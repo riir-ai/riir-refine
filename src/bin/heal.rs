@@ -11718,6 +11718,60 @@ fn main() {
             }
         }
 
+        // ── the required-features audit (P43, the bench_694 class): a
+        // [[test]]/[[bench]]/[[example]] row's `required-features`
+        // unsatisfied at THIS posture means --all-targets silently SKIPPED
+        // the whole target — kept edits in such files (or in files no target
+        // covers at all) read "verified" without ever compiling. A
+        // MANIFEST-level gate, invisible to the cfg audit above (which sees
+        // only `#[cfg]` attributes). Report-only disclosure, the same re-run
+        // suggestion shape.
+        {
+            let mut marks: Vec<riir_refine::fix_verify::ReqFeatUnverified> = Vec::new();
+            let mut sets: std::collections::HashMap<PathBuf, (String, riir_refine::fix_verify::FeatureSet)> =
+                std::collections::HashMap::new();
+            for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
+                if *whole {
+                    continue;
+                }
+                let Some(pkg) = riir_refine::fix_verify::owning_package_root(&b.path) else {
+                    continue;
+                };
+                if !sets.contains_key(&pkg) {
+                    let Ok(text) = std::fs::read_to_string(pkg.join("Cargo.toml")) else {
+                        continue;
+                    };
+                    let set = riir_refine::fix_verify::feature_set_from_args(
+                        &text,
+                        args.verify_args.as_deref(),
+                    );
+                    sets.insert(pkg.clone(), (text, set));
+                }
+                let Some((text, set)) = sets.get(&pkg) else {
+                    continue;
+                };
+                marks.extend(
+                    riir_refine::fix_verify::required_features_unverified_edits(
+                        std::slice::from_ref(b),
+                        set,
+                        text,
+                        &pkg,
+                    )
+                    .into_iter()
+                    .filter(|m| !reverted_lines.contains(&m.line)),
+                );
+            }
+            if !marks.is_empty() {
+                eprint!(
+                    "{}",
+                    riir_refine::fix_verify::render_required_features_audit(
+                        &marks,
+                        args.verify_args.as_deref()
+                    )
+                );
+            }
+        }
+
         // ── 037-T2: the lint-resolution oracle (clippy_verify builds). For
         // kept edits whose rule is one of OUR clippy lints, one
         // `cargo clippy -- -W clippy::<lint>…` per owning package (same

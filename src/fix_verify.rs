@@ -65,6 +65,13 @@
 //!   check that did not complete ([`check_verdict`]).
 //! - Warnings do not fail the check (no `-D warnings`): verification
 //!   proves the edits COMPILE, not that they are warning-free.
+//! - `--all-targets` still skips targets whose manifest row carries
+//!   `required-features` the invocation's posture does not enable — the
+//!   target compiles to NOTHING and a kept edit there reads "verified"
+//!   uncompiled (the `bench_694` casualty, katgpt-rs `877d477cc`). The
+//!   post-verify required-features audit (P43, [`required_features_unverified_edits`])
+//!   names those edits — and files no target covers at all — report-only,
+//!   the same disclosure discipline as the cfg audit below.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -344,7 +351,10 @@ impl FixVerifier {
     ) -> Result<Option<String>, String> {
         let outcome = self.run_check(pkg)?;
         report.n_checks += 1;
-        match check_verdict(outcome.exit_ok, !parse_error_locations(&outcome.json).is_empty()) {
+        match check_verdict(
+            outcome.exit_ok,
+            !parse_error_locations(&outcome.json).is_empty(),
+        ) {
             CheckVerdict::Clean => Ok(None),
             CheckVerdict::Errors => Ok(Some(outcome.json)),
             CheckVerdict::Incomplete => Err(format!(
@@ -673,10 +683,7 @@ impl FeatureSet {
 /// `a?/b` forms name OTHER crates' features — ignored). `--all-features`
 /// switches `all_on`, which short-circuits every feature atom to enabled.
 #[must_use]
-pub fn feature_set_from_args(
-    manifest_text: &str,
-    verify_args: Option<&str>,
-) -> FeatureSet {
+pub fn feature_set_from_args(manifest_text: &str, verify_args: Option<&str>) -> FeatureSet {
     let (defaults, keys) = manifest_feature_names(manifest_text);
     let mut set = FeatureSet::default();
     let Some(args) = verify_args else {
@@ -753,10 +760,24 @@ impl CfgExpr {
             Self::Atom(CfgAtom::Other) => "<opaque>".to_string(),
             Self::Not(inner) => format!("not({})", inner.render()),
             Self::All(parts) => {
-                format!("all({})", parts.iter().map(Self::render).collect::<Vec<_>>().join(", "))
+                format!(
+                    "all({})",
+                    parts
+                        .iter()
+                        .map(Self::render)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
             Self::Any(parts) => {
-                format!("any({})", parts.iter().map(Self::render).collect::<Vec<_>>().join(", "))
+                format!(
+                    "any({})",
+                    parts
+                        .iter()
+                        .map(Self::render)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
         }
     }
@@ -1147,8 +1168,7 @@ fn expr_cfg_regions(expr: &syn::Expr, out: &mut Vec<CfgRegion>) {
         }
         syn::Expr::Match(syn::ExprMatch { arms, .. }) => {
             for arm in arms {
-                let exprs: Vec<CfgExpr> =
-                    arm.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+                let exprs: Vec<CfgExpr> = arm.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                 if let (Some((s, e)), false) = (span_lines(arm), exprs.is_empty()) {
                     out.push(CfgRegion {
                         start_line: s,
@@ -1274,8 +1294,7 @@ impl<'ast> syn::visit::Visit<'ast> for BindingScan {
     fn visit_expr_method_call(&mut self, i: &'ast syn::ExprMethodCall) {
         // syn cannot see &self vs &mut self — treat every plain-ident
         // receiver as mutability-requiring (over-marking, conservative).
-        if let (Some(id), Some((l, _))) =
-            (path_ident(&i.receiver), span_lines(i.receiver.as_ref()))
+        if let (Some(id), Some((l, _))) = (path_ident(&i.receiver), span_lines(i.receiver.as_ref()))
         {
             self.mutations.push((id, l));
         }
@@ -1450,7 +1469,9 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
             out,
             "  {}:{} [{}] — {}",
             m.path.display(),
-            m.line, m.rule_id, reasons.join("; ")
+            m.line,
+            m.rule_id,
+            reasons.join("; ")
         );
     }
     let missing: Vec<String> = {
@@ -1463,6 +1484,398 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
         let _ = writeln!(
             out,
             "  (no --features re-run covers these — verify the listed gates manually)"
+        );
+    } else {
+        let features = missing.join(",");
+        let suggested = match verify_args {
+            Some(a) if !a.trim().is_empty() => format!("{a} --features {features}"),
+            _ => format!("--features {features}"),
+        };
+        let _ = writeln!(
+            out,
+            "  re-run for full coverage: cargo refine --fix --write --verify --verify-args \"{suggested}\""
+        );
+    }
+    out
+}
+
+// ── the required-features audit (P43, the bench_694 class) ────────────────
+//
+// `cargo check --all-targets` is NOT the whole surface: a [[test]] /
+// [[bench]] / [[example]] / [[bin]] / [lib] row carrying `required-features`
+// is SKIPPED SILENTLY at any invocation whose feature posture does not enable
+// them — the target compiles to NOTHING, and a kept edit in such a file reads
+// "verified" without ever having been compiled. The recorded casualty is
+// katgpt-kv's `bench_694_mi_quant_fidelity_probe.rs` behind
+// `required-features = ["mi_probe"]` (katgpt-rs recovery 2026-10-04,
+// `877d477cc`): the hex→float rewrite shipped broken because the gate ran at
+// the default posture. The inline-cfg audit above cannot see this class — the
+// gate is MANIFEST-level, not a `#[cfg]` attribute in the file (and the P42
+// incident's cfg(test) sites are the OTHER direction: `--all-targets` DOES
+// compile unit-test harnesses, so `#[cfg(test)]` code is verified — the
+// audit's CfgAtom::Test evaluates True deliberately).
+//
+// This audit resolves each edited file's COVERING cargo targets (explicit
+// rows matched by `path`, then the auto-discovery conventions) and marks
+// kept edits when EVERY covering row's required-features are unsatisfied at
+// the invocation's feature set — or when NO target covers the file at all
+// (auto-discovery off for that class, or the file outside every target
+// directory): the never-compiled-at-any-posture orphan. REPORT-ONLY, the
+// same disclosure discipline as the cfg audit.
+//
+// Divergences (documented, conservative direction — a mark never claims a
+// compile that did not happen, an unmarked file was compiled by at least one
+// satisfied covering row):
+// - required-features naming an OPTIONAL DEP (`dep:x` / bare non-feature)
+//   never satisfy → the file stays marked even under --all-features; the
+//   suggestion then over-shoots (honest — the row genuinely is not compiled
+//   by any feature-only posture);
+// - a [lib] / [[bin]] row with an explicit `path` pointing OUTSIDE src/ is
+//   matched only by that exact path; src/ module-tree files always count as
+//   lib-covered (they ride --lib, which has no required-features gate in
+//   practice — a lib row WITH unsatisfied required-features marks the whole
+//   tree, correctly);
+// - glob-free: `path` match is exact, `./` prefixes normalized on both sides.
+
+/// One cargo target row, restricted to what the audit reads.
+#[derive(Debug, Clone, PartialEq)]
+struct TargetRow {
+    kind: &'static str,
+    name: Option<String>,
+    /// The package-relative path cargo compiles this row from: the explicit
+    /// `path` (`/`-separated, `./` stripped), else the kind/name default
+    /// (`src/lib.rs`, `src/main.rs` for the main bin, `src/bin/<name>.rs`,
+    /// `tests/<name>.rs`, `benches/<name>.rs`, `examples/<name>.rs`) —
+    /// resolved once at the end of [`manifest_targets`]. `None` = the row
+    /// covers nothing matchable (no path and no name).
+    path: Option<String>,
+    required_features: Vec<String>,
+}
+
+/// The `[package]` auto-discovery switches (cargo defaults: all true).
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(clippy::struct_excessive_bools)] // mirrors cargo's four independent [package] switches
+struct AutoFlags {
+    bins: bool,
+    tests: bool,
+    benches: bool,
+    examples: bool,
+}
+
+impl Default for AutoFlags {
+    fn default() -> Self {
+        Self {
+            bins: true,
+            tests: true,
+            benches: true,
+            examples: true,
+        }
+    }
+}
+
+/// Parse the manifest's target rows + auto-discovery flags. Line-based, the
+/// `manifest_feature_names` style — no toml dep (the module's other manifest
+/// readers set that precedent); multiline `required-features = [ … ]` arrays
+/// accumulate until the closing bracket, like the `default = [ … ]` reader.
+fn manifest_targets(manifest_text: &str) -> (Vec<TargetRow>, AutoFlags) {
+    let mut rows: Vec<TargetRow> = Vec::new();
+    let mut auto = AutoFlags::default();
+    let mut pkg_name: Option<String> = None;
+    // `Some(kind)` while inside a `[[kind]]` row; `[lib]` maps to the same
+    // shape. Any other section header closes the current row.
+    let mut current: Option<(&'static str, TargetRow)> = None;
+    let mut pending_rf: Option<String> = None;
+    let finalize_rf = |pending: &mut Option<String>, row: &mut TargetRow| {
+        if let Some(value) = pending.take() {
+            for part in value.trim_matches(['[', ']']).split(',') {
+                let p = part.trim().trim_matches('"');
+                if !p.is_empty() {
+                    row.required_features.push(p.to_string());
+                }
+            }
+        }
+    };
+    let mut close_row = |current: &mut Option<(&'static str, TargetRow)>,
+                         pending: &mut Option<String>| {
+        if let Some((_, mut row)) = current.take() {
+            finalize_rf(pending, &mut row);
+            rows.push(row);
+        }
+    };
+    for line in manifest_text.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            close_row(&mut current, &mut pending_rf);
+            if let Some(kind) = target_kind_from_header(t) {
+                current = Some((
+                    kind,
+                    TargetRow {
+                        kind,
+                        name: None,
+                        path: None,
+                        required_features: Vec::new(),
+                    },
+                ));
+            }
+            continue;
+        }
+        if let Some((kind, row)) = current.as_mut() {
+            if let Some(pending) = pending_rf.as_mut() {
+                pending.push(' ');
+                pending.push_str(t);
+                if pending.contains(']') {
+                    finalize_rf(&mut pending_rf, row);
+                }
+                continue;
+            }
+            let Some(eq) = t.find('=') else {
+                continue;
+            };
+            let key = t[..eq].trim();
+            let value = t[eq + 1..].trim();
+            match key {
+                "name" => {
+                    let n = value.trim().trim_matches('"');
+                    if !n.is_empty() {
+                        row.name = Some(n.to_string());
+                    }
+                }
+                "path" => {
+                    let p = value.trim().trim_matches('"').trim_start_matches("./");
+                    if !p.is_empty() {
+                        row.path = Some(p.to_string());
+                    }
+                }
+                "required-features" => {
+                    if value.contains(']') {
+                        let mut holder = Some(value.to_string());
+                        finalize_rf(&mut holder, row);
+                    } else if value.starts_with('[') {
+                        pending_rf = Some(value.to_string());
+                    }
+                }
+                _ => {
+                    let _ = kind; // harness/test flags: not audit inputs
+                }
+            }
+        } else {
+            apply_package_line(t, &mut auto, &mut pkg_name);
+        }
+    }
+    close_row(&mut current, &mut pending_rf);
+    resolve_default_target_paths(&mut rows, pkg_name.as_deref());
+    (rows, auto)
+}
+
+/// The target-row header a section line names, if any.
+fn target_kind_from_header(t: &str) -> Option<&'static str> {
+    match t {
+        "[lib]" => Some("lib"),
+        "[[bin]]" => Some("bin"),
+        "[[test]]" => Some("test"),
+        "[[bench]]" => Some("bench"),
+        "[[example]]" => Some("example"),
+        _ => None,
+    }
+}
+
+/// The `[package]`-section lines the audit reads: the four auto-discovery
+/// switches and the crate `name` (the main bin's default-path input).
+fn apply_package_line(t: &str, auto: &mut AutoFlags, pkg_name: &mut Option<String>) {
+    if let Some((key, value)) = t.split_once('=') {
+        let on = value.trim() != "false";
+        match key.trim() {
+            "autobins" => auto.bins = on,
+            "autotests" => auto.tests = on,
+            "autobenches" => auto.benches = on,
+            "autoexamples" => auto.examples = on,
+            "name" => *pkg_name = Some(value.trim().trim_matches('"').to_string()),
+            _ => {}
+        }
+    }
+}
+
+/// Fill each row's `path` from the kind/name default when the manifest gave
+/// no explicit one (`src/lib.rs`, `src/main.rs` for the main bin,
+/// `src/bin/<n>.rs`, `tests/<n>.rs`, `benches/<n>.rs`, `examples/<n>.rs`); a
+/// row with neither path nor name covers nothing matchable.
+fn resolve_default_target_paths(rows: &mut [TargetRow], pkg_name: Option<&str>) {
+    for row in rows.iter_mut() {
+        if row.path.is_none() {
+            row.path = row.name.as_deref().and_then(|name| match row.kind {
+                "lib" => Some("src/lib.rs".to_string()),
+                "bin" if Some(name) == pkg_name => Some("src/main.rs".to_string()),
+                "bin" => Some(format!("src/bin/{name}.rs")),
+                "test" => Some(format!("tests/{name}.rs")),
+                "bench" => Some(format!("benches/{name}.rs")),
+                "example" => Some(format!("examples/{name}.rs")),
+                _ => None,
+            });
+        }
+    }
+}
+
+/// The targets covering `rel` (package-relative, `/`-separated): resolved
+/// rows matched by path first, then the auto-discovery conventions. An empty
+/// result means no target compiles the file at any posture (orphan).
+fn covering_targets(rel: &str, rows: &[TargetRow], auto: AutoFlags) -> Vec<TargetRow> {
+    let rel = rel.trim_start_matches("./");
+    let explicit: Vec<TargetRow> = rows
+        .iter()
+        .filter(|r| r.path.as_deref() == Some(rel))
+        .cloned()
+        .collect();
+    if !explicit.is_empty() {
+        return explicit;
+    }
+    let implicit = |kind: &'static str| TargetRow {
+        kind,
+        name: None,
+        path: Some(rel.to_string()),
+        required_features: Vec::new(),
+    };
+    if rel == "src/lib.rs" || (rel.starts_with("src/") && !rel.starts_with("src/bin/")) {
+        // The lib module tree — [lib] has no required-features gate in
+        // practice, and --lib compiles it unconditionally.
+        return vec![implicit("lib")];
+    }
+    if rel == "src/main.rs" || rel.starts_with("src/bin/") {
+        return auto.bins.then(|| implicit("bin")).into_iter().collect();
+    }
+    if rel.starts_with("tests/") {
+        return auto.tests.then(|| implicit("test")).into_iter().collect();
+    }
+    if rel.starts_with("benches/") {
+        return auto
+            .benches
+            .then(|| implicit("bench"))
+            .into_iter()
+            .collect();
+    }
+    if rel.starts_with("examples/") {
+        return auto
+            .examples
+            .then(|| implicit("example"))
+            .into_iter()
+            .collect();
+    }
+    Vec::new()
+}
+
+/// One required-features/orphan mark, per kept edit.
+#[derive(Debug, Clone)]
+pub struct ReqFeatUnverified {
+    pub path: PathBuf,
+    pub line: usize,
+    pub rule_id: String,
+    /// Union of the unsatisfied covering rows' required-features (the
+    /// suggested re-run set). Empty only for orphans.
+    pub missing: Vec<String>,
+    /// `true` when NO cargo target covers the file at all.
+    pub orphan: bool,
+}
+
+/// Audit a batch of file edits against the manifest-level target gates the
+/// verify posture compiled with. Pure manifest+path pass — no cargo, no file
+/// I/O beyond what the caller already read (manifest text + package root are
+/// passed in; see [`cfg_unverified_edits`] for the inline-cfg twin).
+#[must_use]
+pub fn required_features_unverified_edits(
+    files: &[FileEditSet],
+    set: &FeatureSet,
+    manifest_text: &str,
+    pkg_root: &Path,
+) -> Vec<ReqFeatUnverified> {
+    let (rows, auto) = manifest_targets(manifest_text);
+    let mut marks: Vec<ReqFeatUnverified> = Vec::new();
+    for f in files {
+        let Ok(rel) = f.path.strip_prefix(pkg_root) else {
+            continue; // not under this package: the caller grouped wrong
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        let covering = covering_targets(&rel, &rows, auto);
+        let orphan = covering.is_empty();
+        let mut all_unsatisfied = !covering.is_empty();
+        let mut missing: Vec<String> = Vec::new();
+        for row in &covering {
+            let row_missing: Vec<String> = row
+                .required_features
+                .iter()
+                .filter(|feat| !set.contains(feat))
+                .cloned()
+                .collect();
+            if row_missing.is_empty() {
+                all_unsatisfied = false;
+                break;
+            }
+            for m in row_missing {
+                if !missing.contains(&m) {
+                    missing.push(m);
+                }
+            }
+        }
+        if !all_unsatisfied && !orphan {
+            continue;
+        }
+        missing.sort();
+        for e in &f.edits {
+            marks.push(ReqFeatUnverified {
+                path: f.path.clone(),
+                line: e.final_line,
+                rule_id: e.rule_id.clone(),
+                missing: missing.clone(),
+                orphan,
+            });
+        }
+    }
+    marks
+}
+
+/// Render the required-features audit tail (one line per mark + the re-run
+/// suggestion). Testable render: the bin prints this verbatim.
+#[must_use]
+pub fn render_required_features_audit(
+    marks: &[ReqFeatUnverified],
+    verify_args: Option<&str>,
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    if marks.is_empty() {
+        return out;
+    }
+    let _ = writeln!(
+        out,
+        "verify: required-features audit — {} kept edit(s) in target(s) this baseline did NOT compile:",
+        marks.len()
+    );
+    for m in marks {
+        let reason = if m.orphan {
+            "NO cargo target compiles this file (auto-discovery off or outside every target directory)".to_string()
+        } else {
+            format!(
+                "every covering target's required-features unsatisfied: {}",
+                m.missing.join(", ")
+            )
+        };
+        let _ = writeln!(
+            out,
+            "  {}:{} [{}] — {}",
+            m.path.display(),
+            m.line,
+            m.rule_id,
+            reason
+        );
+    }
+    let missing: Vec<String> = {
+        let mut all: Vec<String> = marks.iter().flat_map(|m| m.missing.clone()).collect();
+        all.sort();
+        all.dedup();
+        all
+    };
+    if missing.is_empty() {
+        let _ = writeln!(
+            out,
+            "  (no --features re-run covers these — wire the file into a [[target]] row or re-enable auto-discovery, then verify manually)"
         );
     } else {
         let features = missing.join(",");
@@ -2197,10 +2610,7 @@ mod tests {
         let set = fset(&["a"]);
         // not(feature) inverts: a ON → provably NOT compiled.
         assert_eq!(
-            eval_cfg(
-                &expr_of("#[cfg(not(feature = \"a\"))] fn f() {}"),
-                &set
-            ),
+            eval_cfg(&expr_of("#[cfg(not(feature = \"a\"))] fn f() {}"), &set),
             Tv::False
         );
         // any(one_off, unknown_key) → Unknown (an unknown atom could make
@@ -2252,7 +2662,10 @@ mod tests {
         let manifest = "\n[features]\ndefault = [\"a\",\n \"b\"]\na = []\nb = []\nc = []\n";
         let (defaults, keys) = manifest_feature_names(manifest);
         assert_eq!(defaults, vec!["a".to_string(), "b".to_string()]);
-        assert_eq!(keys, vec!["a".to_string(), "b".to_string(), "c".to_string()]);
+        assert_eq!(
+            keys,
+            vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        );
         // The count consumer keeps its Issue-031-H3 shape.
         assert_eq!(manifest_nondefault_feature_count(manifest), 1);
     }
@@ -2286,7 +2699,10 @@ mod tests {
         let fixed = "pub fn keep(r: &String) -> bool { r.starts_with('v') }\n\n#[cfg(feature = \"score_bench\")]\npub fn pick(rules: &[String]) -> Vec<String> {\n    rules.iter().filter(|r| keep(r)).cloned().collect()\n}\n";
         let set = fset(&[]);
         let marks = cfg_unverified_edits(
-            &[batch(fixed, &[("needless_return", 2), ("needless_return", 5)])],
+            &[batch(
+                fixed,
+                &[("needless_return", 2), ("needless_return", 5)],
+            )],
             &set,
         );
         assert_eq!(marks.len(), 1, "{marks:?}");
@@ -2298,8 +2714,7 @@ mod tests {
         assert!(rendered.contains("src/probe.rs:5 [needless_return]"));
         assert!(rendered.contains("#[cfg(feature = …)] not enabled: score_bench"));
         assert!(
-            rendered
-                .contains("--verify-args \"--features score_bench\""),
+            rendered.contains("--verify-args \"--features score_bench\""),
             "{rendered}"
         );
     }
@@ -2320,7 +2735,10 @@ mod tests {
         let set = fset(&["a"]);
         // Edits at lines inside #[cfg(test)] and an enabled gate: no marks.
         let marks = cfg_unverified_edits(
-            &[batch(fixed, &[("needless_return", 4), ("needless_return", 8)])],
+            &[batch(
+                fixed,
+                &[("needless_return", 4), ("needless_return", 8)],
+            )],
             &set,
         );
         assert!(marks.is_empty(), "{marks:?}");
@@ -2442,7 +2860,10 @@ mod tests {
         let manifest = "[features]\ndefault = []\nseal_sextet = []\npvp_karma = []\n";
         let set = feature_set_from_args(manifest, Some("--features seal_sextet"));
         let marks = cfg_unverified_edits(
-            &[batch(fixed, &[("needless_return", 2), ("needless_return", 5)])],
+            &[batch(
+                fixed,
+                &[("needless_return", 2), ("needless_return", 5)],
+            )],
             &set,
         );
         assert_eq!(marks.len(), 1, "{marks:?}");
@@ -2453,5 +2874,186 @@ mod tests {
             rendered.contains("--verify-args \"--features seal_sextet --features pvp_karma\""),
             "{rendered}"
         );
+    }
+
+    // ── the required-features audit (P43, the bench_694 class) ──
+
+    fn batch_in(path: &str, edits: &[(&str, usize)]) -> FileEditSet {
+        FileEditSet {
+            path: PathBuf::from(path),
+            original: "x\n".to_string(),
+            fixed: "y\n".to_string(),
+            edits: edits
+                .iter()
+                .map(|(rule, line)| EditAtLine {
+                    rule_id: (*rule).to_string(),
+                    final_line: *line,
+                    replacement: String::new(),
+                    restore: String::new(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn manifest_targets_parses_rows_flags_and_multiline_rf() {
+        let manifest = concat!(
+            "[package]\n",
+            "name = \"x\"\n",
+            "autobins = false\n",
+            "[features]\n",
+            "default = []\n",
+            "mi_probe = []\n",
+            "[[bench]]\n",
+            "name = \"b694\"\n",
+            "required-features = [\n  \"mi_probe\",\n  \"kat_service\",\n]\n",
+            "[[test]]\n",
+            "name = \"t1\"\n",
+            "path = \"tests/t1.rs\"\n",
+            "required-features = [\"mi_probe\"]\n",
+        );
+        let (rows, auto) = manifest_targets(manifest);
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        assert_eq!(rows[0].kind, "bench");
+        // No explicit path: the kind/name default resolves.
+        assert_eq!(rows[0].path.as_deref(), Some("benches/b694.rs"));
+        assert_eq!(rows[0].required_features, vec!["mi_probe", "kat_service"]);
+        assert_eq!(rows[1].kind, "test");
+        assert_eq!(rows[1].path.as_deref(), Some("tests/t1.rs"));
+        assert_eq!(rows[1].required_features, vec!["mi_probe"]);
+        // The [features] section must not read as a target row, and the
+        // [package] autobins flag must survive the intervening sections.
+        assert!(!auto.bins);
+        assert!(auto.tests && auto.benches && auto.examples);
+    }
+
+    #[test]
+    fn required_features_marks_unsatisfied_bench_edit() {
+        // The bench_694 shape: a bench behind required-features the default
+        // posture does not enable — the gate compiled the file to NOTHING.
+        // The row names the file through the DEFAULT path convention (no
+        // explicit `path`), the common real-world shape.
+        let manifest = concat!(
+            "[features]\ndefault = []\nmi_probe = []\n",
+            "[[bench]]\nname = \"694_probe\"\nrequired-features = [\"mi_probe\"]\n",
+        );
+        let set = feature_set_from_args(manifest, None);
+        let marks = required_features_unverified_edits(
+            &[batch_in(
+                "/p/benches/694_probe.rs",
+                &[("unnecessary_cast", 3)],
+            )],
+            &set,
+            manifest,
+            Path::new("/p"),
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert!(!marks[0].orphan);
+        assert_eq!(marks[0].missing, vec!["mi_probe".to_string()]);
+        let rendered = render_required_features_audit(&marks, None);
+        assert!(
+            rendered.contains("/p/benches/694_probe.rs:3 [unnecessary_cast]"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("required-features unsatisfied: mi_probe"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("--verify-args \"--features mi_probe\""),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn required_features_satisfied_row_stays_unmarked() {
+        // Same covering row as the casualty test, feature ENABLED — the
+        // baseline compiled the file; nothing to disclose.
+        let manifest = concat!(
+            "[features]\ndefault = []\nmi_probe = []\n",
+            "[[bench]]\nname = \"694_probe\"\nrequired-features = [\"mi_probe\"]\n",
+        );
+        let set = feature_set_from_args(manifest, Some("--features mi_probe"));
+        let marks = required_features_unverified_edits(
+            &[batch_in(
+                "/p/benches/694_probe.rs",
+                &[("unnecessary_cast", 3)],
+            )],
+            &set,
+            manifest,
+            Path::new("/p"),
+        );
+        assert!(marks.is_empty(), "{marks:?}");
+    }
+
+    #[test]
+    fn required_features_partial_posture_marks_only_the_gap() {
+        let manifest = concat!(
+            "[features]\ndefault = []\na = []\nb = []\n",
+            "[[example]]\nname = \"e\"\nrequired-features = [\"a\", \"b\"]\n",
+        );
+        let set = feature_set_from_args(manifest, Some("--features a"));
+        let marks = required_features_unverified_edits(
+            &[batch_in("/p/examples/e.rs", &[("needless_return", 7)])],
+            &set,
+            manifest,
+            Path::new("/p"),
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].missing, vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn required_features_orphan_when_autodiscovery_off() {
+        // autotests = false + no [[test]] row: the file compiles at NO
+        // posture — the orphan mark, and no --features re-run can cover it.
+        let manifest = "[package]\nautotests = false\n[features]\ndefault = []\na = []\n";
+        let set = feature_set_from_args(manifest, None);
+        let marks = required_features_unverified_edits(
+            &[batch_in("/p/tests/orphan.rs", &[("needless_return", 2)])],
+            &set,
+            manifest,
+            Path::new("/p"),
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert!(marks[0].orphan);
+        assert!(marks[0].missing.is_empty());
+        let rendered = render_required_features_audit(&marks, None);
+        assert!(
+            rendered.contains("NO cargo target compiles this file"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("no --features re-run covers these"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn required_features_src_tree_never_marked_and_explicit_row_wins() {
+        // src/ module-tree files ride --lib (no required-features gate) —
+        // never marked; an EXPLICIT row matching the path wins over the
+        // implicit conventions.
+        let manifest = concat!(
+            "[features]\ndefault = []\nmi_probe = []\n",
+            "[[bin]]\nname = \"tool\"\npath = \"src/bin/tool.rs\"\nrequired-features = [\"mi_probe\"]\n",
+        );
+        let set = feature_set_from_args(manifest, None);
+        let marks = required_features_unverified_edits(
+            &[
+                batch_in("/p/src/lib.rs", &[("needless_return", 1)]),
+                batch_in("/p/src/deep/mod.rs", &[("needless_return", 1)]),
+                // autodiscovered sibling bin (autobins on, no row): compiled.
+                batch_in("/p/src/bin/other.rs", &[("needless_return", 1)]),
+                // the EXPLICIT row's path: unsatisfied → marked.
+                batch_in("/p/src/bin/tool.rs", &[("needless_return", 1)]),
+            ],
+            &set,
+            manifest,
+            Path::new("/p"),
+        );
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].path, PathBuf::from("/p/src/bin/tool.rs"));
+        assert_eq!(marks[0].missing, vec!["mi_probe".to_string()]);
     }
 }
