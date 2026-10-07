@@ -28,9 +28,12 @@
 #                             lane's inference substrate; T2.3 retarget) +
 #                             cubecl-runtime, wgpu-hal (the [patch.crates-io]
 #                             vendor paths, now pointing at riir-infer/vendor)
-#   riir-ai        (private)  riir-rag (latent_retrieval) — the ONLY direct
-#                             riir-ai edge left
-#   riir-neuron-db (private)  riir-neuron-db
+#   riir-ai        (private)  riir-rag-bonsai (bonsai_retrieval) — the ONLY direct
+#                             riir-ai edge left (the Bonsai-27B dense-embedder
+#                             arm; riir-rag itself carved to riir-neuron-db,
+#                             riir-ai Issue 1038, 2026-10-07)
+#   riir-neuron-db (private)  riir-neuron-db, riir-rag (latent_retrieval — the
+#                             carved facade)
 #   riir-kat       (private)  riir-kat (issue 088 — the service-plane leaf;
 #                             riir-auth left the set the same day: the row
 #                             swapped, not grown — the account substrate is
@@ -88,6 +91,7 @@ Cargo.toml riir-kat
 Cargo.toml riir-llm
 Cargo.toml riir-neuron-db
 Cargo.toml riir-rag
+Cargo.toml riir-rag-bonsai
 Cargo.toml wgpu-hal
 EOF
 )

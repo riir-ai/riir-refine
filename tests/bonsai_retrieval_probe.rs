@@ -59,7 +59,7 @@ use riir_refine::draft::{IndexTokenizer, RetrievalConfig, RuleIndex};
 const DENSE_WEIGHTS: &[f32] = &[0.5, 1.0, 5.0, 20.0, 100.0];
 
 fn gguf_present() -> bool {
-    let path = riir_rag::bonsai_embedder::default_gguf_path();
+    let path = riir_rag_bonsai::bonsai_embedder::default_gguf_path();
     if !path.exists() {
         eprintln!("SKIP: GGUF not present at {}", path.display());
         return false;
@@ -72,11 +72,12 @@ fn gguf_present() -> bool {
            ~50 min in RELEASE (far worse in debug). A measurement probe, not a \
            gate -- run it explicitly with the invocation in the module docs."]
 fn probe_cost() {
-    use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder, DenseEmbedder};
+    use riir_rag::DenseEmbedder;
+    use riir_rag_bonsai::{BonsaiEmbedStrategy, BonsaiEmbedder};
     if !gguf_present() {
         return;
     }
-    let path = riir_rag::bonsai_embedder::default_gguf_path();
+    let path = riir_rag_bonsai::bonsai_embedder::default_gguf_path();
 
     let t0 = Instant::now();
     let embedder = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
@@ -129,7 +130,8 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
            ~50 min in RELEASE (far worse in debug). A measurement probe, not a \
            gate -- run it explicitly with the invocation in the module docs."]
 fn dense_rerank_precision() {
-    use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder, DenseEmbedder};
+    use riir_rag::DenseEmbedder;
+    use riir_rag_bonsai::{BonsaiEmbedStrategy, BonsaiEmbedder};
     if !gguf_present() {
         return;
     }
@@ -162,7 +164,7 @@ fn dense_rerank_precision() {
         spans.len()
     );
 
-    let path = riir_rag::bonsai_embedder::default_gguf_path();
+    let path = riir_rag_bonsai::bonsai_embedder::default_gguf_path();
     let t0 = Instant::now();
     let embedder = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool).expect("bonsai load");
     println!(

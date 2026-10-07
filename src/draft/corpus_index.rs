@@ -187,7 +187,7 @@ pub struct RuleIndex {
     /// The dense embedder, when the Bonsai rerank path is active. Held so
     /// query-side `embed_dense` uses the SAME model the index was built with.
     #[cfg(feature = "bonsai_retrieval")]
-    dense: Option<std::sync::Arc<riir_rag::BonsaiEmbedder>>,
+    dense: Option<std::sync::Arc<riir_rag_bonsai::BonsaiEmbedder>>,
     /// Scoring/tokenizing knobs this index was built with.
     config: RetrievalConfig,
     /// `BLAKE3(pattern_text_or_line)` → `rule_id` (the same key the retriever
@@ -365,8 +365,8 @@ impl RuleIndex {
         #[cfg(feature = "bonsai_retrieval")]
         {
             if config.dense_weight > 0.0 {
-                use riir_rag::{BonsaiEmbedStrategy, BonsaiEmbedder};
-                let path = riir_rag::bonsai_embedder::default_gguf_path();
+                use riir_rag_bonsai::{BonsaiEmbedStrategy, BonsaiEmbedder};
+                let path = riir_rag_bonsai::bonsai_embedder::default_gguf_path();
                 let bonsai = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool)
                     .map_err(|e| format!("bonsai load ({}): {e}", path.display()))?;
                 let bonsai = std::sync::Arc::new(bonsai);

@@ -67,7 +67,7 @@ Target set: `scripts/swept_repos.txt` (derived from the BOUNDARY.md workspace, g
 
 ## Why this is a separate repo (not in riir-ai)
 
-Borrows the **drafter+pruner+corpus pattern** from `riir-games-quest/quest_grammar` but has **zero game-domain coupling**: no dep on `riir-games*` / `riir-game-sdk` / any game crate from ANY feature combination; no `riir-chain` dep (`riir-neuron-db` only transitive, via `riir-rag` under `latent_retrieval`); default build's only public dep is `katgpt-core` (ConstraintPruner trait + ternary SIMD matvec + `pick_domain`, katgpt-rs Plan 558); two opt-in feature arms consume non-game sibling substrates (`ternary_inference` → the public `../riir-infer` substrate — retargeted off riir-engine/riir-gpu by the T2.3 slice, reflex Issue 008; `latent_retrieval` → `riir-rag`); the `TernaryDraftModel` pattern is reimplemented locally (~200 LOC). riir-ai is for game runtime + engine, not developer tools.
+Borrows the **drafter+pruner+corpus pattern** from `riir-games-quest/quest_grammar` but has **zero game-domain coupling**: no dep on `riir-games*` / `riir-game-sdk` / any game crate from ANY feature combination; no `riir-chain` dep (riir-neuron-db is the direct `latent_retrieval` home since the Issue-1038 carve took `riir-rag` there); default build's only public dep is `katgpt-core` (ConstraintPruner trait + ternary SIMD matvec + `pick_domain`, katgpt-rs Plan 558); two opt-in feature arms consume non-game sibling substrates (`ternary_inference` → the public `../riir-infer` substrate — retargeted off riir-engine/riir-gpu by the T2.3 slice, reflex Issue 008; `latent_retrieval` → `riir-rag` (ndb repo, carved 1038) + `bonsai_retrieval` → `riir-rag-bonsai` (ai, the dense arm)); the `TernaryDraftModel` pattern is reimplemented locally (~200 LOC). riir-ai is for game runtime + engine, not developer tools.
 
 ## Sibling-Repo Layout
 
@@ -76,11 +76,13 @@ Borrows the **drafter+pruner+corpus pattern** from `riir-games-quest/quest_gramm
 /git/katgpt-rs            ← katgpt-core (NON-OPTIONAL: ConstraintPruner trait + ternary matvec)
 /git/riir-infer           ← OPTIONAL (ternary_inference → riir-infer-core/-gpu + the
                           [patch] vendor copies; the T2.3 retarget, reflex Issue 008)
-/git/riir-ai              ← OPTIONAL (latent_retrieval → riir-rag, Plan 005; a plain
-                          optional path dep, default-features = false)
+/git/riir-ai              ← OPTIONAL (bonsai_retrieval → riir-rag-bonsai, the carved
+                          dense-embedder arm; riir-ai Issue 1038)
+/git/riir-neuron-db       ← OPTIONAL (latent_retrieval → riir-rag, carved there
+                          2026-10-07, riir-ai Issue 1038 — was a plain optional
+                          path dep into riir-ai/crates/riir-rag before the carve)
 /git/riir-train           ← OPTIONAL (L4 LoRA fallback only, deferred)
 /git/riir-chain           ← NOT a dep
-/git/riir-neuron-db       ← transitive only (via riir-rag under latent_retrieval)
 /git/riir-kat             ← NON-OPTIONAL root dep (the kat plane leaf, Issue 088 2026-09-10;
                           kat_service/kat_transport gate its client/transport features)
 /git/riir-llm             ← OPTIONAL (the shared LLM-transport leaf, Issue 124)
@@ -125,7 +127,7 @@ cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (a
 - `kernel_opt` (opt-in): GPU kernel optimization domain (771 rules; re-pinned at Batch 206 — the 10-07 staged leads: llama.cpp #29442/#28782; was 769 at B205, 761 at B203; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - `kernel_verify` (opt-in): CubeCL compile check (STUB — delegates to the shared `RustAnalyzerPruner`). Implies `kernel_opt`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search (pattern reuse, no dep; once per invocation, not per-tick). Implies `clippy_lints`.
-- `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-refine` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).
+- `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag (the riir-neuron-db crate since the Issue-1038 carve); powers the `cargo-refine` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light). `bonsai_retrieval` (opt-in) adds the carved `riir-rag-bonsai` dense-embedder arm (riir-ai).
 - `rustc_errors` (DEFAULT-ON since 2026-08-29): the `--fix-compile` driver domain; inert until invoked (compile-time cost only); dep-tree unchanged (`compile_oracle = []` — std + serde only).
 - `docker` (DEFAULT-ON since 2026-08-28): Dockerfile healing domain; hadolint oracle (`docker_verify`); never a registry network call; the tier-2 `docker build --check` oracle rides `docker_buildcheck` (implies `docker_verify`) and never runs in the heal path.
 - **`sec`** (opt-in) — security-pattern healing domain (16 rules — 6 fixable + 10 suggest-only). **Secret detection is NOT a corpus rule — it is the scan-based secret-blind surface (Issue 151, 2026-10-06):** `--secret-scan` (report; kind + path:line:col + blinded context — never the value), `--secret-scan --blind <path>` (safe-to-share text), and the quiet `[sec]` warn line in suggest/fix runs; suggest-only, never auto-fixed.

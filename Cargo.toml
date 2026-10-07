@@ -119,7 +119,12 @@ riir-infer-gpu = { path = "../riir-infer/crates/riir-infer-gpu", optional = true
 # Composed as-is — zero retrieval code reimplemented locally.
 # Optional + feature-gated (`latent_retrieval`): pulls the
 # riir-neuron-db path dep transitively; the default build stays light.
-riir-rag = { path = "../riir-ai/crates/riir-rag", optional = true, default-features = false, features = ["ast_chunker", "neuron_db"] }
+riir-rag = { path = "../riir-neuron-db/crates/riir-rag", optional = true, default-features = false, features = ["ast_chunker", "neuron_db"] }
+# The Bonsai-27B dense embedder arm (carved out of riir-rag by riir-ai
+# Issue 1038 — it needs riir-engine, which stays an riir-ai-internal edge).
+# It forwards riir-rag/dense_embed, so `bonsai_retrieval` keeps the dense
+# channel enabled without naming it here.
+riir-rag-bonsai = { path = "../riir-ai/crates/riir-rag-bonsai", optional = true, default-features = false }
 # Plan 005 T3.5: the BM25 `Tokenizer` trait, so `RustOpTokenizer` can be
 # injected via `NeuronDbRetriever::with_bm25_tokenizer` (a designed substrate
 # hook). Already pulled transitively by riir-rag/neuron_db — this only makes
@@ -463,7 +468,7 @@ kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]
 # and runs a CPU ternary forward pass per embedded text. NEVER default; the
 # modelless path is the permanent floor (riir-rag's own G5 rule). Exists so
 # the T3.5 contingency's third option is measurable, not assumed.
-bonsai_retrieval = ["latent_retrieval", "riir-rag/bonsai_embedder"]
+bonsai_retrieval = ["latent_retrieval", "dep:riir-rag-bonsai"]
 
 # Kernel rule resolution verification via CubeCL compile (Phase 3).
 # **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax
