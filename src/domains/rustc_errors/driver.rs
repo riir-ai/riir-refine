@@ -267,6 +267,14 @@ pub struct AppliedRecord {
     pub fix: String,
     /// The T6.10 semantic-note annotation (see [`RevertedRecord`]).
     pub semantic_note: Option<&'static str>,
+    /// Issue 148 T-b follow-up: the strategy-menu label — the OTHER
+    /// strategy ids the driver considered for this error site (same
+    /// file/line/code, the post-filter candidate set the choice was made
+    /// from) when it chose this one, sorted + deduped, capped at the
+    /// store's `REJECTED_CAP` where that constant is compiled. Empty = the
+    /// chosen strategy was the only candidate (or no menu was resolved) —
+    /// the store reads empty as `None`, never erasing a label.
+    pub rejected: Vec<String>,
 }
 
 /// One tried-and-reverted candidate, for the report.
@@ -288,6 +296,11 @@ pub struct RevertedRecord {
     /// change, ownership transfer) — surfaced in the report + CLI diff so
     /// the change is NAMED, never silent.
     pub semantic_note: Option<&'static str>,
+    /// Issue 148 T-b follow-up: the same strategy-menu label as
+    /// [`AppliedRecord::rejected`] — the alternatives considered at this
+    /// site when the oracle rejected THIS move (the contrastive negatives
+    /// a refine-rule suite mint trains against).
+    pub rejected: Vec<String>,
 }
 
 /// Why a candidate was reverted.
@@ -761,6 +774,12 @@ impl CompileDriver {
             let Some(best) = candidates.first().cloned() else {
                 break; // no untried candidates left — stop (misses recorded)
             };
+            // Issue 148 T-b follow-up: the strategy menu for THIS decision —
+            // the considered alternatives at best's site minus best itself,
+            // captured once and carried on every record the attempt can
+            // produce (kept or reverted; the menu describes what was
+            // considered, not how the attempt ended).
+            let rejected_menu = strategy_menu(&candidates, &best);
 
             report.iterations += 1;
             let before_errors = diags.len();
@@ -783,6 +802,7 @@ impl CompileDriver {
                     shape: String::new(),
                     fix: String::new(),
                     semantic_note: best.semantic_note,
+                    rejected: rejected_menu.clone(),
                 });
                 tried.insert(tried_key(&best));
                 self.observe(&report);
@@ -815,6 +835,7 @@ impl CompileDriver {
                     shape,
                     fix: best.replacement.clone(),
                     semantic_note: best.semantic_note,
+                    rejected: rejected_menu.clone(),
                 });
                 tried.insert(tried_key(&best));
                 self.observe(&report);
@@ -836,6 +857,7 @@ impl CompileDriver {
                     shape,
                     fix: best.replacement.clone(),
                     semantic_note: best.semantic_note,
+                    rejected: rejected_menu.clone(),
                 });
                 tried.insert(tried_key(&best));
                 self.observe(&report);
@@ -880,6 +902,7 @@ impl CompileDriver {
                     shape,
                     fix: best.replacement.clone(),
                     semantic_note: best.semantic_note,
+                    rejected: rejected_menu.clone(),
                 });
                 diags = new_diags;
                 self.observe(&report);
@@ -908,6 +931,7 @@ impl CompileDriver {
                     shape,
                     fix: best.replacement.clone(),
                     semantic_note: best.semantic_note,
+                    rejected: rejected_menu.clone(),
                 });
                 tried.insert(tried_key(&best));
                 self.observe(&report);
@@ -968,6 +992,33 @@ struct ResolvedDiag {
 /// primary term of the keep rule's lexicographic measure (Issue 100).
 fn masking_count(diags: &[ResolvedDiag]) -> usize {
     diags.iter().filter(|d| d.diag.is_masking()).count()
+}
+
+/// Issue 148 T-b follow-up (the driver lane's suite-mint label): the
+/// strategy menu behind one apply decision — the considered candidates'
+/// strategy ids at the CHOSEN candidate's error site (same file, line,
+/// code — the diagnostic identity after `dedupe_by_site`), MINUS the
+/// chosen strategy. The input is the post-filter candidate set the choice
+/// was made from (revive-suppressed and bench-declined candidates were
+/// not considered, so they are not in the menu). Sorted + deduped like
+/// every label; capped at [`crate::traj_store::REJECTED_CAP`] where
+/// that constant is compiled (`latent_retrieval` owns it — the only build
+/// with a store consumer; without it the playbook-bounded menu travels
+/// whole and any store that ever reads it clamps). Empty (solo candidate)
+/// reads as `None` downstream — a missing menu never erases one.
+#[must_use]
+fn strategy_menu(candidates: &[FixCandidate], chosen: &FixCandidate) -> Vec<String> {
+    let mut ids: Vec<String> = candidates
+        .iter()
+        .filter(|c| c.file == chosen.file && c.line == chosen.line && c.code == chosen.code)
+        .map(|c| c.strategy_id.clone())
+        .filter(|id| id != &chosen.strategy_id)
+        .collect();
+    ids.sort();
+    ids.dedup();
+    #[cfg(feature = "latent_retrieval")]
+    ids.truncate(crate::traj_store::REJECTED_CAP);
+    ids
 }
 
 /// Resolve a diagnostic's primary span to an absolute path, read the
@@ -1103,6 +1154,54 @@ mod tests {
         assert_ne!(a, b, "line discriminates");
         assert_ne!(a, c, "file discriminates");
         assert_eq!(a.len(), 16, "16 hex chars: {a}");
+    }
+
+    /// Issue 148 T-b follow-up — the driver lane's strategy-menu label: the
+    /// considered candidates at the CHOSEN site minus the chosen strategy
+    /// (other sites and other codes excluded, duplicates deduped, sorted),
+    /// capped at the store's label cap where it is compiled, and EMPTY for a
+    /// solo candidate (which the store reads as `None` — never erasing).
+    #[test]
+    fn strategy_menu_is_menu_minus_chosen_at_the_chosen_site() {
+        let cand = |file: &str, line: usize, code: &str, strategy: &str| FixCandidate {
+            strategy_id: strategy.to_string(),
+            code: code.to_string(),
+            file: PathBuf::from(file),
+            line,
+            byte_span: (0, 1),
+            replacement: String::new(),
+            shape: String::new(),
+            semantic_note: None,
+            diag_digest: None,
+            extra_edits: Vec::new(),
+        };
+        // The chosen site carries three strategies (one repeated — dedup);
+        // the other line and the other code are DIFFERENT decisions.
+        let candidates = vec![
+            cand("a.rs", 3, "E0502", "s-b"),
+            cand("a.rs", 3, "E0502", "s-a"),
+            cand("a.rs", 3, "E0502", "s-b"),
+            cand("a.rs", 7, "E0502", "s-far"),
+            cand("a.rs", 3, "E0499", "s-othercode"),
+        ];
+        let chosen = cand("a.rs", 3, "E0502", "s-a");
+        assert_eq!(strategy_menu(&candidates, &chosen), vec!["s-b".to_string()]);
+        // Solo candidate: the empty menu — `None` downstream, never erasing.
+        let solo = vec![cand("a.rs", 3, "E0502", "s-only")];
+        assert!(strategy_menu(&solo, &cand("a.rs", 3, "E0502", "s-only")).is_empty());
+        // The cap: a wide same-site menu truncates to the store's label cap
+        // (`latent_retrieval` owns the constant; without it the label has no
+        // consumer and the menu travels whole — playbook-bounded).
+        #[cfg(feature = "latent_retrieval")]
+        {
+            let wide: Vec<FixCandidate> = (0..24)
+                .map(|i| cand("a.rs", 3, "E0502", &format!("s-{i:02}")))
+                .collect();
+            let menu = strategy_menu(&wide, &cand("a.rs", 3, "E0502", "s-07"));
+            assert_eq!(menu.len(), crate::traj_store::REJECTED_CAP);
+            assert!(!menu.contains(&"s-07".to_string()), "chosen stays out");
+            assert_eq!(menu[0], "s-00", "sorted");
+        }
     }
 
     /// Issue 91 T1.5 — the ring record round-trips through the jsonl

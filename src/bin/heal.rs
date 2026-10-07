@@ -3655,7 +3655,10 @@ impl ReopenTrigger067 {
 /// Issue 148 T-b: the carried `rejected` vec → the stamp's `Option` shape.
 /// EMPTY reads as `None` (no candidate set resolved — a record without the
 /// set in hand never erases a label a richer observation left), non-empty as
-/// `Some` (refresh, clamped + deduped by the store).
+/// `Some` (refresh, clamped + deduped by the store). Shared by BOTH capture
+/// lanes: the clippy/fix lane (span rules at the edited span) and the
+/// rustc_errors driver lane (the strategy menu — T-b follow-up).
+#[cfg(feature = "latent_retrieval")]
 fn rejected_opt(rejected: &[String]) -> Option<&[String]> {
     (!rejected.is_empty()).then_some(rejected)
 }
@@ -9756,13 +9759,20 @@ fn main() {
                         // (repo-relative) — the sync gate's allow_paths input.
                         let src_path = store.src_path_of(&a.file);
                         let sourced = store.sourced(&src_path);
-                        if let Err(e) = sourced.record(
+                        // Issue 148 T-b follow-up: `record_classified` is
+                        // `record` plus the attribution + label params —
+                        // `None` component keeps record's posture exactly;
+                        // the driver's strategy menu rides the same label
+                        // path the clippy lane opened.
+                        if let Err(e) = sourced.record_classified(
                             &traj_key(&a.code, &a.strategy_id),
                             &a.shape,
                             &a.fix,
                             true,
                             true,
                             &heal_run_id,
+                            None,
+                            rejected_opt(&a.rejected),
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
@@ -9798,10 +9808,11 @@ fn main() {
                             false,
                             &heal_run_id,
                             Some(component),
-                            // Issue 148 T-b follow-up: the rustc_errors driver's
-                            // strategy menu is a candidate set in hand, but the
-                            // label capture starts with the corpus-rule fix lane.
-                            None,
+                            // Issue 148 T-b follow-up LANDED: the driver's
+                            // strategy menu (the alternatives considered at
+                            // this site when the oracle rejected THIS move)
+                            // rides the same label path as the applied fix.
+                            rejected_opt(&r.rejected),
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }

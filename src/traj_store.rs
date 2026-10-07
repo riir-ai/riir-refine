@@ -2450,6 +2450,85 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
     }
 
+    /// Issue 148 T-b follow-up (the `rustc_errors` driver lane): the lane
+    /// records through `SourcedTraj::record_classified` — the applied fix
+    /// rides `None` component, the revert rides `Some` — with the captured
+    /// strategy menu as the label. The None-keep law holds on exactly that
+    /// shape: a record without the menu (a solo-candidate decision, captured
+    /// as an empty vec → `rejected_opt` → `None`) never erases one a richer
+    /// observation left, and a revert's `Some` refreshes through the same law.
+    #[test]
+    fn driver_lane_record_shape_keeps_label_on_none() {
+        let root = tmp_root("driver-lane-label");
+        let key = "E0502:e0597-clone-out";
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            // The applied fix, stamped with the captured menu (sourced — the
+            // driver lane's shape carries the file).
+            store
+                .sourced("src/a.rs")
+                .record_classified(
+                    key,
+                    "&v[0]",
+                    "v[0].clone()",
+                    true,
+                    true,
+                    "run-1",
+                    None,
+                    Some(&[
+                        "e0597-deref".to_string(),
+                        "rustc-suggestion".to_string(),
+                    ]),
+                )
+                .unwrap();
+            let label = || {
+                store
+                    .dump()
+                    .into_iter()
+                    .find(|r| r.lint_key == key)
+                    .map(|r| r.rejected)
+                    .unwrap()
+            };
+            assert_eq!(
+                label(),
+                vec!["e0597-deref".to_string(), "rustc-suggestion".to_string()]
+            );
+            // A later keep WITHOUT a menu (solo candidate → empty → `None`)
+            // keeps the label; the sourced path survives the same way.
+            store
+                .sourced("src/a.rs")
+                .record_classified(key, "&v[0]", "v[0].clone()", true, true, "run-2", None, None)
+                .unwrap();
+            assert_eq!(label().len(), 2, "None kept the driver-lane label");
+            // The revert record (`Some(component)`) refreshes through the
+            // same law — the narrower menu replaces, it does not append.
+            store
+                .sourced("src/a.rs")
+                .record_classified(
+                    key,
+                    "&v[0]",
+                    "v[0].clone()",
+                    false,
+                    false,
+                    "run-3",
+                    Some(crate::component::ComponentClass::Drafter),
+                    Some(&["e0597-deref".to_string()]),
+                )
+                .unwrap();
+            assert_eq!(label(), vec!["e0597-deref".to_string()]);
+            assert_eq!(store.dump()[0].src_path, "src/a.rs");
+        }
+        // Durable across reopen.
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let row = store
+            .dump()
+            .into_iter()
+            .find(|r| r.lint_key == key)
+            .unwrap();
+        assert_eq!(row.rejected, vec!["e0597-deref".to_string()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     /// riir-dapps Issue 119 T2: `src_path_of` yields the repo-relative,
     /// forward-slash form the policy globs are written against — through
     /// symlinked temp dirs (canonicalized), for a deleted file (via its

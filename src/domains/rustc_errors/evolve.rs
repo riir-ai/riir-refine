@@ -838,6 +838,7 @@ mod tests {
                 shape: "&v[0]".to_string(),
                 fix: String::new(),
                 semantic_note: None,
+                rejected: Vec::new(),
             }],
             reverted: vec![super::super::driver::RevertedRecord {
                 file: PathBuf::from("/x/a.rs"),
@@ -848,6 +849,7 @@ mod tests {
                 shape: "&v[0]".to_string(),
                 fix: "v[0].clone()".to_string(),
                 semantic_note: None,
+                rejected: Vec::new(),
             }],
             ..FixCompileReport::default()
         };
