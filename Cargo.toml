@@ -1453,6 +1453,15 @@ required-features = ["shader_perf"]
 name = "wasm_validator_gates"
 required-features = ["wasm_validator"]
 
+# Plan 199 T3.3 — the committed-artifact store's gates: install/load/verify
+# round trip, no-op reinstall, hot-swap version bump, tampered-artifact
+# refusal, durable revocation + new-version-only reinstatement, and the
+# tier_guard Lemma-4.2 withdrawal exclusion. Whole-file cfg protects the
+# count; this row protects the reader.
+[[test]]
+name = "wasm_validator_store_gates"
+required-features = ["wasm_validator"]
+
 [[test]]
 name = "differential_anchor_ab"
 required-features = ["differential_anchor", "clippy_lints", "rust_perf"]

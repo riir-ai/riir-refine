@@ -1,0 +1,11 @@
+{
+  "validators": [
+    {
+      "name": "useless_format_brace",
+      "version": 1,
+      "blake3": "89b1acaf19ad5c47435043dc3ce7aa927adea87b737b71dfd44e6901d5498b13",
+      "file": "useless_format_brace.wasm",
+      "state": "active"
+    }
+  ]
+}

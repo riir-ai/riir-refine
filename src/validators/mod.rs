@@ -20,9 +20,14 @@
 #![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
 
 pub mod interp;
+pub mod store;
 
 pub use interp::{
     Outcome, Trap, Vm, ABI_FUNC, ABI_INPUT_ADDR, ABI_SCORE_ADDR, DEFAULT_FUEL, MEM_LEN,
+};
+pub use store::{
+    advantage_certified, withdrawal_excludes, AdmittedValidator, StoreError, ValidatorManifest,
+    ValidatorRecord, ValidatorState, ValidatorStore, MANIFEST_FILE,
 };
 
 use katgpt_percepta::wasm::{
