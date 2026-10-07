@@ -72,6 +72,7 @@ fn row(lint_key: &str, shape: &str, fix: &str) -> TrajRowDoc {
         journey_runs: 0,
         journey_taint_sum: 0,
         src_path: "src/lib.rs".into(),
+        rejected: Vec::new(),
     }
 }
 

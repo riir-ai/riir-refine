@@ -3590,6 +3590,8 @@ fn migrate_envelope_once(store: &riir_refine::traj_store::TrajStore) {
             // file — unknown path, which the sync gate fails closed on
             // until a later heal run re-records the row with its file.
             src_path: String::new(),
+            // Issue 148 T-b: the envelope never knew the candidate set.
+            rejected: Vec::new(),
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -3650,6 +3652,14 @@ impl ReopenTrigger067 {
     }
 }
 
+/// Issue 148 T-b: the carried `rejected` vec → the stamp's `Option` shape.
+/// EMPTY reads as `None` (no candidate set resolved — a record without the
+/// set in hand never erases a label a richer observation left), non-empty as
+/// `Some` (refresh, clamped + deduped by the store).
+fn rejected_opt(rejected: &[String]) -> Option<&[String]> {
+    (!rejected.is_empty()).then_some(rejected)
+}
+
 /// Record one verdict event into the durable store (best-effort — a store
 /// failure warns once per event, never fails the heal). `component` is the
 /// Issue 047 decision-time failure attribution (`None` on successes and
@@ -3657,7 +3667,7 @@ impl ReopenTrigger067 {
 /// ([`TrajStore::src_path_of`](riir_refine::traj_store::TrajStore::src_path_of))
 /// — the row's sync-policy `allow_paths` input (riir-dapps Issue 119 T2).
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
-#[allow(clippy::too_many_arguments)] // the existing record shape + attribution + source
+#[allow(clippy::too_many_arguments)] // the existing record shape + attribution + source + the Issue-148 label
 fn record_traj(
     store: &Option<riir_refine::traj_store::TrajStore>,
     src_path: &str,
@@ -3668,6 +3678,7 @@ fn record_traj(
     verified: bool,
     run_id: &str,
     component: Option<riir_refine::component::ComponentClass>,
+    rejected: Option<&[String]>,
 ) {
     if let Some(store) = store {
         if let Err(e) = store.sourced(src_path).record_classified(
@@ -3678,6 +3689,7 @@ fn record_traj(
             verified,
             run_id,
             component,
+            rejected,
         ) {
             eprintln!("self-evolve: store record failed: {e}");
         }
@@ -3689,6 +3701,7 @@ fn record_traj(
 /// point the failure is observed (Issue 047): a compile-gate revert means
 /// the drafter produced a defective fix — W-class.
 #[cfg(all(feature = "fix_verify", feature = "latent_retrieval"))]
+#[allow(clippy::too_many_arguments)] // threads the Issue-148 label through the fixed failure verdict
 fn record_traj_fail(
     store: &Option<riir_refine::traj_store::TrajStore>,
     src_path: &str,
@@ -3696,6 +3709,7 @@ fn record_traj_fail(
     restore: &str,
     replacement: &str,
     run_id: &str,
+    rejected: Option<&[String]>,
 ) {
     let class = riir_refine::component::classify(&riir_refine::component::FailureSignal::reverted(
         riir_refine::component::RevertKind::CompileGate,
@@ -3710,6 +3724,7 @@ fn record_traj_fail(
         false,
         run_id,
         Some(class),
+        rejected,
     );
 }
 
@@ -3766,16 +3781,23 @@ fn suppression_disabled() -> bool {
 /// middle fields exist for the verify path; `note` is the rule's trust
 /// annotation (Issue 074 T1) and `fmt_note` is the per-file
 /// fmt-plan/outcome annotation (`None` disables).
-fn format_fix_review(
-    display: &str,
-    edits: &[(String, usize, String, String, Option<&'static str>)],
-    fmt_note: Option<&str>,
-) -> String {
+/// One review-row edit — the widened fix-review tuple (Issue 148 T-b
+/// added the 6th field, the rejected candidate set riding the record path).
+type FixEdit = (
+    String,
+    usize,
+    String,
+    String,
+    Option<&'static str>,
+    Vec<String>,
+);
+
+fn format_fix_review(display: &str, edits: &[FixEdit], fmt_note: Option<&str>) -> String {
     if edits.is_empty() {
         return String::new();
     }
     let mut out = format!("fix {} ({} edit(s)):\n", display, edits.len());
-    for (rule_id, line, _, _, note) in edits {
+    for (rule_id, line, _, _, note, _) in edits {
         out.push_str(&format!("  [{rule_id:<24}] line {line}"));
         // Issue 074 T1: one annotation dialect with the rustc_errors
         // renderer (`semantic_note_suffix`), truncated to the FIRST line
@@ -3795,11 +3817,7 @@ fn format_fix_review(
 }
 
 /// Print the formatted fix review.
-fn print_fix_review(
-    display: &str,
-    edits: &[(String, usize, String, String, Option<&'static str>)],
-    fmt_note: Option<&str>,
-) {
+fn print_fix_review(display: &str, edits: &[FixEdit], fmt_note: Option<&str>) {
     print!("{}", format_fix_review(display, edits, fmt_note));
 }
 
@@ -9780,6 +9798,10 @@ fn main() {
                             false,
                             &heal_run_id,
                             Some(component),
+                            // Issue 148 T-b follow-up: the rustc_errors driver's
+                            // strategy menu is a candidate set in hand, but the
+                            // label capture starts with the corpus-rule fix lane.
+                            None,
                         ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
@@ -11197,7 +11219,39 @@ fn main() {
         // (own-pass mapping is safe: the edit's own splice breaks at
         // `start >= p` without self-applying), then express it as a line
         // number in the final text.
-        let all_edits: Vec<(String, usize, String, String, Option<&'static str>)> = all_edits
+        //
+        // ── Issue 148 T-b (the suite-mint label): the per-span rejected
+        // candidate set, captured where the matcher already has it. ONE
+        // suggest pass over the ORIGINAL file (the decision-time corpus
+        // posture); each edit resolves the span whose line range contains
+        // its OWN-PASS line (chunk-neighborhood join — exact at pass 0,
+        // drift only from earlier passes' line deltas, bounded by how rarely
+        // the fixpoint goes past pass 1). An edit whose span is not found
+        // carries an EMPTY vec — `rejected_opt` turns that into `None` so a
+        // miss never erases a label a richer observation left.
+        #[cfg(feature = "latent_retrieval")]
+        let span_candidates: Vec<(usize, usize, Vec<String>)> =
+            if args.write && !all_edits.is_empty() && traj_store.is_some() {
+                matcher
+                    .suggest_file(&src, &display, args.top_k)
+                    .iter()
+                    .map(|s| {
+                        let mut rules: Vec<String> = s
+                            .by_domain
+                            .iter()
+                            .flat_map(|(_, rs)| rs.iter().map(|r| r.rule_id.clone()))
+                            .collect();
+                        rules.sort();
+                        rules.dedup();
+                        (s.start_line, s.end_line, rules)
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+        #[cfg(not(feature = "latent_retrieval"))]
+        let span_candidates: Vec<(usize, usize, Vec<String>)> = Vec::new();
+        let all_edits: Vec<FixEdit> = all_edits
             .into_iter()
             .map(|(pass, rule_id, start, end, replacement)| {
                 let mut pos = start;
@@ -11214,7 +11268,23 @@ fn main() {
                 } else {
                     rule_context_note(&rule_id)
                 };
-                (rule_id, line, replacement, restore, note)
+                // The edit's line in ITS OWN pass's text — the honest join
+                // key against the ORIGINAL-file span map (see the block
+                // comment above for the approximation bound).
+                let pass_line = pass_texts[pass][..start].matches('\n').count() + 1;
+                let rejected: Vec<String> = span_candidates
+                    .iter()
+                    .find(|(sl, el, _)| pass_line >= *sl && pass_line <= *el)
+                    .map(|(_, _, rules)| {
+                        rules
+                            .iter()
+                            .filter(|r| r.as_str() != rule_id)
+                            .take(riir_refine::traj_store::REJECTED_CAP)
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                (rule_id, line, replacement, restore, note, rejected)
             })
             .collect();
 
@@ -11238,12 +11308,13 @@ fn main() {
                     fixed: current.clone(),
                     edits: all_edits
                         .iter()
-                        .map(|(rule, line, repl, restore, _note)| {
+                        .map(|(rule, line, repl, restore, _note, rejected)| {
                             riir_refine::fix_verify::EditAtLine {
                                 rule_id: rule.clone(),
                                 final_line: *line,
                                 replacement: repl.clone(),
                                 restore: restore.clone(),
+                                rejected: rejected.clone(),
                             }
                         })
                         .collect(),
@@ -11287,7 +11358,7 @@ fn main() {
                     evolve_rec.record_reviewed(
                         &all_edits
                             .iter()
-                            .map(|(rule_id, line, replacement, restore, _)| {
+                            .map(|(rule_id, line, replacement, restore, _, _)| {
                                 (rule_id.clone(), *line, replacement.clone(), restore.clone())
                             })
                             .collect::<Vec<_>>(),
@@ -11299,11 +11370,15 @@ fn main() {
                     // of `file` — its repo-relative path rides the row.
                     let src_path = store.src_path_of(file);
                     let sourced = store.sourced(&src_path);
-                    for (rule, _, replacement, restore, _) in &all_edits {
+                    for (rule, _, replacement, restore, _, rejected) in &all_edits {
                         reopen067.note(store, rule);
-                        if let Err(e) =
-                            sourced.record_applied(rule, restore, replacement, &heal_run_id)
-                        {
+                        if let Err(e) = sourced.record_applied(
+                            rule,
+                            restore,
+                            replacement,
+                            &heal_run_id,
+                            rejected_opt(rejected),
+                        ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
                     }
@@ -11331,7 +11406,7 @@ fn main() {
                 n_fixed_edits += all_edits.len();
                 if args.write {
                     for (rule, ..) in &all_edits {
-                        *fixstat_rules.entry(rule.clone()).or_insert(0) += 1;
+                        *fixstat_rules.entry(rule.clone()).or_default() += 1;
                     }
                 }
             }
@@ -11345,7 +11420,7 @@ fn main() {
                     evolve_rec.record_reviewed(
                         &all_edits
                             .iter()
-                            .map(|(rule_id, line, replacement, restore, _)| {
+                            .map(|(rule_id, line, replacement, restore, _, _)| {
                                 (rule_id.clone(), *line, replacement.clone(), restore.clone())
                             })
                             .collect::<Vec<_>>(),
@@ -11357,11 +11432,15 @@ fn main() {
                     // of `file` — its repo-relative path rides the row.
                     let src_path = store.src_path_of(file);
                     let sourced = store.sourced(&src_path);
-                    for (rule, _, replacement, restore, _) in &all_edits {
+                    for (rule, _, replacement, restore, _, rejected) in &all_edits {
                         reopen067.note(store, rule);
-                        if let Err(e) =
-                            sourced.record_applied(rule, restore, replacement, &heal_run_id)
-                        {
+                        if let Err(e) = sourced.record_applied(
+                            rule,
+                            restore,
+                            replacement,
+                            &heal_run_id,
+                            rejected_opt(rejected),
+                        ) {
                             eprintln!("self-evolve: store record failed: {e}");
                         }
                     }
@@ -11923,6 +12002,7 @@ fn main() {
                         &e.restore,
                         &e.replacement,
                         &heal_run_id,
+                        rejected_opt(&e.rejected),
                     );
                 }
                 continue;
@@ -11982,6 +12062,7 @@ fn main() {
                     verified,
                     &heal_run_id,
                     fail_signal.as_ref().map(riir_refine::component::classify),
+                    rejected_opt(&e.rejected),
                 );
             }
             for e in b
@@ -12005,6 +12086,7 @@ fn main() {
                     &e.restore,
                     &e.replacement,
                     &heal_run_id,
+                    rejected_opt(&e.rejected),
                 );
             }
             println!(
@@ -13600,6 +13682,7 @@ mod fix_review_note_tests {
                 "r".to_string(),
                 "o".to_string(),
                 note,
+                Vec::new(),
             )],
             None,
         )
@@ -13685,6 +13768,7 @@ mod fix_review_note_tests {
                 String::new(),
                 String::new(),
                 Some("first line\nsecond line"),
+                Vec::new(),
             )],
             Some("would-format"),
         );

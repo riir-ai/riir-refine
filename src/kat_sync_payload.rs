@@ -60,8 +60,12 @@
 //! per-repo `.refine-sync-policy` + mining-consent mechanism — no new
 //! consent surface is owed. decstat/fixstat CANNOT carry contexts (their
 //! stats-only redaction law); this lane is the one carrier. Any label-field
-//! additions (e.g. the rejected candidate set per span) are `PAYLOAD_VERSION`
-//! decisions — see [`PAYLOAD_CHANGELOG`] + the receiver's floor posture.
+//! additions are `PAYLOAD_VERSION` decisions — see [`PAYLOAD_CHANGELOG`] +
+//! the receiver's floor posture. **v4 (Issue 148 T-b) landed the first such
+//! label: the per-row `rejected` candidate set** (the matcher's proposed
+//! rule ids minus the applied rule), captured at heal time in the fix
+//! lane's record path and riding the row ungated (the `domain` vocabulary
+//! class).
 //!
 //! ## Honest scope
 //!
@@ -96,7 +100,7 @@ use ed25519_dalek::{Signer as _, Verifier as _};
 /// The payload SCHEMA version (G9b). Bump ONLY when the wire shape changes
 /// (field added/removed/renamed, gating scope, commitment domain), and record
 /// the delta in [`PAYLOAD_CHANGELOG`] in the same change.
-pub const PAYLOAD_VERSION: u32 = 3;
+pub const PAYLOAD_VERSION: u32 = 4;
 
 /// Versioned deltas of the payload schema (G9b — "never a silent re-shape").
 pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
@@ -136,6 +140,20 @@ pub const PAYLOAD_CHANGELOG: &[(u32, &str)] = &[
          mapping) — never a hard cutover; mixed fleets are the normal state. \
          SYNC_SIGNING_DOMAIN keeps its historical `-v2` spelling: old clients \
          verify against those exact bytes, so moving it WOULD be a hard cut.",
+    ),
+    (
+        4,
+        "each row gains `rejected` (Issue 148 T-b, the suite-mint label): the \
+         retrieval matcher's proposed rule ids for the span the fix was applied \
+         to, minus the applied rule — the contrastive negatives a refine-rule \
+         suite mint trains against (the training-source designation above). \
+         Sorted, deduped, capped at 16, NOT gated (the `domain` class: \
+         generated vocabulary ids naming OUR compiled corpus rules, never user \
+         bytes), skip-serialized when empty so a no-label row is byte-identical \
+         to v3. The receiver still ingests {2,3} (rejected = absent → None) — \
+         never a hard cutover. Captured only where the candidate set is \
+         already in hand (the corpus-rule fix lane's matcher join; the \
+         rustc_errors driver's strategy menu is the recorded follow-up).",
     ),
 ];
 
@@ -245,6 +263,17 @@ pub struct PayloadRow {
     /// user bytes. A pre-v3 receiver ignores it; a v3 receiver treats absent
     /// (v2 rows) and empty identically.
     pub domain: String,
+    /// The REJECTED candidate set (v4 — Issue 148 T-b, the suite-mint
+    /// label): the retrieval matcher's proposed rule ids for the span this
+    /// fix was applied to, minus the applied rule — the contrastive
+    /// negatives a refine-rule suite mint trains against. Sorted, deduped,
+    /// capped at `traj_store::REJECTED_CAP`. NOT a gated field — the same
+    /// generated-vocabulary-id class as `domain`, never user bytes (the
+    /// ids name OUR compiled corpus rules). Absent = no label captured
+    /// (span not found / pre-v4 row / non-latent build) — a pre-v4
+    /// receiver ignores it; empty and absent are the same no-label answer.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected: Vec<String>,
     /// The trigger text, gated (redacted in place when the policy allows).
     pub shape: String,
     /// The replacement text, gated.
@@ -597,6 +626,7 @@ pub(crate) fn gate_row(
         shape_id: shape_hash(&row.shape),
         lint_key,
         domain: domains.domain_for(row.lint_key.as_str()).to_string(),
+        rejected: row.rejected.clone(),
         shape,
         fix,
         direction: row.direction.clone(),
@@ -766,6 +796,7 @@ mod tests {
             journey_runs: 0,
             journey_taint_sum: 0,
             src_path: "src/lib.rs".into(),
+            rejected: Vec::new(),
         }
     }
 
@@ -1014,8 +1045,14 @@ mod tests {
     #[test]
     fn builder_default_attributes_from_the_compiled_table() {
         let gate = RedactionGate::from_policy(allow_policy());
-        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer())
-            .build_at(&[row("needless_return", "fn g() { return 1; }", "fn g() { 1 }")], 1);
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &golden_signer()).build_at(
+            &[row(
+                "needless_return",
+                "fn g() { return 1; }",
+                "fn g() { 1 }",
+            )],
+            1,
+        );
         let parsed = parse_rows(&p.ndjson).unwrap();
         assert_eq!(parsed[0].domain, "clippy");
         // Unknown rules cross as the empty string (the receiver's `other`).
@@ -1056,8 +1093,8 @@ mod tests {
             .collect(),
             rustc_codes: std::collections::BTreeSet::new(),
         };
-        let b = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
-            .with_rule_domains(domains);
+        let b =
+            SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).with_rule_domains(domains);
         let rows = vec![
             row(
                 "uninlined_format_args",
@@ -1072,19 +1109,20 @@ mod tests {
             "bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f"
         );
         let expected = concat!(
-            // payload_version 3 (Issue 103). redact_version tracks
-            // REDACT_VERSION (5 since the Issue-002 AI-intel pass: the AQ.
-            // Gemini row; the v4 consolidation rode the same window). The
-            // batch_commitment is over the ROW lines only; the SIGNATURE
-            // covers the header — so a redact_version bump re-pins this
-            // golden (coordinated, both repos, same window). Rows now carry
-            // `domain` (the fixture's EXPLICIT table — both rules → clippy),
-            // placed between lint_key and shape in the serde field order.
-            "{\"payload_version\":3,\"redact_version\":5,\"origin\":\"own-repo\",",
+            // payload_version 4 (riir-refine Issue 148 T-b — the per-row
+            // `rejected` label; these fixture rows carry none, so the ROW
+            // bytes — and with them the batch_commitment — are byte-identical
+            // to v3: only the header's payload_version + the signature that
+            // covers it moved). redact_version tracks REDACT_VERSION (5 since
+            // the Issue-002 AI-intel pass). Rows carry `domain` (the
+            // fixture's EXPLICIT table — both rules → clippy), placed between
+            // lint_key and shape in the serde field order; `rejected` would
+            // sit right after `domain` when present (skip-serialized empty).
+            "{\"payload_version\":4,\"redact_version\":5,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
             "\"batch_commitment\":\"bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f\",",
             "\"account_pubkey_hex\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\",",
-            "\"signature_hex\":\"fff18caad80604fb0613b9a618a22d76c34396063a4c5a617303df182f4b78d31ee87a615e2721f30af146007048d7d215ef18db5151c588ee95f021f077310d\"}\n",
+            "\"signature_hex\":\"7c6b8030f9478dab785bfa9687b83f9af56c83c5118e5e3b713b653e6c53935970aed4080619cf6b4c0f4d4b73ee15d1b3b596268f8fa9be07f13ae957272702\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",\"domain\":\"clippy\",",
             "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",
@@ -1099,6 +1137,48 @@ mod tests {
             "\"gate\":{\"decision\":\"allow\",\"findings\":[]}}\n",
         );
         assert_eq!(p.ndjson, expected);
+    }
+
+    /// Issue 148 T-b: a row carrying the `rejected` label round-trips —
+    /// the field serializes between `domain` and `shape` (skip-serialized
+    /// when empty), the row's commitment + signature verify, and the label
+    /// survives the consumer-side `parse_rows` decode. The empty-label
+    /// half is pinned by `golden_payload_bytes_are_pinned` (its rows carry
+    /// no label and are byte-identical to v3 — the skip-when-empty law).
+    #[test]
+    fn rejected_label_round_trips_and_is_byte_pinned() {
+        let gate = RedactionGate::from_policy(allow_policy());
+        let signer = golden_signer();
+        let mut labelled = row("needless_return", "fn g() { return 1; }", "fn g() { 1 }");
+        labelled.rejected = vec![
+            "manual_map".to_string(),
+            "map_clone".to_string(),
+            "manual_map".to_string(), // dup — the builder carries what the
+                                      // store stamped (sorted+deduped at write time); the wire takes
+                                      // the doc verbatim, so the dup is honest input for THIS pin.
+        ];
+        let p = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
+            .build_at(&[labelled], 1_234_567);
+        assert_eq!(p.rows_included, 1);
+        // The label sits right before `shape` (after `domain`).
+        assert!(
+            p.ndjson
+                .contains("\"rejected\":[\"manual_map\",\"map_clone\",\"manual_map\"],\"shape\":"),
+            "the rejected array is byte-pinned in place: {}",
+            p.ndjson
+        );
+        let h = verify_payload(&p.ndjson).unwrap();
+        assert_eq!(h.payload_version, PAYLOAD_VERSION);
+        let rows = parse_rows(&p.ndjson).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].rejected,
+            vec![
+                "manual_map".to_string(),
+                "map_clone".to_string(),
+                "manual_map".to_string()
+            ]
+        );
     }
 
     /// Issue 008 gates (the T3 set — mirrored receiver-side):

@@ -155,7 +155,24 @@ pub struct TrajRowDoc {
     /// promise — "never a file path").
     #[serde(default)]
     pub src_path: String,
+    /// Issue 148 T-b (the suite-mint label): the REJECTED candidate set —
+    /// the retrieval matcher's proposed rule ids for the span this row's
+    /// fix was applied to, MINUS the applied rule — the contrastive
+    /// negatives a refine-rule suite mint trains against. Sorted, deduped,
+    /// capped at [`REJECTED_CAP`]; refreshed by every record that KNOWS the
+    /// candidate set (`Some`), left untouched by records that do not
+    /// (`None` — the `src_path` law). The join is chunk-neighborhood
+    /// approximate: the matcher proposes per suggest-span, the edit lands
+    /// at a line inside one. Vocabulary ids from the compiled corpus, never
+    /// user bytes — crosses the wire ungated like `domain` (v4).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rejected: Vec<String>,
 }
+
+/// The per-row cap on [`TrajRowDoc::rejected`] — the label is the
+/// neighborhood signal, not the whole index; 16 covers every top-k the
+/// CLI ships without letting a wide fan-out bloat the row doc.
+pub const REJECTED_CAP: usize = 16;
 
 /// The ELO base rating (unrated) — re-exported from the math module
 /// (Issue 039 T2 moved it beside [`EloTable`]; the arena calculator + PL
@@ -505,6 +522,19 @@ fn stamp_src(row: &mut TrajRowDoc, src: Option<&str>) {
     }
 }
 
+/// Stamp the Issue-148 T-b label: `Some(rejected)` refreshes the row's
+/// candidate set (clamped to [`REJECTED_CAP`]); `None` leaves it — a record
+/// without the candidate set in hand never erases one that had it.
+fn stamp_rejected(row: &mut TrajRowDoc, rejected: Option<&[String]>) {
+    if let Some(rs) = rejected {
+        let mut v: Vec<String> = rs.to_vec();
+        v.sort();
+        v.dedup();
+        v.truncate(REJECTED_CAP);
+        row.rejected = v;
+    }
+}
+
 /// `file` relative to `root`, forward slashes — both sides resolved to
 /// absolute + canonical form first (a relative `file` resolves against the
 /// cwd; a file that no longer exists resolves through its canonical parent,
@@ -569,7 +599,7 @@ impl SourcedTraj<'_> {
         verified: bool,
         run_id: &str,
     ) -> Result<(), String> {
-        self.record_classified(lint_key, shape, fix, success, verified, run_id, None)
+        self.record_classified(lint_key, shape, fix, success, verified, run_id, None, None)
     }
 
     /// [`TrajStore::record_classified`], sourced.
@@ -587,6 +617,7 @@ impl SourcedTraj<'_> {
         verified: bool,
         run_id: &str,
         component: Option<crate::component::ComponentClass>,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
         self.store.record_classified_src(
             lint_key,
@@ -597,6 +628,7 @@ impl SourcedTraj<'_> {
             run_id,
             component,
             Some(self.src_path),
+            rejected,
         )
     }
 
@@ -634,9 +666,10 @@ impl SourcedTraj<'_> {
         shape: &str,
         fix: &str,
         run_id: &str,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
         self.store
-            .record_applied_src(lint_key, shape, fix, run_id, Some(self.src_path))
+            .record_applied_src(lint_key, shape, fix, run_id, Some(self.src_path), rejected)
     }
 }
 
@@ -709,7 +742,7 @@ impl TrajStore {
         verified: bool,
         run_id: &str,
     ) -> Result<(), String> {
-        self.record_classified(lint_key, shape, fix, success, verified, run_id, None)
+        self.record_classified(lint_key, shape, fix, success, verified, run_id, None, None)
     }
 
     /// [`record`](Self::record) with the Issue 047 component attribution:
@@ -720,7 +753,7 @@ impl TrajStore {
     /// # Errors
     ///
     /// KV put or JSON encode failure.
-    #[allow(clippy::too_many_arguments)] // mirrors `record`'s call shape + the one attribution param
+    #[allow(clippy::too_many_arguments)] // mirrors `record`'s call shape + the attribution + label params
     pub fn record_classified(
         &self,
         lint_key: &str,
@@ -730,16 +763,17 @@ impl TrajStore {
         verified: bool,
         run_id: &str,
         component: Option<crate::component::ComponentClass>,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
         self.record_classified_src(
-            lint_key, shape, fix, success, verified, run_id, component, None,
+            lint_key, shape, fix, success, verified, run_id, component, None, rejected,
         )
     }
 
     /// The one verdict-write body behind [`record_classified`](Self::record_classified)
     /// and [`SourcedTraj::record_classified`]: `src = Some(path)` refreshes
     /// the row's [`TrajRowDoc::src_path`]; `None` leaves it untouched.
-    #[allow(clippy::too_many_arguments)] // record_classified's shape + the source path
+    #[allow(clippy::too_many_arguments)] // record_classified's shape + the source path + the label
     fn record_classified_src(
         &self,
         lint_key: &str,
@@ -750,6 +784,7 @@ impl TrajStore {
         run_id: &str,
         component: Option<crate::component::ComponentClass>,
         src: Option<&str>,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
@@ -757,6 +792,7 @@ impl TrajStore {
         // is stable, the fix may have been refined).
         row.fix = fix.to_string();
         stamp_src(&mut row, src);
+        stamp_rejected(&mut row, rejected);
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
         if let Some(class) = component {
@@ -857,8 +893,9 @@ impl TrajStore {
         shape: &str,
         fix: &str,
         run_id: &str,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
-        self.record_applied_src(lint_key, shape, fix, run_id, None)
+        self.record_applied_src(lint_key, shape, fix, run_id, None, rejected)
     }
 
     /// The apply-write body (see [`record_applied`](Self::record_applied));
@@ -870,11 +907,13 @@ impl TrajStore {
         fix: &str,
         run_id: &str,
         src: Option<&str>,
+        rejected: Option<&[String]>,
     ) -> Result<(), String> {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         row.fix = fix.to_string();
         stamp_src(&mut row, src);
+        stamp_rejected(&mut row, rejected);
         row.last_run_id = run_id.to_string();
         row.last_seen_at = now_unix_secs();
         self.put_row(&key, &row)
@@ -975,6 +1014,7 @@ impl TrajStore {
                     journey_runs: 0,
                     journey_taint_sum: 0,
                     src_path: String::new(),
+                    rejected: Vec::new(),
                 }
             })
     }
@@ -2243,6 +2283,7 @@ mod tests {
                     false,
                     "run-c",
                     Some(crate::component::ComponentClass::Drafter),
+                    None,
                 )
                 .unwrap();
             let row = &store.dump()[0];
@@ -2319,7 +2360,7 @@ mod tests {
                 .unwrap();
             store
                 .sourced("src/a.rs")
-                .record_applied("rule", "shape", "fix", "r1")
+                .record_applied("rule", "shape", "fix", "r1", None)
                 .unwrap();
             store
                 .record("rule", "shape", "fix2", false, false, "r2")
@@ -2341,7 +2382,7 @@ mod tests {
             assert_eq!(src("rule"), "build.rs");
             store
                 .sourced("tests/t.rs")
-                .record_classified("rule", "shape", "fix3", true, true, "r4", None)
+                .record_classified("rule", "shape", "fix3", true, true, "r4", None, None)
                 .unwrap();
             assert_eq!(src("rule"), "tests/t.rs");
         }
@@ -2352,6 +2393,60 @@ mod tests {
             .find(|r| r.lint_key == "rule")
             .unwrap();
         assert_eq!(row.src_path, "tests/t.rs");
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// Issue 148 T-b (the suite-mint label): `Some(rejected)` refreshes the
+    /// row's candidate set — sorted, deduped, capped — while `None` (a record
+    /// without the set in hand) never erases one a richer observation left.
+    #[test]
+    fn rejected_stamp_refreshes_on_some_and_keeps_on_none() {
+        let root = tmp_root("rejected-stamp");
+        {
+            let (store, _) = TrajStore::open(&root).unwrap();
+            store
+                .record_applied(
+                    "rule",
+                    "shape",
+                    "fix",
+                    "r1",
+                    Some(&[
+                        "z_rule".to_string(),
+                        "a_rule".to_string(),
+                        "a_rule".to_string(),
+                    ]),
+                )
+                .unwrap();
+            let label = || {
+                store
+                    .dump()
+                    .into_iter()
+                    .find(|r| r.lint_key == "rule")
+                    .map(|r| r.rejected)
+                    .unwrap()
+            };
+            assert_eq!(label(), vec!["a_rule".to_string(), "z_rule".to_string()]);
+            // `None` keeps (an outcome-only record never erases the label).
+            store
+                .record("rule", "shape", "fix", true, true, "r2")
+                .unwrap();
+            assert_eq!(label().len(), 2, "None kept the label");
+            // `Some` refreshes — unsorted input is normalized, and the cap
+            // truncates after the sort (deterministic, never arbitrary).
+            let many: Vec<String> = (0..24).map(|i| format!("r{i:02}")).collect();
+            store
+                .record_applied("rule", "shape", "fix", "r3", Some(&many))
+                .unwrap();
+            assert_eq!(label().len(), REJECTED_CAP);
+            assert_eq!(label().first().map(String::as_str), Some("r00"));
+        }
+        let (store, _) = TrajStore::open(&root).unwrap();
+        let row = store
+            .dump()
+            .into_iter()
+            .find(|r| r.lint_key == "rule")
+            .unwrap();
+        assert_eq!(row.rejected.len(), REJECTED_CAP, "the label is durable");
         let _ = std::fs::remove_dir_all(&root);
     }
 
@@ -2561,6 +2656,7 @@ mod tests {
                     "match c { true => a, _ => b }",
                     "if c { a } else { b }",
                     "run-1",
+                    None,
                 )
                 .unwrap();
         }
@@ -2607,6 +2703,7 @@ mod tests {
                 journey_runs: 0,
                 journey_taint_sum: 0,
                 src_path: String::new(),
+                rejected: Vec::new(),
             })
             .unwrap();
         let report = store.stats_report(0);
@@ -2742,6 +2839,7 @@ mod tests {
                 "match c { true => a, _ => b }",
                 "if c { a } else { b }",
                 "run-a",
+                None,
             )
             .unwrap();
         assert!(store.learn_rows().is_empty());
@@ -2846,7 +2944,7 @@ mod tests {
                 .unwrap();
             // Apply-only sighting: no outcomes, stays unrated.
             store
-                .record_applied("rule_c", "shape 3", "fix3", "run-1")
+                .record_applied("rule_c", "shape 3", "fix3", "run-1", None)
                 .unwrap();
 
             let s1 = store.recompute_elo().unwrap();
@@ -3037,7 +3135,7 @@ mod tests {
             store.recompute_elo().unwrap();
             // Post-recompute sighting on a NEW shape: fresh row at base.
             store
-                .record_applied("rule_r", "shape new", "f", "run-2")
+                .record_applied("rule_r", "shape new", "f", "run-2", None)
                 .unwrap();
         }
         let (store, _) = TrajStore::open(&root).unwrap();
@@ -3060,7 +3158,7 @@ mod tests {
         {
             let (store, _) = TrajStore::open(&root).unwrap();
             store
-                .record_applied("review_only", "shape 3", "fix3", "run-1")
+                .record_applied("review_only", "shape 3", "fix3", "run-1", None)
                 .unwrap();
             let table = store.elo_table();
             assert!(table.is_empty());
@@ -3542,13 +3640,19 @@ mod tests {
             provenance: crate::frontier_pairs::PROVENANCE_ORGANIC.into(),
         };
         store
-            .put_row_if_changed(&TrajStore::pair_key("E0597", "organic_probe_case"), &organic)
+            .put_row_if_changed(
+                &TrajStore::pair_key("E0597", "organic_probe_case"),
+                &organic,
+            )
             .unwrap();
         assert_eq!(store.pair_rows().unwrap().len(), n_construction + 1);
 
         let (fit, rated) = store.rate_pairs(50).unwrap();
         // Count: the fence rated exactly the construction rows.
-        assert_eq!(rated, n_construction, "fence must pass construction rows only");
+        assert_eq!(
+            rated, n_construction,
+            "fence must pass construction rows only"
+        );
         // Players: the organic row's strategies never enter the fit.
         assert!(!fit.contains_key("organic-winner-probe"));
         assert!(!fit.contains_key("organic-loser-probe"));

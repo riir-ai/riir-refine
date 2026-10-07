@@ -75,7 +75,7 @@ fn poisoned_wrong_goal_credit_is_excluded() {
         }
         // The poisoned row itself: an apply-only sighting (0/0, unrated).
         store
-            .record_applied("rule_p", "span_x trigger", "fix", "run-2")
+            .record_applied("rule_p", "span_x trigger", "fix", "run-2", None)
             .unwrap();
         store.recompute_elo().unwrap();
         // The goal-side model rates this pair far below a coin flip.
@@ -246,7 +246,7 @@ fn replay_is_deterministic() {
                 .unwrap();
         }
         store
-            .record_applied("rule_p", "span_x trigger", "fix", "run-2")
+            .record_applied("rule_p", "span_x trigger", "fix", "run-2", None)
             .unwrap();
         store.recompute_elo().unwrap();
         // The poisoned keep — refused this replay (p_goal ≪ p_outcome).

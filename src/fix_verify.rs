@@ -100,6 +100,13 @@ pub struct EditAtLine {
     pub replacement: String,
     /// The original source text of the replaced span (put back on revert).
     pub restore: String,
+    /// Issue 148 T-b: the rejected candidate set captured at edit time —
+    /// the matcher's proposed rule ids for the span minus this edit's
+    /// rule. Carried so the POST-VERIFY record path (which sees edits only
+    /// after the gate) can stamp the label. Empty = no candidate set was
+    /// resolved (span not found / non-latent build) — recorded as `None`,
+    /// never as an erasing `Some(&[])`.
+    pub rejected: Vec<String>,
 }
 
 /// One file's fix, ready for verification: the original text, the fixed
@@ -2090,6 +2097,7 @@ mod tests {
             final_line: line,
             replacement: replacement.to_string(),
             restore: restore.to_string(),
+            rejected: Vec::new(),
         }
     }
 
@@ -2316,18 +2324,21 @@ mod tests {
                 final_line: line_of(&fixed, "Vec::with_capacity(n);"),
                 replacement: "Vec::with_capacity(n)".to_string(),
                 restore: "Vec::new()".to_string(),
+                rejected: Vec::new(),
             },
             EditAtLine {
                 rule_id: "vec-with-capacity".to_string(),
                 final_line: line_of(&fixed, "Vec::with_capacity(BOARD_SIZE);"),
                 replacement: "Vec::with_capacity(BOARD_SIZE)".to_string(),
                 restore: "Vec::new()".to_string(),
+                rejected: Vec::new(),
             },
             EditAtLine {
                 rule_id: "redundant_closure".to_string(),
                 final_line: line_of(&fixed, "filter(is_true)"),
                 replacement: "is_true".to_string(),
                 restore: "|b| **b".to_string(),
+                rejected: Vec::new(),
             },
         ];
 
@@ -2496,6 +2507,7 @@ mod tests {
                 final_line: 2,
                 replacement: "Vec::with_capacity(n)".to_string(),
                 restore: "Vec::new()".to_string(),
+                rejected: Vec::new(),
             }],
         };
         let report = FixVerifier::new().verify(&[set]);
@@ -2577,6 +2589,7 @@ mod tests {
                     final_line: *line,
                     replacement: String::new(),
                     restore: String::new(),
+                    rejected: Vec::new(),
                 })
                 .collect(),
         }
@@ -2890,6 +2903,7 @@ mod tests {
                     final_line: *line,
                     replacement: String::new(),
                     restore: String::new(),
+                    rejected: Vec::new(),
                 })
                 .collect(),
         }

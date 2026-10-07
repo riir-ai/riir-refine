@@ -1,6 +1,6 @@
 # Issue 148 — the traj-mining contribution claim: name the lane as the (future) refine-rule-suite training source + add the missing label fields
 
-**Status:** OPEN — moved from Issue 147 at the T0′ closure (2026-10-05, the pre-registered NO-GO disposition: the tier closed, the contribution lane does not). **T-a LANDED + T-c analysis RECORDED 2026-10-05** (the module-doc designation in `src/kat_sync_payload.rs`; all three growth levers route through existing consent mechanisms — no healer-side code owed). **T-b (the label fields) is the remaining work** — a payload-version decision, yield-gated on P019 Move 1. **Standalone value: the corpus feeds self_evolve/Elo + mining regardless of the (now-closed) Decision-CPI tier.** **T-c lever 1 EXECUTED 2026-10-05 (owner-gate delegation verdict round 2 AGREE, session `3f5da49e-a018-45c9-871b-c32c1f19aec5`): katgpt-rs joined the contribution lane** — `.refine-sync-policy` written at the katgpt-rs repo root (the default v3: own-repo + standard source globs, `allow_redacted: false`; NOTE it sits at the ROOT, not under `.refine/`, and katgpt-rs's `.gitignore` covers only `.refine/` — the file is kept local-untracked via katgpt-rs `.git/info/exclude`) + `cargo refine --mine` run there (mining consent OptedIn, machine-global stance — `--unmine` reverses future contributions) ending in the full sync: **385 rows included / 0 blocked, server ingest rows_new 353 / terminal_skipped 32** (the non-zero include proves the policy was picked up). `--stats on` deliberately NOT run (machine-global, forward-only, and not a 148 lever). Other repos remain opt-in per owner.
+**Status:** OPEN — moved from Issue 147 at the T0′ closure (2026-10-05, the pre-registered NO-GO disposition: the tier closed, the contribution lane does not). **T-a LANDED + T-c analysis RECORDED 2026-10-05** (the module-doc designation in `src/kat_sync_payload.rs`; all three growth levers route through existing consent mechanisms — no healer-side code owed). **T-b LANDED 2026-10-07** (payload v4 — see the T-b row). **T-c lever 1 EXECUTED 2026-10-05** (owner-gate delegation verdict round 2 AGREE, session `3f5da49e-a018-45c9-871b-c32c1f19aec5`): katgpt-rs joined the contribution lane — `.refine-sync-policy` written at the katgpt-rs repo root (the default v3: own-repo + standard source globs, `allow_redacted: false`; NOTE it sits at the ROOT, not under `.refine/`, and katgpt-rs's `.gitignore` covers only `.refine/` — the file is kept local-untracked via katgpt-rs `.git/info/exclude`) + `cargo refine --mine` run there (mining consent OptedIn, machine-global stance — `--unmine` reverses future contributions) ending in the full sync: **385 rows included / 0 blocked, server ingest rows_new 353 / terminal_skipped 32** (the non-zero include proves the policy was picked up). `--stats on` deliberately NOT run (machine-global, forward-only, and not a 148 lever). Other repos remain opt-in per owner.
 
 ## What (Proposal 021 §3 carrier-corrected at verdict r2)
 
@@ -46,14 +46,57 @@ not a new lane and not decstat:
       designation" section in the module doc, carrying the Issue-147 T0′
       corpus bar + the consent-mechanism note (T-c's third lever's record)
       + the decstat exclusion + the label-field versioning law.
-- [ ] **T-b The label fields**: add the fields a suite mint needs and the
-      lane lacks — per-span **the rejected candidate set** (the top-k
+- [x] **T-b The label fields**: add the fields a suite mint needs and the
+      lane lacked — per-span **the rejected candidate set** (the top-k
       rules the matcher proposed that were NOT applied), recorded at
       heal time where the candidate set is already in hand. Schema note:
       the sync payload's rows are content-addressed + idempotent — a new
       field is a payload-version decision (see `PAYLOAD_CHANGELOG`), not
       a silent append; coordinate with the receiver's `MIN_SYNC_PAYLOAD_VERSION`
-      posture. YIELDS to P019 Move 1 if that move lands first.
+      posture. YIELDS to P019 Move 1 if that move lands first (it has not —
+      Proposal 019 stays PROPOSED, so the yield never fired).
+      **LANDED 2026-10-07 as payload v4** — the full family, both sides:
+      (1) **heal-time capture** (riir-refine `src/bin/heal.rs`): ONE
+      `matcher.suggest_file` pass over each EDITED file's original text
+      (only `--fix --write` runs with the store open); each applied edit
+      resolves the suggest-span containing its OWN-PASS line
+      (chunk-neighborhood join — exact at pass 0, drift bounded by the
+      fixpoint's rare pass>1) and carries the span's rule ids MINUS the
+      applied rule (capped `REJECTED_CAP=16`) into the record path —
+      `record_applied` (both non-verify cfg arms) AND the post-verify
+      `record_traj`/`record_traj_fail` sites via `EditAtLine.rejected`;
+      `rejected_opt(empty)=None` so a span-miss never erases a label a
+      richer observation left (the `src_path` law). (2) **the store**
+      (`TrajRowDoc.rejected`, serde-default + skip-when-empty, sorted+
+      deduped+clamped by `stamp_rejected`; `Some` refreshes, `None` keeps).
+      (3) **the wire** (`PayloadRow.rejected`, NOT gated — the `domain`
+      vocabulary-id class; skip-serialized when empty so a no-label row is
+      byte-identical to v3 and the golden COMMITMENT did not move):
+      `PAYLOAD_VERSION` 3→4 + the changelog row + the refine golden
+      re-pinned (only `payload_version` + the covering signature changed).
+      (4) **the receiver** (riir-dapps `src/kat/mining.rs`):
+      `SYNC_PAYLOAD_VERSION`=4 with the acceptance now a RANGE
+      `(MIN..=CURRENT)` in `verify_sync_payload` + `preverify_sync_header`
+      (v2/v3 still ingest — mixed fleet); `SyncPayloadRow.rejected:
+      Option<Vec<String>>` (absent/empty = None, the `domain` law);
+      `QueueRow.rejected` persisted as a SECOND codec tail after domain
+      ('\n'-joined; no tail = pre-v4 row, domain-only tail = v3 row —
+      pinned by the reworked truncation-boundary test); the refresh merge
+      is MONOTONE (the Issue-103 domain law: a v4 refresh re-labels, an
+      older-client refresh never wipes). Gates: refine lib 2718/0 at
+      `kat_service,latent_retrieval,fix_verify` + the integration trio +
+      the re-pinned goldens; dapps kat_mining 20/20 incl. the new
+      `v4_rejected_label_ingests_and_refresh_merges_monotonically`;
+      full guards on both repos. **Deploy posture (the Issue-103 law,
+      owner act): the LIVE devnet worker still accepts {2,3} — until the
+      owner deploys the v4-ingesting worker, the maintained binary's
+      auto-sync tail stacks OFFLINE (the designed posture: watermark
+      never advances on refusal, rows re-send post-deploy, server dedups
+      by record id). The released 0.2.1 binary emits v3 and is unaffected.**
+      Known scope note: the rustc_errors driver lane records `None` (its
+      strategy-menu capture is the recorded follow-up); `EvolveRecorder`
+      (envelope backend) carries no label by design — the store is the
+      label's home.
 - [-] **T-c The growth lever (analysis, then maybe code)**: the corpus is
       converged on m3 — growth needs NEW contexts. Cheapest levers, in
       order: (1) the never-pushed local stores (riir-game-sdk 12M,

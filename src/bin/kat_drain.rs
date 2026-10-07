@@ -1221,6 +1221,7 @@ mod tests {
             journey_runs: 0,
             journey_taint_sum: 0,
             src_path: String::new(),
+            rejected: Vec::new(),
         }
     }
 
