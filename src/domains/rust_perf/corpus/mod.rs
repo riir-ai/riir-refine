@@ -401,21 +401,23 @@ mod entries_12;
 mod entries_13;
 mod entries_14;
 mod entries_15;
+mod entries_16;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 167 entries
-/// (Batch 196, 2026-10-02, Plan 195: +2 from the `TensorFold` v0.6.0 distill —
-/// the grammar-window draft prune (complexity) + the startup-estimate
-/// allocation-shapes rule; the 163 figure below was the Batch 182 state and
-/// had gone stale — B186's +2 never moved it) covering the main perf
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 180 entries
+/// (Batch 202, 2026-10-07, Plan 201: +1, the nnethercote min-rank worklist
+/// rule. The prior headline said 167 and had gone stale through B198's +1
+/// and B200's +11 — the 179 figure the test asserted since B200 was the
+/// honest one; both are superseded here) covering the main perf
 /// pattern categories (complexity, allocation, simd,
 /// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm; live counts repaired at Batch 196 — complexity 31 (24 in the prior
-/// prose was stale through B177/B179/B181/B182/B186's complexity adds),
+/// wasm; live counts repaired at Batch 196 — complexity 32 (Batch 202 added
+/// the dataflow min-rank convergence rule; 31 was the state after B196 and
+/// the count prose below kept landing late — trust the test, not prose),
 /// allocation 29, io 26, concurrency 23, layout 13, iterators 11, simd 9,
 /// caching 8, arithmetic 8, dispatch 6, bevy 2, wasm 1).
 /// Allocation is the deepest family (29 — Batch 173 added the two
@@ -465,5 +467,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_13::entries());
     entries.extend(entries_14::entries());
     entries.extend(entries_15::entries());
+    entries.extend(entries_16::entries());
     Corpus::new(entries)
 }

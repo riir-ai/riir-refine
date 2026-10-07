@@ -25,7 +25,16 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 179 rules — Batch 200 (2026-10-03,
+profiling guide, Research 032; **now 180 rules — Batch 202 (2026-10-07,
+Plan 201 — the nnethercote min-rank worklist rule, source rust-lang/rust
+`#160193` "Improve CFG traversal" @ merge `cb9d1b06`, MIT/Apache — the
+author's 2026-09-30 perf blog; `dataflow-fixpoint-convergence-traversal-order`
+(complexity, NotBenchable annotated — a fixpoint's convergence is
+traversal-order dependent: re-process re-dirtied nodes in dataflow order
+(min-rank), never FIFO push-back; 1.5M → 90,000 apply_effects_in_block calls,
+~30% check-build wall on cranelift-codegen; the 17% figure is #160033's,
+NOT this PR's — the drift correction rides the entry). Previously
+179 rules — Batch 200 (2026-10-03,
 Plan 198 — the TensorFold staged pool's serving half, source
 `ashhart/tensorfold` @ `c4646171` v0.6.0, Apache-2.0 — the kernel half
 landed as Batch 199; all eleven NotBenchable annotated: prefix-cache-entry,

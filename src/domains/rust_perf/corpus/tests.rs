@@ -16,12 +16,13 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 179); // Batch 200 (+11: the TensorFold staged pool's serving half -- prefix-cache-entry-one-token-early, dual-reduction-shared-butterfly-ladder, idle-rank-doorbell-on-rendezvous-store, prompt-item-per-consumer-kernel-measured, concurrent-round-parity-solo-equal, lone-stream-graph-replay-mode-switch, snapshot-then-release-shared-drafter-context, graph-pool-handle-fresh-per-generation, spec-copy-window-aimd-ramp-alone-gated, one-shot-staging-release-to-system, madvise-random-for-key-gather-tables -- all NotBenchable annotated, Plan 198) on the 168 base (Batch 198 +1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
+    assert_eq!(corpus.entries.len(), 180); // Batch 202 (+1: dataflow-fixpoint-convergence-traversal-order -- the nnethercote min-rank worklist rule, rust-lang/rust #160193 @ cb9d1b06, NotBenchable annotated, Plan 201) on the 179 base (Batch 200 (+11: the TensorFold staged pool's serving half -- prefix-cache-entry-one-token-early, dual-reduction-shared-butterfly-ladder, idle-rank-doorbell-on-rendezvous-store, prompt-item-per-consumer-kernel-measured, concurrent-round-parity-solo-equal, lone-stream-graph-replay-mode-switch, snapshot-then-release-shared-drafter-context, graph-pool-handle-fresh-per-generation, spec-copy-window-aimd-ramp-alone-gated, one-shot-staging-release-to-system, madvise-random-for-key-gather-tables -- all NotBenchable annotated, Plan 198) on the 168 base (Batch 198 +1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
     // Per-category standing counts (repaired to the LIVE numbers at Batch
     // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
     // caching 7 and dispatch 5 in the prior prose had gone stale before this
     // batch: real 30/8/6 at the 165 state): allocation 29, io 26,
-    // concurrency 23, complexity 31, layout 13, iterators 11, simd 9,
+    // concurrency 23, complexity 32 (Batch 202 +1: the dataflow min-rank
+    // rule), layout 13, iterators 11, simd 9,
     // arithmetic 8, caching 8, dispatch 6, bevy 2, wasm 1 — asserted via the
     // distinct-category pin below plus the benchable/NotBenchable pins in
     // this file. Never read a typed figure from prose: run
@@ -5587,6 +5588,53 @@ fn batch200_rules_present_and_parse() {
             assert!(
                 notes.contains(needle),
                 "batch-200 '{id}' notes missing needle: {needle}"
+            );
+        }
+    }
+}
+
+/// Batch 202 — the nnethercote min-rank worklist rule (Plan 201):
+/// presence + category + syn-parse gate over both fixtures, plus the
+/// load-bearing needles from the verified quotes (the blog + the merged
+/// framework/mod.rs @ cb9d1b06, read live this batch).
+#[test]
+fn batch202_rules_present_and_parse() {
+    let corpus = build_perf_seed_corpus();
+    let expected = [(
+        "dataflow-fixpoint-convergence-traversal-order",
+        "complexity",
+        vec![
+            "NotBenchable",
+            "cb9d1b0640549f1b041aae430dc413ce93f8c204",
+            "160193",
+            "1.5 million",
+            "90,000",
+            "min-rank",
+            // the drift correction must ride the entry: 17% is #160033's
+            // figure, never this PR's
+            "160033",
+            "NOT carried",
+        ],
+    )];
+    for (id, category, notes_needles) in expected {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-202 rule '{id}' missing from corpus"));
+        assert_eq!(e.category, category, "batch-202 '{id}' category");
+        assert!(
+            syn::parse_file(&e.buggy_code)
+                .and_then(|_| syn::parse_file(&e.fixed_code))
+                .is_ok(),
+            "batch-202 '{id}' fixtures must parse"
+        );
+        assert!(e.context_notes.is_some(), "batch-202 '{id}' must be annotated");
+        let notes = e.context_notes.as_deref().unwrap_or_default();
+        for needle in notes_needles {
+            assert!(
+                notes.contains(needle),
+                "batch-202 '{id}' notes missing needle: {needle}"
             );
         }
     }
