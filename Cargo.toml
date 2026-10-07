@@ -21,6 +21,12 @@ katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", features = ["entropic_
 # adds the direct path + the `nonergodic_belief` gate the PoC consumes.
 # Optional, opt-in `nonergodic_poc` only.
 katgpt-micro-belief = { path = "../katgpt-rs/crates/katgpt-micro-belief", version = "0.2.1", optional = true, features = ["nonergodic_belief"] }
+# Plan 199 T3.2: the WASM validator lane's substrate — the percepta MVP
+# decoder + lowering pipeline (`percepta_wasm`). Optional, opt-in
+# `wasm_validator` only; good_lp / percepta_compile stay off (the T3.1
+# decision: percepta-decoder + an authored fuel-bounded interpreter, wasmi
+# refused on cost). BOUNDARY.md carries the allowlist row (same commit).
+katgpt-percepta = { path = "../katgpt-rs/crates/katgpt-percepta", optional = true, default-features = false, features = ["percepta_wasm"] }
 
 # Serialization for corpus freeze/thaw (BLAKE3-committed)
 blake3 = "1"
@@ -590,6 +596,13 @@ ruliology_search = ["clippy_lints"]
 # WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity)
 wasm_pruner = []
 
+# Plan 199 Phase 3 (T3.2): the WASM validator lane — bounded fix-validators
+# compiled Rust→wasm32, BLAKE3-committed, executed in-process by the
+# fuel-bounded interpreter in src/validators/ as a pre-oracle gate. Opt-in;
+# the artifact build lane is `cargo run --features wasm_validator --bin
+# wasm-validator-build`. Phase 3 stays opt-in until the T3.4 gates pass.
+wasm_validator = ["dep:katgpt-percepta"]
+
 # Adaptive LoRA fallback (L4 — deferred to riir-train; opt-in when ready)
 clippy_lora = []
 
@@ -914,6 +927,16 @@ name = "kat_drain"
 path = "src/bin/kat_drain.rs"
 # Issue 051: groq_first joins — the drain routes groq-first, CF fallback.
 required-features = ["cf_workers_ai", "groq_first"]
+
+# Plan 199 T3.2 — the validator authoring lane: build every validator source
+# crate under validator_src/ for wasm32-unknown-unknown, install the
+# artifacts into assets/validators/ (BLAKE3-stamped), then admission-verify
+# + smoke-run each through the in-process pipeline. Dev-time tool; the
+# committed artifacts are what tests + (later) the pre-oracle gate read.
+[[bin]]
+name = "wasm-validator-build"
+path = "src/bin/wasm_validator_build.rs"
+required-features = ["wasm_validator"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Local patches — mirror the riir-infer workspace's [patch.crates-io] so the
@@ -1421,6 +1444,14 @@ required-features = ["dist"]
 [[test]]
 name = "shader_perf_gates"
 required-features = ["shader_perf"]
+
+# Plan 199 T3.2 — the wasm validator lane's standing gates: committed-artifact
+# admission + verdict/score fixtures, fuel exhaustion, and the admission
+# refusal surface (imports / non-basic ops / ABI signature). Whole-file cfg
+# protects the count; this row protects the reader (the 713-T3 law).
+[[test]]
+name = "wasm_validator_gates"
+required-features = ["wasm_validator"]
 
 [[test]]
 name = "differential_anchor_ab"

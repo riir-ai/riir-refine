@@ -1,0 +1,22 @@
+[package]
+name = "validator_useless_format_brace"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Plan 199 T3.2 first bounded validator: the P21 useless_format brace-escape predicate as a wasm32 cdylib (bytes-in / verdict+score-out)."
+
+# Deliberately NOT a riir-refine workspace member: this crate builds for
+# wasm32-unknown-unknown only (the authoring lane's target), std-free so the
+# emitted module stays in the bounded i32 opcode set the admission gate
+# certifies. Built by `cargo run --features wasm_validator --bin
+# wasm-validator-build` from the repo root; the artifact lands at
+# assets/validators/useless_format_brace.wasm.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = "s"

@@ -18,6 +18,11 @@ CLAUDE.md
 # writes ./t37_rows.jsonl when --out is omitted) — a run artifact, not source.
 t37_rows.jsonl
 .wrangler/
+
+# Plan 199 T3.2: the validator authoring lane's wasm32 build dirs (the
+# .wasm ARTIFACTS are committed under assets/validators/; the intermediate
+# build trees are not).
+validator_src/*/target/
 scripts/__pycache__/
 .env
 

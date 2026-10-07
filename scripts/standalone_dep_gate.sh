@@ -62,7 +62,10 @@ cd "$(dirname "$0")/.."
 
 # The pinned inventory: "<manifest-relative-path> <dep-name>", sorted.
 #
-# 12 entries as of 2026-09-24 (Plan 610 S6 / reflex Issue 008 T2.3: the
+# 12 rows as of 2026-10-07 (11 through 2026-09-24 + katgpt-percepta — Plan
+# 199 T3.2: the wasm validator lane's decoder/lowering substrate, opt-in
+# `wasm_validator`; same katgpt-rs checkout as katgpt-core, no new sibling
+# for CI to provision). Earlier: Plan 610 S6 / reflex Issue 008 T2.3 — the
 # ternary lane retargeted from riir-engine/riir-gpu to riir-infer-core/
 # riir-infer-gpu — same count, two rows swapped; the cubecl-wgpu patch row
 # dropped with the old edge, arc-swap's genlock fork was a git dep and was
@@ -78,6 +81,7 @@ Cargo.toml cubecl-runtime
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
 Cargo.toml katgpt-micro-belief
+Cargo.toml katgpt-percepta
 Cargo.toml riir-infer-core
 Cargo.toml riir-infer-gpu
 Cargo.toml riir-kat

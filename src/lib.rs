@@ -729,3 +729,11 @@ pub use draft::{
     DomainId, DomainRouter, LatentMatcher, RuleIndex, RuleInfo, ScoredRule, SpanSuggestion,
     SuggestScratch,
 };
+
+// Plan 199 Phase 3: the WASM validator lane — bounded fix-validators as
+// committed wasm32 modules executed in-process at µs class. Opt-in: the
+// percepta wasm decoder/lowering dep rides `wasm_validator` only (default
+// build stays dependency-light). Admission gate + fuel-bounded interpreter;
+// the artifact build lane is the `wasm-validator-build` bin.
+#[cfg(feature = "wasm_validator")]
+pub mod validators;
