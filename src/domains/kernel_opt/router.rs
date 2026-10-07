@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 758, "Plan 003: experts cover all 758 corpus rules (Batch 201 +12, the mlxfast MTP slice — B +1 the pack11/pack12 encode arithmetic, C +2 the acceptance-packet one-launch walk + the producer-folds single-consumer family, D +2 the deferred block release + the first-layer-ahead submission, E +2 the env-polarity migration + the gather signed-index wrap, N +4 the pack-worthiness shape admission + the lossless 11-bit repack trial + the draft-tape behavior-gated trial + the per-layer verification coverage, O +1 the single-pass continuation scan; Batch 199 +7 the TensorFold kernel half before it; re-pinned 758 with the honest label)");
+        assert_eq!(total, 761, "Plan 003: experts cover all 761 corpus rules (Batch 203 +3, the cute-triadic-GDN pool — B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 201 +12 the mlxfast MTP slice before it; re-pinned 761 with the honest label)");
     }
 
     #[test]

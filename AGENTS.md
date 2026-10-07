@@ -13,7 +13,7 @@ History, batch records, sweep campaign records, score-bench history: `HISTORY.md
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 100 corpus lints across style/complexity/perf/pedantic/nursery/suspicious (81 `--fix`, 16 `--verify`, 3 self_evolve-only; Batches 155–200 landed the frontier-miner packs).
 - **`rust_perf`** (default-on) — heals Rust perf issues; 180 rules (Batch 202, 2026-10-07: +1, the nnethercote min-rank worklist rule from rust-lang/rust #160193; the prior count line said 179 — Batch 200, 2026-10-03: +11 from the TensorFold staged pool's serving half), promoted via the `rust_perf_bench` Pareto + alloc-count validator.
-- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 758 rules (Batch 201, the mlxfast MTP slice — Plan 200; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 761 rules (Batch 203, the cute-triadic-GDN pool — Plan 203; Batch 201's mlxfast MTP slice before it; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - **`rustc_errors`** (default-on since 2026-08-29) — the `--fix-compile` driver domain; oracle-driven compile-error repair keyed by rustc error code; inert until invoked (compile-time cost only; std + serde only).
 - **`sec`** (opt-in) — security-pattern bounded fixes (16 rules; 6 fixable + 10 suggest-only).
 - **`docker`** (default-on since 2026-08-28) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
@@ -122,7 +122,7 @@ cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (a
 - `rust_perf` (default-on): rust performance healing domain (180 rules; the feature list's older counts were stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
-- `kernel_opt` (opt-in): GPU kernel optimization domain (746 rules; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- `kernel_opt` (opt-in): GPU kernel optimization domain (761 rules; stale at 746 through Batch 202 — the feature-list line the B201/B202 count walks missed, re-pinned at Batch 203; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - `kernel_verify` (opt-in): CubeCL compile check (STUB — delegates to the shared `RustAnalyzerPruner`). Implies `kernel_opt`.
 - `ruliology_search` (opt-in): L3 Pareto-front candidate search (pattern reuse, no dep; once per invocation, not per-tick). Implies `clippy_lints`.
 - `latent_retrieval` (opt-in): real-file span-level latent retrieval via riir-rag; powers the `cargo-refine` bin (`--suggest` / `--fix` / `--domain`); gates `dep:riir-rag` (heavy tree — the default build stays light).

@@ -1883,7 +1883,8 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 125, "expected 125 context-annotated rules (Batch 200: 114 → 125 — the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 — the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 — the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert_eq!(annotated.len(), 126, "expected 126 context-annotated rules (Batch 203 en-route repair: B202's dataflow-fixpoint-convergence-traversal-order landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 → 125 -- the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 -- the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 -- the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert!(annotated.contains(&"dataflow-fixpoint-convergence-traversal-order")); // Batch 202 -- the NotBenchable decision-content note (the pin B202's landing missed)
     assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
     assert!(annotated.contains(&"grammar-window-draft-prune-path-local-mask")); // Batch 196 — the exactness-law + refusal-surface annotation
     assert!(annotated.contains(&"startup-estimate-derived-from-allocation-shapes")); // Batch 196 — the reconciliation + sub-arm annotation
@@ -1979,7 +1980,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 125); // Batch 200: 114 -> 125 (the TensorFold serving-half ELEVEN, all annotated); Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113 (the TensorFold grammar-window + startup-estimate pair); Batch 186: 109 -> 111 (the ggml-cpu tiled measurement pair); Batch 179: 100 → 104 (the rsconstmap trio + the bufwriter-batched serialize rider); Batch 181: 104 → 106 (the mlxfast mask-memo + seed-warm annotations); Batch 182: 106 → 109 (the mlxfast-delta trio)
+    assert_eq!(annotated, 126); // Batch 203 en-route repair: B202's rule landed annotated (125 -> 126) and missed this pin -- the narrow batch202 gate never ran it; Batch 200: 114 -> 125 (the TensorFold serving-half ELEVEN); Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113; Batch 186: 109 -> 111; Batch 179: 100 → 104; Batch 181: 104 → 106; Batch 182: 106 → 109
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2020,7 +2021,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 125, "expected 125 annotated rules (Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 — the measurement-honesty pair; Batch 179: 100 → 104 — the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 — the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 — the mlxfast-delta trio)");
+    assert_eq!(annotated.len(), 126, "expected 126 annotated rules (Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {

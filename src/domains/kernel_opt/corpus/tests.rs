@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        758,
-        "kernel batches through Batch 201 should have 758 rules",
+        761,
+        "kernel batches through Batch 203 should have 761 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 758-rule corpus must appear in exactly one category
-    // (re-pinned 758 at Batch 201; read 746 through B200, 734 through B198).
+    // Every rule_id in the 761-rule corpus must appear in exactly one category
+    // (re-pinned 761 at Batch 203; read 758 through B202, 746 through B201).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5465,12 +5465,12 @@ fn kernel_categories_counts_match_plan_003_table() {
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
         (KernelCategory::MemoryAccess, 159),
-        (KernelCategory::Compute, 80),
+        (KernelCategory::Compute, 81),
         (KernelCategory::Fusion, 54),
         (KernelCategory::Dispatch, 168),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 18),
-        (KernelCategory::LinearAttnRecurrence, 34),
+        (KernelCategory::LinearAttnRecurrence, 36),
         (KernelCategory::MoeDispatchBackward, 36),
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 758.
+    // Sum must equal 761.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 758, "Plan 003: category totals must sum to 758 (Batch 201 +12, the mlxfast MTP slice: B +1 the pack11/pack12 encode arithmetic, C +2 the acceptance-packet one-launch walk + the producer-folds single-consumer family, D +2 the deferred block release + the first-layer-ahead submission, E +2 the env-polarity migration + the gather signed-index wrap, N +4 the pack-worthiness shape admission + the lossless 11-bit repack trial + the draft-tape behavior-gated trial + the per-layer verification coverage, O +1 the single-pass continuation scan; Batch 199 +7 re-pinned 746 before it)");
+    assert_eq!(total, 761, "Plan 003: category totals must sum to 761 (Batch 203 +3, the cute-triadic-GDN pool: B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 201 +12 re-pinned 758 before it)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 758,
-        "Plan 003: grouped corpus has {total} rules, expected 758"
+        total, 761,
+        "Plan 003: grouped corpus has {total} rules, expected 761"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        758,
-        "corpus count re-pinned at Batch 201 (the mlxfast MTP slice: 12 rules — B +1 the pack11/pack12 encode arithmetic, C +2 the acceptance-packet one-launch walk + the producer-folds single-consumer family, D +2 the deferred block release + the first-layer-ahead submission, E +2 the env-polarity migration + the gather signed-index wrap, N +4 the pack-worthiness shape admission + the lossless 11-bit repack trial + the draft-tape behavior-gated trial + the per-layer verification coverage, O +1 the single-pass continuation scan; was 746 at Batch 199)",
+        761,
+        "corpus count re-pinned at Batch 203 (the cute-triadic-GDN pool: 3 rules — B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); was 758 at Batch 201, 746 at Batch 199)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14197,6 +14197,100 @@ fn batch201_riders_landed_on_their_hosts() {
         "the Batch-201 exact-form-device-trial rider must ride the family host"
     );
 
+}
+
+#[test]
+fn batch203_pseudocode_parses() {
+    // G1 for Batch 203: syn-parse gate (the cute-triadic-GDN pool -- Plan
+    // 202: the state-slice-resident tiling along the non-interacting value
+    // axis + the chunk-boundary state checkpoint with the bitwise-
+    // reproducible backward (both G), and the log-gate-diff decay no-clamp
+    // stability (B; the measured mid-chunk-reference refusal rides in-rule)).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "state-slice-resident-tiling-noninteracting-axis",
+        "chunk-boundary-state-checkpoint-bitwise-backward",
+        "log-gate-diff-decay-no-clamp-stability",
+    ];
+    assert_eq!(ids.len(), 3, "batch-203 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-203 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-203 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-203 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch203_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-203 decision-content contracts (the batch201 precedent):
+    // each rule's load-bearing caveat must ride the rule text.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "state-slice-resident-tiling-noninteracting-axis",
+            "70% of the SMs",
+        ),
+        (
+            "chunk-boundary-state-checkpoint-bitwise-backward",
+            "GJ_SAVE_MASKS",
+        ),
+        (
+            "log-gate-diff-decay-no-clamp-stability",
+            "needs no cap",
+        ),
+    ];
+    for (id, marker) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-203 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-203 contract marker '{marker}' missing on '{id}'"
+        );
+    }
+    // The staging-correction needle: the dedup miss the coordinator caught
+    // at conversion -- R3's distinct-from must name the B197 nearest
+    // neighbor Research 236's dedup missed.
+    let r3 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "chunk-boundary-state-checkpoint-bitwise-backward")
+        .expect("batch-203 R3 present");
+    assert!(
+        r3.gpu_concept.contains("segmented-checkpoint-cheap-replay-backward"),
+        "batch-203 R3 must distinct-from the B197 segmented-checkpoint rule"
+    );
+    // The NotBenchable annotation rides all three (sm90/sm100-only source).
+    for id in [
+        "state-slice-resident-tiling-noninteracting-axis",
+        "chunk-boundary-state-checkpoint-bitwise-backward",
+        "log-gate-diff-decay-no-clamp-stability",
+    ] {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-203 rule '{id}' missing"));
+        assert!(
+            rule.gpu_concept.contains("NotBenchable"),
+            "batch-203 '{id}' must carry the NotBenchable annotation"
+        );
+    }
 }
 
 #[test]

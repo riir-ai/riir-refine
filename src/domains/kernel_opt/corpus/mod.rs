@@ -1958,6 +1958,8 @@ mod entries_gpu_69;
 mod entries_gpu_70;
 mod entries_gpu_71;
 mod entries_gpu_72;
+mod entries_gpu_73;
+mod entries_gpu_74;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2006,6 +2008,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_70::entries());
     entries.extend(entries_gpu_71::entries());
     entries.extend(entries_gpu_72::entries());
+    entries.extend(entries_gpu_73::entries());
+    entries.extend(entries_gpu_74::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2243,7 +2247,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-independent-pass-block-bounded-scratch"
         ],
     ),
-    // B: Compute patterns (80 rules; Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
+    // B: Compute patterns (81 rules; Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
     // deferred between MMA bursts (renamed from the staged moe- name --
     // qmm.cu is the general decode lane, not MoE); Batch 198 +1: the fewrow tensor tile
     // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
@@ -2301,6 +2305,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "softplus-piecewise-saturation-clamp",
             "fast-math-contraction-behind-feature-flag",
             "sign-branch-stable-sigmoid",
+            "log-gate-diff-decay-no-clamp-stability",
             "per-layer-grad-norm-lr-equalization",
             "inplace-grad-accumulate-deferred-postscale",
             "monomorphize-per-element-trait-calls",
@@ -2713,7 +2718,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "paged-page-pair-deferred-permutation-bitmask"
         ],
     ),
-    // G: Linear-attention recurrence (34 rules; Batch 197 +3: the segmented entry-state checkpoint with the cheap-replay backward (the register-posture arm folded), the forward-save cache of the expensive chunk-local intermediates, and the chain-rule postprocess kernel; the comment read 30 while the table held 31 since B189's two-chunk overlap — the stale-comment miss repaired here; Batch 189 +1: the
+    // G: Linear-attention recurrence (36 rules; Batch 203 +2: the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime beside B28's fits-regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 197 +3: the segmented entry-state checkpoint with the cheap-replay backward (the register-posture arm folded), the forward-save cache of the expensive chunk-local intermediates, and the chain-rule postprocess kernel; the comment read 30 while the table held 31 since B189's two-chunk overlap — the stale-comment miss repaired here; Batch 189 +1: the
     // two-chunk state-independent overlap scheduling rule)
     (
         KernelCategory::LinearAttnRecurrence,
@@ -2753,6 +2758,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cache-symmetric-intermediates-per-chunk",
             "chain-rule-postprocess-kernel",
             "full-accept-state-store-host-observable-predictor",
+            "state-slice-resident-tiling-noninteracting-axis",
+            "chunk-boundary-state-checkpoint-bitwise-backward",
         ],
     ),
     // H: MoE dispatch + backward pass (36 rules; Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
