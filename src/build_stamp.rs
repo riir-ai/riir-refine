@@ -36,6 +36,36 @@
 /// Written by `build.rs` from cargo's own `CARGO_FEATURE_*` exports.
 pub const COMPILED_FEATURES: &str = env!("RIIR_CLIPPY_COMPILED_FEATURES");
 
+/// The commit this binary was compiled from (Issue 150, option 3) —
+/// `<12-hex>` or `<12-hex>-dirty`, or `unknown` when the build had no git
+/// (tarball, bare non-repo dir).
+///
+/// THE SHADOW IT ANSWERS: a release binary on PATH ahead of the maintained
+/// dev symlink used to be indistinguishable — same version, same feature
+/// stamp. Two different builds name different commits, and a binary built
+/// BEFORE this change prints no `build:` line at all, so the standing check
+/// (`cargo refine --version`, then compare the hash against
+/// `git rev-parse --short=12 HEAD` in the repo you meant to run) catches
+/// every shadow class: missing line = pre-stamp binary; `unknown` = a build
+/// outside any checkout; mismatch = a different tree.
+pub const BUILD_COMMIT: &str = env!("RIIR_REFINE_BUILD_COMMIT");
+
+/// Shape check for a stamp: `unknown`, or `<7..=40 hex>` with an optional
+/// single `-dirty` suffix. The one validator — the version block, the unit
+/// tests, and the process-boundary CLI test all share it, so a malformed
+/// stamp fails shape before it is trusted as a commit name.
+#[must_use]
+pub fn is_valid_stamp(stamp: &str) -> bool {
+    if stamp == "unknown" {
+        return true;
+    }
+    let hex = stamp.strip_suffix("-dirty").unwrap_or(stamp);
+    !hex.is_empty()
+        && hex.len() >= 7
+        && hex.len() <= 40
+        && hex.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// The feature set `.github/workflows/release.yml` builds the shipped
 /// `cargo-refine` with, in the workflow's own order (the order is part of the
 /// claim — the rebuild command below is meant to be copy-pasteable).
@@ -110,6 +140,7 @@ pub fn version_lines() -> Vec<String> {
     let mut out = vec![
         format!("cargo-refine {}", env!("CARGO_PKG_VERSION")),
         format!("features: {COMPILED_FEATURES}"),
+        format!("build: {BUILD_COMMIT}"),
     ];
     let missing = missing_release_features();
     if missing.is_empty() {
@@ -173,20 +204,20 @@ pub fn release_set_from_workflow(workflow: &str) -> Result<Vec<String>, String> 
     let line = workflow
         .lines()
         .find(|l| l.contains("--bin cargo-refine") && l.contains("--features"))
-        .ok_or_else(|| {
-            "no line carrying both `--features` and `--bin cargo-refine`".to_string()
-        })?;
+        .ok_or_else(|| "no line carrying both `--features` and `--bin cargo-refine`".to_string())?;
     let mut it = line.split_whitespace();
     while let Some(tok) = it.next() {
         if tok == "--features" {
-            let set = it.next().ok_or_else(|| {
-                "`--features` with no value on the release line".to_string()
-            })?;
+            let set = it
+                .next()
+                .ok_or_else(|| "`--features` with no value on the release line".to_string())?;
             // A value that is itself a flag means the line does not have the
             // shape assumed — report that rather than returning `["--bin"]`,
             // which would read as a real (wrong) set to the comparison arm.
             if set.starts_with('-') {
-                return Err(format!("`--features` followed by {set:?}, not a feature set"));
+                return Err(format!(
+                    "`--features` followed by {set:?}, not a feature set"
+                ));
             }
             return Ok(set.split(',').map(str::to_string).collect());
         }
@@ -266,6 +297,40 @@ mod tests {
         }
     }
 
+    /// The build line (Issue 150 option 3) rides after the feature line and
+    /// carries a well-formed stamp. Line 0/1 stay first so anything parsing
+    /// the pre-150 output keeps working.
+    #[test]
+    fn version_block_names_the_build_commit() {
+        let lines = version_lines();
+        assert_eq!(lines[2], format!("build: {BUILD_COMMIT}"));
+        assert!(
+            lines[0].starts_with("cargo-refine ") && lines[1].starts_with("features: "),
+            "lines 0/1 must stay byte-stable ahead of the build line"
+        );
+        assert!(
+            is_valid_stamp(BUILD_COMMIT),
+            "the compiled-in stamp must pass the shape check: {BUILD_COMMIT}"
+        );
+    }
+
+    /// The stamp validator accepts exactly the shapes `capture_commit` can
+    /// produce and refuses the shapes a bug would.
+    #[test]
+    fn stamp_validator_accepts_exact_shapes_only() {
+        assert!(is_valid_stamp("unknown"));
+        assert!(is_valid_stamp("abcdef123456"));
+        assert!(is_valid_stamp("abcdef123456-dirty"));
+        assert!(is_valid_stamp(&"a".repeat(40)));
+        // Refuse the shapes a bug would produce.
+        assert!(!is_valid_stamp(""));
+        assert!(!is_valid_stamp("abc")); // too short to be a --short hash
+        assert!(!is_valid_stamp("abcdef12345g")); // not hex
+        assert!(!is_valid_stamp("abcdef123456-dirty-x")); // double suffix
+        assert!(!is_valid_stamp("unknown-dirty")); // the literal is exact
+        assert!(!is_valid_stamp("abcdef123456 dirty")); // space, not suffix
+    }
+
     /// The refusal names the command, the missing feature, the binary's own
     /// set, and the rebuild — all four, because dropping any one of them
     /// recreates a half of the 00:21 diagnosis that had to be done by hand.
@@ -311,7 +376,11 @@ mod tests {
     fn a_needed_feature_already_in_the_release_set_is_not_repeated() {
         let cmd = rebuild_command_for(&["kat_transport"]);
         assert_eq!(cmd.matches("kat_transport").count(), 1, "{cmd}");
-        assert_eq!(cmd, rebuild_command(), "no extra feature = the plain recipe");
+        assert_eq!(
+            cmd,
+            rebuild_command(),
+            "no extra feature = the plain recipe"
+        );
     }
 
     #[test]
@@ -329,15 +398,18 @@ mod tests {
     /// is the one with an arm pointed at its source of truth.
     #[test]
     fn release_set_matches_the_release_workflow() {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join(".github/workflows/release.yml");
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".github/workflows/release.yml");
         let Ok(text) = std::fs::read_to_string(&path) else {
             // Absent workflow = the instrument cannot see. Say so; never
             // read it as agreement (the UNSEEN-is-not-a-pass rule).
-            panic!("release workflow unreadable at {} — this arm asserts nothing without it", path.display());
+            panic!(
+                "release workflow unreadable at {} — this arm asserts nothing without it",
+                path.display()
+            );
         };
-        let from_workflow = release_set_from_workflow(&text)
-            .unwrap_or_else(|e| panic!("release.yml parse: {e}"));
+        let from_workflow =
+            release_set_from_workflow(&text).unwrap_or_else(|e| panic!("release.yml parse: {e}"));
         assert_eq!(
             from_workflow,
             RELEASE_FEATURES

@@ -86,6 +86,45 @@ fn short_v_prints_the_same_block() {
     assert_eq!(long_text, short_text);
 }
 
+/// Issue 150 (option 3): the version block names the commit, and — the
+/// STANDING shadow check — a binary built from THIS checkout names THIS
+/// checkout's HEAD. The `build:` line's ABSENCE only catches pre-150
+/// binaries (the shipped 0.2.1); the hash comparison is what keeps catching
+/// the shadow from the next release on: mismatch = some other tree's binary
+/// answering on PATH. `CARGO_BIN_EXE` builds this very tree right before the
+/// test runs, so the two must agree (optionally with a `-dirty` suffix —
+/// this worktree is usually mid-edit). The one benign race: a sibling
+/// session committing between the binary's build-script run and this read —
+/// a re-run resolves it.
+#[test]
+fn version_names_the_build_commit_and_it_matches_this_checkout() {
+    let (code, text) = heal(&["--version"]);
+    assert_eq!(code, Some(0), "--version must exit 0. output:\n{text}");
+    let line = text
+        .lines()
+        .find(|l| l.starts_with("build: "))
+        .expect("a post-150 binary must print the build: line — its absence IS the Issue-150 shadow. output:\n{text}");
+    let stamp = line.trim_start_matches("build: ");
+    assert!(
+        riir_refine::build_stamp::is_valid_stamp(stamp),
+        "malformed build stamp {stamp:?}"
+    );
+    let head = Command::new("git")
+        .args(["rev-parse", "--short=12", "HEAD"])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .output()
+        .expect("git in this checkout");
+    assert!(
+        head.status.success(),
+        "git rev-parse failed in this checkout"
+    );
+    let head = String::from_utf8_lossy(&head.stdout).trim().to_string();
+    assert!(
+        stamp.starts_with(&head),
+        "build stamp {stamp:?} does not start with this checkout's HEAD {head} — the binary answering was NOT built from this tree (the Issue-150 shadow class). Rebuild."
+    );
+}
+
 /// The verdict half of the stamp: whichever side this build is on, the
 /// output must say so, and must name the rebuild command EXACTLY when the
 /// release set is incomplete. A complete build that nags is noise; an
@@ -124,7 +163,9 @@ fn sync_refuses_loudly_instead_of_disappearing() {
     assert!(text.contains("sync: refused"), "{text}");
     assert!(text.contains("kat_transport"), "{text}");
     assert!(
-        text.contains(&riir_refine::build_stamp::rebuild_command_for(&["kat_transport"])),
+        text.contains(&riir_refine::build_stamp::rebuild_command_for(&[
+            "kat_transport"
+        ])),
         "the refusal must name a rebuild that SUPPLIES what it asked for. output:\n{text}"
     );
     // The two shapes the class is mistaken for.
