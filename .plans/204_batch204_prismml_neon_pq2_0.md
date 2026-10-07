@@ -1,8 +1,9 @@
 # Plan 204 — Batch 204: the PrismML NEON PQ2_0 vec_dot pool
 
 **Status:** COMPLETE — Batch 204 landed 2026-10-07 (see the snapshot row +
-Research 239 §CONVERTED); allocated against `.plans/.highwater` 203→204,
-dual_allocation_gate clean at allocation.
+Research 239 §CONVERTED); T11 (the M3-Max GOAT) CLOSED 2026-10-08 PARETO-PASS
+(`.benchmarks/106_neon_pq2_m3_goat.md`); allocated against `.plans/.highwater`
+203→204, dual_allocation_gate clean at allocation.
 
 Source: `PrismML-Eng/llama.cpp` @ `6bfcd79a2d426abcd2b50e3c2d09ae2225e70a17`
 (MIT; org-name trap `PrismML` 404s), commit "arm: NEON vec_dot for PQ2_0 (#265)".
@@ -56,11 +57,22 @@ is NotBenchable on this box (the B182/B186 corpus-only precedent); the M3-Max GO
       Batch 204 paragraph + `.docs/11_domains/kernel_opt.md` riders paragraph;
       AGENTS.md + README counts; snapshot LANDED row in the SAME commit.
 - [x] T10 commit `feat: batch 204: ...` + push.
-- [-] T11 (defer) M3-Max GOAT for rule 1 — rust_perf Pareto validator + integer-exact
+- [x] T11 (defer) M3-Max GOAT for rule 1 — rust_perf Pareto validator + integer-exact
       G1 (power-of-two scales, naive-codec scalar reference per the B62 lesson,
       256..4096 K × 32..512 rows GEMV sweep); x86_64 host compiles NEON to nothing —
       the bench runs on the M3 idle loop's next rust_perf slot; recorded in the
-      snapshot row. — DEFERRED to the M3 session (their box owns aarch64 execution).
+      snapshot row. — **DONE 2026-10-08 (M3): PARETO-PASS — `benches/
+      bench_005_neon_pq2_m3_goat.rs` (harness=false, self-contained, aarch64-only
+      by loud exit-2 refusal elsewhere); G1 311 cases bit-identical vs the naive
+      per-element scalar reference (B62 form); G4 zero-alloc both arms; G2 NEON
+      strictly faster 25/25 shapes, band 2.00–2.35× (~2.2× typical — the honest
+      big-core number; the source's 5.1×/4.6× RK3588 was never a bar, the
+      weak-core-denominator caveat rode the rule text). Provenance PASSED
+      (power=AC load=4.37 powermode=2(high)); gate posture exit-2 held. Rust-name
+      note: ACLE vsdotq_s32 = stdarch vdotq_s32; std f16 still unstable on
+      1.98.1 — the bench carries f16 bits + exact decoder. Record:
+      `.benchmarks/106_neon_pq2_m3_goat.md` (highwater 105→106,
+      dual_allocation_gate clean).**
 
 ## Notes
 

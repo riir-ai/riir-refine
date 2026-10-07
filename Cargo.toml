@@ -653,6 +653,13 @@ name = "bench_001_l1_matvec"
 harness = false
 required-features = ["clippy_lints"]
 
+# Plan 204 T11 — the M3-Max GOAT for the Batch-204 NEON PQ2_0 rule. Self-
+# contained (no lib deps, no features); aarch64-only by loud refusal (exit 2
+# elsewhere — the intrinsics compile to nothing off ARM, never a green zero).
+[[bench]]
+name = "bench_005_neon_pq2_m3_goat"
+harness = false
+
 [[bench]]
 name = "bench_002_l2_pruner_syn"
 harness = false
