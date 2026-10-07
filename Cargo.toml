@@ -27,6 +27,15 @@ katgpt-micro-belief = { path = "../katgpt-rs/crates/katgpt-micro-belief", versio
 # decision: percepta-decoder + an authored fuel-bounded interpreter, wasmi
 # refused on cost). BOUNDARY.md carries the allowlist row (same commit).
 katgpt-percepta = { path = "../katgpt-rs/crates/katgpt-percepta", optional = true, default-features = false, features = ["percepta_wasm"] }
+# Plan 202 R4: the vessel verify path — ONE artifact protocol across the
+# stack (instinct Proposal 001 A1/A8, via the public format repo's crate).
+# Optional, opt-in `vessel_artifacts` only. `default-features = false` +
+# `vessel_public_read` ONLY: the hosted reader never compiles into this
+# publicly-distributed binary (the moat — hosted vessels refuse at peek,
+# structurally). Verify-only by law: refine NEVER mints (A8 — minting is
+# riir-train's offline lane) and NEVER embeds vessel bytes (A10 — the
+# compiled-in corpora stay code-sealed; the artifact-dir leak test pins it).
+reflexer-vessel = { path = "../riir-reflexer/crates/reflexer-vessel", optional = true, default-features = false, features = ["vessel_public_read"] }
 
 # Serialization for corpus freeze/thaw (BLAKE3-committed)
 blake3 = "1"
@@ -222,6 +231,17 @@ kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # transports (R2 HostedExpertL4 / R3a seat rerank) register INTO it, never in
 # code. Opt-in until the R6 arm-H outcome-based selection measures a winner.
 escalation_manifest = ["katgpt-core/escalation_guard"]
+
+# Plan 202 R4 (2026-10-08): the vessel verify path — refine's runtime
+# artifacts verify through the SAME protocol the decision stack uses (sign /
+# blake3 / monotonic apply / strict refusal on tamper — A1/A8). Verify-only
+# seam: operator pins via RIIR_REFINE_VESSEL_PUBKEY (the reflex wildcard
+# pattern; the compiled pin table stays EMPTY until the first release
+# artifact ships — the reflexer DEFAULT_PINS law), strict
+# downgrade/fork-refusing monotonic apply. R2's HostedExpertL4 + the
+# escalation lane's artifact pins are the designed consumers. Opt-in until
+# a real artifact adopts it (the l4_lora seam-first precedent).
+vessel_artifacts = ["dep:reflexer-vessel"]
 
 # Plan 005 Phase 1: real-file span-level latent retrieval (`--suggest` MVP).
 # Indexes every enabled domain's corpus via riir-rag, routes spans via
