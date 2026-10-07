@@ -35,6 +35,15 @@
 //!   suffix form), and an EXISTING suffix (either spelling, `5u64` or
 //!   `5_u64`) is stripped before the canonical `5_u64` emit — clippy's own
 //!   suggestion for `5u64 as u64` is `5_u64`, verified in the probe.
+//!   **P42 soundness guards** (the rewrite must hold standalone — the fix
+//!   lane can fire without an oracle span): a float token takes only a
+//!   float target; int→float requires a DECIMAL token (in hex, `f` is a
+//!   digit — `0x8000_f32` lexes as the integer `0x8000f32`); int→int
+//!   requires the value to FIT the target (`300_u8` is E0301). The probe
+//!   also caught TWO upstream 1.98 broken suggestions this guard set
+//!   refuses to mirror: the out-of-range `300_u8` on `300 as u8` and the
+//!   prefix-dropping `FF_u64` on `0xFF_u64 as u64` (ours re-emits
+//!   `0xFF_u64`).
 //! - Cross-type casts REFUSE by construction (the proven map stores the
 //!   exact type text; `x as u64` with `x: u32` is not a match). The probe
 //!   showed those fire `cast_lossless` / `needless_type_cast` /
@@ -139,6 +148,23 @@ impl Collector<'_> {
 
     /// Arm (b): `5 as u64` → `5_u64` — the unsized literal carries the type
     /// itself. Int/float targets only; a direct `Expr::Lit` operand only.
+    ///
+    /// P42 guards (the literal rewrite must be SOUND STANDALONE — the fix
+    /// lane can fire without an oracle span, which is exactly how the hex
+    /// breakage shipped, katgpt-rs recovery `877d477cc`):
+    /// - **kind**: a float-token operand takes only a float target (`2.0 as
+    ///   u64` → `2.0_u64` is not a literal at all; upstream 1.98 is SILENT
+    ///   there — probe-verified).
+    /// - **base**: int→float requires a DECIMAL token — float literals are
+    ///   decimal-only, and in a hex literal `f` is a DIGIT, so `0x8000_f32`
+    ///   lexes as the hex INTEGER `0x8000f32` (the P42 breakage; upstream is
+    ///   silent on non-decimal int→float — parity).
+    /// - **value fit**: int→int requires the value to FIT the target —
+    ///   `300 as u8` → `300_u8` is E0301. Upstream 1.98 FIRES here with that
+    ///   broken suggestion (probe-verified; likewise its suffixed-hex
+    ///   suggestion `FF_u64` drops the `0x`) — the bounded fix-space is
+    ///   narrower than clippy by design, and our strip-then-reemit keeps the
+    ///   prefix upstream loses.
     fn rewrite_typed_literal(&self, c: &ExprCast, target: &str) -> Option<String> {
         if !SUFFIX_TARGETS.contains(&target) {
             return None;
@@ -149,10 +175,27 @@ impl Collector<'_> {
             Lit::Float(fl) => fl.token().to_string(),
             _ => return None,
         };
+        let is_float_lit = matches!(&l.lit, Lit::Float(_));
+        let is_float_target = target == "f32" || target == "f64";
+        if is_float_lit && !is_float_target {
+            // `2.0_u64` is not a literal spelling — refuse.
+            return None;
+        }
+        if is_float_target && !is_float_lit && !is_decimal_int_token(&digits) {
+            // Non-decimal int → float: no float spelling exists for the
+            // token (float literals are decimal-only).
+            return None;
+        }
         // Strip an existing integer/float suffix (either spelling) and emit
         // the canonical `digits_target` form — the probe-verified upstream
         // suggestion for `5u64 as u64` is `5_u64`.
         let bare = strip_numeric_suffix(&digits);
+        if !is_float_target {
+            let value = parse_int_value(&bare)?;
+            if !fits_int_target(value, target) {
+                return None;
+            }
+        }
         if drops_interior_comment(self.source, byte_range(c), &[byte_range(&*c.expr)]) {
             return None;
         }
@@ -166,6 +209,56 @@ const SUFFIX_TARGETS: &[&str] = &[
     "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
     "isize", "f32", "f64",
 ];
+
+/// True when the numeric token is DECIMAL — no `0x`/`0o`/`0b` radix prefix
+/// (P42's base guard: float literals are decimal-only).
+fn is_decimal_int_token(tok: &str) -> bool {
+    !(tok.starts_with("0x")
+        || tok.starts_with("0X")
+        || tok.starts_with("0o")
+        || tok.starts_with("0O")
+        || tok.starts_with("0b")
+        || tok.starts_with("0B"))
+}
+
+/// Parse an unsuffixed integer token's VALUE (radix prefixes + `_`
+/// separators handled; the token is non-negative — unary-minus operands are
+/// refused upstream of this call by the direct-`Expr::Lit` guard).
+fn parse_int_value(bare: &str) -> Option<u128> {
+    let (digits, radix) = if let Some(rest) = bare.strip_prefix("0x").or_else(|| bare.strip_prefix("0X")) {
+        (rest, 16)
+    } else if let Some(rest) = bare.strip_prefix("0o").or_else(|| bare.strip_prefix("0O")) {
+        (rest, 8)
+    } else if let Some(rest) = bare.strip_prefix("0b").or_else(|| bare.strip_prefix("0B")) {
+        (rest, 2)
+    } else {
+        (bare, 10)
+    };
+    let cleaned: String = digits.chars().filter(|&c| c != '_').collect();
+    if cleaned.is_empty() {
+        return None;
+    }
+    u128::from_str_radix(&cleaned, radix).ok()
+}
+
+/// Does the non-negative value FIT the int target's range (`300_u8` is
+/// E0301 — the P42 value-fit guard)? `usize`/`isize` use the 64-bit bound
+/// (the conservative platform-independent direction: refuse more).
+fn fits_int_target(value: u128, target: &str) -> bool {
+    match target {
+        "u8" => value <= u128::from(u8::MAX),
+        "u16" => value <= u128::from(u16::MAX),
+        "u32" => value <= u128::from(u32::MAX),
+        "u64" | "usize" => value <= u128::from(u64::MAX),
+        "u128" => true,
+        "i8" => value <= i8::MAX as u128,
+        "i16" => value <= i16::MAX as u128,
+        "i32" => value <= i32::MAX as u128,
+        "i64" | "isize" => value <= i64::MAX as u128,
+        "i128" => value <= i128::MAX as u128,
+        _ => false,
+    }
+}
 
 /// Split a numeric literal token into its digits, stripping a KNOWN suffix
 /// (`5u64`, `5_u64`, `2.0f32`) when present. An unsuffixed token returns the
@@ -302,6 +395,91 @@ mod tests {
             "fn f(hits: &mut Vec<u8>) -> char { hits.push(0); 'a' as char }",
         )
         .is_none());
+    }
+
+    #[test]
+    fn hex_int_to_float_refuses_p42() {
+        // THE P42 regression: in a hex literal `f` is a digit, so
+        // `0x8000_f32` lexes as the hex INTEGER `0x8000f32` (E0277 — the
+        // katgpt-rs `877d477cc` breakage). No float spelling exists for a
+        // non-decimal token; upstream 1.98 is silent here too.
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0x8000 as f32 }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn oct_int_to_float_refuses_p42() {
+        // Same base-guard class for octal (upstream silent — parity).
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> f64 { hits.push(0); 0o777 as f64 }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn dec_int_to_float_gains_suffix_p42() {
+        // The decimal int→float arm SURVIVES the P42 guards — upstream fires
+        // here and suggests exactly this form (probe-verified), and the
+        // emitted spelling compiles.
+        let out = propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 32768 as f32 }",
+        )
+        .expect("matched");
+        assert!(out.contains("32768_f32"), "suffix not substituted: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn float_lit_to_int_refuses_p42() {
+        // `2.0_u64` is not a literal spelling (kind guard); upstream 1.98 is
+        // silent on the shape — parity.
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 2.0 as u64 }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn overflow_int_to_int_refuses_p42() {
+        // `300_u8` is E0301 (literal out of range) — the value-fit guard.
+        // Upstream 1.98 FIRES here with that broken suggestion (probe); the
+        // fix-space is narrower than clippy by design.
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 300 as u8 }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn hex_int_to_int_gains_suffix_p42() {
+        // Hex → INT stays sound (suffix on hex is valid: `u`/`i` are not hex
+        // digits) — and our re-emit keeps the `0x` prefix that upstream's own
+        // suffixed-hex suggestion drops (its `FF_u64` is E0425, probe).
+        let out = propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 0x8000 as u64 }",
+        )
+        .expect("matched");
+        assert!(out.contains("0x8000_u64"), "prefix lost or no suffix: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn existing_hex_suffix_canonicalizes_keeps_prefix_p42() {
+        let out = propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 0xFF_u64 as u64 }",
+        )
+        .expect("matched");
+        assert!(out.contains("0xFF_u64"), "canonical form wrong: {out}");
+        syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
