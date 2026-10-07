@@ -1698,6 +1698,22 @@ pub fn score_case(
 
 /// Shared state for one POC run: the seeded pipeline (miss classification +
 /// modelless candidate), the retrieval few-shot source, the oracle.
+/// One [`RegateHarness::classify_outcome`] result — the miss class, the
+/// modelless serve, its confidence score, and the L0–L3 candidate pool
+/// (the Plan 202 R6 arm-H escalation input).
+pub struct ClassifyOutcome {
+    /// The miss classification (unchanged semantics).
+    pub miss: MissClass,
+    /// The modelless fix `heal` served (`None` = declined).
+    pub served: Option<String>,
+    /// The modelless confidence (`evolution_score`, 0.0 when declined) —
+    /// the manifest row's `modelless_cap` worthiness axis.
+    pub score: f32,
+    /// The candidate codes in candidate order, deduped — the rerank arm's
+    /// presentation (the seat picks among THESE by index).
+    pub pool: Vec<String>,
+}
+
 pub struct RegateHarness {
     pub pipeline: HealPipeline,
     pub corpus: ClippyCorpus,
@@ -1754,9 +1770,20 @@ impl RegateHarness {
     /// instead lets the drafter fabricate serves for off-corpus rules off
     /// unrelated entries, which measures a pipeline nobody ships.
     pub fn classify(&mut self, lint: &str, module: &str) -> (MissClass, Option<String>) {
+        let outcome = self.classify_outcome(lint, module);
+        (outcome.miss, outcome.served)
+    }
+
+    /// Plan 202 R6 arm H — [`Self::classify`] plus the modelless confidence
+    /// score and the L0–L3 candidate pool: the full escalation-chain input
+    /// (worthiness gate reads `score`, the seat rerank reads `pool`).
+    /// Served-score semantics: a declined case scores `0.0` (a total miss
+    /// is maximally escalation-eligible — `modelless_cap > 0` routes it).
+    pub fn classify_outcome(&mut self, lint: &str, module: &str) -> ClassifyOutcome {
         let candidates: Vec<crate::ClippyFixEntry> = self.corpus.lookup(lint).cloned().collect();
         let in_corpus = !candidates.is_empty();
-        if let Some(r) = self.pipeline.heal(lint, module, &candidates) {
+        let outcome = self.pipeline.heal_with_pool(lint, module, &candidates);
+        let (miss, served, score) = if let Some(r) = outcome.result {
             let class = if in_corpus {
                 if r.parses {
                     MissClass::ServedParsing
@@ -1768,14 +1795,20 @@ impl RegateHarness {
                 // input; a serve here means the gate regressed.
                 MissClass::OffCorpus
             };
-            (class, Some(r.fixed_code))
+            (class, Some(r.fixed_code), r.evolution_score)
         } else {
             let class = if in_corpus {
                 MissClass::Declined
             } else {
                 MissClass::OffCorpus
             };
-            (class, None)
+            (class, None, 0.0)
+        };
+        ClassifyOutcome {
+            miss,
+            served,
+            score,
+            pool: outcome.pool,
         }
     }
 

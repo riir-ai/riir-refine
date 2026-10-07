@@ -1267,6 +1267,14 @@ required-features = ["kat_transport"]
 name = "kat_sync_payload_g4"
 required-features = ["kat_service", "latent_retrieval"]
 
+# T13 fixture freeze (riir-kat 003 site 18, 9d6daa23): the sync payload's
+# canonical signing message. The row was missed at birth (the T1.1e law) —
+# added 2026-10-08: without it the default `clippy --all-targets` lane reds
+# E0432 on the cfg(all(kat_service, latent_retrieval)) module.
+[[test]]
+name = "kat_sync_v1_fixture_freeze"
+required-features = ["kat_service", "latent_retrieval"]
+
 # Issue 088 spin-out: the cross-repo pins that became cross-CRATE — the
 # sync-payload redact floor (member protocol) against the sync envelope
 # version (root keeper). Same combo as kat_sync_payload_g4, for the same

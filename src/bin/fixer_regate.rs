@@ -33,6 +33,18 @@
 //!   snapshots (blake3) + scoring of PLANTED fixes (positive + negative
 //!   controls). No model, no network. This is the "arms pending" evidence
 //!   mode.
+//! - `--arm H` — Plan 202 R6: the ESCALATION chain over the same cases —
+//!   the modelless answer (the pipeline pick) vs the armed manifest row's
+//!   transport (seat rerank over the L0–L3 pool / hosted generate on a
+//!   miss), paired per-case with the cost axes (wall/receipt ms; the
+//!   llm_spend summary for the hosted leg). Arming is a manifest row
+//!   (`--esc-manifest`, default `.refine/escalation_manifest.json`) under
+//!   `--esc-domain` (default clippy); consent is the shared
+//!   `RIIR_REFINE_CODE_EGRESS=snippet` scope; `--deadline-ms` bounds the
+//!   whole readiness-retry + wire budget per case. Requires features
+//!   `escalation_manifest` + the row's transport (`seat_rerank` and/or
+//!   `hosted_expert`). Demotion of the loser is an operator manifest edit
+//!   — the arm prints the verdict, never edits data.
 //!
 //! Run:
 //!
@@ -96,6 +108,15 @@ struct Args {
     price_in: f64,
     price_out: f64,
     behav_dir: PathBuf,
+    /// Plan 202 R6 arm H: the escalation manifest path (arming is a file
+    /// edit, never code — the R1 law).
+    esc_manifest: PathBuf,
+    /// The domain label arm H reads its armed row under (the harness fixes
+    /// clippy lints — "clippy" is the runbook default).
+    esc_domain: String,
+    /// The per-case escalation deadline in ms (the whole readiness-retry
+    /// + wire budget; Bench 107: the lazy window ran ~100 ms under it).
+    deadline_ms: u64,
 }
 
 impl Args {
@@ -118,6 +139,9 @@ impl Args {
             price_in: DEFAULT_PRICE_IN_PER_M,
             price_out: DEFAULT_PRICE_OUT_PER_M,
             behav_dir: std::env::temp_dir().join("issue040_behav"),
+            esc_manifest: PathBuf::from(".refine/escalation_manifest.json"),
+            esc_domain: "clippy".into(),
+            deadline_ms: 2_000,
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
@@ -150,6 +174,11 @@ impl Args {
                 "--price-in" => a.price_in = val().parse().expect("--price-in must be a float"),
                 "--price-out" => a.price_out = val().parse().expect("--price-out must be a float"),
                 "--behav-dir" => a.behav_dir = PathBuf::from(val()),
+                "--esc-manifest" => a.esc_manifest = PathBuf::from(val()),
+                "--esc-domain" => a.esc_domain = val(),
+                "--deadline-ms" => {
+                    a.deadline_ms = val().parse().expect("--deadline-ms must be an integer")
+                }
                 other => {
                     eprintln!("unknown arg: {other}");
                     std::process::exit(2);
@@ -293,13 +322,28 @@ struct Prepared {
     /// degenerates to arm B byte-identically there; recorded per-row.
     growing_prime_channels_empty: bool,
     reachable_miss: bool,
+    /// Plan 202 R6 arm H: the modelless confidence + the L0–L3 candidate
+    /// pool (the escalation chain's input). Read only by the arm-H runner;
+    /// the allow keeps the other postures' clippy clean.
+    #[allow(dead_code)]
+    score: f32,
+    #[allow(dead_code)]
+    pool: Vec<String>,
+    /// Arm H's modelless-arm latency: the classify (the serve path's
+    /// pipeline work) measured at prepare — the escalation chain in
+    /// production reuses THIS result, so this is the honest µs axis.
+    #[allow(dead_code)]
+    modelless_us: u128,
 }
 
 fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) -> Vec<Prepared> {
     samples
         .into_iter()
         .map(|sample| {
-            let (miss, modelless) = harness.classify(&sample.lints[0], &sample.module);
+            let t_classify = std::time::Instant::now();
+            let outcome = harness.classify_outcome(&sample.lints[0], &sample.module);
+            let modelless_us = t_classify.elapsed().as_micros();
+            let (miss, modelless) = (outcome.miss, outcome.served);
             let fs = harness.few_shots(&sample.module, few_shots);
             let raw = cf_workers_ai::prompt_raw(&sample.module);
             let prepass = cf_workers_ai::prompt_prepass(&sample.module, modelless.as_deref(), &fs);
@@ -338,6 +382,9 @@ fn prepare(harness: &mut RegateHarness, samples: Vec<Sample>, few_shots: usize) 
                 prompt_growing_prime: growing_prime,
                 growing_prime_channels_empty: growing_prime_empty,
                 reachable_miss,
+                score: outcome.score,
+                pool: outcome.pool,
+                modelless_us,
             }
         })
         .collect()
@@ -485,8 +532,9 @@ fn main() {
         "DRY" => run_dry(&args, &verifier, &prepared),
         "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
+        "H" => hosted_dispatch(&args, &verifier, &prepared),
         other => {
-            eprintln!("unknown --arm {other} (A|B|G|G2|C|DRY|BT8|BT8DRY)");
+            eprintln!("unknown --arm {other} (A|B|G|G2|C|H|DRY|BT8|BT8DRY)");
             std::process::exit(2);
         }
     }
@@ -1416,5 +1464,371 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
             }
         });
         let _ = writeln!(f, "{row}");
+    }
+}
+
+// ── Plan 202 R6 — arm H: the escalation chain over the existing harness ────
+//
+// The hosted arm: per case, the modelless answer (the pipeline's pick, from
+// `prepare`) vs the ESCALATED answer — the armed manifest row's transport
+// (seat rerank over the L0–L3 pool, or hosted generate on a miss). Paired
+// per-case on the same case list, with the explicit cost axes (the plan's
+// R6 row): wall/receipt time per answer and, for the hosted leg, the
+// llm_spend ledger. The demotion itself is an operator manifest edit — the
+// arm PRINTS the loser, never edits data.
+
+/// Entry gate: the dispatch module is compiled only with the manifest AND a
+/// transport; everything else refuses loudly naming the missing features.
+fn hosted_dispatch(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+    #[cfg(all(
+        feature = "escalation_manifest",
+        any(feature = "seat_rerank", feature = "hosted_expert")
+    ))]
+    {
+        run_hosted(args, verifier, prepared);
+    }
+    #[cfg(not(all(
+        feature = "escalation_manifest",
+        any(feature = "seat_rerank", feature = "hosted_expert")
+    )))]
+    {
+        let _ = (args, verifier, prepared);
+        eprintln!(
+            "--arm H requires --features escalation_manifest plus the armed row's transport \
+             (seat_rerank and/or hosted_expert) — an armed row must never look armed while \
+             doing nothing"
+        );
+        std::process::exit(2);
+    }
+}
+
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+    use riir_refine::escalation_dispatch::{
+        EscalatedFix, EscalationDispatch, ReadinessPolicy, PRESENTATION_CAP,
+    };
+    use riir_refine::escalation_manifest::EscalationManifest;
+
+    // ── arm (manifest-only; the ALL-EMPTY posture measures nothing) ────
+    let manifest = match EscalationManifest::load(&args.esc_manifest) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+    let mut dispatch = match EscalationDispatch::arm(&manifest, &args.esc_domain) {
+        Ok(Some(d)) => d,
+        Ok(None) => {
+            eprintln!(
+                "SKIP arm H: no armed escalation row for {:?} in {} — arm H measures the \
+                 ESCALATION chain; add the row (arming is a manifest edit, never code)",
+                args.esc_domain,
+                args.esc_manifest.display()
+            );
+            std::process::exit(3);
+        }
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+    eprintln!(
+        "[regate] arm H: domain={} kind={} cap={} max_rate={} deadline={}ms consent={}",
+        dispatch.label(),
+        dispatch.row().target.kind,
+        dispatch.row().modelless_cap,
+        dispatch.row().max_rate,
+        args.deadline_ms,
+        if std::env::var("RIIR_REFINE_CODE_EGRESS")
+            .is_ok_and(|v| v.trim() == "snippet")
+        {
+            "granted"
+        } else {
+            "REFUSED (set RIIR_REFINE_CODE_EGRESS=snippet for live seats)"
+        }
+    );
+
+    let policy = ReadinessPolicy::default();
+    let mut out = args
+        .out
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
+    let mut escalated_summary = ArmSummary::default();
+    let mut modelless_summary = ArmSummary::default();
+
+    // Paired axes.
+    let (mut esc_wins, mut esc_losses, mut ties) = (0usize, 0usize, 0usize);
+    let (mut n_worthy, mut n_pick, mut n_generate) = (0usize, 0usize, 0usize);
+    let (mut n_abstain, mut n_below_min, mut n_declined, mut n_latched) =
+        (0usize, 0usize, 0usize, 0usize);
+    let (mut esc_wall_ms_total, mut esc_wall_ms_max) = (0u128, 0u128);
+    let mut cases_escalated = 0u128;
+    #[cfg(feature = "seat_rerank")]
+    let mut receipt_us_total = 0u64;
+    #[cfg(not(feature = "seat_rerank"))]
+    let receipt_us_total = 0u64;
+    #[cfg(not(feature = "seat_rerank"))]
+    let _ = receipt_us_total;
+    let kind = dispatch.row().target.kind.clone();
+
+    for p in prepared {
+        eprintln!("[H] {} …", p.sample.id);
+        // ── the modelless arm (the incumbent the chain protects) ───────
+        let modelless_gen: String = p.modelless.clone().unwrap_or_default();
+        let score_m = cf_workers_ai::score_case(
+            verifier,
+            &p.sample,
+            &modelless_gen,
+            Some(&args.behav_dir),
+        );
+        modelless_summary.add(&score_m, p.reachable_miss, 0, 0, 0.0, 0.0);
+
+        // ── the escalation arm (worthiness → ceiling → transport) ──────
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms);
+        let (outcome_class, served_from, fix, receipt_note, wall_ms) = match kind.as_str() {
+                "seat_rerank" => {
+                    let t = std::time::Instant::now();
+                    let answer =
+                        dispatch.escalate_rerank(p.score, &p.sample.module, &p.pool, deadline, policy);
+                    let wall = t.elapsed().as_millis();
+                    // The R7 receipt tier (seat_rerank builds only): the
+                    // seat-side decision time + the build/confidence audit
+                    // note, read BEFORE the answer is consumed below.
+                    #[cfg(feature = "seat_rerank")]
+                    if let Some(r) = answer.receipt() {
+                        receipt_us_total += r.us.unwrap_or(0);
+                    }
+                    let note = receipt_audit_note(&answer);
+                    match answer {
+                        EscalatedFix::Answer { fix, source, .. } => {
+                            n_pick += 1;
+                            (outcome_class_of(&fix), source.to_string(), fix, note, wall)
+                        }
+                        EscalatedFix::StoodByModelless { reason } => {
+                            let (class, reason) = stand_reason_axes(reason, &mut n_worthy, &mut n_abstain, &mut n_below_min, &mut n_declined, &mut n_latched);
+                            (class, "modelless".to_string(), modelless_gen.clone(), reason, wall)
+                        }
+                    }
+                }
+                "hosted_expert" => {
+                    let t = std::time::Instant::now();
+                    let fix = dispatch.escalate_generate(
+                        p.score,
+                        &p.sample.module,
+                        deadline,
+                        args.max_new as u64,
+                    );
+                    let wall = t.elapsed().as_millis();
+                    match fix {
+                        EscalatedFix::Answer { fix, source, .. } => {
+                            n_generate += 1;
+                            (
+                                outcome_class_of(&fix),
+                                source.to_string(),
+                                fix,
+                                "no-receipt".to_string(),
+                                wall,
+                            )
+                        }
+                        EscalatedFix::StoodByModelless { reason } => {
+                            let (class, reason) = stand_reason_axes(reason, &mut n_worthy, &mut n_abstain, &mut n_below_min, &mut n_declined, &mut n_latched);
+                            (class, "modelless".to_string(), modelless_gen.clone(), reason, wall)
+                        }
+                    }
+                }
+                other => (
+                    "skip".to_string(),
+                    "modelless".to_string(),
+                    modelless_gen.clone(),
+                    format!("unknown kind {other:?}"),
+                    0,
+                ),
+            };
+        if served_from != "modelless" {
+            esc_wall_ms_total += wall_ms;
+            esc_wall_ms_max = esc_wall_ms_max.max(wall_ms);
+            cases_escalated += 1;
+        }
+
+        // ── score the escalated answer (same instrument, same case) ────
+        let score_e = cf_workers_ai::score_case(verifier, &p.sample, &fix, Some(&args.behav_dir));
+        escalated_summary.add(&score_e, p.reachable_miss, 0, 0, 0.0, 0.0);
+
+        // Paired keep_strict verdict.
+        match (score_e.keep_strict, score_m.keep_strict) {
+            (true, false) => esc_wins += 1,
+            (false, true) => esc_losses += 1,
+            _ => ties += 1,
+        }
+
+        if let Some(f) = out.as_mut() {
+            let row = serde_json::json!({
+                "id": p.sample.id,
+                "arm": "H",
+                "kind": dispatch.row().target.kind,
+                "miss_class": format!("{:?}", p.miss),
+                "modelless": {
+                    "served": p.modelless.is_some(),
+                    "us": p.modelless_us,
+                    "keep_o": score_m.keep_oracle,
+                    "keep_s": score_m.keep_strict,
+                    "em": score_m.em,
+                },
+                "escalated": {
+                    "outcome_class": outcome_class,
+                    "served_from": served_from,
+                    "pool_len": p.pool.len(),
+                    "pool_truncated": p.pool.len() > PRESENTATION_CAP,
+                    "keep_o": score_e.keep_oracle,
+                    "keep_s": score_e.keep_strict,
+                    "em": score_e.em,
+                    "wall_ms": wall_ms,
+                    "receipt": receipt_note,
+                },
+            });
+            let _ = writeln!(f, "{row}");
+        }
+        println!(
+            "  {:<28} miss={:<13} pool={:<2} m[keep_s={} {}µs] e[{} {} keep_s={} {}ms {}]",
+            p.sample.id,
+            format!("{:?}", p.miss),
+            p.pool.len(),
+            score_m.keep_strict,
+            p.modelless_us,
+            served_from,
+            outcome_class,
+            score_e.keep_strict,
+            wall_ms,
+            receipt_note,
+        );
+    }
+
+    // ── the paired summary + the cost axes ────────────────────────────
+    let n = prepared.len();
+    println!("\n═ arm H summary ({n} paired cases; kind={}) ═", dispatch.row().target.kind);
+    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!("{}", modelless_summary.markdown_row("H-modelless"));
+    println!("{}", escalated_summary.markdown_row("H-escalated"));
+    println!(
+        "  chain: worthy(stands) {n_worthy} · seat picks {n_pick} · hosted generates {n_generate} · \
+         abstained {n_abstain} · below min_pool {n_below_min} · declined {n_declined} · rate-latched {n_latched}"
+    );
+    println!(
+        "  paired keep_s over {n}: escalated wins {esc_wins}, loses {esc_losses}, ties {ties}"
+    );
+    if cases_escalated > 0 {
+        println!(
+            "  cost axes: escalated wall total {esc_wall_ms_total}ms over {cases_escalated} case(s) \
+             (max {esc_wall_ms_max}ms); seat-side decision time total {receipt_us_total}µs; \
+             modelless arm total {}µs",
+            prepared.iter().map(|p| p.modelless_us).sum::<u128>(),
+        );
+    } else {
+        println!(
+            "  cost axes: no escalated case served — modelless arm total {}µs",
+            prepared.iter().map(|p| p.modelless_us).sum::<u128>()
+        );
+    }
+    #[cfg(feature = "hosted_expert")]
+    if let Some(line) = dispatch.spend_summary_line() {
+        println!("  {line}");
+    }
+    println!("  {}", escalated_summary.verdict_vs_decline());
+    let verdict = if esc_wins > esc_losses {
+        "ESCALATION WINS — demote the modelless incumbent via the manifest cap (raise modelless_cap), never code"
+    } else if esc_losses > esc_wins {
+        "MODELLESS WINS — demote the escalation (manifest row demoted:true or the RIIR_REFINE_ESC=0 literal), never code"
+    } else {
+        "TIE — no outcome-based selection signal; keep the modelless default (free + µs)"
+    };
+    println!("  VERDICT: {verdict}");
+
+    // The quality time series gets the ESCALATED arm's scores (the modelless
+    // baseline's numbers are arm H-modelless above; the incumbent series is
+    // the existing arms').
+    escalated_summary.latency_ms_total = esc_wall_ms_total;
+    escalated_summary.latency_ms_max = esc_wall_ms_max;
+    let model_tag = match dispatch.row().target.kind.as_str() {
+        "seat_rerank" => format!("seat:{}:heal", args.esc_domain),
+        _ => "hosted_expert".to_string(),
+    };
+    append_quality_history("H", &model_tag, &escalated_summary);
+}
+
+/// The receipt-audit note for one dispatch answer (seat_rerank builds read
+/// the R7 receipt tier; every other build/answer reports `no-receipt`).
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+fn receipt_audit_note(answer: &riir_refine::escalation_dispatch::EscalatedFix) -> String {
+    #[cfg(feature = "seat_rerank")]
+    if let Some(r) = answer.receipt() {
+        return match (&r.build, r.us, &r.confidence) {
+            (Some(b), Some(us), Some(c)) => format!(
+                "build={}&us={us}&conf={c}",
+                b.chars().take(8).collect::<String>()
+            ),
+            _ => "partial-receipt".to_string(),
+        };
+    }
+    #[cfg(not(feature = "seat_rerank"))]
+    let _ = answer;
+    "no-receipt".to_string()
+}
+
+/// The outcome class for an ANSWER (audit axis on the rows file) — what
+/// kind of thing the chain served.
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+fn outcome_class_of(fix: &str) -> String {
+    if fix.trim().is_empty() {
+        "empty".to_string()
+    } else {
+        "answer".to_string()
+    }
+}
+
+/// Fold a [`StandReason`] into the paired counters + the row axes. Returns
+/// (outcome_class, reason_text).
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+fn stand_reason_axes(
+    reason: riir_refine::escalation_dispatch::StandReason,
+    n_worthy: &mut usize,
+    n_abstain: &mut usize,
+    n_below_min: &mut usize,
+    n_declined: &mut usize,
+    n_latched: &mut usize,
+) -> (String, String) {
+    match reason {
+        riir_refine::escalation_dispatch::StandReason::Worthy => {
+            *n_worthy += 1;
+            ("worthy".to_string(), "modelless_cap met".to_string())
+        }
+        riir_refine::escalation_dispatch::StandReason::SeatAbstained => {
+            *n_abstain += 1;
+            ("abstained".to_string(), "seat abstained — modelless stands".to_string())
+        }
+        riir_refine::escalation_dispatch::StandReason::BelowMinPool => {
+            *n_below_min += 1;
+            ("below_min_pool".to_string(), "pool below the row's bound".to_string())
+        }
+        riir_refine::escalation_dispatch::StandReason::RateLatched => {
+            *n_latched += 1;
+            ("rate_latched".to_string(), "cost ceiling latched (sticky)".to_string())
+        }
+        riir_refine::escalation_dispatch::StandReason::Declined(m) => {
+            *n_declined += 1;
+            ("declined".to_string(), m)
+        }
     }
 }

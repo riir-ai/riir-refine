@@ -156,6 +156,16 @@ pub mod active_set;
 // switches, ALL-EMPTY at ship. Opt-in (`escalation_manifest`).
 #[cfg(feature = "escalation_manifest")]
 pub mod escalation_manifest;
+// Plan 202 R6: the escalation DISPATCH — armed manifest rows joined to their
+// shipped transports (the min-pool gate, the deadline-capped readiness
+// retry, the sticky cost-ceiling latch). Gated as the manifest AND any of
+// its two transports (the code_egress ANY-of-consumers shape): a dispatch
+// without a transport is nothing to compile.
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+pub mod escalation_dispatch;
 // Plan 202 R4: the vessel verify path — ONE artifact protocol across the
 // decision stack (A1/A8), via the public format repo's crate. Verify-only
 // seam: refine never mints (A8), never embeds vessel bytes (A10). Opt-in

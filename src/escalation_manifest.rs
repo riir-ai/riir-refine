@@ -124,8 +124,8 @@ impl TargetKind {
 pub struct EscalateTarget {
     /// The transport kind (see [`TargetKind`]).
     pub kind: String,
-    /// The transport's address (daemon socket / seat URL) — opaque to
-    /// this manifest, owned by the transport.
+    /// The transport's address (daemon socket / seat URL / OpenAI-compatible
+    /// base) — opaque to this manifest, owned by the transport.
     #[serde(default)]
     pub endpoint: Option<String>,
     /// The rerank arm's lower pool bound (Bench 107's law: a rerank with
@@ -138,6 +138,12 @@ pub struct EscalateTarget {
     /// manifest keeps refusing).
     #[serde(default)]
     pub min_pool: Option<usize>,
+    /// The served expert's model id — REQUIRED on `hosted_expert` rows
+    /// (R2: the cost guard refuses an unpriced model, so the row must name
+    /// it; no default, no env fallback). A dead knob on `l4_daemon` rows
+    /// (the daemon carries its own checkpoint) — refused there.
+    #[serde(default)]
+    pub model: Option<String>,
 }
 
 impl EscalateTarget {
@@ -271,6 +277,28 @@ impl EscalationManifest {
                     ));
                 }
             }
+            // The model id: required where the transport cannot construct
+            // without it, a dead knob everywhere else (the same conflation
+            // law as min_pool).
+            match TargetKind::from_label(&row.target.kind) {
+                Some(TargetKind::HostedExpert) if row.target.model.is_none() => {
+                    return Err(format!(
+                        "escalation.{label}.target.model: hosted_expert rows must name \
+                         the served expert's model id (the cost guard refuses an \
+                         unpriced model — R2: no default, no env fallback)"
+                    ));
+                }
+                Some(TargetKind::L4Daemon | TargetKind::SeatRerank)
+                    if row.target.model.is_some() =>
+                {
+                    return Err(format!(
+                        "escalation.{label}.target.model: only hosted_expert rows \
+                         carry a model id (the daemon carries its own checkpoint; \
+                         the seat picks among OUR candidates — nothing to name)"
+                    ));
+                }
+                _ => {}
+            }
         }
         Ok(())
     }
@@ -342,7 +370,7 @@ mod tests {
             "{{\"domains\":{{\"clippy\":{{
                 \"modelless_cap\": 0.0,
                 \"max_rate\": {max_rate},
-                \"target\": {{\"kind\": \"hosted_expert\", \"endpoint\": \"http://127.0.0.1:9\"}}
+                \"target\": {{ \"kind\": \"hosted_expert\", \"endpoint\": \"http://127.0.0.1:9\", \"model\": \"test-model\" }}
             }}}}}}"
         )
     }
@@ -425,6 +453,7 @@ mod tests {
                         kind: "hosted_expert".to_string(),
                         endpoint: None,
                         min_pool: None,
+                        model: Some("test-model".to_string()),
                     },
                     demoted: false,
                 },
@@ -498,6 +527,43 @@ mod tests {
         )
         .expect_err("min_pool on hosted_expert");
         assert!(e.contains("only seat_rerank rows"), "{e}");
+    }
+
+    // ── the hosted model id (Plan 202 R6 wiring — R2's construction law) ──
+
+    #[test]
+    fn hosted_expert_row_requires_a_model_id() {
+        let e = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"hosted_expert\",\"endpoint\":\"http://127.0.0.1:9\"}}}}",
+        )
+        .expect_err("hosted_expert without model");
+        assert!(e.contains("target.model") && e.contains("hosted_expert"), "{e}");
+        // With the model the row loads.
+        let m = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"hosted_expert\",\"endpoint\":\"http://127.0.0.1:9\",\
+             \"model\":\"qwen3.8-27b\"}}}}",
+        )
+        .expect("hosted_expert with model");
+        assert_eq!(
+            m.row("clippy").unwrap().target.model.as_deref(),
+            Some("qwen3.8-27b")
+        );
+    }
+
+    #[test]
+    fn model_on_a_non_hosted_row_is_a_dead_knob_and_refused() {
+        for kind in ["l4_daemon", "seat_rerank"] {
+            let e = parse(
+                &format!(
+                    "{{\"domains\":{{\"clippy\":{{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+                     \"target\":{{\"kind\":\"{kind}\",\"model\":\"x\"}}}}}}}}"
+                ),
+            )
+            .expect_err("model on a non-hosted row");
+            assert!(e.contains("only hosted_expert rows"), "{kind}: {e}");
+        }
     }
 
     #[test]

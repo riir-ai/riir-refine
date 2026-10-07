@@ -147,7 +147,14 @@ impl HostedExpertL4 {
         }
     }
 
-    /// The request body for one snippet โ€” the SNIPPET-ONLY builder. The
+    /// The spend ledger (the R6 arm-H cost axis reads it for the run
+    /// summary; the guard itself stays inside `generate_fix_checked_with`).
+    #[must_use]
+    pub fn spend(&self) -> &crate::llm_spend::SpendLedger {
+        &self.spend
+    }
+
+    /// The request body for one snippet — the SNIPPET-ONLY builder. The
     /// signature takes the snippet and nothing else: there is no path
     /// from a file handle to this function. The no-retention rule rides
     /// the wire twice (system message + metadata) so the receiving

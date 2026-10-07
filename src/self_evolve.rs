@@ -59,6 +59,27 @@ pub struct HealResult {
     pub context_notes: Option<String>,
 }
 
+/// The result of [`HealPipeline::heal_with_pool`] — the modelless answer
+/// AND the L0–L3 candidate pool it was chosen from (Plan 202 R6 arm H).
+/// The pool is what the rerank arm presents to the hosted seat: the seat's
+/// pick is taken from THIS list by index (the rerank wire's L4 invariant 3),
+/// so the exposed codes are the presentation of record.
+#[derive(Debug, Clone)]
+pub struct HealOutcome {
+    /// Exactly what [`HealPipeline::heal`] would return — bit-identical
+    /// (both entry points share [`HealPipeline::heal_inner`]; the pool
+    /// collection is a `None` branch on the `heal` path).
+    pub result: Option<HealResult>,
+    /// The candidate codes in candidate order, deduped (the pool `heal`
+    /// scored). Empty on a no-candidate miss (the generate arm's
+    /// distribution); exactly the Stage-2 verified fix on a Stage-2 hit;
+    /// the full scored pool otherwise (including the non-parsing /
+    /// off-relevance pool that reached `resolve_miss` — the seat's pick is
+    /// adjudicated by the caller's oracle, and a non-parsing pick cannot
+    /// displace a parsing modelless answer that does not exist).
+    pub pool: Vec<String>,
+}
+
 /// Where the proposed fix came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HealSource {
@@ -799,6 +820,39 @@ impl HealPipeline {
         buggy_code: &str,
         corpus: &[E],
     ) -> Option<HealResult> {
+        self.heal_inner(rule_id, buggy_code, corpus, None)
+    }
+
+    /// Plan 202 R6 arm H — [`Self::heal`] with the L0–L3 candidate pool
+    /// exposed. The escalation chain's rerank arm presents THIS pool to the
+    /// hosted seat (the candidates-exist arm; a below-`min_pool` pool is
+    /// never seat traffic — the dispatch owns that gate). `heal` itself
+    /// stays the hot path: same body, pool collection compiled behind a
+    /// `None` discriminant, allocation-free behavior unchanged (the G4 gate
+    /// covers it).
+    #[must_use]
+    pub fn heal_with_pool<E: HealEntry>(
+        &mut self,
+        rule_id: &str,
+        buggy_code: &str,
+        corpus: &[E],
+    ) -> HealOutcome {
+        let mut pool = Vec::new();
+        let result = self.heal_inner(rule_id, buggy_code, corpus, Some(&mut pool));
+        HealOutcome { result, pool }
+    }
+
+    /// The shared `heal` body; `pool_out = Some` collects the candidate
+    /// codes (in candidate order) at the two pool birth points — the
+    /// Stage-2 verified fix and the drafter+memory pool after dedup. The
+    /// `None` path (plain `heal`) never touches the collector.
+    fn heal_inner<E: HealEntry>(
+        &mut self,
+        rule_id: &str,
+        buggy_code: &str,
+        corpus: &[E],
+        mut pool_out: Option<&mut Vec<String>>,
+    ) -> Option<HealResult> {
         // ── Input-scope gate (Bench 669 consumer adoption, Plan 016) ──────
         // `None` ⇒ out-of-scope input (`D > θ`): decline the whole heal —
         // never serve, never consult L4. See `scope_haircut_for` for the
@@ -822,6 +876,12 @@ impl HealPipeline {
         // This is the ~µs serve path (hash lookup) after the tuning loop populated
         // the pool. The Stage 1 path below is the always-on fallback.
         if let Some(verified) = self.adaptive.lookup(rule_id, buggy_code) {
+            // Pool birth point 1 (R6): the Stage-2 pool is the one verified
+            // fix — never rerank-worthy (below the frozen min-pool default),
+            // but exposed so the dispatch's gate sees the true pool size.
+            if let Some(out) = &mut pool_out {
+                out.push(verified.clone());
+            }
             // Stage 2 fixes were already validated by the domain validator during
             // tuning. We still run the L2 pruner (cheap) to set the `parses`
             // field honestly.
@@ -901,8 +961,19 @@ impl HealPipeline {
         if candidates.is_empty() {
             // Modelless miss #1: nothing to serve at all. This is the case L4
             // exists for — an input the corpus, drafter and memory have never
-            // seen. Returns None when no fallback is installed.
+            // seen. Returns None when no fallback is installed. The pool
+            // stays EMPTY — no-candidate traffic is the generate arm's
+            // distribution by construction (the rerank wire refuses it at
+            // the client too).
             return self.consult_l4(rule_id, buggy_code, rule_context_notes);
+        }
+
+        // Pool birth point 2 (R6): the deduped drafter+memory pool, in
+        // candidate order, exactly as `select_best_candidate` is about to
+        // score it. Collected BEFORE selection so the miss paths
+        // (`resolve_miss`) still expose what the modelless path had.
+        if let Some(out) = &mut pool_out {
+            out.extend(candidates.iter().map(|c| c.code.clone()));
         }
 
         // Step 4: score each candidate — see `select_best_candidate` for the
@@ -1218,6 +1289,61 @@ mod tests {
             r.evolution_score, 0.320_000_02,
             "unseen lint → no-evidence score"
         );
+    }
+
+    #[test]
+    fn heal_with_pool_exposes_the_scored_pool_and_agrees_with_heal() {
+        // Plan 202 R6 arm H: the seam's three pins — the pool is the scored
+        // candidate list, the served answer is IN it, and the two entry
+        // points agree bit-identically (same body, pool collection behind a
+        // None branch on the plain-heal path).
+        let corpus = mock_corpus();
+        let mut p1 = make_pipeline();
+        let mut p2 = make_pipeline();
+        p1.seed_from_corpus(&corpus);
+        p2.seed_from_corpus(&corpus);
+
+        let outcome = p1.heal_with_pool("needless_return", "return 42;", &corpus);
+        let plain = p2.heal("needless_return", "return 42;", &corpus).unwrap();
+        let served = outcome.result.expect("corpus-backed heal serves");
+        assert!(!outcome.pool.is_empty(), "a served case has a pool");
+        assert!(
+            outcome.pool.iter().any(|c| c == &served.fixed_code),
+            "the served answer must be one of the presented candidates"
+        );
+        // Deduped by construction (drafter + memory can produce the same fix).
+        let unique: std::collections::BTreeSet<&String> = outcome.pool.iter().collect();
+        assert_eq!(unique.len(), outcome.pool.len(), "pool must be deduped");
+        assert_eq!(served.fixed_code, plain.fixed_code);
+        assert_eq!(served.parses, plain.parses);
+        assert_eq!(served.evolution_score.to_bits(), plain.evolution_score.to_bits());
+        assert_eq!(served.source, plain.source);
+    }
+
+    #[test]
+    fn heal_with_pool_is_empty_on_a_total_miss_and_singleton_on_stage2() {
+        const RULE: &str = "needless_return";
+        const BUGGY: &str = "return 42;";
+        const FIXED: &str = "fn foo() -> i32 { 42 }";
+        let corpus = mock_corpus();
+        // Miss: empty corpus + empty memory → no result, empty pool (the
+        // generate arm's distribution — the rerank wire refuses it too).
+        let mut p = make_pipeline();
+        let empty: [ClippyFixEntry; 0] = [];
+        let miss = p.heal_with_pool("unheard_lint", "weird();", &empty);
+        assert!(miss.result.is_none());
+        assert!(miss.pool.is_empty(), "no candidates → no pool, not a stub");
+
+        // Stage 2: a verified pool entry surfaces as a SINGLETON pool.
+        p.seed_from_corpus(&corpus);
+        p.report_outcome(RULE, BUGGY, FIXED, true, false);
+        // Stage-2 population rides the tuning loop; insert the verified fix
+        // directly (the pool's own sanctioned writer).
+        p.adaptive.insert(RULE, BUGGY, FIXED.to_string());
+        let st2 = p.heal_with_pool(RULE, BUGGY, &corpus);
+        let r = st2.result.expect("stage-2 hit serves");
+        assert_eq!(r.source, HealSource::Stage2Adaptive);
+        assert_eq!(st2.pool, vec![FIXED.to_string()], "the verified fix alone");
     }
 
     #[test]
