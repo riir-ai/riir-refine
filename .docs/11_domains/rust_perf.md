@@ -25,10 +25,31 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 181 rules — Batch 204 (2026-10-07,
-Plan 204 / Research 239 — the PrismML NEON PQ2_0 vec_dot rule, source
-`PrismML-Eng/llama.cpp` #265 @ `6bfcd79a`, MIT — simd 9→10, the corpus's
-first NEON decode/codec member:
+profiling guide, Research 032; **now 183 rules — Batch 207 (2026-10-07,
+Plan 207 / Research 242 — the 10-07 staged leads' rust_perf half, +2, both
+NotBenchable annotated, annotated 127 → 129): `per-scope-map-scan-hash-crossover`
+(complexity; source `tracel-ai/cubecl` #1767 @ `d307dd46`, MIT OR Apache-2.0 —
+a scope-keyed lookup table scanned linearly on every lookup AND insert is
+quadratic in the operations of a region ("A large unrolled kernel spent
+minutes in it"); each scope becomes a hash map — but the MEASURED NEGATIVE is
+the rule's second half: "many regions of a few additions ran 15% slower than
+main", so the adopted shape is pliron's SmallMap hybrid — inline-scan the
+first eight entries without allocating (`INLINE_ENTRIES = 8`), hash past
+them; the key-type clause: `ExpressionKey` hashes everything but its
+attributes, which have no Hash and stay in the equality — keys differing
+only in attributes share a bucket by design) + `inline-hint-not-through-unmarked-wrapper`
+(dispatch; source `bevyengine/bevy` #26040 @ `1ba0c9f9`, MIT OR Apache-2.0 —
+#25200 added wrappers around `fetch_next_aliased_unchecked_internal`, which
+is marked `#[inline(always)]`; the new wrappers weren't marked, so the
+function stopped getting inlined — the four-row laptop table reads
++30–90 µs on every row and the fix restores (and on one row beats) the
+pre-refactor numbers; the class: an inline hint is per-function, never
+transitive — a refactor adding wrappers needs the wrapper-attribute audit +
+the bench, because only the benchmark saw it; the LLM-assisted root-cause
+disclosure with manual diff verification rides as provenance). Was 181 —
+Batch 204 (2026-10-07, Plan 204 / Research 239 — the PrismML NEON PQ2_0
+vec_dot rule, source `PrismML-Eng/llama.cpp` #265 @ `6bfcd79a`, MIT —
+simd 9→10, the corpus's first NEON decode/codec member:
 `neon-tbl-replicate-2bit-codec-sdot-block-rescale` — one `vqtbl1q_u8`
 with an index table replicates each packed byte across the vector,
 in-lane shift/mask/sub lands each 2-bit code in the lane that owns it as

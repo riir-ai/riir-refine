@@ -9,13 +9,15 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 163 entries across 12 categories (allocation 28, io 26, concurrency 23,
-//! complexity 28, layout 13, iterators 11, simd 9, arithmetic 8, caching 8,
-//! dispatch 6, bevy 2, wasm 1). 99 are benchable; 64 are honestly//! `NotBenchable` — the count repaired by Batch 135 (the pre-Batch-118 ledger
-//! said 25 while the gated test said 14; the Batch 118–129 ds4 io
-//! annotations were never counted) and again by the 09-24 housekeeping pass
-//! (the header prose had gone stale at 145/92/53 through B172–B174; the
-//! gated count tests + `cargo refine --corpus-stats` are the live ledgers)
+//! 183 entries across 12 categories as of Batch 207 (2026-10-07 — the live
+//! per-category counts are pinned by tests, never this prose: the figures
+//! here went stale repeatedly — 163 through the B182-era, before that
+//! 145/92/53 through B172–B174 — repaired here at B207 with the honest
+//! label; the gated count tests + `cargo refine --corpus-stats` are the
+//! live ledgers). The NotBenchable ledger was repaired by Batch 135 (the
+//! pre-Batch-118 ledger said 25 while the gated test said 14; the Batch
+//! 118–129 ds4 io annotations were never counted) and again by the 09-24
+//! housekeeping pass
 //! (8 external-runtime/size-class + 2
 //! metric-mismatch (Issue
 //! 014) + the x86-only prefetch annotation (Batch 85) + the bitflag size
@@ -403,6 +405,7 @@ mod entries_14;
 mod entries_15;
 mod entries_16;
 mod entries_17;
+mod entries_18;
 
 #[cfg(test)]
 mod tests;
@@ -472,5 +475,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_15::entries());
     entries.extend(entries_16::entries());
     entries.extend(entries_17::entries());
+    entries.extend(entries_18::entries());
     Corpus::new(entries)
 }

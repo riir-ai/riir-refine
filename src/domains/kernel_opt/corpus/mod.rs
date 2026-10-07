@@ -1962,6 +1962,7 @@ mod entries_gpu_73;
 mod entries_gpu_74;
 mod entries_gpu_75;
 mod entries_gpu_76;
+mod entries_gpu_77;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2014,6 +2015,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_74::entries());
     entries.extend(entries_gpu_75::entries());
     entries.extend(entries_gpu_76::entries());
+    entries.extend(entries_gpu_77::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2063,9 +2065,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 739-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 739 at Batch
-///   197 — the mlx VJP distill; was 728 at Batch 196).
+/// - **Exhaustive:** every `rule_id` in the 773-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 773 at Batch
+///   207 — the 10-07 staged leads; was 771 at Batch 206, 739 at Batch 197).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
 ///
@@ -2251,7 +2253,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-independent-pass-block-bounded-scratch"
         ],
     ),
-    // B: Compute patterns (85 rules; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
+    // B: Compute patterns (86 rules; Batch 207 +1: the minifloat normal-code decode -- the fused
+    // one-shift + bias-difference form with the placed E2M1 decode (the 2^14 lift folded
+    // into the caller's block scale) and the emulated-conversion admission predicate, all
+    // one cubecl commit; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
     // deferred between MMA bursts (renamed from the staged moe- name --
     // qmm.cu is the general decode lane, not MoE); Batch 198 +1: the fewrow tensor tile
     // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
@@ -2354,7 +2359,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "branch-free-top2-insert-order-invariant-guard",
             "last-query-rect-projection",
             "fewrow-tensor-tile-decode-into-rhs-operand",
-            "per-group-epilogue-deferred-between-mma-bursts"
+            "per-group-epilogue-deferred-between-mma-bursts",
+            "minifloat-normal-code-shift-bias-diff-decode"
         ],
     ),
     // C: Fusion patterns (54 rules; Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
@@ -2424,7 +2430,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (173 rules; Batch 206 +2: the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect that widens dst admission to contiguous_1, one story) + the per-thread-stream blocking-op explicit-sync escape (the legacy-default-stream serialization class; the ROCm -j re-enable rides as the hazard evidence) — both from the 10-07 staged leads; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
+    // D: Dispatch patterns (174 rules; Batch 207 +1: the profile-window drain -- a window opened behind
+    // unrelated queued work timed that work as its own and the autotuner elected the outliers
+    // (the measurement-honesty D-class member; the backend fact named once, TimestampSampling);
+    // Batch 206 +2: the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect that widens dst admission to contiguous_1, one story) + the per-thread-stream blocking-op explicit-sync escape (the legacy-default-stream serialization class; the ROCm -j re-enable rides as the hazard evidence) — both from the 10-07 staged leads; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
     // uncapturable capability axis (the expert class DECLINES graphs);
     // Batch 198 +2: the ids-path stride
     // rebind correctness law (the #258 per-slot bound) + the single-seq
@@ -2617,7 +2626,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "single-seq-slice-contiguity-copy-elision",
             "declared-uncapturable-expert-declines-graphs",
             "widening-conversion-row-chunk-staging-budget",
-            "per-thread-stream-blocking-op-explicit-sync"
+            "per-thread-stream-blocking-op-explicit-sync",
+            "profile-window-drains-queued-work-before-open"
         ],
     ),
     // E: Parallelism patterns (72 rules; Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role

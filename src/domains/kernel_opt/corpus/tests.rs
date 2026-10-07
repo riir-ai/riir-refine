@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        771,
-        "kernel batches through Batch 206 should have 771 rules",
+        773,
+        "kernel batches through Batch 207 should have 773 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 771-rule corpus must appear in exactly one category
-    // (re-pinned 771 at Batch 206; read 769 through B205, 761 through B204, 758 through B202).
+    // Every rule_id in the 773-rule corpus must appear in exactly one category
+    // (re-pinned 773 at Batch 207; read 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5465,9 +5465,9 @@ fn kernel_categories_counts_match_plan_003_table() {
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
         (KernelCategory::MemoryAccess, 159),
-        (KernelCategory::Compute, 85),
+        (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 173),
+        (KernelCategory::Dispatch, 174),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 771.
+    // Sum must equal 773.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 771, "Plan 003: category totals must sum to 771 (Batch 206 +2, the 10-07 staged leads: D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; Batch 205 +8, the 10-06 unstaged kernel pool: D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 re-pinned 761 before it)");
+    assert_eq!(total, 773, "Plan 003: category totals must sum to 773 (Batch 207 +2, the 10-07 staged leads: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain (a window opened behind unrelated queued work timed that work as its own and the autotuner elected the outliers); Batch 206 +2, the 10-07 staged leads: D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; Batch 205 +8 before it)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 771,
-        "Plan 003: grouped corpus has {total} rules, expected 771"
+        total, 773,
+        "Plan 003: grouped corpus has {total} rules, expected 773"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        771,
-        "corpus count re-pinned at Batch 206 (the 10-07 staged leads: 2 rules — D +2 the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect admission half) + the per-thread-stream blocking-op explicit-sync escape; was 769 at Batch 205 (the 10-06 unstaged kernel pool: 8 rules), 761 at Batch 203, 758 at Batch 201)",
+        773,
+        "corpus count re-pinned at Batch 207 (the 10-07 staged leads: 2 rules — B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form, the placed E2M1 decode, the emulated-conversion admission predicate) + D +1 the profile-window drain (TimestampSampling names the backend fact once; the autotuner's cache-warming read no longer lands in the samples); was 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14608,6 +14608,114 @@ fn batch206_concepts_carry_their_load_bearing_contracts() {
     assert!(
         !b.gpu_concept.contains("512ull"),
         "batch-206 cross-distinct: the stream rule must not cite the staging rule"
+    );
+}
+
+#[test]
+fn batch207_pseudocode_parses() {
+    // G1 for Batch 207: syn-parse gate (the 10-07 staged leads -- Plan 207:
+    // two tracel-ai/cubecl commits; B +1, D +1).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "minifloat-normal-code-shift-bias-diff-decode",
+        "profile-window-drains-queued-work-before-open",
+    ];
+    assert_eq!(ids.len(), 2, "batch-207 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-207 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-207 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-207 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch207_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-207 decision-content contracts (the batch206 precedent):
+    // each rule's load-bearing quotes must ride the rule text verbatim,
+    // the cross-distinct pairs must name each other, and the batch/plan
+    // stamp + the NotBenchable annotation must be present.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "minifloat-normal-code-shift-bias-diff-decode",
+            vec![
+                "one shift and one add of the bias difference on the exponent field",
+                "fail when the bias is off by one",
+                "about 3% of the kernel's time",
+                "E2M1_F16_LIFT",
+                "e2m1_words_to_f16_placed",
+                "itself pays no more than the conversion",
+                "enumerable-domain-bit-identity-admission-gate",
+                "dtype-native-source-read-with-shared-admission-predicate",
+                "ue8m0-pow2-scale-as-biased-exponent-byte",
+            ],
+        ),
+        (
+            "profile-window-drains-queued-work-before-open",
+            vec![
+                "Autotune queues exactly that work",
+                "about three times their duration",
+                "a resolve waits for completion (as before), and a window drains the queue before it opens (new)",
+                "TimestampSampling",
+                "fused-serving-stack-measured-negative-ledger",
+                "seed-warm-the-scored-seam",
+            ],
+        ),
+    ];
+    for (id, markers) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-207 rule '{id}' missing"));
+        for marker in markers {
+            assert!(
+                rule.gpu_concept.contains(marker),
+                "batch-207 contract marker missing on '{id}': '{marker}'"
+            );
+        }
+        assert!(
+            rule.gpu_concept.contains("Batch 207 / Plan 207"),
+            "batch-207 '{id}' must carry the batch/plan stamp"
+        );
+        assert!(
+            rule.gpu_concept.contains("NotBenchable"),
+            "batch-207 '{id}' must carry the NotBenchable annotation"
+        );
+    }
+    // Cross-distinct: the two batch-207 rules carry disjoint mechanisms --
+    // decode arithmetic vs measurement honesty -- and must not cite each
+    // other.
+    let a = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "minifloat-normal-code-shift-bias-diff-decode")
+        .unwrap();
+    let b = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
+        .unwrap();
+    assert!(
+        !a.gpu_concept.contains("profile-window"),
+        "batch-207 cross-distinct: the decode rule must not cite the profile rule"
+    );
+    assert!(
+        !b.gpu_concept.contains("E2M1_F16_LIFT"),
+        "batch-207 cross-distinct: the profile rule must not cite the decode rule"
     );
 }
 
