@@ -12105,6 +12105,40 @@ fn main() {
             spans.len()
         );
     }
+    // Plan 199 T3.5: the WASM validator lane's run-status line — the
+    // summary-law shape (report-ONLY, never a gate; the lane's T3.4/Bench
+    // 105 verdict is the recorded "native is fine" negative, so nothing in
+    // the fix path consumes validator verdicts). When the lane is compiled
+    // in and the committed store loads, the operator sees what would serve;
+    // any other state (feature off, no store, revoked) is either invisible
+    // (feature off = the lane does not exist in this build) or a named
+    // report line (a store that fails to load is a fact worth one line).
+    #[cfg(feature = "wasm_validator")]
+    {
+        let store = riir_refine::validators::ValidatorStore::new(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/validators"),
+        );
+        match store.verify() {
+            Ok(admitted) if !admitted.is_empty() => {
+                let rows: Vec<String> = admitted
+                    .iter()
+                    .map(|a| {
+                        format!(
+                            "{} v{} ({:?})",
+                            a.record.name, a.record.version, a.record.state
+                        )
+                    })
+                    .collect();
+                println!(
+                    "wasm-validator lane: {} committed artifact(s) verified — report-only \
+                     (Bench 105 verdict: opt-in, the native predicate is the baseline)",
+                    rows.join(", ")
+                );
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("wasm-validator lane: store verify failed (report-only): {e}"),
+        }
+    }
     // P12: report the suppressed re-proposals — the operator must see what
     // was skipped and why (a suppressed edit keeps its lint firing; the
     // escape hatch is RIIR_REFINE_SUPPRESS_REVERTED=0 for one run).
