@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        776,
-        "kernel batches through Batch 208 should have 776 rules",
+        777,
+        "kernel batches through Batch 210 should have 777 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 776-rule corpus must appear in exactly one category
-    // (re-pinned 776 at Batch 208; read 773 through B207, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 777-rule corpus must appear in exactly one category
+    // (re-pinned 777 at Batch 210; read 776 through B209, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5467,7 +5467,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 159),
         (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 177),
+        (KernelCategory::Dispatch, 178),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 776.
+    // Sum must equal 777.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 776, "Plan 003: category totals must sum to 776 (Batch 208 +3, all D: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2 before that: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 777, "Plan 003: category totals must sum to 777 (Batch 210 +1, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3 before that, all D: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 776,
-        "Plan 003: grouped corpus has {total} rules, expected 776"
+        total, 777,
+        "Plan 003: grouped corpus has {total} rules, expected 777"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        776,
-        "corpus count re-pinned at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        777,
+        "corpus count re-pinned at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14930,6 +14930,76 @@ fn batch209_pool2d_rider_present() {
         assert!(
             rule.gpu_concept.contains(marker),
             "batch-209 pool2d rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch210_pseudocode_parses() {
+    // G1 for Batch 210 (Plan 210): the single 10-08 late-envelope lead --
+    // llama.cpp #29887 MoE expert GPU cache -- landed as ONE new D rule,
+    // expert-cache-write-path-regime-gated. The B94 family owns the
+    // victim POLICY, the REGION isolation, and the regime-START
+    // admission; THIS rule owns the WRITE-PATH regime gate + the
+    // scheduler-seam update hook. Syn-parse gate both sides + needle
+    // markers + the distinct-from trio (the B202 narrow-batch-gate
+    // lesson).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = ["expert-cache-write-path-regime-gated"];
+    assert_eq!(ids.len(), 1, "batch-210 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-210 rule missing: {id}"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-210 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-210 opt_pattern for '{id}' must parse"
+        );
+    }
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "expert-cache-write-path-regime-gated")
+        .unwrap();
+    for marker in [
+        "would evict the experts used in generation",
+        "large batches only read the cache, so the experts used in generation stay in it",
+        "the slot map is a host weight, so the scheduler starts a new split here and copies it with the copy callback",
+        "hits go to the tail first, so the head can be evicted below",
+        "sorted misses usually get consecutive slots, so the uploads can be merged",
+        "while (e + n <= last && slots[e + n] == slots[e] + n) { n++; }",
+        "one extra slot at the end, CUDA MMQ can read past the last expert",
+        "split the budget by the size of the experts, so each group caches the same fraction of its experts",
+        "the cache has only a few slots (4 for 288 KiB experts), so the experts are evicted and uploaded again",
+        "if (uniq.size() > (size_t) n_slots) { return false; }",
+        "scratch-isolation WITHOUT a second region",
+        "NotBenchable",
+        "Batch 210 / Plan 210",
+    ] {
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-210 rule marker missing: '{marker}'"
+        );
+    }
+    // the distinct-from trio: the B94 family members this rule names
+    for kin in [
+        "decayed-frequency-eviction-recency-tiebreak-route-protection",
+        "scratch-bank-isolates-one-shot-operands-from-hot-cache",
+        "fill-gate-speculation-until-working-set-resident",
+        "host-cache-immutable-device-weights",
+    ] {
+        assert!(
+            rule.gpu_concept.contains(kin),
+            "batch-210 distinct-from missing: '{kin}'"
         );
     }
 }
