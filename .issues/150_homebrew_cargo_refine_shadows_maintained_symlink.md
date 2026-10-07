@@ -1,6 +1,6 @@
 # Issue 150 — the Homebrew-installed cargo-refine shadows the maintained symlink on PATH
 
-**Status:** PARTIALLY RESOLVED — **option 3 LANDED 2026-10-07** (the build-commit stamp: `--version` prints `build: <hash>[-dirty]|unknown`; commit `<hash>`; the standing shadow check is the hash-vs-HEAD comparison below). Options 1/2 (the box's PATH/Cellar state) REMAIN OPEN OWNER CALLS — until decided, the interim absolute-path ruling stands. Found 2026-10-06 by the dapps plan-045 verdict round 2 during the B7 privacy-cut live smoke · Machine: the M3 box.
+**Status:** PARTIALLY RESOLVED — **option 3 LANDED 2026-10-07** (the build-commit stamp: `--version` prints `build: <hash>[-dirty]|unknown`; commit `0a4c010c`; the standing shadow check is the hash-vs-HEAD comparison below). Options 1/2 (the box's PATH/Cellar state) REMAIN OPEN OWNER CALLS — until decided, the interim absolute-path ruling stands. Found 2026-10-06 by the dapps plan-045 verdict round 2 during the B7 privacy-cut live smoke · Machine: the M3 box.
 
 ## Option 3 — landed (2026-10-07, the Claude-verdict round-1 REVISE design)
 
