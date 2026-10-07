@@ -92,7 +92,12 @@ not a new lane and not decstat:
       owner deploys the v4-ingesting worker, the maintained binary's
       auto-sync tail stacks OFFLINE (the designed posture: watermark
       never advances on refusal, rows re-send post-deploy, server dedups
-      by record id). The released 0.2.1 binary emits v3 and is unaffected.**
+      id). The released 0.2.1 binary emits v3 and is unaffected.**
+      **DEPLOYED 2026-10-08: the devnet worker (`18cb3f44-7b49-41bd-a0df-
+      022d1dca17a8`) accepts {2,3,4} — the maintained binary's sync tail
+      drains. Apex/mainnet remain owner-gated. En-route: the D8c row
+      `kat:ledgerid:v1` pinned in the dapps explorer inventory (the L6
+      red this landing inherited).**
       Known scope note: `EvolveRecorder` (envelope backend) carries no
       label by design — the store is the label's home. The rustc_errors
       driver lane's strategy-menu capture — the recorded follow-up —
