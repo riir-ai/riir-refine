@@ -16,5 +16,5 @@ Source: nnethercote perf blog 2026-09-30 (`/2026/09/30/how-to-speed-up-the-rust-
 - [x] Retrieval floors: `cargo test --features latent_retrieval --lib retrieval` ✓ 20/20 (32 s; no decay; no re-pin).
 - [x] Research note `.research/238_nnethercote_cfg_traversal_min_rank.md` (RECORD: the verified quotes, the drift corrections, the not-re-carried 1,508,264/89,809 pair).
 - [x] AGENTS.md rust_perf count line 179 → 180 (Batch 202 label, ×2 sites); `.docs/11_domains/rust_perf.md` 179 → 180 with the entry summary.
-- [ ] `.distill/001_mining_queue_snapshot.md`: R134 slot DONE + commit hash; queue state updated (this commit).
-- [ ] Fetch origin immediately before the commit (the S-series lesson); commit `feat: batch 202: ...` + push; tick this plan (this commit).
+- [x] `.distill/001_mining_queue_snapshot.md`: R134 slot DONE + commit hash (`2d384d16`); queue state updated.
+- [x] Fetch origin immediately before the commit (the S-series lesson); commit `feat: batch 202: ...` + push (`2d384d16`); tick this plan.
