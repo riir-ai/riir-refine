@@ -150,6 +150,12 @@ pub mod evolve;
 // Ungated, default-empty — nothing demotes until the fade-predictive gate
 // opens; the fan-out and fix lanes only ever READ this file.
 pub mod active_set;
+// Plan 202 R1: the escalation manifest — the operator-owned ARMING surface
+// for per-domain escalation, consuming the SHARED katgpt-core
+// escalation_guard primitive (Issue 923). Manifest-only arming, demote-only
+// switches, ALL-EMPTY at ship. Opt-in (`escalation_manifest`).
+#[cfg(feature = "escalation_manifest")]
+pub mod escalation_manifest;
 // Issue 130 T1+T3: the admission-time generalization gate's REPORT half —
 // per-stratum δ calibration + the corpus-stall predicate. Report-only by
 // design (T0): nothing here gates admission until the strata support a δ.

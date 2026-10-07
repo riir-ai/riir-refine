@@ -207,6 +207,17 @@ rust_perf_bench = ["rust_perf"]
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
 kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 
+# Plan 202 R1 (2026-10-07): the escalation manifest — the operator-owned
+# ARMING surface for per-domain escalation (`.refine/escalation_manifest.json`),
+# consuming the SHARED katgpt-core `escalation_guard` primitive (Issue 923:
+# RollingRateLatch cost-ceiling shape + the exact-literal demote-only decode
+# RIIR_REFINE_ESC=0). Manifest-only arming, demote-only switches, max_rate as
+# the ONLY rate knob (the miss rate is coverage-decided — low is good, never
+# a demotion trigger). Ships ALL-EMPTY (absent file = zero behavior). The
+# transports (R2 HostedExpertL4 / R3a seat rerank) register INTO it, never in
+# code. Opt-in until the R6 arm-H outcome-based selection measures a winner.
+escalation_manifest = ["katgpt-core/escalation_guard"]
+
 # Plan 005 Phase 1: real-file span-level latent retrieval (`--suggest` MVP).
 # Indexes every enabled domain's corpus via riir-rag, routes spans via
 # domain centroids, retrieves ranked rules. ZERO proposer code — suggestions
