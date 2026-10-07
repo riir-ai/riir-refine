@@ -188,11 +188,25 @@ fn run_case(
     }
     let us = t0.elapsed().as_micros();
     let (class, detail) = match &outcome {
-        Ok(SeatAnswer::Pick { index, candidate }) => {
+        Ok(SeatAnswer::Pick {
+            index,
+            candidate,
+            receipt: ref receipt_opt,
+        }) => {
             *picks += 1;
-            ("pick", format!("index={index} bytes={}", candidate.len()))
+            let audit = receipt_opt
+                .as_ref()
+                .map(|r| {
+                    format!(
+                        " receipt(build={:?} us={:?})",
+                        r.build.as_deref().unwrap_or("-"),
+                        r.us
+                    )
+                })
+                .unwrap_or_else(|| " receipt=none".to_string());
+            ("pick", format!("index={index} bytes={} {audit}", candidate.len()))
         }
-        Ok(SeatAnswer::Abstained) => {
+        Ok(SeatAnswer::Abstained { .. }) => {
             *abstains += 1;
             ("abstain", "modelless answer stands".to_string())
         }
@@ -233,7 +247,7 @@ fn run_case(
 fn class_of(outcome: &Result<SeatAnswer, SeatDecline>) -> &'static str {
     match outcome {
         Ok(SeatAnswer::Pick { .. }) => "pick",
-        Ok(SeatAnswer::Abstained) => "abstain",
+        Ok(SeatAnswer::Abstained { .. }) => "abstain",
         Err(_) => "decline",
     }
 }

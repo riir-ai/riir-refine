@@ -128,7 +128,30 @@ pub struct EscalateTarget {
     /// this manifest, owned by the transport.
     #[serde(default)]
     pub endpoint: Option<String>,
+    /// The rerank arm's lower pool bound (Bench 107's law: a rerank with
+    /// nothing to choose between is a paid socket for a non-choice — the
+    /// corpus is 1-fix-per-rule everywhere, so fresh installs never have
+    /// a rerank-worthy pool). Absent → the frozen default 2; a rerank
+    /// row may raise it, never lower it, and the seat's presentation cap
+    /// (instinct S8) bounds it above. Meaningless on generate rows —
+    /// refused there (a dead knob on an armed row is the conflation this
+    /// manifest keeps refusing).
+    #[serde(default)]
+    pub min_pool: Option<usize>,
 }
+
+impl EscalateTarget {
+    /// The pool bound the dispatch must honor: the row's value, else the
+    /// frozen default (`2` — the R7 freeze; the wire never carries a
+    /// 1-option rerank from our first customer).
+    #[must_use]
+    pub fn min_pool_or_default(&self) -> usize {
+        self.min_pool.unwrap_or(DEFAULT_MIN_POOL)
+    }
+}
+
+/// The frozen rerank min-pool default (Plan 202 R7 / Bench 107).
+pub const DEFAULT_MIN_POOL: usize = 2;
 
 /// One domain's escalation row.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -218,7 +241,28 @@ impl EscalationManifest {
                 ));
             }
             match TargetKind::from_label(&row.target.kind) {
-                Some(_) => {}
+                Some(kind) => match (kind, row.target.min_pool) {
+                    // The rerank arm raises the frozen default, never
+                    // lowers it; the seat's presentation cap bounds above.
+                    (TargetKind::SeatRerank, Some(n)) if !(2..=8).contains(&n) => {
+                        return Err(format!(
+                            "escalation.{label}.target.min_pool: {n} must be in 2..=8 \
+                             (the frozen default is {DEFAULT_MIN_POOL}; the seat's \
+                             presentation cap is 8)",
+                        ));
+                    }
+                    // A dead knob on a generate row: refused — an armed
+                    // row carrying meaningless fields is the conflation
+                    // class this manifest keeps refusing.
+                    (TargetKind::L4Daemon | TargetKind::HostedExpert, Some(_)) => {
+                        return Err(format!(
+                            "escalation.{label}.target.min_pool: only seat_rerank rows \
+                             carry a pool bound (the generate arm owns no-candidate \
+                             traffic by construction)",
+                        ));
+                    }
+                    _ => {}
+                },
                 None => {
                     return Err(format!(
                         "escalation.{label}.target.kind: {:?} is not a registered \
@@ -380,6 +424,7 @@ mod tests {
                     target: EscalateTarget {
                         kind: "hosted_expert".to_string(),
                         endpoint: None,
+                        min_pool: None,
                     },
                     demoted: false,
                 },
@@ -401,6 +446,58 @@ mod tests {
         let e = parse(&row_json(0.05).replace("hosted_expert", "carrier_pigeon"))
             .expect_err("bad kind");
         assert!(e.contains("registered transport"), "{e}");
+    }
+
+    // ── the rerank min-pool gate (Plan 202 R7 / Bench 107) ────────────
+
+    #[test]
+    fn min_pool_defaults_to_the_frozen_two_and_overrides_only_upward() {
+        // Absent → the frozen default 2 (the wire never carries a
+        // 1-option rerank from our first customer).
+        let m = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"seat_rerank\",\"endpoint\":\"http://127.0.0.1:8092\"}}}}",
+        )
+        .expect("seat_rerank row without min_pool");
+        assert_eq!(
+            m.row("clippy").unwrap().target.min_pool_or_default(),
+            DEFAULT_MIN_POOL
+        );
+        // An explicit value within the grammar resolves as written.
+        let m = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"seat_rerank\",\"min_pool\":4}}}}",
+        )
+        .expect("seat_rerank row with min_pool 4");
+        assert_eq!(m.row("clippy").unwrap().target.min_pool_or_default(), 4);
+    }
+
+    #[test]
+    fn min_pool_out_of_grammar_refused() {
+        // Below the law (1 = a paid socket for a non-choice).
+        let e = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"seat_rerank\",\"min_pool\":1}}}}",
+        )
+        .expect_err("min_pool 1");
+        assert!(e.contains("min_pool") && e.contains("2..=8"), "{e}");
+        // Above the seat's presentation cap (S8 = 8).
+        let e = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"seat_rerank\",\"min_pool\":9}}}}",
+        )
+        .expect_err("min_pool 9");
+        assert!(e.contains("min_pool"), "{e}");
+    }
+
+    #[test]
+    fn min_pool_on_a_generate_row_is_a_dead_knob_and_refused() {
+        let e = parse(
+            "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+             \"target\":{\"kind\":\"hosted_expert\",\"min_pool\":2}}}}",
+        )
+        .expect_err("min_pool on hosted_expert");
+        assert!(e.contains("only seat_rerank rows"), "{e}");
     }
 
     #[test]

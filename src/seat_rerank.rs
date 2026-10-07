@@ -55,14 +55,70 @@ const CONNECT_BUDGET_CAP: Duration = Duration::from_millis(250);
 const CONNECT_BUDGET_FLOOR: Duration = Duration::from_millis(10);
 
 /// What the seat answered. The pick carries the CALLER's candidate (by
-/// index) — never the wire's copy (L4 invariant 3).
+/// index) — never the wire's copy (L4 invariant 3). Both variants carry
+/// the seat's receipt when the reply had one (additive on the wire — a
+/// seat without receipts still answers; Bench 107 finding 4: the heal
+/// side's audit trail was blind to the seat-side evidence).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SeatAnswer {
     /// The expert picked `candidates[index]`; `candidate` is that
     /// caller-owned string, copied out for the caller's convenience.
-    Pick { index: usize, candidate: String },
+    Pick {
+        index: usize,
+        candidate: String,
+        receipt: Option<SeatReceipt>,
+    },
     /// The expert abstained — the modelless answer stands.
-    Abstained,
+    Abstained { receipt: Option<SeatReceipt> },
+}
+
+/// The seat's decision receipt, parsed LENIENTLY: every field optional
+/// (the receipt is additive on the wire; the CONTRACT fields — options
+/// echo, pick, abstained — are validated in [`SeatRerankClient::parse_reply`],
+/// never here). Surfaced for the heal-side audit trail (the R7 freeze).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SeatReceipt {
+    /// The seat's build fingerprint (`receipt.build`).
+    pub build: Option<String>,
+    /// `receipt.input_blake3` — the BLAKE3 of the request state.
+    pub input_blake3: Option<String>,
+    /// `receipt.decision_blake3` — the BLAKE3 of the canonical decision.
+    pub decision_blake3: Option<String>,
+    /// The seat's own decision time in µs (`us`).
+    pub us: Option<u64>,
+    /// The seat's confidence (`confidence`) — specialist-scaled, not
+    /// comparable to the modelless scorer's.
+    pub confidence: Option<String>,
+    /// The lane that answered (`arm`).
+    pub arm: Option<String>,
+}
+
+impl SeatReceipt {
+    /// Lenient parse off the reply envelope. `confidence` is kept as its
+    /// raw spelling (the edge emits a float; string form keeps `Eq` + a
+    /// stable audit copy — this is an audit record, not a score input).
+    fn parse(v: &serde_json::Value) -> Option<Self> {
+        let r = &v["receipt"];
+        let get = |k: &str| r[k].as_str().map(str::to_string);
+        let parsed = Self {
+            build: get("build"),
+            input_blake3: get("input_blake3"),
+            decision_blake3: get("decision_blake3"),
+            us: v["us"].as_u64(),
+            // The edge emits a JSON number; the raw spelling keeps Eq
+            // and a stable audit copy — this is an audit record, not a
+            // score input.
+            confidence: v["confidence"]
+                .as_str()
+                .map(str::to_string)
+                .or_else(|| v["confidence"].as_f64().map(|c| c.to_string())),
+            arm: v["arm"].as_str().map(str::to_string),
+        };
+        // An envelope with NO receipt and NO timing is a seat older than
+        // the receipt tier — `None`, not an empty record.
+        let empty = Self::default();
+        if parsed == empty { None } else { Some(parsed) }
+    }
 }
 
 /// Why [`SeatRerankClient::rerank`] declined. A decline is ALWAYS safe:
@@ -364,7 +420,9 @@ impl SeatRerankClient {
         }
         // Abstention first-class: the modelless answer stands.
         if v["abstained"].as_bool() == Some(true) {
-            return Ok(SeatAnswer::Abstained);
+            return Ok(SeatAnswer::Abstained {
+                receipt: SeatReceipt::parse(&v),
+            });
         }
         let Some(idx_u64) = v["pick_index"].as_u64() else {
             return Err(SeatDecline::Contract(
@@ -395,6 +453,7 @@ impl SeatRerankClient {
         Ok(SeatAnswer::Pick {
             index: idx,
             candidate: candidates[idx].clone(),
+            receipt: SeatReceipt::parse(&v),
         })
     }
 }
@@ -643,7 +702,16 @@ mod tests {
             answer,
             SeatAnswer::Pick {
                 index: 1,
-                candidate: CANDIDATES[1].to_string()
+                candidate: CANDIDATES[1].to_string(),
+                // The ok_doc's receipt block parses leniently: build
+                // lands, the blake3 spellings it doesn't use stay None.
+                receipt: Some(SeatReceipt {
+                    build: Some("t".to_string()),
+                    us: Some(42),
+                    confidence: Some("0.9".to_string()),
+                    arm: Some("ENC".to_string()),
+                    ..SeatReceipt::default()
+                }),
             }
         );
         // The wire carried the candidates EXACTLY as presented (the
@@ -668,7 +736,50 @@ mod tests {
         let answer = client
             .rerank_checked_with(SNIPPET, &candidates(), budget(), EgressConsent::Allowed)
             .unwrap();
-        assert_eq!(answer, SeatAnswer::Abstained);
+        // The doc carries `us:7` — the receipt tier reads it even on an
+        // abstain (the audit trail is about the EXCHANGE, not the pick).
+        assert_eq!(
+            answer,
+            SeatAnswer::Abstained {
+                receipt: Some(SeatReceipt {
+                    us: Some(7),
+                    confidence: Some("0".to_string()),
+                    arm: Some("ENC".to_string()),
+                    ..SeatReceipt::default()
+                })
+            }
+        );
+    }
+
+    #[test]
+    fn the_seat_receipt_surfaces_on_a_pick() {
+        // The full instinct edge receipt shape (Bench 107 finding 4: the
+        // client DROPPED all of it — the audit trail was blind). Every
+        // field lands; a field the seat omits stays None.
+        let opts: Vec<String> = CANDIDATES.iter().map(|o| format!("\"{o}\"")).collect();
+        let doc = format!(
+            "{{\"suite\":\"clippy_fix\",\"arm\":\"ENC\",\"options\":[{}],\"pick\":\"{}\",\
+             \"pick_index\":1,\"abstained\":false,\"confidence\":0.9,\"us\":42,\
+             \"lane_load\":\"ready\",\"receipt\":{{\"build\":\"deadbeef\",\"features\":[\"default\"],\
+             \"input_blake3\":\"aa\",\"decision_blake3\":\"bb\"}}}}",
+            opts.join(","),
+            CANDIDATES[1]
+        );
+        let (addr, _rx) = fake_seat("200 OK", &doc);
+        let client = SeatRerankClient::new(&addr, "clippy_fix").unwrap();
+        let answer = client
+            .rerank_checked_with(SNIPPET, &candidates(), budget(), EgressConsent::Allowed)
+            .unwrap();
+        let SeatAnswer::Pick { receipt, .. } = answer else {
+            panic!("expected a pick: {answer:?}");
+        };
+        let r = receipt.expect("the reply carried a receipt");
+        assert_eq!(r.build.as_deref(), Some("deadbeef"));
+        assert_eq!(r.input_blake3.as_deref(), Some("aa"));
+        assert_eq!(r.decision_blake3.as_deref(), Some("bb"));
+        assert_eq!(r.us, Some(42));
+        assert_eq!(r.confidence.as_deref(), Some("0.9"));
+        assert_eq!(r.arm.as_deref(), Some("ENC"));
     }
 
     // ── the contract pins (every violation declines) ──────────────────

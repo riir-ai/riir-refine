@@ -41,3 +41,11 @@ Postures: both sides RELEASE builds; loopback; box = shikuwa (Windows 11, i7-137
 - Plan 202 R7 can now freeze: the ledger rows above ARE the freeze inputs (refine's manifest grammar half: min-pool gate + suite naming + receipt tier decision; the decision_wire half lives in reflex's filed issue).
 - R6 arm H gains a named prerequisite: expose the candidate pool (today `heal()`'s pool is internal — a `heal_with_pool`-shaped seam or the rerank hook), plus the readiness-retry policy.
 - The examples stay as the standing dogfood rig: boot the server example, run the driver, diff the ledger.
+
+## Addendum — the freeze landed (2026-10-08, same day)
+
+The refine manifest grammar half of the freeze is in the tree (see Plan 202 R7's "Freeze LANDED" note):
+
+1. `EscalateTarget.min_pool` — absent → `DEFAULT_MIN_POOL = 2`; seat_rerank rows may raise it, never lower it (validated 2..=8); refused as a dead knob on generate rows.
+2. `SeatReceipt` — the seat's decision receipt surfaces on both `SeatAnswer` variants, lenient parse (an envelope without a receipt still answers — the additive-on-the-wire law); the dogfood driver prints it per pick.
+3. **The suite vocabulary is DECIDED: one `heal` suite for v1.** One seat lane hosts the healing rerank expert; per-domain lanes wait for measured need — the hosted tier scales experts independently (R5's LRU), and multiplying seats before traffic is the premature-axis class. The suite is an opaque routing key on the wire, so this decision needs no wire change; it freezes the manifest grammar's `suite` field vocabulary for our first customer.
