@@ -1,8 +1,8 @@
 # Plan 209 — Batch 209: the 10-08 envelope re-poll — pool2d warp-window crossover rider
 
-**Status:** IN FLIGHT — the single new in-lane lead from the 10-08 envelope re-poll
-(llama.cpp `42c787e8c1` #29425, CUDA pool2d) converted as a RIDER on
-`row-dot-split-inner-axis-block-reduce`; no new rules (corpus stays 776).
+**Status:** COMPLETE — Batch 209 landed (rider-only; all gates green: batch209
+13-needle gate + batch20x 22/22, kernel_opt+latent lib 3082/0, default lib
+2473/0, clippy ×3 clean, retrieval 21/21 held; corpus stays 776).
 
 ## Lead
 
@@ -38,10 +38,10 @@
 - [x] Dedup grep (coalesc / pool2d / shfl / restrict families — owners identified above)
 - [x] Full commit read at the pin via `.raw/b209-llamacpp` clone
 - [x] Plan-first (this file; `.plans/.highwater` 208→209; dual_allocation_gate clean)
-- [ ] Rider edit: `entries_gpu_66.rs` row-dot rule += the B209 RIDER clause (verbatim quotes)
-- [ ] `tests.rs`: batch209 rider gate (needles + total 776 held)
-- [ ] Gates: clippy `-D` x3 postures; default lib; kernel_opt+latent_retrieval lib; retrieval 21/21 floors
-- [ ] Research note 244 (grade + disposition + rider content; `.research/.highwater` 243→244)
-- [ ] AGENTS.md / README: counts unchanged; batch lineage mention
-- [ ] Snapshot row prepend (`.distill/001_mining_queue_snapshot.md`)
-- [ ] Commit + push; `.raw/b209-llamacpp` removed at close
+- [x] Rider edit: `entries_gpu_06.rs` row-dot rule += the B209 RIDER clause (verbatim quotes)
+- [x] `tests.rs`: batch209 rider gate (13 needles; total held by the standing category pin)
+- [x] Gates: clippy `-D` x3 postures; default lib 2473/0; kernel_opt+latent_retrieval lib 3082/0; retrieval 21/21 floors (en-route: the pre-existing batch208 too_many_lines pedantic warning split-and-healed)
+- [x] Research note 244 (grade + disposition + rider content; `.research/.highwater` 243→244)
+- [x] AGENTS.md / README: counts unchanged; batch lineage mention (Batch 1-209)
+- [x] Snapshot row prepend (`.distill/001_mining_queue_snapshot.md`)
+- [x] Commit + push; `.raw/b209-llamacpp` removed at close

@@ -14819,38 +14819,9 @@ fn batch208_concepts_carry_their_load_bearing_contracts() {
             "batch-208 '{id}' must carry the NotBenchable annotation"
         );
     }
-    // Rider needles: the fewrow rule carries the #30065 per-type threshold
-    // table; the profile-window rule carries the #1770 compile-queue drain.
-    let fewrow = corpus
-        .entries
-        .iter()
-        .find(|e| e.rule_id == "fewrow-tensor-tile-decode-into-rhs-operand")
-        .unwrap();
-    for marker in [
-        "any type with a 16-weight dequantizer",
-        "5 rows TQ2_0, 4 BF16",
-        "Batch 208 rider / Plan 208",
-    ] {
-        assert!(
-            fewrow.gpu_concept.contains(marker),
-            "batch-208 fewrow rider marker missing: '{marker}'"
-        );
-    }
-    let drain = corpus
-        .entries
-        .iter()
-        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
-        .unwrap();
-    for marker in [
-        "Every measurement starts with it",
-        "its measurement would carry every candidate's compilation",
-        "Batch 208 rider / Plan 208",
-    ] {
-        assert!(
-            drain.gpu_concept.contains(marker),
-            "batch-208 drain rider marker missing: '{marker}'"
-        );
-    }
+    // Rider needles for batch 208 live in batch208_rider_needles_present
+    // (split out to stay under the clippy too_many_lines pedantic bar --
+    // assertions unchanged).
     // Cross-distinct: the three batch-208 rules carry disjoint mechanisms
     // (fusion operand selection vs FA shape admission vs graph-construction
     // dead compute) and must not cite each other's load-bearing ids.
@@ -14881,6 +14852,86 @@ fn batch208_concepts_carry_their_load_bearing_contracts() {
         !headless.gpu_concept.contains("glm_mla_shape"),
         "batch-208 cross-distinct: headless rule must not cite the FA rule"
     );
+}
+
+#[test]
+fn batch208_rider_needles_present() {
+    // Split from batch208_concepts_carry_their_load_bearing_contracts (the
+    // too_many_lines pedantic bar) -- assertions unchanged: the fewrow rule
+    // carries the #30065 per-type threshold table; the profile-window rule
+    // carries the #1770 compile-queue drain.
+    let corpus = build_kernel_seed_corpus();
+    let fewrow = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fewrow-tensor-tile-decode-into-rhs-operand")
+        .unwrap();
+    for marker in [
+        "any type with a 16-weight dequantizer",
+        "5 rows TQ2_0, 4 BF16",
+        "Batch 208 rider / Plan 208",
+    ] {
+        assert!(
+            fewrow.gpu_concept.contains(marker),
+            "batch-208 fewrow rider marker missing: '{marker}'"
+        );
+    }
+    let drain = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
+        .unwrap();
+    for marker in [
+        "Every measurement starts with it",
+        "its measurement would carry every candidate's compilation",
+        "Batch 208 rider / Plan 208",
+    ] {
+        assert!(
+            drain.gpu_concept.contains(marker),
+            "batch-208 drain rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch209_pool2d_rider_present() {
+    // G1 for Batch 209 (Plan 209): the single 10-08 envelope lead -- llama.cpp
+    // #29425 pool2d warp-window crossover -- landed as a RIDER on
+    // row-dot-split-inner-axis-block-reduce (the WORK-SIZE-GATED regime face;
+
+    // the butterfly itself is the B22 shuffle family's). No new rules: the
+
+    // standing category-total pin holds 776; this gate asserts the host rule
+    // carries the rider's load-bearing quotes verbatim (the B202
+    // narrow-batch-gate lesson).
+
+    let corpus = build_kernel_seed_corpus();
+
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "row-dot-split-inner-axis-block-reduce")
+        .unwrap();
+    for marker in [
+        "WORK-SIZE-GATED",
+        "if (kh * kw >= CUDA_POOL2D_WARP_KERNEL_MIN_WINDOW)",
+        "#define CUDA_POOL2D_WARP_KERNEL_MIN_WINDOW 32",
+        "POOL_2D max over MiniMax-M3 indexer block scores",
+        "for (int t = lane; t < win_elems; t += WARP_SIZE)",
+        "i = bh + t / win_w; j = bw + t % win_w",
+        "res = (op == GGML_OP_POOL_MAX) ? max(res, other) : res + other;",
+        "res += cur * scale",
+        "MSA indexer block-max shape: wide 1-D window along ne0, no padding, non-divisible width",
+        "4160/128 = 32.5 windows",
+        "__shfl_xor_sync",
+        "NotBenchable",
+        "Batch 209 rider / Plan 209",
+    ] {
+        assert!(
+            rule.gpu_concept.contains(marker),
+            "batch-209 pool2d rider marker missing: '{marker}'"
+        );
+    }
 }
 
 #[test]
