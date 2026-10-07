@@ -5,10 +5,17 @@
 //! `#[path]`) to run them: temp git fixtures for the clean/dirty/untracked/
 //! unknown degradations and the rerun-list coverage. This file adds the one
 //! thing no in-process test can reach: the RERUN contract at the process
-//! boundary — a real `cargo build` of a throwaway crate whose build script
+//! boundary — real `cargo build`s of a throwaway crate whose build script
 //! includes this repo's `build_commit.rs`, proving a commit → rebuild cycle
 //! picks up the new hash. A stamp that never updates is the exact lie Issue
-//! 150 is about; without this arm nothing proves the detector ever fires.
+//! 150 is about; without these arms nothing proves the detector ever fires.
+//!
+//! The three arms, and why each exists (the round-2 verdict):
+//! 1. the broad arm — a commit that also edits src moves the stamp;
+//! 2. the ISOLATED arm — a commit that moves NO watched file but the git
+//!    state still moves the stamp (only the ref watches can cause that);
+//! 3. the steady-state arm — a no-op rebuild reports `Fresh`, including
+//!    after `git pack-refs --all` (the perpetual-dirty hazard).
 //!
 //! Needs `git` and `cargo` on PATH — both exist wherever this repo builds.
 //! No features, no network (the probe crate has zero deps).
@@ -68,14 +75,10 @@ fn git_env() -> Vec<(&'static str, &'static str)> {
     ]
 }
 
-#[test]
-fn a_commit_rebuild_picks_up_the_new_hash() {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let repo = unique_temp("rerun");
-    let include = Path::new(env!("CARGO_MANIFEST_DIR")).join("build_commit.rs");
-
-    // The probe crate: zero deps, one bin printing its build-script stamp,
-    // a build.rs that includes THIS repo's capture module by absolute path.
+/// Lay out the throwaway probe crate: zero deps, one bin printing its
+/// build-script stamp, a build.rs that includes THIS repo's capture module
+/// by absolute path. `main.rs` starts at `v1` content.
+fn write_probe_crate(repo: &Path, include: &Path) {
     std::fs::create_dir_all(repo.join("src")).expect("mkdir src");
     std::fs::write(
         repo.join("Cargo.toml"),
@@ -90,12 +93,35 @@ fn a_commit_rebuild_picks_up_the_new_hash() {
         ),
     )
     .expect("write build.rs");
-    std::fs::write(
-        repo.join("src/main.rs"),
+    write_probe_main(
+        repo,
         "fn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
-    )
-    .expect("write main.rs");
+    );
+}
 
+fn write_probe_main(repo: &Path, content: &str) {
+    std::fs::write(repo.join("src/main.rs"), content).expect("write main.rs");
+}
+
+/// One `cargo build` + a run of the probe bin: the printed stamp.
+fn stamp_after_build(repo: &Path, target: &Path, cargo: &str, label: &str) -> String {
+    let env: Vec<(&str, &str)> = vec![
+        ("CARGO_TARGET_DIR", target.to_str().expect("target path")),
+        ("CARGO_NET_OFFLINE", "true"),
+    ];
+    let (ok, out) = run(repo, cargo, &["build", "--offline", "-q"], &env);
+    assert!(ok, "cargo build ({label}): {out}");
+    let bin = target.join("debug/stamp_probe");
+    let (ok, out) = run(repo, bin.to_str().expect("bin path"), &[], &[]);
+    assert!(ok, "run stamp_probe ({label}): {out}");
+    out.trim().to_string()
+}
+
+fn probe_repo(tag: &str) -> (PathBuf, PathBuf, String) {
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+    let repo = unique_temp(tag);
+    let include = Path::new(env!("CARGO_MANIFEST_DIR")).join("build_commit.rs");
+    write_probe_crate(&repo, &include);
     let genv = git_env();
     let (ok, out) = run(
         &repo,
@@ -108,32 +134,25 @@ fn a_commit_rebuild_picks_up_the_new_hash() {
     assert!(ok, "git add: {out}");
     let (ok, out) = run(&repo, "git", &["commit", "-q", "-m", "init"], &genv);
     assert!(ok, "git commit: {out}");
-
     let target = repo.join("target");
-    let build_env: Vec<(&str, &str)> = vec![
-        ("CARGO_TARGET_DIR", target.to_str().expect("target path")),
-        ("CARGO_NET_OFFLINE", "true"),
-    ];
-    let stamp = |label: &str| -> String {
-        let (ok, out) = run(&repo, &cargo, &["build", "--offline", "-q"], &build_env);
-        assert!(ok, "cargo build ({label}): {out}");
-        let bin = target.join("debug/stamp_probe");
-        let (ok, out) = run(&repo, bin.to_str().expect("bin path"), &[], &[]);
-        assert!(ok, "run stamp_probe ({label}): {out}");
-        out.trim().to_string()
-    };
+    (repo, target, cargo)
+}
 
+/// Arm 1 (broad): a commit that also rewrites src moves the stamp.
+#[test]
+fn a_commit_rebuild_picks_up_the_new_hash() {
+    let (repo, target, cargo) = probe_repo("rerun");
     let head1 = head_of(&repo);
-    let h1 = stamp("first");
+    let h1 = stamp_after_build(&repo, &target, &cargo, "first");
     assert_eq!(h1, head1, "first stamp must name the committed HEAD");
     assert!(!h1.contains('-'), "clean probe repo must be bare hex: {h1}");
 
     // Commit 2: src changes AND the branch ref moves — both watched inputs.
-    std::fs::write(
-        repo.join("src/main.rs"),
+    write_probe_main(
+        &repo,
         "// touched for the rerun assertion\nfn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
-    )
-    .expect("rewrite main.rs");
+    );
+    let genv = git_env();
     let (ok, out) = run(&repo, "git", &["add", "-A"], &genv);
     assert!(ok, "git add 2: {out}");
     let (ok, out) = run(&repo, "git", &["commit", "-q", "-m", "touch src"], &genv);
@@ -141,7 +160,7 @@ fn a_commit_rebuild_picks_up_the_new_hash() {
 
     let head2 = head_of(&repo);
     assert_ne!(head1, head2, "fixture sanity: HEAD must have moved");
-    let h2 = stamp("second");
+    let h2 = stamp_after_build(&repo, &target, &cargo, "second");
     assert_ne!(
         h1, h2,
         "the stamp MUST move with the commit — a frozen stamp is the Issue-150 lie ({h1} stayed)"
@@ -151,62 +170,106 @@ fn a_commit_rebuild_picks_up_the_new_hash() {
     let _ = std::fs::remove_dir_all(&repo);
 }
 
+/// Arm 2 (ISOLATED — the round-2 verdict's requirement i): build with an
+/// uncommitted src edit (stamp `H0-dirty`), then commit WITHOUT touching
+/// any file, rebuild, and the stamp must read `H1`. The src edit predates
+/// the first build, so between the two builds the ONLY watched inputs that
+/// moved are the git state files (ref file, reflog, refs/heads dir) — if
+/// the ref watches were absent, the script would not re-run and the stamp
+/// would stay `H0-dirty`, failing this arm.
 #[test]
-fn an_uncommitted_edit_stamps_dirty_at_the_process_boundary() {
-    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
-    let repo = unique_temp("dirty_e2e");
-    let include = Path::new(env!("CARGO_MANIFEST_DIR")).join("build_commit.rs");
+fn committing_without_touching_files_moves_the_stamp_by_itself() {
+    let (repo, target, cargo) = probe_repo("isolated");
+    let head0 = head_of(&repo);
 
-    std::fs::create_dir_all(repo.join("src")).expect("mkdir src");
-    std::fs::write(
-        repo.join("Cargo.toml"),
-        "[package]\nname = \"stamp_probe\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
-    )
-    .expect("write Cargo.toml");
-    std::fs::write(
-        repo.join("build.rs"),
-        format!(
-            "#[path = r#\"{}\"#]\nmod build_commit;\nfn main() {{\n    let cwd = std::path::PathBuf::from(\n        std::env::var(\"CARGO_MANIFEST_DIR\").unwrap_or_else(|_| \".\".to_string()),\n    );\n    println!(\n        \"cargo:rustc-env=PROBE_COMMIT={{}}\",\n        build_commit::capture_commit(&cwd)\n    );\n}}\n",
-            include.display()
-        ),
-    )
-    .expect("write build.rs");
-    std::fs::write(
-        repo.join("src/main.rs"),
-        "fn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
-    )
-    .expect("write main.rs");
-
-    let genv = git_env();
-    let (ok, out) = run(
+    // Uncommitted src edit, THEN the first build stamps it dirty.
+    write_probe_main(
         &repo,
-        "git",
-        &["init", "-q", "--initial-branch=main"],
-        &genv,
+        "// uncommitted between the builds\nfn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
     );
-    assert!(ok, "git init: {out}");
+    let s1 = stamp_after_build(&repo, &target, &cargo, "dirty build");
+    assert_eq!(
+        s1,
+        format!("{head0}-dirty"),
+        "the uncommitted-edit build must stamp dirty, got {s1}"
+    );
+
+    // Commit — creates H1 but touches NO watched file (the src edit and the
+    // index update both predate or bypass the watched set).
+    let genv = git_env();
     let (ok, out) = run(&repo, "git", &["add", "-A"], &genv);
     assert!(ok, "git add: {out}");
-    let (ok, out) = run(&repo, "git", &["commit", "-q", "-m", "init"], &genv);
+    let (ok, out) = run(&repo, "git", &["commit", "-q", "-m", "commit only"], &genv);
     assert!(ok, "git commit: {out}");
+    let head1 = head_of(&repo);
+    assert_ne!(head0, head1, "fixture sanity: HEAD must have moved");
 
-    // Uncommitted edit to a COMPILED file, then rebuild from the warm target.
-    std::fs::write(
-        repo.join("src/main.rs"),
-        "// uncommitted\nfn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
-    )
-    .expect("dirty main.rs");
-    let target = repo.join("target");
-    let build_env: Vec<(&str, &str)> = vec![
+    let s2 = stamp_after_build(&repo, &target, &cargo, "post-commit build");
+    assert_eq!(
+        s2, head1,
+        "the commit alone must re-stamp (H0-dirty {s1} -> {head1}); got {s2} — the ref watches did not fire"
+    );
+    assert!(!s2.contains('-'), "committed tree must stamp bare: {s2}");
+
+    let _ = std::fs::remove_dir_all(&repo);
+}
+
+/// Arm 3 (steady-state — requirement ii): a no-op rebuild reports `Fresh`,
+/// and STILL reports `Fresh` after `git pack-refs --all` — the ref-packing
+/// event may cost one absorbing re-run, but the next build must be back to
+/// Fresh. A perpetual `Compiling` here is the missing-watched-path hazard
+/// (cargo treats a watched path that no longer exists as dirty forever).
+#[test]
+fn noop_rebuild_reports_fresh_even_after_pack_refs() {
+    let (repo, target, cargo) = probe_repo("fresh");
+    let env: Vec<(&str, &str)> = vec![
         ("CARGO_TARGET_DIR", target.to_str().expect("target path")),
         ("CARGO_NET_OFFLINE", "true"),
     ];
-    let (ok, out) = run(&repo, &cargo, &["build", "--offline", "-q"], &build_env);
-    assert!(ok, "cargo build (dirty): {out}");
-    let bin = target.join("debug/stamp_probe");
-    let (ok, out) = run(&repo, bin.to_str().expect("bin path"), &[], &[]);
-    assert!(ok, "run stamp_probe (dirty): {out}");
-    let stamp = out.trim().to_string();
+    let verbose = |label: &str| -> String {
+        let (ok, out) = run(&repo, &cargo, &["build", "--offline", "-v"], &env);
+        assert!(ok, "cargo build -v ({label}): {out}");
+        out
+    };
+
+    let _ = stamp_after_build(&repo, &target, &cargo, "warm");
+    let v1 = verbose("steady state");
+    assert!(
+        v1.contains("Fresh stamp_probe"),
+        "no-op rebuild must be Fresh: {v1}"
+    );
+    assert!(
+        !v1.contains("Compiling stamp_probe"),
+        "no-op rebuild must not recompile: {v1}"
+    );
+
+    // Pack the loose refs away (what `git gc` does): the branch ref file
+    // this build's rerun list watched VANISHES.
+    let genv = git_env();
+    let (ok, out) = run(&repo, "git", &["pack-refs", "--all"], &genv);
+    assert!(ok, "git pack-refs: {out}");
+
+    // One absorbing build (the emitted set changed), then steady state again.
+    let _ = stamp_after_build(&repo, &target, &cargo, "absorb post-pack");
+    let v2 = verbose("post-pack steady state");
+    assert!(
+        v2.contains("Fresh stamp_probe") && !v2.contains("Compiling stamp_probe"),
+        "after pack-refs the NEXT no-op rebuild must be Fresh (a perpetual Compiling is the missing-watched-path hazard): {v2}"
+    );
+
+    let _ = std::fs::remove_dir_all(&repo);
+}
+
+#[test]
+fn an_uncommitted_edit_stamps_dirty_at_the_process_boundary() {
+    let (repo, target, cargo) = probe_repo("dirty_e2e");
+
+    // Uncommitted edit to a COMPILED file, then rebuild from the warm target.
+    write_probe_main(
+        &repo,
+        "// uncommitted\nfn main() { println!(\"{}\", env!(\"PROBE_COMMIT\")); }\n",
+    );
+    let stamp = stamp_after_build(&repo, &target, &cargo, "dirty");
     let head = head_of(&repo);
     assert_eq!(
         stamp,
