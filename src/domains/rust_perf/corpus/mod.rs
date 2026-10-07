@@ -402,13 +402,14 @@ mod entries_13;
 mod entries_14;
 mod entries_15;
 mod entries_16;
+mod entries_17;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 180 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 181 entries
 /// (Batch 202, 2026-10-07, Plan 201: +1, the nnethercote min-rank worklist
 /// rule. The prior headline said 167 and had gone stale through B198's +1
 /// and B200's +11 — the 179 figure the test asserted since B200 was the
@@ -418,7 +419,9 @@ mod tests;
 /// wasm; live counts repaired at Batch 196 — complexity 32 (Batch 202 added
 /// the dataflow min-rank convergence rule; 31 was the state after B196 and
 /// the count prose below kept landing late — trust the test, not prose),
-/// allocation 29, io 26, concurrency 23, layout 13, iterators 11, simd 9,
+/// allocation 29, io 26, concurrency 23, layout 13, iterators 11, simd 10
+/// (Batch 204 added the NEON tbl-replicate 2-bit codec rule — the first
+/// NEON decode/codec member; 9 was the count through B202),
 /// caching 8, arithmetic 8, dispatch 6, bevy 2, wasm 1).
 /// Allocation is the deepest family (29 — Batch 173 added the two
 /// serde zero-copy rules; Batch 196 added the startup-estimate
@@ -468,5 +471,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_14::entries());
     entries.extend(entries_15::entries());
     entries.extend(entries_16::entries());
+    entries.extend(entries_17::entries());
     Corpus::new(entries)
 }

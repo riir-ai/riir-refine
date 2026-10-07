@@ -1,10 +1,12 @@
 # 239 — PrismML-Eng NEON PQ2_0 vec_dot `6bfcd79a2` (distill verdict)
 
-**Status:** DISTILLED — batch-ready, no owner gate (M3 CPU-side work; plan-first at
-conversion per the Research-236 PRISMML-intake precedent wording — no `.plans/`
-number allocated now). ⚠ Numbering note: allocated 238 at write time, RENUMBERED
-238→239 on rebase — Batch 202 (landed concurrently from shikuwa/4090) took
-`.research/238` first; the renumber-not-reuse fix per the numbering discipline.
+**Status:** DISTILLED → **CONVERTED as Batch 204 (2026-10-07, shikuwa/4090 —
+see §CONVERTED below)**; no owner gate (M3 CPU-side work; plan-first at
+conversion per the Research-236 PRISMML-intake precedent wording — the plan
+landed as `.plans/204_batch204_prismml_neon_pq2_0.md`). ⚠ Numbering note:
+allocated 238 at write time, RENUMBERED 238→239 on rebase — Batch 202 (landed
+concurrently from shikuwa/4090) took `.research/238` first; the renumber-not-reuse
+fix per the numbering discipline.
 
 Date: 2026-10-07 · graded by the riir-refine idle loop (queue item 5 intake row
 2026-10-06, the riir-ai Issue-1034 watch handoff `distill lead`).
@@ -227,3 +229,38 @@ Convert as ONE batch at the next mining slot: rule 1 → rust_perf simd (M3 Max
 bench) + riders 2–4 → kernel_opt; plan-first at conversion (Research-236
 PRISMML-intake precedent); no owner gate (M3 CPU work). The 4090
 mining-partition check runs at the batch unit, not here.
+
+## CONVERTED (Batch 204, 2026-10-07, shikuwa/4090 — Plan 204)
+
+Landed as ONE batch (corpus 761 → 762 total: rust_perf 180 → 181, kernel_opt
+UNCHANGED at 761): rule 1 = `neon-tbl-replicate-2bit-codec-sdot-block-rescale`
+(rust_perf simd — entries_17.rs, NotBenchable on the x86_64 host box, the
+M3-Max GOAT STAGED as Plan 204 T11: the rust_perf Pareto validator +
+integer-exact G1 runs on the M3 idle loop's next rust_perf slot, with the B62
+law in-rule — the scalar reference is the naive per-element codec form, never
+a transposed-lane multi-accumulator form) + riders 2–4 exactly as graded:
+the ISA boundary → B116-addendum `swar-lane-widened-base3-dp4a-dot`
+(entries_gpu_27.rs), the CPU-NEON instance + test methodology → B127
+`per-block-int32-chunk-rescale-fp32-accum` (entries_gpu_33.rs), the
+pairing-migration orphan + `ggml_cpu_pq2_needs_q8_0` escape hatch → B103
+addendum `dispatcher-eligibility-predicate-lags-kernel-capability`
+(entries_gpu_16.rs; the conversion added the TWO-SITE override detail — the
+hatch overrides both `ggml_cpu_vec_dot_type` AND `ggml_cpu_vec_dot`, verified
+verbatim at ggml-cpu.c:1186-1204). Drops held: the ARMv7 wrapper (C —
+portability anecdote; the `ggml_vqtbl1q_u8` wrapper choice rides the new
+rule's fixture, honestly labeled), the cross-arch fp32 note (owned).
+T0 freshness: the pin IS origin/prism's tip at clone time (zero drift since
+grading); ALL quotes re-verified verbatim — 0 corrections vs this note.
+En-route count repairs (the pins did their job): README's rust_perf row read
+179 (B202's +1 never landed there) and README's annotation count read 113
+(B198/B200/B202's annotated rules never landed there) — both repaired with
+honest labels at Batch 204 (181 rules / 127 annotated per the pins).
+Dedup re-greps at Batch-203 head: all clean (vqtbl/replicat/sdot/swar/
+dispatcher/neon — zero new collisions; B194's tbl-replication is TABLE-width,
+this is SOURCE-byte replication — different mechanism, different domain).
+Gates: batch204 parse+needles (rust_perf) + batch204 riders gate (kernel_opt,
+3 hosts × needles + the landed-then-dropped clause) · rust_perf 181-pin +
+127-annotated-pin + 81-without_spec-pin · kernel count pins UNCHANGED at 761
+· retrieval floors re-run (see the snapshot row for the verdict) · freeze +
+score-bench NOT owed (zero clippy-corpus delta, P30). `.raw/prismml-b204`
+removed at close (the ephemeral-clone law).

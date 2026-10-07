@@ -25,7 +25,27 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 180 rules — Batch 202 (2026-10-07,
+profiling guide, Research 032; **now 181 rules — Batch 204 (2026-10-07,
+Plan 204 / Research 239 — the PrismML NEON PQ2_0 vec_dot rule, source
+`PrismML-Eng/llama.cpp` #265 @ `6bfcd79a`, MIT — simd 9→10, the corpus's
+first NEON decode/codec member:
+`neon-tbl-replicate-2bit-codec-sdot-block-rescale` — one `vqtbl1q_u8`
+with an index table replicates each packed byte across the vector,
+in-lane shift/mask/sub lands each 2-bit code in the lane that owns it as
+{−1,0,+1}, the block's sub-block dots accumulate in int32 via sdot, and
+the block scale applies ONCE per 128-weight block; regime = small-domain
+integer codes whose consumer can stay integer (Q8_K's one-scale-per-256
+is what makes the int32 accumulation + single rescale legal);
+anti-regime = float-domain outputs where NEON's missing gather forces
+the scalar-extraction path; NotBenchable on the x86_64 host box — the
+M3-Max GOAT is staged with the B62 naive-codec-reference law; plus 3
+kernel_opt riders: the B116-addendum ISA boundary (the same u16-lane
+widening measured SLOWER on NEON — M5 Pro + Snapdragon 7 Gen 4, in-PR
+drop — dp4a-widen / NEON-scalar / i8mm-SMMLA is now the three-arm
+decision), the B127 CPU-NEON instance + the exact vec_dot test
+methodology, and the B103-addendum pairing-migration orphan +
+`ggml_cpu_pq2_needs_q8_0` row-extent escape hatch). Previously
+180 rules — Batch 202 (2026-10-07,
 Plan 201 — the nnethercote min-rank worklist rule, source rust-lang/rust
 `#160193` "Improve CFG traversal" @ merge `cb9d1b06`, MIT/Apache — the
 author's 2026-09-30 perf blog; `dataflow-fixpoint-convergence-traversal-order`

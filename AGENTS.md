@@ -12,7 +12,7 @@ History, batch records, sweep campaign records, score-bench history: `HISTORY.md
 **Multi-domain modelless code healer** — a pluggable framework behind the `HealDomain` trait (Plan 001) healing code via a drafter+pruner+corpus pattern. **Developer tooling repo** — NOT game, NOT training, NOT chain.
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 100 corpus lints across style/complexity/perf/pedantic/nursery/suspicious (81 `--fix`, 16 `--verify`, 3 self_evolve-only; Batches 155–200 landed the frontier-miner packs).
-- **`rust_perf`** (default-on) — heals Rust perf issues; 180 rules (Batch 202, 2026-10-07: +1, the nnethercote min-rank worklist rule from rust-lang/rust #160193; the prior count line said 179 — Batch 200, 2026-10-03: +11 from the TensorFold staged pool's serving half), promoted via the `rust_perf_bench` Pareto + alloc-count validator.
+- **`rust_perf`** (default-on) — heals Rust perf issues; 181 rules (Batch 204, 2026-10-07: +1, the PrismML NEON PQ2_0 vec_dot rule — the corpus's first NEON decode/codec member, PrismML-Eng/llama.cpp #265 @ `6bfcd79a`, simd, NotBenchable on the x86_64 host box, M3-Max GOAT staged; Batch 202, 2026-10-07: +1, the nnethercote min-rank worklist rule from rust-lang/rust #160193; the prior count line said 179 — Batch 200, 2026-10-03: +11 from the TensorFold staged pool's serving half), promoted via the `rust_perf_bench` Pareto + alloc-count validator.
 - **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 761 rules (Batch 203, the cute-triadic-GDN pool — Plan 203; Batch 201's mlxfast MTP slice before it; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - **`rustc_errors`** (default-on since 2026-08-29) — the `--fix-compile` driver domain; oracle-driven compile-error repair keyed by rustc error code; inert until invoked (compile-time cost only; std + serde only).
 - **`sec`** (opt-in) — security-pattern bounded fixes (16 rules; 6 fixable + 10 suggest-only).
@@ -119,7 +119,7 @@ cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (a
 - `default` = `["clippy_lints"]`: clippy domain + L0 corpus + L1 ternary drafter + L2 native pruner.
 - `clippy_lints` (default-on): the clippy lint healing domain.
 - `clippy_verify` (opt-in): lint-resolution verification via real `cargo clippy` re-run (slow, needs cargo+clippy on PATH). Implies `clippy_lints`.
-- `rust_perf` (default-on): rust performance healing domain (180 rules; the feature list's older counts were stale — Pareto + alloc-count promoted).
+- `rust_perf` (default-on): rust performance healing domain (181 rules; Batch 204 +1 the NEON PQ2_0 vec_dot rule — simd 9→10, NotBenchable on this x86_64 box; the feature list's older counts were stale — Pareto + alloc-count promoted).
 - `rust_perf_verify` (opt-in): `cargo test` re-run for perf-rule verification. Implies `rust_perf`.
 - `rust_perf_bench` (opt-in): the promotion gate — generated microbenchmarks with a deterministic alloc-count axis; GOAT PASS. Implies `rust_perf`.
 - `kernel_opt` (opt-in): GPU kernel optimization domain (761 rules; stale at 746 through Batch 202 — the feature-list line the B201/B202 count walks missed, re-pinned at Batch 203; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.

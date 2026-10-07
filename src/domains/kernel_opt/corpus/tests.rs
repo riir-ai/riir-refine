@@ -14294,6 +14294,75 @@ fn batch203_concepts_carry_their_load_bearing_contracts() {
 }
 
 #[test]
+fn batch204_riders_carry_their_verified_contract() {
+    // Batch 204 -- the PrismML NEON PQ2_0 pool's THREE riders (Plan 204 /
+    // Research 239; quotes re-verified verbatim at 6bfcd79a this batch):
+    // the ISA boundary on the B116-addendum lane-widening rule, the
+    // CPU-NEON instance + test methodology on B127, and the
+    // pairing-migration orphan + row-extent escape hatch on the B103
+    // addendum. Riders add no rules -- the kernel count stays 761.
+    let corpus = build_kernel_seed_corpus();
+    let riders = [
+        (
+            "swar-lane-widened-base3-dp4a-dot",
+            vec![
+                "Batch 204",
+                "Apple M5 Pro, Snapdragon 7 Gen 4",
+                "alias it back to generic",
+                "dp4a-widen / NEON-scalar / i8mm-smmla",
+                "SMMLA 2x2 tiling",
+            ],
+        ),
+        (
+            "per-block-int32-chunk-rescale-fp32-accum",
+            vec![
+                "Batch 204",
+                "vaddvq_s32",
+                "~124k random inputs per format",
+                "vpaddl_s8+vmovl_s16 produces int32x4_t",
+                "power-of-two scales",
+            ],
+        ),
+        (
+            "dispatcher-eligibility-predicate-lags-kernel-capability",
+            vec![
+                "Batch 204",
+                "dead code for normal inference",
+                "ggml_cpu_pq2_needs_q8_0",
+                "reads past the activation buffer",
+                "TWO-SITE override",
+            ],
+        ),
+    ];
+    for (id, needles) in riders {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-204 rider host '{id}' missing"));
+        for needle in needles {
+            assert!(
+                rule.gpu_concept.contains(needle),
+                "batch-204 rider '{id}' missing needle: {needle}"
+            );
+        }
+    }
+    // The staged-vs-final-tree clause: the PTQ1_0 NEON half LANDED then
+    // DROPPED in the same PR -- the rider must never cite the dropped
+    // intermediate blob as shipped state; the negative rides the
+    // arch-fallback comment AT the pin.
+    let isa = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
+        .expect("batch-204 ISA rider host present");
+    assert!(
+        isa.gpu_concept.contains("DROPPED it in the SAME PR"),
+        "batch-204 ISA rider must carry the landed-then-dropped clause"
+    );
+}
+
+#[test]
 fn batch199_pseudocode_parses() {
     // G1 for Batch 199: syn-parse gate (the TensorFold v0.6.0 kernel half
     // of 7 -- Plan 197: the split-K reduce one-launch order pin, the
