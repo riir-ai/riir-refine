@@ -50,6 +50,33 @@ Limelight mapping (round-2 corrected - the two signals are DIFFERENT and must ne
   - **Substrate pointers (grepped 2026-10-07, do NOT rebuild):** katgpt-core `zone_density_routing` (DEFAULT-ON) already ships `ZoneDensityCache<V>` - a papaya LRU with tier/drift/TTL invalidation driven by a modelless sigmoid classify (mobility -> tier + cache_key); `engram` (DEFAULT-ON) ships the plasma-tier lock-free papaya LRU; the game-lane Elo book precedent lives in riir-ai `attack_reasoning` (Plan 575, Bench 898 GOAT); rethink already warms encoder workers at boot (encoder_serve.rs warm path). New work at impl time: the ELO book for experts (riir-ai precedent transplanted) + the shallow-reasoning policy over it + the two-tier wiring onto the existing lazy lanes. Boundary note: the policy primitive (if shared) routes via katgpt-core like R1's.
   - Defer trigger: host the first real decision-service customer OR escalate traffic that makes cold-start latency visible in W2-style metrics - whichever first.
 
+**R5b flow (educational):**
+
+```mermaid
+flowchart TD
+    Req["User request"] --> Seat["Hosted seat - instinct Ext seat"]
+    Seat --> Q{"Expert resident?"}
+    Q -- "yes" --> Serve["Serve fix / rerank"]
+    Q -- "no" --> Tier{"Which tier?"}
+    Tier -- "per-user LRU" --> PU["Per-user warm slot"]
+    Tier -- "global tier" --> GW["Global warm slot"]
+    Tier -- "both miss" --> Load["Cold load - from artifact store - A8: reload, never mint"]
+    PU --> Serve
+    GW --> Serve
+    Load --> Serve
+    Serve --> Res{"Outcome - served / abstained / won / declined"}
+    Res --> ELO["ELO book - one rating per expert"]
+    ELO --> Pol["Modelless shallow reasoning - sigmoid over rating + recency + demand"]
+    Pol -- "hot: keep warm" --> Promote["Promote - per-user slot or global tier"]
+    Pol -- "cold: demote" --> Evict["Evict - unload now, reload later"]
+    Promote --> PU
+    Promote --> GW
+    Evict --> Store[("Artifact store")]
+    Load --> Store
+```
+
+Legend: the straight path (request -> tiers -> serve) is REQUEST TIME; the loop (outcome -> ELO book -> policy -> promote/evict) is LEARNING TIME, asynchronous, fed only by real serve outcomes. The policy is modelless - sigmoid gates over the ELO table, never a trained model. A8: every cold load and every post-eviction reload comes from the artifact store - nothing is ever minted at runtime. Deferred (next version) until a defer trigger fires.
+
 
 - [ ] **R6 — outcome-based selection: arm H in the EXISTING harness (round-1 re-scope).** The harness exists: `src/bin/fixer_regate.rs` (Issue 040) already runs arms A, B, G, G2, C + the dry-run BT8DRY over deny-by-default redaction policy — **add a hosted-expert arm H there**, never a second harness. Comparison is PAIRED PER-CASE on the frozen split (deterministic — interleaving fixes timing noise, not quality), with an explicit COST axis: quality gained per dollar (llm_spend ledger) and per second (modelless fixes are microsecond-scale; a 24 s hosted fix must buy real quality to win). Demote the loser via manifest/active-set; record the measurement. This is the standing mechanism for "we pick best result".
 - [ ] **R7 — the v1-breaking ledger: RIGHT budget, WRONG time (round-1 re-sequencing).** Spending the one-time break BEFORE any first-customer traffic risks a SECOND break — the unknowns (rerank vs generate payloads, consent fields, receipt tiers) only surface under real traffic. Order: **freeze the R7 ledger after a short R2+R3 dogfood spike**; include a `contract_version` field IN the break so v2 is additive forever after. **The decision_wire half of the ledger is filed as an issue in riir-reflex** (decision_wire belongs to reflex — G3/repo law), not as a refine row; refine's manifest grammar half stays here.
