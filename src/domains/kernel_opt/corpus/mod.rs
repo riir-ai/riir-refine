@@ -1955,6 +1955,9 @@ mod entries_gpu_66;
 mod entries_gpu_67;
 mod entries_gpu_68;
 mod entries_gpu_69;
+mod entries_gpu_70;
+mod entries_gpu_71;
+mod entries_gpu_72;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2000,6 +2003,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_67::entries());
     entries.extend(entries_gpu_68::entries());
     entries.extend(entries_gpu_69::entries());
+    entries.extend(entries_gpu_70::entries());
+    entries.extend(entries_gpu_71::entries());
+    entries.extend(entries_gpu_72::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2237,7 +2243,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-independent-pass-block-bounded-scratch"
         ],
     ),
-    // B: Compute patterns (79 rules; Batch 199 +1: the per-group epilogue
+    // B: Compute patterns (80 rules; Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
     // deferred between MMA bursts (renamed from the staged moe- name --
     // qmm.cu is the general decode lane, not MoE); Batch 198 +1: the fewrow tensor tile
     // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
@@ -2256,6 +2262,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
+            "dflash2-pack11-pack12-encode-arithmetic",
             "sfu-exp-swap-pays-only-when-sfu-limited",
             "fold-invariant-factor-commutes-to-epilogue",
             "lds-cluster-cross-warp-phase-not-static-distance",
@@ -2337,7 +2344,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-group-epilogue-deferred-between-mma-bursts"
         ],
     ),
-    // C: Fusion patterns (52 rules; Batch 199 +1: the split-K reduce in
+    // C: Fusion patterns (54 rules; Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
     // one launch with the summation order pinned (the split-k family's
     // launch-count + order member); Batch 195 +1:
     // roundfuse-packed-embedding-gather; Batch 181 +1:
@@ -2348,6 +2355,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Fusion,
         "C: fusion",
         &[
+            "accept-packet-one-launch",
+            "producer-folds-single-consumer-family",
             "fuse-norm-act-linear",
             "fuse-quant-matmul",
             "fuse-softmax-mask",
@@ -2402,7 +2411,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (166 rules; Batch 199 +1: the declared-
+    // D: Dispatch patterns (168 rules; Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
     // uncapturable capability axis (the expert class DECLINES graphs);
     // Batch 198 +2: the ids-path stride
     // rebind correctness law (the #258 per-slot bound) + the single-seq
@@ -2423,6 +2432,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            "deferred-block-release",
+            "first-layer-ahead-submission",
             "nodecode-arm-bounds-overhead-elimination",
             "profile-sol-table-before-compute-rung",
             "sub-ms-bench-boost-clock-never-engages",
@@ -2591,7 +2602,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "declared-uncapturable-expert-declines-graphs"
         ],
     ),
-    // E: Parallelism patterns (70 rules; Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (72 rules; Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2601,6 +2612,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            "env-polarity-migration",
+            "gather-signed-index-wrap-semantics",
             "spill-fragility-law-accumulator-regcap-cliff",
             "tile-shrink-occupancy-pays-feed-economics",
             "left-right-fold-pair-proves-associative-combine",
@@ -2890,7 +2903,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (58 rules; Batch 199 +1: the
+    // N: dtype + alignment specialization (62 rules; Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
     // quantized stored-bytes rule (hold the wire bytes, never widened
     // patterns -- the storage-form pole beside B176's kernel-path axis);
     // Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
@@ -2904,6 +2917,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            "draft-tape-behavior-gated-trial",
+            "per-layer-verification-coverage",
+            "pack-worthiness-shape-admission",
+            "lossless-11bit-repack-trial",
             "smem-fill-align-chunk-not-element",
             "dtype-specialized-float-kind",
             "alignment-gated-zero-copy-view",
@@ -2964,7 +2981,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quantized-stored-bytes-not-widened-patterns"
         ],
     ),
-    // O: IR strength reduction (7 rules; Batch 195 +2: the io32
+    // O: IR strength reduction (8 rules; Batch 201 +1: the single-pass continuation scan (the two-phase prompt-lookup scan replaced by the one endpoint pass); Batch 195 +2: the io32
     // count-pinned kernel-source-text narrowing (the TEXT-level static
     // member) + the strided-view offset fit32 launch proof (the
     // launch-proven arbitrary-view member — the family's admission half);
@@ -2975,6 +2992,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::IrStrengthReduction,
         "O: IR strength reduction",
         &[
+            "single-pass-continuation-scan",
             "strength-reduce-mul-pow2",
             "strength-reduce-mul-pow2-plus-minus-one",
             "strength-reduce-div-pow2",

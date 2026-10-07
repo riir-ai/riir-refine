@@ -13,7 +13,7 @@ History, batch records, sweep campaign records, score-bench history: `HISTORY.md
 
 - **`clippy_lints`** (default-on) — heals `cargo clippy` warnings; 100 corpus lints across style/complexity/perf/pedantic/nursery/suspicious (81 `--fix`, 16 `--verify`, 3 self_evolve-only; Batches 155–200 landed the frontier-miner packs).
 - **`rust_perf`** (default-on) — heals Rust perf issues; 179 rules (Batch 200, 2026-10-03: +11 from the TensorFold staged pool's serving half), promoted via the `rust_perf_bench` Pareto + alloc-count validator.
-- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 746 rules (Batch 199 re-pin; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
+- **`kernel_opt`** (opt-in) — heals GPU kernel optimization; 758 rules (Batch 201, the mlxfast MTP slice — Plan 200; 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
 - **`rustc_errors`** (default-on since 2026-08-29) — the `--fix-compile` driver domain; oracle-driven compile-error repair keyed by rustc error code; inert until invoked (compile-time cost only; std + serde only).
 - **`sec`** (opt-in) — security-pattern bounded fixes (16 rules; 6 fixable + 10 suggest-only).
 - **`docker`** (default-on since 2026-08-28) — Dockerfile bounded-fix healing (31 rules, hadolint oracle).
