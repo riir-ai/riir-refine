@@ -1677,6 +1677,10 @@ fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
                     "keep_o": score_m.keep_oracle,
                     "keep_s": score_m.keep_strict,
                     "em": score_m.em,
+                    // The worthiness gate's INPUT (the R6 audit trail — a
+                    // cap choice must be quotable against the score
+                    // distribution it routes on).
+                    "score": p.score,
                 },
                 "escalated": {
                     "outcome_class": outcome_class,
