@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        769,
-        "kernel batches through Batch 205 should have 769 rules",
+        771,
+        "kernel batches through Batch 206 should have 771 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 769-rule corpus must appear in exactly one category
-    // (re-pinned 769 at Batch 205; read 761 through B204, 758 through B202).
+    // Every rule_id in the 771-rule corpus must appear in exactly one category
+    // (re-pinned 771 at Batch 206; read 769 through B205, 761 through B204, 758 through B202).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 769.
+    // Sum must equal 771.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 769, "Plan 003: category totals must sum to 769 (Batch 205 +8, the 10-06 unstaged kernel pool: D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 re-pinned 761 before it)");
+    assert_eq!(total, 771, "Plan 003: category totals must sum to 771 (Batch 206 +2, the 10-07 staged leads: D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; Batch 205 +8, the 10-06 unstaged kernel pool: D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 re-pinned 761 before it)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 769,
-        "Plan 003: grouped corpus has {total} rules, expected 769"
+        total, 771,
+        "Plan 003: grouped corpus has {total} rules, expected 771"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -14503,6 +14503,112 @@ fn batch205_concepts_carry_their_load_bearing_contracts() {
             "batch-205 '{id}' must carry the NotBenchable annotation"
         );
     }
+}
+
+#[test]
+fn batch206_pseudocode_parses() {
+    // G1 for Batch 206: syn-parse gate (the 10-07 staged leads -- Plan 206:
+    // two ggml-org/llama.cpp commits; D +2).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "widening-conversion-row-chunk-staging-budget",
+        "per-thread-stream-blocking-op-explicit-sync",
+    ];
+    assert_eq!(ids.len(), 2, "batch-206 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-206 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-206 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-206 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch206_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-206 decision-content contracts (the batch205 precedent):
+    // each rule's load-bearing quotes must ride the rule text verbatim,
+    // the cross-distinct pairs must name each other, and the batch/plan
+    // stamp + the NotBenchable annotation must be present.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "widening-conversion-row-chunk-staging-budget",
+            vec![
+                "constexpr size_t max_src0_convert_size = 512ull * 1024 * 1024;",
+                "const int64_t ldc = nb1 / sizeof(float);",
+                "ggml_is_contiguous_1(dst)",
+                "F32 chunks can have padding between rows to preserve the original destination stride",
+                "const int64_t rows_per_chunk = std::max<int64_t>(1, (int64_t) (max_src0_convert_size / f32_row_size));",
+                "if (rows_per_chunk < src0->ne[1])",
+                "src0_chunk.data = (char *) src0->data + i01*src0->nb[1];",
+                "row-independent-pass-block-bounded-scratch",
+                "ids-path-rebinds-stride-meaning",
+            ],
+        ),
+        (
+            "per-thread-stream-blocking-op-explicit-sync",
+            vec![
+                "CUDA_CHECK(cudaMemsetAsync((char *)tensor->data + original_size, 0, padded_size - original_size, cudaStreamPerThread));",
+                "CUDA_CHECK(cudaStreamSynchronize(cudaStreamPerThread));",
+                "CUDA_CHECK(cudaMemset((char *)tensor->data + original_size, 0, padded_size - original_size));",
+                "ci : re-enable test-backend-ops -j for ROCm",
+                "captured-graph-init-unconditional-and-stream-ordered",
+            ],
+        ),
+    ];
+    for (id, markers) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-206 rule '{id}' missing"));
+        for marker in markers {
+            assert!(
+                rule.gpu_concept.contains(marker),
+                "batch-206 contract marker missing on '{id}': '{marker}'"
+            );
+        }
+        assert!(
+            rule.gpu_concept.contains("Batch 206 / Plan 206"),
+            "batch-206 '{id}' must carry the batch/plan stamp"
+        );
+        assert!(
+            rule.gpu_concept.contains("NotBenchable"),
+            "batch-206 '{id}' must carry the NotBenchable annotation"
+        );
+    }
+    // Cross-distinct: the two batch-206 rules carry disjoint mechanisms --
+    // staging-budget vs stream-choice -- and must not cite each other.
+    let a = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "widening-conversion-row-chunk-staging-budget")
+        .unwrap();
+    let b = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "per-thread-stream-blocking-op-explicit-sync")
+        .unwrap();
+    assert!(
+        !a.gpu_concept.contains("per-thread-stream"),
+        "batch-206 cross-distinct: the staging rule must not cite the stream rule"
+    );
+    assert!(
+        !b.gpu_concept.contains("512ull"),
+        "batch-206 cross-distinct: the stream rule must not cite the staging rule"
+    );
 }
 
 #[test]

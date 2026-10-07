@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 769, "Plan 003: experts cover all 769 corpus rules (Batch 205 +8, the 10-06 unstaged kernel pool — D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 the cute-triadic-GDN pool before it; re-pinned 769 with the honest label)");
+        assert_eq!(total, 771, "Plan 003: experts cover all 771 corpus rules (Batch 206 +2, the 10-07 staged leads — D +2 the widening-conversion row-chunk staging budget with its ldc stride-respect admission half + the per-thread-stream blocking-op explicit-sync escape; Batch 205 +8, the 10-06 unstaged kernel pool — D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 the cute-triadic-GDN pool before it; re-pinned 771 with the honest label)");
     }
 
     #[test]

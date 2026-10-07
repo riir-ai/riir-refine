@@ -1961,6 +1961,7 @@ mod entries_gpu_72;
 mod entries_gpu_73;
 mod entries_gpu_74;
 mod entries_gpu_75;
+mod entries_gpu_76;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2012,6 +2013,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_73::entries());
     entries.extend(entries_gpu_74::entries());
     entries.extend(entries_gpu_75::entries());
+    entries.extend(entries_gpu_76::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2422,7 +2424,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (171 rules; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
+    // D: Dispatch patterns (173 rules; Batch 206 +2: the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect that widens dst admission to contiguous_1, one story) + the per-thread-stream blocking-op explicit-sync escape (the legacy-default-stream serialization class; the ROCm -j re-enable rides as the hazard evidence) — both from the 10-07 staged leads; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
     // uncapturable capability axis (the expert class DECLINES graphs);
     // Batch 198 +2: the ids-path stride
     // rebind correctness law (the #258 per-slot bound) + the single-seq
@@ -2613,7 +2615,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "register-width-topk-falls-back-to-tiled-radix-select",
             "ids-path-rebinds-stride-meaning",
             "single-seq-slice-contiguity-copy-elision",
-            "declared-uncapturable-expert-declines-graphs"
+            "declared-uncapturable-expert-declines-graphs",
+            "widening-conversion-row-chunk-staging-budget",
+            "per-thread-stream-blocking-op-explicit-sync"
         ],
     ),
     // E: Parallelism patterns (72 rules; Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
