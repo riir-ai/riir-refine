@@ -454,6 +454,13 @@ cf_workers_ai = ["dep:ureq", "riir-llm/transport", "latent_retrieval", "clippy_v
 # `cf_workers_ai` (it composes CfClient as the fallback leg).
 groq_first = ["riir-llm/transport"]
 
+# Plan 202 R2 — the hosted-expert GENERATE transport (the no-candidate
+# miss under the L4Fallback seam). The groq_first dep shape: the leaf's
+# transport feature (pulls riir-llm + its ureq; no direct ureq of its own)
+# + the L4 trait. llm_spend lights via the lib.rs cfg-any. Opt-in until a
+# domain's manifest row arms it (the R6 wiring); never in the release set.
+hosted_expert = ["l4_lora", "riir-llm/transport"]
+
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +
 # ScopeGate) wrapped as `ScopeModel`. Opt-in like the L4 seam it guards: the

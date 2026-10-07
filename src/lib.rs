@@ -255,9 +255,20 @@ pub mod cf_workers_ai;
 // Issue 046 — the USD LLM daily-cap ledger (reserve-then-reconcile): the
 // circuit breaker every LLM call through `CfClient::generate` gates through
 // BEFORE any unattended loop runs (the Issue 040 169-request burn class).
-// Same feature gate as the client it guards; no new deps.
-#[cfg(feature = "cf_workers_ai")]
+// Plan 202 R2: the `hosted_expert` transport joins it as a consumer — the
+// gate is the ANY of the two features (the ledger itself is feature-free).
+#[cfg(any(feature = "cf_workers_ai", feature = "hosted_expert"))]
 pub mod llm_spend;
+
+// Plan 202 R2 — HostedExpertL4: the hosted-expert GENERATE transport under
+// the L4Fallback seam (the no-candidate miss). OpenAI-compatible wire via
+// the riir-llm leaf (the groq_first shape: no direct ureq); llm_spend as
+// the cost guard; code-egress consent as its own scope (Unset refuses,
+// pre-socket); hard deadline declines; snippet-only payload with the
+// no-retention rule on the wire. Endpoint comes from the R1 manifest row
+// — never in code. Opt-in (arming is the manifest's, at the R6 wiring).
+#[cfg(feature = "hosted_expert")]
+pub mod hosted_expert;
 
 // Issue 051 — groq-first free-tier LLM routing + the groq→infron→CF
 // provider ladder (the `router` submodule, additionally gated on
