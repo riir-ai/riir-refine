@@ -47,82 +47,16 @@
 use crate::l4_fallback::L4Fallback;
 use std::time::Instant;
 
-/// The code-egress consent env โ€” its OWN scope, shared with no other
-/// consent surface. The accepted value is [`EGRESS_ALLOW`]: a value that
-/// names the payload shape, so consenting to send code off-machine is a
-/// deliberate act, never a copied `=1`.
-pub const EGRESS_ENV: &str = "RIIR_REFINE_CODE_EGRESS";
+// The code-egress consent scope moved to [`crate::code_egress`] (Plan 202
+// R3a: the seat-rerank client joins as the second consumer — one scope,
+// one definition, the `llm_spend` ANY-of-consumers gate shape). The
+// re-export preserves every historical path (`hosted_expert::EgressConsent`...
+// — the R2 tests and any external caller compile unchanged).
+pub use crate::code_egress::{EgressConsent, EgressRefusal, EGRESS_ALLOW, EGRESS_ENV};
 
-/// The only value that consents. Anything else โ€” unset, blank, `0`,
-/// `true`, `1`, junk โ€” refuses (junk refuses LOUD, naming the accepted
-/// spelling; a typo must never look like consent).
-pub const EGRESS_ALLOW: &str = "snippet";
-
-/// The hosted endpoint's bearer token env (optional โ€” a local/loopback
+/// The hosted endpoint's bearer token env (optional — a local/loopback
 /// expert may skip auth; a real hosted tier will not).
 pub const TOKEN_ENV: &str = "RIIR_HOSTED_EXPERT_TOKEN";
-
-/// Why [`EgressConsent::parse`] refused to send code off-machine.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EgressRefusal {
-    /// The env is unset/blank โ€” the default posture is NO egress.
-    Unset,
-    /// The env is set to something that is not [`EGRESS_ALLOW`] โ€” a
-    /// typo or a copied generic value must never look like consent.
-    NotConsent(String),
-}
-
-impl std::fmt::Display for EgressRefusal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Unset => write!(
-                f,
-                "{EGRESS_ENV} is unset โ€” code egress is a scope of its own and \
-                 no other consent implies it; set {EGRESS_ENV}={EGRESS_ALLOW} to \
-                 allow sending snippets to the hosted expert"
-            ),
-            Self::NotConsent(got) => write!(
-                f,
-                "{EGRESS_ENV}={got:?} is not consent โ€” the only accepted value is \
-                 {EGRESS_ALLOW:?} (a generic truthy value is refused on purpose: \
-                 consenting to send user code off-machine must be deliberate)"
-            ),
-        }
-    }
-}
-
-/// The code-egress consent verdict โ€” pure, testable without env races
-/// (the `is_armed_with` / `operator_pins_from` seam pattern).
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EgressConsent {
-    Allowed,
-    Refused(EgressRefusal),
-}
-
-impl EgressConsent {
-    /// Parse the env value into the verdict.
-    #[must_use]
-    pub fn parse(value: Option<&str>) -> Self {
-        match value {
-            None => Self::Refused(EgressRefusal::Unset),
-            Some(v) if v.trim().is_empty() => Self::Refused(EgressRefusal::Unset),
-            Some(v) if v.trim() == EGRESS_ALLOW => Self::Allowed,
-            Some(v) => Self::Refused(EgressRefusal::NotConsent(v.trim().to_string())),
-        }
-    }
-
-    /// The process-env form.
-    #[must_use]
-    pub fn from_env() -> Self {
-        Self::parse(std::env::var(EGRESS_ENV).ok().as_deref())
-    }
-
-    /// `true` only for [`EgressConsent::Allowed`].
-    #[must_use]
-    pub fn is_allowed(self) -> bool {
-        matches!(self, Self::Allowed)
-    }
-}
 
 /// Why [`HostedExpertL4::generate_fix`] declined. `Display` names the
 /// refusal class for the run log; a decline is ALWAYS safe for the

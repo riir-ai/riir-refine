@@ -270,6 +270,27 @@ pub mod llm_spend;
 #[cfg(feature = "hosted_expert")]
 pub mod hosted_expert;
 
+// Plan 202 R3a — the code-egress consent scope moved here from
+// `hosted_expert` (R2): the seat-rerank client joins as the second
+// consumer of the SAME scope (one env, one spelling, one taxonomy —
+// the `llm_spend` ANY-of-consumers gate shape). Pure std.
+#[cfg(any(feature = "hosted_expert", feature = "seat_rerank"))]
+pub mod code_egress;
+
+// Plan 202 R3a — SeatRerankClient: the RERANK half of the escalation
+// chain (the candidates-exist arm). The L0–L3 candidates become the
+// seat's `options`; the hosted instinct `Ext` seat picks or abstains;
+// abstain => the modelless answer stands. Std-only HTTP/1.1 over the
+// serve edge's `/decide` envelope (the riir-agents decision_client
+// shape — a decision-plane edge, not an LLM leg; no riir-llm, no ureq).
+// The echo-is-the-trust-anchor contract + L4 invariant 3 (a pick can
+// only ever name a candidate we sent) + the shared code-egress consent
+// + a required deadline. Opt-in (arming is the manifest's, at the R6
+// wiring). The instinct-side gate: riir-instinct
+// tests/ext_seat_rerank_gates.rs (the seat half of the contract).
+#[cfg(feature = "seat_rerank")]
+pub mod seat_rerank;
+
 // Issue 051 — groq-first free-tier LLM routing + the groq→infron→CF
 // provider ladder (the `router` submodule, additionally gated on
 // `cf_workers_ai` — it composes CfClient as the paid fallback leg).

@@ -461,6 +461,18 @@ groq_first = ["riir-llm/transport"]
 # domain's manifest row arms it (the R6 wiring); never in the release set.
 hosted_expert = ["l4_lora", "riir-llm/transport"]
 
+# Plan 202 R3a — the seat-RERANK client (the candidates-exist arm): the
+# hosted instinct `Ext` seat picks among the L0–L3 candidates or abstains
+# (abstain => the modelless answer stands); generation stays local and
+# modelless, and generate transports never touch the seat. STD-ONLY HTTP
+# (the riir-agents decision_client shape — the /decide wire is a
+# decision-plane edge, not an LLM leg: no riir-llm, no ureq, zero new
+# deps). Consent is the SHARED code-egress scope (one definition with
+# hosted_expert); a required deadline; the echo-is-the-trust-anchor
+# contract + L4 invariant 3. Opt-in until a domain's manifest row arms it
+# (the R6 wiring); never in the release set.
+seat_rerank = []
+
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +
 # ScopeGate) wrapped as `ScopeModel`. Opt-in like the L4 seam it guards: the
