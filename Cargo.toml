@@ -893,6 +893,15 @@ name = "bench_003_modelless_miss_rate"
 harness = false
 required-features = ["self_evolve", "clippy_lints"]
 
+# Bench 004 (Plan 199 T3.4): the wasm validator lane's three-arm PoC gate —
+# G-safety (planted-violation floor, posture-independent), G-cost (wasm vs
+# native over a deterministic 10⁴-span set, preflight-provenance-gated),
+# G-value (the committed-artifact hot-swap cost).
+[[bench]]
+name = "bench_004_wasm_validator_goat"
+harness = false
+required-features = ["wasm_validator"]
+
 # Bench 010: llama.cpp vs katgpt ternary, both generating on clippy prompts.
 [[bench]]
 name = "bench_clippy_ternary_tps"
