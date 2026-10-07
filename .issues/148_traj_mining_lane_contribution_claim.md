@@ -93,10 +93,20 @@ not a new lane and not decstat:
       auto-sync tail stacks OFFLINE (the designed posture: watermark
       never advances on refusal, rows re-send post-deploy, server dedups
       by record id). The released 0.2.1 binary emits v3 and is unaffected.**
-      Known scope note: the rustc_errors driver lane records `None` (its
-      strategy-menu capture is the recorded follow-up); `EvolveRecorder`
-      (envelope backend) carries no label by design — the store is the
-      label's home.
+      Known scope note: `EvolveRecorder` (envelope backend) carries no
+      label by design — the store is the label's home. The rustc_errors
+      driver lane's strategy-menu capture — the recorded follow-up —
+      **LANDED 2026-10-08** (commit `34d32063`): the driver computes the
+      menu at the apply decision (the post-filter candidate set's strategy
+      ids at the chosen site — same file/line/code, the `dedupe_by_site`
+      diagnostic identity — MINUS the chosen strategy, sorted + deduped +
+      capped) and carries it on `AppliedRecord.rejected` /
+      `RevertedRecord.rejected`; heal.rs records it through the SAME T-b
+      path (`record_classified` + `rejected_opt`, store + wire untouched —
+      no label mechanism beyond v4's). Divergence vs the clippy-lane join:
+      the driver is compile-oracle-driven, not span-driven, so the join key
+      is the per-error-code decision (site identity), not a line-in-span
+      lookup — same cap, stamp and None-keep semantics.
 - [-] **T-c The growth lever (analysis, then maybe code)**: the corpus is
       converged on m3 — growth needs NEW contexts. Cheapest levers, in
       order: (1) the never-pushed local stores (riir-game-sdk 12M,
