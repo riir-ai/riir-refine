@@ -710,6 +710,14 @@ harness = false
 name = "heal_demo"
 required-features = ["clippy_lints"]
 
+# Plan 202 R2+R3 dogfood spike (the client half): replays real corpus
+# candidate pools through SeatRerankClient against the instinct
+# ext_seat_dogfood_server; writes the R7-ledger JSONL.
+# Run: cargo run --release --features seat_rerank --example seat_rerank_dogfood
+[[example]]
+name = "seat_rerank_dogfood"
+required-features = ["clippy_lints", "seat_rerank"]
+
 [[example]]
 name = "plant_067_store"
 required-features = ["latent_retrieval"]

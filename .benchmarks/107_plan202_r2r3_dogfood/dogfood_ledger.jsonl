@@ -1,0 +1,25 @@
+{"rule":"assign_op_pattern","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":217,"class":"pick","first_class":"decline","attempts":2,"us":53786,"detail":"index=0 bytes=86"}
+{"rule":"collapsible_if","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":170,"class":"pick","first_class":"pick","attempts":1,"us":1290,"detail":"index=0 bytes=61"}
+{"rule":"filter_map_bool_then","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":253,"class":"pick","first_class":"pick","attempts":1,"us":902,"detail":"index=0 bytes=102"}
+{"rule":"iter_nth_zero","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":178,"class":"pick","first_class":"pick","attempts":1,"us":808,"detail":"index=0 bytes=68"}
+{"rule":"manual_map","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":240,"class":"pick","first_class":"pick","attempts":1,"us":777,"detail":"index=0 bytes=69"}
+{"rule":"match_bool","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":144,"class":"pick","first_class":"pick","attempts":1,"us":846,"detail":"index=0 bytes=45"}
+{"rule":"needless_late_init","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":189,"class":"pick","first_class":"pick","attempts":1,"us":776,"detail":"index=0 bytes=72"}
+{"rule":"ptr_arg","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":135,"class":"pick","first_class":"pick","attempts":1,"us":711,"detail":"index=0 bytes=45"}
+{"rule":"redundant_static_lifetimes","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":112,"class":"pick","first_class":"pick","attempts":1,"us":726,"detail":"index=0 bytes=29"}
+{"rule":"to_string_in_format_args","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":154,"class":"pick","first_class":"pick","attempts":1,"us":715,"detail":"index=0 bytes=48"}
+{"rule":"unreadable_literal","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":140,"class":"pick","first_class":"pick","attempts":1,"us":752,"detail":"index=0 bytes=50"}
+{"rule":"wrong_self_convention","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":261,"class":"pick","first_class":"pick","attempts":1,"us":724,"detail":"index=0 bytes=104"}
+{"rule":"assign_op_pattern","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":1007,"class":"pick","first_class":"pick","attempts":1,"us":1105,"detail":"index=1 bytes=66"}
+{"rule":"collapsible_if","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":984,"class":"pick","first_class":"pick","attempts":1,"us":1234,"detail":"index=1 bytes=66"}
+{"rule":"filter_map_bool_then","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":1025,"class":"pick","first_class":"pick","attempts":1,"us":1222,"detail":"index=1 bytes=66"}
+{"rule":"iter_nth_zero","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":986,"class":"pick","first_class":"pick","attempts":1,"us":1160,"detail":"index=1 bytes=66"}
+{"rule":"manual_map","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":1045,"class":"pick","first_class":"pick","attempts":1,"us":1171,"detail":"index=1 bytes=66"}
+{"rule":"match_bool","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":975,"class":"pick","first_class":"pick","attempts":1,"us":1579,"detail":"index=1 bytes=66"}
+{"rule":"needless_late_init","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":993,"class":"pick","first_class":"pick","attempts":1,"us":1255,"detail":"index=1 bytes=66"}
+{"rule":"ptr_arg","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":966,"class":"pick","first_class":"pick","attempts":1,"us":1267,"detail":"index=1 bytes=66"}
+{"rule":"redundant_static_lifetimes","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":957,"class":"pick","first_class":"pick","attempts":1,"us":1233,"detail":"index=1 bytes=66"}
+{"rule":"to_string_in_format_args","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":980,"class":"pick","first_class":"pick","attempts":1,"us":1271,"detail":"index=1 bytes=66"}
+{"rule":"unreadable_literal","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":966,"class":"pick","first_class":"pick","attempts":1,"us":1304,"detail":"index=1 bytes=66"}
+{"rule":"wrong_self_convention","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":1028,"class":"pick","first_class":"pick","attempts":1,"us":1403,"detail":"index=1 bytes=66"}
+{"rule":"assign_op_pattern","pass":"abstain_probe","suite":"sst5","pool":1,"body_bytes":176,"class":"abstain","first_class":"abstain","attempts":1,"us":798,"detail":"modelless answer stands"}

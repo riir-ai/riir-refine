@@ -1,0 +1,7 @@
+{"rule":"assign_op_pattern","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":217,"class":"pick","first_class":"decline","attempts":3,"us":109404,"detail":"index=0 bytes=86"}
+{"rule":"manual_is_multiple_of","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":220,"class":"pick","first_class":"pick","attempts":1,"us":8123,"detail":"index=0 bytes=97"}
+{"rule":"redundant_closure_for_method_calls","pass":"corpus_pool","suite":"sst5","pool":1,"body_bytes":192,"class":"pick","first_class":"pick","attempts":1,"us":4314,"detail":"index=0 bytes=75"}
+{"rule":"assign_op_pattern","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":1007,"class":"pick","first_class":"pick","attempts":1,"us":8025,"detail":"index=1 bytes=66"}
+{"rule":"manual_is_multiple_of","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":998,"class":"pick","first_class":"pick","attempts":1,"us":8819,"detail":"index=1 bytes=66"}
+{"rule":"redundant_closure_for_method_calls","pass":"wire_scale","suite":"sst5","pool":8,"body_bytes":993,"class":"pick","first_class":"pick","attempts":1,"us":7505,"detail":"index=1 bytes=66"}
+{"rule":"assign_op_pattern","pass":"abstain_probe","suite":"sst5","pool":1,"body_bytes":176,"class":"abstain","first_class":"abstain","attempts":1,"us":3800,"detail":"modelless answer stands"}
