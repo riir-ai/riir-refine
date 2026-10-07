@@ -5467,7 +5467,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 159),
         (KernelCategory::Compute, 85),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 171),
+        (KernelCategory::Dispatch, 173),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        769,
-        "corpus count re-pinned at Batch 205 (the 10-06 unstaged kernel pool: 8 rules — D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; was 761 at Batch 203, 758 at Batch 201)",
+        771,
+        "corpus count re-pinned at Batch 206 (the 10-07 staged leads: 2 rules — D +2 the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect admission half) + the per-thread-stream blocking-op explicit-sync escape; was 769 at Batch 205 (the 10-06 unstaged kernel pool: 8 rules), 761 at Batch 203, 758 at Batch 201)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {

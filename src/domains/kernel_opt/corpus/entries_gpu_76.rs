@@ -1,6 +1,6 @@
 //! Entries slice — Batch 206 (Plan 206) — the 10-07 staged leads: two
 //! ggml-org/llama.cpp upstream commits, converted standalone (nnethercote
-//! R134 stays behind for the next rust_perf slot; nothing invented — every
+//! R134 stays behind for the next `rust_perf` slot; nothing invented — every
 //! quote re-verified VERBATIM at the pins BEFORE landing, line numbers read
 //! from `git show <sha>:<path>` at the post-commit files, not hunk-derived).
 //!
@@ -15,10 +15,10 @@
 //! Pack composition (category split D +2; corpus 769 → 771):
 //! - D +1 `widening-conversion-row-chunk-staging-budget` (#29442 — carries
 //!   BOTH halves of that commit: the 512 MiB row-chunk staging bound AND the
-//!   ldc stride-respect that widens dst admission to contiguous_1)
+//!   the `ldc` stride-respect that widens dst admission to `contiguous_1`)
 //! - D +1 `per-thread-stream-blocking-op-explicit-sync` (#28782 — the
 //!   legacy-default-stream escape with the completion guarantee preserved;
-//!   the ROCm `-j` re-enable rides as the cross-thread hazard evidence)
+//!   the `ROCm` `-j` re-enable rides as the cross-thread hazard evidence)
 //!
 //! DEDUP (run at authoring, both vocabularies): zero prior owners for the
 //! widening-staging byte budget (the chunk-vocab rules are submission limits
