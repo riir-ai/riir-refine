@@ -149,6 +149,10 @@ enum Verdict {
     TestPassed,
     /// killed by a signal (abort / stack overflow) — rejected: the failure
     /// mode is the whole program, not a localizable position.
+    /// Constructed only under `#[cfg(unix)]` (the `ExitStatusExt::signal`
+    /// probe) — on non-unix hosts the classifier cannot observe signals, so
+    /// the variant is deliberately never constructed there.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Signal,
     /// exceeded the wall cap — rejected (the hang-safety net).
     TimedOut,

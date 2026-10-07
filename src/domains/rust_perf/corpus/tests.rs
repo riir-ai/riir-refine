@@ -5642,10 +5642,10 @@ fn batch202_rules_present_and_parse() {
     }
 }
 
-/// Batch 204 — the PrismML NEON PQ2_0 vec_dot rule (Plan 204 / Research
+/// Batch 204 — the `PrismML` NEON `PQ2_0` `vec_dot` rule (Plan 204 / Research
 /// 239): presence + category + syn-parse gate over both fixtures, plus the
 /// load-bearing needles from the verified quotes (arm/quants.c
-/// ggml_vec_dot_pq2_0_q8_K + the commit message @ 6bfcd79a, re-verified
+/// `ggml_vec_dot_pq2_0_q8_K` + the commit message @ 6bfcd79a, re-verified
 /// verbatim at the pin this batch).
 #[test]
 fn batch204_rules_present_and_parse() {

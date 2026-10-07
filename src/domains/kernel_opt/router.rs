@@ -469,7 +469,7 @@ mod tests {
             .map(KernelExpertRouter::rules_for_expert)
             .map(<[&str]>::len)
             .sum();
-        assert_eq!(total, 761, "Plan 003: experts cover all 761 corpus rules (Batch 203 +3, the cute-triadic-GDN pool — B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 201 +12 the mlxfast MTP slice before it; re-pinned 761 with the honest label)");
+        assert_eq!(total, 769, "Plan 003: experts cover all 769 corpus rules (Batch 205 +8, the 10-06 unstaged kernel pool — D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 the cute-triadic-GDN pool before it; re-pinned 769 with the honest label)");
     }
 
     #[test]

@@ -1960,6 +1960,7 @@ mod entries_gpu_71;
 mod entries_gpu_72;
 mod entries_gpu_73;
 mod entries_gpu_74;
+mod entries_gpu_75;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2010,6 +2011,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_72::entries());
     entries.extend(entries_gpu_73::entries());
     entries.extend(entries_gpu_74::entries());
+    entries.extend(entries_gpu_75::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2247,7 +2249,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-independent-pass-block-bounded-scratch"
         ],
     ),
-    // B: Compute patterns (81 rules; Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
+    // B: Compute patterns (85 rules; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
     // deferred between MMA bursts (renamed from the staged moe- name --
     // qmm.cu is the general decode lane, not MoE); Batch 198 +1: the fewrow tensor tile
     // with the PQ2_0 decode fused into the RHS operand -- the A− lead of the
@@ -2306,6 +2308,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fast-math-contraction-behind-feature-flag",
             "sign-branch-stable-sigmoid",
             "log-gate-diff-decay-no-clamp-stability",
+            "mma-accumulate-into-resident-accumulator-c-operand",
+            "partial-unroll-bounds-register-spill-cliff",
+            "auxiliary-sum-widens-at-add-sites-against-cancellation",
+            "strided-loop-batched-prefetch-unroll-tail",
             "per-layer-grad-norm-lr-equalization",
             "inplace-grad-accumulate-deferred-postscale",
             "monomorphize-per-element-trait-calls",
@@ -2416,7 +2422,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (168 rules; Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
+    // D: Dispatch patterns (171 rules; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
     // uncapturable capability axis (the expert class DECLINES graphs);
     // Batch 198 +2: the ids-path stride
     // rebind correctness law (the #258 per-slot bound) + the single-seq
@@ -2546,6 +2552,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "request-shape-decline-mirror-completeness",
             "backing-provenance-causal-shadowed-extent-widen",
             "dispatcher-eligibility-predicate-lags-kernel-capability",
+            "sibling-kernel-admission-gap-absorbed-by-generalist",
+            "work-splitting-requires-work-shape-homogeneity",
+            "tail-clamped-row-reuse-widens-fast-kernel-admission",
             "concurrent-dispatch-dependency-level-barriers",
             "pipelined-token-slot-ping-pong-submit-ahead",
             "a8-activation-route-stability-guard",
@@ -2691,7 +2700,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "threadgroup-scope-reduction-single-writer",
         ],
     ),
-    // F: Flash-attention tiling (18 rules; Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
+    // F: Flash-attention tiling (19 rules; Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
     // bit-visibility block-skip tree attention with its measured
     // dispatch cross-over)
     (
@@ -2715,6 +2724,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "kv-split-decode-underfill-per-slot-validity",
             "fixed-ref-softmax-decode-walk",
             "ancestor-mask-bit-visibility-block-skip-tree-attention",
+            "too-few-channels-token-tile-broadcast-ownership",
             "paged-page-pair-deferred-permutation-bitmask"
         ],
     ),

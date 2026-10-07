@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        761,
-        "kernel batches through Batch 203 should have 761 rules",
+        769,
+        "kernel batches through Batch 205 should have 769 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 761-rule corpus must appear in exactly one category
-    // (re-pinned 761 at Batch 203; read 758 through B202, 746 through B201).
+    // Every rule_id in the 769-rule corpus must appear in exactly one category
+    // (re-pinned 769 at Batch 205; read 761 through B204, 758 through B202).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5465,11 +5465,11 @@ fn kernel_categories_counts_match_plan_003_table() {
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
         (KernelCategory::MemoryAccess, 159),
-        (KernelCategory::Compute, 81),
+        (KernelCategory::Compute, 85),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 168),
+        (KernelCategory::Dispatch, 171),
         (KernelCategory::Parallelism, 72),
-        (KernelCategory::FlashAttnTiling, 18),
+        (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
         (KernelCategory::MoeDispatchBackward, 36),
         (KernelCategory::NsaBlockSparse, 8),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 761.
+    // Sum must equal 769.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 761, "Plan 003: category totals must sum to 761 (Batch 203 +3, the cute-triadic-GDN pool: B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 201 +12 re-pinned 758 before it)");
+    assert_eq!(total, 769, "Plan 003: category totals must sum to 769 (Batch 205 +8, the 10-06 unstaged kernel pool: D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; Batch 203 +3 re-pinned 761 before it)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 761,
-        "Plan 003: grouped corpus has {total} rules, expected 761"
+        total, 769,
+        "Plan 003: grouped corpus has {total} rules, expected 769"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        761,
-        "corpus count re-pinned at Batch 203 (the cute-triadic-GDN pool: 3 rules — B +1 the log-gate-diff decay no-clamp stability (the measured mid-chunk-reference refusal rides in-rule), G +2 the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); was 758 at Batch 201, 746 at Batch 199)",
+        769,
+        "corpus count re-pinned at Batch 205 (the 10-06 unstaged kernel pool: 8 rules — D +3 the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening, B +4 the in-place mma C-operand accumulation + the partial-unroll register-spill cliff + the aux-sum add-site widening against cancellation + the TK-batched strided-loop prefetch, F +1 the too-few-channels token-tile broadcast ownership; was 761 at Batch 203, 758 at Batch 201)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -14300,7 +14300,8 @@ fn batch204_riders_carry_their_verified_contract() {
     // the ISA boundary on the B116-addendum lane-widening rule, the
     // CPU-NEON instance + test methodology on B127, and the
     // pairing-migration orphan + row-extent escape hatch on the B103
-    // addendum. Riders add no rules -- the kernel count stays 761.
+    // addendum. Riders add no rules -- the kernel count stays 761 (it moves
+    // to 769 at the NEXT rule-landing batch, Batch 205).
     let corpus = build_kernel_seed_corpus();
     let riders = [
         (
@@ -14360,6 +14361,148 @@ fn batch204_riders_carry_their_verified_contract() {
         isa.gpu_concept.contains("DROPPED it in the SAME PR"),
         "batch-204 ISA rider must carry the landed-then-dropped clause"
     );
+}
+
+#[test]
+fn batch205_pseudocode_parses() {
+    // G1 for Batch 205: syn-parse gate (the 10-06 unstaged kernel pool --
+    // Plan 205: four ggml-org/llama.cpp commits + two ml-explore/mlx
+    // commits; D +3, B +4, F +1).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    let ids = [
+        "sibling-kernel-admission-gap-absorbed-by-generalist",
+        "work-splitting-requires-work-shape-homogeneity",
+        "mma-accumulate-into-resident-accumulator-c-operand",
+        "too-few-channels-token-tile-broadcast-ownership",
+        "partial-unroll-bounds-register-spill-cliff",
+        "tail-clamped-row-reuse-widens-fast-kernel-admission",
+        "auxiliary-sum-widens-at-add-sites-against-cancellation",
+        "strided-loop-batched-prefetch-unroll-tail",
+    ];
+    assert_eq!(ids.len(), 8, "batch-205 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-205 rule '{id}' missing"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-205 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-205 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch205_concepts_carry_their_load_bearing_contracts() {
+    // The Batch-205 decision-content contracts (the batch203 precedent):
+    // each rule's load-bearing quotes/markers must ride the rule text,
+    // and the batch's cross-distinct pairs must name each other.
+    let corpus = build_kernel_seed_corpus();
+    let contracts = [
+        (
+            "sibling-kernel-admission-gap-absorbed-by-generalist",
+            vec![
+                "MMF needs full row tiles, for other row counts MMVF still beats cuBLAS at small batch size",
+                "ggml_cuda_should_use_mmf",
+                "TWELVE sites total",
+                "dispatcher-eligibility-predicate-lags-kernel-capability",
+                "tail-clamped-row-reuse-widens-fast-kernel-admission",
+            ],
+        ),
+        (
+            "work-splitting-requires-work-shape-homogeneity",
+            vec![
+                "skipped KV tiles make the blocks uneven",
+                "tiles_efficiency_percent >= 75",
+                "GGML_CUDA_CC_DGX_SPARK",
+                "stream-k-persistent-cta-mac-segments",
+            ],
+        ),
+        (
+            "mma-accumulate-into-resident-accumulator-c-operand",
+            vec![
+                "accumulate in place into the output sum array",
+                "reinterpret_cast<tile_C *>",
+                "fast-accumulate-periodic-promote-bounded-error",
+            ],
+        ),
+        (
+            "too-few-channels-token-tile-broadcast-ownership",
+            vec![
+                "so no dot product needs a cross thread reduction",
+                "Keeping the keys in float in shared memory measures slower, the occupancy drops",
+                "LIGHTNING_INDEXER_TILE_TOKENS",
+                "fewrow-tensor-tile-decode-into-rhs-operand",
+            ],
+        ),
+        (
+            "partial-unroll-bounds-register-spill-cliff",
+            vec![
+                "63 VGPRs with no spill",
+                "unrolled by 8",
+                "36x faster on an R9700",
+                "six shared reads per element pair instead of nine",
+                "unroll-fixed-inner",
+            ],
+        ),
+        (
+            "tail-clamped-row-reuse-widens-fast-kernel-admission",
+            vec![
+                "reuse the weights of the last valid output row",
+                "so the reduction loop needs no per-row bounds check",
+                "src = min(row, last_row)",
+                "Compare aligned inputs with the existing full-tile kernel.",
+                "sibling-kernel-admission-gap-absorbed-by-generalist",
+            ],
+        ),
+        (
+            "auxiliary-sum-widens-at-add-sites-against-cancellation",
+            vec![
+                "the sum of [1, 1 / denom, -1, 0] cancels",
+                "1 / denom is exactly half an ulp at 1.0",
+                "sum += U(x[i])",
+                "sign * k / (4 * denom)",
+            ],
+        ),
+        (
+            "strided-loop-batched-prefetch-unroll-tail",
+            vec![
+                "TK=4 is chosen to keep register pressure low",
+                "issue all TK K/V loads first so the HW can overlap them",
+                "TK=1 would run faster for certain shapes",
+                "register-prefetch-ring-measured-cutoff",
+            ],
+        ),
+    ];
+    for (id, markers) in contracts {
+        let rule = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-205 rule '{id}' missing"));
+        for marker in markers {
+            assert!(
+                rule.gpu_concept.contains(marker),
+                "batch-205 contract marker missing on '{id}': '{marker}'"
+            );
+        }
+        assert!(
+            rule.gpu_concept.contains("Batch 205 / Plan 205"),
+            "batch-205 '{id}' must carry the batch/plan stamp"
+        );
+        assert!(
+            rule.gpu_concept.contains("NotBenchable"),
+            "batch-205 '{id}' must carry the NotBenchable annotation"
+        );
+    }
 }
 
 #[test]
