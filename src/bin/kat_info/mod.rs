@@ -95,7 +95,7 @@ fn network_sections(acct32: Option<&str>) {
     use riir_refine::kat_lease_client::HttpResponse;
     use riir_refine::kat_stake_client::StakeTransport as _;
 
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = crate::command_service_url();
     let transport = svc::HttpAccountTransport::new(&url, 6);
 
     println!("SERVICE");
@@ -416,7 +416,7 @@ fn corpus_section(paths: &[PathBuf]) {
     {
         let store = riir_refine::kat_lease_client::LeaseStore::open_net(
             &root,
-            &riir_refine::kat_lease_client::service_url_for_command(),
+            &crate::command_service_url(),
         );
         match store.current_epoch() {
             Some(epoch) => println!("  lease:      corpus epoch {epoch} installed"),

@@ -81,6 +81,107 @@ fn write_a_rs(dir: &Path) {
     std::fs::write(dir.join("a.rs"), file).expect("write a.rs");
 }
 
+// ── riir-kat Issue 003 T8: the adopt/quarantine-via-flow arm ──────────────
+
+/// (1) an UNSTAMPED ack sitting in the per-net dir (the shape a naive
+/// hand-migration leaves) makes the burn flow REFUSE the money decision —
+/// the push never dials POST /burn, the refusal names the adopt-state
+/// remedy, and the exit code stays 0 (a local refusal, never an error);
+/// (2) quarantining that file through the REAL `config adopt-state
+/// --discard` CLI unblocks the very next run — the full stacked total
+/// pushes, and the ack is born STAMPED (T2's write-side law).
+#[test]
+fn an_unstamped_ack_refuses_the_push_until_quarantined() {
+    let dir = scratch("quarantine");
+    write_a_rs(&dir);
+    login(&dir);
+
+    // Phase 1: stack against a dead service (the a_failed_push shape) —
+    // the per-net charge book is born here, stamped host-only (T2).
+    let (code, text) = heal(&dir, CLOSED_PORT, &[]);
+    assert_eq!(code, Some(0), "stacking run. output:\n{text}");
+    let stacked = charged_kat(&dir);
+    assert!(stacked > 0, "the run must bill something to stack");
+    assert!(!ack_path(&dir).exists(), "no ack from a dead service");
+
+    // Phase 2: the naive hand-migration — an UNSTAMPED ack lands in the
+    // per-net dir (copied from a pre-split machine, say).
+    std::fs::write(
+        ack_path(&dir),
+        "{\"burn_kat_total\": 999, \"contributed\": false, \"first_commitment_hex\": null}",
+    )
+    .expect("plant unstamped ack");
+    let mock = spawn_burn_mock();
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(
+        code,
+        Some(0),
+        "a stamp refusal is a local decision, never an error. output:\n{text}"
+    );
+    assert!(
+        text.contains("carries no network stamp"),
+        "the refusal must name the stamp law. output:\n{text}"
+    );
+    assert!(
+        text.contains("adopt-state"),
+        "the refusal must name the remedy. output:\n{text}"
+    );
+    assert!(
+        !mock.captured().iter().any(|c| c.path == "/burn"),
+        "the refused push must never reach the wire"
+    );
+
+    // Phase 3: quarantine THROUGH THE CLI (the remedy the prose names).
+    // The discard arm never dials; the URL is the operator's posture.
+    let (code, text) = heal(
+        &dir,
+        &mock.base(),
+        &["config", "adopt-state", "devnet", "--discard", "--url", &mock.base()],
+    );
+    assert_eq!(code, Some(0), "discard must succeed. output:\n{text}");
+    assert!(
+        text.contains("quarantined 1 file(s)"),
+        "exactly the planted ack quarantined. output:\n{text}"
+    );
+    assert!(!ack_path(&dir).exists(), "the unstamped ack is gone");
+
+    // Phase 4: the very next run pushes the FULL stacked total and the
+    // ack is born stamped (host + ledger id from the attestation read).
+    // The total is the charge book AT PUSH TIME — the refused phase-2 run
+    // still billed its own scan (only the PUSH was refused), and phase 4
+    // bills its own too; the pushed cumulative must equal the book's
+    // final state exactly (the the_next_run precedent's x/y law).
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(code, Some(0), "the post-quarantine run. output:\n{text}");
+    let captured = mock.captured();
+    let pushes: Vec<_> = captured
+        .iter()
+        .filter(|c| c.path == "/burn")
+        .collect();
+    assert_eq!(pushes.len(), 1, "exactly one push, the full total. {text}");
+    let book_now = charged_kat(&dir);
+    let wire_now = riir_refine::kat_burn_client::wire_kat_total(book_now);
+    assert!(
+        pushes[0]
+            .body
+            .contains(&format!("\"burn_kat_total\":{wire_now}")),
+        "the pushed total must be the full book {wire_now} whole KAT (micro {book_now}; stacked \
+         micro {stacked} + the refused run's own billing + this run's): {}",
+        pushes[0].body
+    );
+    assert!(book_now > stacked, "the refused run must still have billed");
+    let raw = std::fs::read_to_string(ack_path(&dir)).expect("the born ack");
+    assert!(
+        raw.contains("\"service_host\""),
+        "the born ack must carry the stamp: {raw}"
+    );
+    assert!(
+        raw.contains("\"ledger_id\""),
+        "the born ack must carry the attested ledger id: {raw}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ── the mock server (std TCP; the kat_lease_client_g10 shape) ─────────────
 
 #[derive(Debug, Clone)]
@@ -247,10 +348,20 @@ fn login(dir: &Path) {
     );
 }
 
-/// The settled cumulative burn, read off the charge ledger the run saved.
+/// The settled cumulative burn, read off the charge ledger the run saved
+/// (T3/T7, riir-kat Issue 003: PER-NET — every mock in this file is
+/// loopback, so the net key is the port-less `127.0.0.1`, the same key
+/// [`ack_path`] reads; the pre-T7 flat helper is what this file's 4-test
+/// suite rode on until the per-net move orphaned it — found red on develop
+/// 2026-10-09, fixed with this landing's T8 arm).
 fn charged_kat(dir: &Path) -> u64 {
-    let text =
-        std::fs::read_to_string(dir.join(".refine").join("kat_charge.json")).expect("charge file");
+    let text = std::fs::read_to_string(
+        dir.join(".refine")
+            .join("net")
+            .join("127.0.0.1")
+            .join("kat_charge.json"),
+    )
+    .expect("charge file");
     serde_json::from_str::<serde_json::Value>(&text)
         .expect("charge json")
         .get("charged_kat")

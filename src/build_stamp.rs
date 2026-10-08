@@ -137,13 +137,17 @@ pub fn missing_release_features() -> Vec<&'static str> {
 
 /// The `--version` block (Issue 117 T1). Line 0 is the unchanged
 /// `cargo-refine <version>` — anything parsing the old single-line output keeps
-/// working; the stamp rides after it.
+/// working; the stamp rides after it. The `net:` line (riir-kat Issue 003 T9)
+/// names the NET PIN as riir-kat's own const computes it — the member that
+/// ENFORCES the pin is the member that names it (this crate's feature list
+/// cannot see the forwarded member features).
 #[must_use]
 pub fn version_lines() -> Vec<String> {
     let mut out = vec![
         format!("cargo-refine {}", env!("CARGO_PKG_VERSION")),
         format!("features: {COMPILED_FEATURES}"),
         format!("build: {BUILD_COMMIT}"),
+        format!("net: {}", riir_kat::kat_net_pin::NET_PIN),
     ];
     let missing = missing_release_features();
     if missing.is_empty() {

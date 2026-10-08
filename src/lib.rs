@@ -349,7 +349,16 @@ pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
 // The state-stamp module (riir-kat Issue 003 T1/T2): feature-free protocol
 // tier — the per-net dir seam + the stamp judge are consumed by the ungated
 // consent plane (--unmine's outbox dir) and the gated money plane alike.
-pub use riir_kat::kat_state_stamp;
+// kat_net_pin rides the same ungated posture (Issue 003 T9 consumer half:
+// the pin is a BUILD property — the version stamp and the URL seam read it
+// in every feature build).
+pub use riir_kat::{kat_net_pin, kat_state_stamp};
+
+// Issue 003 T4 (the refine half): the `config adopt-state` engine — the
+// explicit, per-file migration command for pre-split network-blind state.
+// Ungated (the consent-module rule: `config` works in every feature build;
+// the oracle's network reads are the bin layer's to gate).
+pub mod kat_adopt;
 
 // riir-dapps Proposal 004 Half 1: the work-stats sharing consent — the
 // THIRD consent plane beside mining, deny-by-default (Unset refuses; only

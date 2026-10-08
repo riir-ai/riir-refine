@@ -275,6 +275,24 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
 /// T7 (riir-kat Issue 003): the book is PER-NET (`KatCharge::open_net`) —
 /// the net the current resolution names, so each ledger's cost basis is
 /// its own; the env override stays the exact-file posture.
+/// riir-kat Issue 003 T9 (the consumer half): the net-pin gate at the ONE
+/// URL seam. Every command surface that dials resolves through
+/// `service_url_for_command`; this wrapper adds the pin check so a pinned
+/// build refuses a foreign host BEFORE any dial, naming the rebuild
+/// (foreign hosts compile to nothing in a pinned build — this refusal is
+/// the runtime half of that law). Exit 2, never a silent canonicalization.
+#[cfg(feature = "kat_service")]
+fn command_service_url() -> String {
+    let raw = riir_refine::kat_lease_client::service_url_for_command();
+    match riir_refine::kat_net_pin::ensure_net_allowed(&raw) {
+        Ok(url) => url,
+        Err(e) => {
+            eprintln!("service url refused: {e}");
+            std::process::exit(2);
+        }
+    }
+}
+
 #[cfg(feature = "kat_service")]
 fn open_kat_charge(
     paths: &[PathBuf],
@@ -290,7 +308,7 @@ fn open_kat_charge(
     let root = resolve_heal_root(paths);
     Some(riir_refine::kat_meter::KatCharge::open_net(
         &root,
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
         meter.state(),
     ))
 }
@@ -430,7 +448,7 @@ fn enforce_kat_soft_gate(args: &Args) {
         .map(|a| a.state().account_id.clone())
         .unwrap_or_default();
     let top_up = riir_refine::kat_lease_client::payment_url(
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
         &account_id,
     );
     eprintln!(
@@ -508,7 +526,7 @@ fn print_depleted_survey(args: &Args) {
     }
     let leaderboard = format!(
         "{}/leaderboard",
-        riir_refine::kat_lease_client::service_url_for_command().trim_end_matches('/')
+        command_service_url().trim_end_matches('/')
     );
     eprintln!("  * payouts land within 7 days of a push — exact dates: {leaderboard}");
 }
@@ -556,7 +574,7 @@ fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
 fn mining_queued_batches() -> u32 {
     let outbox = riir_refine::kat_state_stamp::net_state_dir_for_url(
         &resolve_heal_root(&[]),
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
     )
     .join("outbox");
     u32::try_from(
@@ -861,7 +879,7 @@ fn run_mine_intro() {
                 account.key_path().display()
             );
         }
-        let wallet_base = riir_refine::kat_lease_client::service_url_for_command();
+        let wallet_base = command_service_url();
         println!(
             "web wallet (same account): {}/wallet   <- GitHub SSH-key match",
             wallet_base.trim_end_matches('/')
@@ -953,7 +971,7 @@ fn run_mine_intro() {
     // halves simply has no heartbeat line.
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     {
-        let base = riir_refine::kat_lease_client::service_url_for_command();
+        let base = command_service_url();
         let trimmed = base.trim_end_matches('/');
         // Issue 119 T9: an override is INVISIBLE once set (the env outlives
         // the shell that set it — a ~/.profile row, a direnv state) and
@@ -1053,7 +1071,7 @@ fn run_unmine(purge_server: bool) {
     // data; a failure prints one line and never changes the exit code.
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     {
-        let base = riir_refine::kat_lease_client::service_url_for_command();
+        let base = command_service_url();
         let trimmed = base.trim_end_matches('/');
         // Issue 119 T9 — same override notice as --mine: an opted-OUT note
         // must land where the machine is pointed, and the user must SEE
@@ -1119,7 +1137,7 @@ fn run_unmine(purge_server: bool) {
     //    decides).
     // The watermark goes (the pending-unsynced estimator reads it) — the
     // PER-NET one first (T1), then the pre-T1 flat one if it lingers.
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let watermark = riir_refine::kat_pending_estimator::SyncWatermark::net_path(
         &resolve_heal_root(&[]),
         &url,
@@ -1316,7 +1334,7 @@ fn run_unmine_purge() {
             }
             let watermark = riir_refine::kat_pending_estimator::SyncWatermark::net_path(
                 &resolve_heal_root(&[]),
-                &riir_refine::kat_lease_client::service_url_for_command(),
+                &command_service_url(),
             );
             match std::fs::remove_file(&watermark) {
                 Ok(()) => println!("  watermark cleared: {}", watermark.display()),
@@ -1370,7 +1388,7 @@ fn run_unmine_purge() {
 fn unmine_outbox_dir() -> PathBuf {
     riir_refine::kat_state_stamp::net_state_dir_for_url(
         &resolve_heal_root(&[]),
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
     )
     .join("outbox")
 }
@@ -1507,7 +1525,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     let root = resolve_heal_root(paths);
     let charge_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
         &root,
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
     )
     .join("kat_charge.json");
     let charge = std::fs::read_to_string(&charge_path).ok().and_then(|text| {
@@ -1581,7 +1599,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 (None, None)
             }
             Some(acct) => {
-                let url = riir_refine::kat_lease_client::service_url_for_command();
+                let url = command_service_url();
                 // 5 s, deliberately short: `account` is offline-capable and
                 // the probe fail-fasts, so an offline run costs one budget.
                 let transport = svc::HttpAccountTransport::new(&url, 5);
@@ -1672,7 +1690,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         if let Some(acct) = history_acct.as_deref() {
             use riir_refine::kat_account_client::AccountTransport;
             use riir_refine::kat_lease_client::HttpResponse;
-            let url = riir_refine::kat_lease_client::service_url_for_command();
+            let url = command_service_url();
             let transport = riir_refine::kat_account_client::HttpAccountTransport::new(&url, 5);
             let lines = match transport.get_history(acct, 20) {
                 HttpResponse::Ok(body) => riir_refine::kat_account_client::parse_history(&body)
@@ -1723,7 +1741,7 @@ fn run_kat_update() {
     };
 
     let root = resolve_heal_root(&[]);
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let store = LeaseStore::open_net(&root, &url);
     let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 30);
@@ -1854,7 +1872,7 @@ fn maybe_auto_corpus() {
     use riir_refine::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let store = LeaseStore::open_net(&root, &url);
     let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 4);
@@ -2306,8 +2324,18 @@ fn push_mining_batch(
 /// trap, and (for a custom/loopback host) the local-artifact caveat for
 /// payment links/QRs (g5). The get is the g3 diagnosis: the ACTIVE url AND
 /// its source. Local-only and ungated — works in every feature build.
-fn run_kat_config(set: bool, url: Option<&str>) {
+fn run_kat_config(
+    set: bool,
+    url: Option<&str>,
+    adopt_state: Option<&str>,
+    discard: bool,
+    paths: &[PathBuf],
+) {
     use riir_refine::kat_service_config as svc;
+    if let Some(net) = adopt_state {
+        run_kat_adopt_state(net, discard, url, paths);
+        return;
+    }
     let dir = svc::account_dir();
     if !set {
         // `config get` (bare `config` behaves the same — a pure read).
@@ -2341,6 +2369,20 @@ fn run_kat_config(set: bool, url: Option<&str>) {
                  until it is unset",
                 var = svc::SERVICE_URL_ENV_VAR
             );
+        }
+        // riir-kat Issue 003 T6: the per-file network diagnosis — every
+        // per-net state file under this root, its stamp, or the UNSTAMPED
+        // flag with the adopt-state remedy. The Plan 023 g3 spirit: name the
+        // source, never guess.
+        {
+            let root = resolve_heal_root(paths);
+            let files = riir_refine::kat_adopt::scan_state_files(&root);
+            if !files.is_empty() {
+                println!("state files (under {}):", root.join(".refine").display());
+                for f in &files {
+                    println!("  {}", riir_refine::kat_adopt::diagnosis_line(f));
+                }
+            }
         }
         return;
     }
@@ -2383,6 +2425,233 @@ fn run_kat_config(set: bool, url: Option<&str>) {
     println!("config: inspect anytime — cargo refine config get");
 }
 
+/// riir-kat Issue 003 T4 (the refine half): `config adopt-state <net>
+/// [--discard]` — the EXPLICIT, per-file migration for pre-split
+/// network-blind state. Never auto-adopts: adoption is oracle-confirmed
+/// (the burn ack's contribution fact vs the declared net's live `/history`
+/// row) and everything else is offered as `--discard`-only (the quarantine
+/// move). Ungated like the rest of `config` (the oracle's network read is
+/// the cfg'd helper's to gate; without it every file reads discard-only
+/// with the reason).
+/// `--url` is the dev-rig/testing oracle override (the `config set` shape):
+/// the declared net's alias resolves canonically in production, and a mock
+/// ledger stands in for it under test. The pin gates the override like any
+/// other dial.
+fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, paths: &[PathBuf]) {
+    use riir_refine::kat_adopt::{self as adopt, AdoptVerdict, FileClass, HostFacts, Placement};
+    use riir_refine::kat_service_config as svc;
+
+    let (default_url, other_net, other_url) = match net {
+        "devnet" => (
+            riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
+            "mainnet",
+            riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
+        ),
+        "mainnet" => (
+            riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
+            "devnet",
+            riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
+        ),
+        _ => unreachable!("parse_args validated the net word"),
+    };
+    let net_url = match url_override {
+        Some(raw) => match svc::validate_service_url(raw) {
+            Ok(u) => u,
+            Err(e) => {
+                eprintln!("config adopt-state --url {raw}: {e}");
+                std::process::exit(2);
+            }
+        },
+        None => default_url.to_string(),
+    };
+    if let Err(e) = riir_refine::kat_net_pin::ensure_net_allowed(&net_url) {
+        eprintln!("config adopt-state {net}: the target {net_url} is outside this build's net \
+             pin — {e}");
+        std::process::exit(2);
+    }
+
+    let root = resolve_heal_root(paths);
+    let files = adopt::scan_state_files(&root);
+    let actionable: Vec<&adopt::StateFile> = files
+        .iter()
+        .filter(|f| f.class() != FileClass::StampedOk)
+        .collect();
+    let base = root.join(".refine");
+    if actionable.is_empty() {
+        println!(
+            "adopt-state {net}: no pre-split or mismatched state files under {} — nothing to do.",
+            base.display()
+        );
+        return;
+    }
+    println!(
+        "adopt-state {net} → {net_url}: {} actionable file(s) under {}",
+        actionable.len(),
+        base.display()
+    );
+
+    if discard {
+        let mut moved = 0usize;
+        let mut failed = 0usize;
+        for f in &actionable {
+            match riir_refine::kat_state_stamp::quarantine_state_file(&f.path, &root, &f.rel) {
+                Ok(dest) => {
+                    moved += 1;
+                    println!("  quarantined {} → {}", f.rel, dest.display());
+                }
+                Err(e) => {
+                    failed += 1;
+                    eprintln!("  FAILED {}: {e}", f.rel);
+                }
+            }
+        }
+        println!(
+            "quarantined {moved} file(s) (.bak copies kept beside each — nothing deleted); \
+             the next run re-baselines fresh per net."
+        );
+        std::process::exit(if failed > 0 { 1 } else { 0 });
+    }
+
+    // The adopt path: oracle-backed, LAZY on the second ledger (a
+    // declared-net match never dials the other net — the mock-test and
+    // the prod posture share that property). Facts are fetched ONLY when
+    // a flat burn ack exists (the one file with oracle fields); every
+    // other file lands discard-only without any network.
+    let needs_oracle = actionable
+        .iter()
+        .any(|f| f.kind == adopt::StateFileKind::BurnAck && f.placement == Placement::FlatLegacy);
+    let (declared_facts, declared_why) = if needs_oracle {
+        adopt_oracle_facts(&net_url)
+    } else {
+        (HostFacts::unreachable(), None)
+    };
+
+    let mut adopted = 0usize;
+    let mut refused: Vec<String> = Vec::new();
+    let mut needs_other: Vec<&adopt::StateFile> = Vec::new();
+    for f in &actionable {
+        if f.placement != Placement::FlatLegacy {
+            refused.push(format!(
+                "{}: unstamped/mismatched INSIDE a net dir — quarantine it (--discard) and let \
+                 the next run re-baseline",
+                f.rel
+            ));
+            continue;
+        }
+        match adopt::adopt_verdict(f, net, &declared_facts, other_net, None) {
+            AdoptVerdict::Adopt => match adopt::adopt_into_net(&root, f, &net_url) {
+                Ok(dest) => {
+                    adopted += 1;
+                    println!("  adopted {} → {} (oracle-confirmed)", f.rel, dest.display());
+                }
+                Err(e) => refused.push(format!("{}: {e}", f.rel)),
+            },
+            AdoptVerdict::NeedsOtherNet => needs_other.push(f),
+            AdoptVerdict::BelongsToOtherNet { .. } => unreachable!("None other never decides"),
+            AdoptVerdict::DiscardOnly { reason } => refused.push(format!(
+                "{}: {reason} — `--discard` quarantines it{}",
+                f.rel,
+                declared_why
+                    .as_deref()
+                    .map_or(String::new(), |w| format!(" (oracle: {w})"))
+            )),
+        }
+    }
+    // Second pass, only for acks the declared net did not match: consult
+    // the OTHER live ledger once, then decide belongs-to-other vs discard.
+    if !needs_other.is_empty() {
+        let (other_facts, other_why) = adopt_oracle_facts(other_url);
+        for f in needs_other {
+            match adopt::adopt_verdict(f, net, &declared_facts, other_net, Some(&other_facts)) {
+                AdoptVerdict::BelongsToOtherNet { other } => refused.push(format!(
+                    "{}: belongs to {other} (the other ledger's contribution row matches) — \
+                     re-run `config adopt-state {other}` for it, or --discard",
+                    f.rel
+                )),
+                AdoptVerdict::DiscardOnly { reason } => refused.push(format!(
+                    "{}: {reason}{}",
+                    f.rel,
+                    other_why
+                        .as_deref()
+                        .map_or(String::new(), |w| format!(" (other oracle: {w})"))
+                )),
+                _ => unreachable!("the second pass only sees decided verdicts"),
+            }
+        }
+    }
+    println!("adopted {adopted} file(s); {} refused (discard-only or wrong net)", refused.len());
+    for r in &refused {
+        eprintln!("  REFUSED {r}");
+    }
+    if adopted > 0 {
+        println!(
+            "the net dir now owns the adopted files; `cargo refine config get` shows every \
+             stamp."
+        );
+    }
+    std::process::exit(if refused.is_empty() { 0 } else { 2 });
+}
+
+/// The adopt-state oracle: one bounded `GET /history` for this account on
+/// the given base URL → the contribution-fact pair. Fail-closed: any
+/// failure is an unreachable verdict + the human reason (never a guess).
+#[cfg(all(feature = "kat_service", feature = "kat_transport"))]
+fn adopt_oracle_facts(url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<String>) {
+    use riir_refine::kat_account::KatAccount;
+    use riir_refine::kat_account_client::{AccountTransport as _, HttpAccountTransport};
+    use riir_refine::kat_adopt::HostFacts;
+    use riir_refine::kat_lease_client::HttpResponse;
+
+    let unreach = |why: String| (HostFacts::unreachable(), Some(why));
+    let Ok(account) = KatAccount::load(&KatAccount::default_dir()) else {
+        return unreach("no local account key — the oracle cannot query a ledger without \
+             one (run `cargo refine login` first)".into());
+    };
+    let Some(hex) =
+        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
+    else {
+        return unreach("the local account id is not the 64-hex derivation".into());
+    };
+    // 5 s, the `account` probe's budget: adopt-state is an explicit,
+    // operator-run command — one bounded read per ledger, never a spin.
+    let transport = HttpAccountTransport::new(url, 5);
+    match transport.get_history(hex, 1) {
+        HttpResponse::Ok(body) => match riir_refine::kat_account_client::parse_history(&body) {
+            Ok(h) => (
+                HostFacts {
+                    reachable: true,
+                    contributed: Some(h.contributed),
+                    first_commitment_hex: h.first_commitment_hex,
+                },
+                None,
+            ),
+            Err(e) => unreach(format!("the /history body did not parse: {e}")),
+        },
+        HttpResponse::Status(c) => unreach(format!("GET /history answered HTTP {c}")),
+        HttpResponse::NotModified => unreach("GET /history answered 304".into()),
+        HttpResponse::Error(e) => unreach(format!("{url} is unreachable: {e}")),
+    }
+}
+
+/// The compiled-out posture: the oracle cannot run, so every oracle-able
+/// file reads discard-only with the rebuild named (the honest degradation
+/// — never a silent pretend-match).
+#[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+fn adopt_oracle_facts(
+    _url: &str,
+) -> (
+    riir_refine::kat_adopt::HostFacts,
+    Option<String>,
+) {
+    (
+        riir_refine::kat_adopt::HostFacts::unreachable(),
+        Some(
+            "this build has no service transport — rebuild with \
+             --features kat_service,kat_transport to run the oracle".into(),
+        ),
+    )
+}
+
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_refine::kat_lease_client::{
@@ -2390,7 +2659,7 @@ fn run_kat_sync() {
     };
 
     let root = resolve_heal_root(&[]);
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let store = LeaseStore::open_net(&root, &url);
     let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 30);
@@ -2525,7 +2794,7 @@ fn run_kat_claim(sig: Option<&str>) {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_lease_client::LeaseTransport;
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, 10);
         if let riir_refine::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
             println!("claim: submitted to {url} — the service verifies the five checks + mints at settlement");
@@ -2535,7 +2804,7 @@ fn run_kat_claim(sig: Option<&str>) {
     let root = resolve_heal_root(&[]);
     match queue_claim(
         &root,
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
         &req,
     ) {
         Ok(path) => {
@@ -2546,7 +2815,7 @@ fn run_kat_claim(sig: Option<&str>) {
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
                 riir_refine::kat_lease_client::payment_url(
-                    &riir_refine::kat_lease_client::service_url_for_command(),
+                    &command_service_url(),
                     &req.account_id
                 )
             );
@@ -2612,7 +2881,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
         }
         #[cfg(feature = "kat_transport")]
         {
-            let url = riir_refine::kat_lease_client::service_url_for_command();
+            let url = command_service_url();
             let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
             let flow = match account.signing_key() {
                 Ok(key) => {
@@ -2655,7 +2924,7 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_stake_client::StakeOutcome;
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
         match riir_refine::kat_stake_client::stake_request_flow(
             &transport,
@@ -2708,7 +2977,7 @@ fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_stake_client::StakeTransport as _;
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
         if let riir_refine::kat_lease_client::HttpResponse::Ok(body) =
             transport.get_stake_info(account_id)
@@ -2760,7 +3029,7 @@ fn run_kat_unstake() {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_stake_client::HttpStakeTransport::new(&url, 10);
         // Issue 096 (riir-dapps): the unstake route is signature-gated —
         // the request signs with the account key (the claim key).
@@ -2833,7 +3102,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_vote_client::VoteOutcome;
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_vote_client::HttpVoteTransport::new(&url, 10);
         match riir_refine::kat_vote_client::vote_flow(
             &transport,
@@ -2902,7 +3171,7 @@ fn run_kat_topup(pack: Option<u8>) {
             std::process::exit(1);
         }
     };
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let host_label = url
         .trim_start_matches("https://")
         .trim_start_matches("http://")
@@ -3081,7 +3350,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
         match riir_refine::kat_payreq_client::pay_request_flow(
             &transport,
@@ -3171,7 +3440,7 @@ fn run_kat_faucet(qr: bool) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
         match riir_refine::kat_payreq_client::faucet_request_flow(&transport, &url, &signing_key) {
             Ok(outcome) => {
@@ -3230,7 +3499,7 @@ fn run_kat_refill(wait_secs: u64) {
     // posture comparison on this side.
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         // Best-effort: the account id only DECORATES the pay link, so a
         // missing/unreadable account still gets the full refusal.
         let account_id = riir_refine::kat_account::KatAccount::load(&dir)
@@ -3277,7 +3546,7 @@ fn run_kat_refill(wait_secs: u64) {
 
     #[cfg(feature = "kat_transport")]
     {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         // The crank bearer is read HERE, never inside `kat_refill` — the
         // module stays environment-free (the wetrun caveat #2 rule), and
         // the operator's token IS the crank authorization (the module doc
@@ -3477,7 +3746,7 @@ fn run_kat_wetrun(dry_run: bool) {
     #[cfg(feature = "kat_transport")]
     use riir_refine::kat_wetrun::Verdict;
 
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let network = riir_refine::kat_wetrun::classify_service_url(&url);
     let mode = if dry_run {
         RunMode::DryRun
@@ -3673,7 +3942,7 @@ fn run_kat_replay() {
         riir_refine::kat_replay::hex32_short(&local_fp)
     );
 
-    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let url = command_service_url();
     let transport = HttpReplayTransport::new(&url, 60);
     let ack = match request_lease(&transport, &signing_key, REPLAY_LEASE_LIMIT) {
         Ok(a) => a,
@@ -4288,8 +4557,10 @@ USAGE:
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
-    cargo refine config get                            (the ACTIVE service url + its source: env > config > default)
+    cargo refine config get                            (the ACTIVE service url + its source + every state file's network stamp: env > config > default)
     cargo refine config set --url <devnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
+    cargo refine config adopt-state <devnet|mainnet> [--discard]  (migrate pre-split network-blind state: oracle-confirmed adopt, or quarantine; riir-kat Issue 003 T4)
+    --net <devnet|mainnet>                             (one-invocation env sugar, pin-checked; Issue 003 T11)
 
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
@@ -4994,6 +5265,17 @@ struct Args {
     /// riir-dapps Plan 023: the `config set` subcommand modifier (bare
     /// `config` / `config get` is the pure read).
     config_set: bool,
+    /// riir-kat Issue 003 T4: the `config adopt-state <devnet|mainnet>
+    /// subcommand modifier — the explicit, per-file migration for pre-split
+    /// network-blind state (the remedy the stamp judge's refusal names).
+    config_adopt_state: Option<String>,
+    /// riir-kat Issue 003 T4: `--discard` — with `config adopt-state` ONLY:
+    /// quarantine the scanned files instead of adopting (the `.bak`-preserving
+    /// move; never a delete).
+    config_adopt_discard: bool,
+    /// riir-kat Issue 003 T11: `--net <devnet|mainnet>` — sugar over the env
+    /// var for ONE invocation (validated against the build's pin).
+    net_alias: Option<String>,
     /// riir-dapps Issue 112 T4: `--export <file|->` — with `sync` ONLY: write
     /// the redacted batch locally instead of pushing it.
     sync_export: Option<PathBuf>,
@@ -5239,6 +5521,9 @@ fn parse_args() -> Args {
         claim_tx: None,
         config_url: None,
         config_set: false,
+        config_adopt_state: None,
+        config_adopt_discard: false,
+        net_alias: None,
         sync_export: None,
         stake_usd: None,
         stake_info: false,
@@ -5698,6 +5983,18 @@ fn parse_args() -> Args {
                 };
                 args.config_url = Some(value);
             }
+            "--discard" => args.config_adopt_discard = true,
+            "--net" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--net requires a value (devnet | mainnet)");
+                    usage();
+                };
+                if args.net_alias.is_some() {
+                    eprintln!("--net given twice");
+                    usage();
+                }
+                args.net_alias = Some(value);
+            }
             "--export" => {
                 let Some(value) = it.next() else {
                     eprintln!("--export requires a value (a file path, or - for stdout)");
@@ -5756,6 +6053,35 @@ fn parse_args() -> Args {
             "set" if args.command == Some(KatCommand::Config) && args.paths.is_empty() => {
                 args.config_set = true;
             }
+            // riir-kat Issue 003 T4: the `config adopt-state <net>` modifier —
+            // the `set` precedent's shape, with its net word consumed inline.
+            "adopt-state"
+                if args.command == Some(KatCommand::Config)
+                    && args.paths.is_empty()
+                    && !args.config_set =>
+            {
+                if args.config_adopt_state.is_some() {
+                    eprintln!("config adopt-state takes exactly one net: <devnet|mainnet>");
+                    usage();
+                }
+                let Some(net) = it.next() else {
+                    eprintln!("config adopt-state requires a net: <devnet|mainnet>");
+                    usage();
+                };
+                args.config_adopt_state = Some(net);
+            }
+            "devnet" | "mainnet"
+                if args.command == Some(KatCommand::Config)
+                    && args.config_adopt_state.is_none()
+                    && args.paths.is_empty()
+                    && !args.config_set =>
+            {
+                // Unreachable in practice (adopt-state consumes its net word
+                // inline); kept so a bare `config devnet` still lands in the
+                // usage path instead of becoming a scan path.
+                eprintln!("did you mean `config adopt-state {arg}` or `config set --url {arg}`?");
+                usage();
+            }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
@@ -5785,8 +6111,34 @@ fn parse_args() -> Args {
             usage();
         }
     }
-    if args.config_url.is_some() && !(args.config_set && args.command == Some(KatCommand::Config)) {
-        eprintln!("--url requires `config set`");
+    if args.config_adopt_discard && args.config_adopt_state.is_none() {
+        eprintln!("--discard requires `config adopt-state <net>`");
+        usage();
+    }
+    if let Some(net) = &args.config_adopt_state {
+        if args.command != Some(KatCommand::Config) || args.config_set {
+            eprintln!("adopt-state is a `config` subcommand: cargo refine config adopt-state <net>");
+            usage();
+        }
+        if net != "devnet" && net != "mainnet" {
+            eprintln!(
+                "config adopt-state takes <devnet|mainnet> — the two live ledgers (testnet is torn \
+                 down; its state dir, if any, is its own)"
+            );
+            usage();
+        }
+    }
+    if let Some(alias) = &args.net_alias {
+        if alias != "devnet" && alias != "mainnet" {
+            eprintln!("--net takes <devnet|mainnet>");
+            usage();
+        }
+    }
+    if args.config_url.is_some()
+        && !(args.config_set && args.command == Some(KatCommand::Config))
+        && args.config_adopt_state.is_none()
+    {
+        eprintln!("--url requires `config set` (or `config adopt-state` as its oracle override)");
         usage();
     }
     if args.sync_export.is_some() && args.command != Some(KatCommand::Sync) {
@@ -8723,8 +9075,32 @@ fn main() {
     // Ungated (the kat_mining_consent precedent): a local record must be
     // writable/readable in EVERY feature build, including before `login`.
     // The money commands it re-points are the gated ones.
+    // riir-kat Issue 003 T11: `--net <alias>` — sugar over the env var for
+    // ONE invocation. Applied HERE, before every dispatch, so every later
+    // resolution (money flows, lease opens, config get) sees it; the alias
+    // set is the two live ledgers (parse-validated). The pin check is the
+    // seam's own (command_service_url) — this only selects.
+    if let Some(alias) = &args.net_alias {
+        use riir_refine::kat_service_config as svc;
+        let url = svc::validate_service_url(alias).unwrap_or_else(|e| {
+            eprintln!("--net {alias}: {e}");
+            std::process::exit(2);
+        });
+        if let Err(e) = riir_refine::kat_net_pin::ensure_net_allowed(&url) {
+            eprintln!("--net {alias} refused: {e}");
+            std::process::exit(2);
+        }
+        std::env::set_var(svc::SERVICE_URL_ENV_VAR, &url);
+        println!("net: this invocation targets {alias} ({url})");
+    }
     if args.command == Some(KatCommand::Config) {
-        run_kat_config(args.config_set, args.config_url.as_deref());
+        run_kat_config(
+            args.config_set,
+            args.config_url.as_deref(),
+            args.config_adopt_state.as_deref(),
+            args.config_adopt_discard,
+            &args.paths,
+        );
         return;
     }
 
@@ -10305,7 +10681,7 @@ fn main() {
     #[cfg(feature = "kat_service")]
     let lease_store = riir_refine::kat_lease_client::LeaseStore::open_net(
         &resolve_heal_root(&args.paths),
-        &riir_refine::kat_lease_client::service_url_for_command(),
+        &command_service_url(),
     );
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
@@ -12888,7 +13264,7 @@ fn main() {
                     .map(|a| a.state().account_id.clone())
                     .unwrap_or_default();
                 let url = riir_refine::kat_lease_client::payment_url(
-                    &riir_refine::kat_lease_client::service_url_for_command(),
+                    &command_service_url(),
                     &acct,
                 );
                 eprintln!(
@@ -12933,7 +13309,7 @@ fn main() {
         .0,
         riir_refine::kat_mining_consent::MiningConsent::OptedIn
     ) {
-        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let url = command_service_url();
         let transport = riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, 5);
         let outcome = push_mining_batch(true, &url, &transport);
         print_mine_push(&outcome);
@@ -13013,7 +13389,7 @@ fn main() {
             riir_refine::kat_account::KatAccount::load(&riir_refine::kat_account::KatAccount::default_dir());
         let pushed = match account.ok().and_then(|a| a.signing_key().ok()) {
             Some(key) => {
-                let url = riir_refine::kat_lease_client::service_url_for_command();
+                let url = command_service_url();
                 let transport = riir_refine::kat_fixstat_client::HttpFixstatTransport::new(
                     &url,
                     riir_refine::kat_fixstat_client::FIXSTAT_TIMEOUT_SECS,
@@ -13131,7 +13507,7 @@ fn main() {
             .map(|_| {
                 format!(
                     "{}/leaderboard",
-                    riir_refine::kat_lease_client::service_url_for_command()
+                    command_service_url()
                         .trim_end_matches('/')
                 )
             })

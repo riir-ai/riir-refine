@@ -73,6 +73,18 @@ fn version_prints_the_compiled_feature_stamp() {
         text.contains("release set:"),
         "the stamp must state the release-set verdict. output:\n{text}"
     );
+    // riir-kat Issue 003 T9: the NET PIN line — sourced from riir-kat's own
+    // const (the member that ENFORCES the pin names it). This test build is
+    // unpinned, so the multi-net label is the pinned expectation.
+    assert!(
+        text.contains(&format!("net: {}", riir_refine::kat_net_pin::NET_PIN)),
+        "the version block must carry the net pin. output:\n{text}"
+    );
+    assert_eq!(
+        riir_refine::kat_net_pin::NET_PIN,
+        "multi (default mainnet)",
+        "this test binary enables no pin features"
+    );
 }
 
 /// `-V` is the documented short form and must print the same block — a

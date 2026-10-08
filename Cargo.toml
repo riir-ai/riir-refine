@@ -516,6 +516,20 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # src/kat_lease_client.rs §golden).
 kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]
 
+# riir-kat Issue 003 T9 (the consumer half): the net-pin feature forwards.
+# Pins are RESTRICTIONS with OVERLAP semantics — enabling both compiles fine
+# and yields an EMPTY allowed host set that refuses at runtime (never
+# compile_error: the --all-features lanes this workspace runs routinely must
+# keep building; the refusal is loud at the URL seam). `allow-local` only
+# widens (adds loopback for the dev rig). The stamp source is riir-kat's own
+# `NET_PIN` const (`--version` prints it) — this crate's build_stamp cannot
+# see the member's features, so the member that enforces the pin names it.
+# NEVER add these to `default`: the shipped bin is multi-net (`net: multi
+# (default mainnet)`) — labeling it `net-mainnet` would misreport the pin.
+net-mainnet = ["riir-kat/net-mainnet"]
+net-devnet = ["riir-kat/net-devnet"]
+allow-local = ["riir-kat/allow-local"]
+
 # Issue 153: the CLI version alert + the verified binary self-update (`cargo
 # refine upgrade`) + the corpus-freshness surface in --info. Reuses the tree's
 # ureq (no new HTTP client); sha2 verifies the release SHA256SUMS (dist
@@ -1334,6 +1348,13 @@ required-features = ["kat_service", "latent_retrieval", "rust_perf", "clippy_lin
 # exists.
 [[test]]
 name = "kat_burn_stack"
+required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
+
+# riir-kat Issue 003 T4/T6/T8 (the refine half): the `config adopt-state` +
+# `config get` state-stamp surface through the real binary (hermetic scratch
+# roots; the one mock is a loopback /history oracle behind the --url override).
+[[test]]
+name = "kat_adopt_state_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
 # Issue 075 (owner soft gate): the depleted-account refusal through the REAL
