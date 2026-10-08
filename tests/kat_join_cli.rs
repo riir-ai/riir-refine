@@ -66,10 +66,9 @@ fn run_heal(
             .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir.display().to_string())
             .env("RIIR_AUTH_ACCOUNT_DIR", dir.display().to_string())
             // The join decision must not see an inherited service-url
-            // value (either spelling): any-source-is-configured would
-            // skip the prompt arm silently.
+            // value: any-source-is-configured would skip the prompt arm
+            // silently.
             .env_remove("RIIR_REFINE_KAT_SERVICE_URL")
-            .env_remove("RIIR_HEAL_KAT_SERVICE_URL")
             .env_remove("RIIR_REFINE_JOIN_ENV")
             .env_remove("RIIR_REFINE_YES")
             .stdin(Stdio::null());

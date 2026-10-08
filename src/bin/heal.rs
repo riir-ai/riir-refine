@@ -8443,7 +8443,6 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 }
 
 fn main() {
-    riir_refine::install_env_rename_compat();
     let args = parse_args();
 
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —

@@ -133,7 +133,7 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
         tuna_expires_unix: None,
     };
     let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
 }
@@ -154,7 +154,7 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
         tuna_expires_unix: None,
     };
     let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
 }
@@ -164,7 +164,7 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
 /// compat).
 fn seed_v2_ack_file(dir: &Path, balance_micro: i64) {
     let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
     std::fs::write(
         heal_dir.join(KatBurnAck::FILE_NAME),
         format!(
@@ -617,7 +617,7 @@ fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     assert_eq!(ack.last_balance_micro, None);
     assert_eq!(ack.contributed, None);
     let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".heal dir");
+    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
     seed_marker(&dir); // the leftover file — still zero effect, still warn-only

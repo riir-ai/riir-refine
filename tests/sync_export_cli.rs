@@ -54,7 +54,6 @@ fn refine(dir: &Path, args: &[&str]) -> Output {
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:1")
         .env_remove("RIIR_REFINE_SYNC_POLICY")
-        .env_remove("RIIR_HEAL_SYNC_POLICY")
         .args(args)
         .output()
         .expect("spawn cargo-refine")

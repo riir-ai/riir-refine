@@ -425,7 +425,7 @@ l4_lora = []
 
 # Plan 356 A1 — PAV (process-advantage) dataset curation for the L4 fixer
 # (arXiv:2410.08146 / katgpt-rs Research 509): (prefix, MC-Q) pairs over the
-# frozen score-bench spans + the `.heal/` store + extra miss dumps, with
+# frozen score-bench spans + the `.refine/` store + extra miss dumps, with
 # first-pit curation and the free vocabulary judge. The rollout engine is
 # seam-shaped: `examples/pav_data_curate.rs` drives the real daemon (the GPU
 # campaign) or a seeded mock (dry-run/tests). Opt-in — the daemon campaign
@@ -681,7 +681,7 @@ ternary_inference = ["dep:riir-infer-core", "dep:riir-infer-gpu"]
 self_evolve = []
 # Issue 136 (reef P1+P3+P5): the structural self-mutation lane's persistent
 # surface — the content-addressed artifact store + the two-head CAS chain
-# file under .heal/structural/. Opt-in so no default build can persist
+# file under .refine/structural/. Opt-in so no default build can persist
 # structural state; the vocabulary itself (gates, review classes, chain
 # state machine) is UNGATED in src/structural_admission.rs. Activation of
 # any auto-serve kind stays a separate owner call.

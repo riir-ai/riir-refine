@@ -117,7 +117,6 @@ echo "stranger-drill: the client resolves its service through the A1 config reco
 # resolve through the A1-recorded config, never the ambient value.
 MATERIAL_KNOBS=(
   RIIR_REFINE_KAT_SERVICE_URL
-  RIIR_HEAL_KAT_SERVICE_URL
   RIIR_REFINE_JOIN_ENV
   RIIR_REFINE_YES
   RIIR_REFINE_KAT_PROMPT_YES
@@ -127,7 +126,6 @@ MATERIAL_KNOBS=(
   RIIR_REFINE_AUTO_ORACLE
   RIIR_REFINE_SELF_EVOLVE
   RIIR_REFINE_KAT_ACCOUNT_DIR
-  RIIR_HEAL_KAT_ACCOUNT_DIR
   RIIR_AUTH_ACCOUNT_DIR
 )
 SANITIZE_ARGS=()

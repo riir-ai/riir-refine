@@ -248,7 +248,7 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     login(&dir);
     // The gate input starts DEPLETED (the state --refill exists to fix).
     let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
+    std::fs::create_dir_all(dir.join(".refine")).expect(".refine dir");
     let depleted = KatBurnAck {
         version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
@@ -341,7 +341,7 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let dir = scratch("gatename");
     login(&dir);
     let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".refine")).expect(".heal dir");
+    std::fs::create_dir_all(dir.join(".refine")).expect(".refine dir");
     let ack = KatBurnAck {
         version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,

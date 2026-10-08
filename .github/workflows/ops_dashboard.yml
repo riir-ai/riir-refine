@@ -52,7 +52,7 @@
 #     coverage cache's own measured_at deltas: riir-ai 57 s, riir-train 35 s).
 #     CI additionally pays 11 × fetch-depth-2000 clones + a release build of
 #     cargo-refine.
-#   * CI STRUCTURALLY produces a degraded dashboard: `.heal/trajectories.kv`
+#   * CI STRUCTURALLY produces a degraded dashboard: `.refine/trajectories.kv`
 #     is gitignored local state, so the self-evolve adoption section is always
 #     empty on a fresh checkout (admitted in the note below). That is a whole
 #     card the CI run can never fill and the M3 always can.
@@ -83,7 +83,7 @@
 # runs `git log --since=30.days` per repo — a depth-1 clone would undercount
 # it. Known limitation: >2000 commits in 30d undercounts a repo's cadence.
 #
-# Known CI limitation: `.heal/trajectories.kv` stores are gitignored local
+# Known CI limitation: `.refine/trajectories.kv` stores are gitignored local
 # state, so the trajectory-adoption section will be empty on fresh checkouts
 # (it degrades gracefully; coverage + git cadence + ledger sections carry the
 # run).

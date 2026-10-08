@@ -484,7 +484,6 @@ fn planted_fixes() -> Vec<(&'static str, &'static str, bool)> {
 }
 
 fn main() {
-    riir_refine::install_env_rename_compat();
     let args = Args::parse();
     let t0 = std::time::Instant::now();
 
