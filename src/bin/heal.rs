@@ -3847,6 +3847,12 @@ fn migrate_envelope_once(store: &riir_refine::traj_store::TrajStore) {
             src_path: String::new(),
             // Issue 148 T-b: the envelope never knew the candidate set.
             rejected: Vec::new(),
+            // Issue 156: the envelope never knew the rescue tallies.
+            b0_attempts: 0,
+            b0_successes: 0,
+            bd_attempts: 0,
+            bd_successes: 0,
+            rescue_depth: 0,
         };
         if store.import_row(&row).is_ok() {
             imported += 1;
@@ -4476,6 +4482,11 @@ USAGE:
                     one per-RULE queue per ENABLED retrieval domain
                     (clippy/perf/kernel/sec/docker — same control law at
                     rule granularity, attribution by corpus membership).
+                    Plus the Issue 156 rescue band (latent_retrieval
+                    builds): the state-level FlyBy tallies from the
+                    trajectory store — rescue exemplars (b0=0 ∧ bd≥3) first,
+                    bd=0 states as intractable-eviction candidates;
+                    report-only, augment-only vs the agreement veto.
                     Pool evidence comes from the trajectory store when the
                     build ships latent_retrieval; without it the order
                     degenerates to id-sorted. `--limit <N>` caps the table
@@ -6329,6 +6340,46 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
     // With rustc_errors compiled in the code queue always renders; without
     // it, at least one domain section must have — else this build can order
     // nothing and says so instead of printing a green nothing.
+    // (The Issue 156 rescue section below prints BEFORE this check so a
+    // build with rescue tallies but no healing domain still reports them.)
+    // Issue 156 T3 — the state-level rescue band (FlyBy tallies from the
+    // durable store; report-only ordering evidence: rescue exemplars
+    // (b0=0 ∧ bd≥3) are the learnable-hard band's head, bd=0 states the
+    // intractable-eviction candidates). Store-only evidence — the tallies
+    // live on traj: rows under latent_retrieval. AUGMENT-ONLY: this band
+    // narrows candidates entering the agreement veto; the veto stays the
+    // acceptance authority.
+    #[cfg(feature = "latent_retrieval")]
+    if root.join(".refine").join("trajectories.kv").exists() {
+        match riir_refine::traj_store::TrajStore::open(&root) {
+            Ok((store, _)) => {
+                let states: Vec<riir_refine::rescue_mine::StateRescueTally> = store
+                    .dump()
+                    .into_iter()
+                    .filter(|r| r.b0_attempts > 0 || r.bd_attempts > 0)
+                    .map(|r| riir_refine::rescue_mine::StateRescueTally {
+                        state_id: format!(
+                            "{}:{}",
+                            r.lint_key,
+                            riir_refine::traj_store::shape_hash(&r.shape)
+                        ),
+                        b0_attempts: r.b0_attempts,
+                        b0_successes: r.b0_successes,
+                        bd_attempts: r.bd_attempts,
+                        bd_successes: r.bd_successes,
+                        depth: r.rescue_depth,
+                        tier: riir_refine::memory::EvidenceTier::from_u8(r.tier),
+                    })
+                    .collect();
+                if !states.is_empty() {
+                    let section =
+                        riir_refine::rescue_mine::render_misses_section(&states);
+                    print_report_capped(&section, limit);
+                }
+            }
+            Err(e) => eprintln!("misses: rescue band unavailable — store unreadable: {e}"),
+        }
+    }
     #[cfg(feature = "rustc_errors")]
     let rendered_any = true;
     #[cfg(not(feature = "rustc_errors"))]

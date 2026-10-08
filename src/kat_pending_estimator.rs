@@ -473,6 +473,11 @@ mod tests {
             journey_taint_sum: 0,
             src_path: "src/lib.rs".into(),
             rejected: Vec::new(),
+            b0_attempts: 0,
+            b0_successes: 0,
+            bd_attempts: 0,
+            bd_successes: 0,
+            rescue_depth: 0,
         }
     }
 

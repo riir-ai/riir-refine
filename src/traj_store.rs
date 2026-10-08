@@ -164,9 +164,36 @@ pub struct TrajRowDoc {
     /// (`None` — the `src_path` law). The join is chunk-neighborhood
     /// approximate: the matcher proposes per suggest-span, the edit lands
     /// at a line inside one. Vocabulary ids from the compiled corpus, never
+    /// vocabulary ids from the compiled corpus, never
     /// user bytes — crosses the wire ungated like `domain` (v4).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rejected: Vec<String>,
+    /// Issue 156 — the `FlyBy` state tallies (T1): the no-tool (modelless)
+    /// continuation attempts/successes and the tool-assisted (escalated,
+    /// transport-served) attempts/successes for this STATE. An ORTHOGONAL
+    /// evidence axis (the Issue-105 journey precedent): never touches the
+    /// outcome counters, the consecutive-fail ladder, or the tier FSM — a
+    /// modelless failure is evidence about the STATE (`FlyBy` keeps it
+    /// precisely because no-tool fails), never against the rule.
+    #[serde(default)]
+    pub b0_attempts: u32,
+    /// Issue 156: no-tool continuations that verified — ANY nonzero value
+    /// rejects the state (execution-reachable, `FlyBy`'s V>0 law).
+    #[serde(default)]
+    pub b0_successes: u32,
+    /// Issue 156: tool-assisted continuations actually served by the
+    /// transport (a stood-by-modelless leg is no-tool, never counted here).
+    #[serde(default)]
+    pub bd_attempts: u32,
+    /// Issue 156: tool-assisted continuations that verified — the rescue
+    /// evidence. `b0_successes == 0 ∧ bd_successes >= 3` is the keep-set.
+    #[serde(default)]
+    pub bd_successes: u32,
+    /// Issue 156 (T2): the SHALLOWEST sufficient depth at which a rescue
+    /// was demonstrated — [`crate::rescue_mine::RescueDepth::as_u8`];
+    /// `0` = none yet. Only successful sightings update it, only downward.
+    #[serde(default)]
+    pub rescue_depth: u8,
 }
 
 /// The per-row cap on [`TrajRowDoc::rejected`] — the label is the
@@ -919,6 +946,89 @@ impl TrajStore {
         self.put_row(&key, &row)
     }
 
+    /// Issue 156 (T1+T2) — record one arm-H paired observation for the state
+    /// `(lint_key, shape)`: the modelless (no-tool) continuation outcome and,
+    /// when the escalation chain actually served a transport answer, the
+    /// tool-assisted (escalated) outcome at its depth.
+    ///
+    /// The tallies are an ORTHOGONAL evidence axis on the row (the Issue-105
+    /// journey precedent): they never touch the outcome counters, the
+    /// consecutive-fail ladder, or the tier FSM — a modelless failure is
+    /// evidence about the STATE (`FlyBy` keeps it precisely because no-tool
+    /// fails), never against the rule. The escalated verdict, when it
+    /// VERIFIES, additionally rides the EXISTING evidence vocabulary
+    /// ([`Self::record_classified`] success+verified — "no-fix fails, fix
+    /// verifies"), so the rescue exemplar is retrievable as a Certified-tier
+    /// trajectory when the Issue-126 tier guard agrees; an escalated
+    /// non-verification tallies only (a failed rescue attempt is not evidence
+    /// against the rule either).
+    ///
+    /// AUGMENT-ONLY law: this predicate narrows the candidate set entering
+    /// the network-oracle agreement VETO — it never replaces the veto.
+    ///
+    /// # Errors
+    ///
+    /// KV put or JSON encode failure (either write half).
+    pub fn record_rescue_pair(
+        &self,
+        lint_key: &str,
+        shape: &str,
+        fix: &str,
+        modelless_success: bool,
+        escalated: Option<(bool, crate::rescue_mine::RescueDepth)>,
+        run_id: &str,
+    ) -> Result<(), String> {
+        let key = Self::row_key(lint_key, shape);
+        let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
+        row.b0_attempts = row.b0_attempts.saturating_add(1);
+        row.b0_successes = row.b0_successes.saturating_add(u32::from(modelless_success));
+        if let Some((success, depth)) = escalated {
+            row.bd_attempts = row.bd_attempts.saturating_add(1);
+            row.bd_successes = row.bd_successes.saturating_add(u32::from(success));
+            if success && (row.rescue_depth == 0 || depth.as_u8() < row.rescue_depth) {
+                row.rescue_depth = depth.as_u8();
+            }
+        }
+        row.last_run_id = run_id.to_string();
+        row.last_seen_at = now_unix_secs();
+        self.put_row(&key, &row)?;
+        // The exemplar half (T2): a verified rescue rides the existing
+        // evidence vocabulary; the tier guard governs certification.
+        if matches!(escalated, Some((true, _))) {
+            self.record_classified(lint_key, shape, fix, true, true, run_id, None, None)?;
+        }
+        Ok(())
+    }
+
+    /// The accumulated rescue evidence for one state (read-only): the `FlyBy`
+    /// tallies + the row's evidence tier. Zeros + `Heuristic` when the state
+    /// has no row or the row is undecodable.
+    #[must_use]
+    pub fn rescue_state(
+        &self,
+        lint_key: &str,
+        shape: &str,
+    ) -> (crate::rescue_mine::RescueTally, EvidenceTier) {
+        let empty = crate::rescue_mine::RescueTally::default();
+        let key = Self::row_key(lint_key, shape);
+        let Some(bytes) = self.kv.get_bytes(&key) else {
+            return (empty, EvidenceTier::Heuristic);
+        };
+        let Ok(row) = serde_json::from_slice::<TrajRowDoc>(&bytes) else {
+            return (empty, EvidenceTier::Heuristic);
+        };
+        (
+            crate::rescue_mine::RescueTally {
+                b0_attempts: row.b0_attempts,
+                b0_successes: row.b0_successes,
+                bd_attempts: row.bd_attempts,
+                bd_successes: row.bd_successes,
+                depth: row.rescue_depth,
+            },
+            EvidenceTier::from_u8(row.tier),
+        )
+    }
+
     /// riir-dapps Issue 119 T2: a write view that stamps every row it
     /// touches with `src_path` — the repo-relative path of the file the
     /// snippet came from (normalize with [`src_path_of`](Self::src_path_of)).
@@ -1015,6 +1125,11 @@ impl TrajStore {
                     journey_taint_sum: 0,
                     src_path: String::new(),
                     rejected: Vec::new(),
+                    b0_attempts: 0,
+                    b0_successes: 0,
+                    bd_attempts: 0,
+                    bd_successes: 0,
+                    rescue_depth: 0,
                 }
             })
     }
@@ -2070,6 +2185,94 @@ mod tests {
         assert_eq!(EvidenceTier::from_u8(9), EvidenceTier::Heuristic);
     }
 
+    /// Issue 156 T1/T2/T5 — the arm-H rescue tallies: accumulate toward the
+    /// `FlyBy` keep predicate, stay orthogonal to the outcome counters/FSM,
+    /// ride the existing evidence vocabulary on a verified rescue, and
+    /// survive reopen.
+    #[test]
+    fn rescue_pair_tallies_accumulate_and_never_touch_outcome_counters() {
+        use crate::rescue_mine::RescueDepth;
+        let root = tmp_root("rescue_pair");
+        {
+            let (store, bad) = TrajStore::open(&root).unwrap();
+            assert_eq!(bad, 0);
+            // 4 modelless failures + 3 escalated successes + 1 escalated
+            // non-verification → the FlyBy keep-set, demonstrated at seat
+            // depth.
+            for _ in 0..3 {
+                store
+                    .record_rescue_pair(
+                        "ptr_arg",
+                        "shape_a",
+                        "fix_a",
+                        false,
+                        Some((true, RescueDepth::SeatRerank)),
+                        "run-r",
+                    )
+                    .unwrap();
+            }
+            store
+                .record_rescue_pair(
+                    "ptr_arg",
+                    "shape_a",
+                    "fix_a",
+                    false,
+                    Some((false, RescueDepth::SeatRerank)),
+                    "run-r",
+                )
+                .unwrap();
+            let (t, tier) = store.rescue_state("ptr_arg", "shape_a");
+            assert_eq!((t.b0_attempts, t.b0_successes), (4, 0));
+            assert_eq!((t.bd_attempts, t.bd_successes), (4, 3));
+            assert_eq!(t.depth, RescueDepth::SeatRerank.as_u8());
+            assert!(t.keep(), "b0=0 ∧ bd=3 — the keep predicate holds");
+            // The tallies are orthogonal: the outcome counters saw only the
+            // 3 verified rescues (the exemplar record), never the modelless
+            // failures, and the fail ladder never moved.
+            let row = store
+                .dump()
+                .into_iter()
+                .find(|r| r.lint_key == "ptr_arg")
+                .unwrap();
+            assert_eq!((row.success_count, row.fail_count), (3, 0));
+            assert_eq!(row.consecutive_fails, 0);
+            // The exemplar rode the existing evidence vocabulary: a
+            // success-only row certifies (the cold start — the guard admits
+            // it), which is T2's Certified-tier shape.
+            assert_eq!(tier, EvidenceTier::Certified);
+            // A stood-by-modelless leg: a no-tool attempt (b0), no bd bump.
+            store
+                .record_rescue_pair("ptr_arg", "shape_a", "fix_a", true, None, "run-r")
+                .unwrap();
+            let (t, _) = store.rescue_state("ptr_arg", "shape_a");
+            assert_eq!((t.b0_attempts, t.b0_successes, t.bd_attempts), (5, 1, 4));
+            assert!(!t.keep(), "b0>0 — execution-reachable, FlyBy's V>0 law");
+            // An unseen state reads zeros honestly.
+            let (t, tier) = store.rescue_state("ptr_arg", "never_seen");
+            assert_eq!(t, crate::rescue_mine::RescueTally::default());
+            assert_eq!(tier, EvidenceTier::Heuristic);
+        }
+        // Reopen: the tallies are durable (WAL replay).
+        {
+            let (store, bad) = TrajStore::open(&root).unwrap();
+            assert_eq!(bad, 0);
+            let (t, _) = store.rescue_state("ptr_arg", "shape_a");
+            assert_eq!((t.b0_attempts, t.bd_successes), (5, 3));
+        }
+    }
+
+    /// Issue 156 — pre-156 rows (no tallies in their JSON) decode with zero
+    /// tallies: the serde-default schema-evolution law.
+    #[test]
+    fn pre_issue_156_rows_decode_with_zero_rescue_tallies() {
+        let legacy = r#"{"lint_key":"ptr_arg","shape":"s","fix":"f","direction":[],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":0}"#;
+        let row: TrajRowDoc = serde_json::from_str(legacy).unwrap();
+        assert_eq!(
+            (row.b0_attempts, row.b0_successes, row.bd_attempts, row.bd_successes, row.rescue_depth),
+            (0, 0, 0, 0, 0)
+        );
+    }
+
     #[test]
     fn certified_density_counts_only_certified_rows_per_lint_key() {
         // Issue 067 T1 — the reopen-trigger instrument's counting core:
@@ -2783,6 +2986,11 @@ mod tests {
                 journey_taint_sum: 0,
                 src_path: String::new(),
                 rejected: Vec::new(),
+                b0_attempts: 0,
+                b0_successes: 0,
+                bd_attempts: 0,
+                bd_successes: 0,
+                rescue_depth: 0,
             })
             .unwrap();
         let report = store.stats_report(0);

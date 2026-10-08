@@ -464,6 +464,16 @@ pub mod traj_store;
 // band-mass is predictive).
 pub mod frontier_report;
 
+// Issue 156 — the state-level rescue-trajectory mining filter (FlyBy
+// Algorithm 1, Research 609 §2.6): the b0=0 ∧ bd≥3 keep predicate, the
+// shallowest-sufficient-depth vocabulary, the keep-set BLAKE3 hash, and the
+// `--misses` rescue-band section. UNGATED pure arithmetic over counters
+// (the frontier_report precedent — lib tests cover it at default features);
+// the durable tallies live on the traj_store row (gated) and the arm-H lane
+// (`fixer_regate --arm H`) is the miner. AUGMENT-ONLY: the agreement VETO
+// stays the acceptance authority — this can only narrow.
+pub mod rescue_mine;
+
 // Issue 134 T1 — the compiled rule→domain table, moved UNGATED from
 // kat_sync_payload (which re-exports it at its historical path): the
 // demonstrability column + the score-bench lane project through the SAME

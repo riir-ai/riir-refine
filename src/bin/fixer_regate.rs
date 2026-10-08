@@ -45,6 +45,12 @@
 //!   `escalation_manifest` + the row's transport (`seat_rerank` and/or
 //!   `hosted_expert`). Demotion of the loser is an operator manifest edit
 //!   — the arm prints the verdict, never edits data.
+//!   Issue 156: each paired case also records the FlyBy state tallies
+//!   (`rescue_mine` — b0 = the modelless continuation's outcome, bd = the
+//!   escalated continuation's outcome when the transport actually served)
+//!   into the durable trajectory store, and emits the rescue exemplar set
+//!   (`b0=0 ∧ bd≥3`) with its BLAKE3 keep-set hash. AUGMENT-ONLY: the
+//!   tallies are a pre-filter; the agreement veto stays the authority.
 //!
 //! Run:
 //!
@@ -531,7 +537,7 @@ fn main() {
         "DRY" => run_dry(&args, &verifier, &prepared),
         "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
-        "H" => hosted_dispatch(&args, &verifier, &prepared),
+        "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
         other => {
             eprintln!("unknown --arm {other} (A|B|G|G2|C|H|DRY|BT8|BT8DRY)");
             std::process::exit(2);
@@ -1478,20 +1484,27 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
 
 /// Entry gate: the dispatch module is compiled only with the manifest AND a
 /// transport; everything else refuses loudly naming the missing features.
-fn hosted_dispatch(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+/// `store` is the harness's durable trajectory store (Issue 156: the rescue
+/// tallies' home; `None` = run-local tallies, honestly disclosed).
+fn hosted_dispatch(
+    args: &Args,
+    verifier: &ClippyVerifier,
+    prepared: &[Prepared],
+    store: Option<&riir_refine::traj_store::TrajStore>,
+) {
     #[cfg(all(
         feature = "escalation_manifest",
         any(feature = "seat_rerank", feature = "hosted_expert")
     ))]
     {
-        run_hosted(args, verifier, prepared);
+        run_hosted(args, verifier, prepared, store);
     }
     #[cfg(not(all(
         feature = "escalation_manifest",
         any(feature = "seat_rerank", feature = "hosted_expert")
     )))]
     {
-        let _ = (args, verifier, prepared);
+        let _ = (args, verifier, prepared, store);
         eprintln!(
             "--arm H requires --features escalation_manifest plus the armed row's transport \
              (seat_rerank and/or hosted_expert) — an armed row must never look armed while \
@@ -1505,7 +1518,12 @@ fn hosted_dispatch(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]
     feature = "escalation_manifest",
     any(feature = "seat_rerank", feature = "hosted_expert")
 ))]
-fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+fn run_hosted(
+    args: &Args,
+    verifier: &ClippyVerifier,
+    prepared: &[Prepared],
+    store: Option<&riir_refine::traj_store::TrajStore>,
+) {
     use riir_refine::escalation_dispatch::{
         EscalatedFix, EscalationDispatch, ReadinessPolicy, PRESENTATION_CAP,
     };
@@ -1573,6 +1591,15 @@ fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     #[cfg(not(feature = "seat_rerank"))]
     let _ = receipt_us_total;
     let kind = dispatch.row().target.kind.clone();
+    // Issue 156: one run id per invocation (the store's per-run attribution
+    // convention) + the run's touched states for the rescue summary.
+    let run_id = format!(
+        "armh-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+    );
+    let mut touched: Vec<(String, String, riir_refine::rescue_mine::RescueTally)> = Vec::new();
 
     for p in prepared {
         eprintln!("[H] {} …", p.sample.id);
@@ -1664,6 +1691,41 @@ fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             _ => ties += 1,
         }
 
+        // ── Issue 156 T1: the FlyBy state tallies (bookkeeping over the
+        // SAME paired continuations — no new sampling). b0 = the no-tool
+        // (modelless) continuation's outcome; bd = the tool-assisted
+        // (escalated) outcome, counted ONLY when the transport actually
+        // served — a stood-by-modelless leg is a no-tool continuation in
+        // disguise. The store write rides the orthogonal tally axis (never
+        // the outcome counters); a verified rescue additionally lands as
+        // the existing success+verified evidence (the store method's job).
+        let m_success = score_m.keep_strict;
+        let e_served = served_from != "modelless";
+        let e_depth = riir_refine::rescue_mine::RescueDepth::from_kind(&kind);
+        let escalated_obs = if e_served {
+            e_depth.map(|d| (score_e.keep_strict, d))
+        } else {
+            None
+        };
+        let mut rescue = riir_refine::rescue_mine::RescueTally::default();
+        rescue.observe_modelless(m_success);
+        if let Some((s, d)) = escalated_obs {
+            rescue.observe_escalated(s, d);
+        }
+        if let Some(st) = store {
+            if let Err(e) = st.record_rescue_pair(
+                &p.sample.lints[0],
+                &p.sample.module,
+                &fix,
+                m_success,
+                escalated_obs,
+                &run_id,
+            ) {
+                eprintln!("[H] rescue tally write failed: {e}");
+            }
+        }
+        touched.push((p.sample.lints[0].clone(), p.sample.module.clone(), rescue));
+
         if let Some(f) = out.as_mut() {
             let row = serde_json::json!({
                 "id": p.sample.id,
@@ -1691,6 +1753,19 @@ fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
                     "em": score_e.em,
                     "wall_ms": wall_ms,
                     "receipt": receipt_note,
+                },
+                // Issue 156 T1: this run's FlyBy contribution for the state
+                // (the accumulated history lives in the store, not here).
+                // `depth` names the depth a tool-assisted leg RAN at —
+                // "none" when the chain stood by modelless.
+                "rescue": {
+                    "b0_attempted": 1,
+                    "b0_success": m_success,
+                    "bd_attempted": e_served,
+                    "bd_success": e_served && score_e.keep_strict,
+                    "depth": escalated_obs
+                        .as_ref()
+                        .map_or("none", |(_, d)| d.label()),
                 },
             });
             let _ = writeln!(f, "{row}");
@@ -1749,6 +1824,65 @@ fn run_hosted(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         "TIE — no outcome-based selection signal; keep the modelless default (free + µs)"
     };
     println!("  VERDICT: {verdict}");
+
+    // ── Issue 156 T2/T5: the rescue exemplar set over this run's states ──
+    // Read back the ACCUMULATED tallies when the store is durable — a
+    // single run contributes at most one continuation per arm, so the keep
+    // predicate (bd≥3) can only fire on the store's history. Run-local
+    // tallies are still summarized honestly when no store is present.
+    let states: Vec<riir_refine::rescue_mine::StateRescueTally> = touched
+        .iter()
+        .map(|(lint, shape, run_tally)| {
+            let (tally, tier) = match store {
+                Some(st) => st.rescue_state(lint, shape),
+                None => (*run_tally, riir_refine::memory::EvidenceTier::Heuristic),
+            };
+            riir_refine::rescue_mine::StateRescueTally {
+                state_id: format!(
+                    "{lint}:{}",
+                    riir_refine::traj_store::shape_hash(shape)
+                ),
+                b0_attempts: tally.b0_attempts,
+                b0_successes: tally.b0_successes,
+                bd_attempts: tally.bd_attempts,
+                bd_successes: tally.bd_successes,
+                depth: tally.depth,
+                tier,
+            }
+        })
+        .collect();
+    let rescue_summary = riir_refine::rescue_mine::summarize_states(&states);
+    println!(
+        "  rescue tallies (Issue 156, FlyBy b0=0 ∧ bd≥3 — augment-only pre-filter): {} state(s) \
+         this run; keep-set {}, learnable-hard {}, intractable-eviction candidates {}, \
+         unprobed {}, exec-reachable {}",
+        rescue_summary.population,
+        rescue_summary.keep,
+        rescue_summary.learnable_hard,
+        rescue_summary.intractable,
+        rescue_summary.unprobed,
+        rescue_summary.exec_reachable,
+    );
+    if rescue_summary.keep > 0 {
+        println!(
+            "  keep-set hash: {} (same transcripts → identical)",
+            &rescue_summary.keep_hash[..12]
+        );
+        for s in states.iter().filter(|s| s.keep()) {
+            println!(
+                "    exemplar: {} depth={} tier={}",
+                s.state_id,
+                riir_refine::rescue_mine::RescueDepth::from_u8(s.depth).label(),
+                riir_refine::rescue_mine::tier_label(s.tier),
+            );
+        }
+    }
+    if store.is_none() {
+        println!(
+            "  (no durable store — tallies are run-local; run from the repo root or set \
+             RIIR_REGATE_STORE_DIR)"
+        );
+    }
 
     // The quality time series gets the ESCALATED arm's scores (the modelless
     // baseline's numbers are arm H-modelless above; the incumbent series is
