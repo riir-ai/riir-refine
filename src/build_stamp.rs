@@ -74,6 +74,9 @@ pub const RELEASE_FEATURES: &[&str] = &[
     "kat_service",
     "kat_transport",
     "fix_verify",
+    // Issue 153 — a shipped binary without the update alert is exactly the
+    // "old version with no notice" class this feature exists to end.
+    "update_check",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names
