@@ -259,7 +259,12 @@ fn charged_kat(dir: &Path) -> u64 {
 }
 
 fn ack_path(dir: &Path) -> PathBuf {
-    dir.join(".refine").join(KatBurnAck::FILE_NAME)
+    // T1 (riir-kat Issue 003): the flow places the ack in the per-net dir;
+    // every mock in this file is loopback (the port-less net key).
+    dir.join(".refine")
+        .join("net")
+        .join("127.0.0.1")
+        .join(KatBurnAck::FILE_NAME)
 }
 
 fn ack_of(dir: &Path) -> Option<KatBurnAck> {
