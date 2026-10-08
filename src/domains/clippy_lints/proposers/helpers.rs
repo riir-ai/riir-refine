@@ -613,11 +613,30 @@ pub(crate) fn doc_lines<'a>(source: &'a str, file: &File) -> Vec<DocLine<'a>> {
     // Visit order is roughly source order but not guaranteed across item
     // kinds — sort, then walk in line order.
     v.docs.sort_by_key(|r| r.start);
+    // P44 defense-in-depth: a span that is not a char boundary IN `source`
+    // cannot come from a clean parse of this text (proc-macro2 fallback bugs
+    // are the measured class — a BOM'd source shifts every span). Slicing it
+    // panics (helpers.rs:630, 2026-10-08); flooring it would misplace the
+    // edit SILENTLY — the worse direction. Skip the line instead; the read
+    // seam's BOM strip is the root-cause fix, this only bounds the blast
+    // radius of the next span-corruption class.
+    let skipped = v.docs.iter().filter(|r| !source.is_char_boundary(r.start)).count();
+    if skipped > 0 {
+        eprintln!(
+            "doc_lines: skipped {skipped} doc attr(s) with non-char-boundary spans \
+             (span corruption — proposers stand down on this file's docs)"
+        );
+    }
     let mut out = Vec::with_capacity(v.docs.len());
     let mut prev_line: Option<usize> = None;
     let mut line_no = 0usize;
     let mut scanned = 0usize;
     for range in v.docs {
+        // P44: a non-boundary start is span corruption (see the skip above) —
+        // slicing would panic, flooring would misplace. Stand down per line.
+        if !source.is_char_boundary(range.start) {
+            continue;
+        }
         // Line number of this doc attr (for the adjacency gap flag).
         while scanned < range.start {
             if source.as_bytes()[scanned] == b'\n' {

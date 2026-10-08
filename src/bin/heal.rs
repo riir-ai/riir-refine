@@ -140,6 +140,30 @@ fn default_memory_path() -> PathBuf {
     new_dir.join("memory.json")
 }
 
+/// Read a Rust source file for the span-based lanes (P44): a leading UTF-8
+/// BOM poisons proc-macro2's fallback span→byte mapping — measured minimal
+/// repro, `byte_range()` returns char-space offsets for BOM'd source, so
+/// every syn span lands shifted against the real bytes (mid-char where the
+/// drift crosses a multi-byte char — the helpers.rs:630 panic class — and
+/// silently wrong-but-valid elsewhere, the misplaced-edit class). Strip it
+/// once at the read seam so parse coordinates, proposers, and the write-back
+/// share one coordinate system; the strip is disclosed and the healed file
+/// is written BOM-free (a leading BOM is optional in Rust source).
+fn read_source(path: &std::path::Path) -> std::io::Result<String> {
+    let src = std::fs::read_to_string(path)?;
+    match src.strip_prefix('\u{feff}') {
+        Some(rest) => {
+            eprintln!(
+                "bom: stripped leading UTF-8 BOM (3 bytes) from {} — \
+                 spans are computed BOM-free; the healed file is written BOM-free",
+                path.display()
+            );
+            Ok(rest.to_owned())
+        }
+        None => Ok(src),
+    }
+}
+
 /// Resolve the repo-local `.refine` root shared by the trajectory store and the
 /// KAT meter: `RIIR_REFINE_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
@@ -10669,7 +10693,7 @@ fn main() {
         Vec::new();
 
     for file in &files {
-        let Ok(src) = std::fs::read_to_string(file) else {
+        let Ok(src) = read_source(file) else {
             eprintln!("skip (unreadable): {}", file.display());
             continue;
         };
@@ -13356,7 +13380,7 @@ fn reheat_fix_pass(
 ) -> usize {
     const MAX_PASSES: usize = 4;
 
-    let Ok(src) = std::fs::read_to_string(path) else {
+    let Ok(src) = read_source(path) else {
         return 0;
     };
     let display = path.display().to_string();
@@ -14398,5 +14422,60 @@ mod issue_149_resplice_dedup_tests {
         let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
         assert_eq!(edits.len(), 2);
         assert!(dropped.is_empty());
+    }
+}
+
+/// P44: a leading UTF-8 BOM poisons proc-macro2's fallback span→byte
+/// mapping — byte_range() returns char-space offsets for BOM'd source, so
+/// every syn span lands shifted against the real bytes (the helpers.rs:630
+/// mid-char panic class, and the silent misplaced-edit class beside it).
+/// The read seam strips the BOM once, before any parse.
+#[cfg(test)]
+mod p44_bom_seam_tests {
+    use super::read_source;
+    use syn::spanned::Spanned;
+
+    #[test]
+    fn bom_is_stripped_and_the_rest_is_verbatim() {
+        let dir = std::env::temp_dir().join(format!(
+            "p44_bom_seam_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("bommed.rs");
+        let body = "/// the seat’s pool —uléiš text\nfn go() {}\n";
+        let bommed = format!("\u{feff}{body}");
+        std::fs::write(&path, &bommed).unwrap();
+
+        let src = read_source(&path).unwrap();
+        assert_eq!(src, body, "BOM stripped, body verbatim");
+
+        // The composed seam: the stripped text parses and the proposer's
+        // spans are boundary-safe against the SAME string it slices.
+        let parsed: syn::File = syn::parse_file(&src).unwrap();
+        for attr in &parsed.attrs {
+            let r = attr.span().byte_range();
+            assert!(
+                src.is_char_boundary(r.start) && src.is_char_boundary(r.end),
+                "span {r:?} not boundary-safe"
+            );
+        }
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn bom_free_source_is_returned_verbatim() {
+        let dir = std::env::temp_dir().join(format!(
+            "p44_bom_free_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("clean.rs");
+        std::fs::write(&path, "fn go() {}\n").unwrap();
+        assert_eq!(read_source(&path).unwrap(), "fn go() {}\n");
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

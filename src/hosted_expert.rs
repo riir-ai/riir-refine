@@ -1,4 +1,4 @@
-﻿//! Plan 202 R2: `HostedExpertL4` โ€” one MORE transport under the existing
+//! Plan 202 R2: `HostedExpertL4` โ€” one MORE transport under the existing
 //! [`L4Fallback`](crate::l4_fallback::L4Fallback) seam (beside
 //! `DaemonL4`'s long-lived process and `CfClient`'s CF-Workers-AI leg),
 //! for the no-candidate miss: the hosted expert GENERATES the fix.

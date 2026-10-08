@@ -510,6 +510,22 @@ mod tests {
     use super::super::propose_fix;
 
     #[test]
+    fn p44_multibyte_doc_content_no_panic_correct_edits() {
+        // P44: the evidence class — multi-byte chars (curly quote / em-dash)
+        // in doc comments while doc_lines slices byte-indexed lines. A clean
+        // parse of this text has boundary-safe spans, so the propose path
+        // must neither panic nor misplace the rewrite.
+        let src = "/// The seat’s shader_perf pool —uléiš decisions only.\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires");
+        // The rewrite lands on the code word, not shifted into the
+        // multi-byte region on either side of it.
+        assert!(out.contains("`shader_perf`"), "{out}");
+        assert!(out.contains("uléiš"), "{out}");
+        assert!(out.contains('’'), "{out}");
+        assert!(syn::parse_file(&out).is_ok(), "{out}");
+    }
+
+    #[test]
     fn snake_case_and_camel_case_wrap() {
         let src = "/// Runs the shader_perf stage over a HashMap of buckets.\nfn stage() {}";
         let out = propose_fix("doc_markdown", src).expect("fires");
