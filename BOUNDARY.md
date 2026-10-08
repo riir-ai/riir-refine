@@ -43,7 +43,7 @@ and `kat_promotion` (score_bench/domain).
 | riir-neuron-db | `../riir-neuron-db` | `optional = true`, `default-features = false` (measured 2026-08-21) |
 | riir-kat | `../riir-kat` | `default-features = false` (non-optional — root re-exports the member's free-tier trio ungated); `kat_service` enables `riir-kat/client`, `kat_transport` adds `riir-kat/kat_transport` (issue 088, 2026-09-10). riir-auth is no longer a ROOT dep — it enters the graph transitively through riir-kat's `account_key` (same sibling, resolution-load-bearing). |
 | riir-llm | `../riir-llm` | `optional = true`, `default-features = false` (issue 124, 2026-09-18 — the shared LLM-transport leaf, the Issue-051/106 extraction). `groq_first` = `riir-llm/transport` (no direct ureq of its own); `cf_workers_ai` adds `riir-llm/transport` beside its own ureq (the GraphQL usage meter stays clippy-side — the leaf speaks chat-completions, not GraphQL). Wire URL/body/parse/classify/timeouts/bearer hygiene live in the leaf; the windowed `LlmRouter` policy, FreeTierStats/providers ledger contract, pricing (`avoided_usd`, `llm_spend`) stay HERE. |
-| reflexer-vessel | `../riir-reflexer/crates/reflexer-vessel` | opt-in `vessel_artifacts` only (Plan 202 R4, 2026-10-08 — the vessel verify path, ONE artifact protocol across the decision stack). `default-features = false` + `vessel_public_read` ONLY — the hosted reader never compiles into this publicly-distributed binary (the moat: hosted vessels refuse at peek, structurally). Verify-only: refine NEVER mints (A8 — minting is riir-train's offline lane) and NEVER embeds vessel bytes (A10 — the artifact-dir leak test pins it). Public crate, deps blake3 + ed25519-dalek only; same katgpt-free leaf law as this repo's default build. |
+| `reflexer-vessel` | `../riir-reflexer/crates/reflexer-vessel` | opt-in `vessel_artifacts` only (Plan 202 R4, 2026-10-08 — the vessel verify path, ONE artifact protocol across the decision stack). `default-features = false` + `vessel_public_read` ONLY — the hosted reader never compiles into this publicly-distributed binary (the moat: hosted vessels refuse at peek, structurally). Verify-only: refine NEVER mints (A8 — minting is riir-train's offline lane) and NEVER embeds vessel bytes (A10 — the artifact-dir leak test pins it). Public crate, deps blake3 + ed25519-dalek only; same katgpt-free leaf law as this repo's default build. |
 
 ## Standing invariants
 
@@ -59,8 +59,10 @@ and `kat_promotion` (score_bench/domain).
 ## Drift ledger (target vs actual)
 
 **None.** Row D1 (the reflexer-vessel allowlist cell shape, Issue 154, found
-by the 170th boundary run 2026-10-08) fixed at filing — backticked per the
-allowlist() convention; closed same day.
+by the 170th boundary run 2026-10-08) is closed — ⚠ the first fix commit
+(`6135b0f3`) edited only THIS prose and never backticked the cell (its
+message claimed otherwise — caught by the 172nd scoped run, Issue 155); the
+cell backtick itself landed with the Issue-155 fix commit the same morning.
 
 Otherwise clean (surfaces clean at the 2026-08-19 guard run; the
 2026-08-25 Proposal-005 service-plane row closed with Issue 041 — home
