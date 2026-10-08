@@ -68,7 +68,7 @@ pub const FORMAT_VERSION: u32 = 1;
 const MAGIC: &[u8; 4] = b"RLEM";
 
 /// Numerically stable σ: two branches so `e^z` never overflows.
-fn sigmoid(z: f32) -> f32 {
+pub(crate) fn sigmoid(z: f32) -> f32 {
     if z >= 0.0 {
         1.0 / (1.0 + (-z).exp())
     } else {
@@ -347,7 +347,7 @@ fn push_f32(v: &mut Vec<u8>, x: f32) {
 /// the only producer — the runtime view's f32 never re-encodes, because
 /// requantization is not guaranteed byte-identical). `rules` must be
 /// pre-sorted by id; the sort lives in [`train`] so the bytes are canonical.
-fn encode_artifact(
+pub(crate) fn encode_artifact(
     buckets: usize,
     dim: usize,
     tau: f32,
@@ -626,12 +626,12 @@ fn loss_and_grad(
     loss / n as f32
 }
 
-fn dot(a: &[f32], b: &[f32]) -> f32 {
+pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
     a.iter().zip(b.iter()).map(|(x, y)| x * y).sum()
 }
 
 /// Sparse (bucket-indexed) row × matrix: `out = Σ_b x_b · W[b]`.
-fn matvec(w: &[f32], idx: &[u32], val: &[f32], out: &mut [f32]) {
+pub(crate) fn matvec(w: &[f32], idx: &[u32], val: &[f32], out: &mut [f32]) {
     out.fill(0.0);
     let d = out.len();
     for (&b, &xb) in idx.iter().zip(val.iter()) {
@@ -643,7 +643,7 @@ fn matvec(w: &[f32], idx: &[u32], val: &[f32], out: &mut [f32]) {
 }
 
 /// The transpose: `g_W[b] += gout · x_b`.
-fn scatter_grad(g: &mut [f32], gout: &[f32], idx: &[u32], val: &[f32]) {
+pub(crate) fn scatter_grad(g: &mut [f32], gout: &[f32], idx: &[u32], val: &[f32]) {
     let d = gout.len();
     for (&b, &xb) in idx.iter().zip(val.iter()) {
         let row = &mut g[b as usize * d..(b as usize + 1) * d];
@@ -655,7 +655,7 @@ fn scatter_grad(g: &mut [f32], gout: &[f32], idx: &[u32], val: &[f32]) {
 
 /// Shared tokenization → sparse signed L2-normalized unigram+bigram bag at
 /// [`FEATURE_BUCKETS`] (the `acc` scratch is caller-owned; training only).
-fn sparse_features(text: &str, acc: &mut Vec<f32>) -> (Vec<u32>, Vec<f32>) {
+pub(crate) fn sparse_features(text: &str, acc: &mut Vec<f32>) -> (Vec<u32>, Vec<f32>) {
     acc.clear();
     acc.resize(FEATURE_BUCKETS, 0.0);
     fill_hashbag(text, FEATURE_BUCKETS, acc);
@@ -672,7 +672,7 @@ fn sparse_features(text: &str, acc: &mut Vec<f32>) -> (Vec<u32>, Vec<f32>) {
 
 /// Per-matrix absmax → ×127 i8 (the `span_embed` quantization law). A zero
 /// matrix keeps scale 1.0 so dequant stays defined.
-fn quantize(m: &[f32]) -> (Vec<i8>, f32) {
+pub(crate) fn quantize(m: &[f32]) -> (Vec<i8>, f32) {
     let absmax = m.iter().fold(0.0_f32, |a, &v| a.max(v.abs()));
     let scale = if absmax > 0.0 { absmax / 127.0 } else { 1.0 };
     let q = m.iter().map(|&v| round_clamp_i8(v / scale)).collect();
@@ -694,14 +694,14 @@ fn round_clamp_i8(v: f32) -> i8 {
 /// typed to its own param shape, so this kernel carries the flat twin. The
 /// warmup+cosine SCHEDULE is shared (`AdamW::lr_at`). Generalize the pair
 /// into one constructor when a third consumer exists (rule of three).
-struct FlatAdamW {
+pub(crate) struct FlatAdamW {
     m: Vec<f32>,
     v: Vec<f32>,
     t: u64,
 }
 
 impl FlatAdamW {
-    fn new(len: usize) -> Self {
+    pub(crate) fn new(len: usize) -> Self {
         Self {
             m: vec![0.0; len],
             v: vec![0.0; len],
@@ -709,7 +709,7 @@ impl FlatAdamW {
         }
     }
 
-    fn step(&mut self, w: &mut [f32], g: &[f32], lr: f32, wd: f32) {
+    pub(crate) fn step(&mut self, w: &mut [f32], g: &[f32], lr: f32, wd: f32) {
         self.t += 1;
         let (b1, b2, eps) = (0.9_f32, 0.999_f32, 1e-8_f32);
         let bc1 = 1.0 - b1.powi(self.t as i32);

@@ -61,6 +61,12 @@ pub mod margin_weight;
 // schedule); the shipped suggest lane stays modelless until the gates pass.
 #[cfg(feature = "rule_embed_poc")]
 pub mod rule_embed;
+// Issue 133 T1: the Matryoshka-k randomized-budget supervision arms
+// (span-structured BCE over `katgpt_core::exact_mass_admit` masks) —
+// measurement-only, same towers/artifact wire as `rule_embed`. Gated on the
+// FULL feature (it alone carries the katgpt-core/exact_mass_admit forward).
+#[cfg(feature = "mattr_k_poc")]
+pub mod rule_embed_mattr;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
 #[cfg(feature = "set_rerank")]

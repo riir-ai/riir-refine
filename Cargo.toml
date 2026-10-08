@@ -344,6 +344,15 @@ choice_scorer_poc = ["latent_retrieval", "clippy_lints", "rust_perf"]
 # profile no worse.
 rule_embed_poc = ["choice_scorer_poc"]
 
+# Issue 133 T1 (2026-10-08): the Matryoshka-k randomized-budget supervision
+# arms for the two-tower scorer — span-structured BCE whose candidate
+# weights come from `katgpt_core::exact_mass_admit` (Σσ = k by bisection) at
+# a per-step budget draw (uniform / log_both). Measurement-only, on top of
+# the shipped `rule_embed_poc` posture (implies it — same towers, same
+# artifact wire, same `run_split_eval` gates); never in the heal path.
+# Gates `examples/rule_embed_mattr_t1.rs` + `draft::rule_embed_mattr`.
+mattr_k_poc = ["rule_embed_poc", "katgpt-core/exact_mass_admit"]
+
 # Issue 097: linking↔retrieval-confusion PoC — does topological linking
 # (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
 # span-embedding clouds predict retrieval top-1 confusion between those
@@ -773,6 +782,12 @@ required-features = ["choice_scorer_poc"]
 [[example]]
 name = "rule_embed_poc"
 required-features = ["rule_embed_poc"]
+
+# Issue 133 T1 — the randomized-k supervision harness (control + uniform +
+# log_both arms over the 049_t01 span corpus; measurement-only).
+[[example]]
+name = "rule_embed_mattr_t1"
+required-features = ["mattr_k_poc"]
 
 [[example]]
 name = "nonergodic_driver_poc"
