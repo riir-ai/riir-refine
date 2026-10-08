@@ -211,6 +211,16 @@ pub struct PayloadHeader {
 /// mixed-fleet rule forbids.
 pub const SYNC_SIGNING_DOMAIN: &[u8] = b"riir-kat-sync-payload-v2";
 
+/// The T12 network-bound signing domain (riir-kat Issue 003 T12b, site 12 —
+/// the composer half of the dapps mirror): the schema's own history is at
+/// `-v2`, so the version component bumps by exactly ONE → `-v3`. The
+/// ledger instance id rides RAW between the domain and the `-v2` message
+/// tail (the `riir_kat::kat_protocol_v2` splice law — the two generations
+/// cannot drift). The WIRE HEADER IS UNCHANGED: the id is reconstructed
+/// server-side from the entry-injected `lid=` param, so a v3-signed
+/// payload ingests through the same shape gate as v2/v4.
+pub const SYNC_SIGNING_DOMAIN_V3: &[u8] = b"riir-kat-sync-payload-v3";
+
 impl PayloadHeader {
     /// The canonical signed message — every field a receiver gates or
     /// attributes on, in fixed little-endian layout:
@@ -241,6 +251,23 @@ impl PayloadHeader {
         m.extend_from_slice(self.origin.as_bytes());
         m.extend_from_slice(&commitment);
         Some(m)
+    }
+
+    /// The T12 network-bound signed message (riir-kat Issue 003 T12b, site
+    /// 12): `SYNC_SIGNING_DOMAIN_V3 ‖ ledger_id (32 raw) ‖ <the `-v2`
+    /// message after its domain>` — built through the shared
+    /// `kat_protocol_v2::ledger_bound` splice (the domain-prefix assertion
+    /// panics on a mismatch rather than signing wrong bytes). `None` under
+    /// the same totality contract as [`Self::signing_message`].
+    #[must_use]
+    pub fn signing_message_net(&self, ledger_id: &[u8; 32]) -> Option<Vec<u8>> {
+        let v2 = self.signing_message()?;
+        Some(riir_kat::kat_protocol_v2::ledger_bound(
+            SYNC_SIGNING_DOMAIN_V3,
+            ledger_id,
+            SYNC_SIGNING_DOMAIN,
+            &v2,
+        ))
     }
 }
 
@@ -360,6 +387,10 @@ pub struct SyncPayloadBuilder<'g, 'k> {
     /// The row→domain attribution table (v3 — Issue 103). Defaults to the
     /// compiled table; overridden only where bytes must be feature-stable.
     domains: RuleDomains,
+    /// The T12 network-bound signature arm (T12b, site 12). `None` = the
+    /// legacy `-v2` domain (every pre-T12b caller); `Some(id)` = the `-v3`
+    /// splice over THAT ledger instance.
+    ledger_id: Option<[u8; 32]>,
 }
 
 /// A built payload + its per-input-row outcomes (input order — zip with the
@@ -451,6 +482,7 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
             origin,
             signer,
             domains: RuleDomains::compiled(),
+            ledger_id: None,
         }
     }
 
@@ -460,6 +492,21 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
     #[must_use]
     pub fn with_rule_domains(mut self, domains: RuleDomains) -> Self {
         self.domains = domains;
+        self
+    }
+
+    /// Arm the T12 network-bound signature (riir-kat Issue 003 T12b, site
+    /// 12): `Some(id)` signs the envelope under `SYNC_SIGNING_DOMAIN_V3 ‖
+    /// id ‖ <v2 tail>` — bound to THAT ledger instance. `None` (the
+    /// default) keeps the legacy `-v2` signature byte-for-byte (the mixed
+    /// fleet's shape; every existing caller, the golden fixture and the
+    /// v1 fixture freeze included, is unaffected). The id comes from the
+    /// service-info read (`GET /`'s D8c additive field, parsed by
+    /// `kat_lease_client::parse_service_ledger_id`): present → v3, absent
+    /// → legacy (an old server has nothing to bind to).
+    #[must_use]
+    pub fn with_ledger_id(mut self, ledger_id: Option<[u8; 32]>) -> Self {
+        self.ledger_id = ledger_id;
         self
     }
 
@@ -531,10 +578,18 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
             signature_hex: String::new(),
         };
         // The signing message reads only fields already set — the signature
-        // itself is outside it.
-        let msg = header
-            .signing_message()
-            .expect("builder commitment is canonical 64-hex");
+        // itself is outside it. T12b: the network-bound `-v3` message when
+        // the ledger id is armed, the legacy `-v2` message otherwise — the
+        // server tries the bound domain FIRST and falls back, so both
+        // generations ingest in the mixed-fleet window.
+        let msg = match self.ledger_id {
+            Some(id) => header
+                .signing_message_net(&id)
+                .expect("builder commitment is canonical 64-hex"),
+            None => header
+                .signing_message()
+                .expect("builder commitment is canonical 64-hex"),
+        };
         header.signature_hex = hex_encode(&self.signer.sign(&msg).to_bytes());
         let head = serde_json::to_string(&header).expect("header serializes");
         let mut ndjson = String::with_capacity(row_bytes.len() + head.len() + 1);

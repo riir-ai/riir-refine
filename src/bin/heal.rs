@@ -1932,9 +1932,29 @@ fn push_mining_batch(
             return MinePush::Skipped;
         }
     };
-    let payload =
-        SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &signing_key).build(&rows);
+    // T12b (riir-kat Issue 003, site 12 — the client half): arm the
+    // network-bound signature when the service discloses its D8c ledger
+    // instance id. The read rides the SAME transport (one extra GET, the
+    // same bounded window); an old server answers without the field and
+    // the legacy `-v2` signature goes out unchanged (the mixed-fleet
+    // posture). A failed info read ALSO falls back to legacy — the push
+    // itself fails closed at the server if the posture demands v2 (426),
+    // never silently mis-signed.
+    let ledger_id = match transport.service_info() {
+        riir_refine::kat_lease_client::HttpResponse::Ok(body) => {
+            riir_refine::kat_lease_client::parse_service_ledger_id(&body)
+        }
+        _ => None,
+    };
+    let payload = SyncPayloadBuilder::new(&loaded.gate, SpanOrigin::OwnRepo, &signing_key)
+        .with_ledger_id(ledger_id)
+        .build(&rows);
     if sv {
+        if ledger_id.is_some() {
+            println!(
+                "sync: network-bound signature armed (ledger instance bound)"
+            );
+        }
         println!(
             "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
             payload.rows_included,
@@ -1953,6 +1973,26 @@ fn push_mining_batch(
     }
     match transport.post_sync(&payload.ndjson) {
         riir_refine::kat_lease_client::HttpResponse::Ok(body) => {
+            // T13's client-side half: a coded refusal arrives here as
+            // Ok(body) — the transport's `sync_refusal_or_status`
+            // passthrough (the burn-client convention). Read `error` FIRST:
+            // a refusal is QUEUED, never accepted (the outbox copy stays,
+            // the watermark does not advance), and the verbatim upgrade
+            // text (426 client_too_old) reaches the user — the only
+            // self-explanatory refusal an uncontrolled rig will ever see.
+            if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
+                if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
+                    let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
+                        .ok()
+                        .map_or_else(
+                            || "(queue write failed)".to_string(),
+                            |p| p.display().to_string(),
+                        );
+                    println!("sync: refused by the service — {err}");
+                    println!("sync: payload queued at {queued} (upgrade the client, then it submits with the next run)");
+                    return MinePush::QueuedOffline;
+                }
+            }
             let mut rows_new = 0u64;
             if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
                 rows_new = v

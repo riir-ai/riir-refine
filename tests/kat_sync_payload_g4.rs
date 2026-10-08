@@ -28,7 +28,7 @@
 use riir_refine::kat_redact::{
     scan_secrets, BlockReason, RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION,
 };
-use riir_refine::kat_sync_payload::{parse_rows, verify_payload, RowOutcome, SyncPayloadBuilder};
+use riir_refine::kat_sync_payload::{parse_rows, verify_payload, PayloadHeader, RowOutcome, SyncPayloadBuilder};
 use riir_refine::traj_store::TrajRowDoc;
 
 /// The shipped-policy shape (mirrors `riir-refine/.refine-sync-policy`).
@@ -371,4 +371,104 @@ fn g4_zero_secrets_in_row_lines_of_synced_payloads() {
         scan_secrets(row_lines).is_empty(),
         "synced row lines must be scan-clean:\n{row_lines}"
     );
+}
+
+// ── T12b: the network-bound signing arm (riir-kat Issue 003, site 12) ─────
+
+#[test]
+fn t12b_ledger_id_arms_the_v3_splice_and_none_keeps_v2_bytes() {
+    use riir_refine::kat_sync_payload::{SYNC_SIGNING_DOMAIN, SYNC_SIGNING_DOMAIN_V3};
+
+    let gate = RedactionGate::from_policy(shipped_policy());
+    let rows = vec![row("needless_return", "fn g() { return 1; }", "fn g() { 1 }")];
+    let signer = golden_signer();
+    let id = [0xD8u8; 32];
+
+    // The DEFAULT build is byte-identical to the pre-T12b shape (the
+    // v1 fixture freeze pins exactly this — the freeze stays green).
+    let legacy = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer).build_at(&rows, 7);
+    let head = legacy.ndjson.lines().next().unwrap();
+    assert!(
+        !head.contains("ledger_id"),
+        "the wire header is UNCHANGED — the ledger id never rides the payload"
+    );
+
+    // The armed build: same header SHAPE, signature under the `-v3` splice.
+    let bound = SyncPayloadBuilder::new(&gate, SpanOrigin::OwnRepo, &signer)
+        .with_ledger_id(Some(id))
+        .build_at(&rows, 7);
+    assert_eq!(
+        bound.ndjson.lines().next().unwrap().split("\"signature_hex\"").next().unwrap(),
+        head.split("\"signature_hex\"").next().unwrap(),
+        "identical bytes up to the signature (same commitment, same header)"
+    );
+    assert_ne!(legacy.ndjson, bound.ndjson, "the signatures differ (different domains)");
+
+    // THE SPLICE LAW at the sync site: v3-message = v3-domain ‖ id ‖ v2-tail.
+    // Verify through the SIGNED payload: parse the header (the wire shape is
+    // unchanged) and check the signature over the reconstructed splice —
+    // exactly what the dapps mirror does server-side with the entry-injected
+    // id. (refine's own `verify_payload` stays a legacy-only self-check; no
+    // production path self-verifies a v3 payload — build posts, the SERVER
+    // verifies.)
+    let head = bound.ndjson.lines().next().unwrap();
+    let h: PayloadHeader = serde_json::from_str(head).expect("the wire header parses");
+    let v2_msg = {
+        // Rebuild the legacy message from the parsed header (the mirror of
+        // dapps `signing_message`): domain ‖ scalars ‖ commitment.
+        let commitment = hex_to_32(&h.batch_commitment).expect("64-hex");
+        let mut m = Vec::new();
+        m.extend_from_slice(SYNC_SIGNING_DOMAIN);
+        m.extend_from_slice(&h.payload_version.to_le_bytes());
+        m.extend_from_slice(&h.redact_version.to_le_bytes());
+        m.extend_from_slice(&h.created_unix.to_le_bytes());
+        m.extend_from_slice(&h.rows_included.to_le_bytes());
+        m.extend_from_slice(&h.rows_blocked.to_le_bytes());
+        m.extend_from_slice(&(u32::try_from(h.origin.len()).unwrap_or(u32::MAX)).to_le_bytes());
+        m.extend_from_slice(h.origin.as_bytes());
+        m.extend_from_slice(&commitment);
+        m
+    };
+    let v3_msg = riir_refine::kat_protocol_v2::ledger_bound(
+        SYNC_SIGNING_DOMAIN_V3,
+        &id,
+        SYNC_SIGNING_DOMAIN,
+        &v2_msg,
+    );
+    use ed25519_dalek::{Signature, Verifier as _};
+    let vk = signer.verifying_key();
+    let sig_bytes = hex_to_64(&h.signature_hex).expect("128-hex");
+    vk.verify(&v3_msg, &Signature::from_bytes(&sig_bytes))
+        .expect("the signature is over the -v3 splice of the v2 message");
+    // And the legacy build still verifies under the legacy domain only.
+    let head2 = legacy.ndjson.lines().next().unwrap();
+    let h2: PayloadHeader = serde_json::from_str(head2).expect("the wire header parses");
+    let sig2 = hex_to_64(&h2.signature_hex).expect("128-hex");
+    vk.verify(&v2_msg, &Signature::from_bytes(&sig2))
+        .expect("the legacy signature is over the -v2 message");
+}
+
+/// Hex-decode 64 chars into 32 bytes (the test-side mirror of
+/// `decode_hex32`; the lib helper is private, and duplicating eight lines
+/// in a test beats widening the API for it).
+fn hex_to_32(s: &str) -> Option<[u8; 32]> {
+    if s.len() != 64 {
+        return None;
+    }
+    let mut out = [0u8; 32];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
+}
+
+fn hex_to_64(s: &str) -> Option<[u8; 64]> {
+    if s.len() != 128 {
+        return None;
+    }
+    let mut out = [0u8; 64];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&s[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(out)
 }
