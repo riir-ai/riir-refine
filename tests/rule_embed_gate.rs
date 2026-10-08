@@ -118,5 +118,10 @@ fn rule_embed_posture_holds_the_pinned_gates() {
     // in the test output (not a failure: uncovered rules fall back to the
     // baseline term by design).
     let total_rules = rep.baseline_train.labeled + rep.baseline_withheld.labeled;
-    assert_eq!(total_rules, 138, "labeled span population shifted");
+    // Re-pinned 2026-10-08 (measured 90/104 + 36/37, floors unchanged,
+    // regressions 0 — the full eprintln above carries the numbers): the
+    // labeled population grew 138 → 141 from corpus growth after the
+    // Issue-134 T3 re-arm; found red on develop by the Issue-133 T1
+    // Matryoshka harness session (its sanity check reproduces this run).
+    assert_eq!(total_rules, 141, "labeled span population shifted");
 }
