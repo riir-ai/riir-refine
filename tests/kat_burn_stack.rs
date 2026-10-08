@@ -103,9 +103,12 @@ impl BurnMock {
     }
 }
 
-/// A one-route HTTP mock: `POST /burn` → 200 with the documented accepted
-/// shape, echoing the reported total (what a monotone server does for a
-/// fresh report).
+/// A two-route HTTP mock: `GET /` → 200 with a readable devnet
+/// attestation (T10/T2: the money transports pre-flight the service-info
+/// read, and the T2 flow-level stamp judge shares the same cached read —
+/// one GET per process per host), `POST /burn` → 200 with the documented
+/// accepted shape, echoing the reported total (what a monotone server
+/// does for a fresh report).
 fn spawn_burn_mock() -> BurnMock {
     spawn_burn_mock_with("")
 }
@@ -127,16 +130,25 @@ fn spawn_burn_mock_with(extra_fields: &str) -> BurnMock {
                 continue;
             };
             cap.lock().unwrap().push(Captured {
-                path,
+                path: path.clone(),
                 body: body.clone(),
             });
-            let total = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()
-                .and_then(|v| v.get("burn_kat_total").and_then(serde_json::Value::as_u64))
-                .unwrap_or(0);
-            let reply = format!(
-                "{{\"accepted\":true,\"burn_kat_total\":{total},\"increment_kat\":{total},\"balance_micro\":99000000000000{extra_fields}}}"
-            );
+            // The attestation route: a fixed 64-hex id — readable, so the
+            // T2 judge and the T10 transport gate share one cached read.
+            let reply = if path == "/" {
+                format!(
+                    "{{\"service\":\"kat\",\"env\":\"devnet\",\"ledger_id\":\"{}\"}}",
+                    "ab".repeat(32)
+                )
+            } else {
+                let total = serde_json::from_str::<serde_json::Value>(&body)
+                    .ok()
+                    .and_then(|v| v.get("burn_kat_total").and_then(serde_json::Value::as_u64))
+                    .unwrap_or(0);
+                format!(
+                    "{{\"accepted\":true,\"burn_kat_total\":{total},\"increment_kat\":{total},\"balance_micro\":99000000000000{extra_fields}}}"
+                )
+            };
             let resp = format!(
                 "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
                 reply.len()
@@ -338,11 +350,15 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
     assert!(y > x, "the second run bills more (y={y}, x={x})");
 
     let captured = mock.captured();
-    assert_eq!(captured.len(), 1, "exactly one request. output:\n{text2}");
-    assert_eq!(captured[0].path, "/burn");
+    // T10/T2: the pre-flight GET / (readable attestation → cached, so the
+    // T2 flow-level judge and the transport gate share ONE) precedes the
+    // money POST.
+    assert_eq!(captured.len(), 2, "exactly one push. output:\n{text2}");
+    assert_eq!(captured[0].path, "/");
+    assert_eq!(captured[1].path, "/burn");
 
     let v: serde_json::Value =
-        serde_json::from_str(&captured[0].body).expect("the request body must be JSON");
+        serde_json::from_str(&captured[1].body).expect("the request body must be JSON");
     let sent = v
         .get("burn_kat_total")
         .and_then(serde_json::Value::as_u64)
@@ -427,7 +443,12 @@ fn a_split_report_names_the_trial_credit_draw() {
     // ONE run bills exactly ONE_RUN_MICRO_KAT = one whole wire KAT, so
     // the first run already pushes.
     let captured = mock.captured();
-    assert_eq!(captured.len(), 1, "the run must push. output:\n{text}");
+    assert_eq!(
+        captured.len(),
+        2,
+        "the run must push (pre-flight GET / + POST). output:\n{text}"
+    );
+    assert_eq!(captured[1].path, "/burn");
 
     // The split line rides the report line (2 `burn sync:` lines total).
     assert_eq!(burn_sync_lines(&text), 2, "output:\n{text}");
@@ -459,7 +480,11 @@ fn a_run_with_no_new_burn_sends_nothing() {
     let mock = spawn_burn_mock();
     let (code2, text2) = heal(&dir, &mock.base(), &[]);
     assert_eq!(code2, Some(0), "output:\n{text2}");
-    assert_eq!(mock.captured().len(), 1, "the drain push");
+    assert_eq!(
+        mock.captured().len(),
+        2,
+        "the drain push (pre-flight GET / + POST)"
+    );
     let ack = ack_of(&dir).expect("drained");
     assert_eq!(
         ack.burn_kat_total,

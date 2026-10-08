@@ -259,6 +259,10 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
         first_commitment_hex: None,
         tuna_balance_micro: None,
         tuna_expires_unix: None,
+        // T2 stamp fields (riir-kat Issue 003): additive; the gate flows
+        // these tests exercise read none of them.
+        service_host: None,
+        ledger_id: None,
     };
     depleted.save(&ack_path).expect("seed depleted ack");
 
@@ -352,6 +356,10 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
         first_commitment_hex: None,
         tuna_balance_micro: None,
         tuna_expires_unix: None,
+        // T2 stamp fields (riir-kat Issue 003): additive; the gate flows
+        // these tests exercise read none of them.
+        service_host: None,
+        ledger_id: None,
     };
     ack.save(&ack_path).expect("seed depleted ack");
 
