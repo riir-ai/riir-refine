@@ -58,7 +58,11 @@ and `kat_promotion` (score_bench/domain).
 
 ## Drift ledger (target vs actual)
 
-**None.** Otherwise clean (surfaces clean at the 2026-08-19 guard run; the
+**None.** Row D1 (the reflexer-vessel allowlist cell shape, Issue 154, found
+by the 170th boundary run 2026-10-08) fixed at filing — backticked per the
+allowlist() convention; closed same day.
+
+Otherwise clean (surfaces clean at the 2026-08-19 guard run; the
 2026-08-25 Proposal-005 service-plane row closed with Issue 041 — home
 resolved to `../riir-dapps`, client half now OWNED by `../riir-kat` per
 issue 088, allowlist updated same commit).
