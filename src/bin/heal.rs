@@ -70,6 +70,10 @@ enum KatCommand {
     /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
     /// atomic swap + the visible charge line.
     Update,
+    /// Issue 153 T2: the verified binary self-update (fetch the release
+    /// archive, verify SHA256SUMS, backup-swap). NOT the corpus lane — that
+    /// is `update` above; the names are deliberately distinct.
+    Upgrade,
     /// Bidirectional (T1.6): push redacted batches + pull the lease.
     Sync,
     /// Compose + submit (or queue) a payment claim.
@@ -1726,6 +1730,164 @@ fn run_kat_update() {
     }
     if let Err(e) = charge.save() {
         eprintln!("corpus lease: could not persist the charge ledger: {e}");
+    }
+}
+
+// ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
+
+/// The run-start legs (T1 alert + T2 hands-free upgrade + T4 auto corpus).
+/// Every leg fail-soft — a network-less run must never turn into a nonzero
+/// exit here. A feature-less build compiles the whole fn to nothing (the
+/// caller skips it anyway on the same gates).
+fn run_update_surface_hooks(paths: &[PathBuf]) {
+    #[cfg(feature = "update_check")]
+    {
+        let root = resolve_heal_root(paths);
+        let lines = riir_refine::update_check::check_for_alert(
+            &root,
+            &riir_refine::update_check::GitHubLatest::new(),
+        );
+        let newer = !lines.is_empty();
+        for line in &lines {
+            eprintln!("{line}");
+        }
+        // T2: the hands-free apply is OPT-IN — a binary that replaces itself
+        // without the env set would be a consent violation, full stop. The
+        // CURRENT run keeps the old binary (the swap renames, it cannot
+        // relaunch us); the message says so.
+        if newer && riir_refine::update_check::auto_upgrade_enabled() {
+            eprintln!("auto-upgrade: RIIR_REFINE_AUTO_UPGRADE=1 — applying…");
+            match riir_refine::update_check::upgrade(
+                &riir_refine::update_check::GitHubLatest::new(),
+                &riir_refine::update_check::HttpDownload::new(),
+                env!("CARGO_PKG_VERSION"),
+            ) {
+                Ok(report) => eprintln!(
+                    "auto-upgrade: {} → {} installed — THIS run keeps the old binary; rerun to pick it up (rollback: {})",
+                    report.from_version,
+                    report.to_version,
+                    report.backup.display()
+                ),
+                Err(e) => eprintln!("auto-upgrade: failed ({e}) — staying on this build"),
+            }
+        }
+    }
+    #[cfg(feature = "kat_transport")]
+    {
+        let _ = paths; // the corpus leg resolves the root itself
+        maybe_auto_corpus();
+    }
+    #[cfg(not(any(feature = "update_check", feature = "kat_transport")))]
+    {
+        let _ = paths;
+    }
+}
+
+/// Issue 153 T4: `RIIR_REFINE_AUTO_CORPUS=1` — the lease refresh (`update`)
+/// runs itself at run start, at most once per 12h. The lease charge is the
+/// tier gate HONORED, not bypassed: out-of-KAT and refused postures skip
+/// inside `run_update_phase` exactly as the explicit command does. One
+/// bookkeeping file records the ATTEMPT, not the success — a flaky network
+/// must not re-timeout on every invocation. Silent when the corpus is
+/// current (NotModified) — a run start is not a status page.
+#[cfg(feature = "kat_transport")]
+fn maybe_auto_corpus() {
+    /// The auto-corpus bookkeeping window (Issue 153 T4).
+    const AUTO_CORPUS_WINDOW_SECS: i64 = 12 * 3600;
+    if std::env::var("RIIR_REFINE_AUTO_CORPUS").as_deref() != Ok("1") {
+        return;
+    }
+    let root = resolve_heal_root(&[]);
+    let stamp_path = root.join(".refine").join("corpus_auto.json");
+    #[derive(serde::Deserialize, serde::Serialize)]
+    struct AutoStamp {
+        last_attempt_unix: i64,
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    if let Ok(text) = std::fs::read_to_string(&stamp_path) {
+        if let Ok(s) = serde_json::from_str::<AutoStamp>(&text) {
+            if now - s.last_attempt_unix < AUTO_CORPUS_WINDOW_SECS {
+                return;
+            }
+        }
+    }
+    if let Some(dir) = stamp_path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(
+        &stamp_path,
+        serde_json::to_vec(&AutoStamp {
+            last_attempt_unix: now,
+        })
+        .unwrap_or_default(),
+    );
+
+    // The same legs run_kat_update runs — a startup-capped budget (the
+    // explicit command's 30s generous budget would stall every run start).
+    use riir_refine::kat_lease_client::{
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+    };
+    let store = LeaseStore::open(&root);
+    let mut charge = LeaseCharge::open(&store);
+    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let transport = HttpLeaseTransport::new(&url, 4);
+    let deadline = Some(std::time::Instant::now() + std::time::Duration::from_secs(6));
+    let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
+    match outcome.status {
+        riir_refine::kat_lease_client::UpdateStatus::NotModified => {}
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+            eprintln!(
+                "auto-corpus: {}",
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+            );
+            eprintln!(
+                "auto-corpus: epoch {epoch} installed — the retrieval index rebuilds on the next run"
+            );
+        }
+        riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
+            eprintln!("auto-corpus: skipped — {reason}");
+        }
+        riir_refine::kat_lease_client::UpdateStatus::Failed(e) => {
+            eprintln!("auto-corpus: failed ({e}) — proceeding on the local corpus");
+        }
+    }
+    if let Err(e) = charge.save() {
+        eprintln!("auto-corpus: could not persist the charge ledger: {e}");
+    }
+}
+
+/// Issue 153 T2: `cargo refine upgrade` — the verified binary self-update.
+/// The explicit command IS the consent; every refusal is loud and names its
+/// leg. Fetch → pick asset → verify SHA256SUMS → extract → backup-swap; the
+/// running process stays the old binary until the next invocation.
+#[cfg(feature = "update_check")]
+fn run_self_upgrade() {
+    eprintln!("upgrade: checking the latest release…");
+    let report = riir_refine::update_check::upgrade(
+        &riir_refine::update_check::GitHubLatest::new(),
+        &riir_refine::update_check::HttpDownload::new(),
+        env!("CARGO_PKG_VERSION"),
+    );
+    match report {
+        Ok(r) => {
+            println!("upgraded: cargo-refine {} → {}", r.from_version, r.to_version);
+            println!("  installed at {}", r.new_exe.display());
+            println!(
+                "  old binary kept at {} (delete it when happy)",
+                r.backup.display()
+            );
+            println!("  THIS run is still the old binary — rerun to pick up the new one");
+        }
+        Err(riir_refine::update_check::UpdateError::UpToDate(v)) => {
+            println!("already current: cargo-refine {v} is the latest release");
+        }
+        Err(e) => {
+            eprintln!("upgrade: failed — {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -4410,6 +4572,14 @@ USAGE:
                     repo-local charge ledger — this repo's burn + balance
                     projection. Verifies key↔record agreement (tamper
                     evidence). No $ figures (caveats #12/#15).
+    upgrade         Issue 153: the verified BINARY self-update (fetch the
+                    release archive + SHA256SUMS, verify, backup-swap). The
+                    binary carries the compiled corpus — upgrading it is how
+                    the compiled rules move. Needs --features update_check
+                    (the release set carries it). RIIR_REFINE_AUTO_UPGRADE=1
+                    applies pending upgrades at run start; RIIR_REFINE_
+                    AUTO_CORPUS=1 auto-runs the lease refresh (update) at run
+                    start, at most once per 12h, charge-gated as usual.
     update          T1.6 corpus lease refresh (needs --features kat_transport):
                     GET /lease with If-None-Match → 304 (up to date, no
                     charge) or 200 → manifest verify (tamper → reject, fall
@@ -5518,14 +5688,16 @@ fn parse_args() -> Args {
                 eprintln!("unknown flag {flag:?}");
                 usage();
             }
-            "login" | "account" | "update" | "sync" | "claim" | "stake" | "unstake" | "vote"
-            | "pay" | "topup" | "faucet" | "wetrun" | "config" | "replay"
+            "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
+            | "unstake" | "vote" | "pay" | "topup" | "faucet" | "wetrun" | "config"
+            | "replay"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
                     "login" => KatCommand::Login,
                     "account" => KatCommand::Account,
                     "update" => KatCommand::Update,
+                    "upgrade" => KatCommand::Upgrade,
                     "sync" => KatCommand::Sync,
                     "stake" => KatCommand::Stake,
                     "unstake" => KatCommand::Unstake,
@@ -8456,6 +8628,17 @@ fn main() {
         std::sync::atomic::Ordering::Relaxed,
     );
 
+    // ── Issue 153 T1/T2/T4: the run-start surface — update alert, hands-free
+    // upgrade, auto corpus refresh. Order matters and is deliberate:
+    // upgrade BEFORE the corpus refresh (a swapped binary wants the fresh
+    // corpus too, and the refresh re-resolves nothing else), alert lines
+    // always to stderr, every leg fail-soft — a network-less run must never
+    // turn into a nonzero exit here. `upgrade` (the explicit command) and
+    // `--version` (which alerts post-output in its own arm) skip this hook.
+    if args.command != Some(KatCommand::Upgrade) && !args.version {
+        run_update_surface_hooks(&args.paths);
+    }
+
     // ── riir-dapps Plan 023: `config` — the LOCAL service-url surface ────
     // Ungated (the kat_mining_consent precedent): a local record must be
     // writable/readable in EVERY feature build, including before `login`.
@@ -8463,6 +8646,20 @@ fn main() {
     if args.command == Some(KatCommand::Config) {
         run_kat_config(args.config_set, args.config_url.as_deref());
         return;
+    }
+
+    // ── Issue 153 T2: `upgrade` — the verified binary self-update ────
+    // Dispatched BEFORE the kat_service block: the upgrade lane ships on its
+    // OWN feature (the release set carries it), not on the service plane —
+    // refusing it with "needs kat_service" would name the wrong remedy.
+    if args.command == Some(KatCommand::Upgrade) {
+        #[cfg(feature = "update_check")]
+        {
+            run_self_upgrade();
+            return;
+        }
+        #[cfg(not(feature = "update_check"))]
+        riir_refine::build_stamp::refuse("upgrade", &["update_check"]);
     }
 
     // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
@@ -8474,6 +8671,9 @@ fn main() {
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
+            // Exhaustiveness only — `upgrade` is dispatched (on its own
+            // feature, NOT kat_service) before this match ever runs.
+            KatCommand::Upgrade => unreachable!("upgrade is dispatched before the kat match"),
             // Issue 112 T4: the local export sends nothing, so it needs no
             // transport — it dispatches ahead of the transport-gated push.
             KatCommand::Sync if args.sync_export.is_some() => {
@@ -8543,7 +8743,7 @@ fn main() {
     #[cfg(not(feature = "kat_service"))]
     if args.command.is_some() {
         riir_refine::build_stamp::refuse(
-            "login/account/update/sync/claim/stake/unstake/vote/pay",
+            "login/account/update/upgrade/sync/claim/stake/unstake/vote/pay",
             &["kat_service"],
         );
     }
@@ -8693,6 +8893,19 @@ fn main() {
         // unchanged `cargo-refine <version>`.
         for line in riir_refine::build_stamp::version_lines() {
             println!("{line}");
+        }
+        // Issue 153 T1: the version query is where an upgrade-minded user
+        // looks — alert AFTER the version block (never delay or precede it),
+        // never auto-apply (a read stays a read; the next real run applies).
+        #[cfg(feature = "update_check")]
+        {
+            let root = resolve_heal_root(&args.paths);
+            for line in riir_refine::update_check::check_for_alert(
+                &root,
+                &riir_refine::update_check::GitHubLatest::new(),
+            ) {
+                eprintln!("{line}");
+            }
         }
         return;
     }

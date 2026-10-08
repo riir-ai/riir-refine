@@ -217,6 +217,11 @@ pub mod compile_oracle;
 #[cfg(feature = "fix_verify")]
 pub mod fix_verify;
 
+// Issue 153: the CLI version alert + the verified binary self-update. The
+// alert is the module's whole job when the feature is off — compiled out.
+#[cfg(feature = "update_check")]
+pub mod update_check;
+
 // Plan 336 T4.4: the L0-L3 → L4 composition seam. Opt-in and inert without an
 // installed fallback; the adapter lives in riir-train (needs the 27B GGUF + a
 // GPU). Splitting the contract from the adapter is what makes G4 measurable

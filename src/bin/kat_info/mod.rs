@@ -78,8 +78,11 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
         let _ = &acct32;
     }
 
-    // ── the local work block (always) ───────────────────────────────────
+    // ── the local work block (always) ───────────────────────────────────────────
     local_section(paths);
+
+    // ── Issue 153 T3: the corpus surface (always local; cache-only reads) ──
+    corpus_section(paths);
 }
 
 /// The service/wallet/staking/mining reads. One bounded agent per plane
@@ -378,6 +381,84 @@ fn local_section(paths: &[PathBuf]) {
             kat(balance_micro)
         ),
     }
+}
+
+/// Issue 153 T3: the corpus section — what rules THIS binary carries, what
+/// corpus epoch the lease lane has installed, and whether a newer release
+/// exists. READ-ONLY in the strongest sense: the release verdict comes from
+/// the CACHE only (`.refine/update_check.json`, written by the run-start
+/// alert / `--version`) — `--info` never touches the network; forcing a
+/// fresh check is `cargo refine --version` or `upgrade`.
+fn corpus_section(paths: &[PathBuf]) {
+    let root = crate::resolve_heal_root(paths);
+    println!("CORPUS");
+
+    // The compiled-in rule counts — the corpus SHIPS IN the binary, so
+    // "stale corpus" is first a function of the binary's age.
+    #[cfg(feature = "clippy_lints")]
+    {
+        let n = riir_refine::domains::clippy_lints::corpus::build_seed_corpus().entries.len();
+        println!("  compiled:   clippy_lints {n} rules");
+    }
+    #[cfg(not(feature = "clippy_lints"))]
+    println!("  compiled:   clippy_lints (not compiled in this build)");
+    #[cfg(feature = "rust_perf")]
+    {
+        let n = riir_refine::domains::rust_perf::corpus::build_perf_seed_corpus().entries.len();
+        println!("  compiled:   rust_perf    {n} rules");
+    }
+    #[cfg(not(feature = "rust_perf"))]
+    println!("  compiled:   rust_perf    (not compiled in this build)");
+
+    // The lease-corpus epoch — the service-synced half (`cargo refine
+    // update` pulls it; epochs carry the fleet-mined rule/replay sets).
+    #[cfg(feature = "kat_service")]
+    {
+        let store = riir_refine::kat_lease_client::LeaseStore::open(&root);
+        match store.current_epoch() {
+            Some(epoch) => println!("  lease:      corpus epoch {epoch} installed"),
+            None => println!(
+                "  lease:      no corpus epoch installed yet — `cargo refine update` pulls one"
+            ),
+        }
+    }
+    #[cfg(not(feature = "kat_service"))]
+    println!("  lease:      (the corpus lease lane needs a kat_service build)");
+
+    // The binary-freshness verdict — cache read ONLY, never a network call.
+    #[cfg(feature = "update_check")]
+    {
+        let installed = env!("CARGO_PKG_VERSION");
+        let cache = riir_refine::update_check::load_cache(
+            &riir_refine::update_check::cache_path(&root),
+        );
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        match riir_refine::update_check::decide(cache.as_ref(), now, installed) {
+            riir_refine::update_check::Plan::Alert(latest) => {
+                let detail = latest
+                    .detail
+                    .as_deref()
+                    .map(|d| format!(" — {d}"))
+                    .unwrap_or_default();
+                println!(
+                    "  release:    STALE — {} is out (installed {installed}){detail}",
+                    latest.version
+                );
+                println!("              `cargo refine upgrade` applies it (or {})", latest.url);
+            }
+            riir_refine::update_check::Plan::Fetch => println!(
+                "  release:    (no fresh check yet — `cargo refine --version` checks now)"
+            ),
+            riir_refine::update_check::Plan::Silent => {
+                println!("  release:    current (installed {installed}, cache fresh)");
+            }
+        }
+    }
+    #[cfg(not(feature = "update_check"))]
+    println!("  release:    (the update lane needs a update_check build — the release set carries it)");
 }
 
 #[cfg(test)]

@@ -82,6 +82,11 @@ quote = "1"
 # cf_workers_ai + groq_first live here and name ureq directly.
 ureq = { version = "2.9", optional = true, features = ["json"] }
 
+# Issue 153 T2: the self-update verifies the downloaded archive against the
+# release's SHA256SUMS (the dist format is sha256 — the house blake3 rule
+# applies to OUR storage, not to verifying a third-party-format manifest).
+sha2 = { version = "0.10", optional = true, default-features = false }
+
 # (issue 088: the ssh-key row moved to riir-kat with the account + stake
 # clients — riir-refine no longer names ssh_key anywhere.)
 
@@ -502,6 +507,12 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # src/kat_lease_client.rs §golden).
 kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]
 
+# Issue 153: the CLI version alert + the verified binary self-update (`cargo
+# refine upgrade`) + the corpus-freshness surface in --info. Reuses the tree's
+# ureq (no new HTTP client); sha2 verifies the release SHA256SUMS (dist
+# format). Opt-in here but IN the release set — a shipped binary without it
+# is exactly the "old version with no update notice" this exists to end.
+
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
 # ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF
 # and runs a CPU ternary forward pass per embedded text. NEVER default; the
@@ -685,6 +696,7 @@ self_evolve = []
 # structural state; the vocabulary itself (gates, review classes, chain
 # state machine) is UNGATED in src/structural_admission.rs. Activation of
 # any auto-serve kind stays a separate owner call.
+update_check = ["dep:ureq", "dep:sha2"]
 structural_admission = []
 
 [[bench]]
