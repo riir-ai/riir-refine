@@ -2,6 +2,17 @@
 
 **Status:** PARTIALLY RESOLVED — **option 3 LANDED 2026-10-07** (the build-commit stamp: `--version` prints `build: <hash>[-dirty]|unknown`; commit `0a4c010c`; the standing shadow check is the hash-vs-HEAD comparison below). Options 1/2 (the box's PATH/Cellar state) REMAIN OPEN OWNER CALLS — until decided, the interim absolute-path ruling stands. Found 2026-10-06 by the dapps plan-045 verdict round 2 during the B7 privacy-cut live smoke · Machine: the M3 box. **STANDING CHECK FIRED 2026-10-08 (M3, idle-loop hygiene): the shadow is LIVE and the maintained binary was STALE — both halves in one reading.** Bare `cargo refine --version` resolved `/opt/homebrew/bin/cargo-refine` (Cellar 0.2.1 tap build) and printed NO `build:` line — the exact detector; `which -a` shows Homebrew FIRST, `~/.cargo/bin` second. The absolute-path read showed the maintained binary at `build: 6ee548ca3cfd` ≠ HEAD `32d0ac3458b6` (stale maintained binary — the shadow's danger WITHOUT the tap: even the symlink path was behind). Remedy applied per the issue's own law: rebuilt in place at the pinned release set (`latent_retrieval,kat_service,kat_transport,fix_verify,update_check`), stamp now `32d0ac3458b6` = HEAD ✓. Session hygiene note: every healer invocation this session used the absolute path. The tap build's silence is now a POSITIVE detector: no `build:` line ⇒ pre-2026-10 binary ⇒ not the maintained one.
 
+**STANDING CHECK FIRED 2026-10-08 (4090 box, session hygiene, post-T8-CMMA):** the maintained
+binary `~/.cargo/bin/cargo-refine.exe` was a manual COPY (Windows — no symlink convention) at
+`07:43` today, pre-dating the build stamp (printed NO `build:` line) and missing `update_check`
+(release set read 4 of 5). Remedy per the same law: `git pull --ff-only` to `c3cf1865`, rebuild
+at the pinned release set (7m05s), COPY over the PATH binary. Verified by direct invocation:
+`build: c3cf186526dc` = HEAD ✓, full 5-feature set. ⚠ Cosmetic git-bash quirk on this box:
+`cargo refine --version` (the cargo SUBCOMMAND form) prints only the last line of the block —
+read the stamp via the DIRECT binary path (`~/.cargo/bin/cargo-refine.exe --version`), which
+prints all four lines. No tap/shadow on this box (Homebrew is macOS-only); the failure class
+here was pure staleness of the manual copy.
+
 ## Option 3 — landed (2026-10-07, the Claude-verdict REVISE designs, rounds 1+2)
 
 - `build.rs` + `build_commit.rs` (shared module — build scripts cannot host tests; `tests/build_commit_logic.rs` compiles it): `capture_commit` = `git rev-parse --short=12 HEAD` + a `-dirty` suffix scoped to **compiled paths only** (`src`, `build.rs`, `build_commit.rs`, `Cargo.toml`, `Cargo.lock`, plus the embedded-asset dirs `assets` and `tests/fixtures` — both are `include_bytes!`/`include_str!`'d into the binary; `--untracked-files=no` — a bare status in this shared worktree is always dirty from sibling `.plans`/`.issues` edits and would say nothing). Any git failure → the honest `unknown`, never a build error.
