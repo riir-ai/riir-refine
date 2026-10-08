@@ -229,16 +229,24 @@ pub fn release_set_from_workflow(workflow: &str) -> Result<Vec<String>, String> 
 mod tests {
     use super::*;
 
-    /// The stamp is non-empty in any real build: `default` alone supplies
-    /// six features, and a build script that stopped exporting would leave
-    /// this empty — a stamp that silently says nothing is worse than none,
-    /// because `--version` would print a confident blank set.
+    /// The stamp is non-empty in any feature-bearing build: `default` alone
+    /// supplies six features, and a build script that stopped exporting would
+    /// leave this empty — a stamp that silently says nothing is worse than
+    /// none, because `--version` would print a confident blank set.
+    /// EXCEPTION (the flag-OFF posture, P45): `--no-default-features` with no
+    /// extra features exports zero `CARGO_FEATURE_*` vars, so the empty stamp
+    /// is the CORRECT projection there — the assert then requires the
+    /// default-on witness to be off, so a broken build script still fails at
+    /// every posture someone actually builds.
     #[test]
     fn the_stamp_is_populated() {
-        assert!(
-            !COMPILED_FEATURES.is_empty(),
-            "build.rs must export the compiled feature set"
-        );
+        if COMPILED_FEATURES.is_empty() {
+            assert!(
+                !cfg!(feature = "clippy_lints"),
+                "empty stamp with clippy_lints on = build.rs stopped exporting"
+            );
+            return;
+        }
         // Sorted + comma-separated, no stray whitespace.
         let v = compiled();
         let mut sorted = v.clone();
