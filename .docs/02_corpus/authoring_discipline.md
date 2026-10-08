@@ -1,8 +1,9 @@
 # Corpus authoring discipline — the meta-rule (how rules get authored)
 
 > **What this is:** the explicit meta-rule guide consulted at mining time —
-> Library Drift's "meta-skill" ([Issue 102](../../.issues/102_corpus_lifecycle_library_drift.md)
-> T5; source arXiv:2609.11873 §3.5/§6 adopting arXiv:2605.19576). It
+> Library Drift's "meta-skill" (Issue 102 T5, closed 2026-10-08 — durable
+> record in [HISTORY.md](../../HISTORY.md); source arXiv:2609.11873 §3.5/§6
+> adopting arXiv:2605.19576). It
 > formalizes practice that already exists in the batch protocol, the
 > `distill` skill, and the corpus records — nothing here is new policy.
 > When this file and a skill disagree, the skill wins and this file gets

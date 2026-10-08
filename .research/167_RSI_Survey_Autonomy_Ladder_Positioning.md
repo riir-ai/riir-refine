@@ -1,6 +1,6 @@
 # Research 167 — The RSI survey (B0–L5) consumed as a healer positioning audit
 
-**Status:** DISTILLED — positioning record + [Issue 102](../.issues/102_corpus_lifecycle_library_drift.md) filed (corpus lifecycle / Library Drift adoption). No new primitive claimed; the taxonomy and the lifecycle mechanism are both published prior art we consume.
+**Status:** DISTILLED — positioning record + Issue 102 filed and CLOSED 2026-10-08 (corpus lifecycle / Library Drift adoption; file removed per the noise-reduction rule — durable record in `../HISTORY.md`). No new primitive claimed; the taxonomy and the lifecycle mechanism are both published prior art we consume.
 
 **Date:** 2026-09-13
 **Source:** [arXiv:2609.11873](https://arxiv.org/abs/2609.11873) — "The Last AI Built by Humans: Toward Genuine Recursive Self-Improvement" (Duan, Liu, Tang et al., SJTU + Theseus Labs + Tsinghua + ByteDance + ModelBest + Xiaohongshu + Humanlaya + Agent-Native Research Lab + Shanghai AI Lab; 2026-09-10, 75pp; 491 papers + 72 companies surveyed)
