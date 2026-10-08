@@ -346,6 +346,10 @@ pub use riir_kat::kat_units;
 // rule) — the member compiles them for us at default features, and root
 // consumers reach them through these ungated re-exports.
 pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
+// The state-stamp module (riir-kat Issue 003 T1/T2): feature-free protocol
+// tier — the per-net dir seam + the stamp judge are consumed by the ungated
+// consent plane (--unmine's outbox dir) and the gated money plane alike.
+pub use riir_kat::kat_state_stamp;
 
 // riir-dapps Proposal 004 Half 1: the work-stats sharing consent — the
 // THIRD consent plane beside mining, deny-by-default (Unset refuses; only

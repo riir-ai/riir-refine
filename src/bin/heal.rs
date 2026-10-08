@@ -272,6 +272,9 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
 /// overrides the exact file. `meter` is the just-opened meter's PRE-session
 /// state — the recovery path (missing/corrupt charge ledger → watermark = the
 /// meter cumulative at open) is only correct against a pre-session reading.
+/// T7 (riir-kat Issue 003): the book is PER-NET (`KatCharge::open_net`) —
+/// the net the current resolution names, so each ledger's cost basis is
+/// its own; the env override stays the exact-file posture.
 #[cfg(feature = "kat_service")]
 fn open_kat_charge(
     paths: &[PathBuf],
@@ -285,8 +288,9 @@ fn open_kat_charge(
         ));
     }
     let root = resolve_heal_root(paths);
-    Some(riir_refine::kat_meter::KatCharge::open(
+    Some(riir_refine::kat_meter::KatCharge::open_net(
         &root,
+        &riir_refine::kat_lease_client::service_url_for_command(),
         meter.state(),
     ))
 }
@@ -550,7 +554,11 @@ fn survey_fixable_count(paths: &[PathBuf]) -> Option<usize> {
 /// `cargo refine sync` drains), 0 when the dir does not exist yet.
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn mining_queued_batches() -> u32 {
-    let outbox = resolve_heal_root(&[]).join(".refine").join("outbox");
+    let outbox = riir_refine::kat_state_stamp::net_state_dir_for_url(
+        &resolve_heal_root(&[]),
+        &riir_refine::kat_lease_client::service_url_for_command(),
+    )
+    .join("outbox");
     u32::try_from(
         std::fs::read_dir(&outbox).map_or(0, |rd| {
                 rd.filter_map(std::result::Result::ok)
@@ -1109,9 +1117,13 @@ fn run_unmine(purge_server: bool) {
     //    a tool that silently deletes the evidence of what it queued is
     //    not auditable; they are inert while opted out and the user
     //    decides).
-    let watermark = resolve_heal_root(&[])
-        .join(".refine")
-        .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
+    // The watermark goes (the pending-unsynced estimator reads it) — the
+    // PER-NET one first (T1), then the pre-T1 flat one if it lingers.
+    let url = riir_refine::kat_lease_client::service_url_for_command();
+    let watermark = riir_refine::kat_pending_estimator::SyncWatermark::net_path(
+        &resolve_heal_root(&[]),
+        &url,
+    );
     match std::fs::remove_file(&watermark) {
         Ok(()) => println!(
             "UNSYNC: cleared the sync watermark ({})",
@@ -1302,9 +1314,10 @@ fn run_unmine_purge() {
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
                 Err(e) => eprintln!("  purge: could not clear the outbox: {e}"),
             }
-            let watermark = resolve_heal_root(&[])
-                .join(".refine")
-                .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
+            let watermark = riir_refine::kat_pending_estimator::SyncWatermark::net_path(
+                &resolve_heal_root(&[]),
+                &riir_refine::kat_lease_client::service_url_for_command(),
+            );
             match std::fs::remove_file(&watermark) {
                 Ok(()) => println!("  watermark cleared: {}", watermark.display()),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -1344,15 +1357,22 @@ fn run_unmine_purge() {
     }
 }
 
-/// The `.refine/outbox/` dir `run_kat_sync`'s `queue_outbox` writes into,
-/// resolved the SAME way (`resolve_heal_root` → `.refine/outbox`) so the path
-/// `--unmine` names is the path a queued batch actually sits at. No cfg
+/// The `.refine/net/<resolved>/outbox/` dir `run_kat_sync`'s `queue_outbox`
+/// writes into (T1: per-net — rows queued for net X live in X's dir and
+/// can only drain to X), resolved the SAME way the queue resolves it
+/// (`resolve_heal_root` + the resolved service URL →
+/// `.refine/net/<key>/outbox`) so the path `--unmine` names is the path a
+/// queued batch actually sits at. No cfg
 /// fallback: `resolve_heal_root` compiles behind
 /// `latent_retrieval`/`kat_service` and this binary's `required-features`
 /// include BOTH, so a build of `cargo-refine` without it cannot exist — an
 /// unreachable cfg arm would be an untested claim, not extra safety.
 fn unmine_outbox_dir() -> PathBuf {
-    resolve_heal_root(&[]).join(".refine").join("outbox")
+    riir_refine::kat_state_stamp::net_state_dir_for_url(
+        &resolve_heal_root(&[]),
+        &riir_refine::kat_lease_client::service_url_for_command(),
+    )
+    .join("outbox")
 }
 
 /// The login-outcome lines, shared by `cargo refine login` and `--mine`'s
@@ -1485,7 +1505,11 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // arg or cwd) when one exists. Per-repo by design (Plans 023/024) until
     // the server aggregates at Phase 1.
     let root = resolve_heal_root(paths);
-    let charge_path = root.join(".refine").join("kat_charge.json");
+    let charge_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
+        &root,
+        &riir_refine::kat_lease_client::service_url_for_command(),
+    )
+    .join("kat_charge.json");
     let charge = std::fs::read_to_string(&charge_path).ok().and_then(|text| {
         match serde_json::from_str::<ChargeState>(&text) {
             Ok(charge) => Some(charge),
@@ -1699,9 +1723,9 @@ fn run_kat_update() {
     };
 
     let root = resolve_heal_root(&[]);
-    let store = LeaseStore::open(&root);
-    let mut charge = LeaseCharge::open(&store);
     let url = riir_refine::kat_lease_client::service_url_for_command();
+    let store = LeaseStore::open_net(&root, &url);
+    let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 30);
     let current = store.current_epoch().unwrap_or(0);
     let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
@@ -1830,9 +1854,9 @@ fn maybe_auto_corpus() {
     use riir_refine::kat_lease_client::{
         run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
-    let store = LeaseStore::open(&root);
-    let mut charge = LeaseCharge::open(&store);
     let url = riir_refine::kat_lease_client::service_url_for_command();
+    let store = LeaseStore::open_net(&root, &url);
+    let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 4);
     let deadline = Some(std::time::Instant::now() + std::time::Duration::from_secs(6));
     let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
@@ -2168,7 +2192,7 @@ fn push_mining_batch(
             // self-explanatory refusal an uncontrolled rig will ever see.
             if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
                 if let Some(err) = v.get("error").and_then(serde_json::Value::as_str) {
-                    let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
+                    let queued = queue_outbox(&root, url, &payload.ndjson, &payload.commitment)
                         .ok()
                         .map_or_else(
                             || "(queue write failed)".to_string(),
@@ -2245,9 +2269,10 @@ fn push_mining_batch(
             // no longer "pending-unsynced").
             let wm = riir_refine::kat_pending_estimator::SyncWatermark::from_payload(&payload);
             if let Err(e) = wm.save(
-                &root
-                    .join(".refine")
-                    .join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME),
+                &riir_refine::kat_pending_estimator::SyncWatermark::net_path(
+                    &root,
+                    url,
+                ),
             ) {
                 eprintln!("sync: watermark save failed: {e}");
             }
@@ -2257,7 +2282,7 @@ fn push_mining_batch(
             }
         }
         resp => {
-            let queued = queue_outbox(&root, &payload.ndjson, &payload.commitment)
+            let queued = queue_outbox(&root, url, &payload.ndjson, &payload.commitment)
                 .ok()
                 .map_or_else(
                     || "(queue write failed)".to_string(),
@@ -2365,9 +2390,9 @@ fn run_kat_sync() {
     };
 
     let root = resolve_heal_root(&[]);
-    let store = LeaseStore::open(&root);
-    let mut charge = LeaseCharge::open(&store);
     let url = riir_refine::kat_lease_client::service_url_for_command();
+    let store = LeaseStore::open_net(&root, &url);
+    let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 30);
 
     // ── consent gate (owner mandate 2026-09-08) ───────────────────────
@@ -2508,7 +2533,11 @@ fn run_kat_claim(sig: Option<&str>) {
         }
     }
     let root = resolve_heal_root(&[]);
-    match queue_claim(&root, &req) {
+    match queue_claim(
+        &root,
+        &riir_refine::kat_lease_client::service_url_for_command(),
+        &req,
+    ) {
         Ok(path) => {
             println!(
                 "claim: service plane not yet live — queued locally at {}",
@@ -10223,8 +10252,10 @@ fn main() {
     // never mid-pass mutation. Fresh install + offline → no epoch → the
     // compiled-in seed stands (G3: byte-identical to features-off).
     #[cfg(feature = "kat_service")]
-    let lease_store =
-        riir_refine::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+    let lease_store = riir_refine::kat_lease_client::LeaseStore::open_net(
+        &resolve_heal_root(&args.paths),
+        &riir_refine::kat_lease_client::service_url_for_command(),
+    );
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
     #[cfg(all(feature = "kat_service", feature = "score_bench"))]
@@ -13768,7 +13799,10 @@ fn run_reheat_pass(
     // One bounded lease check: did a new epoch land?
     let url = riir_refine::kat_lease_client::service_url_from_env()?;
     let transport = HttpLeaseTransport::new(&url, args.update_timeout.max(1));
-    let store = riir_refine::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
+    let store = riir_refine::kat_lease_client::LeaseStore::open_net(
+        &resolve_heal_root(&args.paths),
+        &url,
+    );
     let mut charge = riir_refine::kat_lease_client::LeaseCharge::open(&store);
     let current = store.current();
     let etag = current

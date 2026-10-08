@@ -414,7 +414,10 @@ fn corpus_section(paths: &[PathBuf]) {
     // update` pulls it; epochs carry the fleet-mined rule/replay sets).
     #[cfg(feature = "kat_service")]
     {
-        let store = riir_refine::kat_lease_client::LeaseStore::open(&root);
+        let store = riir_refine::kat_lease_client::LeaseStore::open_net(
+            &root,
+            &riir_refine::kat_lease_client::service_url_for_command(),
+        );
         match store.current_epoch() {
             Some(epoch) => println!("  lease:      corpus epoch {epoch} installed"),
             None => println!(

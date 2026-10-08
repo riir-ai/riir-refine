@@ -80,7 +80,7 @@
 //! ```
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::kat_redact::{RedactionGate, SpanOrigin};
 use crate::kat_sync_payload::PayloadRow;
@@ -215,6 +215,14 @@ impl SyncWatermark {
     #[must_use]
     pub fn load(root: &Path) -> (Self, Option<String>) {
         Self::load_at(&root.join(".refine").join(Self::FILE_NAME))
+    }
+
+    /// The PER-NET watermark path (riir-kat Issue 003 T1): the watermark
+    /// belongs to the net it was synced against — a fresh net re-pends
+    /// everything by construction (the file simply is not there).
+    #[must_use]
+    pub fn net_path(root: &Path, url: &str) -> PathBuf {
+        riir_kat::kat_state_stamp::net_state_dir_for_url(root, url).join(Self::FILE_NAME)
     }
 
     /// Exact-path loader (tests + the env-override pattern).
