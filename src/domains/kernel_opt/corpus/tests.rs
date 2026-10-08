@@ -15019,6 +15019,41 @@ fn batch211_riders_present() {
 }
 
 #[test]
+fn batch212_cpu_b2b_rider_present() {
+    // G1 for Batch 212 (Plan 212): the Research-239 follow-up pool converted
+    // as ONE count-neutral RIDER on the GPU anti-LUT law -- the CPU face
+    // (the scalar byte-indexed b2b LUT on arm quants.c, the same fork
+    // inverting its own CUDA rule). Markers are the load-bearing quotes at
+    // the pin (4fbda129).
+    let corpus = build_kernel_seed_corpus();
+    let b2b = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "lut-free-bit-spread-vadd4-unpack")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 212",
+        "4fbda129",
+        "the anti-LUT verdict does NOT transfer",
+        "__constant__-memory serialization under DIVERGENT per-lane indices",
+        "const uint64_t expand0 = table_b2b_0[bits[0]];",
+        "static const uint64_t table_b2b_1[1 << 8] = { B8(10, 00) }; // (!b) << 4",
+        "extract the 5th bit via lookup table ((!b) << 4)",
+        "ONE table pair, TWO consumers",
+        "1-bit -> LUT",
+        "3-state -> arithmetic",
+        "#21273",
+        "#21636",
+        "no serialization mechanism exists for uniform bits to hide",
+    ] {
+        assert!(
+            b2b.gpu_concept.contains(marker),
+            "batch-212 b2b rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch210_pseudocode_parses() {
     // G1 for Batch 210 (Plan 210): the single 10-08 late-envelope lead --
     // llama.cpp #29887 MoE expert GPU cache -- landed as ONE new D rule,
