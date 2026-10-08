@@ -14935,6 +14935,90 @@ fn batch209_pool2d_rider_present() {
 }
 
 #[test]
+fn batch211_riders_present() {
+    // G1 for Batch 211 (Plan 211): the 4-lead conversion mini-batch's three
+    // kernel_opt RIDERS, all count-neutral (no new rules, the standing
+    // category-total pin holds 777; count pins move only for the rust_perf
+    // rule in this batch). Each gate asserts the host rule carries the
+    // rider's load-bearing quotes verbatim (the B202 narrow-batch-gate
+    // lesson).
+    let corpus = build_kernel_seed_corpus();
+
+    // Rider 1: #29100 -- the upstream CUDA FWHT ladder lands on the B116
+    // rule; the width gate + the superset-admission fall-through law.
+    let fwht = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fwht-wide-block-row-per-threadgroup-exchange-ladder")
+        .unwrap();
+    for marker in [
+        "7d9305fb51689840aa084eb0a60f4c03950c8988",
+        "#29100",
+        "Widths 64 to 512 keep the warp kernel. 1024 through 8192 use the new one",
+        "SUPERSET-ADMISSION FALL-THROUGH LAW",
+        "does not check width, so it needed no change here",
+        "falls through correctly to the cuBLAS path",
+        "Stages below the warp width still shuffle, those up to the block width go through shared memory, and the rest stay in registers",
+        "static_assert(NE >= 1 && N % NT == 0 && NT % warp_size == 0",
+        "Batch 211 / Plan 211 / Research 246",
+    ] {
+        assert!(
+            fwht.gpu_concept.contains(marker),
+            "batch-211 fwht rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 2: PrismML #290 -- the i8mm arm validates, the alias-back
+    // lifts, on the B204 ISA-boundary arm (the base-3 dp4a rule).
+    let trit = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "swar-lane-widened-base3-dp4a-dot")
+        .unwrap();
+    for marker in [
+        "4fbda1292",
+        "((q + (q >> 1)) >> 1) >> 6",
+        "(3q) >> 8",
+        "checked for all 256 byte values",
+        "vmmlaq_s32",
+        "reusing decoded trits for two activation columns",
+        "vmlaq_n_f32, one horizontal add per row",
+        "pp64 1.22 -> 2.33 t/s, tg16 1.09 -> 1.31 t/s",
+        "greedy output matches the generic path",
+        "alias-back LIFTS",
+        "Batch 211 / Plan 211 / Research 246",
+    ] {
+        assert!(
+            trit.gpu_concept.contains(marker),
+            "batch-211 i8mm rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 3: #28205 -- the dtype half of the aliasing conjunct + the
+    // negation-scope law, on the B208 FA admission rule.
+    let fa = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view")
+        .unwrap();
+    for marker in [
+        "6ed24bce20d2d58211f866cd629340ef7ea8ee06",
+        "#28205",
+        "The flash_attn shader defines V as K when KV overlaps",
+        "the existing check allows pairs such as K/V = Q8_0/F16, which could break access to the array",
+        "!(ggml_is_quantized(src1->type) && ggml_is_quantized(src2->type))",
+        "NEGATION-SCOPE REPAIR",
+        "De Morgan is load-bearing in guards",
+        "Batch 211 / Plan 211 / Research 246",
+    ] {
+        assert!(
+            fa.gpu_concept.contains(marker),
+            "batch-208/211 FA rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch210_pseudocode_parses() {
     // G1 for Batch 210 (Plan 210): the single 10-08 late-envelope lead --
     // llama.cpp #29887 MoE expert GPU cache -- landed as ONE new D rule,

@@ -1,14 +1,17 @@
 //! Entries slice 18 — Batch 207 (2026-10-07, Plan 207): the 10-07 staged
 //! leads' `rust_perf` half — one cubecl IR-pass data-structure rule and one
-//! bevy inlining rule.
+//! bevy inlining rule. Batch 211 rider (2026-10-08, Plan 211): one bevy
+//! data-layout rule (the store-to-load-forwarding register partition).
 //!
 //! Two `rust_perf` rules distilled from `tracel-ai/cubecl` @ `d307dd46`
 //! (#1767, MIT OR Apache-2.0) and `bevyengine/bevy` @ `1ba0c9f93969ff5a07a7a1ca3dc5168be03ef63e`
-//! (#26040, MIT OR Apache-2.0). Quotes re-verified VERBATIM at the pins this
-//! batch. Both `NotBenchable` on this box: the corpus harness benches Rust
-//! micro-shapes, and both rules are decision-content (a scope-size crossover
-//! and an inlining-propagation hazard) whose source measurements are
-//! foreign-box laptop figures — provenance, never bars.
+//! (#26040, MIT OR Apache-2.0); one more from `bevyengine/bevy` @ `a144d28034a229c6bc1ce80e1a2c8d955cd72cbc`
+//! (#26042, Apache-2.0, Batch 211). Quotes re-verified VERBATIM at the pins
+//! (the #26042 PR body + diff fetched this batch). All `NotBenchable` on this
+//! box: the corpus harness benches Rust micro-shapes, and these rules are
+//! decision-content (a scope-size crossover, an inlining-propagation hazard,
+//! a codegen register-partition law) whose source measurements are foreign-box
+//! figures — provenance, never bars.
 
 use crate::domains::rust_perf::PerfRule;
 
@@ -59,6 +62,62 @@ pub(super) fn entries() -> Vec<PerfRule> {
             // laptop measurement (provenance, never bars) — the decision
             // content is the per-function hint-propagation law + the
             // wrapper-attribute audit discipline.
+            #[cfg(feature = "rust_perf_bench")]
+            bench_spec: None,
+        },
+        // ── layout: a hot small Copy struct whose register-load partition
+        // disagrees with the consumer's store partition round-trips a
+        // partial-field read through the stack — store-to-load forwarding
+        // fails and every read stalls; ONE repr(align(N)) attribute tips
+        // the partition so the joined read happens in-register ──────────
+        // Source: bevyengine/bevy #26042 (crates/bevy_ecs/src/entity/mod.rs)
+        // + the rust-lang/rust #163916 alignment-drop rider face.
+        PerfRule {
+            rule_id: "repr-align-register-partition-store-forwarding".to_string(),
+            name: "a hot small Copy struct that is loaded under one register partition and stored under another pays a stack round-trip on every partial-field read — the joined read spans two pending stores, store-to-load forwarding fails, and the read stalls on memory; one repr(align(N)) attribute tips LLVM's partition so the fields the hot read joins land in registers that store contiguously, and the read forwards in-register".to_string(),
+            category: "layout".to_string(),
+            buggy_code: "// naive: a 16-byte Copy struct with NO alignment hint — four 4-byte\n// fields, natural align 4. The hot consumer loads it from the table into\n// three registers — row | (table_row + archetype) | slot — then stores\n// it as 8+4+4: (row + table_row) | archetype | slot. That first 8-byte\n// store chunk needs row PLUS HALF of the second register, so the\n// compiler builds it by spilling both registers to the stack and\n// reading 8 bytes back — a load spanning TWO pending stores.\n// Store-to-load forwarding fails; every struct write stalls on memory.\n#[derive(Copy, Clone)]
+struct EntityLoc {
+    row: u32,
+    table_row: u32,
+    archetype: u32,
+    slot: u32,
+}
+
+// the hot path: build the entity cell's key from a location — hit on\n// nearly every entity access (store the location, then read the\n// (row, table_row) pair)\nfn cell_key(loc: EntityLoc) -> u64 {
+    ((loc.row as u64) << 32) | loc.table_row as u64
+}
+
+pub fn store_then_key(locs: &mut Vec<EntityLoc>, loc: EntityLoc) -> u64 {
+    locs.push(loc); // the 8+4+4 partitioned store
+    cell_key(loc) // the joined read that wants ONE forwarded store
+}
+"
+                .to_string(),
+            fixed_code: "// optimized: the ONE-LINE fix — a single alignment attribute tips the\n// partition: the struct now loads as row | table_row | (archetype +\n// slot) (4+4+8), so the fields the hot store joins (row + table_row)\n// land in registers that store contiguously and the join happens\n// IN-REGISTER, with no round-trip to the stack. Measured at the source\n// (their bench box, before-layout / layout-change / layout+align(8)):\n// world_entity/50000 259.52 -> 233.33 -> 66.48 us (x0.26 vs pre);\n// get_entity_mut_slice/20 102.2 -> 152.1 (the x1.49 REGRESSION the\n// layout change caused) -> 100.9 ns (parity recovered).\n#[derive(Copy, Clone)]
+#[repr(align(8))] // tips the register partition; see the layout law
+struct EntityLoc {
+    row: u32,
+    table_row: u32,
+    archetype: u32,
+    slot: u32,
+}
+
+fn cell_key(loc: EntityLoc) -> u64 {
+    ((loc.row as u64) << 32) | loc.table_row as u64
+}
+
+pub fn store_then_key(locs: &mut Vec<EntityLoc>, loc: EntityLoc) -> u64 {
+    locs.push(loc);
+    cell_key(loc)
+}
+"
+                .to_string(),
+            context_notes: Some("Grade B+ — NotBenchable ON THIS BOX (every figure is SOURCE-REPORTED on their bench box — provenance, never bars; the decision content is the PARTITION law + the before/during/after measurement triple, which no local microbench of the fixture shapes could give). THE MECHANISM, PR body verbatim: '`EntityLocation` gets loaded from the entity table into three registers: `archetype_row` (4 bytes), `table_row`+`archetype_id` (8 bytes), and `table_id` (4 bytes). Since #25632, it then gets written as 8+4+4 into `UnsafeEntityCell`: `archetype_row`+`table_row`, then `archetype_id`, then `table_id`. That first 8-byte chunk needs `archetype_row` plus the half of the second register, and LLVM builds it by writing both registers to the stack and reading 8 bytes back. That read spans two pending stores and causes the store-to-load forwarding to fail. This path gets hit in most places where we build an `UnsafeEntityCell` from a location, and so ends up affecting multiple benchmarks.' THE FIX, verbatim: 'Putting a `repr(align(8))` onto `EntityLocation` makes LLVM load it as `archetype_row`, `table_row`, and `archetype_id`+`table_id` (4+4+8), and it can then join `archetype_row` and `table_row` directly in a register without the round-trip to the stack.' + the diff comment 'Specifying alignment helps codegen around `UnsafeEntityCell`.' MEASURED (the 16-row table, before-#25632 / #25632 / #25632+align(8) — source-reported): world_entity/50000_entities 259.52 -> 233.33 -> 66.48 us (x0.26 vs pre — the fix recovers MORE than the regression cost); get_entity_mut_slice/20 102.2 ns -> 152.1 (x1.49 — the REGRESSION the layout change caused) -> 100.9 (x0.99, parity recovered); get_entity_mut_slice/200 1.96 -> 2.43 -> 1.90 us; event_propagation/four_event_types 296.68 -> 350.13 -> 310.61 us; 'The PR also speeds up `World::entity`, which already had a similar forwarding failure before #25632.' HONEST MIXED TABLE (carry in-rule): observe/observer_custom/10000_entity 461.24 -> 513.55 -> 510.81 us — 'the only one that's still worse than before #25632. Not sure what's going on there, and will probably leave it as future work'; the remaining shapes are parity (+-3%) — the attribute is NOT a universal win, it removes ONE identified stall. ⛔ THE RIDER — the alignment-DROP face, the same lever OPPOSITE direction, same week (rust-lang/rust #163916 @ aaa57c9a8beec536ad85b6b117ef8c5e1e96f0ba, Apache-2.0/MIT): PartialRes.unresolved_segments usize -> u32 ('We don't need room for more than 2^32 unresolved segments, so store it as a u32') — the narrower field DROPS the struct's alignment, and the map's (NodeId, PartialRes) pair shrinks 32 -> 20 bytes: verbatim 'We store a *lot* of those. For aws-sdk-ec2 (full check), this reduces max-rss by ~102 MiB (1.84%)'. ONE LAW, both faces: field width/alignment is ONE decision with TWO downstream costs — the register PARTITION (codegen/forwarding; this rule's face) and the CONTAINER footprint (size at N=millions; the rider face). Mismatch in EITHER direction is a defect: a partition that splits the hot read across pending stores stalls codegen; fields wider than their domain inflate every container that carries them. REGIME: a small Copy struct (<= 2 registers) on a hot path that is stored as an aggregate and read through PARTIAL-field loads, where the partition boundary falls inside the hot read's width; found by bench bisect after a layout change (the source's own story: refactor #25632 caused it, the #25839 bench table caught it, the assembly read located it) — never by source-reading alone. ANTI-REGIME: the hot access is whole-struct (no partial read to forward); the cost is cross-THREAD coherence (align-64-false-sharing's axis) or lock partitioning (cache-line-block-partitioned-lock); the struct crosses FFI/serialized layouts where repr(align) changes the wire; field REORDER is the heavier hammer and changes layout/ABI where the attribute alone may suffice — and an attribute without a failing benchmark is speculative layout churn (measure first, the CSE crossover rule's two-sided law). KINSHIP (grep-verified in this corpus, do not double-count): align-64-false-sharing is coherence-LINE alignment BETWEEN threads/cores (align(64) to split cache lines) — HERE one-thread IN-REGISTER forwarding (align(8) to re-partition one core's own stores); different axis, both are alignment-as-a-tool; hot-byval/memcpy rules own CALL-BOUNDARY aggregate moves, not intra-function store->load forwarding; inline-hint-not-through-unmarked-wrapper (the #26040 sibling, same author, landed this corpus the same week) is the DISPATCH-axis member of this family — that one re-inlines a call chain, this one re-partitions a store; the B146 AST-node line-packing rule packs fields for SIZE/streaming capacity — the footprint face's bandwidth cousin, not the forwarding face. Fixtures ORIGINAL (the 4x u32 shape transcribed as a plain-Rust stand-in; UnsafeEntityCell's interior is not pasted). CITE: bevyengine/bevy @ a144d28034a229c6bc1ce80e1a2c8d955cd72cbc (#26042, Apache-2.0, merged 2026-10-07) -- crates/bevy_ecs/src/entity/mod.rs (the two-line diff), PR body (the mechanism paragraph + the 16-row bench table, fixes #25839; the author's explainer reference: eme64.github.io blog 2024-06-24 'Auto-Vectorization and Store to Load Forwarding'); rider: rust-lang/rust @ aaa57c9a8beec536ad85b6b117ef8c5e1e96f0ba (#163916) -- compiler/rustc_middle/src/middle/resolve.rs (usize -> u32). Batch 211 / Plan 211 / Research 246.".to_string()),
+            // Not benchable on this box: every figure is SOURCE-REPORTED
+            // on their bench box (provenance, never bars) — the decision
+            // content is the register-partition law + the
+            // before/during/after measurement triple.
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: None,
         },

@@ -16,13 +16,14 @@ fn seed_corpus_round_trips() {
 #[test]
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
-    assert_eq!(corpus.entries.len(), 183); // Batch 207 (+2: per-scope-map-scan-hash-crossover -- the cubecl CSE ScopedMap fix, complexity, the measured 15% small-scope negative flipping it into the hybrid inline-scan-then-hash law, annotated; + inline-hint-not-through-unmarked-wrapper -- the bevy #26040 re-inline, dispatch, the four-row laptop table + the wrapper-attribute-audit discipline, annotated; tracel-ai/cubecl #1767 @ d307dd46 + bevyengine/bevy #26040 @ 1ba0c9f9) on the 181 base (Batch 204 (+1: neon-tbl-replicate-2bit-codec-sdot-block-rescalek-rescale -- the PrismML NEON PQ2_0 vec_dot rule, PrismML-Eng/llama.cpp #265 @ 6bfcd79a, simd category, NotBenchable annotated on the x86_64 host box -- M3-Max GOAT staged, Plan 204) on the 180 base (Batch 202 (+1: dataflow-fixpoint-convergence-traversal-order -- the nnethercote min-rank worklist rule, rust-lang/rust #160193 @ cb9d1b06, NotBenchable annotated, Plan 201) on the 179 base (Batch 200 (+11: the TensorFold staged pool's serving half -- prefix-cache-entry-one-token-early, dual-reduction-shared-butterfly-ladder, idle-rank-doorbell-on-rendezvous-store, prompt-item-per-consumer-kernel-measured, concurrent-round-parity-solo-equal, lone-stream-graph-replay-mode-switch, snapshot-then-release-shared-drafter-context, graph-pool-handle-fresh-per-generation, spec-copy-window-aimd-ramp-alone-gated, one-shot-staging-release-to-system, madvise-random-for-key-gather-tables -- all NotBenchable annotated, Plan 198) on the 168 base (Batch 198 +1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
+    assert_eq!(corpus.entries.len(), 184); // Batch 211 (+1: repr-align-register-partition-store-forwarding -- the bevy #26042 EntityLocation alignment rule, layout, NotBenchable annotated (source-reported bench-box figures; carries the rust #163916 alignment-drop face as the rider -- one law, two faces: register partition vs container footprint); bevyengine/bevy #26042 @ a144d280 + rust-lang/rust #163916 @ aaa57c9a) on the 183 base (Batch 207 (+2: per-scope-map-scan-hash-crossover -- the cubecl CSE ScopedMap fix, complexity, the measured 15% small-scope negative flipping it into the hybrid inline-scan-then-hash law, annotated; + inline-hint-not-through-unmarked-wrapper -- the bevy #26040 re-inline, dispatch, the four-row laptop table + the wrapper-attribute-audit discipline, annotated; tracel-ai/cubecl #1767 @ d307dd46 + bevyengine/bevy #26040 @ 1ba0c9f9) on the 181 base (Batch 204 (+1: neon-tbl-replicate-2bit-codec-sdot-block-rescalek-rescale -- the PrismML NEON PQ2_0 vec_dot rule, PrismML-Eng/llama.cpp #265 @ 6bfcd79a, simd category, NotBenchable annotated on the x86_64 host box -- M3-Max GOAT staged, Plan 204) on the 180 base (Batch 202 (+1: dataflow-fixpoint-convergence-traversal-order -- the nnethercote min-rank worklist rule, rust-lang/rust #160193 @ cb9d1b06, NotBenchable annotated, Plan 201) on the 179 base (Batch 200 (+11: the TensorFold staged pool's serving half -- prefix-cache-entry-one-token-early, dual-reduction-shared-butterfly-ladder, idle-rank-doorbell-on-rendezvous-store, prompt-item-per-consumer-kernel-measured, concurrent-round-parity-solo-equal, lone-stream-graph-replay-mode-switch, snapshot-then-release-shared-drafter-context, graph-pool-handle-fresh-per-generation, spec-copy-window-aimd-ramp-alone-gated, one-shot-staging-release-to-system, madvise-random-for-key-gather-tables -- all NotBenchable annotated, Plan 198) on the 168 base (Batch 198 +1: selector-lattice-beam-over-greedy-walk -- the PrismML #284 beam-over-greedy selector walk, annotated with the NOT-ISOLATED caveat) on the 167 base (Batch 196 +2: the TensorFold A- serving/host pair -- grammar-window-draft-prune-path-local-mask + startup-estimate-derived-from-allocation-shapes, both NotBenchable annotated) on the 165 base (Batch 186 +2: fallthrough-toggle-oracle + cold-l3-evict-min-of-n; Batch 181 +2, Batch 182 +3)
     // Per-category standing counts (repaired to the LIVE numbers at Batch
     // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
     // caching 7 and dispatch 5 in the prior prose had gone stale before this
     // batch: real 30/8/6 at the 165 state): allocation 29, io 26,
     // concurrency 23, complexity 32 (Batch 202 +1: the dataflow min-rank
-    // rule), layout 13, iterators 11, simd 9,
+    // rule), layout 14 (Batch 211 +1: the #26042 register-partition rule),
+    // iterators 11, simd 9,
     // arithmetic 8, caching 8, dispatch 9 (Batch 207 +1 the inline-hint wrapper rule +1 the
     // B200-era additions past this prose's last update — the live number, disclosed here),
     // bevy 2, wasm 1 — asserted via the
@@ -1768,7 +1769,7 @@ fn fourteen_rules_are_not_benchable() {
     // annotations (13 rules) were never counted here — the pin sat at the
     // Batch-109-era 14 while reality moved to 27. The test only compiles
     // under `rust_perf_bench`, so nobody ran it.
-    assert_eq!(without_spec.len(), 84); // 2026-10-08 REPAIR (M3, first 5c run since B207): 83 was one SHORT — measured truth 84 None + 99 Some (the sibling with_spec pin, green in the same run) = 183 total, the AGENTS.md count. The B207 comment's "183 total − 100 benchable" arithmetic used a benchable count that contradicts the 99 pin; the pin hid through B207's landing because only the all-features 5c suite compiles this test. Batch 207 +2 -- the CSE scope-map crossover (IR-pass decision content: the 15% small-scope negative is the rule's second half, not a bar) + the inline-hint wrapper rule (a propagation law, not a local transform -- and its numbers are foreign-laptop provenance); Batch 204 +1 -- the NEON vec_dot rule (aarch64-only; its M3-Max GOAT LANDED PARETO-PASS 2026-10-08, bench 106 — the rule stays corpus-only, the GOAT priced the mechanism); Batch 200 added ALL ELEVEN its rules as NotBenchable (serving-stack decision content: parity properties, mode switches, pool lifecycles, AIMD ramps, pinned-staging + madvise hygiene); Batch 198 added its rule as NotBenchable (host-behavior-shaped; the NOT-ISOLATED caveat rides context_notes); Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
+    assert_eq!(without_spec.len(), 85); // Batch 211 +1 (repr-align-register-partition-store-forwarding, the bevy #26042 layout rule, source-reported bench-box provenance) on the 2026-10-08 REPAIR base (M3, first 5c run since B207): 83 was one SHORT — measured truth 84 None + 99 Some (the sibling with_spec pin, green in the same run) = 183 total, the AGENTS.md count. The B207 comment's "183 total − 100 benchable" arithmetic used a benchable count that contradicts the 99 pin; the pin hid through B207's landing because only the all-features 5c suite compiles this test. Batch 207 +2 -- the CSE scope-map crossover (IR-pass decision content: the 15% small-scope negative is the rule's second half, not a bar) + the inline-hint wrapper rule (a propagation law, not a local transform -- and its numbers are foreign-laptop provenance); Batch 204 +1 -- the NEON vec_dot rule (aarch64-only; its M3-Max GOAT LANDED PARETO-PASS 2026-10-08, bench 106 — the rule stays corpus-only, the GOAT priced the mechanism); Batch 200 added ALL ELEVEN its rules as NotBenchable (serving-stack decision content: parity properties, mode switches, pool lifecycles, AIMD ramps, pinned-staging + madvise hygiene); Batch 198 added its rule as NotBenchable (host-behavior-shaped; the NOT-ISOLATED caveat rides context_notes); Batch 196 added BOTH its rules as NotBenchable (rows-not-paid-for in a serving verify forward + host accounting); Batch 182 added all THREE its rules as NotBenchable (dispatch/framework-shaped + acceptance-rate + measurement-methodology); Batch 181 added BOTH its rules as NotBenchable (mask-memo graph-reuse class + seed-warm measurement hygiene)
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
     assert!(without_spec.contains(&"nonblocking-open-for-head-probes")); // Batch 172 — the failure is a hang on a live kernel endpoint
@@ -1887,7 +1888,7 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 129, "expected 129 context-annotated rules (Batch 207: +2 -- the CSE scope-map crossover (the measured-negative second arm + the attribute-less Hash key clause) + the inline-hint wrapper rule (the wrapper-attribute-audit discipline + the LLM-disclosure provenance note); Batch 204: +1 -- the PrismML NEON PQ2_0 vec_dot rule lands annotated (NotBenchable on the x86_64 host box + the M3 GOAT staging + the B62 bench-design law); Batch 203 en-route repair: B202's dataflow-fixpoint-convergence-traversal-order landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 → 125 -- the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 -- the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 -- the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
+    assert_eq!(annotated.len(), 130, "expected 130 context-annotated rules (Batch 211: +1 -- the bevy #26042 register-partition rule lands annotated (NotBenchable + the two-faces law + the rider face), Plan 211; Batch 207: +2 -- the CSE scope-map crossover (the measured-negative second arm + the attribute-less Hash key clause) + the inline-hint wrapper rule (the wrapper-attribute-audit discipline + the LLM-disclosure provenance note); Batch 204: +1 -- the PrismML NEON PQ2_0 vec_dot rule lands annotated (NotBenchable on the x86_64 host box + the M3 GOAT staging + the B62 bench-design law); Batch 203 en-route repair: B202's dataflow-fixpoint-convergence-traversal-order landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 → 125 -- the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 -- the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 -- the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations)");
     assert!(annotated.contains(&"neon-tbl-replicate-2bit-codec-sdot-block-rescale")); // Batch 204 -- the NotBenchable-on-x86_64 note + the staged M3 GOAT + the B62 naive-codec-reference law
     assert!(annotated.contains(&"dataflow-fixpoint-convergence-traversal-order")); // Batch 202 -- the NotBenchable decision-content note (the pin B202's landing missed)
     assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
@@ -1985,7 +1986,7 @@ fn context_notes_backward_compatible_serde() {
     let json = serde_json::to_string(&corpus.entries).unwrap();
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
-    assert_eq!(annotated, 129); // Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule (127 -> 129, Plan 207); Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated (126 -> 127, Plan 204); Batch 203 en-route repair: B202's rule landed annotated (125 -> 126) and missed this pin -- the narrow batch202 gate never ran it; Batch 200: 114 -> 125 (the TensorFold serving-half ELEVEN); Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113; Batch 186: 109 -> 111; Batch 179: 100 → 104; Batch 181: 104 → 106; Batch 182: 106 → 109
+    assert_eq!(annotated, 130); // Batch 211: +1 the bevy #26042 register-partition rule lands annotated (129 -> 130, Plan 211); Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule (127 -> 129, Plan 207); Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated (126 -> 127, Plan 204); Batch 203 en-route repair: B202's rule landed annotated (125 -> 126) and missed this pin -- the narrow batch202 gate never ran it; Batch 200: 114 -> 125 (the TensorFold serving-half ELEVEN); Batch 198: 113 -> 114 (the PrismML selector-lattice NOT-ISOLATED annotation); Batch 196: 111 -> 113; Batch 186: 109 -> 111; Batch 179: 100 → 104; Batch 181: 104 → 106; Batch 182: 106 → 109
 
     // Simulate a pre-field snapshot: strip `context_notes` from JSON.
     // (A real old snapshot simply omits the key; serde(default) → None.)
@@ -2026,7 +2027,7 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 129, "expected 129 annotated rules (Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule, Plan 207; Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated, Plan 204; Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)");
+    assert_eq!(annotated.len(), 130, "expected 130 annotated rules (Batch 211: +1 the bevy #26042 register-partition rule lands annotated, Plan 211; Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule, Plan 207; Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated, Plan 204; Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)");
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -5770,5 +5771,59 @@ fn batch207_rules_present_and_parse() {
                 "batch-207 '{id}' notes missing needle: {needle}"
             );
         }
+    }
+}
+
+#[test]
+fn batch211_rule_present_and_parse() {
+    // G1 for Batch 211 (Plan 211): the 4-lead conversion mini-batch's
+    // rust_perf half -- bevy #26042 EntityLocation alignment, landed as ONE
+    // new layout rule carrying the rust #163916 alignment-drop face as the
+    // rider (one law, two faces: register partition vs container
+    // footprint). Syn-parse gate both sides + needle markers + the
+    // distinct-from trio (the B202 narrow-batch-gate lesson).
+    let corpus = build_perf_seed_corpus();
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "repr-align-register-partition-store-forwarding")
+        .unwrap_or_else(|| panic!("batch-211 rule missing from corpus"));
+    assert_eq!(e.category, "layout", "batch-211 rule category");
+    assert!(
+        syn::parse_file(&e.buggy_code)
+            .and_then(|_| syn::parse_file(&e.fixed_code))
+            .is_ok(),
+        "batch-211 fixtures must parse"
+    );
+    assert!(e.context_notes.is_some(), "batch-211 rule must be annotated");
+    #[cfg(feature = "rust_perf_bench")]
+    assert!(e.bench_spec.is_none(), "batch-211 rule is NotBenchable");
+    let notes = e.context_notes.as_deref().unwrap_or_default();
+    for needle in [
+        "NotBenchable",
+        "a144d28034a229c6bc1ce80e1a2c8d955cd72cbc",
+        "26042",
+        "written as 8+4+4 into `UnsafeEntityCell`",
+        "That read spans two pending stores and causes the store-to-load forwarding to fail",
+        "repr(align(8))",
+        "(4+4+8)",
+        "259.52 -> 233.33 -> 66.48",
+        "102.2 ns -> 152.1",
+        "x1.49",
+        "the only one that's still worse than before #25632",
+        "aaa57c9a8beec536ad85b6b117ef8c5e1e96f0ba",
+        "163916",
+        "reduces max-rss by ~102 MiB (1.84%)",
+        "align-64-false-sharing",
+        "cache-line-block-partitioned-lock",
+        "inline-hint-not-through-unmarked-wrapper",
+        "UnsafeEntityCell's interior is not pasted",
+        "Apache-2.0",
+        "Batch 211 / Plan 211 / Research 246",
+    ] {
+        assert!(
+            notes.contains(needle),
+            "batch-211 notes missing needle: {needle}"
+        );
     }
 }

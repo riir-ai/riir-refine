@@ -242,6 +242,11 @@ mod tests {
     /// default-on witness to be off, so a broken build script still fails at
     /// every posture someone actually builds.
     #[test]
+    // The assert is DELIBERATELY constant-valued: a cfg tripwire, not a
+    // runtime check (allow, never `const { }` — a const block would make
+    // the default posture a compile error, the opposite of the tripwire's
+    // test-time intent).
+    #[allow(clippy::assertions_on_constants)]
     fn the_stamp_is_populated() {
         if COMPILED_FEATURES.is_empty() {
             assert!(
