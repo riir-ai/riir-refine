@@ -9047,6 +9047,14 @@ fn run_candidates_gate(path: &std::path::Path, heal_root: &std::path::Path) {
 }
 
 fn main() {
+    // Issue 003 T15: the dials identify this binary — `cargo-refine/<v>
+    // (build <hash>)` rides the UA the kat transports send (first install
+    // wins; the server counts the shipped stragglers by its absence).
+    riir_kat::kat_ua::install_consumer_tag(format!(
+        "cargo-refine/{} (build {BUILD_COMMIT})",
+        env!("CARGO_PKG_VERSION"),
+        BUILD_COMMIT = riir_refine::build_stamp::BUILD_COMMIT,
+    ));
     let args = parse_args();
 
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —

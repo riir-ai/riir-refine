@@ -518,6 +518,13 @@ fn run_preflight(args: &Args) -> ! {
 }
 
 fn main() {
+    // Issue 003 T15: the drain's dials identify this binary (first install
+    // wins — see the kat_ua module).
+    riir_kat::kat_ua::install_consumer_tag(format!(
+        "kat-drain/{} (build {BUILD_COMMIT})",
+        env!("CARGO_PKG_VERSION"),
+        BUILD_COMMIT = riir_refine::build_stamp::BUILD_COMMIT,
+    ));
     let args = Args::parse();
     if args.preflight {
         run_preflight(&args);
