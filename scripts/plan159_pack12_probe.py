@@ -21,6 +21,17 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+# Keep this instrument's verdict printable on a non-UTF-8 console
+# (katgpt-rs Issue 804 / the 928 drift census): it prints non-ASCII glyphs,
+# and print() raises UnicodeEncodeError on e.g. cp874 — the process then dies
+# with NO verdict. backslashreplace degrades the glyph visibly and keeps
+# ASCII exact, so a verdict line stays greppable. Best-effort: a detached or
+# captured stream is left alone rather than made fatal at import.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass
 
 FIXTURES = {
     # lint -> (source fragment, expected FIRING lint count for it)
@@ -80,7 +91,7 @@ def main() -> int:
     try:
         (crate / "src").mkdir()
         (crate / "Cargo.toml").write_text(
-            '[package]\nname = "plan159probe"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n'
+            '[package]\nname = "plan159probe"\nversion = "0.1.0"\nedition = "2021"\n\n[workspace]\n', encoding="utf-8"
         )
         parts = [LIB_HEAD, SUPPORT]
         for name, (frag, _) in FIXTURES.items():
@@ -89,7 +100,7 @@ def main() -> int:
             parts.append(frag)
         parts.append("pub fn use_all() { let _ = eld(1); let _ = mrf(&Fruit::Apple); let _ = mdc(10, 3); let _ = iir(vec![1, 2]); let _ = Widg::new(); }\n")
         lib = crate / "src" / "lib.rs"
-        lib.write_text("\n".join(parts))
+        lib.write_text("\n".join(parts), encoding="utf-8")
 
         found = run_clippy(lib, target)
 
