@@ -29,20 +29,20 @@ Implementation is owned UPSTREAM by **katgpt-rs Plan 619** (`crates/katgpt-core/
 
 ### Consumer acceptance criteria (Phase 2 starts only when all hold)
 
-- [ ] **T1.A** Plan 619 gates **G1 (recall@1), G2 (latency flat vs N), G5 (near-miss recovery vs Engram), G6 (RSS-vs-N within the byte budget)** are GREEN — G5 is the Claim A differentiator and is load-bearing for the healer's evidence semantics; G3 (overwrite/forgetting) green too, since evidence updates rely on in-place overwrite.
+- [-] **T1.A** Plan 619 gates **G1 (recall@1), G2 (latency flat vs N), G5 (near-miss recovery vs Engram), G6 (RSS-vs-N within the byte budget)** are GREEN — G5 is the Claim A differentiator and is load-bearing for the healer's evidence semantics; G3 (overwrite/forgetting) green too, since evidence updates rely on in-place overwrite. **RESOLVED 2026-10-07 (measured, upstream Bench 919 — see T1.B's VERIFIED block): G1/G2/G3/G6 green, G5 WINS at the 0.05σ bar for N ≤ ~33k; the plan row is a start-CONDITION for Phase 2, and Phase 2 itself is owner-gated (T2.2 rescope) — defer-marked so the row does not read as open work.**
 - [x] **T1.B** The API surface Phase 2 consumes exists and is leaf-stable: `LatticeMemory::sized(items, collision_budget, byte_budget)` · `write(embedding, evidence_row)` (delta-rule accumulate) · `query(embedding) -> blended evidence` (per-cell read-then-blend) · freeze/thaw-compatible snapshot (BLAKE3-committed, atomic swap — the `FrozenProductKeyMemory` shape). **VERIFIED 2026-10-07, 4/4** (katgpt-rs `9eec34e80` + T1.9 `c8b7e061d`): `LatticeMemory::sized(d, d_k, d_v, seed, samples, expected_items, near_miss_sigma, byte_budget)` (support-driven grid + `OverCapacity{required_d_k}` refusal); writes = `write_delta(x,k,v,β)` / `write_value(x,v)` (semantics-equivalent, lower-level than the brief's names); reads = `read_blend(x,out)` / `read_cells(x,q,out)` / `read_scored(x,q,out,λ)` (zero-alloc out-param shape); freeze/thaw = `snapshot()/restore()/commitment()` (serde snapshot + BLAKE3 geometry-headered commitment + validated whole-swap thaw — katgpt-rs `.plans/619` T1.9). **T1.A measured** (Bench 919): G1/G2/G3/G6 green, G5 wins vs Engram at the 0.05σ bar for N ≤ ~33k. **T1.C did not fire** (the failure is the 10⁶ envelope — a rescope decision, not an absent primitive). **T1.8 done** (tent wins, pinned). Phase 2's start condition is now purely the owner's rescope call (T2.2).
-- [ ] **T1.C** Negative branch: if Plan 619's floor fails (no G5 win vs Engram, or locality absent → the claim restates as "Engram with delta-rule cells"), Phase 2 is DROPPED and this plan records the negative — no healer wiring without a measured primitive win.
+- [x] **T1.C** Negative branch: if Plan 619's floor fails (no G5 win vs Engram, or locality absent → the claim restates as "Engram with delta-rule cells"), Phase 2 is DROPPED and this plan records the negative — no healer wiring without a measured primitive win. **DID NOT FIRE 2026-10-07 (measured, Bench 919): the G5-vs-Engram win EXISTS at consumer scale (lattice 0.105 vs Engram 0.002 at 10⁵, the 0.05σ bar); the failure is the 10⁶ envelope only — a rescope decision, not the negative branch.**
 - [x] **T1.8** Kernel A/B once: cos² vs tent bump on the same G1–G3 cells (advocate: kernel shape is a tunable); pin the winner, demote the loser. **DONE upstream 2026-10-07** (Bench 919 §T1.8: tent wins — cos² +6% near-miss AUC bought with −0.4pt exact recall, fails the floor; `Cos2` stays selectable).
 
 ## Phase 2 — Healer consumption (evidence memory)
 
 ### Tasks
 
-- [ ] **T2.1** goat-audit + boundary-guard at wiring time (the plan wires a katgpt-rs primitive into riir-* — run the audit before the first healer commit).
-- [ ] **T2.2** First consumer: the issue-140 insight store (span/task-conditional evidence) — lattice index over `(span_embedding → evidence rows)` with delta-rule accumulation per cell; fallback consumer if 140 hasn't landed: `traj_store` evidence lookup keyed by `span_embed`. Feature forward `lattice_memory` (implies nothing new — katgpt-core already a dep; zero new deps this phase).
-- [ ] **T2.3** Quality gate: score-bench / retrieval-eval A/B — top-1 and heal rate with lattice evidence vs current path, paired, same seeds. No regression tolerated on any existing floor.
-- [ ] **T2.4** Growth-curve gate: synthetic 10× corpus — evidence-lookup cost flat vs corpus size (the PKM-at-scale argument, measured on our store).
-- [ ] **T2.5** Promote/demote decision per slot from T2.3/T2.4 (per-stack ledger discipline); consolidation rider: closed-form split/merge triggers (Research 233 §2 #11) — bench post-consolidation recall no-regression + shrink ratio.
+- [-] **T2.1** goat-audit + boundary-guard at wiring time (the plan wires a katgpt-rs primitive into riir-* — run the audit before the first healer commit). **DEFER 2026-10-10: Phase 2 is owner-gated (the T2.2 rescope call — evidence-memory slot within ≤ ~33k items at R=0.05σ); no healer wiring exists to audit.** Fires with T2.2.
+- [-] **T2.2** First consumer: the issue-140 insight store (span/task-conditional evidence) — lattice index over `(span_embedding → evidence rows)` with delta-rule accumulation per cell; fallback consumer if 140 hasn't landed: `traj_store` evidence lookup keyed by `span_embed`. Feature forward `lattice_memory` (implies nothing new — katgpt-core already a dep; zero new deps this phase). **DEFER 2026-10-10 — OWNER-GATED (the rescope call, facts in katgpt-rs `.docs/03_memory/lattice_memory.md` + Bench 919; the plan's own status header says "Phase 2 remains blocked on the owner rescope call").**
+- [-] **T2.3** Quality gate: score-bench / retrieval-eval A/B — top-1 and heal rate with lattice evidence vs current path, paired, same seeds. No regression tolerated on any existing floor. **DEFER with T2.2 (owner rescope gate).**
+- [-] **T2.4** Growth-curve gate: synthetic 10× corpus — evidence-lookup cost flat vs corpus size (the PKM-at-scale argument, measured on our store). **DEFER with T2.2 (owner rescope gate).**
+- [-] **T2.5** Promote/demote decision per slot from T2.3/T2.4 (per-stack ledger discipline); consolidation rider: closed-form split/merge triggers (Research 233 §2 #11) — bench post-consolidation recall no-regression + shrink ratio. **DEFER with T2.2 (owner rescope gate).**
 
 ## Phase 3 — WASM validator lane (Rust → wasm32; no Python)
 
@@ -65,9 +65,9 @@ Implementation is owned UPSTREAM by **katgpt-rs Plan 619** (`crates/katgpt-core/
 
 ### Tasks
 
-- [ ] **T4.1** `.docs/` entries: lattice primitive (11_domains or the retrieval doc), validator lane (05_clippy_verify sibling); README feature-table rows.
-- [ ] **T4.2** Cross-repo records (not filed): game-side consumers (NPC lesson memory over lattice cells — Research 228's riir-ai 1022 fusion; riir-auth session fingerprints) noted in the research note's revisit list.
-- [ ] **T4.3** doc-sync lines; commit + push per phase; box-state provenance quoted beside every latency number.
+- [-] **T4.1** `.docs/` entries: lattice primitive (11_domains or the retrieval doc), validator lane (05_clippy_verify sibling); README feature-table rows. **DEFER 2026-10-10: the validator-lane half is covered (T3 landed with its own docs/README coverage — the plan status reads COMPLETE for Phase 0+3); the lattice-primitive half belongs to Phase 2's landing, owner-gated — defer-marked rather than silently open.**
+- [-] **T4.2** Cross-repo records (not filed): game-side consumers (NPC lesson memory over lattice cells — Research 228's riir-ai 1022 fusion; riir-auth session fingerprints) noted in the research note's revisit list. **DEFER with T2.2 (owner rescope gate; the research note's revisit list is the standing home).**
+- [-] **T4.3** doc-sync lines; commit + push per phase; box-state provenance quoted beside every latency number. **DEFER with T2.2 (owner rescope gate); the landed phases each carried their own doc-sync companion.**
 
 ## Guardrails
 
