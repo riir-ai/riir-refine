@@ -735,6 +735,10 @@ name = "bench_005_neon_pq2_m3_goat"
 harness = false
 
 [[bench]]
+name = "bench_006_repr_align_m3_goat"
+harness = false
+
+[[bench]]
 name = "bench_002_l2_pruner_syn"
 harness = false
 
