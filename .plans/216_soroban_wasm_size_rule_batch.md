@@ -1,0 +1,15 @@
+# Plan 216 — Batch: soroban wasm size rules (Research 252)
+
+**Status:** STAGED — queues behind the standing staged pools (the Plan-215 TensorFold pack + the conversion set convert first); no corpus edit until this plan's slot opens.
+
+Source: `stellar/rs-soroban-sdk` @ pin `0d72c4c9ed7dd5f948b4ef5ac2cbcdd9f21380f9` (Apache-2.0). Verdict: YES B− (Research 252). Domain: `rust_perf`, category `wasm` (family members #2/#3 beside `wasm-batch-ffi`). Expected yield: 1–2 rules after falsification.
+
+- [ ] T1 — Re-clone at the pin into `.raw/soroban-sdk` (ephemeral, `--depth 1`), `git rev-parse HEAD` must equal the pin; re-verify EVERY Research-252 quote verbatim at the pin (`unwrap.rs` both arms, `UnwrapInfallible` never-destructure + its comment, #2114 diff marker lines, Cargo profile knobs); pin license in the batch note.
+- [ ] T2 — Dedup re-verification, both vocabularies, across rust_perf + clippy_lints + dist corpora (`unwrap_optimized`, `unreachable`, `panic` machinery, `link_section`, `spec shaking`, `marker`, `binary size`, `wasm32`); record one evidence line per candidate in the batch note (expected: candidate-1 clean; candidate-2 clean; the two unwrap-axis rules + dist profile rules named as distinct-froms, not collisions).
+- [ ] T3 — Author the entry(ies) with ORIGINAL minimal fixtures (license hygiene — never paste source): `wasm-unwrap-panic-machinery-elimination` (primary) into the wasm category; adjudicate `linker-dce-custom-section-volatile-marker` own-rule-or-drop at authoring (drop if the fixture cannot stand without Soroban context).
+- [ ] T4 — Annotations: size-axis NotBenchable (`bench_spec: None`, the Batch-136/dial9 class) + `context_notes` carrying (a) the anti-regime clause (never rewrite a reachable unwrap arm — trap-vs-panic is a deliberate semantics change on the impossible arm), (b) the distinct-from set (`unwrap-or-else-lazy`, `oneshot-response-send-unwrap-panics`, dist `cli-panic-unwind-tables` profile-level), (c) the source-provenance bytes story (panic-fmt machinery + message plumbing vs 1-byte trap; native arm unchanged).
+- [ ] T5 — Standing gates: batch parse gate + contracts; count pins (rust_perf `tests.rs` total / without_spec / annotated + membership asserts); clippy `-D` at the postures the batch touches; retrieval floors if the rust_perf slice demands them.
+- [ ] T6 — Assert score-bench + freeze NOT owed (zero clippy-corpus delta, P30) — verify, never assume.
+- [ ] T7 — Landing note: AGENTS.md + README count rows if moved; Research 252 status line update (DISTILLED → landed-at-Batch-N); queue snapshot row update in the same commit.
+- [ ] T8 — Commit (`feat:` prefix, develop) + push; `.raw/soroban-sdk` removed in the same landing (ephemeral-clone law).
+- [-] T9 — DEFER: local wasm32 binary-size A/B measurement — no wasm toolchain guaranteed on this box; the source-reported bytes story carries the magnitude claim. Re-arm if a wasm-size lane consumer appears (katgpt-rs wasm32 crates shipping size-critical artifacts).
