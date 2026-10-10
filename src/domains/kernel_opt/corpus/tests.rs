@@ -110,8 +110,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        784,
-        "kernel batches through Batch 220 should have 784 rules",
+        795,
+        "kernel batches through Batch 223 should have 795 rules",
     );
 }
 
@@ -1686,7 +1686,7 @@ fn batch29_concepts_covered() {
     // C: epilogue-at-register-write-phase (riir-gpu epilogue/mod.rs L8-26 + gemv_residual_cubecl.rs L103-109 + L24-31)
     assert!(concepts.contains(&"memory-bound elementwise operations (residual adds, scales, activations) should execute while the producer's output is STILL IN REGISTERS, at the existing write phase — not as a separate dispatch that reads the output vector back from global memory. In a plane-cooperative GEMV (one plane per output row), plane_sum leaves the full row dot product in every lane's registers, so the epilogue (read residual[row], add, write) rides lane 0's single global store: one extra scalar global read amortized over the n-length cooperative dot, one dispatch eliminated per use site (2→1; 52 per 26-layer model, 104 combined with the norm+residual fusion). The condition is the register-residency of the produced value at the write phase. Distinct from fuse-residual-via-in-place-output-array (buffer aliasing to bypass a parameter limit — this is register-residency at the producer's write phase) and from merge-dispatches-into-single-compute-pass (host-side pass merging, zero kernel changes — this edits the kernel body)"), "register-write-phase concept");
     // C: delay-rms-scale-past-gemv-epilogue (riir-gpu epilogue/mod.rs L118-133 + L227-262 + coda_primitives_cubecl.rs L20-24)
-    assert!(concepts.contains(&"RMSNorm's per-row scalar commutes with the downstream matmul — RMSNorm(x) @ W = r · (x·γ) @ W — so split the norm into (a) extracting r (a partial-norm reduction), (b) applying only the elementwise gamma, and (c) applying r later as a row-scale epilogue of the downstream GEMV, composable with a residual add. Be honest about what this saves: the pure reparameterization alone saves ZERO dispatches (3→3) — the real win is fusing r into the LAST GEMV of the group and eliminating the pre-GEMV write of the normed vector; with handle-to-handle passing the dominant benefit is dispatch/command-buffer overhead, not bandwidth. The win compounds when multiple GEMVs share the same r. Distinct from fold-norm-scalar-into-matmul (folds the scalar into the matmul internals — this keeps the GEMV body untouched and adds the producer-side decomposition) and from fuse-add-rms-norm (fuses residual into a norm kernel — this moves the norm scalar across a GEMV boundary)"), "delayed-rms concept");
+    assert!(concepts.contains(&"RMSNorm's per-row scalar commutes with the downstream matmul — RMSNorm(x) @ W = r · (x·γ) @ W — so split the norm into (a) extracting r (a partial-norm reduction), (b) applying only the elementwise gamma, and (c) applying r later as a row-scale epilogue of the downstream GEMV, composable with a residual add. Be honest about what this saves: the pure reparameterization alone saves ZERO dispatches (3→3) — the real win is fusing r into the LAST GEMV of the group and eliminating the pre-GEMV write of the normed vector; with handle-to-handle passing the dominant benefit is dispatch/command-buffer overhead, not bandwidth. The win compounds when multiple GEMVs share the same r. Distinct from fold-norm-scalar-into-matmul (folds the scalar into the matmul internals — this keeps the GEMV body untouched and adds the producer-side decomposition) and from fuse-add-rms-norm (fuses residual into a norm kernel — this moves the norm scalar across a GEMV boundary). RIDER (Batch 223 / Plan 222, lithos-ai/lithos-metal @ 236475fa, Apache-2.0 -- the PREFOLD half of the commuted norm, the statistic side this rule's r-extraction only implies): the commuted norm ships in two halves on the lithos compiler -- passes/fuse_norm.py:2-6 verbatim: 'that GEMV can emit, per block, the partial sum of squares of the BF16 values it writes (STAT_OUT), and the consumer sums the n_blocks partials in block order -- the same statistic, deterministic, one dispatch fewer per norm.' -- the producer GEMV emits per-block PARTIAL sums-of-squares (stat_out=True, stat_value named) and the consumer sums the n_blocks partials IN BLOCK ORDER; a producer feeds ONE statistic ('a producer feeds one statistic' guard, fuse_norm.py:27 -- no double-claim), and the statistic of a norm fed by anything else (the embedding) keeps its own dispatch. The reciprocal-RMS fold itself then runs ONCE in a separate one-SIMD-group kernel so every downstream projection applies the SAME scales after their FP32 product -- mlp_fusion.py:14-15 verbatim: 'One SIMD group computes the eight reciprocal RMS values. Projections still apply them after their FP32 product, preserving the commuted-norm contract.' -- one fold, not per-consumer refolds. The honesty pair rides the rider verbatim (mixers.md:101-104): 'Moving BF16 rounding changes the numerical path.' (default-ON with an opt-out: '--no-commute-norm in the generation CLI or Session(..., commute_norm=False)'); 'Tests must distinguish numerical agreement with the reordered formula from agreement with the original rounding boundaries.'; and 'Removing a dispatch is not sufficient evidence of a latency improvement.' -- the same honesty law this rule's own zero-dispatch-savings disclosure carries, now seconded by an independent engine. Batch 223 rider / Plan 222."), "delayed-rms concept");
     // D: pack-scalar-params-into-combined-buffer (riir-gpu epilogue/mod.rs L48 + L148-154 + coda_primitives_cubecl.rs L51-55 + L144-146 + norm_residual_cubecl.rs L179-181 + L351-354)
     assert!(concepts.contains(&"when the kernel DSL caps Array parameters (~4-5 in CubeCL v0.10), pack ALL launch scalars (eps, dim, derived constants) into ONE small f32 params buffer created per launch on the host — precomputing derived values there (inv_dim = 1/dim once on the CPU, not per-thread in-kernel) — and index it positionally in-kernel. When even a u32 like dim won't fit as a scalar arg, bitcast it through the f32 pack and cast back in-kernel. Couple variant choice to the budget with a total_array_count()-style metadata method so a kernel never exceeds the Array limit. Distinct from staging-packed-uniforms-encoder-ordered-copies (driven by upload batching — this is driven by the kernel argument-count limit), from derive-params-from-global-invocation-id (per-item params encoded in the grid — these are per-launch scalars), and from identical-uniforms-share-single-slot (dedupes identical uniforms — this packs distinct scalars)"), "packed-params concept");
     // M: enum-dispatch-separate-kernel-per-variant (riir-gpu epilogue/mod.rs L47 + L99-103 + L137-154 + gemv_residual_cubecl.rs L76 + L140)
@@ -5368,8 +5368,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 784-rule corpus must appear in exactly one category
-    // (re-pinned 784 at Batch 220; read 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 795-rule corpus must appear in exactly one category
+    // (re-pinned 795 at Batch 223; read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5465,17 +5465,17 @@ fn kernel_categories_counts_match_plan_003_table() {
     // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 159),
+        (KernelCategory::MemoryAccess, 162),
         (KernelCategory::Compute, 86),
-        (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 182),
-        (KernelCategory::Parallelism, 73),
+        (KernelCategory::Fusion, 55),
+        (KernelCategory::Dispatch, 185),
+        (KernelCategory::Parallelism, 75),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
-        (KernelCategory::MoeDispatchBackward, 37),
+        (KernelCategory::MoeDispatchBackward, 38),
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 14),
+        (KernelCategory::AutotuneDispatch, 15),
         (KernelCategory::ConvGemmLayout, 19),
         (KernelCategory::KernelPolymorphism, 21),
         (KernelCategory::DtypeAlignment, 63),
@@ -5493,9 +5493,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 784.
+    // Sum must equal 795.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 784, "Plan 003: category totals must sum to 784 (Batch 220 +1: the MoE router weight fold into reduce never-materialize (prism #107, the league fork — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR with opposite polarity — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair); shape-exact subgraph matcher (pointer-equality add chain + exact view strides/offsets), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. pointer alignment; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts and the Metal no-fusion harness validation); Batch 215 +5 before that, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 795, "Plan 003: category totals must sum to 795 (Batch 223 +11: the lithos-metal pack (Research 249/248, lithos-ai/lithos-metal @ 236475fa, Apache-2.0) — A +3 the coherence scope by write set (ordinary loads on the provably immutable class keep the weight-cache path; the barrier pass classifies buffers conservatively, coherence per POINTER fine) + the attention two-knob shared partial workspace (tile size and partition size tune separately in opposite directions; sequential layers share ONE workspace per partial-result kind sized for the largest consumer — 16 copies × 96 KB per capacity token = 12 GB at a 128K context, alone over the M5 Max budget) + the derived-pack immutable-original content-addressed atomic publish (conversion at compile time outside the timed program; the span-shrink skips ≤1 MiB and ≥80% active) — C +1 the fusion scope by barrier cost (in-kernel global barriers priced no cheaper than dispatch boundaries on M3 Pro/M5 Pro → layer-wise; the unfused program is the built-in numerical AND performance control) — D +3 the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (the flag on the READER orders a dependency; the swap moves the barrier onto the immediate predecessor so the conflicting pair overlaps; unknown write metadata never joins the group) + the gpu-resident control loop under static ICB replay (advance/accept-scan/EOS/stop as GPU data; the command sequence encodes once and replays; a later replay returns without doing work) + the cost-aware verify length (L = argmax_l (1+Σa_i)/cost[l] over a profiled per-format table that refuses to extrapolate — miss → FALLBACK_THRESHOLD 0.5) — E +2 the bounded cross-worker barrier protocol polling fan-in ladder (serial/simd/wide/leader-release, monotone epochs, 1M-spin loud-fail, no grid sync on Metal) + the own-slice coprime-stride steal with the claimant-invariance fence elision (enabled per op only where trace shows tail skew AND an A/B gain — none of the dense targets' ops does) — H +1 the MoE readiness queue without a grid barrier (bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring) — K +1 the autotune fidelity (the synthetic carries the producer's REAL params, streams ≥256 MB, beats the default only beyond NOISE_MARGIN 0.03 min-of-5, and the cache key is the full mechanism signature) + THREE count-neutral riders: gdn-transition-replay-log-commit-many += the parity-slot commit-by-recompute (SLOTS=2 by step parity; rejected positions never reach state; the placeholder-binding MTL_SHADER_VALIDATION lesson), delay-rms-scale-past-gemv-epilogue += the STAT_OUT prefold half (per-block partial sums-of-squares summed in block order; one fold, one statistic) + the honesty pair, lut-free-bit-spread-vadd4-unpack += the fp8-subnormal density-split face (normal codes are bit arithmetic; the 8 subnormals take the LUT/tiny-product arm — lithos re-derived the corpus's own density-aware law); Batch 220 +1 before that, the MoE router weight fold into reduce never-materialize (prism #107, the league fork — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR with opposite polarity — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair); shape-exact subgraph matcher (pointer-equality add chain + exact view strides/offsets), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. pointer alignment; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts and the Metal no-fusion harness validation); Batch 215 +5 before that, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5506,8 +5506,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 784,
-        "Plan 003: grouped corpus has {total} rules, expected 784 (Batch 220 +1: the MoE router weight fold into reduce never-materialize, prism #107)"
+        total, 795,
+        "Plan 003: grouped corpus has {total} rules, expected 795 (Batch 223 +11: the lithos-metal pack, Research 249/248)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9614,8 +9614,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        784,
-        "corpus count re-pinned at Batch 220 (1 rule, D: the MoE router weight fold into reduce never-materialize — prism #107, patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91 on the league fork: the MUL(down_out, weights) + n_exp views + (n_exp-1) left-to-right adds subgraph folds into ONE kernel so the weighted intermediate is never materialized ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn accumulating left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair; the generic range checker bypassed because it 'can only reject, while the weights case has a cheap repair'); shape-exact matcher (pointer-equality add chain + exact view strides/offsets + per-(expert,token) broadcast weights), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. both pointer alignments; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts + the Metal no-fusion harness validation; was 783 at Batch 215 (5 rules, the TensorFold native-engine delta pack — Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3f2ab85b2a68f2eed817e45eecbd04781, Apache-2.0: expert-member-rows-width-ladder-bit-identical (H — member rows per pass is a measurable 2/3/4 ladder, bit-identical at every rung, equal-at-2 null point, three recorded negatives) + zero-anchored-prompt-grid-chunk-identity (D — end() returns an off-grid start to the grid so a resumed pass cuts where a cache-off pass cuts, by construction) + verified-logits-derived-outputs-path-independence (D — logprob rows read the verified target logits, path-independent by construction, float64 oracle within 2e-6) + staggered-segments-two-queue-fences (E — one MTLFence per segment + MTLEvent between, the 4096-row gate, the fan-out ceiling) + hip-affine-contract-off-row-invariance (N — built with -ffp-contract=off so every row reduces the same way for any M, one fixed reduction order, one explicit RNE conversion with NaN preservation, the comparator rejecting any single-bit mutation including signed zero); + ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); was 778 at Batch 214 (1 rule, D: the componentwise version guard rollover — llama.cpp #29453 a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards, a quiet performance loss never a compile error; repairs = the ordered component guard (landed) or the packed single compare; the guard-taken proof is the verification) + 4 count-neutral riders on their hosts (the cubecl #1779 lost-device election stop on the B207 measurement-honesty rule, the PrismML #225 per-dispatch-path row-tile axis on the B198 fewrow rule, the PrismML #312 evict-to-reuse pole on rust_perf one-shot-staging, the PrismML #313 host-chain k>1 top-k arm on the B189 argmax-epilogue rule); was 777 at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        795,
+        "corpus count re-pinned at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face; was 784 at Batch 220 (1 rule, D: the MoE router weight fold into reduce never-materialize — prism #107, patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91 on the league fork: the MUL(down_out, weights) + n_exp views + (n_exp-1) left-to-right adds subgraph folds into ONE kernel so the weighted intermediate is never materialized ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn accumulating left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair; the generic range checker bypassed because it 'can only reject, while the weights case has a cheap repair'); shape-exact matcher (pointer-equality add chain + exact view strides/offsets + per-(expert,token) broadcast weights), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. both pointer alignments; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts + the Metal no-fusion harness validation; was 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -15481,6 +15481,240 @@ fn batch218_riders_landed_on_their_hosts() {
         assert!(
             staging.gpu_concept.contains(marker),
             "batch-218 staging rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch223_rules_parse_and_needles_landed() {
+    // G1 for Batch 223 (Plan 222): the lithos-metal pack -- 11 own rules
+    // (Research 249 drafts / Research 248 quote authority,
+    // lithos-ai/lithos-metal @ 236475fa, Apache-2.0; the pin clone
+    // .raw/lithos-b223 HEAD == pin EXACTLY, every quote re-verified at it
+    // by the slice agents + coordinator). R9 folded into R2 (the bus-first
+    // sibling axis), T1's eligibility law folded into R2 (the same
+    // conservative default), T2's name-collision law folded into R8.
+    // Each rule: needle markers (verbatim quotes at the pin) + the syn
+    // parse of both fixture halves.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    let cases: [(&str, &[&str]); 11] = [
+        (
+            "coherence-scope-by-write-set-ordinary-loads-on-immutable",
+            &[
+                "uint4 pointers in this kernel address immutable packed weights only",
+                "This helper only reads keys strictly before the current position",
+                "The preceding dispatch publishes inputs; internal data stays coherent",
+                "Classify by the entire buffer name so aliases at different offsets remain coherent",
+                "Ordinary cached reads may be speculated past a select",
+                "Narrow scale loads are also views of the immutable weight block",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "barrier-on-reader-open-group-conflict-swap-overlap",
+            &[
+                "the flag on the *reader* is what orders a dependency",
+                "v0 set the flag on every op",
+                "a gate GEMV encoded before its mixer core still overlaps the core rather than the projection it followed",
+                "The predicated per-T variants of one GEMV are mutually exclusive and join without a check",
+                "the first op of the step always waits",
+                "an op without that record is treated as writing everything it binds",
+                "Move each sibling gate GEMV in front of the mixer core it was emitted after",
+                "Only a value with a known producer and a subsequent consumer is eligible",
+                "Values first read before being written may carry state across ICB replays",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "bounded-cross-worker-barrier-protocol-polling-fan-in-ladder",
+            &[
+                "Worker zero polls arrivals; other workers poll a single release epoch",
+                "Arrival and release epochs are monotone across stages and repeated dispatches",
+                "bounded waits report failure rather than spinning indefinitely",
+                "fused region has no Metal binding left",
+                "The region still needs its done guard and bounded-barrier error path",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "fusion-scope-by-barrier-cost-not-dispatch-count",
+            &[
+                "Global barriers are not assumed to be cheaper just because they occur inside one kernel",
+                "Merely reducing the number of dispatches does not guarantee lower memory traffic",
+                "Omitting a barrier requires dependency analysis, not a timing observation",
+                "The unfused normalized program is returned as the numerical and performance control",
+                "Model-specific names never enter the compiler",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "gpu-resident-control-loop-static-icb-replay",
+            &[
+                "A later replay can return without doing work",
+                "the per-step SERIAL op that closes a step",
+                "ring overflow: the host fell behind",
+                "ctx_cap > 0 is the program's context capacity",
+                "the KV entries of rejected positions are overwritten by later steps",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "cost-aware-verify-length-survival-cost-table",
+            &[
+                "FALLBACK_THRESHOLD",
+                "verifying the whole block costs",
+                "never an interpolated or extrapolated cost",
+                "accelerator_min_t",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "own-slice-coprime-stride-steal-claimant-invariant",
+            &[
+                "none of the dense targets' ops does",
+                "no fence is needed",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "attention-partition-two-knob-shared-partial-workspace",
+            &[
+                "Smaller partitions expose more parallel work",
+                "96 KB per capacity token, 12 GB at a 128K context",
+                "Sequential attention layers share one workspace",
+                "one buffer per name for the whole program",
+                "both said 'T8'",
+                "24576 rows into a 4096-row output",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "derived-pack-immutable-original-content-addressed-atomic",
+            &[
+                "The original pack remains immutable",
+                "Conversion happens at compilation, outside the timed GPU program",
+                "Derived files are content-addressed and atomically published",
+                "A handful of norms must not keep gigabytes of replaced matrix payload resident in every ICB",
+                "No tensor bytes change",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "autotune-fidelity-synthetic-carries-producer-params",
+            &[
+                "the benchmark must see the program's count",
+                "256 MB streamed per timing",
+                "NOISE_MARGIN",
+                "a variant replaces the default only if faster by more than this fraction",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+        (
+            "moe-readiness-queue-no-grid-barrier-producer-scans-before-retire",
+            &[
+                "There is no grid-wide barrier or wait for a particular worker",
+                "The preceding grouping dispatch resets the counters before every replay",
+                "Its last producer continues after publication and scans ready work before retiring",
+                "The router and final weighted reduction retain their original numerical order",
+                "Original operations are retained as JSON metadata",
+                "Batch 223 / Plan 222",
+            ],
+        ),
+    ];
+    for (rule_id, markers) in cases {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rule_id)
+            .unwrap_or_else(|| panic!("batch-223 rule '{rule_id}' missing from the corpus"));
+        for marker in markers {
+            assert!(
+                entry.gpu_concept.contains(marker),
+                "batch-223 rule '{rule_id}' marker missing: '{marker}'"
+            );
+        }
+        // the pseudocode halves parse (the batch207 pattern).
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-223 ref_shape for '{rule_id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-223 opt_pattern for '{rule_id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch223_riders_landed_on_their_hosts() {
+    // G1 for Batch 223 riders: THREE count-neutral riders on existing
+    // hosts -- RD1 the parity-slot commit-by-recompute on
+    // gdn-transition-replay-log-commit-many (entries_gpu_08), RD2 the
+    // STAT_OUT prefold half + the honesty pair on
+    // delay-rms-scale-past-gemv-epilogue (entries_gpu_02), RD3 the
+    // fp8-subnormal density-split face on lut-free-bit-spread-vadd4-unpack
+    // (entries_gpu_33). Every marker a verbatim quote at the pin clone.
+    let corpus = build_kernel_seed_corpus();
+
+    let gdn = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "gdn-transition-replay-log-commit-many")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 223 / Plan 222",
+        "236475fa",
+        "the v-head blocks sharing a key head's conv window race on it -- a block that finishes first overwrites the window a slower sibling is still reading",
+        "the rejected positions never reach the state",
+        "the source of an intermittent wrong-token / hang / empty-generation failure of the speculative programs, found with MTL_SHADER_VALIDATION=1",
+        "Forward GDN already stores the complete recurrence in the next parity slot",
+        "Batch 223 rider / Plan 222",
+    ] {
+        assert!(
+            gdn.gpu_concept.contains(marker),
+            "batch-223 gdn rider marker missing: '{marker}'"
+        );
+    }
+
+    let rms = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "delay-rms-scale-past-gemv-epilogue")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 223 / Plan 222",
+        "the consumer sums the n_blocks partials in block order -- the same statistic, deterministic, one dispatch fewer per norm",
+        "One SIMD group computes the eight reciprocal RMS values. Projections still apply them after their FP32 product, preserving the commuted-norm contract.",
+        "Moving BF16 rounding changes the numerical path",
+        "Tests must distinguish numerical agreement with the reordered formula from agreement with the original rounding boundaries",
+        "Removing a dispatch is not sufficient evidence of a latency improvement",
+        "Batch 223 rider / Plan 222",
+    ] {
+        assert!(
+            rms.gpu_concept.contains(marker),
+            "batch-223 rms rider marker missing: '{marker}'"
+        );
+    }
+
+    let lut = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "lut-free-bit-spread-vadd4-unpack")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 223 / Plan 222",
+        "uint a=q&127u, bits=(a<<4)+(120u<<7);",
+        "if(a<8u) v=as_type<float>((a<<20)+(121u<<23))-(1.0f/64.0f);",
+        "bfloat4 tiny=bfloat4(float4(a&ushort(7u))*(1.0f/512.0f));",
+        "Batch 223 rider / Plan 222",
+    ] {
+        assert!(
+            lut.gpu_concept.contains(marker),
+            "batch-223 lut rider marker missing: '{marker}'"
         );
     }
 }

@@ -1,7 +1,7 @@
 //! Entries slice — Batch 223 (Plan 222) — the lithos-metal pack, slice C:
 //! R10 derived pack immutable original + content-addressed atomic
-//! publish (MemoryAccess), R11 autotune fidelity (AutotuneDispatch),
-//! R12 MoE readiness queue without a grid barrier (MoeDispatchBackward).
+//! publish (`MemoryAccess`), R11 autotune fidelity (`AutotuneDispatch`),
+//! R12 `MoE` readiness queue without a grid barrier (`MoeDispatchBackward`).
 //! Source lithos-ai/lithos-metal @ 236475fa (Apache-2.0); every quote
 //! re-verified at the pin clone this session.
 //!
@@ -20,7 +20,7 @@
 //! `grid barrier` / `retire`): B105 owns the routing no-host-sync
 //! contract (adjudicated COMPOSED NEIGHBOR, see its entry), B70
 //! host-side barrier elimination, B119 sentinel polls, B194 overwrite
-//! gating, B186/B210 the MoE admission/workspace/cache axes — the queue
+//! gating, B186/B210 the `MoE` admission/workspace/cache axes — the queue
 //! discipline has no owner.
 
 use super::KernelRule;

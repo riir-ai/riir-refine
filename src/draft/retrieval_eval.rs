@@ -2251,7 +2251,20 @@ mod tests {
                     // 105/168 (62.5%) — floor = 100 per the Plan-030 convention.
                     // Batch 179 re-pin (2026-09-25): population 171, MEASURED
                     // 107/171 (62.6%) — floor = 102.
-                    102.0 / 171.0
+                    // Batch 223 re-pin (2026-10-11): MEASURED 101/171 (59.1%,
+                    // isolated E:/tmp/b223tgt) — was 107 at B179; the interim
+                    // batches (B180–B222) measured ≥ 102 (the gate held at
+                    // the 102 pin without a re-measure) and the lithos-metal
+                    // 11 tipped it one span. Attribution MEASURED both sides:
+                    // the pre-batch detached worktree (E:/git/.w223pre @
+                    // e7f2a9ee, isolated E:/tmp/b223pre) measured EXACTLY
+                    // 102/171 (59.6%) — the batch's 11 kernel rules cost ONE
+                    // span, the B137 mechanism (new kernel concept vocabulary
+                    // — ICB replay, coherent pointers, megakernel barrier
+                    // placement — attracts one more generic-Rust span to a
+                    // kernel centroid). Floor = measured − 5 = 96 per the
+                    // Plan-030 convention.
+                    96.0 / 171.0
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file

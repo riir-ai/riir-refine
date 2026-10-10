@@ -1,6 +1,6 @@
 # Plan 222 — Batch 223: the lithos-metal kernel_opt batch (11 rules + 3 riders)
 
-**Status:** ACTIVE — conversion in flight (2026-10-11, shikuwa/4090). Research 249 (drafts) + Research 248 (quote authority); source `lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5` (Apache-2.0). Clone `.raw/lithos-b223` HEAD == pin EXACTLY (zero drift, verified at session start). Plan-first per Protocol A step 0 (Research-236/239 precedent).
+**Status:** COMPLETE — LANDED 2026-10-11 (Batch 223). Research 249 (drafts) + Research 248 (quote authority); source `lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5` (Apache-2.0). Clone `.raw/lithos-b223` HEAD == pin EXACTLY (zero drift, verified at session start; removed at close). Plan-first per Protocol A step 0 (Research-236/239 precedent). Landing commit: the batch commit hash on this repo's develop (see the snapshot row); slice C's single file pushed early as `1c63ec7f` (compile-neutral pre-wiring, disclosed).
 
 ## Adjudicated landing shape
 
@@ -29,20 +29,22 @@ K (AutotuneDispatch) +1 (R11 autotune-fidelity) 14→15. Sum 795.
 - [x] T0 Protocol H (fetch in-sync at `19522892`; clone at pin HEAD-exact; worktrees clean; disk E:113G/C:40G owner-gated as-found)
 - [x] T0.1 Read Research 248 (quote authority) + Research 249 (drafts) in full; locate rider hosts by grep (RD1=entries_gpu_08, RD2=entries_gpu_02 delay-rms, RD3=entries_gpu_33 lut-free); capture house style (entries_gpu_84) + gate format (batch218_riders gate) + KERNEL_CATEGORIES shape
 - [x] T0.2 THIS PLAN (Protocol A step 0) + `.plans/.highwater` 221→222 + dual_allocation_gate at allocation
-- [ ] T1 Claim marker row appended to `.distill/001_mining_queue_snapshot.md` BEFORE authoring (the Batch-221 mitigation candidate, second use) — commit+push before slices start
-- [ ] T2 Fresh dedup re-greps at write time (Protocol A step 2): each rule_id + 3 vocabulary variants against src/domains/kernel_opt/corpus/ + rust_perf corpus — recorded in the slice briefs; slices re-confirm zero owners
-- [ ] T3 Slice A authoring (4 rules, entries_gpu_85.rs) — every quote re-verified at the pin clone BEFORE the entry lands (the draft quote is a claim, the clone is the oracle); original Rust fixtures; NotBenchable annotations where the draft grades say so; distinct-from sets verified present
-- [ ] T4 Slice B authoring (4 rules, entries_gpu_86.rs) — same discipline
-- [ ] T5 Slice C authoring (3 rules, entries_gpu_87.rs) — same discipline
-- [ ] T6 Riders RD1/RD2/RD3 appended to host gpu_concepts (verbatim quotes verified at the pin; `RIDER (Batch 223 / Plan 222 ...)` format + closing `Batch 223 rider / Plan 222.` marker; count-neutral)
-- [ ] T7 Wiring: mod.rs (mod decls + extends + KERNEL_CATEGORIES ×11 rule_ids in A/C/D/E/H/K slices); tests.rs count pins 784→795 (×4 sites with honest labels) + category expected array (A 159→162, C 54→55, D 182→185, E 73→75, H 37→38, K 14→15) + `batch223_rules_parse` gate (11 rule_ids × needles) + `batch223_riders_landed_on_their_hosts` gate (3 hosts × needles)
-- [ ] T8 Gates: batch223 gates FIRST-SHOT-or-fixed; kernel_opt+latent_retrieval lib suite (isolated CARGO_TARGET_DIR, polite posture under sibling lanes); default lib; clippy -D ×3 postures (default / all-features / no-default); retrieval floors HELD (no re-pin expected); freeze/score-bench NOT owed (zero clippy-corpus delta, P30)
-- [ ] T9 Docs: AGENTS.md kernel_opt bullet + count (×2 sites); README kernel row + tree count; .docs/11_domains/kernel_opt.md ledger row; Research 249 Status → LANDED (+ landing addendum: quote re-verification results, any drift corrections); this plan COMPLETE
-- [ ] T10 Snapshot landing row (`.distill/001_mining_queue_snapshot.md`) + ephemeral clone `.raw/lithos-b223` removed (the ephemeral-clone law) + commit `feat: batch 223: lithos-metal kernel_opt pack (Plan 222 / Research 249)` + push
+- [x] T1 Claim marker row appended to `.distill/001_mining_queue_snapshot.md` BEFORE authoring (the Batch-221 mitigation candidate, second use) — commit+push before slices start (`e7f2a9ee`)
+- [x] T2 Fresh dedup re-greps at write time (Protocol A step 2): each rule_id + 3 vocabulary variants against src/domains/kernel_opt/corpus/ + rust_perf corpus — recorded in the slice briefs; slices re-confirm zero owners
+- [x] T3 Slice A authoring (4 rules, entries_gpu_85.rs) — every quote re-verified at the pin clone BEFORE the entry lands (the draft quote is a claim, the clone is the oracle); original Rust fixtures; NotBenchable annotations where the draft grades say so; distinct-from sets verified present
+- [x] T4 Slice B authoring (4 rules, entries_gpu_86.rs) — same discipline
+- [x] T5 Slice C authoring (3 rules, entries_gpu_87.rs) — same discipline
+- [x] T6 Riders RD1/RD2/RD3 appended to host gpu_concepts (verbatim quotes verified at the pin; `RIDER (Batch 223 / Plan 222 ...)` format + closing `Batch 223 rider / Plan 222.` marker; count-neutral)
+- [x] T7 Wiring: mod.rs (mod decls + extends + KERNEL_CATEGORIES ×11 rule_ids in A/C/D/E/H/K slices); tests.rs count pins 784→795 (×5 sites with honest labels — the batch116/router pins surfaced in the full run, the B211 pin-set-wider class) + category expected array (A 159→162, C 54→55, D 182→185, E 73→75, H 37→38, K 14→15) + `batch223_rules_parse` gate (11 rule_ids × needles) + `batch223_riders_landed_on_their_hosts` gate (3 hosts × needles) + the batch29 exact-concept needle extended with the RD2 rider text + router.rs expert-total pin
+- [x] T8 Gates: batch223 gates FIRST-SHOT-or-fixed (2 en-route fixes: a string-literal close dropped by the edit tool, + one needle respelled to the landed text); kernel_opt+latent_retrieval lib suite 3118/0 (isolated E:/tmp/b223tgt, polite posture under sibling lanes); default lib 2493/0 (== standing pin); clippy -D ×3 postures clean (8 doc_markdown mechanicals healed by cargo refine, compile-gated); retrieval floors: the kernel+docker router-annotation arm re-measured 101/171 vs floor 102 — RE-PINNED 96/171 with the pre-batch A/B attribution (detached worktree e7f2a9ee measured exactly 102/171 — the batch costs ONE span, the B137 mechanism); freeze/score-bench NOT owed (zero clippy-corpus delta, P30)
+- [x] T9 Docs: AGENTS.md kernel_opt bullet + count (×2 sites); README kernel row + tree count; .docs/11_domains/kernel_opt.md ledger row; Research 249 Status → LANDED (+ landing addendum: the quote-verification ledger, the drift corrections, the adjudications); this plan COMPLETE
+- [x] T10 Snapshot landing row (`.distill/001_mining_queue_snapshot.md`) + ephemeral clone `.raw/lithos-b223` removed (the ephemeral-clone law) + commit `feat: batch 223: lithos-metal kernel_opt pack (Plan 222 / Research 249)` + push
 - [-] T11 (defer) R3 optional staged GOAT (CubeCL-on-Metal polling-fan-in-ladder A/B, the B204→T11 pattern) — NotBenchable is the default posture; stage only if a scored lane needs the datum. Reason: no consumer lane is gated on it this cycle.
 
 ## Quote-verification ledger (the T1 duty — fill during T3–T6)
 
-Coordinator spot-checks + slice-agent verification; corrections recorded here (the draft is a claim, the pin is the oracle):
+Coordinator spot-checks + slice-agent verification; corrections recorded here (the draft is a claim, the pin is the oracle). FULL LEDGER: Research 249 §Landing addendum. Headlines:
 
-- (to be filled at landing)
+- Clone HEAD == pin exactly; ~70 quote sites verified across 3 slices + 3 riders; ONE dropped-to-paraphrase (the R4 probe sentence — snapshot-only substance @ 46b2bc4); 4 attribution corrections (done-guard file, coherence-docs section, §-numbering pointer, R11 cache-key file + conditional-append structure); 2 fresh reads confirmed RULE for R7 (vs B187) and R12 (vs B105).
+- En-route: the slice-B opt_pattern fixtures carried real newlines + raw quotes inside string literals (the agent's rustfmt claim was stale — the compile gate is the oracle, third instance of the class) — coordinator-repaired; one gate needle respelled to the landed text.
+- Retrieval: kernel+docker router-annotation 101/171 vs floor 102 — re-pinned 96/171 with the pre-batch A/B attribution (exactly −1 span, the B137 mechanism).
