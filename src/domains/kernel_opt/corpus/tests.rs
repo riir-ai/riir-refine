@@ -15054,6 +15054,118 @@ fn batch212_cpu_b2b_rider_present() {
 }
 
 #[test]
+fn batch213_riders_landed_on_their_hosts() {
+    // G1 for Batch 213 (Plan 213): the census-unblocked conversion set --
+    // FOUR count-neutral riders (Leads 1+2 of the 10-08 intake, the P45
+    // pad middle rung, Lead 3 #28713; the queue's designated first four).
+    // A rider that never landed is a staging note, not corpus (the
+    // batch198 precedent). Markers are the load-bearing quotes at the
+    // pins (verified verbatim at the pins by the verification pass; the
+    // P45 pins are git f616f65 for cachedNarrowZeros + main tip 0c7c392
+    // for LeadingRowsSlot -- the submission UUID 6e19fe12 is NOT a sha).
+    let corpus = build_kernel_seed_corpus();
+
+    // Rider 1: #30087 -- the CUDA GDN four-columns-per-warp face on the
+    // gpu_09 row-packing rule (the B198 #292 precedent: family EXTENDED).
+    let gdn = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "simdgroup-row-packing-reduction-amortization")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 213 / Plan 213",
+        "24e41838e0c834f67db214e6d280af51f266056e",
+        "#30087",
+        "the warp is split into cols_per_warp segments of lanes_per_col lanes; each segment owns",
+        "S_v must be a multiple of lanes_per_col",
+        "float kv_col = warp_reduce_sum<lanes_per_col>(kv_shard);",
+        "if (lane_in_col == 0) { attn_data[col] = attn_col * scale; }",
+        "shrink the CTA when the wider CTA would leave SMs without a CTA, so small head counts keep the device filled",
+        "while (num_warps > 1 && H*n_seqs*(S_v / (cols_per_warp * num_warps)) < nsm) { num_warps /= 2; }",
+        "NotBenchable",
+        "Batch 213 rider",
+    ] {
+        assert!(
+            gdn.gpu_concept.contains(marker),
+            "batch-213 GDN rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 2: P45 -- the cached zero-pad MIDDLE rung on the B176
+    // dtype-native rule (the pad facet's second rider; the fold-into-read
+    // pole is the B195 rider above it in the same concept).
+    let pad = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "dtype-native-source-read-with-shared-admission-predicate")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 213 / Plan 213",
+        "the pad ladder's MIDDLE RUNG",
+        "The same buffer is reused across projections; it is never written.",
+        "if narrowPads.count > 12 { narrowPads.removeAll(keepingCapacity: true) }",
+        "fold-into-read > once-resident-shared > per-call",
+        "held off the module tree (a plain class, as `matrixRoute` is), so it is never loaded, updated or counted as a parameter of this module",
+        "MLXFAST_RIDER_NARROW_ZERO_PAD",
+        "Batch 213 rider",
+    ] {
+        assert!(
+            pad.gpu_concept.contains(marker),
+            "batch-213 pad-rung rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 3: #29608 -- the pinned upload staging ring on the gpu_61
+    // ring-overwrite rule (the gating shape applied to the upload side).
+    let ring = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ring-overwrite-gated-k-back-readiness")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 213 / Plan 213",
+        "000bee54a544070356b44d68af299b973d391d26",
+        "#29608",
+        "if (ctx->staging.submitted[slot]) {",
+        "copy through pinned memory so the device never reads mmap()ed pages directly",
+        "chunks pipeline on the in-order compute queue, so no drain per tensor is needed",
+        "waits for every queued upload, then releases the pinned block",
+        "USM allocations above 2 GiB take the relaxed/large-allocation path, which serializes H2D copies with compute and prevents copy/compute overlap",
+        "Batch 213 rider",
+    ] {
+        assert!(
+            ring.gpu_concept.contains(marker),
+            "batch-213 upload-ring rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 4: #28713 -- the GPU shape-keyed top-k regime face on the
+    // gpu_64 topk dispatch rule.
+    let topk = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "register-width-topk-falls-back-to-tiled-radix-select")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 213 / Plan 213",
+        "71ad0590f4808b6202f9213d166913858c73b1bc",
+        "#28713",
+        "bitonic for short rows, radix select for several long rows, and DeviceTopK or CUB argsort for a single long row",
+        "bitonic stays in use for rows up to a padded 1024 while the rows fit in one wave of blocks (nrows <= number of SMs)",
+        "radix select pays a fixed cost of about a dozen launches that only amortizes over more rows",
+        "Radix select now processes rows in chunks so its scratch memory stays bounded, and the bitonic path keeps its chunking",
+        "const int chunk_bytes = 1 << 26;",
+        "On qwen4exp at 34,816 tokens this cuts top-k from 1,671,253 launches / 5,761.8 ms to 2,329 / 941.8 ms",
+        "Batch 213 rider",
+    ] {
+        assert!(
+            topk.gpu_concept.contains(marker),
+            "batch-213 topk rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch210_pseudocode_parses() {
     // G1 for Batch 210 (Plan 210): the single 10-08 late-envelope lead --
     // llama.cpp #29887 MoE expert GPU cache -- landed as ONE new D rule,
