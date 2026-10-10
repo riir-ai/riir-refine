@@ -1,6 +1,6 @@
 # Plan 218 — Batch 218: Lead 15 (llama.cpp #29809 MXFP4 SYCL) as two count-neutral kernel_opt riders
 
-**Status:** LANDED 2026-10-10 (see the commit for the hash; gates ALL GREEN — full suite 3109/0, default 2488/0 == pin, clippy -D ×2 clean, retrieval floors held, count pins unmoved)
+**Status:** LANDED 2026-10-10 at riir-refine `49bfc500` (gates ALL GREEN — full suite 3109/0, default 2488/0 == pin, clippy -D ×2 clean, retrieval floors held, count pins unmoved)
 
 ## Source (the staging row, now FULLY read)
 
