@@ -952,6 +952,16 @@ required-features = ["score_bench", "latent_retrieval"]
 name = "ood_fresh_family"
 required-features = ["score_bench", "latent_retrieval"]
 
+# Issue 157 P0.2 — the retrieval-negative channel's miss-set + near-tie
+# census (the triage verdict chain's P0 readout; pre-registered margin
+# fractions live in the module doc). Print-only, writes nothing, reads only
+# the in-tree corpus + fixtures.
+#   cargo run --release --features latent_retrieval,clippy_lints,rust_perf,kernel_opt \
+#     --example p157_near_tie_census
+[[example]]
+name = "p157_near_tie_census"
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf", "kernel_opt"]
+
 # Issue 008: real-world validation of self_evolve via cargo clippy ground truth.
 # Requires both self_evolve + clippy_verify. SLOW — spawns cargo clippy dozens of times.
 [[example]]

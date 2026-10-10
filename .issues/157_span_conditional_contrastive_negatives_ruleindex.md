@@ -1,6 +1,8 @@
 # Issue 157: Span-conditional contrastive negatives in RuleIndex retrieval (v4 `rejected` labels as a negative channel)
 
-**Status:** OPEN (fusion idea, novelty TBD — owner triage) — filed 2026-10-08, surfaced by the katgpt-rs research PASS on arXiv:2509.09691 (wave/resonance memory; the paper itself was PASSed — no adoption — but its context-conditional polarity framing exposed this gap in our own retrieval).
+**Status:** OPEN (tripwire — the P0 probe ran, verdict **DECLINE-for-now on volume**; re-open trigger recorded below) — filed 2026-10-08, surfaced by the katgpt-rs research PASS on arXiv:2509.09691 (wave/resonance memory; the paper itself was PASSed — no adoption — but its context-conditional polarity framing exposed this gap in our own retrieval).
+
+**OWNER TRIAGE RESOLVED 2026-10-10** (the task below; Claude verdict session `2b8a1316`, rounds 1–3 → AGREE; probe + record: [`.benchmarks/111_issue157_negative_channel_p0.md`](../.benchmarks/111_issue157_negative_channel_p0.md)). Verdict: **the retrieval-negative consumer is NOT wanted today — the local store carries ~0 negatives** (12 pairs, one span; the `rejected` field landed 2026-10-08), so the channel is vacuous on current data (kill criterion 1). NOT a mechanism negative: the census found the flip target exists (4 of 15 miss spans have gold at rank 1 — one demotion of the wrong top-1 promotes it; 2–5 near-tie at the pre-registered margins; miss-set n = 15). Two data-model blockers recorded for any future P1: the store does not persist pre-fix span text (certification of acceptable-vs-wrong is impossible), and the eval corpus has zero authored acceptable sets. **Re-open trigger:** ≥ 60 negative pairs across ≥ 10 distinct spans in the local store (or any live store) — then: certification first, census re-run, only then the P1 A/B with the round-1 gates (paired LB95 top-1 delta + zero regressions vs baseline + per-family retention + pre-registered λ/threshold). The census instrument: `cargo run --release --features latent_retrieval,clippy_lints,rust_perf,kernel_opt --example p157_near_tie_census`. The mint consumer (the v4 label's existing consumer) is untouched; fleet rows stay out of scope pending a separate consent decision.
 
 ## The idea
 
@@ -39,7 +41,7 @@ away the conditional information; plain retrieval never sees it.
 
 ## Tasks
 
-- [ ] Owner triage: is the retrieval-negative consumer wanted beside the mint consumer?
+- [x] Owner triage: is the retrieval-negative consumer wanted beside the mint consumer? — **RESOLVED 2026-10-10: NO for now (volume-vacuous), tripwire above.** Verdict chain: Claude verdict rounds 1–3 AGREE; P0 ran per the amended spec (`.benchmarks/111`); DECLINE-for-now on kill criterion 1 (volume ~0); census shows the flip target exists; re-open trigger ≥60 pairs / ≥10 spans.
 - [ ] If GO: PoC on the oracle fixtures (`src/draft/retrieval_eval.rs` fixtures) measuring
       top-1 precision delta with vs without the negative channel; G-gate vs incumbent;
       only then a plan.
