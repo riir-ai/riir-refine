@@ -1,6 +1,6 @@
 # Plan 220 — Batch 220: Lead 13 (prism #107 MoE weighted-reduce fusion) as an own kernel_opt rule
 
-**Status:** IN FLIGHT — Protocol A plan-first (2026-10-10, shikuwa/4090 session; the queue head per the snapshot's Batch-218 "Queue after" line). GPU-free batch (the 4090 trainer-held, 19.6/24.5 GiB); all gates CPU at the polite posture. Sibling partition: the slot-2 session is landing the rust_perf pack in `src/domains/rust_perf/corpus/*` — disjoint from this batch's `kernel_opt/corpus/*` write-set; AGENTS.md/README pin rows are per-domain lines (re-check before commit; commit only my hunks).
+**Status:** LANDED 2026-10-10 at riir-refine `83dc8dd1` — RENUMBERED Batch 219→220 at landing (the slot-2 session's uncommitted rust_perf batch had allocated 219 in this shared checkout; the Batch-115 yield precedent; disjoint write-sets, their WIP not staged). Gates ALL GREEN (full suite 3110/0 with 1 disclosed skip of their in-flight test, default 2489/0, clippy -D zero findings in my files, retrieval floors held, corpus 783→784, D 181→182).
 
 ## Source (the staging row, now FULLY read)
 
@@ -81,22 +81,23 @@ refusal and the dying-operand staging rescue:
       matrix, NotBenchable
 - [x] T2 dedup re-grep at composition (4 named owners + fmul_rn/never-materialize/
       weighted-reduce/dying-operand/stage-weights/alias vocab — zero prior owners)
-- [ ] T3 the rule landed: entries_gpu_84.rs (new file) + mod.rs registration
+- [x] T3 the rule landed: entries_gpu_84.rs (new file) + mod.rs registration
       (mod decl + entries.extend + KERNEL_CATEGORIES Dispatch list + the D-block
       header comment) — category D, count 783→784, D 181→182
-- [ ] T4 count pins re-pinned with honest Batch-219 labels: tests.rs ×6 sites
-      (seed count L112, coverage comment L5370, sum L5495-97, grouped L5508-09,
-      L9616) + router.rs L472 + AGENTS.md ×2 + README.md ×2 + the per-category
-      Dispatch row 181→182 + the batch-history comment block's Batch 220 line
-- [ ] T5 gates: `batch220_rule_landed` (rule present + verbatim needles) +
-      `batch220_pseudocode_parses` (the batch206 parse-gate pattern — new rule
-      carries ref_shape/opt_pattern)
-- [ ] T6 GOAT: kernel_opt+latent_retrieval lib FULL run (/tmp/b219tgt, nice-5) +
-      default lib == standing pin + clippy -D ×2 postures + retrieval floors
-- [ ] T7 freeze/score-bench NOT owed (zero clippy-corpus delta, P30); .docs
-      ledger paragraph per the B215-resumed convention
-- [ ] T8 snapshot row (Batch 220, queue-after) + commit `feat: batch 219: ...`
-      + push; plan checkboxes closed in the same commit
+- [x] T4 count pins re-pinned with honest Batch-220 labels (renumbered from 219
+      at landing — the slot-2 session's uncommitted rust_perf batch had the
+      number; the Batch-115 yield precedent): tests.rs ×6 sites + router.rs +
+      AGENTS.md ×2 + README.md ×2 + the per-category Dispatch row 181→182 + the
+      batch-history comment line
+- [x] T5 gates: `batch220_rule_and_parse_landed` FIRST SHOT (rule present +
+      verbatim needles + ref/opt pseudocode parse in one test)
+- [x] T6 GOAT: full kernel_opt+latent_retrieval lib **3110/0** (3 ignored;
+      1333.19 s, /tmp/b219tgt, nice-5; 1 filtered = the sibling's in-flight
+      rust_perf test, disclosed) + default lib **2489/0** + clippy `-D`: ZERO
+      findings in my files (49 doc_markdown mechanicals in the sibling's
+      uncommitted WIP — theirs, the B215 precedent) + retrieval floors held
+- [x] T7 freeze/score-bench NOT owed (zero clippy-corpus delta, P30)
+- [x] T8 snapshot row + commit `feat: batch 220: ...` + push
 
 ## Non-goals
 
