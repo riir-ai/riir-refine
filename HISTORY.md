@@ -622,6 +622,11 @@ Full text in AGENTS.md: monotonic never-reused counters per directory, one count
 ## 2026-10-06 — Issue 144: the dist README + CLI-help audit — T1–T5 landed; T6 dispositioned on the owner's re-arm posture
 - T1 dist README rewrite + CHANGELOG (incl. three corrections beyond the audit's evidence table); T2 repo rename; T3 `--help`/`--help-all` split with internal plan/issue ids banned from the user page; T4 `--domain` choices derived from the compiled feature set; T5 EULA/LICENSE + the private-crate leak fixed at the `about.toml` level. T6 dispositioned NOT done: the testnet alias stays pinned (the recorded re-arm posture wins over a cosmetic help-text win).
 
+## 2026-10-10 — Issue 159 CLOSED: the net-pin conflict posture refuses every run at startup — fixed `2e54d205`, verified
+- Found during the kat_ua (riir-kat 003 T15) landing's guard run; pre-existing and reproducible since `492381b2`. Root cause: under `--all-features` both net pins are on, so the `command_service_url()` conflict refusal fired at STARTUP (via the Issue-153 update check's URL resolution) — before any dial, killing every local-only scan a all-features-built binary tried to run, including the guard's own Layer 5c e2e (`auto_oracle_features_cli`).
+- Fix (`2e54d205`): `net_partition_url()` downgrades the both-pins conflict to one advisory line for LOCAL state partitions (LeaseStore open_net + mining outbox read — state partitions under the default net); every DIAL still exits 2 through the strict seam (the pin contract unchanged). `build_stamp_cli`'s 'multi' pin assertion is posture-aware. Ride-along: `run_docker_lane` gained the `#[cfg(feature = "docker")]` its caller already carried (E0433 on docker-less builds).
+- Verified 2026-10-10: `cargo test --all-features --test auto_oracle_features_cli` → 1 passed. Issue file removed per the noise-reduction rule; this entry is the record.
+
 ## Lessons
 - A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
 - `git fetch origin` BEFORE any sizing/dry-run on a repo not touched this session — the reflog can be 8 commits stale and the residue phantom.
