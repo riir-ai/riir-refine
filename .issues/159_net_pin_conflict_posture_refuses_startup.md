@@ -1,6 +1,8 @@
 # Issue 159: the net-pin conflict posture refuses every run at startup — the all-features e2e lane (auto_oracle_features_cli) has been red since the T9/T11 landing
 
-**Status:** Open — filed by the idle worker 2026-10-10 during the kat_ua (riir-kat 003 T15) landing; the failure is PRE-EXISTING, reproducible at `492381b2`..`9374ddc6` (before the UA commit `38e7164e`).
+**Status:** FIXED on develop — the conflict posture partitions local state under the default net (one advisory line) and keeps every dial fatal; the e2e + the build-stamp pin assertion are posture-aware. This file remains as the record (remove on the next hygiene pass).
+
+Open — filed by the idle worker 2026-10-10 during the kat_ua (riir-kat 003 T15) landing; the failure is PRE-EXISTING, reproducible at `492381b2`..`9374ddc6` (before the UA commit `38e7164e`).
 
 ## The finding
 

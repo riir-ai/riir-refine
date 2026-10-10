@@ -75,16 +75,27 @@ fn version_prints_the_compiled_feature_stamp() {
     );
     // riir-kat Issue 003 T9: the NET PIN line — sourced from riir-kat's own
     // const (the member that ENFORCES the pin names it). This test build is
-    // unpinned, so the multi-net label is the pinned expectation.
+    // unpinned, so the multi-net label is the pinned expectation — UNLESS
+    // this IS an all-features build, where both pins ride and the conflict
+    // sentence is the correct const (issue 159: the conflict posture is a
+    // legal build, not a test failure).
     assert!(
         text.contains(&format!("net: {}", riir_refine::kat_net_pin::NET_PIN)),
         "the version block must carry the net pin. output:\n{text}"
     );
-    assert_eq!(
-        riir_refine::kat_net_pin::NET_PIN,
-        "multi (default mainnet)",
-        "this test binary enables no pin features"
-    );
+    if !cfg!(feature = "net-mainnet") && !cfg!(feature = "net-devnet") {
+        assert_eq!(
+            riir_refine::kat_net_pin::NET_PIN,
+            "multi (default mainnet)",
+            "this test binary enables no pin features"
+        );
+    } else {
+        assert_eq!(
+            riir_refine::kat_net_pin::NET_PIN,
+            "conflict: net-mainnet+net-devnet (empty allowed set — every host refuses)",
+            "both pins enabled: the conflict label is the pinned expectation"
+        );
+    }
 }
 
 /// `-V` is the documented short form and must print the same block — a
