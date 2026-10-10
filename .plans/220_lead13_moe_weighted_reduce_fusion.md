@@ -1,0 +1,104 @@
+# Plan 220 — Batch 220: Lead 13 (prism #107 MoE weighted-reduce fusion) as an own kernel_opt rule
+
+**Status:** IN FLIGHT — Protocol A plan-first (2026-10-10, shikuwa/4090 session; the queue head per the snapshot's Batch-218 "Queue after" line). GPU-free batch (the 4090 trainer-held, 19.6/24.5 GiB); all gates CPU at the polite posture. Sibling partition: the slot-2 session is landing the rust_perf pack in `src/domains/rust_perf/corpus/*` — disjoint from this batch's `kernel_opt/corpus/*` write-set; AGENTS.md/README pin rows are per-domain lines (re-check before commit; commit only my hunks).
+
+## Source (the staging row, now FULLY read)
+
+PrismML-Eng/llama.cpp `8eaee8b7f` → PR #107, patch commit `930ddba3b7f07c1599354d2989aeb23b51988f91`
+(MIT; bri-prism) — "cuda: fold the MoE router weighting and expert reduction into one
+kernel". The full 876-line patch fetched this session (`/tmp/b219/lead13.patch`; 6 files,
++734: ggml-cuda.cu +147, moe-reduce.cu +191 new, moe-reduce.cuh +19 new,
+test-backend-ops.cpp +77, test-moe-weighted-reduce.cpp +299 new, CMakeLists +1). Every
+quote below verified verbatim at it. The staging row's "A10 number truncated at read" is
+adjudicated: **the A10 paragraph is a behavior/admission matrix, not a wall-clock figure**
+("every no-overlap case fused with staged=0, every weights-inside-dst case fused with
+staged=1, every dst-inside-x case declined the fusion, with all 48 cases bit-identical")
+— the win is quantified structurally (the MUL "writes a second full-size F32 tensor …
+tens of MB written and read again per layer"), NotBenchable honestly.
+
+## The rule (OWN RULE — three unowned atoms, one mechanism)
+
+`moe-router-weight-fold-into-reduce-never-materialize` — category **D** (Dispatch):
+the never-materialize consumer-fold into a reduction, with the bit-identity-intrinsics
+refusal and the dying-operand staging rescue:
+
+1. **The fold**: build_moe_ffn's `MUL(down_out, router_weights) → n_exp VIEWs →
+   (n_exp−1) ADDs` subgraph becomes ONE kernel `dst[i0,i2] = Σₑ x[i0,e,i2]·w[0,e,i2]`;
+   the weighted intermediate is never written or read ("tens of MB written and read again
+   per layer" at large ubatch).
+2. **Bit-identity as the identity instrument**: `__fmul_rn` every product + `__fadd_rn`
+   accumulate left-to-right in increasing slot order — "the explicit intrinsics keep nvcc
+   from contracting a product and its accumulation into an FMA, which would be more
+   accurate but would not match the baseline". The REFUSAL of a more-accurate fast path
+   is what makes the fusion legal; the test bound is 0.0 error.
+3. **The dying-operand staging rescue**: the weights die at the mul so "the graph
+   allocator routinely packs the add-chain output over them"; dst↔w overlap → snapshot
+   the weights into pool scratch ("they are n_expert_used*n_tokens floats") and fuse
+   anyway; dst↔x overlap → decline (cross-block race, no cheap repair). The generic
+   range checker is bypassed deliberately: it "ignores sources whose op is GGML_OP_NONE
+   and … can only reject, while the weights case has a cheap repair."
+4. **Admission**: F32-only, contiguous, same-shape; weights = per-(expert,token) scalars
+   broadcast along ne0; the EXACT view geometry (nb[1]=mul->nb[2], data at e*mul->nb[1])
+   + the EXACT left-to-right add-chain node order; n_tok ≤ 65535; cap 2..15 experts
+   (`GGML_CUDA_MOE_REDUCE_MAX_EXPERTS 15`, bounded by ggml_can_fuse_subgraph's 32-node
+   limit — the subgraph is 2·n_exp nodes); 16 falls through to the unfused ops.
+5. **Kill/debug switches**: `GGML_CUDA_MOE_REDUCE_DISABLE=1` parsed beside
+   `GGML_CUDA_DISABLE_FUSION`; `GGML_CUDA_MOE_REDUCE_DEBUG=1` logs each fusion incl.
+   whether the weights were staged.
+6. **float4 admission**: five conjuncts (ne0/sx1/sx2/sd1 %4 + x/dst 16B pointer
+   alignment) — stride-aligned-yet-pointer-misaligned falls back to scalar.
+7. **The tests**: 48 cases at a 0.0 error bound vs CPU (bit-identity), expert counts
+   2/3/4/8/15/16 (cap + fall-through), float4+scalar, single/multi-token, weights as
+   graph input AND dying in-graph intermediate; + hand-placed single-buffer aliasing
+   layouts test-backend-ops cannot reach (weights-inside-dst must stage; dst-inside-x
+   must decline); Metal (no fusion) passes the same 48 at 0.0, validating the harness.
+
+## Dedup (re-grepped at composition, all clean)
+
+- `fusion-residual-selected-by-identity-not-negation` (B208, entries_gpu_78.rs) — owns
+  fusion-ADMISSION operand selection (identity vs negation); THIS owns the
+  never-materialize fold + the aliasing/staging law. Compose, never merge.
+- `producer-folds-single-consumer-family` (entries_gpu_72.rs) — the PRODUCER-side fold
+  ("its output has no other reader"); THIS is the consumer-side fold into a REDUCTION
+  over n producer slices — the intermediate HAS readers (the add chain); the fold is
+  algebraic (mul into adds), not reader-count elision.
+- `argmax-epilogue-replaces-output-materialization` (entries_gpu_52.rs) — same
+  never-materialize spirit at a DIFFERENT site (top-k in a GEMM epilogue); no reduction
+  fold, no staging rescue, no bit-identity-vs-rounding law.
+- `per-group-epilogue-deferred-between-mma-bursts` (entries_gpu_67.rs) — epilogue
+  scheduling axis, not graph fusion.
+- No corpus rule owns: FMA-contraction refusal for bit-identity, dying-operand staging,
+  the subgraph-shape matcher (exact view geometry + add-chain node order), or the
+  dst↔operand overlap admission pair (decline vs cheap-repair-stage).
+
+## Tasks
+
+- [x] T0 pre-flight: dual_allocation gate clean (0/0/0); highwater 218 re-read;
+      partition check (slot-2 sibling active in rust_perf/corpus — disjoint write-set;
+      re-check git status before commit, commit only my hunks)
+- [x] T1 full-patch verification: /tmp/b219/lead13.patch (876 lines, commit
+      `930ddba3…`), every quote verbatim; the A10 "number" adjudicated = behavior
+      matrix, NotBenchable
+- [x] T2 dedup re-grep at composition (4 named owners + fmul_rn/never-materialize/
+      weighted-reduce/dying-operand/stage-weights/alias vocab — zero prior owners)
+- [ ] T3 the rule landed: entries_gpu_84.rs (new file) + mod.rs registration
+      (mod decl + entries.extend + KERNEL_CATEGORIES Dispatch list + the D-block
+      header comment) — category D, count 783→784, D 181→182
+- [ ] T4 count pins re-pinned with honest Batch-219 labels: tests.rs ×6 sites
+      (seed count L112, coverage comment L5370, sum L5495-97, grouped L5508-09,
+      L9616) + router.rs L472 + AGENTS.md ×2 + README.md ×2 + the per-category
+      Dispatch row 181→182 + the batch-history comment block's Batch 220 line
+- [ ] T5 gates: `batch220_rule_landed` (rule present + verbatim needles) +
+      `batch220_pseudocode_parses` (the batch206 parse-gate pattern — new rule
+      carries ref_shape/opt_pattern)
+- [ ] T6 GOAT: kernel_opt+latent_retrieval lib FULL run (/tmp/b219tgt, nice-5) +
+      default lib == standing pin + clippy -D ×2 postures + retrieval floors
+- [ ] T7 freeze/score-bench NOT owed (zero clippy-corpus delta, P30); .docs
+      ledger paragraph per the B215-resumed convention
+- [ ] T8 snapshot row (Batch 220, queue-after) + commit `feat: batch 219: ...`
+      + push; plan checkboxes closed in the same commit
+
+## Non-goals
+
+- No rust_perf/kernel_opt counts beyond this +1; no AGENTS.md feature-list prose
+  beyond the count pin; Lead 9/10/11 + k=8-MMA stay queued (one unit per cycle).
