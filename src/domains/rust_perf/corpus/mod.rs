@@ -9,10 +9,12 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 183 entries across 12 categories as of Batch 207 (2026-10-07 — the live
-//! per-category counts are pinned by tests, never this prose: the figures
+//! 195 entries across 13 categories as of Batch 219 (2026-10-10, Plan 215
+//! slot 2 — the live per-category counts are pinned by tests, never this
+//! prose: the figures
 //! here went stale repeatedly — 163 through the B182-era, before that
-//! 145/92/53 through B172–B174 — repaired here at B207 with the honest
+//! 145/92/53 through B172–B174, 183 through B211 — repaired here at B218
+//! with the honest
 //! label; the gated count tests + `cargo refine --corpus-stats` are the
 //! live ledgers). The `NotBenchable` ledger was repaired by Batch 135 (the
 //! pre-Batch-118 ledger said 25 while the gated test said 14; the Batch
@@ -55,7 +57,11 @@
 //!     class). Batch 179 (Plan 172 / Research 210) added the rsconstmap trio —
 //!     layout 12 → 13, iterators 10 → 11, complexity 22 → 23 (three measured
 //!     `ParetoDominant` benchable rules; the first `[dep: constmap]` external
-//!     map-family entry).
+//!     map-family entry). Batch 219 (Plan 215 slot 2 / Research 251, the
+//!     `TensorFold` native-engine serving/timing pack) added nine `NotBenchable`
+//!     annotated rules — complexity +2 (the cost-table hygiene pair), caching
+//!     +3 (the prompt-cache pair + the fingerprint persistence), thermal +1
+//!     (the corpus's THIRTEENTH category), dispatch +1, io +1, allocation +1.
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -406,56 +412,62 @@ mod entries_15;
 mod entries_16;
 mod entries_17;
 mod entries_18;
+mod entries_19;
+mod entries_20;
+mod entries_21;
+mod entries_22;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 181 entries
-/// (Batch 202, 2026-10-07, Plan 201: +1, the nnethercote min-rank worklist
-/// rule. The prior headline said 167 and had gone stale through B198's +1
-/// and B200's +11 — the 179 figure the test asserted since B200 was the
-/// honest one; both are superseded here) covering the main perf
-/// pattern categories (complexity, allocation, simd,
-/// layout, iterators, concurrency, io, arithmetic, dispatch, caching, bevy,
-/// wasm; live counts repaired at Batch 196 — complexity 32 (Batch 202 added
-/// the dataflow min-rank convergence rule; 31 was the state after B196 and
-/// the count prose below kept landing late — trust the test, not prose),
-/// allocation 29, io 26, concurrency 23, layout 13, iterators 11, simd 10
-/// (Batch 204 added the NEON tbl-replicate 2-bit codec rule — the first
-/// NEON decode/codec member; 9 was the count through B202),
-/// caching 8, arithmetic 8, dispatch 6, bevy 2, wasm 1).
-/// Allocation is the deepest family (29 — Batch 173 added the two
-/// serde zero-copy rules; Batch 196 added the startup-estimate
-/// allocation-shapes rule); complexity has 31 (the measurement-honesty family
-/// lives here — B109 the work, the 2609.04040 rule the design, B115 the
-/// config, Batch 177 the comparator (A/A control) + the observer-consumer
-/// bias); concurrency has 23
-/// (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
-/// contention rules; Batch 135 added the zero-cost atomic conversion + the
-/// zero-sync partition; Batch 136 added the dynamic-work ladder + the
-/// sender-termination idiom + the `par_bridge` deadlock; Batch 152 added the
-/// three dial9 tokio rules — the blocking-pool segment hoist, the adaptive
-/// consecutive-ready yield, the semaphore fan-out bound; Batch 153 added the
-/// blocking-sleep async twin + the rayon oneshot bridge — the corpus's first
-/// tokio×rayon boundary rule; Batch 154 added the oneshot response-send
-/// hygiene + the bounded-channel-cycle deadlock; Batch 172 added the
-/// crossbeam steal-batch rule; Batch 174 added the host-lock re-entrant
-/// release rule + the deferred-command flush-hoist);
-/// arithmetic has 8 (Batch 74 added 1); dispatch has 6 (Batch 61 + 74 added
-/// 1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-/// the runtime-table handler-pair hoist; Batch 182 added the host-mirror
-/// shared-scalar rule); caching has 8 (Batch 181 added the mask-memo owner-lifetime
-/// rule); io has 26 (the
-/// measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
-/// prefault-admission rule; Batch 141 added the tail-boundary and
-/// stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
-/// rule; Batch 154 added the vectored-write capability flag; Batch 172 added
-/// the mmap-settled-size-gated read + the nonblocking head-probe open); bevy
-/// has 2; wasm has 1. simd has 9 (Batch 172 added the dual-mask fused block
-/// scan — the corpus's first hand-SIMD `std::arch` entry with both AVX2 and
-/// NEON arms).
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 195 entries
+/// (Batch 219, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
+/// `TensorFold` native-engine serving/timing pack — complexity +2 the
+/// cost-table hygiene pair, caching +3 the prompt-cache pair + the
+/// fingerprint persistence, concurrency +2 the bounded peer-handoff wait
+/// + the spinning one-message-per-exchange post lock (the T18 transport
+///   cluster's landed members), dispatch +1 the load-qualification probe,
+///   io +1 the Metal keepalive, allocation +1 the display carveout, and
+///   thermal +1 the hysteresis band — the corpus's THIRTEENTH category.
+///   The prior headline said 181 at Batch 202 and had gone stale through
+///   B204/207/211's +1/+2/+1; every hand-typed per-category figure in this
+///   doc has gone stale at least once — the gated count test +
+///   `cargo refine --corpus-stats` are the live ledgers) covering the main
+///   perf pattern categories (complexity, allocation, simd, layout,
+///   iterators, concurrency, io, arithmetic, dispatch, caching, bevy, wasm,
+///   thermal).
+///   Allocation is the deepest family (29 — Batch 173 added the two
+///   serde zero-copy rules; Batch 196 added the startup-estimate
+///   allocation-shapes rule); complexity has 31 (the measurement-honesty family
+///   lives here — B109 the work, the 2609.04040 rule the design, B115 the
+///   config, Batch 177 the comparator (A/A control) + the observer-consumer
+///   bias); concurrency has 23
+///   (Issue 014 added the two metric-mismatch rules; Batch 65 added the two
+///   contention rules; Batch 135 added the zero-cost atomic conversion + the
+///   zero-sync partition; Batch 136 added the dynamic-work ladder + the
+///   sender-termination idiom + the `par_bridge` deadlock; Batch 152 added the
+///   three dial9 tokio rules — the blocking-pool segment hoist, the adaptive
+///   consecutive-ready yield, the semaphore fan-out bound; Batch 153 added the
+///   blocking-sleep async twin + the rayon oneshot bridge — the corpus's first
+///   tokio×rayon boundary rule; Batch 154 added the oneshot response-send
+///   hygiene + the bounded-channel-cycle deadlock; Batch 172 added the
+///   crossbeam steal-batch rule; Batch 174 added the host-lock re-entrant
+///   release rule + the deferred-command flush-hoist);
+///   arithmetic has 8 (Batch 74 added 1); dispatch has 6 (Batch 61 + 74 added
+///   1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
+///   the runtime-table handler-pair hoist; Batch 182 added the host-mirror
+///   shared-scalar rule); caching has 8 (Batch 181 added the mask-memo owner-lifetime
+///   rule); io has 26 (the
+///   measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
+///   prefault-admission rule; Batch 141 added the tail-boundary and
+///   stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
+///   rule; Batch 154 added the vectored-write capability flag; Batch 172 added
+///   the mmap-settled-size-gated read + the nonblocking head-probe open); bevy
+///   has 2; wasm has 1. simd has 9 (Batch 172 added the dual-mask fused block
+///   scan — the corpus's first hand-SIMD `std::arch` entry with both AVX2 and
+///   NEON arms).
 #[must_use]
 pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     let mut entries = entries_01::entries();
@@ -476,5 +488,9 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_16::entries());
     entries.extend(entries_17::entries());
     entries.extend(entries_18::entries());
+    entries.extend(entries_19::entries());
+    entries.extend(entries_20::entries());
+    entries.extend(entries_21::entries());
+    entries.extend(entries_22::entries());
     Corpus::new(entries)
 }
