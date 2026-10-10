@@ -1,6 +1,6 @@
 # Plan 216 — Batch: soroban wasm size rules (Research 252)
 
-**Status:** STAGED — queues behind the standing staged pools (the Plan-215 TensorFold pack + the conversion set convert first); no corpus edit until this plan's slot opens.
+**Status:** STAGED — queues behind Plan 215 SLOT 2 only (the rust_perf serving/timing pack; slot 1 landed as Batch 215 on 2026-10-10 and the conversion set completed at B213/B214); no corpus edit until this plan's slot opens.
 
 Source: `stellar/rs-soroban-sdk` @ pin `0d72c4c9ed7dd5f948b4ef5ac2cbcdd9f21380f9` (Apache-2.0). Verdict: YES B− (Research 252). Domain: `rust_perf`, category `wasm` (family members #2/#3 beside `wasm-batch-ffi`). Expected yield: 1–2 rules after falsification.
 

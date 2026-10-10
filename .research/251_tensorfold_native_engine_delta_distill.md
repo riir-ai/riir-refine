@@ -1,6 +1,6 @@
 # Research 251 — TensorFold native-engine delta (v0.6.0 → 1.0.4-era tip): the standing source re-distilled after 823 commits
 
-**Status:** DISTILLED — pending owner decision (the delta grades YES B+ again — the standing Research-220 verdict is CONFIRMED and EXTENDED; ~13 fresh candidates + ~7 riders staged as Plan 215 across two batch slots; plus a WEEKLY catch-up cadence row landed in the queue snapshot per the owner's standing ask)
+**Status:** SLOT 1 LANDED at Batch 215 (2026-10-10, 4090 box — 5 kernel_opt rules + 1 count-neutral rider, corpus 778 → 783; commit recorded in the queue snapshot; drift corrections carried — the N3 null point is the structural reading, N6's numbers live in CHANGELOG #572, the M3-Ultra figure is #497's cross-posture receipt); slot 2 (the rust_perf serving/timing pack, T10–T20) STAYS STAGED. The original grading verdict below:
 
 Graded 2026-10-10 (M3 idle unit, zero-contention; 2 read subagents over disjoint scopes — docs/recipes lane + kernel-code lane — coordinator dedup + quote verification at the pin). This is the UPDATE verdict to [Research 220](220_opponent_watch_leads_tensorfold_exl3_mlx_gather_qmm.md) (graded the 0.3.x EXL3 wave @ `8c1291cc` → Batch 188) and to the v0.6.0-era pool (graded ~10-01 from the queue staging row → Batches 196/199/200, 22 rules + riders, pin `c464617`).
 

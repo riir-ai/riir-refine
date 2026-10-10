@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        778,
-        "kernel batches through Batch 214 should have 778 rules",
+        783,
+        "kernel batches through Batch 215 should have 783 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 778-rule corpus must appear in exactly one category
-    // (re-pinned 778 at Batch 214; read 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 783-rule corpus must appear in exactly one category
+    // (re-pinned 783 at Batch 215; read 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5467,17 +5467,17 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 159),
         (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 179),
-        (KernelCategory::Parallelism, 72),
+        (KernelCategory::Dispatch, 181),
+        (KernelCategory::Parallelism, 73),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
-        (KernelCategory::MoeDispatchBackward, 36),
+        (KernelCategory::MoeDispatchBackward, 37),
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 14),
         (KernelCategory::ConvGemmLayout, 19),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 62),
+        (KernelCategory::DtypeAlignment, 63),
         (KernelCategory::IrStrengthReduction, 8),
     ];
     for (cat, count) in expected {
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 778.
+    // Sum must equal 783.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 778, "Plan 003: category totals must sum to 778 (Batch 214 +1, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 783, "Plan 003: category totals must sum to 783 (Batch 215 +5, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 778,
-        "Plan 003: grouped corpus has {total} rules, expected 778"
+        total, 783,
+        "Plan 003: grouped corpus has {total} rules, expected 783 (Batch 215 +5, the TensorFold native-engine delta pack)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        778,
-        "corpus count re-pinned at Batch 214 (1 rule, D: the componentwise version guard rollover — llama.cpp #29453 a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards, a quiet performance loss never a compile error; repairs = the ordered component guard (landed) or the packed single compare; the guard-taken proof is the verification) + 4 count-neutral riders on their hosts (the cubecl #1779 lost-device election stop on the B207 measurement-honesty rule, the PrismML #225 per-dispatch-path row-tile axis on the B198 fewrow rule, the PrismML #312 evict-to-reuse pole on rust_perf one-shot-staging, the PrismML #313 host-chain k>1 top-k arm on the B189 argmax-epilogue rule); was 777 at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        783,
+        "corpus count re-pinned at Batch 215 (5 rules, the TensorFold native-engine delta pack — Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3f2ab85b2a68f2eed817e45eecbd04781, Apache-2.0: expert-member-rows-width-ladder-bit-identical (H — member rows per pass is a measurable 2/3/4 ladder, bit-identical at every rung, equal-at-2 null point, three recorded negatives) + zero-anchored-prompt-grid-chunk-identity (D — end() returns an off-grid start to the grid so a resumed pass cuts where a cache-off pass cuts, by construction) + verified-logits-derived-outputs-path-independence (D — logprob rows read the verified target logits, path-independent by construction, float64 oracle within 2e-6) + staggered-segments-two-queue-fences (E — one MTLFence per segment + MTLEvent between, the 4096-row gate, the fan-out ceiling) + hip-affine-contract-off-row-invariance (N — built with -ffp-contract=off so every row reduces the same way for any M, one fixed reduction order, one explicit RNE conversion with NaN preservation, the comparator rejecting any single-bit mutation including signed zero); + ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); was 778 at Batch 214 (1 rule, D: the componentwise version guard rollover — llama.cpp #29453 a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards, a quiet performance loss never a compile error; repairs = the ordered component guard (landed) or the packed single compare; the guard-taken proof is the verification) + 4 count-neutral riders on their hosts (the cubecl #1779 lost-device election stop on the B207 measurement-honesty rule, the PrismML #225 per-dispatch-path row-tile axis on the B198 fewrow rule, the PrismML #312 evict-to-reuse pole on rust_perf one-shot-staging, the PrismML #313 host-chain k>1 top-k arm on the B189 argmax-epilogue rule); was 777 at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -15226,7 +15226,10 @@ fn batch214_rule_and_riders_landed() {
     }
 
     // Rider 1: #1779 -- the lost-device election stop on the B207
-    // measurement-honesty rule (the ELECTION member).
+    // measurement-honesty rule (the ELECTION member). The four rider
+    // needle blocks live in `batch214_rider_needles_present` (the
+    // too_many_lines split, the B209 repair pattern -- assertions
+    // unchanged).
     let profile = corpus
         .entries
         .iter()
@@ -15237,6 +15240,28 @@ fn batch214_rule_and_riders_landed() {
         "5247cd5df9452ae931738b6a85b641bb8a3f4bd2",
         "#1779",
         "cached a kernel measured on nothing",
+    ] {
+        assert!(
+            profile.gpu_concept.contains(marker),
+            "batch-214 election rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch214_rider_needles_present() {
+    // The four rider needle blocks of `batch214_rule_and_riders_landed`,
+    // split out for the pedantic line budget (the B209 repair pattern;
+    // every assertion unchanged).
+    let corpus = build_kernel_seed_corpus();
+
+    // Rider 1 (rest): #1779 -- the lost-device election stop.
+    let profile = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
+        .unwrap();
+    for marker in [
         "whose error then surfaced as the caller's failure in place of the device loss",
         "the tune stops, logs the loss and leaves the key pending",
         "A tune stopped on a lost device leaves its key here for good",
@@ -15387,6 +15412,234 @@ fn batch217_riders_landed_on_their_hosts() {
         assert!(
             fewrow.gpu_concept.contains(marker),
             "batch-217 fewrow rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch215_rules_and_rider_landed() {
+    // G1 for Batch 215 (Plan 215): the TensorFold native-engine delta
+    // pack, slot 1 (Research 251) -- FIVE new rules from
+    // ashhart/TensorFold @ f1aef9c3 (Apache-2.0; N3 the MoE member-rows
+    // width ladder, N4 the zero-anchored prompt grid, N6 the verified
+    // logits path independence, N12 the HIP affine contraction-off
+    // contract, N13 the staggered two-queue fences) plus ONE
+    // count-neutral rider (the prefill-head-final-chunk
+    // partial-consumption face on the headless-draft rule, source
+    // 96c0b0e4, MIT -- pre-license-flip). Quotes verified verbatim at
+    // the pin via git-show blob reads (the NTFS-invalid filename in the
+    // tree blocks checkout); the drift corrections carried: the N3
+    // null point is the structural reading (the source says only
+    // 'equal at 2', the register-pressure framing is OUR inference,
+    // labeled), N6's numbers live in CHANGELOG #572 (commit 1746f7d is
+    // a 2-line arity fix), and the M3 Ultra 0.16 s/8.1 s figure is the
+    // #497 Metal sibling's, carried as a cross-posture receipt with
+    // attribution.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    let five = [
+        "expert-member-rows-width-ladder-bit-identical",
+        "zero-anchored-prompt-grid-chunk-identity",
+        "verified-logits-derived-outputs-path-independence",
+        "hip-affine-contract-off-row-invariance",
+        "staggered-segments-two-queue-fences",
+    ];
+    assert_eq!(five.len(), 5, "batch-215 fixture count = landed rules");
+    for id in five {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-215 rule missing: {id}"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-215 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-215 opt_pattern for '{id}' must parse"
+        );
+    }
+
+    // N3 (the headliner): the ladder + null point + the three
+    // negatives + the folded cost-model rider + the Apache pin.
+    let n3 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "expert-member-rows-width-ladder-bit-identical")
+        .unwrap();
+    for marker in [
+        "f1aef9c3f2ab85b2a68f2eed817e45eecbd04781",
+        "the four weight words of a 16-group as its outer loop",
+        "three members a pass at four simdgroups fit",
+        "22.57 to 20.58 at 64, equal at 2",
+        "lose 5-40%: only two to four at four simdgroups win",
+        "member blocks spread over grid z",
+        "about 4.4 ms of GPU time, against about 2.3 ms",
+        "2985ed7",
+        "6cb5374",
+        "Batch 215 / Plan 215",
+    ] {
+        assert!(
+            n3.gpu_concept.contains(marker),
+            "batch-215 N3 ladder marker missing: '{marker}'"
+        );
+    }
+
+    // N4: the constructive grid contract + the resumed-turn receipt.
+    let n4 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "zero-anchored-prompt-grid-chunk-identity")
+        .unwrap();
+    for marker in [
+        "a pass that resumes or keeps states cuts where",
+        "an off-grid start returns to the grid",
+        "resumed at 2048: the same later cuts",
+        "keeps and resumes only on the zero-anchored prompt grid",
+        "reaches its first token in 0.19 to 0.21 seconds",
+        "against 1.06 to 1.09 seconds without the cache",
+        "prefilled in 0.16 s instead of 8.1 s",
+        "e2dcb78",
+    ] {
+        assert!(
+            n4.gpu_concept.contains(marker),
+            "batch-215 N4 grid marker missing: '{marker}'"
+        );
+    }
+
+    // N6: derived outputs read the verified logits + the float64
+    // oracle + the disclosed cost. Its needle block lives in
+    // `batch215_n12_n13_rider_needles_present` (line budget).
+
+    // N13: the fence/event placement + the gate + the fan-out ceiling
+    // (the segments.zig full read is the code half of the evidence).
+    let n13 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "staggered-segments-two-queue-fences")
+        .unwrap();
+    for marker in [
+        "Buffers are untracked, so without the fence the encoders overlap and the output breaks",
+        "error.Segments",
+    ] {
+        assert!(
+            n13.gpu_concept.contains(marker),
+            "batch-215 N13 fence marker missing: '{marker}'"
+        );
+    }
+
+    // The rider: the prefill-head-final-chunk partial-consumption face
+    // on the B208 headless-draft rule (entries_gpu_78).
+    let headless = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "headless-draft-forward-crops-to-output-rows-cache-writes-persist")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 215 / Plan 215",
+        "96c0b0e4bd99d0b7398dd1c68260cd5aeaea195a",
+        "Batch 215 rider",
+    ] {
+        assert!(
+            headless.gpu_concept.contains(marker),
+            "batch-215 headless rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch215_n12_n13_rider_needles_present() {
+    // The N12/N13/headless-rider needle blocks of
+    // `batch215_rules_and_rider_landed`, split out for the pedantic line
+    // budget (the B209 repair pattern; every assertion unchanged).
+    let corpus = build_kernel_seed_corpus();
+
+    // N6 (rest): derived outputs read the verified logits + the float64
+    // oracle + the disclosed cost.
+    let n6 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "verified-logits-derived-outputs-path-independence")
+        .unwrap();
+    for marker in [
+        "read on the GPU from the verified target logits",
+        "float64 log-softmax of the same logits within 2e-6",
+        "decoded 7% slower than without",
+        "__fsub_rn",
+        "atomicExch",
+        "1746f7d",
+    ] {
+        assert!(
+            n6.gpu_concept.contains(marker),
+            "batch-215 N6 logprob marker missing: '{marker}'"
+        );
+    }
+
+    // N12 (coordinator-authored): the contraction-off contract + the
+    // mutation-sweep comparator + the gates.
+    let n12 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "hip-affine-contract-off-row-invariance")
+        .unwrap();
+    for marker in [
+        "built with -ffp-contract=off so every row reduces the same way for any M",
+        "Preserve NaNs rather than rounding a small NaN payload to infinity",
+        "every single-bit output mutation is rejected including signed zero",
+        "Two 32-lane output warps per block, independent of batch width",
+        "dot = dot + (((product[0] + product[1]) + product[2]) + product[3])",
+        "acc = acc + (from_bf16(scales[g]) * dot + sum * from_bf16(biases[g]))",
+        "shape-only-plan-row-invariant-kernel",
+        "construction-identity-row-classes-replace-probe",
+        "half-domain-exact-band-dequant-with-raw-bit-oracle",
+        "NotBenchable",
+    ] {
+        assert!(
+            n12.gpu_concept.contains(marker),
+            "batch-215 N12 contraction marker missing: '{marker}'"
+        );
+    }
+
+    // N13 (rest): the fence/event placement + the gate + the fan-out
+    // ceiling (the segments.zig full read is the code half).
+    let n13 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "staggered-segments-two-queue-fences")
+        .unwrap();
+    for marker in [
+        "Use an MTLFence inside a queue and an MTLEvent across queues",
+        "next(left, step, min_rows) splits into two only when rows >= 2",
+        "4,096",
+        "7.52",
+        "6.94",
+        "2,629",
+    ] {
+        assert!(
+            n13.gpu_concept.contains(marker),
+            "batch-215 N13 fence marker missing: '{marker}'"
+        );
+    }
+
+    // The rider (rest): the prefill-head-final-chunk face.
+    let headless = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "headless-draft-forward-crops-to-output-rows-cache-writes-persist")
+        .unwrap();
+    for marker in [
+        "prefill computes the head only on the prompt's last chunk",
+        "8k prompts 142 -> 1,008 tok/s, 32k 132 -> 993, 120k ~123 -> 914",
+        "a member tile with no rows returns before reading its expert",
+        "programs past a row's keys or complete blocks return",
+    ] {
+        assert!(
+            headless.gpu_concept.contains(marker),
+            "batch-215 headless rider marker missing: '{marker}'"
         );
     }
 }
