@@ -15540,6 +15540,64 @@ fn batch220_rule_and_parse_landed() {
 }
 
 #[test]
+fn batch221_riders_landed_on_their_hosts() {
+    // G1 for Batch 221 (Plan 221): the rider-tier conversion set -- TWO
+    // count-neutral kernel_opt riders: Lead 9 (ggml-org/llama.cpp
+    // @ 1f8fa52318b594b373e7447a3c2bb36cdba9515f #30209, the Metal FA
+    // set-mirror face on the B208 admission rule) and the k=8-MMA lead
+    // (tracel-ai/cubecl @ 73cecbfc241e48fa174754ba299b790fb84e71e3
+    // #1802, the accumulator-as-A-fragment face on the
+    // mma-fragment-layout rule). Both .patch files read IN FULL this
+    // session; every needle verbatim at them. Corpus pins UNMOVED (784;
+    // the rust_perf +1 and the dist +1 of this batch live in their own
+    // domains' gates).
+    let corpus = build_kernel_seed_corpus();
+
+    let fa = corpus
+        .entries
+        .iter()
+        .find(|e| {
+            e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view"
+        })
+        .expect("B208 FA host missing from the corpus");
+    for marker in [
+        "the kernels exist for K == V and for these K > V pairs only",
+        "accept every compiled pair",
+        "op->src[1]->ne[0] < op->src[2]->ne[0]",
+        "(dk == 128 && dv == 96) ||",
+        "if (dk == 128 && dv == 96) { return 4; }",
+        "n_kv_max_sparse",
+        "fa_vec_baseline_ne",
+        "1f8fa52318b594b373e7447a3c2bb36cdba9515f",
+        "Batch 221 rider",
+    ] {
+        assert!(
+            fa.gpu_concept.contains(marker),
+            "batch-221 FA rider marker missing: '{marker}'"
+        );
+    }
+
+    let mma = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "mma-fragment-layout-m16n8k16")
+        .expect("mma-fragment-layout host missing from the corpus");
+    for marker in [
+        "An m16n8 accumulator is, cell for cell, the A fragment of an m16n8k8 instruction",
+        "kept beside the `k = 16` one wherever both exist",
+        "this likely does not follow the same layout pattern as those after 80",
+        "shapes(80) AND shapes(120) contain (16,8,8)",
+        "73cecbfc241e48fa174754ba299b790fb84e71e3",
+        "Batch 221 rider",
+    ] {
+        assert!(
+            mma.gpu_concept.contains(marker),
+            "batch-221 k8 rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch215_rules_and_rider_landed() {
     // G1 for Batch 215 (Plan 215): the TensorFold native-engine delta
     // pack, slot 1 (Research 251) -- FIVE new rules from

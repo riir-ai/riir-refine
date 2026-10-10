@@ -25,7 +25,16 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 195 rules across 13 categories — Batch 219
+profiling guide, Research 032; **now 196 rules across 13 categories — Batch 221
+(2026-10-10, Plan 221 — +1 the bevy `runtime-bool-duplicates-inlinable-body`
+(dispatch, NotBenchable annotated; annotated 141 → 142), source bevyengine/bevy
+PR #25864 @ merge `74884ffd`, patches `a4d1789` + `8328184`, Apache-2.0/MIT,
+quotes verified at the pins this session: a runtime bool branching around a
+large inlinable body forces the inliner into duplicate-or-deinline; the landed
+form hoists the branch into a conditional `Option<Guard>` tuple (the restore in
+a Drop impl, panic-safe) so the body compiles once — the patch-1
+branch-around-closure disclosed in-rule as the anti-shape itself).
+Previously 195 rules — Batch 219
 (2026-10-10, Plan 215 slot 2 / Research 251 — the TensorFold native-engine
 serving/timing pack, +11 ALL NotBenchable annotated (annotated 130 → 141),
 source `ashhart/TensorFold` @ `f1aef9c3`, Apache-2.0, quotes verified at the

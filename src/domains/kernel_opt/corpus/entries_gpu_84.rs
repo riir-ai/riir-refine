@@ -1,4 +1,4 @@
-//! Entries slice — Batch 220 (Plan 220) — Lead 13: the prism #107 MoE
+//! Entries slice — Batch 220 (Plan 220) — Lead 13: the prism #107 `MoE`
 //! weighted-reduce fusion (own rule; the three staging-row atoms —
 //! consumer-fold-into-REDUCTION, bit-identity-intrinsics, dying-operand
 //! staging — one mechanism, zero prior owners). Quotes re-verified

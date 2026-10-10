@@ -47,6 +47,7 @@ pub const DIST_RULES: &[&str] = &[
     "member-profile-ignored",
     "large-api-dependency-mostly-unused-hint",
     "pgo-training-set-covers-real-workload-hint",
+    "bench-targets-shared-dependency-cluster-hint",
 ];
 
 /// Phase 1 is suggest-only — no rule carries a bounded fix. The constant
@@ -73,6 +74,11 @@ pub struct ManifestScan {
     /// facts (versions, features) are deliberately NOT read, keeping the
     /// scanner's key/name-PRESENCE contract intact.
     pub large_dependencies: Vec<(String, usize)>,
+    /// `[[bench]]` targets in file order: (1-based line of the header, keys
+    /// seen). Batch 221 — the bench-cluster rule reads the TARGET COUNT and
+    /// the `required-features` key PRESENCE per target; every other value
+    /// stays unread (the same presence-only contract as the profile keys).
+    pub benches: Vec<(usize, Vec<String>)>,
 }
 
 /// The known-large API crate table for `large_dependencies` (Batch 143 —
@@ -138,6 +144,9 @@ pub fn scan(source: &str) -> ManifestScan {
             if array && name == "bin" {
                 m.has_bin = true;
             }
+            if array && name == "bench" {
+                m.benches.push((line_no, Vec::new()));
+            }
             if !array && name == "workspace" {
                 m.has_workspace = true;
             }
@@ -148,9 +157,10 @@ pub fn scan(source: &str) -> ManifestScan {
             m.sections.push((name, line_no));
             continue;
         }
-        // Inside a non-array section: collect `key =` presences.
-        if let Some((false, name)) = &current {
-            if name.starts_with("profile.") {
+        // Inside a section: collect `key =` presences (profile keys, large
+        // dep names, and — Batch 221 — `[[bench]]` target keys).
+        match &current {
+            Some((false, name)) if name.starts_with("profile.") => {
                 if let Some(eq) = trimmed.find('=') {
                     let key = trimmed[..eq].trim();
                     if !key.is_empty() {
@@ -159,7 +169,8 @@ pub fn scan(source: &str) -> ManifestScan {
                         }
                     }
                 }
-            } else if name.ends_with("dependencies") {
+            }
+            Some((false, name)) if name.ends_with("dependencies") => {
                 // A dependency key: `name = ...`, `name = { ... }`, or the
                 // workspace-inherited `name.workspace = true`. The dep NAME
                 // is the key up to the first '.'; only large-API names are
@@ -172,6 +183,17 @@ pub fn scan(source: &str) -> ManifestScan {
                     }
                 }
             }
+            Some((true, name)) if name == "bench" => {
+                if let Some(eq) = trimmed.find('=') {
+                    let key = trimmed[..eq].trim();
+                    if !key.is_empty() {
+                        if let Some(last) = m.benches.last_mut() {
+                            last.1.push(key.to_ascii_lowercase());
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
     m
@@ -380,6 +402,34 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
             line: *line,
             excerpt: format!("{name} = ..."),
             advice: "if this large API crate is a small fraction of your actual usage, measure `-Zhint-mostly-unused` (nightly-only rustc flag, set via [build] rustflags in .cargo/config.toml) — big compile-time wins are reported for small-fraction consumers of windows/rustix/aws-sdk-*; measure per crate before adopting",
+        });
+    }
+
+    // Rule 7 — the bench compile-time cluster split (Batch 221, bevy
+    // #25321). Fires on MANY bench targets NONE of which carries a
+    // required-features key: the shared dependency set compiles the UNION
+    // of every target's heavy deps to run any ONE of them. The gated form
+    // (required-features rows present) IS the fixed artifact and stays
+    // silent — strictly additive over every existing fixture.
+    bench_cluster_finding(scan, out);
+}
+
+/// Rule 7's detector — extracted so `detect` keeps one rule per readable
+/// block (the `too_many_lines` split point).
+fn bench_cluster_finding(scan: &ManifestScan, out: &mut Vec<DistFinding>) {
+    let bench_count = scan.benches.len();
+    if bench_count >= 3
+        && scan
+            .benches
+            .iter()
+            .all(|(_, keys)| !keys.iter().any(|k| k == "required-features"))
+    {
+        let (line, _) = scan.benches[0];
+        out.push(DistFinding {
+            rule_id: "bench-targets-shared-dependency-cluster-hint",
+            line,
+            excerpt: format!("[[bench]] x{bench_count} — no required-features rows"),
+            advice: "these bench targets share ONE dependency set, so running any ONE of them compiles the union of their heavy deps — split the bench surface behind per-cluster features, ALL default-on (behavior-identical `cargo bench`): bench deps become `optional = true` normal deps, one `bench_<crate>` feature per measured crate, and every [[bench]] names its feature via `required-features` — a single-crate bench loop then runs `--no-default-features --features bench_ecs` and skips the heavy siblings (bevy #25321: the ecs bench no longer builds bevy_render). The required-features rows are LOAD-BEARING — without them a gated bench target is skipped silently (green-zero class)",
         });
     }
 }

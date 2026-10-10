@@ -1,16 +1,18 @@
 //! The dist seed corpus — Phase 1 (Issue 085).
 //!
-//! Six rules, all suggest-only, every one with measured provenance — the
+//! Seven rules, all suggest-only, every one with measured provenance — the
 //! first four from the session that found the class (the owner had to ASK why
 //! the binary was 2x — that is the failure this domain exists to prevent),
 //! the fifth from upstream's own measured compile-time series (Batch 143 —
 //! nnethercote Dec-2025: `windows`/`rustix`/`aws-sdk-ec2` named with
 //! `-Zhint-mostly-unused` wins for small-fraction consumers), the sixth
 //! from the July-2026 series (Batch 146 — rustc #159091: PGO training-set
-//! coverage, the out-of-manifest next lever for the fully-tuned audience).
+//! coverage, the out-of-manifest next lever for the fully-tuned audience),
+//! the seventh from bevy's own benches split (Batch 221 — #25321: per-crate
+//! bench features, optional bench deps, required-features per [[bench]]).
 //! The dedup verdict rides each rule's `incumbent` field: `cargo` itself
 //! warns about NOTHING here (checked live 2026-09-09 — a bare release build
-//! of a bin crate with no profile section compiles silent), so all six are
+//! of a bin crate with no profile section compiles silent), so all seven are
 //! Class B (novel detection) with no incumbent to overlay.
 //!
 //! | Rule | Family | Fix | Incumbent |
@@ -21,6 +23,7 @@
 //! | `member-profile-ignored` | `ProfilePlacement` | suggest (gated) | none |
 //! | `large-api-dependency-mostly-unused-hint` | `BuildTime` | suggest | none |
 //! | `pgo-training-set-covers-real-workload-hint` | `BuildTime` | suggest | none |
+//! | `bench-targets-shared-dependency-cluster-hint` | `BuildTime` | suggest | none |
 
 use super::{DistDomain, DistFamily, DistRule};
 use crate::corpus::Corpus;
@@ -108,6 +111,15 @@ fn entries() -> Vec<DistRule> {
             "# The fix is NOT a manifest edit — PGO training-set coverage is a\n# build-pipeline property. This IS the fixed artifact: the training\n# workload must be the SHIPPED workload mix (rustc #159091 added\n# rustdoc benches to rustc's PGO training set: +2.85% mean wall-time\n# across rustdoc benchmarks, >6% best — 'the training set matters').\n# Train on your real corpus; measure before/after.\n# (pgo training pipeline snippet — out-of-manifest by construction)",
             F::BuildTime,
             Some("Source: nnethercote, \"How to speed up the Rust compiler in July 2026\" (2026-07-31), #159091 (Jakub Beránek), verbatim: 'added rustdoc benchmarks to the PGO training set, which lets rustdoc benefit more from PGO. This gave a mean 2.85% reduction in wall-time across all the rustdoc benchmarks, with the largest reduction exceeding 6%. PGO is fiddly to set up but it can really make a difference, and the training set matters.' PROXY-TRIGGERED BY DESIGN (the large-api-dependency precedent): the scanner cannot see whether PGO exists at all — the trigger is the fully-tuned effective profile (strip+lto+panic all set), i.e. the audience that has exhausted the manifest-level levers this domain advises; the -hint suffix + the conditional advice ('IF you use or add PGO') + the measure-first caveat are load-bearing. Strictly additive by construction: silent for every manifest with a missing knob (the three ship-size fixtures are unaffected), and on a fully-tuned shipped bin it fires alone — no sibling rule co-fires."),
+        ),
+        rule(
+            "bench-targets-shared-dependency-cluster-hint",
+            "a bench package whose [[bench]] targets share ONE dependency set compiles the UNION of every target's heavy deps to run ANY one of them — per-crate bench features (ALL default-on) with optional bench deps + a required-features row per [[bench]] let a single-crate bench loop skip the heavy siblings",
+            "a manifest with 3 or more [[bench]] targets, none carrying a required-features key",
+            "# One bench package, many targets, ONE shared dependency set: running\n# the ecs bench compiles the render stack too (bevy #25321's own story).\n[package]\nname = \"benches\"\nautobenches = false\n\n[dependencies]\ncriterion = \"0.8\"\necs-core = { path = \"../crates/ecs-core\" }\nrender-stack = { path = \"../crates/render-stack\" }\n\n[[bench]]\nname = \"ecs\"\nharness = false\n\n[[bench]]\nname = \"render\"\nharness = false\n\n[[bench]]\nname = \"scene\"\nharness = false\n",
+            "# The split: bench deps become OPTIONAL normal deps; one default-on\n# feature per measured crate; every [[bench]] names its feature. Bare\n# `cargo bench` stays behavior-identical (default = all); a single-crate\n# loop runs --no-default-features --features bench_ecs and skips the\n# render build entirely. The required-features rows are LOAD-BEARING.\n[package]\nname = \"benches\"\nautobenches = false\n\n[dependencies]\ncriterion = \"0.8\"\necs-core = { path = \"../crates/ecs-core\", optional = true }\nrender-stack = { path = \"../crates/render-stack\", optional = true }\n\n[features]\ndefault = [\"bench_ecs\", \"bench_render\", \"bench_scene\"]\nbench_ecs = [\"dep:ecs-core\"]\nbench_render = [\"dep:render-stack\"]\nbench_scene = [\"dep:ecs-core\"]\n\n[[bench]]\nname = \"ecs\"\nharness = false\nrequired-features = [\"bench_ecs\"]\n\n[[bench]]\nname = \"render\"\nharness = false\nrequired-features = [\"bench_render\"]\n\n[[bench]]\nname = \"scene\"\nharness = false\nrequired-features = [\"bench_scene\"]\n",
+            F::BuildTime,
+            Some("Source: bevyengine/bevy #25321, 'Split benchmarks with features to allow avoiding unnecessary compilation' (merged 2026-10-05 @ 430c448d4b0878741fa025836ffc26b852438cf2, +122/-20 — benches/Cargo.toml only), PR body verbatim: 'Since benchmarks share the same dependencies, that includes `bevy_render`, even though I'm only trying to run `bevy_ecs` benchmarks. `bevy_render` also happens to take way longer to compile than anything else.' + 'Add features to `benches` to enable specific crates' benchmarks: feature `bench_ecs` for `bevy_ecs`, `bench_render` for `bevy_render`, etc.' + 'All features are enabled by default, so default behavior should be the same.' + 'The dependencies are normal dependencies instead of dev-dependencies now, but they're also now `optional = true`.' — bevy's landed split: 10 bench_* features, deps optional-normal, required-features per [[bench]]; the merged resolution to the review's automated-benchmarking question IS the default-on half (bare `cargo bench` compiles everything, unchanged; the win is realized by the targeted --no-default-features --features bench_ecs invocation; the author ran both postures). ⛔ OUR OWN lore rides the advice: a feature-gated bench target WITHOUT its required-features row is skipped SILENTLY by --all-targets, and a whole-file-gated one reports ok. 0 passed (the cfg-gated green-zero class, katgpt-rs bench_694) — the rows are load-bearing, never decorative; this advice is for humans cutting bench compile time, never for gate-asserted suites. Detector precision: fires on >= 3 [[bench]] with NO required-features key on ANY of them (2 targets have nothing to split); the gated form is the fixed artifact and stays silent (strictly additive — every pre-existing fixture is benchless)."),
         ),
     ]
 }
@@ -263,5 +275,36 @@ mod tests {
     #[test]
     fn phase1_is_suggest_only() {
         assert!(crate::domains::dist::rules::FIXABLE_DIST.is_empty());
+    }
+
+    /// Batch 221 — the bench-cluster rule: fires at >= 3 ungated
+    /// [[bench]] targets, silent at 2, and the gated form (the fixed
+    /// artifact, required-features rows present) is silent.
+    #[test]
+    fn bench_cluster_rule_boundary_and_gated_silence() {
+        let two = "[[bench]]\nname = \"a\"\n\n[[bench]]\nname = \"b\"\n";
+        assert!(scan_source_with(two, DistContext::default()).is_empty());
+
+        let three =
+            "[[bench]]\nname = \"a\"\n\n[[bench]]\nname = \"b\"\n\n[[bench]]\nname = \"c\"\n";
+        let findings = scan_source_with(three, DistContext::default());
+        let hits: Vec<_> = findings
+            .iter()
+            .filter(|f| f.rule_id == "bench-targets-shared-dependency-cluster-hint")
+            .collect();
+        assert_eq!(hits.len(), 1, "one advice per manifest");
+        assert_eq!(hits[0].line, 1, "anchored at the first bench header");
+        assert!(hits[0].excerpt.contains('3'), "the excerpt names the count");
+
+        // One gated target is enough to silence (the split landed): the
+        // detector's ALL-gated clause reads the fixed form as done.
+        let half_gated = "[[bench]]\nname = \"a\"\n\n[[bench]]\nname = \"b\"\n\n[[bench]]\nname = \"c\"\nrequired-features = [\"bench_c\"]\n";
+        assert!(scan_source_with(half_gated, DistContext::default()).is_empty());
+
+        let fixed = entries()
+            .into_iter()
+            .find(|r| r.rule_id == "bench-targets-shared-dependency-cluster-hint")
+            .unwrap();
+        assert!(scan_source_with(&fixed.fixed_code, DistContext::default()).is_empty());
     }
 }

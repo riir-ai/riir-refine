@@ -9,8 +9,10 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 195 entries across 13 categories as of Batch 219 (2026-10-10, Plan 215
-//! slot 2 — the live per-category counts are pinned by tests, never this
+//! 196 entries across 13 categories as of Batch 221 (2026-10-10, Plan 221 —
+//! the rider-tier conversion set: +1 the bevy #25864 runtime-bool
+//! conditional-guard rule, dispatch, `NotBenchable` annotated; the live
+//! per-category counts are pinned by tests, never this
 //! prose: the figures
 //! here went stale repeatedly — 163 through the B182-era, before that
 //! 145/92/53 through B172–B174, 183 through B211 — repaired here at B218
@@ -62,6 +64,11 @@
 //!     annotated rules — complexity +2 (the cost-table hygiene pair), caching
 //!     +3 (the prompt-cache pair + the fingerprint persistence), thermal +1
 //!     (the corpus's THIRTEENTH category), dispatch +1, io +1, allocation +1.
+//!     Batch 221 (Plan 221) added one `NotBenchable` annotated rule — dispatch
+//!     +1 (the bevy #25864 runtime-bool conditional-guard rule: a runtime
+//!     bool branching around a large inlinable body forces
+//!     duplicate-or-deinline; the landed form hoists the branch into a
+//!     conditional `Option<Guard>` tuple so the body compiles once).
 //!
 //! Batch 48 (idle-queue item 11, 2026-08-16) added the 8 online-search
 //! candidates (perf-book std-types + iterators chapters): collect-append-to-
@@ -416,13 +423,14 @@ mod entries_19;
 mod entries_20;
 mod entries_21;
 mod entries_22;
+mod entries_23;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 195 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 196 entries
 /// (Batch 219, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
 /// `TensorFold` native-engine serving/timing pack — complexity +2 the
 /// cost-table hygiene pair, caching +3 the prompt-cache pair + the
@@ -492,5 +500,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_20::entries());
     entries.extend(entries_21::entries());
     entries.extend(entries_22::entries());
+    entries.extend(entries_23::entries());
     Corpus::new(entries)
 }

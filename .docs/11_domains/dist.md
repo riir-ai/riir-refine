@@ -126,6 +126,26 @@ missing, fires ALONE on a fully-tuned one. Measured provenance: rustc
 wall-time across rustdoc benchmarks, >6% best; "the training set
 matters"). Record: [Research 173](../../.research/173_batch146_accumulated_readlane_pack.md).
 
+## The seventh rule (Batch 221, 2026-10-10)
+
+`bench-targets-shared-dependency-cluster-hint` — a bench package whose
+`[[bench]]` targets share ONE dependency set compiles the UNION of every
+target's heavy deps to run ANY one of them (bevy #25321's own story: running
+the ecs bench built `bevy_render`, "which happens to take way longer to
+compile than anything else"). The fix shape: per-crate bench features ALL
+default-on (bare `cargo bench` behavior-identical), bench deps become
+`optional = true` normal deps, and every `[[bench]]` names its feature via a
+`required-features` row — a single-crate bench loop then runs
+`--no-default-features --features bench_ecs` and skips the heavy siblings.
+Detector: fires on ≥3 `[[bench]]` targets with NO `required-features` key on
+ANY of them (2 targets have nothing to split; the gated form IS the fixed
+artifact and stays silent — strictly additive over every pre-existing
+fixture). ⛔ The green-zero caveat rides the advice (our own lore): a
+feature-gated bench target WITHOUT its required-features row is skipped
+silently by `--all-targets` (the katgpt-rs bench_694 class) — the rows are
+load-bearing, never decorative; this advice is for humans cutting bench
+compile time, never for gate-asserted suites.
+
 ## See also
 
 - [`HISTORY.md`](../../HISTORY.md) §Issue 085 — the issue record + GOAT gate (issue file removed at closure)
