@@ -237,6 +237,17 @@ kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # code. Opt-in until the R6 arm-H outcome-based selection measures a winner.
 escalation_manifest = ["katgpt-core/escalation_guard"]
 
+# Plan 621 Phase 5 T5.2 (2026-10-11): the probe-gated half of the rescue
+# lane — katgpt-core `state_probe` (the FlyBy probe kernel + Phase-2
+# classifier) consumed over the rescue tallies' ACCUMULATED b0 leg. The raw
+# keep predicate (`b0 = 0 ∧ bd ≥ 3`, Issue 156's pinned truth table) stays
+# byte-identical and UNGATED; this feature adds the escalation ADVICE
+# (knowledge-like / productive / undetermined over the attempt counts) + the
+# `--misses` probe-b0 column. Augment-only: the advice can narrow the arm-H
+# escalation queue, never admit. Opt-in until the first ARMED arm-H run
+# produces the real-telemetry re-gate (Plan 621 T5.4).
+rescue_probe = ["katgpt-core/state_probe"]
+
 # Plan 202 R4 (2026-10-08): the vessel verify path — refine's runtime
 # artifacts verify through the SAME protocol the decision stack uses (sign /
 # blake3 / monotonic apply / strict refusal on tamper — A1/A8). Verify-only

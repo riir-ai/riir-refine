@@ -38,6 +38,92 @@
 
 use crate::memory::EvidenceTier;
 
+/// The knowledge-bottleneck certification bar for the probe-gated lane
+/// (Plan 621 T5.2): the state's b0 side is KNOWLEDGE-LIKE only when the
+/// Wilson upper bound on its accumulated no-tool pass-rate clears BELOW
+/// this ε — a state at (2 attempts, 0 successes) is `Undetermined` (keep
+/// probing, the escalation would be premature), while (16, 0) certifies at
+/// `wilson_hi` ≈ 0.194 < 0.2. Declared, never asserted: the raw keep
+/// predicate is unaffected; this bar only arms the probe-gated ADVICE.
+pub const KB_EPSILON: f64 = 0.2;
+
+/// The probe's two-sided 95% critical value (the substrate `probe()` docs'
+/// spelling — the CI COMPUTATION is consumed from katgpt-core, never
+/// copied; this is the named critical-value literal the consumers pass).
+pub const PROBE_Z95: f64 = 1.959_963_984_540_054;
+
+/// The probe-gated half of the rescue lane (Plan 621 Phase 5 T5.2): the
+/// Phase-2 bottleneck classifier over the state's ACCUMULATED b0 tallies.
+/// The raw keep predicate stays the truth table exactly as Issue 156 pinned
+/// it (`b0 = 0 ∧ bd ≥ 3` — byte-identical, the G3 anchor); this lane adds
+/// the attempt-count honesty the raw predicate lacks: a state whose no-tool
+/// control failed twice is NOT the same evidence as one that failed
+/// sixteen times, and spending a tool-assisted escalation on the former is
+/// the waste Plan 621's gate exists to prevent. Composition, not
+/// replacement: the class is ADVICE for the arm-H escalation ordering —
+/// the augment-only law is unchanged (the agreement VETO stays the
+/// acceptance authority; the probe can only narrow, never admit).
+#[cfg(feature = "rescue_probe")]
+pub mod probe_gate {
+    use super::{KB_EPSILON, PROBE_Z95, StateRescueTally};
+    use katgpt_core::state_probe::{classify, probe, ProbeClass, ProbeInput};
+
+    /// The state's probe estimate over its ACCUMULATED no-tool leg:
+    /// `pass_count = b0_successes`, `n = b0_attempts`, answers-not-tracked
+    /// (the rescue tallies carry no answer histogram — the verdict reads
+    /// only the Wilson bounds; `h_mm` is 0.0 by the kernel's own contract).
+    #[must_use]
+    pub fn estimate(t: &StateRescueTally) -> katgpt_core::state_probe::ProbeEstimate {
+        probe(
+            &ProbeInput {
+                pass_count: t.b0_successes,
+                n: t.b0_attempts,
+                histogram: &[],
+            },
+            PROBE_Z95,
+        )
+    }
+
+    /// The state's bottleneck class over the accumulated b0 leg — the
+    /// arm-H escalation ADVICE: `KnowledgeLike` ⇒ escalate (the rescue is
+    /// the only path); `Productive` ⇒ never (execution-reachable, V > 0);
+    /// `Undetermined` ⇒ keep probing (the escalation would be premature
+    /// spend).
+    #[must_use]
+    pub fn class(t: &StateRescueTally) -> ProbeClass {
+        classify(&estimate(t), KB_EPSILON)
+    }
+
+    /// The probe-gated keep reading: the state is a rescue exemplar iff it
+    /// certifies knowledge-like AND the raw predicate's demonstrated-rescue
+    /// bar holds. The raw [`super::StateRescueTally::keep`] is UNCHANGED —
+    /// this is the escalation-gate composition, never a replacement (the
+    /// truth-table test pins the raw one byte-identical).
+    #[must_use]
+    pub fn keep_probe_gated(t: &StateRescueTally) -> bool {
+        matches!(class(t), ProbeClass::KnowledgeLike) && t.keep()
+    }
+
+    /// The probe column's render cell for the `--misses` table: the class
+    /// label with the b0 interval — `(advice | lo, hi | n)`. Empty for a
+    /// state with no b0 attempts (the kernel's interval is undefined
+    /// there — the honest cell is `-`).
+    #[must_use]
+    pub fn cell(t: &StateRescueTally) -> String {
+        if t.b0_attempts == 0 {
+            return "-".to_string();
+        }
+        let e = estimate(t);
+        let cls = classify(&e, KB_EPSILON);
+        let word = match cls {
+            ProbeClass::KnowledgeLike => "KB",
+            ProbeClass::Productive => "exec",
+            ProbeClass::Undetermined => "undet",
+        };
+        format!("{word} [{:.2},{:.2}] n={}", e.wilson_lo, e.wilson_hi, t.b0_attempts)
+    }
+}
+
 /// The tool-assisted success bar — `FlyBy`'s `bd ≥ 3` of 4 (a 3-of-4 rescue
 /// majority; `(0, 2)` is REJECT: the rescue is undemonstrated).
 pub const BD_KEEP_MIN: u32 = 3;
@@ -399,6 +485,45 @@ pub fn render_misses_section(states: &[StateRescueTally]) -> String {
             .then(a.state_id.cmp(&b.state_id))
     });
 
+    render_misses_table(&mut out, &ordered, &band_of);
+
+    let _ = writeln!(
+        out,
+        "\n(class: rescue = the FlyBy keep-set — the learnable-hard band's head; \
+         learnable-hard = b0=0 with the rescue demonstrated below the ≥{BD_KEEP_MIN} bar; \
+         intractable-evict = bd=0, RegretMemory's absorbing class — eviction CANDIDATES only; \
+         unprobed = no escalated leg has served yet; exec-reachable = the no-tool control \
+         succeeded (V>0) — never a rescue candidate. AUGMENT-ONLY: this band narrows the \
+         candidate set entering the agreement VETO — the veto stays the acceptance authority.)\n"
+    );
+    #[cfg(feature = "rescue_probe")]
+    let _ = writeln!(
+        out,
+        "(probe b0 = the Plan-621 T5.2 escalation ADVICE over the accumulated no-tool leg: \
+         KB = knowledge-like at ε = {KB_EPSILON} — the rescue is the only path; exec = \
+         productive — the control succeeded, never escalate; undet = more b0 evidence \
+         needed before the escalation is worth its spend. Advice only: the raw keep \
+         predicate and the augment-only law are unchanged.)\n"
+    );
+    out
+}
+
+/// The rank table (header + one row per state, the Issue-156 order already
+/// applied by the caller). The probe-gated b0-advice column (Plan 621 T5.2,
+/// feature `rescue_probe`) rides the ON posture; the OFF posture's table is
+/// byte-identical to its pre-T5.2 shape (G3).
+fn render_misses_table(
+    out: &mut String,
+    ordered: &[&StateRescueTally],
+    band_of: &std::collections::BTreeMap<&str, &str>,
+) {
+    use std::fmt::Write as _;
+    #[cfg(feature = "rescue_probe")]
+    out.push_str(
+        "| rank | state | tier | b0 suc/att | bd suc/att | depth | p̂_d | band | class | probe b0 |\n\
+         |---|---|---|---|---|---|---|---|---|---|\n",
+    );
+    #[cfg(not(feature = "rescue_probe"))]
     out.push_str(
         "| rank | state | tier | b0 suc/att | bd suc/att | depth | p̂_d | band | class |\n\
          |---|---|---|---|---|---|---|---|---|\n",
@@ -410,6 +535,25 @@ pub fn render_misses_section(states: &[StateRescueTally]) -> String {
         } else {
             s.bd_successes as f32 / s.bd_attempts as f32
         };
+        #[cfg(feature = "rescue_probe")]
+        let probe_cell = probe_gate::cell(s);
+        #[cfg(feature = "rescue_probe")]
+        let _ = writeln!(
+            out,
+            "| {} | {} | {} | {}/{} | {}/{} | {} | {p_hat:.3} | {} | {} | {} |",
+            i + 1,
+            s.state_id,
+            tier_label(s.tier),
+            s.b0_successes,
+            s.b0_attempts,
+            s.bd_successes,
+            s.bd_attempts,
+            RescueDepth::from_u8(s.depth).label(),
+            band_of.get(s.state_id.as_str()).copied().unwrap_or("-"),
+            classify(s).label(),
+            probe_cell,
+        );
+        #[cfg(not(feature = "rescue_probe"))]
         let _ = writeln!(
             out,
             "| {} | {} | {} | {}/{} | {}/{} | {} | {p_hat:.3} | {} | {} |",
@@ -425,16 +569,6 @@ pub fn render_misses_section(states: &[StateRescueTally]) -> String {
             classify(s).label(),
         );
     }
-    let _ = writeln!(
-        out,
-        "\n(class: rescue = the FlyBy keep-set — the learnable-hard band's head; \
-         learnable-hard = b0=0 with the rescue demonstrated below the ≥{BD_KEEP_MIN} bar; \
-         intractable-evict = bd=0, RegretMemory's absorbing class — eviction CANDIDATES only; \
-         unprobed = no escalated leg has served yet; exec-reachable = the no-tool control \
-         succeeded (V>0) — never a rescue candidate. AUGMENT-ONLY: this band narrows the \
-         candidate set entering the agreement VETO — the veto stays the acceptance authority.)\n"
-    );
-    out
 }
 
 #[cfg(test)]
@@ -603,6 +737,85 @@ mod tests {
             "exec-reachable: 1",
         ] {
             assert!(rendered.contains(needle), "{needle} missing: {rendered}");
+        }
+    }
+
+    /// Plan 621 T5.2 — the probe-gated escalation advice over the
+    /// ACCUMULATED b0 leg (feature `rescue_probe`; the raw predicate's own
+    /// truth table above is posture-independent and stays byte-identical).
+    #[cfg(feature = "rescue_probe")]
+    mod probe_gate {
+        use super::{state, super::probe_gate};
+
+        #[test]
+        fn enough_zero_success_attempts_certify_knowledge_like() {
+            // 20 no-tool attempts, 0 successes: wilson_hi ≈ 0.161 < 0.2.
+            let t = state("kb", 0, 20, 3, 4);
+            assert!(matches!(
+                probe_gate::class(&t),
+                katgpt_core::state_probe::ProbeClass::KnowledgeLike
+            ));
+            // And the probe-gated keep agrees with the raw keep here.
+            assert!(t.keep());
+            assert!(probe_gate::keep_probe_gated(&t));
+        }
+
+        #[test]
+        fn thin_evidence_reads_undetermined_where_the_raw_predicate_reads_keep() {
+            // THE disclosure the probe adds: (2 attempts, 0 successes) is
+            // keep-eligible under the raw count predicate but the Wilson
+            // upper bound (≈ 0.78) is nowhere near the 0.2 bar — escalating
+            // on this state is premature spend. Both readings stand; the
+            // probe-gated one is the ADVICE.
+            let t = state("thin", 0, 2, 3, 4);
+            assert!(t.keep(), "raw predicate unchanged (the truth table)");
+            assert!(matches!(
+                probe_gate::class(&t),
+                katgpt_core::state_probe::ProbeClass::Undetermined
+            ));
+            assert!(!probe_gate::keep_probe_gated(&t));
+        }
+
+        #[test]
+        fn one_success_blocks_the_knowledge_certification() {
+            // V > 0 evidence: a single control success in 20 keeps the
+            // interval over the bar (hi ≈ 0.21) — undetermined, never KB.
+            let t = state("vpos", 1, 20, 3, 4);
+            assert!(matches!(
+                probe_gate::class(&t),
+                katgpt_core::state_probe::ProbeClass::Undetermined
+            ));
+            assert!(!probe_gate::keep_probe_gated(&t));
+        }
+
+        #[test]
+        fn saturated_control_is_productive_never_kb() {
+            let t = state("prod", 20, 20, 4, 4);
+            assert!(matches!(
+                probe_gate::class(&t),
+                katgpt_core::state_probe::ProbeClass::Productive
+            ));
+            assert!(!probe_gate::keep_probe_gated(&t));
+        }
+
+        #[test]
+        fn empty_b0_leg_renders_the_honest_dash_and_reads_undetermined() {
+            let t = state("never", 0, 0, 0, 0);
+            assert_eq!(probe_gate::cell(&t), "-");
+            assert!(matches!(
+                probe_gate::class(&t),
+                katgpt_core::state_probe::ProbeClass::Undetermined
+            ));
+        }
+
+        #[test]
+        fn the_probe_column_renders_with_the_table() {
+            let states = vec![state("kb", 0, 20, 3, 4), state("thin", 0, 2, 3, 4)];
+            let rendered = super::super::render_misses_section(&states);
+            assert!(rendered.contains("| probe b0 |"), "header: {rendered}");
+            assert!(rendered.contains("KB ["), "kb cell: {rendered}");
+            assert!(rendered.contains("undet ["), "thin cell: {rendered}");
+            assert!(rendered.contains("ADVICE"), "the augment-only legend: {rendered}");
         }
     }
 }
