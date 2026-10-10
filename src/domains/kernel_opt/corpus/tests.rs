@@ -15417,6 +15417,74 @@ fn batch217_riders_landed_on_their_hosts() {
 }
 
 #[test]
+fn batch218_riders_landed_on_their_hosts() {
+    // G1 for Batch 218 (Plan 218): TWO count-neutral riders -- Lead 15
+    // (llama.cpp #29809, MXFP4 SYCL): the SWAR arithmetic decode (the
+    // decode-mechanism family's FOURTH member, on the B207 minifloat rule)
+    // + the lazy per-expert chunked reorder (the B206 staging-budget
+    // family's lazy-reorder member). Every marker is a verbatim quote
+    // verified at the FULL .patch this session (fetched at conversion --
+    // the Batch-217 staging row read the PR body only; the owed
+    // verification closes here).
+    let corpus = build_kernel_seed_corpus();
+
+    // Rider 1: the SWAR arithmetic decode on the minifloat rule
+    // (entries_gpu_77) -- the E2M1 magnitude ladder as piecewise-linear
+    // integer arithmetic, admitted where the byte-permute is emulated.
+    let minifloat = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "minifloat-normal-code-shift-bias-diff-decode")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 218 / Plan 218",
+        "d890cc8959019be0e3527638f66a5a46118bb8b9",
+        "#29809",
+        "dpct::byte_level_permute is emulated with 64-bit shifts, eight per int, which made the MXFP4 GEMV compute-bound on Intel GPUs",
+        "Magnitudes 0,1,2,3,4,6,8,12 = m + [m>=5] + [m>=6] + 3*[m>=7]; each byte stays below 256, so the byte-wise adds never carry.",
+        "-0 (code 8) is left as 0 so the two's-complement +1 cannot carry either.",
+        "const uint32_t mag = m + ge5 + ge6 + 3u * ge7;",
+        "return (int) ((mag ^ (neg * 0xffu)) + neg);",
+        "Replaces table-based MXFP4 decoding with bit-identical 32-bit arithmetic, avoiding costly permute emulation.",
+        "Batch 218 rider / Plan 218",
+    ] {
+        assert!(
+            minifloat.gpu_concept.contains(marker),
+            "batch-218 minifloat rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 2: the lazy chunked reorder on the staging-budget rule (this
+    // file's B206 host) -- the Windows driver-paging hazard, the 32-MiB
+    // cap with the floor-1 chunk, the degrade arm, the alignment
+    // admission, and the prefill re-arm face.
+    let staging = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "widening-conversion-row-chunk-staging-budget")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 218 / Plan 218",
+        "d890cc8959019be0e3527638f66a5a46118bb8b9",
+        "#29809",
+        "The 17-byte AoS block leaves qs unaligned; split out, every 16-byte nibble block is aligned.",
+        "each lane's two weight ints are one aligned 8-byte load (the AoS layout needed eight byte loads)",
+        "a whole-tensor temporary (hundreds of MB) can exceed the VRAM left on a nearly full card, and on Windows the driver then pages device memory out to host RAM instead of failing",
+        "const size_t  max_chunk_bytes   = 32u << 20;",
+        "failed to allocate %zu bytes for reorder temp buffer, skipping reorder",
+        "The MXFP4 reorder kernels use 8-byte vector loads, so every expert slice must stay aligned.",
+        "the queue is in-order: each chunk's copy into tmp_buf waits for the previous chunk's kernel",
+        "reorder MXFP4 here as well, so prompt processing does not depend on a single-token decode having run first.",
+        "Batch 218 rider / Plan 218",
+    ] {
+        assert!(
+            staging.gpu_concept.contains(marker),
+            "batch-218 staging rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch215_rules_and_rider_landed() {
     // G1 for Batch 215 (Plan 215): the TensorFold native-engine delta
     // pack, slot 1 (Research 251) -- FIVE new rules from
