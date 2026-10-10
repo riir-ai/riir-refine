@@ -15327,6 +15327,71 @@ fn batch214_rule_and_riders_landed() {
 }
 
 #[test]
+fn batch217_riders_landed_on_their_hosts() {
+    // G1 for Batch 217 (Plan 217): TWO count-neutral riders -- Lead 12
+    // (PrismML #306, the PQ2_0 activation-layout family's FOURTH member
+    // GGML_CUDA_Q8_1_PQ2 on the planar rule) + Lead 14 (PrismML #340, the
+    // width-validation axis's PER-CC member on the fewrow rule). A rider
+    // that never landed is a staging note, not corpus (the batch198
+    // precedent). Markers are the load-bearing quotes at the pins
+    // (verified verbatim from the FULL .patch of each commit this session;
+    // the Lead-12 staging row's three 'unowned atoms' re-grepped at
+    // composition -- the qsum atom reattributed to its B180 owner, the
+    // rider disposition superseding the staged own-rule option).
+    let corpus = build_kernel_seed_corpus();
+
+    // Rider 1: #306 -- the encode-time decode-eliminating permutation on
+    // the planar-transposed activation layout rule (entries_gpu_49).
+    let planar = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "planar-transposed-activation-multi-column-quant-matvec")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 217 / Plan 217",
+        "2a42998c5",
+        "#306",
+        "GGML_CUDA_Q8_1_PQ2",
+        "the qs bytes of a column are permuted inside each 16-element group",
+        "position (e % 4)*4 + (e % 16)/4 holds element e",
+        "(code_word >> 2k) & 0x03030303 pairs the raw 2-bit codes 0..3 with the right activation bytes, so there is no per-weight decode",
+        "so quantizer and kernel agree",
+        "sum(q*(c-1)) = sum(q*c) - sum(q)",
+        "The environment switch of the previous commit was only there to measure the change; the multi-column kernel is now selected by the conditions alone.",
+        "6.3784/6.3784/6.3776 -> 6.3774/6.3774/6.3820",
+        "Batch 217 rider",
+    ] {
+        assert!(
+            planar.gpu_concept.contains(marker),
+            "batch-217 planar rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 2: #340 -- the per-CC rows axis on the fewrow rule (this
+    // file's host; the axis spread completes per-type / per-path /
+    // per-warp-columns / per-cc).
+    let fewrow = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fewrow-tensor-tile-decode-into-rhs-operand")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 217 / Plan 217",
+        "668256445",
+        "#340",
+        "ptq1_0_pt_rows_per_item_for_cc(ncols_dst, cc)",
+        "The one-row tile is tuned on sm_86. Other devices keep the four-row baseline, including Hopper when GGML_CUDA_BATCH_INVARIANT selects this planar path.",
+        "Guard and launcher both call this so a shape that would exceed smpb falls back to the generic kernel",
+        "Batch 217 rider",
+    ] {
+        assert!(
+            fewrow.gpu_concept.contains(marker),
+            "batch-217 fewrow rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
 fn batch210_pseudocode_parses() {
     // G1 for Batch 210 (Plan 210): the single 10-08 late-envelope lead --
     // llama.cpp #29887 MoE expert GPU cache -- landed as ONE new D rule,
