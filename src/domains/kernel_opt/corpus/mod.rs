@@ -1965,6 +1965,7 @@ mod entries_gpu_76;
 mod entries_gpu_77;
 mod entries_gpu_78;
 mod entries_gpu_79;
+mod entries_gpu_80;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2020,6 +2021,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_77::entries());
     entries.extend(entries_gpu_78::entries());
     entries.extend(entries_gpu_79::entries());
+    entries.extend(entries_gpu_80::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2434,7 +2436,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "splitk-reduce-one-launch-slice-order-pinned"
         ],
     ),
-    // D: Dispatch patterns (178 rules; Batch 210 +1: the expert-cache write-path regime gate (llama.cpp #29887 — the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU; the update hook rides the scheduler's host-weight split); Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs — llama.cpp #30100) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171, pp8192 2.99x source-reported; the in-commit F16-scores revert rides as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); Batch 207 +1: the profile-window drain -- a window opened behind
+    // D: Dispatch patterns (179 rules; Batch 214 +1: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover (the minor resets to 0), silently un-defining the fast path it guards — a quiet performance loss, never a compile error; the repairs are the ordered guard (major > N || (major == N && minor >= M), the landed form) or the packed single compare (MAJOR * 1000000 + MINOR * 1000 + PATCH, the message's rationale); the guard-taken proof (preprocess the unit — the fast-path symbol present, the fallback symbol absent) is the only test that separates the fast path compiled in from the fallback still passing); Batch 210 +1: the expert-cache write-path regime gate (llama.cpp #29887 — the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU; the update hook rides the scheduler's host-weight split); Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs — llama.cpp #30100) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171, pp8192 2.99x source-reported; the in-commit F16-scores revert rides as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); Batch 207 +1: the profile-window drain -- a window opened behind
     // unrelated queued work timed that work as its own and the autotuner elected the outliers
     // (the measurement-honesty D-class member; the backend fact named once, TimestampSampling);
     // Batch 206 +2: the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect that widens dst admission to contiguous_1, one story) + the per-thread-stream blocking-op explicit-sync escape (the legacy-default-stream serialization class; the ROCm -j re-enable rides as the hazard evidence) — both from the 10-07 staged leads; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
@@ -2635,7 +2637,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-residual-selected-by-identity-not-negation",
             "fa-fast-path-validated-exact-shape-admission-v-as-strided-view",
             "headless-draft-forward-crops-to-output-rows-cache-writes-persist",
-            "expert-cache-write-path-regime-gated"
+            "expert-cache-write-path-regime-gated",
+            "componentwise-version-guard-rollover-silences-fast-path"
         ],
     ),
     // E: Parallelism patterns (72 rules; Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role

@@ -109,8 +109,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        777,
-        "kernel batches through Batch 210 should have 777 rules",
+        778,
+        "kernel batches through Batch 214 should have 778 rules",
     );
 }
 
@@ -5367,8 +5367,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 777-rule corpus must appear in exactly one category
-    // (re-pinned 777 at Batch 210; read 776 through B209, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 778-rule corpus must appear in exactly one category
+    // (re-pinned 778 at Batch 214; read 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5467,7 +5467,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 159),
         (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 54),
-        (KernelCategory::Dispatch, 178),
+        (KernelCategory::Dispatch, 179),
         (KernelCategory::Parallelism, 72),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5492,9 +5492,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 777.
+    // Sum must equal 778.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 777, "Plan 003: category totals must sum to 777 (Batch 210 +1, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3 before that, all D: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 778, "Plan 003: category totals must sum to 778 (Batch 214 +1, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5505,8 +5505,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 777,
-        "Plan 003: grouped corpus has {total} rules, expected 777"
+        total, 778,
+        "Plan 003: grouped corpus has {total} rules, expected 778"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9613,8 +9613,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        777,
-        "corpus count re-pinned at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        778,
+        "corpus count re-pinned at Batch 214 (1 rule, D: the componentwise version guard rollover — llama.cpp #29453 a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards, a quiet performance loss never a compile error; repairs = the ordered component guard (landed) or the packed single compare; the guard-taken proof is the verification) + 4 count-neutral riders on their hosts (the cubecl #1779 lost-device election stop on the B207 measurement-honesty rule, the PrismML #225 per-dispatch-path row-tile axis on the B198 fewrow rule, the PrismML #312 evict-to-reuse pole on rust_perf one-shot-staging, the PrismML #313 host-chain k>1 top-k arm on the B189 argmax-epilogue rule); was 777 at Batch 210 (1 rule, D: the expert-cache write-path regime gate — llama.cpp #29887 the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary); was 776 at Batch 208 (3 rules, all D: the fusion residual selected by identity not negation (llama.cpp #30100 — a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171 — pp8192 2.99x source-reported; the in-commit F16-scores revert recorded as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); was 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -15161,6 +15161,167 @@ fn batch213_riders_landed_on_their_hosts() {
         assert!(
             topk.gpu_concept.contains(marker),
             "batch-213 topk rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch214_rule_and_riders_landed() {
+    // G1 for Batch 214 (Plan 214): the conversion set's TAIL -- ONE new D
+    // rule (Lead 4, llama.cpp #29453 the CCCL version-guard rollover) plus
+    // FOUR count-neutral riders (Leads 5-8: the cubecl #1779 lost-device
+    // election stop, the PrismML #225 per-dispatch-path row-tile axis, the
+    // PrismML #312 evict-to-reuse pole, the PrismML #313 host-chain k>1
+    // top-k arm). A rider that never landed is a staging note, not corpus
+    // (the batch198 precedent). Markers are the load-bearing quotes at the
+    // pins (verified verbatim at the pins by the verification pass; the
+    // staging drift on Lead 4 carried: the LANDED guard is the ordered
+    // component form, the packed compare is the message's rationale).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    // The new D rule: parse both fixtures + the load-bearing needles
+    // (the failure-mode law, both repair spellings, the guard-taken proof).
+    let ids = ["componentwise-version-guard-rollover-silences-fast-path"];
+    assert_eq!(ids.len(), 1, "batch-214 fixture count = landed rules");
+    for id in ids {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-214 rule missing: {id}"));
+        let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-214 ref_shape for '{id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-214 opt_pattern for '{id}' must parse"
+        );
+    }
+    let guard = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "componentwise-version-guard-rollover-silences-fast-path")
+        .unwrap();
+    for marker in [
+        "1167d3f42c2b4dc5469bf4e696cb8c678ca79110",
+        "#29453",
+        "4 >= 3 && 0 >= 1, i.e. false",
+        "the regression is a quiet performance loss rather than a compile error",
+        "CCCL_MAJOR_VERSION > 3 || (CCCL_MAJOR_VERSION == 3 && CCCL_MINOR_VERSION >= 1)",
+        "CCCL_VERSION = MAJOR * 1000000 + MINOR * 1000 + PATCH",
+        "no component arithmetic left to get wrong",
+        "The old guard disagreed at 4.0.0 and 5.0.0.",
+        "a passing regression test does not on its own prove the guard is still taken",
+        "counting_iterator is present, init_offsets is not",
+        "NotBenchable",
+    ] {
+        assert!(
+            guard.gpu_concept.contains(marker),
+            "batch-214 version-guard rule marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 1: #1779 -- the lost-device election stop on the B207
+    // measurement-honesty rule (the ELECTION member).
+    let profile = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "profile-window-drains-queued-work-before-open")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 214 / Plan 214",
+        "5247cd5df9452ae931738b6a85b641bb8a3f4bd2",
+        "#1779",
+        "cached a kernel measured on nothing",
+        "whose error then surfaced as the caller's failure in place of the device loss",
+        "the tune stops, logs the loss and leaves the key pending",
+        "A tune stopped on a lost device leaves its key here for good",
+        "run the first candidate that serves the problem and meet the loss in their own reads",
+        "a_tune_on_a_lost_device_settles_nothing",
+        "Batch 214 rider",
+    ] {
+        assert!(
+            profile.gpu_concept.contains(marker),
+            "batch-214 election rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 2: #225 -- the per-dispatch-path row-tile axis on the B198
+    // fewrow rule (the (type x path) grid; the ID-fails-at-5 datum).
+    let fewrow = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fewrow-tensor-tile-decode-into-rhs-operand")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 214 / Plan 214",
+        "5e9365f05e56c7d28ff596c874dcffa3da785b15",
+        "#225",
+        "Keep MUL_MAT_ID on its separately validated four-row instantiation; sharing the five-row variant produces numerical failures there.",
+        "The dense kernel can amortize each activation load across five output rows.",
+        "Keep MUL_MAT_ID at four: its five-row specialization fails numerical validation.",
+        "N_R0_ID_PTQ1_0",
+        "45/45 PTQ1 MUL_MAT and 75/75 PTQ1 MUL_MAT_ID cases pass",
+        "10.300 to 11.505 tok/s on M1 Max",
+        "Batch 214 rider",
+    ] {
+        assert!(
+            fewrow.gpu_concept.contains(marker),
+            "batch-214 per-path rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 3: #312 -- the evict-to-reuse pole on the rust_perf
+    // one-shot-staging rule (context_notes, not gpu_concept -- rust_perf
+    // shape). Located via the rust_perf corpus builder.
+    let rust_perf_corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
+    let staging = rust_perf_corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "one-shot-staging-release-to-system")
+        .unwrap();
+    let notes = staging.context_notes.as_deref().unwrap_or("");
+    for marker in [
+        "RIDER (Batch 214 / Plan 214",
+        "bf197c43d06d7e513dc956459043fa081c4d91a6",
+        "#312",
+        "zero-filled and page-faulted again. Hand the buffers of the last evicted checkpoint to the next one instead.",
+        "the buffers of an evicted checkpoint go to the new one: a fresh vector is zero-filled by resize()",
+        "saves about 18 ms per turn (645 -> 627 ms)",
+        "evicted checkpoint buffers are now always handed to the next checkpoint",
+        "Batch 214 rider",
+    ] {
+        assert!(
+            notes.contains(marker),
+            "batch-214 evict-reuse rider marker missing: '{marker}'"
+        );
+    }
+
+    // Rider 4: #313 -- the host-chain k>1 top-k arm on the B189
+    // argmax-epilogue rule.
+    let argmax = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "argmax-epilogue-replaces-output-materialization")
+        .unwrap();
+    for marker in [
+        "RIDER (Batch 214 / Plan 214",
+        "527ea4d9f2aee165bb55f7057406f66b2de0488a",
+        "#313",
+        "select the k largest logits directly",
+        "so that tokens with equal logits end up in the same order as with llama_sampler_top_k",
+        "Checked against std::partial_sort on 120000 random arrays (ties, NaN, inf)",
+        "any |= logits[i + j] > thr",
+        "+1.9 % (greedy benchmark), +1.85 % with the Hermes sampling settings",
+        "Batch 214 rider",
+    ] {
+        assert!(
+            argmax.gpu_concept.contains(marker),
+            "batch-214 host-chain rider marker missing: '{marker}'"
         );
     }
 }
