@@ -1,6 +1,6 @@
 # Research 252 — stellar/rs-soroban-sdk distill verdict (4090, user-directed)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** LANDED — Batch 222 (2026-10-10, this box: BOTH candidates converted as own rust_perf rules in `src/domains/rust_perf/corpus/entries_24.rs`; candidate 2 verified RICHER at the pin — two mechanisms, the macro-side MARKER read + the keep_reachable fn-pointer form — and its plain-Rust fixture STOOD ALONE, so the own-rule-or-drop adjudication resolved OWN-RULE; counts rust_perf 196 → 198, wasm family 1 → 3, annotated 142 → 144, without_spec 97 → 99; quotes re-verified at the pin via the .raw clone per T1 of Plan 216; the riir-chain lane intel below still rides for the chain-owning session).
 
 ## Source
 

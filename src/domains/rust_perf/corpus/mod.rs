@@ -9,7 +9,13 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 196 entries across 13 categories as of Batch 221 (2026-10-10, Plan 221 —
+//! 198 entries across 13 categories as of Batch 222 (2026-10-10, Plan 216 /
+//! Research 252 — the soroban wasm size pair from `stellar/rs-soroban-sdk` @
+//! `0d72c4c9`: +2 `wasm-unwrap-panic-machinery-elimination` +
+//! `linker-dce-custom-section-volatile-marker`, BOTH category `wasm`, BOTH
+//! `NotBenchable` annotated (the size-axis domain reason; annotated 142 → 144,
+//! `without_spec` 97 → 99, the wasm family 1 → 3); Batch 221 before it,
+//! 2026-10-10, Plan 221 —
 //! the rider-tier conversion set: +1 the bevy #25864 runtime-bool
 //! conditional-guard rule, dispatch, `NotBenchable` annotated; the live
 //! per-category counts are pinned by tests, never this
@@ -293,6 +299,11 @@
 //! - `async-future-size` (future state-machine size — deterministic `size_of_val`)
 //! - `bevy-reactive-loop` (needs the Bevy runtime — can't run in a temp crate)
 //! - `wasm-batch-ffi` (needs a WASM runtime — can't run in a temp crate)
+//! - `wasm-unwrap-panic-machinery-elimination` (wasm BINARY SIZE is the win
+//!   metric — no native axis hosts it; Batch 222, the dial9 class)
+//! - `linker-dce-custom-section-volatile-marker` (same size-axis domain reason
+//!   — the win is the section surviving the linker into the artifact; Batch
+//!   222)
 //! - `tokio-guard-across-await` (**metric mismatch**, Issue 014 T2.3 — cost is
 //!   OTHER tasks' wait latency under contention, not this task's wall-clock)
 //! - `bounded-channel-backpressure` (**metric mismatch + semantics-changing**,
@@ -424,14 +435,17 @@ mod entries_20;
 mod entries_21;
 mod entries_22;
 mod entries_23;
+mod entries_24;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 196 entries
-/// (Batch 219, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 198 entries
+/// (Batch 222, 2026-10-10, Plan 216 / Research 252: +2, the soroban wasm size
+/// pair — both `wasm`, both `NotBenchable` annotated; Batch 219 before the
+/// pair, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
 /// `TensorFold` native-engine serving/timing pack — complexity +2 the
 /// cost-table hygiene pair, caching +3 the prompt-cache pair + the
 /// fingerprint persistence, concurrency +2 the bounded peer-handoff wait
@@ -501,5 +515,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_21::entries());
     entries.extend(entries_22::entries());
     entries.extend(entries_23::entries());
+    entries.extend(entries_24::entries());
     Corpus::new(entries)
 }

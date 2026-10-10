@@ -25,7 +25,24 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 196 rules across 13 categories — Batch 221
+profiling guide, Research 032; **now 198 rules across 13 categories — Batch 222
+(2026-10-10, Plan 216 / Research 252 — +2 the soroban wasm size pair, source
+`stellar/rs-soroban-sdk` @ `0d72c4c9`, Apache-2.0: `wasm-unwrap-panic-machinery-elimination`
+(on wasm every `.unwrap()` carries core::panicking's message + fmt machinery
+into the artifact even under panic = abort; the `UnwrapOptimized` trait swaps
+the precondition-impossible arm for a 1-byte `core::arch::wasm32::unreachable()`
+trap — native arm keeps the plain unwrap — plus the `UnwrapInfallible`
+`Err(never) => match never {}` statically-checked-infallible clause; the
+MANDATORY anti-regime: never rewrite a reachable unwrap arm) +
+`linker-dce-custom-section-volatile-marker` (a data-only `#[link_section]`
+custom-section static with no compiled-code reference is shaken out by the
+linker's GC — root it in a reachable path via `read_volatile`; the #2114 'Fix
+event spec shaking' fix incl. the `keep_reachable` fn-pointer form — 'Keeps
+`f`'s symbol alive through the linker's dead-code-elimination pass without
+invoking `f` at runtime.'); both category `wasm` — the family 1 → 3 — both
+NotBenchable annotated (the size-axis domain reason; annotated 142 → 144,
+without_spec 97 → 99); quotes re-verified at the pin via the .raw clone).
+Previously 196 — Batch 221
 (2026-10-10, Plan 221 — +1 the bevy `runtime-bool-duplicates-inlinable-body`
 (dispatch, NotBenchable annotated; annotated 141 → 142), source bevyengine/bevy
 PR #25864 @ merge `74884ffd`, patches `a4d1789` + `8328184`, Apache-2.0/MIT,
