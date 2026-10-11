@@ -123,6 +123,14 @@ struct Args {
     /// The per-case escalation deadline in ms (the whole readiness-retry
     /// + wire budget; Bench 107: the lazy window ran ~100 ms under it).
     deadline_ms: u64,
+    /// Plan 225 T1.1 (`--arm HARVEST`): cap on harvested cases (0 = the
+    /// full deduped v2edit population). Separate from `--limit` (whose
+    /// default 16 is the LLM arms' per-chunk semantics).
+    harvest_cap: usize,
+    /// Plan 225 T1.4's behavioural PILOT budget: the first N pool≥2 cases
+    /// with ≥1 (a)∧(c)-gold candidate get the per-fn differential driver,
+    /// estimating P(behaviour-ok | a∧c-ok) for the T1.6 supply projection.
+    harvest_behavioural: usize,
 }
 
 impl Args {
@@ -148,6 +156,8 @@ impl Args {
             esc_manifest: PathBuf::from(".refine/escalation_manifest.json"),
             esc_domain: "clippy".into(),
             deadline_ms: 2_000,
+            harvest_cap: 0,
+            harvest_behavioural: 0,
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
@@ -184,6 +194,13 @@ impl Args {
                 "--esc-domain" => a.esc_domain = val(),
                 "--deadline-ms" => {
                     a.deadline_ms = val().parse().expect("--deadline-ms must be an integer")
+                }
+                "--harvest-cap" => {
+                    a.harvest_cap = val().parse().expect("--harvest-cap must be an integer")
+                }
+                "--harvest-behavioural" => {
+                    a.harvest_behavioural =
+                        val().parse().expect("--harvest-behavioural must be an integer")
                 }
                 other => {
                     eprintln!("unknown arg: {other}");
@@ -225,6 +242,12 @@ fn build_samples(args: &Args) -> Result<Vec<Sample>, String> {
     if args.source == "v2edit" || args.source == "both" {
         let dir = resolve_data_dir(&args.data_dir)?;
         samples.extend(cf_workers_ai::load_v2edit(&dir, &args.chunks, args.limit)?);
+    }
+    // Plan 225 T1.1: the FULL deduped v2edit population (labelled chunks +
+    // unlabelled sft rows; the HARVEST arm labels them by discovery).
+    if args.source == "v2edit_all" {
+        let dir = resolve_data_dir(&args.data_dir)?;
+        samples.extend(cf_workers_ai::load_v2edit_full(&dir, args.harvest_cap)?);
     }
     if samples.is_empty() {
         return Err(format!("--source {} produced zero samples", args.source));
@@ -527,6 +550,16 @@ fn main() {
         args.arm
     );
 
+    // Plan 225 T1.1 — the harvest arm runs its OWN replay loop (classify →
+    // score → warm memory, interleaved per case so pools warm exactly as
+    // production serves them). It must NOT go through `prepare` (no LLM
+    // prompts, no batch classify — the pool capture happens per case).
+    if args.arm == "HARVEST" {
+        run_harvest(&args, &mut harness, samples);
+        eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+        return;
+    }
+
     let prepared = prepare(&mut harness, samples, args.few_shots);
     std::fs::create_dir_all(&args.behav_dir).ok();
     // The harness is consumed by `prepare`; arms get their own verifier
@@ -539,7 +572,7 @@ fn main() {
         "C" => run_daemon(&args, &verifier, &prepared),
         "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
         other => {
-            eprintln!("unknown --arm {other} (A|B|G|G2|C|H|DRY|BT8|BT8DRY)");
+            eprintln!("unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|BT8|BT8DRY)");
             std::process::exit(2);
         }
     }
@@ -1470,6 +1503,440 @@ fn run_bt8(args: &Args, verifier: &ClippyVerifier, harness: &mut RegateHarness) 
         });
         let _ = writeln!(f, "{row}");
     }
+}
+
+// ── Plan 225 T1 — the HARVEST arm: mine the heal-decision case set ────────
+//
+// Replays the FULL deduped v2edit population through the production pipeline
+// IN ORDER, warming memory exactly as a real heal run does (report_outcome per
+// served case), and records for EVERY case the (module, target lint,
+// L0–L3 pool, per-candidate oracle verdict) row the seat bench needs. The
+// gold oracle is the plan's three clauses: (a) merge + compile + lint-clears
+// (score_case + the new after_compiled gate), (c) contract + no added
+// allow/expect, and — on a deterministic pilot subset — (b) per-fn
+// behavioural equivalence. Census + lint-disjoint split + digest land in the
+// out dir; the T1.6 power arithmetic is computed from them.
+
+/// One harvested candidate row (the per-candidate oracle verdict).
+#[derive(serde::Serialize)]
+struct HarvestCand {
+    idx: usize,
+    blake3_12: String,
+    merge: Option<&'static str>,
+    compiled: bool,
+    target_resolved: bool,
+    contract_ok: bool,
+    attr_silence: bool,
+    /// Clause (a) ∧ (c) — the cheap gold half the full population gets.
+    gold_a_c: bool,
+    /// Pilot-only clause (b): "ok" | "divergent" | "unresolved" | null.
+    behav: Option<&'static str>,
+    /// gold_a_c ∧ behav == ok — null outside the pilot.
+    gold_full: Option<bool>,
+}
+
+/// Every top-level fn name in a module (the per-fn behavioural pilot's
+/// driver targets). `None` when the module does not parse.
+fn module_fn_names(src: &str) -> Option<Vec<String>> {
+    let file: syn::File = syn::parse_file(src).ok()?;
+    let mut names = Vec::new();
+    for item in file.items {
+        if let syn::Item::Fn(f) = item {
+            names.push(f.sig.ident.to_string());
+        }
+    }
+    Some(names)
+}
+
+/// Run the per-fn differential driver over every fn in the module:
+/// "ok" | "divergent" | "unresolved" (any Unsupported fn wins only if
+/// nothing diverged — a concrete counterexample outranks a shrug).
+fn behavioural_pilot_verdict(
+    before: &str,
+    merged: &str,
+    behav_dir: &std::path::Path,
+    case_id: &str,
+) -> &'static str {
+    let Some(names) = module_fn_names(before) else {
+        return "unresolved";
+    };
+    if names.is_empty() {
+        return "unresolved";
+    }
+    let dir = behav_dir.join(case_id.replace(':', "_"));
+    let mut any_unsupported = false;
+    for name in names {
+        match riir_refine::behavioural_equivalence::check(before, merged, &name, 64, &dir) {
+            riir_refine::behavioural_equivalence::Verdict::Equivalent { .. } => {}
+            riir_refine::behavioural_equivalence::Verdict::Divergent { .. } => return "divergent",
+            riir_refine::behavioural_equivalence::Verdict::Unsupported { .. } => {
+                any_unsupported = true;
+            }
+        }
+    }
+    if any_unsupported {
+        "unresolved"
+    } else {
+        "ok"
+    }
+}
+
+fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
+    use cf_workers_ai::{apply_edit, attr_silence_added, score_case};
+
+    /// Per-target-lint census row (T1.5/T1.6's arithmetic substrate).
+    #[derive(Default, serde::Serialize)]
+    struct LintCensus {
+        n: usize,
+        corpus_covered: bool,
+        pool_empty: usize,
+        pool_singleton: usize,
+        pool_ge2: usize,
+        deciding: usize,
+        none_gold: usize,
+        all_gold: usize,
+        deciding_full: usize,
+        #[serde(skip)]
+        pool_seen: usize,
+    }
+
+    let Some(out_dir) = args.out.clone() else {
+        eprintln!("FATAL: --arm HARVEST needs --out <dir> (cases.jsonl + census.json + split.json)");
+        std::process::exit(2);
+    };
+    std::fs::create_dir_all(&out_dir).expect("create harvest out dir");
+    let behav_dir = out_dir.join("behav");
+    std::fs::create_dir_all(&behav_dir).ok();
+    let mut cases = std::fs::File::create(out_dir.join("cases.jsonl")).expect("create cases.jsonl");
+
+    let clippy_version = std::process::Command::new("cargo")
+        .arg("clippy")
+        .arg("--version")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    eprintln!("[harvest] {} samples; clippy {clippy_version}", samples.len());
+
+    // ── Phase 0: labelling pass — the target lint is what FIRES in the ────
+    // scaffold (row label first when it fires, else the first discovery;
+    // nothing fires → the case has no oracle and is recorded as such).
+    eprintln!("[harvest] phase 0: labelling (discovery clippy per module)...");
+    struct Labelled {
+        sample: Sample,
+        target: Option<String>,
+        target_source: &'static str,
+    }
+    let mut labelled: Vec<Labelled> = Vec::with_capacity(samples.len());
+    let mut no_control = 0usize;
+    let t_label = std::time::Instant::now();
+    let total_samples = samples.len();
+    for (n, s) in samples.into_iter().enumerate() {
+        let d = harness.verifier.discover_lints(&s.module);
+        let fires: Vec<&str> = d
+            .present_lints
+            .iter()
+            .map(|l| l.strip_prefix("clippy::").unwrap_or(l))
+            .collect();
+        let (target, source) = if let Some(l) = s.lints.iter().find(|l| fires.contains(&l.as_str())) {
+            (Some(l.clone()), "row")
+        } else if let Some(first) = fires.first() {
+            (Some((*first).to_string()), "discovered")
+        } else {
+            (None, "none")
+        };
+        if target.is_none() {
+            no_control += 1;
+        }
+        labelled.push(Labelled { sample: s, target, target_source: source });
+        if (n + 1) % 200 == 0 {
+            eprintln!(
+                "[harvest] labelled {}/{} ({:.1}s)",
+                n + 1,
+                labelled.len(),
+                t_label.elapsed().as_secs_f32()
+            );
+        }
+    }
+    eprintln!(
+        "[harvest] labelling done: {} with a firing target, {no_control} without an oracle",
+        labelled.len() - no_control
+    );
+
+    // ── Phase 1: the replay — classify → score every pool candidate → warm ──
+    eprintln!("[harvest] phase 1: replay (pool capture + per-candidate oracle)...");
+    let mut behav_cases_left = args.harvest_behavioural;
+    let mut per_lint: std::collections::BTreeMap<String, LintCensus> = Default::default();
+    let t_replay = std::time::Instant::now();
+    for (n, l) in labelled.into_iter().enumerate() {
+        let target = match &l.target {
+            Some(t) => t.clone(),
+            None => {
+                let row = serde_json::json!({
+                    "case_id": l.sample.id,
+                    "target_lint": serde_json::Value::Null,
+                    "target_source": l.target_source,
+                    "row_lints": l.sample.lints,
+                    "module": l.sample.module,
+                    "pool": [],
+                    "stratum": "no_control",
+                });
+                writeln!(cases, "{row}").ok();
+                continue;
+            }
+        };
+        let c = per_lint.entry(target.clone()).or_default();
+        c.n += 1;
+        c.corpus_covered = c.corpus_covered || harness.corpus.lookup(&target).next().is_some();
+
+        // The score-time sample targets ONLY the harvest target lint.
+        let score_sample = Sample {
+            id: l.sample.id.clone(),
+            lints: vec![target.clone()],
+            module: l.sample.module.clone(),
+            expected: l.sample.expected.clone(),
+            source: SampleSource::V2edit,
+        };
+        let outcome = harness.classify_outcome(&target, &l.sample.module);
+        let pool_len = outcome.pool.len();
+        c.pool_seen = c.pool_seen.max(pool_len);
+        if pool_len >= 2 {
+            c.pool_ge2 += 1;
+        } else if pool_len == 1 {
+            c.pool_singleton += 1;
+        } else {
+            c.pool_empty += 1;
+        }
+
+        // Pilot eligibility: deterministic — the first N pool≥2 cases that
+        // turn out to have ≥1 (a)∧(c)-gold candidate (checked post-score).
+        let pilot_case = behav_cases_left > 0 && pool_len >= 2;
+        let mut pilot_used = false;
+        let mut cands: Vec<HarvestCand> = Vec::with_capacity(pool_len);
+        for (i, cand) in outcome.pool.iter().enumerate() {
+            let merged = apply_edit(&l.sample.module, cand, false).map(|(m, _)| m);
+            let score = score_case(&harness.verifier, &score_sample, cand, None);
+            let gold_a = merged.is_some()
+                && score.oracle_ran
+                && score.after_compiled
+                && score.target_resolved;
+            let silences = merged
+                .as_deref()
+                .is_some_and(|m| attr_silence_added(&l.sample.module, m));
+            let gold_c = score.contract_ok && !silences;
+            let gold_a_c = gold_a && gold_c;
+            let (behav, gold_full) = if pilot_case && gold_a_c {
+                pilot_used = true;
+                let v = behavioural_pilot_verdict(
+                    &l.sample.module,
+                    merged.as_deref().unwrap_or_default(),
+                    &behav_dir,
+                    &l.sample.id,
+                );
+                (Some(v), Some(v == "ok"))
+            } else {
+                (None, None)
+            };
+            cands.push(HarvestCand {
+                idx: i,
+                blake3_12: blake3::hash(cand.as_bytes()).to_hex().as_str()[..12].to_string(),
+                merge: score.merge_strategy.map(|m| m.name()),
+                compiled: score.after_compiled,
+                target_resolved: score.target_resolved,
+                contract_ok: score.contract_ok,
+                attr_silence: silences,
+                gold_a_c,
+                behav,
+                gold_full,
+            });
+        }
+        if pilot_used {
+            behav_cases_left -= 1;
+        }
+
+        // Strata (T1.5): on gold_a_c over the full population; the pilot
+        // rows also carry the full-gold stratum where every candidate was
+        // behav-scored.
+        let (stratum, stratum_full) = if pool_len == 0 {
+            ("empty_pool", None)
+        } else if pool_len == 1 {
+            ("singleton_pool", None)
+        } else {
+            let g = cands.iter().filter(|c| c.gold_a_c).count();
+            let s = if g == 0 {
+                "none_gold"
+            } else if g == pool_len {
+                "all_gold"
+            } else {
+                "deciding"
+            };
+            let s_full = if cands.iter().all(|c| c.gold_full.is_some()) {
+                let gf = cands.iter().filter(|c| c.gold_full == Some(true)).count();
+                Some(if gf == 0 {
+                    "none_gold_full"
+                } else if gf == pool_len {
+                    "all_gold_full"
+                } else {
+                    "deciding_full"
+                })
+            } else {
+                None
+            };
+            (s, s_full)
+        };
+        match stratum {
+            "deciding" => c.deciding += 1,
+            "none_gold" => c.none_gold += 1,
+            "all_gold" => c.all_gold += 1,
+            _ => {}
+        }
+        if stratum_full == Some("deciding_full") {
+            c.deciding_full += 1;
+        }
+
+        // Memory warming — the production shape: the SERVED candidate's
+        // real outcome feeds the trajectory store (pool diversity for later
+        // same-rule cases grows exactly as production serves them).
+        let mut served_idx: Option<usize> = None;
+        if let Some(served) = &outcome.served {
+            served_idx = outcome.pool.iter().position(|p| p == served);
+            if let Some(i) = served_idx {
+                let success = cands[i].gold_a_c;
+                harness.pipeline.report_outcome(
+                    &target,
+                    &l.sample.module,
+                    served,
+                    success,
+                    true,
+                );
+            }
+        }
+
+        let row = serde_json::json!({
+            "case_id": l.sample.id,
+            "target_lint": target,
+            "target_source": l.target_source,
+            "row_lints": l.sample.lints,
+            "module": l.sample.module,
+            "expected": l.sample.expected,
+            "pool": cands,
+            "pool_size": pool_len,
+            "served_idx": served_idx,
+            "modelless_score": outcome.score,
+            "stratum": stratum,
+            "stratum_full": stratum_full,
+        });
+        writeln!(cases, "{row}").ok();
+        if (n + 1) % 100 == 0 {
+            eprintln!(
+                "[harvest] {}/{} replayed ({:.1}s)",
+                n + 1,
+                total_samples,
+                t_replay.elapsed().as_secs_f32()
+            );
+        }
+    }
+    cases.flush().ok();
+
+    // ── Phase 2: census + split + digest ──────────────────────────────
+
+    // The lint-disjoint split (T1.7): time/source-repo provenance is absent
+    // from the v2edit rows, so the leakage-safe fallback splits by LINT —
+    // each lint wholly on one side, so a test rule's cases never appear in
+    // training in any form. Greedy balance on scored cases, deterministic
+    // order (count desc, name asc), test target ≈45% of scored.
+    let mut scored_lints: Vec<(&String, &mut LintCensus)> = per_lint
+        .iter_mut()
+        .filter(|(_, c)| c.deciding + c.none_gold > 0)
+        .collect();
+    let total_scored: usize = scored_lints.iter().map(|(_, c)| c.deciding + c.none_gold).sum();
+    scored_lints.sort_by(|a, b| {
+        (b.1.deciding + b.1.none_gold)
+            .cmp(&(a.1.deciding + a.1.none_gold))
+            .then(a.0.cmp(b.0))
+    });
+    let test_target = total_scored * 45 / 100;
+    let mut split: std::collections::BTreeMap<String, &'static str> = Default::default();
+    let mut test_scored = 0usize;
+    for (lint, c) in &scored_lints {
+        let scored = c.deciding + c.none_gold;
+        if test_scored < test_target {
+            split.insert((*lint).clone(), "test");
+            test_scored += scored;
+        } else {
+            split.insert((*lint).clone(), "train");
+        }
+    }
+    for (lint, c) in &per_lint {
+        if c.deciding + c.none_gold == 0 {
+            split.insert(lint.clone(), "train"); // unscored lints are train-side structure
+        }
+    }
+
+    let deciding_total: usize = per_lint.values().map(|c| c.deciding).sum();
+    let none_gold_total: usize = per_lint.values().map(|c| c.none_gold).sum();
+    let all_gold_total: usize = per_lint.values().map(|c| c.all_gold).sum();
+    let pool_ge2_total: usize = per_lint.values().map(|c| c.pool_ge2).sum();
+    let n_total: usize = per_lint.values().map(|c| c.n).sum();
+    let deciding_full_total: usize = per_lint.values().map(|c| c.deciding_full).sum();
+
+    // The pinned T1.6 power table (superiority route): N = (z_{α/2}+z_β)² ·
+    // (p_d − δ₀²)/δ₀² with δ₀ = 0.05, α = 0.05 two-sided, power 0.80.
+    let n_power = |p_d: f64| (7.849 * (p_d - 0.0025) / 0.0025).ceil() as usize;
+
+    let census = serde_json::json!({
+        "clippy_version": clippy_version,
+        "samples": n_total + no_control,
+        "no_control": no_control,
+        "with_target": n_total,
+        "pool_ge2": pool_ge2_total,
+        "strata": {
+            "deciding": deciding_total,
+            "none_gold": none_gold_total,
+            "all_gold_unscored": all_gold_total,
+        },
+        "behav_pilot": {
+            "cases": args.harvest_behavioural - behav_cases_left,
+            "deciding_full": deciding_full_total,
+        },
+        "t16_power_table": {
+            "inputs": "delta0=0.05, alpha=0.05 two-sided, power=0.80, paired per-case score",
+                       "n_at_pd_0.20": n_power(0.20),
+            "n_at_pd_0.35": n_power(0.35),
+            "n_at_pd_0.50": n_power(0.50),
+        },
+        "per_lint": per_lint,
+        "split": &split,
+        "split_test_scored": test_scored,
+    });
+    std::fs::write(out_dir.join("census.json"), serde_json::to_string_pretty(&census).unwrap())
+        .expect("write census.json");
+    std::fs::write(
+        out_dir.join("split.json"),
+        serde_json::to_string_pretty(&split).unwrap(),
+    )
+    .expect("write split.json");
+
+    println!("═ arm HARVEST — Plan 225 T1 case-set census ═");
+    println!("  clippy {clippy_version}");
+    println!("  modules: {} ({} without a firing target)", n_total + no_control, no_control);
+    println!("  pool≥2: {pool_ge2_total}   deciding: {deciding_total}   none-gold: {none_gold_total}   all-gold(unscored): {all_gold_total}");
+    println!("  behav pilot cases: {}   deciding_full among them: {deciding_full_total}", args.harvest_behavioural - behav_cases_left);
+    println!("  split (lint-disjoint): test {} / {} scored", test_scored, total_scored);
+    println!("  T1.6 N(p_d): p_d=0.20 → {}, 0.35 → {}, 0.50 → {}", n_power(0.20), n_power(0.35), n_power(0.50));
+    for (lint, c) in &per_lint {
+        println!(
+            "    {:<28} n={:<4} corpus={} pool≥2={:<4} deciding={:<3} none-gold={:<3} all-gold={:<3}",
+            lint,
+            c.n,
+            if c.corpus_covered { "y" } else { "n" },
+            c.pool_ge2,
+            c.deciding,
+            c.none_gold,
+            c.all_gold
+        );
+    }
+    eprintln!("[harvest] artifacts: {}", out_dir.display());
 }
 
 // ── Plan 202 R6 — arm H: the escalation chain over the existing harness ────

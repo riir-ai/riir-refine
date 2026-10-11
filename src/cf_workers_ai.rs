@@ -276,6 +276,80 @@ pub fn load_v2edit(data_dir: &Path, chunks: &[usize], limit: usize) -> Result<Ve
     Ok(out)
 }
 
+/// Load the FULL v2edit corpus — Plan 225 T1.1's harvest population: the
+/// seven test chunks + `sft_train` + `sft_test` + the indist chunk, deduped by
+/// BLAKE3(module) first-seen, in deterministic file/row order (the chunks
+/// first — they are the lint-LABELLED slice, so their ids win the dedup).
+///
+/// Unlike [`load_v2edit`] a row MAY carry no lint label — the harvest's
+/// labelling pass (`ClippyVerifier::discover_lints`) targets whatever
+/// actually fires in the scaffold. `cap = 0` means uncapped.
+///
+/// # Errors
+///
+/// Returns a `String` if a corpus file is missing (refusing a silently
+/// truncated population) or a row fails to parse.
+pub fn load_v2edit_full(data_dir: &Path, cap: usize) -> Result<Vec<Sample>, String> {
+    #[derive(serde::Deserialize)]
+    struct Row {
+        prompt: String,
+        response: String,
+        #[serde(default)]
+        lint: Option<String>,
+        #[serde(default)]
+        lints: Option<Vec<String>>,
+    }
+    const FILES: [&str; 10] = [
+        "clippy_l4_v2edit_test_chunk_00.jsonl",
+        "clippy_l4_v2edit_test_chunk_01.jsonl",
+        "clippy_l4_v2edit_test_chunk_02.jsonl",
+        "clippy_l4_v2edit_test_chunk_03.jsonl",
+        "clippy_l4_v2edit_test_chunk_04.jsonl",
+        "clippy_l4_v2edit_test_chunk_05.jsonl",
+        "clippy_l4_v2edit_test_chunk_06.jsonl",
+        "clippy_l4_v2edit_sft_train.jsonl",
+        "clippy_l4_v2edit_sft_test.jsonl",
+        "clippy_l4_v2edit_indist_chunk_00.jsonl",
+    ];
+    let mut out: Vec<Sample> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for file in FILES {
+        let p = data_dir.join(file);
+        let raw = std::fs::read_to_string(&p)
+            .map_err(|e| format!("cannot read {}: {e} — the harvest population must not be silently truncated", p.display()))?;
+        for (i, line) in raw.lines().enumerate() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if cap != 0 && out.len() >= cap {
+                return Ok(out);
+            }
+            let row: Row = serde_json::from_str(line)
+                .map_err(|e| format!("{}:{}: bad JSONL row: {e}", p.display(), i + 1))?;
+            let module = prompt_module(&row.prompt).to_string();
+            if !seen.insert(blake3::hash(module.as_bytes()).to_hex().to_string()) {
+                continue; // duplicate module — first sighting owns the case id
+            }
+            let mut lints = row.lints.unwrap_or_default();
+            if let Some(l) = row.lint {
+                lints.push(l);
+            }
+            let stem = file
+                .strip_prefix("clippy_l4_v2edit_")
+                .unwrap_or(file)
+                .trim_end_matches(".jsonl");
+            out.push(Sample {
+                id: format!("v2edit_all:{stem}:{i:03}"),
+                lints,
+                module,
+                expected: Some(row.response),
+                source: SampleSource::V2edit,
+            });
+        }
+    }
+    Ok(out)
+}
+
 /// The reachable-miss samples.
 #[must_use]
 pub fn reachable_samples() -> Vec<Sample> {
@@ -1031,6 +1105,16 @@ pub fn contract_preserved(buggy: &str, fixed: &str) -> bool {
     contract_idents(buggy).is_subset(&contract_idents(fixed))
 }
 
+/// Plan 225 T1.4 clause (c): gold is REFUSED when the candidate ADDS an
+/// `allow`/`expect` attribute — lint silencing, not healing. Compares
+/// occurrence counts (not presence) so a pre-existing allowance survives a
+/// legitimate fix untouched.
+#[must_use]
+pub fn attr_silence_added(original: &str, merged: &str) -> bool {
+    let more = |pat: &str| merged.matches(pat).count() > original.matches(pat).count();
+    more("#[allow(") || more("#[expect(") || more("#![allow(") || more("#![expect(")
+}
+
 /// First `fn NAME` in the source — the behavioural-equivalence name hint.
 #[must_use]
 pub fn first_fn_name(code: &str) -> Option<String> {
@@ -1592,6 +1676,10 @@ pub struct CaseScore {
     pub oracle_ran: bool,
     pub findings_before: usize,
     pub findings_after: usize,
+    /// The MERGED module compiled under the oracle (Plan 225 T1.4 clause
+    /// (a)). Distinct from `oracle_ran`: a compile failure still "ran", and
+    /// its empty lint list must not read as a findings reduction.
+    pub after_compiled: bool,
     /// Strictly fewer clippy findings after the fix (the never-wrong keep
     /// rule's core test).
     pub strictly_fewer: bool,
@@ -1655,6 +1743,7 @@ pub fn score_case(
         oracle_ran: false,
         findings_before: before.present_lints.len(),
         findings_after: usize::MAX,
+        after_compiled: false,
         strictly_fewer: false,
         target_resolved: false,
         noop,
@@ -1668,9 +1757,16 @@ pub fn score_case(
     s.contract_ok = contract_preserved(&sample.module, &merged);
     let after = verifier.verify(&merged, &sample.lints[0]);
     s.oracle_ran = before.ran && after.ran;
+    s.after_compiled = after.compiled;
     s.findings_after = after.present_lints.len();
-    s.strictly_fewer = s.oracle_ran && s.findings_after < s.findings_before;
+    // `after.compiled` gates both reductions: a module that failed to
+    // compile reports an empty lint list (errors, not clippy codes), which
+    // before the gate read as "strictly fewer + target resolved" for code
+    // that never linted at all (Plan 225 T1.4 clause (a)).
+    s.strictly_fewer =
+        s.oracle_ran && s.after_compiled && s.findings_after < s.findings_before;
     s.target_resolved = s.oracle_ran
+        && s.after_compiled
         && !after
             .present_lints
             .iter()
@@ -2969,6 +3065,28 @@ mod tests {
         let local_fix =
             contract_preserved("pub fn f() { let s2 = 1; let _ = s2; }", "pub fn f() { }");
         assert!(local_fix, "dropping a local let is a legitimate fix");
+    }
+
+    // ── Plan 225 T1.4 clause (c): attr silencing ───────────────────────
+
+    #[test]
+    fn attr_silence_added_flags_a_new_allowance_not_a_preexisting_one() {
+        let original = "pub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        // The heal: the attribute is ADDED — refused.
+        let silenced =
+            "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        assert!(attr_silence_added(original, silenced));
+        // The legitimate fix: no attribute anywhere — accepted.
+        let healed = "pub fn f(v: &[u8]) -> usize { v.len() }";
+        assert!(!attr_silence_added(original, healed));
+        // A PRE-EXISTING allowance that survives the edit is not an addition.
+        let orig_with =
+            "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        assert!(!attr_silence_added(orig_with, orig_with));
+        // `expect` is the same class.
+        let expected =
+            "#[expect(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        assert!(attr_silence_added(original, expected));
     }
 
     #[test]

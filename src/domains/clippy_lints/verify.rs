@@ -34,8 +34,20 @@ pub struct ClippyVerifyResult {
     /// Whether the target lint is NOT present in the code.
     ///
     /// `true` = lint resolved (the fix works).
-    /// `false` = lint still present OR cargo clippy failed to run.
+    /// `false` = lint still present OR the code did not compile (the lint
+    /// analysis never ran on it — a "resolution" read out of error output
+    /// is not a resolution) OR cargo clippy failed to run.
     pub lint_resolved: bool,
+    /// Whether the code COMPILED under clippy (Plan 225 T1.4 clause (a)).
+    ///
+    /// Distinct from `ran` (cargo spawned) and from `lint_resolved`: a
+    /// compile failure is a trustworthy verdict about the code, but the
+    /// clippy lint pass on the broken item never produced anything — so
+    /// callers that need "the lint cleared" must require BOTH
+    /// `lint_resolved && compiled` (the `verify` contract already folds
+    /// `!compiled` into `lint_resolved = false`; the field exists for
+    /// callers that report the two axes separately).
+    pub compiled: bool,
     /// Whether `cargo clippy` ran successfully.
     ///
     /// `false` if cargo/clippy is not on PATH, or the command timed out,
@@ -54,6 +66,7 @@ impl ClippyVerifyResult {
     fn did_not_run(error: impl Into<String>) -> Self {
         Self {
             lint_resolved: false,
+            compiled: false,
             ran: false,
             error: Some(error.into()),
             present_lints: vec![],
@@ -61,9 +74,10 @@ impl ClippyVerifyResult {
     }
 
     /// Construct a "ran successfully" result.
-    fn ran_with(lint_resolved: bool, present_lints: Vec<String>) -> Self {
+    fn ran_with(lint_resolved: bool, compiled: bool, present_lints: Vec<String>) -> Self {
         Self {
             lint_resolved,
+            compiled,
             ran: true,
             error: None,
             present_lints,
@@ -144,8 +158,8 @@ impl ClippyVerifier {
     /// # Returns
     ///
     /// - `lint_resolved = true` → the lint did NOT fire (fix is good)
-    /// - `lint_resolved = false` → the lint fired (fix doesn't work) OR
-    ///   cargo clippy couldn't run
+    /// - `lint_resolved = false` → the lint fired (fix doesn't work), OR the
+    ///   code did not compile, OR cargo clippy couldn't run
     /// - `ran = false` → cargo/clippy unavailable or I/O error (check `error`)
     #[must_use]
     pub fn verify(&self, code: &str, lint_name: &str) -> ClippyVerifyResult {
@@ -158,7 +172,7 @@ impl ClippyVerifier {
         };
 
         // Run cargo clippy.
-        let output = match self.run_clippy(&crate_dir, lint_name) {
+        let output = match self.run_clippy(&crate_dir, Some(lint_name)) {
             Ok(o) => o,
             Err(e) => return ClippyVerifyResult::did_not_run(e),
         };
@@ -180,7 +194,45 @@ impl ClippyVerifier {
         let target_code = format!("clippy::{lint_name}");
         let lint_present = present_lints.iter().any(|l| l == &target_code);
 
-        ClippyVerifyResult::ran_with(!lint_present, present_lints)
+        // A compile failure is a REFUSAL, never a resolution (the documented
+        // contract: "clippy couldn't run → false"). The witness's
+        // `CompileFailed` arm is a trustworthy verdict about the code, but
+        // the lint analysis never ran on the broken item, so the target's
+        // absence from ERROR output must not read as resolved — measured as
+        // the live hole a type-broken draft could ship through (Plan 225
+        // T1.4's clause (a) closes it at this seam for every consumer).
+        let compiled = !matches!(witness, probe_witness::ProbeWitness::CompileFailed);
+
+        ClippyVerifyResult::ran_with(!lint_present && compiled, compiled, present_lints)
+    }
+
+    /// Discover ALL clippy lints firing on `code` under the DEFAULT warn set
+    /// (one clippy run, no `-W` target) — Plan 225 T1.1's labelling pass: a
+    /// row's target lint is whatever actually fires in the scaffold, the
+    /// same instrument `verify` scores with.
+    ///
+    /// `lint_resolved` is meaningless for a discovery pass (no target) and
+    /// is always `false`; read `present_lints` (full `clippy::<name>` codes)
+    /// and `compiled`.
+    #[must_use]
+    pub fn discover_lints(&self, code: &str) -> ClippyVerifyResult {
+        let (crate_dir, source_changed) = match self.prepare_crate(code) {
+            Ok(pair) => pair,
+            Err(e) => {
+                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
+            }
+        };
+        let output = match self.run_clippy(&crate_dir, None) {
+            Ok(o) => o,
+            Err(e) => return ClippyVerifyResult::did_not_run(e),
+        };
+        let witness = probe_witness::witness_cargo_json(&output, source_changed);
+        if !witness.trustworthy() {
+            return ClippyVerifyResult::did_not_run(witness.reason());
+        }
+        let present_lints = parse_clippy_lints(&output);
+        let compiled = !matches!(witness, probe_witness::ProbeWitness::CompileFailed);
+        ClippyVerifyResult::ran_with(false, compiled, present_lints)
     }
 
     /// Check if cargo is available on the system.
@@ -240,24 +292,25 @@ impl ClippyVerifier {
     /// Run `cargo clippy --message-format=json` on the temp crate.
     ///
     /// Returns the combined stdout output as a String on success.
-    fn run_clippy(&self, crate_dir: &Path, lint_name: &str) -> Result<String, String> {
+    /// `lint_name = None` runs the default warn set (the discovery pass —
+    /// no `--` args at all, so cargo's flags are untouched).
+    fn run_clippy(&self, crate_dir: &Path, lint_name: Option<&str>) -> Result<String, String> {
         let manifest_path = crate_dir.join("Cargo.toml");
-        let lint_flag = format!("clippy::{lint_name}");
-
-        let output = Command::new(&self.cargo_bin)
-            // ⛔ PIN the probe's target dir, do not inherit one (Issue 110).
-            // A caller with CARGO_TARGET_DIR set — the isolated-target idiom
-            // this workspace recommends for measuring on a busy box — would
-            // otherwise put every scratch crate in ONE target dir, which is
-            // the collision above. Belt and braces with the keyed name.
-            .env("CARGO_TARGET_DIR", crate_dir.join("target"))
+        let mut cmd = Command::new(&self.cargo_bin);
+        // ⛔ PIN the probe's target dir, do not inherit one (Issue 110).
+        // A caller with CARGO_TARGET_DIR set — the isolated-target idiom
+        // this workspace recommends for measuring on a busy box — would
+        // otherwise put every scratch crate in ONE target dir, which is
+        // the collision above. Belt and braces with the keyed name.
+        cmd.env("CARGO_TARGET_DIR", crate_dir.join("target"))
             .arg("clippy")
             .arg("--manifest-path")
             .arg(&manifest_path)
-            .arg("--message-format=json")
-            .arg("--")
-            .arg("-W")
-            .arg(&lint_flag)
+            .arg("--message-format=json");
+        if let Some(lint_name) = lint_name {
+            cmd.arg("--").arg("-W").arg(format!("clippy::{lint_name}"));
+        }
+        let output = cmd
             .output()
             .map_err(|e| format!("cargo spawn failed: {e}"))?;
 
@@ -382,6 +435,7 @@ mod tests {
     fn did_not_run_sets_fields_correctly() {
         let r = ClippyVerifyResult::did_not_run("cargo not found");
         assert!(!r.lint_resolved);
+        assert!(!r.compiled);
         assert!(!r.ran);
         assert_eq!(r.error.as_deref(), Some("cargo not found"));
         assert!(r.present_lints.is_empty());
@@ -389,11 +443,29 @@ mod tests {
 
     #[test]
     fn ran_with_sets_fields_correctly() {
-        let r = ClippyVerifyResult::ran_with(true, vec!["clippy::other".to_string()]);
+        let r = ClippyVerifyResult::ran_with(true, true, vec!["clippy::other".to_string()]);
         assert!(r.lint_resolved);
+        assert!(r.compiled);
         assert!(r.ran);
         assert!(r.error.is_none());
         assert_eq!(r.present_lints.len(), 1);
+    }
+
+    // ── The compile-failure refusal (Plan 225 T1.4 clause (a)) — real cargo ──
+
+    #[test]
+    fn a_type_error_is_a_refusal_not_a_resolution() {
+        let v = ClippyVerifier::new();
+        // Syn-clean but type-broken: the pruner cannot catch this class, and
+        // before the fix the error output's empty lint list read as
+        // `lint_resolved = true`.
+        let r = v.verify(
+            "pub fn f() -> u32 { no_such_item_anywhere() }",
+            "needless_return",
+        );
+        assert!(r.ran, "cargo ran: {r:?}");
+        assert!(!r.compiled);
+        assert!(!r.lint_resolved, "a broken compile must never resolve a lint");
     }
 
     // ── ClippyVerifier construction ───────────────────────────────────────

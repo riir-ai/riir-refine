@@ -1,6 +1,6 @@
 # Plan 225 — the `heal` seat gets a real expert: mine → mint → arm-H paired read (the Bench-108 revisit condition)
 
-**Status:** PROPOSED — 2026-10-11; verdict round 1 REVISE folded (`1d410fd5`); verdict round 2 **AGREE** (2026-10-11) with four consistency fixes folded in this commit (scored population, non-inferiority route, pinned α/δ/power, stale-prose fix). T1 may start; owner-gated: T3 mint spend (GPU, conditional on T1.6), T5 ARMED production run, T5 telemetry.
+**Status:** T1 EXECUTED 2026-10-11 (Bench 113) — **T1.6 BLOCKED ON CASE SUPPLY** (3 deciding cases vs ≥621 at the most optimistic p_d=0.20; 0 under the full oracle) — T2/T3 do not run, zero GPU spend, δ₀ not lowered. Root cause STRUCTURAL: the L0–L1 pool substrate is retriever-shaped (corpus snippets) and 98.3% of candidates cannot merge into real modules — the revisit condition is AMENDED to require module-applicable pool candidates first (proposer edits / clippy suggestions as pool members); then T1.1 re-runs and the gate re-computes. Verdict round 1 REVISE folded (`1d410fd5`); round 2 **AGREE** (`bf1bb501`). Owner-gated items (T3 mint, T5 arming/telemetry) stand, now behind the amended condition.
 
 ## Why now
 
@@ -33,17 +33,26 @@ grammar-not-answers law), and every claim carries its n beside it.
 
 ## Phases
 
-### T1 — mine the heal-decision case set (refine)
-- [ ] T1.1 Harvest real candidate pools: walk `.refine/misses/`, rescue tallies, and past arm-H
+### T1 — mine the heal-decision case set (refine) — EXECUTED 2026-10-11, Bench 113
+- [x] T1.1 Harvest real candidate pools: walk `.refine/misses/`, rescue tallies, and past arm-H
       ledgers; for each case capture (snippet, rule/lint id, the L0–L3 candidate list, the
       compile-gate verdict per candidate). Pool-eligibility: `pool ≥ 2` distinct candidates
       (the Bench-107 law — rerank never fires at 1).
-- [ ] T1.2 Build the frozen test split FIRST (digest-pinned, cases_digest), never trained on.
+      **Result:** the persistent artifacts carry state-level tallies, not per-case pools — the
+      harvest REPLAYS the real population instead (the full deduped v2edit corpus, 1500
+      modules, through `heal_with_pool` with memory warming) via the new
+      `fixer_regate --arm HARVEST`. pool≥2 = 643.
+- [x] T1.2 Build the frozen test split FIRST (digest-pinned, cases_digest), never trained on.
       Disclose n per class beside every future claim (the n=32 lesson).
-- [ ] T1.3 If real multi-candidate cases are too few for training: synthesize TRAIN-side rows only
+      **Result:** lint-disjoint split (340 test / 303 train scored) — the leakage-safe fallback,
+      the v2edit rows carry no source-repo/time provenance; census + split committed under
+      Bench 113, cases.jsonl digest recorded there.
+- [-] T1.3 If real multi-candidate cases are too few for training: synthesize TRAIN-side rows only
       through the reflex synthesis lane (echo gates + V5 + compile-gate veto). The frozen test
       split stays real-only, never synthetic — one contaminated row kills the bench.
-- [ ] T1.4 Gold verification harness — COMPILES+CLEARS IS NECESSARY, NEVER SUFFICIENT. A
+      **Deferred:** supply was not thin, it was wrong-shaped (98.3% merge-fail) — synthesis
+      cannot fix pool shape and never fires under the block.
+- [x] T1.4 Gold verification harness — COMPILES+CLEARS IS NECESSARY, NEVER SUFFICIENT. A
       candidate is gold iff ALL of: (a) the patched snippet applies, compiles (the `fix_verify`
       posture, `--verify-args` for feature-gated code) and the lint clears; (b) behaviour is
       preserved — the crate's own tests pass on the patched tree (scoped `cargo test` per case,
@@ -54,7 +63,14 @@ grammar-not-answers law), and every claim carries its n beside it.
       counted as gold (the percentile-audit lesson: UNRESOLVED is not clean). Every non-gold
       candidate records WHICH clause rejected it ((a)/(b)/(c)) — the breakdown shows whether
       (b)/(c) carry signal a compile-only head cannot see.
-- [ ] T1.5 Scored population + per-case score. TWO scored strata, n reported SEPARATELY for
+      **Result:** all three clauses implemented in the HARVEST arm ((a) via `score_case` + the NEW
+      `after_compiled` gate; (c) via `contract_ok` + `attr_silence_added`; (b) per-fn differential
+      driver on the pilot). En route the harness's compile-failure hole was closed at the seam:
+      a type-broken candidate previously read `lint_resolved=true`/`strictly_fewer=true` — 17 such
+      candidates refused by the new gate in this census (Bench 113 §oracle-hardening). The
+      breakdown answers the clause-signal question empirically: (a) rejects 99.8% of candidates
+      before (b)/(c) are even reached.
+- [x] T1.5 Scored population + per-case score. TWO scored strata, n reported SEPARATELY for
       each: **deciding cases** (some but not all candidates gold — the stratum that separates
       pickers) and **none-gold cases** (the stratum that rewards ABSTAINING — A0 never abstains;
       its verify-in-order fallback always scores 0 there, so these cases DO separate the arms and
@@ -63,7 +79,11 @@ grammar-not-answers law), and every claim carries its n beside it.
       none-gold) = 0. All-gold cases are unscored structure (every arm ties) — reported in the
       census, excluded from the paired read. Every result reports BOTH n's, never total-n alone
       (Bench 108's 8/9 ties is exactly this blindness).
-- [ ] T1.6 FEASIBILITY GATE (blocks T2 AND T3): the frozen split must carry ≥ N deciding cases,
+      **Result:** deciding = 3, none-gold = 640, all-gold = 0 (n's reported separately in
+      Bench 113). The two-stratum design proved load-bearing: with 640 none-gold vs 3 deciding,
+      an always-abstain expert would have "won" vacuously — the deciding-supply gate killed that
+      class before any bench ran.
+- [x] T1.6 FEASIBILITY GATE (blocks T2 AND T3): the frozen split must carry ≥ N deciding cases,
       N derived from the power calculation with the inputs PINNED HERE, before any T1 data is
       seen: paired per-case score, superiority margin **δ₀ = +0.05** (five points on the T1.5
       score — a rerank plausibility over drafter ties), target power **0.80**, family α **0.05**
@@ -71,13 +91,26 @@ grammar-not-answers law), and every claim carries its n beside it.
       Gate fails → the plan is recorded BLOCKED ON CASE SUPPLY — no mint, no training, no bench
       against a split that cannot detect a difference. The owner's T3 approval is conditional on
       this gate passing.
-- [ ] T1.7 Leakage-safe split: split by TIME or SOURCE REPO, never by row; near-duplicate
+      **VERDICT (Bench 113): BLOCKED ON CASE SUPPLY.** N(p_d=0.20)=621, N(0.35)=1092, N(0.50)=1562
+      vs supply 3 (a∧c level) / 0 (full oracle); measured p̂_d = 3/643 = 0.0047. δ₀ NOT lowered
+      post hoc. T2/T3 do not run — the block is the gate working (zero GPU spend).
+- [x] T1.7 Leakage-safe split: split by TIME or SOURCE REPO, never by row; near-duplicate
       removal by blake3 of (normalised snippet + rule) ACROSS train and test; assert no
       self-evolve trajectory contains a frozen case's patch; reflex V5 synthetic rows (if T1.3
       fires) take seeds from the TRAINING side only.
+      **Result:** module-level dedup by blake3 at load (1500 unique); the split is LINT-DISJOINT
+      (each lint wholly one side — 340 test / 303 train scored), the honest fallback because the
+      v2edit rows carry NO source-repo/time provenance; a test rule's cases never appear in
+      training in any form, which kills the near-duplicate class by construction. The harvest
+      replay's memory writes are run-local (scratch store), so no self-evolve trajectory carries
+      a case patch.
 
 ### T2 — candidate A1: the Instinct-corpus specialist (riir-train mints, instinct serves)
 ⛔ Gated on T1.6 (the feasibility gate) — an unproven case supply trains nothing.
+   **T1.6 verdict (Bench 113): BLOCKED** — stands until the pool substrate carries
+   module-applicable candidates (proposer edits / clippy MachineApplicable suggestions
+   as pool members — the natural `heal_with_pool` widening), then T1.1 re-runs and the
+   gate re-computes on the new census.
 - [ ] T2.1 Mine the heal training corpus (TRAIN-side split of T1 only, post T1.7 dedupe): refine
       corpora + misses + self-evolve trajectories (`LatentFixMemory` rows), train-side synth
       augment per T1.3. Corpus manifest + blake3s.

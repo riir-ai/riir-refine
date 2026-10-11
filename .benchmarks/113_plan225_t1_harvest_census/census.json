@@ -1,0 +1,171 @@
+{
+  "behav_pilot": {
+    "cases": 3,
+    "deciding_full": 0
+  },
+  "clippy_version": "clippy 0.1.98 (48a229ceae 2026-09-01)",
+  "no_control": 6,
+  "per_lint": {
+    "collapsible_if": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 151,
+      "none_gold": 48,
+      "pool_empty": 0,
+      "pool_ge2": 48,
+      "pool_singleton": 103
+    },
+    "manual_map": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 160,
+      "none_gold": 60,
+      "pool_empty": 0,
+      "pool_ge2": 60,
+      "pool_singleton": 100
+    },
+    "needless_borrow": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 152,
+      "none_gold": 30,
+      "pool_empty": 0,
+      "pool_ge2": 30,
+      "pool_singleton": 122
+    },
+    "needless_lifetimes": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 1,
+      "deciding_full": 0,
+      "n": 122,
+      "none_gold": 47,
+      "pool_empty": 0,
+      "pool_ge2": 48,
+      "pool_singleton": 74
+    },
+    "needless_range_loop": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 134,
+      "none_gold": 55,
+      "pool_empty": 0,
+      "pool_ge2": 55,
+      "pool_singleton": 79
+    },
+    "needless_return": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 2,
+      "deciding_full": 0,
+      "n": 116,
+      "none_gold": 60,
+      "pool_empty": 0,
+      "pool_ge2": 62,
+      "pool_singleton": 54
+    },
+    "redundant_closure": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 103,
+      "none_gold": 40,
+      "pool_empty": 0,
+      "pool_ge2": 40,
+      "pool_singleton": 63
+    },
+    "redundant_field_names": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 203,
+      "none_gold": 85,
+      "pool_empty": 0,
+      "pool_ge2": 85,
+      "pool_singleton": 118
+    },
+    "single_match": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 91,
+      "none_gold": 72,
+      "pool_empty": 0,
+      "pool_ge2": 72,
+      "pool_singleton": 19
+    },
+    "unnecessary_mut_passed": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 101,
+      "none_gold": 54,
+      "pool_empty": 0,
+      "pool_ge2": 54,
+      "pool_singleton": 47
+    },
+    "unnecessary_unwrap": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 85,
+      "none_gold": 61,
+      "pool_empty": 0,
+      "pool_ge2": 61,
+      "pool_singleton": 24
+    },
+    "useless_conversion": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 76,
+      "none_gold": 28,
+      "pool_empty": 0,
+      "pool_ge2": 28,
+      "pool_singleton": 48
+    }
+  },
+  "pool_ge2": 643,
+  "samples": 1500,
+  "split": {
+    "collapsible_if": "train",
+    "manual_map": "test",
+    "needless_borrow": "train",
+    "needless_lifetimes": "train",
+    "needless_range_loop": "train",
+    "needless_return": "test",
+    "redundant_closure": "train",
+    "redundant_field_names": "test",
+    "single_match": "test",
+    "unnecessary_mut_passed": "train",
+    "unnecessary_unwrap": "test",
+    "useless_conversion": "train"
+  },
+  "split_test_scored": 340,
+  "strata": {
+    "all_gold_unscored": 0,
+    "deciding": 3,
+    "none_gold": 640
+  },
+  "t16_power_table": {
+    "inputs": "delta0=0.05, alpha=0.05 two-sided, power=0.80, paired per-case score",
+    "n_at_pd_0.20": 621,
+    "n_at_pd_0.35": 1092,
+    "n_at_pd_0.50": 1562
+  },
+  "with_target": 1494
+}
