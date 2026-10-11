@@ -1,6 +1,6 @@
 # Issue 160 — CRLF line-ending contamination in tracked doc surfaces (cross-box flip-flop hazard)
 
-**Status:** OPEN — detection + census landed 2026-10-11; repair is a per-repo quiet-window protocol (below), deferred while sibling lanes are live.
+**Status:** OPEN — repair IN PROGRESS: leg 1/8 DONE (riir-refine `7fbca3a7b`, 2026-10-11 — 82 files, 0 at HEAD); legs 2-8 deferred to the verified-idle window (live-lane files per protocol).
 
 ## The class
 
@@ -67,3 +67,8 @@ once the normalization lands — a hard ceiling would red on the 166 standing fi
 today, so gate-first is wrong; normalize first, then ratchet. The reflexer
 `rust-toolchain.toml` single hit may just be normalized en route (cargo is
 ending-agnostic).
+
+## Progress
+
+- [x] 2026-10-11 riir-refine `7fbca3a7b` — 82 files normalized, per-file byte-verified endings-only (HEAD-minus-CR identical), census-at-HEAD reads 0; all files closed lanes (0 unchecked boxes); the .benchmarks/ 16 artifacts stay excluded.
+- [ ] legs 2-8 (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5, riir-reflex 2, riir-reflexer 1) — quiet window, live-lane deferral re-checked at execution time.
