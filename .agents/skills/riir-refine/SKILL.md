@@ -272,6 +272,11 @@ skill points agents there). Per sweep:
   the arbiter**: a rejected push = re-fetch, re-adjudicate, yield. **Claim
   expiry:** a claim with no follow-up landing within 48h is EXPIRED — any
   lane may claim past it (a crashed lane must not block the queue head forever).
+  **Extend the same claim to OWNER-GATED ADJUDICATIONS**: a lane about to run a
+  verdict session on a named gate posts the claim row first — a gate ruling is
+  as yield-worthy as a batch (the 2026-10-11 dual gate-ruling: two lanes ran
+  owner-delegated verdicts on reflex 085's T0 in the same hour and got OPPOSITE
+  outcomes; landed `89769e0` won, the other lane reset unpushed).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
