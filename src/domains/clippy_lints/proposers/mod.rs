@@ -123,7 +123,7 @@
 //! | Lint | Why not `--fix` |
 //!|---|---|
 //! | `needless_borrow` | whether `&x` is needless depends on the callee's expected type |
-//! | `useless_conversion` | `.into()` is only useless if source type == annotated type; `.into_iter()` as a direct call arg is only useless if the callee param is `IntoIterator`-generic (wrong drops are compile errors, never silent) |
+//! | `useless_conversion` | `.into()` is only useless if source type == annotated type; `.into_iter()` as a direct call arg is only useless if the callee param is `IntoIterator`-generic; `.into()` as a block TAIL is only useless if the block's expected type == receiver type (wrong drops are compile errors, never silent) |
 //! | `unnecessary_mut_passed` | `&mut v` → `&v` depends on the callee's signature; the param-`mut` strip is file-wide |
 //!
 //! `redundant_closure` sits between the two sets: demoted from

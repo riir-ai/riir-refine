@@ -1,4 +1,4 @@
-//! `clippy::useless_conversion` — two shapes, both type-blind:
+//! `clippy::useless_conversion` — three shapes, all type-blind:
 //!
 //! 1. `let x: T = y.into()` → `let x: T = y` (useless only when `y`'s type
 //!    already equals the annotation `T`).
@@ -7,13 +7,20 @@
 //!    ("explicit call to `.into_iter()` in function argument accepting
 //!    `IntoIterator`", machine-applicable). Probe 2026-09-14; live specimen:
 //!    riir-ai `624f24958` (`preupload_all(projections.into_iter())`).
+//! 3. `{ v.into() }` as a block TAIL expression (final stmt, no semicolon,
+//!    no args, no turbofish) → `{ v }` — covers fn bodies, if/else arms,
+//!    match-arm blocks: any `Block` whose value position the call occupies
+//!    (P48, 2026-10-12 — the 76/76 census shape of the v2edit pool,
+//!    Bench 114 / Issue 161; probe 2026-10-12 clippy 1.93 fires every
+//!    tail variant with `consider removing .into()` over the whole call).
 //!
 //! Span-preserving (T6.4): the `.into()`/`.into_iter()` call's byte range is
 //! replaced by the ORIGINAL source text of its receiver.
 //!
 //! **Type-blind** (not `--fix` eligible): the rewrite is only correct when
 //! the types line up — shape 1 needs `y: T`, shape 2 needs the callee param
-//! to be `IntoIterator`-generic. A parse-only validator cannot know either.
+//! to be `IntoIterator`-generic, shape 3 needs the block's expected type to
+//! equal the receiver's. A parse-only validator cannot know any of these.
 //! Every wrong application is a COMPILE error (dropping the call where the
 //! callee wanted `Iterator`/`T` breaks resolution), never a silent behavior
 //! change — the `self_evolve` loop (real `cargo clippy` verify) and the
@@ -23,7 +30,7 @@
 use super::{edit, src, SourceEdit};
 use syn::punctuated::Punctuated;
 use syn::visit::Visit;
-use syn::{Expr, ExprCall, ExprMethodCall, File, Local, Token};
+use syn::{Block, Expr, ExprCall, ExprMethodCall, File, Local, Stmt, Token};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -41,6 +48,22 @@ struct Collector<'a> {
 }
 
 impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_block(&mut self, block: &'ast Block) {
+        syn::visit::visit_block(self, block);
+        // Shape 3 (P48): the block's TAIL expression (final stmt, no
+        // semicolon — the block's value) is a bare `<expr>.into()` — no
+        // args, no turbofish. Covers fn bodies, if/else arms, match-arm
+        // blocks: any Block whose value position the call occupies.
+        let Some(Stmt::Expr(Expr::MethodCall(mc), None)) = block.stmts.last() else {
+            return;
+        };
+        if mc.method == "into" && mc.args.is_empty() && mc.turbofish.is_none() {
+            if let Some(text) = src(self.source, &*mc.receiver) {
+                self.edits.push(edit(mc, text));
+            }
+        }
+    }
+
     fn visit_local(&mut self, local: &'ast Local) {
         syn::visit::visit_local(self, local);
         // Must have an explicit type annotation + an init.
@@ -195,9 +218,82 @@ fn caller(v: Vec<u32>) { sink(v.into_iter().map(|x| x * 2)); }";
         // negative control (2026-09-14) proved real clippy stays silent
         // here — in the `--clippy-json` fed lane clippy's typeck is the
         // authority and this span never surfaces.
-        let input = "fn sink_iter<I: Iterator<Item = u32>>(items: I) {}
-fn caller(v: Vec<u32>) { sink_iter(v.into_iter()); }";
+        let input = "fn sink_iter<I: Iterator<Item = u32>>(items: I) {}\nfn caller(v: Vec<u32>) { sink_iter(v.into_iter()); }";
         let out = propose_fix("useless_conversion", input).expect("matched");
         assert!(out.contains("sink_iter(v)"), "{out}");
+    }
+
+    // ── Shape 3: `.into()` as a block TAIL expression (P48, 2026-10-12
+    //    intake — the 76/76 census shape of the v2edit pool, Bench 114 /
+    //    Issue 161; probe 2026-10-12, clippy 1.93, positive + negative
+    //    controls). ──
+
+    #[test]
+    fn drops_tail_into_fn_body() {
+        // The census shape verbatim: probe fired useless_conversion with
+        // `consider removing .into(): v` and the span over the WHOLE call
+        // — exactly this arm's edit.
+        let input = "fn transform(v: usize) -> usize { v.into() }";
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("usize { v }"), "tail into not dropped: {out}");
+        assert!(!out.contains(".into"), "{out}");
+    }
+
+    #[test]
+    fn drops_tail_into_if_else_arms() {
+        // Both arm blocks fire independently (probe: two diagnostics, one
+        // per arm); the fn body's own tail is the `if` expr, not a call.
+        let input =
+            "fn pick(flag: bool, a: u64, b: u64) -> u64 { if flag { a.into() } else { b.into() } }";
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("flag { a }"), "if-arm into not dropped: {out}");
+        assert!(out.contains("else { b }"), "else-arm into not dropped: {out}");
+    }
+
+    #[test]
+    fn drops_tail_into_match_arm_blocks() {
+        let input = "fn pick_match(mode: u8, a: u64, b: u64) -> u64 { match mode { 0 => { a.into() } _ => { b.into() } } }";
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("0 => { a }"), "match-arm into not dropped: {out}");
+        assert!(out.contains("_ => { b }"), "match-arm into not dropped: {out}");
+    }
+
+    #[test]
+    fn tail_shape_overmatch_on_real_conversion_is_type_blind() {
+        // HONEST LIMITATION PIN: `make` returns `Z` and `From<Y> for Z` is
+        // a REAL conversion — the probe's negative control (2026-10-12)
+        // proved real clippy stays SILENT on this shape. A parse-only
+        // proposer cannot see the return type, so it fires and the edit
+        // `Y::default()` breaks the compile (Y != Z) — the documented
+        // type-blind tier (suggest/oracle lanes only; clippy's typeck is
+        // the authority in both, so this span never surfaces in the fed
+        // lane).
+        let input = "pub struct Y { pub x: u32 }\npub struct Z { pub x: u32 }\nimpl From<Y> for Z { fn from(y: Y) -> Z { Z { x: y.x } } }\nimpl Default for Y { fn default() -> Y { Y { x: 0 } } }\npub fn make() -> Z { Y::default().into() }";
+        let out = propose_fix("useless_conversion", input).expect("matched");
+        assert!(out.contains("Z { Y::default() }"), "{out}");
+    }
+
+    #[test]
+    fn leaves_semicoloned_into_stmt_unchanged() {
+        // `{ v.into(); }` is a Stmt::Expr WITH a semicolon — not the
+        // block's value tail. Probe note (2026-10-12): the shape does not
+        // even compile in practice (E0283 — a discarded `Into<_>` is
+        // ambiguous), so clippy never fires it; the None here matches the
+        // oracle's realizable surface.
+        let input = "fn discard(v: usize) { v.into(); }";
+        let out = propose_fix("useless_conversion", input);
+        assert!(out.is_none(), "semicolon'd into touched: {out:?}");
+    }
+
+    #[test]
+    fn leaves_turbofish_tail_into_unchanged() {
+        // `.into::<T>()` is not valid Rust (E0107 — `Into::into` takes no
+        // generic arguments; the FQ form is `Into::<T>::into(v)`); probe
+        // note 2026-10-12. Parse-level the arm still refuses the shape
+        // defensively — a turbofish names a target type and would change
+        // the shape's type-blind contract.
+        let input = "fn tf(v: u64) -> u64 { v.into::<u64>() }";
+        let out = propose_fix("useless_conversion", input);
+        assert!(out.is_none(), "turbofish into touched: {out:?}");
     }
 }
