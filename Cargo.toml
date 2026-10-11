@@ -266,6 +266,13 @@ vessel_artifacts = ["dep:reflexer-vessel"]
 # Opt-in: heavy dep tree (riir-rag + riir-neuron-db + syn-pulled chunker).
 latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 
+# Issue 162 T2 — the formatting-churn certificate for the retrieval channel.
+# Forwards katgpt-core `basis_split` (Plan 625) so the format-flip instrument
+# can fit the fix-pair variant basis and read its held-out `pair_leakage`
+# residual. Mirrors reflex's same-named feature (the cross-repo vocabulary).
+# Opt-in: report-only today; a projected-KNN lane (T3) would gate on it.
+basis_cert = ["katgpt-core/basis_split"]
+
 # Issue 121 (katgpt-rs Plan 599 T4.2 — the first consumer of katgpt-core's
 # `set_admission` primitive): counter-anchored SET rerank of the merged
 # seven-domain span pool. The fan-out merge (`all_rules`' flat score sort)
@@ -799,6 +806,15 @@ required-features = ["frontier_miner"]
 [[example]]
 name = "linking_confusion_poc"
 required-features = ["linking_confusion_poc"]
+
+# Issue 162 T2 — the formatting-churn instrument (REPORT-ONLY): certified
+# fix-pair top-1 flip rates per channel, the token-identical whitespace
+# floor over the committed eval fixtures, and the SplitJEPA formatting
+# basis with its cross-family pair_leakage holdout. Reads
+# `--dump-trajectories` JSONL files; commits nothing.
+[[example]]
+name = "formatting_flip"
+required-features = ["latent_retrieval", "basis_cert"]
 
 # Issue 125 — the CUA-S1 specialist option-scorer PoC (render/train/eval/
 # selftest; measurement-only, never in default runs).
