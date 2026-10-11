@@ -262,6 +262,16 @@ skill points agents there). Per sweep:
   untracked files, verify the tree is 100% theirs, pick a different unit.
   Never commit through a duplicate (two `feature = []` keys = broken
   manifest for both sessions).
+- **Claim-marker protocol (RATIFIED 2026-10-11 via the verdict reviewer; trial:
+  Batch 221's claim `80327d3f`; root cause: the three-lane collision record —
+  the dual-allocation gate cannot see another box's unfetched commits):**
+  before authoring a batch, append a one-line claim row to
+  `.distill/001_mining_queue_snapshot.md` naming the queue head + your batch
+  number, COMMIT + PUSH it BEFORE authoring begins; every lane re-fetches
+  before staging and yields to an existing claim on its target. **The push is
+  the arbiter**: a rejected push = re-fetch, re-adjudicate, yield. **Claim
+  expiry:** a claim with no follow-up landing within 48h is EXPIRED — any
+  lane may claim past it (a crashed lane must not block the queue head forever).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
