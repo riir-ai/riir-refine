@@ -1,6 +1,6 @@
 # Issue 160 — CRLF line-ending contamination in tracked doc surfaces (cross-box flip-flop hazard)
 
-**Status:** OPEN — repair IN PROGRESS: 3 legs landed (riir-refine `7fbca3a7b` 82 files; riir-reflex `9e517d2` 2 files; riir-reflexer `68cdaae` 1 file — all 2026-10-11, each repo census-at-HEAD reads 0); remaining legs (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5) gated on live sibling lanes + M3 cross-box collision — live-lane re-check at execution time.
+**Status:** OPEN — repair IN PROGRESS: 4 legs landed (riir-refine `7fbca3a7b` 82 files; riir-reflex `9e517d2` 2 files; riir-reflexer `68cdaae` 1 file; riir-ai `ff56c5e113` 26 files — all 2026-10-11, each repo census-at-HEAD reads 0); remaining legs (katgpt-rs 23, riir-train 28, riir-infer 5) gated on live sibling lanes — live-lane re-check at execution time.
 
 ## The class
 
@@ -73,4 +73,5 @@ ending-agnostic).
 - [x] 2026-10-11 riir-refine `7fbca3a7b` — 82 files normalized, per-file byte-verified endings-only (HEAD-minus-CR identical), census-at-HEAD reads 0; all files closed lanes (0 unchecked boxes); the .benchmarks/ 16 artifacts stay excluded.
 - [x] 2026-10-11 riir-reflex `9e517d2` — 2 files (wire_contract_v1.md, .issues/085_drex_v15_revisit.md) normalized; `git diff --ignore-cr-at-eol` empty (zero content change); census-at-HEAD reads 0. Liveness re-check at execution: tree clean, 085 lane owner-gated on the Nace email (not being edited) — normalizing now is the protective direction against the future wholesale flip.
 - [x] 2026-10-11 riir-reflexer `68cdaae` — rust-toolchain.toml normalized (cargo is ending-agnostic); census-at-HEAD reads 0.
-- [ ] remaining legs (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5) — quiet window + sibling-lane gates (katgpt-rs trainer Plan-621 WIP; riir-train 623 capture lane + routing restriction; riir-ai M3-constant collision; riir-infer 038 lane WIP), live-lane re-check at execution time.
+- [x] 2026-10-11 riir-ai `ff56c5e113` — 26 files normalized (the founding census's 25 + `.research/397` born-CRLF the same evening); batch-verified endings-only: `git diff --ignore-cr-at-eol` EMPTY across the set (2253/2253 symmetric line flips); census-at-HEAD reads 0. Liveness re-check at execution: tree clean at commit; 1054's arc closed (0 unchecked boxes, 17:41 closeout 2h44m prior); 1051 owner-menu 8h-quiet (the reflex-085 protective precedent applied); 397 born-complete with its terminal 19:18 dedup verdict; all 13 `.plans/` + 6 older `.research/` files closed Sept-era records; `crates/riir-games-shared/clippy.toml` stable config.
+- [ ] remaining legs (katgpt-rs 23, riir-train 28, riir-infer 5) — sibling-lane gates (katgpt-rs trainer Plan-621 WIP; riir-train 623 capture lane + routing restriction; riir-infer 038 lane WIP), live-lane re-check at execution time.
