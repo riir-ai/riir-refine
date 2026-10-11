@@ -1,12 +1,12 @@
 # Plan 225 — the `heal` seat gets a real expert: mine → mint → arm-H paired read (the Bench-108 revisit condition)
 
-**Status:** PROPOSED — 2026-10-11, awaiting Claude verdict + owner go. Owner-gated: T3 mint spend (GPU), T5 ARMED production run, T5 telemetry.
+**Status:** PROPOSED — 2026-10-11; verdict round 1 REVISE (2026-10-11) folded in: behaviour-preserving oracle, deciding-case definition, verify-in-order A0, T1 feasibility gate before any GPU spend, leakage-safe split, pre-registered two-candidate comparison. Awaiting round-2 verdict + owner go. Owner-gated: T3 mint spend (GPU), T5 ARMED production run, T5 telemetry.
 
 ## Why now
 
 Plan 202 (R1–R7) landed the whole decision stack and Bench 108 measured it end-to-end over the
 live `heal` seat: 9/9 reranks, 1 win / 8 ties / 0 losses, ~6 ms/case, $0 — verdict recorded
-**INSTRUCT-VALID, QUALITY-PENDING**: the seat was the R3 stub (deterministic index-1 pick), so the
+**INSTRUMENT-VALID, QUALITY-PENDING**: the seat was the R3 stub (deterministic index-1 pick), so the
 modelless incumbent was correctly NOT demoted. Bench 108's own recorded revisit condition is
 *"revisit when a real hosted heal expert exists (HOSTED-ONLY tier, riir-train mint lane)"*. This
 plan builds that expert — twice (two independent candidates) — and lets the frozen read pick the
@@ -41,13 +41,35 @@ synthetic population (the grammar-not-answers law), and every claim carries its 
 - [ ] T1.3 If real multi-candidate cases are too few for training: synthesize TRAIN-side rows only
       through the reflex synthesis lane (echo gates + V5 + compile-gate veto). The frozen test
       split stays real-only, never synthetic — one contaminated row kills the bench.
-- [ ] T1.4 Gold verification harness: per candidate, apply → compile (the `fix_verify` posture,
-      feature-gated code needs `--verify-args`) → clippy-clear check. Cache verdicts
-      content-addressed (blake3 of patch+base). CARGO_TARGET_DIR isolated per the box rules.
+- [ ] T1.4 Gold verification harness — COMPILES+CLEARS IS NECESSARY, NEVER SUFFICIENT. A
+      candidate is gold iff ALL of: (a) the patched snippet applies, compiles (the `fix_verify`
+      posture, `--verify-args` for feature-gated code) and the lint clears; (b) behaviour is
+      preserved — the crate's own tests pass on the patched tree (scoped `cargo test` per case,
+      budgeted); (c) the patch is non-degenerate — gold is REFUSED when the candidate adds an
+      `allow`/`expect` attribute, deletes code beyond the lint span, or otherwise silences rather
+      than heals. Anything (a)–(c) cannot settle lands in an explicit UNRESOLVED bucket, never
+      counted as gold (the percentile-audit lesson: UNRESOLVED is not clean).
+- [ ] T1.5 Deciding cases — the population the bench can actually read. Per case, the pool holds
+      0/1/many gold candidates: all-gold → every arm ties; none-gold → the right answer is
+      ABSTAIN. Only **deciding cases** (some but not all candidates gold) separate the arms.
+      Pre-registered per-case score: pick-a-gold = 1 · abstain-when-none-gold = 1 · otherwise 0.
+      Every result reports **deciding-n**, never total-n (Bench 108's 8/9 ties is exactly this
+      blindness).
+- [ ] T1.6 FEASIBILITY GATE (blocks T2 AND T3): the frozen split must carry ≥ N deciding cases,
+      N derived from a power calculation for paired LB95 > 0 at a pre-stated plausible effect
+      size (record the arithmetic in the bench record). Gate fails → the plan is recorded
+      BLOCKED ON CASE SUPPLY — no mint, no training, no bench against a split that cannot detect
+      a difference. The owner's T3 approval is conditional on this gate passing.
+- [ ] T1.7 Leakage-safe split: split by TIME or SOURCE REPO, never by row; near-duplicate
+      removal by blake3 of (normalised snippet + rule) ACROSS train and test; assert no
+      self-evolve trajectory contains a frozen case's patch; reflex V5 synthetic rows (if T1.3
+      fires) take seeds from the TRAINING side only.
 
 ### T2 — candidate A1: the Instinct-corpus specialist (riir-train mints, instinct serves)
-- [ ] T2.1 Mine the heal training corpus: refine corpora + misses + self-evolve trajectories
-      (`LatentFixMemory` rows), train-side synth augment per T1.3. Corpus manifest + blake3s.
+⛔ Gated on T1.6 (the feasibility gate) — an unproven case supply trains nothing.
+- [ ] T2.1 Mine the heal training corpus (TRAIN-side split of T1 only, post T1.7 dedupe): refine
+      corpora + misses + self-evolve trajectories (`LatentFixMemory` rows), train-side synth
+      augment per T1.3. Corpus manifest + blake3s.
 - [ ] T2.2 Train the specialist head on the riir-train rigs (4090; small head — the nbsvm-class
       presence-bag shape trained on candidate snippets + rule context is the first arm; scale up
       only if it loses for capacity reasons, not tuning).
@@ -56,6 +78,7 @@ synthetic population (the grammar-not-answers law), and every claim carries its 
       bridging added ONLY if the raw route refuses). A10: nothing public ever carries this corpus.
 
 ### T3 — candidate A2: the Rethink encoder head (riir-train HOSTED-ONLY mint lane)
+⛔ Gated on T1.6 (the feasibility gate) + owner mint approval.
 - [ ] T3.1 Train the encoder decision head (the laya encoder + a pick/abstain head) on the SAME
       T1 training corpus — the distill-teacher lanes are available but NOT required; the compile
       gate is the label source, not a teacher.
@@ -65,16 +88,26 @@ synthetic population (the grammar-not-answers law), and every claim carries its 
 - [ ] T3.3 GPU box state recorded beside every number (bench_preflight / PROVENANCE law).
 
 ### T4 — the bench: one frozen arm-H paired read (refine + instinct seat)
-- [ ] T4.1 Arms: **A0** modelless incumbent alone (control) · **A1** + T2 seat · **A2** + T3 seat ·
-      hosted_expert generate = comparison-only (cost axis, never the winner lane).
-- [ ] T4.2 Protocol: paired per-case over the frozen split, ONE read, LB95 paired non-inferiority/
-      superiority (the two-signal law: accuracy = commissioning signal; rate window = cost ceiling
-      only), cost axes (ms/decision vs the 0.8–6 ms Bench-107 floor; $ for the hosted leg), seat
-      receipts recorded (decision_blake3 audit trail).
-- [ ] T4.3 Verdict rule (pre-registered here): a candidate WINS the `heal` manifest row iff paired
-      LB95 > 0 vs A0 on the frozen read AND cost within the recorded budget; else the seat stays
-      empty and the result is recorded — **decline is a correct answer** (the L4/603 precedent).
-      Loser demoted by manifest edit; ties keep A0 (the conservative contract).
+- [ ] T4.1 Arms: **A0** modelless chain + the DETERMINISTIC verify-in-order control — try each
+      candidate in pool order through the compile gate, keep the first that passes (else the
+      smallest diff); this is what the healer can already compute for itself (`--verify` exists),
+      so a learned head must beat it on quality OR match it at strictly lower cost (the
+      modelless-first mandate's bar). **A1** + T2 seat · **A2** + T3 seat · hosted generate =
+      comparison-only (cost axis, never the winner lane).
+- [ ] T4.2 Protocol: paired per-case over the frozen deciding population, ONE read, pre-registered
+      comparison: Holm correction across the two candidate-vs-A0 comparisons (or the fixed α
+      split stated here: α=0.025 each); superiority = paired LB95 > 0 on the per-case score of
+      T1.5. Cost axes with NUMERIC budgets pinned NOW: seat lanes ≤ 50 ms/decision p50 (the
+      0.8–6 ms Bench-107 floor + wire slack) and $0 (loopback); the hosted leg priced through
+      `llm_spend` with its recorded cap. Two-signal law: accuracy = commissioning; rate = cost
+      ceiling only. Seat receipts recorded (decision_blake3 audit trail).
+- [ ] T4.3 Verdict rule (pre-registered): a candidate WINS the `heal` manifest row iff its
+      Holm-corrected paired LB95 > 0 vs A0 on the deciding population AND cost within the T4.2
+      budgets. If BOTH clear: the paired A1-vs-A2 comparison decides; an A1-vs-A2 tie breaks on
+      lower cost, then on the simpler artifact (raw winner over trained head). Ties with A0 keep
+      A0; else the seat stays empty and the result is recorded — **decline is a correct answer**
+      (the L4/603 precedent). Loser demoted by manifest edit; A0 itself never demoted by this
+      bench (it is the floor, not a candidate).
 - [ ] T4.4 Record under a fresh `.benchmarks/` number; the arm-H run-record law (Plan 202 §11)
       satisfied by the same record.
 
