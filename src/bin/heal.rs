@@ -1103,6 +1103,11 @@ fn run_unmine(purge_server: bool) {
     // logout half below removes the key, because a signature needs it. The
     // note carries the tier + machine label + signature only, never heal
     // data; a failure prints one line and never changes the exit code.
+    // (`purge_server` is consumed only by the armed block — silenced exactly
+    // when that block is absent; the bin's required-features build carries
+    // kat_service WITHOUT kat_transport.)
+    #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+    let _ = purge_server;
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     {
         let base = command_service_url();
@@ -3188,6 +3193,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
 /// loud (nobody guesses a price).
 #[cfg(feature = "kat_service")]
 fn run_kat_topup(pack: Option<u8>) {
+    #[cfg(feature = "kat_transport")]
     use riir_refine::kat_pay_client as topup;
 
     let dir = riir_refine::kat_account::KatAccount::default_dir();
@@ -3321,6 +3327,9 @@ fn run_kat_topup(pack: Option<u8>) {
 
 /// Whether stdin is a TTY (the interactive-pick gate). A non-TTY always
 /// answers false — the refusal path, never a hang (piped/agent runs).
+/// kat_transport-gated: the only caller is the topup interactive pick
+/// inside the armed pay lane.
+#[cfg(feature = "kat_transport")]
 fn args_tty_stdin() -> bool {
     use std::io::IsTerminal as _;
     std::io::stdin().is_terminal()
