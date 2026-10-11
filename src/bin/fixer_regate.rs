@@ -1666,6 +1666,11 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
     // ── Phase 1: the replay — classify → score every pool candidate → warm ──
     eprintln!("[harvest] phase 1: replay (pool capture + per-candidate oracle)...");
     let mut behav_cases_left = args.harvest_behavioural;
+    // The pilot's clause-(b) tally (candidate-level): every gold_a_c
+    // candidate on a pilot case gets behav-scored; the ok-rate IS
+    // P(behav-ok | a∧c-ok) — the T1.6 full-oracle supply projection input.
+    let (mut pilot_gold_ac, mut pilot_behav_ok, mut pilot_behav_divergent, mut pilot_behav_unresolved) =
+        (0usize, 0usize, 0usize, 0usize);
     let mut per_lint: std::collections::BTreeMap<String, LintCensus> = Default::default();
     let t_replay = std::time::Instant::now();
     for (n, l) in labelled.into_iter().enumerate() {
@@ -1733,6 +1738,12 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
                     &behav_dir,
                     &l.sample.id,
                 );
+                pilot_gold_ac += 1;
+                match v {
+                    "ok" => pilot_behav_ok += 1,
+                    "divergent" => pilot_behav_divergent += 1,
+                    _ => pilot_behav_unresolved += 1,
+                }
                 (Some(v), Some(v == "ok"))
             } else {
                 (None, None)
@@ -1754,9 +1765,18 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
             behav_cases_left -= 1;
         }
 
-        // Strata (T1.5): on gold_a_c over the full population; the pilot
-        // rows also carry the full-gold stratum where every candidate was
-        // behav-scored.
+        // Strata (T1.5): on gold_a_c over the full population. The full
+        // stratum (pilot rows only) is CONFIRMED-BASED: a candidate that
+        // failed (a)/(c) is confirmed non-gold; a behav-scored candidate is
+        // confirmed either way; a gold_a_c candidate whose behav reads
+        // "unresolved" is UNRESOLVED (never gold, per the T1.4 law — but it
+        // is not confirmed non-gold either). deciding_full therefore means:
+        // ≥1 confirmed full-gold AND ≥1 confirmed non-gold — the stratum
+        // that separates pickers under the FULL oracle. (The original
+        // all-cands-scored formulation was structurally unreachable: behav
+        // only ever runs on gold_a_c candidates, so non-gold candidates
+        // never carried gold_full — Bench 114's pilot read 0 deciding_full
+        // on 40 deciding pilot cases.)
         let (stratum, stratum_full) = if pool_len == 0 {
             ("empty_pool", None)
         } else if pool_len == 1 {
@@ -1770,11 +1790,17 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
             } else {
                 "deciding"
             };
-            let s_full = if cands.iter().all(|c| c.gold_full.is_some()) {
-                let gf = cands.iter().filter(|c| c.gold_full == Some(true)).count();
+            let gf = cands.iter().filter(|c| c.gold_full == Some(true)).count();
+            // Confirmed non-gold: failed (a)/(c), or behav-DIVERGENT.
+            let confirmed_non = cands
+                .iter()
+                .filter(|c| !c.gold_a_c || c.gold_full == Some(false))
+                .count();
+            let any_pilot_scored = cands.iter().any(|c| c.behav.is_some());
+            let s_full = if any_pilot_scored {
                 Some(if gf == 0 {
                     "none_gold_full"
-                } else if gf == pool_len {
+                } else if confirmed_non == 0 {
                     "all_gold_full"
                 } else {
                     "deciding_full"
@@ -1898,6 +1924,15 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         "behav_pilot": {
             "cases": args.harvest_behavioural - behav_cases_left,
             "deciding_full": deciding_full_total,
+            "gold_ac_candidates": pilot_gold_ac,
+            "behav_ok": pilot_behav_ok,
+            "behav_divergent": pilot_behav_divergent,
+            "behav_unresolved": pilot_behav_unresolved,
+            "p_behav_ok_given_gold_ac": if pilot_gold_ac > 0 {
+                Some(pilot_behav_ok as f64 / pilot_gold_ac as f64)
+            } else {
+                None
+            },
         },
         "t16_power_table": {
             "inputs": "delta0=0.05, alpha=0.05 two-sided, power=0.80, paired per-case score",
@@ -1921,7 +1956,13 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
     println!("  clippy {clippy_version}");
     println!("  modules: {} ({} without a firing target)", n_total + no_control, no_control);
     println!("  pool≥2: {pool_ge2_total}   deciding: {deciding_total}   none-gold: {none_gold_total}   all-gold(unscored): {all_gold_total}");
-    println!("  behav pilot cases: {}   deciding_full among them: {deciding_full_total}", args.harvest_behavioural - behav_cases_left);
+    println!(
+        "  behav pilot cases: {}   deciding_full among them: {deciding_full_total}",
+        args.harvest_behavioural - behav_cases_left
+    );
+    println!(
+        "  clause-(b) pilot: {pilot_gold_ac} gold_a_c cands → ok {pilot_behav_ok} / divergent {pilot_behav_divergent} / unresolved {pilot_behav_unresolved}"
+    );
     println!("  split (lint-disjoint): test {} / {} scored", test_scored, total_scored);
     println!("  T1.6 N(p_d): p_d=0.20 → {}, 0.35 → {}, 0.50 → {}", n_power(0.20), n_power(0.35), n_power(0.50));
     for (lint, c) in &per_lint {

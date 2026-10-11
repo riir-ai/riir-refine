@@ -830,6 +830,14 @@ impl HealPipeline {
     /// stays the hot path: same body, pool collection compiled behind a
     /// `None` discriminant, allocation-free behavior unchanged (the G4 gate
     /// covers it).
+    ///
+    /// Pool birth points (Issue 161): (1) the Stage-2 verified fix,
+    /// (2) the deduped drafter+memory candidates, (3) the module-applicable
+    /// proposer fix — a POOL-ONLY member computed from the input itself by
+    /// the per-lint AST proposers. It never enters modelless selection, so
+    /// the served answer stays bit-identical to [`Self::heal`]; the seat's
+    /// pick of it over a corpus-shaped snippet IS the decision the rerank
+    /// bench measures.
     #[must_use]
     pub fn heal_with_pool<E: HealEntry>(
         &mut self,
@@ -912,6 +920,22 @@ impl HealPipeline {
         // Step 2: draft a fix using the existing L1 drafter.
         let drafted = self.drafter.draft_fix(rule_id, buggy_code, corpus);
 
+        // Step 2b (Issue 161): the module-applicable proposer candidate —
+        // POOL-ONLY. The per-lint AST proposers compute span-preserving
+        // edits FROM the input itself, so the fix merges into the module by
+        // construction. On real modules the drafter is a retriever: its
+        // candidates are corpus-shaped snippets that cannot merge (Bench
+        // 113: 98.3% merge-fail), so without this birth point the pool is
+        // structurally alien to the code under repair. Computed ONLY on the
+        // pool arm (`pool_out.is_some()`) — the plain `heal` path pays one
+        // branch and stays allocation-free; the candidate also never enters
+        // modelless selection, so the served answer cannot move.
+        let proposer_fix = if pool_out.is_some() {
+            proposer_pool_candidate(rule_id, buggy_code)
+        } else {
+            None
+        };
+
         // Step 3: collect candidates (drafter output + memory trajectories).
         // Each candidate carries its code + direction + optional success_rate.
         // The success_rate (from the memory trajectory) lets us prefer fixes
@@ -959,21 +983,31 @@ impl HealPipeline {
         }
 
         if candidates.is_empty() {
+            // Pool birth point 3a (Issue 161): even a total modelless miss
+            // exposes the proposer's fix when one exists — the pool's TRUE
+            // size. A singleton is still below every `min_pool` bound (the
+            // manifest bounds it above 1), so this never becomes seat
+            // traffic; it only keeps the census/dispatch gate honest about
+            // what the pipeline could offer.
+            if let (Some(out), Some(fix)) = (&mut pool_out, &proposer_fix) {
+                out.push(fix.clone());
+            }
             // Modelless miss #1: nothing to serve at all. This is the case L4
             // exists for — an input the corpus, drafter and memory have never
-            // seen. Returns None when no fallback is installed. The pool
-            // stays EMPTY — no-candidate traffic is the generate arm's
-            // distribution by construction (the rerank wire refuses it at
-            // the client too).
+            // seen. Returns None when no fallback is installed. Without a
+            // proposer fix the pool stays EMPTY — no-candidate traffic is
+            // the generate arm's distribution by construction (the rerank
+            // wire refuses it at the client too).
             return self.consult_l4(rule_id, buggy_code, rule_context_notes);
         }
 
         // Pool birth point 2 (R6): the deduped drafter+memory pool, in
         // candidate order, exactly as `select_best_candidate` is about to
         // score it. Collected BEFORE selection so the miss paths
-        // (`resolve_miss`) still expose what the modelless path had.
+        // (`resolve_miss`) still expose what the modelless path had — then
+        // birth point 3b (Issue 161): the module-applicable proposer fix.
         if let Some(out) = &mut pool_out {
-            out.extend(candidates.iter().map(|c| c.code.clone()));
+            collect_pool_members(out, &candidates, proposer_fix.as_deref());
         }
 
         // Step 4: score each candidate — see `select_best_candidate` for the
@@ -1201,6 +1235,37 @@ impl HealPipeline {
     }
 }
 
+/// Issue 161 — the module-applicable pool candidate from the per-lint AST
+/// proposers: span-preserving edits computed FROM the input, so the result
+/// merges into the module by construction (the `--fix` engine's own output
+/// shape). POOL-ONLY by design — it never enters modelless selection, so
+/// the served answer stays bit-identical to `heal` (the R6 seam contract).
+#[cfg(feature = "clippy_lints")]
+fn proposer_pool_candidate(rule_id: &str, buggy_code: &str) -> Option<String> {
+    crate::domains::clippy_lints::proposers::propose_fix(rule_id, buggy_code)
+        .filter(|fixed| fixed != buggy_code)
+}
+
+/// The no-`clippy_lints` arm: no proposers exist, no pool member is added.
+#[cfg(not(feature = "clippy_lints"))]
+fn proposer_pool_candidate(_rule_id: &str, _buggy_code: &str) -> Option<String> {
+    None
+}
+
+/// Pool birth points 2 + 3b: the deduped drafter+memory candidates in
+/// candidate order (the modelless preference order IS the seat's option
+/// order), then the module-applicable proposer fix appended LAST, deduped
+/// against the collected pool (a memory trajectory may already carry the
+/// identical code).
+fn collect_pool_members(out: &mut Vec<String>, candidates: &[Candidate], proposer_fix: Option<&str>) {
+    out.extend(candidates.iter().map(|c| c.code.clone()));
+    if let Some(fix) = proposer_fix {
+        if !out.iter().any(|c| c == fix) {
+            out.push(fix.to_string());
+        }
+    }
+}
+
 /// Report from a Stage 2 tuning pass.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct TuneReport {
@@ -1328,6 +1393,9 @@ mod tests {
         let corpus = mock_corpus();
         // Miss: empty corpus + empty memory → no result, empty pool (the
         // generate arm's distribution — the rerank wire refuses it too).
+        // NOTE (Issue 161): the snippet is deliberately NOT a parseable
+        // file, so the proposer birth point stays silent here — an
+        // unparseable input has no module-applicable fix either.
         let mut p = make_pipeline();
         let empty: [ClippyFixEntry; 0] = [];
         let miss = p.heal_with_pool("unheard_lint", "weird();", &empty);
@@ -1344,6 +1412,86 @@ mod tests {
         let r = st2.result.expect("stage-2 hit serves");
         assert_eq!(r.source, HealSource::Stage2Adaptive);
         assert_eq!(st2.pool, vec![FIXED.to_string()], "the verified fix alone");
+    }
+
+    #[test]
+    fn proposer_candidate_is_pool_only_and_module_applicable() {
+        // Issue 161: a module-applicable proposer fix joins the POOL (the
+        // seat's options) but never the modelless served answer — the R6
+        // seam contract (heal_with_pool.result ≡ heal) holds bit-identically.
+        // The fixture is the Bench-113 reality: a module whose corpus
+        // retrieval is corpus-shaped (the drafter serves the corpus entry's
+        // `fn foo` snippet for `fn bar`'s module), while the proposer emits
+        // the module's own fixed shape — the seat's pick between them is
+        // exactly the decision the rerank bench measures.
+        const RULE: &str = "needless_return";
+        const BUGGY: &str = "fn bar(a: i32) -> i32 { return a * 2; }";
+        let corpus = mock_corpus();
+        let mut p1 = make_pipeline();
+        let mut p2 = make_pipeline();
+        p1.seed_from_corpus(&corpus);
+        p2.seed_from_corpus(&corpus);
+
+        let outcome = p1.heal_with_pool(RULE, BUGGY, &corpus);
+        let plain = p2.heal(RULE, BUGGY, &corpus).expect("modelless serves");
+        let served = outcome.result.expect("pool arm serves the same");
+
+        let proposer_fix =
+            crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
+                .expect("the needless_return proposer fires on this module");
+        assert!(proposer_fix.contains("fn bar"), "module-applicable: {proposer_fix}");
+        assert!(
+            outcome.pool.iter().any(|c| c == &proposer_fix),
+            "the proposer candidate joins the pool: {:?}",
+            outcome.pool
+        );
+        // Pool-only: the served answer is bit-identical to plain heal — the
+        // proposer member never entered modelless selection, so on this
+        // fixture the served answer is still the corpus-shaped snippet.
+        assert_eq!(served.fixed_code, plain.fixed_code);
+        assert_ne!(served.fixed_code, proposer_fix);
+        assert_eq!(served.source, plain.source);
+        // The pool stays deduped with the new member.
+        let unique: std::collections::BTreeSet<&String> = outcome.pool.iter().collect();
+        assert_eq!(unique.len(), outcome.pool.len());
+    }
+
+    #[test]
+    fn proposer_candidate_fills_a_modelless_miss_pool() {
+        // Issue 161: when the modelless path has NO candidate but the
+        // proposer fires, the pool exposes the TRUE singleton — still below
+        // every min_pool bound (the manifest bounds it above 1), so it never
+        // becomes seat traffic; the dispatch owns that gate.
+        const BUGGY: &str = "fn f() -> i32 { return 3; }";
+        let mut p = make_pipeline();
+        let empty: [ClippyFixEntry; 0] = [];
+        let outcome = p.heal_with_pool("needless_return", BUGGY, &empty);
+        assert!(outcome.result.is_none(), "no corpus + no memory → modelless miss");
+        let proposer_fix =
+            crate::domains::clippy_lints::proposers::propose_fix("needless_return", BUGGY)
+                .expect("proposer fires on the module");
+        assert_eq!(outcome.pool, vec![proposer_fix], "the true pool singleton");
+    }
+
+    #[test]
+    fn proposer_candidate_dedups_against_the_modelless_pool() {
+        // Seed a memory trajectory carrying EXACTLY the proposer's output
+        // for this module: birth point 2 collects it as a memory candidate,
+        // so birth point 3b must not append a duplicate. (The relevance gate
+        // declines the memory-only candidate on an empty corpus — the miss
+        // path — but the pool was already collected; that survival is the
+        // R6 contract this also pins.)
+        const RULE: &str = "needless_return";
+        const BUGGY: &str = "fn foo() -> i32 { return 42; }";
+        let mut p = make_pipeline();
+        let empty: [ClippyFixEntry; 0] = [];
+        let proposer_fix =
+            crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
+                .expect("proposer fires");
+        p.report_outcome(RULE, BUGGY, &proposer_fix, true, false);
+        let outcome = p.heal_with_pool(RULE, BUGGY, &empty);
+        let n_hits = outcome.pool.iter().filter(|c| *c == &proposer_fix).count();
+        assert_eq!(n_hits, 1, "exactly one copy: {:?}", outcome.pool);
     }
 
     #[test]

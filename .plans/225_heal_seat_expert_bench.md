@@ -1,6 +1,6 @@
 # Plan 225 — the `heal` seat gets a real expert: mine → mint → arm-H paired read (the Bench-108 revisit condition)
 
-**Status:** T1 EXECUTED 2026-10-11 (Bench 113) — **T1.6 BLOCKED ON CASE SUPPLY** (3 deciding cases vs ≥621 at the most optimistic p_d=0.20; 0 under the full oracle) — T2/T3 do not run, zero GPU spend, δ₀ not lowered. Root cause STRUCTURAL: the L0–L1 pool substrate is retriever-shaped (corpus snippets) and 98.3% of candidates cannot merge into real modules — the revisit condition is AMENDED to require module-applicable pool candidates first (proposer edits / clippy suggestions as pool members); then T1.1 re-runs and the gate re-computes. Verdict round 1 REVISE folded (`1d410fd5`); round 2 **AGREE** (`bf1bb501`). Owner-gated items (T3 mint, T5 arming/telemetry) stand, now behind the amended condition.
+**Status:** T1 EXECUTED 2026-10-11 (Bench 113, BLOCKED) → **ISSUE 161 LANDED SAME DAY (Bench 114): T1.6 PASSES** — deciding 3 → **1416** vs N(p_d=0.20)=621 (2.3×; also clears N(0.35)=1092); clause-(b) pilot 22 ok / 0 divergent / 18 unresolved → P(behav-ok | a∧c-ok) = 0.55, full-oracle projection ≈ 779 ≥ 621. δ₀ never lowered. The unblock was three changes (Issue 161): the proposer pool birth point (pool-only, R6 seam contract intact), the `rewrite` merge strategy (the instrument was mangling faithful whole-module rewrites — the FIRST widened census read 455 deciding with the proposer member `not_compiled` 91/91 on single_match while a direct probe showed the fixes compile+resolve ≈100%; the merge, not the proposers, was wrong), and the behav driver's real-module blockers (floats/int-slices/Option<float> + PRIVATE-FN E0603 — real modules declare private fns; the driver publicizes both sides). T2/T3 re-enter scope, owner-gated as before. Earlier: verdict round 1 REVISE folded (`1d410fd5`); round 2 **AGREE** (`bf1bb501`).
 
 ## Why now
 
@@ -94,6 +94,10 @@ grammar-not-answers law), and every claim carries its n beside it.
       **VERDICT (Bench 113): BLOCKED ON CASE SUPPLY.** N(p_d=0.20)=621, N(0.35)=1092, N(0.50)=1562
       vs supply 3 (a∧c level) / 0 (full oracle); measured p̂_d = 3/643 = 0.0047. δ₀ NOT lowered
       post hoc. T2/T3 do not run — the block is the gate working (zero GPU spend).
+      **RE-COMPUTED (Bench 114, post Issue 161): PASSES.** Supply 1416 deciding (a∧c) ≥ 621 at
+      2.3× (also ≥ 1092 at p_d=0.35); clause-(b) pilot P(behav-ok | a∧c-ok) = 0.55 with ZERO
+      divergences → full-oracle projection ≈ 779 ≥ 621. The gate unblocks; T2/T3 re-enter
+      scope (owner-gated).
 - [x] T1.7 Leakage-safe split: split by TIME or SOURCE REPO, never by row; near-duplicate
       removal by blake3 of (normalised snippet + rule) ACROSS train and test; assert no
       self-evolve trajectory contains a frozen case's patch; reflex V5 synthetic rows (if T1.3
@@ -107,10 +111,10 @@ grammar-not-answers law), and every claim carries its n beside it.
 
 ### T2 — candidate A1: the Instinct-corpus specialist (riir-train mints, instinct serves)
 ⛔ Gated on T1.6 (the feasibility gate) — an unproven case supply trains nothing.
-   **T1.6 verdict (Bench 113): BLOCKED** — stands until the pool substrate carries
-   module-applicable candidates (proposer edits / clippy MachineApplicable suggestions
-   as pool members — the natural `heal_with_pool` widening), then T1.1 re-runs and the
-   gate re-computes on the new census.
+   **T1.6 verdict (Bench 114, post Issue 161): PASSES** — 1416 deciding ≥ 621; the pool
+   substrate now carries the module-applicable proposer member (pool-only), and the census
+   instrument merges whole-module rewrites faithfully (`rewrite` strategy). T2 is IN SCOPE,
+   owner-gated as before.
 - [ ] T2.1 Mine the heal training corpus (TRAIN-side split of T1 only, post T1.7 dedupe): refine
       corpora + misses + self-evolve trajectories (`LatentFixMemory` rows), train-side synth
       augment per T1.3. Corpus manifest + blake3s.

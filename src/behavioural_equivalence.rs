@@ -95,6 +95,23 @@ enum Dom {
     OptInt {
         rust: &'static str,
     },
+    /// `f32` / `f64` (Bench 114's pilot extension — the real-module
+    /// population's #1 blocker was 26 float-signature fns reading
+    /// Unsupported). The corpus carries the adversarial IEEE values:
+    /// signed zero, NaN, infinities — Debug prints all of them distinctly.
+    Float {
+        rust: &'static str,
+    },
+    /// `Vec<int>` / `&[int]` for any integer width (the #2 blocker — 29
+    /// non-u8 int-slice fns). `u8` keeps the older [`Dom::Bytes`] shape so
+    /// every existing fixture's generated rows stay byte-identical.
+    Ints {
+        rust: &'static str,
+    },
+    /// `Option<f32>` / `Option<f64>`.
+    OptFloat {
+        rust: &'static str,
+    },
 }
 
 /// How one side of the pair receives an owned value. `ptr_arg`'s whole fix is a
@@ -142,18 +159,41 @@ impl Dom {
                 format!("Some(42{rust})"),
                 format!("Some({rust}::MAX)"),
             ],
+            Self::Float { rust } => vec![
+                format!("0.0{rust}"),
+                format!("-0.0{rust}"),
+                format!("1.5{rust}"),
+                format!("-2.25{rust}"),
+                format!("{rust}::NAN"),
+                format!("{rust}::INFINITY"),
+                format!("{rust}::MIN_POSITIVE"),
+            ],
+            Self::Ints { rust } => vec![
+                "vec![]".into(),
+                format!("vec![0{rust}]"),
+                format!("vec![1{rust},2,3]"),
+                format!("vec![7{rust};17]"),
+            ],
+            Self::OptFloat { rust } => vec![
+                "None".into(),
+                format!("Some(0.0{rust})"),
+                format!("Some(-0.0{rust})"),
+                format!("Some(1.5{rust})"),
+                format!("Some({rust}::NAN)"),
+            ],
         }
     }
 
     /// The owned local's Rust type, so the driver can declare a typed `Vec`.
     fn owned_ty(self) -> String {
         match self {
-            Self::Int { rust } => rust.to_string(),
+            Self::Int { rust } | Self::Float { rust } => rust.to_string(),
             Self::Bool => "bool".into(),
             Self::Char => "char".into(),
             Self::Str => "String".into(),
             Self::Bytes => "Vec<u8>".into(),
-            Self::OptInt { rust } => format!("Option<{rust}>"),
+            Self::OptInt { rust } | Self::OptFloat { rust } => format!("Option<{rust}>"),
+            Self::Ints { rust } => format!("Vec<{rust}>"),
         }
     }
 }
@@ -172,9 +212,12 @@ fn classify(ty: &syn::Type) -> Option<(Dom, Borrow)> {
         }
         syn::Type::Slice(s) => {
             let (d, _) = classify(&s.elem)?;
-            // `[u8]` behind a reference — the ptr_arg destination.
+            // `[T]` behind a reference — the ptr_arg destination for u8; any
+            // other integer width is the Bench-114 Ints domain.
             match d {
                 Dom::Int { rust: "u8" } => Some((Dom::Bytes, Borrow::Slice)),
+                Dom::Int { rust } => Some((Dom::Ints { rust }, Borrow::Slice)),
+                Dom::Float { rust } => Some((Dom::Float { rust }, Borrow::Slice)),
                 _ => None,
             }
         }
@@ -186,6 +229,9 @@ fn classify(ty: &syn::Type) -> Option<(Dom, Borrow)> {
             ];
             if let Some(rust) = ints.iter().find(|i| **i == name) {
                 return Some((Dom::Int { rust }, Borrow::ByValue));
+            }
+            if let Some(rust) = ["f32", "f64"].iter().find(|i| **i == name) {
+                return Some((Dom::Float { rust }, Borrow::ByValue));
             }
             match name.as_str() {
                 "bool" => Some((Dom::Bool, Borrow::ByValue)),
@@ -200,6 +246,7 @@ fn classify(ty: &syn::Type) -> Option<(Dom, Borrow)> {
                     };
                     match classify(inner)? {
                         (Dom::Int { rust }, _) => Some((Dom::OptInt { rust }, Borrow::ByValue)),
+                        (Dom::Float { rust }, _) => Some((Dom::OptFloat { rust }, Borrow::ByValue)),
                         _ => None,
                     }
                 }
@@ -212,6 +259,7 @@ fn classify(ty: &syn::Type) -> Option<(Dom, Borrow)> {
                     };
                     match classify(inner)? {
                         (Dom::Int { rust: "u8" }, _) => Some((Dom::Bytes, Borrow::ByValue)),
+                        (Dom::Int { rust }, _) => Some((Dom::Ints { rust }, Borrow::ByValue)),
                         _ => None,
                     }
                 }
@@ -220,6 +268,90 @@ fn classify(ty: &syn::Type) -> Option<(Dom, Borrow)> {
         }
         _ => None,
     }
+}
+
+/// Publicize every TOP-LEVEL fn so the driver can call it cross-module.
+/// Real mined modules (the Bench 114 population) declare private `fn`s —
+/// every driver call read E0603 and the pilot settled nothing. The rewrite
+/// is column-0 + name-anchored (nested fns are indented; `pub` is illegal
+/// there), applied IDENTICALLY to both sides. Anything it mangles fails the
+/// driver's compile → `Unsupported` — the failure mode is an honest unscored
+/// case, never a false Equivalent.
+fn publicize_top_level_fns(src: &str) -> String {
+    // The target names come from a real parse: only top-level Item::Fn
+    // idents, so a col-0 `fn name` inside a doc comment or raw string can
+    // only match if the module genuinely declares that same fn — and the
+    // compile gate still backstops the pathological residue.
+    let names: BTreeSet<String> = syn::parse_file(src)
+        .map(|f| {
+            f.items
+                .iter()
+                .filter_map(|i| match i {
+                    syn::Item::Fn(x) => Some(x.sig.ident.to_string()),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    if names.is_empty() {
+        return src.to_string();
+    }
+    let mut out = String::with_capacity(src.len() + names.len() * 4);
+    for line in src.split_inclusive('\n') {
+        let trimmed = line.trim_start();
+        if !line.starts_with(' ') && !line.starts_with('\t') {
+            // Skip an existing visibility prefix; publicize only when the
+            // item declares one of our target fns.
+            let after_vis = match trimmed.find(' ') {
+                Some(i) => {
+                    let first = &trimmed[..i];
+                    if first == "pub" || first.starts_with("pub(") {
+                        &trimmed[i + 1..]
+                    } else {
+                        trimmed
+                    }
+                }
+                None => trimmed,
+            };
+            let declares_target = |head: &str| -> bool {
+                // Walk the fn qualifiers (async/const/unsafe/extern "C") then
+                // match `fn NAME` against the target set.
+                let mut head = head.trim_start();
+                while let Some(sp) = head.find(' ') {
+                    let first = &head[..sp];
+                    let rest = &head[sp + 1..];
+                    match first {
+                        "fn" => {
+                            let id = rest.trim_start();
+                            let name: String = id
+                                .chars()
+                                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                                .collect();
+                            return names.contains(&name);
+                        }
+                        "async" | "const" | "unsafe" => head = rest,
+                        "extern" => {
+                            // Skip the optional ABI string: `extern "C" fn`.
+                            if let Some(abi) = rest.trim_start().strip_prefix('"') {
+                                let Some(close) = abi.find('"') else { break };
+                                head = &abi[close + 1..];
+                            } else {
+                                head = rest;
+                            }
+                        }
+                        _ => break,
+                    }
+                }
+                false
+            };
+            let already_pub = trimmed.starts_with("pub ") || trimmed.starts_with("pub(");
+            if !already_pub && declares_target(after_vis) {
+                out.push_str("pub ");
+            }
+        }
+        out.push_str(line);
+    }
+    out
 }
 
 /// Pick the fn to compare: `f` when present (every t51 fixture uses it),
@@ -281,6 +413,16 @@ pub fn check(
     workdir: &Path,
 ) -> Verdict {
     let unsup = |r: String| Verdict::Unsupported { reason: r };
+
+    // Bench 114: publicize both sides' top-level fns before emitting — the
+    // driver calls them cross-module and real mined modules declare them
+    // private (E0603 on every call). The rewrite is name-anchored and
+    // identical on both sides; a mangled driver fails to compile and reads
+    // Unsupported, never a false Equivalent.
+    let original = publicize_top_level_fns(original);
+    let candidate = publicize_top_level_fns(candidate);
+    let original = original.as_str();
+    let candidate = candidate.as_str();
 
     let doms = match plan_domains(original, candidate, name_hint) {
         Ok(d) => d,
@@ -416,7 +558,7 @@ fn emit_driver(
         (format!("({tuple_ty})"), table)
     };
 
-    let driver = format!(
+    format!(
         r#"#![allow(warnings)]
 mod orig {{ {original} }}
 mod cand {{ {candidate} }}
@@ -441,9 +583,7 @@ fn main() {{
     println!("EQUIVALENT\t{{}}", table.len());
 }}
 "#
-    );
-
-    driver
+    )
 }
 
 /// Compile with plain `rustc` — no cargo, no dep graph, no shared target dir —

@@ -974,6 +974,15 @@ pub enum MergeStrategy {
     /// The generation is a verbatim full replacement (reachable fixtures
     /// only — never tried for v2edit, where it would drop the other fns).
     Verbatim,
+    /// The generation is a FAITHFUL whole-module rewrite: it parses as a
+    /// file and preserves every top-level named item the module declares
+    /// (Bench 114). Span-preserving proposer fixes are exactly this shape;
+    /// the snippet strategies mangle them into parseable-but-broken modules
+    /// (`substitute_fn_spans` splits on blank lines and bails on real
+    /// multi-fn bodies, then the LCS line-merge drops mid-item lines). The
+    /// item-preservation gate is what makes it v2edit-safe: a corpus
+    /// snippet or a content-dropping response fails it and falls through.
+    Rewrite,
     /// Whole-fn span substitution.
     FnSpans,
     /// LCS merge, depth-bounded.
@@ -987,6 +996,7 @@ impl MergeStrategy {
     pub fn name(self) -> &'static str {
         match self {
             Self::Verbatim => "verbatim",
+            Self::Rewrite => "rewrite",
             Self::FnSpans => "fn-spans",
             Self::LcsBounded => "lcs-bounded",
             Self::LcsUnbounded => "lcs-unbounded",
@@ -1016,6 +1026,14 @@ pub fn apply_edit(
             return Some((t.to_string(), MergeStrategy::Verbatim));
         }
     }
+    // Faithful whole-module rewrite (Bench 114): tried for EVERY source —
+    // the item-preservation gate is the trust, not the caller's flag. A
+    // response that keeps every top-level named item cannot be a snippet
+    // or a content drop, so taking it whole is safe exactly where the
+    // verbatim branch is not.
+    if let Some(rewritten) = faithful_rewrite(module, gen) {
+        return Some((rewritten, MergeStrategy::Rewrite));
+    }
     if let Some(m) = substitute_fn_spans(module, gen) {
         if parses(&m) {
             return Some((m, MergeStrategy::FnSpans));
@@ -1035,6 +1053,45 @@ pub fn apply_edit(
         }
     }
     None
+}
+
+/// A faithful whole-module rewrite: the response parses as a Rust file,
+/// differs from the module, and declares every top-level named item the
+/// module declares (additions allowed, `use` items exempt — a fix may
+/// legitimately add or remove imports). Span-preserving proposer fixes and
+/// honest full rewrites pass; corpus-shaped snippets and content-dropping
+/// responses fail and fall through to the snippet strategies.
+#[must_use]
+fn faithful_rewrite(module: &str, response: &str) -> Option<String> {
+    let t = response.trim();
+    if t.is_empty() || t == module.trim() {
+        return None;
+    }
+    let mod_file = syn::parse_file(module).ok()?;
+    let resp_file = syn::parse_file(t).ok()?;
+    let top_level_names = |f: &syn::File| {
+        f.items
+            .iter()
+            .filter_map(|i| match i {
+                syn::Item::Fn(x) => Some(x.sig.ident.to_string()),
+                syn::Item::Struct(x) => Some(x.ident.to_string()),
+                syn::Item::Enum(x) => Some(x.ident.to_string()),
+                syn::Item::Trait(x) => Some(x.ident.to_string()),
+                syn::Item::Type(x) => Some(x.ident.to_string()),
+                syn::Item::Static(x) => Some(x.ident.to_string()),
+                syn::Item::Const(x) => Some(x.ident.to_string()),
+                syn::Item::Mod(x) => Some(x.ident.to_string()),
+                _ => None,
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    };
+    let mod_names = top_level_names(&mod_file);
+    let resp_names = top_level_names(&resp_file);
+    if mod_names.iter().all(|n| resp_names.contains(n)) {
+        Some(t.to_string())
+    } else {
+        None
+    }
 }
 
 // ── Contract preservation (destructive-edit veto, Bench 039) ───────────────
@@ -2457,6 +2514,46 @@ mod tests {
     #[test]
     fn apply_edit_fails_loudly_on_garbage() {
         assert!(apply_edit("fn a() {}", "}}}garbage{{{", true).is_none());
+    }
+
+    #[test]
+    fn apply_edit_takes_a_faithful_whole_module_rewrite() {
+        // Bench 114: a whole-module response that preserves every top-level
+        // item merges WHOLE — the module-applicable pool member's shape. The
+        // snippet paths mangle real multi-fn rewrites (`substitute_fn_spans`
+        // splits on blank lines; the LCS line-merge drops mid-item lines)
+        // into parseable-but-broken modules, and the census undercounted
+        // gold by a third before this strategy existed.
+        let module = "use std::collections::HashMap;\n\nfn fetch(s: &str) -> usize {\n    s.split_whitespace().count()\n}\n\nfn baz() -> u8 {\n    7\n}";
+        let fixed = "use std::collections::HashMap;\n\nfn fetch(s: &str) -> usize {\n    s.split_whitespace().count() + 1\n}\n\nfn baz() -> u8 {\n    8\n}";
+        let (m, s) = apply_edit(module, fixed, false).expect("faithful rewrite merges");
+        assert_eq!(s, MergeStrategy::Rewrite);
+        assert_eq!(m, fixed);
+    }
+
+    #[test]
+    fn rewrite_gate_refuses_a_fn_snippet_for_a_multi_fn_module() {
+        // The trust is the ITEM SET, not the caller's flag: a single-fn
+        // response against a two-fn module parses but is not a faithful
+        // rewrite — it falls through to the snippet strategies (this is the
+        // corpus-snippet pool member's shape, and the content-drop shape).
+        let module = "fn a() {}\nfn b() {}";
+        let resp = "fn a() { fixed(); }";
+        let (m, s) = apply_edit(module, resp, false).expect("falls to fn-spans");
+        assert_eq!(s, MergeStrategy::FnSpans);
+        assert!(m.contains("fn b"), "the other fn survives: {m}");
+    }
+
+    #[test]
+    fn rewrite_gate_allows_use_changes() {
+        // `use` items are exempt from preservation: a fix may legitimately
+        // add or remove imports (e.g. removing a borrow removed the last
+        // use of an import).
+        let module = "use std::io;\nfn a() { let _ = io::stdout(); }";
+        let fixed = "fn a() {}";
+        let (m, s) = apply_edit(module, fixed, false).expect("use drop is faithful");
+        assert_eq!(s, MergeStrategy::Rewrite);
+        assert_eq!(m, fixed);
     }
 
     #[test]

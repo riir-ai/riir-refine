@@ -1,0 +1,176 @@
+{
+  "behav_pilot": {
+    "behav_divergent": 0,
+    "behav_ok": 22,
+    "behav_unresolved": 18,
+    "cases": 40,
+    "deciding_full": 22,
+    "gold_ac_candidates": 40,
+    "p_behav_ok_given_gold_ac": 0.55
+  },
+  "clippy_version": "clippy 0.1.98 (48a229ceae 2026-09-01)",
+  "no_control": 6,
+  "per_lint": {
+    "collapsible_if": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 151,
+      "deciding_full": 2,
+      "n": 151,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 151,
+      "pool_singleton": 0
+    },
+    "manual_map": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 160,
+      "deciding_full": 8,
+      "n": 160,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 160,
+      "pool_singleton": 0
+    },
+    "needless_borrow": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 152,
+      "deciding_full": 2,
+      "n": 152,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 152,
+      "pool_singleton": 0
+    },
+    "needless_lifetimes": {
+      "all_gold": 1,
+      "corpus_covered": true,
+      "deciding": 121,
+      "deciding_full": 1,
+      "n": 122,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 122,
+      "pool_singleton": 0
+    },
+    "needless_range_loop": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 134,
+      "deciding_full": 3,
+      "n": 134,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 134,
+      "pool_singleton": 0
+    },
+    "needless_return": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 116,
+      "deciding_full": 2,
+      "n": 116,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 116,
+      "pool_singleton": 0
+    },
+    "redundant_closure": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 103,
+      "deciding_full": 1,
+      "n": 103,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 103,
+      "pool_singleton": 0
+    },
+    "redundant_field_names": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 202,
+      "deciding_full": 0,
+      "n": 203,
+      "none_gold": 1,
+      "pool_empty": 0,
+      "pool_ge2": 203,
+      "pool_singleton": 0
+    },
+    "single_match": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 91,
+      "deciding_full": 1,
+      "n": 91,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 91,
+      "pool_singleton": 0
+    },
+    "unnecessary_mut_passed": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 101,
+      "deciding_full": 2,
+      "n": 101,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 101,
+      "pool_singleton": 0
+    },
+    "unnecessary_unwrap": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 85,
+      "deciding_full": 0,
+      "n": 85,
+      "none_gold": 0,
+      "pool_empty": 0,
+      "pool_ge2": 85,
+      "pool_singleton": 0
+    },
+    "useless_conversion": {
+      "all_gold": 0,
+      "corpus_covered": true,
+      "deciding": 0,
+      "deciding_full": 0,
+      "n": 76,
+      "none_gold": 28,
+      "pool_empty": 0,
+      "pool_ge2": 28,
+      "pool_singleton": 48
+    }
+  },
+  "pool_ge2": 1446,
+  "samples": 1500,
+  "split": {
+    "collapsible_if": "test",
+    "manual_map": "test",
+    "needless_borrow": "test",
+    "needless_lifetimes": "train",
+    "needless_range_loop": "train",
+    "needless_return": "train",
+    "redundant_closure": "train",
+    "redundant_field_names": "test",
+    "single_match": "train",
+    "unnecessary_mut_passed": "train",
+    "unnecessary_unwrap": "train",
+    "useless_conversion": "train"
+  },
+  "split_test_scored": 666,
+  "strata": {
+    "all_gold_unscored": 1,
+    "deciding": 1416,
+    "none_gold": 29
+  },
+  "t16_power_table": {
+    "inputs": "delta0=0.05, alpha=0.05 two-sided, power=0.80, paired per-case score",
+    "n_at_pd_0.20": 621,
+    "n_at_pd_0.35": 1092,
+    "n_at_pd_0.50": 1562
+  },
+  "with_target": 1494
+}

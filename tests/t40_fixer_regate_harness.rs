@@ -66,8 +66,16 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
     };
 
     // Positives (Bench 039's verified-clean wins, full-module verbatim).
+    // `manual_strip` replaced `ptr_arg` here when the 2026-09-18 re-pick
+    // (Batch 155) made ptr_arg a corpus entry — probe-checked to FIRE on its
+    // fixture against this box's clippy before landing (the clear_with_drain
+    // and unused_self re-picks do NOT fire on their fixture shapes — they
+    // stay decline-only, never controls).
     for (id, gen) in [
-        ("reachable:ptr_arg", "pub fn f(v: &[u8]) -> usize { v.len() }"),
+        (
+            "reachable:manual_strip",
+            "pub fn f(s: &str) -> Option<&str> { s.strip_prefix(\"ab\") }",
+        ),
         (
             "reachable:or_fun_call",
             "pub fn f(opt: Option<u32>) -> u32 { opt.unwrap_or_else(expensive) }\npub fn expensive() -> u32 { 42 }",
@@ -84,8 +92,8 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
 
     // Negative: noop echo — findings unchanged, never kept.
     let s = score(
-        "reachable:ptr_arg",
-        "pub fn f(v: &Vec<u8>) -> usize { v.len() }",
+        "reachable:manual_strip",
+        "pub fn f(s: &str) -> Option<&str> { if s.starts_with(\"ab\") { Some(&s[2..]) } else { None } }",
     );
     assert!(!s.keep_oracle, "noop must not pass the oracle filter");
     assert!(s.noop);
@@ -104,7 +112,7 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
     );
 
     // Negative: garbage never merges.
-    let s = score("reachable:ptr_arg", "}}}not rust{{{");
+    let s = score("reachable:manual_strip", "}}}not rust{{{");
     assert!(s.merge_strategy.is_none());
     assert!(!s.keep_oracle && !s.keep_strict);
 }

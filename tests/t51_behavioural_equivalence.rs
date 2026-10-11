@@ -177,3 +177,65 @@ fn a_noncompiling_candidate_is_unsupported_not_equivalent() {
     );
     assert!(matches!(got, Verdict::Unsupported { .. }), "got {got:?}");
 }
+
+// ── The Bench-114 domain extension: real-module signatures ─────────────────
+
+#[test]
+fn float_and_int_slice_signatures_are_now_scoreable() {
+    // The v2edit real-module population's top two Unsupported blockers were
+    // float params (26 fns) and non-u8 int slices (29 fns). Both must now
+    // SCORE — and the float corpus must carry the adversarial IEEE values
+    // (signed zero / NaN) that make a silent semantics change visible.
+    let eq = v(
+        "float_slice_eq",
+        "pub fn f(x: f64, v: &[i64]) -> f64 { x + v.len() as f64 }",
+        "pub fn f(x: f64, v: &[i64]) -> f64 { x + (v.len() as f64) }",
+    );
+    assert!(matches!(eq, Verdict::Equivalent { .. }), "got {eq:?}");
+
+    let div = v(
+        "float_signed_zero",
+        "pub fn f(x: f64) -> f64 { x }",
+        "pub fn f(x: f64) -> f64 { x + 0.0 }",
+    );
+    // -0.0 + 0.0 == 0.0 — the signed-zero counterexample the corpus reaches.
+    match &div {
+        Verdict::Divergent { input, .. } => {
+            assert!(input.contains("-0.0"), "the counterexample is -0.0, got {input}");
+        }
+        other => panic!("expected Divergent on -0.0, got {other:?}"),
+    }
+}
+
+#[test]
+fn option_float_and_vec_int_signatures_are_now_scoreable() {
+    let got = v(
+        "opt_float_vec",
+        "pub fn f(o: Option<f32>, v: Vec<u32>) -> u32 { v.len() as u32 + o.map(|_| 1u32).unwrap_or(0) }",
+        "pub fn f(o: Option<f32>, v: Vec<u32>) -> u32 { v.len() as u32 + o.map(|_| 1u32).unwrap_or(0) }",
+    );
+    assert!(matches!(got, Verdict::Equivalent { cases: 64 }), "got {got:?}");
+}
+
+#[test]
+fn private_fn_modules_are_scoreable() {
+    // Bench 114: the real mined population declares PRIVATE fns — every
+    // driver call read E0603 and the pilot settled nothing. The driver now
+    // publicizes both sides' top-level fns (identical transform, compile
+    // gate as the safety net).
+    let orig = "fn fetch(s: &str) -> usize {\n    s.split_whitespace().count()\n}\n\nfn hash_label(v: i32) -> i64 { v as i64 }";
+    let broken = "fn fetch(s: &str) -> usize {\n    s.split_whitespace().count()\n}\n\nfn hash_label(v: i32) -> i64 { v as i64 + 1 }";
+    let dir = work("private_fns");
+    // hash_label diverges (+1) — called BY ITS NAME (the harvest's shape:
+    // one check per top-level fn, name_hint = the fn's own ident).
+    let got = check(orig, broken, "hash_label", 64, &dir.join("div"));
+    match &got {
+        Verdict::Divergent { original, candidate, .. } => {
+            assert_ne!(original, candidate);
+        }
+        other => panic!("expected Divergent on hash_label, got {other:?}"),
+    }
+
+    let eq = check(orig, orig, "fetch", 64, &dir.join("eq"));
+    assert!(matches!(eq, Verdict::Equivalent { .. }), "got {eq:?}");
+}

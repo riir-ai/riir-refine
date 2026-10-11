@@ -1,0 +1,14 @@
+{
+  "collapsible_if": "test",
+  "manual_map": "test",
+  "needless_borrow": "test",
+  "needless_lifetimes": "train",
+  "needless_range_loop": "train",
+  "needless_return": "train",
+  "redundant_closure": "train",
+  "redundant_field_names": "test",
+  "single_match": "train",
+  "unnecessary_mut_passed": "train",
+  "unnecessary_unwrap": "train",
+  "useless_conversion": "train"
+}
