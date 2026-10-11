@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="930" height="408" viewBox="0 0 930 408" font-family="ui-monospace,Menlo,monospace">
+<rect width="930" height="408" fill="#14161a"/>
+<text x="24" y="32" fill="#f2f2f2" font-size="19" font-weight="bold">fsearch search latency — cargo refine outbound bench</text>
+<text x="24" y="54" fill="#9aa0a6" font-size="12">fsearch @ b88f4e9a90703eb7338085b325c2852fcaf131a9 (MIT) · 4,019,254 entries</text>
+<text x="24" y="72" fill="#9aa0a6" font-size="12">corpus: ~/git dev workspace, APFS-frozen snapshot · box: Apple M3 Max (Mac15,8), AC power, load 6.2-6.4 (quiet-ish, disclosed)</text>
+<text x="24" y="90" fill="#9aa0a6" font-size="12">geomean of per-query median (3 rig rounds) · lower is better · log scale</text>
+<rect x="316" y="104" width="12" height="12" fill="#5b8def"/><text x="334" y="114" fill="#c9cdd3" font-size="12">before (pin) — after pending, gated on mainnet launch</text>
+<text x="24" y="148" fill="#e8e8e8" font-size="13">find a file by name (exact)</text>
+<rect x="316" y="130" width="281.0634549883571" height="22" fill="#5b8def" rx="3"/>
+<text x="605.0634549883571" y="146" fill="#9db8ef" font-size="12">206 µs</text>
+<text x="24" y="180" fill="#e8e8e8" font-size="13">name with one typo</text>
+<rect x="316" y="162" width="278.3505855061437" height="22" fill="#5b8def" rx="3"/>
+<text x="602.3505855061437" y="178" fill="#9db8ef" font-size="12">192 µs</text>
+<text x="24" y="212" fill="#e8e8e8" font-size="13">common short word</text>
+<rect x="316" y="194" width="289.7990437870226" height="22" fill="#5b8def" rx="3"/>
+<text x="613.7990437870226" y="210" fill="#9db8ef" font-size="12">262 µs</text>
+<text x="24" y="244" fill="#e8e8e8" font-size="13">folder + name</text>
+<rect x="316" y="226" width="325.75707985172016" height="22" fill="#5b8def" rx="3"/>
+<text x="649.7570798517202" y="242" fill="#9db8ef" font-size="12">695 µs</text>
+<text x="24" y="276" fill="#e8e8e8" font-size="13">filtered query (ext:/type:/in:)</text>
+<rect x="316" y="258" width="311.290450322482" height="22" fill="#5b8def" rx="3"/>
+<text x="635.290450322482" y="274" fill="#9db8ef" font-size="12">469 µs</text>
+<text x="24" y="308" fill="#e8e8e8" font-size="13">typing a whole filename, all keystrokes</text>
+<rect x="316" y="290" width="413.2862192891662" height="22" fill="#5b8def" rx="3"/>
+<text x="737.2862192891662" y="306" fill="#9db8ef" font-size="12">7.49 ms</text>
+<line x1="24" y1="334" x2="906" y2="334" stroke="#2a2e35"/>
+<text x="24" y="356" fill="#c9cdd3" font-size="13">fix + bench by cargo refine · harness: fsearch examples/rig.rs (upstream, identical corpus both arms)</text>
+<text x="24" y="376" fill="#5b8def" font-size="14" font-weight="bold">refine.gist.rs — the modelless Rust fixer + bench tool</text>

@@ -1,0 +1,999 @@
+{
+  "grep": [],
+  "names": [
+    {
+      "cat": "exact",
+      "q": "objectscript"
+    },
+    {
+      "cat": "exact",
+      "q": "E_infinitig_w.an1"
+    },
+    {
+      "cat": "exact",
+      "q": "ckihq41c8qljj2juarjvzstk4.o"
+    },
+    {
+      "cat": "exact",
+      "q": "Variables.olean.server"
+    },
+    {
+      "cat": "exact",
+      "q": "FireStrike_Booster.png"
+    },
+    {
+      "cat": "exact",
+      "q": "SiGurobi.mjs"
+    },
+    {
+      "cat": "exact",
+      "q": "Tannery.trace"
+    },
+    {
+      "cat": "exact",
+      "q": "_not-found.html"
+    },
+    {
+      "cat": "exact",
+      "q": "SiStreamlabs.cjs"
+    },
+    {
+      "cat": "exact",
+      "q": "A_dorsal_fin.ms1"
+    },
+    {
+      "cat": "exact",
+      "q": "OBJ_E_SEVIS_STATUE_A01.FBX"
+    },
+    {
+      "cat": "exact",
+      "q": "sweep_population.py"
+    },
+    {
+      "cat": "exact",
+      "q": "M_M_Red_JaguarRing.mod"
+    },
+    {
+      "cat": "exact",
+      "q": "InvLog.olean"
+    },
+    {
+      "cat": "exact",
+      "q": "EFF_WORLD_G_GORGEOUSFW_04.prefab"
+    },
+    {
+      "cat": "exact",
+      "q": "4mdd9i3vvrj46sjxgwehewggz.o"
+    },
+    {
+      "cat": "exact",
+      "q": "SiMetager.tsx"
+    },
+    {
+      "cat": "exact",
+      "q": "2mx5yhnpbdnx3mmajgsca03x7.o"
+    },
+    {
+      "cat": "exact",
+      "q": "ITEM_E_UNISEX_ARCHER_MAIN_09.mat"
+    },
+    {
+      "cat": "exact",
+      "q": "FreezeGate.lean"
+    },
+    {
+      "cat": "exact",
+      "q": "test_install_hint_pinned_1016.py"
+    },
+    {
+      "cat": "exact",
+      "q": "8js0rjjlbhwcuh8zu8mwgmjw3.o"
+    },
+    {
+      "cat": "exact",
+      "q": "t_kaiax.tex"
+    },
+    {
+      "cat": "exact",
+      "q": "A_captaincarf.ms1"
+    },
+    {
+      "cat": "exact",
+      "q": "Common_Event_Set_05_W.img"
+    },
+    {
+      "cat": "exact",
+      "q": "Chutcha_Plastic_bags_hand.mod"
+    },
+    {
+      "cat": "exact",
+      "q": "SheafOfFunctions.ilean"
+    },
+    {
+      "cat": "exact",
+      "q": "eyes_ring.mat.meta"
+    },
+    {
+      "cat": "exact",
+      "q": "ajkwd9qbv6lecb1fd5m2ri0uw.o"
+    },
+    {
+      "cat": "exact",
+      "q": "SiZigbee2mqtt.cjs"
+    },
+    {
+      "cat": "exact",
+      "q": "FEMALE@dragonboat_stand01.FBX"
+    },
+    {
+      "cat": "exact",
+      "q": "52sngoqf7zbmfwikie4wc26f1.o"
+    },
+    {
+      "cat": "exact",
+      "q": "tooth.html"
+    },
+    {
+      "cat": "exact",
+      "q": "pocket.js.map"
+    },
+    {
+      "cat": "exact",
+      "q": "5yer2dektvobelvgnorw0sp7v.o"
+    },
+    {
+      "cat": "exact",
+      "q": "2uibm0fj6nmvpw36e5sfyasm7.o"
+    },
+    {
+      "cat": "exact",
+      "q": "ICON_A_HAT_TEETHINGRING.png.meta"
+    },
+    {
+      "cat": "exact",
+      "q": "pr_validate"
+    },
+    {
+      "cat": "exact",
+      "q": "d9lwms0obytbmm69xdx54f1rj.o"
+    },
+    {
+      "cat": "exact",
+      "q": "ScottTopology.ilean.hash"
+    },
+    {
+      "cat": "exact",
+      "q": "MonoOver.olean.hash"
+    },
+    {
+      "cat": "exact",
+      "q": "grave_d_torch.img"
+    },
+    {
+      "cat": "exact",
+      "q": "PLAN_SPL.md"
+    },
+    {
+      "cat": "exact",
+      "q": "anchored_reach.rs"
+    },
+    {
+      "cat": "exact",
+      "q": "riir_kat-1aok58k6odgrl"
+    },
+    {
+      "cat": "exact",
+      "q": "4t7gxwvymmovz0tskxw1exb0k.o"
+    },
+    {
+      "cat": "exact",
+      "q": "infinite.tmx"
+    },
+    {
+      "cat": "exact",
+      "q": "bp1e5n9d1mnupt9w0lh3iqweq.o"
+    },
+    {
+      "cat": "exact",
+      "q": "sort-array-includes.js"
+    },
+    {
+      "cat": "exact",
+      "q": "Magic_24_Dancingflame_2.an1"
+    },
+    {
+      "cat": "exact",
+      "q": "head-of-stiff-horse.md"
+    },
+    {
+      "cat": "exact",
+      "q": "._billboard_eff_shock.glb"
+    },
+    {
+      "cat": "exact",
+      "q": "9kvboyia80gnrop4in8tsdqae.o"
+    },
+    {
+      "cat": "exact",
+      "q": "E_Coin2.zfm"
+    },
+    {
+      "cat": "exact",
+      "q": "5fohmgq5tt7pfdag0d5p3yl2e.o"
+    },
+    {
+      "cat": "exact",
+      "q": "SiMediapipe.mjs"
+    },
+    {
+      "cat": "exact",
+      "q": "aldpzbgkxwr2ytvy5ngkdzgjd.o"
+    },
+    {
+      "cat": "exact",
+      "q": "bg_color_gradient.tex"
+    },
+    {
+      "cat": "exact",
+      "q": "9dbsy8t1onvvv9lrczq6s44hh.o"
+    },
+    {
+      "cat": "exact",
+      "q": "049wzvjuguskupol4kfqataiy.o"
+    },
+    {
+      "cat": "typo",
+      "q": "obejctscript"
+    },
+    {
+      "cat": "typo",
+      "q": "E_ininitig_w.an1"
+    },
+    {
+      "cat": "typo",
+      "q": "ckihq41c8qljj2juarjvzstk4.ao"
+    },
+    {
+      "cat": "typo",
+      "q": "Variables.oleax.server"
+    },
+    {
+      "cat": "typo",
+      "q": "FireStrike_Booster.npg"
+    },
+    {
+      "cat": "typo",
+      "q": "SiGurbi.mjs"
+    },
+    {
+      "cat": "typo",
+      "q": "Tannery.jtrace"
+    },
+    {
+      "cat": "typo",
+      "q": "_nxt-found.html"
+    },
+    {
+      "cat": "typo",
+      "q": "SiStreamlabs.cjx"
+    },
+    {
+      "cat": "typo",
+      "q": "A_dosal_fin.ms1"
+    },
+    {
+      "cat": "typo",
+      "q": "OBJ_E_SEqVIS_STATUE_A01.FBX"
+    },
+    {
+      "cat": "typo",
+      "q": "sweep_population.px"
+    },
+    {
+      "cat": "typo",
+      "q": "M_M_Red_JaugarRing.mod"
+    },
+    {
+      "cat": "typo",
+      "q": "IvLog.olean"
+    },
+    {
+      "cat": "typo",
+      "q": "EFF_WORLD_G_nGORGEOUSFW_04.prefab"
+    },
+    {
+      "cat": "typo",
+      "q": "4mdd9i3vvrj46sjxgwehewgxz.o"
+    },
+    {
+      "cat": "typo",
+      "q": "SiMetagre.tsx"
+    },
+    {
+      "cat": "typo",
+      "q": "2x5yhnpbdnx3mmajgsca03x7.o"
+    },
+    {
+      "cat": "typo",
+      "q": "ITfEM_E_UNISEX_ARCHER_MAIN_09.mat"
+    },
+    {
+      "cat": "typo",
+      "q": "FreezeGate.leax"
+    },
+    {
+      "cat": "typo",
+      "q": "test_nistall_hint_pinned_1016.py"
+    },
+    {
+      "cat": "typo",
+      "q": "8js0rjjbhwcuh8zu8mwgmjw3.o"
+    },
+    {
+      "cat": "typo",
+      "q": "t_kaiax.twex"
+    },
+    {
+      "cat": "typo",
+      "q": "A_captxincarf.ms1"
+    },
+    {
+      "cat": "typo",
+      "q": "Common_Event_Set_05_W.imx"
+    },
+    {
+      "cat": "typo",
+      "q": "Chutcha_Plastc_bags_hand.mod"
+    },
+    {
+      "cat": "typo",
+      "q": "SheafOfyFunctions.ilean"
+    },
+    {
+      "cat": "typo",
+      "q": "eyex_ring.mat.meta"
+    },
+    {
+      "cat": "typo",
+      "q": "ajkwd9qbv6lecb1fd5m2ri0uw.x"
+    },
+    {
+      "cat": "typo",
+      "q": "SiZigbe2mqtt.cjs"
+    },
+    {
+      "cat": "typo",
+      "q": "FEMpALE@dragonboat_stand01.FBX"
+    },
+    {
+      "cat": "typo",
+      "q": "52sngoqf7zbmfwikie4wx26f1.o"
+    },
+    {
+      "cat": "typo",
+      "q": "tootx.html"
+    },
+    {
+      "cat": "typo",
+      "q": "pocket.js.ma"
+    },
+    {
+      "cat": "typo",
+      "q": "5yer2deaktvobelvgnorw0sp7v.o"
+    },
+    {
+      "cat": "typo",
+      "q": "2uibm0fj6nxvpw36e5sfyasm7.o"
+    },
+    {
+      "cat": "typo",
+      "q": "ICON_A_HAT_TEETHINGRING.pnx.meta"
+    },
+    {
+      "cat": "typo",
+      "q": "pr_vaidate"
+    },
+    {
+      "cat": "typo",
+      "q": "d9lwems0obytbmm69xdx54f1rj.o"
+    },
+    {
+      "cat": "typo",
+      "q": "ScottToxology.ilean.hash"
+    },
+    {
+      "cat": "typo",
+      "q": "MonoOver.olean.ahsh"
+    },
+    {
+      "cat": "typo",
+      "q": "grave_d_torh.img"
+    },
+    {
+      "cat": "typo",
+      "q": "PLAN_dSPL.md"
+    },
+    {
+      "cat": "typo",
+      "q": "axchored_reach.rs"
+    },
+    {
+      "cat": "typo",
+      "q": "riir_kat-1aok58k6odrgl"
+    },
+    {
+      "cat": "typo",
+      "q": "4t7gxwvymmovz0tkxw1exb0k.o"
+    },
+    {
+      "cat": "typo",
+      "q": "infinikte.tmx"
+    },
+    {
+      "cat": "typo",
+      "q": "bp1e5n9d1xnupt9w0lh3iqweq.o"
+    },
+    {
+      "cat": "typo",
+      "q": "sorx-array-includes.js"
+    },
+    {
+      "cat": "typo",
+      "q": "Magic_24_Dancingfame_2.an1"
+    },
+    {
+      "cat": "typo",
+      "q": "head-of-stiff-horrse.md"
+    },
+    {
+      "cat": "typo",
+      "q": "._billboard_eff_sxock.glb"
+    },
+    {
+      "cat": "typo",
+      "q": "9kvboyia80ngrop4in8tsdqae.o"
+    },
+    {
+      "cat": "typo",
+      "q": "E_Coin2.zf"
+    },
+    {
+      "cat": "typo",
+      "q": "5fohmgq5tt7pfdag0d5p3yll2e.o"
+    },
+    {
+      "cat": "typo",
+      "q": "Sixediapipe.mjs"
+    },
+    {
+      "cat": "typo",
+      "q": "aldpzbgkxwr2ytvy5ngkdgzjd.o"
+    },
+    {
+      "cat": "typo",
+      "q": "bg_color_grdient.tex"
+    },
+    {
+      "cat": "typo",
+      "q": "9dbsy8t1onvvv9lrczq6s44hh.co"
+    },
+    {
+      "cat": "typo",
+      "q": "049wzvjugxskupol4kfqataiy.o"
+    },
+    {
+      "cat": "word",
+      "q": "basic"
+    },
+    {
+      "cat": "word",
+      "q": "constants"
+    },
+    {
+      "cat": "word",
+      "q": "dtypes"
+    },
+    {
+      "cat": "word",
+      "q": "factory"
+    },
+    {
+      "cat": "word",
+      "q": "fft"
+    },
+    {
+      "cat": "word",
+      "q": "flag"
+    },
+    {
+      "cat": "word",
+      "q": "globals"
+    },
+    {
+      "cat": "word",
+      "q": "index"
+    },
+    {
+      "cat": "word",
+      "q": "instances"
+    },
+    {
+      "cat": "word",
+      "q": "interval"
+    },
+    {
+      "cat": "word",
+      "q": "lattice"
+    },
+    {
+      "cat": "word",
+      "q": "lemmas"
+    },
+    {
+      "cat": "word",
+      "q": "lib"
+    },
+    {
+      "cat": "word",
+      "q": "list"
+    },
+    {
+      "cat": "word",
+      "q": "loaders"
+    },
+    {
+      "cat": "word",
+      "q": "metrics"
+    },
+    {
+      "cat": "word",
+      "q": "multiarray"
+    },
+    {
+      "cat": "word",
+      "q": "noop"
+    },
+    {
+      "cat": "word",
+      "q": "overrides"
+    },
+    {
+      "cat": "word",
+      "q": "prod"
+    },
+    {
+      "cat": "word",
+      "q": "quants"
+    },
+    {
+      "cat": "word",
+      "q": "quotient"
+    },
+    {
+      "cat": "word",
+      "q": "response"
+    },
+    {
+      "cat": "word",
+      "q": "ring"
+    },
+    {
+      "cat": "word",
+      "q": "sboms"
+    },
+    {
+      "cat": "word",
+      "q": "selectors"
+    },
+    {
+      "cat": "word",
+      "q": "units"
+    },
+    {
+      "cat": "word",
+      "q": "windows"
+    },
+    {
+      "cat": "word",
+      "q": "zip"
+    },
+    {
+      "cat": "word",
+      "q": "zod"
+    },
+    {
+      "cat": "multi",
+      "q": "extensions objectscript"
+    },
+    {
+      "cat": "multi",
+      "q": "actor E_infinitig_w"
+    },
+    {
+      "cat": "multi",
+      "q": "s-hmub0myxd9-0shq49e-dzhwsarevl9ixmmze8j4logig ckihq41c8qljj2juarjvzstk4"
+    },
+    {
+      "cat": "multi",
+      "q": "MvPolynomial Variables"
+    },
+    {
+      "cat": "multi",
+      "q": "06 FireStrike_Booster"
+    },
+    {
+      "cat": "multi",
+      "q": "icons SiGurobi"
+    },
+    {
+      "cat": "multi",
+      "q": "Group Tannery"
+    },
+    {
+      "cat": "multi",
+      "q": "bundle-analyzer _not-found"
+    },
+    {
+      "cat": "multi",
+      "q": "icons SiStreamlabs"
+    },
+    {
+      "cat": "multi",
+      "q": "wear A_dorsal_fin"
+    },
+    {
+      "cat": "multi",
+      "q": "05 OBJ_E_SEVIS_STATUE_A01"
+    },
+    {
+      "cat": "multi",
+      "q": "scripts sweep_population"
+    },
+    {
+      "cat": "multi",
+      "q": "J_ring M_M_Red_JaguarRing"
+    },
+    {
+      "cat": "multi",
+      "q": "Log InvLog"
+    },
+    {
+      "cat": "multi",
+      "q": "04_EFFECT_GUARDER_PACK_01 EFF_WORLD_G_GORGEOUSFW_04"
+    },
+    {
+      "cat": "multi",
+      "q": "s-hn2u89dym4-0ws1mmr-bkuf78a59ho39pv2y8i1yy8ng 4mdd9i3vvrj46sjxgwehewggz"
+    },
+    {
+      "cat": "multi",
+      "q": "icons SiMetager"
+    },
+    {
+      "cat": "multi",
+      "q": "s-hmshwggr30-091tboj-2px0w1i1zrh1ky2l17txy9coo 2mx5yhnpbdnx3mmajgsca03x7"
+    },
+    {
+      "cat": "multi",
+      "q": "95 ITEM_E_UNISEX_ARCHER_MAIN_09"
+    },
+    {
+      "cat": "multi",
+      "q": "Consolidation FreezeGate"
+    },
+    {
+      "cat": "multi",
+      "q": "tests test_install_hint_pinned_1016"
+    },
+    {
+      "cat": "multi",
+      "q": "s-hn2hulf7k3-0zx9hav-ajfxv649i7vvanei2eumodtu5 8js0rjjlbhwcuh8zu8mwgmjw3"
+    },
+    {
+      "cat": "multi",
+      "q": "wear t_kaiax"
+    },
+    {
+      "cat": "multi",
+      "q": "wear A_captaincarf"
+    },
+    {
+      "cat": "multi",
+      "q": "Event Common_Event_Set_05_W"
+    },
+    {
+      "cat": "multi",
+      "q": "effect Chutcha_Plastic_bags_hand"
+    },
+    {
+      "cat": "multi",
+      "q": "Sheaves SheafOfFunctions"
+    },
+    {
+      "cat": "multi",
+      "q": "06 eyes_ring"
+    },
+    {
+      "cat": "multi",
+      "q": "s-hmv62xbam1-1dbwitg-0e3mjz8gq5zqjm97ezr7tk0ah ajkwd9qbv6lecb1fd5m2ri0uw"
+    },
+    {
+      "cat": "multi",
+      "q": "icons SiZigbee2mqtt"
+    },
+    {
+      "cat": "filter",
+      "q": "ext:rs engine"
+    },
+    {
+      "cat": "filter",
+      "q": "type:image screenshot"
+    },
+    {
+      "cat": "filter",
+      "q": "kind:dir node_modules"
+    },
+    {
+      "cat": "filter",
+      "q": "type:app safari"
+    },
+    {
+      "cat": "filter",
+      "q": "in:~/Developer main"
+    },
+    {
+      "cat": "filter",
+      "q": "size:>100mb"
+    },
+    {
+      "cat": "filter",
+      "q": "mtime:<1d"
+    },
+    {
+      "cat": "filter",
+      "q": "re:^IMG_[0-9]+"
+    },
+    {
+      "cat": "filter",
+      "q": "path:Developer.*swift$ view"
+    },
+    {
+      "cat": "filter",
+      "q": "main !test"
+    },
+    {
+      "cat": "filter",
+      "q": "'main.rs"
+    },
+    {
+      "cat": "filter",
+      "q": "^Cargo"
+    },
+    {
+      "cat": "filter",
+      "q": "toml$"
+    },
+    {
+      "cat": "filter",
+      "q": "ext:pdf"
+    },
+    {
+      "cat": "filter",
+      "q": "a"
+    },
+    {
+      "cat": "filter",
+      "q": "e s"
+    },
+    {
+      "cat": "filter",
+      "q": "in:~/Developer ext:md readme"
+    },
+    {
+      "cat": "filter",
+      "q": "type:code mtime:<7d"
+    },
+    {
+      "cat": "filter",
+      "q": "kind:file size:>1gb"
+    },
+    {
+      "cat": "filter",
+      "q": "Developer/Tools fsearch"
+    }
+  ],
+  "typing": [
+    [
+      "o",
+      "ob",
+      "obj",
+      "obje",
+      "objec",
+      "object",
+      "objects",
+      "objectsc",
+      "objectscr",
+      "objectscri",
+      "objectscrip",
+      "objectscript"
+    ],
+    [
+      "E",
+      "E_",
+      "E_i",
+      "E_in",
+      "E_inf",
+      "E_infi",
+      "E_infin",
+      "E_infini",
+      "E_infinit",
+      "E_infiniti",
+      "E_infinitig",
+      "E_infinitig_",
+      "E_infinitig_w",
+      "E_infinitig_w.",
+      "E_infinitig_w.a",
+      "E_infinitig_w.an",
+      "E_infinitig_w.an1"
+    ],
+    [
+      "c",
+      "ck",
+      "cki",
+      "ckih",
+      "ckihq",
+      "ckihq4",
+      "ckihq41",
+      "ckihq41c",
+      "ckihq41c8",
+      "ckihq41c8q",
+      "ckihq41c8ql",
+      "ckihq41c8qlj",
+      "ckihq41c8qljj",
+      "ckihq41c8qljj2",
+      "ckihq41c8qljj2j",
+      "ckihq41c8qljj2ju",
+      "ckihq41c8qljj2jua",
+      "ckihq41c8qljj2juar",
+      "ckihq41c8qljj2juarj",
+      "ckihq41c8qljj2juarjv",
+      "ckihq41c8qljj2juarjvz",
+      "ckihq41c8qljj2juarjvzs",
+      "ckihq41c8qljj2juarjvzst",
+      "ckihq41c8qljj2juarjvzstk",
+      "ckihq41c8qljj2juarjvzstk4",
+      "ckihq41c8qljj2juarjvzstk4.",
+      "ckihq41c8qljj2juarjvzstk4.o"
+    ],
+    [
+      "V",
+      "Va",
+      "Var",
+      "Vari",
+      "Varia",
+      "Variab",
+      "Variabl",
+      "Variable",
+      "Variables",
+      "Variables.",
+      "Variables.o",
+      "Variables.ol",
+      "Variables.ole",
+      "Variables.olea",
+      "Variables.olean",
+      "Variables.olean.",
+      "Variables.olean.s",
+      "Variables.olean.se",
+      "Variables.olean.ser",
+      "Variables.olean.serv",
+      "Variables.olean.serve",
+      "Variables.olean.server"
+    ],
+    [
+      "F",
+      "Fi",
+      "Fir",
+      "Fire",
+      "FireS",
+      "FireSt",
+      "FireStr",
+      "FireStri",
+      "FireStrik",
+      "FireStrike",
+      "FireStrike_",
+      "FireStrike_B",
+      "FireStrike_Bo",
+      "FireStrike_Boo",
+      "FireStrike_Boos",
+      "FireStrike_Boost",
+      "FireStrike_Booste",
+      "FireStrike_Booster",
+      "FireStrike_Booster.",
+      "FireStrike_Booster.p",
+      "FireStrike_Booster.pn",
+      "FireStrike_Booster.png"
+    ],
+    [
+      "S",
+      "Si",
+      "SiG",
+      "SiGu",
+      "SiGur",
+      "SiGuro",
+      "SiGurob",
+      "SiGurobi",
+      "SiGurobi.",
+      "SiGurobi.m",
+      "SiGurobi.mj",
+      "SiGurobi.mjs"
+    ],
+    [
+      "T",
+      "Ta",
+      "Tan",
+      "Tann",
+      "Tanne",
+      "Tanner",
+      "Tannery",
+      "Tannery.",
+      "Tannery.t",
+      "Tannery.tr",
+      "Tannery.tra",
+      "Tannery.trac",
+      "Tannery.trace"
+    ],
+    [
+      "_",
+      "_n",
+      "_no",
+      "_not",
+      "_not-",
+      "_not-f",
+      "_not-fo",
+      "_not-fou",
+      "_not-foun",
+      "_not-found",
+      "_not-found.",
+      "_not-found.h",
+      "_not-found.ht",
+      "_not-found.htm",
+      "_not-found.html"
+    ],
+    [
+      "S",
+      "Si",
+      "SiS",
+      "SiSt",
+      "SiStr",
+      "SiStre",
+      "SiStrea",
+      "SiStream",
+      "SiStreaml",
+      "SiStreamla",
+      "SiStreamlab",
+      "SiStreamlabs",
+      "SiStreamlabs.",
+      "SiStreamlabs.c",
+      "SiStreamlabs.cj",
+      "SiStreamlabs.cjs"
+    ],
+    [
+      "A",
+      "A_",
+      "A_d",
+      "A_do",
+      "A_dor",
+      "A_dors",
+      "A_dorsa",
+      "A_dorsal",
+      "A_dorsal_",
+      "A_dorsal_f",
+      "A_dorsal_fi",
+      "A_dorsal_fin",
+      "A_dorsal_fin.",
+      "A_dorsal_fin.m",
+      "A_dorsal_fin.ms",
+      "A_dorsal_fin.ms1"
+    ]
+  ]
+}
