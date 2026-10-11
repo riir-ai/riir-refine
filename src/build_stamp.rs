@@ -440,6 +440,48 @@ mod tests {
         );
     }
 
+    /// The manual release script is the CI pipeline's local twin — and since
+    /// the Actions billing block it is the path EVERY real release takes. A
+    /// drifted FEATURES line ships a binary with `upgrade` compiled out (the
+    /// exact command the server's 426 CLIENT_TOO_OLD text funnels users
+    /// toward), so the script is pinned to the same set, plus the two build
+    /// claims that make it a pipeline twin (the dist profile and the size
+    /// gate the CI package job runs).
+    #[test]
+    fn release_set_matches_the_manual_script() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/manual_release.sh");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            panic!(
+                "manual release script unreadable at {} — this arm asserts nothing without it",
+                path.display()
+            );
+        };
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("FEATURES=\""))
+            .unwrap_or_else(|| {
+                panic!("no FEATURES=\"…\" line in scripts/manual_release.sh")
+            });
+        let set = line
+            .trim_start_matches("FEATURES=\"")
+            .trim_end_matches('"');
+        assert_eq!(
+            set.split(',').map(str::to_string).collect::<Vec<_>>(),
+            RELEASE_FEATURES
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<Vec<_>>(),
+            "scripts/manual_release.sh FEATURES drifted from RELEASE_FEATURES — a hand-cut release would ship a stale set"
+        );
+        for claim in ["--profile dist", "binary_size_gate.sh"] {
+            assert!(
+                text.contains(claim),
+                "scripts/manual_release.sh lost its `{claim}` — it no longer matches the CI pipeline it twins"
+            );
+        }
+    }
+
     /// The parser's own failure modes are distinguishable from a match —
     /// an extractor that returns an empty set on an unreadable file would
     /// make the arm above pass over nothing.
