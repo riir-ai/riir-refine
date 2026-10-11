@@ -76,7 +76,7 @@ With the sampled population itself at 12 pairs / 1 span, criterion (2) is **UNPO
 
 So criterion (4) ("near-tie ~0") does NOT fire — the mechanism could flip real misses IF negatives existed for the stealing rules. The binding constraint is purely the negative volume + the certification data model.
 
-**Standing re-open trigger (recorded in the issue):** the local store (or any live store) carrying **≥ 60 negative pairs across ≥ 10 distinct spans** re-arms the triage: run the sampled acceptable-share certification (needs the data-model fixes above), re-run this census at the then-current corpus, and only then the P1 A/B with the round-1 gates (paired LB95 top-1 delta + zero regressions vs baseline + per-family retention + pre-registered λ/threshold).
+**Standing re-open trigger (recorded here — the issue file was removed per the noise-reduction rule, 2026-10-11; recover it from git history):** the local store (or any live store) carrying **≥ 60 negative pairs across ≥ 10 distinct spans** re-arms the triage: run the sampled acceptable-share certification (needs the data-model fixes above), re-run this census at the then-current corpus, and only then the P1 A/B with the round-1 gates (paired LB95 top-1 delta + zero regressions vs baseline + per-family retention + pre-registered λ/threshold).
 
 **Unchanged:** the mint consumer (the v4 `rejected` label's existing consumer) is untouched; local negatives only, fleet rows out of scope pending a separate consent decision; the census example stays as the re-open instrument.
 

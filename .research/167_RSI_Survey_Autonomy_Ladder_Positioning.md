@@ -66,6 +66,6 @@ None of the three owns the full loop alone: **165/Frog** owns *admission* (band 
 - katgpt-rs [Research 512](../../katgpt-rs/.research/512_Meta_n_Fixed_Omega_Growing_Input_PASS.md) — Meta^n; its PASS-Redirects row is how this family keeps citing itself.
 - katgpt-rs [Research 289](../../katgpt-rs/.research/289_RecursiveMAS_Pass_Already_Shipped.md) — RecursiveMAS PASS.
 - katgpt-rs [Research 320](../../katgpt-rs/.research/320_Red_Queen_Godel_Machine_Selective_Erasure_Best_Belief.md) — RQGM (the survey's L5 evaluator-evolution entry).
-- Local [Research 165](165_Frog_Family_Healer_Curriculum_Distill.md) + [Issue 089](../.issues/089_frontier_band_healer_curriculum.md) — the L3 admission half this note completes.
+- Local [Research 165](165_Frog_Family_Healer_Curriculum_Distill.md) + Issue 089 (removed per the noise rule 2026-10-11; git history) — the L3 admission half this note completes.
 
 **PASS-Redirects (synthesis):** Duan et al. [arXiv:2609.11873 "The Last AI Built by Humans: Toward Genuine Recursive Self-Improvement"] — consumed as the B0–L5 positioning audit; the one actionable extraction (corpus lifecycle) is Issue 102.
