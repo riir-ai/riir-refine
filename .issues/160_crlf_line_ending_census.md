@@ -1,6 +1,6 @@
 # Issue 160 — CRLF line-ending contamination in tracked doc surfaces (cross-box flip-flop hazard)
 
-**Status:** OPEN — repair IN PROGRESS: leg 1/8 DONE (riir-refine `7fbca3a7b`, 2026-10-11 — 82 files, 0 at HEAD); legs 2-8 deferred to the verified-idle window (live-lane files per protocol).
+**Status:** OPEN — repair IN PROGRESS: 3 legs landed (riir-refine `7fbca3a7b` 82 files; riir-reflex `9e517d2` 2 files; riir-reflexer `68cdaae` 1 file — all 2026-10-11, each repo census-at-HEAD reads 0); remaining legs (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5) gated on live sibling lanes + M3 cross-box collision — live-lane re-check at execution time.
 
 ## The class
 
@@ -71,4 +71,6 @@ ending-agnostic).
 ## Progress
 
 - [x] 2026-10-11 riir-refine `7fbca3a7b` — 82 files normalized, per-file byte-verified endings-only (HEAD-minus-CR identical), census-at-HEAD reads 0; all files closed lanes (0 unchecked boxes); the .benchmarks/ 16 artifacts stay excluded.
-- [ ] legs 2-8 (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5, riir-reflex 2, riir-reflexer 1) — quiet window, live-lane deferral re-checked at execution time.
+- [x] 2026-10-11 riir-reflex `9e517d2` — 2 files (wire_contract_v1.md, .issues/085_drex_v15_revisit.md) normalized; `git diff --ignore-cr-at-eol` empty (zero content change); census-at-HEAD reads 0. Liveness re-check at execution: tree clean, 085 lane owner-gated on the Nace email (not being edited) — normalizing now is the protective direction against the future wholesale flip.
+- [x] 2026-10-11 riir-reflexer `68cdaae` — rust-toolchain.toml normalized (cargo is ending-agnostic); census-at-HEAD reads 0.
+- [ ] remaining legs (katgpt-rs 23, riir-train 28, riir-ai 25, riir-infer 5) — quiet window + sibling-lane gates (katgpt-rs trainer Plan-621 WIP; riir-train 623 capture lane + routing restriction; riir-ai M3-constant collision; riir-infer 038 lane WIP), live-lane re-check at execution time.
