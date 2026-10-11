@@ -1,6 +1,6 @@
 # Plan 225 — the `heal` seat gets a real expert: mine → mint → arm-H paired read (the Bench-108 revisit condition)
 
-**Status:** PROPOSED — 2026-10-11; verdict round 1 REVISE (2026-10-11) folded in: behaviour-preserving oracle, deciding-case definition, verify-in-order A0, T1 feasibility gate before any GPU spend, leakage-safe split, pre-registered two-candidate comparison. Awaiting round-2 verdict + owner go. Owner-gated: T3 mint spend (GPU), T5 ARMED production run, T5 telemetry.
+**Status:** PROPOSED — 2026-10-11; verdict round 1 REVISE folded (`1d410fd5`); verdict round 2 **AGREE** (2026-10-11) with four consistency fixes folded in this commit (scored population, non-inferiority route, pinned α/δ/power, stale-prose fix). T1 may start; owner-gated: T3 mint spend (GPU, conditional on T1.6), T5 ARMED production run, T5 telemetry.
 
 ## Why now
 
@@ -13,9 +13,11 @@ plan builds that expert — twice (two independent candidates) — and lets the 
 winner. The owner's 2026-10-11 directive: remove self-made evals (code_fixtures retired), build a
 PROPER bench for the refine decision seat around the Instinct corpus lane and the Rethink encoder.
 
-The oracle makes this honest where code_fixtures was not: **a candidate is gold iff the patched
-snippet compiles and the lint clears** — the healer's own compile-gate. No self-authored gold, no
-synthetic population (the grammar-not-answers law), and every claim carries its n beside it.
+The oracle makes this honest where code_fixtures was not: **gold is T1.4's three-part definition —
+applies + compiles + lint-clears, behaviour preserved (tests pass), and non-degenerate (no
+allow/expect, no out-of-span silencing)** — with everything unverifiable in an UNRESOLVED bucket
+that never counts as gold. No self-authored gold, no synthetic population (the
+grammar-not-answers law), and every claim carries its n beside it.
 
 ## Substrate consumed (substrate-first — nothing new is built here)
 
@@ -45,21 +47,30 @@ synthetic population (the grammar-not-answers law), and every claim carries its 
       candidate is gold iff ALL of: (a) the patched snippet applies, compiles (the `fix_verify`
       posture, `--verify-args` for feature-gated code) and the lint clears; (b) behaviour is
       preserved — the crate's own tests pass on the patched tree (scoped `cargo test` per case,
-      budgeted); (c) the patch is non-degenerate — gold is REFUSED when the candidate adds an
+      budgeted; isolated `CARGO_TARGET_DIR` + wall timeout — a TIMEOUT lands in UNRESOLVED, never
+      in failed); (c) the patch is non-degenerate — gold is REFUSED when the candidate adds an
       `allow`/`expect` attribute, deletes code beyond the lint span, or otherwise silences rather
       than heals. Anything (a)–(c) cannot settle lands in an explicit UNRESOLVED bucket, never
-      counted as gold (the percentile-audit lesson: UNRESOLVED is not clean).
-- [ ] T1.5 Deciding cases — the population the bench can actually read. Per case, the pool holds
-      0/1/many gold candidates: all-gold → every arm ties; none-gold → the right answer is
-      ABSTAIN. Only **deciding cases** (some but not all candidates gold) separate the arms.
-      Pre-registered per-case score: pick-a-gold = 1 · abstain-when-none-gold = 1 · otherwise 0.
-      Every result reports **deciding-n**, never total-n (Bench 108's 8/9 ties is exactly this
-      blindness).
+      counted as gold (the percentile-audit lesson: UNRESOLVED is not clean). Every non-gold
+      candidate records WHICH clause rejected it ((a)/(b)/(c)) — the breakdown shows whether
+      (b)/(c) carry signal a compile-only head cannot see.
+- [ ] T1.5 Scored population + per-case score. TWO scored strata, n reported SEPARATELY for
+      each: **deciding cases** (some but not all candidates gold — the stratum that separates
+      pickers) and **none-gold cases** (the stratum that rewards ABSTAINING — A0 never abstains;
+      its verify-in-order fallback always scores 0 there, so these cases DO separate the arms and
+      are scored, never dropped). Pre-registered per-case score: pick-a-gold = 1 ·
+      abstain-when-none-gold = 1 · pick-a-non-gold (incl. A0's smallest-diff fallback on
+      none-gold) = 0. All-gold cases are unscored structure (every arm ties) — reported in the
+      census, excluded from the paired read. Every result reports BOTH n's, never total-n alone
+      (Bench 108's 8/9 ties is exactly this blindness).
 - [ ] T1.6 FEASIBILITY GATE (blocks T2 AND T3): the frozen split must carry ≥ N deciding cases,
-      N derived from a power calculation for paired LB95 > 0 at a pre-stated plausible effect
-      size (record the arithmetic in the bench record). Gate fails → the plan is recorded
-      BLOCKED ON CASE SUPPLY — no mint, no training, no bench against a split that cannot detect
-      a difference. The owner's T3 approval is conditional on this gate passing.
+      N derived from the power calculation with the inputs PINNED HERE, before any T1 data is
+      seen: paired per-case score, superiority margin **δ₀ = +0.05** (five points on the T1.5
+      score — a rerank plausibility over drafter ties), target power **0.80**, family α **0.05**
+      (Holm, per T4.2), two-sided paired test; the arithmetic is recorded in the bench record.
+      Gate fails → the plan is recorded BLOCKED ON CASE SUPPLY — no mint, no training, no bench
+      against a split that cannot detect a difference. The owner's T3 approval is conditional on
+      this gate passing.
 - [ ] T1.7 Leakage-safe split: split by TIME or SOURCE REPO, never by row; near-duplicate
       removal by blake3 of (normalised snippet + rule) ACROSS train and test; assert no
       self-evolve trajectory contains a frozen case's patch; reflex V5 synthetic rows (if T1.3
@@ -94,20 +105,24 @@ synthetic population (the grammar-not-answers law), and every claim carries its 
       so a learned head must beat it on quality OR match it at strictly lower cost (the
       modelless-first mandate's bar). **A1** + T2 seat · **A2** + T3 seat · hosted generate =
       comparison-only (cost axis, never the winner lane).
-- [ ] T4.2 Protocol: paired per-case over the frozen deciding population, ONE read, pre-registered
-      comparison: Holm correction across the two candidate-vs-A0 comparisons (or the fixed α
-      split stated here: α=0.025 each); superiority = paired LB95 > 0 on the per-case score of
-      T1.5. Cost axes with NUMERIC budgets pinned NOW: seat lanes ≤ 50 ms/decision p50 (the
+- [ ] T4.2 Protocol: paired per-case over the frozen scored population (T1.5's two strata), ONE
+      read, ONE pre-registered comparison rule: **Holm at family α = 0.05** across the two
+      candidate-vs-A0 comparisons (no alternate spelling). Superiority = paired LB95 > 0 on the
+      T1.5 score. Cost axes with NUMERIC budgets pinned NOW: seat lanes ≤ 50 ms/decision p50 (the
       0.8–6 ms Bench-107 floor + wire slack) and $0 (loopback); the hosted leg priced through
       `llm_spend` with its recorded cap. Two-signal law: accuracy = commissioning; rate = cost
       ceiling only. Seat receipts recorded (decision_blake3 audit trail).
-- [ ] T4.3 Verdict rule (pre-registered): a candidate WINS the `heal` manifest row iff its
-      Holm-corrected paired LB95 > 0 vs A0 on the deciding population AND cost within the T4.2
-      budgets. If BOTH clear: the paired A1-vs-A2 comparison decides; an A1-vs-A2 tie breaks on
-      lower cost, then on the simpler artifact (raw winner over trained head). Ties with A0 keep
-      A0; else the seat stays empty and the result is recorded — **decline is a correct answer**
-      (the L4/603 precedent). Loser demoted by manifest edit; A0 itself never demoted by this
-      bench (it is the floor, not a candidate).
+- [ ] T4.3 Verdict rule (pre-registered): a candidate WINS the `heal` manifest row through EITHER
+      route — **superiority**: Holm-corrected paired LB95 > 0 vs A0 on the scored population; OR
+      **non-inferiority at lower cost**: paired LB95 > **−δ_NI** (δ_NI = 0.02, pinned) AND
+      measurably lower decision cost than A0's verify-in-order compile time (A0 pays a real
+      compile per candidate — a cheaper seat matching its quality is the likeliest real win, and
+      this route is why the cost axis exists). If BOTH candidates clear a route: the paired
+      A1-vs-A2 comparison decides (superiority first, then the non-inferiority route); still tied
+      → lower cost, then the simpler artifact (raw winner over trained head). A0 itself is NEVER
+      demotable by this bench (it is the floor, not a candidate). If nothing clears: the seat
+      stays empty and the result is recorded — **decline is a correct answer** (the L4/603
+      precedent). Loser demoted by manifest edit.
 - [ ] T4.4 Record under a fresh `.benchmarks/` number; the arm-H run-record law (Plan 202 §11)
       satisfied by the same record.
 
