@@ -244,6 +244,14 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
         text.contains("cargo refine --unmine"),
         "--mine must name the opt-out. output:\n{text}"
     );
+    // Issue 119 T16b: the consent screen states the contribution licence
+    // (the web terms' "What you contribute — the MIT licence" row, owner
+    // call 2026-10-06) beside the consent text — pinned so it cannot
+    // silently regress out of the explainer.
+    assert!(
+        text.contains("what you contribute is published under the MIT licence"),
+        "--mine must state the contribution licence. output:\n{text}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 

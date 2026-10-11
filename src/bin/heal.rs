@@ -954,6 +954,11 @@ fn run_mine_intro() {
         eprintln!("{w}");
     }
     println!("{}", state.status_line());
+    // Issue 119 T16b: the consent screen states the licence the web terms
+    // already carry ("What you contribute — the MIT licence", owner call
+    // 2026-10-06) — the CLI is the moment of opt-in, so the disclosure
+    // lives here too, one line beside the consent text.
+    println!("licence: what you contribute is published under the MIT licence");
     println!("opt out any time: cargo refine --unmine");
 
     // The policy moment rides the consent moment: opting IN here while the
