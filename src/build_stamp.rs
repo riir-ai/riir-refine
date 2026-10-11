@@ -443,7 +443,7 @@ mod tests {
     /// The manual release script is the CI pipeline's local twin — and since
     /// the Actions billing block it is the path EVERY real release takes. A
     /// drifted FEATURES line ships a binary with `upgrade` compiled out (the
-    /// exact command the server's 426 CLIENT_TOO_OLD text funnels users
+    /// exact command the server's 426 `CLIENT_TOO_OLD` text funnels users
     /// toward), so the script is pinned to the same set, plus the two build
     /// claims that make it a pipeline twin (the dist profile and the size
     /// gate the CI package job runs).
