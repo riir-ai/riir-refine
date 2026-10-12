@@ -1107,10 +1107,13 @@ required-features = ["wasm_validator"]
 # T2.3 retarget (reflex Issue 008) the ternary lane's inference crates come
 # from ../riir-infer, so the vendor rows point at THAT repo's copies — the
 # same byte-identical forks its own CI builds against. Remove once upstream
-# lands the fixes (cubecl tracel-ai/cubecl#1359, wgpu-hal raw_handle PR).
+# lands the fixes (cubecl tracel-ai/cubecl#1359, cubecl #1806 idle-server
+# park @ 6bba5fdf0 — no release carries it yet, drop on the first cubecl
+# release past 0.11.0, wgpu-hal raw_handle PR).
 # ─────────────────────────────────────────────────────────────────────────────
 [patch.crates-io]
 cubecl-runtime = { path = "../riir-infer/vendor/cubecl-runtime-0.11.0-pre.2" }
+cubecl-common = { path = "../riir-infer/vendor/cubecl-common-0.11.0-pre.2" }
 wgpu-hal = { path = "../riir-infer/vendor/wgpu-hal-30.0.0" }
 # The cubecl-wgpu fork row (as_raw_metal_* accessors) is GONE: it existed for
 # the old riir-gpu edge; the moved riir-infer-gpu metal_tensor family never
