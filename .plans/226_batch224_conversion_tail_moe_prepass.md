@@ -20,7 +20,8 @@
 - [x] T5 syn-parse gate extended (batch224_rule_parse_and_needles_landed, 14 needles + both halves parse) + counts pinned (tests.rs ×5 sites + category D 185→186 + the router.rs expert-total pin 795→796 + ledger comments + KERNEL_CATEGORIES D count comment)
 - [x] T6 GOAT: G1 parse/syn ✓; G2 lib tests default 2504/0 + kernel_opt 2944/0 ✓; G3 clippy clean BOTH feature states (2 en-route heals: the `MoE` backtick + the pre-existing too_many_lines on batch223's test fn, annotated-allow) ✓; retrieval re-measure 21/21 — kernel self-variants 100.0%, blended 91.2/94.7/95.3, floors HELD, no re-pin ✓; freeze/score-bench NOT owed (zero clippy-corpus delta, the B223/P30 precedent)
 - [x] T7 Research note `.research/254_batch224_moe_mul_mat_id_compact_prepass.md` + AGENTS.md counts (kernel_opt 796 ×1 + rust_perf rider note ×1) + `.docs/11_domains/` (kernel_opt.md seed line + B224 paragraph + dist.md rider note)
-- [ ] T8 `.distill/001_mining_queue_snapshot.md` batch row + intake rows marked DONE; commit `feat: batch 224: ...` + push
+- [x] T8 `.distill/001_mining_queue_snapshot.md` batch row + intake rows marked DONE; commit `feat: batch 224: ...` + push
+      **Done in `e523d937` + the cycle-38 rows `ce6f2519`/`bc96f6b4`** (the landing row + claim row live in the snapshot; intake P45–P48 all `[x]`; the checkbox here was the only stale artifact — flipped 2026-10-13 from the S1.11 session, evidence re-checked then).
 
 ## Numbering
 
