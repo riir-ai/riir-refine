@@ -42,3 +42,8 @@ scripts/__pycache__/
 
 # session scratch (repro dirs etc.) - sync pass 2026-10-07
 .scratch/
+
+# bench raw run artifacts — census/split summaries stay tracked; the heavy
+# per-case evidence is regenerable run output (Bench 114 harvest, 1afd5d15)
+.benchmarks/114_issue161_pool_widened_harvest/behav/
+.benchmarks/114_issue161_pool_widened_harvest/cases.jsonl
