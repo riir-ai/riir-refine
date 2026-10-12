@@ -182,6 +182,85 @@ fn an_unstamped_ack_refuses_the_push_until_quarantined() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+// ── the per-net rebase deadlock (riir-kat: the 2026-10-12 zero-burn stall) ──
+
+/// The measured stall, replayed: the per-net book opens FRESH
+/// (`charged_kat` near zero — the Issue 003 open_net baseline) while the
+/// ACCOUNT carries a bigger server watermark (acked from this net at the
+/// book's open watermark). The sync must report `base + net delta`, not
+/// the net total alone — pre-fix this run SKIPPED forever (0 pushes) and
+/// the server's burn total froze for a month, starving the mining pool.
+#[test]
+fn the_acked_account_base_plus_the_net_delta_pushes() {
+    let dir = scratch("rebase");
+    write_a_rs(&dir);
+    login(&dir);
+
+    // Phase 1: one billed run against the dead service — the net charge
+    // book is born (1M micro, watermark 1M), no ack.
+    let (code, _) = heal(&dir, CLOSED_PORT, &[]);
+    assert_eq!(code, Some(0));
+    assert!(!ack_path(&dir).exists(), "bootstrap: no ack yet");
+    let book: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            dir.join(".refine")
+                .join("net")
+                .join("127.0.0.1")
+                .join("kat_charge.json"),
+        )
+        .expect("the net charge book"),
+    )
+    .expect("charge json");
+    let open_watermark = book
+        .get("meter_watermark_tokens")
+        .and_then(serde_json::Value::as_u64)
+        .expect("watermark");
+    assert!(open_watermark > 0);
+
+    // Plant the ACCOUNT truth: a fully-STAMPED ack (the mock's attestation
+    // id — "ab" ×32 — and its loopback host) saying the server already
+    // holds 21 KAT, acked at THIS net's open watermark. Every field is
+    // present: a partial JSON would fail to parse and read as the empty
+    // ack (the bootstrap), which is NOT the shape under test.
+    let planted = format!(
+        "{{\"version\":{},\"burn_kat_total\":21,\"meter_watermark_tokens\":{open_watermark},\
+         \"acked_unix\":1700000000,\"last_balance_micro\":174000000,\
+         \"contributed\":true,\"first_commitment_hex\":null,\
+         \"tuna_balance_micro\":null,\"tuna_expires_unix\":null,\
+         \"service_host\":\"127.0.0.1\",\"ledger_id\":\"{}\",\
+         \"charged_at_ack_micro\":1000000}}",
+        riir_refine::kat_burn_client::BURN_ACK_VERSION,
+        "ab".repeat(32)
+    );
+    std::fs::write(ack_path(&dir), planted).expect("plant the acked account base");
+
+    // Phase 2: one more billed run against the live mock. Pre-fix: the
+    // net's own wire total (2) sat below the account base (21) → Skipped,
+    // ZERO pushes, forever. Post-fix: the delta since the ack's watermark
+    // is one whole KAT → the report is 22.
+    let mock = spawn_burn_mock();
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    let captured = mock.captured();
+    assert_eq!(
+        captured.len(),
+        2,
+        "exactly the pre-flight GET / + the POST /burn. output:\n{text}"
+    );
+    assert_eq!(captured[1].path, "/burn");
+    let v: serde_json::Value =
+        serde_json::from_str(&captured[1].body).expect("the push body must be JSON");
+    assert_eq!(
+        v.get("burn_kat_total").and_then(serde_json::Value::as_u64),
+        Some(22),
+        "the report is the acked base 21 + this net's 1-KAT delta, never the net total. body: {}",
+        captured[1].body
+    );
+    let ack = ack_of(&dir).expect("the ack must advance");
+    assert_eq!(ack.burn_kat_total, 22, "the ack adopts the server answer");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ── the mock server (std TCP; the kat_lease_client_g10 shape) ─────────────
 
 #[derive(Debug, Clone)]

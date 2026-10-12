@@ -3,19 +3,23 @@
 //! config offers a one-time network choice instead of silently riding the
 //! mainnet default.
 //!
-//! ## The shape (Proposal 008 §2, byte-pinned in the module tests)
+//! ## The shape (owner call 2026-10-12 — mainnet is the default network;
+//! devnet is the operator's test network)
 //!
 //! ```text
-//! Join which kat network?  [devnet]
-//!   devnet  — the live network: real pipeline, test credit (KAT/TUNA carry no cash value)
-//!   (mainnet is not open yet)
-//! > devnet
-//! recorded to config (cargo refine config set --url devnet). Change any time.
+//! Join which kat network?  [mainnet]
+//!   mainnet — the live economy of record (trial credit is devnet-funded for now)
+//!   devnet  — the operator's test network: real pipeline, test credit
+//! > mainnet
+//! recorded to config (cargo refine config set --url mainnet). Change any time.
 //! ```
 //!
-//! - **Default = devnet** (Enter / `--yes` / `RIIR_REFINE_YES=1`): devnet
-//!   is the only env where a fresh account's full loop works today (grant →
-//!   burn → mine → settle → vest).
+//! - **Default = mainnet** (Enter / `--yes` / `RIIR_REFINE_YES=1`): the
+//!   owner call "aim for mainnet all the way" (2026-10-12) — the public
+//!   product faces mainnet; devnet stays for the operator's testing. A
+//!   fresh mainnet account draws no trial credit until the reservoir is
+//!   funded (the posture lines below name it); the fixing tier is logged
+//!   OUT and needs no account at all.
 //! - **Recorded through the EXISTING `service_url.json` writer** — the same
 //!   record `cargo refine config set` writes ([`riir_kat::kat_service_config::store`]),
 //!   never a second record format — so `config get` reports it and every
@@ -57,10 +61,10 @@ pub const JOIN_ENV_ENV_VAR: &str = "RIIR_REFINE_JOIN_ENV";
 /// The environments the first-join picker offers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JoinEnv {
-    /// The live test network — the default.
-    Devnet,
-    /// The canonical host.
+    /// The live economy of record — the default.
     Mainnet,
+    /// The operator's test network (test credit).
+    Devnet,
 }
 
 impl JoinEnv {
@@ -96,14 +100,13 @@ impl JoinEnv {
     }
 }
 
-/// The picker's choices — EXACTLY devnet + mainnet, devnet first (the
-/// bracketed default). `testnet` is absent and, since riir-dapps Plan 047,
-/// no longer a `config set` alias either (the deployment was torn down
-/// 2026-10-03). Mainnet is listed (a typed answer / the env force still
-/// choose it) but HIDDEN from the printed offer — see [`PROMPT_BLOCK`].
+/// The picker's choices — EXACTLY mainnet + devnet, mainnet first (the
+/// bracketed default; the owner call 2026-10-12). `testnet` is absent and,
+/// since riir-dapps Plan 047, no longer a `config set` alias either (the
+/// deployment was torn down 2026-10-03).
 pub const JOIN_CHOICES: &[(JoinEnv, &str)] = &[
-    (JoinEnv::Devnet, "devnet"),
     (JoinEnv::Mainnet, "mainnet"),
+    (JoinEnv::Devnet, "devnet"),
 ];
 
 /// What the first-join choice decided.
@@ -139,19 +142,19 @@ impl JoinRefusal {
     pub fn message(&self) -> String {
         match self {
             Self::BadJoinEnv(value) => format!(
-                "join: {JOIN_ENV_ENV_VAR}={value:?} is not one of devnet|mainnet — \
-                 set it to `devnet` or `mainnet` (or unset it to be asked)"
+                "join: {JOIN_ENV_ENV_VAR}={value:?} is not one of mainnet|devnet — \
+                 set it to `mainnet` or `devnet` (or unset it to be asked)"
             ),
             Self::NonInteractive => format!(
                 "join: no service config and no way to answer the first-join prompt \
                  (stdin is not a terminal; no --yes; no {JOIN_ENV_ENV_VAR}) — set \
-                 {JOIN_ENV_ENV_VAR}=devnet|mainnet (or pass --yes for the devnet default) \
+                 {JOIN_ENV_ENV_VAR}=mainnet|devnet (or pass --yes for the mainnet default) \
                  and re-run"
             ),
             Self::StdinClosed => format!(
                 "join: no service config and stdin closed (EOF) before answering \
-                 the first-join prompt — set {JOIN_ENV_ENV_VAR}=devnet|mainnet \
-                 (or pass --yes for the devnet default) and re-run"
+                 the first-join prompt — set {JOIN_ENV_ENV_VAR}=mainnet|devnet \
+                 (or pass --yes for the mainnet default) and re-run"
             ),
         }
     }
@@ -187,7 +190,7 @@ pub fn decide(
         return Ok(JoinDecision::Choose(env));
     }
     if yes {
-        return Ok(JoinDecision::Choose(JoinEnv::Devnet));
+        return Ok(JoinDecision::Choose(JoinEnv::Mainnet));
     }
     Ok(JoinDecision::Ask)
 }
@@ -195,7 +198,7 @@ pub fn decide(
 /// One answered prompt line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Answer {
-    /// Empty line / bare Enter — the bracketed default (devnet).
+    /// Empty line / bare Enter — the bracketed default (mainnet).
     Default,
     /// A full-word choice (case-insensitive).
     Pick(JoinEnv),
@@ -218,15 +221,13 @@ pub fn parse_answer(line: &str) -> Answer {
     }
 }
 
-/// The ask, byte-pinned (Proposal 008 §2's transcript; the trailing `> `
-/// is the answer prompt — printed without a trailing newline). Mainnet is
-/// HIDDEN from the offer (riir-dapps Plan 047, owner call 2026-10-06:
-/// refine, reflex and rethink run on ONE live network first) — not closed:
-/// a typed `mainnet`, [`JOIN_ENV_ENV_VAR`]`=mainnet` and `config set --url
-/// mainnet` still choose it (the owner's dry-run door).
-pub const PROMPT_BLOCK: &str = "Join which kat network?  [devnet]
-  devnet  — the live network: real pipeline, test credit (KAT/TUNA carry no cash value)
-  (mainnet is not open yet)
+/// The ask, byte-pinned (the owner call 2026-10-12 transcript: mainnet is
+/// the bracketed default — the network of record; devnet stays listed as
+/// the operator's test network. The Plan 047 hiding is INVERTED: devnet is
+/// the operator's door, mainnet is the face).
+pub const PROMPT_BLOCK: &str = "Join which kat network?  [mainnet]
+  mainnet — the live economy of record (trial credit is devnet-funded for now)
+  devnet  — the operator's test network: real pipeline, test credit
 > ";
 
 /// The interactive half of [`JoinDecision::Ask`]. A non-TTY stdin refuses
@@ -253,10 +254,10 @@ pub fn answer_ask(
             return Err(JoinRefusal::StdinClosed);
         };
         match parse_answer(&line) {
-            Answer::Default => return Ok(JoinEnv::Devnet),
+            Answer::Default => return Ok(JoinEnv::Mainnet),
             Answer::Pick(env) => return Ok(env),
             Answer::Invalid => {
-                eprintln!("join: answer devnet (Enter = devnet)");
+                eprintln!("join: answer mainnet (Enter = mainnet)");
             }
         }
     }
@@ -281,15 +282,17 @@ pub fn account_key_present(dir: &Path) -> bool {
     ACCOUNT_KEY_FILES.iter().any(|f| dir.join(f).exists())
 }
 
-/// The post-record copy — local by construction (no network calls). Devnet:
-/// the recorded line. Mainnet: the recorded line + the A3 posture copy,
-/// three lines naming every unarmed plane up front (pool 0, TUNA
-/// unconfigured, crank unset) so the joiner never discovers them at the
-/// first 503. `had_account_key` appends the join-visibility clause to the
-/// recorded line — ONLY for a machine that already held a key (an existing
-/// account was on the pre-join mainnet default by construction; the
-/// choice's switch must be visible). A brand-new machine keeps the line
-/// byte-identical to the proposal transcript.
+/// The post-record copy — local by construction (no network calls). Mainnet:
+/// the recorded line + the A3 posture copy, three lines naming every
+/// unarmed plane up front (pool 0, TUNA unconfigured, crank unset) so the
+/// joiner never discovers them at the first 503 — the normal posture
+/// until the owner arms them. Devnet: the recorded line only (the test
+/// network's grant → burn → mine → settle loop is fully live).
+/// `had_account_key` appends the join-visibility clause to the recorded
+/// line — ONLY for a machine that already held a key (an existing account
+/// was riding the network default by construction; the choice's switch
+/// must be visible). A brand-new machine keeps the line byte-identical to
+/// the proposal transcript.
 #[must_use]
 pub fn join_lines(env: JoinEnv, had_account_key: bool) -> Vec<String> {
     let mut recorded = format!(
@@ -407,39 +410,45 @@ mod tests {
     }
 
     #[test]
-    fn the_picker_offers_exactly_devnet_and_mainnet() {
+    fn the_picker_offers_exactly_mainnet_and_devnet() {
         let aliases: Vec<&str> = JOIN_CHOICES.iter().map(|(_, a)| *a).collect();
-        assert_eq!(aliases, ["devnet", "mainnet"]);
+        assert_eq!(aliases, ["mainnet", "devnet"], "mainnet first: the bracketed default");
         assert!(!aliases.contains(&"testnet"), "A2: testnet is never offered");
         assert_eq!(JoinEnv::from_alias("testnet"), None);
         // …and since riir-dapps Plan 047 the alias itself is RETIRED too:
-        // two networks, devnet + mainnet — the word resolves to nothing.
+        // two networks, mainnet + devnet — the word resolves to nothing.
         assert_eq!(riir_kat::kat_service_config::resolve_alias("testnet"), None);
         assert!(riir_kat::kat_service_config::validate_service_url("testnet").is_err());
     }
 
     #[test]
-    fn no_config_yes_records_devnet() {
-        // The --yes / RIIR_REFINE_YES=1 arm: devnet, the bracketed default.
+    fn no_config_yes_records_mainnet() {
+        // The --yes / RIIR_REFINE_YES=1 arm: mainnet, the bracketed default
+        // (the owner call 2026-10-12 — mainnet all the way).
         assert_eq!(
             decide(None, true, false).expect("decides"),
-            JoinDecision::Choose(JoinEnv::Devnet)
+            JoinDecision::Choose(JoinEnv::Mainnet)
         );
-        let dir = scratch("yes_devnet");
+        let dir = scratch("yes_mainnet");
         assert!(!account_key_present(&dir), "a fresh machine has no key");
-        record(&dir, JoinEnv::Devnet).expect("records");
+        record(&dir, JoinEnv::Mainnet).expect("records");
         assert_eq!(
             riir_kat::kat_service_config::read(&dir).as_deref(),
-            Some(JoinEnv::Devnet.url())
+            Some(JoinEnv::Mainnet.url())
         );
         // A brand-new machine's line is byte-identical to the proposal
-        // transcript — no visibility clause.
-        let lines = join_lines(JoinEnv::Devnet, false);
-        assert_eq!(lines.len(), 1);
+        // transcript minus the posture copy — the recorded line carries no
+        // visibility clause.
+        let lines = join_lines(JoinEnv::Mainnet, false);
+        assert_eq!(lines.len(), 4, "the recorded line + the 3-line posture");
         assert_eq!(
             lines[0],
-            "recorded to config (cargo refine config set --url devnet). Change any time."
+            "recorded to config (cargo refine config set --url mainnet). Change any time."
         );
+        // The devnet choice is the one-line posture (the operator's test
+        // network needs no arming disclosure).
+        let devnet = join_lines(JoinEnv::Devnet, false);
+        assert_eq!(devnet.len(), 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -451,11 +460,11 @@ mod tests {
         let dir = scratch("had_key");
         std::fs::write(dir.join("id_ed25519"), b"not-a-real-key\n").expect("seed the key file");
         assert!(account_key_present(&dir));
-        let lines = join_lines(JoinEnv::Devnet, true);
-        assert_eq!(lines.len(), 1, "the clause appends to the line, never a new one");
+        let lines = join_lines(JoinEnv::Mainnet, true);
+        assert_eq!(lines.len(), 4, "the clause appends to the line, never a new one");
         assert!(
             lines[0].starts_with(
-                "recorded to config (cargo refine config set --url devnet). Change any time."
+                "recorded to config (cargo refine config set --url mainnet). Change any time."
             ),
             "the base line is unchanged: {}",
             lines[0]
@@ -465,11 +474,11 @@ mod tests {
             "the clause: {}",
             lines[0]
         );
-        // …and the mainnet choice carries the same clause (it is about the
+        // …and the devnet choice carries the same clause (it is about the
         // MACHINE's prior state, not the choice).
-        let mainnet = join_lines(JoinEnv::Mainnet, true);
-        assert_eq!(mainnet.len(), 4, "clause on line 0, posture copy unchanged");
-        assert!(mainnet[0].contains("the pre-join default was mainnet"));
+        let devnet = join_lines(JoinEnv::Devnet, true);
+        assert_eq!(devnet.len(), 1, "clause on line 0, no posture copy");
+        assert!(devnet[0].contains("the pre-join default was mainnet"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -527,7 +536,7 @@ mod tests {
         assert_eq!(err, JoinRefusal::BadJoinEnv("staging".to_string()));
         let msg = err.message();
         assert!(msg.contains("staging"), "names the value: {msg}");
-        assert!(msg.contains("devnet|mainnet"), "names the set: {msg}");
+        assert!(msg.contains("mainnet|devnet"), "names the set: {msg}");
         // Validation precedes --yes and the configured check: an invalid
         // value never resolves through any other arm.
         assert_eq!(
@@ -643,14 +652,14 @@ mod tests {
             "the EOF arm must not claim a non-terminal stdin: {eof_msg}"
         );
         assert!(eof_msg.contains(JOIN_ENV_ENV_VAR), "names the remedy: {eof_msg}");
-        // A bare Enter is the bracketed default.
+        // A bare Enter is the bracketed default (mainnet).
         assert_eq!(
             answer_ask(true, &mut || Some("\n".to_string())).expect("decides"),
-            JoinEnv::Devnet
+            JoinEnv::Mainnet
         );
         assert_eq!(
             answer_ask(true, &mut || Some("  \n".to_string())).expect("decides"),
-            JoinEnv::Devnet
+            JoinEnv::Mainnet
         );
     }
 
@@ -680,22 +689,24 @@ mod tests {
     }
 
     #[test]
-    fn the_prompt_block_is_the_proposal_shape() {
+    fn the_prompt_block_is_the_owner_call_shape() {
         let mut lines = PROMPT_BLOCK.lines();
         assert_eq!(
             lines.next(),
-            Some("Join which kat network?  [devnet]")
+            Some("Join which kat network?  [mainnet]")
         );
         assert_eq!(
             lines.next(),
             Some(
-                "  devnet  — the live network: real pipeline, test credit \
-                 (KAT/TUNA carry no cash value)"
+                "  mainnet \u{2014} the live economy of record (trial credit is devnet-funded for now)"
             )
         );
-        // riir-dapps Plan 047: mainnet is hidden from the offer, not closed
-        assert_eq!(lines.next(), Some("  (mainnet is not open yet)"));
-        assert_eq!(parse_answer("mainnet"), Answer::Pick(JoinEnv::Mainnet), "the hidden door still opens");
+        assert_eq!(
+            lines.next(),
+            Some(
+                "  devnet  \u{2014} the operator's test network: real pipeline, test credit"
+            )
+        );
         assert_eq!(lines.next(), Some("> "));
         assert!(lines.next().is_none(), "the block ends at the answer prompt");
         assert!(PROMPT_BLOCK.ends_with("> "));

@@ -279,10 +279,25 @@ fn receipts_line(
 
 /// The repo-local block: trajectory rows, pending outbox batches, the
 /// charge ledger, the burn-ack server truth, and the soft-gate verdict.
+/// T7 (riir-kat Issue 003): the net-scoped state (outbox, charge book,
+/// burn ack) reads the PER-NET dir — the same files the sync and the gate
+/// use. The flat reads here were the measured 2026-10-12 split-brain:
+/// `--info` displayed the pre-split flat ledgers (a stale charge book and
+/// a stale balance) while the run path lived in the net dir.
 fn local_section(paths: &[PathBuf]) {
     use riir_refine::kat_meter::ChargeState;
 
     let root = crate::resolve_heal_root(paths);
+    // kat_service-gated at every CALL SITE (heal.rs --info dispatch); the
+    // flag-OFF posture compiles this fn but never runs it — the helper is
+    // cfg'd, so the dir resolves through a stub there.
+    #[cfg(feature = "kat_service")]
+    let net_dir = riir_refine::kat_state_stamp::net_state_dir_for_url(
+        &root,
+        &crate::net_partition_url(),
+    );
+    #[cfg(not(feature = "kat_service"))]
+    let net_dir = root.join(".refine");
     println!("LOCAL WORK ({})", root.display());
 
     // healed rows — this repo's trajectory store.
@@ -302,9 +317,8 @@ fn local_section(paths: &[PathBuf]) {
     #[cfg(not(feature = "latent_retrieval"))]
     println!("  healed:      (this build cannot read the neuron store — latent_retrieval off)");
 
-    // unsynced batches — the outbox the push half drains.
-    let outbox = root.join(".refine").join("outbox");
-    let queued = std::fs::read_dir(&outbox)
+    // unsynced batches — the outbox the push half drains (per-net).
+    let queued = std::fs::read_dir(net_dir.join("outbox"))
         .map(|rd| rd.filter_map(|e| e.ok()).count())
         .unwrap_or(0);
     if queued > 0 {
@@ -313,9 +327,9 @@ fn local_section(paths: &[PathBuf]) {
         println!("  unsynced:    0 pending outbox batches");
     }
 
-    // local burn — this repo's charge ledger (per-repo by design).
-    let charge_path = root.join(".refine").join("kat_charge.json");
-    match std::fs::read_to_string(&charge_path)
+    // local burn — this net's charge ledger (per-net; the book the burn
+    // sync reads).
+    match std::fs::read_to_string(net_dir.join(riir_refine::kat_meter::KatCharge::FILE_NAME))
         .ok()
         .and_then(|t| serde_json::from_str::<ChargeState>(&t).ok())
     {
@@ -324,20 +338,19 @@ fn local_section(paths: &[PathBuf]) {
                 riir_refine::kat_units::render_kat(i64::try_from(micro).unwrap_or(i64::MAX))
             };
             println!(
-                "  local burn:  {} charged this repo ({} tokens metered)",
+                "  local burn:  {} charged this net ({} tokens metered)",
                 kat(c.charged_kat),
                 c.meter_watermark_tokens
             );
         }
         None => println!(
-            "  local burn:  (no charge ledger here — heal this repo to start one)"
+            "  local burn:  (no charge ledger for this net — heal this repo to start one)"
         ),
     }
 
-    // the burn-ack server truth + the 075 soft gate over it.
-    let ack_path = root
-        .join(".refine")
-        .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+    // the burn-ack server truth + the 075 soft gate over it (per-net — the
+    // file the burn sync advances).
+    let ack_path = net_dir.join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");

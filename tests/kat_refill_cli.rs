@@ -217,8 +217,18 @@ fn login(dir: &Path) {
     );
 }
 
+fn ack_path(dir: &Path) -> PathBuf {
+    // T7 (riir-kat Issue 003): the refill refreshes the PER-NET ack — the
+    // file the 075 gate reads. Every mock here is loopback, so the net key
+    // is the port-less `127.0.0.1` (the kat_burn_stack precedent).
+    dir.join(".refine")
+        .join("net")
+        .join("127.0.0.1")
+        .join(KatBurnAck::FILE_NAME)
+}
+
 fn ack_of(dir: &Path) -> Option<KatBurnAck> {
-    let text = std::fs::read_to_string(dir.join(".refine").join(KatBurnAck::FILE_NAME)).ok()?;
+    let text = std::fs::read_to_string(ack_path(dir)).ok()?;
     Some(serde_json::from_str(&text).expect("ack json"))
 }
 
@@ -247,8 +257,8 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
     let dir = scratch("happy");
     login(&dir);
     // The gate input starts DEPLETED (the state --refill exists to fix).
-    let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".refine")).expect(".refine dir");
+    let ack_path = ack_path(&dir);
+    std::fs::create_dir_all(ack_path.parent().expect("net dir")).expect("net dir");
     let depleted = KatBurnAck {
         version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
@@ -263,6 +273,9 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
         // these tests exercise read none of them.
         service_host: None,
         ledger_id: None,
+        // v6 charge baseline (the zero-burn-stall fix): None = the legacy
+        // semantics these fixtures exercise.
+        charged_at_ack_micro: None,
     };
     depleted.save(&ack_path).expect("seed depleted ack");
 
@@ -344,8 +357,8 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
 fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     let dir = scratch("gatename");
     login(&dir);
-    let ack_path = dir.join(".refine").join(KatBurnAck::FILE_NAME);
-    std::fs::create_dir_all(dir.join(".refine")).expect(".refine dir");
+    let ack_path = ack_path(&dir);
+    std::fs::create_dir_all(ack_path.parent().expect("net dir")).expect("net dir");
     let ack = KatBurnAck {
         version: riir_refine::kat_burn_client::BURN_ACK_VERSION,
         burn_kat_total: 1_000,
@@ -360,6 +373,9 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
         // these tests exercise read none of them.
         service_host: None,
         ledger_id: None,
+        // v6 charge baseline (the zero-burn-stall fix): None = the legacy
+        // semantics these fixtures exercise.
+        charged_at_ack_micro: None,
     };
     ack.save(&ack_path).expect("seed depleted ack");
 

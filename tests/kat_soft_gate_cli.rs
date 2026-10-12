@@ -117,6 +117,13 @@ fn login(dir: &Path) {
     );
 }
 
+/// The per-net dir the gate reads (T7, riir-kat Issue 003): the closed
+/// loopback URL's net key is the port-less `127.0.0.1` (the burn-stack
+/// precedent).
+fn net_ack_dir(dir: &Path) -> PathBuf {
+    dir.join(".refine").join("net").join("127.0.0.1")
+}
+
 /// Seed an ack with the given server balance — the gate's input.
 /// `contributed` stays `None`: no server truth stated (a pre-v3 answer or
 /// a v2 file) — since the dated removal that is simply NOT contributed.
@@ -135,9 +142,12 @@ fn seed_ack(dir: &Path, balance_micro: i64) {
         // these tests exercise read none of them.
         service_host: None,
         ledger_id: None,
+        // v6 charge baseline (the zero-burn-stall fix): None = the legacy
+        // semantics these fixtures exercise.
+        charged_at_ack_micro: None,
     };
-    let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
+    let heal_dir = net_ack_dir(dir);
+    std::fs::create_dir_all(&heal_dir).expect("net dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
 }
@@ -160,9 +170,12 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
         // these tests exercise read none of them.
         service_host: None,
         ledger_id: None,
+        // v6 charge baseline (the zero-burn-stall fix): None = the legacy
+        // semantics these fixtures exercise.
+        charged_at_ack_micro: None,
     };
-    let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
+    let heal_dir = net_ack_dir(dir);
+    std::fs::create_dir_all(&heal_dir).expect("net dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
 }
@@ -171,8 +184,8 @@ fn seed_ack_with_contributed(dir: &Path, balance_micro: i64, contributed: Option
 /// existing machine has on disk before the upgrade (issue 080 read-back
 /// compat).
 fn seed_v2_ack_file(dir: &Path, balance_micro: i64) {
-    let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
+    let heal_dir = net_ack_dir(dir);
+    std::fs::create_dir_all(&heal_dir).expect("net dir");
     std::fs::write(
         heal_dir.join(KatBurnAck::FILE_NAME),
         format!(
@@ -332,7 +345,16 @@ fn the_survey_mining_arm_counts_the_queued_outbox() {
     write_a_rs(&dir);
     login(&dir);
     seed_ack(&dir, 0);
-    let outbox = dir.join(".refine").join("outbox");
+    // T7 (riir-kat Issue 003): the outbox the survey counts is the PER-NET
+    // one (the same root `cargo refine sync` drains — the closed loopback
+    // URL's net key is the port-less 127.0.0.1). Found red on develop: the
+    // survey moved to the net dir and this fixture kept seeding the flat
+    // path.
+    let outbox = dir
+        .join(".refine")
+        .join("net")
+        .join("127.0.0.1")
+        .join("outbox");
     std::fs::create_dir_all(&outbox).expect("outbox dir");
     std::fs::write(outbox.join("batch-0001.ndjson"), "{}\n").expect("seed batch");
 
@@ -624,8 +646,8 @@ fn issue_080_never_synced_stays_warn_only_even_with_a_leftover_marker() {
     let ack = riir_refine::kat_burn_client::KatBurnAck::empty();
     assert_eq!(ack.last_balance_micro, None);
     assert_eq!(ack.contributed, None);
-    let heal_dir = dir.join(".refine");
-    std::fs::create_dir_all(&heal_dir).expect(".refine dir");
+    let heal_dir = net_ack_dir(&dir);
+    std::fs::create_dir_all(&heal_dir).expect("net dir");
     ack.save(&heal_dir.join(KatBurnAck::FILE_NAME))
         .expect("seed ack");
     seed_marker(&dir); // the leftover file — still zero effect, still warn-only

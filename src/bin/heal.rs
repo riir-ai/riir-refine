@@ -411,9 +411,16 @@ fn enforce_kat_soft_gate(args: &Args) {
         return;
     }
     let root = resolve_heal_root(&args.paths);
-    let ack_path = root
-        .join(".refine")
-        .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+    // T7 (riir-kat Issue 003): the ack lives in the PER-NET dir — the same
+    // placement the burn sync reads and writes. The flat path here was the
+    // measured 2026-10-12 split-brain: the gate judged the pre-split flat
+    // ack (a stale balance, possibly another net's) while the sync
+    // advanced the per-net one.
+    let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
+        &root,
+        &net_partition_url(),
+    )
+    .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
@@ -3632,9 +3639,14 @@ fn run_kat_refill(wait_secs: u64) {
         // stale, the fuel is still real.
         if let Some(b) = &outcome.final_balance {
             let root = resolve_heal_root(&[]);
-            let ack_path = root
-                .join(".refine")
-                .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            // T7 (riir-kat Issue 003): the PER-NET ack — the same file the
+            // gate reads (the flat write here fed a file nothing reads
+            // since the per-net move — the 2026-10-12 split-brain family).
+            let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
+                &root,
+                &command_service_url(),
+            )
+            .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
             let (mut ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = warning {
                 eprintln!("{w}");
@@ -4844,9 +4856,9 @@ USAGE:
     --yes           Non-interactive consent: every y/N prompt answers yes
                     (the flag form of RIIR_REFINE_YES=1 — agents/CI). Arms the
                     depleted-run contribute-now offer (Issue 079) and answers the
-                    first-join network prompt with its devnet default (Plan 045:
-                    --mine/login with no service config asks devnet/mainnet once;
-                    RIIR_REFINE_JOIN_ENV=devnet|mainnet forces instead).
+                    first-join network prompt with its mainnet default (Plan 045:
+                    --mine/login with no service config asks mainnet/devnet once;
+                    RIIR_REFINE_JOIN_ENV=mainnet|devnet forces instead).
     --write         With --fix-compile: write the edits in place. (--fix already
                     writes — the explicit flag is the consent; rustfmt AUTOMATICALLY
                     follows when the original was already rustfmt-clean — pre-existing
@@ -5051,7 +5063,7 @@ struct Args {
     /// (the flag form of `RIIR_REFINE_YES=1`; agents and CI). Arms the
     /// depleted-run contribute-now offer (Issue 079) and answers the
     /// first-join network prompt with its devnet default (Plan 045 A1 —
-    /// `RIIR_REFINE_JOIN_ENV=devnet|mainnet` forces instead).
+    /// `RIIR_REFINE_JOIN_ENV=mainnet|devnet` forces instead).
     yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
     /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
@@ -13579,9 +13591,15 @@ fn main() {
             riir_refine::kat_footer::SyncState::LoggedOut
         } else {
             let root = resolve_heal_root(&args.paths);
-            let ack_path = root
-                .join(".refine")
-                .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            // T7 (riir-kat Issue 003): the PER-NET ack — the same file the
+            // burn sync advances (the flat read here was the measured
+            // 2026-10-12 split-brain: the footer displayed the pre-split
+            // flat ack's stale balance while the sync lived in the net dir).
+            let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
+                &root,
+                &net_partition_url(),
+            )
+            .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
             let (ack, _) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             kat_balance = ack.last_balance_micro.map(MicroKat);
             tuna_line = ack.tuna_balance_micro.zip(ack.tuna_expires_unix).map(
@@ -13600,10 +13618,16 @@ fn main() {
             // so the sub-KAT sliver of `charged` is BY DESIGN unacked until
             // the next whole-KAT crossing — it is not a stuck delta. Current
             // means: every pushable whole KAT is acked. A real stack (offline
-            // pushes) leaves whole-KAT gaps beyond the sliver.
+            // pushes) leaves whole-KAT gaps beyond the sliver. The pending
+            // total is the acked ACCOUNT base plus this net's whole-KAT
+            // delta (pending_report_total — the net-vs-account scope mismatch
+            // deadlocked the sync; the footer mirrors the sync's arithmetic).
+            let report_total = riir_refine::kat_burn_client::pending_report_total(
+                &ack,
+                c.state().charged_kat,
+            );
             let wire = riir_refine::kat_burn_client::WIRE_PER_CHARGE_UNITS;
-            let pushable_wire = c.state().charged_kat / wire;
-            if pushable_wire <= ack.burn_kat_total {
+            if report_total <= ack.burn_kat_total {
                 riir_refine::kat_footer::SyncState::Current {
                     ledger_url: &ledger_url,
                 }
@@ -13612,7 +13636,7 @@ fn main() {
                     // The whole-KAT gap → µ at the ONE µ-per-whole-KAT factor
                     // (explicit conversion — Plan 035 T3).
                     micro_kat: MicroKat::from(
-                        (pushable_wire - ack.burn_kat_total).saturating_mul(wire),
+                        (report_total - ack.burn_kat_total).saturating_mul(wire),
                     ),
                     queued_batches: 0,
                     ledger_url: &ledger_url,
