@@ -379,6 +379,20 @@ pub mod kat_stats_consent;
 // for wire compat); `DEFAULT_SERVICE_URL` never moves (the QR-goldens law).
 pub mod kat_join;
 
+// riir-dapps Plan 050 S1.11 (the devnet→mainnet corpus PR lane's client
+// half): the refine-integrated PR builder + submitter — the S1.0
+// auto-rebase, the golden-pinned wire mirror (three-way: dapps lib +
+// Python builder + this module; riir-dapps is NOT a dep — the
+// `kat_lease_client` mirror law), the T2b per-pair stamps, the T10
+// attested-intent gates, and the draft/submit ladder with its
+// idempotent-resume semantics. Pure + signing halves ride `kat_service`
+// (the ed25519 signing key is the dedicated `--gen-corpuspr` class);
+// the network half is inner-gated `kat_transport` (the release set
+// carries both — the lane rides the release train, riir-kat Issue 003
+// T15's row).
+#[cfg(feature = "kat_service")]
+pub mod kat_corpus_pr;
+
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
 // gated rows + BLAKE3 batch commitment + the account-key Ed25519 signature

@@ -111,6 +111,12 @@ enum KatCommand {
     /// gated; kill switch `RIIR_REFINE_REPLAY=0`. Needs `kat_service` +
     /// `kat_transport` + `clippy_verify` (the oracle instrument).
     Replay,
+    /// riir-dapps Plan 050 S1.11: `corpus-pr --src <devnet> --dst <mainnet>
+    /// --submitter <32hex> [--seq N] [--key-file <path>] [--submit]` — the
+    /// devnet→mainnet corpus PR client half (draft + submit, the S1.0
+    /// auto-rebase first). Without `--key-file` the run is the read-only
+    /// divergence gauge. Needs `kat_transport` (the lease reads).
+    CorpusPr,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
     /// the persisted service-url surface (env > config > default). Ungated:
     /// local-only (the consent-record precedent); the money commands it
@@ -3922,6 +3928,47 @@ fn run_kat_wetrun(dry_run: bool) {
 ///    local toolchain aborts BEFORE any compile (a skewed verdict is
 ///    refused unscored server-side; running it would be pure waste).
 ///
+/// riir-dapps Plan 050 S1.11: the corpus PR client half — resolve, gate
+/// (T10/T2b/pins), draft (S1.0 rebase + chunk + sign), and optionally
+/// submit. The engine's disclosure lines print verbatim; a refusal is
+/// one loud line + exit 1 (an operational failure, not a usage error).
+#[cfg(feature = "kat_transport")]
+#[allow(clippy::too_many_arguments)]
+fn run_kat_corpus_pr(
+    src: Option<&str>,
+    dst: Option<&str>,
+    seq: Option<u64>,
+    submitter: Option<&str>,
+    key_file: Option<&std::path::Path>,
+    submit: bool,
+    root: &std::path::Path,
+) {
+    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
+
+    let args = CorpusPrArgs {
+        src: src.unwrap_or_default().to_string(),
+        dst: dst.unwrap_or_default().to_string(),
+        seq,
+        submitter: submitter.unwrap_or_default().to_string(),
+        key_file: key_file.map(std::path::Path::to_path_buf),
+        submit,
+    };
+    // 60s per request — the builder's curl -m 60 posture (a stalled
+    // server cannot outlive the budget; segments are MB-class).
+    let wire = HttpCorpusPrWire::new(60);
+    match run_corpus_pr(root, &wire, &args) {
+        Ok(report) => {
+            for line in &report.lines {
+                println!("{line}");
+            }
+        }
+        Err(e) => {
+            eprintln!("corpus-pr: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 /// Per item: judge → submit. `Unmeasurable` items are SKIPPED with the
 /// reason (a verdict is a claim — never submit what was not measured).
 #[cfg(all(
@@ -5334,6 +5381,23 @@ struct Args {
     /// riir-dapps Issue 112 T4: `--export <file|->` — with `sync` ONLY: write
     /// the redacted batch locally instead of pushing it.
     sync_export: Option<PathBuf>,
+    /// riir-dapps Plan 050 S1.11: `--src <url|alias>` — with `corpus-pr`
+    /// ONLY: the PR source env (the dev branch).
+    corpus_pr_src: Option<String>,
+    /// `--dst <url|alias>` — with `corpus-pr` ONLY: the PR destination
+    /// (must name the mainnet ledger).
+    corpus_pr_dst: Option<String>,
+    /// `--seq <N>` — with `corpus-pr` ONLY: the explicit pr_seq (absent =
+    /// the client-local last + 1).
+    corpus_pr_seq: Option<u64>,
+    /// `--submitter <32hex>` — with `corpus-pr` ONLY: the payee account id.
+    corpus_pr_submitter: Option<String>,
+    /// `--key-file <path>` — with `corpus-pr` ONLY: the PR-attestation key
+    /// (the `--gen-corpuspr` 64-hex-seed format; absent = the gauge).
+    corpus_pr_key_file: Option<PathBuf>,
+    /// `--submit` — with `corpus-pr` ONLY: POST the envelope + chunks after
+    /// drafting (replays are idempotent).
+    corpus_pr_submit: bool,
     /// Proposal 007 T2.1: `--usd <N>` — the stake amount (dollars, ≤6
     /// fractional digits, integer-exact into base units).
     stake_usd: Option<String>,
@@ -5580,6 +5644,12 @@ fn parse_args() -> Args {
         config_adopt_discard: false,
         net_alias: None,
         sync_export: None,
+        corpus_pr_src: None,
+        corpus_pr_dst: None,
+        corpus_pr_seq: None,
+        corpus_pr_submitter: None,
+        corpus_pr_key_file: None,
+        corpus_pr_submit: false,
         stake_usd: None,
         stake_info: false,
         stake_restake: None,
@@ -6057,6 +6127,58 @@ fn parse_args() -> Args {
                 };
                 args.sync_export = Some(PathBuf::from(value));
             }
+            // riir-dapps Plan 050 S1.11: the corpus-PR flags (unguarded
+            // arms + post-parse validation — the `--export` precedent, so
+            // both `corpus-pr --src X` and `--src X corpus-pr` parse).
+            "--src" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--src requires a value (the source env url or alias)");
+                    usage();
+                };
+                if args.corpus_pr_src.is_some() {
+                    eprintln!("--src given twice");
+                    usage();
+                }
+                args.corpus_pr_src = Some(value);
+            }
+            "--dst" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--dst requires a value (the destination env url or alias)");
+                    usage();
+                };
+                if args.corpus_pr_dst.is_some() {
+                    eprintln!("--dst given twice");
+                    usage();
+                }
+                args.corpus_pr_dst = Some(value);
+            }
+            "--seq" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--seq requires a value (the explicit pr_seq)");
+                    usage();
+                };
+                args.corpus_pr_seq = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--seq expects a number, got {value:?}");
+                    usage();
+                }));
+            }
+            "--submitter" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--submitter requires a value (the payee account id, 32 hex)");
+                    usage();
+                };
+                args.corpus_pr_submitter = Some(value);
+            }
+            "--key-file" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--key-file requires a value (the PR-attestation key file)");
+                    usage();
+                };
+                args.corpus_pr_key_file = Some(PathBuf::from(value));
+            }
+            "--submit" => {
+                args.corpus_pr_submit = true;
+            }
             "--history" => args.account_history = true,
             "--no-reheat" => args.no_reheat = true,
             "--candidates" => {
@@ -6082,7 +6204,7 @@ fn parse_args() -> Args {
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
             | "unstake" | "vote" | "pay" | "topup" | "faucet" | "wetrun" | "config"
-            | "replay"
+            | "replay" | "corpus-pr"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -6100,6 +6222,7 @@ fn parse_args() -> Args {
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
                     "replay" => KatCommand::Replay,
+                    "corpus-pr" => KatCommand::CorpusPr,
                     _ => KatCommand::Claim,
                 });
             }
@@ -6198,6 +6321,45 @@ fn parse_args() -> Args {
     }
     if args.sync_export.is_some() && args.command != Some(KatCommand::Sync) {
         eprintln!("--export requires the `sync` command (cargo refine sync --export <file|->)");
+        usage();
+    }
+    // riir-dapps Plan 050 S1.11: the corpus-PR flag validation (the
+    // `--export` precedent — the arms parse unconditionally, the
+    // combination law lives HERE).
+    if args.command == Some(KatCommand::CorpusPr) {
+        let missing: Vec<&str> = [
+            ("--src", args.corpus_pr_src.is_none()),
+            ("--dst", args.corpus_pr_dst.is_none()),
+            ("--submitter", args.corpus_pr_submitter.is_none()),
+        ]
+        .iter()
+        .filter(|(_, missing)| *missing)
+        .map(|(flag, _)| *flag)
+        .collect();
+        if !missing.is_empty() {
+            eprintln!(
+                "corpus-pr requires {}: cargo refine corpus-pr --src <devnet> --dst <mainnet> \
+                 --submitter <32hex> [--seq N] [--key-file <path>] [--submit]",
+                missing.join(", ")
+            );
+            usage();
+        }
+        if args.corpus_pr_submit && args.corpus_pr_key_file.is_none() {
+            eprintln!("--submit requires --key-file (the PR is attested; the gauge cannot POST)");
+            usage();
+        }
+        if args.corpus_pr_seq == Some(0) {
+            eprintln!("--seq must be ≥ 1 (PRs number from one)");
+            usage();
+        }
+    } else if args.corpus_pr_src.is_some()
+        || args.corpus_pr_dst.is_some()
+        || args.corpus_pr_seq.is_some()
+        || args.corpus_pr_submitter.is_some()
+        || args.corpus_pr_key_file.is_some()
+        || args.corpus_pr_submit
+    {
+        eprintln!("the corpus-PR flags require the `corpus-pr` command");
         usage();
     }
     if args.purge && !args.unmine {
@@ -9241,6 +9403,25 @@ fn main() {
                     "replay",
                     &["kat_transport", "clippy_verify", "latent_retrieval"],
                 );
+            }
+            // riir-dapps Plan 050 S1.11: the corpus PR client half. The lane
+            // reads BOTH ledgers' leases over the network (even the gauge),
+            // so the whole command rides kat_transport; the signing half is
+            // kat_service (implied by kat_transport).
+            #[cfg(feature = "kat_transport")]
+            KatCommand::CorpusPr => run_kat_corpus_pr(
+                args.corpus_pr_src.as_deref(),
+                args.corpus_pr_dst.as_deref(),
+                args.corpus_pr_seq,
+                args.corpus_pr_submitter.as_deref(),
+                args.corpus_pr_key_file.as_deref(),
+                args.corpus_pr_submit,
+                &resolve_heal_root(&args.paths),
+            ),
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::CorpusPr => {
+                eprintln!("corpus-pr: the PR lane reads both ledgers' leases over the network");
+                riir_refine::build_stamp::refuse("corpus-pr", &["kat_transport"]);
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
