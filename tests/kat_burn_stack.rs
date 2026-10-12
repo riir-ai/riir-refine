@@ -261,6 +261,103 @@ fn the_acked_account_base_plus_the_net_delta_pushes() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The verdict-round arm: a 0.3.0-era per-net ack — account base ABOVE
+/// zero, NO charge baseline — must not deadlock. The first encounter
+/// adopts the current charge as the baseline AND PERSISTS it (a skip
+/// never wrote an ack before, so the baseline could never be recorded);
+/// the next whole-KAT delta pushes normally. The first encounter must NOT
+/// push base + wire(charged) — the pre-ack charges are already covered by
+/// the base (the server answered them), and re-reporting them debits
+/// phantom KAT.
+#[test]
+fn a_v5_net_ack_adopts_its_charge_baseline_and_unsticks() {
+    let dir = scratch("v5ack");
+    write_a_rs(&dir);
+    login(&dir);
+
+    // Phase 1: one billed run against the dead service — the net book is
+    // born (1M micro charged), no ack.
+    let (code, _) = heal(&dir, CLOSED_PORT, &[]);
+    assert_eq!(code, Some(0));
+    let book: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            dir.join(".refine")
+                .join("net")
+                .join("127.0.0.1")
+                .join("kat_charge.json"),
+        )
+        .expect("the net charge book"),
+    )
+    .expect("charge json");
+    let charged_now = book.get("charged_kat").and_then(serde_json::Value::as_u64).expect("charged");
+
+    // Plant the 0.3.0 shape: base 21, NO charged_at_ack_micro, fully
+    // stamped (the mock's attestation).
+    let planted = format!(
+        "{{\"version\":{},\"burn_kat_total\":21,\"meter_watermark_tokens\":{},\
+         \"acked_unix\":1700000000,\"last_balance_micro\":174000000,\
+         \"contributed\":true,\"first_commitment_hex\":null,\
+         \"tuna_balance_micro\":null,\"tuna_expires_unix\":null,\
+         \"service_host\":\"127.0.0.1\",\"ledger_id\":\"{}\"}}",
+        riir_refine::kat_burn_client::BURN_ACK_VERSION,
+        charged_now,
+        "ab".repeat(32)
+    );
+    std::fs::write(ack_path(&dir), planted).expect("plant the v5 ack");
+
+    // Phase 2: the first encounter — SKIPS (the base alone; no phantom
+    // debit) but PERSISTS the adopted baseline. The encounter run bills
+    // its own scan before the sync, so the adopted baseline is the POST-
+    // run charge — read the book, not the pre-run number.
+    let mock = spawn_burn_mock();
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert_eq!(
+        mock.captured().len(),
+        0,
+        "the first encounter must not dial — the base covers the pre-ack charges"
+    );
+    let book: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            dir.join(".refine")
+                .join("net")
+                .join("127.0.0.1")
+                .join("kat_charge.json"),
+        )
+        .expect("the net charge book"),
+    )
+    .expect("charge json");
+    let charged_at_encounter = book
+        .get("charged_kat")
+        .and_then(serde_json::Value::as_u64)
+        .expect("charged");
+    let ack = ack_of(&dir).expect("the upgrade must persist the ack");
+    assert_eq!(ack.burn_kat_total, 21, "the base is untouched");
+    assert_eq!(
+        ack.charged_at_ack_micro,
+        Some(charged_at_encounter),
+        "the adopted baseline: the charge AT the first encounter"
+    );
+
+    // Phase 3: one more billed run (+1 whole KAT) — the delta computes
+    // from the adopted baseline and PUSHES 22.
+    let (code, text) = heal(&dir, &mock.base(), &[]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    let captured = mock.captured();
+    assert_eq!(captured.len(), 2, "pre-flight GET / + the POST /burn. output:\n{text}");
+    let v: serde_json::Value =
+        serde_json::from_str(&captured[1].body).expect("the push body must be JSON");
+    assert_eq!(
+        v.get("burn_kat_total").and_then(serde_json::Value::as_u64),
+        Some(22),
+        "base 21 + the net's 1-KAT delta. body: {}",
+        captured[1].body
+    );
+    let ack = ack_of(&dir).expect("the ack must advance");
+    assert_eq!(ack.burn_kat_total, 22);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 // ── the mock server (std TCP; the kat_lease_client_g10 shape) ─────────────
 
 #[derive(Debug, Clone)]
