@@ -110,8 +110,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        795,
-        "kernel batches through Batch 223 should have 795 rules",
+        796,
+        "kernel batches through Batch 224 should have 796 rules",
     );
 }
 
@@ -5368,8 +5368,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 795-rule corpus must appear in exactly one category
-    // (re-pinned 795 at Batch 223; read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 796-rule corpus must appear in exactly one category
+    // (re-pinned 796 at Batch 224; 795 at Batch 223, read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5468,7 +5468,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::MemoryAccess, 162),
         (KernelCategory::Compute, 86),
         (KernelCategory::Fusion, 55),
-        (KernelCategory::Dispatch, 185),
+        (KernelCategory::Dispatch, 186),
         (KernelCategory::Parallelism, 75),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5493,9 +5493,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 795.
+    // Sum must equal 796.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 795, "Plan 003: category totals must sum to 795 (Batch 223 +11: the lithos-metal pack (Research 249/248, lithos-ai/lithos-metal @ 236475fa, Apache-2.0) — A +3 the coherence scope by write set (ordinary loads on the provably immutable class keep the weight-cache path; the barrier pass classifies buffers conservatively, coherence per POINTER fine) + the attention two-knob shared partial workspace (tile size and partition size tune separately in opposite directions; sequential layers share ONE workspace per partial-result kind sized for the largest consumer — 16 copies × 96 KB per capacity token = 12 GB at a 128K context, alone over the M5 Max budget) + the derived-pack immutable-original content-addressed atomic publish (conversion at compile time outside the timed program; the span-shrink skips ≤1 MiB and ≥80% active) — C +1 the fusion scope by barrier cost (in-kernel global barriers priced no cheaper than dispatch boundaries on M3 Pro/M5 Pro → layer-wise; the unfused program is the built-in numerical AND performance control) — D +3 the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (the flag on the READER orders a dependency; the swap moves the barrier onto the immediate predecessor so the conflicting pair overlaps; unknown write metadata never joins the group) + the gpu-resident control loop under static ICB replay (advance/accept-scan/EOS/stop as GPU data; the command sequence encodes once and replays; a later replay returns without doing work) + the cost-aware verify length (L = argmax_l (1+Σa_i)/cost[l] over a profiled per-format table that refuses to extrapolate — miss → FALLBACK_THRESHOLD 0.5) — E +2 the bounded cross-worker barrier protocol polling fan-in ladder (serial/simd/wide/leader-release, monotone epochs, 1M-spin loud-fail, no grid sync on Metal) + the own-slice coprime-stride steal with the claimant-invariance fence elision (enabled per op only where trace shows tail skew AND an A/B gain — none of the dense targets' ops does) — H +1 the MoE readiness queue without a grid barrier (bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring) — K +1 the autotune fidelity (the synthetic carries the producer's REAL params, streams ≥256 MB, beats the default only beyond NOISE_MARGIN 0.03 min-of-5, and the cache key is the full mechanism signature) + THREE count-neutral riders: gdn-transition-replay-log-commit-many += the parity-slot commit-by-recompute (SLOTS=2 by step parity; rejected positions never reach state; the placeholder-binding MTL_SHADER_VALIDATION lesson), delay-rms-scale-past-gemv-epilogue += the STAT_OUT prefold half (per-block partial sums-of-squares summed in block order; one fold, one statistic) + the honesty pair, lut-free-bit-spread-vadd4-unpack += the fp8-subnormal density-split face (normal codes are bit arithmetic; the 8 subnormals take the LUT/tiny-product arm — lithos re-derived the corpus's own density-aware law); Batch 220 +1 before that, the MoE router weight fold into reduce never-materialize (prism #107, the league fork — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR with opposite polarity — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair); shape-exact subgraph matcher (pointer-equality add chain + exact view strides/offsets), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. pointer alignment; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts and the Metal no-fusion harness validation); Batch 215 +5 before that, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 796, "Plan 003: category totals must sum to 796 (Batch 224 +1 D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034 + vulkan #29998 @ 966baae76, MIT: the dense experts-x-entry-tiles grid (94% launch-to-exit tiles) becomes a two-pass compact prepass + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; duplicate expert ids overflowed the fixed ne21 capacity 'into the slice of the next expert'; the unconditional-store law ('conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot); th_max 768 -> plain mul_mm registers; grid ~8-16x shrink, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor and EXPERTS_PER_CHUNK=1024 chunking); Batch 223 +11: the lithos-metal pack (Research 249/248, lithos-ai/lithos-metal @ 236475fa, Apache-2.0) — A +3 the coherence scope by write set (ordinary loads on the provably immutable class keep the weight-cache path; the barrier pass classifies buffers conservatively, coherence per POINTER fine) + the attention two-knob shared partial workspace (tile size and partition size tune separately in opposite directions; sequential layers share ONE workspace per partial-result kind sized for the largest consumer — 16 copies × 96 KB per capacity token = 12 GB at a 128K context, alone over the M5 Max budget) + the derived-pack immutable-original content-addressed atomic publish (conversion at compile time outside the timed program; the span-shrink skips ≤1 MiB and ≥80% active) — C +1 the fusion scope by barrier cost (in-kernel global barriers priced no cheaper than dispatch boundaries on M3 Pro/M5 Pro → layer-wise; the unfused program is the built-in numerical AND performance control) — D +3 the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (the flag on the READER orders a dependency; the swap moves the barrier onto the immediate predecessor so the conflicting pair overlaps; unknown write metadata never joins the group) + the gpu-resident control loop under static ICB replay (advance/accept-scan/EOS/stop as GPU data; the command sequence encodes once and replays; a later replay returns without doing work) + the cost-aware verify length (L = argmax_l (1+Σa_i)/cost[l] over a profiled per-format table that refuses to extrapolate — miss → FALLBACK_THRESHOLD 0.5) — E +2 the bounded cross-worker barrier protocol polling fan-in ladder (serial/simd/wide/leader-release, monotone epochs, 1M-spin loud-fail, no grid sync on Metal) + the own-slice coprime-stride steal with the claimant-invariance fence elision (enabled per op only where trace shows tail skew AND an A/B gain — none of the dense targets' ops does) — H +1 the MoE readiness queue without a grid barrier (bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring) — K +1 the autotune fidelity (the synthetic carries the producer's REAL params, streams ≥256 MB, beats the default only beyond NOISE_MARGIN 0.03 min-of-5, and the cache key is the full mechanism signature) + THREE count-neutral riders: gdn-transition-replay-log-commit-many += the parity-slot commit-by-recompute (SLOTS=2 by step parity; rejected positions never reach state; the placeholder-binding MTL_SHADER_VALIDATION lesson), delay-rms-scale-past-gemv-epilogue += the STAT_OUT prefold half (per-block partial sums-of-squares summed in block order; one fold, one statistic) + the honesty pair, lut-free-bit-spread-vadd4-unpack += the fp8-subnormal density-split face (normal codes are bit arithmetic; the 8 subnormals take the LUT/tiny-product arm — lithos re-derived the corpus's own density-aware law); Batch 220 +1 before that, the MoE router weight fold into reduce never-materialize (prism #107, the league fork — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR with opposite polarity — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair); shape-exact subgraph matcher (pointer-equality add chain + exact view strides/offsets), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. pointer alignment; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts and the Metal no-fusion harness validation); Batch 215 +5 before that, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
 }
 
 #[test]
@@ -5506,8 +5506,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 795,
-        "Plan 003: grouped corpus has {total} rules, expected 795 (Batch 223 +11: the lithos-metal pack, Research 249/248)"
+        total, 796,
+        "Plan 003: grouped corpus has {total} rules, expected 796 (Batch 224 +1 D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9614,8 +9614,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        795,
-        "corpus count re-pinned at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face; was 784 at Batch 220 (1 rule, D: the MoE router weight fold into reduce never-materialize — prism #107, patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91 on the league fork: the MUL(down_out, weights) + n_exp views + (n_exp-1) left-to-right adds subgraph folds into ONE kernel so the weighted intermediate is never materialized ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn accumulating left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair; the generic range checker bypassed because it 'can only reject, while the weights case has a cheap repair'); shape-exact matcher (pointer-equality add chain + exact view strides/offsets + per-(expert,token) broadcast weights), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. both pointer alignments; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts + the Metal no-fusion harness validation; was 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        796,
+        "corpus count re-pinned at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face; was 784 at Batch 220 (1 rule, D: the MoE router weight fold into reduce never-materialize — prism #107, patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91 on the league fork: the MUL(down_out, weights) + n_exp views + (n_exp-1) left-to-right adds subgraph folds into ONE kernel so the weighted intermediate is never materialized ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn accumulating left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair; the generic range checker bypassed because it 'can only reject, while the weights case has a cheap repair'); shape-exact matcher (pointer-equality add chain + exact view strides/offsets + per-(expert,token) broadcast weights), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. both pointer alignments; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts + the Metal no-fusion harness validation; was 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -15486,6 +15486,7 @@ fn batch218_riders_landed_on_their_hosts() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // one needle block per rule (the 11-rule lithos pack; the B130 annotated-allow pattern)
 fn batch223_rules_parse_and_needles_landed() {
     // G1 for Batch 223 (Plan 222): the lithos-metal pack -- 11 own rules
     // (Research 249 drafts / Research 248 quote authority,
@@ -15715,6 +15716,64 @@ fn batch223_riders_landed_on_their_hosts() {
         assert!(
             lut.gpu_concept.contains(marker),
             "batch-223 lut rider marker missing: '{marker}'"
+        );
+    }
+}
+
+#[test]
+fn batch224_rule_parse_and_needles_landed() {
+    // G1 for Batch 224 (Plan 226): ONE own rule -- the llama.cpp MoE
+    // mul_mat_id duplicate-id compact-prepass + static-bound
+    // tile-descriptor dispatch family (metal #30373 @ 073b74034 + vulkan
+    // #29998 @ 966baae76, MIT; every needle verbatim at the pins via the
+    // GitHub commits API this session, patch completeness reconciled +/-
+    // against the API stats block -- none truncated). Riders: #1806 on
+    // entries_02 (rust_perf, the name-field pattern) + #30299 on the dist
+    // bench-targets rule (notes) -- pinned in their own domains' tests.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    let cases: [(&str, &[&str]); 1] = [(
+        "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch",
+        &[
+            "assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert",
+            "pass 1: count the entries of this expert - every occurrence of this expert within the ids is an entry (duplicate ids produce multiple entries for the same token)",
+            "one store per token for every thread, regardless of the match - conditional stores of the divergent lanes are very slow - the dummy value of the tokens without a match lands on the padding slot of this slice and is never read",
+            "(expert, first entry, valid rows)",
+            "full tiles over all entries plus at most one partial tile per expert",
+            "Each nonempty expert can add at most one partial tile to the combined grid.",
+            "The grid shrinks by ~8-16x on typical shapes",
+            "94% only launched to exit",
+            "register pressure: th_max 768 -> back to the plain mul_mm level",
+            "duplicates are now handled implicitly, since they only produce more descriptors within the bound",
+            "no measurable perf change",
+            "a tighter upper bound on the number of workgroups and the tail can trivially early exit",
+            "EXPERTS_PER_CHUNK 1024",
+            "Batch 224 / Plan 226",
+        ],
+    )];
+    for (rule_id, markers) in cases {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rule_id)
+            .unwrap_or_else(|| panic!("batch-224 rule '{rule_id}' missing from the corpus"));
+        for marker in markers {
+            assert!(
+                entry.gpu_concept.contains(marker),
+                "batch-224 rule '{rule_id}' marker missing: '{marker}'"
+            );
+        }
+        // the pseudocode halves parse (the batch207/223 pattern).
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-224 ref_shape for '{rule_id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-224 opt_pattern for '{rule_id}' must parse"
         );
     }
 }

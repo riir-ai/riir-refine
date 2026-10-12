@@ -144,7 +144,15 @@ fixture). ⛔ The green-zero caveat rides the advice (our own lore): a
 feature-gated bench target WITHOUT its required-features row is skipped
 silently by `--all-targets` (the katgpt-rs bench_694 class) — the rows are
 load-bearing, never decorative; this advice is for humans cutting bench
-compile time, never for gate-asserted suites.
+compile time, never for gate-asserted suites. **RIDER (Batch 224 / Plan
+226)**: the C++ twin — llama.cpp #30299 @ `ccdbe2905` ("tests : link each
+test against only the libraries it uses"): the helper fns gain a LINK
+keyword so call sites declare the minimal link set ("ggml-only tests now
+link just ggml"); the interface-leak half ("Both helpers now set
+cxx_std_17 explicitly, since the tests no longer inherit it from
+llama-common's PUBLIC interface") and the workaround-collapse half (the
+LLAMA_TEST_NAME/target_link_libraries patches die once the helper can
+express per-test sets) ride the rule's notes.
 
 ## See also
 

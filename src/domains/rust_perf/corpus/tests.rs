@@ -6210,3 +6210,34 @@ fn batch222_notes_needles_present() {
         );
     }
 }
+
+#[test]
+fn batch224_rider_landed_on_channel_send_batching_host() {
+    // G1 for the Batch 224 rider (Plan 226): the CONSUMER-side
+    // park-vs-fixed-sleep half of the channel family on
+    // `channel-send-batching-unpark` (tracel-ai/cubecl @ 6bba5fdf #1806,
+    // MIT — every needle verbatim at the pin via the commits API this
+    // session). Count-neutral (the name-field rider pattern).
+    let corpus = build_perf_seed_corpus();
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "channel-send-batching-unpark")
+        .expect("channel-send-batching-unpark in corpus");
+    for needle in [
+        "RIDER (Batch 224 / Plan 226",
+        "6bba5fdf04206d9c3710dfbc46aa9850450ab405",
+        "The server now parks instead, and the client whose task fills a buffer unparks it when it is parked. The park keeps the old step as its timeout, so a shutdown is still noticed within it, and an idle server still costs no CPU.",
+        "a kept-awake server decoded about 20% faster",
+        "so this bounds only how late it notices a shutdown, never how late it runs work",
+        "either the server sees the full queue and does not park, or the client sees the flag and unparks it",
+        "An unpark that lands before the park is kept by the thread and ends the park at once",
+        "PARK_STEP_SERVER",
+        "the park-timeout-as-watchdog pair + the unpark-token semantics are the new atoms",
+    ] {
+        assert!(
+            rule.name.contains(needle),
+            "batch-224 rider on channel-send-batching-unpark missing needle: {needle}"
+        );
+    }
+}
