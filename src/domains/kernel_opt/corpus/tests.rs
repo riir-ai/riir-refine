@@ -17104,6 +17104,43 @@ fn batch226_rider_landed_on_fa_admission_host() {
 
 #[test]
 #[cfg(feature = "kernel_opt")]
+fn batch229_rider_landed_on_ragged_chunk_pad_host() {
+    // G1 for the Batch 229 rider (Plan 231): the STAGING-SIDE SYMMETRY face
+    // on `ragged-chunk-pad` (ggml-org/llama.cpp @ 411d5485 #29533, MIT --
+    // every needle verbatim at the fetched .patch this session).
+    // Count-neutral (corpus 803 stands; zero clippy-corpus delta -- no
+    // freeze regen owed, P30).
+    let corpus = build_kernel_seed_corpus();
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ragged-chunk-pad")
+        .expect("ragged-chunk-pad host in corpus");
+    for needle in [
+        "RIDER (Batch 229 / Plan 231 -- the STAGING-SIDE SYMMETRY face",
+        "411d548515017ca75c2a12c39659b6e7e1551dd7",
+        "more workgroups than maxComputeWorkGroupCount allows",
+        "The A side skipped the shared memory write for the k steps past end_k, while the B side was already told the bound and zero filled",
+        "the stale scale went into the dot product and produced NaN at k = 32",
+        "Pass the bound to block_a_to_shmem and write zeros when it is false, for every DATA_A type, mirroring the B side",
+        "the skip-write form is the bug because shared memory is NEVER zero by default",
+        "the stale DEQUANT MULTIPLIER (buf_a.dm)",
+        "the else-branch must zero dm too",
+        "GGML_ASSERT(b.size != VK_WHOLE_SIZE && d.size != VK_WHOLE_SIZE)",
+        "padded_n - n_base",
+        "its law is SYMMETRY between co-consumed stagers, not economics",
+        "here the consumer reads the full staged width, so the fill is MANDATORY",
+        "Verified verbatim at 411d5485 via the .patch endpoint",
+    ] {
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-229 rider on ragged-chunk-pad host missing needle: {needle}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
 fn batch227_rules_parse_and_needles_landed() {
     // G1 for Batch 227 (Plan 229): TWO own rules -- the lithos-metal
     // wave-2 pack (lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0;
