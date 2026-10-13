@@ -58,6 +58,24 @@ nothing — the green-zero shape one layer down); the portable SPAN-prefetch
 half of this rule and the MADVISE half compose; same-commit PIN-axis sibling:
 kernel_opt `host-pointer-buffer-foreign-range-subtraction`; retrieval floors
 HELD, corpus 804 kernel / 198 rust_perf stand).
+Batch 232 rider (2026-10-14, Plan 234 / Research 263 — count-NEUTRAL: the
+`degrade-not-fail-load-qualification-probe` dispatch rule += the
+HEADROOM-ADMISSION face — ashhart/TensorFold @ `b264f534` "The 27B's Neural
+Engine share loads only inside the 70% load limit", Apache-2.0, quotes
+verbatim at the fetched .patch: the load-time two-class admission posture
+with the predicate axis widened from measured exactness to RESOURCE HEADROOM
+— `fitsLoadLimit` = `bytes +| MARGIN <= total / 100 * SHARE_PERCENT`
+(saturating add; fail-closed on an unknown RAM reading — 0 admits nothing);
+the defect economics: 'The share keeps an fp16 copy of 3,072 MLP columns of
+every layer, 5,760 MiB for the 27B. On a 32 GB Mac that copy took the server
+past its memory, and it swapped for about 5% faster prompts (#643)' — a 5%
+prompt gain bought WITH SWAP is a net loss; the served host answers with the
+70% load limit and its 2 GiB margin, so 'a 32 GB Mac runs prompts on the GPU
+alone and says so, and a 48 GB or larger Mac keeps the share'; direct-loader
+tools keep it wherever it can load — the limit is a SERVED-host contract;
+same-commit PIN-axis sibling: kernel_opt
+`warm-background-pass-quiet-hold-yield-chunking-cut-invariance`; retrieval
+floors HELD, corpus 805 kernel / 198 rust_perf stand).
 Batch 226 rider (2026-10-13, Plan 228 / Research 256 — count-NEUTRAL: the
 B211 `repr-align-register-partition-store-forwarding` layout rule += the
 DEVICE-CONTRACT view — the layout decision's THIRD audience, bevy @
