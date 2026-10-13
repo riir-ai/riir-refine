@@ -48,6 +48,23 @@ use std::path::{Path, PathBuf};
 /// The toolchain [`LINT_GROUPS`] was derived from (`rust-toolchain.toml`).
 pub const PINNED_TOOLCHAIN: &str = "1.98.1";
 
+/// Fix-set lints whose rows in [`LINT_GROUPS`] are AHEAD of the pinned
+/// toolchain (Batch 230, Plan 232 — the toolchain-move re-arm): the lints
+/// shipped in clippy **1.99** while the workspace pin rides 1.98.1, so the
+/// pinned driver's `-W help` cannot corroborate their rows. Derived from
+/// the ISOLATED `+1.99.0` driver (`clippy-driver +1.99.0 -W help`,
+/// 2026-10-13 — per-lint default levels + group blocks; probe artifacts in
+/// `scripts/plan232_batch230_probe/`). The pin-bump commit EMPTIES this
+/// list (the rows re-merge into the live driver check in the same commit
+/// it bumps `rust-toolchain.toml` to ≥1.99).
+pub const AHEAD_OF_PIN_1_99: &[&str] = &[
+    "assert_is_empty",               // pedantic, clippy 1.99 (#17149)
+    "block_scrutinee",               // suspicious, clippy 1.99 (#16855)
+    "manual_bit_width",              // pedantic, clippy 1.99 (#16902)
+    "mismatched_bit_width_type",     // suspicious, clippy 1.99 (#16902)
+    "nonnull_unchecked_on_box_ptr",  // complexity, clippy 1.99 (#17336)
+];
+
 /// The clippy groups whose lints are allow-by-default.
 pub const ALLOW_BY_DEFAULT_GROUPS: &[&str] = &["pedantic", "nursery", "restriction", "cargo"];
 
@@ -56,7 +73,9 @@ pub const ALLOW_BY_DEFAULT_GROUPS: &[&str] = &["pedantic", "nursery", "restricti
 /// — re-derive on a toolchain bump (the `table_matches_installed_driver`
 /// test names every disagreement).
 pub const LINT_GROUPS: &[(&str, &str)] = &[
+    ("assert_is_empty", "pedantic"),
     ("assign_op_pattern", "style"),
+    ("block_scrutinee", "suspicious"),
     ("bool_comparison", "complexity"),
     ("byte_char_slices", "style"),
     ("bytes_count_to_len", "complexity"),
@@ -88,6 +107,7 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("legacy_numeric_constants", "style"),
     ("len_without_is_empty", "style"),
     ("let_and_return", "style"),
+    ("manual_bit_width", "pedantic"),
     ("manual_checked_ops", "complexity"),
     ("manual_clamp", "complexity"),
     ("manual_is_multiple_of", "complexity"),
@@ -108,6 +128,7 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("match_like_matches_macro", "style"),
     ("match_ref_pats", "style"),
     ("mem_replace_with_default", "style"),
+    ("mismatched_bit_width_type", "suspicious"),
     ("multiple_bound_locations", "style"),
     ("needless_bool", "complexity"),
     ("needless_bool_assign", "complexity"),
@@ -119,6 +140,7 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("needless_range_loop", "style"),
     ("needless_return", "style"),
     ("new_without_default", "style"),
+    ("nonnull_unchecked_on_box_ptr", "complexity"),
     ("partialeq_to_none", "style"),
     ("print_with_newline", "style"),
     ("ptr_arg", "style"),

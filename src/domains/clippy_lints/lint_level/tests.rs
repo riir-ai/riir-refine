@@ -62,13 +62,20 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
     // a set, not a count, is what this pins.
     let mut got: Vec<&str> = fix_set().into_iter().filter(|l| is_allow_by_default(l)).collect();
     got.sort_unstable();
+    // Batch 230 note: the two new pedantic rows (assert_is_empty,
+    // manual_bit_width) are AHEAD-OF-PIN (clippy 1.99) — their rows are
+    // derived from the isolated +1.99.0 driver, not the pinned 1.98.1
+    // (see AHEAD_OF_PIN_1_99); the membership this test pins is unchanged
+    // in KIND: both are allow-by-default pedantic lints.
     let mut want = vec![
+        "assert_is_empty",
         "cast_lossless",
         "collapsible_else_if",
         "doc_markdown",
         "format_collect",
         "items_after_statements",
         "manual_let_else",
+        "manual_bit_width",
         "manual_string_new",
         "map_unwrap_or",
         "match_bool",
@@ -132,6 +139,14 @@ fn table_and_corpus_match_installed_driver() {
         surface.lints.iter().map(|r| (r.name.as_str(), r.group.as_str())).collect();
     let mut bad = Vec::new();
     for (lint, g) in LINT_GROUPS {
+        // AHEAD-OF-PIN rows (Batch 230): the pinned 1.98.1 driver cannot
+        // know them — they are verified against the +1.99.0 driver by
+        // `ahead_of_pin_rows_match_the_1_99_driver` below, not here.
+        if AHEAD_OF_PIN_1_99.contains(lint) {
+            assert!(driver.get(lint).is_none(),
+                "table {lint} is listed AHEAD-OF-PIN but the pinned driver already knows it — re-merge the row");
+            continue;
+        }
         match driver.get(lint) {
             Some(d) if d == g => {}
             other => bad.push(format!("table {lint}: {g} vs driver {other:?}")),
@@ -146,6 +161,47 @@ fn table_and_corpus_match_installed_driver() {
         }
     }
     assert!(bad.is_empty(), "re-derive from the driver:\n{}", bad.join("\n"));
+}
+
+/// The AHEAD-OF-PIN half of the driver check (Batch 230): every
+/// [`AHEAD_OF_PIN_1_99`] row is verified against the ISOLATED `+1.99.0`
+/// clippy driver when it is installed (this box: `rustup toolchain install
+/// 1.99.0`); on a box without it the check reads UNSEEN — never a pass.
+#[test]
+fn ahead_of_pin_rows_match_the_1_99_driver() {
+    let Ok(out) = std::process::Command::new("clippy-driver")
+        .args(["+1.99.0", "-W", "help"])
+        .stdin(std::process::Stdio::null())
+        .output()
+    else {
+        eprintln!("UNSEEN: clippy-driver +1.99.0 not spawnable — the ahead-of-pin check did not run");
+        return;
+    };
+    let version = std::process::Command::new("clippy-driver")
+        .args(["+1.99.0", "--version"])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    if !out.status.success() || !version.contains("0.1.99") {
+        eprintln!(
+            "UNSEEN: clippy-driver +1.99.0 is `{}` — not the expected 0.1.99",
+            version.trim()
+        );
+        return;
+    }
+    let surface = crate::corpus_coverage::parse_lint_help(&String::from_utf8_lossy(&out.stdout));
+    assert!(surface.blind.is_none(), "1.99 driver surface blind: {:?}", surface.blind);
+    let driver: HashMap<&str, &str> =
+        surface.lints.iter().map(|r| (r.name.as_str(), r.group.as_str())).collect();
+    let mut bad = Vec::new();
+    for lint in AHEAD_OF_PIN_1_99 {
+        let want = default_group(lint).expect("ahead-of-pin row missing from LINT_GROUPS");
+        match driver.get(lint) {
+            Some(d) if *d == want => {}
+            other => bad.push(format!("ahead row {lint}: {want} vs 1.99 driver {other:?}")),
+        }
+    }
+    assert!(bad.is_empty(), "re-derive ahead-of-pin rows from the +1.99.0 driver:\n{}", bad.join("\n"));
 }
 
 // ── T2: effective level ─────────────────────────────────────────────────
@@ -319,7 +375,7 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
     let all_gated = gated_lints(&none, &[]);
     assert!(all_gated.contains(&"doc_markdown") && all_gated.contains(&"use_self"));
     assert!(!all_gated.contains(&"needless_return"), "default-on lints are never gated");
-    assert_eq!(all_gated.len(), 20, "the pinned allow-by-default fix-set membership");
+    assert_eq!(all_gated.len(), 22, "the pinned allow-by-default fix-set membership");
 
     let ped = gated_lints(&none, &["pedantic".to_string()]);
     assert!(!ped.contains(&"doc_markdown") && ped.contains(&"use_self"));

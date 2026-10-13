@@ -1,6 +1,6 @@
 # Plan 232 — Batch 230: the clippy-1.99 new-lint wave (the toolchain-move re-arm)
 
-**Status:** IN PROGRESS — claimed 2026-10-13 ~21:4x +07 (claim row `66f9e41a`, pushed)
+**Status:** LANDED 2026-10-13 — all gates green (Research 261)
 
 ## T0 — the trigger (DONE)
 
@@ -39,32 +39,15 @@ positive, read and dismissed).
 
 ## Tasks
 
-- [ ] T1 Probe: `rustup toolchain install 1.99.0` (isolated); temp crate
-  with triggering shapes per candidate; `cargo +1.99.0 clippy
-  --message-format=json` — verify each lint FIRES, capture the suggestion
-  text + applicability (MachineApplicable / MaybeIncorrect / help-only) +
-  co-fire census + silence arms. A candidate whose probe contradicts the
-  fixable read re-tiers or drops (probe evidence is the landing authority —
-  Batch 33 precedent).
-- [ ] T2 Author: 5 corpus entries + proposers (per probe shapes, bounded
-  guards per house style) + the `clone_on_copy` UFCS rider (proposer edit,
-  count-neutral); entry ATOMS rustc-verified (the Batch-183 E0308 lesson:
-  `fixed_code` must COMPILE, not just parse).
-- [ ] T3 Standing gates: extend `batch230_pseudocode_parses` in the
-  syn-parse gate; `cargo test --lib` green; clippy ×4 postures green
-  (default / all-features / all-targets / no-default-features).
-- [ ] T4 Freeze regen (clippy corpus delta — plan 137 T7.5): regenerate
-  gen2/gen3 freeze tables in this batch (the `#[ignore]`d
-  `generation_v2_freeze`/`generation_v3_freeze` e2e).
-- [ ] T5 Score-bench: `cargo refine --score-bench` (append-only history).
-- [ ] T6 GOAT: G1 parse/syn (all new rules); G2 lib tests; G3 no-regression
-  (clippy 0 both feature states + `./scripts/ci_feature_guard.sh`).
-- [ ] T7 Docs: research note 261; AGENTS.md clippy count line + batch row;
-  `.docs/11_domains/clippy_lints.md` B230 row; snapshot landing row (same
-  commit); corpus count via `cargo refine --corpus-stats` (derived, never
-  hand-typed).
-- [ ] T8 Commit + push (`feat: batch 230: ...`); CRLF ritual (new files
-  LF; the distill file consistent-CRLF).
+- [x] T1 Probe: `rustup toolchain install 1.99.0` (isolated); probe crate + the PR `.patch` test shapes (round 1 decoded the REAL trigger shapes — assert_is_empty is diagnostics-forward, manual_bit_width is `BITS - leading_zeros`); every candidate verified firing + every fixed form compile-verified at BOTH 1.99.0 and 1.98.1. Probe artifacts: the session record (Research 261).
+- [x] T2 Author: 4 proposer modules (assert_is_empty.rs, bit_width.rs serving BOTH bit-width lints, block_scrutinee.rs, nonnull_unchecked_on_box_ptr.rs — 3 authoring subagents over disjoint files) + the `clone_on_copy` UFCS rider (count-neutral, this session). All corpus ATOMS compile-verified.
+- [x] T3 Standing gates: fixture table +5 rows (96→101); `cargo test --lib` 2608/0 default + 2972/0 feature posture; clippy ×4 postures clean.
+- [x] T4 Freeze regen: v2 (94 verified / 18 newly excluded — the five atoms are AHEAD-OF-PIN-unlabelable by the 1.98.1 oracle by design + the stride reshuffles; M4 PASS) + v3 (stratification PASS); both records pasted; loudness invariants green.
+- [x] T5 Score-bench: double-run gen-1 96.36% FLAT bit-identical (records 179+180).
+- [x] T6 GOAT: G1 parse/syn (fixture table green); G2 lib tests; G3 clippy 0 all four postures.
+- [x] T7 Docs: Research 261; AGENTS.md count line 103→108 + the B230 row; corpus count asserts (108, FIXABLE 89); plan ticked (this file); snapshot landing row (same commit). No .docs/11_domains/clippy_lints.md exists (B228 precedent: AGENTS.md only).
+- [x] T8 Commit + push (`feat: batch 230: ...`).
+- [x] T9 (added at gate time): the router-annotation floor re-pin 108→102 of 141 (the 5-entry pool growth flipped 6 spans' TF-cosine routing — the Batch-200 P7 mechanism; measured 113→107, floor = measured − 5 per the Plan-030 convention; delta recorded at the constant). The lint_level AHEAD_OF_PIN_1_99 carve-out + the ahead-of-pin driver test (the pinned-driver test asserts the rows' absence).
 
 ## Honest caveats
 

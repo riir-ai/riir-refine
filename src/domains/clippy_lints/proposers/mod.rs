@@ -41,8 +41,9 @@
 //! `--fix` applies edits without a type checker — the L2 pruner only validates
 //! syntax. Rules whose **detection is purely structural** (the pattern match
 //! alone guarantees the rewrite preserves semantics) are `--fix` eligible.
-//! The 40 rows below (6 seed + 27 from the Issue 016 expansion + 1 Batch 89
-//! `use_self` + 2 Batch 90, selected
+//! The 89 rows below (the batch-enumeration tail: … + 3 Batch 228 + 5 Batch
+//! 230, the clippy-1.99 toolchain-move re-arm — the authoritative count is
+//! the `fixable_lints_count` assert, never this sentence) — selected
 //! frequency-ranked from kornel's 100K-crate clippy run + Li et al.'s
 //! 8.09M-warning crates.io study ∩ clippy's `MachineApplicable` axis ∩
 //! parse-only provability; see `.benchmarks/021`; + 2 Batch 91 + 1 P15
@@ -193,7 +194,10 @@
 //! Plan-169 staged IOU pair); future lints drop in by extending
 //! the match.
 
+pub mod assert_is_empty;
 pub mod assign_op_pattern;
+pub mod bit_width;
+pub mod block_scrutinee;
 pub mod bool_comparison;
 pub mod byte_char_slices;
 pub mod bytes_count_to_len;
@@ -217,6 +221,7 @@ pub mod map_clone;
 pub mod mem_replace_with_default;
 pub mod needless_late_init;
 pub mod new_without_default;
+pub mod nonnull_unchecked_on_box_ptr;
 pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
@@ -865,6 +870,34 @@ pub const FIXABLE_LINTS: &[&str] = &[
     "manual_repeat_n",
     "manual_ok_err",
     "manual_next_back",
+    // ── Batch 230 (the clippy-1.99 new-lint wave — Plan 232; the
+    // toolchain-move re-arm: upstream stable 1.98.1→1.99.0 shipped
+    // 2026-09-28 with 8 new lints, 5 probe-admitted + the clone_on_copy
+    // UFCS rider; probe scripts/plan232_batch230_probe/, isolated
+    // +1.99.0 toolchain, 2026-10-13. Lint-level rows live in
+    // lint_level.rs's AHEAD_OF_PIN_1_99 (the pinned 1.98.1 driver cannot
+    // see them — the documented ahead-of-pin derivation) ──
+    // assert_is_empty: `assert!(x.is_empty())` → `assert_eq!(x, <empty>)`
+    // on signature-proven containers — pass-behavior identical, the
+    // value-printing panic message IS the lint's purpose. Pedantic group.
+    "assert_is_empty",
+    // One module (bit_width.rs) serves BOTH 1.99 bit-width lints — the fix
+    // is receiver-kind-driven either way (`<Ty>::BITS - x.leading_zeros()`
+    // → `x.bit_width()` / `.cast_unsigned().bit_width()` / NonZero `.get()`;
+    // bit_width() stabilized 1.97, the LINT ships 1.99 — clippy is
+    // MSRV-aware so the lint only fires where the fix compiles (the
+    // chunks_exact_to_as_chunks precedent).
+    "manual_bit_width",
+    "mismatched_bit_width_type",
+    // The un-brace of a plain single-expression block scrutinee
+    // (match/if-let/while-let) — construction identity; HELP-ONLY upstream
+    // (no .fixed), the identity fix is ours. Suspicious group.
+    "block_scrutinee",
+    // `unsafe { NonNull::new_unchecked(Box::into_raw(p)) }` →
+    // `NonNull::from_mut(Box::leak(p))` — same pointer, leak-on-both-sides,
+    // safe-replaces-unsafe; only BOX_LEAK MSRV-gated upstream (ancient);
+    // from_mut compile-verified at 1.98.1. Complexity group.
+    "nonnull_unchecked_on_box_ptr",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -928,6 +961,13 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // (the fix_verify loop auto-reverts it there). Eq-by-construction
         // otherwise (the adapter is defined as the expansion).
         "manual_repeat_n" => Some("MSRV floor — iter::repeat_n stabilized Rust 1.82; the rewrite needs a ≥1.82 toolchain (fix_verify auto-reverts on older)"),
+        // ── Batch 230 (clippy-1.99-only lints — the pinned 1.98.1 driver
+        // cannot fire any of these; see lint_level.rs AHEAD_OF_PIN_1_99) ──
+        "assert_is_empty" => Some("clippy 1.99 lint, pedantic group — fires only in crates enabling pedantic; the panic message CHANGES to print the asserted value (that difference is the lint's purpose)"),
+        "manual_bit_width" => Some("clippy 1.99 lint; bit_width() stabilized Rust 1.97 — clippy is MSRV-aware so the lint fires only where the fix compiles"),
+        "mismatched_bit_width_type" => Some("clippy 1.99 lint; the fix follows the RECEIVER's type kind — if the mismatched LHS type was intentional, decline the edit (the lint reads it as a probable bug)"),
+        "block_scrutinee" => Some("clippy 1.99 lint, help-only upstream; the un-brace is construction-identity — multi-statement blocks and unsafe/async wrappers refuse"),
+        "nonnull_unchecked_on_box_ptr" => Some("clippy 1.99 lint; same pointer value and leak-on-both-sides ownership, safe-replaces-unsafe — a SAFETY comment above the block refuses (orphaned justification)"),
         _ => None,
     }
 }
@@ -1245,6 +1285,14 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_repeat_n" => manual_repeat_n::collect_edits(source, file),
         "manual_ok_err" => manual_ok_err::collect_edits(source, file),
         "manual_next_back" => manual_next_back::collect_edits(source, file),
+        // ── Batch 230 (the clippy-1.99 new-lint wave — Plan 232) ──
+        "assert_is_empty" => assert_is_empty::collect_edits(source, file),
+        "manual_bit_width" => bit_width::collect_edits(source, file),
+        "mismatched_bit_width_type" => bit_width::collect_edits(source, file),
+        "block_scrutinee" => block_scrutinee::collect_edits(source, file),
+        "nonnull_unchecked_on_box_ptr" => {
+            nonnull_unchecked_on_box_ptr::collect_edits(source, file)
+        }
         _ => Vec::new(),
     }
 }
@@ -1399,12 +1447,17 @@ mod tests {
         // manual_repeat_n + manual_ok_err + manual_next_back — the
         // std/adapter definition-identity trio from the fresh 0.1.98
         // derivation's evidence tail).
-        assert_eq!(FIXABLE_LINTS.len(), 84);
+        // + 5 Batch 230 (the clippy-1.99 new-lint wave, Plan 232 — the
+        // toolchain-move re-arm: assert_is_empty + manual_bit_width +
+        // mismatched_bit_width_type + block_scrutinee +
+        // nonnull_unchecked_on_box_ptr; the clone_on_copy UFCS rider is
+        // count-neutral).
+        assert_eq!(FIXABLE_LINTS.len(), 89);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 96-row fixture table — length is the point.
+    /// 101-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1936,6 +1989,32 @@ impl S {
                 "manual_next_back",
                 "fn t(vals: &[u32]) -> Option<u32> { vals.iter().rev().next().copied() }",
                 ".next_back()",
+            ),
+            // ── Batch 230 (the clippy-1.99 new-lint wave — Plan 232) ──
+            (
+                "assert_is_empty",
+                "fn t(v: &Vec<u32>) { assert!(v.is_empty()); }",
+                "assert_eq!(v.as_slice(), [])",
+            ),
+            (
+                "manual_bit_width",
+                "fn t(w: u32) -> u32 { u32::BITS - w.leading_zeros() }",
+                "w.bit_width()",
+            ),
+            (
+                "mismatched_bit_width_type",
+                "fn t(w: u8) -> u32 { u32::BITS - w.leading_zeros() }",
+                "w.bit_width()",
+            ),
+            (
+                "block_scrutinee",
+                "fn t(o: Option<u32>) -> u32 { match { o.unwrap() } { n => n + 1 } }",
+                "match o.unwrap()",
+            ),
+            (
+                "nonnull_unchecked_on_box_ptr",
+                "fn t(one: Box<u32>) -> std::ptr::NonNull<u32> { unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(one)) } }",
+                "NonNull::from_mut(Box::leak(one))",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

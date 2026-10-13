@@ -31,7 +31,12 @@ use crate::domains::clippy_lints::{ClippyFixEntry, ClippyLintDomain};
 /// provability — see `.benchmarks/021`; the Batch 89 pair from the Plan
 /// 049 T0.1 real-code fired histogram, Bench 061) + the 2 Batch 90
 /// fired-histogram pedantic rows + the 4 Batch 91 clippy-1.98 new-lint
-/// rows (P9 intake, all four suggestion-only in real clippy) + the 2
+/// rows (P9 intake, all four suggestion-only in real clippy) + the 5
+/// Batch 230 clippy-1.99 new-lint rows (2026-10-13, the TOOLCHAIN-MOVE
+/// RE-ARM — upstream stable 1.98.1→1.99.0 shipped 2026-09-28; the
+/// Batch-91 precedent class; probe-verified against the isolated +1.99.0
+/// toolchain, all fixed forms compile-verified at BOTH 1.99.0 and 1.98.1;
+/// AHEAD-OF-PIN lints — see `lint_level.rs` `AHEAD_OF_PIN_1_99`) + the 2
 /// P10 post-mining intake rows (2026-09-13, the 089-T3 usage artifact —
 /// both probe-verified on-by-default in clippy 1.98, the pair the
 /// mechanical fixer needed by hand on `src/bin/heal.rs`) + the 1 P11
@@ -1156,6 +1161,70 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn mnb(vals: &[u32]) -> Option<u32> { vals.iter().rev().next().copied() }".to_string(),
             fixed_code: "fn mnb(vals: &[u32]) -> Option<u32> { vals.iter().next_back().copied() }".to_string(),
         },
+        // ── Batch 230 (the 2026-10-13 clippy-1.99 new-lint wave, Plan 232 —
+        // the TOOLCHAIN-MOVE RE-ARM: upstream stable 1.98.1→1.99.0 shipped
+        // 2026-09-28; the Batch-91 precedent class. All five probe-verified
+        // against the ISOLATED +1.99.0 toolchain this session; every fixed
+        // form below COMPILE-VERIFIED at BOTH 1.99.0 and 1.98.1 (the
+        // Batch-183 E0308 law: fixed_code must compile, not just parse).
+        // The lints are AHEAD-OF-PIN (lint_level.rs AHEAD_OF_PIN_1_99): they
+        // fire nowhere on the workspace's pinned 1.98.1 driver — the live
+        // surface is public consumers on stable 1.99. Groups per the +1.99.0
+        // driver's -W help (assert-is-empty/manual-bit-width = pedantic,
+        // block-scrutinee/mismatched-bit-width-type = suspicious,
+        // nonnull-unchecked-on-box-ptr = complexity) ──
+        ClippyFixEntry {
+            lint_name: "assert_is_empty".to_string(),
+            lint_group: "pedantic".to_string(),
+            // `assert_eq!(x, <empty>)` prints the asserted value on
+            // failure — that diagnostics difference IS the lint's purpose;
+            // pass-behavior identical (assert_eq! is assert!(*a == *b)).
+            // The &Vec form rides `.as_slice()`; the owned-Vec cast form
+            // `[T; 0]` is the proposer's signature-proven arm.
+            buggy_code: "fn aie(v: &Vec<u32>, s: &str) { assert!(v.is_empty()); assert!(!s.is_empty()); }".to_string(),
+            fixed_code: "fn aie(v: &Vec<u32>, s: &str) { assert_eq!(v.as_slice(), []); assert_ne!(s, \"\"); }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_bit_width".to_string(),
+            lint_group: "pedantic".to_string(),
+            // `T::BITS - x.leading_zeros()` IS `x.bit_width()` for unsigned
+            // (the std definition); signed rides cast_unsigned (the +1.99
+            // upstream .fixed shape). bit_width() stabilized 1.97 — the
+            // LINT ships 1.99 and clippy is MSRV-aware, so the lint only
+            // fires where the fix compiles (chunks_exact precedent).
+            buggy_code: "fn mbw(w: u32, x: i64) -> u32 { u32::BITS - w.leading_zeros() }".to_string(),
+            fixed_code: "fn mbw(w: u32, x: i64) -> u32 { w.bit_width() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "mismatched_bit_width_type".to_string(),
+            lint_group: "suspicious".to_string(),
+            // The LHS names a DIFFERENT width than the receiver — a
+            // probable bug; the fix follows the RECEIVER's kind (probed:
+            // `u32::BITS - w.leading_zeros()` with w: u8 → `w.bit_width()`).
+            buggy_code: "fn mbwt(w: u8) -> u32 { u32::BITS - w.leading_zeros() }".to_string(),
+            fixed_code: "fn mbwt(w: u8) -> u32 { w.bit_width() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "block_scrutinee".to_string(),
+            lint_group: "suspicious".to_string(),
+            // HELP-ONLY upstream (no .fixed) — the identity fix is ours:
+            // un-brace the single-expression scrutinee; same expression,
+            // same evaluation point. Multi-statement blocks and unsafe
+            // wrappers refuse (upstream ignores unsafe scrutinees too).
+            buggy_code: "fn bs(o: Option<u32>) -> u32 { match { o.unwrap() } { n => n + 1 } }".to_string(),
+            fixed_code: "fn bs(o: Option<u32>) -> u32 { match o.unwrap() { n => n + 1 } }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "nonnull_unchecked_on_box_ptr".to_string(),
+            lint_group: "complexity".to_string(),
+            // Same pointer value, leak-on-both-sides ownership (into_raw
+            // leaks; Box::leak leaks) — safe-replaces-unsafe via
+            // NonNull::from_mut(&mut) (a reference is provably non-null).
+            // Only BOX_LEAK MSRV-gated upstream; from_mut compiles at
+            // 1.98.1 (probe-verified).
+            buggy_code: "fn nub(one: Box<u32>) -> std::ptr::NonNull<u32> { unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(one)) } }".to_string(),
+            fixed_code: "fn nub(one: Box<u32>) -> std::ptr::NonNull<u32> { NonNull::from_mut(Box::leak(one)) }".to_string(),
+        },
     ])
 }
 
@@ -1300,7 +1369,11 @@ mod tests {
         // Batch 228 (2026-10-13, the coverage-report re-arm pack XIX,
         // Plan 230) added the std/adapter definition-identity trio
         // (manual_repeat_n + manual_ok_err + manual_next_back) = 103.
-        assert_eq!(corpus.entries.len(), 103);
+        // Batch 230 (2026-10-13, the clippy-1.99 new-lint wave, Plan 232)
+        // added the five toolchain-move re-arm rows (assert_is_empty +
+        // manual_bit_width + mismatched_bit_width_type + block_scrutinee +
+        // nonnull_unchecked_on_box_ptr) = 108.
+        assert_eq!(corpus.entries.len(), 108);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

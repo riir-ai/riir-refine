@@ -4,6 +4,18 @@
 //! with a clean fixed form, 2026-09-21,
 //! `scripts/plan158_frontier_probe.py`).
 //!
+//! ## Batch 230 rider (Plan 232): the UFCS path-call forms
+//!
+//! clippy 1.99 (#16972) widened the lint to UFCS calls — `Clone::clone(&x)`,
+//! `u32::clone(&x)`, `<u32 as Clone>::clone(&x)` — all probe-verified firing
+//! 2026-10-13 (`scripts/plan232_batch230_probe/`, isolated +1.99.0
+//! toolchain). The rider admits the shape the doc previously refused: a
+//! path-call whose SINGLE argument is `&bare_ident` with the ident a
+//! signature-proven Copy scalar. The fix is `ident` — `Clone for T` on a
+//! Copy `T` is `*x` by the std contract (the same FIXABLE bar as the method
+//! form). By-ref argument spellings (`Clone::clone(s)` for `s: &str`),
+//! `&mut`, and multi-arg forms refuse — narrower than clippy, by design.
+//!
 //! ## Why the rewrite is construction-identity (the FIXABLE bar)
 //!
 //! On a `Copy` type `T`, `x.clone()` and `x` have the same type, the same
@@ -29,6 +41,10 @@
 //!   turbofish; path-call spellings (`T::clone(&x)`) refuse. A receiver
 //!   that is a method chain, field, index, or call refuses (not a bare
 //!   proven ident).
+//! - **Batch 230**: the path-call refusal above is LIFTED for the UFCS
+//!   family (see the rider section) — `Clone::clone(&x)`-shaped calls on
+//!   proven-Copy scalars now rewrite to `x`. Everything else about the
+//!   original refusal stands.
 //! - Distinctness: `needless_borrow` owns expression-POSITION borrows;
 //!   `redundant_clone` owns value-flow clones that are never used; this
 //!   rule owns only the proven-Copy receiver's semantic no-op. Comments
@@ -37,7 +53,7 @@
 use std::collections::BTreeMap;
 
 use syn::visit::Visit;
-use syn::{Expr, ExprMethodCall, File, ImplItemFn, ItemFn};
+use syn::{Expr, ExprCall, ExprMethodCall, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
 use super::{edit, SourceEdit};
@@ -94,6 +110,17 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
             self.edits.push(edit(m, replacement));
         }
     }
+
+    fn visit_expr_call(&mut self, c: &'ast ExprCall) {
+        // The Batch-230 UFCS rider: `Clone::clone(&x)`-family path calls.
+        // Descend first (default traversal), then attempt the rewrite so a
+        // nested non-matching call inside the argument still gets its own
+        // visit.
+        syn::visit::visit_expr_call(self, c);
+        if let Some(replacement) = self.try_rewrite_ufcs(c) {
+            self.edits.push(edit(c, replacement));
+        }
+    }
 }
 
 impl Collector<'_> {
@@ -117,6 +144,75 @@ impl Collector<'_> {
             return None;
         }
         if drops_interior_comment(self.source, byte_range(m), &[byte_range(&*m.receiver)]) {
+            return None;
+        }
+        Some(ident)
+    }
+
+    /// The Batch-230 UFCS arm: `Clone::clone(&x)` / `Ty::clone(&x)` /
+    /// `<Ty as Clone>::clone(&x)` / `std::clone::Clone::clone(&x)` where
+    /// `x` is a signature-proven Copy scalar BY VALUE. The fix is `x`.
+    fn try_rewrite_ufcs(&self, c: &ExprCall) -> Option<String> {
+        let Expr::Path(p) = &*c.func else { return None };
+        if p.path.leading_colon.is_some() || c.args.len() != 1 {
+            return None;
+        }
+        let segs: Vec<String> = p
+            .path
+            .segments
+            .iter()
+            .map(|s| s.ident.to_string())
+            .collect();
+        // Every segment must be argument-free (a turbofish on any segment
+        // refuses; qself already excluded by the Expr::Path shape).
+        if p.path.segments.iter().any(|s| !s.arguments.is_none()) {
+            return None;
+        }
+        // The single argument must be `&bare_ident`.
+        let Some(arg) = c.args.first() else { return None };
+        let Expr::Reference(r) = arg else { return None };
+        if r.mutability.is_some() {
+            return None;
+        }
+        let Expr::Path(ap) = &*r.expr else { return None };
+        if ap.qself.is_some() || ap.path.leading_colon.is_some() || ap.path.segments.len() != 1 {
+            return None;
+        }
+        if !ap.path.segments[0].arguments.is_none() {
+            return None;
+        }
+        let ident = ap.path.segments[0].ident.to_string();
+        let ty = self.proven.get(ident.as_str())?;
+        // Only BY-VALUE scalar idents: `&ident` on a `&str`/`&String` param
+        // is a double reference — refuse (narrower than clippy).
+        let by_value_copy = [
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
+            "isize", "f32", "f64", "bool", "char",
+        ];
+        if !by_value_copy.contains(&ty.as_str()) {
+            return None;
+        }
+        // Admissible path spellings: [Clone, clone], [std|core, clone,
+        // Clone, clone], and [Ty, clone] (Ty == the proven type). The
+        // `<Ty as Clone>::clone` spelling parses WITH qself, which the
+        // Expr::Path shape already excluded — it refuses by construction
+        // (the documented narrower-than-clippy divergence).
+        let ok = match segs.as_slice() {
+            [c_name, m_name] if m_name == "clone" && (c_name == "Clone" || c_name == ty) => true,
+            [root, _mod_name, c_name, m_name]
+                if (root == "std" || root == "core")
+                    && _mod_name == "clone"
+                    && c_name == "Clone"
+                    && m_name == "clone" =>
+            {
+                true
+            }
+            _ => false,
+        };
+        if !ok {
+            return None;
+        }
+        if drops_interior_comment(self.source, byte_range(c), &[byte_range(arg)]) {
             return None;
         }
         Some(ident)
@@ -231,5 +327,91 @@ mod tests {
         .expect("matched");
         assert!(out.contains("if x > 1"), "condition not simplified: {out}");
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    // ── Batch 230: the UFCS path-call rider (clippy 1.99 #16972) ──
+
+    #[test]
+    fn ufcs_trait_path_drops() {
+        let out = propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); Clone::clone(&x) }",
+        )
+        .expect("matched");
+        assert!(out.contains("hits.push(0); x }"), "UFCS clone not dropped: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ufcs_type_path_drops() {
+        let out = propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); u32::clone(&x) }",
+        )
+        .expect("matched");
+        assert!(out.contains("hits.push(0); x }"), "UFCS type-path clone not dropped: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ufcs_std_qualified_drops() {
+        let out = propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); std::clone::Clone::clone(&x) }",
+        )
+        .expect("matched");
+        assert!(out.contains("hits.push(0); x }"), "std-qualified UFCS clone not dropped: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn ufcs_wrong_type_path_refuses() {
+        // `u64::clone(&x)` where x is u32 — the path names a DIFFERENT type
+        // than the proven one; refuse (conservative).
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); u64::clone(&x) }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ufcs_by_ref_arg_refuses() {
+        // `Clone::clone(s)` with `s: &str` — a by-ref argument spelling,
+        // not `&ident`; refuse (narrower than clippy by design).
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(s) }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ufcs_double_ref_arg_refuses() {
+        // `Clone::clone(&s)` with `s: &str` — `&s` is `&&str`; the
+        // by-value-Copy derivation does not cover it.
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(&s) }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ufcs_mut_ref_arg_refuses() {
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); Clone::clone(&mut x) }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ufcs_two_args_refuses() {
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32, y: u32) -> u32 { hits.push(0); Clone::clone(&x, &y) }",
+        )
+        .is_none());
     }
 }
