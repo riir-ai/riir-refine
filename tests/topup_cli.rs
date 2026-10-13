@@ -88,6 +88,20 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                     r#"{"seq":7,"pack_id":1,"usdc_base":1000000,"kat_micro":10000000,"reference":"3RefX7","url":"solana:pay?example","expires_unix":1800062400,"status":"open"}"#
                         .to_string(),
                 ),
+                // Issue 126 — the actions answer the canned intent body
+                // (the SAME PayIntentCreated shape; show/void are the
+                // server's own re-compose/terminal marks — the mock needs
+                // no crypto because the REAL signature checks live in the
+                // worker contract tier).
+                ("ok", "/pay/intent/void") => (
+                    200,
+                    r#"{"seq":7,"status":"voided"}"#.to_string(),
+                ),
+                ("ok", "/pay/intent/show") => (
+                    200,
+                    r#"{"seq":7,"pack_id":1,"usdc_base":1000000,"kat_micro":10000000,"reference":"3RefX7","url":"solana:pay?example","expires_unix":1800062400,"status":"open"}"#
+                        .to_string(),
+                ),
                 ("ok", "/history") => (
                     200,
                     format!(
@@ -364,4 +378,109 @@ fn account_history_without_purchases_renders_no_section() {
         !lines.iter().any(|l| l.contains("purchases")),
         "no section on a pre-B7 body: {lines:?}"
     );
+}
+
+// ── issue 126: the void / show actions + the 429 auto-show ──────────────
+
+/// `--show <seq>` re-prints the checkout: the SAME intent lines + QR the
+/// create printed (the server recomposes; the client renders). The mock
+/// answers the canned intent body, so the URL line must match exactly.
+#[test]
+fn topup_show_reprints_the_checkout() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("show");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["topup", "--show", "7", "--qr"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("solana:pay?example"), "{text}");
+    assert!(text.contains("3RefX7"), "{text}");
+    assert!(text.contains('▀') || text.contains('█'), "the --qr forced QR: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `--void <seq>` prints the release line (the mock 200s the action).
+#[test]
+fn topup_void_prints_the_release() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("void");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["topup", "--void", "7"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("voided"), "{text}");
+    assert!(text.contains("slot is free"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The 429 auto-show: the intent route refuses `rate_limited` (the mock's
+/// `capped` mode), the CLI reads `/history`, finds exactly ONE open
+/// checkout, and SHOWS it without asking — the owner's exact ask. The
+/// open row in the canned history is seq 7.
+#[test]
+fn topup_capped_with_one_open_intent_shows_it_without_asking() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+    let cap = format!(
+        r#"{{"error":"pay: 2 intents already open for this account — settle or wait","code":"rate_limited"}}"#
+    );
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { return };
+            let Some((path, _, _)) = read_request(&mut stream) else { continue };
+            let route = path.split('?').next().unwrap_or(&path);
+            let (status, reply) = match route {
+                "/pay/catalog" => (200, CATALOG_BODY.to_string()),
+                "/pay/intent" => (429, cap.clone()),
+                "/history" => (
+                    200,
+                    format!(
+                        r#"{{"account_id":"{}","balance_micro":0,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}}],"purchases_total":1,"purchases_truncated":false}}"#,
+                        "a".repeat(32)
+                    ),
+                ),
+                "/pay/intent/show" => (
+                    200,
+                    r#"{"seq":7,"pack_id":1,"usdc_base":1000000,"kat_micro":10000000,"reference":"3RefX7","url":"solana:pay?example","expires_unix":1800062400,"status":"open"}"#
+                        .to_string(),
+                ),
+                _ => (404, r#"{"error":"no such route","code":"not_found"}"#.to_string()),
+            };
+            let resp = format!(
+                "HTTP/1.1 {status} x\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{reply}",
+                reply.len()
+            );
+            let _ = stream.write_all(resp.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+    let mock_base = format!("http://{addr}");
+    let dir = scratch("autoshow");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock_base, &[], &["topup", "--pack", "1", "--qr"]);
+    assert_eq!(code, Some(0), "the auto-show SUCCEEDS (exit 0, a shown checkout): output:\n{text}");
+    assert!(text.contains("already have an open checkout (seq 7)"), "{text}");
+    assert!(text.contains("solana:pay?example"), "{text}");
+    assert!(text.contains('▀') || text.contains('█'), "the shown checkout's QR: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The action flags' combination law: --show + --void together is a
+/// refusal BEFORE any dial (the closed port proves nothing reached the
+/// wire), and both require the topup command.
+#[test]
+fn topup_show_void_flags_validate_before_any_dial() {
+    let dir = scratch("flaglaw");
+    login(&dir);
+    let (code, text) = heal(
+        &dir,
+        CLOSED_PORT,
+        &[],
+        &["topup", "--show", "7", "--void", "7"],
+    );
+    assert_eq!(code, Some(2), "{text}");
+    assert!(text.contains("separate actions"), "{text}");
+    // Outside topup: refused at parse.
+    let (code, text) = heal(&dir, CLOSED_PORT, &[], &["account", "--history", "--show", "7"]);
+    assert_eq!(code, Some(2), "{text}");
+    assert!(text.contains("--show/--void require"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
 }

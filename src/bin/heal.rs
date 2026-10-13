@@ -3196,6 +3196,172 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
 }
 
+/// The account's open checkouts, read through the SAME transport tier
+/// (the history read's transport + the purchases page parse). `None` =
+/// the read failed (the caller falls back to the bare 429 prose). The
+/// account signing key is required because the seq actions are signed —
+/// fetched here once, reused by show/void.
+fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::PayPurchaseRow>> {
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_refine::kat_account_client::AccountTransport;
+        use riir_refine::kat_lease_client::HttpResponse;
+        let dir = riir_refine::kat_account::KatAccount::default_dir();
+        let account = riir_refine::kat_account::KatAccount::load(&dir).ok()?;
+        let pubkey = account.signing_key().ok()?.verifying_key().to_bytes();
+        let acct_hex = riir_refine::kat_payreq_client::hex_encode(&pubkey);
+        let transport = riir_refine::kat_account_client::HttpAccountTransport::new(url, 10);
+        let body = match transport.get_history(&acct_hex, 20) {
+            HttpResponse::Ok(b) => b,
+            _ => return None,
+        };
+        let v: serde_json::Value = serde_json::from_slice(&body).ok()?;
+        let (rows, _, _) = riir_refine::kat_protocol_pay::parse_purchases_page(&v).ok()?;
+        Some(
+            rows.into_iter()
+                .filter(|r| r.status == "open")
+                .collect(),
+        )
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = url;
+        None
+    }
+}
+
+/// USDC base units → the display string (the 6-dec fiat, whole amounts
+/// bare — the pay client's own rule, mirrored for the listing lines).
+fn format_usdc(base: u64) -> String {
+    let whole = base / 1_000_000;
+    let frac = base % 1_000_000;
+    if frac == 0 {
+        format!("{whole}")
+    } else {
+        format!("{whole}.{frac:06}")
+    }
+}
+
+/// Issue 126: `topup --void <seq>` — release an open checkout's slot.
+/// Idempotent server-side; the marker stays reserved until the TTL (a
+/// payment already scanned still lands on the account).
+#[cfg(feature = "kat_service")]
+fn run_kat_topup_void(seq: u64) {
+    #[cfg(feature = "kat_transport")]
+    use riir_refine::kat_pay_client as topup;
+
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("topup: no account ({e}) — run `cargo refine login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("topup: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let url = command_service_url();
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, seq, url);
+        riir_refine::build_stamp::refuse("topup", &["kat_transport"]);
+    }
+    #[cfg(feature = "kat_transport")]
+    {
+        let transport = topup::HttpTopupTransport::new(&url, 10);
+        match topup::void_intent(&transport, &signing_key, seq) {
+            topup::TopupOutcome::Ok(v) => {
+                assert_eq!(v.status.as_str(), "voided");
+                println!("checkout seq {} voided — the slot is free; a payment already scanned still lands on your account until its TTL", v.seq);
+            }
+            topup::TopupOutcome::Refused { status, code, detail } => {
+                eprintln!("topup: the void was refused ({status} {}{})", code.as_deref().unwrap_or("no code"), detail);
+                std::process::exit(1);
+            }
+            topup::TopupOutcome::Unexpected(e) => {
+                eprintln!("topup: void failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
+/// Issue 126: `topup --show <seq>` — re-print an open (or
+/// voided-unexpired) checkout: the SAME lines + QR creation printed,
+/// recomposed server-side from the row. One definition of the checkout
+/// surface; nothing is re-signed, nothing re-priced.
+#[cfg(feature = "kat_service")]
+fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
+    #[cfg(feature = "kat_transport")]
+    use riir_refine::kat_pay_client as topup;
+
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("topup: no account ({e}) — run `cargo refine login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("topup: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let url = command_service_url();
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = (signing_key, seq, url, qr);
+        riir_refine::build_stamp::refuse("topup", &["kat_transport"]);
+    }
+    #[cfg(feature = "kat_transport")]
+    {
+        let transport = topup::HttpTopupTransport::new(&url, 10);
+        match topup::show_intent(&transport, &signing_key, seq) {
+            topup::TopupOutcome::Ok(intent) => {
+                for l in topup::intent_lines(&intent) {
+                    println!("{l}");
+                }
+                let want_qr = match qr {
+                    Some(b) => b,
+                    None => {
+                        use std::io::IsTerminal as _;
+                        std::io::stdout().is_terminal()
+                    }
+                };
+                if want_qr {
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
+                    if rendered.is_empty() {
+                        eprintln!("topup: the QR could not be rendered — open the URL above");
+                    } else {
+                        println!("{rendered}");
+                        println!("  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above");
+                    }
+                }
+            }
+            topup::TopupOutcome::Refused { status, code, detail } => {
+                eprintln!(
+                    "topup: the show was refused ({status} {}{})",
+                    code.as_deref().unwrap_or("no code"),
+                    detail
+                );
+                std::process::exit(1);
+            }
+            topup::TopupOutcome::Unexpected(e) => {
+                eprintln!("topup: show failed: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+}
+
 /// riir-dapps Plan 045 B7: `topup [--pack N] [--qr|--no-qr]` — the
 /// USDC→KAT checkout (the 075 gate's "top up" path, rendered actionable):
 /// the machine catalog read, the pack pick, the signed `POST /pay/intent`,
@@ -3338,7 +3504,83 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
             topup::TopupOutcome::Refused { status, code, detail } => {
                 match code.as_deref() {
                     Some(riir_refine::kat_protocol_pay::CODE_RATE_LIMITED) => {
-                        eprintln!("topup: a cap is full ({status}) — {detail}");
+                        // The 429 dead-end's fix (issue 126): an open
+                        // checkout probably exists — surface IT instead of
+                        // the refusal, per the owner's ask (one = show
+                        // without asking; several = pick).
+                        if let Some(intents) = topup_open_intents(&url) {
+                            match intents.len() {
+                                0 => {
+                                    eprintln!("topup: a cap is full ({status}) — {detail}");
+                                    eprintln!("topup: no open checkout of yours shows on this net — the lane-wide cap or another account holds it; retry later");
+                                }
+                                1 => {
+                                    let seq = intents[0].seq;
+                                    println!(
+                                        "topup: you already have an open checkout (seq {seq}) — showing it instead"
+                                    );
+                                    run_kat_topup_show(seq, qr);
+                                    // The checkout was SHOWN — this run's
+                                    // job is done (exit 0, never the
+                                    // refusal's exit 1 below).
+                                    return;
+                                }
+                                _ => {
+                                    eprintln!("topup: a cap is full ({status}) — {detail}");
+                                    eprintln!("topup: your open checkouts:");
+                                    for i in &intents {
+                                        println!(
+                                            "  seq {:<4} pack {}   {} USDC — created {} min ago",
+                                            i.seq,
+                                            i.pack_id,
+                                            format_usdc(i.usdc_base),
+                                            i.created_unix,
+                                        );
+                                    }
+                                    if args_tty_stdin() {
+                                        print!("show which (seq, empty = newest, 'v<seq>' to void): ");
+                                        use std::io::Write as _;
+                                        std::io::stdout().flush().ok();
+                                        let mut line = String::new();
+                                        match std::io::stdin().read_line(&mut line) {
+                                            Ok(0) | Err(_) => std::process::exit(2),
+                                            Ok(_) => {
+                                                let t = line.trim();
+                                                if t.is_empty() {
+                                                    run_kat_topup_show(
+                                                        intents[0].seq,
+                                                        qr,
+                                                    );
+                                                    return;
+                                                } else if let Some(raw) = t.strip_prefix(['v', 'V']) {
+                                                    match raw.parse::<u64>() {
+                                                        Ok(s) => run_kat_topup_void(s),
+                                                        Err(_) => std::process::exit(2),
+                                                    }
+                                                    return;
+                                                } else {
+                                                    match t.parse::<u64>() {
+                                                        Ok(s) => run_kat_topup_show(s, qr),
+                                                        Err(_) => std::process::exit(2),
+                                                    }
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        eprintln!(
+                                            "topup: re-print one with  cargo refine topup --show <seq>"
+                                        );
+                                        eprintln!(
+                                            "topup: release one with  cargo refine topup --void <seq>"
+                                        );
+                                        std::process::exit(2);
+                                    }
+                                }
+                            }
+                        } else {
+                            eprintln!("topup: a cap is full ({status}) — {detail}");
+                        }
                     }
                     Some(riir_refine::kat_protocol_pay::CODE_TERMINAL_STATE) => {
                         eprintln!("topup: this account cannot buy ({status}) — {detail}");
@@ -4678,7 +4920,7 @@ USAGE:
     cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
     cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
-    cargo refine topup [--pack N] [--qr|--no-qr]      (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses, kat_transport)
+    cargo refine topup [--pack N] [--qr|--no-qr]      (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, kat_transport)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -5474,6 +5716,15 @@ struct Args {
     /// working too).
     topup_qr: bool,
     topup_no_qr: bool,
+    /// Issue 126: `--show <seq>` — re-print an OPEN (or voided-unexpired)
+    /// checkout's QR. The server recomposes the URL from the row (the
+    /// marked amount never rode the history wire), so the re-print is
+    /// byte-identical to the QR that was scanned.
+    topup_show: Option<u64>,
+    /// Issue 126: `--void <seq>` — release an open checkout's slot
+    /// (idempotent; the reference stays reserved until the TTL, so a
+    /// payment already in flight still lands on the account).
+    topup_void: Option<u64>,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -5698,6 +5949,8 @@ fn parse_args() -> Args {
         topup_pack: None,
         topup_qr: false,
         topup_no_qr: false,
+        topup_show: None,
+        topup_void: None,
         wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
@@ -6110,6 +6363,28 @@ fn parse_args() -> Args {
             // with the topup command is normalized to topup_qr post-parse
             // (the pay/faucet --qr check would otherwise refuse it).
             "--no-qr" => args.topup_no_qr = true,
+            // Issue 126 — the checkout re-print + release, both seq-taking
+            // and topup-only (the parse arms sit beside --pack's).
+            "--show" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--show requires a value (the intent seq)");
+                    usage();
+                };
+                args.topup_show = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--show expects a number, got {value:?}");
+                    usage();
+                }));
+            }
+            "--void" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--void requires a value (the intent seq)");
+                    usage();
+                };
+                args.topup_void = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--void expects a number, got {value:?}");
+                    usage();
+                }));
+            }
             "--label" => {
                 let Some(value) = it.next() else {
                     eprintln!("--label requires a value (e.g. \"invoice #1042\")");
@@ -6308,6 +6583,16 @@ fn parse_args() -> Args {
     }
     if args.topup_pack.is_some() && !matches!(args.command, Some(KatCommand::Topup)) {
         eprintln!("--pack requires the `topup` command");
+        usage();
+    }
+    if (args.topup_show.is_some() || args.topup_void.is_some())
+        && !matches!(args.command, Some(KatCommand::Topup))
+    {
+        eprintln!("--show/--void require the `topup` command");
+        usage();
+    }
+    if args.topup_show.is_some() && args.topup_void.is_some() {
+        eprintln!("--show and --void are separate actions — run one per invocation");
         usage();
     }
     // The topup QR: a `--qr` token under `topup` normalizes to the topup
@@ -9441,7 +9726,13 @@ fn main() {
                 } else {
                     None
                 };
-                run_kat_topup(args.topup_pack, qr_mode);
+                if let Some(seq) = args.topup_void {
+                    run_kat_topup_void(seq);
+                } else if let Some(seq) = args.topup_show {
+                    run_kat_topup_show(seq, qr_mode);
+                } else {
+                    run_kat_topup(args.topup_pack, qr_mode);
+                }
             }
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
             KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),
