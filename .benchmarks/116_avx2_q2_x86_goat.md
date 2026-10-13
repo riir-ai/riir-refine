@@ -1,6 +1,6 @@
 # Bench 116 — the AVX2 Q2_0 x86 GOAT (the P53 rider, batch 231)
 
-> **Status:** COMPLETE — PARETO-PASS (2026-10-14 ~03:2x +07, 4090 idle loop)
+> **Status:** COMPLETE — PARETO-PASS (2026-10-14 ~03:2x +07, 4090 idle loop); annotation tie-in CLOSED 2026-10-14 (batch 231 landed `9d8ca6490` — the rider carries this bench's numbers)
 > **Rule:** the P53 x86 SIMD face rider on kernel_opt `lut-free-bit-spread-vadd4-unpack` (entries_gpu_33) — the llama.cpp `0a731cce` #30447 AVX2 Q2_0 vec_dot distill (batch 231, claim `68be73c34`, plan 233 `11e1a8ae9`, in flight on the M3 lane at run time — this gate is the STAGED 4090 half, run AHEAD of the landing so the numbers exist the moment the rider does)
 > **Bench:** `benches/bench_007_avx2_q2_x86_goat.rs` (self-contained, `harness = false`, no required-features — x86_64+avx2+fma only by loud refusal, exit 2 elsewhere)
 
@@ -54,11 +54,11 @@ PROVENANCE: power=AC scheme=high load=0 swap=2339MB gpu=20 %, 498 MiB canary=ski
 
 ## What this gate does NOT claim
 
-- **No corpus edit** — entries_gpu_33 is the M3 lane's surface mid-batch-231 (the claim row owns it); the verdict lands HERE + in the snapshot row. When batch 231 lands, the rider's NotBenchable-on-M3 note carries this bench's number as its x86 half — the annotation tie-in is the named follow-up (it may ride the batch's own docs pass or the next idle unit).
+- **No corpus edit at run time** — entries_gpu_33 was the M3 lane's surface mid-batch-231 (the claim row owns it); the verdict landed HERE + in the snapshot row. **Tie-in CLOSED 2026-10-14:** batch 231 landed `9d8ca6490` and the rider's NotBenchable-on-M3 note now carries this bench's numbers inline ("the staged x86 GOAT RAN: BENCH 007/116 … G1 311 bit-identical, G2 25/25 at 2.20x-2.94x, G4 zero-alloc, provenance PASSED") — verified at the file post-landing; no further action.
 - **No league-model claim** — this is the RULE's mechanism priced on real shapes, not a Bonsai/Qwen pipeline number.
 - **No aarch64 statement** — the rule's NEON/other-arch faces are unchanged; this gate is x86_64-only by construction (exit 2 elsewhere, never a green zero).
 - **No measured-vs-source figure dispute** — the PR quotes no isolated vec_dot speedup; 2.2–2.9× is this box's honest measurement of the pattern against the naive per-element form.
 
 ## Queue after
 
-The x86 GOAT half of batch 231's staging is DONE (ahead of the landing). Remaining on this lane: poll batch 231's `feat:` landing → the annotation tie-in (rider note gains the x86 bench number) → the standing watches (971 merge-moment protocol re-armed; dated leads mlxfast ~10-17, walk #15 ~10-20, nnethercote ~11-01).
+The x86 GOAT half of batch 231's staging is DONE (ahead of the landing). ~~poll batch 231's `feat:` landing → the annotation tie-in~~ **BOTH CLOSED**: batch 231 landed `9d8ca6490` (verified: `git log -1 -- src/domains/kernel_opt/corpus/entries_gpu_33.rs`), the rider annotation carries this bench's numbers (verified by file read 2026-10-14). Standing: the watches (971 merge-moment protocol re-armed; dated leads mlxfast ~10-17, walk #15 ~10-20, nnethercote ~11-01).
