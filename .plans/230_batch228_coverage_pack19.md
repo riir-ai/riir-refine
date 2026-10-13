@@ -74,14 +74,16 @@ zero-hit):
    `iter.next_back()`.
 
 - [x] T0 — derivation + the 49-row adjudication table above + dedup greps
-- [ ] T1 — the probe (`scripts/plan230_pack19_probe.py`, the plan188
+- [x] T1 — the probe (`scripts/plan230_pack19_probe.py`, the plan188
       envelope): per-fixture clippy JSON runs; FIRING arms (std-path +
       imported spellings per lead), SILENT arms (repeat without take /
       take on non-repeat / non-identity ok-err arms / rev-then-forall /
       .last() forms), POSTURE arms (recorded, never gated), FIXED forms
       (compile + silent), suggestion-applicability dump, co-fire census
       (let_and_return / redundant_pattern_matching / manual_map / double_compare
-      watch set)
+      watch set) — DONE (probe VERDICT PASS quoted in the landing commit:
+      8 firing / 3 silent / 3 posture / 6 fixed forms, zero co-fires;
+      `4bed7a280`)
 - [x] T2 — author on PASS: corpus entries ×3 + proposers ×3 + the
       `all_fixed_code_parses` standing gate (the clippy_lints domain's
       per-entry G1 — the batchNN_pseudocode_parses convention is
@@ -97,8 +99,10 @@ zero-hit):
       byte-identical to B227, no re-pin); Layer 5c 3920/0
 - [x] T4 — Research 259; AGENTS.md corpus count 100→103 (84 fixable);
       snapshot discharge row; plan ticked (this commit)
-- [ ] T5 — commit `feat: batch 228: ...` + push; .plans/.highwater
-      already 229→230 at allocation
+- [x] T5 — commit `feat: batch 228: ...` + push; .plans/.highwater
+      already 229→230 at allocation — DONE (`4bed7a280` pushed to origin;
+      ticked post-landing by the idle loop — the commit's own message
+      carries the T1 probe verdict and the T5 push is the commit itself)
 
 ## Scope discipline
 
