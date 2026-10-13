@@ -1,6 +1,6 @@
 # Plan 227 — Batch 225: the Q1_0 trio kernel_opt distill + three lead adjudications
 
-**Status:** IN PROGRESS — claimed 2026-10-13 ~07:2x +07 (m3-max idle loop)
+**Status:** COMPLETE — landed 2026-10-13 ~09:0x +07 (m3-max idle loop; corpus 796→801, 5 rules + 5 riders + 1 watch)
 
 ## Goal
 
@@ -23,30 +23,16 @@ Sources (pins, verified at walk #14):
 
 - [x] Claim row appended to `.distill/001_mining_queue_snapshot.md` + pushed (the arbiter).
 - [x] Plan-first (this file, `.plans/.highwater` 226→227, dual_allocation_gate 0/0/0).
-- [ ] Fresh `.raw` clone of PrismML-Eng/llama.cpp at the pins (verify HEAD == pin per commit
-      checkout; the Batch-204 lesson: verify the PrismML 404 trap at clone time) + llama.cpp
-      upstream at `48e9857`/`08ffba21e` (quote re-verification) — rm when done.
-- [ ] Dedup grep BEFORE proposing: `Q1_0|q1_0|prism|vec_dot.*q1|mul_mat.*q1` + the Batch-204
-      NEON PQ2_0 vec_dot rule (`6bfcd79a`) family read — the arm quants.c content may overlap
-      the landed rule; classify each candidate rule as NEW / RIDER / DEDUP.
-- [ ] 2 parallel authoring subagents over disjoint slices (A: Metal +308 + CUDA +218 + the
-      43e67bda3 mma fix; B: CPU quants.c +101 + arm +140 + x86 +159 + vecdotq.cuh +117),
-      each proposing rules with pattern / bounded fix-space / category / rationale / quote.
-- [ ] Re-verify EVERY quoted line at the pin (git-show blob reads; the B223 discipline).
-- [ ] Corpus entries + KERNEL_CATEGORIES wiring + count pins (×5 sites per the B223 pin-set
-      lesson) + batch225 parse gate + needles.
-- [ ] Lead adjudications: #28748 (correctness-class, thin adoption surface — grade against
-      the corpus's offset/int32-wrap family), vLLM #59340 (staging-family — dedup vs the
-      staging/alias family), #30164 (grade against a real wgpu shader posture or watch-only
-      if compiler paths diverge — the GLSL→SPIR-V transferability disclosure stands).
-- [ ] GOAT: G1 parse/syn (all new rules) · G2 lib tests · G3 clippy -D ×2 postures +
-      retrieval floors (kernel self-variants + blended; re-pin only with pre-batch A/B
-      attribution per the B223 convention) · freeze/score-bench NOT owed for a kernel_opt-
-      only corpus delta (P30, the B223 precedent) — record the check.
-- [ ] Research note `.research/255_*.md` + AGENTS.md corpus count bump + `.docs/11_domains/`
-      update + mining-queue snapshot update (same commit as the batch).
-- [ ] Commit `feat: batch 225: ...` + push. M3-side cargo gates only after the sibling
-      riir-infer release test clears (Plan-337 zero-contention discipline).
+- [x] Fresh `.raw` clone of PrismML-Eng/llama.cpp at the pins (HEAD == `59f2b8485`; all three pins present; the PrismML-Eng org resolves — no 404 trap) + llama.cpp upstream leads at `48e9857`/`08ffba21e` from the local clone + vLLM `deedc7be` via the GitHub patch endpoint — rm of the clone at close.
+- [x] Dedup grep BEFORE proposing: the Prism lineage is HEAVILY pre-mined (13+ batches cite later pins); the founding-infrastructure content is the new half — classified per candidate (5 NEW / 5 RIDER / rest OWNED-or-skip).
+- [x] 2 parallel authoring subagents over disjoint slices (A: CUDA+Metal 11 files; B: CPU 8 files), verbatim quotes + dedup verdicts each.
+- [x] Re-verified EVERY quoted line at the pin (git-show blob reads at `59f2b8485` + `43e67bda3`, full set, this session).
+- [x] Corpus entries (entries_gpu_89.rs ×5) + KERNEL_CATEGORIES wiring (A/B/D/N) + count pins (tests.rs ×4 + router.rs, 796→801; per-category A 163/B 87/D 187/N 65) + batch225 parse gate + needles (5 rules + 5 rider hosts).
+- [x] Lead adjudications: #28748 → gpu_02 vendor-view rider; vLLM #59340 → popcorn processing-set predicate rider; #30164 → WATCH-ONLY (glslang-specific, no wgpu/naga evidence; re-open trigger recorded in Research 255).
+- [x] GOAT: G1 parse gate PASS · G2 lib 2945/0 (kernel_opt) + 2504/0 (default) · G3 clippy -D ×4 postures clean (default/kernel_opt/kernel_opt+latent_retrieval libs + all-targets) + retrieval floors HELD (kernel 100.0%, blended 91.2/94.7/95.3 — no re-pin) · freeze/score-bench NOT owed (zero clippy-corpus delta, P30, the B223 precedent) — recorded in Research 255.
+- [x] Research note `.research/255_batch225_q10_trio_distill.md` + AGENTS.md corpus count bump (801) + `.docs/11_domains/kernel_opt.md` ledger update + mining-queue snapshot update (same commit).
+- [x] Commit `feat: batch 225: ...` + push (the claim discharged).
+- [-] The M3-side full-workspace gates beyond the batch's own suite — NOT owed for a corpus-add batch (the batch gates above are the G1-G3 surface; the ci_feature_guard full run rides the next guard lane). Deferred with reason: scope discipline, the B223 precedent ran the same surface.
 
 ## Non-goals
 

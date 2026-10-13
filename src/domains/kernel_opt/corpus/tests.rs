@@ -110,8 +110,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        796,
-        "kernel batches through Batch 224 should have 796 rules",
+        801,
+        "kernel batches through Batch 225 should have 801 rules",
     );
 }
 
@@ -490,7 +490,8 @@ fn batch7_burn_cubecl_concepts_covered() {
     assert!(concepts.contains(&"matmul-kind-keyed kernel family dispatch"));
     assert!(concepts.contains(&"vectorization width as an autotune dimension"));
     assert!(concepts.contains(&"1x1 convolution as direct matmul (skip im2col)"));
-    assert!(concepts.contains(&"stride-contiguity guard skips unnecessary relayout copy"));
+    // (rider-tolerant prefix pin: Batch 225 appended the vLLM #59340 processing-set face to this concept)
+    assert!(concepts.iter().any(|c| c.starts_with("stride-contiguity guard skips unnecessary relayout copy")));
     assert!(concepts.contains(&"grid-limit-aware batch packing"));
     assert!(concepts.contains(&"stride-byte-alignment determines vectorization width"));
     assert!(concepts.contains(&"shape bucketing for autotune cache reuse"));
@@ -1329,7 +1330,8 @@ fn batch24_cudarc_backward_concepts_covered() {
         .map(|e| e.gpu_concept.as_str())
         .collect();
     // A: widen-index-multiply-to-64bit (riir-gpu cudarc_kernels/backward.rs L416/L474/L478/L515/L518)
-    assert!(concepts.contains(&"when a flat index product (position × stride) can exceed 2^31 on large buffers (long-context KV caches, big batched grads), widen ONLY the address-producing multiply to 64-bit by casting one operand — keep loop counters and small dims 32-bit for register economy. int32 index overflow in CUDA wraps silently → OOB reads / wrong elements with no error. Appears as `(long)t * kv_stride` at every KV cache access. Distinct from upcast-before-reduction (fp32 precision) — this is integer address width"));
+    // (rider-tolerant prefix pin: Batch 225 appended the #28748 vendor-view face to this concept)
+    assert!(concepts.iter().any(|c| c.starts_with("when a flat index product (position × stride) can exceed 2^31 on large buffers")));
     // B: dual-accumulator-single-reduction-sweep (riir-gpu cudarc_kernels/backward.rs L61-83)
     assert!(concepts.contains(&"fuse two block reductions over the same data into one sweep: keep two partial accumulators in the same strided loop (each element loaded once, feeding both), and reduce both shared-memory arrays inside the SAME stride tree — halves global loads and halves the __syncthreads() barrier count vs two sequential reductions. RMSNorm backward needs sum(x²) and dot(grad_y·γ·x) over identical elements — the canonical case. Distinct from split-sign-accumulators-defer-subtraction (ILP chains within one dot) — this is barrier + load sharing across two different reductions"));
     // C: dual-grad-same-pass (riir-gpu cudarc_kernels/backward.rs L108-126 + L137-155 + L169-186 + L345-369)
@@ -5368,8 +5370,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 796-rule corpus must appear in exactly one category
-    // (re-pinned 796 at Batch 224; 795 at Batch 223, read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 801-rule corpus must appear in exactly one category
+    // (re-pinned 801 at Batch 225; 796 at Batch 224, 795 at Batch 223, read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5465,10 +5467,10 @@ fn kernel_categories_counts_match_plan_003_table() {
     // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 162),
-        (KernelCategory::Compute, 86),
+        (KernelCategory::MemoryAccess, 163),
+        (KernelCategory::Compute, 87),
         (KernelCategory::Fusion, 55),
-        (KernelCategory::Dispatch, 186),
+        (KernelCategory::Dispatch, 187),
         (KernelCategory::Parallelism, 75),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5478,7 +5480,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::AutotuneDispatch, 15),
         (KernelCategory::ConvGemmLayout, 19),
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 63),
+        (KernelCategory::DtypeAlignment, 65),
         (KernelCategory::IrStrengthReduction, 8),
     ];
     for (cat, count) in expected {
@@ -5493,9 +5495,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 796.
+    // Sum must equal 801.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 796, "Plan 003: category totals must sum to 796 (Batch 224 +1 D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034 + vulkan #29998 @ 966baae76, MIT: the dense experts-x-entry-tiles grid (94% launch-to-exit tiles) becomes a two-pass compact prepass + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; duplicate expert ids overflowed the fixed ne21 capacity 'into the slice of the next expert'; the unconditional-store law ('conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot); th_max 768 -> plain mul_mm registers; grid ~8-16x shrink, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor and EXPERTS_PER_CHUNK=1024 chunking); Batch 223 +11: the lithos-metal pack (Research 249/248, lithos-ai/lithos-metal @ 236475fa, Apache-2.0) — A +3 the coherence scope by write set (ordinary loads on the provably immutable class keep the weight-cache path; the barrier pass classifies buffers conservatively, coherence per POINTER fine) + the attention two-knob shared partial workspace (tile size and partition size tune separately in opposite directions; sequential layers share ONE workspace per partial-result kind sized for the largest consumer — 16 copies × 96 KB per capacity token = 12 GB at a 128K context, alone over the M5 Max budget) + the derived-pack immutable-original content-addressed atomic publish (conversion at compile time outside the timed program; the span-shrink skips ≤1 MiB and ≥80% active) — C +1 the fusion scope by barrier cost (in-kernel global barriers priced no cheaper than dispatch boundaries on M3 Pro/M5 Pro → layer-wise; the unfused program is the built-in numerical AND performance control) — D +3 the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (the flag on the READER orders a dependency; the swap moves the barrier onto the immediate predecessor so the conflicting pair overlaps; unknown write metadata never joins the group) + the gpu-resident control loop under static ICB replay (advance/accept-scan/EOS/stop as GPU data; the command sequence encodes once and replays; a later replay returns without doing work) + the cost-aware verify length (L = argmax_l (1+Σa_i)/cost[l] over a profiled per-format table that refuses to extrapolate — miss → FALLBACK_THRESHOLD 0.5) — E +2 the bounded cross-worker barrier protocol polling fan-in ladder (serial/simd/wide/leader-release, monotone epochs, 1M-spin loud-fail, no grid sync on Metal) + the own-slice coprime-stride steal with the claimant-invariance fence elision (enabled per op only where trace shows tail skew AND an A/B gain — none of the dense targets' ops does) — H +1 the MoE readiness queue without a grid barrier (bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring) — K +1 the autotune fidelity (the synthetic carries the producer's REAL params, streams ≥256 MB, beats the default only beyond NOISE_MARGIN 0.03 min-of-5, and the cache key is the full mechanism signature) + THREE count-neutral riders: gdn-transition-replay-log-commit-many += the parity-slot commit-by-recompute (SLOTS=2 by step parity; rejected positions never reach state; the placeholder-binding MTL_SHADER_VALIDATION lesson), delay-rms-scale-past-gemv-epilogue += the STAT_OUT prefold half (per-block partial sums-of-squares summed in block order; one fold, one statistic) + the honesty pair, lut-free-bit-spread-vadd4-unpack += the fp8-subnormal density-split face (normal codes are bit arithmetic; the 8 subnormals take the LUT/tiny-product arm — lithos re-derived the corpus's own density-aware law); Batch 220 +1 before that, the MoE router weight fold into reduce never-materialize (prism #107, the league fork — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR with opposite polarity — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair); shape-exact subgraph matcher (pointer-equality add chain + exact view strides/offsets), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. pointer alignment; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts and the Metal no-fusion harness validation); Batch 215 +5 before that, the TensorFold native-engine delta pack (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3, Apache-2.0): D +2 the zero-anchored prompt grid chunk identity (a resumed pass cuts where a cache-off pass cuts, by construction) + the verified logits-derived outputs path independence (logprob rows read the verified target logits), E +1 the staggered segments two-queue fences (one MTLFence a segment + MTLEvent between, the 4096-row gate), H +1 the expert member-rows width ladder (2/3/4 rungs, bit-identical at every width, equal-at-2 null point), N +1 the HIP affine contraction-off row invariance (-ffp-contract=off so every row reduces the same way for any M + the single-bit-mutation comparator) — plus ONE count-neutral rider: the prefill-head-final-chunk partial-consumption face on the headless-draft rule (TensorFold @ 96c0b0e4, MIT — prefill computes the head only on the prompt's last chunk); Batch 214 +1 before that, D: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover and silently un-defines the fast path it guards; repairs: the ordered guard (landed) or the packed single compare (the message's rationale); the guard-taken proof is the verification) + Batch 210 +1 before that, D: the expert-cache write-path regime gate (llama.cpp #29887: the MoE expert GPU cache plans-and-evicts only for batches whose working set fits the slots; large batches read-if-present and never touch the LRU so a prefill-sized plan cannot evict the generation working set; the update hook rides the scheduler's host-weight split boundary) + Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks when both ADD operands are matmul outputs) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts + the headless draft forward cropped to output rows (cache writes persist); Batch 207 +2: B +1 the minifloat normal-code decode (the fused one-shift + bias-difference form + the placed E2M1 decode folding the lift into the caller's block scale + the emulated-conversion admission predicate) + D +1 the profile-window drain; Batch 206 +2: D +2 the widening-conversion row-chunk staging budget + the per-thread-stream blocking-op explicit-sync escape)");
+    assert_eq!(total, 801, "Plan 003: category totals must sum to 801 (Batch 225 +5: the Q1_0 trio distill, PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding) + 43e67bda3 (the mmq/mma accuracy fix) — D +1 mmq-tile-loader-thread-map-derives-from-block-geometry (the ported threads_per_row formula 'MMQ_ITER_K_Q1_0 / (4 * QR1_0)' read 32 threads on a 4-block span — the 'pending accuracy debugging' disabled-kernel commit's root cause; the fix derives blocks_per_iter * QI1_0; the stale MMQ_ITER_K_Q1_0 macro survives with the wrong-derivation comment) — B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer (±1 int8 payload at the Q8_0 tile geometry, the vec_dot_q8_0_q8_1_mma consumer reused verbatim, the bespoke g128 tile macro deleted onto the shared tile) — A +1 superblock-scale-replication-to-subblock-scale-slots (the staging tile is the adapter: one d per 128 broadcast into all four QK8_1 scale slots, consumer untouched) — N +2 sign-expand-one-bit-dp4a-symmetric-epilogue (±1 bytes ARE dp4a lanes; 'ds8f.y is the precomputed sum (not needed for symmetric quant)'; the computed-but-unused sumy anti-shape) + sign-codec-shared-magnitude-mean-abs ('const float d = sum_abs / qk;' — the L2-optimal shared magnitude of a sign codec IS the mean abs, not max-abs; the BINARY budget rungs 0.025/0.40 vs ternary 0.01/0.15); Batch 224 +1 D before that: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)");
 }
 
 #[test]
@@ -5506,8 +5508,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 796,
-        "Plan 003: grouped corpus has {total} rules, expected 796 (Batch 224 +1 D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
+        total, 801,
+        "Plan 003: grouped corpus has {total} rules, expected 801 (Batch 225 +5: the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 + 43e67bda3: D +1 the mmq tile-loader thread-map derivation law, B +1 the sub-byte pre-expand-into-Q8_0-tile MMA-consumer-reuse law, A +1 the super-block scale broadcast-into-sub-block-slots staging law, N +2 the sign-expand dp4a symmetric-epilogue consume + the mean-abs shared-magnitude quantize law; Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9614,8 +9616,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        796,
-        "corpus count re-pinned at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face; was 784 at Batch 220 (1 rule, D: the MoE router weight fold into reduce never-materialize — prism #107, patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91 on the league fork: the MUL(down_out, weights) + n_exp views + (n_exp-1) left-to-right adds subgraph folds into ONE kernel so the weighted intermediate is never materialized ('tens of MB written and read again per layer' at large ubatch); bit-identity enforced AGAINST the compiler: __fmul_rn every product + __fadd_rn accumulating left-to-right in increasing slot order, the FMA-contraction refusal ('would be more accurate but would not match the baseline'); the aliasing PAIR — dst over the dying router weights STAGES them into pool scratch (n_expert_used*n_tokens floats), dst over x DECLINES (cross-block race, no repair; the generic range checker bypassed because it 'can only reject, while the weights case has a cheap repair'); shape-exact matcher (pointer-equality add chain + exact view strides/offsets + per-(expert,token) broadcast weights), cap 2..15 by ggml_can_fuse_subgraph's 32-node limit, float4 admission five-conjunct incl. both pointer alignments; the 48-case 0.0-error suite incl. the hand-placed single-buffer aliasing layouts + the Metal no-fusion harness validation; was 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        801,
+        "corpus count re-pinned at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -15774,6 +15776,179 @@ fn batch224_rule_parse_and_needles_landed() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-224 opt_pattern for '{rule_id}' must parse"
+        );
+    }
+}
+
+#[test]
+#[allow(clippy::too_many_lines)] // one needle block per rule + the rider pins (the 5-rule Q1_0 pack; the B130 annotated-allow pattern)
+fn batch225_rules_parse_and_needles_landed() {
+    // G1 for Batch 225 (Plan 227): FIVE own rules -- the Q1_0 trio
+    // distill (PrismML-Eng/llama.cpp @ 59f2b8485 v0.0.1-prism founding
+    // + 43e67bda3 the mmq/mma accuracy fix, MIT; every needle verbatim
+    // at the pin clone this session). Riders: the NO_DEVICE_CODE stub
+    // + admission-narrowing face on gpu_16, the x86 shuffle-cmpeq face
+    // + the mismatched-block face on the gpu_33 pair, the vendor-view
+    // int32-wrap face (#28748) on gpu_02, the processing-set staging
+    // predicate (vLLM #59340) on entries_popcorn -- pinned by the
+    // needles below on their hosts.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    let cases: [(&str, &[&str]); 5] = [
+        (
+            "mmq-tile-loader-thread-map-derives-from-block-geometry",
+            &[
+                "constexpr int threads_per_row = MMQ_ITER_K_Q1_0 / (4 * QR1_0);",
+                "constexpr int blocks_per_iter = MMQ_ITER_K / QK1_0;",
+                "constexpr int scale_entries_per_row = blocks_per_iter * (QK1_0 / QK8_1);",
+                "#define MMQ_ITER_K_Q1_0 128  // For Q1_0: 32 blocks per row, QI1_0=1, so threads_per_row = 128/(4*1) = 32",
+                "pending accuracy debugging",
+                "the /4 encodes Q4_0's two-nibble-per-byte structure",
+                "Batch 225 / Plan 227 / Research 255",
+            ],
+        ),
+        (
+            "subbyte-preexpand-int8-tile-reuses-validated-mma-consumer",
+            &[
+                "x_qs[i*MMQ_MMA_TILE_X_K_Q8_0 + kbx*QI8_0 + j] = unpacked_bytes[j];",
+                "vec_dot_mma  = vec_dot_q8_0_q8_1_mma<mmq_x, mmq_y, MMQ_Q8_1_DS_LAYOUT_D4>",
+                "case GGML_TYPE_Q1_0_g128: return MMQ_MMA_TILE_X_K_Q8_0;",
+                "Batch 225 / Plan 227 / Research 255",
+            ],
+        ),
+        (
+            "superblock-scale-replication-to-subblock-scale-slots",
+            &[
+                "constexpr int scale_entries_per_block = QK1_0_g128 / QK8_1;",
+                "const int scale_block = ksx / scale_entries_per_block;",
+                "x_df[i*MMQ_MMA_TILE_X_K_Q8_0 + ksx] = bxi->d;",
+                "the staging tile is the ADAPTER layer",
+                "Batch 225 / Plan 227 / Research 255",
+            ],
+        ),
+        (
+            "sign-expand-one-bit-dp4a-symmetric-epilogue",
+            &[
+                "#define VDR_Q1_0_Q8_1_MMQ  1  // Changed from 2 to 1: Q1_0 has only 32 bits (1 int) per block",
+                "// Q1_0 is symmetric (no offset), so we just multiply by scales",
+                "ds8f.y is the precomputed sum (not needed for symmetric quant)",
+                "return d1 * ds8f.x * sumi;",
+                "Batch 225 / Plan 227 / Research 255",
+            ],
+        ),
+        (
+            "sign-codec-shared-magnitude-mean-abs",
+            &[
+                "const float d = sum_abs / qk;",
+                "// Just store sign of each weight directly (no normalization)",
+                "MAX_QUANTIZATION_TOTAL_ERROR_BINARY = 0.025f",
+                "MAX_DOT_PRODUCT_ERROR_BINARY = 0.40f",
+                "Batch 225 / Plan 227 / Research 255",
+            ],
+        ),
+    ];
+    for (rule_id, markers) in cases {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rule_id)
+            .unwrap_or_else(|| panic!("batch-225 rule '{rule_id}' missing from the corpus"));
+        for marker in markers {
+            assert!(
+                entry.gpu_concept.contains(marker),
+                "batch-225 rule '{rule_id}' marker missing: '{marker}'"
+            );
+        }
+        // the pseudocode halves parse (the batch207/223/224 pattern).
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-225 ref_shape for '{rule_id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-225 opt_pattern for '{rule_id}' must parse"
+        );
+    }
+
+    // the riders on their hosts (count-neutral; needle-pinned).
+    let dispatcher = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "dispatcher-eligibility-predicate-lags-kernel-capability")
+        .expect("gpu_16 host missing");
+    for marker in [
+        "vec_dot_q1_mmq_dp4a_disabled",
+        "NO_DEVICE_CODE",
+        "!turing_mma_available(cc)",
+        "Batch 225 rider",
+    ] {
+        assert!(
+            dispatcher.gpu_concept.contains(marker),
+            "batch-225 gpu_16 rider marker missing: '{marker}'"
+        );
+    }
+    let lut_free = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "lut-free-bit-spread-vadd4-unpack")
+        .expect("gpu_33 lut-free host missing");
+    for marker in [
+        "const uint32_t qbits32 = *(const uint32_t *)x[ib].qs;",
+        "_mm256_cmpeq_epi8(bit_test, bit_mask)",
+        "7 months BEFORE the Batch-212 rider's 4fbda129 pin",
+        "Batch 225 rider",
+    ] {
+        assert!(
+            lut_free.gpu_concept.contains(marker),
+            "batch-225 lut-free rider marker missing: '{marker}'"
+        );
+    }
+    let rescale = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "per-block-int32-chunk-rescale-fp32-accum")
+        .expect("gpu_33 rescale host missing");
+    for marker in [
+        "sumv = vmlaq_n_f32(sumv, vcvtq_f32_s32(p1), d0 * d1);",
+        "#define QK1_0 32  // MUST match QK8_0 for vec_dot computation!",
+        "Batch 225 rider",
+    ] {
+        assert!(
+            rescale.gpu_concept.contains(marker),
+            "batch-225 rescale rider marker missing: '{marker}'"
+        );
+    }
+    let widen = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "widen-index-multiply-to-64bit")
+        .expect("gpu_02 host missing");
+    for marker in [
+        "a slice is not used because its byte offset is int32 and wraps at 2 GiB",
+        "(uint64_t) im * N * M + (uint64_t) rb * M + ra",
+        "Batch 225 rider",
+    ] {
+        assert!(
+            widen.gpu_concept.contains(marker),
+            "batch-225 widen-index rider marker missing: '{marker}'"
+        );
+    }
+    let contiguity = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "contiguity-guard-before-reshape")
+        .expect("entries_popcorn host missing");
+    for marker in [
+        "outputs=quanted_input if has_input_processing else None",
+        "a staging copy is owed only when a transform actually runs",
+        "Batch 225 rider",
+    ] {
+        assert!(
+            contiguity.gpu_concept.contains(marker),
+            "batch-225 contiguity rider marker missing: '{marker}'"
         );
     }
 }

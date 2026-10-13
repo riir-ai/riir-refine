@@ -1974,6 +1974,7 @@ mod entries_gpu_85;
 mod entries_gpu_86;
 mod entries_gpu_87;
 mod entries_gpu_88;
+mod entries_gpu_89;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2038,6 +2039,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_86::entries());
     entries.extend(entries_gpu_87::entries());
     entries.extend(entries_gpu_88::entries());
+    entries.extend(entries_gpu_89::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2280,7 +2282,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "row-independent-pass-block-bounded-scratch",
             "coherence-scope-by-write-set-ordinary-loads-on-immutable",
             "attention-partition-two-knob-shared-partial-workspace",
-            "derived-pack-immutable-original-content-addressed-atomic"
+            "derived-pack-immutable-original-content-addressed-atomic",
+            "superblock-scale-replication-to-subblock-scale-slots"
         ],
     ),
     // B: Compute patterns (86 rules; Batch 207 +1: the minifloat normal-code decode -- the fused
@@ -2381,6 +2384,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "warp-bitonic-topk-merge-shuffle",
             "tensor-core-mma-staged-quantized-codes-double-buffered",
             "maddubs-overflow-two-exact-mac-selector",
+            "subbyte-preexpand-int8-tile-reuses-validated-mma-consumer",
             "hoist-row-invariant-scale-to-subblock-epilogue",
             "register-budget-band-partition-indep-correction-offband",
             "lut16-pshufb-byte-expansion-at-stage",
@@ -2673,6 +2677,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "barrier-on-reader-open-group-conflict-swap-overlap",
             "gpu-resident-control-loop-static-icb-replay",
             "cost-aware-verify-length-survival-cost-table",
+            "mmq-tile-loader-thread-map-derives-from-block-geometry",
             "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch"
         ],
     ),
@@ -3046,6 +3051,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-block-int32-chunk-rescale-fp32-accum",
             "kv-dequant-materialization-batch-threshold-gate",
             "quantize-scale-math-wide-precision-denorm-safe",
+            "sign-expand-one-bit-dp4a-symmetric-epilogue",
+            "sign-codec-shared-magnitude-mean-abs",
             "block-quant-weight-pad-never-extends-activations",
             "fast-accumulate-periodic-promote-bounded-error",
             "quantized-pack-residency-audit-unquantized-minority-first",
