@@ -3536,13 +3536,18 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
                                 _ => {
                                     eprintln!("topup: a cap is full ({status}) — {detail}");
                                     eprintln!("topup: your open checkouts:");
+                                    let now = std::time::SystemTime::now()
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .map(|d| d.as_secs())
+                                        .unwrap_or(0);
                                     for i in &intents {
+                                        let mins = now.saturating_sub(i.created_unix) / 60;
                                         println!(
                                             "  seq {:<4} pack {}   {} USDC — created {} min ago",
                                             i.seq,
                                             i.pack_id,
                                             format_usdc(i.usdc_base),
-                                            i.created_unix,
+                                            mins,
                                         );
                                     }
                                     if args_tty_stdin() {
