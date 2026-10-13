@@ -78,23 +78,46 @@ fn version_prints_the_compiled_feature_stamp() {
     // unpinned, so the multi-net label is the pinned expectation — UNLESS
     // this IS an all-features build, where both pins ride and the conflict
     // sentence is the correct const (issue 159: the conflict posture is a
-    // legal build, not a test failure).
+    // legal build, not a test failure). The expectation mirrors the same
+    // cfg! match riir-kat's own test derives (issue 163: the conflict label
+    // names the hosted refusals — loopback follows allow-local there).
     assert!(
         text.contains(&format!("net: {}", riir_refine::kat_net_pin::NET_PIN)),
         "the version block must carry the net pin. output:\n{text}"
     );
-    if !cfg!(feature = "net-mainnet") && !cfg!(feature = "net-devnet") {
-        assert_eq!(
-            riir_refine::kat_net_pin::NET_PIN,
-            "multi (default mainnet)",
-            "this test binary enables no pin features"
-        );
-    } else {
-        assert_eq!(
-            riir_refine::kat_net_pin::NET_PIN,
-            "conflict: net-mainnet+net-devnet (empty allowed set — every host refuses)",
-            "both pins enabled: the conflict label is the pinned expectation"
-        );
+    match (
+        cfg!(feature = "net-mainnet"),
+        cfg!(feature = "net-devnet"),
+    ) {
+        (false, false) => {
+            assert_eq!(
+                riir_refine::kat_net_pin::NET_PIN,
+                "multi (default mainnet)",
+                "this test binary enables no pin features"
+            );
+        }
+        (true, true) => {
+            assert_eq!(
+                riir_refine::kat_net_pin::NET_PIN,
+                "conflict: net-mainnet+net-devnet (every hosted host refuses; \
+                 loopback follows allow-local)",
+                "both pins enabled: the conflict label is the pinned expectation"
+            );
+        }
+        (true, false) => {
+            assert_eq!(
+                riir_refine::kat_net_pin::NET_PIN,
+                "mainnet",
+                "net-mainnet only: the label names the pin"
+            );
+        }
+        (false, true) => {
+            assert_eq!(
+                riir_refine::kat_net_pin::NET_PIN,
+                "devnet",
+                "net-devnet only: the label names the pin"
+            );
+        }
     }
 }
 

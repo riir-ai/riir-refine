@@ -301,12 +301,13 @@ fn command_service_url() -> String {
 
 /// The URL a LOCAL state partition names (the lease store's per-net dir, the
 /// mining outbox read) — issue 159: the both-pins CONFLICT posture must not
-/// kill a run that never dials. The pin contract refuses DIALS at this seam
-/// (every host refuses; that stays fatal in [`command_service_url`]), but a
-/// conflicted build is a dev posture whose local-only work — the scan, the
-/// corpus lease STORE, the trajectory memory — must still run: one advisory
-/// line, the default URL names the partition, and the first real dial still
-/// exits 2 through the strict seam.
+/// kill a run that never dials. The pin contract refuses HOSTED dials at
+/// that seam (loopback follows `allow-local`, issue 163; hosted refusals
+/// stay fatal in [`command_service_url`]), but a conflicted build is a dev
+/// posture whose local-only work — the scan, the corpus lease STORE, the
+/// trajectory memory — must still run: one advisory line, the default URL
+/// names the partition, and the first real dial still exits 2 through the
+/// strict seam.
 #[cfg(feature = "kat_service")]
 fn net_partition_url() -> String {
     let raw = riir_refine::kat_lease_client::service_url_for_command();
@@ -317,7 +318,7 @@ fn net_partition_url() -> String {
         {
             eprintln!(
                 "net-pin conflict posture: local state partitions under the default net; \
-                 every dial still refuses (net: {e})"
+                 hosted dials still refuse (net: {e})"
             );
             raw
         }

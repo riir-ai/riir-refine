@@ -419,9 +419,7 @@ fn topup_void_prints_the_release() {
 fn topup_capped_with_one_open_intent_shows_it_without_asking() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
-    let cap = format!(
-        r#"{{"error":"pay: 2 intents already open for this account — settle or wait","code":"rate_limited"}}"#
-    );
+    let cap = r#"{"error":"pay: 2 intents already open for this account — settle or wait","code":"rate_limited"}"#.to_string();
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { return };

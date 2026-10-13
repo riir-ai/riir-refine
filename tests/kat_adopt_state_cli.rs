@@ -254,20 +254,43 @@ fn adopt_state_names_the_other_net_on_a_mismatch() {
 
 /// T11: `--net` is one-invocation sugar — it selects the URL the command
 /// resolves (visible through `config get`'s active line) and refuses a
-/// non-alias value at parse time.
+/// non-alias value at parse time. Posture-aware (issue 163): the sugar
+/// resolves the HOSTED devnet url, so pinned builds refuse it at the URL
+/// seam — the conflict posture names the overlap, a single pin names the
+/// pin; only the unpinned (shipped) build shows the selection. The
+/// parse-refusal arms are posture-independent.
 #[test]
 fn net_flag_selects_the_invocation_net() {
     let dir = scratch("netflag");
+    let allowed = riir_refine::kat_net_pin::pinned_allowed_hosts();
     let (code, text) = heal(&dir, CLOSED_PORT, &["--net", "devnet", "config", "get"]);
-    assert_eq!(code, Some(0), "output:\n{text}");
-    assert!(
-        text.contains("net: this invocation targets devnet"),
-        "the sugar line must print: {text}"
-    );
-    assert!(
-        text.contains("https://devnet.gist.rs"),
-        "config get must show the selected URL as active: {text}"
-    );
+    match allowed.as_deref() {
+        Some([]) => {
+            assert_eq!(code, Some(2), "output:\n{text}");
+            assert!(
+                text.contains("at most one pin"),
+                "the conflict posture names the overlap: {text}"
+            );
+        }
+        Some([_]) | Some([_, ..]) => {
+            assert_eq!(code, Some(2), "output:\n{text}");
+            assert!(
+                text.contains("net pin"),
+                "a single pin refuses the other net: {text}"
+            );
+        }
+        None => {
+            assert_eq!(code, Some(0), "output:\n{text}");
+            assert!(
+                text.contains("net: this invocation targets devnet"),
+                "the sugar line must print: {text}"
+            );
+            assert!(
+                text.contains("https://devnet.gist.rs"),
+                "config get must show the selected URL as active: {text}"
+            );
+        }
+    }
     let (code, text) = heal(&dir, CLOSED_PORT, &["--net", "bogus", "config", "get"]);
     assert_eq!(code, Some(2), "a non-alias must refuse: {text}");
     let (code, text) = heal(&dir, CLOSED_PORT, &["config", "adopt-state", "testnet"]);
