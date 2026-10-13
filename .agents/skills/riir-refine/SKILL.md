@@ -276,7 +276,12 @@ skill points agents there). Per sweep:
   verdict session on a named gate posts the claim row first — a gate ruling is
   as yield-worthy as a batch (the 2026-10-11 dual gate-ruling: two lanes ran
   owner-delegated verdicts on reflex 085's T0 in the same hour and got OPPOSITE
-  outcomes; landed `89769e0` won, the other lane reset unpushed).
+  outcomes; landed `89769e0` won, the other lane reset unpushed). **Extend it
+  to WALK EXECUTIONS too**: the due arxiv-walk close-out is claimed the same
+  way before its lane fetches begin — a walk is a multi-hour grading session,
+  exactly the claim-worthy waste class (the 2026-10-13 dual walk: two sessions
+  executed arxiv walk #14 in the same hour; the pushed close-out `9027f028`
+  kept Research 258, the later lane yielded unpushed).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
