@@ -2091,16 +2091,17 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 773-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 773 at Batch
-///   207 — the 10-07 staged leads; was 771 at Batch 206, 739 at Batch 197).
+/// - **Exhaustive:** every `rule_id` in the 804-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 804 at Batch
+///   231 — the host-pointer-buffer foreign-range pinning law; was 803 at Batch
+///   227, 801 at Batch 225, 773 at Batch 207).
 /// - **Order-stable:** categories appear in enum-discriminant order (A=0 … O=14).
 /// - **Count-stable:** the per-category counts are pinned by tests.
 ///
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (164 rules; Batch 227 +1: the
+    // A: Memory access patterns (165 rules; Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
     // coop-tensor per-chip-family layout contract (lithos-metal #35 —
     // measure the slot map with coop_layout, port the layout, never
     // inherit it); Batch 223 +3: the coherence
@@ -2289,7 +2290,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "attention-partition-two-knob-shared-partial-workspace",
             "derived-pack-immutable-original-content-addressed-atomic",
             "superblock-scale-replication-to-subblock-scale-slots",
-            "coop-tensor-layout-measured-per-chip-family"
+            "coop-tensor-layout-measured-per-chip-family",
+            "host-pointer-buffer-foreign-range-subtraction"
         ],
     ),
     // B: Compute patterns (86 rules; Batch 207 +1: the minifloat normal-code decode -- the fused

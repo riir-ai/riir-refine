@@ -42,6 +42,22 @@ event spec shaking' fix incl. the `keep_reachable` fn-pointer form — 'Keeps
 invoking `f` at runtime.'); both category `wasm` — the family 1 → 3 — both
 NotBenchable annotated (the size-axis domain reason; annotated 142 → 144,
 without_spec 97 → 99); quotes re-verified at the pin via the .raw clone).
+Batch 231 rider (2026-10-14, Plan 233 / Research 262 — count-NEUTRAL: the
+`madvise-random-for-key-gather-tables` io rule += the macOS WILLNEED-PREFETCH
+NO-OP face — ggml-org/llama.cpp @ `b9f3599f` #30405 second sub-commit, MIT,
+quotes verbatim at the fetched .patch: the prefetch path's platform guard
+`#if defined(__linux__) || (defined(_WIN32) && ...)` silently took the #else
+on macOS — 'The prefetch hint of the tensors marked as prefetchable is a
+no-op on macOS, so their pages are faulted in one by one while the graph
+runs. madvise (MADV_WILLNEED) behaves as expected here, so add the platform
+to the guard'; the repair is ONE platform constant (`+defined(__APPLE__)`);
+measured (commit message, cold file cache) 356/375/475 → 735/749/788 t/s at
+pp512/2048/4096 — ~2× pp from making the EXISTING hint actually execute; the
+platform-guard-silent-else class named (the arm exists and runs and reaches
+nothing — the green-zero shape one layer down); the portable SPAN-prefetch
+half of this rule and the MADVISE half compose; same-commit PIN-axis sibling:
+kernel_opt `host-pointer-buffer-foreign-range-subtraction`; retrieval floors
+HELD, corpus 804 kernel / 198 rust_perf stand).
 Batch 226 rider (2026-10-13, Plan 228 / Research 256 — count-NEUTRAL: the
 B211 `repr-align-register-partition-store-forwarding` layout rule += the
 DEVICE-CONTRACT view — the layout decision's THIRD audience, bevy @
