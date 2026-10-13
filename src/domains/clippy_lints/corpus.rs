@@ -1122,6 +1122,40 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn mrw(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::replace(dst, Default::default())) }".to_string(),
             fixed_code: "fn mrw(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::take(dst)) }".to_string(),
         },
+        // ── Batch 228 (2026-10-13, the coverage-report re-arm pack XIX —
+        // Plan 230, probe scripts/plan230_pack19_probe.py): the
+        // std/adapter DEFINITION-IDENTITY trio from the fresh 0.1.98
+        // derivation's evidence tail. manual_repeat_n: the adapter is
+        // DEFINED as the expansion (RepeatN yields value count times —
+        // the same elements as repeat(value).take(count), cloned per
+        // yield in both); the input's compilation proves T: Clone; MSRV
+        // floor 1.82 carried as the proposer's context_note.
+        // manual_ok_err: Option::ok/err are DEFINED as these matches
+        // (the std source); two-arm identity matches only — the if-let
+        // form fires upstream but refuses v1 (documented narrower
+        // divergence). manual_next_back: Rev<I> inverts direction, so
+        // `it.rev().next()` IS `it.next_back()`; the input's compilation
+        // proves DoubleEndedIterator. All three: probe VERDICT PASS
+        // (8 firing / 3 silent / 3 posture / 6 fixed forms compile clean
+        // + silent, zero co-fires). ──
+        ClippyFixEntry {
+            lint_name: "manual_repeat_n".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn mrn(n: usize) -> Vec<u32> { std::iter::repeat(0u32).take(n).collect() }".to_string(),
+            fixed_code: "fn mrn(n: usize) -> Vec<u32> { std::iter::repeat_n(0u32, n).collect() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_ok_err".to_string(),
+            lint_group: "complexity".to_string(),
+            buggy_code: "fn moe(r: Result<u32, String>) -> Option<u32> { match r { Ok(v) => Some(v), Err(_) => None } }".to_string(),
+            fixed_code: "fn moe(r: Result<u32, String>) -> Option<u32> { r.ok() }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "manual_next_back".to_string(),
+            lint_group: "style".to_string(),
+            buggy_code: "fn mnb(vals: &[u32]) -> Option<u32> { vals.iter().rev().next().copied() }".to_string(),
+            fixed_code: "fn mnb(vals: &[u32]) -> Option<u32> { vals.iter().next_back().copied() }".to_string(),
+        },
     ])
 }
 
@@ -1263,7 +1297,10 @@ mod tests {
     #[test]
     fn corpus_size_is_82() {
         let corpus = build_seed_corpus();
-        assert_eq!(corpus.entries.len(), 100);
+        // Batch 228 (2026-10-13, the coverage-report re-arm pack XIX,
+        // Plan 230) added the std/adapter definition-identity trio
+        // (manual_repeat_n + manual_ok_err + manual_next_back) = 103.
+        assert_eq!(corpus.entries.len(), 103);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

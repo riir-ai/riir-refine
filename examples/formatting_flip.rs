@@ -277,11 +277,12 @@ fn load_pairs(
     filter: TierFilter,
 ) -> Result<(Vec<FixPair>, String), String> {
     let mut rows: Vec<FixPair> = Vec::new();
-    let mut per_file: Vec<(String, usize, usize)> = Vec::new();
+    let mut per_file: Vec<(String, usize, usize, u64)> = Vec::new();
     for p in paths {
         let text = std::fs::read_to_string(p).map_err(|e| format!("{p}: {e}"))?;
         let mut total = 0usize;
         let mut kept = 0usize;
+        let mut failed = 0u64;
         for line in text.lines() {
             if line.trim().is_empty() {
                 continue;
@@ -289,6 +290,7 @@ fn load_pairs(
             let row: PairRow = serde_json::from_str(line)
                 .map_err(|e| format!("{p}: bad jsonl row: {e}"))?;
             total += 1;
+            failed += u64::from(row.fail_count);
             if !filter.keeps(&row) {
                 continue;
             }
@@ -317,13 +319,15 @@ fn load_pairs(
             });
             kept += 1;
         }
-        per_file.push((p.clone(), total, kept));
+        per_file.push((p.clone(), total, kept, failed));
     }
     rows.sort_by(|a, b| {
         (&a.lint_key, &a.before, &a.after).cmp(&(&b.lint_key, &b.before, &b.after))
     });
-    for (p, total, kept) in &per_file {
-        println!("  pairs: {p}: {total} rows, {kept} certified+usable");
+    for (p, total, kept, failed) in &per_file {
+        println!(
+            "  pairs: {p}: {total} rows, {kept} certified+usable, {failed} failed-trajectory mass"
+        );
     }
     // Freeze: BLAKE3 over the sorted slice.
     let mut h = blake3::Hasher::new();

@@ -237,6 +237,9 @@ pub mod map_flatten;
 pub mod manual_checked_ops;
 pub mod manual_clamp;
 pub mod manual_is_multiple_of;
+pub mod manual_next_back;
+pub mod manual_ok_err;
+pub mod manual_repeat_n;
 pub mod manual_let_else;
 pub mod manual_map;
 pub mod manual_range_contains;
@@ -846,6 +849,22 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // cloned-over-copied precedent). Style-group (default-on; the
     // installed driver is the authority).
     "mem_replace_with_default",
+    // ── Batch 228 (the coverage-report re-arm pack XIX — Plan 230): the
+    // std definition-identity trio. manual_repeat_n: `repeat(x).take(n)` →
+    // `repeat_n(x, n)` (the adapter is DEFINED as the expansion; the input's
+    // compilation proves `T: Clone`; ⚠ MSRV floor — `iter::repeat_n`
+    // stabilized 1.82, the rewrite fails to compile on older toolchains);
+    // manual_ok_err / manual_next_back: the Option/Rev counterpart twins —
+    // std-definition and adapter-definition identities respectively, both
+    // eq-by-construction on the measured two-arm match / `.rev().next()`
+    // shapes (probe plan230_pack19_probe.py VERDICT PASS). Groups per the
+    // INSTALLED DRIVER (the lint_level gate's own derivation — the
+    // plan-188 GROUP CORRECTION class): manual_repeat_n = STYLE,
+    // manual_ok_err = COMPLEXITY, manual_next_back = style. ALL
+    // default-on; the installed driver is the authority.
+    "manual_repeat_n",
+    "manual_ok_err",
+    "manual_next_back",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -904,6 +923,11 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // is SILENT upstream — no oracle anchor, and --repo-posture declines
         // those shapes. The proposer stays pattern-based under plain --fix.
         "manual_range_contains" => Some("clippy 0.1.98 firing surface — fires only with a local-ident receiver and BOTH bounds literal; variable bounds and field-projection receivers are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)"),
+        // The rewrite TARGETS a newer std API: `iter::repeat_n` stabilized
+        // in Rust 1.82 — on an older toolchain the fix fails to compile
+        // (the fix_verify loop auto-reverts it there). Eq-by-construction
+        // otherwise (the adapter is defined as the expansion).
+        "manual_repeat_n" => Some("MSRV floor — iter::repeat_n stabilized Rust 1.82; the rewrite needs a ≥1.82 toolchain (fix_verify auto-reverts on older)"),
         _ => None,
     }
 }
@@ -1217,6 +1241,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "mem_replace_with_default" => {
             mem_replace_with_default::collect_edits(source, file)
         }
+        // ── Batch 228 (the coverage-report re-arm pack XIX — Plan 230) ──
+        "manual_repeat_n" => manual_repeat_n::collect_edits(source, file),
+        "manual_ok_err" => manual_ok_err::collect_edits(source, file),
+        "manual_next_back" => manual_next_back::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1367,12 +1395,16 @@ mod tests {
         // + 1 Batch 191 (mem_replace_with_default — the coverage-report
         // pack XVIII, Plan 188; the std definition-identity take()
         // rewrite).
-        assert_eq!(FIXABLE_LINTS.len(), 81);
+        // + 3 Batch 228 (the coverage-report re-arm pack XIX, Plan 230:
+        // manual_repeat_n + manual_ok_err + manual_next_back — the
+        // std/adapter definition-identity trio from the fresh 0.1.98
+        // derivation's evidence tail).
+        assert_eq!(FIXABLE_LINTS.len(), 84);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 93-row fixture table — length is the point.
+    /// 96-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1888,6 +1920,22 @@ impl S {
                 "mem_replace_with_default",
                 "fn t(dst: &mut Vec<u32>, sink: &mut Vec<Vec<u32>>) { sink.push(Vec::new()); sink.push(std::mem::replace(dst, Default::default())); }",
                 "std::mem::take(dst)",
+            ),
+            // ── Batch 228 (the coverage-report re-arm pack XIX — Plan 230) ──
+            (
+                "manual_repeat_n",
+                "fn t(n: usize) -> Vec<u32> { std::iter::repeat(0u32).take(n).collect() }",
+                "std::iter::repeat_n(0u32, n)",
+            ),
+            (
+                "manual_ok_err",
+                "fn t(r: Result<u32, String>) -> Option<u32> { match r { Ok(v) => Some(v), Err(_) => None } }",
+                "r.ok()",
+            ),
+            (
+                "manual_next_back",
+                "fn t(vals: &[u32]) -> Option<u32> { vals.iter().rev().next().copied() }",
+                ".next_back()",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();
