@@ -38,7 +38,7 @@ use riir_refine::kat_protocol_account::ServiceHistory;
 /// The closed loopback port — connection REFUSED, instantly, no network.
 const CLOSED_PORT: &str = "http://127.0.0.1:1";
 
-const CATALOG_BODY: &str = r#"{"packs":[{"id":1,"usdc_base":1000000,"kat_micro":10000000},{"id":2,"usdc_base":5000000,"kat_micro":50000000},{"id":3,"usdc_base":20000000,"kat_micro":200000000}],"rate_kat_per_usdc":10,"mint_b58":"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU","payee_b58":"gistmeAhMG7AcKSPCHis8JikGmKT9tRRyZpyMLNNULq","max_open":9,"max_open_per_acct":2,"ttl_secs":86400}"#;
+const CATALOG_BODY: &str = r#"{"packs":[{"id":1,"usdc_base":1000000,"kat_micro":10000000},{"id":2,"usdc_base":5000000,"kat_micro":50000000},{"id":3,"usdc_base":20000000,"kat_micro":200000000}],"rate_kat_per_usdc":10,"mint_b58":"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU","payee_b58":"gistXmdXerQ8oWMpdxXhva65pgkAdteQJwyGLGRe5zN","max_open":9,"max_open_per_acct":2,"ttl_secs":86400}"#;
 const UNCONFIGURED_BODY: &str =
     r#"{"error":"pay: not armed on this environment","code":"unconfigured"}"#;
 
