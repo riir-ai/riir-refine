@@ -228,16 +228,24 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(text.contains("3RefX7"), "{text}");
     assert!(text.contains("account --history"), "{text}");
-    // The dials: catalog GET then intent POST.
+    // The QR default is AUTO: a piped (non-TTY) run renders none — agents
+    // never get a block of unicode in their logs.
+    assert!(!text.contains('▀') && !text.contains('█'), "piped run must not render the QR: {text}");
+    // The dials: catalog GET, then the T10 attested-intent PRE-FLIGHT (a
+    // `GET /` service-info read — riir-kat 23d551b landed it 2026-10-08,
+    // two days after this suite; the mock answers 404 and the
+    // local-intent dev-rig allowance proceeds), then the intent POST.
     let caps = mock.captured();
-    assert_eq!(caps.len(), 2, "{caps:?}");
+    assert_eq!(caps.len(), 3, "{caps:?}");
     assert_eq!(caps[0].method, "GET");
     assert!(caps[0].path.starts_with("/pay/catalog"));
-    assert_eq!(caps[1].method, "POST");
-    assert!(caps[1].path.starts_with("/pay/intent"));
+    assert_eq!(caps[1].method, "GET", "the T10 pre-flight: {caps:?}");
+    assert_eq!(caps[1].path, "/", "the service-info attestation read: {caps:?}");
+    assert_eq!(caps[2].method, "POST");
+    assert!(caps[2].path.starts_with("/pay/intent"));
     // THE WIRE PIN: the body parses, and the signature verifies against
     // the CANONICAL composer for the pack the CLI was asked for.
-    let v: serde_json::Value = serde_json::from_str(&caps[1].body).expect("the signed body");
+    let v: serde_json::Value = serde_json::from_str(&caps[2].body).expect("the signed body");
     assert_eq!(v["pack_id"], 1);
     let pk: [u8; 32] = hex_bytes(v["pubkey_hex"].as_str().unwrap())
         .try_into()
@@ -255,6 +263,39 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
             .is_ok(),
         "the POST signature must verify against the canonical composer"
     );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Phase 2b: `--qr` forces the checkout QR even piped — the QR is the URL
+/// (the same string), rendered by the shared lease-client renderer, with
+/// the wallet pointer line under it.
+#[test]
+fn topup_qr_flag_renders_the_checkout_qr_even_piped() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("qr");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["topup", "--pack", "1", "--qr"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("solana:pay?example"), "the URL line: {text}");
+    assert!(text.contains('▀') || text.contains('█'), "the QR must render: {text}");
+    assert!(text.contains("Solana Pay wallet"), "the pointer line: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Phase 2c: `--qr --no-qr` is no defensible resolution — exit 2 before
+/// ANY dial (the closed port proves nothing reached the wire).
+#[test]
+fn topup_qr_no_qr_conflict_refuses_before_any_dial() {
+    let dir = scratch("qrconflict");
+    login(&dir);
+    let (code, text) = heal(
+        &dir,
+        CLOSED_PORT,
+        &[],
+        &["topup", "--pack", "1", "--qr", "--no-qr"],
+    );
+    assert_eq!(code, Some(2), "output:\n{text}");
+    assert!(text.contains("conflict"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

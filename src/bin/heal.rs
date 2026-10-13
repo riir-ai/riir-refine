@@ -3196,16 +3196,19 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
 }
 
-/// riir-dapps Plan 045 B7: `topup [--pack N]` — the USDC→KAT checkout
-/// (the 075 gate's "top up" path, rendered actionable): the machine
-/// catalog read, the pack pick, the signed `POST /pay/intent`, and the
-/// `solana:` URL. Refuses honestly when the lane is not armed on the
-/// configured environment (the `503 unconfigured` code — the money-route
+/// riir-dapps Plan 045 B7: `topup [--pack N] [--qr|--no-qr]` — the
+/// USDC→KAT checkout (the 075 gate's "top up" path, rendered actionable):
+/// the machine catalog read, the pack pick, the signed `POST /pay/intent`,
+/// and the `solana:` URL. Refuses honestly when the lane is not armed on
+/// the configured environment (the `503 unconfigured` code — the money-route
 /// convention, not a retryable outage). Agents/CI pass `--pack N`;
 /// an interactive TTY picks from the catalog; anything else refuses
-/// loud (nobody guesses a price).
+/// loud (nobody guesses a price). The QR: `qr` is `Some(true)` = render
+/// even piped, `Some(false)` = suppress even on a TTY, `None` = AUTO (a
+/// stdout TTY renders it — scanning with a phone is the primary payment
+/// gesture; agents/CI never get a block of unicode in their logs).
 #[cfg(feature = "kat_service")]
-fn run_kat_topup(pack: Option<u8>) {
+fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
     #[cfg(feature = "kat_transport")]
     use riir_refine::kat_pay_client as topup;
 
@@ -3233,7 +3236,7 @@ fn run_kat_topup(pack: Option<u8>) {
 
     #[cfg(not(feature = "kat_transport"))]
     {
-        let _ = (signing_key, pack, host_label);
+        let _ = (signing_key, pack, host_label, qr);
         riir_refine::build_stamp::refuse("topup", &["kat_transport"]);
     }
 
@@ -3310,6 +3313,26 @@ fn run_kat_topup(pack: Option<u8>) {
             topup::TopupOutcome::Ok(intent) => {
                 for l in topup::intent_lines(&intent) {
                     println!("{l}");
+                }
+                // The checkout QR (auto on a TTY; --qr forces, --no-qr
+                // suppresses). Never a gate: an empty render (URL too long
+                // for any QR version — never happens for a solana: URL)
+                // prints the pointer line and moves on.
+                let want_qr = match qr {
+                    Some(b) => b,
+                    None => {
+                        use std::io::IsTerminal as _;
+                        std::io::stdout().is_terminal()
+                    }
+                };
+                if want_qr {
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
+                    if rendered.is_empty() {
+                        eprintln!("topup: the QR could not be rendered — open the URL above");
+                    } else {
+                        println!("{rendered}");
+                        println!("  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above");
+                    }
                 }
             }
             topup::TopupOutcome::Refused { status, code, detail } => {
@@ -4655,7 +4678,7 @@ USAGE:
     cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
     cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
-    cargo refine topup [--pack N]                       (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL, kat_transport)
+    cargo refine topup [--pack N] [--qr|--no-qr]      (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses, kat_transport)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -5441,6 +5464,16 @@ struct Args {
     /// catalog pack to buy. Absent + a TTY = an interactive pick;
     /// absent + non-TTY = a loud refusal (agents/CI never guess a price).
     topup_pack: Option<u8>,
+    /// The checkout QR (2026-10-13 rider): `--qr` forces the ASCII QR
+    /// after the intent lines even piped; `--no-qr` suppresses it even on
+    /// a TTY; default = AUTO (a TTY sees the QR — scanning a phone is the
+    /// primary payment gesture — agents/CI never render one). `--qr` is
+    /// the SAME token `pay`/`faucet` parse; the command check normalizes
+    /// it to the topup field (the token order in the grammar is
+    /// command-first, but normalization keeps a stray `--qr topup` form
+    /// working too).
+    topup_qr: bool,
+    topup_no_qr: bool,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -5663,6 +5696,8 @@ fn parse_args() -> Args {
         pay_label: None,
         pay_wait: 600,
         topup_pack: None,
+        topup_qr: false,
+        topup_no_qr: false,
         wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
@@ -6071,6 +6106,10 @@ fn parse_args() -> Args {
                 args.wetrun_dry_run = true;
             }
             "--qr" => args.pay_qr = true,
+            // The topup QR's OFF switch (the --qr counterpart). A bare --qr
+            // with the topup command is normalized to topup_qr post-parse
+            // (the pay/faucet --qr check would otherwise refuse it).
+            "--no-qr" => args.topup_no_qr = true,
             "--label" => {
                 let Some(value) = it.next() else {
                     eprintln!("--label requires a value (e.g. \"invoice #1042\")");
@@ -6269,6 +6308,22 @@ fn parse_args() -> Args {
     }
     if args.topup_pack.is_some() && !matches!(args.command, Some(KatCommand::Topup)) {
         eprintln!("--pack requires the `topup` command");
+        usage();
+    }
+    // The topup QR: a `--qr` token under `topup` normalizes to the topup
+    // field (the same flag spells pay/faucet's QR; the command decides which
+    // checkout surface it means). `--no-qr` is topup-only. Both at once is
+    // no defensible resolution (the --stats conflict shape).
+    if matches!(args.command, Some(KatCommand::Topup)) && args.pay_qr {
+        args.topup_qr = true;
+        args.pay_qr = false;
+    }
+    if args.topup_qr && args.topup_no_qr {
+        eprintln!("--qr and --no-qr conflict — choose one (the default is auto: a TTY renders the QR)");
+        std::process::exit(2);
+    }
+    if args.topup_no_qr && !matches!(args.command, Some(KatCommand::Topup)) {
+        eprintln!("--no-qr requires the `topup` command");
         usage();
     }
     if args.info {
@@ -9376,7 +9431,18 @@ fn main() {
                 args.pay_qr,
                 args.pay_wait,
             ),
-            KatCommand::Topup => run_kat_topup(args.topup_pack),
+            KatCommand::Topup => {
+                // The QR mode tri-state: Some(true) = --qr forced on,
+                // Some(false) = --no-qr, None = auto (a stdout TTY renders).
+                let qr_mode = if args.topup_no_qr {
+                    Some(false)
+                } else if args.topup_qr {
+                    Some(true)
+                } else {
+                    None
+                };
+                run_kat_topup(args.topup_pack, qr_mode);
+            }
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
             KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),
             // P015 Phase 2 (Plan 127): the replay lane needs the oracle
