@@ -3208,8 +3208,16 @@ fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::Pa
         use riir_refine::kat_lease_client::HttpResponse;
         let dir = riir_refine::kat_account::KatAccount::default_dir();
         let account = riir_refine::kat_account::KatAccount::load(&dir).ok()?;
-        let pubkey = account.signing_key().ok()?.verifying_key().to_bytes();
-        let acct_hex = riir_refine::kat_payreq_client::hex_encode(&pubkey);
+        let signing_key = account.signing_key().ok()?;
+        let pubkey = signing_key.verifying_key().to_bytes();
+        // The /history route indexes by the SERVICE account id —
+        // `blake3(pubkey)[..16]` (the house derivation), 32 hex chars —
+        // never the raw pubkey hex (a well-formed query for a
+        // nonexistent account is the silent-zero failure the protocol
+        // module's `service_account_hex` guard exists to prevent).
+        let acct_hex = riir_refine::kat_payreq_client::hex_encode(
+            &riir_refine::kat_protocol_account::account_for_pubkey(&pubkey),
+        );
         let transport = riir_refine::kat_account_client::HttpAccountTransport::new(url, 10);
         let body = match transport.get_history(&acct_hex, 20) {
             HttpResponse::Ok(b) => b,
