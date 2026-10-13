@@ -110,8 +110,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        801,
-        "kernel batches through Batch 225 should have 801 rules",
+        803,
+        "kernel batches through Batch 227 should have 803 rules",
     );
 }
 
@@ -5370,8 +5370,8 @@ fn kernel_categories_table_has_15_entries() {
 
 #[test]
 fn kernel_categories_cover_all_corpus_rules_exhaustively() {
-    // Every rule_id in the 801-rule corpus must appear in exactly one category
-    // (re-pinned 801 at Batch 225; 796 at Batch 224, 795 at Batch 223, read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
+    // Every rule_id in the 803-rule corpus must appear in exactly one category
+    // (re-pinned 803 at Batch 227; 801 at Batch 225, 796 at Batch 224, 795 at Batch 223, read 784 through B220, 783 through B218/B215, 778 through B214, 777 through B213, 776 through B210, 773 through B208, 771 through B206, 769 through B205, 761 through B204).
     let corpus = build_kernel_seed_corpus();
     let corpus_ids: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     let mut categorized: Vec<&str> = Vec::new();
@@ -5467,10 +5467,10 @@ fn kernel_categories_counts_match_plan_003_table() {
     // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 163),
+        (KernelCategory::MemoryAccess, 164),
         (KernelCategory::Compute, 87),
         (KernelCategory::Fusion, 55),
-        (KernelCategory::Dispatch, 187),
+        (KernelCategory::Dispatch, 188),
         (KernelCategory::Parallelism, 75),
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 36),
@@ -5495,9 +5495,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 801.
+    // Sum must equal 803.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 801, "Plan 003: category totals must sum to 801 (Batch 225 +5: the Q1_0 trio distill, PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding) + 43e67bda3 (the mmq/mma accuracy fix) — D +1 mmq-tile-loader-thread-map-derives-from-block-geometry (the ported threads_per_row formula 'MMQ_ITER_K_Q1_0 / (4 * QR1_0)' read 32 threads on a 4-block span — the 'pending accuracy debugging' disabled-kernel commit's root cause; the fix derives blocks_per_iter * QI1_0; the stale MMQ_ITER_K_Q1_0 macro survives with the wrong-derivation comment) — B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer (±1 int8 payload at the Q8_0 tile geometry, the vec_dot_q8_0_q8_1_mma consumer reused verbatim, the bespoke g128 tile macro deleted onto the shared tile) — A +1 superblock-scale-replication-to-subblock-scale-slots (the staging tile is the adapter: one d per 128 broadcast into all four QK8_1 scale slots, consumer untouched) — N +2 sign-expand-one-bit-dp4a-symmetric-epilogue (±1 bytes ARE dp4a lanes; 'ds8f.y is the precomputed sum (not needed for symmetric quant)'; the computed-but-unused sumy anti-shape) + sign-codec-shared-magnitude-mean-abs ('const float d = sum_abs / qk;' — the L2-optimal shared magnitude of a sign codec IS the mean abs, not max-abs; the BINARY budget rungs 0.025/0.40 vs ternary 0.01/0.15); Batch 224 +1 D before that: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)");
+    assert_eq!(total, 803, "Plan 003: category totals must sum to 803 (Batch 227 +2: the lithos-metal wave-2 pack @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35, the per-chip-family layout contract) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36, the N-exact reproduction law); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral); the prior message records: Batch 225 +5: the Q1_0 trio distill, PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding) + 43e67bda3 (the mmq/mma accuracy fix) — D +1 mmq-tile-loader-thread-map-derives-from-block-geometry (the ported threads_per_row formula 'MMQ_ITER_K_Q1_0 / (4 * QR1_0)' read 32 threads on a 4-block span — the 'pending accuracy debugging' disabled-kernel commit's root cause; the fix derives blocks_per_iter * QI1_0; the stale MMQ_ITER_K_Q1_0 macro survives with the wrong-derivation comment) — B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer (±1 int8 payload at the Q8_0 tile geometry, the vec_dot_q8_0_q8_1_mma consumer reused verbatim, the bespoke g128 tile macro deleted onto the shared tile) — A +1 superblock-scale-replication-to-subblock-scale-slots (the staging tile is the adapter: one d per 128 broadcast into all four QK8_1 scale slots, consumer untouched) — N +2 sign-expand-one-bit-dp4a-symmetric-epilogue (±1 bytes ARE dp4a lanes; 'ds8f.y is the precomputed sum (not needed for symmetric quant)'; the computed-but-unused sumy anti-shape) + sign-codec-shared-magnitude-mean-abs ('const float d = sum_abs / qk;' — the L2-optimal shared magnitude of a sign codec IS the mean abs, not max-abs; the BINARY budget rungs 0.025/0.40 vs ternary 0.01/0.15); Batch 224 +1 D before that: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)");
 }
 
 #[test]
@@ -5508,8 +5508,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 801,
-        "Plan 003: grouped corpus has {total} rules, expected 801 (Batch 225 +5: the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 + 43e67bda3: D +1 the mmq tile-loader thread-map derivation law, B +1 the sub-byte pre-expand-into-Q8_0-tile MMA-consumer-reuse law, A +1 the super-block scale broadcast-into-sub-block-slots staging law, N +2 the sign-expand dp4a symmetric-epilogue consume + the mean-abs shared-magnitude quantize law; Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
+        total, 803,
+        "Plan 003: grouped corpus has {total} rules, expected 803 (Batch 227 +2: the lithos wave-2 pack - A +1 the coop-tensor per-chip-family layout contract + D +1 the exact-pass sub-pass chunking law); prior: Batch 225 +5: the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 + 43e67bda3: D +1 the mmq tile-loader thread-map derivation law, B +1 the sub-byte pre-expand-into-Q8_0-tile MMA-consumer-reuse law, A +1 the super-block scale broadcast-into-sub-block-slots staging law, N +2 the sign-expand dp4a symmetric-epilogue consume + the mean-abs shared-magnitude quantize law; Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9616,8 +9616,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        801,
-        "corpus count re-pinned at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        803,
+        "corpus count re-pinned at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -17098,6 +17098,117 @@ fn batch226_rider_landed_on_fa_admission_host() {
         assert!(
             e.gpu_concept.contains(needle),
             "batch-226 rider on fa-fast-path admission host missing needle: {needle}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
+fn batch227_rules_parse_and_needles_landed() {
+    // G1 for Batch 227 (Plan 229): TWO own rules -- the lithos-metal
+    // wave-2 pack (lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0;
+    // every needle verbatim at the fetched commits this session). Riders:
+    // the B223 arena-admission face (#37, slot size-class bound) + the
+    // B207 half2-pairing face (#38, the decode family's fifth member) --
+    // pinned by the needles below on their hosts. Count-neutral riders,
+    // corpus 801 -> 803.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(corpus.entries.len(), 803, "batch-227: corpus 801 -> 803");
+
+    let cases: [(&str, &[&str]); 2] = [
+        (
+            "coop-tensor-layout-measured-per-chip-family",
+            &[
+                "gemm_tile filled its right operand and read its destination in the M5 neural accelerators' register layout",
+                "lay a SIMD-group's cooperative tensors out as 8 x 8 matrices: a thread holds the reduction slots kr + 8*jj of the row pairs nc + e + 8*s (measured with coop_layout)",
+                "the autotuner kept the tile off, leaving every T > 1 projection on the shader GEMV — a DSpark verify of 8 rows at 8.8x a T = 1 pass, a prompt chunk at one pass per row",
+                "two token blocks, staged weights and the split fill assume the Apple10 cooperative layout",
+                "A 4-bit tile needs TK >= 128 on Apple9",
+                "The row GEMVs that read x' outside a tile read four slots 8 apart",
+                "the tile takes NVFP4 at 8 rows from 8.80x to 2.50x a T = 1 pass (32 rows 5.81x), and the 27B's prefill of 43 tokens from 11.8 to 0.65 s",
+                "7781e9341e7f43a1d393e506d6d1431e692b81fd",
+                "Batch 227 / Plan 229 / Research 257",
+            ],
+        ),
+        (
+            "exact-pass-rows-take-their-sub-pass-chunking",
+            &[
+                "pick_chunk sizes the attention's key chunks from the pass's context, so a 512-row prompt pass summed a row's keys in a different order than the 128-row pass N-exact promises to reproduce",
+                "the rows of each such sub-pass take the chunking that sub-pass would (pick_chunk of its own context), so every row sums its keys in that pass's order",
+                "a 192-row chunk would put rows 128-191 of a 384-token prompt in a sub-pass of the wrong context",
+                "an exact prefill chunk is a multiple of",
+                "rg == 0 && key >= qpos0 + s0",
+                "the context of the row's EXACT_SUB-row pass",
+                "512-row exact passes (the 128-row results bit for bit): a 2846-token Qwen3.8-27B prompt's first token 9.2 -> 8.6 s with the measured kernel choices; 1024 rows measured no better",
+                "Fixed-chunk kernels (v2, the matrix attention) already sum every row the same way",
+                "Batch 227 / Plan 229 / Research 257",
+            ],
+        ),
+    ];
+    for (rule_id, markers) in cases {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rule_id)
+            .unwrap_or_else(|| panic!("batch-227 rule '{rule_id}' missing from the corpus"));
+        for marker in markers {
+            assert!(
+                entry.gpu_concept.contains(marker),
+                "batch-227 rule '{rule_id}' marker missing: '{marker}'"
+            );
+        }
+        // the pseudocode halves parse (the batch207/223/224/225 pattern).
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-227 ref_shape for '{rule_id}' must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-227 opt_pattern for '{rule_id}' must parse"
+        );
+    }
+
+    // the riders on their hosts (count-neutral; needle-pinned).
+    let workspace = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "attention-partition-two-knob-shared-partial-workspace")
+        .expect("b223 workspace host missing");
+    for marker in [
+        "RIDER (Batch 227 / Plan 229 / Research 257 — the ARENA-ADMISSION face",
+        "5842639e56f0734c4e2cee2987e01bcd020804ab",
+        "a later small value took their slot and the next layer's partials opened a new one",
+        "held five copies of the partial workspace: 18.7 GB of scratch for 128-row passes on the M4 Pro and 34.9 GB for 256 rows, past its working set (a GPU page fault)",
+        "A value now takes a free slot at most twice its size: 5.8 and 9.1 GB",
+        "s['end'] < start and s['size'] <= 2 * size",
+        "Batch 227 rider (quotes verbatim at the fetched commit)",
+    ] {
+        assert!(
+            workspace.gpu_concept.contains(marker),
+            "batch-227 b223 arena-admission rider marker missing: '{marker}'"
+        );
+    }
+    let minifloat = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "minifloat-normal-code-shift-bias-diff-decode")
+        .expect("b207 minifloat host missing");
+    for marker in [
+        "RIDER (Batch 227 / Plan 229 / Research 257 -- the decode family's FIFTH member, the LANE-PAIRING face",
+        "258ef6e78258d4427209aad2810e0e844f6282a4",
+        "The FP8 decode GEMV is ALU-bound on Apple9",
+        "the M3 Ultra's T = 1 FP8 projections 514-562 -> 672-675 GB/s, the M4 Pro +2-4 %, the M5 Max +3-6 %",
+        "bytes 0 and 2 of a word, then 1 and 3, each a half of a half2",
+        "((code & 0x007F007Fu) << 7) | ((code & 0x00800080u) << 8)",
+        "Batch 227 rider (quotes verbatim at the fetched commit)",
+    ] {
+        assert!(
+            minifloat.gpu_concept.contains(marker),
+            "batch-227 b207 half2-pairing rider marker missing: '{marker}'"
         );
     }
 }
