@@ -142,9 +142,11 @@ fn table_and_corpus_match_installed_driver() {
         // AHEAD-OF-PIN rows (Batch 230): the pinned 1.98.1 driver cannot
         // know them — they are verified against the +1.99.0 driver by
         // `ahead_of_pin_rows_match_the_1_99_driver` below, not here.
-        if AHEAD_OF_PIN_1_99.contains(lint) {
-            assert!(driver.get(lint).is_none(),
-                "table {lint} is listed AHEAD-OF-PIN but the pinned driver already knows it — re-merge the row");
+        if !driver.contains_key(lint) {
+            assert!(
+                AHEAD_OF_PIN_1_99.contains(lint),
+                "table {lint} is listed AHEAD-OF-PIN but the pinned driver already knows it — re-merge the row"
+            );
             continue;
         }
         match driver.get(lint) {

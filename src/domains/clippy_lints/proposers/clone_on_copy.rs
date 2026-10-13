@@ -169,7 +169,7 @@ impl Collector<'_> {
             return None;
         }
         // The single argument must be `&bare_ident`.
-        let Some(arg) = c.args.first() else { return None };
+        let arg = c.args.first()?;
         let Expr::Reference(r) = arg else { return None };
         if r.mutability.is_some() {
             return None;
@@ -178,7 +178,7 @@ impl Collector<'_> {
         if ap.qself.is_some() || ap.path.leading_colon.is_some() || ap.path.segments.len() != 1 {
             return None;
         }
-        if !ap.path.segments[0].arguments.is_none() {
+        if !matches!(ap.path.segments[0].arguments, syn::PathArguments::None) {
             return None;
         }
         let ident = ap.path.segments[0].ident.to_string();
@@ -199,9 +199,9 @@ impl Collector<'_> {
         // (the documented narrower-than-clippy divergence).
         let ok = match segs.as_slice() {
             [c_name, m_name] if m_name == "clone" && (c_name == "Clone" || c_name == ty) => true,
-            [root, _mod_name, c_name, m_name]
+            [root, mod_name, c_name, m_name]
                 if (root == "std" || root == "core")
-                    && _mod_name == "clone"
+                    && mod_name == "clone"
                     && c_name == "Clone"
                     && m_name == "clone" =>
             {

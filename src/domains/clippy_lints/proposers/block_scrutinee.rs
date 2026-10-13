@@ -97,7 +97,7 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
                     self.edits.push(edit(b, e));
                     self.visit_block(&i.then_branch);
                     if let Some((_, else_e)) = &i.else_branch {
-                        self.visit_expr(&**else_e);
+                        self.visit_expr(else_e);
                     }
                     for attr in &i.attrs {
                         self.visit_attribute(attr);

@@ -190,7 +190,7 @@ impl Collector<'_> {
         if m.method != "is_empty" || !m.args.is_empty() || m.turbofish.is_some() {
             return None;
         }
-        let ident = bare_ident(&*m.receiver)?;
+        let ident = bare_ident(&m.receiver)?;
         let family = self.proven.get(ident.as_str())?;
         // The whole macro span is re-spelled; only the receiver's own
         // bytes survive verbatim — a comment anywhere else would drop.

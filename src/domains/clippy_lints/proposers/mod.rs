@@ -105,14 +105,14 @@
 //! `clone_on_copy` | `x.clone()` → `x` on a proven-Copy receiver (primitives + `&str`/`&String`) — the std Copy/Clone contract makes the call a no-op; `String` refuses (`redundant_clone`'s territory) (Batch 167) |
 //! `empty_line_after_doc_comments` | `/// docs` + blank run + item → delete the blank run (pure whitespace; the doc re-attaches); attr-intervened silence mirrored (Batch 168) |
 //! `match_ref_pats` | `match f { &A => .., &B => .. }` → `match *f { A => .., B => .. }` — deref the ident scrutinee + strip each arm's leading `&`; binding-free sub-patterns only (binding modes are the staged hazard); mixed/wildcard/or arms are upstream-silent and refused (Batch 169) |
-//! `into_iter_on_ref` | `(&v).into_iter()` → `(&v).iter()` (+ the `(&mut v)` → `iter_mut` twin) — method rename only, clippy's own suggestion shape; the receiver ident proven container-typed by the fn signature (std's `IntoIterator for &T` IS `iter()`); for-heads refuse (the rename births explicit_iter_loop) (Batch 169) |
+//! `into_iter_on_ref` | `(&v).into_iter()` → `(&v).iter()` (+ the `(&mut v)` → `iter_mut` twin) — method rename only, clippy's own suggestion shape; the receiver ident proven container-typed by the fn signature (std's `IntoIterator for &T` IS `iter()`); for-heads refuse (the rename births `explicit_iter_loop`) (Batch 169) |
 //! `tabs_in_doc_comments` | every TAB in a doc comment → four spaces — comment bytes carry zero semantics; `///`, `//!`, `/** */` AND fenced code samples fire (probe); regular `//`/`////` stay silent; item/file-level doc attrs only (Batch 171) |
-//! `map_clone` | `v.iter().map(|x| x.clone())` → `.cloned()` / `.map(|x| *x)` → `.copied()` — the shape compiling PROVES the adapter's bound (T: Clone / T: Copy); by-ref adapter chains only (into_iter's empty-suggestion deletion is Copy-only — refused, the documented divergence) (Batch 171) |
+//! `map_clone` | `v.iter().map(|x| x.clone())` → `.cloned()` / `.map(|x| *x)` → `.copied()` — the shape compiling PROVES the adapter's bound (T: Clone / T: Copy); by-ref adapter chains only (`into_iter`'s empty-suggestion deletion is Copy-only — refused, the documented divergence) (Batch 171) |
 //! `new_without_default` | `impl W { pub fn new() -> Self }` with no Default → insert `impl Default for W` delegating to `new()` — purely additive, clippy's own suggestion shape (Batch 168) |
 //! `len_without_is_empty` | inherent impl with a public `len(&self) -> <int>` and no `is_empty` on the type → INSERT `pub fn is_empty(&self) -> bool { self.len() == 0 }` before the impl's closing brace — the additive-insertion precedent; traits refuse v1 (Batch 175) |
 //! `cast_abs_to_unsigned` | `x.abs() as uN` → `x.unsigned_abs()` on a signature-proven signed-int param — whole-expr replacement iff the unsigned twin width equals the cast target, else the cast survives (narrow/wide); release-identical + debug-strictly-better (the lint's own "can panic" motivation) (Batch 175) |
 //! `ptr_offset_with_cast` | `p.offset(i as isize)` → `p.add(i)` (+ `wrapping_offset` → `wrapping_add`) — receiver proven a raw pointer by the fn head (`*const/*mut` param) or an `as_ptr`/`as_mut_ptr`-initialized local (never-rebound, never-assigned); operand a `usize` param (upstream's own firing precondition, probe-measured) (Batch 184) |
-//! `needless_borrowed_reference` | `let &ref y = e;` → `let ref y = e;` — the leading `&` deleted (upstream's own one-span MachineApplicable); LET-bindings only (the match shape co-fires `match_ref_pats`, which owns it); exactly `&ref IDENT`, non-mut, no subpat, no let-else (Batch 184) |
+//! `needless_borrowed_reference` | `let &ref y = e;` → `let ref y = e;` — the leading `&` deleted (upstream's own one-span `MachineApplicable`); LET-bindings only (the match shape co-fires `match_ref_pats`, which owns it); exactly `&ref IDENT`, non-mut, no subpat, no let-else (Batch 184) |
 //! `multiple_bound_locations` | `<T: Default>` + `where T: Default` → the duplicated bound consolidated into ONE location — subset-driven (inline ⊆ where deletes the inline segment; where ⊆ inline deletes the predicate/whole clause); fn-only surface = upstream parity (trait impls/structs probe-silent); disjoint sets refuse — the merge case, the documented v1 divergence (Batch 185) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
 //!
@@ -1287,8 +1287,7 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_next_back" => manual_next_back::collect_edits(source, file),
         // ── Batch 230 (the clippy-1.99 new-lint wave — Plan 232) ──
         "assert_is_empty" => assert_is_empty::collect_edits(source, file),
-        "manual_bit_width" => bit_width::collect_edits(source, file),
-        "mismatched_bit_width_type" => bit_width::collect_edits(source, file),
+        "manual_bit_width" | "mismatched_bit_width_type" => bit_width::collect_edits(source, file),
         "block_scrutinee" => block_scrutinee::collect_edits(source, file),
         "nonnull_unchecked_on_box_ptr" => {
             nonnull_unchecked_on_box_ptr::collect_edits(source, file)

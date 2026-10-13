@@ -57,7 +57,7 @@
 //!   index and method-chain receivers refuse (not a bare ident).
 //! - **Provenance is PARAM-only**: the receiver's type must be provable from
 //!   the enclosing fn's signature — the integer rows of
-//!   `scalar_param_heads_over` plus the local NonZero derivation below, both
+//!   `scalar_param_heads_over` plus the local `NonZero` derivation below, both
 //!   under the never-rebound guard (zero rebinds make the annotation a
 //!   CONSTRUCTION fact). Locals, lets, fields and calls are unprovable —
 //!   clippy can type them, we refuse. The `mismatched` shape with an
@@ -67,7 +67,7 @@
 //! - Receivers proven to a NON-integer type (`f32`/`f64`/`bool`/`char`, and
 //!   the `String`/`&str` rows the scalar derivation admits) refuse — no
 //!   `bit_width()` exists there.
-//! - The NonZero derivation accepts exactly `NonZero<uN>` / `NonZero<iN>` /
+//! - The `NonZero` derivation accepts exactly `NonZero<uN>` / `NonZero<iN>` /
 //!   `NonZeroUxx` / `NonZeroUsize` / `NonZeroIxx` / `NonZeroIsize`, bare or
 //!   `std::num::`-qualified; `core::num::`, deeper qualifiers, qself, a
 //!   leading colon, generics on the alias form, and non-int type arguments
@@ -84,15 +84,15 @@ use syn::{BinOp, Expr, ExprBinary, File, ImplItemFn, ItemFn};
 use super::helpers::{body_rebinds, byte_range, drops_interior_comment, scalar_param_heads_over};
 use super::{edit, SourceEdit};
 
-/// The bare unsigned-int type names (the scalar rows + the NonZero generic
+/// The bare unsigned-int type names (the scalar rows + the `NonZero` generic
 /// argument).
 const UNSIGNED_INTS: &[&str] = &["u8", "u16", "u32", "u64", "u128", "usize"];
 
-/// The bare signed-int type names (the scalar rows + the NonZero generic
+/// The bare signed-int type names (the scalar rows + the `NonZero` generic
 /// argument).
 const SIGNED_INTS: &[&str] = &["i8", "i16", "i32", "i64", "i128", "isize"];
 
-/// The fixed-width NonZero alias idents, unsigned side.
+/// The fixed-width `NonZero` alias idents, unsigned side.
 const NONZERO_ALIAS_UNSIGNED: &[&str] = &[
     "NonZeroU8",
     "NonZeroU16",
@@ -102,7 +102,7 @@ const NONZERO_ALIAS_UNSIGNED: &[&str] = &[
     "NonZeroUsize",
 ];
 
-/// The fixed-width NonZero alias idents, signed side.
+/// The fixed-width `NonZero` alias idents, signed side.
 const NONZERO_ALIAS_SIGNED: &[&str] = &[
     "NonZeroI8",
     "NonZeroI16",
@@ -247,7 +247,7 @@ fn bare_ident_of(e: &Expr) -> Option<String> {
 
 /// Signature-proven bit-width receiver kinds of `f` (param ident → kind):
 /// the INTEGER subset of the shared scalar derivation plus the local
-/// NonZero derivation, both under the never-rebound guard.
+/// `NonZero` derivation, both under the never-rebound guard.
 fn width_params_over<'i>(
     inputs: impl Iterator<Item = &'i syn::FnArg>,
     block: &syn::Block,
@@ -291,7 +291,7 @@ fn scalar_width_of(text: &str) -> Option<Width> {
     }
 }
 
-/// The NonZero row of the local derivation: the param's type must spell
+/// The `NonZero` row of the local derivation: the param's type must spell
 /// EXACTLY one of `NonZero<u8>`/`NonZero<i8>`/…, `NonZeroU8`/`NonZeroI8`/…/
 /// `NonZeroUsize`/`NonZeroIsize`, each optionally `std::num::`-qualified
 /// (the canonical spellings — the structural equivalent of exact

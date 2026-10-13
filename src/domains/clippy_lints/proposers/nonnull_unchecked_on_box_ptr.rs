@@ -4,9 +4,9 @@
 //! group, NEW in clippy 1.99 / PR #17336).
 //!
 //! Probe note (2026-10-13, clippy 1.99.0 isolated toolchain): the shape
-//! fires with a MachineApplicable suggestion and a `.fixed` file
+//! fires with a `MachineApplicable` suggestion and a `.fixed` file
 //! upstream; the fixed form compile-verified at the repo's 1.98.1
-//! toolchain (only the ancient BOX_LEAK MSRV gate applies upstream —
+//! toolchain (only the ancient `BOX_LEAK` MSRV gate applies upstream —
 //! `from_mut` compiles everywhere we ship).
 //!
 //! ## Why the rewrite is construction-identity (the FIXABLE bar)
