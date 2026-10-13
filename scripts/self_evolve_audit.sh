@@ -97,7 +97,7 @@ if [ -n "$BIN_AGE_MTIME" ] && [ -n "$BIN_AGE_LAST_CT" ]; then
     echo "  bin-age:   OK  (binary $(bin_age_fmt "$BIN_AGE_MTIME") >= last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"))"
   else
     echo "  bin-age:   STALE — binary $(bin_age_fmt "$BIN_AGE_MTIME") predates last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"); adoption runs serve a stale corpus"
-    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify --bin cargo-refine (the release set — latent_retrieval alone compiles the refill/sync/burn-push surfaces to nothing)"
+    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify,update_check --bin cargo-refine (the Issue-153 pinned release set, byte-identical to release.yml's build line — latent_retrieval alone compiles the refill/sync/burn-push surfaces to nothing, and a set missing update_check honestly self-reports STALE at --version)"
   fi
 else
   echo "  bin-age:   UNKNOWN (mtime/git comparison unavailable on this box — broken symlink? no git?)"
