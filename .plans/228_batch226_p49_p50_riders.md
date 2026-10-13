@@ -1,6 +1,6 @@
 # Plan 228 — Batch 226: the P49+P50 rider conversion (B211 + B208)
 
-**Status:** IN PROGRESS — claimed 2026-10-13 ~09:1x +07 (m3-max idle loop; count-neutral, corpus 801 stands both domains)
+**Status:** COMPLETE — landed 2026-10-13 ~09:3x +07 (m3-max idle loop; count-neutral, corpus 801 stands both domains; gates ALL GREEN — see Research 256)
 
 ## Goal
 
@@ -29,25 +29,26 @@ envelope) into count-neutral riders on their adjudicated hosts:
 
 ## Tasks
 
-- [ ] Claim row appended to `.distill/001_mining_queue_snapshot.md` + pushed (the arbiter).
-- [ ] Plan-first (this file; `.plans/.highwater` 227→228; dual_allocation_gate 0/0/0).
-- [ ] Quote re-verification at the pins: bevy `48ae9fc0a1` (#26090) + llama.cpp `358a420e`
-      (#30416) — fresh `.raw` clones or the GitHub patch endpoint, rm at close.
-- [ ] Dedup check at the hosts: B211/B208 full text re-read; confirm the rider faces add NEW
-      content (stride-vs-size_of ≠ register-partition; probe-shape + pad-at-producer ≠
-      exact-shape-admission's existing conjuncts); pad-family cross-ref non-duplicative.
-- [ ] Rider authoring: `entries_18.rs` B211 += P49 face; `entries_gpu_78.rs` B208 += P50 face.
-- [ ] Needle tests: `batch226_rider_needles_landed` in rust_perf tests.rs + kernel_opt tests.rs
-      (the batch225 rider-needle pattern; quotes verbatim).
-- [ ] GOAT: G1 parse/needles both domains · G2 kernel_opt lib + default lib counts hold
-      (2945/2504 floors, rider-only = unchanged) · G3 clippy -D ×4 postures clean + retrieval
-      floors HELD (kernel self-variants 100.0%, blended 91.2/94.7/95.3) · freeze/score-bench NOT
-      owed (zero clippy-corpus delta — riders on kernel_opt/rust_perf hosts, the P30 precedent).
-- [ ] Research note `.research/256_batch226_p49_p50_riders.md` (`.research/.highwater` 255→256)
-      + snapshot update (P49/P50 rows → landed; a BATCH-LANDED head row) + AGENTS.md rider lines
-      (count-neutral — 801 stands; the two feature-table lines gain the rider note) +
-      `.docs/11_domains/` ledger rows.
-- [ ] Commit `feat: batch 226: ...` + push (the claim discharged).
+- [x] Claim row appended to `.distill/001_mining_queue_snapshot.md` + pushed (the arbiter).
+- [x] Plan-first (this file; `.plans/.highwater` 227→228; dual_allocation_gate 0/0/0).
+- [x] Quote re-verification at the pins: bevy `48ae9fc0a1` (#26090) + llama.cpp `358a420e`
+      (#30416) — both via the GitHub `.patch` endpoint in full, this session.
+- [x] Dedup check at the hosts: B211 had no stride/shader content (P49 new — the third view);
+      B208 had no probe-domain or pad-at-producer content (P50 new); the B221 set-mirror rider
+      is complementary (compiler-coupled vs probe/producer-coupled); pad family has no owner of
+      the producer-side stride law.
+- [x] Rider authoring: `entries_18.rs` B211 += P49 face; `entries_gpu_78.rs` B208 += P50 face.
+- [x] Needle tests: `batch226_rider_landed_on_repr_align_layout_host` (rust_perf tests.rs) +
+      `batch226_rider_landed_on_fa_admission_host` (kernel_opt tests.rs) — 2/2 pass.
+- [x] GOAT: G1 parse/needles 2/2 · G2 kernel_opt lib 2947/0 (2945+2 ✓) + default lib 2505/0
+      (2504+1 ✓) · G3 clippy -D ×4 postures clean + retrieval floors HELD (kernel 100.0%,
+      blended 91.2/94.7/95.3, no re-pin) · freeze/score-bench NOT owed (zero clippy-corpus
+      delta, P30).
+- [x] Research note `.research/256_batch226_p49_p50_riders.md` (`.research/.highwater` 255→256)
+      + snapshot update (P49/P50 rows → [x]; a BATCH-LANDED head row) + AGENTS.md rider lines
+      (kernel_opt + rust_perf) + `.docs/11_domains/` ledger rows (kernel_opt.md table cell +
+      rust_perf.md paragraph).
+- [x] Commit `feat: batch 226: ...` + push (the claim discharged).
 
 ## Non-goals
 

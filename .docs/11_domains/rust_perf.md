@@ -42,6 +42,16 @@ event spec shaking' fix incl. the `keep_reachable` fn-pointer form — 'Keeps
 invoking `f` at runtime.'); both category `wasm` — the family 1 → 3 — both
 NotBenchable annotated (the size-axis domain reason; annotated 142 → 144,
 without_spec 97 → 99); quotes re-verified at the pin via the .raw clone).
+Batch 226 rider (2026-10-13, Plan 228 / Research 256 — count-NEUTRAL: the
+B211 `repr-align-register-partition-store-forwarding` layout rule += the
+DEVICE-CONTRACT view — the layout decision's THIRD audience, bevy @
+`48ae9fc0a1` #26090: `UninitBufferVec` sized entries by Rust's `size_of`
+(168 B under glam scalar-math) where the shader declares 176; the stride
+takes from the consumer: `item_size: T::SHADER_SIZE.get() as usize`;
+single-entry = LOUD (binding-size error at draw), multi-entry = SILENT —
+capacity mistaken for contract; host faces fail at compile time/local
+bench, this face fails at runtime on the GPU and its divergence trigger is
+a feature flag; corpus 801/198 stand; retrieval floors HELD).
 Previously 196 — Batch 221
 (2026-10-10, Plan 221 — +1 the bevy `runtime-bool-duplicates-inlinable-body`
 (dispatch, NotBenchable annotated; annotated 141 → 142), source bevyengine/bevy

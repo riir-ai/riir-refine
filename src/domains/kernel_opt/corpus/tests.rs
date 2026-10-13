@@ -17063,3 +17063,41 @@ fn batch181_neg_bias_proof_is_not_vacuous() {
     assert!(e.gpu_concept.ends_with(tail));
     assert!(e.gpu_concept.contains("RIDER (Batch 181"));
 }
+
+#[test]
+#[cfg(feature = "kernel_opt")]
+fn batch226_rider_landed_on_fa_admission_host() {
+    // G1 for the Batch 226 rider (Plan 228): the PROBE-SHAPE-CLASS +
+    // PAD-AT-THE-PRODUCER faces on
+    // `fa-fast-path-validated-exact-shape-admission-v-as-strided-view`
+    // (ggml-org/llama.cpp @ 358a420e #30416, MIT -- every needle
+    // verbatim at the fetched .patch this session). Count-neutral (the
+    // rider-appends-after-the-previous-rider pattern; the B221 set-mirror
+    // rider precedes it on the same host).
+    let corpus = build_kernel_seed_corpus();
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view")
+        .expect("fa-fast-path admission host in corpus");
+    for needle in [
+        "RIDER (Batch 226 the PROBE-SHAPE-CLASS + PAD-AT-THE-PRODUCER faces",
+        "358a420ec4ed59b6b0be08b1d1f71dd478b99a99",
+        "the -fa auto probe (1 token) disables flash attention for such models",
+        "a degenerate shape OUTSIDE the stride contract's domain",
+        "K->ne[1] a multiple of FATTN_KQ_STRIDE for the head-size-512 CUDA kernels",
+        "so FLASH_ATTN_EXT sees K->ne[1] == n_tokens",
+        "so the op falls back to the CPU for most lengths",
+        "const int64_t n_kv = GGML_PAD(n_tokens, 256);",
+        "padded like the KV cache (see llama_kv_cache::get_n_kv)",
+        "Pad the mask like llama_kv_cache::get_n_kv and pad K and V with zeros up to the KV dimension of the mask",
+        "admission, reachability, and probe agreement are one contract",
+        "the model family that surfaced the #30100 fusion mispick needed the same producer-side pad",
+        "Batch 226 rider (quotes verbatim at the fetched .patch)",
+    ] {
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-226 rider on fa-fast-path admission host missing needle: {needle}"
+        );
+    }
+}

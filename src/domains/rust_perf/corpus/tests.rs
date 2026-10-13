@@ -6241,3 +6241,39 @@ fn batch224_rider_landed_on_channel_send_batching_host() {
         );
     }
 }
+
+#[test]
+fn batch226_rider_landed_on_repr_align_layout_host() {
+    // G1 for the Batch 226 rider (Plan 228): the DEVICE-CONTRACT view --
+    // the layout decision's third audience -- on
+    // `repr-align-register-partition-store-forwarding`
+    // (bevyengine/bevy @ 48ae9fc0a1 #26090 fixes #26087, MIT OR
+    // Apache-2.0 -- every needle verbatim at the fetched .patch this
+    // session). Count-neutral (the context_notes rider pattern; the
+    // B224 name-field rider is the sibling form).
+    let corpus = build_perf_seed_corpus();
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "repr-align-register-partition-store-forwarding")
+        .expect("repr-align-register-partition-store-forwarding in corpus");
+    let notes = rule.context_notes.as_deref().unwrap_or_default();
+    for needle in [
+        "RIDERS (Batch 226 the DEVICE-CONTRACT view",
+        "48ae9fc0a1a445dba9f3c5fe55fb5d8de3186ac7",
+        "The shader expects each entry to be 176 bytes",
+        "w/ glam's scalar-math feature on, Rust packs the struct tighter, to 168 bytes",
+        "the buffer comes out 168 bytes when the shader needs at least 176",
+        "With two or more meshes the buffer happens to be big enough, so the bug stays hidden",
+        "item_size: T::SHADER_SIZE.get() as usize",
+        "CAPACITY mistaken for CONTRACT",
+        "A `Vec3` is 12 bytes on the CPU but the struct is 16 bytes in WGSL.",
+        "It fails before the fix and passes after",
+        "Batch 226 rider (quotes verbatim at the fetched .patch)",
+    ] {
+        assert!(
+            notes.contains(needle),
+            "batch-226 rider on repr-align-register-partition-store-forwarding missing needle: {needle}"
+        );
+    }
+}
