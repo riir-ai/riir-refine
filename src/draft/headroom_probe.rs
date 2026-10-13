@@ -53,8 +53,9 @@ use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, Ow
 /// Rung history: each `RERANK_POOL` re-pin appends its rung AND one deeper
 /// (the recoverable band needs a rung above production — zeroing it reads
 /// as "no headroom" when it is "no deeper probe"). Batch 184 (Plan 179)
-/// appended 33 (the pin) + 40 (the band's deep end).
-pub const HEADROOM_DEPTHS: [usize; 9] = [8, 12, 16, 20, 24, 28, 32, 33, 40];
+/// appended 33 (the pin) + 40 (the band's deep end). P51a (2026-10-14)
+/// appended 37 (the pin; 40 already provides the deep rung above it).
+pub const HEADROOM_DEPTHS: [usize; 10] = [8, 12, 16, 20, 24, 28, 32, 33, 37, 40];
 
 /// Index of the production depth within [`HEADROOM_DEPTHS`].
 /// 12 → 16 at the P10 re-pin (2026-09-13, `RERANK_POOL` 12 → 16 after the
@@ -74,7 +75,7 @@ pub const HEADROOM_DEPTHS: [usize; 9] = [8, 12, 16, 20, 24, 28, 32, 33, 40];
 /// to exist. Keeping production at the array's deep end would zero the
 /// band by construction, which reads as "no headroom" and is actually
 /// "no deeper probe".
-pub const PROD_DEPTH_IDX: usize = 7;
+pub const PROD_DEPTH_IDX: usize = 8;
 
 /// Plan 017 T1.2 stop bar: below this many percentage points of
 /// `recall@deepest − recall@1`, the band is noise and no selector is built.

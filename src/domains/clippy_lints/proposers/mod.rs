@@ -115,6 +115,7 @@
 //! `needless_borrowed_reference` | `let &ref y = e;` → `let ref y = e;` — the leading `&` deleted (upstream's own one-span `MachineApplicable`); LET-bindings only (the match shape co-fires `match_ref_pats`, which owns it); exactly `&ref IDENT`, non-mut, no subpat, no let-else (Batch 184) |
 //! `multiple_bound_locations` | `<T: Default>` + `where T: Default` → the duplicated bound consolidated into ONE location — subset-driven (inline ⊆ where deletes the inline segment; where ⊆ inline deletes the predicate/whole clause); fn-only surface = upstream parity (trait impls/structs probe-silent); disjoint sets refuse — the merge case, the documented v1 divergence (Batch 185) |
 //! `excessive_precision` | `2.141592653589793238462643f32` → `2.1415927f32` — suffix-pinned shortest-round-trip rewrite, bit-identity proven in-proposer (Batch 164) |
+//! `match_same_arms` | adjacent arms with byte-identical bodies + binding-free patterns + no guards → `p1 | p2 | .. => B` — merging adjacent arms is execution-equivalent by construction (one arm runs either way); clippy's non-adjacent/typed-equality/wildcard-delete shapes are refused (the conservative subset, P51a 2026-10-14) |
 //!
 //! The remaining proposers fire on **type-blind** detection — they are
 //! correct when the types line up, but a parse-only validator cannot know
@@ -213,12 +214,16 @@ pub mod doc_lazy_continuation;
 pub mod doc_markdown;
 pub mod empty_line_after_doc_comments;
 pub mod excessive_precision;
+pub mod explicit_auto_deref;
+pub mod match_same_arms;
 pub mod manual_string_new;
 pub mod match_like_matches_macro;
 pub mod match_ref_pats;
 pub mod tabs_in_doc_comments;
 pub mod map_clone;
 pub mod mem_replace_with_default;
+pub mod unnecessary_get_then_check;
+pub mod used_underscore_binding;
 pub mod needless_late_init;
 pub mod new_without_default;
 pub mod nonnull_unchecked_on_box_ptr;
@@ -898,6 +903,20 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // safe-replaces-unsafe; only BOX_LEAK MSRV-gated upstream (ancient);
     // from_mut compile-verified at 1.98.1. Complexity group.
     "nonnull_unchecked_on_box_ptr",
+    // ── P51a post-mining intake (2026-10-14 — the batch-230 self-heal
+    // run's no-corpus-rule classes; specimens = the healer's own proposers,
+    // cycle 71) ──
+    // Adjacent arms with byte-identical bodies + binding-free patterns +
+    // no guards → `p1 | p2 | .. => B`. Merging ADJACENT arms is
+    // execution-equivalent by construction (exactly one arm runs either
+    // way; the or-pattern tries alternatives in source order over the
+    // same union of values) — the conservative subset of upstream's
+    // overlap-analysis merge (non-adjacent runs, typed body equality,
+    // same-guard merges, and the wildcard-DELETE suggestion all refuse).
+    // Pedantic group. The three P51a siblings that are type-blind
+    // (unnecessary_get_then_check, explicit_auto_deref,
+    // used_underscore_binding) ride the --verify tier below.
+    "match_same_arms",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1098,6 +1117,30 @@ pub const VERIFY_LINTS: &[&str] = &[
     // methods only (clippy's avoid_breaking_exported_api default skips
     // exported items, and the API break compiles — refused up front).
     "wrong_self_convention",
+    // ── P51a post-mining intake (2026-10-14, the batch-230 self-heal run's
+    // no-corpus-rule classes; the specimens are the healer's own proposers) ──
+    // `m.get(k).is_none()` → `!m.contains_key(k)` (+ the `is_some` twin).
+    // VERIFY: the receiver is type-blind (clippy type-checks for the four
+    // std map/set types and stays SILENT on `&map` receivers — probe-
+    // verified; we fire wider, the divergences disclosed in the module
+    // doc: slice/Vec/set receivers are E0599 the compile gate reverts,
+    // the custom-get-vs-contains_key class is the pathological residual).
+    "unnecessary_get_then_check",
+    // `f(&*e)` → `f(&e` / `f(&**e)` → `f(e)` (argument position only; the
+    // deref-COUNT selects the splice — both MachineApplicable upstream,
+    // probe-verified). VERIFY: concrete callees are proof-safe (the
+    // original compiling proves the coercion chain); the GENERIC-callee
+    // class binds T differently and is SILENT — the disclosed residual,
+    // bounded by how rare `&*` args to generic callees are (both cycle-71
+    // specimens were concrete-typed helpers).
+    "explicit_auto_deref",
+    // `_x` (used) → `x` at the binding + every use (multi-span rename,
+    // upstream is diagnosis-only in 1.98.1 — the rewrite is ours).
+    // VERIFY: the multi-span P15 structural class — the file-level
+    // collision census + macro-token + shorthand guards make the rename
+    // resolution-preserving; per-fn scoping keeps UNUSED `_x` bindings
+    // untouched (renaming them would birth unused-var warnings).
+    "used_underscore_binding",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -1292,6 +1335,12 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "nonnull_unchecked_on_box_ptr" => {
             nonnull_unchecked_on_box_ptr::collect_edits(source, file)
         }
+        // ── P51a post-mining intake (2026-10-14, the batch-230 self-heal
+        // run's no-corpus-rule classes) ──
+        "unnecessary_get_then_check" => unnecessary_get_then_check::collect_edits(source, file),
+        "explicit_auto_deref" => explicit_auto_deref::collect_edits(source, file),
+        "match_same_arms" => match_same_arms::collect_edits(source, file),
+        "used_underscore_binding" => used_underscore_binding::collect_edits(source, file),
         _ => Vec::new(),
     }
 }
@@ -1451,7 +1500,10 @@ mod tests {
         // mismatched_bit_width_type + block_scrutinee +
         // nonnull_unchecked_on_box_ptr; the clone_on_copy UFCS rider is
         // count-neutral).
-        assert_eq!(FIXABLE_LINTS.len(), 89);
+        // + 1 P51a (2026-10-14, the batch-230 self-heal run's no-corpus-rule
+        // classes: match_same_arms — the execution-equivalent adjacent-arm
+        // merge; its three type-blind siblings ride VERIFY_LINTS).
+        assert_eq!(FIXABLE_LINTS.len(), 90);
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
@@ -2014,6 +2066,28 @@ impl S {
                 "nonnull_unchecked_on_box_ptr",
                 "fn t(one: Box<u32>) -> std::ptr::NonNull<u32> { unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(one)) } }",
                 "NonNull::from_mut(Box::leak(one))",
+            ),
+            // ── P51a post-mining intake (2026-10-14, the batch-230 self-heal
+            // run's no-corpus-rule classes) ──
+            (
+                "unnecessary_get_then_check",
+                "fn f(m: std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get(&k).is_none() }",
+                "!m.contains_key(&k)",
+            ),
+            (
+                "explicit_auto_deref",
+                "struct EadM { field: Box<u8> } fn f(m: &EadM) -> u8 { ident(&*m.field) } fn ident(e: &u8) -> u8 { *e }",
+                "ident(&m.field)",
+            ),
+            (
+                "match_same_arms",
+                "fn f(x: &str) -> u8 { match x { \"a\" => 1, \"b\" => 1, _ => 2 } }",
+                "\"a\" | \"b\" => 1",
+            ),
+            (
+                "used_underscore_binding",
+                "fn f(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }",
+                "mod_name == \"clone\"",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

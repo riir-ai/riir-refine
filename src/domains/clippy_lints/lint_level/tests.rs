@@ -67,6 +67,9 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
     // derived from the isolated +1.99.0 driver, not the pinned 1.98.1
     // (see AHEAD_OF_PIN_1_99); the membership this test pins is unchanged
     // in KIND: both are allow-by-default pedantic lints.
+    // P51a note (2026-10-14): match_same_arms + used_underscore_binding
+    // join — both allow-by-default pedantic rows per the pinned 1.98.1
+    // driver, the same KIND.
     let mut want = vec![
         "assert_is_empty",
         "cast_lossless",
@@ -79,6 +82,7 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
         "manual_string_new",
         "map_unwrap_or",
         "match_bool",
+        "match_same_arms",
         "needless_pass_by_ref_mut",
         "range_plus_one",
         "redundant_closure_for_method_calls",
@@ -90,6 +94,7 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
         "uninlined_format_args",
         "unreadable_literal",
         "use_self",
+        "used_underscore_binding",
     ];
     want.sort_unstable();
     assert_eq!(got, want);
@@ -377,7 +382,7 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
     let all_gated = gated_lints(&none, &[]);
     assert!(all_gated.contains(&"doc_markdown") && all_gated.contains(&"use_self"));
     assert!(!all_gated.contains(&"needless_return"), "default-on lints are never gated");
-    assert_eq!(all_gated.len(), 22, "the pinned allow-by-default fix-set membership");
+    assert_eq!(all_gated.len(), 24, "the pinned allow-by-default fix-set membership");
 
     let ped = gated_lints(&none, &["pedantic".to_string()]);
     assert!(!ped.contains(&"doc_markdown") && ped.contains(&"use_self"));

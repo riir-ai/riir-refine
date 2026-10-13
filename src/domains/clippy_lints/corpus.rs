@@ -1225,6 +1225,55 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn nub(one: Box<u32>) -> std::ptr::NonNull<u32> { unsafe { std::ptr::NonNull::new_unchecked(Box::into_raw(one)) } }".to_string(),
             fixed_code: "fn nub(one: Box<u32>) -> std::ptr::NonNull<u32> { NonNull::from_mut(Box::leak(one)) }".to_string(),
         },
+        // ── P51a post-mining intake (2026-10-14 — the batch-230 self-heal
+        // run's no-corpus-rule classes; specimens = the healer's own proposers,
+        // cycle 71; groups per the pinned 1.98.1 driver's -W help parse:
+        // unnecessary-get-then-check / explicit-auto-deref = complexity,
+        // match-same-arms / used-underscore-binding = pedantic) ──
+        ClippyFixEntry {
+            lint_name: "unnecessary_get_then_check".to_string(),
+            lint_group: "complexity".to_string(),
+            // Same lookup, one call instead of two: get returns Option<&V>
+            // the check discards; contains_key does the one lookup needed.
+            // OWNED map receiver — the real firing shape (the 1.98.1 lint
+            // type-checks the caller and stays SILENT on `&map` receivers,
+            // probe-verified; the cycle-71 specimen was an owned local).
+            buggy_code: "fn ugtc(m: std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get(&k).is_none() }".to_string(),
+            fixed_code: "fn ugtc(m: std::collections::HashMap<u8, u8>, k: u8) -> bool { !m.contains_key(&k) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "explicit_auto_deref".to_string(),
+            lint_group: "complexity".to_string(),
+            // The deref-COUNT law (both MachineApplicable upstream,
+            // probe-verified): one deref under the & keeps the &; two drop
+            // the whole &**. The specimens: `bare_ident(&*m.receiver)` →
+            // `&m.receiver` and `visit_expr(&**else_e)` → `else_e`.
+            buggy_code: "struct EadM { field: Box<u8> } fn ead(m: &EadM) -> u8 { ident(&*m.field) } fn ident(e: &u8) -> u8 { *e }".to_string(),
+            fixed_code: "struct EadM { field: Box<u8> } fn ead(m: &EadM) -> u8 { ident(&m.field) } fn ident(e: &u8) -> u8 { *e }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "match_same_arms".to_string(),
+            lint_group: "pedantic".to_string(),
+            // Adjacent arms with identical bodies merge their or-pattern:
+            // exactly one arm runs either way, the same union of values,
+            // the same body — execution-equivalent by construction. The
+            // cycle-71 specimen: two dispatch arms with one body →
+            // `"manual_bit_width" | "mismatched_bit_width_type" => ..`.
+            buggy_code: "fn msa(x: &str) -> u8 { match x { \"a\" => 1, \"b\" => 1, _ => 2 } }".to_string(),
+            fixed_code: "fn msa(x: &str) -> u8 { match x { \"a\" | \"b\" => 1, _ => 2 } }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "used_underscore_binding".to_string(),
+            lint_group: "pedantic".to_string(),
+            // Upstream is diagnosis-only in 1.98.1 — the rename is ours:
+            // a USED `_x` drops the underscore at the binding and every
+            // use (file-level collision census + macro/shorthand guards);
+            // unused `_x` never renames (the underscore is then
+            // load-bearing). The cycle-71 specimen: `_mod_name` →
+            // `mod_name` across a match arm + guard.
+            buggy_code: "fn uub(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }".to_string(),
+            fixed_code: "fn uub(segs: &[String]) -> bool { let [_root, mod_name, c, m] = segs else { return false }; mod_name == \"clone\" && c == m }".to_string(),
+        },
     ])
 }
 
@@ -1373,7 +1422,11 @@ mod tests {
         // added the five toolchain-move re-arm rows (assert_is_empty +
         // manual_bit_width + mismatched_bit_width_type + block_scrutinee +
         // nonnull_unchecked_on_box_ptr) = 108.
-        assert_eq!(corpus.entries.len(), 108);
+        // P51a (2026-10-14, the batch-230 self-heal run's no-corpus-rule
+        // classes) added the four post-mining rows (unnecessary_get_then_check
+        // + explicit_auto_deref + match_same_arms + used_underscore_binding)
+        // = 112.
+        assert_eq!(corpus.entries.len(), 112);
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

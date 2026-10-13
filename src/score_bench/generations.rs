@@ -467,6 +467,20 @@ pub fn specs() -> Vec<GenSpec> {
 // 27/27, 20/20), M4 PASS, branch (A) — bad-atom set unchanged at 9 (the
 // known exportation/co-fire classes; no new interference). Both lanes
 // green post-prune; the record stands.
+// P51a re-freeze (2026-10-14, the batch-230 self-heal run's four
+// post-mining rows — unnecessary_get_then_check + explicit_auto_deref +
+// match_same_arms + used_underscore_binding; corpus 108→112): all four
+// atoms fire exactly their own lint (none joins the bad-atom set — the
+// standing 14/15 exclusions unchanged, organic crowding only). The stride
+// windows grew ONE new k1 spec per lane (gen2-k1-match_same_arms /
+// gen3-k1-match_same_arms — union-identity PASS, label = the atom, landed
+// in both tables this batch). Tables: 95 v2 labels / 37 v2 exclusions,
+// 96 v3 labels / 40 v3 exclusions. e2es: v2 verified, no drift, M4 PASS;
+// v3 verified, no drift, stratification PASS. The pool_depth_rescue_guard
+// re-fired at the 112-entry corpus (first-found 34, pool 33 — organic,
+// none of the four is vec-shaped): RERANK_POOL 33→37 per the documented
+// ladder (34 measured + slack 3) + HEADROOM_DEPTHS appended 37. Retrieval
+// floors HELD (19/19 at the latent posture); router annotation floor HELD.
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]),  // k=1
     ("gen2-k1-bool_comparison", &["bool_comparison"]),  // k=1
@@ -508,6 +522,9 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-match_bool", &["match_bool"]),  // k=1
     ("gen2-k1-match_like_matches_macro", &["match_like_matches_macro"]),  // k=1
     ("gen2-k1-match_ref_pats", &["match_ref_pats"]),  // k=1
+    // P51a re-freeze (2026-10-14): the match_same_arms atom's k1 spec —
+    // measured fresh this run (union-identity PASS, label = the atom).
+    ("gen2-k1-match_same_arms", &["match_same_arms"]),  // k=1
     ("gen2-k1-mem_replace_with_default", &["mem_replace_with_default"]),  // k=1
     ("gen2-k1-multiple_bound_locations", &["multiple_bound_locations"]),  // k=1
     ("gen2-k1-needless_bool", &["needless_bool"]),  // k=1
@@ -958,6 +975,8 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-match_bool", &["match_bool"]),  // k=1
     ("gen3-k1-match_like_matches_macro", &["match_like_matches_macro"]),  // k=1
     ("gen3-k1-match_ref_pats", &["match_ref_pats"]),  // k=1
+    // P51a re-freeze (2026-10-14): the match_same_arms atom's v3 k1 spec.
+    ("gen3-k1-match_same_arms", &["match_same_arms"]),  // k=1
     ("gen3-k1-mem_replace_with_default", &["mem_replace_with_default"]),  // k=1
     ("gen3-k1-multiple_bound_locations", &["multiple_bound_locations"]),  // k=1
     ("gen3-k1-needless_bool", &["needless_bool"]),  // k=1

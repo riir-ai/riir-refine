@@ -188,6 +188,39 @@ pub(crate) fn is_none_pat(p: &Pat) -> bool {
         || matches!(p, Pat::Ident(pi) if pi.ident == "None")
 }
 
+/// Does the pattern BIND nothing? (`match_same_arms` P51a — the merge
+/// guard: a body that names a binding could bind in one arm and shadow an
+/// outer name in the other; a binding-free pattern makes the merge
+/// re-resolution-free by construction. Wildcards bind nothing and count as
+/// FREE here — the wildcard MERGE refusal is the caller's policy.) Walks
+/// every sub-pattern; `mut`/`ref` idents, subpats, struct/tuple/or/slice
+/// forms all descend.
+pub(crate) fn pattern_free(p: &Pat) -> bool {
+    struct Seeker {
+        free: bool,
+    }
+    impl<'ast> Visit<'ast> for Seeker {
+        fn visit_pat(&mut self, p: &'ast Pat) {
+            if let Pat::Ident(pi) = p {
+                // syn parses bare ctors like `None` as Pat::Ident too (the
+                // Issue 029 T3 lesson); an Uppercase-initial "ident" in
+                // pattern position is a constructor/const PATH, not a
+                // binding — only lowercase/underscore-initial idents bind.
+                let name = pi.ident.to_string();
+                let binds =
+                    name.starts_with('_') || name.chars().next().is_some_and(char::is_lowercase);
+                if binds {
+                    self.free = false;
+                }
+            }
+            syn::visit::visit_pat(self, p);
+        }
+    }
+    let mut s = Seeker { free: true };
+    s.visit_pat(p);
+    s.free
+}
+
 /// Comment-displacement guard — hoisted to the feature-neutral emitter
 /// substrate (Plan 057 salvage: the `sec` NaN-comparator proposer shares it
 /// without pulling `clippy_lints` into `--no-default-features --features

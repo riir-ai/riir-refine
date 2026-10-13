@@ -165,10 +165,14 @@ pub enum RerankMode {
 /// plus the intervening corpus growth crowded it to first-found at
 /// depth **29-30** (30 at the 96-entry corpus, 29 at 98 — organic
 /// crowding, not this batch's entries); 30 the measured minimum, 33 the
-/// ladder rung with slack 3).
+/// ladder rung with slack 3), then 33 → 37 (2026-10-14, P51a: the four
+/// post-mining rows at the 112-entry corpus crowded the casualty to
+/// first-found at depth **34** (measured by the guard's discovery sweep;
+/// organic crowding again — none of the four is vec-shaped); 34 the
+/// measured minimum, 37 the ladder rung with slack 3).
 /// The `pool_depth_rescue_guard` re-firing on the next vec-shaped corpus
 /// entry is the designed prompt to re-measure, not a defect.
-pub const RERANK_POOL: usize = 33;
+pub const RERANK_POOL: usize = 37;
 
 /// Does `rule_id`'s proposer visitor actually match `file`?
 ///
