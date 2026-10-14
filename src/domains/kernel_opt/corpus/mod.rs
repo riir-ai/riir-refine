@@ -1977,6 +1977,7 @@ mod entries_gpu_88;
 mod entries_gpu_89;
 mod entries_gpu_90;
 mod entries_gpu_91;
+mod entries_gpu_92;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2044,6 +2045,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_89::entries());
     entries.extend(entries_gpu_90::entries());
     entries.extend(entries_gpu_91::entries());
+    entries.extend(entries_gpu_92::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2093,8 +2095,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 805-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 805 at Batch
+/// - **Exhaustive:** every `rule_id` in the 806-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 806 at Batch
 ///   232 — the warm background pass quiet-hold yield-chunking cut-invariance
 ///   law (`TensorFold` c724dd9d); was 804 at Batch
 ///   231 — the host-pointer-buffer foreign-range pinning law; was 803 at Batch
@@ -2950,7 +2952,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "autotune-fidelity-synthetic-carries-producer-params"
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (19 rules; Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
+    // L: Conv-as-GEMM + memory layout (20 rules; Batch 233 +1: the reshape-relabel axis-scramble content-oracle law (llama.cpp #28738 + #30480 — a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape); prior: Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -2974,6 +2976,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "window-recurrence-halo-snapshot-block-parallel",
             "register-built-right-operand-lane-contiguous-plane-layout",
             "affine-block-address-lets-pipeliner-fly",
+            "reshape-relabel-axis-scramble-content-oracle",
         ],
     ),
     // M: Kernel parametric polymorphism (21 rules; Batch 186 +1: the

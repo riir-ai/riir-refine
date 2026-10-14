@@ -110,8 +110,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        805,
-        "kernel batches through Batch 232 should have 805 rules (Batch 232 +1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d; the entries_21 HEADROOM-ADMISSION rider count-neutral); prior: Batch 231 +1: the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599f, MIT; the two riders — the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free — are count-neutral)",
+        806,
+        "kernel batches through Batch 233 should have 806 rules (Batch 233 +1: L the reshape-relabel axis-scramble content-oracle law — llama.cpp #28738 + #30480, MIT: a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape equality; the B224 moe-duplicate-id rider (the #30501 UB-contract face) is count-neutral); prior: Batch 232 +1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d; the entries_21 HEADROOM-ADMISSION rider count-neutral; prior: Batch 231 +1: the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599f, MIT; the two riders — the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free — are count-neutral)",
     );
 }
 
@@ -5478,7 +5478,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 15),
-        (KernelCategory::ConvGemmLayout, 19),
+        (KernelCategory::ConvGemmLayout, 20),
         (KernelCategory::KernelPolymorphism, 21),
         (KernelCategory::DtypeAlignment, 65),
         (KernelCategory::IrStrengthReduction, 8),
@@ -5495,9 +5495,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 805.
+    // Sum must equal 806.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 805, "Plan 003: category totals must sum to 805 (Batch 232 +1: D warm-background-pass-quiet-hold-yield-chunking-cut-invariance — ashhart/TensorFold @ c724dd9d, Apache-2.0: the deferred-background-pass yield law — quiet-hold, drop-don't-queue, 256-row yield chunks with step-aside state-keeping, cut-invariance as the bit-legality contract; the rust_perf HEADROOM-ADMISSION rider is count-neutral); prior: Batch 231 +1: A host-pointer-buffer-foreign-range-subtraction — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps; compute the file ranges of each context and subtract the ranges owned by the other contexts, then create one buffer per range; the batch's two riders (the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack) are count-neutral); prior: Batch 227 +2: the lithos-metal wave-2 pack @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35, the per-chip-family layout contract) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36, the N-exact reproduction law); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral); the prior message records: Batch 225 +5: the Q1_0 trio distill, PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding) + 43e67bda3 (the mmq/mma accuracy fix) — D +1 mmq-tile-loader-thread-map-derives-from-block-geometry (the ported threads_per_row formula 'MMQ_ITER_K_Q1_0 / (4 * QR1_0)' read 32 threads on a 4-block span — the 'pending accuracy debugging' disabled-kernel commit's root cause; the fix derives blocks_per_iter * QI1_0; the stale MMQ_ITER_K_Q1_0 macro survives with the wrong-derivation comment) — B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer (±1 int8 payload at the Q8_0 tile geometry, the vec_dot_q8_0_q8_1_mma consumer reused verbatim, the bespoke g128 tile macro deleted onto the shared tile) — A +1 superblock-scale-replication-to-subblock-scale-slots (the staging tile is the adapter: one d per 128 broadcast into all four QK8_1 scale slots, consumer untouched) — N +2 sign-expand-one-bit-dp4a-symmetric-epilogue (±1 bytes ARE dp4a lanes; 'ds8f.y is the precomputed sum (not needed for symmetric quant)'; the computed-but-unused sumy anti-shape) + sign-codec-shared-magnitude-mean-abs ('const float d = sum_abs / qk;' — the L2-optimal shared magnitude of a sign codec IS the mean abs, not max-abs; the BINARY budget rungs 0.025/0.40 vs ternary 0.01/0.15); Batch 224 +1 D before that: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248);");
+    assert_eq!(total, 806, "Plan 003: category totals must sum to 806 (Batch 233 +1: L reshape-relabel-axis-scramble-content-oracle — llama.cpp #28738 + #30480, MIT: the shape-preserving-wrongness law — a reshape re-declares bounds and cannot permute axes, the oracle is content vs the per-axis decomposition; the B224 #30501 UB-contract rider is count-neutral); prior: Batch 232 +1: D warm-background-pass-quiet-hold-yield-chunking-cut-invariance — ashhart/TensorFold @ c724dd9d, Apache-2.0: the deferred-background-pass yield law — quiet-hold, drop-don't-queue, 256-row yield chunks with step-aside state-keeping, cut-invariance as the bit-legality contract; the rust_perf HEADROOM-ADMISSION rider is count-neutral); prior: Batch 231 +1: A host-pointer-buffer-foreign-range-subtraction — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps; compute the file ranges of each context and subtract the ranges owned by the other contexts, then create one buffer per range; the batch's two riders (the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack) are count-neutral); prior: Batch 227 +2: the lithos-metal wave-2 pack @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35, the per-chip-family layout contract) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36, the N-exact reproduction law); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral); the prior message records: Batch 225 +5: the Q1_0 trio distill, PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding) + 43e67bda3 (the mmq/mma accuracy fix) — D +1 mmq-tile-loader-thread-map-derives-from-block-geometry (the ported threads_per_row formula 'MMQ_ITER_K_Q1_0 / (4 * QR1_0)' read 32 threads on a 4-block span — the 'pending accuracy debugging' disabled-kernel commit's root cause; the fix derives blocks_per_iter * QI1_0; the stale MMQ_ITER_K_Q1_0 macro survives with the wrong-derivation comment) — B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer (±1 int8 payload at the Q8_0 tile geometry, the vec_dot_q8_0_q8_1_mma consumer reused verbatim, the bespoke g128 tile macro deleted onto the shared tile) — A +1 superblock-scale-replication-to-subblock-scale-slots (the staging tile is the adapter: one d per 128 broadcast into all four QK8_1 scale slots, consumer untouched) — N +2 sign-expand-one-bit-dp4a-symmetric-epilogue (±1 bytes ARE dp4a lanes; 'ds8f.y is the precomputed sum (not needed for symmetric quant)'; the computed-but-unused sumy anti-shape) + sign-codec-shared-magnitude-mean-abs ('const float d = sum_abs / qk;' — the L2-optimal shared magnitude of a sign codec IS the mean abs, not max-abs; the BINARY budget rungs 0.025/0.40 vs ternary 0.01/0.15); Batch 224 +1 D before that: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248);");
 }
 
 #[test]
@@ -5508,8 +5508,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 805,
-        "Plan 003: grouped corpus has {total} rules, expected 805 (Batch 232 +1: D the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d; the entries_21 HEADROOM-ADMISSION rider count-neutral); prior: Batch 231 +1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599f, a buffer created from a host pointer pins everything that it wraps; the riders count-neutral); prior: Batch 227 +2: the lithos wave-2 pack - A +1 the coop-tensor per-chip-family layout contract + D +1 the exact-pass sub-pass chunking law); prior: Batch 225 +5: the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 + 43e67bda3: D +1 the mmq tile-loader thread-map derivation law, B +1 the sub-byte pre-expand-into-Q8_0-tile MMA-consumer-reuse law, A +1 the super-block scale broadcast-into-sub-block-slots staging law, N +2 the sign-expand dp4a symmetric-epilogue consume + the mean-abs shared-magnitude quantize law; Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
+        total, 806,
+        "Plan 003: grouped corpus has {total} rules, expected 806 (Batch 233 +1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 UB-contract rider count-neutral); prior: Batch 232 +1: D the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d; the entries_21 HEADROOM-ADMISSION rider count-neutral); prior: Batch 231 +1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599f, a buffer created from a host pointer pins everything that it wraps; the riders count-neutral); prior: Batch 227 +2: the lithos wave-2 pack - A +1 the coop-tensor per-chip-family layout contract + D +1 the exact-pass sub-pass chunking law); prior: Batch 225 +5: the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 + 43e67bda3: D +1 the mmq tile-loader thread-map derivation law, B +1 the sub-byte pre-expand-into-Q8_0-tile MMA-consumer-reuse law, A +1 the super-block scale broadcast-into-sub-block-slots staging law, N +2 the sign-expand dp4a symmetric-epilogue consume + the mean-abs shared-magnitude quantize law; Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-dispatch, llama.cpp #30373+#29998; Batch 223 +11: the lithos-metal pack, Research 249/248)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9616,8 +9616,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        805,
-        "corpus count re-pinned at Batch 232 (+1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d, Apache-2.0: a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it yields in 256-row chunks one in flight, keeps its state when it steps aside, and chunking is bit-legal by cut-invariance; the rust_perf HEADROOM-ADMISSION rider on degrade-not-fail-load-qualification-probe is count-neutral); prior re-pin at Batch 231 (+1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps — subtract the ranges owned by the other contexts, one buffer per disjoint owned range; the two riders count-neutral: the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack); was 803 at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        806,
+        "corpus count re-pinned at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law — llama.cpp #28738 + #30480, MIT: a reshape re-declares bounds over fixed memory and cannot permute axes, the oracle is content vs the per-axis decomposition; the B224 moe-duplicate-id rider — the #30501 UB-contract face — count-neutral); prior re-pin at Batch 232 (+1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d, Apache-2.0: a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it yields in 256-row chunks one in flight, keeps its state when it steps aside, and chunking is bit-legal by cut-invariance; the rust_perf HEADROOM-ADMISSION rider on degrade-not-fail-load-qualification-probe is count-neutral); prior re-pin at Batch 231 (+1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps — subtract the ranges owned by the other contexts, one buffer per disjoint owned range; the two riders count-neutral: the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack); was 803 at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -17141,6 +17141,91 @@ fn batch229_rider_landed_on_ragged_chunk_pad_host() {
 
 #[test]
 #[cfg(feature = "kernel_opt")]
+fn batch233_rules_parse_and_needles_landed() {
+    // G1 for Batch 233 (Plan 235): ONE own rule (category L) + ONE
+    // count-neutral rider -- the cycle-87 staged intake (1a)+(1b). The rule:
+    // the layout-contract family law over TWO upstream faces (llama.cpp
+    // #28738 @ 6868a52, the conv_1d batch-fold axis-order fix + its
+    // test-conv-1d content oracle; #30480 @ e7268bf, the DSA k-pool
+    // selection mask-layout carry over glm5-next + qwen4exp) -- every
+    // needle verbatim at the fetched .diff files this session. The rider:
+    // the #30501 UB-contract face on moe-duplicate-id-compact-prepass-
+    // static-bound-tile-dispatch (8c2134a), count-neutral. Count:
+    // corpus 805 -> 806.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(corpus.entries.len(), 806, "batch-233: corpus 805 -> 806");
+
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "reshape-relabel-axis-scramble-content-oracle")
+        .expect("batch-233 rule missing from corpus");
+    for needle in [
+        "conv_1d folds the batch into the rows of the GEMM, so the product is laid out as [OL, N, OC] and reaches the documented [OL, OC, N] only after a transpose of the two slowest dimensions.",
+        "The test runs one batched convolution and N single batch convolutions sharing the same weight and the same input slices, on the CPU backend, and compares every channel of every batch in F32. A wrong layout keeps the shape intact and scrambles the values, so the comparison is on the contents.",
+        "result = ggml_reshape_3d(ctx, result, im2col->ne[1], a->ne[2], im2col->ne[2]); // [N, OC, OL]",
+        "result = ggml_reshape_3d(ctx, result, im2col->ne[1], im2col->ne[2], a->ne[2]); // [OC, N, OL]",
+        "result = ggml_cont(ctx, ggml_permute(ctx, result, 0, 2, 1, 3)); // [N, OC, OL]",
+        "the selection already carries the causal mask, and it comes in the mask layout",
+        "GGML_ASSERT(ggml_are_same_shape(sel, kq_mask))",
+        "GGML_ASSERT(n_sel == (int64_t) inp_kpool->n_sel)",
+        "const size_t row = sel->nb[2];",
+        "a 1x1 permutation is the identity",
+        "worst batch decides the case",
+        "shape is NOT layout",
+        "the assert is the SEAM guard, the decomposition is the ORACLE",
+        "ids-path-rebinds-stride-meaning",
+        "repr-align-register-partition-store-forwarding",
+        "6868a52",
+        "e7268bf",
+        "Batch 233 / Plan 235 / Research 264",
+    ] {
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-233 rule missing needle: {needle}"
+        );
+    }
+    // the pseudocode halves parse (the batch207/227/229/231/232 pattern).
+    let ref_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.buggy_code());
+    assert!(
+        verdict_passes(&ref_verdict),
+        "batch-233 ref_shape must parse"
+    );
+    let opt_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.fixed_code());
+    assert!(
+        verdict_passes(&opt_verdict),
+        "batch-233 opt_pattern must parse"
+    );
+
+    // the rider: the B224 rule gains the #30501 UB-contract face
+    // (count-neutral -- the corpus total above is the pin).
+    let b224 = corpus
+        .entries
+        .iter()
+        .find(|e| {
+            e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch"
+        })
+        .expect("batch-233 rider host missing");
+    for needle in [
+        "note: this op has undefined behaviour if a given `a` is referenced more than once for a given `b`",
+        "(i.e. duplicate experts per token are not guaranteed to be supported in all backends)",
+        "[TAG_MUL_MAT_ID_DUPLICATE_ID]",
+        "TODO: disabled until CUDA backend support is added [TAG_MUL_MAT_ID_DUPLICATE_ID]",
+        "8c2134a",
+        "never silently deleted -- they are the re-enable gate",
+        "the clamp is now contract-enforced, not merely NaN hygiene",
+    ] {
+        assert!(
+            b224.gpu_concept.contains(needle),
+            "batch-233 rider missing needle: {needle}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
 fn batch232_rules_parse_and_needles_landed() {
     // G1 for Batch 232 (Plan 234): ONE own rule -- the TensorFold 1.0.9
     // lead (1a) conversion (ashhart/TensorFold @ c724dd9d, the
@@ -17151,7 +17236,7 @@ fn batch232_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 805, "batch-232: corpus 804 -> 805");
+    assert_eq!(corpus.entries.len(), 806, "batch-232: corpus 804 -> 805; re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 rider count-neutral)");
 
     let e = corpus
         .entries
@@ -17210,7 +17295,7 @@ fn batch231_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 805, "batch-231: corpus 803 -> 804; re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d)");
+    assert_eq!(corpus.entries.len(), 806, "batch-231: corpus 803 -> 804; re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480)");
 
     let e = corpus
         .entries
@@ -17286,7 +17371,7 @@ fn batch227_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 805, "batch-227: corpus 801 -> 803; re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f)");
+    assert_eq!(corpus.entries.len(), 806, "batch-227: corpus 801 -> 803; re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f)");
 
     let cases: [(&str, &[&str]); 2] = [
         (
