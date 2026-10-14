@@ -40,4 +40,4 @@ Quotes verified verbatim at the fetched .patch files + the release body this ses
 - [x] Research note `.research/263_batch232_tensorfold_109_leads.md` (born-complete, Status: DISTILLED)
 - [x] Docs: AGENTS.md kernel_opt 804→805 + rider note; `.docs/11_domains/kernel_opt.md` B232 row;
   rust_perf.md Batch 232 rider line; snapshot landing row; intake rows (1a)/(1b) → [x]
-- [ ] Commit `feat: batch 232: ...` + push (the claim discharged by the landing row)
+- [x] Commit `feat: batch 232: ...` + push (the claim discharged by the landing row)
