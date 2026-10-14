@@ -367,23 +367,31 @@ fn t32_measured_evasion_set_is_pinned() {
     // THE PIN. A change here is a gate definition change: bump
     // REDACT_VERSION + add a REDACT_CHANGELOG row.
     //
-    // Re-measured at v3 (the declaration-scope bump, Bench 053) and the set
-    // did NOT move — which is the expected result, and worth stating rather
-    // than passing over. v3 rescoped the identifier rule from the physical
-    // line to the DECLARATION, closing the shape `rustfmt` generates
-    // (`const NAME: &str =` ⏎ `    "literal";`). `line-split` below is a
-    // different shape: the secret is broken INSIDE the literal with a Rust
-    // `\` continuation, which no formatter emits at default settings — it is
-    // author-chosen obfuscation, not a formatting artifact. v3 deliberately
-    // does not chase it; see Bench 052 §Verdict for the reasoning on why
-    // hardening the pattern set for this class is the wrong move.
+    // Re-measured at v3 (the declaration-scope bump, Bench 053), v4 (the
+    // gitleaks provider-format consolidation, riir-kat Issue 002) and v5
+    // (the AI key-format intel pass) — the set did NOT move at any of them,
+    // which is the expected result each time and worth stating rather than
+    // passing over. v3 rescoped the identifier rule from the physical line
+    // to the DECLARATION, closing the shape `rustfmt` generates
+    // (`const NAME: &str =` ⏎ `    "literal";`). v4's families are
+    // provider-specific (google/stripe/telegram/JWT/…); v5 adds the Gemini
+    // `AQ.` row and `sk-`-family parity — neither touches the AWS `AKIA`
+    // class every fixture below wraps, so 3/9 caught is the stable answer.
+    // `line-split` below is a different shape than v3's target: the secret
+    // is broken INSIDE the literal with a Rust `\` continuation, which no
+    // formatter emits at default settings — it is author-chosen
+    // obfuscation, not a formatting artifact. v3 deliberately does not
+    // chase it; see Bench 052 §Verdict for the reasoning on why hardening
+    // the pattern set for this class is the wrong move.
     //
     // The standing caught/evaded ratio across versions: v1 2/9, v2 3/9
-    // (hexish made unconditional), v3 3/9 (unchanged — v3's gain is on the
-    // ACCIDENTAL own-repo class this suite does not measure).
+    // (hexish made unconditional), v3 3/9, v4 3/9, v5 3/9 (unchanged since
+    // v2 — v3's gain is on the ACCIDENTAL own-repo class this suite does
+    // not measure; v4/v5's gains are on provider formats this suite does
+    // not wrap).
     assert_eq!(
-        REDACT_VERSION, 3,
-        "the evasion set below was measured at REDACT_VERSION 3 — re-measure \
+        REDACT_VERSION, 5,
+        "the evasion set below was measured at REDACT_VERSION 5 — re-measure \
          and update this pin as part of the next version bump"
     );
     assert_eq!(

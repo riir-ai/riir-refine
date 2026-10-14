@@ -447,6 +447,9 @@ pub fn pair_dir(root: &Path, dst_url: &str, src_url: &str) -> PathBuf {
         .join(crate::kat_state_stamp::net_dir_key(src_url))
 }
 
+/// All callers live in the `kat_transport`-gated submit lane; gating the
+/// helper with the same cfg keeps the default build warning-free.
+#[cfg(feature = "kat_transport")]
 fn unix_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
