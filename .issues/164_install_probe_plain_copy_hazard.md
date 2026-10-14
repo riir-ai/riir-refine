@@ -1,6 +1,6 @@
 # Issue 164 — the install-probe plain-copy hazard: install.sh/ps1 (gist-rs/cargo-refine) clobbers the developer symlink silently
 
-**Status:** OPEN (hazard recorded, fix spec below; the edit lands in the PUBLIC dist repo — owner-adjacent lane, rides the next release cut or a deliberate dist-repo pass)
+**Status:** OPEN — checklist-convention half LANDED 2026-10-14 (`.plans/223` §R6 + `.plans/105` Notes); remaining = the dist-repo installer edit (owner-adjacent lane, rides the next release cut or a deliberate dist-repo pass) + the AGENTS.md UNLANDED-line update once it lands
 
 ## The hazard (measured twice, both boxes, 2026-10-13)
 
@@ -78,5 +78,9 @@ clobbered; if clobbered, the same awareness belongs there (this half IS in-repo)
       recoverable trail.
 - [ ] AGENTS.md §Production adoption hazard line updated to name the fixed installer
       versions (remove "UNLANDED" once the dist edit lands)
-- [ ] the R6 release-checklist convention line (Plan 105's runbook) gains the re-link /
-      re-copy step for developer boxes
+- [x] the R6 release-checklist convention line gains the re-link /
+      re-copy step for developer boxes — **LANDED 2026-10-14:** `.plans/223` §R6
+      now carries the standing DEVELOPER-BOX CONVENTION (after any probe:
+      re-link unix / re-copy Windows, verify `lrwxrwxrwx` + build-stamp==HEAD;
+      `self_evolve_audit.sh` §0 bin-age named the standing detector) + a
+      one-line hazard pointer in `.plans/105` Notes.
