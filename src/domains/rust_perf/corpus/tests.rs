@@ -6279,7 +6279,6 @@ fn batch226_rider_landed_on_repr_align_layout_host() {
 }
 
 #[test]
-#[test]
 fn batch232_rider_landed_on_degrade_host() {
     // G1 for the Batch 232 rider (Plan 234): the TensorFold HEADROOM-ADMISSION
     // face on `degrade-not-fail-load-qualification-probe`
@@ -6312,6 +6311,7 @@ fn batch232_rider_landed_on_degrade_host() {
     }
 }
 
+#[test]
 fn batch231_rider_landed_on_madvise_host() {
     // G1 for the Batch 231 rider (Plan 233): the macOS WILLNEED-prefetch
     // NO-OP face on `madvise-random-for-key-gather-tables`
