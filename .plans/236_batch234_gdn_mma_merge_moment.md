@@ -21,8 +21,8 @@
 - [x] T11: freeze/score-bench adjudication — NOT owed unless a clippy-corpus delta lands (P30, the B229/232 precedent)
 - [x] T12: research note 266 (`.research/.highwater` 265→266, dual_allocation_gate at allocation)
 - [x] T13: docs — AGENTS.md kernel_opt bullet 812 + B234 narrative; kernel_opt.md B234 row + counts; the merge-moment context (this batch IS the watch-971 merge event's conversion)
-- [ ] T14: snapshot landing row (`.distill/001` — LF-preserving python) + the claim row discharged
-- [ ] T15: commit `feat: batch 234: the #29353 GDN-MMA chunked prefill pack` + push
+- [x] T14: snapshot landing row (`.distill/001` — LF-preserving python) + the claim row discharged — HYGIENE-TICKED 2026-10-14 by the Batch-235 session: the landing row IS in `.distill/001` (the "BATCH 234 LANDED 2026-10-14 ~23:4x +07" row, top of file) and the claim row `8e4e6eaa7` reads "discharged by this row"
+- [x] T15: commit `feat: batch 234: the #29353 GDN-MMA chunked prefill pack` + push — HYGIENE-TICKED same session: the commit IS `c83c323f` ("feat: batch 234 — the #29353 GDN-MMA merge-moment pack (+6, corpus 806 -> 812)"), pushed to origin/develop (in this checkout's history below the t32 unit)
 - [ ] T16 (same session, parallel): the fork re-pin bout at `prism-b10776-d00e252` (the +4 near-flat-class delta; #355 the only CUDA arm) + the Plan-605-T5 defense dispatch record
 
 ## Notes

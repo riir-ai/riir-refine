@@ -17346,6 +17346,74 @@ fn batch234_rules_parse_and_needles_landed() {
 
 #[test]
 #[cfg(feature = "kernel_opt")]
+fn batch235_riders_parse_and_needles_landed() {
+    // G1 for Batch 235 (Plan 237): the B234 DEFERRED rider pair, both
+    // count-neutral (corpus stands 812). Rider (a): the mma.cuh ldmatrix
+    // I==8 x2 + % t.J wrap face on ldmatrix-pair-x2-to-x4-adjacency (the
+    // width-matched loader law; ggml-org/llama.cpp #29353 @ merge 62df1815
+    // / head dde6a4d93, MIT). Rider (b): the ggml.h n_tokens > K slot-0
+    // guarantee + the two overflow test-row REMOVALS -- the SECOND
+    // UB-contract face on moe-duplicate-id-compact-prepass (the
+    // remove-vs-disable disposition split). Every needle verbatim at the
+    // .diff re-fetched this session.
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        812,
+        "batch-235: count-neutral rider batch -- corpus stands 812"
+    );
+
+    // Rider (a): the width-matched loader face.
+    let ldm = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "ldmatrix-pair-x2-to-x4-adjacency")
+        .expect("batch-235 rider (a) host missing");
+    for needle in [
+        "the width-matched loader face",
+        "static_assert(I == 8 || I == 16, \"bad tile width\")",
+        "((threadIdx.x / t.I) * (t.J / 2)) % t.J",
+        "ldmatrix.sync.aligned.m8n8.x2.b16",
+        "ldmatrix.sync.aligned.m8n8.x2.trans.b16",
+        "const int j = I == 16 ? (threadIdx.x / 16) * (t.J / 2) : 0;",
+        "the opposite direction, adjudicated in Research 266",
+        "62df1815",
+        "Batch 235 / Plan 237 / Research 267",
+    ] {
+        assert!(
+            ldm.gpu_concept.contains(needle),
+            "batch-235 rider (a) missing needle: {needle}"
+        );
+    }
+
+    // Rider (b): the state-slot guarantee face (the second UB-contract
+    // rider on the B224 rule).
+    let b224 = corpus
+        .entries
+        .iter()
+        .find(|e| {
+            e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch"
+        })
+        .expect("batch-235 rider (b) host missing");
+    for needle in [
+        "the SECOND UB-contract face: the state-slot guarantee",
+        "when n_tokens < K only slots 0..n_tokens-1 are written.",
+        "when n_tokens > K only slot 0 is guaranteed; backends may leave slots 1..K-1 unwritten.",
+        "// overflow: n_tokens > K — only the last K snapshots kept.",
+        "SUPERSEDES any test that pins beyond it",
+        "REMOVE when the behavior is deliberately unspecified across backends",
+        "the slot-0-only surface is the portable one",
+    ] {
+        assert!(
+            b224.gpu_concept.contains(needle),
+            "batch-235 rider (b) missing needle: {needle}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
 fn batch232_rules_parse_and_needles_landed() {
     // G1 for Batch 232 (Plan 234): ONE own rule -- the TensorFold 1.0.9
     // lead (1a) conversion (ashhart/TensorFold @ c724dd9d, the
