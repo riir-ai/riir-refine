@@ -264,12 +264,18 @@ impl SyncWatermark {
     }
 
     /// Persist the watermark (the post-push write — Phase 1's `sync` calls
-    /// this; shipped now so the derivation is shared).
+    /// this; shipped now so the derivation is shared). Creates the parent
+    /// directory if needed — the `KatBurnAck::save` convention (a cross-repo
+    /// scan root may have no `.refine` state dir yet; bookkeeping must not
+    /// depend on another component having run first).
     ///
     /// # Errors
     ///
     /// Filesystem write failure (the caller decides how loud to be).
     pub fn save(&self, path: &Path) -> Result<(), String> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| format!("watermark dir: {e}"))?;
+        }
         let text =
             serde_json::to_string_pretty(self).map_err(|e| format!("watermark serialize: {e}"))?;
         std::fs::write(path, text).map_err(|e| format!("watermark write: {e}"))
@@ -676,6 +682,27 @@ mod tests {
         assert!(warn.is_none());
         assert_eq!(loaded, wm);
         let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn watermark_save_creates_missing_state_dir() {
+        // The cross-repo sweep shape: a scan root whose `.refine/net/...`
+        // state dir has never been created (os error 3 before the fix —
+        // the KatBurnAck::save convention, bookkeeping never depends on
+        // another component having run first).
+        let rows = two_rows();
+        let wm = watermark_after_sync(&rows, &allow_policy());
+        let dir = std::env::temp_dir().join(format!(
+            "kat_wm_dir_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        let path = dir.join("net").join("mainnet").join(SyncWatermark::FILE_NAME);
+        wm.save(&path).expect("save into a never-created nested dir");
+        let (loaded, warn) = SyncWatermark::load_at(&path);
+        assert!(warn.is_none());
+        assert_eq!(loaded, wm);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

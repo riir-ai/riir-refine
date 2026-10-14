@@ -1,6 +1,6 @@
 # Plan 237 — Batch 235: the B234 deferred rider pair (count-neutral)
 
-**Status:** IN_FLIGHT — claimed `d5233464` (2026-10-14 ~23:2x +07, M3 idle loop); Plan 236 T5's `- [-]` discharged by this plan.
+**Status:** COMPLETE 2026-10-14 — landed `c7461f0a` (claimed `d5233464`, M3 idle loop; the claim discharged by the .distill landing row); T12 hygiene-closed 2026-10-15 (4090 idle loop — a duplicated unticked T12 row removed; the landing row, commit and push were already verifiably in). Plan 236 T5's `- [-]` discharged by this plan.
 
 Batch 235 = the two count-neutral riders Plan 236 deferred (recorded Research 266 §"The integration shape (riders)"):
 
@@ -22,7 +22,6 @@ Batch 235 = the two count-neutral riders Plan 236 deferred (recorded Research 26
 - [x] T10: research note 267 (`.research/.highwater` 266→267, dual_allocation_gate clean at allocation) + plan 236 T14/T15 hygiene tick (the c83c323f landing row IS in .distill, the commit IS pushed).
 - [x] T11: docs — AGENTS.md kernel_opt bullet gains the Batch 235 discharge row (the B234 "DEFERRED" clause resolved in-place); `.docs/11_domains/kernel_opt.md` batch list row appended.
 - [x] T12: snapshot landing row (.distill — the claim discharged) + commit `feat: batch 235: ...` + push.
-- [ ] T12: snapshot landing row (.distill — the claim discharged) + commit `feat: batch 235: ...` + push.
 
 ## Notes
 
