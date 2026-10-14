@@ -1804,10 +1804,23 @@ fn run_kat_update() {
     let mut charge = LeaseCharge::open(&store);
     let transport = HttpLeaseTransport::new(&url, 30);
     let current = store.current_epoch().unwrap_or(0);
+    // Issue 165: captured BEFORE the phase — after the swap the old epoch's
+    // manifest + segments are still on disk (content-addressed), which is
+    // what makes the gain diff computable at all.
+    let had_epoch = store.current_epoch();
     let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
     match outcome.status {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {
             println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
+            // Issue 165: the shape of what the 304 is keeping — the
+            // per-domain rule counts the installed epoch serves.
+            if let Some((epoch, overlay)) =
+                riir_refine::kat_lease_client::overlay_from_epoch(&store, None)
+            {
+                if let Some(line) = riir_refine::kat_lease_client::corpus_shape_line(&overlay) {
+                    println!("{line} (epoch {epoch})");
+                }
+            }
         }
         riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
             println!(
@@ -1817,6 +1830,7 @@ fn run_kat_update() {
             println!(
                 "corpus lease: epoch {epoch} installed atomically — the retrieval index rebuilds on the next run"
             );
+            print_corpus_epoch_gain(&store, had_epoch, epoch);
         }
         riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
             println!("corpus lease: skipped — {reason}");
@@ -1831,6 +1845,93 @@ fn run_kat_update() {
     if let Err(e) = charge.save() {
         eprintln!("corpus lease: could not persist the charge ledger: {e}");
     }
+}
+
+/// Issue 165: the `update`/`sync` gain surface — what the applied epoch
+/// actually changes, computed client-side from the overlays BOTH epochs'
+/// manifests + content-addressed segments still yield (the atomic swap
+/// adds files, it never removes). No wire change; an unreadable overlay
+/// skips the line honestly instead of fabricating a diff. First-install
+/// (or old-epoch-unreadable) postures show the installed shape instead.
+#[cfg(feature = "kat_transport")]
+fn print_corpus_epoch_gain(
+    store: &riir_refine::kat_lease_client::LeaseStore,
+    old_epoch: Option<u64>,
+    new_epoch: u64,
+) {
+    use riir_refine::kat_lease_client::{corpus_epoch_diff, corpus_shape_line, overlay_from_epoch};
+    let Some((_, new_overlay)) = overlay_from_epoch(store, Some(new_epoch)) else {
+        return;
+    };
+    match old_epoch.map(|e| overlay_from_epoch(store, Some(e))) {
+        Some(Some((old, old_overlay))) if old != new_epoch => {
+            let diff = corpus_epoch_diff(&old_overlay, &new_overlay);
+            match diff.summary_line(old, new_epoch) {
+                Some(line) => println!("{line}"),
+                None => println!("corpus diff (epoch {old} → {new_epoch}): rule sets identical"),
+            }
+        }
+        _ => {
+            if let Some(line) = corpus_shape_line(&new_overlay) {
+                println!("{line}");
+            }
+        }
+    }
+}
+
+/// Issue 165: the mining opt-in encouragement — honest numbers only. The
+/// estimate composes the pending estimator (caveat #15: "service credit,
+/// if proven", provisional rate) over the store THIS run already opened;
+/// zero pending rows → the flow line (fix records history; mine shares
+/// it) on suggest-only runs with findings. Unset consent only: OptedIn
+/// runs auto-push in the tail, and OptedOut is respected, never nagged.
+#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+fn print_mine_encouragement(
+    suggest_only: bool,
+    findings_total: usize,
+    traj_store: Option<&riir_refine::traj_store::TrajStore>,
+    root: &Path,
+) {
+    use riir_refine::kat_mining_consent::MiningConsent;
+    let (consent, _) = riir_refine::kat_mining_consent::read_with_warning(
+        &riir_refine::kat_mining_consent::default_dir(),
+    );
+    if consent != MiningConsent::Unset {
+        return;
+    }
+    let flow_tip = suggest_only && findings_total > 0;
+    let Some(store) = traj_store else {
+        if flow_tip {
+            println!(
+                "mine: `cargo refine --fix` records your heal history — \
+                 `cargo refine --mine` opts in and shares it for KAT service credit"
+            );
+        }
+        return;
+    };
+    let loaded = riir_refine::kat_redact::RedactionGate::discover(None);
+    let (watermark, _) = riir_refine::kat_pending_estimator::SyncWatermark::load_at(
+        &riir_refine::kat_pending_estimator::SyncWatermark::net_path(root, &net_partition_url()),
+    );
+    let est = riir_refine::kat_pending_estimator::estimate_pending(
+        &store.dump(),
+        &loaded.gate,
+        riir_refine::kat_redact::SpanOrigin::OwnRepo,
+        &watermark,
+    );
+    if est.pending_unsynced > 0 {
+        println!(
+            "mine: {} — run `cargo refine --mine` to opt in and contribute",
+            est.pending_line()
+        );
+    } else if flow_tip {
+        println!(
+            "mine: `cargo refine --fix` records your heal history — \
+             `cargo refine --mine` opts in and shares it for KAT service credit"
+        );
+    }
+    // pending rows that are already synced (awaiting server proof) name no
+    // CTA — they are contributed; the quorum decides, not the user.
 }
 
 // ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
@@ -2784,8 +2885,9 @@ fn run_kat_sync() {
         }
     }
 
-    // ── pull half (shared with `update`) ───────────────────────────────
+    // ── pull half (shared with `update`) ───────────────────────────
     let current = store.current_epoch().unwrap_or(0);
+    let had_epoch = store.current_epoch();
     let outcome = run_update_phase(&transport, &store, &mut charge, false, None);
     match outcome.status {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {
@@ -2796,6 +2898,7 @@ fn run_kat_sync() {
                 "{}",
                 riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
             );
+            print_corpus_epoch_gain(&store, had_epoch, epoch);
         }
         riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
             println!("corpus lease: skipped — {reason}");
@@ -7408,12 +7511,81 @@ fn truncate(s: &str, n: usize) -> String {
     }
 }
 
+/// Issue 165: the run-end per-domain roll-up's accumulator. `print_suggestion`
+/// tallies exactly what it prints, so the line can never drift from the
+/// findings above it; the non-syn lanes + the secret scan merge their counts
+/// afterwards (disjoint surfaces by construction — the syn pass never cites
+/// a Dockerfile/manifest/`.wgsl` file kind).
+#[derive(Default)]
+struct DomainTallies {
+    /// Printed findings per domain label (syn citations + lane counts + the
+    /// secret scan, which merges under `sec`).
+    per_domain: std::collections::BTreeMap<&'static str, usize>,
+    /// Citations whose rule sits in the compiled clippy fix set — a
+    /// clippy-only floor on what `--fix` could apply (other domains carry
+    /// no static set; the render says "look", never promises).
+    fixable_clippy: usize,
+    /// Fix-surface findings (syn citations + lanes) — everything the fix
+    /// lane could in principle act on. The secret scan never auto-fixes,
+    /// so secrets are excluded here.
+    citations: usize,
+    /// Secret-shaped scan findings (merged under `sec` for display).
+    secrets: usize,
+}
+
+impl DomainTallies {
+    fn add_citation(&mut self, domain: &'static str, fixable: bool) {
+        *self.per_domain.entry(domain).or_default() += 1;
+        self.citations += 1;
+        if fixable {
+            self.fixable_clippy += 1;
+        }
+    }
+
+    fn add_count(&mut self, domain: &'static str, n: usize) {
+        if n == 0 {
+            return;
+        }
+        *self.per_domain.entry(domain).or_default() += n;
+        self.citations += n;
+    }
+
+    fn add_secrets(&mut self, n: usize) {
+        if n == 0 {
+            return;
+        }
+        *self.per_domain.entry("sec").or_default() += n;
+        self.secrets += n;
+    }
+
+    fn total(&self) -> usize {
+        self.citations + self.secrets
+    }
+
+    /// The one roll-up line, e.g. `findings by domain: clippy 41 · perf 23
+    /// · sec 95 — 159 total`.
+    fn rollup_line(&self) -> String {
+        let parts: Vec<String> = self
+            .per_domain
+            .iter()
+            .map(|(domain, n)| format!("{domain} {n}"))
+            .collect();
+        format!(
+            "findings by domain: {} — {} total",
+            parts.join(" · "),
+            self.total()
+        )
+    }
+}
+
 fn print_suggestion(
     s: &SpanSuggestion,
     matcher: &LatentMatcher,
     domain_filter: Option<DomainId>,
     feed_present: bool,
     bench_target: bool,
+    tally: &mut DomainTallies,
+    fixable_set: &std::collections::BTreeSet<String>,
 ) {
     let routed = s.routed_domain.label();
     let anchored = !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty();
@@ -7479,6 +7651,10 @@ fn print_suggestion(
             domain.label(),
             lint
         );
+        tally.add_citation(
+            domain.label(),
+            *domain == DomainId::Clippy && fixable_set.contains(lint),
+        );
     }
     for lint in &s.anchored_missing {
         println!("  [oracle] {lint:<32} NO CORPUS RULE (gap signal)");
@@ -7511,6 +7687,10 @@ fn print_suggestion(
                 domain.label(),
                 rule.rule_id,
                 rule.score
+            );
+            tally.add_citation(
+                domain.label(),
+                *domain == DomainId::Clippy && fixable_set.contains(&rule.rule_id),
             );
         }
     }
@@ -11947,6 +12127,13 @@ fn main() {
 
     let mut n_chunks = 0usize;
     let mut n_suggestions = 0usize;
+    // Issue 165: the run-end roll-up's accumulator + the fixable ceiling it
+    // reports (the compiled clippy fix set; built once, read per citation).
+    let mut domain_tally = DomainTallies::default();
+    let fixable_set: std::collections::BTreeSet<String> = {
+        let (fixable, verify) = fix_lane_tiers();
+        fixable.into_iter().chain(verify).collect()
+    };
     let mut n_fixed_files = 0usize;
     // Proposal 004 Half 1.5 — the fix-stats row's rule counts: WRITTEN
     // edits only (the Issue-018 law — review-only runs record nothing;
@@ -13226,6 +13413,8 @@ fn main() {
                     args.domain,
                     clippy_feed.is_some() || hot_present,
                     bench_target,
+                    &mut domain_tally,
+                    &fixable_set,
                 );
             }
         }
@@ -13356,6 +13545,16 @@ fn main() {
     #[cfg(not(feature = "shader_perf"))]
     let n_shader = 0usize;
     let _ = n_shader;
+
+    // Issue 165: the non-syn lane findings join the roll-up. Disjoint from
+    // the syn citations by file kind (Dockerfiles / manifests / `.wgsl`),
+    // EXCEPT kernel: the wgsl + `#[cube]` lane and the syn pass can both
+    // cite a cube body in a `.rs` file — a roll-up approximation, disclosed
+    // here rather than silently dropped.
+    domain_tally.add_count("docker", n_docker);
+    domain_tally.add_count("dist", n_dist);
+    domain_tally.add_count("shader", n_shader);
+    domain_tally.add_count("kernel", n_non_syn);
 
     // ── Issue 015: the verify loop — write, cargo check, auto-revert.
     #[cfg(feature = "fix_verify")]
@@ -14091,8 +14290,9 @@ fn main() {
     // corpus-delta placement convention — under the count it refines).
     // Quiet at zero. The findings' context lines are BLINDED (shareable-
     // output rule: no bytes, no fingerprint).
+    let secret_total: usize = secret_findings.iter().map(|(_, f)| f.len()).sum();
     if !secret_findings.is_empty() {
-        let total: usize = secret_findings.iter().map(|(_, f)| f.len()).sum();
+        let total = secret_total;
         let file_pl2 = if secret_findings.len() == 1 { "file" } else { "files" };
         println!(
             "secrets: {total} finding(s) in {} {file_pl2} — suggest-only, never auto-fixed \
@@ -14119,6 +14319,42 @@ fn main() {
         if shown < total || shown_files < secret_findings.len() {
             println!("  … and {} more (the report lists every finding)", total - shown);
         }
+    }
+    if secret_total > 0 {
+        domain_tally.add_secrets(secret_total);
+    }
+
+    // ── Issue 165: the per-domain roll-up + the next-step lines ──────────
+    // One line answers "what did this run find, by topic" over everything
+    // printed above (syn citations + lanes + the secret scan), then the
+    // honest next steps: the fix lane when this was a suggest-only run
+    // (with the fixable ceiling when the compiled set can name one), and
+    // the mining opt-in when rows are ACTUALLY pending (the estimator —
+    // never a fabricated rate). Silent at zero findings: a run with
+    // nothing to act on grows no CTA noise.
+    let suggest_only = args.suggest && !args.fix;
+    if domain_tally.total() > 0 {
+        println!("{}", domain_tally.rollup_line());
+        if suggest_only && domain_tally.citations > 0 {
+            if domain_tally.fixable_clippy > 0 {
+                println!(
+                    "next: ~{} clippy finding(s) look auto-fixable — run `cargo refine --fix` \
+                     (compile-gated; the suggest-only rows stay manual)",
+                    domain_tally.fixable_clippy
+                );
+            } else {
+                println!("next: run `cargo refine --fix` to heal the fixable ones in place");
+            }
+        }
+    }
+    #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
+    if !args.quiet {
+        print_mine_encouragement(
+            suggest_only,
+            domain_tally.total(),
+            traj_store.as_ref(),
+            &resolve_heal_root(&args.paths),
+        );
     }
 
     // ── Issue 116: the corpus-truth delta surface ─────────────────────────
@@ -16116,5 +16352,47 @@ mod p44_bom_seam_tests {
         std::fs::write(&path, "fn go() {}\n").unwrap();
         assert_eq!(read_source(&path).unwrap(), "fn go() {}\n");
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod run_rollup_tests {
+    use super::*;
+
+    /// Issue 165: the roll-up must read exactly like the run it summarizes —
+    /// per-domain counts, the total, and the fixable floor only where the
+    /// compiled set can name one.
+    #[test]
+    fn rollup_line_counts_domains_and_totals() {
+        let mut t = DomainTallies::default();
+        t.add_citation("clippy", true);
+        t.add_citation("clippy", false);
+        t.add_citation("perf", false);
+        t.add_secrets(95);
+        assert_eq!(t.rollup_line(), "findings by domain: clippy 2 · perf 1 · sec 95 — 98 total");
+        assert_eq!(t.total(), 98);
+        assert_eq!(t.citations, 3, "secrets are display-only, never fix-surface");
+        assert_eq!(t.fixable_clippy, 1);
+    }
+
+    #[test]
+    fn lane_counts_merge_and_zero_counts_stay_silent() {
+        let mut t = DomainTallies::default();
+        t.add_count("docker", 2);
+        t.add_count("dist", 0);
+        t.add_count("kernel", 5);
+        t.add_count("shader", 0);
+        assert_eq!(t.rollup_line(), "findings by domain: docker 2 · kernel 5 — 7 total");
+        assert!(!t.rollup_line().contains("dist"), "a zero lane never prints");
+        assert!(!t.rollup_line().contains("shader"), "a zero lane never prints");
+    }
+
+    #[test]
+    fn zero_tallies_total_zero_and_the_line_is_never_printed_by_the_caller() {
+        let t = DomainTallies::default();
+        assert_eq!(t.total(), 0);
+        // The call-site gate is `total() > 0`; this pin is the shape the
+        // gate reads (an all-zero roll-up line would be CTA noise).
+        assert!(t.per_domain.is_empty());
     }
 }
