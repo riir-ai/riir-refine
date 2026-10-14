@@ -283,7 +283,7 @@ fn g10a_304_fast_path_no_body_no_charge() {
             out.status,
             UpdateStatus::Applied {
                 epoch: 9,
-                charge_kat: riir_refine::kat_lease_client::LEASE_FEE_KAT
+                charge_micro_kat: riir_refine::kat_lease_client::LEASE_FEE_MICRO_KAT
             }
         ),
         "first fetch applies + charges: {:?}",
@@ -559,8 +559,8 @@ fn g10e_itemized_output_separates_passes_and_charge() {
     // The lease charge line is SEPARATE (never aggregated into the pass
     // line) + carries no $ figure.
     let charge_line = LeaseCharge::line(5, 1000);
-    assert!(charge_line.starts_with("corpus lease epoch 5"));
-    assert!(charge_line.contains("KAT"));
+    assert!(charge_line.starts_with("corpus lease:  epoch 5"));
+    assert!(charge_line.contains("0.001000 KAT"));
     assert!(!charge_line.contains('$'));
     assert!(!line.contains("KAT"), "the pass line carries tokens only");
 }

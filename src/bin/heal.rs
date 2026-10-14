@@ -1824,13 +1824,14 @@ fn run_kat_update() {
                 }
             }
         }
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
             println!(
                 "{}",
-                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
             );
             println!(
-                "corpus lease: epoch {epoch} installed atomically — the retrieval index rebuilds on the next run"
+                "{:<15}epoch {epoch} installed atomically — the retrieval index rebuilds on the next run",
+                "corpus lease:"
             );
             print_corpus_epoch_gain(&store, had_epoch, epoch);
         }
@@ -1870,7 +1871,10 @@ fn print_corpus_epoch_gain(
             let diff = corpus_epoch_diff(&old_overlay, &new_overlay);
             match diff.summary_line(old, new_epoch) {
                 Some(line) => println!("{line}"),
-                None => println!("corpus diff (epoch {old} → {new_epoch}): rule sets identical"),
+                None => println!(
+                    "{:<15}epoch {old} → {new_epoch} — rule sets identical",
+                    "corpus diff:"
+                ),
             }
         }
         _ => {
@@ -2041,10 +2045,10 @@ fn maybe_auto_corpus() {
     let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
     match outcome.status {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {}
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
             eprintln!(
                 "auto-corpus: {}",
-                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
             );
             eprintln!(
                 "auto-corpus: epoch {epoch} installed — the retrieval index rebuilds on the next run"
@@ -2934,10 +2938,10 @@ fn run_kat_sync() {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {
             println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
         }
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
             println!(
                 "{}",
-                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
             );
             print_corpus_epoch_gain(&store, had_epoch, epoch);
         }
@@ -12247,14 +12251,14 @@ fn main() {
                 out_of_kat,
                 Some(deadline),
             );
-            if let riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } =
+            if let riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } =
                 outcome.status
             {
                 // The visible charge line + the matcher rebuild onto E+1 for
                 // THIS run (rule 1: proceed on the freshest applied epoch).
                 println!(
                     "{}",
-                    riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat)
+                    riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
                 );
                 if let Some((_, overlay)) = lease_overlay_for_run(&lease_store, None) {
                     match LatentMatcher::from_enabled_domains_with_overlay(&overlay) {
@@ -15614,7 +15618,7 @@ fn run_reheat_pass(
     let out_of_kat = false; // the reheat bill is the delta bill, not a new grant gate
     let outcome = run_update_phase(&transport, &store, &mut charge, out_of_kat, None);
     match outcome.status {
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
             // Rebuild the matcher under E+1 (a failed rebuild aborts the
             // reheat — pass 1's results stand). T2.4: promotions merge into
             // the rebuilt overlay too (same helper as the run-start build).
@@ -15714,7 +15718,7 @@ fn run_reheat_pass(
                 new_fixes,
             };
             let _ = charge.save();
-            let line = riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_kat);
+            let line = riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat);
             Some((report, Some(line)))
         }
         _ => None,
