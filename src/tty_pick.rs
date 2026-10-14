@@ -309,6 +309,18 @@ impl TtyKeys {
     pub fn first_timeout(&mut self, _decisecs: u8) {}
 }
 
+// Compile-time reachability only: `enable()` is always `None` on this
+// platform, so a `TtyKeys` can never reach `pick` at runtime — but the
+// call site's `K: KeyReader` bound is checked at compile time on every
+// platform. The stub answers EOF (the caller's cancel path), mirroring
+// the unix reader's real EOF.
+#[cfg(not(unix))]
+impl KeyReader for TtyKeys {
+    fn read_key(&mut self) -> Key {
+        Key::Eof
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
