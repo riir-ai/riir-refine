@@ -3573,7 +3573,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                     .map(|p| p.id)
                     .unwrap_or_else(|| {
                         eprintln!(
-                            "topup: no pack sells exactly {} KAT — pick one of the packs above",
+                            "topup: no pack sells exactly {} — pick one of the packs above",
                             riir_refine::kat_payreq_client::render_kat(
                                 i64::try_from(micro).unwrap_or(i64::MAX)
                             )
