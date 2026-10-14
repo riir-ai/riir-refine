@@ -29,11 +29,22 @@ pub enum Key {
     Char(char),
     Esc,
     CtrlC,
+    /// End of input.
+    Eof,
+    /// The first-keypress window expired with nothing pressed — the
+    /// agent-stuck defense: an unattended terminal never wedges the UI.
+    Timeout,
 }
 
-/// The key source. `None` = end of input (cancels).
+/// The agent-stuck defense window (issue 126 follow-up, owner ask):
+/// `VTIME` is 0.1 s units and `u8`, so 100 = a 10 s first-key window
+/// (the `u8` ceiling is 25.5 s — well above).
+pub const FIRST_KEY_TIMEOUT_DECISECS: u8 = 100;
+
+/// The key source. The first key may carry a timeout window
+/// (`TtyKeys::first_timeout`); after it, reads block.
 pub trait KeyReader {
-    fn read_key(&mut self) -> Option<Key>;
+    fn read_key(&mut self) -> Key;
 }
 
 /// What the picker decided.
@@ -43,8 +54,12 @@ pub enum Picked {
     Show(u64),
     /// Release this checkout's slot (already confirmed in-band).
     Void(u64),
-    /// Nothing chosen — the caller says so and exits 2.
+    /// Nothing chosen (quit / Ctrl+C / end of input) — the caller says
+    /// so and exits 2.
     Cancelled,
+    /// The first-key window expired untouched — the caller prints the
+    /// non-interactive hint (an agent is on the other end).
+    TimedOut,
 }
 
 /// Run the picker: draw, read a key, redraw in place. Rows arrive
@@ -62,42 +77,44 @@ pub fn pick<K: KeyReader, W: Write>(rows: &[PickRow], keys: &mut K, out: &mut W)
     loop {
         drawn = draw(out, rows, sel, armed, drawn);
         let _ = out.flush();
-        let Some(key) = keys.read_key() else {
-            return Picked::Cancelled;
-        };
-        match key {
-            Key::Up | Key::Char('k') => {
-                sel = sel.saturating_sub(1);
-                armed = None;
-            }
-            Key::Down | Key::Char('j') => {
-                if sel + 1 < rows.len() {
-                    sel += 1;
-                }
-                armed = None;
-            }
-            Key::Enter => {
-                let seq = rows[sel].seq;
-                return if armed == Some(sel) {
-                    Picked::Void(seq)
-                } else {
-                    Picked::Show(seq)
-                };
-            }
-            Key::Char('v' | 'V') => armed = Some(sel),
-            Key::Char('y' | 'Y') if armed.is_some() => {
-                return Picked::Void(rows[sel].seq);
-            }
-            Key::Char('n' | 'N') => armed = None,
-            Key::Char('q' | 'Q') | Key::Esc => {
-                if armed.is_some() {
+        match keys.read_key() {
+            Key::Eof => return Picked::Cancelled,
+            Key::Timeout => return Picked::TimedOut,
+            key => match key {
+                Key::Up | Key::Char('k') => {
+                    sel = sel.saturating_sub(1);
                     armed = None;
-                } else {
-                    return Picked::Cancelled;
                 }
-            }
-            Key::CtrlC => return Picked::Cancelled,
-            Key::Char(_) => {}
+                Key::Down | Key::Char('j') => {
+                    if sel + 1 < rows.len() {
+                        sel += 1;
+                    }
+                    armed = None;
+                }
+                Key::Enter => {
+                    let seq = rows[sel].seq;
+                    return if armed == Some(sel) {
+                        Picked::Void(seq)
+                    } else {
+                        Picked::Show(seq)
+                    };
+                }
+                Key::Char('v' | 'V') => armed = Some(sel),
+                Key::Char('y' | 'Y') if armed.is_some() => {
+                    return Picked::Void(rows[sel].seq);
+                }
+                Key::Char('n' | 'N') => armed = None,
+                Key::Char('q' | 'Q') | Key::Esc => {
+                    if armed.is_some() {
+                        armed = None;
+                    } else {
+                        return Picked::Cancelled;
+                    }
+                }
+                Key::CtrlC => return Picked::Cancelled,
+                Key::Char(_) => {}
+                Key::Eof | Key::Timeout => unreachable!("handled above"),
+            },
         }
     }
 }
@@ -146,6 +163,9 @@ fn draw<W: Write>(
 pub struct TtyKeys {
     saved: libc::termios,
     raw: libc::termios,
+    /// The armed first-keypress window (deciseconds), consumed by the
+    /// next `read_key` — the agent-stuck defense. `None` = block.
+    first_timeout: Option<u8>,
 }
 
 #[cfg(unix)]
@@ -169,7 +189,19 @@ impl TtyKeys {
         if unsafe { libc::tcsetattr(0, libc::TCSANOW, &raw const raw) } != 0 {
             return None;
         }
-        Some(Self { saved, raw })
+        Some(Self {
+            saved,
+            raw,
+            first_timeout: None,
+        })
+    }
+
+    /// Arm the FIRST-keypress window (0.1 s units): if nothing is pressed
+    /// within it, `read_key` answers `Key::Timeout` and the picker cancels
+    /// — an agent (or a scrolled-away human) never wedges the UI. One
+    /// window: after any key, reads block.
+    pub fn first_timeout(&mut self, decisecs: u8) {
+        self.first_timeout = Some(decisecs);
     }
 
     /// Re-aim the non-blocking window: `vtime` is in 0.1 s units (0 = the
@@ -211,15 +243,31 @@ impl Drop for TtyKeys {
 
 #[cfg(unix)]
 impl KeyReader for TtyKeys {
-    fn read_key(&mut self) -> Option<Key> {
-        self.set_wait(1, 0);
+    fn read_key(&mut self) -> Key {
+        let first = self.first_timeout.take();
+        let wait = match first {
+            Some(d) => (0u8, d),
+            None => (1u8, 0u8),
+        };
+        self.set_wait(wait.0, wait.1);
         loop {
-            let b = Self::read_byte()?;
-            match b {
-                0x1b => {
+            match Self::read_byte() {
+                None => {
+                    // A VTIME expiry and a real EOF both read as 0/EIO —
+                    // the window tells them apart (only the first read
+                    // can time out).
+                    return if first.is_some() {
+                        Key::Timeout
+                    } else {
+                        Key::Eof
+                    };
+                }
+                Some(0x1b) => {
                     // An escape sequence's tail arrives together with the
                     // ESC byte; a 100 ms window separates "arrow" from a
-                    // lone Esc press without ever blocking on it.
+                    // lone Esc press without ever blocking on it. The
+                    // wait posture re-arms to whatever this call started
+                    // with (the first-key window keeps running).
                     self.set_wait(0, 1);
                     let tail = Self::read_byte();
                     let key = match tail {
@@ -231,16 +279,16 @@ impl KeyReader for TtyKeys {
                         Some(_) => None, // an ESC chord we do not bind
                         None => Some(Key::Esc),
                     };
-                    self.set_wait(1, 0);
+                    self.set_wait(wait.0, wait.1);
                     if let Some(k) = key {
-                        return Some(k);
+                        return k;
                     }
                 }
-                b'\r' | b'\n' => return Some(Key::Enter),
-                0x03 => return Some(Key::CtrlC),
-                0x7f | 0x08 => return Some(Key::Esc),
-                b if b.is_ascii_graphic() => return Some(Key::Char(b as char)),
-                _ => {} // control bytes we do not bind — ignore
+                Some(b'\r' | b'\n') => return Key::Enter,
+                Some(0x03) => return Key::CtrlC,
+                Some(0x7f | 0x08) => return Key::Esc,
+                Some(b) if b.is_ascii_graphic() => return Key::Char(b as char),
+                Some(_) => {} // control bytes we do not bind — ignore
             }
         }
     }
@@ -257,18 +305,21 @@ impl TtyKeys {
     pub fn enable() -> Option<Self> {
         None
     }
+
+    pub fn first_timeout(&mut self, _decisecs: u8) {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// A scripted key source: each call pops the next key.
-    struct Script(Vec<Option<Key>>);
+    /// A scripted key source: each call pops the next key; an empty
+    /// script is end-of-input.
+    struct Script(Vec<Key>);
     impl KeyReader for Script {
-        fn read_key(&mut self) -> Option<Key> {
+        fn read_key(&mut self) -> Key {
             if self.0.is_empty() {
-                None
+                Key::Eof
             } else {
                 self.0.remove(0)
             }
@@ -288,7 +339,7 @@ mod tests {
         ]
     }
 
-    fn run(keys: Vec<Option<Key>>) -> (Picked, String) {
+    fn run(keys: Vec<Key>) -> (Picked, String) {
         let mut out: Vec<u8> = Vec::new();
         let picked = pick(&rows(), &mut Script(keys), &mut out);
         (picked, String::from_utf8(out).expect("utf8"))
@@ -296,7 +347,7 @@ mod tests {
 
     #[test]
     fn enter_immediately_shows_the_newest() {
-        let (picked, out) = run(vec![Some(Key::Enter)]);
+        let (picked, out) = run(vec![Key::Enter]);
         assert_eq!(picked, Picked::Show(4));
         assert!(out.contains('▸'), "the newest preselected: {out}");
         assert!(out.contains("seq 4"), "{out}");
@@ -304,17 +355,17 @@ mod tests {
 
     #[test]
     fn arrows_navigate_and_clamp() {
-        let (picked, _) = run(vec![Some(Key::Down), Some(Key::Down), Some(Key::Enter)]);
+        let (picked, _) = run(vec![Key::Down, Key::Down, Key::Enter]);
         assert_eq!(picked, Picked::Show(2), "the bottom row clamps");
-        let (picked, _) = run(vec![Some(Key::Up), Some(Key::Enter)]);
+        let (picked, _) = run(vec![Key::Up, Key::Enter]);
         assert_eq!(picked, Picked::Show(4), "the top row clamps");
-        let (picked, _) = run(vec![Some(Key::Char('j')), Some(Key::Char('k')), Some(Key::Enter)]);
+        let (picked, _) = run(vec![Key::Char('j'), Key::Char('k'), Key::Enter]);
         assert_eq!(picked, Picked::Show(4), "j/k mirror the arrows");
     }
 
     #[test]
     fn the_marker_moves_with_the_selection() {
-        let (_, out) = run(vec![Some(Key::Down), Some(Key::Enter)]);
+        let (_, out) = run(vec![Key::Down, Key::Enter]);
         // The redraw escape skips prev_lines (header + 2 rows) upward; the
         // last frame is everything after that prefix.
         let last = out.rsplit("\x1b[3A").next().unwrap_or("");
@@ -324,50 +375,48 @@ mod tests {
 
     #[test]
     fn void_arms_then_confirms_by_enter_or_y() {
-        let (picked, out) = run(vec![Some(Key::Char('v')), Some(Key::Enter)]);
+        let (picked, out) = run(vec![Key::Char('v'), Key::Enter]);
         assert_eq!(picked, Picked::Void(4));
         assert!(out.contains("void seq 4?"), "the confirm line drew: {out}");
-        let (picked, _) = run(vec![Some(Key::Char('v')), Some(Key::Char('y'))]);
+        let (picked, _) = run(vec![Key::Char('v'), Key::Char('y')]);
         assert_eq!(picked, Picked::Void(4));
     }
 
     #[test]
     fn any_other_key_disarms_a_void() {
-        let (picked, _) = run(vec![
-            Some(Key::Char('v')),
-            Some(Key::Char('n')),
-            Some(Key::Enter),
-        ]);
+        let (picked, _) = run(vec![Key::Char('v'), Key::Char('n'), Key::Enter]);
         assert_eq!(picked, Picked::Show(4));
-        let (picked, _) = run(vec![
-            Some(Key::Char('v')),
-            Some(Key::Esc),
-            Some(Key::Enter),
-        ]);
+        let (picked, _) = run(vec![Key::Char('v'), Key::Esc, Key::Enter]);
         assert_eq!(picked, Picked::Show(4));
         // An arrow away disarms too.
-        let (picked, _) = run(vec![
-            Some(Key::Char('v')),
-            Some(Key::Down),
-            Some(Key::Enter),
-        ]);
+        let (picked, _) = run(vec![Key::Char('v'), Key::Down, Key::Enter]);
         assert_eq!(picked, Picked::Show(2));
     }
 
     #[test]
     fn quit_ctrl_c_and_eof_cancel() {
-        let (picked, _) = run(vec![Some(Key::Char('q'))]);
+        let (picked, _) = run(vec![Key::Char('q')]);
         assert_eq!(picked, Picked::Cancelled);
-        let (picked, _) = run(vec![Some(Key::CtrlC)]);
+        let (picked, _) = run(vec![Key::CtrlC]);
         assert_eq!(picked, Picked::Cancelled);
         let (picked, _) = run(vec![]);
         assert_eq!(picked, Picked::Cancelled);
     }
 
     #[test]
+    fn the_first_key_window_timing_out_is_timed_out() {
+        let mut out: Vec<u8> = Vec::new();
+        let picked = pick(&rows(), &mut Script(vec![Key::Timeout]), &mut out);
+        assert_eq!(picked, Picked::TimedOut);
+        // The frame was still drawn (the operator can see what WOULD have
+        // been picked) — the caller adds the non-interactive hint.
+        assert!(String::from_utf8(out).expect("utf8").contains('▸'));
+    }
+
+    #[test]
     fn empty_rows_cancel_without_drawing() {
         let mut out: Vec<u8> = Vec::new();
-        let picked = pick(&[], &mut Script(vec![Some(Key::Enter)]), &mut out);
+        let picked = pick(&[], &mut Script(vec![Key::Enter]), &mut out);
         assert_eq!(picked, Picked::Cancelled);
         assert!(out.is_empty());
     }

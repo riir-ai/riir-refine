@@ -95,6 +95,11 @@ enum KatCommand {
     /// from `pay` (which ASKS a payer for KAT); this BUYS KAT with USDC.
     /// Needs `kat_transport` (the catalog read + the signed POST).
     Topup,
+    /// The friction-cut money verb (issue 126 follow-up, owner ask
+    /// 2026-10-14): `cargo refine buy 10 kat` — the amount resolves the
+    /// catalog pack, MAINNET is the default dial (--net overrides), and
+    /// the whole topup flow (QR, the capped-429 surface) rides along.
+    Buy,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -3315,6 +3320,51 @@ fn topup_typed_pick(
     }
 }
 
+/// What `topup --pack` / `buy <amount> <unit>` asked for (the buy
+/// friction-cut): an exact pack id, or an amount the CATALOG must match
+/// exactly — nobody guesses a price (the --pack refusal law).
+#[cfg(feature = "kat_service")]
+enum BuyAsk {
+    Pack(Option<u8>),
+    /// micro-KAT (the parse's unit).
+    Kat(u64),
+    /// USDC base units.
+    Usdc(u64),
+}
+
+/// Parse the `buy <amount> <unit>` pair (the glued `10kat` form already
+/// split post-parse) into a catalog ask. 6-dec decimals both units
+/// (`parse_kat_amount` is the shared parser); a zero amount refuses.
+#[cfg(feature = "kat_service")]
+fn parse_buy_ask(amount: Option<&str>, unit: Option<&str>) -> BuyAsk {
+    let (Some(amount), Some(unit)) = (amount, unit) else {
+        eprintln!("buy: an amount and a unit are required — cargo refine buy 10 kat");
+        std::process::exit(2);
+    };
+    let micro = match riir_refine::kat_payreq_client::parse_kat_amount(amount) {
+        Some(m) if m > 0 => u64::try_from(m).unwrap_or_else(|_| {
+            eprintln!("buy: the amount overflows — {amount:?}");
+            std::process::exit(2);
+        }),
+        Some(_) => {
+            eprintln!("buy: the amount must be above zero");
+            std::process::exit(2);
+        }
+        None => {
+            eprintln!("buy: bad amount {amount:?} (6-dec decimals, e.g. 10 or 1.5)");
+            std::process::exit(2);
+        }
+    };
+    match unit.to_ascii_lowercase().as_str() {
+        "kat" => BuyAsk::Kat(micro),
+        "usdc" => BuyAsk::Usdc(micro),
+        other => {
+            eprintln!("buy: unknown unit {other:?} — kat | usdc");
+            std::process::exit(2);
+        }
+    }
+}
+
 /// Issue 126: `topup --void <seq>` — release an open checkout's slot.
 /// Idempotent server-side; the marker stays reserved until the TTL (a
 /// payment already scanned still lands on the account).
@@ -3440,14 +3490,17 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
 /// the machine catalog read, the pack pick, the signed `POST /pay/intent`,
 /// and the `solana:` URL. Refuses honestly when the lane is not armed on
 /// the configured environment (the `503 unconfigured` code — the money-route
-/// convention, not a retryable outage). Agents/CI pass `--pack N`;
-/// an interactive TTY picks from the catalog; anything else refuses
-/// loud (nobody guesses a price). The QR: `qr` is `Some(true)` = render
-/// even piped, `Some(false)` = suppress even on a TTY, `None` = AUTO (a
-/// stdout TTY renders it — scanning with a phone is the primary payment
-/// gesture; agents/CI never get a block of unicode in their logs).
+/// convention, not a retryable outage). Agents/CI pass `--pack N` (or use
+/// `buy`, which resolves the pack from an amount); an interactive TTY
+/// picks from the catalog; anything else refuses loud (nobody guesses a
+/// price). The QR: `qr` is `Some(true)` = render even piped,
+/// `Some(false)` = suppress even on a TTY, `None` = AUTO (a stdout TTY
+/// renders it — scanning with a phone is the primary payment gesture;
+/// agents/CI never get a block of unicode in their logs). `pick_latest`
+/// (issue 126 follow-up): on the open cap, show the NEWEST checkout
+/// without ever entering the interactive picker — the agent-safe path.
 #[cfg(feature = "kat_service")]
-fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
+fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
     #[cfg(feature = "kat_transport")]
     use riir_refine::kat_pay_client as topup;
 
@@ -3475,7 +3528,7 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
 
     #[cfg(not(feature = "kat_transport"))]
     {
-        let _ = (signing_key, pack, host_label, qr);
+        let _ = (signing_key, ask, host_label, qr, pick_latest);
         riir_refine::build_stamp::refuse("topup", &["kat_transport"]);
     }
 
@@ -3507,9 +3560,46 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
         for l in topup::catalog_lines(&catalog, &host_label) {
             println!("{l}");
         }
+        // The pack: an exact id, or the amount the CATALOG must match
+        // exactly (nobody guesses a price — a miss prints the catalog
+        // that was just rendered and refuses).
+        let asked_pack = match ask {
+            BuyAsk::Pack(p) => p,
+            BuyAsk::Kat(micro) => Some(
+                catalog
+                    .packs
+                    .iter()
+                    .find(|p| p.kat_micro == micro)
+                    .map(|p| p.id)
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "topup: no pack sells exactly {} KAT — pick one of the packs above",
+                            riir_refine::kat_payreq_client::render_kat(
+                                i64::try_from(micro).unwrap_or(i64::MAX)
+                            )
+                        );
+                        std::process::exit(2);
+                    }),
+            ),
+            BuyAsk::Usdc(micro) => Some(
+                catalog
+                    .packs
+                    .iter()
+                    .find(|p| p.usdc_base == micro)
+                    .map(|p| p.id)
+                    .unwrap_or_else(|| {
+                        eprintln!(
+                            "topup: no pack sells exactly {} USDC — pick one of the packs above",
+                            format_usdc(micro)
+                        );
+                        std::process::exit(2);
+                    }),
+            ),
+        };
 
-        // The pack pick: explicit flag > TTY prompt > loud refusal.
-        let pack_id = match pack {
+        // The pack pick: resolved amount > explicit flag > TTY prompt >
+        // loud refusal.
+        let pack_id = match asked_pack {
             Some(p) => p,
             None => {
                 if args_tty_stdin() {
@@ -3599,6 +3689,20 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
                                     return;
                                 }
                                 _ => {
+                                    // The agent-safe path (issue 126
+                                    // follow-up): --pick latest shows the
+                                    // NEWEST checkout and never enters the
+                                    // interactive picker (whose 10 s
+                                    // first-key window would only waste an
+                                    // unattended run).
+                                    if pick_latest {
+                                        let seq = intents[0].seq;
+                                        println!(
+                                            "topup: --pick latest — showing the newest checkout (seq {seq})"
+                                        );
+                                        run_kat_topup_show(seq, qr);
+                                        return;
+                                    }
                                     eprintln!("topup: a cap is full ({status}) — {detail}");
                                     eprintln!("topup: your open checkouts (newest first):");
                                     let now = std::time::SystemTime::now()
@@ -3636,6 +3740,14 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
                                     let picked = if args_tty_stdin() {
                                         match riir_refine::tty_pick::TtyKeys::enable() {
                                             Some(mut keys) => {
+                                                // The agent-stuck defense: if
+                                                // nothing is pressed within the
+                                                // window (an unattended pty),
+                                                // cancel instead of wedging the
+                                                // UI forever.
+                                                keys.first_timeout(
+                                                    riir_refine::tty_pick::FIRST_KEY_TIMEOUT_DECISECS,
+                                                );
                                                 let mut out = std::io::stdout();
                                                 let picked = riir_refine::tty_pick::pick(
                                                     &rows,
@@ -3666,12 +3778,24 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
                                             eprintln!("topup: cancelled — nothing changed");
                                             std::process::exit(2);
                                         }
+                                        Some(riir_refine::tty_pick::Picked::TimedOut) => {
+                                            eprintln!(
+                                                "topup: no keypress in 10 s — cancelled (nothing changed)"
+                                            );
+                                            eprintln!(
+                                                "topup: non-interactive: rerun with  --pick latest  (or --show <seq> / --void <seq>)"
+                                            );
+                                            std::process::exit(2);
+                                        }
                                         None => {
                                             eprintln!(
                                                 "topup: re-print one with  cargo refine topup --show <seq>"
                                             );
                                             eprintln!(
                                                 "topup: release one with  cargo refine topup --void <seq>"
+                                            );
+                                            eprintln!(
+                                                "topup: non-interactive:  cargo refine topup --pick latest"
                                             );
                                             std::process::exit(2);
                                         }
@@ -5020,7 +5144,8 @@ USAGE:
     cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
     cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
     cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
-    cargo refine topup [--pack N] [--qr|--no-qr]      (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, kat_transport)
+    cargo refine topup [--pack N] [--qr|--no-qr] [--pick latest]  (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, --pick latest shows the newest without asking; kat_transport)
+    cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -5825,6 +5950,15 @@ struct Args {
     /// (idempotent; the reference stays reserved until the TTL, so a
     /// payment already in flight still lands on the account).
     topup_void: Option<u64>,
+    /// Issue 126 follow-up: `--pick latest` — the non-interactive pick.
+    /// On the open cap the NEWEST checkout is shown without prompting
+    /// (and the interactive picker — with its 10 s first-key window — is
+    /// never entered). Agents/CI pass this; a human just presses Enter.
+    topup_pick_latest: bool,
+    /// The `buy <amount> <unit>` positionals (the topup friction-cut).
+    /// The unit word may ride glued (`buy 10kat`) — split post-parse.
+    buy_amount: Option<String>,
+    buy_unit: Option<String>,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -6051,6 +6185,9 @@ fn parse_args() -> Args {
         topup_no_qr: false,
         topup_show: None,
         topup_void: None,
+        topup_pick_latest: false,
+        buy_amount: None,
+        buy_unit: None,
         wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
@@ -6485,6 +6622,20 @@ fn parse_args() -> Args {
                     usage();
                 }));
             }
+            // Issue 126 follow-up — the non-interactive pick (the topup
+            // friction-cut's agent story: never enters the interactive
+            // picker, so the 10 s window never runs).
+            "--pick" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--pick requires a value (latest)");
+                    usage();
+                };
+                if value != "latest" {
+                    eprintln!("--pick takes \"latest\" (the newest open checkout) — got {value:?}");
+                    usage();
+                }
+                args.topup_pick_latest = true;
+            }
             "--label" => {
                 let Some(value) = it.next() else {
                     eprintln!("--label requires a value (e.g. \"invoice #1042\")");
@@ -6617,7 +6768,7 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
-            | "unstake" | "vote" | "pay" | "topup" | "faucet" | "wetrun" | "config"
+            | "unstake" | "vote" | "pay" | "topup" | "buy" | "faucet" | "wetrun" | "config"
             | "replay" | "corpus-pr"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
@@ -6632,6 +6783,7 @@ fn parse_args() -> Args {
                     "vote" => KatCommand::Vote,
                     "pay" => KatCommand::Pay,
                     "topup" => KatCommand::Topup,
+                    "buy" => KatCommand::Buy,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -6674,6 +6826,24 @@ fn parse_args() -> Args {
                 eprintln!("did you mean `config adopt-state {arg}` or `config set --url {arg}`?");
                 usage();
             }
+            // The `buy <amount> <unit>` positionals (the topup friction-cut):
+            // consumed inline (the adopt-state precedent) so they never become
+            // scan paths. The glued `10kat` form rides the amount word whole
+            // and splits post-parse.
+            amount_word
+                if args.command == Some(KatCommand::Buy)
+                    && args.buy_amount.is_none()
+                    && args.buy_unit.is_none() =>
+            {
+                args.buy_amount = Some(amount_word.to_string());
+            }
+            unit_word
+                if args.command == Some(KatCommand::Buy)
+                    && args.buy_amount.is_some()
+                    && args.buy_unit.is_none() =>
+            {
+                args.buy_unit = Some(unit_word.to_string());
+            }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
@@ -6691,15 +6861,59 @@ fn parse_args() -> Args {
         eprintln!("--show/--void require the `topup` command");
         usage();
     }
+    // The buy friction-cut (issue 126 follow-up): its words belong to it,
+    // and its surfaces are topup's flags minus the pack/action trio (the
+    // pack RESOLVES from the amount; --show/--void are the flag forms).
+    if (args.buy_amount.is_some() || args.buy_unit.is_some())
+        && !matches!(args.command, Some(KatCommand::Buy))
+    {
+        eprintln!("buy: the amount/unit words require the `buy` command — cargo refine buy 10 kat");
+        usage();
+    }
+    if args.topup_pick_latest && !matches!(args.command, Some(KatCommand::Topup | KatCommand::Buy))
+    {
+        eprintln!("--pick requires the `topup` or `buy` command");
+        usage();
+    }
+    if args.command == Some(KatCommand::Buy)
+        && (args.topup_pack.is_some() || args.topup_show.is_some() || args.topup_void.is_some())
+    {
+        eprintln!("buy: --pack/--show/--void belong to `topup` — buy resolves the pack from the amount");
+        usage();
+    }
+    if args.command == Some(KatCommand::Buy) && !args.paths.is_empty() {
+        eprintln!("buy: unexpected extra words — cargo refine buy <amount> <kat|usdc>");
+        usage();
+    }
+    // The glued `10kat` form: the unit rides the amount word whole and
+    // splits here (the two-word form never enters this arm).
+    if args.command == Some(KatCommand::Buy) && args.buy_unit.is_none() {
+        if let Some(amount) = &args.buy_amount {
+            match amount.find(|c: char| c.is_ascii_alphabetic()) {
+                Some(i) => {
+                    args.buy_unit = Some(amount[i..].to_string());
+                    args.buy_amount = Some(amount[..i].to_string());
+                }
+                None => {
+                    eprintln!("buy: a unit is required (kat | usdc) — cargo refine buy 10 kat");
+                    usage();
+                }
+            }
+        }
+    }
+    if args.command == Some(KatCommand::Buy) && args.buy_amount.is_none() {
+        eprintln!("buy: an amount is required — cargo refine buy 10 kat");
+        usage();
+    }
     if args.topup_show.is_some() && args.topup_void.is_some() {
         eprintln!("--show and --void are separate actions — run one per invocation");
         usage();
     }
-    // The topup QR: a `--qr` token under `topup` normalizes to the topup
-    // field (the same flag spells pay/faucet's QR; the command decides which
-    // checkout surface it means). `--no-qr` is topup-only. Both at once is
-    // no defensible resolution (the --stats conflict shape).
-    if matches!(args.command, Some(KatCommand::Topup)) && args.pay_qr {
+    // The topup QR: a `--qr` token under `topup`/`buy` normalizes to the
+    // topup field (the same flag spells pay/faucet's QR; the command
+    // decides which checkout surface it means). `--no-qr` is topup/buy
+    // only. Both at once is no defensible resolution (the --stats shape).
+    if matches!(args.command, Some(KatCommand::Topup) | Some(KatCommand::Buy)) && args.pay_qr {
         args.topup_qr = true;
         args.pay_qr = false;
     }
@@ -6707,8 +6921,8 @@ fn parse_args() -> Args {
         eprintln!("--qr and --no-qr conflict — choose one (the default is auto: a TTY renders the QR)");
         std::process::exit(2);
     }
-    if args.topup_no_qr && !matches!(args.command, Some(KatCommand::Topup)) {
-        eprintln!("--no-qr requires the `topup` command");
+    if args.topup_no_qr && !matches!(args.command, Some(KatCommand::Topup) | Some(KatCommand::Buy)) {
+        eprintln!("--no-qr requires the `topup` or `buy` command");
         usage();
     }
     if args.info {
@@ -9712,7 +9926,7 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         BUILD_COMMIT = riir_refine::build_stamp::BUILD_COMMIT,
     ));
-    let args = parse_args();
+    let mut args = parse_args();
 
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
@@ -9745,6 +9959,25 @@ fn main() {
     // resolution (money flows, lease opens, config get) sees it; the alias
     // set is the two live ledgers (parse-validated). The pin check is the
     // seam's own (command_service_url) — this only selects.
+    // `buy` IS the mainnet verb (issue 126 follow-up, owner ask): it
+    // defaults the alias to MAINNET — a preset service-url env (an
+    // explicit operator/wrapper intent, e.g. a hermetic test rig) still
+    // wins, but a stale persisted CONFIG default does not. `--net devnet`
+    // overrides explicitly.
+    if args.command == Some(KatCommand::Buy) && args.net_alias.is_none() {
+        use riir_refine::kat_service_config as svc;
+        let env_preset = std::env::var(svc::SERVICE_URL_ENV_VAR)
+            .map(|v| !v.trim().is_empty())
+            .unwrap_or(false);
+        if env_preset {
+            println!(
+                "net: buy honors the preset {} env (unset it for the mainnet default)",
+                svc::SERVICE_URL_ENV_VAR
+            );
+        } else {
+            args.net_alias = Some("mainnet".to_string());
+        }
+    }
     if let Some(alias) = &args.net_alias {
         use riir_refine::kat_service_config as svc;
         let url = svc::validate_service_url(alias).unwrap_or_else(|e| {
@@ -9831,8 +10064,27 @@ fn main() {
                 } else if let Some(seq) = args.topup_show {
                     run_kat_topup_show(seq, qr_mode);
                 } else {
-                    run_kat_topup(args.topup_pack, qr_mode);
+                    run_kat_topup(
+                        BuyAsk::Pack(args.topup_pack),
+                        qr_mode,
+                        args.topup_pick_latest,
+                    );
                 }
+            }
+            KatCommand::Buy => {
+                // The same QR tri-state (the parse normalizes --qr here).
+                let qr_mode = if args.topup_no_qr {
+                    Some(false)
+                } else if args.topup_qr {
+                    Some(true)
+                } else {
+                    None
+                };
+                let ask = parse_buy_ask(
+                    args.buy_amount.as_deref(),
+                    args.buy_unit.as_deref(),
+                );
+                run_kat_topup(ask, qr_mode, args.topup_pick_latest);
             }
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
             KatCommand::Wetrun => run_kat_wetrun(args.wetrun_dry_run),

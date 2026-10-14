@@ -81,11 +81,20 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                 body,
             });
             let (status, reply) = match (mode, path.split('?').next().unwrap_or(&path)) {
-                ("ok", "/pay/catalog") => (200, CATALOG_BODY.to_string()),
+                ("ok", "/pay/catalog") | ("capped2", "/pay/catalog") => {
+                    (200, CATALOG_BODY.to_string())
+                }
                 ("unarmed", "/pay/catalog") => (503, UNCONFIGURED_BODY.to_string()),
                 ("ok", "/pay/intent") => (
                     200,
                     r#"{"seq":7,"pack_id":1,"usdc_base":1000000,"kat_micro":10000000,"reference":"3RefX7","url":"solana:pay?example","expires_unix":1800062400,"status":"open"}"#
+                        .to_string(),
+                ),
+                // The capped posture (issue 126): the creation refuses —
+                // the account already holds open checkout(s).
+                ("capped2", "/pay/intent") => (
+                    429,
+                    r#"{"error":"pay: 2 intents already open for this account — settle or wait","code":"rate_limited"}"#
                         .to_string(),
                 ),
                 // Issue 126 — the actions answer the canned intent body
@@ -93,11 +102,11 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                 // server's own re-compose/terminal marks — the mock needs
                 // no crypto because the REAL signature checks live in the
                 // worker contract tier).
-                ("ok", "/pay/intent/void") => (
+                ("ok", "/pay/intent/void") | ("capped2", "/pay/intent/void") => (
                     200,
                     r#"{"seq":7,"status":"voided"}"#.to_string(),
                 ),
-                ("ok", "/pay/intent/show") => (
+                ("ok", "/pay/intent/show") | ("capped2", "/pay/intent/show") => (
                     200,
                     r#"{"seq":7,"pack_id":1,"usdc_base":1000000,"kat_micro":10000000,"reference":"3RefX7","url":"solana:pay?example","expires_unix":1800062400,"status":"open"}"#
                         .to_string(),
@@ -106,6 +115,15 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                     200,
                     format!(
                         r#"{{"account_id":"{}","balance_micro":8000000,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}},{{"seq":2,"pack_id":1,"status":"settled","usdc_base":1000000,"paid_base":1000000,"kat_micro":10000000,"created_unix":5,"settled_unix":9,"reference":""}}],"purchases_total":2,"purchases_truncated":false}}"#,
+                        "a".repeat(32)
+                    ),
+                ),
+                // Two OPEN checkouts, newest FIRST (the server's order) —
+                // the >1 arm of the 429 surface (the picker, --pick latest).
+                ("capped2", "/history") => (
+                    200,
+                    format!(
+                        r#"{{"account_id":"{}","balance_micro":0,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":8,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":20,"settled_unix":0,"reference":"RefNew"}},{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}}],"purchases_total":2,"purchases_truncated":false}}"#,
                         "a".repeat(32)
                     ),
                 ),
@@ -458,6 +476,100 @@ fn topup_capped_with_one_open_intent_shows_it_without_asking() {
     assert!(text.contains("already have an open checkout (seq 7)"), "{text}");
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(text.contains('▀') || text.contains('█'), "the shown checkout's QR: {text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Issue 126 follow-up: `--pick latest` is the agent-safe non-interactive
+/// path — on the cap with SEVERAL open checkouts it shows the NEWEST one
+/// (the server's first row) and never enters the interactive picker.
+#[test]
+fn pick_latest_shows_the_newest_without_asking() {
+    let mock = spawn_topup_mock("capped2");
+    let dir = scratch("picklatest");
+    login(&dir);
+    let (code, text) = heal(
+        &dir,
+        &mock.base(),
+        &[],
+        &["topup", "--pack", "1", "--no-qr", "--pick", "latest"],
+    );
+    assert_eq!(code, Some(0), "exit 0 (a shown checkout):\n{text}");
+    assert!(
+        text.contains("--pick latest — showing the newest checkout (seq 8)"),
+        "{text}"
+    );
+    // The show action fired (the seq rides the SIGNED body — binary — so
+    // the pick proof is the printed line above plus the route hit; the
+    // mock's canned reply is seq 7, never echoed as the pick).
+    assert!(
+        mock.captured().iter().any(|c| c.path == "/pay/intent/show"),
+        "the show route was asked: {:?}",
+        mock.captured().iter().map(|c| c.path.as_str()).collect::<Vec<_>>()
+    );
+    assert!(text.contains("solana:pay?example"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The buy friction-cut: the amount resolves the catalog pack
+/// (`buy 10 kat` = pack 1) and the whole topup flow rides along.
+#[test]
+fn buy_resolves_the_pack_from_the_amount() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("buy");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "10", "kat"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("buying pack 1"), "{text}");
+    assert!(text.contains("solana:pay?example"), "{text}");
+    // The preset service-url env is an explicit operator intent and wins
+    // over the mainnet default (the hermetic-test law).
+    assert!(text.contains("buy honors the preset"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The glued `10kat` form parses like the two-word one.
+#[test]
+fn buy_accepts_the_glued_unit_form() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("buyglued");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "1usdc"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("buying pack 1"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Nobody guesses a price: an amount no pack sells exactly refuses with
+/// the rendered catalog.
+#[test]
+fn buy_refuses_an_amount_no_pack_matches() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("buymiss");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "100", "kat"]);
+    assert_eq!(code, Some(2), "output:\n{text}");
+    assert!(text.contains("no pack sells exactly 100.000000 KAT"), "{text}");
+    // The signed intent was never attempted.
+    assert!(
+        !mock.captured().iter().any(|c| c.path == "/pay/intent"),
+        "no intent POST on a pack miss"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `buy` rides the topup 429 surface too — --pick latest composes with it
+/// (the agent story end to end: one command, no prompting, a QR/URL).
+#[test]
+fn buy_pick_latest_composes_on_the_cap() {
+    let mock = spawn_topup_mock("capped2");
+    let dir = scratch("buycapped");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "10", "kat", "--pick", "latest"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(
+        text.contains("--pick latest — showing the newest checkout (seq 8)"),
+        "{text}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
