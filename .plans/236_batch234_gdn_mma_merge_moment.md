@@ -23,7 +23,7 @@
 - [x] T13: docs — AGENTS.md kernel_opt bullet 812 + B234 narrative; kernel_opt.md B234 row + counts; the merge-moment context (this batch IS the watch-971 merge event's conversion)
 - [x] T14: snapshot landing row (`.distill/001` — LF-preserving python) + the claim row discharged — HYGIENE-TICKED 2026-10-14 by the Batch-235 session: the landing row IS in `.distill/001` (the "BATCH 234 LANDED 2026-10-14 ~23:4x +07" row, top of file) and the claim row `8e4e6eaa7` reads "discharged by this row"
 - [x] T15: commit `feat: batch 234: the #29353 GDN-MMA chunked prefill pack` + push — HYGIENE-TICKED same session: the commit IS `c83c323f` ("feat: batch 234 — the #29353 GDN-MMA merge-moment pack (+6, corpus 806 -> 812)"), pushed to origin/develop (in this checkout's history below the t32 unit)
-- [ ] T16 (same session, parallel): the fork re-pin bout at `prism-b10776-d00e252` (the +4 near-flat-class delta; #355 the only CUDA arm) + the Plan-605-T5 defense dispatch record
+- [x] T16 (same session, parallel): the fork re-pin bout at `prism-b10776-d00e252` (the +4 near-flat-class delta; #355 the only CUDA arm) + the Plan-605-T5 defense dispatch record — HYGIENE-TICKED 2026-10-15 by the post-B236 idle cycle: the re-pin IS Bench 983 (riir-ai `.benchmarks/983_issue1066_gdn_mma_prefill_defense.md` — re-pinned at `prism-b10776-d00e252`, the #355 CUDA arm scored-shape-inert as priced; decode 1.0597× hold widened, pp2048 1.1703× PASS, pp4096 1.1266×) + the defense dispatch record IS the issue-1066 close (CLOSED-REFUSED-PROMOTION: the chunked-GDN MMA arm ships OPT-IN behind `RIIR_PREFILL_GDN_CHUNKED`, kernel 1.69× vs rowpar, e2e pp4096 +17.2%/pp2048 +5.2%, promotion refused on the widened 948-class walk — 5/54 argmax flips vs the FA-precedent 0-flips bar)
 
 ## Notes
 
