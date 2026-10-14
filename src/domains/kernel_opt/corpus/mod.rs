@@ -1978,6 +1978,8 @@ mod entries_gpu_89;
 mod entries_gpu_90;
 mod entries_gpu_91;
 mod entries_gpu_92;
+mod entries_gpu_93;
+mod entries_gpu_94;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2046,6 +2048,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_90::entries());
     entries.extend(entries_gpu_91::entries());
     entries.extend(entries_gpu_92::entries());
+    entries.extend(entries_gpu_93::entries());
+    entries.extend(entries_gpu_94::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2095,9 +2099,13 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 806-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 806 at Batch
-///   232 — the warm background pass quiet-hold yield-chunking cut-invariance
+/// - **Exhaustive:** every `rule_id` in the 812-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 812 at Batch
+///   234 — the llama.cpp #29353 GDN-MMA chunked-prefill pack (+2 G, +1 N, +1 D,
+///   +1 A, +1 E: register-resident scan state, bf16 residual-pair 3-mma,
+///   in-register triangular inverse, occupancy-keyed value-split ladder,
+///   union smem scratch, warp-split overlap + cross-chunk prefetch); was 806 at
+///   Batch 232 — the warm background pass quiet-hold yield-chunking cut-invariance
 ///   law (`TensorFold` c724dd9d); was 804 at Batch
 ///   231 — the host-pointer-buffer foreign-range pinning law; was 803 at Batch
 ///   227, 801 at Batch 225, 773 at Batch 207).
@@ -2107,7 +2115,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (165 rules; Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
+    // A: Memory access patterns (166 rules; Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
     // coop-tensor per-chip-family layout contract (lithos-metal #35 —
     // measure the slot map with coop_layout, port the layout, never
     // inherit it); Batch 223 +3: the coherence
@@ -2297,7 +2305,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "derived-pack-immutable-original-content-addressed-atomic",
             "superblock-scale-replication-to-subblock-scale-slots",
             "coop-tensor-layout-measured-per-chip-family",
-            "host-pointer-buffer-foreign-range-subtraction"
+            "host-pointer-buffer-foreign-range-subtraction",
+            "lifecycle-disjoint-intermediates-union-smem-scratch"
         ],
     ),
     // B: Compute patterns (86 rules; Batch 207 +1: the minifloat normal-code decode -- the fused
@@ -2482,7 +2491,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-scope-by-barrier-cost-not-dispatch-count"
         ],
     ),
-    // D: Dispatch patterns (189 rules; Batch 232 +1: the warm background pass quiet-hold yield-chunking cut-invariance (TensorFold c724dd9d — a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it cuts into yield_rows=256-row chunks one in flight so a request waits one chunk at most, keeps the prefill state it reached when it steps aside, and chunking is bit-legal by cut-invariance 'a row's bits do not depend on where a pass is cut'; lessons/dumps/decision-row passes keep their full 2,048-row chunks and the .waits warm mode keeps the history mark the pass may never drop); Batch 227 +1: the exact-pass rows take their sub-pass chunking (lithos-metal #36 — a shape-derived chunk width breaks an N-exact reproduction promise; rows take their sub-pass's chunking, exact chunks are boundary multiples, the fold-chain clone admits only chunked chains); Batch 225 +1 (the Q1_0 tile-loader thread map, recorded late): the mmq-tile-loader thread-map-derives-from-block-geometry (the ported threads_per_row formula put 32 threads on a 4-block span — the disabled-kernel root cause); Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch (llama.cpp metal #30373 + vulkan #29998 — the cross-backend family: the dense experts-x-entry-tiles grid where 94% of tiles only launched to exit becomes a two-pass compact prepass + per-tile (expert, first-entry, valid-rows) descriptors + a host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the correctness half: duplicate expert ids overflowed the fixed ne21 capacity assumption 'into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — the dummy lands on a never-read padding slot; register half: th_max 768 back to plain mul_mm; +2% pp on Qwen3.6-35B-A3B, ~8-16x grid shrink; the ne02 function-constant fold measured 'no measurable perf change' — the honest null); Batch 223 +3: the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (lithos-metal — the flag on the READER orders a dependency; the swap overlaps a conflicting pair on its immediate predecessor) + the gpu-resident control loop under static ICB replay (every decision per token is GPU data; a later replay can return without doing work) + the cost-aware verify length (L = argmax E[committed]/cost[l] over a profiled table that refuses to extrapolate); Batch 220 +1: the MoE router weight fold into reduce never-materialize (prism #107 — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read; bit-identity enforced AGAINST the compiler (__fmul_rn per product + __fadd_rn left-to-right, the FMA-contraction refusal); the aliasing pair: dst over the dying weights STAGES them into pool scratch, dst over x declines; shape-exact matcher, cap 2..15 by the 32-node subgraph limit, 48-case 0.0-error suite); Batch 215 +2: the zero-anchored prompt grid chunk identity (TensorFold — a resumed pass cuts exactly where a cache-off pass cuts BY CONSTRUCTION: end() returns an off-grid start to the grid, resumability is grid-only; GB10 resumed turn 0.19–0.21 s vs 1.06–1.09 s TTFT) + the verified logits-derived outputs path independence (logprob rows read the VERIFIED target logits — drafted, non-drafted, concurrent and resumed all give the same rows by construction; float64 log-softmax oracle within 2e-6; 7%-slower disclosure); Batch 214 +1: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover (the minor resets to 0), silently un-defining the fast path it guards — a quiet performance loss, never a compile error; the repairs are the ordered guard (major > N || (major == N && minor >= M), the landed form) or the packed single compare (MAJOR * 1000000 + MINOR * 1000 + PATCH, the message's rationale); the guard-taken proof (preprocess the unit — the fast-path symbol present, the fallback symbol absent) is the only test that separates the fast path compiled in from the fallback still passing); Batch 210 +1: the expert-cache write-path regime gate (llama.cpp #29887 — the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU; the update hook rides the scheduler's host-weight split); Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs — llama.cpp #30100) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171, pp8192 2.99x source-reported; the in-commit F16-scores revert rides as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); Batch 207 +1: the profile-window drain -- a window opened behind
+    // D: Dispatch patterns (190 rules; Batch 232 +1: the warm background pass quiet-hold yield-chunking cut-invariance (TensorFold c724dd9d — a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it cuts into yield_rows=256-row chunks one in flight so a request waits one chunk at most, keeps the prefill state it reached when it steps aside, and chunking is bit-legal by cut-invariance 'a row's bits do not depend on where a pass is cut'; lessons/dumps/decision-row passes keep their full 2,048-row chunks and the .waits warm mode keeps the history mark the pass may never drop); Batch 227 +1: the exact-pass rows take their sub-pass chunking (lithos-metal #36 — a shape-derived chunk width breaks an N-exact reproduction promise; rows take their sub-pass's chunking, exact chunks are boundary multiples, the fold-chain clone admits only chunked chains); Batch 225 +1 (the Q1_0 tile-loader thread map, recorded late): the mmq-tile-loader thread-map-derives-from-block-geometry (the ported threads_per_row formula put 32 threads on a 4-block span — the disabled-kernel root cause); Batch 224 +1: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch (llama.cpp metal #30373 + vulkan #29998 — the cross-backend family: the dense experts-x-entry-tiles grid where 94% of tiles only launched to exit becomes a two-pass compact prepass + per-tile (expert, first-entry, valid-rows) descriptors + a host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the correctness half: duplicate expert ids overflowed the fixed ne21 capacity assumption 'into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — the dummy lands on a never-read padding slot; register half: th_max 768 back to plain mul_mm; +2% pp on Qwen3.6-35B-A3B, ~8-16x grid shrink; the ne02 function-constant fold measured 'no measurable perf change' — the honest null); Batch 223 +3: the open-group barrier placement with the bus-first encode-order sibling axis + the arena eligibility law folded (lithos-metal — the flag on the READER orders a dependency; the swap overlaps a conflicting pair on its immediate predecessor) + the gpu-resident control loop under static ICB replay (every decision per token is GPU data; a later replay can return without doing work) + the cost-aware verify length (L = argmax E[committed]/cost[l] over a profiled table that refuses to extrapolate); Batch 220 +1: the MoE router weight fold into reduce never-materialize (prism #107 — the MUL+VIEW×n+ADD×(n−1) subgraph folds into one kernel so the weighted intermediate is never written or read; bit-identity enforced AGAINST the compiler (__fmul_rn per product + __fadd_rn left-to-right, the FMA-contraction refusal); the aliasing pair: dst over the dying weights STAGES them into pool scratch, dst over x declines; shape-exact matcher, cap 2..15 by the 32-node subgraph limit, 48-case 0.0-error suite); Batch 215 +2: the zero-anchored prompt grid chunk identity (TensorFold — a resumed pass cuts exactly where a cache-off pass cuts BY CONSTRUCTION: end() returns an off-grid start to the grid, resumability is grid-only; GB10 resumed turn 0.19–0.21 s vs 1.06–1.09 s TTFT) + the verified logits-derived outputs path independence (logprob rows read the VERIFIED target logits — drafted, non-drafted, concurrent and resumed all give the same rows by construction; float64 log-softmax oracle within 2e-6; 7%-slower disclosure); Batch 214 +1: the componentwise version guard rollover (llama.cpp #29453 — a MAJOR >= N && MINOR >= M guard evaluates false on every future major rollover (the minor resets to 0), silently un-defining the fast path it guards — a quiet performance loss, never a compile error; the repairs are the ordered guard (major > N || (major == N && minor >= M), the landed form) or the packed single compare (MAJOR * 1000000 + MINOR * 1000 + PATCH, the message's rationale); the guard-taken proof (preprocess the unit — the fast-path symbol present, the fallback symbol absent) is the only test that separates the fast path compiled in from the fallback still passing); Batch 210 +1: the expert-cache write-path regime gate (llama.cpp #29887 — the MoE expert GPU cache: small batches plan-and-evict, large batches read-if-present and never touch the LRU; the update hook rides the scheduler's host-weight split); Batch 208 +3: the fusion residual selected by identity not negation (a negated op-class predicate mispicks the never-written buffer when both ADD operands are matmul outputs — llama.cpp #30100) + the FA fast-path validated exact-shape admission with the V-as-strided-view conjuncts (llama.cpp #29171, pp8192 2.99x source-reported; the in-commit F16-scores revert rides as watch) + the headless draft forward cropped to output rows (llama.cpp #29928 — cache writes persist; prune 0.33 ms vs landed crop 2.9 ms, both recorded); Batch 207 +1: the profile-window drain -- a window opened behind
     // unrelated queued work timed that work as its own and the autotuner elected the outliers
     // (the measurement-honesty D-class member; the backend fact named once, TimestampSampling);
     // Batch 206 +2: the widening-conversion row-chunk staging budget (the 512 MiB bound + the ldc stride-respect that widens dst admission to contiguous_1, one story) + the per-thread-stream blocking-op explicit-sync escape (the legacy-default-stream serialization class; the ROCm -j re-enable rides as the hazard evidence) — both from the 10-07 staged leads; Batch 205 +3: the sibling-kernel admission-gap complement-predicate call + the stream-k work-shape-homogeneity guard + the tail-clamped row-reuse admission widening (all three from the 10-06 unstaged pool); Batch 201 +2: the deferred block release (host teardown held past the finalize seam) + the first-layer-ahead submission (69 us earlier commit; the finer-slicing negative rides in-rule); Batch 199 +1: the declared-
@@ -2694,10 +2703,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mmq-tile-loader-thread-map-derives-from-block-geometry",
             "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch",
             "exact-pass-rows-take-their-sub-pass-chunking",
-            "warm-background-pass-quiet-hold-yield-chunking-cut-invariance"
+            "warm-background-pass-quiet-hold-yield-chunking-cut-invariance",
+            "occupancy-keyed-value-split-register-budget-ladder"
         ],
     ),
-    // E: Parallelism patterns (75 rules; Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (76 rules; Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2782,6 +2792,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "staggered-segments-two-queue-fences",
             "bounded-cross-worker-barrier-protocol-polling-fan-in-ladder",
             "own-slice-coprime-stride-steal-claimant-invariant",
+            "warp-role-split-phase-overlap-cross-chunk-prefetch"
         ],
     ),
     // F: Flash-attention tiling (19 rules; Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
@@ -2812,7 +2823,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "paged-page-pair-deferred-permutation-bitmask"
         ],
     ),
-    // G: Linear-attention recurrence (36 rules; Batch 203 +2: the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime beside B28's fits-regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 197 +3: the segmented entry-state checkpoint with the cheap-replay backward (the register-posture arm folded), the forward-save cache of the expensive chunk-local intermediates, and the chain-rule postprocess kernel; the comment read 30 while the table held 31 since B189's two-chunk overlap — the stale-comment miss repaired here; Batch 189 +1: the
+    // G: Linear-attention recurrence (38 rules; Batch 203 +2: the state-slice-resident tiling along the non-interacting value axis (the does-not-fit regime beside B28's fits-regime) + the chunk-boundary state checkpoint with the bitwise-reproducible backward (the GJ_SAVE_MASKS knob rides); Batch 197 +3: the segmented entry-state checkpoint with the cheap-replay backward (the register-posture arm folded), the forward-save cache of the expensive chunk-local intermediates, and the chain-rule postprocess kernel; the comment read 30 while the table held 31 since B189's two-chunk overlap — the stale-comment miss repaired here; Batch 189 +1: the
     // two-chunk state-independent overlap scheduling rule)
     (
         KernelCategory::LinearAttnRecurrence,
@@ -2854,6 +2865,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "full-accept-state-store-host-observable-predictor",
             "state-slice-resident-tiling-noninteracting-axis",
             "chunk-boundary-state-checkpoint-bitwise-backward",
+            "register-resident-scan-state-one-kernel-layer-pass",
+            "in-register-unit-triangular-inverse-warp-substitution"
         ],
     ),
     // H: MoE dispatch + backward pass (38 rules; Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
@@ -3008,7 +3021,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (63 rules; Batch 215 +1: the HIP affine contraction-off row invariance (TensorFold — a quantized kernel that must bit-match a reference for EVERY row count builds with -ffp-contract=off so every row reduces the same way for any M + one fixed reduction order + one explicit RNE conversion with NaN preservation, verified by a comparator that rejects ANY single-bit mutation including signed zero; Rust spelling: the hazard inverts through explicit mul_add); Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
+    // N: dtype + alignment specialization (66 rules; the stale 63 repaired at Batch 234 — the table held 65; now; Batch 215 +1: the HIP affine contraction-off row invariance (TensorFold — a quantized kernel that must bit-match a reference for EVERY row count builds with -ffp-contract=off so every row reduces the same way for any M + one fixed reduction order + one explicit RNE conversion with NaN preservation, verified by a comparator that rejects ANY single-bit mutation including signed zero; Rust spelling: the hazard inverts through explicit mul_add); Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
     // quantized stored-bytes rule (hold the wire bytes, never widened
     // patterns -- the storage-form pole beside B176's kernel-path axis);
     // Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
@@ -3086,7 +3099,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "enumerable-domain-bit-identity-admission-gate",
             "tied-hadamard-output-fold-at-load",
             "quantized-stored-bytes-not-widened-patterns",
-            "hip-affine-contract-off-row-invariance"
+            "hip-affine-contract-off-row-invariance",
+            "bf16-residual-pair-three-mma-near-f32"
         ],
     ),
     // O: IR strength reduction (8 rules; Batch 201 +1: the single-pass continuation scan (the two-phase prompt-lookup scan replaced by the one endpoint pass); Batch 195 +2: the io32

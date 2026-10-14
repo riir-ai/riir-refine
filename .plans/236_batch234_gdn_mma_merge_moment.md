@@ -1,0 +1,34 @@
+# Plan 236 — Batch 234: the #29353 GDN-MMA chunked-prefill kernel batch (the merge-moment conversion)
+
+**Status:** LANDED (2026-10-14, the merge-moment session; claim `8e4e6eaa7` discharged) (2026-10-14, perf-rematch-4090 lane; claim `8e4e6eaa7` — the merge-moment claim, watch-971's watched event)
+**Claim:** `8e4e6eaa7` (2026-10-14 ~22:1x +07, shikuwa/4090)
+**Source:** ggml-org/llama.cpp PR #29353 "cuda, hip: GDN chunked kernel" MERGED 2026-10-14T14:00:59Z (merge commit `62df1815`, by am17an; head `dde6a4d93`; 7 files +564/−14, MIT)
+**Intake:** the ai-971 14:3x mining note (staged merge-gated across ~25 watch cycles; the 12:5xZ re-price rows; the 22:1x merge-moment claim row), `.distill/001`
+
+## Tasks
+
+- [x] T0: fetch + read the merged .diff at the final pin (head `dde6a4d93` / merge `62df1815`) — DONE this session (the full 442-line `gated-delta-net-mma.cu` + `gated-delta-net-mma.cuh` + the `gated_delta_net.cu` integration + the `mma.cuh` ldmatrix x2 rider + the ggml.h doc-contract line + the dictated overflow-test removals) — the #29612 swizzle-refactor adaptation (`load_ldmatrix_*_swizzled`) is IN the merged shape
+- [x] T1: dedup grep vs the G-family (LinearAttnRecurrence, 36 rules) + the mma/fragment families + prefetch family (3+ vocabulary variants; operator names, not English names) — adjudicate kinships in-rule
+- [x] T2: rule decomposition at the slot — SIX own rules + TWO riders (see Notes); corpus 806 → 812
+- [x] T3: author entries_gpu_93.rs (rules 1-3: the G register-resident scan-state law; the N bf16-residual 3-mma law; the G in-register triangular-inverse law) — subagent A
+- [x] T4: author entries_gpu_94.rs (rules 4-6: the D occupancy-keyed value-split ladder; the A lifecycle-disjoint union scratch; the E warp-split overlap + cross-chunk prefetch) — subagent B
+- [-] T5: the riders (the mma.cuh ldmatrix I==8 x2 + `% t.J` wrap face on the loader family; the ggml.h `n_tokens > K` slot-guarantee doc-contract on the B224 UB family) DEFERRED to the next count-neutral rider batch — the merge-moment core (six rules) owned this session's budget; both faces recorded in Research 266 + the AGENTS bullet
+- [x] T6: batch234 gates — pseudocode parse + needle tests (needles from the verbatim source lines)
+- [x] T7: G2 — kernel_opt lib tests + default lib tests
+- [x] T8: G3 — clippy ×4 postures clean (cargo refine --fix --write --verify for mechanical classes)
+- [x] T9: retrieval floors — 21/21 HELD or re-pin with measured attribution
+- [x] T10: count pins — 806→812 at every pin site (tests + historical + tables + mod.rs + router.rs + AGENTS + kernel_opt.md) + per-category pins (G +2, N +1, D +1, A +1, E +1)
+- [x] T11: freeze/score-bench adjudication — NOT owed unless a clippy-corpus delta lands (P30, the B229/232 precedent)
+- [x] T12: research note 266 (`.research/.highwater` 265→266, dual_allocation_gate at allocation)
+- [x] T13: docs — AGENTS.md kernel_opt bullet 812 + B234 narrative; kernel_opt.md B234 row + counts; the merge-moment context (this batch IS the watch-971 merge event's conversion)
+- [ ] T14: snapshot landing row (`.distill/001` — LF-preserving python) + the claim row discharged
+- [ ] T15: commit `feat: batch 234: the #29353 GDN-MMA chunked prefill pack` + push
+- [ ] T16 (same session, parallel): the fork re-pin bout at `prism-b10776-d00e252` (the +4 near-flat-class delta; #355 the only CUDA arm) + the Plan-605-T5 defense dispatch record
+
+## Notes
+
+- The staged mining note's six mechanisms → six own rules: (1) G register-resident whole-sequence scan state + ONE kernel per layer-pass (state loaded once, stored once — global memory at the pass boundaries only); (2) N the double-BF16 residual-pair operand + THREE mma per 16-k step dropping lo·lo (the near-F32 numerics that bought ORippler's sign-off: KL 4.63e-4, top-1 98.82%); (3) G the in-register unit-lower-triangular (I+L)⁻¹ via one-row-per-warp backward substitution (`__shfl_sync` pivot elimination — FLA's solve_tril 16×16 scalar regime, ONE regime in-kernel); (4) D the SM-OCCUPANCY-keyed V∈{32,64,128} value-split ladder ("value splitting pays off when whole heads leave at least half the SMs idle"; one-wave fit → `__launch_bounds__(256,1)` register-budget arm) + the benchmark-gated CC admission ("MMA support alone does not imply a speedup" — CC∈{sm_86,sm_89,Blackwell,GB10}; sm_80/Orin/Hopper excluded) + the runtime predicate with incumbent fallback (admission is a predicate, never a build flag); (5) A the union smem scratch (state-snapshot XOR solved — lifecycle-disjoint intermediates share one ~36-40KB opt-in allocation via cudaFuncSetAttribute, per-device once_flag smpbo check); (6) E the warp-split phase overlap (V32: warps 0-3 Gram/inverse ∥ warps 4-7 projections) + the next-chunk q/k prefetch ("Carry the first eight input rows across chunks to hide global-load latency").
+- Riders: mma.cuh gains ldmatrix I==8 `.x2.b16` variants + the `j % t.J` wrap fix (the loader-family face); the ggml.h line "when n_tokens > K only slot 0 is guaranteed; backends may leave slots 1..K-1 unwritten" = the dictated API-contract face (UB-contract formalization class, B224 kinship).
+- The eligible predicate line (verbatim from the diff): `g->ne[0] == 1 && ggml_get_op_params_i32(dst, 0) < v->ne[2] && S_v == 128 && q->ne[0] == 128` — scalar gate, K < n_tokens (K==n_tokens spec-dec prefill never enters), head_dim 128 both sides; + `H_k != 16 || (H != 16 && H != 32 && H != 48 && H != 64) || n_tokens < 64` refusal → `gdn_path::ar` incumbent.
+- Numbers honesty: the PR's own 4090 rows (dense-27B +3.1/+3.2% pp2048/pp4096 vs master `296538ade`; the +10.8-20.6% rows are 35B-A3B MoE) are SOURCE-REPORTED — the league's own bout at the fork's absorption is the measured bar. KL 4.63e-4 / top-1 98.82% / perplexity +0.0045 are the PR's own instruments.
+- Count discipline: 6 own rules (kernel_opt 806 → 812); riders count-neutral.
