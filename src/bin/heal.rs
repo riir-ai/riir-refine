@@ -1619,7 +1619,8 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     match &charge {
         Some(charge) => {
             println!(
-                "local burn:          {} charged this repo ({} tokens, watermark {})",
+                "{:<12}{} charged this repo ({} tokens, watermark {})",
+                "local burn:",
                 riir_refine::kat_payreq_client::render_kat(
                     i64::try_from(charge.charged_kat).unwrap_or(i64::MAX)
                 ),
@@ -1629,7 +1630,8 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         }
         None => {
             println!(
-                "local burn:          (no charge ledger at {} — heal a repo to start one)",
+                "{:<12}(no charge ledger at {} — heal a repo to start one)",
+                "local burn:",
                 charge_path.display()
             );
         }
@@ -2511,7 +2513,7 @@ fn run_kat_config(
             // `kat_lease_client::DEFAULT_SERVICE_URL`.
             svc::MAINNET_SERVICE_URL,
         );
-        println!("service url: {active}");
+        println!("{:<15}{}", "service url:", active);
         println!("     source: {}", source.label());
         match source {
             svc::ServiceUrlSource::Env => println!(
@@ -2531,8 +2533,9 @@ fn run_kat_config(
                 .map(|a| format!(" ({a})"))
                 .unwrap_or_default();
             println!(
-                "stored config: {stored}{alias_note} — BOOKKEEPING ONLY (a stored row no longer \
-                 steers the dial)"
+                "{:<15}{}{alias_note} — BOOKKEEPING ONLY (a stored row no longer \
+                 steers the dial)",
+                "stored config:", stored
             );
         }
         if svc::service_url_from_env().is_some() && file_url.is_some() {
@@ -2550,9 +2553,28 @@ fn run_kat_config(
             let root = resolve_heal_root(paths);
             let files = riir_refine::kat_adopt::scan_state_files(&root);
             if !files.is_empty() {
+                // The table (issue 126 follow-up 4): the name column is
+                // COMPUTED across the page, so the per-file diagnosis text
+                // starts on one column instead of drifting with the path
+                // lengths.
+                let name_w = files
+                    .iter()
+                    .map(|f| f.rel.len())
+                    .max()
+                    .unwrap_or(4)
+                    .max(4);
                 println!("state files (under {}):", root.join(".refine").display());
                 for f in &files {
-                    println!("  {}", riir_refine::kat_adopt::diagnosis_line(f));
+                    let line = riir_refine::kat_adopt::diagnosis_line(f);
+                    // diagnosis_line is `{rel}: {rest}` — split once at the
+                    // first ": " and pad the name column (a rel never
+                    // carries a colon).
+                    match line.split_once(": ") {
+                        Some((name, rest)) => {
+                            println!("  {:<name_w$}  {}", format!("{name}:"), rest);
+                        }
+                        None => println!("  {line}"),
+                    }
                 }
             }
         }

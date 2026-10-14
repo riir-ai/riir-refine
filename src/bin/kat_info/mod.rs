@@ -189,13 +189,13 @@ fn network_sections(acct32: Option<&str>) {
 #[cfg(any(test, feature = "kat_transport"))]
 fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<String> {
     let kat = |micro: i64| riir_refine::kat_units::render_kat(micro);
+    // The label column is explicit ({:<13} after the 2-space indent), never
+    // hand-padded (issue 126 follow-up 4).
     let mut lines = vec![
+        format!("  {:<13}{} service credit", "balance:", kat(h.balance_micro)),
         format!(
-            "  balance:     {} service credit",
-            kat(h.balance_micro)
-        ),
-        format!(
-            "  grant:       {}",
+            "  {:<13}{}",
+            "grant:",
             if h.granted {
                 "applied (the signup claim — TUNA trial credit)"
             } else {
@@ -214,26 +214,35 @@ fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<St
             })
             .unwrap_or_default();
         lines.push(format!(
-            "  tuna:        {}{expiry} · trial credit — heals only, non-transferable",
+            "  {:<13}{}{expiry} · trial credit — heals only, non-transferable",
+            "tuna:",
             riir_refine::kat_units::render_units(tuna, "TUNA")
         ));
     }
     lines.push(match h.burn_kat_total {
         Some(total) => format!(
-            "  burned:      {total} KAT service credit lifetime{}",
+            "  {:<13}{total} KAT service credit lifetime{}",
+            "burned:",
             h.burn_updated_tick
                 .map(|t| format!(" (watermark tick {t})"))
                 .unwrap_or_default()
         ),
-        None => "  burned:      nothing yet (no burn watermark on the ledger)".to_string(),
+        None => format!(
+            "  {:<13}nothing yet (no burn watermark on the ledger)",
+            "burned:"
+        ),
     });
     lines.push(match (h.contributed, h.first_commitment_hex.as_deref()) {
         (true, Some(hex)) => format!(
-            "  contributed: yes — first commitment {}…",
+            "  {:<13}yes — first commitment {}…",
+            "contributed:",
             &hex[..hex.len().min(16)]
         ),
-        (true, None) => "  contributed: yes".to_string(),
-        (false, _) => "  contributed: no mining batch has landed from this account yet".to_string(),
+        (true, None) => format!("  {:<13}yes", "contributed:"),
+        (false, _) => format!(
+            "  {:<13}no mining batch has landed from this account yet",
+            "contributed:"
+        ),
     });
     lines.push(receipts_line(h, &kat));
     lines
@@ -247,7 +256,10 @@ fn receipts_line(
     kat: &dyn Fn(i64) -> String,
 ) -> String {
     if h.receipts.is_empty() {
-        return "  receipts:   none yet (mining rewards mint per epoch after proof)".to_string();
+        return format!(
+            "  {:<13}none yet (mining rewards mint per epoch after proof)",
+            "receipts:"
+        );
     }
     let minted: Vec<_> = h.receipts.iter().filter(|r| r.state == "Minted").collect();
     let allocated = h.receipts.iter().filter(|r| r.state == "Allocated").count();
@@ -269,7 +281,8 @@ fn receipts_line(
         parts.push(format!("{other} other state"));
     }
     format!(
-        "  receipts:   {} shown of {} matching — {} \u{00b7} newest epoch {}",
+        "  {:<13}{} shown of {} matching — {} · newest epoch {}",
+        "receipts:",
         h.receipts.len(),
         h.receipts_total_matching,
         parts.join(", "),

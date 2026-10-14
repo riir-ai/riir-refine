@@ -21,7 +21,10 @@ fn corpus_detector_and_fixable_tables_agree() {
     // its count-pin walk missed THIS pin (the failure that proves the gate
     // is live); Batch 146 (Plan 132) joined pgo-training-set-covers-real-
     // workload-hint — the pin moved WITH the batch. Suggest-only still holds.
-    assert_eq!(entries.len(), 6, "Phase 1 ships exactly 6 rules");
+    // Batch 221 (9080b598, bench-targets-shared-dependency-cluster-hint)
+    // missed it too — found red at HEAD 2026-10-14 by the alignment sweep
+    // (the third instance of this exact failure mode).
+    assert_eq!(entries.len(), 7, "Phase 1 ships exactly 7 rules");
     let ids: std::collections::BTreeSet<String> =
         entries.iter().map(|r| r.rule_id.clone()).collect();
     let detectors: std::collections::BTreeSet<String> =
