@@ -100,6 +100,11 @@ pub mod pruner;
 // (π(τ|s_g)/π(τ|s_j) exclusion + the priced 2γε/(1−γ) slack) is crate-level
 // evidence law, and the pure tests run at default features.
 pub mod tier_guard;
+// Issue 126 follow-up: the interactive TTY picker (arrow-key selection,
+// newest preselected) behind the topup 429 flow's typed prompt. Ungated:
+// pure engine lib-tested at default features; the raw-mode reader is
+// unix-only termios (a target dep — no feature-matrix churn).
+pub mod tty_pick;
 
 // ── Domain modules (feature-gated) ─────────────────────────────────────────
 pub mod domains;

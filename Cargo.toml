@@ -161,6 +161,12 @@ riir-llm = { path = "../riir-llm", optional = true, default-features = false }
 # riir-ai vendor paths. Same trick for cubecl-runtime + cubecl-wgpu (the
 # arithmetic-overflow fix + the raw-handle accessors).
 
+# Issue 126 follow-up: the topup picker's raw-mode key reader (unix
+# termios via libc — already in the lock transitively, zero new packages).
+# A `[target]` table closes the [dependencies] one; keep it last.
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 # serde_json: already a main dep (zero new tree cost) — the 038 e2e parses
 # --dump-trajectories JSONL rows.

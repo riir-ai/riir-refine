@@ -3251,6 +3251,70 @@ fn format_usdc(base: u64) -> String {
     }
 }
 
+/// One aligned checkout line — the 429 listing and the picker rows render
+/// the SAME text, so the picker can never disagree with the list above it.
+/// `kat_micro` comes from the catalog by pack id (the history row's own
+/// `kat_micro` is 0 while open — the credit exists only after settle).
+#[cfg(feature = "kat_transport")]
+fn topup_checkout_line(
+    row: &riir_refine::kat_protocol_pay::PayPurchaseRow,
+    kat_micro: Option<u64>,
+    now_unix: u64,
+) -> String {
+    let mins = now_unix.saturating_sub(row.created_unix) / 60;
+    let kat = match kat_micro {
+        Some(m) => {
+            riir_refine::kat_payreq_client::render_kat(i64::try_from(m).unwrap_or(i64::MAX))
+        }
+        None => "? KAT".to_string(),
+    };
+    let mut reference = row.reference.clone();
+    if reference.chars().count() > 6 {
+        reference = format!("{}…", reference.chars().take(6).collect::<String>());
+    }
+    format!(
+        "seq {:<4} {:>8} USDC → {:<14} {:>5} min old  ref {}",
+        row.seq,
+        format_usdc(row.usdc_base),
+        kat,
+        mins,
+        reference
+    )
+}
+
+/// The typed fallback (raw mode unavailable: an odd terminal, non-unix):
+/// the issue-126 prompt verbatim — empty = newest, `v<seq>` voids,
+/// `<seq>` shows, EOF / a bad answer exits 2. Returns `None` when the
+/// run answered nothing actionable — the caller prints the flag hints.
+#[cfg(feature = "kat_transport")]
+fn topup_typed_pick(
+    rows: &[riir_refine::tty_pick::PickRow],
+) -> Option<riir_refine::tty_pick::Picked> {
+    print!("show which (seq, empty = newest, 'v<seq>' to void): ");
+    use std::io::Write as _;
+    std::io::stdout().flush().ok();
+    let mut line = String::new();
+    match std::io::stdin().read_line(&mut line) {
+        Ok(0) | Err(_) => std::process::exit(2),
+        Ok(_) => {
+            let t = line.trim();
+            if t.is_empty() {
+                return Some(riir_refine::tty_pick::Picked::Show(rows[0].seq));
+            }
+            if let Some(raw) = t.strip_prefix(['v', 'V']) {
+                return match raw.parse::<u64>() {
+                    Ok(s) => Some(riir_refine::tty_pick::Picked::Void(s)),
+                    Err(_) => std::process::exit(2),
+                };
+            }
+            match t.parse::<u64>() {
+                Ok(s) => Some(riir_refine::tty_pick::Picked::Show(s)),
+                Err(_) => std::process::exit(2),
+            }
+        }
+    }
+}
+
 /// Issue 126: `topup --void <seq>` — release an open checkout's slot.
 /// Idempotent server-side; the marker stays reserved until the TTL (a
 /// payment already scanned still lands on the account).
@@ -3536,59 +3600,81 @@ fn run_kat_topup(pack: Option<u8>, qr: Option<bool>) {
                                 }
                                 _ => {
                                     eprintln!("topup: a cap is full ({status}) — {detail}");
-                                    eprintln!("topup: your open checkouts:");
+                                    eprintln!("topup: your open checkouts (newest first):");
                                     let now = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .map(|d| d.as_secs())
                                         .unwrap_or(0);
-                                    for i in &intents {
-                                        let mins = now.saturating_sub(i.created_unix) / 60;
-                                        println!(
-                                            "  seq {:<4} pack {}   {} USDC — created {} min ago",
-                                            i.seq,
-                                            i.pack_id,
-                                            format_usdc(i.usdc_base),
-                                            mins,
-                                        );
+                                    let lines: Vec<String> = intents
+                                        .iter()
+                                        .map(|i| {
+                                            let kat = catalog
+                                                .packs
+                                                .iter()
+                                                .find(|p| p.id == i.pack_id)
+                                                .map(|p| p.kat_micro);
+                                            topup_checkout_line(i, kat, now)
+                                        })
+                                        .collect();
+                                    for l in &lines {
+                                        println!("  {l}");
                                     }
-                                    if args_tty_stdin() {
-                                        print!("show which (seq, empty = newest, 'v<seq>' to void): ");
-                                        use std::io::Write as _;
-                                        std::io::stdout().flush().ok();
-                                        let mut line = String::new();
-                                        match std::io::stdin().read_line(&mut line) {
-                                            Ok(0) | Err(_) => std::process::exit(2),
-                                            Ok(_) => {
-                                                let t = line.trim();
-                                                if t.is_empty() {
-                                                    run_kat_topup_show(
-                                                        intents[0].seq,
-                                                        qr,
-                                                    );
-                                                    return;
-                                                } else if let Some(raw) = t.strip_prefix(['v', 'V']) {
-                                                    match raw.parse::<u64>() {
-                                                        Ok(s) => run_kat_topup_void(s),
-                                                        Err(_) => std::process::exit(2),
-                                                    }
-                                                    return;
-                                                } else {
-                                                    match t.parse::<u64>() {
-                                                        Ok(s) => run_kat_topup_show(s, qr),
-                                                        Err(_) => std::process::exit(2),
-                                                    }
-                                                    return;
-                                                }
+                                    let rows: Vec<riir_refine::tty_pick::PickRow> = intents
+                                        .iter()
+                                        .zip(&lines)
+                                        .map(|(i, text)| riir_refine::tty_pick::PickRow {
+                                            seq: i.seq,
+                                            text: text.clone(),
+                                        })
+                                        .collect();
+                                    // Issue 126 follow-up: on a real terminal
+                                    // the pick is interactive — arrows + Enter
+                                    // (newest preselected, the owner's default),
+                                    // `v` arms a void, `q` quits. Raw mode
+                                    // unavailable falls back to the typed prompt
+                                    // verbatim (piped stdin never reaches here).
+                                    let picked = if args_tty_stdin() {
+                                        match riir_refine::tty_pick::TtyKeys::enable() {
+                                            Some(mut keys) => {
+                                                let mut out = std::io::stdout();
+                                                let picked = riir_refine::tty_pick::pick(
+                                                    &rows,
+                                                    &mut keys,
+                                                    &mut out,
+                                                );
+                                                // Restore the terminal BEFORE
+                                                // anything else prints (the QR
+                                                // must not render in raw mode).
+                                                drop(keys);
+                                                Some(picked)
                                             }
+                                            None => topup_typed_pick(&rows),
                                         }
                                     } else {
-                                        eprintln!(
-                                            "topup: re-print one with  cargo refine topup --show <seq>"
-                                        );
-                                        eprintln!(
-                                            "topup: release one with  cargo refine topup --void <seq>"
-                                        );
-                                        std::process::exit(2);
+                                        None
+                                    };
+                                    match picked {
+                                        Some(riir_refine::tty_pick::Picked::Show(seq)) => {
+                                            run_kat_topup_show(seq, qr);
+                                            return;
+                                        }
+                                        Some(riir_refine::tty_pick::Picked::Void(seq)) => {
+                                            run_kat_topup_void(seq);
+                                            return;
+                                        }
+                                        Some(riir_refine::tty_pick::Picked::Cancelled) => {
+                                            eprintln!("topup: cancelled — nothing changed");
+                                            std::process::exit(2);
+                                        }
+                                        None => {
+                                            eprintln!(
+                                                "topup: re-print one with  cargo refine topup --show <seq>"
+                                            );
+                                            eprintln!(
+                                                "topup: release one with  cargo refine topup --void <seq>"
+                                            );
+                                            std::process::exit(2);
+                                        }
                                     }
                                 }
                             }
