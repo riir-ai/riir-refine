@@ -1616,25 +1616,32 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // TUNA trial credit (never KAT), so a local KAT "remaining of grant"
     // figure was a mint promise that does not exist; the service section
     // below is the authoritative balance.
+    // One label column for the whole run (issue 126 follow-up 6): the
+    // substrate's computed account_line — the same grid the identity block
+    // and the welcome gate render through. The net is named by the
+    // `service:` line below, so the absent-ledger line stays short.
     match &charge {
-        Some(charge) => {
-            println!(
-                "{:<12}{} charged this repo ({} tokens, watermark {})",
+        Some(charge) => println!(
+            "{}",
+            riir_refine::kat_account_client::account_line(
                 "local burn:",
-                riir_refine::kat_payreq_client::render_kat(
-                    i64::try_from(charge.charged_kat).unwrap_or(i64::MAX)
-                ),
-                charge.meter_watermark_tokens,
-                charge.meter_watermark_tokens
-            );
-        }
-        None => {
-            println!(
-                "{:<12}(no charge ledger at {} — heal a repo to start one)",
+                format!(
+                    "{} charged this repo ({} tokens, watermark {})",
+                    riir_refine::kat_payreq_client::render_kat(
+                        i64::try_from(charge.charged_kat).unwrap_or(i64::MAX)
+                    ),
+                    charge.meter_watermark_tokens,
+                    charge.meter_watermark_tokens
+                )
+            )
+        ),
+        None => println!(
+            "{}",
+            riir_refine::kat_account_client::account_line(
                 "local burn:",
-                charge_path.display()
-            );
-        }
+                "(no charge ledger for this net — heal a repo to start one)",
+            )
+        ),
     }
 
     let spent = charge.as_ref().map_or(0, |c| c.charged_kat);
@@ -1693,13 +1700,22 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                                     |micro: i64| riir_refine::kat_payreq_client::render_kat(micro);
                                 if claim.already {
                                     println!(
-                                        "grant:  already claimed (balance {})",
-                                        kat(claim.balance_micro)
+                                        "{}",
+                                        riir_refine::kat_account_client::account_line(
+                                            "grant:",
+                                            format!("already claimed (balance {})", kat(claim.balance_micro)),
+                                        )
                                     );
                                 } else {
                                     println!(
-                                        "grant:  {} claimed — the free-tier grant is live (balance {})",
-                                        kat(claim.claimed_micro), kat(claim.balance_micro)
+                                        "{}",
+                                        riir_refine::kat_account_client::account_line(
+                                            "grant:",
+                                            format!(
+                                                "{} claimed — the free-tier grant is live (balance {})",
+                                                kat(claim.claimed_micro), kat(claim.balance_micro)
+                                            ),
+                                        )
                                     );
                                 }
                                 // Re-read through the service view so the
@@ -1713,13 +1729,25 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                             }
                             Ok(None) => view.balance,
                             Err(e) => {
-                                println!("grant:  not claimed — {e}");
+                                println!(
+                                    "{}",
+                                    riir_refine::kat_account_client::account_line(
+                                        "grant:",
+                                        format!("not claimed — {e}"),
+                                    )
+                                );
                                 view.balance
                             }
                         }
                     }
                     Err(e) => {
-                        println!("grant:  not claimed — the account key is unusable ({e})");
+                        println!(
+                            "{}",
+                            riir_refine::kat_account_client::account_line(
+                                "grant:",
+                                format!("not claimed — the account key is unusable ({e})"),
+                            )
+                        );
                         view.balance
                     }
                 };
@@ -1734,7 +1762,13 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     #[cfg(not(feature = "kat_transport"))]
     let (served, history_acct): (Option<riir_refine::kat_account_client::ServiceBalance>, Option<String>) = {
         if spent == 0 {
-            println!("{}", riir_refine::kat_account::welcome_line());
+            println!(
+                "{}",
+                riir_refine::kat_account_client::account_line(
+                    "welcome:",
+                    riir_refine::kat_account::welcome_line(),
+                )
+            );
         }
         (None, None)
     };

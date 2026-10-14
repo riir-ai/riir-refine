@@ -43,13 +43,16 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     // ── the account + consent block (always local) ──────────────────────
     let state = account.state();
     println!("KAT ACCOUNT");
+    // The account-family label column (issue 126 follow-ups 4+6): the
+    // substrate's computed account_line, the SAME grid the `account`
+    // command and the welcome gate render through.
+    use riir_refine::kat_account_client::account_line;
     println!(
-        "  account:  {} ({})",
-        state.account_id,
-        account.key_path().display()
+        "{}",
+        account_line("account:", format!("{} ({})", state.account_id, account.key_path().display()))
     );
     if let Some(user) = &state.github_user {
-        println!("  github:   {user}");
+        println!("{}", account_line("github:", user));
     }
     let (mining, mw) = riir_refine::kat_mining_consent::read_with_warning(
         &riir_refine::kat_mining_consent::default_dir(),
@@ -57,14 +60,20 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     if let Some(w) = mw {
         eprintln!("{w}");
     }
-    println!("  mining:   {} (contribution consent)", mining.label());
+    println!(
+        "{}",
+        account_line("mining:", format!("{} (contribution consent)", mining.label()))
+    );
     let (stats, sw) = riir_refine::kat_stats_consent::read_with_warning(
         &riir_refine::kat_stats_consent::default_dir(),
     );
     if let Some(w) = sw {
         eprintln!("{w}");
     }
-    println!("  stats:    {} (work-stats sharing)", stats.label());
+    println!(
+        "{}",
+        account_line("stats:", format!("{} (work-stats sharing)", stats.label()))
+    );
 
     // ── the network sections ────────────────────────────────────────────
     let acct32 = riir_refine::kat_account_client::service_account_hex(&state.account_id)
@@ -100,8 +109,16 @@ fn network_sections(acct32: Option<&str>) {
 
     println!("SERVICE");
     match svc::service_line_via(&transport) {
-        Some(line) => println!("  {line}"),
-        None => println!("  (no service label — asking {url})"),
+        // The render half formats under the account label column (the
+        // two-space indent is already in the line — never re-indent it).
+        Some(line) => println!("{line}"),
+        None => println!(
+            "{}",
+            riir_refine::kat_account_client::account_line(
+                "service:",
+                format!("(no label — asking {url})")
+            )
+        ),
     }
 
     let Some(acct) = acct32 else {
@@ -188,19 +205,19 @@ fn network_sections(acct32: Option<&str>) {
 /// keep it alive in every lane.
 #[cfg(any(test, feature = "kat_transport"))]
 fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<String> {
+    use riir_refine::kat_account_client::account_line;
     let kat = |micro: i64| riir_refine::kat_units::render_kat(micro);
-    // The label column is explicit ({:<13} after the 2-space indent), never
-    // hand-padded (issue 126 follow-up 4).
+    // The label column is the substrate's computed account_line (issue 126
+    // follow-ups 4+6) — never hand-padded.
     let mut lines = vec![
-        format!("  {:<13}{} service credit", "balance:", kat(h.balance_micro)),
-        format!(
-            "  {:<13}{}",
+        account_line("balance:", format!("{} service credit", kat(h.balance_micro))),
+        account_line(
             "grant:",
             if h.granted {
                 "applied (the signup claim — TUNA trial credit)"
             } else {
                 "not claimed yet"
-            }
+            },
         ),
     ];
     // The trial-credit line (Proposal 006) — only when the server sent
@@ -213,35 +230,35 @@ fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<St
                 format!(" · expires {y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default();
-        lines.push(format!(
-            "  {:<13}{}{expiry} · trial credit — heals only, non-transferable",
+        lines.push(account_line(
             "tuna:",
-            riir_refine::kat_units::render_units(tuna, "TUNA")
+            format!(
+                "{}{expiry} · trial credit — heals only, non-transferable",
+                riir_refine::kat_units::render_units(tuna, "TUNA")
+            ),
         ));
     }
     lines.push(match h.burn_kat_total {
-        Some(total) => format!(
-            "  {:<13}{total} KAT service credit lifetime{}",
+        Some(total) => account_line(
             "burned:",
-            h.burn_updated_tick
-                .map(|t| format!(" (watermark tick {t})"))
-                .unwrap_or_default()
+            format!(
+                "{total} KAT service credit lifetime{}",
+                h.burn_updated_tick
+                    .map(|t| format!(" (watermark tick {t})"))
+                    .unwrap_or_default()
+            ),
         ),
-        None => format!(
-            "  {:<13}nothing yet (no burn watermark on the ledger)",
-            "burned:"
-        ),
+        None => account_line("burned:", "nothing yet (no burn watermark on the ledger)"),
     });
     lines.push(match (h.contributed, h.first_commitment_hex.as_deref()) {
-        (true, Some(hex)) => format!(
-            "  {:<13}yes — first commitment {}…",
+        (true, Some(hex)) => account_line(
             "contributed:",
-            &hex[..hex.len().min(16)]
+            format!("yes — first commitment {}…", &hex[..hex.len().min(16)]),
         ),
-        (true, None) => format!("  {:<13}yes", "contributed:"),
-        (false, _) => format!(
-            "  {:<13}no mining batch has landed from this account yet",
-            "contributed:"
+        (true, None) => account_line("contributed:", "yes"),
+        (false, _) => account_line(
+            "contributed:",
+            "no mining batch has landed from this account yet",
         ),
     });
     lines.push(receipts_line(h, &kat));
@@ -256,9 +273,9 @@ fn receipts_line(
     kat: &dyn Fn(i64) -> String,
 ) -> String {
     if h.receipts.is_empty() {
-        return format!(
-            "  {:<13}none yet (mining rewards mint per epoch after proof)",
-            "receipts:"
+        return riir_refine::kat_account_client::account_line(
+            "receipts:",
+            "none yet (mining rewards mint per epoch after proof)",
         );
     }
     let minted: Vec<_> = h.receipts.iter().filter(|r| r.state == "Minted").collect();
@@ -280,13 +297,15 @@ fn receipts_line(
     if other > 0 {
         parts.push(format!("{other} other state"));
     }
-    format!(
-        "  {:<13}{} shown of {} matching — {} · newest epoch {}",
+    riir_refine::kat_account_client::account_line(
         "receipts:",
-        h.receipts.len(),
-        h.receipts_total_matching,
-        parts.join(", "),
-        h.receipts[0].epoch
+        format!(
+            "{} shown of {} matching — {} · newest epoch {}",
+            h.receipts.len(),
+            h.receipts_total_matching,
+            parts.join(", "),
+            h.receipts[0].epoch
+        ),
     )
 }
 
