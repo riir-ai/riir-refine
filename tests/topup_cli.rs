@@ -114,7 +114,7 @@ fn spawn_topup_mock(mode: &'static str) -> TopupMock {
                 ("ok", "/history") => (
                     200,
                     format!(
-                        r#"{{"account_id":"{}","balance_micro":8000000,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}},{{"seq":2,"pack_id":1,"status":"settled","usdc_base":1000000,"paid_base":1000000,"kat_micro":10000000,"created_unix":5,"settled_unix":9,"reference":""}}],"purchases_total":2,"purchases_truncated":false}}"#,
+                        r#"{{"account_id":"{}","balance_micro":8000000,"granted":false,"contributed":false,"burn":null,"first_commitment_hex":null,"cegel_balance_micro":0,"seal_balance_micro":0,"receipts":[],"receipts_total_matching":0,"receipts_truncated":false,"events":[],"events_total":0,"events_truncated":false,"tuna_balance_micro":47200000,"tuna_expires_unix":2000000000,"purchases":[{{"seq":7,"pack_id":1,"status":"open","usdc_base":1000000,"paid_base":0,"kat_micro":0,"created_unix":10,"settled_unix":0,"reference":"3RefX7"}},{{"seq":2,"pack_id":1,"status":"settled","usdc_base":1000000,"paid_base":1000000,"kat_micro":10000000,"created_unix":5,"settled_unix":9,"reference":""}}],"purchases_total":2,"purchases_truncated":false}}"#,
                         "a".repeat(32)
                     ),
                 ),
@@ -230,6 +230,12 @@ fn hex_bytes(h: &str) -> Vec<u8> {
         .collect()
 }
 
+/// Whether `text` carries a rendered QR — the small render's glyphs are
+/// the Unicode braille patterns (U+2800–U+28FF, the 2×4 module packing).
+fn has_qr(text: &str) -> bool {
+    text.chars().any(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
+}
+
 /// Phase 1: no account, no dial — the honest local refusal.
 #[test]
 fn topup_without_an_account_refuses_before_dialing() {
@@ -262,7 +268,7 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     assert!(text.contains("account --history"), "{text}");
     // The QR default is AUTO: a piped (non-TTY) run renders none — agents
     // never get a block of unicode in their logs.
-    assert!(!text.contains('▀') && !text.contains('█'), "piped run must not render the QR: {text}");
+    assert!(!has_qr(&text), "piped run must not render the QR: {text}");
     // The dials: catalog GET, then the T10 attested-intent PRE-FLIGHT (a
     // `GET /` service-info read — riir-kat 23d551b landed it 2026-10-08,
     // two days after this suite; the mock answers 404 and the
@@ -309,7 +315,7 @@ fn topup_qr_flag_renders_the_checkout_qr_even_piped() {
     let (code, text) = heal(&dir, &mock.base(), &[], &["topup", "--pack", "1", "--qr"]);
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("solana:pay?example"), "the URL line: {text}");
-    assert!(text.contains('▀') || text.contains('█'), "the QR must render: {text}");
+    assert!(has_qr(&text), "the QR must render (braille-packed): {text}");
     assert!(text.contains("Solana Pay wallet"), "the pointer line: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -412,7 +418,7 @@ fn topup_show_reprints_the_checkout() {
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(text.contains("3RefX7"), "{text}");
-    assert!(text.contains('▀') || text.contains('█'), "the --qr forced QR: {text}");
+    assert!(has_qr(&text), "the --qr forced QR: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -475,7 +481,7 @@ fn topup_capped_with_one_open_intent_shows_it_without_asking() {
     assert_eq!(code, Some(0), "the auto-show SUCCEEDS (exit 0, a shown checkout): output:\n{text}");
     assert!(text.contains("already have an open checkout (seq 7)"), "{text}");
     assert!(text.contains("solana:pay?example"), "{text}");
-    assert!(text.contains('▀') || text.contains('█'), "the shown checkout's QR: {text}");
+    assert!(has_qr(&text), "the shown checkout's QR: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -569,6 +575,54 @@ fn buy_pick_latest_composes_on_the_cap() {
     assert!(
         text.contains("--pick latest — showing the newest checkout (seq 8)"),
         "{text}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The value verbs (issue 126 follow-up): `kat` renders the one-line
+/// host-labelled balance, `tuna` renders the balance + expiry window.
+#[test]
+fn kat_and_tuna_render_the_one_line_values() {
+    let mock = spawn_topup_mock("ok");
+    let dir = scratch("values");
+    login(&dir);
+    let (code, text) = heal(&dir, &mock.base(), &[], &["kat"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("8.000000 KAT — "), "{text}");
+    assert!(text.contains("127.0.0.1"), "host-labelled: {text}");
+    let (code, text) = heal(&dir, &mock.base(), &[], &["tuna"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("47.200000 TUNA"), "{text}");
+    assert!(text.contains("expires in"), "{text}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The dialing law (issue 126 follow-up 3, owner 2026-10-14: "all should
+/// target mainnet without any flag, flag is for devnet"): a STORED config
+/// row never steers the dial. Two mocks: the row names B, the env names
+/// A — the command answers from A and B captures nothing. (A stale row is
+/// exactly how bare commands dialed devnet before the law.)
+#[test]
+fn a_stored_config_row_never_steers_the_dial() {
+    let dial = spawn_topup_mock("ok");
+    let decoy = spawn_topup_mock("ok");
+    let dir = scratch("configlaw");
+    login(&dir);
+    // The stale row: written through the SAME writer `config set` uses,
+    // into the scratch account dir the child reads via the env override.
+    riir_refine::kat_service_config::store(&dir, &decoy.base()).expect("the bookkeeping row stores");
+    // The env names the dial; the row names the decoy. The dial must win.
+    let (code, text) = heal(&dir, &dial.base(), &[], &["kat"]);
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("8.000000 KAT"), "{text}");
+    assert!(
+        decoy.captured().is_empty(),
+        "the decoy captured nothing: {:?}",
+        decoy.captured().iter().map(|c| c.path.as_str()).collect::<Vec<_>>()
+    );
+    assert!(
+        dial.captured().iter().any(|c| c.path.starts_with("/history")),
+        "the dial mock served the read"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

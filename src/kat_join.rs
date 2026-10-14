@@ -11,7 +11,8 @@
 //!   mainnet — the live economy of record (trial credit is devnet-funded for now)
 //!   devnet  — the operator's test network: real pipeline, test credit
 //! > mainnet
-//! recorded to config (cargo refine config set --url mainnet). Change any time.
+//! recorded to config: mainnet (bookkeeping — commands dial mainnet by
+//! default; cargo refine --net mainnet targets mainnet).
 //! ```
 //!
 //! - **Default = mainnet** (Enter / `--yes` / `RIIR_REFINE_YES=1`): the
@@ -295,9 +296,16 @@ pub fn account_key_present(dir: &Path) -> bool {
 /// the proposal transcript.
 #[must_use]
 pub fn join_lines(env: JoinEnv, had_account_key: bool) -> Vec<String> {
+    // Issue 126 follow-up 3 (owner law 2026-10-14: "all should target
+    // mainnet without any flag, flag is for devnet"): the recorded row is
+    // BOOKKEEPING — the dial precedence is env > mainnet, and a stored
+    // row can never re-point a bare command again (the old "Change any
+    // time (cargo refine config set ...)" line advertised a surface that
+    // no longer steers).
+    let alias = env.alias();
     let mut recorded = format!(
-        "recorded to config (cargo refine config set --url {}). Change any time.",
-        env.alias()
+        "recorded to config: {alias} (bookkeeping — commands dial mainnet by default; \
+         cargo refine --net {alias} targets {alias})"
     );
     if had_account_key {
         recorded.push_str(
@@ -436,14 +444,13 @@ mod tests {
             riir_kat::kat_service_config::read(&dir).as_deref(),
             Some(JoinEnv::Mainnet.url())
         );
-        // A brand-new machine's line is byte-identical to the proposal
-        // transcript minus the posture copy — the recorded line carries no
-        // visibility clause.
+        // A brand-new machine's line carries the dialing law (the recorded
+        // row is bookkeeping; bare commands dial mainnet).
         let lines = join_lines(JoinEnv::Mainnet, false);
         assert_eq!(lines.len(), 4, "the recorded line + the 3-line posture");
         assert_eq!(
             lines[0],
-            "recorded to config (cargo refine config set --url mainnet). Change any time."
+            "recorded to config: mainnet (bookkeeping — commands dial mainnet by default; cargo refine --net mainnet targets mainnet)"
         );
         // The devnet choice is the one-line posture (the operator's test
         // network needs no arming disclosure).
@@ -464,7 +471,7 @@ mod tests {
         assert_eq!(lines.len(), 4, "the clause appends to the line, never a new one");
         assert!(
             lines[0].starts_with(
-                "recorded to config (cargo refine config set --url mainnet). Change any time."
+                "recorded to config: mainnet (bookkeeping — commands dial mainnet by default; cargo refine --net mainnet targets mainnet)"
             ),
             "the base line is unchanged: {}",
             lines[0]

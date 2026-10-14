@@ -100,6 +100,14 @@ enum KatCommand {
     /// catalog pack, MAINNET is the default dial (--net overrides), and
     /// the whole topup flow (QR, the capped-429 surface) rides along.
     Buy,
+    /// The one-line KAT balance (issue 126 follow-up, the owner's value
+    /// verbs: "expect `cargo refine kat` and `cargo refine tuna` should
+    /// show value"): the bearer-free /history read, one agent-parseable
+    /// line. Needs `kat_transport`.
+    Kat,
+    /// The one-line TUNA trial-credit balance + expiry window (same
+    /// surface, the same ask). Needs `kat_transport`.
+    Tuna,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -1558,8 +1566,7 @@ fn run_kat_login(import_key: Option<&Path>) {
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     use riir_refine::kat_account::{history_lines, KatAccount};
-    use riir_refine::kat_meter::{ChargeState, KAT_WARN_REMAINING};
-    use riir_refine::kat_units::MicroKat;
+    use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
     let account = match KatAccount::load(&dir) {
@@ -1604,28 +1611,21 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // mutated after first write, so the constant IS the projection).
     // Plan 035 T3: the projection math runs in MicroKat — µ/whole mixing
     // needs an explicit conversion to compile.
-    let grant = riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT;
+    // Issue 126 follow-up 3 (owner 2026-10-14): the old "balance
+    // projection: X of 100 KAT" line is GONE — the signup grant is the
+    // TUNA trial credit (never KAT), so a local KAT "remaining of grant"
+    // figure was a mint promise that does not exist; the service section
+    // below is the authoritative balance.
     match &charge {
         Some(charge) => {
-            let remaining = grant.saturating_sub(MicroKat::from(charge.charged_kat));
-            let kat = |micro: MicroKat| riir_refine::kat_payreq_client::render_kat(micro.0);
             println!(
                 "local burn:          {} charged this repo ({} tokens, watermark {})",
-                kat(MicroKat::from(charge.charged_kat)),
+                riir_refine::kat_payreq_client::render_kat(
+                    i64::try_from(charge.charged_kat).unwrap_or(i64::MAX)
+                ),
                 charge.meter_watermark_tokens,
                 charge.meter_watermark_tokens
             );
-            println!(
-                "balance projection:  {} of {} (per-repo until server aggregation)",
-                kat(remaining),
-                kat(grant)
-            );
-            if remaining <= MicroKat::from(KAT_WARN_REMAINING) {
-                println!(
-                    "kat: WARN balance ≤ {} — top up before the next long run (depleted + never-contributed accounts are refused by the 075 soft gate)",
-                    kat(MicroKat::from(KAT_WARN_REMAINING))
-                );
-            }
         }
         None => {
             println!(
@@ -1776,12 +1776,12 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                     println!("{line}");
                 }
             }
-            // The offline fallback — T0.2's local earned/spent view, which
-            // is honest about being a per-repo projection. The grant is the
-            // µ constant, positive by construction — the `.0 as u64` read
-            // the newtype doc sanctions (the fn takes raw µ).
+            // The offline fallback — T0.2's local spent view, honest about
+            // being per-repo metering: the grant is the TUNA trial credit
+            // (never KAT), so the local render carries no earned/balance
+            // projection (issue 126 follow-up 3).
             None => {
-                for line in history_lines(grant.0 as u64, spent, tokens) {
+                for line in history_lines(spent, tokens) {
                     println!("{line}");
                 }
             }
@@ -2497,14 +2497,16 @@ fn run_kat_config(
     }
     let dir = svc::account_dir();
     if !set {
-        // `config get` (bare `config` behaves the same — a pure read).
+        // `config get` (bare `config` behaves the same — a pure read). The
+        // DIAL is the law seam (env > mainnet — a stored row never steers,
+        // issue 126 follow-up 3); the stored row is disclosed as the
+        // bookkeeping it now is.
         let (file_url, warning) = svc::read_with_warning(&dir);
         if let Some(w) = warning {
             eprintln!("config: {w}");
         }
-        let (active, source) = svc::resolved_from(
+        let (active, source) = svc::dial_service_url(
             svc::service_url_from_env().as_deref(),
-            file_url.as_deref(),
             // Ungated default mirror — the gated pin test asserts it IS
             // `kat_lease_client::DEFAULT_SERVICE_URL`.
             svc::MAINNET_SERVICE_URL,
@@ -2513,19 +2515,30 @@ fn run_kat_config(
         println!("     source: {}", source.label());
         match source {
             svc::ServiceUrlSource::Env => println!(
-                "             (env {var} wins over the config file while it is set)",
+                "             (env {var} steers the dial while it is set)",
                 var = svc::SERVICE_URL_ENV_VAR
             ),
-            svc::ServiceUrlSource::Config => {}
             svc::ServiceUrlSource::Default => println!(
-                "             (the baked default never moves — opt in: cargo refine config set \
-                 --url devnet|mainnet)"
+                "             (the baked mainnet default — the 2026-10-14 dialing law: bare \
+                 commands target mainnet; --net devnet or the env var steer)"
             ),
+            svc::ServiceUrlSource::Config => {
+                unreachable!("the dialing seam never answers config")
+            }
+        }
+        if let Some(stored) = &file_url {
+            let alias_note = svc::pinned_alias_for(stored)
+                .map(|a| format!(" ({a})"))
+                .unwrap_or_default();
+            println!(
+                "stored config: {stored}{alias_note} — BOOKKEEPING ONLY (a stored row no longer \
+                 steers the dial)"
+            );
         }
         if svc::service_url_from_env().is_some() && file_url.is_some() {
             eprintln!(
-                "config: WARNING — {var} is set AND a config file exists; the env var wins \
-                 until it is unset",
+                "config: NOTE — {var} is set AND a config file exists; the env var steers (the \
+                 stored row is bookkeeping)",
                 var = svc::SERVICE_URL_ENV_VAR
             );
         }
@@ -2562,17 +2575,23 @@ fn run_kat_config(
         std::process::exit(1);
     }
     println!(
-        "config: service url set → {validated} ({})",
+        "config: service url recorded → {validated} ({})",
         svc::service_config_path(&dir).display()
     );
+    // Issue 126 follow-up 3 (the 2026-10-14 dialing law): the row is
+    // BOOKKEEPING — it never steers the dial, so the old "burn/mine/
+    // refill/claims will target it" promise is gone and the remedies are
+    // named instead.
+    println!(
+        "config: BOOKKEEPING ONLY — commands dial mainnet by default; `cargo refine --net \
+         devnet …` targets devnet for one invocation, {var} steers persistently",
+        var = svc::SERVICE_URL_ENV_VAR
+    );
     match svc::pinned_alias_for(&validated) {
-        Some(alias) => println!(
-            "config: pinned network host ({alias}) — burn/mine/refill/claims will target it"
-        ),
+        Some(alias) => println!("config: pinned network host ({alias})"),
         None => println!(
-            "config: WARNING — not a pinned network host; burn/mine/refill/claims WILL target \
-             it, and payment links/QRs compose from it (on a custom/loopback host they are \
-             local-only artifacts — do not share)"
+            "config: WARNING — not a pinned network host; payment links/QRs composed from it \
+             are local-only artifacts (do not share)"
         ),
     }
     if svc::service_url_from_env().is_some() {
@@ -3423,6 +3442,109 @@ fn topup_typed_pick(
     }
 }
 
+/// The one-line value verbs' shared fetch (issue 126 follow-up, the
+/// owner's "expect `cargo refine kat` and `cargo refine tuna` should show
+/// value"): the SAME bearer-free /history read `account --history`
+/// renders in full, parsed into the typed [`ServiceHistory`]. Any failure
+/// names the richer surface and exits 1 (never a silent zero).
+#[cfg(feature = "kat_transport")]
+fn fetch_service_history() -> riir_refine::kat_protocol_account::ServiceHistory {
+    use riir_refine::kat_account_client::{AccountTransport, HttpAccountTransport};
+    use riir_refine::kat_lease_client::HttpResponse;
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let account = match riir_refine::kat_account::KatAccount::load(&dir) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("kat: no account ({e}) — run `cargo refine login` first");
+            std::process::exit(1);
+        }
+    };
+    let signing_key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("kat: could not load the account signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let pubkey = signing_key.verifying_key().to_bytes();
+    // The /history route indexes by the SERVICE account id (the house
+    // derivation), never the raw pubkey hex — the topup_open_intents law.
+    let acct_hex = riir_refine::kat_payreq_client::hex_encode(
+        &riir_refine::kat_protocol_account::account_for_pubkey(&pubkey),
+    );
+    let transport = HttpAccountTransport::new(&command_service_url(), 10);
+    match transport.get_history(&acct_hex, 1) {
+        HttpResponse::Ok(body) => {
+            match riir_refine::kat_protocol_account::parse_history(&body) {
+                Ok(h) => h,
+                Err(e) => {
+                    eprintln!("kat: {e} — try `cargo refine account --history`");
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => {
+            eprintln!("kat: the service did not answer /history — try `cargo refine account --history`");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// `cargo refine kat` — the one-line KAT balance (the service ledger's
+/// authoritative number), host-labelled so a devnet/mainnet mix-up is
+/// visible at a glance.
+#[cfg(feature = "kat_transport")]
+fn run_kat_balance() {
+    let h = fetch_service_history();
+    let host = command_service_url()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_end_matches('/')
+        .to_string();
+    println!(
+        "{} — {host}",
+        riir_refine::kat_payreq_client::render_kat(h.balance_micro)
+    );
+}
+
+/// The TUNA display (the unit differs from KAT; micro formatting is the
+/// same 6-dec rule).
+#[cfg(feature = "kat_transport")]
+fn render_tuna(micro: i64) -> String {
+    format!("{}.{:06} TUNA", micro / 1_000_000, micro % 1_000_000)
+}
+
+/// `cargo refine tuna` — the one-line trial-credit balance + expiry
+/// window. `None` is a supported answer (a pre-TUNA deployment) and says
+/// so — never a silent zero (the additive-wire rule).
+#[cfg(feature = "kat_transport")]
+fn run_kat_tuna() {
+    let h = fetch_service_history();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    match h.tuna_balance_micro {
+        None => println!(
+            "tuna: the service does not carry the trial-credit plane (pre-TUNA deployment)"
+        ),
+        Some(0) => println!(
+            "0.000000 TUNA — the trial credit is spent or expired (it is granted once per account)"
+        ),
+        Some(micro) => match h.tuna_expires_unix {
+            Some(unix) if unix > now => {
+                let days = (unix - now) / 86_400;
+                println!("{} — expires in {days} d", render_tuna(micro));
+            }
+            Some(_) => println!(
+                "{} — past its expiry (the server's sweep settles it at the boundary)",
+                render_tuna(micro)
+            ),
+            None => println!("{}", render_tuna(micro)),
+        },
+    }
+}
+
 /// What `topup --pack` / `buy <amount> <unit>` asked for (the buy
 /// friction-cut): an exact pack id, or an amount the CATALOG must match
 /// exactly — nobody guesses a price (the --pack refusal law).
@@ -3563,7 +3685,7 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
                     }
                 };
                 if want_qr {
-                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii_small(&intent.url);
                     if rendered.is_empty() {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
@@ -3758,7 +3880,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                     }
                 };
                 if want_qr {
-                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii_small(&intent.url);
                     if rendered.is_empty() {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
@@ -4755,7 +4877,7 @@ fn run_kat_replay() {
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn print_qr(url: &str) {
-    let qr = riir_refine::kat_lease_client::render_qr_ascii(url);
+    let qr = riir_refine::kat_lease_client::render_qr_ascii_small(url);
     if !qr.is_empty() {
         println!("{qr}");
     }
@@ -5249,6 +5371,8 @@ USAGE:
     cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
     cargo refine topup [--pack N] [--qr|--no-qr] [--pick latest]  (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, --pick latest shows the newest without asking; kat_transport)
     cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)
+    cargo refine kat                                  (the one-line KAT balance — the service ledger's authoritative number, host-labelled; kat_transport)
+    cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -5574,9 +5698,10 @@ USAGE:
                     key is loaded, never regenerated. Records the free-tier
                     grant as a LOCAL projection (accounting-only, G9d).
     account         KAT local view: account id (BLAKE3(pubkey)), key path,
-                    grant projection, and — when a path (or cwd) holds a
-                    repo-local charge ledger — this repo's burn + balance
-                    projection. Verifies key↔record agreement (tamper
+                    the grant note (the signup claim is TUNA trial credit),
+                    and — when a path (or cwd) holds a repo-local charge
+                    ledger — this repo's metered burn. Verifies key↔record
+                    agreement (tamper
                     evidence). No $ figures (caveats #12/#15).
     upgrade         Issue 153: the verified BINARY self-update (fetch the
                     release archive + SHA256SUMS, verify, backup-swap). The
@@ -6871,8 +6996,8 @@ fn parse_args() -> Args {
                 usage();
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
-            | "unstake" | "vote" | "pay" | "topup" | "buy" | "faucet" | "wetrun" | "config"
-            | "replay" | "corpus-pr"
+            | "unstake" | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet"
+            | "wetrun" | "config" | "replay" | "corpus-pr"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -6887,6 +7012,8 @@ fn parse_args() -> Args {
                     "pay" => KatCommand::Pay,
                     "topup" => KatCommand::Topup,
                     "buy" => KatCommand::Buy,
+                    "kat" => KatCommand::Kat,
+                    "tuna" => KatCommand::Tuna,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -10311,6 +10438,15 @@ fn main() {
             KatCommand::CorpusPr => {
                 eprintln!("corpus-pr: the PR lane reads both ledgers' leases over the network");
                 riir_refine::build_stamp::refuse("corpus-pr", &["kat_transport"]);
+            }
+            // The value verbs (issue 126 follow-up): one-line balances.
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Kat => run_kat_balance(),
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Tuna => run_kat_tuna(),
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Kat | KatCommand::Tuna => {
+                riir_refine::build_stamp::refuse("kat/tuna", &["kat_transport"]);
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
@@ -14459,7 +14595,7 @@ fn main() {
                 eprintln!(
                     "kat-charge: top up — {url} (KAT packs), or contribute: cargo refine --mine"
                 );
-                let qr = riir_refine::kat_lease_client::render_qr_ascii(&url);
+                let qr = riir_refine::kat_lease_client::render_qr_ascii_small(&url);
                 if !qr.is_empty() {
                     eprintln!("{qr}");
                 }

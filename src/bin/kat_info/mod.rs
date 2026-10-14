@@ -197,9 +197,9 @@ fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<St
         format!(
             "  grant:       {}",
             if h.granted {
-                "applied (free tier, once per account key)"
+                "applied (the signup claim — TUNA trial credit)"
             } else {
-                "not applied yet"
+                "not claimed yet"
             }
         ),
     ];

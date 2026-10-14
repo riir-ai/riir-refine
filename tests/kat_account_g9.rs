@@ -79,14 +79,12 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     let dir = temp_dir("grant");
     let (first, outcome) = KatAccount::login(&dir).unwrap();
     assert!(matches!(outcome, LoginOutcome::Generated { .. }));
-    // G9d post-081: the grant lives in the RENDER (the meter constant), not
-    // on the record state. Issue 031: the render is 6-decimal KAT (100 KAT
-    // at the meter constant), never raw micro.
+    // G9d post-081: the grant lives in the RENDER, not on the record state.
+    // Issue 126 follow-up 3 (owner 2026-10-14): the grant line names the
+    // TUNA trial credit — never a KAT figure (a KAT number reads as a mint
+    // promise that does not exist).
     assert!(first.summary_lines().iter().any(|l| {
-        l.contains("grant projection")
-            && l.contains(&riir_refine::kat_payreq_client::render_kat(
-                FREE_TIER_GRANT_MICRO_KAT.0,
-            ))
+        l.contains("grant:") && l.contains("TUNA trial credit")
     }));
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved

@@ -110,7 +110,9 @@ fn join_env_forces_devnet_through_the_config_set_record() {
         "the choice records through the config-set record"
     );
     assert!(
-        stdout.contains("recorded to config (cargo refine config set --url devnet)"),
+        stdout.contains(
+            "recorded to config: devnet (bookkeeping — commands dial mainnet by default; cargo refine --net devnet targets devnet)"
+        ),
         "the recorded line: {stdout}"
     );
     assert!(
@@ -149,7 +151,9 @@ fn an_existing_account_key_makes_the_switch_visible_in_the_join_output() {
         .find(|l| l.starts_with("recorded to config"))
         .expect("the recorded line prints");
     assert!(
-        recorded_line.starts_with("recorded to config (cargo refine config set --url devnet). Change any time."),
+        recorded_line.starts_with(
+            "recorded to config: devnet (bookkeeping — commands dial mainnet by default; cargo refine --net devnet targets devnet)"
+        ),
         "the base line is unchanged: {recorded_line}"
     );
     assert!(
@@ -177,7 +181,7 @@ fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
         "mainnet records the mainnet API host (riir-dapps Plan 047)"
     );
     for needle in [
-        "recorded to config (cargo refine config set --url mainnet)",
+        "recorded to config: mainnet (bookkeeping — commands dial mainnet by default; cargo refine --net mainnet targets mainnet)",
         "mainnet posture",
         "reward pool is 0",
         "TUNA trial credit is unconfigured",
@@ -194,14 +198,17 @@ fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
 }
 
 #[test]
-fn yes_answers_the_devnet_default_without_a_tty() {
+fn yes_answers_the_mainnet_default_without_a_tty() {
+    // The 2026-10-12 first-join flip (decide(): --yes → Mainnet) — this e2e
+    // was missed in that commit and had been red at HEAD since (caught
+    // 2026-10-14 by the dialing-law work, which re-ran the suite whole).
     let dir = scratch("yes");
     let (code, stdout, stderr) = run_heal(&dir, &[], &["--yes", "login"]);
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://devnet.gist.rs"),
-        "--yes takes the bracketed default"
+        Some("https://mainnet.gist.rs"),
+        "--yes takes the mainnet default (the 2026-10-12 flip + the dialing law)"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -241,7 +248,7 @@ fn invalid_env_value_refuses_loud_and_records_nothing() {
     );
     assert_eq!(code, Some(2), "stderr: {stderr}");
     assert!(
-        stderr.contains("staging") && stderr.contains("devnet|mainnet"),
+        stderr.contains("staging") && stderr.contains("mainnet|devnet"),
         "the error names the value AND the valid set: {stderr}"
     );
     assert!(
@@ -297,13 +304,19 @@ fn config_get_reports_the_joined_record() {
         &["login"],
     );
     assert_eq!(code, Some(0), "stderr: {stderr}");
-    // The same surface `config set` feeds: source = config, url = devnet.
+    // Issue 126 follow-up 3 (the 2026-10-14 dialing law): the joined row is
+    // BOOKKEEPING — `config get` shows the DIAL (mainnet, source: default)
+    // and the stored row as BOOKKEEPING ONLY, never as the steering source.
     let (code, stdout, stderr) = run_heal(&dir, &[], &["config", "get"]);
     assert_eq!(code, Some(0), "stderr: {stderr}");
     assert!(stdout.contains("https://devnet.gist.rs"), "url: {stdout}");
     assert!(
-        stdout.contains("source: config"),
-        "the join record reads as `config` source: {stdout}"
+        stdout.contains("source: default"),
+        "the dial reads as the mainnet default (a stored row never steers): {stdout}"
+    );
+    assert!(
+        stdout.contains("BOOKKEEPING ONLY"),
+        "the stored row is disclosed as bookkeeping: {stdout}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

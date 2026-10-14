@@ -182,7 +182,7 @@ if ! run_leg "$LOG_A_JOIN" "$ACCT_A" "$WORK" -- login --key "$WORK/id_a" --yes; 
   fail "stranger A login exited nonzero"
 fi
 show "$LOG_A_JOIN" A-join
-grep -q "recorded to config (cargo refine config set --url devnet)" "$LOG_A_JOIN" \
+grep -q "recorded to config: devnet (bookkeeping" "$LOG_A_JOIN" \
   || fail "A1: the join did not record devnet through the config-set record"
 if grep -q "Join which kat network" "$LOG_A_JOIN"; then
   fail "A1: the prompt block printed under --yes (the default must answer silently)"
