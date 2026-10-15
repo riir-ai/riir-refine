@@ -1,6 +1,6 @@
 # Batch 246 — the prism fork delta: split-alignment + pending-rollback fork laws
 
-**Status:** IN_FLIGHT (claimed 2026-10-16, shikuwa/4090 lane, 48h expiry)
+**Status:** COMPLETE 2026-10-16 (shikuwa/4090 lane — all tasks done; gates green; landing commit follows this plan tick)
 
 Source: PrismML-Eng/llama.cpp (MIT, the league opponent fork), branch `prism` delta
 `e3de715222..5ae2e169e` (3 commits, polled fresh this session at the vendor clone
@@ -23,15 +23,15 @@ movement — the watch-971 bout trigger does NOT fire.
 
 ## Tasks
 
-- [ ] T0: quotes re-verified at the pins at conversion (vendor clone at `71c1473207` + `5ae2e169ea`)
-- [ ] T1: kernel_opt rule `entries_gpu_100.rs` (new file) + mod.rs wiring + L-category membership + counts (847→848, L 21→22)
-- [ ] T2: rust_perf rule `entries_31.rs` (new file) + mod.rs wiring + counts (217→218, caching 15→16)
-- [ ] T3: count-neutral rider on `cost-aware-verify-length-survival-cost-table` (entries_gpu_86) — the platform-keyed verify-cost face
-- [ ] T4: batch246 needle + parse tests (tests.rs both domains) + count-pin walk
-- [ ] T5: gates — default lib + kernel_opt lib, clippy × postures, retrieval floors (kernel_opt+latent_retrieval; expect HELD, re-pin only if moved)
-- [ ] T6: score-bench appended + gen2/gen3 freeze regen (rust_perf corpus delta owed, plan 137 T7.5)
-- [ ] T7: docs — AGENTS.md ×2 rows + .docs/11_domains/rust_perf.md + kernel_opt.md + README counts + Research 278 born-complete
-- [ ] T8: landing row in .distill/001 + plan ticked COMPLETE + commit/push
+- [x] T0: quotes re-verified at the pins at conversion (vendor clone at `71c1473207` + `5ae2e169ea`) — both diffs read in full this session, every needle verbatim
+- [x] T1: kernel_opt rule `entries_gpu_100.rs` (new file) + mod.rs wiring + L-category membership + counts (847→848, L 21→22)
+- [x] T2: rust_perf rule `entries_31.rs` (new file) + mod.rs wiring + counts (217→218, caching 15→16)
+- [x] T3: count-neutral rider on `cost-aware-verify-length-survival-cost-table` (entries_gpu_86) — the platform-keyed verify-cost face
+- [x] T4: batch246 needle + parse tests (tests.rs both domains) + count-pin walk (kernel_opt ×14 historical asserts + router.rs; rust_perf ×7 incl. the serde/drafter 163→164 pair)
+- [x] T5: gates — default lib 2678/2678 · kernel_opt lib 3133/0/1i · corpus tests 154/154 + 405/405 + router 23/23 · clippy ×3 postures 0 errors (7 doc_markdown healed via cargo refine) · retrieval floors HELD no re-pin (blended 90.6/94.2/95.3; kernel self-variants 100.0%; 58.55 s)
+- [x] T6: score-bench run #185 appended + gen2/gen3 freeze e2e --ignored both ok (57.84 s / 39.56 s)
+- [x] T7: docs — AGENTS.md ×2 rows + README + .docs/11_domains/rust_perf.md + kernel_opt.md ledger rows + Research 278 born-complete
+- [x] T8: landing row in .distill/001 + plan ticked COMPLETE + commit/push
 
 ## Numbering
 

@@ -1985,6 +1985,7 @@ mod entries_gpu_96;
 mod entries_gpu_97;
 mod entries_gpu_98;
 mod entries_gpu_99;
+mod entries_gpu_100;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2060,6 +2061,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_97::entries());
     entries.extend(entries_gpu_98::entries());
     entries.extend(entries_gpu_99::entries());
+    entries.extend(entries_gpu_100::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2109,8 +2111,9 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 847-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 847 at Batch
+/// - **Exhaustive:** every `rule_id` in the 848-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 848 at Batch
+///   246 (+1 L — the prism fork shard-alignment law, #363); 847 at Batch
 ///   242 — the mlx-serve GDN/QSA pack (+7 A, +3 B, +9 D, +2 E, +1 K, +1 L, +8 N:
 ///   ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 — the Zig GDN/QSA serving engine
 ///   for Apple Silicon with embedded MSL kernels; 31 own rules across three slices
@@ -3016,7 +3019,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "per-generation-plan-table-unmeasured-generation-fallback"
         ],
     ),
-    // L: Conv-as-GEMM + memory layout (21 rules; Batch 242 +1: the mlx-serve tp-rank-inferred-from-scale-grid-ambiguity-refused (the sushi/Hadamard pack layout inference — ambiguity refuses, never guesses); Batch 233 +1: the reshape-relabel axis-scramble content-oracle law (llama.cpp #28738 + #30480 — a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape); prior: Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
+    // L: Conv-as-GEMM + memory layout (22 rules; Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (the prism fork #363 tensor-split law — a shard boundary respects EVERY block constraint on the axis: lcm(type block, rotation block); the rotation reshape keeps the axis boundaries (4D not 2D) so the split survives; views inherit the parent's split scaled by their geometry; a feature-sharded elementwise op slices its full-width mirrored operand per shard); Batch 242 +1: the mlx-serve tp-rank-inferred-from-scale-grid-ambiguity-refused (the sushi/Hadamard pack layout inference — ambiguity refuses, never guesses); Batch 233 +1: the reshape-relabel axis-scramble content-oracle law (llama.cpp #28738 + #30480 — a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape); prior: Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
     (
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
@@ -3028,6 +3031,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cube-count-bounded-batch-pack",
             "stride-align-vectorization-key",
             "anchor-shape-bucketing",
+            "shard-granularity-lcm-never-cut-rotation-block",
             "carry-dual-layout-dead-slot",
             "twin-projection-shared-delta-adapter",
             "bool-fields-over-bitset-hot-reads",

@@ -9,6 +9,16 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
+//! 218 entries across 13 categories as of Batch 246 (2026-10-16, Plan 250 /
+//! Research 278 — the prism fork delta: +1 caching, the serving state-cache
+//! family's FORK face — `seq-fork-carries-pending-rollback-record` (a
+//! sequence-fork carries PENDING mutation records, not just committed
+//! state: the `rs_idx` deferred rollback travels with the copy; for
+//! snapshot-plane state the copy takes the plane the rollback points to,
+//! never the live plane; planes counted `n_stream*(1+n_rs_seq`) in `size_t`
+//! arithmetic) — `NotBenchable` annotated; caching 15 → 16; categories
+//! UNCHANGED 13.
+//!
 //! 217 entries across 13 categories as of Batch 244 (2026-10-16, Plan 247 /
 //! Research 276 — the text/unicode family's follow-up, the byte-scan/search
 //! mechanism batch, +10 — ALL benchable + annotated — from three sources read
@@ -511,6 +521,7 @@ mod entries_27;
 mod entries_28;
 mod entries_29;
 mod entries_30;
+mod entries_31;
 
 #[cfg(test)]
 mod tests;
@@ -604,5 +615,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_28::entries());
     entries.extend(entries_29::entries());
     entries.extend(entries_30::entries());
+    entries.extend(entries_31::entries());
     Corpus::new(entries)
 }

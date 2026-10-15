@@ -111,8 +111,8 @@ fn seed_corpus_has_expected_entry_count() {
 
     assert_eq!(
         corpus.entries.len(),
-        847,
-        "kernel batches through Batch 242 should have 847 rules (Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT (Research 274 / Plan 244): 31 own rules across slices 97 (GDN/QSA/RHT core, 10) / 98 (quant matmul + packs, 9) / 99 (attention + oracles, 12); A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); prior: 816 at Batch 240",
+        848,
+        "kernel batches through Batch 246 should have 848 rules (Batch 246 +1 — the prism fork #363 shard law, L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT (Research 274 / Plan 244): 31 own rules across slices 97 (GDN/QSA/RHT core, 10) / 98 (quant matmul + packs, 9) / 99 (attention + oracles, 12); A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); prior: 816 at Batch 240",
     );
 }
 
@@ -5479,7 +5479,7 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
         (KernelCategory::AutotuneDispatch, 16), // Batch 242 +1: per-generation-plan-table-unmeasured-generation-fallback (mlx-serve @ 1015f785 — measured on the Bonsai 27B shapes, OUR league model)
-        (KernelCategory::ConvGemmLayout, 21), // Batch 242 +1: tp-rank-inferred-from-scale-grid-ambiguity-refused (mlx-serve @ 1015f785)
+        (KernelCategory::ConvGemmLayout, 22), // Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (PrismML-Eng #363 — the lcm split law); Batch 242 +1: tp-rank-inferred-from-scale-grid-ambiguity-refused (mlx-serve @ 1015f785)
         (KernelCategory::KernelPolymorphism, 21),
         (KernelCategory::DtypeAlignment, 74), // Batch 242 +8: masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics) + decay-gate-dtype-one-point-zero-lock + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf (mlx-serve @ 1015f785) // Batch 234 +1: bf16-residual-pair-three-mma-near-f32 (llama.cpp #29353 @ 62df1815)
         (KernelCategory::IrStrengthReduction, 8),
@@ -5496,9 +5496,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 847.
+    // Sum must equal 848.
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 847, "Plan 003: category totals must sum to 847 (Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 (the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; Research 274 / Plan 244; 31 own rules across slices 97/98/99: A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host)");
+    assert_eq!(total, 848, "Plan 003: category totals must sum to 848 (re-pinned Batch 246 +1 L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 (the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; Research 274 / Plan 244; 31 own rules across slices 97/98/99: A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host)");
 }
 
 #[test]
@@ -5509,8 +5509,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 847,
-        "Plan 003: grouped corpus has {total} rules, expected 847 (Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT: A +7, B +3, D +9, E +2, K +1, L +1, N +8 across slices 97/98/99; the GOAT is masked-in-place-field-prescale-other-operand; landed ABOVE the 12-16 estimate, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT); was 813 at Batch 236 +1 (the mid-prefill capture law); was 812 at Batch 234 (+6), 806 at Batch 233 (+1), 805 at Batch 232, 804 at Batch 231, 803 at Batch 227, 801 at Batch 225, 796 at Batch 224, 795 at Batch 223"
+        total, 848,
+        "Plan 003: grouped corpus has {total} rules, expected 848 (re-pinned Batch 246 +1 L, the prism fork #363 shard law; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT: A +7, B +3, D +9, E +2, K +1, L +1, N +8 across slices 97/98/99; the GOAT is masked-in-place-field-prescale-other-operand; landed ABOVE the 12-16 estimate, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT); was 813 at Batch 236 +1 (the mid-prefill capture law); was 812 at Batch 234 (+6), 806 at Batch 233 (+1), 805 at Batch 232, 804 at Batch 231, 803 at Batch 227, 801 at Batch 225, 796 at Batch 224, 795 at Batch 223"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9617,7 +9617,7 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        847,
+        848,
         "corpus count re-pinned at Batch 242 (+31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT); was 816 at Batch 240 (Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf -- every lane of a collective stays LIVE, loads CLAMP to a valid row at every read site (gid_s = min(gid, LINE_STRIDE_A - 1)), stores gate on the real bound; the pair/splitk store splits into per-element guards) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05 -- the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed -- upcast every non-f32 INPUT at the foreign-graph boundary, build in f32, convert back to the caller's type; supports_op refuses what it cannot compute; the tolerance names its reason); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host); prior re-pin at Batch 237 (RIDER COUNT-NEUTRAL — the autotune-cache HARDWARE-PATH axis on autotune-fidelity-synthetic-carries-producer-params: the tune-cache namespace gains the resolved adapter's fingerprint {{fingerprint}}/{{device_id}}/{{name}}, the wgpu runtime name carries its API — DX12 and Vulkan on one card share a fingerprint; tracel-ai/cubecl @ 5a4f5882c82f0dbb3147c628b0eb4492ec9f3dd0 #1811, Plan 239); prior re-pin at Batch 236 (+1 — D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 FlashInfer convergence face); prior re-pin at Batch 234 (+6 — the llama.cpp #29353 GDN-MMA chunked-prefill pack @ merge 62df1815: G+2 the register-resident scan state + the in-register (I+L)^-1 warp substitution, N+1 the bf16 residual-pair 3-mma, D+1 the occupancy-keyed value-split ladder, A+1 the union smem scratch, E+1 the warp-split overlap + prefetch — the ai-971 merge-moment conversion); prior re-pin at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law — llama.cpp #28738 + #30480, MIT: a reshape re-declares bounds over fixed memory and cannot permute axes, the oracle is content vs the per-axis decomposition; the B224 moe-duplicate-id rider — the #30501 UB-contract face — count-neutral); prior re-pin at Batch 232 (+1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d, Apache-2.0: a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it yields in 256-row chunks one in flight, keeps its state when it steps aside, and chunking is bit-legal by cut-invariance; the rust_perf HEADROOM-ADMISSION rider on degrade-not-fail-load-qualification-probe is count-neutral); prior re-pin at Batch 231 (+1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps — subtract the ranges owned by the other contexts, one buffer per disjoint owned range; the two riders count-neutral: the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack); was 803 at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
@@ -17156,7 +17156,7 @@ fn batch233_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-233: corpus 805 -> 806; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236; was 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack — G+2 register-resident scan state + in-register (I+L)^-1, N+1 bf16 residual-pair 3-mma, D+1 occupancy-keyed value-split ladder, A+1 union smem scratch, E+1 warp-split overlap + prefetch)");
+    assert_eq!(corpus.entries.len(), 848, "batch-233: corpus 805 -> 806; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236; was 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack — G+2 register-resident scan state + in-register (I+L)^-1, N+1 bf16 residual-pair 3-mma, D+1 occupancy-keyed value-split ladder, A+1 union smem scratch, E+1 warp-split overlap + prefetch)");
 
     let e = corpus
         .entries
@@ -17238,7 +17238,7 @@ fn batch234_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-234: corpus 806 -> 812; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law — incoai/splash @ 711f8e5+c3dcf53+985463c+79a4329, Apache-2.0, the vLLM #60050 convergence face)");
+    assert_eq!(corpus.entries.len(), 848, "batch-234: corpus 806 -> 812; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law — incoai/splash @ 711f8e5+c3dcf53+985463c+79a4329, Apache-2.0, the vLLM #60050 convergence face)");
 
     // Rule 1 (G): the register-resident scan state.
     let e = corpus
@@ -17357,7 +17357,7 @@ fn batch236_rule_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-236: corpus 812 -> 813; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)");
+    assert_eq!(corpus.entries.len(), 848, "batch-236: corpus 812 -> 813; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)");
 
     let e = corpus
         .entries
@@ -17422,8 +17422,8 @@ fn batch235_riders_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        847,
-        "batch-235: count-neutral rider batch -- corpus stood 812; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash + the vLLM #60050 convergence face)"
+        848,
+        "batch-235: count-neutral rider batch -- corpus stood 812; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash + the vLLM #60050 convergence face)"
     );
 
     // Rider (a): the width-matched loader face.
@@ -17486,7 +17486,7 @@ fn batch232_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-232: corpus 804 -> 805; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 rider count-neutral); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 848, "batch-232: corpus 804 -> 805; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 rider count-neutral); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let e = corpus
         .entries
@@ -17545,7 +17545,7 @@ fn batch231_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-231: corpus 803 -> 804; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 848, "batch-231: corpus 803 -> 804; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let e = corpus
         .entries
@@ -17622,8 +17622,8 @@ fn batch237_rider_landed_on_autotune_host() {
 
     assert_eq!(
         corpus.entries.len(),
-        847,
-        "batch-237: count-neutral rider batch -- corpus stood 813; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)"
+        848,
+        "batch-237: count-neutral rider batch -- corpus stood 813; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)"
     );
 
     let host = corpus
@@ -17663,8 +17663,8 @@ fn batch240_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        847,
-        "batch-240: corpus 813 -> 816; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); the P67-P70 conversion (+3: E subgroup-tail-lane-clamp-live-loads-gate-stores + A pad-row-classification-interior-memcpy + B f16-upcast-at-foreign-graph-translation)"
+        848,
+        "batch-240: corpus 813 -> 816; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); the P67-P70 conversion (+3: E subgroup-tail-lane-clamp-live-loads-gate-stores + A pad-row-classification-interior-memcpy + B f16-upcast-at-foreign-graph-translation)"
     );
 
     // P67 -- the subgroup tail-lane law (E).
@@ -17774,7 +17774,7 @@ fn batch227_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 847, "batch-227: corpus 801 -> 803; re-pinned 847 at Batch 242 (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 848, "batch-227: corpus 801 -> 803; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let cases: [(&str, &[&str]); 2] = [
         (
@@ -17892,8 +17892,8 @@ fn batch242_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        847,
-        "batch-242: corpus 816 -> 847 (+31: the mlx-serve GDN/QSA pack — A +7, B +3, D +9, E +2, K +1, L +1, N +8)"
+        848,
+        "batch-242: corpus 816 -> 847 at landing; live 848 (Batch 246 +1 L, the prism fork shard law) (+31: the mlx-serve GDN/QSA pack — A +7, B +3, D +9, E +2, K +1, L +1, N +8)"
     );
 
     let slice_a = [
@@ -18052,5 +18052,85 @@ fn batch242_riders_landed_on_hosts() {
                 "batch-242 rider on '{host}' missing needle: {needle}"
             );
         }
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
+fn batch246_rule_parse_and_needles_landed() {
+    // G1 for Batch 246 (Plan 250 / Research 278): the prism fork delta —
+    // ONE own rule (the shard-alignment law family) from
+    // PrismML-Eng/llama.cpp @ 71c14732072dcdb959a5a2dac250c8da2d45bd22
+    // (#363, MIT, 2026-10-15; the diff read in full at the vendor clone
+    // E:/git/vendor/prismml-llama.cpp, every needle verbatim at the pin
+    // this session) + ONE count-neutral rider on
+    // cost-aware-verify-length-survival-cost-table (the platform-keyed
+    // verify-cost face, #354's MTP half). Count: 847 -> 848 (L +1).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        848,
+        "batch-246: corpus 847 -> 848 (+1 L, the prism fork shard law)"
+    );
+
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "shard-granularity-lcm-never-cut-rotation-block")
+        .expect("batch-246 rule missing from corpus");
+    for needle in [
+        "71c14732072dcdb959a5a2dac250c8da2d45bd22",
+        "Split blocks for Hadamard-rotated weights use lcm(type block, rotation block) so shards never cut a rotation block.",
+        "Tensor split aborted on qwen35 models with folded Hadamard rotations at ggml-backend-meta.cpp:1086 (split_state.ne[j] % div == 0): the rotation reshape tiles the activation feature axis, and the meta backend had no split state for it.",
+        "llama_mul_mat_hadamard reshapes to 4D [n, ne0/n, ne1, ne2*ne3] so the split axis survives the rotation, and asserts ne0 % n == 0.",
+        "ssm_out uses a value_dim split when GDN V is grouped, and views of the GATED_DELTA_NET output carry the matching axis-1 split.",
+        "Elementwise MUL/ADD/SUB/DIV of a feature-sharded activation with a full-width mirrored operand slices the operand per shard (ADD_ID is excluded).",
+        "feature-sharded activation times a full-width mirrored operand: each shard reads its slice of src1 (see init_tensor), which is only done for the four elementwise ops",
+        "blck_size = std::lcm(blck_size, int64_t(it->second));",
+        "granularity_qkv * (hparams.ssm_dt_rank / hparams.ssm_n_group)",
+        "ret.nr[0] = src_ss[0].n_segments == 1 ? src_ss[0].nr[0] : 1;",
+        "Tested on 2x H200: Bonsai 2 27B PQ2_0 and Q2_0 now run under -sm tensor with mean KLD 2.5e-4 vs single GPU (top-1 99.3%).",
+        "Split rules by Benjamin Brown (@KodeMunkie), posted on ggml-org/llama.cpp#29600; ADD_ID guard added here.",
+        "reshape-relabel-axis-scramble-content-oracle",
+        "Batch 246 / Plan 250 / Research 278",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-246 rule missing needle: {needle}"
+        );
+    }
+
+    // the pseudocode halves parse (the batch207/227/236/240/242 pattern).
+    let id = "shard-granularity-lcm-never-cut-rotation-block";
+    let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+    assert!(
+        verdict_passes(&ref_verdict),
+        "batch-246 ref_shape must parse"
+    );
+    let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+    assert!(
+        verdict_passes(&opt_verdict),
+        "batch-246 opt_pattern must parse"
+    );
+
+    // the count-neutral rider: the platform-keyed verify-cost face on
+    // cost-aware-verify-length-survival-cost-table (#354's MTP half).
+    let rider = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "cost-aware-verify-length-survival-cost-table")
+        .expect("rider host in corpus");
+    for needle in [
+        "RIDER (Batch 246 / Plan 250 / Research 278",
+        "5ae2e169eac202d2f065606539c3ad6ab8b51333",
+        "On CUDA the cost of a verify batch grows faster with the draft depth than on Metal. A depth of 3 drafts tokens that do not pay back their verify cost, and 1 or 2 is faster. On Metal, 3 is still the fastest of 1, 2 and 3",
+        "An explicit --spec-draft-n-max always wins",
+    ] {
+        assert!(
+            rider.gpu_concept.contains(needle),
+            "batch-246 rider missing needle: {needle}"
+        );
     }
 }
