@@ -1,6 +1,6 @@
 # Plan 249 — Batch 237's staged x86 F16C GOAT (bench_009 / Bench 118)
 
-**Status:** IN_FLIGHT (claimed 2026-10-16, shikuwa/4090, riir-refine idle loop)
+**Status:** COMPLETE (claimed 2026-10-16, landed same day — PARETO-PASS exit 0; Bench 118)
 
 The Batch-237 P58 rule `f16-to-f32-accumulator-lut-breaks-conversion-serialization`
 (rust_perf, simd) landed NotBenchable-on-this-box with the explicit stage marker:
@@ -86,30 +86,36 @@ ISA, absent on Raptor Lake); `#[inline(always)]` is rejected with
 ## Tasks
 
 - [x] T0 design evidence (above)
-- [ ] T1 claim row pushed plan-first (this commit; numbering history:
+- [x] T1 claim row pushed plan-first (claim `302c9f45a`; numbering history:
       `.plans/.highwater` read 246 while `247_batch244_*.md` exists on disk —
       the M3 Batch-244 lane's write-back miss; BOTH lanes repaired it and
       both allocated 248 — the dual allocation caught at push (the M3
       Batch-245 claim `d5e097fbe` landed first); this lane YIELDED and this
       plan is 249 per the push-is-the-arbiter protocol)
-- [ ] T2 author `benches/bench_009_f16c_lut_vs_intrinsic_goat.rs` + the
+- [x] T2 author `benches/bench_009_f16c_lut_vs_intrinsic_goat.rs` + the
       Cargo.toml `[[bench]]` row (harness = false, no required-features —
       the bench_008 shape)
-- [ ] T3 G1 executed (full-sweep exactness + the NaN disclosure counts)
-- [ ] T4 G2 executed at a provenance-PASSED window (the reflex .ps1 sibling
-      gate; interleaved pairs are the contention defense — the LOWO sibling's
-      riir-ai build is the known load, disclosed in the record)
-- [ ] T5 G4 executed (zero-alloc, all measured arms)
-- [ ] T6 Bench 118 written + `.benchmarks/.highwater` 117 → 118
-- [ ] T7 count-neutral in-rule verdict append (entries_25.rs context_notes)
-      + the stale "x86 GOAT staged" comment repairs (tests.rs ×2, AGENTS ×2,
-      .docs/11_domains/rust_perf.md) — every edit count-neutral, the
-      batch237 needle tests re-run green
-- [ ] T8 gates: clippy default + the bench surface, batch237 needles
-      (`cargo test --features rust_perf --lib batch237`), lib default,
-      retrieval floors (the rust_perf+latent_retrieval posture, no re-pin
-      expected — text-only append); scratch cleanup; land + push + the
-      `.distill/001` landing row
+- [x] T3 G1 executed (full-sweep exactness + the NaN disclosure counts) —
+      PASS: widen 65536/65536 non-NaN bit-identical, NaN 2046 class-match /
+      1022 payload diffs disclosed; store 132,922 cases bit-identical /
+      NaN 2 class-match 0 diffs; CAUGHT the corpus fixture's latent
+      store_f16 subnormal-shift bug en route (see T7)
+- [x] T4 G2 executed at a provenance-PASSED window — dot intr/lut
+      5.00–6.16× at all 9 cells; store soft/intr 24.00–35.07× at all 9
+      cells (PER-DIRECTION confirmed)
+- [x] T5 G4 executed (zero-alloc, all five measured arms)
+- [x] T6 Bench 118 written + `.benchmarks/.highwater` 117 → 118
+- [x] T7 count-neutral in-rule verdict append (entries_25.rs context_notes)
+      + THE FIXTURE REPAIR (the store_f16 shift (14 - exp) → (126 - exp),
+      always-negative-in-branch, caught by EXECUTION) + the stale
+      "x86 GOAT staged" comment repairs (tests.rs ×2, AGENTS, rust_perf.md)
+      — every edit count-neutral, batch237 needles re-run 2/2 green
+- [x] T8 gates: clippy --all-targets -D CLEAN (after repairing the
+      pre-existing batch244_rules_present too_many_lines break — the M3
+      landing's own allow-set miss, honest label in-source), batch237
+      needles 2/2, default lib 2676/2676, retrieval 20/0/1i @45.25s HELD
+      no re-pin; scratch cleanup; land + push + the `.distill/001` landing
+      row
 
 ## Non-goals
 

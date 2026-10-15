@@ -771,6 +771,10 @@ name = "bench_008_prescale_masked_field_goat"
 harness = false
 
 [[bench]]
+name = "bench_009_f16c_lut_vs_intrinsic_goat"
+harness = false
+
+[[bench]]
 name = "bench_002_l2_pruner_syn"
 harness = false
 

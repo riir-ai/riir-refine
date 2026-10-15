@@ -35,8 +35,13 @@ register of the quantized dot products, serialising the loop — 19 vs 4
 cycles/iteration estimated, 45–65% slower Q8_0/Q4_0 MUL_MAT_ID measured; the
 lookup table breaks the false dependency; PER-DIRECTION: table for
 FP16→FP32, F16C for FP32→FP16; the commented-out define is the deliberate
-re-enable record; the x86 F16C GOAT lane staged — the 4090 box was
-unreachable) + `work-buffer-sized-by-execution-width-not-plan-tasks`
+re-enable record; the x86 F16C GOAT lane was staged at landing — it LANDED
+2026-10-16 (Bench 118 / bench_009 / plan 249, the i7-13700K 4090 box:
+PARETO-PASS — dot intr/lut 5.00–6.16× with the vpinsrw accumulator merge
+reproduced at T0 on rustc 1.98.1, the source's 45–65% measured 400–516%
+here; store soft/intr 24–35× confirming PER-DIRECTION; the fixture's
+store_f16 subnormal shift repaired count-neutral after the bench G1
+executed and caught the always-negative shift) + `work-buffer-sized-by-execution-width-not-plan-tasks`
 (concurrency, llama.cpp @ `5cdadfc3` #30454, MIT: the sizing authority is the
 op's true parallelization width, never the planner's task count — 'threads > 0
 wrote past the work buffer when the graph had another multi-threaded op') +
