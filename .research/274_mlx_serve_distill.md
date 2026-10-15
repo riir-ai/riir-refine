@@ -1,0 +1,94 @@
+# Research 274 — mlx-serve (the Zig GDN/QSA serving engine) — distill verdict
+
+**Status:** DISTILLED — Batch 242 chartered (plan 244; corpus edits at the batch slot per the plan-first discipline). The oMLX row's designated follow-up pool lead ("a future @distill on IT may grade YES where the integrator grades MARGINAL") — CONFIRMED YES.
+
+## Source
+
+- **Repo:** <https://github.com/ddalcu/mlx-serve> — a native Zig LLM serving engine for Apple Silicon (MLX + GGUF, OpenAI/Anthropic wires, ~169 Zig files in `src/`). The kernel modules under `src/` carry embedded Metal (MSL) shaders in Zig string literals, MLX-style.
+- **Pin:** `1015f7854fd8ee5c22e34993aaddee2443b9cfbf` (2026-10-14, one day old — pin load-bearing; the conversion re-clones at this sha).
+- **License:** MIT (LICENSE; a LICENSE-APACHE-2.0 also ships).
+- **Inspection date:** 2026-10-15 (shikuwa/4090, riir-refine idle loop; claim `4ace9a2ea` pushed plan-first per protocol).
+- **Inspection depth:** FULL-TREE clone (`.raw/mlx-serve`, removed at close per the ephemeral-clone law) + 2 read subagents over disjoint file sets (~11,900 lines read across 17 kernel files) + coordinator dedup greps + coordinator spot-verification of 5 load-bearing quotes (all verbatim). `src/transformer.zig` (74,928 lines, the dispatcher) was NOT read end-to-end — only its import surface; the kernel content lives in the module files read. `gather_qmm_nax`'s `@embedFile`'d `.metal` bodies UNREAD (host-side candidates only there) — re-read at conversion.
+
+## Provenance (in-source citations — a ports hub)
+
+The engine is an INTEGRATOR of techniques the corpus already knows, with each port cited in-source: TensorFold (`mamba_step`/`group_norm`/`add_norm`/`lane_qmm`/`simd_qmm`/`lane_attention`/`row_attention`, MIT), mlxfast-bonsai2 (`qmv_nax2`, MIT), oMLX `m5_gather_qmm_nax.py` @ d6b2b92 (Apache-2.0), beamivalice/sushi `fp8_block.zig` (MIT), PrismML-Eng/llama.cpp#218 (@sudoingX CUDA small-batch PTQ1_0), Prism Hadamard packs (`prism_hadamard_qwen35` — the league model family). gdn_decode.qsa_decode, qsa_mask carry no external citation (the file set's own original work).
+
+## Verdict
+
+**YES B+ corpus (kernel_opt) / LANE INTEL HIGH (the league GDN serving family) / product-coverage N/A (Zig/Metal source; the decision content is what transfers).**
+
+The source's center of gravity is exactly the corpus's favorite shape: **bit-identity contracts that make a speculative verify window equal the serial step** (per-step state rounding, row-count-invariant splits, decomposition-mirroring, rounding-point placement), **runtime self-verification admission** (canaries, per-shape bit-identity probes, decline latches), and **dispatch tables keyed on measured crossovers with safe fallbacks** (per-generation plans, row-per-expert rungs, thread-limit probes).
+
+## Dedup evidence (coordinator greps, both vocabularies)
+
+- `lop3-int4-to-half2-dequant` (entries_gpu_09:141) OWNS the magic-exponent-embedding decode ("`bits | 0x6400` is the f16 pattern of 1024.0 + nibble... zero point fused into the packed-op constants") → lane-B `half2-magic-exponent-decode` DOWNGRADED to RIDER (the 2-bit half2 spelling + the per-j magic ladder 0x6400/0x5C00/0x5400/0x4C00/0x4400).
+- entries_gpu_95 (B236, splash mid-prefill capture) OWNS rounds-as-ended at capture points ("a bf16 state is rounded at each captured state as a prefill ending there rounds it") → lane-A `serial-decoding-per-step-state-rounding` DOWNGRADED to RIDER (the per-STEP granularity + the serial-decoding-stored rationale is the DECODE-side twin; kinship with gdn-transition-replay-log-commit-many named in-rule).
+- `exact-bf16-domain-activation-lut` (B189, open-jev) OWNS the 65536-entry activation LUT → lane-B `paired-swiglu-sigmoid-lut-fused-into-gather` DOWNGRADED to RIDER (the fused-into-gather + admission-contract faces).
+- The B217 rider on entries_gpu_49 OWNS encode-time weight permutation → lane-B `activation-encode-time-permutation-matches-kernel-plane` = the ACTIVATION-side twin, rider-or-rule at conversion.
+- `derived-pack-immutable-original-content-addressed-atomic` (B223 lithos) → lane-B `in-buffer-tile-repack-sole-reader-pointer-registry` is its OPPOSITE POLE (in-place mutation under sole-reader exclusivity vs immutable derived copies) — rider carrying the pole pairing.
+- `moe-router-weight-fold-into-reduce-never-materialize` (B220) → lane-A `moe-combine-rounding-ladder` rider (the explicit f32→T→T-add rounding ladder face).
+- entries_gpu_16 owns the decline-MIRROR taxonomy (request-shape-decline-mirror, Batch 103) — the DECLINE-LATCH mechanism (memoized per-width failure + reason preserved + never re-probe + thread-limit probe with error-string discrimination) is NOT owned → own rule with that kinship.
+- entries_gpu_19/22 "memo" hits = memory-guard prose, NOT identity memoization → the identity-memo (descriptor-pointer key + retained-handle anti-alias + sibling-consumer reuse) is unowned.
+- No corpus hits: `prescale`/`wpre`/exponent-subtract, `canary`-as-admission, row-count-invariant split keying, tree-attention partial/tail/merge, decay-gate dtype lock, finiteness-before-diff, where-not-multiply, noise-floor error bar, threadgroup-cap halving, config-cache full-layout keying, host-resolved tree tables, op-chain-collapse binary-search mask.
+
+## Ranked candidate table (post-merge, post-dedup — the conversion's working set)
+
+Grades are content grades; ALL Metal-trigger rules NotBenchable-on-x86 (annotated; portable-CPU-exact noted where the law itself is host/ALU logic).
+
+**Own-rule candidates (19):**
+
+| # | rule_id (candidate) | Source | Cat | Grade | Note |
+|---|---|---|---|---|---|
+| 1 | `split-prework-recompute-beats-inter-kernel-barrier` | gdn_decode.zig:3-5,35-78 | D | A | The named `packed_gdn_prework`: THREE placement regimes for one per-head prework (recompute-per-split vs producer-kernel vs strided) keyed on sharing structure; kinship B182 (within-round prework ordering). |
+| 2 | `resource-limit-first-dispatch-probe-decline-latch` | gdn_decode.zig:931-944; add_norm.zig:181-193 | A | A | First-dispatch-as-probe; per-width latch; error-string discrimination ("maximum allowed threads per threadgroup" declines, any other error stays latched); separated `eligible()` predicate so routing never plans a declining path; test seam sets 2048. |
+| 3 | `bit-equal-fusion-mirrors-reference-reduction-regime` | add_norm.zig:15-20,113-119 | B/N | A | Bit-equality to a FRAMEWORK op requires mirroring its parallel decomposition (4 elts/thread, 32-slot fold table, precise rsqrt) AND its own width-regime boundary (4096→looped); + the rounding-point-placement face (rht.zig:156-158, add_norm:73-78) folds in as the contract's second half. |
+| 4 | `canary-admission-per-config-bit-equal-stock` | gather_qmm_nax.zig:237-355 | A | A | Runtime synthetic-workload bit-compare vs stock, cached per config key, disable-with-log on mismatch; the reference ORACLE is regime-keyed (stock's own K-tail bug → fp32-dequant oracle with peak-relative bar); error-latch hygiene (drop only the latch the canary raised). Kin: enumerable-domain gate, construction-identity (the runtime-canary face). |
+| 5 | `admission-clones-upstream-dispatch-for-bit-order` | gather_qmm_nax.zig:59-63 | D | A | "Take only the calls MLX sends to its sorted row-block kernel (`B >= 16 && B / E >= 4`)... below that it runs gather_qmv, which sums in another order, and MTP verify rounds must keep its bits." |
+| 6 | `row-count-invariant-bits-split-keyed-on-weight-shape` | lane_qmm.zig:1-15,350-356; simd_qmm.zig:399-404 | B | A | "K slices for an (n, k) weight: fixed by the shape, never by the row count" so "a drafted window verifies with the one-row step's bits"; + the per-shape runtime bit-identity probe routing one-row calls through mma (simd_qmm.zig:633-671) as the enforcement arm. |
+| 7 | `threadgroup-cap-halving-with-order-preserving-sum` | simd_qmm.zig:429-432,553-580 | D | A | Cap-failure-triggered simdgroup halving, memoized per (n,k,bits,rt); bit-safe ONLY because fewer simdgroups walk the S chunks in the same fixed order. Kin: chunk-downsize halve-with-floor. |
+| 8 | `masked-in-place-field-prescale-other-operand` | simd_qmm.zig:28-39; qmv_nax2.zig:155-158,180-183 | N | A | Consume a packed field WITHOUT shifting it out of the word: mask in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern; the 6-bit straddle exception stated in-source. Portable CPU-exact. NOVEL numerics. |
+| 9 | `tree-attention-partial-share-tail-walk-ordered-merge` | lane_attn.zig:1-10,30-285 | E | A | PARTIAL (prefix tiles once, 16-q-row tensor ops, persisted (m,l,O)) → TAIL (per-node path walk, chunk c0 SEEDED from PARTIAL's state) → MERGE; node == serial one-row step contract test-pinned. |
+| 10 | `shared-transform-memo-on-underlying-descriptor-identity` | rht.zig:6-8,294-298,398-432 | G/H | A− | Memo the Hadamard transform keyed on the shape-DESCRIPTOR pointer (not the wrapper handle — copies would defeat it), retained-handle anti-alias, producer-seed, the double-rotate hazard latched per sign-vector conflict. Merged with lane-B identity-memo (qmm_int8.zig:337-342 — the int8-quantization-of-rotated-activation sibling memo). |
+| 11 | `row-bucket-threadgroup-staging-budget-decline` | mamba2_decode.zig:14-29,305-315 | A | A | Staging sized by row BUCKET (1/4/16) not row count; 16 KB admission ceiling; decline-not-fail; test-pinned boundary matrix. |
+| 12 | `lossy-route-physical-error-bar-from-noise-floor` | qmm_int8.zig:614-617,726-738 | N | A | "a ratio against it compares to near zero and is not a bar. The physical bar is relative error against the output itself: int8 over a 128-group costs ~amax/(127*sqrt(12)) per element... ~0.7% relative"; lossiness disclosed at engagement. External validation of the Issue-750-T3 doctrine. |
+| 13 | `gqa-reshape-q-down-never-expand-packed-kv` | kv_quant.zig:191-193,225-262 | B/G | A | Reshape the dense operand DOWN (pure relabel) instead of materializing the packed bank ×g; + the CONCATENATED-needle source-scan test discipline. |
+| 14 | `finiteness-before-diff-nan-blind-comparison-hole` | kv_quant.zig:725-733 (+3 more sites) | N | A | "NaN-blind comparisons pass on an all-NaN candidate... the composed causal arm shipped NaN for months behind exactly this hole. Finiteness is asserted BEFORE the diff." Portable test-oracle law. |
+| 15 | `read-amplify-vs-sync-row-ceiling-admission` | rht.zig:227-230 | A | A | Fused row-reduction+consumer re-reads the whole row per threadgroup (NB× amplification) → decode/verify widths only (16-row ceiling); prefill keeps the composed chain. The OPPOSITE regime of #1 (recompute bounded by amplification vs bounded by per-split cost) — the pair is the decision content. |
+| 16 | `decay-gate-dtype-one-point-zero-lock` | gdn_decode.zig:21-26 | N | B+ | "Under bf16 activations it is the state's: a bf16 gate near one is exactly 1.0 and that head never forgets" — gate dtype chosen by rounding-to-1.0 analysis. Directly league-relevant (our GDN state-dtype lane). Portable CPU-exact. |
+| 17 | `prompt-form-refused-toolchain-format-gap-reopen-trigger` | qmv_nax2.zig:330-339 | D | A (anti-lead + admission) | The measured 0.87-0.93× negative + root cause (no `uint2b_format` → threadgroup expansion costs more than the win) + the not-lossless escape named + "Re-test if uint2b_format ever appears." The negative-row doctrine exemplar. |
+| 18 | `spec-tree-parents-first-walk-register-restart-states` | gdn_decode.zig:291-296,344-380 | E | B+ | Tree walk in ONE launch: kept[TL][4] register snapshots at host-flagged restart rows; `p != t-1` restores; pairs with `commit-replay-reuses-tree-prework` (:382-410) + `derived-index-tables-resolved-host-once` (:752-781) as the tree protocol (rule + 2 sub-faces or 3 rules — conversion adjudicates). |
+| 19 | `bit-equality-oracle-keyed-on-reference-dispatch` | lane_qmm.zig:882-889,980-985 | N | B+ | Re-implement the reference's dispatch predicate to split the TEST oracle: bit-assert where the reference is single-pass; no-worse-than-truth where it splits K (bf16 partials, version-unstable). Portable oracle law. |
+
+**Second tier (B/B− own-rule or rider — conversion adjudicates):** `op-chain-collapse-membership-binary-search-mask` (qsa_mask.zig:1-27, 8 launches→1, B) · `partial-softmax-l-zero-empty-split-skip-flag` (qsa_decode.zig:137,151-163, B+) · `config-cache-keyed-full-layout-not-row-count` (add_norm.zig:100-111, B, portable) · `gqa-head-position-row-packing-keys-read-once` (dec_attn.zig:1-45, B) · `per-generation-plan-table-unmeasured-generation-fallback` (qmv2.zig:206-230, B+) · `per-expert-density-tile-plan-reference-version-keyed` (gather_qmm_nax.zig:22-34, B+) · `strided-interleave-split-ordered-merge-serial-reference` (row_attn.zig:1-89, B) · `quad-lane-line-load-shuffle-word-exchange-ring` (qmv_nax2.zig:59-138, B+) · `where-not-multiply-additive-mask-inf` (kv_quant.zig:327-343, B, portable) · `tp-rank-inferred-from-scale-grid-ambiguity-refused` (sushi_pack.zig:263-277, B−) · `gqa-shared-channel-block-write-once-owner` (gdn_decode.zig:70-77, B) · `joined-projection-in-place-stride-consumption` (gdn_decode.zig:291-294,655-711, B) · `declined-shape-negative-latch-with-reason` (simd_qmm.zig:436-437,606-615 — folds INTO #2) · `device-keyed-threadgroup-size-row-independence` (gdn_decode.zig:412-420, B) · `fold-depth-threadgroup-memory-ceiling` (gdn_decode.zig:582-583, rider to #1/#2) · `dequant-dtype-follows-scales-not-hardcoded` (kv_quant.zig:160-162, C+) · `compile-success-not-correctness-hardware-gate` (qmv_nax2.zig:450-454, C).
+
+**Riders (dedup-adjudicated, count-neutral):** half2 magic ladder → `lop3-int4-to-half2-dequant`; per-step StT rounding → entries_gpu_95 (B236); sigmoid-LUT-into-gather → `exact-bf16-domain-activation-lut`; e4m3 shift-7-×256 → `minifloat-normal-code-shift-bias-diff-decode`; in-buffer tile repack → `derived-pack-immutable-original-content-addressed-atomic` (pole pairing); MoE combine rounding ladder → `moe-router-weight-fold-into-reduce`; activation plane permutation → the B217 rider host; resident-bytes-invariant decode → `quantized-stored-bytes-not-widened`; row-map gather → `sorted-gather-tile-compaction` family.
+
+**Anti-leads (in-source negatives, recorded):** >1 q-head per simdgroup loses to register pressure (qsa_decode.zig:6-7); normRotate at prefill loses (amplification, rht.zig:227); the fold does not cover trees (gdn_decode.zig:892); the prompt-form 2-bit tensor tile measured 0.87-0.93× (qmv_nax2.zig:330); stock wins at M=5 and narrow-n on every measured generation (qmv2.zig:222-228); stock NAX's K-tail bug pinned (gather_qmm_nax.zig:277).
+
+## GOAT candidate
+
+**`masked-in-place-field-prescale-other-operand`** (#8): portable CPU-exact (f32 bit-pattern exponent math + integer masks — bit-identical G1 trivially constructible in Rust), mechanism-level magnitude story (eliminates the per-element shift AND the int→float convert on the packed operand; the pre-scale rides the activation staging once), deterministic. Benchable on the rust_perf Pareto validator at the batch slot if a Rust-idiom fixture composes (the x86-GOAT precedent B231/116). Most other candidates are NotBenchable Metal-decision-content (the B136/dial9 class — annotation, not demotion).
+
+## Lane-intel axis (detection-only)
+
+**LEAGUE INTEL HIGH** — this is the league model family's serving mechanics at depth: the GDN decode/verify/tree protocol (bit-identical to the composed chain; per-step StT rounding; the never-forgets gate-dtype lock), the QSA 128-bit K/V staging (dense bf16 cache views in place via strides, `uint4` loads, shift/mask unpack), tree attention partial/tail/merge, and the per-generation dispatch tables measured on "the Bonsai 27B shapes" — OUR league model. Mapped lanes: riir-ai Issue 971 (GDN prefill defense — the fused-tree/commit-replay protocol is decode-side reference), the 965/967 capture-ladder orbit (per-step rounding = the capture-point law's decode twin), Issue-750-T3 lossy law (the noise-floor error bar is external validation #3), the state-dtype demotion record (the gate-dtype lock strengthens it: bf16's rounding-to-1.0 is a NEW named hazard face beside subnormal-underflow). NOT transferable: absolute tok/s (different silicon, source-reported); the `uint2b_format` prompt-form gap is Apple-toolchain-specific. Offered: issue addenda ride the conversion batch's docs tail; no sibling-repo edits from the verdict.
+
+## Product-coverage axis
+
+N/A for a Rust-famous-lib family (Zig source). The decision content transfers to OUR Metal/CUDA/WGSL lanes; the test-oracle laws (finiteness-before-diff, oracle-keyed-on-reference-dispatch, physical-error-bar) are portable to the workspace's own gate suites — the same class the corpus's measurement-honesty family already carries.
+
+## Honest caveats
+
+- `transformer.zig` (74,928 lines) read at import-surface only — the dispatcher; a mechanism buried ONLY there is missed (the module files are where the kernels live, so exposure is low but nonzero). `gather_qmm_nax`'s embedded `.metal` bodies UNREAD — its candidates are host-side only.
+- A one-day-old fast-moving repo — the pin is load-bearing; the conversion re-clones at `1015f785` and re-verifies every quote byte-for-byte (the B193 law).
+- The engine is a PORTS HUB: ~10 files carry in-source citations to TensorFold/mlxfast/oMLX/sushi/PrismML — the corpus already mined mlxfast (B181-B201) and TensorFold (B188-B219) heavily; the dedup greps above adjudicated the known-collision axes, but conversion-time dedup must re-run per candidate (three pre-identified rider conversions already).
+- Grades are content grades; ~80% NotBenchable-on-x86 (Apple-silicon Metal triggers) — the corpus's annotation class, not a demotion.
+
+## Yield estimate
+
+19 own-rule candidates + ~16 second-tier + 9 pre-adjudicated riders − the ~50% conversion falsification factor on the borderline set → **realistically 12-16 own rules + 4-7 riders** (lithos-B223 class or bigger). Extraordinary-evidence clause satisfied: two independent read lanes + coordinator quote verification on 5 sites + content-level dedup adjudication of every A-grade candidate against the live corpus.
+
+## Queue slot
+
+**Batch 242 / plan 244** (the committed claim `4ace9a2ea` keeps these labels — the tokenmaxxing verdict renumbered to 275/245/243 around it). Conversion at the next batch slot: re-clone at the pin, re-verify every quote, dedup re-run per candidate, author in 3 slices over disjoint files (A: gdn/qsa/mamba2/add_norm/rht → ~10 candidates; B: qmm family + sushi/kv → ~12; C: attn trio + second tier + riders), coordinator wiring + gates (batch242 needle/parse, kernel_opt lib, clippy ×3 postures, retrieval floors; freeze/score-bench NOT owed — zero clippy-corpus delta, P30).
