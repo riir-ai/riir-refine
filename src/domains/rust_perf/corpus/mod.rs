@@ -9,7 +9,21 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 198 entries across 13 categories as of Batch 222 (2026-10-10, Plan 216 /
+//! 201 entries across 13 categories as of Batch 237 (2026-10-15, Plan 239 —
+//! the P58–P61 conversion set: +3 `rust_perf` rules — `f16-to-f32-accumulator-lut-breaks-conversion-serialization`
+//! (simd, ggml-org/llama.cpp @ `685f7089` #30342+#30343: the F16C
+//! FP16→FP32 intrinsic lowers to a vpinsrw into the live accumulator,
+//! serializing the loop — the table breaks the false dependency;
+//! per-direction) + `work-buffer-sized-by-execution-width-not-plan-tasks`
+//! (concurrency, llama.cpp @ `5cdadfc3` #30454: the buffer is sized by the
+//! width that executes, never the planner's task count) +
+//! `discretionary-cache-growth-keys-on-spare-not-available` (io,
+//! incoai/splash @ `ffc2d4be` #418: growth no request needs keys on SPARE
+//! memory, never the OS available estimate; warning-pressure latch + paced
+//! reclaim) — ALL THREE `NotBenchable` annotated; +1 count-neutral
+//! `kernel_opt` rider (the autotune-cache HARDWARE-PATH axis, cubecl #1811
+//! @ `5a4f5882`); annotated 144 → 147, `without_spec` 99 → 102; Batch 222
+//! before it, 2026-10-10, Plan 216 /
 //! Research 252 — the soroban wasm size pair from `stellar/rs-soroban-sdk` @
 //! `0d72c4c9`: +2 `wasm-unwrap-panic-machinery-elimination` +
 //! `linker-dce-custom-section-volatile-marker`, BOTH category `wasm`, BOTH
@@ -436,14 +450,18 @@ mod entries_21;
 mod entries_22;
 mod entries_23;
 mod entries_24;
+mod entries_25;
+mod entries_26;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 198 entries
-/// (Batch 222, 2026-10-10, Plan 216 / Research 252: +2, the soroban wasm size
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 201 entries
+/// (Batch 237, 2026-10-15, Plan 239: +3 — the P58–P61 conversion set, all
+/// `NotBenchable` annotated; see the module header for the batch chain;
+/// Batch 222 before it, 2026-10-10, Plan 216 / Research 252: +2, the soroban wasm size
 /// pair — both `wasm`, both `NotBenchable` annotated; Batch 219 before the
 /// pair, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
 /// `TensorFold` native-engine serving/timing pack — complexity +2 the
@@ -516,5 +534,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_22::entries());
     entries.extend(entries_23::entries());
     entries.extend(entries_24::entries());
+    entries.extend(entries_25::entries());
+    entries.extend(entries_26::entries());
     Corpus::new(entries)
 }

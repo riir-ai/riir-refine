@@ -25,7 +25,35 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 198 rules across 13 categories — Batch 222
+profiling guide, Research 032; **now 201 rules across 13 categories — Batch 237
+(2026-10-15, Plan 239 — +3 the P58–P61 conversion set, ALL NotBenchable
+annotated, quotes re-verified at the pin clones:
+`f16-to-f32-accumulator-lut-breaks-conversion-serialization` (simd,
+ggml-org/llama.cpp @ `685f7089` #30342+#30343, MIT: the F16C FP16→FP32
+intrinsic lowers (Clang 20.1.8) to a vpinsrw merging into the live accumulator
+register of the quantized dot products, serialising the loop — 19 vs 4
+cycles/iteration estimated, 45–65% slower Q8_0/Q4_0 MUL_MAT_ID measured; the
+lookup table breaks the false dependency; PER-DIRECTION: table for
+FP16→FP32, F16C for FP32→FP16; the commented-out define is the deliberate
+re-enable record; the x86 F16C GOAT lane staged — the 4090 box was
+unreachable) + `work-buffer-sized-by-execution-width-not-plan-tasks`
+(concurrency, llama.cpp @ `5cdadfc3` #30454, MIT: the sizing authority is the
+op's true parallelization width, never the planner's task count — 'threads > 0
+wrote past the work buffer when the graph had another multi-threaded op') +
+`discretionary-cache-growth-keys-on-spare-not-available` (io, incoai/splash @
+`ffc2d4be` #418, Apache-2.0: growth that no request in service needs keys on
+the host's SPARE memory — free + file-backed + purgeable + half the
+compression credit, at most a quarter of the anonymous pages — a 7% reserve
+(2–7 GiB) + the 1 GiB warning margin, warning-pressure latch + ≤1
+GiB/paced-pass reclaim, unavailable telemetry pauses growth; measured 'free
+memory read 0.07 GB at 64 GB of engine footprint while host_available_bytes
+still read 31.9 GiB'); annotated 144 → 147, without_spec 99 → 102; the
+count-neutral kernel_opt half: the autotune-cache HARDWARE-PATH axis rider on
+`autotune-fidelity-synthetic-carries-producer-params` (cubecl @ `5a4f5882`
+#1811 — the tune-cache namespace gains the resolved adapter's fingerprint,
+the wgpu runtime name carries its API); retrieval floors HELD, corpus 813
+kernel / 201 rust_perf stand).
+Batch 222 before it
 (2026-10-10, Plan 216 / Research 252 — +2 the soroban wasm size pair, source
 `stellar/rs-soroban-sdk` @ `0d72c4c9`, Apache-2.0: `wasm-unwrap-panic-machinery-elimination`
 (on wasm every `.unwrap()` carries core::panicking's message + fmt machinery

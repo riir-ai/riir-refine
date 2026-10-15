@@ -1,17 +1,17 @@
 # Plan 239 — the P58–P61 conversion batch (Batch 237)
 
-**Status:** IN FLIGHT — claimed 2026-10-15 (M3, idle-loop Decision-ordered unit; 4090 unreachable → M3 owns the mining lane; claim row in `.distill/001` this commit)
+**Status:** LANDED 2026-10-15 — Batch 237 (3 rust_perf rules + 1 count-neutral kernel_opt rider; landing commit: this commit; slice B's entry pre-landed `0c71bea2`, slice C's rider pre-landed `6b00330c`)
 
 Convert the four graded post-mining intake items into corpus rules/riders. Every quote
 re-verified at the pin BEFORE landing; homes adjudicated at claim per each row's own note;
 `.raw` clones removed at close. Batch 236 stands at corpus 813 — counts move only for new rules.
 
-- [ ] T0 — sources at pins: clone `ggml-org/llama.cpp` (`685f7089` for P58, `5cdadfc3` for P59), `incoai/splash` (`ffc2d4be3` for P60), `tracel-ai/cubecl` (`5a4f5882c` for P61) into `.raw/`; verify each pin exists + read the diffs; verify licences (P58/P59 MIT, P60 Apache-2.0, P61 Apache-2.0/MIT per repo)
-- [ ] T1 — P58 home adjudication + quote verification: the LUT-vs-intrinsic accumulator-serialization law (ggml-cpu f16→f32 lookup kept on x86 with F16C); decide own rust_perf rule vs rider on the lut-boundary family; verify quotes verbatim at the pin
-- [ ] T2 — P59 home adjudication + quote verification: the plan-width-vs-execution-width buffer-sizing law (set_rows conversion buffer sized by the planner's task count while the op parallelizes across all threads); decide small own rule vs rider on the B223 workspace-sizing family
-- [ ] T3 — P60 quote verification: the spare-not-available cache-growth law (splash memory governor: discretionary cache keys on spare memory — free + file-backed + purgeable + half compression credit, ≤ ¼ anonymous — not the OS available estimate); own rust_perf rule (io/memory)
-- [ ] T4 — P61 rider authoring: the autotune-cache hardware-path axis (tune cached under one adapter/API pair misprices on another) as a count-neutral rider on B223's `autotune-fidelity-synthetic-carries-producer-params`
-- [ ] T5 — author the rules/riders (disjoint slices, subagents where useful); entry files + LINT_GROUPS + dispatch + FIXABLE/VERIFY tiers per landing convention; probes per Batch-33 discipline where a divergence class is claimed
-- [ ] T6 — gates: parse+needle gates for new entries; domain lib tests; clippy `-D` at the landing postures; retrieval floors check (kernel_opt class); freeze/score-bench NOT owed if zero clippy-corpus delta (P30) — verify that premise
-- [ ] T7 — land: counts/AGENTS.md rows for whatever moved; `.distill/001` landing row (claim discharged); `.plans/.highwater` bump consumed at creation
-- [ ] T8 — close: `.raw` clones removed; plan status → DONE with the landing commit hash
+- [x] T0 — sources at pins: clone `ggml-org/llama.cpp` (`685f7089` for P58, `5cdadfc3` for P59), `incoai/splash` (`ffc2d4be` for P60), `tracel-ai/cubecl` (`5a4f5882c` for P61) into `.raw/`; verify each pin exists + read the diffs; verify licences (P58/P59 MIT, P60 Apache-2.0, P61 dual Apache-2.0/MIT — verified at the clone root)
+- [x] T1 — P58 home adjudication + quote verification: OWN rust_perf rule `f16-to-f32-accumulator-lut-breaks-conversion-serialization` (simd; the register-dependency axis of the LUT-boundary family — distinct-from the GPU constant-cache/density axes; quotes verbatim, zero drift)
+- [x] T2 — P59 home adjudication + quote verification: OWN rust_perf rule `work-buffer-sized-by-execution-width-not-plan-tasks` (concurrency; adjacent-not-covering B223's largest-consumer workspace law — plan-vs-execution WIDTH is a different mismatch; quotes verbatim, zero drift)
+- [x] T3 — P60 quote verification: OWN rust_perf rule `discretionary-cache-growth-keys-on-spare-not-available` (io; all 8 verbatim quotes + ~40 file:line refs verified at the clone; the RUNTIME growth face — the Batch-232 HEADROOM-ADMISSION rider owns the LOAD-time face)
+- [x] T4 — P61 rider authoring: the autotune-cache hardware-path axis as a count-neutral rider on B223's `autotune-fidelity-synthetic-carries-producer-params` (landed in `6b00330c` with 8 verbatim needles)
+- [x] T5 — author the rules/riders (three authoring subagents over disjoint slices: A = entries_25 P58+P59, B = entries_26 P60, C = the kernel_opt rider; coordinator wired mod.rs + pins + batch needle tests)
+- [x] T6 — gates: batch237 rust_perf parse+needles 2/2 first shot; kernel_opt batch237 rider needles 1/1 (in `6b00330c`); default lib 2668/0; kernel_opt lib 3119/0 (1 ignored documented); kernel_opt+latent_retrieval lib 3305/0 (3 ignored documented, 2550 s); clippy -D ×3 postures clean (6 doc_markdown mechanicals in the new slice headers healed by cargo refine, compile-gated, 12,037 tokens); freeze/score-bench NOT owed (zero clippy-corpus delta, P30 — the write set is rust_perf + kernel_opt only, verified)
+- [x] T7 — land: rust_perf 198→201 in AGENTS.md ×2 + README + .docs/11_domains/rust_perf.md; kernel_opt count-pin chains carry the Batch-237 count-neutral note (tests.rs ×4 sites); `.distill/001` landing row rides the batch commit
+- [x] T8 — close: `.raw/llamacpp-b237` + `.raw/splash-b237` + `.raw/cubecl-b237` removed; plan status → LANDED

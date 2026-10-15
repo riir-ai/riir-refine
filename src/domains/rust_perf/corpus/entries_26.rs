@@ -1,10 +1,10 @@
-//! Entries slice 26 — Batch 237 (2026-10-15, Plan 239): the P60 memory-governor law (slice B of 2; slice A = entries_25, the llama.cpp pair).
+//! Entries slice 26 — Batch 237 (2026-10-15, Plan 239): the P60 memory-governor law (slice B of 2; slice A = `entries_25`, the llama.cpp pair).
 //!
 //! One `rust_perf` host-memory rule distilled from incoai/splash
 //! @ ffc2d4be332367a3c4b89fe3c3bcbd692dc6414f ("Keep the cache to spare
 //! memory and give it back when macOS warns", merge #418, Apache-2.0 —
 //! clone `.raw/splash-b237` at the pin; every quote below read back at
-//! the pin THIS batch). Corpus-only NotBenchable decision content —
+//! the pin THIS batch). Corpus-only `NotBenchable` decision content —
 //! `bench_spec: None` (the Batch-182/186 precedent, no proposer files).
 
 use crate::domains::rust_perf::PerfRule;
