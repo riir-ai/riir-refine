@@ -59,6 +59,8 @@
 //! `store_rne` at every cell. A split is exit 1 with the per-arm table
 //! recorded honestly (the bench_008 posture).
 
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_goat {
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::arch::is_x86_feature_detected;
 use std::arch::x86_64::{
@@ -645,4 +647,14 @@ fn main() {
         }
         std::process::exit(1);
     }
+}
+
+}
+
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn main() {
+    // x86-only bench (F16C): this arch compiles an honest no-op stub so the
+    // aarch64 --all-targets lanes stay green; the GOAT numbers are read on the
+    // x86 box this lane was staged for (plan 249 / Bench 118).
+    println!("bench_009 is x86-only (F16C); nothing to run on this arch");
 }

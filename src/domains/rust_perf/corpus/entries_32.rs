@@ -3,10 +3,10 @@
 //! rule from PrismML-Eng/llama.cpp @ 5ae2e169eac202d2f065606539c3ad6ab8b51333
 //! (#354, MIT, 2026-10-15; read at the vendor clone).
 //!
-//! (RENAMED from entries_31.rs at the Batch-245/246 rebase: BOTH lanes created
-//! entries_31.rs independently — the M3 Batch-245 defer-list conversion and
+//! (RENAMED from `entries_31.rs` at the rebase: BOTH lanes created an
+//! `entries_31.rs` independently — the M3 Batch-245 defer-list conversion and
 //! the 4090 Batch-246 prism delta; the collision resolves by the slice-number
-//! = batch-number convention: 245 -> 31, 246 -> 32.)
+//! = batch-number convention: 245 → 31, 246 → 32.)
 //!
 //! - `seq-fork-carries-pending-rollback-record` — a sequence-fork (`seq_cp`)
 //!   must carry PENDING mutation records, not just committed state: the
