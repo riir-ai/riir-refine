@@ -5535,7 +5535,13 @@ USAGE:
                     paste). Suggest-only, always exit 0 on a real scan;
                     refuses exit 1 on an empty walk. The same scan prints a
                     quiet `[sec]` warn line in normal suggest/fix runs when
-                    findings exist.
+                    findings exist. Digest pins (P63) — high-entropy hex
+                    runs tagged with a digest scheme (blake3:/sha256:/…) or
+                    the value of a pin-named declaration (_SHA/_DIGEST/…)
+                    — are adjudicated benign in THIS report's count
+                    (disclosed, not hidden); exact provider formats are
+                    never adjudicated, and the egress gate + --blind stay
+                    fail-closed on everything.
     --secret-scan --blind <path>
                     Print the whole FILE with every finding byte-replaced by
                     its `[REDACTED:<kind>]` placeholder (byte-exact outside
@@ -12697,6 +12703,9 @@ fn main() {
     // touches these (a secret's fix is a process change, not a rewrite).
     let mut secret_findings: Vec<(String, Vec<riir_refine::secret_blind::SpanFinding>)> =
         Vec::new();
+    // P63: the digest-pin adjudication count (report-lane only — the
+    // egress gate keeps the raw fail-closed verdicts).
+    let mut secret_pinned: usize = 0;
 
     for file in &files {
         let Ok(src) = read_source(file) else {
@@ -12705,10 +12714,14 @@ fn main() {
         };
         let display = file.display().to_string();
         // Issue 151: the same-file secret scan (suggest-only; values and
-        // fingerprints never shown — the shareable-output rule).
-        let file_secret_findings = riir_refine::secret_blind::scan_file(&src);
-        if !file_secret_findings.is_empty() {
-            secret_findings.push((display.clone(), file_secret_findings));
+        // fingerprints never shown — the shareable-output rule). P63: the
+        // adjudicated outcome — digest pins leave the finding list (they
+        // were the recurring all-false noise) and ride the disclosure
+        // count instead.
+        let file_secret_outcome = riir_refine::secret_blind::scan_file_with_pins(&src);
+        secret_pinned += file_secret_outcome.digest_pins.len();
+        if !file_secret_outcome.findings.is_empty() {
+            secret_findings.push((display.clone(), file_secret_outcome.findings));
         }
         // P30: bench-target detection, shared by both lanes — the fix lane
         // declines rust_perf edits on it, the suggest lane stamps perf rows.
@@ -14487,11 +14500,20 @@ fn main() {
     // Quiet at zero. The findings' context lines are BLINDED (shareable-
     // output rule: no bytes, no fingerprint).
     let secret_total: usize = secret_findings.iter().map(|(_, f)| f.len()).sum();
+    // P63: the pins suffix — suppressed findings are DISCLOSED, never
+    // silently dropped (a report that hides counts is a green zero).
+    let pins_note = if secret_pinned > 0 {
+        format!(
+            " (+{secret_pinned} digest-pin(s) adjudicated benign — suppressed from this count; the sync gate stays fail-closed)"
+        )
+    } else {
+        String::new()
+    };
     if !secret_findings.is_empty() {
         let total = secret_total;
         let file_pl2 = if secret_findings.len() == 1 { "file" } else { "files" };
         println!(
-            "secrets: {total} finding(s) in {} {file_pl2} — suggest-only, never auto-fixed \
+            "secrets: {total} finding(s) in {} {file_pl2}{pins_note} — suggest-only, never auto-fixed \
              (run `cargo refine --secret-scan` for the report)",
             secret_findings.len()
         );
@@ -14515,6 +14537,13 @@ fn main() {
         if shown < total || shown_files < secret_findings.len() {
             println!("  … and {} more (the report lists every finding)", total - shown);
         }
+    } else if secret_pinned > 0 {
+        // P63: every finding in the run adjudicated benign — still loud
+        // (never a silent green zero), but no longer the recurring
+        // all-false [sec] noise the digest-pin class measured at.
+        println!(
+            "secrets: 0 finding(s){pins_note}"
+        );
     }
     if secret_total > 0 {
         domain_tally.add_secrets(secret_total);
