@@ -1,7 +1,8 @@
 # Issue 164 — the install-probe plain-copy hazard: install.sh/ps1 (gist-rs/cargo-refine) clobbers the developer symlink silently
 
 **Status:** OPEN — checklist-convention half LANDED 2026-10-14 (`.plans/223` §R6 + `.plans/105` Notes); remaining = the dist-repo installer edit (owner-adjacent lane, rides the next release cut or a deliberate dist-repo pass) + the AGENTS.md UNLANDED-line update once it lands
-**Claimed:** zed-m3-idle, 1792087500, expires 2026-10-17T18:05Z — the in-repo optional polish (post-swap symlink courtesy notice, `upgrade` path) — **LANDED 2026-10-15** (the optional polish arm, done): `UpgradeReport.replaced_symlink_target` captured pre-swap (`read_link`), `symlink_notice()` names the preserved `.bak` link + the platform restore command (`ln -sf` unix / re-copy Windows), printed by both consumers (`upgrade` + the auto-upgrade hook); unit test `symlink_notice_names_target_backup_and_restore`; clippy `-D warnings` green lib + bin at the release-shaped feature set
+**Claimed:** zed-m3-idle, 1792087500, expires 2026-10-17T18:05Z
+the in-repo optional polish (post-swap symlink courtesy notice, `upgrade` path) — **LANDED 2026-10-15** (the optional polish arm, done): `UpgradeReport.replaced_symlink_target` captured pre-swap (`read_link`), `symlink_notice()` names the preserved `.bak` link + the platform restore command (`ln -sf` unix / re-copy Windows), printed by both consumers (`upgrade` + the auto-upgrade hook); unit test `symlink_notice_names_target_backup_and_restore`; clippy `-D warnings` green lib + bin at the release-shaped feature set
 
 ## The hazard (measured twice, both boxes, 2026-10-13)
 
