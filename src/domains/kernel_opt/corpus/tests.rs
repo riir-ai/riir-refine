@@ -17609,6 +17609,46 @@ fn batch231_rules_parse_and_needles_landed() {
 
 #[test]
 #[cfg(feature = "kernel_opt")]
+fn batch237_rider_landed_on_autotune_host() {
+    // G1 for the Batch 237 rider (Plan 239): the HARDWARE-PATH axis of
+    // clause 4 on `autotune-fidelity-synthetic-carries-producer-params`
+    // (tracel-ai/cubecl @ 5a4f5882c82f0dbb3147c628b0eb4492ec9f3dd0 #1811
+    // "fix(autotune): key the tune cache on the adapter and API a device
+    // resolved to", Apache-2.0 OR MIT -- every needle verbatim at the pin
+    // clone .raw/cubecl-b237 this session). Count-neutral (the rider
+    // pattern; corpus stands 813).
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        813,
+        "batch-237: count-neutral rider batch -- corpus stood 813"
+    );
+
+    let host = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "autotune-fidelity-synthetic-carries-producer-params")
+        .expect("batch-237 autotune host missing");
+    for needle in [
+        "RIDER (Batch 237 / Plan 239",
+        "5a4f5882c82f0dbb3147c628b0eb4492ec9f3dd0",
+        "{fingerprint}/{device_id}/{name}",
+        "persisted_answers_are_scoped_to_the_adapter_fingerprint",
+        "A device id that resolves to another adapter must not read the first adapter's persisted answers.",
+        "DX12 and Vulkan on one card share a fingerprint",
+        "wgpu<wgsl-vulkan>",
+        "Batch 237 rider.",
+    ] {
+        assert!(
+            host.gpu_concept.contains(needle),
+            "batch-237 rider on autotune host missing needle: {needle}"
+        );
+    }
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
 fn batch227_rules_parse_and_needles_landed() {
     // G1 for Batch 227 (Plan 229): TWO own rules -- the lithos-metal
     // wave-2 pack (lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0;
