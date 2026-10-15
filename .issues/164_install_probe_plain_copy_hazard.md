@@ -1,7 +1,7 @@
 # Issue 164 — the install-probe plain-copy hazard: install.sh/ps1 (gist-rs/cargo-refine) clobbers the developer symlink silently
 
 **Status:** OPEN — checklist-convention half LANDED 2026-10-14 (`.plans/223` §R6 + `.plans/105` Notes); remaining = the dist-repo installer edit (owner-adjacent lane, rides the next release cut or a deliberate dist-repo pass) + the AGENTS.md UNLANDED-line update once it lands
-**Claimed:** zed-m3-idle, 2026-10-15T18:05Z, expires 2026-10-17T18:05Z — the in-repo optional polish (post-swap symlink courtesy notice, `upgrade` path)
+**Claimed:** zed-m3-idle, 2026-10-15T18:05Z, expires 2026-10-17T18:05Z — the in-repo optional polish (post-swap symlink courtesy notice, `upgrade` path) — **LANDED 2026-10-15** (the optional polish arm, done): `UpgradeReport.replaced_symlink_target` captured pre-swap (`read_link`), `symlink_notice()` names the preserved `.bak` link + the platform restore command (`ln -sf` unix / re-copy Windows), printed by both consumers (`upgrade` + the auto-upgrade hook); unit test `symlink_notice_names_target_backup_and_restore`; clippy `-D warnings` green lib + bin at the release-shaped feature set
 
 ## The hazard (measured twice, both boxes, 2026-10-13)
 
@@ -76,7 +76,10 @@ clobbered; if clobbered, the same awareness belongs there (this half IS in-repo)
       Residual polish (optional, not owed): post-swap courtesy notice when the old exe
       was a symlink (name the preserved `.bak` link + the restore command) — the
       semantics still flip destination to a real file after upgrade, but with a
-      recoverable trail.
+      recoverable trail. — **LANDED 2026-10-15** (`zed-m3-idle`): the courtesy notice
+      now ships — `UpgradeReport.replaced_symlink_target` + `symlink_notice()` (one
+      formatter, both consumers), the unix notice names `ln -sf '<target>' '<exe>'`,
+      the Windows notice names the re-copy/mklink posture; test-pinned in-module.
 - [ ] AGENTS.md §Production adoption hazard line updated to name the fixed installer
       versions (remove "UNLANDED" once the dist edit lands)
 - [x] the R6 release-checklist convention line gains the re-link /

@@ -478,6 +478,42 @@ pub struct UpgradeReport {
     pub new_exe: PathBuf,
     /// The old binary's backup path (the rollback story).
     pub backup: PathBuf,
+    /// When the swapped-out destination was a SYMLINK (the developer
+    /// rebuild-convention link), its target — the backup rename moves the
+    /// link itself, so the convention survives at [`Self::backup`] while
+    /// the destination now serves release bytes. `None` for a plain-file
+    /// destination (normal users; no notice).
+    pub replaced_symlink_target: Option<PathBuf>,
+}
+
+impl UpgradeReport {
+    /// Issue 164: the one-line courtesy notice for a swap that moved a
+    /// developer symlink aside — the rebuild link no longer propagates
+    /// until restored, and the restore command differs by platform
+    /// (non-elevated Windows cannot re-link at all).
+    #[must_use]
+    pub fn symlink_notice(&self) -> Option<String> {
+        let target = self.replaced_symlink_target.as_ref()?;
+        Some(if cfg!(windows) {
+            format!(
+                "note: the destination was a developer symlink -> {} (preserved at {}); \
+                 non-elevated Windows cannot re-link — re-copy the link target over {} \
+                 after each rebuild (or mklink elevated)",
+                target.display(),
+                self.backup.display(),
+                self.new_exe.display()
+            )
+        } else {
+            format!(
+                "note: the destination was a developer symlink -> {} (preserved at {}); \
+                 restore the rebuild link: ln -sf '{}' '{}'",
+                target.display(),
+                self.backup.display(),
+                target.display(),
+                self.new_exe.display()
+            )
+        })
+    }
 }
 
 /// The download seam (unit-testable: the checksum/extract/swap legs run
@@ -713,6 +749,10 @@ impl StagedUpgrade<'_> {
         }
 
         // Backup-swap: the old binary stays as .bak-<version> for rollback.
+        // Issue 164: rename moves a SYMLINK itself (never its target), so a
+        // developer box's rebuild link survives at `backup` — capture the
+        // target first and let the caller print the restore notice.
+        let replaced_symlink_target = std::fs::read_link(exe).ok();
         let backup = exe.with_file_name(format!(
             "{}.bak-{}",
             exe.file_name()
@@ -733,6 +773,7 @@ impl StagedUpgrade<'_> {
             to_version: self.to_version.to_string(),
             new_exe: exe.to_path_buf(),
             backup,
+            replaced_symlink_target,
         })
     }
 }
@@ -895,6 +936,41 @@ mod tests {
             asset_name("v0.3.0", "aarch64-apple-darwin"),
             "cargo-refine-v0.3.0-aarch64-apple-darwin.tar.gz"
         );
+    }
+
+    // ── issue 164: the developer-symlink courtesy notice ──
+    #[test]
+    fn symlink_notice_names_target_backup_and_restore() {
+        let report = UpgradeReport {
+            from_version: "0.2.1".into(),
+            to_version: "0.3.0".into(),
+            new_exe: PathBuf::from("/home/dev/.cargo/bin/cargo-refine"),
+            backup: PathBuf::from("/home/dev/.cargo/bin/cargo-refine.bak-0.2.1"),
+            replaced_symlink_target: Some(PathBuf::from(
+                "/git/riir-refine/target/release/cargo-refine",
+            )),
+        };
+        let notice = report.symlink_notice().expect("a symlink swap notices");
+        assert!(notice.contains("developer symlink"), "{notice}");
+        assert!(notice.contains("target/release/cargo-refine"), "{notice}");
+        assert!(notice.contains(".bak-0.2.1"), "{notice}");
+        #[cfg(unix)]
+        assert!(
+            notice.contains("ln -sf"),
+            "unix names the restore command: {notice}"
+        );
+        #[cfg(windows)]
+        assert!(
+            notice.contains("re-copy"),
+            "windows names the re-copy remedy: {notice}"
+        );
+
+        // A plain-file destination (the normal user) prints nothing.
+        let plain = UpgradeReport {
+            replaced_symlink_target: None,
+            ..report
+        };
+        assert!(plain.symlink_notice().is_none());
     }
 
     #[cfg(target_os = "macos")]

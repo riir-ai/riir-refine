@@ -2011,12 +2011,17 @@ fn run_update_surface_hooks(paths: &[PathBuf]) {
                 &riir_refine::update_check::HttpDownload::new(),
                 env!("CARGO_PKG_VERSION"),
             ) {
-                Ok(report) => eprintln!(
-                    "auto-upgrade: {} → {} installed — THIS run keeps the old binary; rerun to pick it up (rollback: {})",
-                    report.from_version,
-                    report.to_version,
-                    report.backup.display()
-                ),
+                Ok(report) => {
+                    eprintln!(
+                        "auto-upgrade: {} → {} installed — THIS run keeps the old binary; rerun to pick it up (rollback: {})",
+                        report.from_version,
+                        report.to_version,
+                        report.backup.display()
+                    );
+                    if let Some(notice) = report.symlink_notice() {
+                        eprintln!("auto-upgrade: {notice}");
+                    }
+                }
                 Err(e) => eprintln!("auto-upgrade: failed ({e}) — staying on this build"),
             }
         }
@@ -2129,6 +2134,9 @@ fn run_self_upgrade() {
                 r.backup.display()
             );
             println!("  THIS run is still the old binary — rerun to pick up the new one");
+            if let Some(notice) = r.symlink_notice() {
+                println!("  {notice}");
+            }
         }
         Err(riir_refine::update_check::UpdateError::UpToDate(v)) => {
             println!("already current: cargo-refine {v} is the latest release");
