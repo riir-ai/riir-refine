@@ -17475,6 +17475,68 @@ fn batch235_riders_parse_and_needles_landed() {
 
 #[test]
 #[cfg(feature = "kernel_opt")]
+fn batch238_rider_parse_and_needles_landed() {
+    // G1 for Batch 238 (Plan 240): ONE count-neutral rider on
+    // l2-grouped-tile-schedule (B130) -- the P64 conversion (llama.cpp
+    // #30215 @ 3e390af18, MIT, merged by 0cc4m 2026-10-15): the
+    // L2-budget-derived group-size face + the merged-axis linearization
+    // + the MUL_MAT_ID carve-out + the bandwidth-starved regime law.
+    // Every needle verbatim at the fetched .patch + PR body this session.
+    // Count: corpus stands 813 (count-neutral rider).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        813,
+        "batch-238: count-neutral rider batch -- corpus stands 813; the rider adds decision content, not an entry"
+    );
+
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "l2-grouped-tile-schedule")
+        .expect("batch-238 rider host missing (B130)");
+    for needle in [
+        "RIDER (Batch 238, ggml-org/llama.cpp #30215 @ 3e390af18, MIT, merged by 0cc4m 2026-10-15)",
+        "The group size is DERIVED from the L2 budget, never a constant",
+        "#define GROUP_A_BUDGET (8u * 1024u * 1024u)",
+        "group_m = clamp(GROUP_A_BUDGET / max(a_panel_bytes, 1u), 1u, min(blocks_m, 32u))",
+        "(BM * p.K / mm_quant_k()) * MmABlockBytes",
+        "a_panel_bytes computed PER OPERAND DATATYPE",
+        "The THIRD concrete formula shape -- the merged-axis linearization",
+        "const uint lin = gl_WorkGroupID.y * blocks_m + (gl_WorkGroupID.x % blocks_m);",
+        "ir = first_m + in_group % gsize; ic = in_group / gsize;",
+        "the grouped schedule is deliberately NOT applied on the expert-indexed path",
+        "q8_0[5120,12288] +32.5%",
+        "602.8->731.5 t/s, the CUDA gap 1.31x->1.08x",
+        "Llama-3.1-8B Q3_K_S pp2048 only +4.0%",
+        "I also tested this on RTX 3090, but it's perf-neutral there",
+        "it started to really matter once I get up to 8kx8k",
+        "I can't measure any difference from it",
+        "NotBenchable at our pins (vulkan cm2 path; our hosts are CUDA/Metal/CubeCL)",
+        "Batch 238 / Plan 240 / Research 269",
+    ] {
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-238 rider missing needle: {needle}"
+        );
+    }
+    // the pseudocode halves still parse (the batch207/227/229/231/236 pattern).
+    let ref_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.buggy_code());
+    assert!(
+        verdict_passes(&ref_verdict),
+        "batch-238 ref_shape must parse"
+    );
+    let opt_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.fixed_code());
+    assert!(
+        verdict_passes(&opt_verdict),
+        "batch-238 opt_pattern must parse"
+    );
+}
+
+#[test]
+#[cfg(feature = "kernel_opt")]
 fn batch232_rules_parse_and_needles_landed() {
     // G1 for Batch 232 (Plan 234): ONE own rule -- the TensorFold 1.0.9
     // lead (1a) conversion (ashhart/TensorFold @ c724dd9d, the
