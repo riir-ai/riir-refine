@@ -1477,6 +1477,10 @@ fn print_login_outcome(outcome: &riir_refine::kat_account::LoginOutcome, prefix:
             "{prefix}: account key adopted from {} (copied into the account dir — the original is untouched)",
             source.display()
         ),
+        LoginOutcome::AdoptedInPlace { source, .. } => println!(
+            "{prefix}: account key adopted IN PLACE — {} IS the account key (no copy; the record names it)",
+            source.display()
+        ),
         LoginOutcome::Existing { .. } => println!("{prefix}: already logged in (key loaded)"),
     }
 }
@@ -1580,6 +1584,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
         eprintln!("kat account: VERIFICATION FAILED — {e}");
         std::process::exit(1);
     }
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("KAT ACCOUNT")
+    );
     for line in account.summary_lines() {
         println!("{line}");
     }

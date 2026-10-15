@@ -42,14 +42,21 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
 
     // ── the account + consent block (always local) ──────────────────────
     let state = account.state();
-    println!("KAT ACCOUNT");
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("KAT ACCOUNT")
+    );
     // The account-family label column (issue 126 follow-ups 4+6): the
     // substrate's computed account_line, the SAME grid the `account`
     // command and the welcome gate render through.
     use riir_refine::kat_account_client::account_line;
     println!(
         "{}",
-        account_line("account:", format!("{} ({})", state.account_id, account.key_path().display()))
+        account_line("account:", &state.account_id)
+    );
+    println!(
+        "{}",
+        account_line("key:", account.key_path().display().to_string())
     );
     if let Some(user) = &state.github_user {
         println!("{}", account_line("github:", user));
@@ -82,7 +89,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     network_sections(acct32.as_deref());
     #[cfg(not(feature = "kat_transport"))]
     {
-        println!("SERVICE");
+        println!("{}", riir_refine::kat_account_client::account_header("SERVICE"));
         println!("  (network sections need a kat_transport build — the local view follows)");
         let _ = &acct32;
     }
@@ -107,7 +114,7 @@ fn network_sections(acct32: Option<&str>) {
     let url = crate::command_service_url();
     let transport = svc::HttpAccountTransport::new(&url, 6);
 
-    println!("SERVICE");
+    println!("{}", riir_refine::kat_account_client::account_header("SERVICE"));
     match svc::service_line_via(&transport) {
         // The render half formats under the account label column (the
         // two-space indent is already in the line — never re-indent it).
@@ -129,7 +136,7 @@ fn network_sections(acct32: Option<&str>) {
     };
 
     // WALLET — `GET /history`: the server-truth position.
-    println!("WALLET (server truth)");
+    println!("{}", riir_refine::kat_account_client::account_header("WALLET (server truth)"));
     let mut offline = false;
     match transport.get_history(acct, 20) {
         HttpResponse::Ok(body) => match svc::parse_history(&body) {
@@ -148,7 +155,7 @@ fn network_sections(acct32: Option<&str>) {
     }
 
     // STAKING — `GET /stake/info` (the `stake --info` read, same render).
-    println!("STAKING");
+    println!("{}", riir_refine::kat_account_client::account_header("STAKING"));
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
@@ -177,7 +184,7 @@ fn network_sections(acct32: Option<&str>) {
     // MINING — `GET /mining/adoption`: the public per-machine queue
     // outcomes, this machine's row matched by the locally-computed
     // pseudonym (the full id never enters the public body).
-    println!("MINING (public table)");
+    println!("{}", riir_refine::kat_account_client::account_header("MINING (public table)"));
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
@@ -330,7 +337,7 @@ fn local_section(paths: &[PathBuf]) {
     );
     #[cfg(not(feature = "kat_service"))]
     let net_dir = root.join(".refine");
-    println!("LOCAL WORK ({})", root.display());
+    println!("{}", riir_refine::kat_account_client::account_header(&format!("LOCAL WORK ({})", root.display())));
 
     // healed rows — this repo's trajectory store.
     #[cfg(feature = "latent_retrieval")]
@@ -436,7 +443,7 @@ fn local_section(paths: &[PathBuf]) {
 /// fresh check is `cargo refine --version` or `upgrade`.
 fn corpus_section(paths: &[PathBuf]) {
     let root = crate::resolve_heal_root(paths);
-    println!("CORPUS");
+    println!("{}", riir_refine::kat_account_client::account_header("CORPUS"));
 
     // The compiled-in rule counts — the corpus SHIPS IN the binary, so
     // "stale corpus" is first a function of the binary's age.
