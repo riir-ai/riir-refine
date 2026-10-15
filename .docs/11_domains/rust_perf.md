@@ -25,7 +25,7 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 205 rules across 13 categories — Batch 241 (+2 the serving slot-state cache pair #30580+#30567, both caching 10→12; + the count-neutral draft-state rider on P65 #30574; the row previously read 201 — stale through B239's +2, repaired here). Batch 237
+profiling guide, Research 032; **now 207 rules across 13 categories — Batch 243 (2026-10-16, Plan 245 / Research 275: +2 the text/unicode processing family seed — the corpus's founding member of that family — `ascii-run-swar-block-skip` (simd, the high-bit-gather block mask; GOAT 6.41-7.78x) + `range-table-page-memoization` (caching, the lazy per-page predicate cache; GOAT 9.82-10.01x), both benchable + annotated, from Hugging Face tokenizers @ `5b5a3fcc` (branch `perf/faster-unicode-normalizers`, Apache-2.0); the third lead (transform-borrow-until-first-change) dropped dominated 0/3/0 twice — the negative in Research 275; retrieval floors re-pinned with attribution + gen2/gen3 freeze-tables regenerated). Batch 241 (+2 the serving slot-state cache pair #30580+#30567, both caching 10→12; + the count-neutral draft-state rider on P65 #30574; the row previously read 201 — stale through B239's +2, repaired here). Batch 237
 (2026-10-15, Plan 239 — +3 the P58–P61 conversion set, ALL NotBenchable
 annotated, quotes re-verified at the pin clones:
 `f16-to-f32-accumulator-lut-breaks-conversion-serialization` (simd,
