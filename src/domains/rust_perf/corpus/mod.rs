@@ -9,7 +9,17 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 201 entries across 13 categories as of Batch 237 (2026-10-15, Plan 239 —
+//! 203 entries across 13 categories as of Batch 239 (2026-10-15, Plan 241 /
+//! Research 270 — the serving state-cache pair from the llama.cpp envelope
+//! delta `843e7dcc → e467e5b5e5ba`: +2 caching —
+//! `partial-state-serialization-honors-rollback-contract-at-leaf-cache`
+//! (#30514: partial = what rollback cannot undo; the flag honored AT THE
+//! LEAF cache keyed on `swa_type`, wrappers delegate; the size-monotonicity
+//! invariant) + `cache-write-admission-requires-restoring-consumer`
+//! (#30498: `is_stateless` kinds never write, both save paths share the one
+//! predicate home; decision models default-off with `cache_ram_explicit`
+//! opt-in) — both `NotBenchable` annotated; annotated 147 → 149, caching 8
+//! → 10) on the Batch 237 base (2026-10-15, Plan 239 —
 //! the P58–P61 conversion set: +3 `rust_perf` rules — `f16-to-f32-accumulator-lut-breaks-conversion-serialization`
 //! (simd, ggml-org/llama.cpp @ `685f7089` #30342+#30343: the F16C
 //! FP16→FP32 intrinsic lowers to a vpinsrw into the live accumulator,
@@ -452,15 +462,19 @@ mod entries_23;
 mod entries_24;
 mod entries_25;
 mod entries_26;
+mod entries_27;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 201 entries
-/// (Batch 237, 2026-10-15, Plan 239: +3 — the P58–P61 conversion set, all
-/// `NotBenchable` annotated; see the module header for the batch chain;
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 203 entries
+/// (Batch 239, 2026-10-15, Plan 241 / Research 270: +2, the serving
+/// state-cache pair from llama.cpp #30514 + #30498 — both `caching`, both
+/// `NotBenchable` annotated; on the Batch 237 base, 2026-10-15, Plan 239:
+/// +3 — the P58–P61 conversion set, all `NotBenchable` annotated; see the
+/// module header for the batch chain;
 /// Batch 222 before it, 2026-10-10, Plan 216 / Research 252: +2, the soroban wasm size
 /// pair — both `wasm`, both `NotBenchable` annotated; Batch 219 before the
 /// pair, 2026-10-10, Plan 215 slot 2 / Research 251: +11, the
@@ -497,9 +511,9 @@ mod tests;
 ///   release rule + the deferred-command flush-hoist);
 ///   arithmetic has 8 (Batch 74 added 1); dispatch has 6 (Batch 61 + 74 added
 ///   1 each; Batch 99 added the `DestProp` branch-site rule; Batch 101 added
-///   the runtime-table handler-pair hoist; Batch 182 added the host-mirror
-///   shared-scalar rule); caching has 8 (Batch 181 added the mask-memo owner-lifetime
-///   rule); io has 26 (the
+///   runtime-table handler-pair hoist; Batch 182 added the host-mirror
+///   shared-scalar rule); caching has 10 (Batch 181 added the mask-memo owner-lifetime
+///   rule; Batch 239 added the state-serialization + admission pair); io has 26 (the
 ///   measurement-honesty io rules ride Batch 122/123/129; Batch 139 added the
 ///   prefault-admission rule; Batch 141 added the tail-boundary and
 ///   stream-holdback rules; Batch 153 added the `TCP_NODELAY` request-response
@@ -536,5 +550,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_24::entries());
     entries.extend(entries_25::entries());
     entries.extend(entries_26::entries());
+    entries.extend(entries_27::entries());
     Corpus::new(entries)
 }

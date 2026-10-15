@@ -1,6 +1,6 @@
 # Plan 241: Batch 239 — the P65+P66 serving state-cache pair (llama.cpp #30514 + #30498)
 
-**Status:** OPEN — claimed 2026-10-15 ~16:xx +07 (shikuwa/4090 lane); staged by the ~16:xx envelope-grade cycle (commit `af914ee7`).
+**Status:** COMPLETE — all tasks landed and gated 2026-10-15 (Batch 239 landed; corpus 198 → 200; gates G1 121/121 + G2 2668/0 + G3 clippy exit 0 + retrieval 21/21 HELD; see Research 270 + the snapshot landing row).
 
 Source: llama.cpp master delta `843e7dcc → e467e5b5e5ba` (3 commits, all
 ServeurpersoCom 2026-10-15 04:30–04:39Z, MIT). #30522 (`1ddc2625`, the
@@ -76,37 +76,33 @@ THIS (admission) = the three faces of the serving prompt-cache family.
 
 ## Tasks
 
-- [ ] T0 — claim row + this plan, commit + push BEFORE authoring (this
-      commit; claim expiry 48h).
-- [ ] T1 — quote re-verification at the pins: fetch the `.patch` files for
-      #30514 + #30498; verify EVERY staged quote verbatim against the diff
-      (the compare-API payloads were read at staging; the patch files are the
-      record of authority). Kill/adjust any drifted claim BEFORE authoring.
-- [ ] T2 — corpus placement: read `src/domains/rust_perf/corpus/entries_20.rs`
-      + `entries_26.rs` (the B219 pair's home) — extend the right file or open
-      the next free `entries_NN.rs`; author both rules (pattern, bounded
-      fix-space, category caching, rationale, source quotes, NotBenchable
-      annotation, kinship citations with the distinctness reasons).
-- [ ] T3 — count pins: rust_perf 198 → 200 at every pin site (AGENTS.md
-      §Role + §Feature Flag Discipline's rust_perf bullet; corpus mod.rs
-      count constants; any per-category counters — caching moves +2).
-- [ ] T4 — standing gates: extend/add `batch239_pseudocode_parses` (the
-      syn-parse gate over both new rules' opt_pattern bodies) + the needles
-      test (each rule's needle strings present verbatim).
-- [ ] T5 — GOAT: G1 lib tests green (`cargo test --lib` at default +
-      `--features rust_perf`); G2 clippy 0 new in BOTH postures
-      (`--all-targets` default + rust_perf feature set; use
-      `CARGO_TARGET_DIR=/tmp/b239tgt` if the main target dir is locked);
-      G3 retrieval re-measure — blended floors HOLD
-      (`cargo test --features kernel_opt,latent_retrieval --lib retrieval`)
-      — re-pin + record ONLY if a measured decay is explained (never weaken
-      silently).
-- [ ] T6 — Research 270 note (born-complete RECORD: source, method, quotes,
-      the two rules, the watch-only #30522 disposition, the mlxfast
-      wrong-base artifact recorded for the next poller).
-- [ ] T7 — AGENTS.md lineage (§Role rust_perf count/lineage + the feature
-      bullet), `.distill/001` landing row + claim tick, commit
-      `feat: batch 239 ...` + push.
+- [x] T0 — claim row + this plan, commit + push BEFORE authoring (claim
+      `d983e23a`, pushed first-try; expiry moot — landed same day).
+- [x] T1 — quote re-verification at the pins: BOTH `.patch` files fetched;
+      every staged quote verified verbatim — ZERO drift (two definitional
+      quotes ADDED at conversion: the test header 'the partial state holds
+      what seq_rm cannot roll back' + the hybrid-idx delegation
+      justification).
+- [x] T2 — corpus placement: `entries_27.rs` (NOT 25 — the M3's Batch 237
+      slice A owns it per the `0c71bea2` note; the mod.rs comment documents
+      the 25/26 gap); both rules authored with kinship citations + NOVEL
+      greps + NotBenchable annotations.
+- [x] T3 — count pins: rust_perf 198 → 200; annotated 144 → 146;
+      unannotated 54 UNCHANGED; caching 8 → 10 (mod.rs ×2 sites + tests.rs
+      ×5 assert sites + AGENTS.md ×2 sites).
+- [x] T4 — gates: `batch239_rules_present` (22 needles) +
+      `batch239_pseudocode_parses` (syn × buggy+fixed × 2 rules).
+- [x] T5 — GOAT: G1 corpus 121/121 + lib 2668/0; G2 clippy `-D warnings`
+      exit 0 (8 doc_markdown backticks in the fresh lines fixed en-route;
+      the residual 'generated 1 warning' lines = the box's hard-link env
+      noise); G3 retrieval 21/21 PASS 246.73s — blended 90.6/94.7/95.3 vs
+      floors 89.4/93.6/93.6 ALL HELD with margin (top-1 −0.6pp vs the B238
+      citation = the +2-fixture pool-competition class, B200 precedent;
+      no re-pin, no Issue-063 repair owed).
+- [x] T6 — Research 270 (born-complete RECORD incl. the watch-only #30522
+      disposition + the mlxfast wrong-base artifact).
+- [x] T7 — AGENTS.md lineage (§Role + §Feature), snapshot landing row,
+      commit + push.
 
 ## Out of scope
 
