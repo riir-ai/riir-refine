@@ -266,6 +266,23 @@ lines, `--blind`) carries kind + location only. Recorded upgrade path if
 cross-run correlation is ever needed: a per-install `blake3::keyed_hash`
 key.
 
+**Digest-pin adjudication (P63, 2026-10-15):** the developer surface
+splits from the gate on ONE class — contextually-evidenced digest pins.
+A high-entropy-hex run carrying a digest-scheme tag (blake3:/sha256:/…,
+glued or across whitespace + one opening quote — the blake3: "<hex>"
+field shape) or opening the fresh-literal value of a pin-named
+declaration (_SHA/_DIGEST/_BASELINE/_COMMITMENT + algo spellings,
+rustfmt-wrap carried) is adjudicated benign in the REPORT count only,
+with the suppressed count DISCLOSED (never a silent drop). Exact
+provider formats are never adjudicated (aws/sk-/AQ. keep firing under
+both guards; probe-pinned by test), and the egress gate + --blind keep
+the RAW canonical verdicts — a report FP costs noise, a gate FP never
+ships a secret, and only the former is a defect (REDACT_VERSION
+untouched). Live basis: 65 suppressions workspace-wide at first run,
+100% digest-pin class (instinct 4, refine 53 incl. the 49-row corruption
+corpus, reflex 3 wrapped BLAKE3 fixture pins, katgpt-rs 5 _BLAKE3/_DIGEST
+fixture pins); zero non-digest findings moved.
+
 **Egress census (the trust claim's basis):** every span-text egress passes
 the gate — `push_mining_batch`/`load_mining_rows` (heal.rs), the
 `fixer_regate` harness (`gate_samples` before any arm), the `kat_drain`
