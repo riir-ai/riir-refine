@@ -1,6 +1,6 @@
 # Plan 242 — Batch 240: the P67–P70 conversion (kernel_opt +3)
 
-Status: IN_FLIGHT (claimed 2026-10-15 ~15:5x +07, shikuwa/4090 lane)
+Status: COMPLETE (landed 2026-10-15; corpus 813 → 816; see Research 271 + the snapshot landing row)
 
 Source set: the 2026-10-15 watch poll's staged rows (`.distill/001` top row, commit
 `22fe7777c`) — llama.cpp envelope `e467e5b5e5ba` → `e36df604` window:
@@ -40,21 +40,21 @@ elsewhere. Freeze/score-bench NOT owed (zero clippy-corpus delta, P30).
 
 ## Tasks
 
-- [ ] T0 claim row spliced into `.distill/001` + this plan + highwater bumps (241→242 plans, 270→271 research), committed + PUSHED before authoring
-- [ ] T1 quote verification at the fetched `.patch` files (all three + P70), verbatim needles recorded
-- [ ] T2 dedup greps (subgroup/tail-lane/clamp vocab; pad/memcpy/row-class vocab; upcast/translation vocab) — zero-owner confirmation + kinship ids verified present
-- [ ] T3 P67 entry authored (entries_gpu_96.rs, category E)
-- [ ] T4 P68 entry authored (entries_gpu_96.rs, category A)
-- [ ] T5 P69 entry authored (entries_gpu_96.rs, category B)
-- [ ] T6 P70 watch adjudication (Rust-side host grep; disposition recorded)
-- [ ] T7 wiring: mod.rs (KERNEL_CATEGORIES slices + category comments + exhaustive doc), router.rs expert-total, tests.rs (master count, Plan-003 sums, grouped total, per-category rows, historical batch asserts re-pin) + batch240 needle/parse gates
-- [ ] T8 G1: batch240 gates green (needles + pseudocode parse)
-- [ ] T9 G2: kernel_opt lib + default lib green (isolated CARGO_TARGET_DIR)
-- [ ] T10 G3: clippy -D clean (default + kernel_opt + all-features postures)
-- [ ] T11 retrieval floors HELD (kernel_opt,latent_retrieval --lib retrieval)
-- [ ] T12 docs: AGENTS.md (kernel_opt bullet + counts), .docs/11_domains/kernel_opt.md, README, Research 271 (born-complete RECORD)
-- [ ] T13 intake hygiene: P58–P61 rows ticked CONSUMED (M3 Batch 237; verify the three rule ids + rider in-tree first)
-- [ ] T14 landing row (snapshot) + plan all-ticked + commit + push
+- [x] T0 claim row spliced into `.distill/001` + this plan + highwater bumps (241→242 plans, 270→271 research), committed + PUSHED before authoring (claim `47cb067e3`, accepted first try)
+- [x] T1 quote verification at the fetched `.patch` files (all three + P70), verbatim needles recorded (all verified; P68's staging phrasing tightened: `!interior` rows = whole-row memset, not "scalar")
+- [x] T2 dedup greps (subgroup/tail-lane/clamp vocab; pad/memcpy/row-class vocab; upcast/translation vocab) — zero-owner confirmation + kinship ids verified present (tail-clamped-row-reuse, masked-boundary-load, role-scoped-store, warp-shuffle, ragged-chunk-pad, pad-tail-to-fixed-tile, zero-pad-ragged-tail, the popcorn upcast trio, dot-macro-family)
+- [x] T3 P67 entry authored (entries_gpu_96.rs, category E) — subgroup-tail-lane-clamp-live-loads-gate-stores
+- [x] T4 P68 entry authored (entries_gpu_96.rs, category A) — pad-row-classification-interior-memcpy
+- [x] T5 P69 entry authored (entries_gpu_96.rs, category B) — f16-upcast-at-foreign-graph-translation
+- [x] T6 P70 watch adjudication (no Rust-side host — our KV reads tiled by design; disposition in Research 271)
+- [x] T7 wiring: mod.rs (KERNEL_CATEGORIES slices + category comments + exhaustive doc), router.rs expert-total, tests.rs (master count, Plan-003 sums, grouped total, per-category rows, historical batch asserts re-pin — 15 sites, FIVE more surfaced by the suite) + batch240 needle/parse gates
+- [x] T8 G1: batch240 gates green (22 needles + pseudocode parse ×3; one em-dash needle drift caught + repaired)
+- [x] T9 G2: kernel_opt lib 3122/0/1i + default lib 2670/0 (isolated CARGO_TARGET_DIR=/tmp/riir-refine-b240, removed at close)
+- [x] T10 G3: clippy -D clean (default lib + kernel_opt --all-targets + no-default --all-targets + all-features lib; 3 doc_markdown healed en route; 1 PRE-EXISTING bin/heal.rs TtyKeys warning at all-features --all-targets disclosed, verified at HEAD)
+- [x] T11 retrieval floors HELD (21/21, 252.93s, no re-pin)
+- [x] T12 docs: AGENTS.md ×2, .docs/11_domains/kernel_opt.md (head + batch row), README, Research 271 (born-complete RECORD)
+- [x] T13 intake hygiene: P58–P61 rows ticked CONSUMED (M3 Batch 237; the three rule ids + rider sha verified in-tree first)
+- [x] T14 landing row (snapshot) + plan all-ticked + commit + push
 
 En-route graded (no action): envelope `e36df604 → 47f5a64ae` = ONE commit
 #29766 vulkan concurrent first-device-init race — NULL (backend-lifecycle

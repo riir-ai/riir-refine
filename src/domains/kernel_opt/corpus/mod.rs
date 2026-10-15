@@ -1981,6 +1981,7 @@ mod entries_gpu_92;
 mod entries_gpu_93;
 mod entries_gpu_94;
 mod entries_gpu_95;
+mod entries_gpu_96;
 mod entries_popcorn;
 
 #[cfg(test)]
@@ -2052,6 +2053,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_93::entries());
     entries.extend(entries_gpu_94::entries());
     entries.extend(entries_gpu_95::entries());
+    entries.extend(entries_gpu_96::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2101,8 +2103,13 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 813-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 813 at Batch
+/// - **Exhaustive:** every `rule_id` in the 816-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 816 at Batch
+///   240 — the P67–P70 conversion (+1 E, +1 A, +1 B: the subgroup tail-lane
+///   clamp law, the pad row-classification interior-memcpy law, the f16 upcast
+///   at foreign-graph translation — llama.cpp #30421 + #30526 + #29200, MIT;
+///   the fourth staged lead P70 #27703 stayed watch-only, no Rust-side host);
+///   was 813 at Batch
 ///   234 — the llama.cpp #29353 GDN-MMA chunked-prefill pack (+2 G, +1 N, +1 D,
 ///   +1 A, +1 E: register-resident scan state, bf16 residual-pair 3-mma,
 ///   in-register triangular inverse, occupancy-keyed value-split ladder,
@@ -2117,7 +2124,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (166 rules; Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
+    // A: Memory access patterns (167 rules; Batch 240 +1: the pad row-classification interior-memcpy law (llama.cpp #30526 — the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading); Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
     // coop-tensor per-chip-family layout contract (lithos-metal #35 —
     // measure the slot map with coop_layout, port the layout, never
     // inherit it); Batch 223 +3: the coherence
@@ -2308,10 +2315,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "superblock-scale-replication-to-subblock-scale-slots",
             "coop-tensor-layout-measured-per-chip-family",
             "host-pointer-buffer-foreign-range-subtraction",
-            "lifecycle-disjoint-intermediates-union-smem-scratch"
+            "lifecycle-disjoint-intermediates-union-smem-scratch",
+            "pad-row-classification-interior-memcpy"
         ],
     ),
-    // B: Compute patterns (86 rules; Batch 207 +1: the minifloat normal-code decode -- the fused
+    // B: Compute patterns (88 rules; Batch 240 +1: the f16 upcast at foreign-graph translation (llama.cpp #29200 — upcast every non-f32 INPUT at the boundary, build the subgraph in f32, convert back to the caller's type at the end; the honest supports_op refusal + the tolerance-that-names-its-reason pair ride in-rule); the comment read 86 through B240 — it missed Batch 225's +1 (subbyte-preexpand-int8-tile-reuses-validated-mma-consumer), repaired here: was 87 at Batch 225; Batch 207 +1: the minifloat normal-code decode -- the fused
     // one-shift + bias-difference form with the placed E2M1 decode (the 2^14 lift folded
     // into the caller's block scale) and the emulated-conversion admission predicate, all
     // one cubecl commit; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
@@ -2419,7 +2427,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "last-query-rect-projection",
             "fewrow-tensor-tile-decode-into-rhs-operand",
             "per-group-epilogue-deferred-between-mma-bursts",
-            "minifloat-normal-code-shift-bias-diff-decode"
+            "minifloat-normal-code-shift-bias-diff-decode",
+            "f16-upcast-at-foreign-graph-translation"
         ],
     ),
     // C: Fusion patterns (55 rules; Batch 223 +1: the fusion scope by
@@ -2710,7 +2719,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "mid-prefill-recurrent-state-capture-boundary-unsplit"
         ],
     ),
-    // E: Parallelism patterns (76 rules; Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (77 rules; Batch 240 +1: the subgroup tail-lane clamp law (llama.cpp #30421 — every lane of a collective stays LIVE, its loads CLAMP to a valid row (gid_s = min(gid, LINE_STRIDE_A - 1)) at every read site, only its stores gate on the real bound; the pair/splitk store splits into per-element guards); Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2795,7 +2804,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "staggered-segments-two-queue-fences",
             "bounded-cross-worker-barrier-protocol-polling-fan-in-ladder",
             "own-slice-coprime-stride-steal-claimant-invariant",
-            "warp-role-split-phase-overlap-cross-chunk-prefetch"
+            "warp-role-split-phase-overlap-cross-chunk-prefetch",
+            "subgroup-tail-lane-clamp-live-loads-gate-stores"
         ],
     ),
     // F: Flash-attention tiling (19 rules; Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
