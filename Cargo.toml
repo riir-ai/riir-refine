@@ -767,6 +767,10 @@ name = "bench_007_avx2_q2_x86_goat"
 harness = false
 
 [[bench]]
+name = "bench_008_prescale_masked_field_goat"
+harness = false
+
+[[bench]]
 name = "bench_002_l2_pruner_syn"
 harness = false
 

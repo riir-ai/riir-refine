@@ -17942,7 +17942,7 @@ fn batch242_rules_parse_and_needles_landed() {
             .iter()
             .find(|e| e.rule_id == *id)
             .unwrap_or_else(|| panic!("batch-242 rule '{id}' missing from corpus"));
-        for needle in needles.iter() {
+        for needle in *needles {
             assert!(
                 entry.gpu_concept.contains(*needle),
                 "batch-242 rule '{id}' missing needle: {needle}"
@@ -18046,7 +18046,7 @@ fn batch242_riders_landed_on_hosts() {
             .iter()
             .find(|e| e.rule_id == *host)
             .unwrap_or_else(|| panic!("batch-242 rider host '{host}' missing"));
-        for needle in needles.iter() {
+        for needle in *needles {
             assert!(
                 entry.gpu_concept.contains(*needle),
                 "batch-242 rider on '{host}' missing needle: {needle}"
