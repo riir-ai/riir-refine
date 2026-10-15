@@ -281,7 +281,14 @@ skill points agents there). Per sweep:
   way before its lane fetches begin — a walk is a multi-hour grading session,
   exactly the claim-worthy waste class (the 2026-10-13 dual walk: two sessions
   executed arxiv walk #14 in the same hour; the pushed close-out `9027f028`
-  kept Research 258, the later lane yielded unpushed).
+  kept Research 258, the later lane yielded unpushed). **The same lease now
+  covers `.issues/`/`.plans/` items (katgpt-rs Issue 943):** before
+  implementing any filed issue/plan, `git fetch origin && py
+  ../katgpt-rs/scripts/claim_lease_check.py --item <NNN>` — a foreign live
+  `Claimed:` line is the yield signal; to claim, append
+  `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the item's
+  Status line and push BEFORE implementing (48 h expiry; advisory — the
+  push stays the arbiter).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
