@@ -1,6 +1,7 @@
 # Issue 164 — the install-probe plain-copy hazard: install.sh/ps1 (gist-rs/cargo-refine) clobbers the developer symlink silently
 
 **Status:** OPEN — checklist-convention half LANDED 2026-10-14 (`.plans/223` §R6 + `.plans/105` Notes); remaining = the dist-repo installer edit (owner-adjacent lane, rides the next release cut or a deliberate dist-repo pass) + the AGENTS.md UNLANDED-line update once it lands
+**Claimed:** zed-m3-idle, 2026-10-15T18:05Z, expires 2026-10-17T18:05Z — the in-repo optional polish (post-swap symlink courtesy notice, `upgrade` path)
 
 ## The hazard (measured twice, both boxes, 2026-10-13)
 
