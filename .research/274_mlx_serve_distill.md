@@ -1,6 +1,6 @@
 # Research 274 — mlx-serve (the Zig GDN/QSA serving engine) — distill verdict
 
-**Status:** DISTILLED — Batch 242 chartered (plan 244; corpus edits at the batch slot per the plan-first discipline). The oMLX row's designated follow-up pool lead ("a future @distill on IT may grade YES where the integrator grades MARGINAL") — CONFIRMED YES.
+**Status:** LANDED — Batch 242 (plan 244; corpus 816→847, +31 own rules across slices 97/98/99 + 6 count-neutral riders, 1 rider + 1 candidate honestly skipped/folded-kill; landed ABOVE the 12-16 estimate, disclosed per the lithos precedent; every needle verbatim at the pin clone; gates: corpus 404/404, kernel_opt lib 3126/0, clippy ×3, retrieval floors HELD 21/21). The oMLX row's designated follow-up pool lead ("a future @distill on IT may grade YES where the integrator grades MARGINAL") — CONFIRMED YES B+.
 
 ## Source
 

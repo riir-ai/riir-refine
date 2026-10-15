@@ -2,7 +2,7 @@
 //! GDN/QSA/RHT core slice — ten own `kernel_opt` rules from
 //! ddalcu/mlx-serve @ 1015f785 (MIT, 2026-10-14), a native Zig LLM
 //! serving engine for Apple Silicon (embedded MSL kernels). Slice A of
-//! the batch (gdn/qsa/rht + the add_norm/simd_qmm fold-in faces); the
+//! the batch (gdn/qsa/rht + the `add_norm/simd_qmm` fold-in faces); the
 //! qmm-family and attn-trio slices land in their own files.
 //!
 //! - cand 1 `split-prework-recompute-beats-inter-kernel-barrier` —
@@ -30,7 +30,7 @@
 //!   the fold-does-not-cover-trees anti-lead.
 //! - cand 6 `op-chain-collapse-membership-binary-search-mask` —
 //!   qsa_mask.zig:1-27,34-41,86-133 — ~8 dependent launches → 1 kernel:
-//!   binary-search membership over a sorted selection padded with INT_MAX
+//!   binary-search membership over a sorted selection padded with `INT_MAX`
 //!   sentinels; the retired chain stays as kill-switch AND oracle.
 //! - cand 7 `partial-softmax-l-zero-empty-split-skip-flag` —
 //!   qsa_decode.zig:55-56,73,80,127-134,137,144-166 — l ≥ 1 for any
@@ -50,7 +50,7 @@
 //!   same'; the chosen size threads grid + config + the baked NT.
 //! - not converted: fold-depth-threadgroup-memory-ceiling — folded
 //!   in-rule as the rider on cand 1 (gdn_decode.zig:582-583, the 32 KB
-//!   threadgroup ceiling bounding FOLD_MAX_SEQ = 8; per task instruction).
+//!   threadgroup ceiling bounding `FOLD_MAX_SEQ` = 8; per task instruction).
 //! - not converted: declined-shape-negative-latch-with-reason — folded
 //!   in-rule as the per-shape face on cand 2 (simd_qmm.zig:436-437,
 //!   606-615; per task instruction).
