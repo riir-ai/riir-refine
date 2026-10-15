@@ -3753,7 +3753,7 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
                     }
                 };
                 if want_qr {
-                    let rendered = riir_refine::kat_lease_client::render_qr_ascii_small(&intent.url);
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
                     if rendered.is_empty() {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
@@ -3948,7 +3948,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                     }
                 };
                 if want_qr {
-                    let rendered = riir_refine::kat_lease_client::render_qr_ascii_small(&intent.url);
+                    let rendered = riir_refine::kat_lease_client::render_qr_ascii(&intent.url);
                     if rendered.is_empty() {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
@@ -4945,7 +4945,7 @@ fn run_kat_replay() {
 /// errors surface as silence, the QR is a convenience never a gate).
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 fn print_qr(url: &str) {
-    let qr = riir_refine::kat_lease_client::render_qr_ascii_small(url);
+    let qr = riir_refine::kat_lease_client::render_qr_ascii(url);
     if !qr.is_empty() {
         println!("{qr}");
     }
@@ -14692,7 +14692,7 @@ fn main() {
                 eprintln!(
                     "kat-charge: top up — {url} (KAT packs), or contribute: cargo refine --mine"
                 );
-                let qr = riir_refine::kat_lease_client::render_qr_ascii_small(&url);
+                let qr = riir_refine::kat_lease_client::render_qr_ascii(&url);
                 if !qr.is_empty() {
                     eprintln!("{qr}");
                 }

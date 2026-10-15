@@ -230,10 +230,12 @@ fn hex_bytes(h: &str) -> Vec<u8> {
         .collect()
 }
 
-/// Whether `text` carries a rendered QR — the small render's glyphs are
-/// the Unicode braille patterns (U+2800–U+28FF, the 2×4 module packing).
+/// Whether `text` carries a rendered QR — the dense render's glyphs are
+/// the Unicode block elements (▀ U+2580 / ▄ U+2584 / █ U+2588, the
+/// Dense1x2 packing: two modules per character).
 fn has_qr(text: &str) -> bool {
-    text.chars().any(|c| ('\u{2800}'..='\u{28FF}').contains(&c))
+    text.chars()
+        .any(|c| matches!(c, '\u{2580}' | '\u{2584}' | '\u{2588}'))
 }
 
 /// Phase 1: no account, no dial — the honest local refusal.
@@ -315,7 +317,7 @@ fn topup_qr_flag_renders_the_checkout_qr_even_piped() {
     let (code, text) = heal(&dir, &mock.base(), &[], &["topup", "--pack", "1", "--qr"]);
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("solana:pay?example"), "the URL line: {text}");
-    assert!(has_qr(&text), "the QR must render (braille-packed): {text}");
+    assert!(has_qr(&text), "the QR must render (dense): {text}");
     assert!(text.contains("Solana Pay wallet"), "the pointer line: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }
