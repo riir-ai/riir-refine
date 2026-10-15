@@ -2087,6 +2087,16 @@ mod tests {
         // P7/B200 trade again: legitimate corpus growth re-ranks the pool,
         // no domain regressed. Floors = measured − ONE span. TOP5 held
         // (133 vs floor 132) — untouched.
+        // Batch 244 NO-RE-PIN (2026-10-16, the byte-scan/search batch landing,
+        // Plan 247 / Research 276): +10 benchable rust_perf rules (the
+        // text/unicode family's follow-up -- regex-automata + memchr + bstr at
+        // release pins) grew the pool again. MEASURED at the landing (default
+        // state): blended **125/141 (88.7%) / 131/141 (92.9%) / 133/141
+        // (94.3%)** -- every blended floor HELD (125 >= 124, 131 >= 130) and
+        // the per-domain floors HELD (clippy/rust_perf/docker/dist
+        // demonstrability constants 0.955/0.946/0.867/0.800, rust_perf n=56
+        // selected 53). No re-pin: the floors stand as-is (124/130), the
+        // batch growth was absorbed without a span of decay.
         pub const BLENDED_TOP1: f32 = 124.0 / 141.0;
         pub const BLENDED_TOP3: f32 = 130.0 / 141.0;
         // Batch 200 re-pin (2026-10-03, the TensorFold serving-half landing,

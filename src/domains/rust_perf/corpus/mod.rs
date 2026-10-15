@@ -9,6 +9,32 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
+//! 217 entries across 13 categories as of Batch 244 (2026-10-16, Plan 247 /
+//! Research 276 — the text/unicode family's follow-up, the byte-scan/search
+//! mechanism batch, +10 — ALL benchable + annotated — from three sources read
+//! at release pins: `rust-lang/regex` @ `regex-automata-0.4.18`,
+//! `BurntSushi/memchr` @ `2.8.3`, `BurntSushi/bstr` @ `1.13.1`:
+//! `byte-class-equivalence-table-shrink` (layout, the regex byte-class law:
+//! collapse the key space to equivalence classes before the table —
+//! states×256 → states×classes, cache-resident) +
+//! `prefilter-choice-shape-ladder` (dispatch, cheapest-first accelerator
+//! selection with the empty-set/empty-string refusals) +
+//! `alternation-prefix-collapse-at-build` (complexity, the common-prefix
+//! collapse + preference-trie shadowing + truncation ladder) +
+//! `byte-rank-select-rarest-probe` (caching, the merged regex-syntax `rank()`
+//! + memchr Pair law — rarest-byte probe + the rank-250 poison refusal) +
+//!   `prefilter-skip-density-demotion` (dispatch, the `PrefilterState`
+//!   feedback-control law — track skip density, latch inert, sentinel 0) +
+//!   `iter-count-bulk-specialization` (iterators, the `Iterator::count` override
+//!   with a bulk mask-popcount sweep) + `mod64-byte-membership-skip` (caching,
+//!   the Two-Way `ApproximateByteSet` — the Boyer–Moore shift for bytes absent
+//!   from the needle) + `byteset-cardinality-dispatch` (dispatch, route
+//!   find-first-of by set cardinality — memchrN for 1–3, 256-entry stack table
+//!   for ≥4) + `utf8-fast-lane-cold-diagnostics` (dispatch, validate bare and
+//!   recompute diagnostics windowed on failure) +
+//!   `bufread-scan-in-buffer-scratch-fragment` (io, the zero-copy `fill_buf`
+//!   drain + one reused scratch).
+//!
 //! 207 entries across 13 categories as of Batch 243 (2026-10-16, Plan 245 /
 //! Research 275 — the text/unicode processing family seed, the corpus's
 //! founding member of that family, from Hugging Face's Tokenmaxxing-BERT
@@ -484,6 +510,7 @@ mod entries_26;
 mod entries_27;
 mod entries_28;
 mod entries_29;
+mod entries_30;
 
 #[cfg(test)]
 mod tests;
@@ -576,5 +603,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_27::entries());
     entries.extend(entries_28::entries());
     entries.extend(entries_29::entries());
+    entries.extend(entries_30::entries());
     Corpus::new(entries)
 }
