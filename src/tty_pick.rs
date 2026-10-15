@@ -309,6 +309,18 @@ impl TtyKeys {
     pub fn first_timeout(&mut self, _decisecs: u8) {}
 }
 
+// Shape parity with the unix guard (whose Drop restores the saved
+// termios exactly): the stub never entered raw mode, so its restore is
+// vacuous — but call sites stay identical on every platform and
+// `drop(keys)` stays meaningful instead of tripping clippy::drop_non_drop
+// against a non-Drop ZST (heal.rs's topup picker). Never constructed at
+// runtime: `enable()` is always `None` here, so this impl is compile-time
+// shape only, exactly like the KeyReader stub below.
+#[cfg(not(unix))]
+impl Drop for TtyKeys {
+    fn drop(&mut self) {}
+}
+
 // Compile-time reachability only: `enable()` is always `None` on this
 // platform, so a `TtyKeys` can never reach `pick` at runtime — but the
 // call site's `K: KeyReader` bound is checked at compile time on every
