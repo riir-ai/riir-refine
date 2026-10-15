@@ -18,6 +18,26 @@
 //! never the live plane; planes counted `n_stream*(1+n_rs_seq`) in `size_t`
 //! arithmetic) — `NotBenchable` annotated; caching 15 → 16; categories
 //! UNCHANGED 13.
+//! 223 entries across 13 categories as of Batch 245 (2026-10-16, Plan 248 /
+//! Research 277 — the Batch-244 DEFER LIST conversion, +6 (3 benchable + 3
+//! NotBenchable-annotated) + 1 count-neutral rider + 1 defer confirmed, from
+//! the same three Batch-244 sources re-read at their release pins:
+//! `self-loop-state-memchr-skip` (dispatch, the dfa/accel.rs self-loop law:
+//! one memchr over the ≤3 exit bytes replaces N state steps — with the
+//! common-byte admission refusal) + `pair-probe-confirm-fused` (simd, the
+//! generic packedpair fused AND: two offsets, one candidate mask, ~p₁·p₂
+//! false positives) + `finder-hoist-reuse` (caching, ONE law in two repos —
+//! memmem + bstr Finder construction amortized across haystacks) +
+//! `canonical-set-guarded-rebuild` (complexity, the invariant-guarded
+//! normalize — premise-corrected: the guard is canonicalize/folded/union,
+//! push is sort-free at this pin) + `nonmax-sentinel-option-niche` (layout,
+//! the Option niche via the `isize::MAX-provable` sentinel — payoff RELABELED
+//! memory-first) + `match-branch-cold-confirm` (dispatch, the #[cold]
+//! placement law — benchmark-cited positive on the rabinkarp confirm,
+//! measured wash on tiny helpers; suggest-only). The rider: the CHAR face on
+//! `byte-find-position-to-memchr` (bstr `find_char` encode-once). DEFER
+//! confirmed: `align-probe-overlap-tail` (align half source-silent, tail
+//! thin). The staged 8 leads convert 6 + rider + defer — zero dropped.
 //!
 //! 217 entries across 13 categories as of Batch 244 (2026-10-16, Plan 247 /
 //! Research 276 — the text/unicode family's follow-up, the byte-scan/search
@@ -522,15 +542,18 @@ mod entries_28;
 mod entries_29;
 mod entries_30;
 mod entries_31;
+mod entries_32;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 207 entries
-/// (Batch 241, 2026-10-15, Plan 243 / Research 273: +2, the serving
-/// slot-state cache pair from llama.cpp #30580 + #30567 — both `caching`, both
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 223 entries
+/// (Batch 245, 2026-10-16, Plan 248 / Research 277: +6, the Batch-244 defer-list
+/// conversion + the count-neutral char rider on `byte-find-position-to-memchr`;
+/// prior — Batch 244: +10, the byte-scan/search batch, Plan 247; Batch 243:
+/// +2, the serving slot-state cache pair from llama.cpp #30580 + #30567 — both `caching`, both
 /// `NotBenchable`; + the count-neutral draft-state rider on P65. Prior —
 /// Batch 239: +2, the serving state-cache pair from llama.cpp #30514 + #30498 — both `caching`, both
 /// `NotBenchable` annotated; on the Batch 237 base, 2026-10-15, Plan 239:
@@ -616,5 +639,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_29::entries());
     entries.extend(entries_30::entries());
     entries.extend(entries_31::entries());
+    entries.extend(entries_32::entries());
     Corpus::new(entries)
 }
