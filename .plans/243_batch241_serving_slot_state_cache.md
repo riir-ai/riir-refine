@@ -1,6 +1,6 @@
 # Plan 243 — Batch 241: the serving slot-state cache pack (P71/P72 own rules + P73 rider)
 
-**Status:** IN_FLIGHT — claimed 2026-10-15 (claim row in `.distill/001`, pushed plan-first)
+**Status:** COMPLETE — landed 2026-10-15 (Batch 241; corpus rust_perf 203 → 205, caching 10 → 12; +1 count-neutral rider)
 
 Source: ggml-org/llama.cpp, envelope delta `47f5a64ae` → `620d2225cc436ab0b001e3200e590e3b286ef9ab`
 (14 commits graded; 3 convertible, rest NULL — version bumps, model registrations, CI, UI,
@@ -45,26 +45,26 @@ jinja C++ copy-ctor with no law). Read at the pins via the fetched F:/llama.cpp 
 
 ## Tasks
 
-- [ ] Re-verify every quote at the pins (full .diff reads of the three commits in
+- [x] Re-verify every quote at the pins (full .diff reads of the three commits in
       F:/llama.cpp — never trust the staging read's transcription)
-- [ ] Re-run dedup greps at authoring time (reuse threshold / empty-first / save-on-
+- [x] Re-run dedup greps at authoring time (reuse threshold / empty-first / save-on-
       overwrite / draft-state persistence)
-- [ ] Author P71 + P72 as OWN rust_perf rules (caching; NotBenchable annotated —
+- [x] Author P71 + P72 as OWN rust_perf rules (caching; NotBenchable annotated —
       serving contracts, no Rust-side A/B axis, the P65/P66 precedent) + P73 as a
       count-neutral rider on entries_27
-- [ ] G1: batch241 needle + pseudocode-parse gate (both halves parse ×3 rules)
-- [ ] G2: lib tests at default + rust_perf postures
-- [ ] G3: clippy `-D warnings` at default + all-features + no-default (heal doc_markdown
+- [x] G1: batch241 needle + pseudocode-parse gate (both halves parse ×3 rules)
+- [x] G2: lib tests at default + rust_perf postures
+- [x] G3: clippy `-D warnings` at default + all-features + no-default (heal doc_markdown
       via `cargo refine --fix --write --verify` — the B192 class)
-- [ ] Retrieval floors re-measure (`--features rust_perf,latent_retrieval --lib
+- [x] Retrieval floors re-measure (`--features rust_perf,latent_retrieval --lib
       retrieval` — B239 precedent; floors 21/21 must hold, no silent re-pin)
-- [ ] Freeze/score-bench: NOT owed (zero clippy-corpus delta, P30) — verify + record
-- [ ] Count pins: rust_perf 203 → 205 at every pin site (tests.rs, mod.rs, router.rs
+- [x] Freeze/score-bench: NOT owed (zero clippy-corpus delta, P30) — verify + record
+- [x] Count pins: rust_perf 203 → 205 at every pin site (tests.rs, mod.rs, router.rs
       if it carries rust_perf totals, AGENTS ×2, README, .docs/11_domains/rust_perf.md)
-- [ ] Research note 273 (born-complete RECORD)
-- [ ] Docs: AGENTS rust_perf bullet + rust_perf.md batch row + snapshot landing row
-- [ ] Commit `feat: batch 241: ...` + push; update `.distill/001` in the same commit
-- [ ] Tick this plan complete + push
+- [x] Research note 273 (born-complete RECORD)
+- [x] Docs: AGENTS rust_perf bullet + rust_perf.md batch row + snapshot landing row
+- [x] Commit `feat: batch 241: ...` + push; update `.distill/001` in the same commit
+- [x] Tick this plan complete + push
 
 ## Notes
 

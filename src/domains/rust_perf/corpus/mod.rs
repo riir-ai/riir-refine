@@ -9,7 +9,11 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 203 entries across 13 categories as of Batch 239 (2026-10-15, Plan 241 /
+//! 205 entries across 13 categories as of Batch 241 (2026-10-15, Plan 243 / Research 273 — the serving slot-state cache pair from the llama.cpp envelope delta `47f5a64ae → 620d2225`: +2 caching —
+//! `reuse-admission-threshold-must-equal-window-semantics` (#30580) +
+//! `empty-slot-first-victim-order-save-before-overwrite` (#30567), plus the
+//! count-neutral draft-state rider on `entries_27` P65 (#30574). Prior —
+//! Batch 239 (2026-10-15, Plan 241 /
 //! Research 270 — the serving state-cache pair from the llama.cpp envelope
 //! delta `843e7dcc → e467e5b5e5ba`: +2 caching —
 //! `partial-state-serialization-honors-rollback-contract-at-leaf-cache`
@@ -463,15 +467,18 @@ mod entries_24;
 mod entries_25;
 mod entries_26;
 mod entries_27;
+mod entries_28;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 203 entries
-/// (Batch 239, 2026-10-15, Plan 241 / Research 270: +2, the serving
-/// state-cache pair from llama.cpp #30514 + #30498 — both `caching`, both
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 205 entries
+/// (Batch 241, 2026-10-15, Plan 243 / Research 273: +2, the serving
+/// slot-state cache pair from llama.cpp #30580 + #30567 — both `caching`, both
+/// `NotBenchable`; + the count-neutral draft-state rider on P65. Prior —
+/// Batch 239: +2, the serving state-cache pair from llama.cpp #30514 + #30498 — both `caching`, both
 /// `NotBenchable` annotated; on the Batch 237 base, 2026-10-15, Plan 239:
 /// +3 — the P58–P61 conversion set, all `NotBenchable` annotated; see the
 /// module header for the batch chain;
@@ -551,5 +558,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_25::entries());
     entries.extend(entries_26::entries());
     entries.extend(entries_27::entries());
+    entries.extend(entries_28::entries());
     Corpus::new(entries)
 }

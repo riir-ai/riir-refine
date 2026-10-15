@@ -25,7 +25,7 @@
 
 160 rules across 12 categories (rust-optimize skill checklist +
 nnethercote/perf-book + rustc-hash/bevy real-world patterns + the hotpath-rs
-profiling guide, Research 032; **now 201 rules across 13 categories — Batch 237
+profiling guide, Research 032; **now 205 rules across 13 categories — Batch 241 (+2 the serving slot-state cache pair #30580+#30567, both caching 10→12; + the count-neutral draft-state rider on P65 #30574; the row previously read 201 — stale through B239's +2, repaired here). Batch 237
 (2026-10-15, Plan 239 — +3 the P58–P61 conversion set, ALL NotBenchable
 annotated, quotes re-verified at the pin clones:
 `f16-to-f32-accumulator-lut-breaks-conversion-serialization` (simd,
