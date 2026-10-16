@@ -60,10 +60,38 @@
 //!   rustfmt-wrapped spelling (one line of carry, the redact v3
 //!   convention).
 //!
-//! [`blind`] and every egress consumer keep the RAW canonical findings:
-//! sharing redaction stays fail-closed, and nothing here changes what
-//! passes or blocks at the gate (`REDACT_VERSION` is untouched).
-
+/// [`blind`] and every egress consumer keep the RAW canonical findings:
+/// sharing redaction stays fail-closed, and nothing here changes what
+/// passes or blocks at the gate (`REDACT_VERSION` is untouched).
+///
+/// # Benign-class extension (P74, 2026-10-17) — still report-lane only
+///
+/// The 10-17 mid-size-repo sweep measured 187 suggest-only findings
+/// across 8 clean repos, every sampled site a documented fixture. Six
+/// classes, four landed as guards, two deferred:
+///
+/// * **GUID tag** — `GUID:<32-hex>` (the Unity .asmdef reference
+///   format) joins the tag guard beside the digest schemes.
+/// * **bodyless key delimiter pair** — a `PrivateKeyBlock` with NO
+///   ≥32-char base64 run between its BEGIN header and END marker is the
+///   parser's `strip_armor` find-needle pair, not key material. SHAPE
+///   evidence (byte-level), so it refines rather than contradicts the
+///   private-key doctrine: a block WITH a body — the named-fixture class
+///   (`THROWAWAY_OPENSSH_KEY`) — stays structural and keeps firing
+///   (DEFERRED: real PEM bytes in source stay visible).
+/// * **canonical base64 alphabet** — a run containing the exact
+///   RFC 4648 64-char sequence is an encoding-vocabulary constant.
+/// * **kebab credential filename** — a `RustSecretLiteral` whose value
+///   is pure lowercase-kebab AND whose binding ends `_credential` is the
+///   systemd `LoadCredential=` FILE name (both evidences AND-ed). An
+///   uppercase/digit-mixed value never qualifies.
+/// * **golden pin names** — the repo-wide `GOLDEN_*` / `*_GOLDEN`
+///   wire-dual-pin convention joins the pin-name evidence; the generic
+///   kinds widen from hex-only to hex+b64 (golden b64 hunks are the
+///   live shape).
+/// * **DEFERRED: RFC assert vectors** — no conservative shape guard
+///   (rustfmt wraps the literal onto its own line; no byte-level
+///   evidence distinguishes them from pinned constants).
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -163,18 +191,44 @@ const PIN_NAME_SUFFIXES: &[&str] = &[
 ];
 
 /// The report-lane adjudication: a canonical finding that is contextually
-/// a digest pin. Scoped to the GENERIC high-entropy-hex kind — exact
-/// provider formats (`AKIA…`, `sk-…`, `AQ.…`, private-key blocks, …) are
-/// structural evidence and are NEVER adjudicated away by context.
+/// a digest pin. Scoped to the GENERIC high-entropy kinds — exact
+/// provider formats (`AKIA…`, `sk-…`, `AQ.…`) are structural evidence and
+/// are NEVER adjudicated away by context. Two kind-specific guards sit
+/// beside the generic ones (P74): a [`FindingKind::PrivateKeyBlock`] with
+/// NO base64 body between its markers (the `strip_armor` delimiter-pair
+/// shape — bodyless bytes are not key material: shape evidence, not
+/// context) and a [`FindingKind::RustSecretLiteral`] whose value is a
+/// lowercase-kebab slug on a `*_CREDENTIAL`-named binding (a systemd
+/// `LoadCredential=` FILENAME, not a secret).
 fn is_digest_pin(span: &str, f: &Finding) -> bool {
-    f.kind == FindingKind::HighEntropyHex
-        && (preceded_by_digest_tag(span, f.start) || opens_pin_named_value(span, f.start))
+    match f.kind {
+        FindingKind::HighEntropyHex | FindingKind::HighEntropyB64 => {
+            preceded_by_known_tag(span, f.start)
+                || opens_pin_named_value(span, f.start)
+                || is_canonical_b64_alphabet(span, f)
+        }
+        FindingKind::PrivateKeyBlock => is_bodyless_key_delimiter(span, f),
+        FindingKind::RustSecretLiteral => is_kebab_credential_value(span, f),
+        _ => false,
+    }
 }
 
-/// Guard (a): a digest-scheme tag sits immediately before the run — glued
-/// (`blake3:EC32…`) or across horizontal whitespace and at most one
-/// opening quote (`blake3: "396b…"` — the struct-field/TOML shape).
-fn preceded_by_digest_tag(span: &str, start: usize) -> bool {
+/// Non-digest identifier tags (P74): `GUID:<32-hex>` is the Unity .asmdef
+/// reference format — project-internal asset ids every Unity repo carries
+/// in source and `.meta` files alike. A real API key never carries the
+/// prefix.
+const IDENTIFIER_SCHEMES: &[&str] = &["guid"];
+
+/// Guard (a): a known tag sits immediately before the run — glued
+/// (`blake3:EC32…`, `GUID:3F2A…`) or across horizontal whitespace and at
+/// most one opening quote (`blake3: "396b…"` — the struct-field/TOML
+/// shape).
+fn preceded_by_known_tag(span: &str, start: usize) -> bool {
+    preceded_by_tag_in(span, start, DIGEST_SCHEMES)
+        || preceded_by_tag_in(span, start, IDENTIFIER_SCHEMES)
+}
+
+fn preceded_by_tag_in(span: &str, start: usize, schemes: &[&str]) -> bool {
     let mut head = &span[..start];
     if head.ends_with('"') || head.ends_with('\'') {
         head = &head[..head.len() - 1];
@@ -189,7 +243,7 @@ fn preceded_by_digest_tag(span: &str, start: usize) -> bool {
         s -= 1;
     }
     let scheme = before_colon[s..].to_ascii_lowercase();
-    DIGEST_SCHEMES.contains(&scheme.as_str())
+    schemes.contains(&scheme.as_str())
 }
 
 /// Guard (b): the run opens a fresh string literal (the byte before it is
@@ -221,19 +275,35 @@ fn opens_pin_named_value(span: &str, start: usize) -> bool {
 }
 
 /// `NAME` (after any `: TYPE` ascription and the `pub/const/static/let/mut`
-/// keywords) — a bare identifier carrying a pin suffix?
-fn pin_named_declaration(lhs: &str) -> bool {
+/// keywords) — the lowercased bare identifier, when the LHS reduces to
+/// exactly one.
+fn declaration_ident(lhs: &str) -> Option<String> {
     let mut s = lhs.trim();
     if let Some(c) = s.find(':') {
         s = s[..c].trim();
     }
     loop {
+        // `pub(super)` / `pub(crate)` visibility — the paren scope sits
+        // between the keyword and the name (P74: the live golden-pin
+        // sites are `pub(super) const GOLDEN_*`; P63 never met the form).
+        if let Some(rest) = s.strip_prefix('(') {
+            let close = rest.find(')')?;
+            s = rest[close + 1..].trim_start();
+            continue;
+        }
         let next = ["pub", "const", "static", "let", "mut"]
             .iter()
             .find_map(|kw| {
                 let rest = s.strip_prefix(kw)?;
-                let n = rest.len() - rest.trim_start_matches([' ', '\t']).len();
-                (n > 0).then(|| &rest[n..])
+                let trimmed = rest.trim_start();
+                let n = rest.len() - trimmed.len();
+                if n > 0 {
+                    Some(trimmed)
+                } else if rest.starts_with('(') {
+                    Some(rest) // `pub(super)…` — the paren arm handles it
+                } else {
+                    None
+                }
             });
         match next {
             Some(n) => s = n.trim_start(),
@@ -244,10 +314,117 @@ fn pin_named_declaration(lhs: &str) -> bool {
         || s.starts_with(|c: char| c.is_ascii_digit())
         || !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
     {
+        return None;
+    }
+    Some(s.to_ascii_lowercase())
+}
+
+/// `NAME` carries a pin suffix — or (P74) the golden-pin convention: the
+/// repo-wide `GOLDEN_*` / `*_GOLDEN` wire-dual-pin naming.
+fn pin_named_declaration(lhs: &str) -> bool {
+    let Some(lower) = declaration_ident(lhs) else {
+        return false;
+    };
+    PIN_NAME_SUFFIXES.iter().any(|sfx| lower.ends_with(sfx))
+        || lower.starts_with("golden_")
+        || lower.ends_with("_golden")
+}
+
+/// `NAME` carries the credential-binding suffix (the systemd
+/// `LoadCredential=` filename-const shape).
+fn credential_named_declaration(lhs: &str) -> bool {
+    declaration_ident(lhs).is_some_and(|lower| lower.ends_with("_credential"))
+}
+
+/// The canonical RFC 4648 base64 alphabet — its exact 64-char sequence is
+/// encoding vocabulary; no credential contains it as a substring.
+const B64_ALPHABET: &[u8; 64] =
+    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Guard (c) (P74): the matched run CONTAINS the exact canonical base64
+/// alphabet sequence — an alphabet constant (`const CHARS: &[u8] =
+/// b"ABCDEFGH…"`), not a secret. Byte-exact substring: conservative by
+/// construction (an attacker-chosen value would have to BE the ordered
+/// alphabet to suppress).
+fn is_canonical_b64_alphabet(span: &str, f: &Finding) -> bool {
+    let token = &span[f.start..f.start + f.len];
+    token
+        .as_bytes()
+        .windows(B64_ALPHABET.len())
+        .any(|w| w == B64_ALPHABET)
+}
+
+/// Byte-substring find (the `kat_redact` helper's local twin — that one is
+/// module-private and the canonical scanner's surface stays untouched).
+fn find_sub(haystack: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return None;
+    }
+    (from..=haystack.len() - needle.len()).find(|&i| &haystack[i..i + needle.len()] == needle)
+}
+
+/// Guard (b) (P74): a [`FindingKind::PrivateKeyBlock`] whose span carries
+/// NO base64 body between the BEGIN header and the END marker — the
+/// delimiter-PAIR shape (`let begin = "-----BEGIN OPENSSH PRIVATE
+/// KEY-----"; let end = "-----END …"`): the parser's find-needles, never
+/// key material. SHAPE evidence, byte-level: a real PEM body is built of
+/// ≥32-char base64 lines; the region between the markers here holds
+/// none. A block WITH a body keeps its finding — named-fixture keys stay
+/// structural evidence (the P74 (a) defer).
+fn is_bodyless_key_delimiter(span: &str, f: &Finding) -> bool {
+    let text = &span[f.start..f.start + f.len];
+    let bytes = text.as_bytes();
+    // The BEGIN header's end — the same needles the scanner matches.
+    let block_end = find_sub(bytes, b"PRIVATE KEY BLOCK-----", 0)
+        .map(|e| e + "PRIVATE KEY BLOCK-----".len());
+    let key_end = find_sub(bytes, b"PRIVATE KEY-----", 0)
+        .map(|e| e + "PRIVATE KEY-----".len());
+    let Some(header_end) = block_end.max(key_end) else {
+        return false; // cannot resolve the shape — fail closed
+    };
+    let body_end = find_sub(bytes, b"-----END", header_end).unwrap_or(bytes.len());
+    let mut run = 0usize;
+    for &b in &bytes[header_end..body_end] {
+        if b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'\\') {
+            run += 1;
+            if run >= 32 {
+                return false;
+            }
+        } else {
+            run = 0;
+        }
+    }
+    true
+}
+
+/// Guard (d) (P74): a [`FindingKind::RustSecretLiteral`] whose value is a
+/// pure lowercase-kebab slug AND whose binding name ends `_credential` —
+/// the systemd `LoadCredential=` FILENAME shape (`pub const
+/// LEDGER_ROOT_CREDENTIAL: &str = "riir-chain-ledger-id"`): the const
+/// names the credential FILE to ask for, it is not the secret. BOTH
+/// evidences AND-ed (the P63 doctrine); an uppercase/digit-mixed value
+/// never qualifies.
+fn is_kebab_credential_value(span: &str, f: &Finding) -> bool {
+    let lit = &span[f.start..f.start + f.len];
+    let Some(value) = lit.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
+        return false;
+    };
+    if value.len() < 8
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        || value.starts_with('-')
+        || value.ends_with('-')
+        || value.contains("--")
+    {
         return false;
     }
-    let lower = s.to_ascii_lowercase();
-    PIN_NAME_SUFFIXES.iter().any(|sfx| lower.ends_with(sfx))
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let head = &span[line_start..f.start];
+    let Some(eq) = head.rfind('=') else {
+        return false;
+    };
+    credential_named_declaration(&head[..eq])
 }
 
 /// Blind a file's text: every finding's bytes replaced by the scanner's
@@ -672,5 +849,117 @@ mod tests {
         let t = "const PIN_SHA: &str = \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2\";\n";
         let out = blind(t);
         assert!(out.contains("[REDACTED:high-entropy-hex]"), "{out}");
+    }
+
+    // ── P74: benign-class guards (probe-first; Batch-33 discipline) ──
+
+    const B64_ALPHABET_STR: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    /// The REAL sites from the 10-17 sweep, verbatim shapes.
+    #[test]
+    fn p74_live_sites_are_suppressed() {
+        // (a) viewbridge xtask — Unity asmdef GUID references (contiguous
+        // 32-hex; the dashed UUID form never fires — dashes break the run).
+        let t = concat!(
+            "    \"references\": [\n",
+            "        \"GUID:0ec3d108315f4b0b8f5f0a52b2f3b96d\",\n",
+            "        \"GUID:3f2ab1c09d8e47aab6c51e0f9a8b7c6d\",\n",
+            "        \"GUID:5a4b3c2d1e0f4a5b8c7d6e5f4a3b2c1d\",\n",
+            "    ],\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 3);
+
+        // (b) rethink authority.rs — the strip_armor delimiter pair (NO
+        // body between the markers).
+        let t = concat!(
+            "fn strip_armor(text: &str) -> Option<&str> {\n",
+            "    let begin = \"-----BEGIN OPENSSH PRIVATE KEY-----\";\n",
+            "    let end = \"-----END OPENSSH PRIVATE KEY-----\";\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // (c) the base64 alphabet constant (rethink authority.rs:244 /
+        // neuron-db e2e_login.rs:143).
+        let t = format!("    let alphabet = b\"{B64_ALPHABET_STR}\";\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // (d) chain ledger_key.rs — the LoadCredential= filename consts.
+        let t = concat!(
+            "pub const LEDGER_ROOT_CREDENTIAL: &str = \"riir-chain-ledger-root\";\n",
+            "pub const LEDGER_ID_CREDENTIAL: &str = \"riir-chain-ledger-id\";\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+
+        // (e) the golden-pin convention (dapps backstab_anchored_tests.rs
+        // GOLDEN_CHUNK/GOLDEN_HUNK — b64 hunks; both values entropy-real).
+        let t = concat!(
+            "pub(super) const GOLDEN_CHUNK: &str =\n",
+            "    \"w7vP5xKq2mR8tNzL1cYb4fJ6hD0sG9uA3eWiXoVkBpQaZyTnMlEdCrHgUjSdF2m\";\n",
+            "pub(super) const GOLDEN_HUNK: &str = \"Zx4Qw7Vb2Nr8Tm5Kj3Yc6Fh9Sd0Gg1Ua2Ei4Oo5Pp8Lk=\";\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+    }
+
+    /// MUST-FIRE (the P74 probe contract): a PRIVATE KEY block WITH a
+    /// body — the named-fixture class — stays structural evidence, name
+    /// notwithstanding (defer (a)); a real-looking kebab password on a
+    /// non-credential binding stays; a NON-kebab credential value stays;
+    /// a partial alphabet stays; an unknown tag stays; a golden-NAMED
+    /// provider secret stays (kind evidence outranks the name).
+    #[test]
+    fn p74_probe_negatives_stay_firing() {
+        // A real PEM body between the markers (short fixture body) — the
+        // delimiter guard must NOT suppress a keyed block.
+        let body = "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gd29ybGQg\naGVsbG8g\n";
+        let t = format!("const FIXTURE: &str = \"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}-----END OPENSSH PRIVATE KEY-----\";\n");
+        let f = scan_file(&t);
+        assert!(f.iter().any(|x| x.tag() == "private-key-block"), "{f:?}");
+
+        // A kebab-slug value on a NON-credential (but secret-shaped)
+        // binding — the name evidence must not leak to other bindings.
+        let t = "let service_password = \"my-service-events-queue\";\n";
+        let f = scan_file(t);
+        assert!(f.iter().any(|x| x.tag() == "rust-secret-literal"), "{f:?}");
+
+        // An uppercase-mixed value on a credential-named binding — a real
+        // password shape; the kebab guard must refuse.
+        let t = "const DEPLOY_CREDENTIAL: &str = \"hunter2S3cret\";\n";
+        let f = scan_file(t);
+        assert!(f.iter().any(|x| x.tag() == "rust-secret-literal"), "{f:?}");
+
+        // A PARTIAL alphabet (the first 40 chars) — not the exact sequence.
+        let t = format!("const CHARS: &[u8] = b\"{}\";\n", &B64_ALPHABET_STR[..40]);
+        assert_eq!(scan_file(&t).len(), 1, "partial alphabet must not suppress");
+
+        // An unknown identifier tag.
+        let t = "let x = \"redis:a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0\";\n";
+        assert_eq!(scan_file(t).len(), 1);
+
+        // A provider secret under a golden name — kind evidence wins.
+        let t = format!("const GOLDEN_KEY: &str = \"{AWS_KEY}\";\n");
+        let f = scan_file(&t);
+        assert!(f.iter().any(|x| x.tag() == "aws-access-key"), "{f:?}");
+    }
+
+    /// Fail-closed shape resolution: a PrivateKeyBlock the guard cannot
+    /// resolve (no recognizable header inside the span) stays a finding.
+    #[test]
+    fn p74_unresolvable_key_block_stays_firing() {
+        // The scanner's needle is BEGIN…PRIVATE KEY-----; a malformed span
+        // that still triggers the kind must not be suppressed.
+        let t = "-----BEGIN OPENSSH PRIVATE KEY-----\n-----END OPENSSH PRIVATE KEY-----\n";
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "plain delimiter pair suppresses");
+        assert_eq!(out.digest_pins.len(), 1);
     }
 }
