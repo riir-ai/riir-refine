@@ -188,7 +188,13 @@ until the claims clear.
 6. Write the Research note (`.research/NNN_*.md` — next free number),
    bump the corpus count in `AGENTS.md`, update `.docs/11_domains/`.
 7. Commit `feat: batch NN: ...` + push. Update the mining queue snapshot
-   at `.distill/001_mining_queue_snapshot.md` (same commit).
+   at `.distill/001_mining_queue_snapshot.md` (same commit). **If the batch
+   touched healer source, the maintained binary must be rebuilt BEFORE the
+   push** (the Issue-153 release feature set; verify with §0 of
+   `scripts/self_evolve_audit.sh` or `cargo refine --version`'s `build:`
+   hash == HEAD) — the B248 lesson: a landed corpus the global
+   `~/.cargo/bin/cargo-refine` does not serve silently heals with the OLD
+   rules until the next audit catches the bin-age.
 
 ## Protocol B — heal dry-run on workspace repos (queue items 3 + 5)
 
