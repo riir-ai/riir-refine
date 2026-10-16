@@ -9,7 +9,13 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 218 entries across 13 categories as of Batch 246 (2026-10-16, Plan 250 /
+//! 230 entries across 13 categories as of Batch 248 (2026-10-16, Plan 252 /
+//! Research 280: the staged simdutf + unicode-normalization conversion —
+//! minimal-perfect-hash-static-lookup, flat-pool-start-len-static-rows,
+//! dense-subdomain-arithmetic-before-table-lookup,
+//! fanout-transform-emit-callback-not-vec, inline-buffer-index-shift-over-drain,
+//! shift-mask-adjacency-check — deferred-error-mask-block-check DROPPED at
+//! measurement, the negative lives in Research 280; was 224 at Batch 246, Plan 250 /
 //! Research 278 — the prism fork delta: +1 caching, the serving state-cache
 //! family's FORK face — `seq-fork-carries-pending-rollback-record` (a
 //! sequence-fork carries PENDING mutation records, not just committed
@@ -543,6 +549,7 @@ mod entries_29;
 mod entries_30;
 mod entries_31;
 mod entries_32;
+mod entries_33;
 
 #[cfg(test)]
 mod tests;
@@ -640,5 +647,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_30::entries());
     entries.extend(entries_31::entries());
     entries.extend(entries_32::entries());
+    entries.extend(entries_33::entries());
     Corpus::new(entries)
 }
