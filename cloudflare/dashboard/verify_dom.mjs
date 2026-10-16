@@ -8,7 +8,7 @@ const captured = {};
 const els = {};
 function el(id) {
   if (els[id]) return els[id];
-  const e = { id, _h: '', textContent: '' };
+  const e = { id, _h: '', textContent: '', style: {} };
   Object.defineProperty(e, 'innerHTML', {
     get() { return this._h; },
     set(v) { this._h = v; if (v) captured[id] = v; },

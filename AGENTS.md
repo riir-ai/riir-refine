@@ -30,7 +30,7 @@ The pipeline (shared across all domains): L0 rule distillation → L1 Plasma/hot
 
 ## CF ops surface + the `.env` contract (read before touching ops)
 
-This repo hosts the **LLM ops plane**: the `riir-kat-housekeeping` worker (`cloudflare/housekeeping/`), the `riir-ops-dashboard` worker (`cloudflare/dashboard/`), and the nightly generator (`scripts/ops_nightly.sh`). Credentials live in **`.env` (gitignored — never commit, never print values)**; [`.env.example`](.env.example) is the documented template. AI sessions: treat `.env` as read-only local state — pipe values into `wrangler secret put` via stdin, never echo them.
+This repo hosts the **LLM ops plane**: the `riir-kat-housekeeping` worker (`cloudflare/housekeeping/`), the `riir-ops-dashboard` worker (`cloudflare/dashboard/`), and the ON-DEMAND dashboard generator (`scripts/ops_nightly.sh` — the nightly launchd schedule `com.riir.ops-nightly` was RETIRED 2026-10-16, riir-dapps Issue 127: run the script manually when a dashboard refresh is wanted; it sources `.env` itself). Credentials live in **`.env` (gitignored — never commit, never print values)**; [`.env.example`](.env.example) is the documented template. AI sessions: treat `.env` as read-only local state — pipe values into `wrangler secret put` via stdin, never echo them.
 
 **Deploy hazard (load-bearing):** wrangler honours `CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN` — an analytics-scoped value in the deploy env silently breaks auth. Every `wrangler deploy` in this repo runs under `env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL …`. Keep that prefix; a bare `npx wrangler deploy` is the bug. (Full record: `HISTORY.md`.)
 
