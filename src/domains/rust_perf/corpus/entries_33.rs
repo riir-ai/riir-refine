@@ -17,12 +17,12 @@
 //! simdutf (validation/transcoding only — confirmed by grep; the family note
 //! scoping stands).
 //!
-//! THE BATCH'S SHAPE: +6 rules (5 benchable ParetoDominant + 1
+//! THE BATCH'S SHAPE: +6 rules (5 benchable `ParetoDominant` + 1
 //! NotBenchable-annotated) + 1 count-neutral rider (the bounded-arity
 //! `ArrayVec` face on `smallvec-stack`, `entries_02`) + a DROP list
 //! recorded in Research 280. DROPPED AT MEASUREMENT (the Batch-243
 //! transform-borrow precedent): deferred-error-mask-block-check — the
-//! scalar-spelled mask-fold measured ParetoDominated 0/3/0 (0.64-0.73x)
+//! scalar-spelled mask-fold measured `ParetoDominated` 0/3/0 (0.64-0.73x)
 //! after ONE honest restructure (the first fixture's threshold-count
 //! naive arm AUTO-VECTORIZES and tied 3/3; the restructured state-carry
 //! shape — the source's actual regime — then measured Dominated because
