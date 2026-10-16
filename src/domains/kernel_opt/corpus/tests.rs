@@ -18134,3 +18134,76 @@ fn batch246_rule_parse_and_needles_landed() {
         );
     }
 }
+
+#[test]
+fn batch247_oracle_riders_landed() {
+    // G1 for Batch 247 (Plan 251 / Research 279): the splash runtime-oracle
+    // RIDER PAIR on entries_gpu_95 (the B236 capture rule's own oracle face),
+    // count-neutral — corpus STANDS 848. Both commits read in full at the
+    // vendor clone E:/git/vendor/splash fetched be3b083c5; every needle
+    // verbatim at the pins this session.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        848,
+        "batch-247: corpus STANDS at 848 (count-neutral rider pair)"
+    );
+
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "mid-prefill-recurrent-state-capture-boundary-unsplit")
+        .expect("batch-247 rider host in corpus");
+
+    // rider (a): the content-vs-count oracle (3903390, the Research-268
+    // deferral discharged).
+    for needle in [
+        "RIDER PAIR (Batch 247 / Plan 251 / Research 279",
+        "3903390",
+        "the retained rows were compared nowhere, and only the continued block checked one count end to end, the one the model's acceptance gave",
+        "The check now compares, for every retained count the loop forces, the two lanes' GDN cells and the rows each retained, byte for byte, so that the next step of either lane would fold the same state.",
+        "model::Runtime::pendingGdnRows",
+        "require(!retained.empty() && retained == executor.pendingGdnRows(masked.requestId))",
+        "A scratch build that leaves one retained row of a constrained lane one bf16 ulp off fails the check at its first count",
+        "count-equality is NOT state-equality",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-247 rider (a) missing needle: {needle}"
+        );
+    }
+
+    // rider (b): the kv-alike oracle gate (4919202, PR #428).
+    for needle in [
+        "4919202",
+        "assumed the GPU computes a row the same whatever the command's row count",
+        "GGUF float projections (#403 loads BF16 and F16 tensors as such) pick the neural accelerator tile or the simdgroup one by row count; both are fp32 up to accumulation order",
+        "ISTA-DASLab and Swift-1.5 Qwen3.8-27B GSQ-RCO IQ3_S failed test-real at --ane-ffn-share 0 (continued_conv_cos 0.963)",
+        "The check now runs where the ended commands' KV of the rows both computed equals the capturing command's bit for bit, which covers a split that ran in one and not the other as well, and prints kv_alike instead of ffns_alike",
+        "kv_alike=0",
+        "kv_alike=1",
+        "the like-arithmetic precondition is itself a CHECKED PREDICATE, never an assumption",
+        "Batch 247 rider pair",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-247 rider (b) missing needle: {needle}"
+        );
+    }
+
+    // the pseudocode halves still parse (the batch207/227/236/240/242/246
+    // pattern; the riders are gpu_concept-only, the halves are untouched).
+    let id = "mid-prefill-recurrent-state-capture-boundary-unsplit";
+    let ref_verdict = KernelOptDomain::validate(id, entry.buggy_code());
+    assert!(
+        verdict_passes(&ref_verdict),
+        "batch-247 host ref_shape must still parse"
+    );
+    let opt_verdict = KernelOptDomain::validate(id, entry.fixed_code());
+    assert!(
+        verdict_passes(&opt_verdict),
+        "batch-247 host opt_pattern must still parse"
+    );
+}

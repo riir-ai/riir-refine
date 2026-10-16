@@ -1,6 +1,6 @@
 # Plan 251 — Batch 247: the splash runtime-oracle rider pair
 
-**Status:** IN_FLIGHT (claimed 2026-10-16 ~6x:xx +07, commit `6c65a3bd8`, expiry 48h)
+**Status:** COMPLETE (landed 2026-10-16; the claim row above discharged by the landing row in `.distill/001`)
 
 Source: incoai/splash (Apache-2.0) @ the vendor clone `E:/git/vendor/splash` fetched
 `be3b083c5` this session — TWO count-neutral riders on
@@ -42,13 +42,13 @@ Binary rebuild NOT owed (kernel_opt is not in the release set).
 
 - [x] T0 Claim row pushed (`6c65a3bd8`) BEFORE authoring; pins read in full at
   the vendor clone; quotes byte-verified via `git show` greps this session
-- [ ] T1 Rider 1 (kv-alike gate) appended to `entries_gpu_95` gpu_concept
-- [ ] T2 Rider 2 (retained-rows content oracle) appended
-- [ ] T3 `batch247_oracle_riders_landed` needle+parse test in corpus tests.rs
+- [x] T1 Rider 1 (kv-alike gate) appended to `entries_gpu_95` gpu_concept
+- [x] T2 Rider 2 (retained-rows content oracle) appended
+- [x] T3 `batch247_oracle_riders_landed` needle+parse test in corpus tests.rs
       (needles from the authored corpus text, corpus count asserted 848)
-- [ ] T4 Gates: kernel_opt lib slice, clippy ×2 postures (default,
-      kernel_opt+latent_retrieval), retrieval floors re-measure (no re-pin
-      expected — text-only append)
-- [ ] T5 Research note 279 born-complete
-- [ ] T6 Docs: AGENTS kernel_opt bullet, `.docs/11_domains/kernel_opt.md` row
-- [ ] T7 Snapshot landing row + commit + push
+- [x] T4 Gates: kernel_opt lib slice (3134/0/1i), clippy ×2 postures (default,
+      kernel_opt+latent_retrieval) 0 errors, retrieval floors HELD 21/21 @312.88s
+      (no re-pin — text-only append, byte-identical numbers)
+- [x] T5 Research note 279 born-complete
+- [x] T6 Docs: AGENTS kernel_opt bullet (×2 sites), `.docs/11_domains/kernel_opt.md` row
+- [x] T7 Snapshot landing row + commit + push
