@@ -264,6 +264,13 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     assert!(text.contains("10.000000 KAT"), "{text}");
     assert!(text.contains("200.000000 KAT"), "{text}");
     assert!(text.contains("2 open per account"), "{text}");
+    // The trust line (riir-kat Issue 006): the payer sees WHO is paid and
+    // WHICH USDC mint the invoice names before scanning the QR.
+    assert!(text.contains("pays gistXmdXerQ8oWMpdxXhva65pgkAdteQJwyGLGRe5zN"), "{text}");
+    assert!(
+        text.contains("USDC mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
+        "{text}"
+    );
     // The intent lines.
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(text.contains("3RefX7"), "{text}");
@@ -420,6 +427,9 @@ fn topup_show_reprints_the_checkout() {
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(text.contains("3RefX7"), "{text}");
+    // The server's own deadline (riir-kat Issue 006) — the mock's fixed
+    // future unix, rendered relative with the clock known.
+    assert!(text.contains("(unix 1800062400)"), "{text}");
     assert!(has_qr(&text), "the --qr forced QR: {text}");
     let _ = std::fs::remove_dir_all(&dir);
 }

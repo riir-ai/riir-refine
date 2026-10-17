@@ -3458,11 +3458,15 @@ fn format_usdc(base: u64) -> String {
 /// the SAME text, so the picker can never disagree with the list above it.
 /// `kat_micro` comes from the catalog by pack id (the history row's own
 /// `kat_micro` is 0 while open — the credit exists only after settle).
+/// `ttl_secs` is the catalog's own TTL: the history wire carries no
+/// per-row expiry, so the deadline is `created + ttl` rendered by the pay
+/// lane's ONE expiry phrase (riir-kat Issue 006).
 #[cfg(feature = "kat_transport")]
 fn topup_checkout_line(
     row: &riir_refine::kat_protocol_pay::PayPurchaseRow,
     kat_micro: Option<u64>,
     now_unix: u64,
+    ttl_secs: u64,
 ) -> String {
     let mins = now_unix.saturating_sub(row.created_unix) / 60;
     let kat = match kat_micro {
@@ -3475,12 +3479,14 @@ fn topup_checkout_line(
     if reference.chars().count() > 6 {
         reference = format!("{}…", reference.chars().take(6).collect::<String>());
     }
+    let expires = row.created_unix.saturating_add(ttl_secs);
     format!(
-        "seq {:<4} {:>8} USDC → {:<14} {:>5} min old  ref {}",
+        "seq {:<4} {:>8} USDC → {:<14} {:>5} min old, {}  ref {}",
         row.seq,
         format_usdc(row.usdc_base),
         kat,
         mins,
+        riir_refine::kat_pay_client::expiry_text(expires, now_unix),
         reference
     )
 }
@@ -3764,9 +3770,12 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
     #[cfg(feature = "kat_transport")]
     {
         let transport = topup::HttpTopupTransport::new(&url, 10);
+        let now_unix = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
         match topup::show_intent(&transport, &signing_key, seq) {
             topup::TopupOutcome::Ok(intent) => {
-                for l in topup::intent_lines(&intent) {
+                for l in topup::intent_lines(&intent, now_unix) {
                     println!("{l}");
                 }
                 let want_qr = match qr {
@@ -3957,7 +3966,10 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
 
         match topup::create_intent(&transport, &signing_key, pack_id) {
             topup::TopupOutcome::Ok(intent) => {
-                for l in topup::intent_lines(&intent) {
+                let now_unix = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| d.as_secs());
+                for l in topup::intent_lines(&intent, now_unix) {
                     println!("{l}");
                 }
                 // The checkout QR (auto on a TTY; --qr forces, --no-qr
@@ -4034,7 +4046,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                                                 .iter()
                                                 .find(|p| p.id == i.pack_id)
                                                 .map(|p| p.kat_micro);
-                                            topup_checkout_line(i, kat, now)
+                                            topup_checkout_line(i, kat, now, catalog.ttl_secs)
                                         })
                                         .collect();
                                     for l in &lines {
