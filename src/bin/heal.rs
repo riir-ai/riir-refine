@@ -3590,9 +3590,27 @@ fn render_tuna(micro: i64) -> String {
     format!("{}.{:06} TUNA", micro / 1_000_000, micro % 1_000_000)
 }
 
+/// The `tuna` verb's line for the ZIPPED-PAIR-ABSENT answer — the server
+/// omits `tuna_balance_micro`/`tuna_expires_unix` when the account holds
+/// NO spendable trial credit at the read's tick. `granted` (the unified
+/// claim predicate the same response carries) disambiguates WHY, because
+/// "pre-TUNA deployment" was the wrong attribution for the common case:
+/// a consumed free tier (a KAT-plane grant, or TUNA spent/expired) reads
+/// the identical wire shape on a current worker. Never a silent zero
+/// (the additive-wire rule).
+#[cfg(feature = "kat_transport")]
+fn tuna_none_line(granted: bool) -> &'static str {
+    if granted {
+        "0.000000 TUNA — the free tier is consumed on this account (a KAT-plane grant, or TUNA spent/expired; it is granted once per account)"
+    } else {
+        "not claimed yet — `cargo refine account` (or any --mine sync) claims the free tier automatically"
+    }
+}
+
 /// `cargo refine tuna` — the one-line trial-credit balance + expiry
-/// window. `None` is a supported answer (a pre-TUNA deployment) and says
-/// so — never a silent zero (the additive-wire rule).
+/// window. The zipped-pair-absent answer says WHY (consumed vs not-yet-
+/// claimed, via the response's `granted`); a positive balance says its
+/// expiry — never a silent zero (the additive-wire rule).
 #[cfg(feature = "kat_transport")]
 fn run_kat_tuna() {
     let h = fetch_service_history();
@@ -3601,9 +3619,7 @@ fn run_kat_tuna() {
         .map(|d| d.as_secs())
         .unwrap_or(0);
     match h.tuna_balance_micro {
-        None => println!(
-            "tuna: the service does not carry the trial-credit plane (pre-TUNA deployment)"
-        ),
+        None => println!("tuna: {}", tuna_none_line(h.granted)),
         Some(0) => println!(
             "0.000000 TUNA — the trial credit is spent or expired (it is granted once per account)"
         ),
@@ -16635,5 +16651,33 @@ mod run_rollup_tests {
         // The call-site gate is `total() > 0`; this pin is the shape the
         // gate reads (an all-zero roll-up line would be CTA noise).
         assert!(t.per_domain.is_empty());
+    }
+}
+
+/// The `tuna` verb's absent-pair answer names the account's actual state
+/// instead of blaming the deployment (2026-10-17): a consumed free tier
+/// and an unclaimed account read the identical wire shape (the zipped
+/// `tuna_balance_micro` pair omitted), and `granted` — the unified claim
+/// predicate the same response carries — is the only honest split.
+#[cfg(test)]
+mod tuna_none_line_tests {
+    #[test]
+    fn consumed_and_unclaimed_get_distinct_honest_lines() {
+        let consumed = super::tuna_none_line(true);
+        assert!(consumed.contains("consumed"), "{consumed}");
+        assert!(
+            consumed.contains("once per account"),
+            "the once-per-life law rides the line: {consumed}"
+        );
+        let unclaimed = super::tuna_none_line(false);
+        assert!(unclaimed.contains("not claimed"), "{unclaimed}");
+        assert!(
+            unclaimed.contains("cargo refine account"),
+            "the automatic claim path is named: {unclaimed}"
+        );
+        // The old misattribution is gone: neither line blames the
+        // deployment for an account-scoped fact.
+        assert!(!consumed.contains("pre-TUNA"));
+        assert!(!unclaimed.contains("pre-TUNA"));
     }
 }
