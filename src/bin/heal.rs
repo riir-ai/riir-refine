@@ -108,6 +108,16 @@ enum KatCommand {
     /// The one-line TUNA trial-credit balance + expiry window (same
     /// surface, the same ask). Needs `kat_transport`.
     Tuna,
+    /// riir-dapps Proposal 009 §9 / issue 129: `get <amt> tuna` — the
+    /// marketing TUNA airdrop to the OWN account id. The operator's hand
+    /// over the governed can-opener lane (the mandate is governance's;
+    /// this signs + fires the final batch). Needs `admin` (implies
+    /// `kat_transport`); compiled out refuses exit 2 via the build stamp.
+    TunaGet,
+    /// Same lane, ANOTHER account: `send <amt> tuna <32-hex-account-id>`.
+    /// A base58 pubkey shape refuses with the account-id hint. Same
+    /// `admin` gate.
+    TunaSend,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -3592,11 +3602,12 @@ fn run_kat_balance() {
     );
 }
 
-/// The TUNA display (the unit differs from KAT; micro formatting is the
-/// same 6-dec rule).
+/// The TUNA display (the unit differs from KAT; the 6-dec rule is the
+/// leaf's ONE formatter, `kat_units::render_units` — issue 129 §9's
+/// airdrop receipt renders through the same fn).
 #[cfg(feature = "kat_transport")]
 fn render_tuna(micro: i64) -> String {
-    format!("{}.{:06} TUNA", micro / 1_000_000, micro % 1_000_000)
+    riir_refine::kat_units::render_units(micro, "TUNA")
 }
 
 /// The `tuna` verb's line for the ZIPPED-PAIR-ABSENT answer — the server
@@ -5480,6 +5491,7 @@ USAGE:
     cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)
     cargo refine kat                                  (the one-line KAT balance — the service ledger's authoritative number, host-labelled; kat_transport)
     cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)
+    cargo refine get|send <amt> tuna [account-id]  (riir-dapps Proposal 009 §9: the marketing TUNA airdrop ADMIN hand — get targets your own account id, send takes a 32-hex account id (a base58 pubkey refuses with the hint); --gov <id> pins the Executed mandate, else unique-hash resolution via the mandates listing; --dry-run composes hash+row+body+caps with no network; secrets read from TUNA_CAN_OPENER_KEY + KAT_CRANK_TOKEN, refused pre-network, never echoed; admin feature, never in the release set)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
     cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
     cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
@@ -6300,6 +6312,18 @@ struct Args {
     /// The unit word may ride glued (`buy 10kat`) — split post-parse.
     buy_amount: Option<String>,
     buy_unit: Option<String>,
+    /// riir-dapps Proposal 009 §9 / issue 129: the `get|send <amt> tuna
+    /// [account]` positionals — same consumed-inline shape as buy's (the
+    /// glued `<amt>tuna` form splits post-parse; `send`'s third word is
+    /// the recipient account id).
+    tuna_amount: Option<String>,
+    tuna_unit: Option<String>,
+    tuna_target: Option<String>,
+    /// The `--gov <id>` pin — skips the listing's unique-hash resolution.
+    tuna_gov: Option<u64>,
+    /// `--dry-run` for the airdrop verbs: hash + row + body + caps, no
+    /// network, no secrets read.
+    tuna_dry_run: bool,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -6529,6 +6553,11 @@ fn parse_args() -> Args {
         topup_pick_latest: false,
         buy_amount: None,
         buy_unit: None,
+        tuna_amount: None,
+        tuna_unit: None,
+        tuna_target: None,
+        tuna_gov: None,
+        tuna_dry_run: false,
         wetrun_dry_run: false,
         update_timeout: 4,
         no_update: false,
@@ -6931,10 +6960,33 @@ fn parse_args() -> Args {
                     usage();
                 }));
             }
-            // `--dry-run` belongs to `wetrun` only (Proposal 011 T4.2) — the
-            // heal modes' dry run is the bare no-mode default, not a flag.
+            // `--dry-run` belongs to `wetrun` (Proposal 011 T4.2) and the
+            // airdrop verbs (issue 129 §9). The heal modes' dry run is the
+            // bare no-mode default, not a flag.
             "--dry-run" if matches!(args.command, Some(KatCommand::Wetrun)) => {
                 args.wetrun_dry_run = true;
+            }
+            // Issue 129 §9: the airdrop verbs' --dry-run — local-only
+            // composition (hash + row + body + caps), no network, no
+            // secrets read.
+            "--dry-run"
+                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)) =>
+            {
+                args.tuna_dry_run = true;
+            }
+            // The `--gov <id>` pin — skips the listing's unique-hash
+            // mandate resolution.
+            "--gov"
+                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)) =>
+            {
+                let Some(value) = it.next() else {
+                    eprintln!("--gov requires a proposal id");
+                    usage();
+                };
+                args.tuna_gov = Some(value.parse().unwrap_or_else(|_| {
+                    eprintln!("--gov expects a u64 proposal id, got {value:?}");
+                    usage();
+                }));
             }
             "--qr" => args.pay_qr = true,
             // The topup QR's OFF switch (the --qr counterpart). A bare --qr
@@ -7110,7 +7162,7 @@ fn parse_args() -> Args {
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
             | "unstake" | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet"
-            | "wetrun" | "config" | "replay" | "corpus-pr"
+            | "wetrun" | "config" | "replay" | "corpus-pr" | "get" | "send"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -7127,6 +7179,8 @@ fn parse_args() -> Args {
                     "buy" => KatCommand::Buy,
                     "kat" => KatCommand::Kat,
                     "tuna" => KatCommand::Tuna,
+                    "get" => KatCommand::TunaGet,
+                    "send" => KatCommand::TunaSend,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -7187,6 +7241,29 @@ fn parse_args() -> Args {
             {
                 args.buy_unit = Some(unit_word.to_string());
             }
+            // Issue 129 §9: the `get|send <amt> tuna [account]` positionals
+            // — the buy precedent's consumed-inline shape.
+            tuna_amount_word
+                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+                    && args.tuna_amount.is_none()
+                    && args.tuna_unit.is_none() =>
+            {
+                args.tuna_amount = Some(tuna_amount_word.to_string());
+            }
+            tuna_unit_word
+                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+                    && args.tuna_amount.is_some()
+                    && args.tuna_unit.is_none() =>
+            {
+                args.tuna_unit = Some(tuna_unit_word.to_string());
+            }
+            tuna_target_word
+                if args.command == Some(KatCommand::TunaSend)
+                    && args.tuna_unit.is_some()
+                    && args.tuna_target.is_none() =>
+            {
+                args.tuna_target = Some(tuna_target_word.to_string());
+            }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
@@ -7211,6 +7288,44 @@ fn parse_args() -> Args {
         && !matches!(args.command, Some(KatCommand::Buy))
     {
         eprintln!("buy: the amount/unit words require the `buy` command — cargo refine buy 10 kat");
+        usage();
+    }
+    // Issue 129 §9: the airdrop verbs' words belong to them, --gov/--dry-run
+    // ride only with them, and `get` takes no recipient word.
+    if (args.tuna_amount.is_some() || args.tuna_unit.is_some() || args.tuna_target.is_some())
+        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+    {
+        eprintln!(
+            "the amount/unit/recipient words require the `get` or `send` command — cargo refine send <amt> tuna [account-id]"
+        );
+        usage();
+    }
+    if args.tuna_gov.is_some()
+        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+    {
+        eprintln!("--gov requires the `get` or `send` command");
+        usage();
+    }
+    if args.tuna_dry_run
+        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+    {
+        eprintln!("--dry-run requires the `get`, `send` or `wetrun` command");
+        usage();
+    }
+    if args.command == Some(KatCommand::TunaGet) && args.tuna_target.is_some() {
+        eprintln!("get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>`)");
+        usage();
+    }
+    if args.command == Some(KatCommand::TunaSend) && args.tuna_target.is_none() {
+        eprintln!("send: a recipient account id is required — cargo refine send <amt> tuna <account-id>");
+        usage();
+    }
+    if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+        && !args.paths.is_empty()
+    {
+        eprintln!("{}: unexpected extra words — cargo refine {} <amt> tuna [account-id]",
+            if args.command == Some(KatCommand::TunaGet) { "get" } else { "send" },
+            if args.command == Some(KatCommand::TunaGet) { "get" } else { "send" });
         usage();
     }
     if args.topup_pick_latest && !matches!(args.command, Some(KatCommand::Topup | KatCommand::Buy))
@@ -10560,6 +10675,33 @@ fn main() {
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Kat | KatCommand::Tuna => {
                 riir_refine::build_stamp::refuse("kat/tuna", &["kat_transport"]);
+            }
+            // riir-dapps Proposal 009 §9 / issue 129: the marketing TUNA
+            // airdrop ADMIN hand — `admin`-gated (implies kat_transport),
+            // NEVER in the release set; compiled out refuses exit 2 via
+            // the build stamp (the three facts + the rebuild).
+            #[cfg(feature = "admin")]
+            KatCommand::TunaGet | KatCommand::TunaSend => {
+                let verb = if cmd == KatCommand::TunaGet { "get" } else { "send" };
+                // `run` exits the process itself (the house command
+                // convention) — never returns.
+                riir_refine::tuna_admin::run(&riir_refine::tuna_admin::TunaAdminArgs {
+                    verb,
+                    amount: args.tuna_amount.as_deref(),
+                    unit: args.tuna_unit.as_deref(),
+                    target: args.tuna_target.as_deref(),
+                    gov: args.tuna_gov,
+                    dry_run: args.tuna_dry_run,
+                    url: &command_service_url(),
+                });
+            }
+            #[cfg(not(feature = "admin"))]
+            KatCommand::TunaGet => {
+                riir_refine::build_stamp::refuse("get", &["admin"]);
+            }
+            #[cfg(not(feature = "admin"))]
+            KatCommand::TunaSend => {
+                riir_refine::build_stamp::refuse("send", &["admin"]);
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]

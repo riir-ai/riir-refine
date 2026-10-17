@@ -540,6 +540,15 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # src/kat_lease_client.rs §golden).
 kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]
 
+# riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17):
+# `cargo refine get|send <amt> tuna` — the marketing-airdrop ADMIN hand
+# (the operator's CLI, never a dao agent surface). DEFAULT-OFF, NEVER in
+# the release set (release.yml's build line names RELEASE_FEATURES only;
+# the release_set_matches_workflow pin keeps that honest). The issue's
+# "account_key" half rides riir-kat/client, which kat_transport already
+# implies through kat_service — no separate feature spelling here.
+admin = ["kat_transport"]
+
 # riir-kat Issue 003 T9 (the consumer half): the net-pin feature forwards.
 # Pins are RESTRICTIONS with OVERLAP semantics — enabling both compiles fine
 # and yields an EMPTY allowed host set that refuses at runtime (never

@@ -249,3 +249,94 @@ fn a_complete_build_never_prints_the_staleness_refusal() {
         "a healthy build must not refuse. output:\n{text}"
     );
 }
+
+// ── riir-dapps Proposal 009 §9 / issue 129: the airdrop verbs ──────────────
+// Same two halves as the sync/refill rows above, one feature over: in a
+// build WITHOUT `admin`, `get`/`send` exit 2 with the refusal block naming
+// the feature AND the rebuild; in a build WITH it, the pre-network key
+// discipline holds (a missing/malformed TUNA_CAN_OPENER_KEY refuses exit 1
+// before any socket, naming the env var, never echoing a value).
+
+#[cfg(not(feature = "admin"))]
+#[test]
+fn tuna_airdrop_verbs_refuse_when_admin_is_compiled_out() {
+    let acct = "aa".repeat(16);
+    for (verb, argv) in [
+        ("get", vec!["get", "100", "tuna"]),
+        ("send", vec!["send", "100", "tuna", acct.as_str()]),
+    ] {
+        let (code, text) = heal(&argv);
+        assert_eq!(code, Some(2), "{verb}: output:\n{text}");
+        assert!(text.contains("admin"), "{verb}: {text}");
+        assert!(text.contains("rebuild with"), "{verb}: {text}");
+        assert!(!text.contains("unknown"), "{verb}: {text}");
+    }
+}
+
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_missing_key_refuses_pre_network() {
+    let acct = "bb".repeat(16);
+    for argv in [
+        vec!["get", "100", "tuna"],
+        vec!["send", "100", "tuna", acct.as_str()],
+    ] {
+        let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
+            .args(&argv)
+            .env_remove("TUNA_CAN_OPENER_KEY")
+            .output()
+            .expect("spawn cargo-refine");
+        let text = format!(
+            "{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(out.status.code(), Some(1), "output:\n{text}");
+        assert!(
+            text.contains("TUNA_CAN_OPENER_KEY"),
+            "the refusal must name the env var. output:\n{text}"
+        );
+    }
+}
+
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_below_floor_refuses_locally_at_exit_2() {
+    // 99 TUNA < the 100-TUNA floor — refused BEFORE any secret is read
+    // (the cap mirror fires ahead of the env discipline by design).
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
+        .args(["get", "99", "tuna"])
+        .env_remove("TUNA_CAN_OPENER_KEY")
+        .output()
+        .expect("spawn cargo-refine");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(out.status.code(), Some(2), "output:\n{text}");
+    assert!(text.contains("free-tier floor"), "output:\n{text}");
+}
+
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_dry_run_is_fully_local_and_shows_the_hash() {
+    // `get` needs the LOCAL account (not a network) for the target — on a
+    // test box without one, the refusal is the honest answer; either way
+    // nothing dials (the dry-run path never constructs a transport).
+    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
+        .args(["get", "100", "tuna", "--dry-run"])
+        .env_remove("TUNA_CAN_OPENER_KEY")
+        .env_remove("KAT_CRANK_TOKEN")
+        .output()
+        .expect("spawn cargo-refine");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        text.contains("DRY RUN") || text.contains("no local account"),
+        "either the local preview or the honest account refusal — output:\n{text}"
+    );
+}

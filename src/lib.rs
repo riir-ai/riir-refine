@@ -334,9 +334,9 @@ pub use riir_kat::{
     kat_account, kat_account_client, kat_adoption, kat_burn_client, kat_fixstat_client,
     kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account,
     kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_pay,
-    kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_v2,
-    kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_service_config,
-    kat_stake_client, kat_vote_client, kat_wetrun,
+    kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop,
+    kat_protocol_v2, kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_service_config,
+    kat_stake_client, kat_tuna_admin_client, kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
@@ -397,6 +397,17 @@ pub mod kat_join;
 // T15's row).
 #[cfg(feature = "kat_service")]
 pub mod kat_corpus_pr;
+
+// riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17): the
+// marketing TUNA airdrop ADMIN hand — `cargo refine get|send <amt> tuna`
+// orchestration over the leaf's `kat_tuna_admin_client` (the listing,
+// the unique-hash mandate resolution, the signed batch, the receipt).
+// The operator's two secrets (TUNA_CAN_OPENER_KEY + the ops bearer) are
+// read from the env and refused PRE-NETWORK when missing, never echoed.
+// Gate: `admin` (implies kat_transport → kat_service). NEVER in the
+// release set.
+#[cfg(feature = "admin")]
+pub mod tuna_admin;
 
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
