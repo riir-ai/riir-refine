@@ -36,7 +36,14 @@ set -u
 # (kernel_opt 684→717 rules + the whole kat staking/decstat/TUNA plane).
 # 9.0 MiB = max + ~10% corpus-growth headroom, still far under the
 # ~11.3 MiB dist-profile-loss signature the gate exists to catch.
-limit="${MAX_BINARY_BYTES:-9437184}"
+# v0.3.2 re-measure (2026-10-17, the five-matrix cut): the +10% corpus
+# headroom above the v0.2.0 basis was SPENT — musl measured 9,326,392 B
+# (8.89 MiB) at v0.3.1 and 10,024,040 B (9.56 MiB) here (+7.5%, one
+# release of legitimate corpus growth: kernel_opt 795→848, rust_perf
+# 198→230, clippy 100→112); windows-gnu 8,806,400 → 9,468,928 (same
+# +7.5%). Ceiling 10.5 MiB = the v0.3.2 max + ~10% headroom for the next
+# release of corpus growth, still far under the dist-loss signature.
+limit="${MAX_BINARY_BYTES:-11010048}"
 
 file_size() {
     # BSD stat (macOS) first, GNU stat (Linux/CI) second; empty on failure —
@@ -82,7 +89,7 @@ if [ "${1:-}" = "--self-test" ]; then
     small="$tmp/small.bin"
     big="$tmp/big.bin"
     : > "$small"
-    dd if=/dev/zero of="$big" bs=1048576 count=7 2>/dev/null || { rm -rf "$tmp"; exit 1; }
+    dd if=/dev/zero of="$big" bs=1048576 count=12 2>/dev/null || { rm -rf "$tmp"; exit 1; }
     if run_gate "$small" >/dev/null 2>&1; then
         echo "self-test: under-ceiling PASS arm ok"
     else
