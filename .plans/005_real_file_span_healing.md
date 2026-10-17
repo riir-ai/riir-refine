@@ -1466,6 +1466,12 @@ unreachable (Bench 030). Deferred.**
    Mitigation: T3.5 (the live Phase 3 contingency) plus the committed
    regression gate, which now floors every future corpus batch at baseline − 1
    span. Treat corpus growth as a precision liability, not a free win.
+   **Consumer-class scope (issue 166, closed negative 2026-10-18):** this
+   liability lives entirely in the RULE-corpus nearest-neighbour lane
+   (`LatentMatcher`/suggest); the scored sigmoid gates have no serve-path
+   weighted-sum/threshold consumer — `margin_weight`'s blend is
+   mining/measurement-side only, and the traj-store fused lane carried the
+   fixed-gate null at 1×→4× (`tests/issue166_gate_null.rs`).
 6. **NEW — false confidence from cold UQ state.** Any calibrated-confidence
    layer (Phase 9) emits a **zero-width, 0%-coverage interval** on an unwarmed
    key rather than an honestly-wide one (measured, Issue 023). Mitigation:

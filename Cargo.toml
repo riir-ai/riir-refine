@@ -1336,6 +1336,10 @@ name = "frontier_poc_ab"
 required-features = ["latent_retrieval", "rustc_errors"]
 
 [[test]]
+name = "issue166_gate_null"
+required-features = ["latent_retrieval"]
+
+[[test]]
 name = "g4_l4_composition"
 required-features = ["l4_lora"]
 
