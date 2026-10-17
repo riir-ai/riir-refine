@@ -951,7 +951,7 @@ mod tests {
         assert!(f.iter().any(|x| x.tag() == "aws-access-key"), "{f:?}");
     }
 
-    /// Fail-closed shape resolution: a PrivateKeyBlock the guard cannot
+    /// Fail-closed shape resolution: a `PrivateKeyBlock` the guard cannot
     /// resolve (no recognizable header inside the span) stays a finding.
     #[test]
     fn p74_unresolvable_key_block_stays_firing() {
