@@ -73,6 +73,16 @@ pub enum UpdateError {
     /// The body was not the JSON shape this module parses.
     Parse(String),
     /// The running target triple has no release asset — refused, never guessed.
+        /// The running target triple has no release asset — refused, never guessed.
+        /// WINDOWS EXCEPTION (the msvc-bootstrap gap, v0.3.2): the dist ships ONE
+        /// windows asset (the gnu zip — installers prefer msvc when one exists,
+        /// but no msvc asset has ever been packaged). An msvc-compiled exe (a
+        /// dev-box `cargo build` copy per the Issue-164 convention) maps to that
+        /// SAME gnu asset with a printed ABI note: the archive is
+        /// runtime-self-contained (mingw CRT), SHA256SUMS-verified like any other,
+        /// and replacing the exe is the whole swap — refusing would mean a
+        /// windows dev box can NEVER self-upgrade, which is the gap this
+        /// exception closes. Any NON-windows unknown triple still refuses.
     NoAsset(String),
     /// The download/checksum/extraction/swap legs of [`upgrade`].
     Verify(String),
@@ -421,8 +431,19 @@ pub fn check_for_alert(root: &Path, fetcher: &dyn FetchLatest) -> Vec<String> {
 
 /// The release.yml package job's five targets. The running triple must be one
 /// of these — an unknown triple REFUSES rather than guessing an asset.
+/// Windows-msvc is the mapped exception: it serves the windows-gnu asset
+/// (the one windows asset the dist has ever packaged) — see the
+/// `release_target_triple_and_note` note text.
 #[must_use]
 pub fn release_target_triple() -> Option<&'static str> {
+    release_target_triple_and_note().map(|(t, _)| t)
+}
+
+/// The triple PLUS the honest note when the mapping crosses the ABI spelling
+/// (windows-msvc → the gnu asset): `Some(note)` rides the report so the user
+/// sees exactly what was installed. `None` = the plain same-triple path.
+#[must_use]
+pub fn release_target_triple_and_note() -> Option<(&'static str, Option<&'static str>)> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
         Some("aarch64-apple-darwin")
@@ -441,16 +462,25 @@ pub fn release_target_triple() -> Option<&'static str> {
     }
     #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "gnu"))]
     {
-        Some("x86_64-pc-windows-gnu")
+        Some(("x86_64-pc-windows-gnu", None))
     }
-    // Any other triple (msvc windows, gnu linux, …) has no release asset —
+    #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "msvc"))]
+    {
+        Some((
+            "x86_64-pc-windows-gnu",
+            Some(
+                "this exe was built for the msvc toolchain — installing the windows-gnu release asset (the dist's one windows build; runtime-self-contained, SHA256SUMS-verified)",
+            ),
+        ))
+    }
+    // Any other triple (gnu linux, arm windows, …) has no release asset —
     // the release workflow does not build one, so refusing is the TRUTH.
     #[cfg(not(any(
         all(target_os = "macos", target_arch = "aarch64"),
         all(target_os = "macos", target_arch = "x86_64"),
         all(target_os = "linux", target_arch = "x86_64", target_env = "musl"),
         all(target_os = "linux", target_arch = "aarch64", target_env = "musl"),
-        all(target_os = "windows", target_arch = "x86_64", target_env = "gnu"),
+        all(target_os = "windows", target_arch = "x86_64"),
     )))]
     {
         None
@@ -484,6 +514,11 @@ pub struct UpgradeReport {
     /// the destination now serves release bytes. `None` for a plain-file
     /// destination (normal users; no notice).
     pub replaced_symlink_target: Option<PathBuf>,
+    /// The ABI-mapping note (windows-msvc → the gnu asset): `Some` when the
+    /// installed asset's toolchain spelling differs from the replaced
+    /// exe's compile-time triple — the user sees exactly what landed.
+    /// `None` for the plain same-triple path.
+    pub abi_note: Option<&'static str>,
 }
 
 impl UpgradeReport {
@@ -630,7 +665,7 @@ pub fn upgrade(
             exe.display()
         )));
     }
-    let triple = release_target_triple().ok_or_else(|| {
+    let (triple, abi_note) = release_target_triple_and_note().ok_or_else(|| {
         UpdateError::NoAsset(format!(
             "no release asset for this platform ({}) — use the install script at https://github.com/{DIST_REPO}",
             std::env::consts::ARCH
@@ -774,6 +809,7 @@ impl StagedUpgrade<'_> {
             new_exe: exe.to_path_buf(),
             backup,
             replaced_symlink_target,
+            abi_note,
         })
     }
 }
@@ -949,6 +985,7 @@ mod tests {
             replaced_symlink_target: Some(PathBuf::from(
                 "/git/riir-refine/target/release/cargo-refine",
             )),
+            abi_note: None,
         };
         let notice = report.symlink_notice().expect("a symlink swap notices");
         assert!(notice.contains("developer symlink"), "{notice}");
@@ -977,6 +1014,35 @@ mod tests {
     #[test]
     fn this_macs_triple_is_a_release_target() {
         assert!(release_target_triple().is_some_and(|t| t.ends_with("apple-darwin")));
+    }
+
+    // The windows-msvc bootstrap gap (v0.3.2): an msvc-compiled exe (the
+    // dev-box `cargo build` copy — the Issue-164 convention shape) must
+    // still self-upgrade, so it maps to THE windows asset the dist ships
+    // (the gnu zip) and the report says so. Non-windows triples beyond the
+    // five still refuse — the mapping never guesses an asset that does not
+    // exist.
+    #[test]
+    fn windows_msvc_maps_to_the_gnu_asset_with_a_note() {
+        let mapped = release_target_triple_and_note();
+        // Compile-time: this test binary's OWN env decides which arm to pin.
+        #[cfg(all(target_os = "windows", target_env = "msvc"))]
+        {
+            let (triple, note) = mapped.expect("msvc windows maps to the gnu asset");
+            assert_eq!(triple, "x86_64-pc-windows-gnu");
+            let note = note.expect("the ABI crossing prints a note");
+            assert!(note.contains("msvc"), "{note}");
+            assert!(note.contains("gnu"), "{note}");
+        }
+        #[cfg(not(all(target_os = "windows", target_env = "msvc")))]
+        {
+            // On every other host the mapping (if any) is same-triple: the
+            // note must be None. The arms themselves are pinned by the
+            // cross-compile lane + the gate's windows leg.
+            if let Some((_, note)) = mapped {
+                assert!(note.is_none(), "same-triple mappings carry no note");
+            }
+        }
     }
 
     // ── SHA256SUMS parsing + verify ──

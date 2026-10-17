@@ -2134,6 +2134,9 @@ fn run_self_upgrade() {
                 r.backup.display()
             );
             println!("  THIS run is still the old binary — rerun to pick up the new one");
+            if let Some(notice) = r.abi_note {
+                println!("  {notice}");
+            }
             if let Some(notice) = r.symlink_notice() {
                 println!("  {notice}");
             }
