@@ -4,7 +4,7 @@
 //! converted at this kernel slot. Same source as Batch 186:
 //! `ggml-org/llama.cpp` @ `d834d44e643681f7b046a22d357335f6f4ff6107`
 //! "ggml-cpu: tiled `mul_mat` for k-quants" (#27851, MIT), read from the
-//! standing `E:/git/vendor/prismml-llama.cpp` clone (no fresh clone consumed).
+//! standing `../vendor/prismml-llama.cpp` (the M3/4090 vendor twin) clone (no fresh clone consumed).
 //! Every load-bearing quote re-verified VERBATIM at the pin THIS batch (Batch
 //! 31 discipline): the j-major writeback comment tiled.cpp:679 + the
 //! `float r[16][8]` load-then-transposed-store loop 686-695; the register

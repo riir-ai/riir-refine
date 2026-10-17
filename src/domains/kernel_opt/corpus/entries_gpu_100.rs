@@ -2,7 +2,7 @@
 //! delta, slice 1 of 1 — one own `kernel_opt` rule from
 //! PrismML-Eng/llama.cpp @ 71c14732072dcdb959a5a2dac250c8da2d45bd22
 //! (#363, MIT, 2026-10-15; read at the vendor clone
-//! `E:/git/vendor/prismml-llama.cpp`).
+//! `../vendor/prismml-llama.cpp` (the M3/4090 vendor twin)).
 //!
 //! - `shard-granularity-lcm-never-cut-rotation-block` — multi-GPU tensor
 //!   split of blocked structures (category L): a shard boundary must

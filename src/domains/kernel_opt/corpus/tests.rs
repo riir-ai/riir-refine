@@ -18062,7 +18062,7 @@ fn batch246_rule_parse_and_needles_landed() {
     // ONE own rule (the shard-alignment law family) from
     // PrismML-Eng/llama.cpp @ 71c14732072dcdb959a5a2dac250c8da2d45bd22
     // (#363, MIT, 2026-10-15; the diff read in full at the vendor clone
-    // E:/git/vendor/prismml-llama.cpp, every needle verbatim at the pin
+    // the vendor clone ../vendor/prismml-llama.cpp, every needle verbatim at the pin
     // this session) + ONE count-neutral rider on
     // cost-aware-verify-length-survival-cost-table (the platform-keyed
     // verify-cost face, #354's MTP half). Count: 847 -> 848 (L +1).
@@ -18140,7 +18140,7 @@ fn batch247_oracle_riders_landed() {
     // G1 for Batch 247 (Plan 251 / Research 279): the splash runtime-oracle
     // RIDER PAIR on entries_gpu_95 (the B236 capture rule's own oracle face),
     // count-neutral — corpus STANDS 848. Both commits read in full at the
-    // vendor clone E:/git/vendor/splash fetched be3b083c5; every needle
+    // vendor clone ../vendor/splash fetched be3b083c5; every needle
     // verbatim at the pins this session.
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();

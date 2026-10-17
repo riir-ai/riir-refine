@@ -16,7 +16,7 @@
 //! not a bounded fix-space — the six batch-parse gates exist precisely so
 //! corpus rules stay mechanism-shaped).
 //!
-//! Source located IN the standing `E:/git/vendor/prismml-llama.cpp` clone
+//! Source located IN the standing `../vendor/prismml-llama.cpp` (the M3/4090 vendor twin) clone
 //! (the commit is upstream history the prism fork tracks); no fresh clone
 //! consumed. Every load-bearing quote re-verified VERBATIM at the pin THIS
 //! batch (Batch 31 discipline): `min_batch` tiled.cpp:1202-1205, the dead-tail

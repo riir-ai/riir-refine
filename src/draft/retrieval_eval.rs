@@ -2290,8 +2290,8 @@ mod tests {
                     // batches (B180–B222) measured ≥ 102 (the gate held at
                     // the 102 pin without a re-measure) and the lithos-metal
                     // 11 tipped it one span. Attribution MEASURED both sides:
-                    // the pre-batch detached worktree (E:/git/.w223pre @
-                    // e7f2a9ee, isolated E:/tmp/b223pre) measured EXACTLY
+                    // the pre-batch detached worktree (the 4090's .w223pre @
+                    // e7f2a9ee, isolated tmp) measured EXACTLY
                     // 102/171 (59.6%) — the batch's 11 kernel rules cost ONE
                     // span, the B137 mechanism (new kernel concept vocabulary
                     // — ICB replay, coherent pointers, megakernel barrier

@@ -2,7 +2,7 @@
 //! quant-MV distill (Research 114 / Plan 060). Source:
 //! `PrismML/llama.cpp` @ `e311ed38f` (`Apache-2.0`; the league-repinned
 //! opponent tip, clone at `../vendor/prismml-llama.cpp` -- `M3` twin
-//! `<E:/git/vendor>`). The batch was armed by the league opponent-watch
+//! the 4090's `E:`-drive vendor twin of `../vendor`). The batch was armed by the league opponent-watch
 //! intake (riir-refine `a749024` / riir-ai Issue 843 `T5`): the 1.4x
 //! prefill jump root-caused REAL -- ZERO `PQ2_0` mentions in
 //! `ggml-metal` at the old pin `9ca265a` (the type-142 Bonsai `GGUF`
