@@ -1,6 +1,7 @@
 # Issue 166: Consumer-class audit of the healer's scored sigmoid gates (capacity-law triage)
 
 **Status:** Open — triage + measurement-first; expected-null pre-registered for the ranking class
+**Claimed:** zed-4090-1018, 1792390500, expires 2026-10-20T03:20:00+07:00
 
 **Source:** [katgpt-rs/.research/624_Associative_Memory_Capacity_Laws.md](../katgpt-rs/.research/624_Associative_Memory_Capacity_Laws.md) (blog: alexwang.ai "You could have invented transformers from memory", 2026-10-15; theory: Zhong et al. arXiv:2505.19488 interference-to-signal)
 **Related:** `.plans/005` L1444–1468 (corpus-growth precision-liability law) · katgpt-core `ssmax.rs` (the log-N law, attention-side) · katgpt-rs Plan 411
