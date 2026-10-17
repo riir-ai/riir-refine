@@ -106,13 +106,13 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 196 (2): the TensorFold v0.6.0 A− pack (Plan 195, pin c4646171, Apache-2.0 — license flipped MIT→Apache-2.0 at 0.6.0) -- affine-block-address-lets-pipeliner-fly (L +1: the stored nvfp4 macro-block address `(b // 4) * 32 * SBN + ((b % 4) * 16) // 2 * SBN` is a STAIRCASE in the loop step and the same address is `b * (8 * SBN)` — make the ADVANCING loop address affine so the hardware pipeliner puts the weight traffic in flight, the step's actual wait; nvfp4.py:312 VERBATIM + commit 443ad4a at-sha), register-width-topk-falls-back-to-tiled-radix-select (D +1: _select holds next_pow2(blocks) scores in registers up to SELECT_REGS = 32768 and SPILLS past — dispatch _select_tiles past the cliff, THE SAME LISTS (radix select one byte a pass from the top, ties by lowest block id, in block order); attention.py:13/:353/:357 VERBATIM + commit a2dba9c; every timing figure commit-message-only) + 1 rider (dtype-native-source-read (B176) += the lane_fuse g32 admission instance — the admission hardcoded `!= 64` while the kernels took (32, 64), g32 checkpoints silently lost fused projections; 50588fbb).
     // Batch 197 (6): the ml-explore/mlx VJP kernel distill (Research 227 / Plan 193; PRs #4563+#4565, merges 83b976ea438466418dea20c89709601201851fe1 + 9295197533d586dc26d6814b92899fa088320ab3, MIT, merged 2026-09-29; every quote verified at the pins — .research/230, 22/22) -- sdpa-backward-as-tiled-matmul-bounded-materialization (E +1, the A− GOAT lead: the attention VJP COMPOSED from tiled library GEMMs through ONE bounded score tile (1024² default, MLX_SDPA_VJP_BLOCK) beats the full-matrix fallback AND the fused flash-style kernel on unified memory — the fused attempt CLOSED UNMERGED as PR #3241, its own text conceding 0.36–0.70× dense; riders folded: save_lse forward output (function_constant 303), the NaN dead-row guard (exp(-inf − −inf)), the causal tile skip with diag_off = kL − qL, the HasTail compile-time segment tag, the dummy-binding fc-gated outputs), segmented-checkpoint-cheap-replay-backward (G +1, A−: checkpoint the ENTRY state every Ckpt-th step (dense cache at T=4096/B=4/Hv=32 = 34 GB in-source) and replay the state recurrence in the backward — delta cached per chunk so the replay is ~a tenth of a chunk's work; the entry-state-not-exit clause pinned by test; lead 6's register seg[Ckpt][n_per_t] arm FOLDED as the second posture), gqa-zero-stride-batch-broadcast (A +1, B+: k_bs innermost stride 0 broadcasts one kv head over its query group through the batched GEMM — no expanded tensor; the GQA-operand family's stride-0 member beside B182's row-fold), threadgroup-scope-reduction-single-writer (E +1, B: reduce_tile_tg folds the kNSG simdgroup partials in threadgroup memory and commits with a single non-atomic store — the atomic paid only on the GQA axis that genuinely crosses threadgroups), cache-symmetric-intermediates-per-chunk (G +1, B: the forward-save pass caches the expensive chunk-local set (KKt, the 15-step Neumann T-inv, QKt_raw, delta) with the dv_idx == 0 single-writer guard — the cache-what's-expensive half of the hierarchy beside #2's recompute-what's-cheap), chain-rule-postprocess-kernel (G +1, C+: the kernel differentiates the TRANSFORMED variable (dgamma, 'computes the gradient with respect to the log') and gated_delta_dgamma_to_dg applies the Jacobian in an O(T) reverse suffix cumsum with the max(g, 1e-6) floor) + 1 rider (dot-macro-family-widens-at-load-f32-accumulate (B192) += the OPERAND-TYPED MACRO instance — the macro-side pole: 'Operand and accumulator types are taken from the tiles rather than pinned to float' + the C-stays-float accumulator clause, gated_delta_nax_ops.h:399-404,576-579); source ml-explore/mlx @ the two merge shas (MIT; T0 re-clone at full shas, 22/22 quotes verified — the 34 GB comment + entry-state clause live in the FORWARD file, a provenance sharpening over the research draft).
     // Batch 199 (7): the TensorFold v0.6.0 kernel half (Plan 197, pin c4646171, Apache-2.0 — the staged B/B−/C+ pool's kernel items 9/10/12/13/15/17/22; items 21/24 landed as riders; the serving half stages for Batch 200) -- splitk-reduce-one-launch-slice-order-pinned (C +1: both split-K faces reduced by ONE kernel with the summation order PINNED bit-identical to the per-slice loop, pinned by test; the qmm.cu cluster DSMEM + exl3 linear.cu last-block atomicAdd election ride as in-entry instances), per-group-epilogue-deferred-between-mma-bursts (B +1: the per-group scale/bias FMA epilogue parked in registers, applied BETWEEN the next group's MMA bursts — group order preserved; renamed from the staged moe- name: qmm.cu is the general decode lane; the PIPE arm is DORMANT at the pin — disclosed decision-content-not-evidence), declared-uncapturable-expert-declines-graphs (D +1: the capability DECLARATION axis — an expert that reads its plan on the host declares capturable=false and the engine declines graphs with one loud line BEFORE a capture fails; the capture tests ran EMPTY plans and could not see the class), draft-context-ring-window-bounded (A +1: drafter KV in a ring of window+block+tile−1 rows — the block pass reads exactly the rows it always read; the capacity ESTIMATOR counts the ring not capacity, and kept-state snapshots copy the WINDOW rows first), row-independent-pass-block-bounded-scratch (A +1: prompt-chunk passes whose rows read no other row run in FIXED 512-row blocks — GiB-class fp32 partials shrink to ONE block each, block-vs-whole equality bitwise-pinned), quantized-stored-bytes-not-widened-patterns (N +1: the widened-pattern ANTI-PATTERN — hold the checkpoint's wire bytes, decode in-kernel; decode-from-wire is the corpus's ambient default so the GOAT framing is REFUSED in-rule), visibility-bounded-scan-shape-stable-allocations (I +1: tiles past the last visible complete pool store −inf WITHOUT dot products while KEEPING bucket-sized allocations for graph reuse; the radix select keeps max(K,·) well-defined; parity by torch.equal incl. ties UNDER capture+replay) + 11 riders (argmax-epilogue += the bit-preserving gate splice; verify-fold += streams-folded-into-row-axis; fwht-ladder += the CUDA warp tier + the twin-transcription hazard; gdn-transition-replay += the mamba deferred-commit window replay; ancestor-mask += the dflash2 analytic contiguous-window band; exact-bf16-lut += act_mode constexpr; exact-widening += the FP8_PB_WO stored-bytes form; consumer-offset-absorption += the Q8_0→affine-g32 writer-side converter with the |d|>511 loud refusal; cuda-graph-scalar += the capture-time derived-table arm; fp4-nibble += the parity-nibble + exact bitcast; shape-only += the FP8_PB_WO recipe + the n-gram weight_scale); source ashhart/tensorfold @ c4646171139ee8a3c38103eaa1699dad226ec12b (v0.6.0, Apache-2.0 — license flipped MIT→Apache-2.0 at 0.6.0; 3 authoring subagents over disjoint slices + the coordinator; every Tier-1 quote re-verified at the pin, ~20 staging drifts disclosed in-entry incl. the capturable flip commit 603d3bc and 2 provenance upgrades message-only→in-source).    // Batch 201 (12): the mlxfast MTP slice (Plan 200, Layr-Labs/mlxfast-bonsai2-27b-engine @ 0c7c392, MIT - the SAME pin as B195's wave-2 delta; every quote verified verbatim at the pin, staged line numbers re-located in-rule) -- slice A (entries_gpu_70): deferred-block-release (D +1: the unadopted speculative block's host teardown HELD past the finalize seam, released at one fixed end-of-step boundary behind the next submission; ~0.1 ms of array releases off the GPU-wait path; adopted blocks refuse by construction), first-layer-ahead-submission (D +1: the FIRST of a multi-layer leading submission commits on its own ahead of the leading submission that follows - one boundary added earlier, never fewer queued; the finer-slicing posture is PRESENT-AT-BASE and measured NEGATIVE on this lineage, riding in-rule), draft-tape-behavior-gated-trial (N +1: PRESENT AT BASE provenance - a kernel-variant timing trial gated on BEHAVIOR IDENTITY vs a freshly recorded tape, one divergent id refuses, the pick's own replay anchors the gate), per-layer-verification-coverage (N +1: an equivalence proof admits PER INSTANCE - ObjectIdentifier-keyed covered set, publishes only on a global pass, untested instances keep the chain) -- slice B (entries_gpu_71): pack-worthiness-shape-admission (N +1: the M5 Max measured table + worthPacking(n:k:) + the 16-row counter-table - the shape-admission gate for when a draft pack is worth verifying), lossless-11bit-repack-trial (N +1: the lossless bit-repack adopted through a timed trial, adoptMargin 0.005 / trialRounds 16 / MLXFAST_P11), dflash2-pack11-pack12-encode-arithmetic (B +1: the ENCODE half clean; pack12 = 8-bit sign|mantissa + 4-bit code "1-15, or 0 (an escape)", pack11 twin = 3-bit code; the decode half is B181's, disclaimed in-rule), accept-packet-one-launch (C +1: five launches -> one thread - the acceptance walk counts leading matches m, writes anchor + confirmed in one launch; "31" = 15 drafts + 16 targets, never an API arg limit; MLXFAST_ACCEPT_WALK_FUSED=0 kill switch; load-time parity proof, fail-closed) -- slice C (entries_gpu_72): env-polarity-migration (E +1: TWO polarity flips verified in the ~40-env audit - MLXFAST_VERIFY_TOKEN_STACK + MLXFAST_DFLASH_SWIGLU; the flip makes code match its own doc), gather-signed-index-wrap-semantics (E +1: the WALKROWS fold must reproduce MLX gather's signed-index wrap "every edge bit for bit and every path id"; the roundfuse wrap is the kin at a distinct site), producer-folds-single-consumer-family (C +1: 7 producer-folds; the measured NEGATIVE rides in-rule - SwiGLU 19% slower), single-pass-continuation-scan (O +1: the two-phase prompt-lookup scan replaced by the single endpoint pass - "only the global longest match needs selection") + 2 riders (rust_perf whole-round-in-situ-adoption-trial += the exact-form device trial - launch parameters fixed from M4 measurements or never timed on the ranked device race ON the production device, every alternative bit-checked BEFORE it is timed, per-knob kill switches; kernel_opt strided-view-offset-fit32-launch-proof += the BoundaryBlocks element-count guard + the anchorJoin sum-form fit32 twin); source re-verified by 2 authoring subagents over disjoint slices + the coordinator; 12/12 quotes byte-exact, ~15 staged line drifts corrected in-rule.
-        // Batch 220 (1): Lead 13, the prism #107 MoE weighted-reduce fusion (Plan 220, PrismML-Eng/llama.cpp patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91, MIT) -- moe-router-weight-fold-into-reduce-never-materialize (D +1: the never-materialize consumer-fold into a reduction + the bit-identity-intrinsics refusal + the dying-operand staging rescue, one mechanism; see the count pin for the full law).
-        // Batch 242 (31): the mlx-serve GDN/QSA pack (Plan 244 / Research 274, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 — the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; 31 own rules across slices 97/98/99, the corpus's largest single-source batch: A +7 resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring, B +3 row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once, D +9 split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count, E +2 spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge, K +1 per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model), L +1 tp-rank-inferred-from-scale-grid-ambiguity-refused, N +8 masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics: mask a packed field in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern) + decay-gate-dtype-one-point-zero-lock (a bf16 gate near one is exactly 1.0 and that head never forgets) + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf; dispositions: 1 killed (dequant-dtype-follows-scales-not-hardcoded, C+ thin — 3 lines of mechanism), 3 folded (fold-depth into split-prework; declined-shape-negative-latch into the decline-latch rule; the tree-protocol sub-faces into one three-face rule; per-expert-density into admission-clones as the rung face); landed ABOVE the 12-16 estimate — the sources were richer than the ~50% falsification factor predicted, disclosed per the lithos precedent).
+    // Batch 220 (1): Lead 13, the prism #107 MoE weighted-reduce fusion (Plan 220, PrismML-Eng/llama.cpp patch commit 930ddba3b7f07c1599354d2989aeb23b51988f91, MIT) -- moe-router-weight-fold-into-reduce-never-materialize (D +1: the never-materialize consumer-fold into a reduction + the bit-identity-intrinsics refusal + the dying-operand staging rescue, one mechanism; see the count pin for the full law).
+    // Batch 242 (31): the mlx-serve GDN/QSA pack (Plan 244 / Research 274, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 — the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; 31 own rules across slices 97/98/99, the corpus's largest single-source batch: A +7 resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring, B +3 row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once, D +9 split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count, E +2 spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge, K +1 per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model), L +1 tp-rank-inferred-from-scale-grid-ambiguity-refused, N +8 masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics: mask a packed field in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern) + decay-gate-dtype-one-point-zero-lock (a bf16 gate near one is exactly 1.0 and that head never forgets) + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf; dispositions: 1 killed (dequant-dtype-follows-scales-not-hardcoded, C+ thin — 3 lines of mechanism), 3 folded (fold-depth into split-prework; declined-shape-negative-latch into the decline-latch rule; the tree-protocol sub-faces into one three-face rule; per-expert-density into admission-clones as the rung face); landed ABOVE the 12-16 estimate — the sources were richer than the ~50% falsification factor predicted, disclosed per the lithos precedent).
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "kernel batches through Batch 246 should have 848 rules (Batch 246 +1 — the prism fork #363 shard law, L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT (Research 274 / Plan 244): 31 own rules across slices 97 (GDN/QSA/RHT core, 10) / 98 (quant matmul + packs, 9) / 99 (attention + oracles, 12); A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); prior: 816 at Batch 240",
+        863,
+        "kernel batches through Batch 249 slice 2 should have 863 rules (Batch 249 slice 2 +15 — the TensorFold drift-pool OWN-RULE set, ashhart/TensorFold window f1aef9c3..9ccf4727, Apache-2.0 (Plan 253 / Research 282): D +8 pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain; A +3 slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set; N +2 layout-check-values-mod-13-break-block-symmetry + kernel-contract-planted-gate-controls; K +1 calibrate-verify-window-on-text-not-proposer-chain; B +1 parser-backtrack-bounded-by-monotone-cursor; 3 folds applied (A-4+D-A-3, B-20+D-B-9, D-A-1+D-B-10 — same law, multiple faces); every quote re-verified at the pin by the coordinator); Batch 246 +1 — the prism fork #363 shard law, L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT (Research 274 / Plan 244): 31 own rules across slices 97/98/99; A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand); prior: 816 at Batch 240",
     );
 }
 
@@ -492,7 +492,9 @@ fn batch7_burn_cubecl_concepts_covered() {
     assert!(concepts.contains(&"vectorization width as an autotune dimension"));
     assert!(concepts.contains(&"1x1 convolution as direct matmul (skip im2col)"));
     // (rider-tolerant prefix pin: Batch 225 appended the vLLM #59340 processing-set face to this concept)
-    assert!(concepts.iter().any(|c| c.starts_with("stride-contiguity guard skips unnecessary relayout copy")));
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("stride-contiguity guard skips unnecessary relayout copy")));
     assert!(concepts.contains(&"grid-limit-aware batch packing"));
     assert!(concepts.contains(&"stride-byte-alignment determines vectorization width"));
     assert!(concepts.contains(&"shape bucketing for autotune cache reuse"));
@@ -1332,7 +1334,9 @@ fn batch24_cudarc_backward_concepts_covered() {
         .collect();
     // A: widen-index-multiply-to-64bit (riir-gpu cudarc_kernels/backward.rs L416/L474/L478/L515/L518)
     // (rider-tolerant prefix pin: Batch 225 appended the #28748 vendor-view face to this concept)
-    assert!(concepts.iter().any(|c| c.starts_with("when a flat index product (position × stride) can exceed 2^31 on large buffers")));
+    assert!(concepts.iter().any(|c| c.starts_with(
+        "when a flat index product (position × stride) can exceed 2^31 on large buffers"
+    )));
     // B: dual-accumulator-single-reduction-sweep (riir-gpu cudarc_kernels/backward.rs L61-83)
     assert!(concepts.contains(&"fuse two block reductions over the same data into one sweep: keep two partial accumulators in the same strided loop (each element loaded once, feeding both), and reduce both shared-memory arrays inside the SAME stride tree — halves global loads and halves the __syncthreads() barrier count vs two sequential reductions. RMSNorm backward needs sum(x²) and dot(grad_y·γ·x) over identical elements — the canonical case. Distinct from split-sign-accumulators-defer-subtraction (ILP chains within one dot) — this is barrier + load sharing across two different reductions"));
     // C: dual-grad-same-pass (riir-gpu cudarc_kernels/backward.rs L108-126 + L137-155 + L169-186 + L345-369)
@@ -5468,20 +5472,20 @@ fn kernel_categories_counts_match_plan_003_table() {
     // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 174), // Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring (ddalcu/mlx-serve @ 1015f785, MIT) // Batch 240 +1: pad-row-classification-interior-memcpy (llama.cpp #30526 @ 23f83e05) // Batch 234 +1: lifecycle-disjoint-intermediates-union-smem-scratch (llama.cpp #29353 @ 62df1815) // Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 @ b9f3599f)
-        (KernelCategory::Compute, 91), // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
+        (KernelCategory::MemoryAccess, 177), // Batch 249 slice 2 +3: slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set (TensorFold @ 9ccf4727 window) // Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring (ddalcu/mlx-serve @ 1015f785, MIT) // Batch 240 +1: pad-row-classification-interior-memcpy (llama.cpp #30526 @ 23f83e05) // Batch 234 +1: lifecycle-disjoint-intermediates-union-smem-scratch (llama.cpp #29353 @ 62df1815) // Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 @ b9f3599f)
+        (KernelCategory::Compute, 92), // Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (TensorFold @ 9ccf4727 window) // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
         (KernelCategory::Fusion, 55),
-        (KernelCategory::Dispatch, 200), // Batch 242 +9: the mlx-serve pack — split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count (mlx-serve @ 1015f785) // Batch 236 +1: mid-prefill-recurrent-state-capture-boundary-unsplit (incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 convergence face) // Batch 234 +1: occupancy-keyed-value-split-register-budget-ladder (llama.cpp #29353 @ 62df1815)
+        (KernelCategory::Dispatch, 208), // Batch 249 slice 2 +8: pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain (TensorFold @ 9ccf4727 window) // Batch 242 +9: the mlx-serve pack — split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count (mlx-serve @ 1015f785) // Batch 236 +1: mid-prefill-recurrent-state-capture-boundary-unsplit (incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 convergence face) // Batch 234 +1: occupancy-keyed-value-split-register-budget-ladder (llama.cpp #29353 @ 62df1815)
         (KernelCategory::Parallelism, 79), // Batch 242 +2: spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge (mlx-serve @ 1015f785) // Batch 240 +1: subgroup-tail-lane-clamp-live-loads-gate-stores (llama.cpp #30421 @ 9166ceaf) // Batch 234 +1: warp-role-split-phase-overlap-cross-chunk-prefetch (llama.cpp #29353 @ 62df1815)
         (KernelCategory::FlashAttnTiling, 19),
         (KernelCategory::LinearAttnRecurrence, 38), // Batch 234 +2: register-resident-scan-state-one-kernel-layer-pass + in-register-unit-triangular-inverse-warp-substitution (llama.cpp #29353 @ 62df1815)
         (KernelCategory::MoeDispatchBackward, 38),
         (KernelCategory::NsaBlockSparse, 8),
         (KernelCategory::VarlenChunkedReduction, 5),
-        (KernelCategory::AutotuneDispatch, 16), // Batch 242 +1: per-generation-plan-table-unmeasured-generation-fallback (mlx-serve @ 1015f785 — measured on the Bonsai 27B shapes, OUR league model)
+        (KernelCategory::AutotuneDispatch, 17), // Batch 249 slice 2 +1: calibrate-verify-window-on-text-not-proposer-chain (TensorFold @ 9ccf4727 window) // Batch 242 +1: per-generation-plan-table-unmeasured-generation-fallback (mlx-serve @ 1015f785 — measured on the Bonsai 27B shapes, OUR league model)
         (KernelCategory::ConvGemmLayout, 22), // Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (PrismML-Eng #363 — the lcm split law); Batch 242 +1: tp-rank-inferred-from-scale-grid-ambiguity-refused (mlx-serve @ 1015f785)
         (KernelCategory::KernelPolymorphism, 21),
-        (KernelCategory::DtypeAlignment, 74), // Batch 242 +8: masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics) + decay-gate-dtype-one-point-zero-lock + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf (mlx-serve @ 1015f785) // Batch 234 +1: bf16-residual-pair-three-mma-near-f32 (llama.cpp #29353 @ 62df1815)
+        (KernelCategory::DtypeAlignment, 76), // Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry + kernel-contract-planted-gate-controls (TensorFold @ 9ccf4727 window) // Batch 242 +8: masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics) + decay-gate-dtype-one-point-zero-lock + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf (mlx-serve @ 1015f785) // Batch 234 +1: bf16-residual-pair-three-mma-near-f32 (llama.cpp #29353 @ 62df1815)
         (KernelCategory::IrStrengthReduction, 8),
     ];
     for (cat, count) in expected {
@@ -5496,9 +5500,9 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 848.
+    // Sum must equal 863 (re-pinned at Batch 249 slice 2).
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
-    assert_eq!(total, 848, "Plan 003: category totals must sum to 848 (re-pinned Batch 246 +1 L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 (the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; Research 274 / Plan 244; 31 own rules across slices 97/98/99: A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host)");
+    assert_eq!(total, 863, "Plan 003: category totals must sum to 863 (re-pinned 863 at Batch 249 slice 2 — +15, the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282; was 848 at Batch 246 +1 L; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT, 2026-10-14 (the Zig GDN/QSA serving engine for Apple Silicon with embedded MSL kernels; Research 274 / Plan 244; 31 own rules across slices 97/98/99: A +7, B +3, D +9, E +2, K +1, L +1, N +8; the GOAT is masked-in-place-field-prescale-other-operand — portable CPU-exact novel numerics; landed ABOVE the 12-16 estimate — 2 killed/folded of 33 candidates, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host)");
 }
 
 #[test]
@@ -5509,8 +5513,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 848,
-        "Plan 003: grouped corpus has {total} rules, expected 848 (re-pinned Batch 246 +1 L, the prism fork #363 shard law; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT: A +7, B +3, D +9, E +2, K +1, L +1, N +8 across slices 97/98/99; the GOAT is masked-in-place-field-prescale-other-operand; landed ABOVE the 12-16 estimate, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT); was 813 at Batch 236 +1 (the mid-prefill capture law); was 812 at Batch 234 (+6), 806 at Batch 233 (+1), 805 at Batch 232, 804 at Batch 231, 803 at Batch 227, 801 at Batch 225, 796 at Batch 224, 795 at Batch 223"
+        total, 863,
+        "Plan 003: grouped corpus has {total} rules, expected 863 (re-pinned 863 at Batch 249 slice 2 — +15, the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282; was 848 at Batch 246 +1 L, the prism fork #363 shard law; Batch 242 +31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT: A +7, B +3, D +9, E +2, K +1, L +1, N +8 across slices 97/98/99; the GOAT is masked-in-place-field-prescale-other-operand; landed ABOVE the 12-16 estimate, disclosed per the lithos precedent); was 816 at Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT); was 813 at Batch 236 +1 (the mid-prefill capture law); was 812 at Batch 234 (+6), 806 at Batch 233 (+1), 805 at Batch 232, 804 at Batch 231, 803 at Batch 227, 801 at Batch 225, 796 at Batch 224, 795 at Batch 223"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9617,8 +9621,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "corpus count re-pinned at Batch 242 (+31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT); was 816 at Batch 240 (Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf -- every lane of a collective stays LIVE, loads CLAMP to a valid row at every read site (gid_s = min(gid, LINE_STRIDE_A - 1)), stores gate on the real bound; the pair/splitk store splits into per-element guards) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05 -- the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed -- upcast every non-f32 INPUT at the foreign-graph boundary, build in f32, convert back to the caller's type; supports_op refuses what it cannot compute; the tolerance names its reason); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host); prior re-pin at Batch 237 (RIDER COUNT-NEUTRAL — the autotune-cache HARDWARE-PATH axis on autotune-fidelity-synthetic-carries-producer-params: the tune-cache namespace gains the resolved adapter's fingerprint {{fingerprint}}/{{device_id}}/{{name}}, the wgpu runtime name carries its API — DX12 and Vulkan on one card share a fingerprint; tracel-ai/cubecl @ 5a4f5882c82f0dbb3147c628b0eb4492ec9f3dd0 #1811, Plan 239); prior re-pin at Batch 236 (+1 — D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 FlashInfer convergence face); prior re-pin at Batch 234 (+6 — the llama.cpp #29353 GDN-MMA chunked-prefill pack @ merge 62df1815: G+2 the register-resident scan state + the in-register (I+L)^-1 warp substitution, N+1 the bf16 residual-pair 3-mma, D+1 the occupancy-keyed value-split ladder, A+1 the union smem scratch, E+1 the warp-split overlap + prefetch — the ai-971 merge-moment conversion); prior re-pin at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law — llama.cpp #28738 + #30480, MIT: a reshape re-declares bounds over fixed memory and cannot permute axes, the oracle is content vs the per-axis decomposition; the B224 moe-duplicate-id rider — the #30501 UB-contract face — count-neutral); prior re-pin at Batch 232 (+1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d, Apache-2.0: a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it yields in 256-row chunks one in flight, keeps its state when it steps aside, and chunking is bit-legal by cut-invariance; the rust_perf HEADROOM-ADMISSION rider on degrade-not-fail-load-qualification-probe is count-neutral); prior re-pin at Batch 231 (+1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps — subtract the ranges owned by the other contexts, one buffer per disjoint owned range; the two riders count-neutral: the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack); was 803 at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
+        863,
+        "corpus count re-pinned at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L); was 847 at Batch 242 (+31 — the mlx-serve GDN/QSA pack, ddalcu/mlx-serve @ 1015f785, MIT); was 816 at Batch 240 (Batch 240 +3 (the P67-P70 conversion, llama.cpp MIT: E +1 subgroup-tail-lane-clamp-live-loads-gate-stores (#30421 @ 9166ceaf -- every lane of a collective stays LIVE, loads CLAMP to a valid row at every read site (gid_s = min(gid, LINE_STRIDE_A - 1)), stores gate on the real bound; the pair/splitk store splits into per-element guards) + A +1 pad-row-classification-interior-memcpy (#30526 @ 23f83e05 -- the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading) + B +1 f16-upcast-at-foreign-graph-translation (#29200 @ 5a638aed -- upcast every non-f32 INPUT at the foreign-graph boundary, build in f32, convert back to the caller's type; supports_op refuses what it cannot compute; the tolerance names its reason); the fourth staged lead P70 (#27703 memory-channel-spread) is watch-only, no Rust-side host); prior re-pin at Batch 237 (RIDER COUNT-NEUTRAL — the autotune-cache HARDWARE-PATH axis on autotune-fidelity-synthetic-carries-producer-params: the tune-cache namespace gains the resolved adapter's fingerprint {{fingerprint}}/{{device_id}}/{{name}}, the wgpu runtime name carries its API — DX12 and Vulkan on one card share a fingerprint; tracel-ai/cubecl @ 5a4f5882c82f0dbb3147c628b0eb4492ec9f3dd0 #1811, Plan 239); prior re-pin at Batch 236 (+1 — D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 FlashInfer convergence face); prior re-pin at Batch 234 (+6 — the llama.cpp #29353 GDN-MMA chunked-prefill pack @ merge 62df1815: G+2 the register-resident scan state + the in-register (I+L)^-1 warp substitution, N+1 the bf16 residual-pair 3-mma, D+1 the occupancy-keyed value-split ladder, A+1 the union smem scratch, E+1 the warp-split overlap + prefetch — the ai-971 merge-moment conversion); prior re-pin at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law — llama.cpp #28738 + #30480, MIT: a reshape re-declares bounds over fixed memory and cannot permute axes, the oracle is content vs the per-axis decomposition; the B224 moe-duplicate-id rider — the #30501 UB-contract face — count-neutral); prior re-pin at Batch 232 (+1: D the warm background pass quiet-hold yield-chunking cut-invariance law — ashhart/TensorFold @ c724dd9d, Apache-2.0: a next-turn background prefill waits warm_quiet of engine quiet and is DROPPED, never queued, when other work arrives; once running it yields in 256-row chunks one in flight, keeps its state when it steps aside, and chunking is bit-legal by cut-invariance; the rust_perf HEADROOM-ADMISSION rider on degrade-not-fail-load-qualification-probe is count-neutral); prior re-pin at Batch 231 (+1: A the host-pointer-buffer foreign-range pinning law — llama.cpp #30405 @ b9f3599fb1c429e89248f042699ea2e062a32e57, MIT: a buffer created from a host pointer pins everything that it wraps — subtract the ranges owned by the other contexts, one buffer per disjoint owned range; the two riders count-neutral: the macOS MADV_WILLNEED prefetch no-op on rust_perf madvise-random-for-key-gather-tables + the AVX2 Q2_0 x86 SIMD spread face on lut-free-bit-spread-vadd4-unpack); was 803 at Batch 227 (+2: the lithos-metal wave-2 pack, lithos-ai/lithos-metal @ repo pin 5485ad6, Apache-2.0 - A +1 coop-tensor-layout-measured-per-chip-family (#35) + D +1 exact-pass-rows-take-their-sub-pass-chunking (#36); the two riders (B223 arena-admission #37, B207 half2-pairing #38) are count-neutral; was 801 at Batch 225 (5 rules, the Q1_0 trio distill — PrismML-Eng/llama.cpp @ 59f2b8485 (v0.0.1-prism founding, 2026-03-02, 29 files +1382/-1: Q1_0 + Q1_0_g128 1-bit sign-based quant across CPU + Metal + CUDA) + 43e67bda3 (2026-03-13, '[cuda] fix mmq/mma path', 7 files +128/-61: the accuracy fix that enabled the kernels); D +1 mmq-tile-loader-thread-map-derives-from-block-geometry, B +1 subbyte-preexpand-int8-tile-reuses-validated-mma-consumer, A +1 superblock-scale-replication-to-subblock-scale-slots, N +2 sign-expand-one-bit-dp4a-symmetric-epilogue + sign-codec-shared-magnitude-mean-abs; + 5 count-neutral riders (gpu_16 the NO_DEVICE_CODE stub + admission-narrowing face, gpu_33 the x86 shuffle-cmpeq expansion face + the mismatched-block sub-window face, gpu_02 the vendor-view int32-wrap face #28748, entries_popcorn the processing-set staging predicate vLLM #59340); was 796 at Batch 224 (1 rule, D: the MoE mul_mat_id duplicate-id compact-prepass static-bound tile-descriptor dispatch — llama.cpp metal #30373 @ 073b74034b8bfe652e410ec8bd1e0d95a7d46fea + vulkan #29998 @ 966baae76b578d5d3dd4c179a75a35c80ff75577, MIT: the two-pass compact prepass (every occurrence of an expert is an entry — duplicates produce multiple entries) + per-tile (expert, first-entry, valid-rows) descriptors + the host-computable static bound (full tiles + at most one partial per expert, min-clamped by n_rows) with tail early-exit; the founding hazard: 'assumed at most one match per token and a fixed capacity of ne21 entries per expert, which produced wrong or dropped output rows and could overflow into the slice of the next expert'; the unconditional-store law: 'conditional stores of the divergent lanes are very slow' — dummy to a never-read padding slot; grid ~8-16x shrink (94% launch-to-exit tiles), th_max 768 -> plain mul_mm, pp +2% Qwen3.6-35B-A3B; the ne02 function-constant fold 'no measurable perf change' — the honest null; cross-backend honesty: the store/th_max/figures atoms are metal-commit-only, vulkan's scatter is atomicAdd-cursor-based with a 2-word descriptor + EXPERTS_PER_CHUNK=1024 chunking + the subgroupBallot scan deletion; was 795 at Batch 223 (11 rules + 3 riders, the lithos-metal pack — Research 249/248, lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5, Apache-2.0: A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (16 copies x 96 KB per capacity token = 12 GB at a 128K context) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap (the bus-first sibling axis + the arena eligibility law folded) + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params; + 3 count-neutral riders: the gdn parity-slot commit-by-recompute, the delay-rms STAT_OUT prefold + honesty pair, the lut-free fp8-subnormal density-split face); was 784 at Batch 220, 783 at Batch 215, 778 at Batch 214, 777 at Batch 210, 776 at Batch 208, 773 at Batch 207, 771 at Batch 206, 769 at Batch 205)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -10261,7 +10265,9 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     // spreads (~0.1, the |q| <= 0.12 input class) the uniform weights sit
     // INSIDE the source's 5e-3 + 3e-2|ref| tolerance of the true weights
     // (max weight deviation ~ spread/(2n) ~ 6e-3 < ~8.7e-3 here).
-    let tiny: [f32; 8] = [-0.05, -0.037_5, -0.025, -0.012_5, 0.0, 0.012_5, 0.025, 0.037_5];
+    let tiny: [f32; 8] = [
+        -0.05, -0.037_5, -0.025, -0.012_5, 0.0, 0.012_5, 0.025, 0.037_5,
+    ];
     let w_true = softmax(&tiny);
     let w_uniform = vec![1.0 / 8.0; 8];
     for (t, u) in w_true.iter().zip(&w_uniform) {
@@ -11951,7 +11957,10 @@ fn batch144_concepts_covered() {
         "Distinct from `ldmatrix-mma-layout-loads`",
         "1.175x",
     ] {
-        assert!(c.contains(phrase), "ldmatrix-limit concept missing '{phrase}'");
+        assert!(
+            c.contains(phrase),
+            "ldmatrix-limit concept missing '{phrase}'"
+        );
     }
     // (g) strided epilogue: the exact ratio, the stage geometry, the
     // reader map, the row pitch, and the write-side distinct-from.
@@ -11966,7 +11975,10 @@ fn batch144_concepts_covered() {
         "Distinct from `tile-amplification-precedes-staging-pass`",
         "inherited v8's schedule",
     ] {
-        assert!(c.contains(phrase), "strided-epilogue concept missing '{phrase}'");
+        assert!(
+            c.contains(phrase),
+            "strided-epilogue concept missing '{phrase}'"
+        );
     }
     // (h) scalar staging: the honest cap (read sectors UNMOVED), the
     // combined-IPC framing, the per-group-per-block contract.
@@ -11993,7 +12005,10 @@ fn batch144_concepts_covered() {
         "kernel bugs, not physics",
         "from `cross-run-profiles-key-on-content-not-stat-triplets`",
     ] {
-        assert!(c.contains(phrase), "profile-first concept missing '{phrase}'");
+        assert!(
+            c.contains(phrase),
+            "profile-first concept missing '{phrase}'"
+        );
     }
 }
 
@@ -12172,10 +12187,7 @@ fn batch148_pseudocode_parses() {
             "xor-swizzle-smem-static-index-tables",
             "OCCUPANCY-COMPOUNDING face",
         ),
-        (
-            "ldmatrix-mma-layout-loads",
-            "the sm_89 LOSER cell",
-        ),
+        ("ldmatrix-mma-layout-loads", "the sm_89 LOSER cell"),
         (
             "mma-fragment-layout-m16n8k16",
             "QMMA.16832.F16.E4M3.E4M3 SASS reads the A-fragment register pair SWAPPED",
@@ -12382,7 +12394,10 @@ fn batch166_concepts_covered() {
         "Distinct from fwht-shuffle-xor-butterfly-register-resident (Batch 96",
         "1bc46a8a7",
     ] {
-        assert!(c.contains(phrase), "staging-ladder concept missing '{phrase}'");
+        assert!(
+            c.contains(phrase),
+            "staging-ladder concept missing '{phrase}'"
+        );
     }
 }
 
@@ -12486,7 +12501,10 @@ fn batch170_concepts_covered() {
         "sNaN quieting",
         "Distinct from monotone-transform-elision-under-argmax",
     ] {
-        assert!(c.contains(phrase), "qscale-elide concept missing '{phrase}'");
+        assert!(
+            c.contains(phrase),
+            "qscale-elide concept missing '{phrase}'"
+        );
     }
     // sentinel: the stride signature, the addmm combination, the
     // degradation property.
@@ -12604,10 +12622,13 @@ fn batch177_rules_present() {
         .find(|e| e.rule_id == "readout-trim-needs-committed-id-coverage")
         .expect("readout-trim rule present");
     assert!(
-        trim.gpu_concept.contains("SCOPE CORRECTION (Batch 177 rider"),
+        trim.gpu_concept
+            .contains("SCOPE CORRECTION (Batch 177 rider"),
         "batch-177 readout-trim scope rider missing"
     );
-    assert!(trim.gpu_concept.contains("becomes a rejection, not an error"));
+    assert!(trim
+        .gpu_concept
+        .contains("becomes a rejection, not an error"));
 }
 
 #[test]
@@ -13664,10 +13685,7 @@ fn batch193_concepts_carry_their_load_bearing_contracts() {
             "readback-domain-excludes-cold-tap-copies",
             "completion event",
         ),
-        (
-            "construction-identity-row-classes-replace-probe",
-            "7 of 43",
-        ),
+        ("construction-identity-row-classes-replace-probe", "7 of 43"),
         (
             "branch-free-top2-insert-order-invariant-guard",
             "count == 2",
@@ -13676,10 +13694,7 @@ fn batch193_concepts_carry_their_load_bearing_contracts() {
             "register-built-right-operand-lane-contiguous-plane-layout",
             "not in the trial",
         ),
-        (
-            "dual-layout-transpose-at-stage",
-            "load-time trial",
-        ),
+        ("dual-layout-transpose-at-stage", "load-time trial"),
         (
             "adoption-trial-rotate-operands-per-launch-dram-streaming",
             "ranks the two the other way",
@@ -13888,7 +13903,10 @@ fn batch197_concepts_carry_their_load_bearing_contracts() {
             "segmented-checkpoint-cheap-replay-backward",
             "it must be the entry state and not the exit state",
         ),
-        ("gqa-zero-stride-batch-broadcast", "zero innermost batch stride"),
+        (
+            "gqa-zero-stride-batch-broadcast",
+            "zero innermost batch stride",
+        ),
         (
             "threadgroup-scope-reduction-single-writer",
             "never leaves threadgroup memory",
@@ -13992,10 +14010,7 @@ fn batch198_concepts_carry_their_load_bearing_contracts() {
             "ids-path-rebinds-stride-meaning",
             "failed in 8 of 10 runs on an RTX 4090",
         ),
-        (
-            "tied-hadamard-output-fold-at-load",
-            "double-fold hazard",
-        ),
+        ("tied-hadamard-output-fold-at-load", "double-fold hazard"),
         (
             "single-seq-slice-contiguity-copy-elision",
             "retain packing for interleaved multi-sequence views",
@@ -14100,54 +14115,21 @@ fn batch201_concepts_carry_their_load_bearing_contracts() {
     // each rule's load-bearing caveat must ride the rule text.
     let corpus = build_kernel_seed_corpus();
     let contracts = [
-        (
-            "deferred-block-release",
-            "the release order is preserved",
-        ),
-        (
-            "first-layer-ahead-submission",
-            "PRESENT-AT-BASE",
-        ),
+        ("deferred-block-release", "the release order is preserved"),
+        ("first-layer-ahead-submission", "PRESENT-AT-BASE"),
         (
             "draft-tape-behavior-gated-trial",
             "every one of its rounds proposed exactly",
         ),
-        (
-            "per-layer-verification-coverage",
-            "ObjectIdentifier",
-        ),
-        (
-            "pack-worthiness-shape-admission",
-            "worthPacking",
-        ),
-        (
-            "lossless-11bit-repack-trial",
-            "MLXFAST_P11",
-        ),
-        (
-            "dflash2-pack11-pack12-encode-arithmetic",
-            "1-15, or 0",
-        ),
-        (
-            "accept-packet-one-launch",
-            "MLXFAST_ACCEPT_WALK_FUSED",
-        ),
-        (
-            "env-polarity-migration",
-            "MLXFAST_DFLASH_SWIGLU",
-        ),
-        (
-            "gather-signed-index-wrap-semantics",
-            "i += long(V)",
-        ),
-        (
-            "producer-folds-single-consumer-family",
-            "19%",
-        ),
-        (
-            "single-pass-continuation-scan",
-            "global longest match",
-        ),
+        ("per-layer-verification-coverage", "ObjectIdentifier"),
+        ("pack-worthiness-shape-admission", "worthPacking"),
+        ("lossless-11bit-repack-trial", "MLXFAST_P11"),
+        ("dflash2-pack11-pack12-encode-arithmetic", "1-15, or 0"),
+        ("accept-packet-one-launch", "MLXFAST_ACCEPT_WALK_FUSED"),
+        ("env-polarity-migration", "MLXFAST_DFLASH_SWIGLU"),
+        ("gather-signed-index-wrap-semantics", "i += long(V)"),
+        ("producer-folds-single-consumer-family", "19%"),
+        ("single-pass-continuation-scan", "global longest match"),
     ];
     for (id, marker) in contracts {
         let rule = corpus
@@ -14168,12 +14150,10 @@ fn batch201_riders_landed_on_their_hosts() {
     // that never landed is a staging note, not corpus): the 2 instance
     // riders across their 2 host rules (rust_perf T4.1 + kernel_opt T4.2).
     let corpus = build_kernel_seed_corpus();
-    let hosts = [
-        (
-            "strided-view-offset-fit32-launch-proof",
-            "RIDER (Batch 201 / Plan 200",
-        ),
-    ];
+    let hosts = [(
+        "strided-view-offset-fit32-launch-proof",
+        "RIDER (Batch 201 / Plan 200",
+    )];
     for (host, marker) in hosts {
         let rule = corpus
             .entries
@@ -14200,7 +14180,6 @@ fn batch201_riders_landed_on_their_hosts() {
         notes.contains("RIDER (Batch 201 / Plan 200"),
         "the Batch-201 exact-form-device-trial rider must ride the family host"
     );
-
 }
 
 #[test]
@@ -14251,10 +14230,7 @@ fn batch203_concepts_carry_their_load_bearing_contracts() {
             "chunk-boundary-state-checkpoint-bitwise-backward",
             "GJ_SAVE_MASKS",
         ),
-        (
-            "log-gate-diff-decay-no-clamp-stability",
-            "needs no cap",
-        ),
+        ("log-gate-diff-decay-no-clamp-stability", "needs no cap"),
     ];
     for (id, marker) in contracts {
         let rule = corpus
@@ -14276,7 +14252,8 @@ fn batch203_concepts_carry_their_load_bearing_contracts() {
         .find(|e| e.rule_id == "chunk-boundary-state-checkpoint-bitwise-backward")
         .expect("batch-203 R3 present");
     assert!(
-        r3.gpu_concept.contains("segmented-checkpoint-cheap-replay-backward"),
+        r3.gpu_concept
+            .contains("segmented-checkpoint-cheap-replay-backward"),
         "batch-203 R3 must distinct-from the B197 segmented-checkpoint rule"
     );
     // The NotBenchable annotation rides all three (sm90/sm100-only source).
@@ -15988,19 +15965,13 @@ fn batch220_rule_and_parse_landed() {
     }
 
     // the pseudocode halves parse (the batch207 pattern).
-    let ref_verdict = KernelOptDomain::validate(
-        moe.rule_id.as_str(),
-        moe.buggy_code(),
-    );
+    let ref_verdict = KernelOptDomain::validate(moe.rule_id.as_str(), moe.buggy_code());
     assert!(
         verdict_passes(&ref_verdict),
         "batch-220 ref_shape for '{}' must parse",
         moe.rule_id
     );
-    let opt_verdict = KernelOptDomain::validate(
-        moe.rule_id.as_str(),
-        moe.fixed_code(),
-    );
+    let opt_verdict = KernelOptDomain::validate(moe.rule_id.as_str(), moe.fixed_code());
     assert!(
         verdict_passes(&opt_verdict),
         "batch-220 opt_pattern for '{}' must parse",
@@ -16025,9 +15996,7 @@ fn batch221_riders_landed_on_their_hosts() {
     let fa = corpus
         .entries
         .iter()
-        .find(|e| {
-            e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view"
-        })
+        .find(|e| e.rule_id == "fa-fast-path-validated-exact-shape-admission-v-as-strided-view")
         .expect("B208 FA host missing from the corpus");
     for marker in [
         "the kernels exist for K == V and for these K > V pairs only",
@@ -16421,18 +16390,9 @@ fn batch199_concepts_carry_their_load_bearing_contracts() {
             "declared-uncapturable-expert-declines-graphs",
             "operation failed due to a previous error during capture",
         ),
-        (
-            "draft-context-ring-window-bounded",
-            "torn window",
-        ),
-        (
-            "row-independent-pass-block-bounded-scratch",
-            "bitwise",
-        ),
-        (
-            "quantized-stored-bytes-not-widened-patterns",
-            "four times",
-        ),
+        ("draft-context-ring-window-bounded", "torn window"),
+        ("row-independent-pass-block-bounded-scratch", "bitwise"),
+        ("quantized-stored-bytes-not-widened-patterns", "four times"),
         (
             "visibility-bounded-scan-shape-stable-allocations",
             "the same allocations",
@@ -16560,26 +16520,17 @@ fn batch195_concepts_carry_their_load_bearing_contracts() {
     // each rule's load-bearing caveat must ride the rule text.
     let corpus = build_kernel_seed_corpus();
     let contracts = [
-        (
-            "io32-count-pinned-text-narrowing",
-            "64-bit text kept",
-        ),
+        ("io32-count-pinned-text-narrowing", "64-bit text kept"),
         (
             "strided-view-offset-fit32-launch-proof",
             "sum of (extent - 1) * stride",
         ),
-        (
-            "write-only-touch-side-queue",
-            "write a scalar no one reads",
-        ),
+        ("write-only-touch-side-queue", "write a scalar no one reads"),
         (
             "last-query-rect-projection",
             "every element the full product's",
         ),
-        (
-            "roundfuse-packed-embedding-gather",
-            "offset_neg_idx",
-        ),
+        ("roundfuse-packed-embedding-gather", "offset_neg_idx"),
         (
             "enumerable-domain-bit-identity-admission-gate",
             "original concat/cast kept",
@@ -16697,26 +16648,14 @@ fn batch194_concepts_carry_their_load_bearing_contracts() {
             "decode-sidecar-coroutine-writes-consumer-stage-ring",
             "kDirectStore",
         ),
-        (
-            "ring-overwrite-gated-k-back-readiness",
-            "slot i-K",
-        ),
+        ("ring-overwrite-gated-k-back-readiness", "slot i-K"),
         (
             "empty-participant-progress-credit",
             "Empty row owners must also contribute",
         ),
-        (
-            "issue-latency-priced-mad-cost-model",
-            "40 : 116",
-        ),
-        (
-            "multiwave-dual-decode-admission-gate",
-            "after final tiling",
-        ),
-        (
-            "work-size-gated-overlap-reduce-mode",
-            "32 MiB",
-        ),
+        ("issue-latency-priced-mad-cost-model", "40 : 116"),
+        ("multiwave-dual-decode-admission-gate", "after final tiling"),
+        ("work-size-gated-overlap-reduce-mode", "32 MiB"),
         (
             "l1-resident-operand-reuse-address-identity-rewind",
             "kNumCores",
@@ -16768,10 +16707,7 @@ fn batch194_riders_landed_on_their_hosts() {
     // asserted via their own contract markers above.
     let corpus = build_kernel_seed_corpus();
     let hosts = [
-        (
-            "weight-stream-non-temporal-loads",
-            "RIDER (Batch 194",
-        ),
+        ("weight-stream-non-temporal-loads", "RIDER (Batch 194"),
         (
             "ue8m0-pow2-scale-as-biased-exponent-byte",
             "RIDER (Batch 194",
@@ -16970,7 +16906,10 @@ fn batch181_signed_codes_mantissa_gate() {
             }
         }
     }
-    assert!(!diverged_in, "forms must be bit-identical INSIDE the 2-bit g128 regime");
+    assert!(
+        !diverged_in,
+        "forms must be bit-identical INSIDE the 2-bit g128 regime"
+    );
 
     // OUT of regime: 8-bit colsums (15-bit values). The offset term
     // 128*s*colsum exceeds the FP32 significand budget and ROUNDS, so the
@@ -16991,7 +16930,10 @@ fn batch181_signed_codes_mantissa_gate() {
             }
         }
     }
-    assert!(found_break, "the 8-bit shape must produce a REAL divergence (the NEGATIVE arm)");
+    assert!(
+        found_break,
+        "the 8-bit shape must produce a REAL divergence (the NEGATIVE arm)"
+    );
 }
 
 // Half-precision widen + the sign-flip identity: the u16→u32 widenings
@@ -17037,12 +16979,19 @@ fn batch181_negative_scale_bias_bit_gate() {
     for g in 0..scales.len() {
         let base = widen(scales[g]) * 5.0 + widen(biases[g]);
         let neg = widen(scales[g]) * 5.0 + -widen(scales[g]);
-        assert_eq!(base.to_bits(), neg.to_bits(), "NEG arm diverged at group {g}");
+        assert_eq!(
+            base.to_bits(),
+            neg.to_bits(),
+            "NEG arm diverged at group {g}"
+        );
     }
     // (c) the proof REFUSES on any mismatched bias (the negative arm).
     let mut bad_biases = biases.clone();
     bad_biases[2] ^= 0x0010; // one payload bit off
-    let holds: bool = scales.iter().zip(bad_biases.iter()).all(|(&s, &b)| s ^ 0x8000 == b);
+    let holds: bool = scales
+        .iter()
+        .zip(bad_biases.iter())
+        .all(|(&s, &b)| s ^ 0x8000 == b);
     assert!(!holds, "the proof must refuse a corrupted bias table");
 }
 
@@ -17156,7 +17105,7 @@ fn batch233_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-233: corpus 805 -> 806; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236; was 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack — G+2 register-resident scan state + in-register (I+L)^-1, N+1 bf16 residual-pair 3-mma, D+1 occupancy-keyed value-split ladder, A+1 union smem scratch, E+1 warp-split overlap + prefetch)");
+    assert_eq!(corpus.entries.len(), 863, "batch-233: corpus 805 -> 806; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236; was 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack — G+2 register-resident scan state + in-register (I+L)^-1, N+1 bf16 residual-pair 3-mma, D+1 occupancy-keyed value-split ladder, A+1 union smem scratch, E+1 warp-split overlap + prefetch)");
 
     let e = corpus
         .entries
@@ -17205,9 +17154,7 @@ fn batch233_rules_parse_and_needles_landed() {
     let b224 = corpus
         .entries
         .iter()
-        .find(|e| {
-            e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch"
-        })
+        .find(|e| e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch")
         .expect("batch-233 rider host missing");
     for needle in [
         "note: this op has undefined behaviour if a given `a` is referenced more than once for a given `b`",
@@ -17238,7 +17185,7 @@ fn batch234_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-234: corpus 806 -> 812; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law — incoai/splash @ 711f8e5+c3dcf53+985463c+79a4329, Apache-2.0, the vLLM #60050 convergence face)");
+    assert_eq!(corpus.entries.len(), 863, "batch-234: corpus 806 -> 812; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law — incoai/splash @ 711f8e5+c3dcf53+985463c+79a4329, Apache-2.0, the vLLM #60050 convergence face)");
 
     // Rule 1 (G): the register-resident scan state.
     let e = corpus
@@ -17252,7 +17199,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "state must divide across warps",
         "two-chunk-state-independent-overlap-serial-chunk-recurrence",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r1 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r1 needle: {needle}"
+        );
     }
     // Rule 2 (N): the bf16 residual-pair 3-mma.
     let e = corpus
@@ -17266,7 +17216,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "hi[i] = h; lo[i] = __float2bfloat16(x - __bfloat162float(h));",
         "operand-precision-gated-by-consumer-invariance",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r2 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r2 needle: {needle}"
+        );
     }
     // Rule 3 (G): the in-register unit-triangular inverse.
     let e = corpus
@@ -17279,7 +17232,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "__shfl_sync(0xffffffff, x[pivot / 32], pivot % 32, 32);",
         "if (cc < rr) { s.lower[s.lower_index(rr, cc)] = v * s.beta[rr]; }",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r3 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r3 needle: {needle}"
+        );
     }
     // Rule 4 (D): the occupancy-keyed value-split ladder.
     let e = corpus
@@ -17293,7 +17249,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "info.cc != GGML_CUDA_CC_AMPERE_GA10X",
         "streamk-starved-tile-grid-dispatch",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r4 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r4 needle: {needle}"
+        );
     }
     // Rule 5 (A): the union smem scratch.
     let e = corpus
@@ -17306,7 +17265,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "cudaFuncAttributeMaxDynamicSharedMemorySize",
         "smem-slot-role-reversal-needs-barrier",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r5 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r5 needle: {needle}"
+        );
     }
     // Rule 6 (E): the warp-split overlap + cross-chunk prefetch.
     let e = corpus
@@ -17321,7 +17283,10 @@ fn batch234_rules_parse_and_needles_landed() {
         "62df1815",
         "Batch 234 / Plan 236 / Research 266",
     ] {
-        assert!(e.gpu_concept.contains(needle), "batch-234 r6 needle: {needle}");
+        assert!(
+            e.gpu_concept.contains(needle),
+            "batch-234 r6 needle: {needle}"
+        );
     }
 
     // the pseudocode halves parse (the batch207+ pattern).
@@ -17339,9 +17304,15 @@ fn batch234_rules_parse_and_needles_landed() {
             .find(|e| e.rule_id == rid)
             .expect("batch-234 rule missing");
         let ref_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.buggy_code());
-        assert!(verdict_passes(&ref_verdict), "batch-234 {rid} ref_shape must parse");
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-234 {rid} ref_shape must parse"
+        );
         let opt_verdict = KernelOptDomain::validate(e.rule_id.as_str(), e.fixed_code());
-        assert!(verdict_passes(&opt_verdict), "batch-234 {rid} opt_pattern must parse");
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-234 {rid} opt_pattern must parse"
+        );
     }
 }
 
@@ -17357,7 +17328,7 @@ fn batch236_rule_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-236: corpus 812 -> 813; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)");
+    assert_eq!(corpus.entries.len(), 863, "batch-236: corpus 812 -> 813; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)");
 
     let e = corpus
         .entries
@@ -17422,8 +17393,8 @@ fn batch235_riders_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-235: count-neutral rider batch -- corpus stood 812; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash + the vLLM #60050 convergence face)"
+        863,
+        "batch-235: count-neutral rider batch -- corpus stood 812; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 (+1: D the mid-prefill recurrent-state capture boundary-unsplit law, incoai/splash + the vLLM #60050 convergence face)"
     );
 
     // Rider (a): the width-matched loader face.
@@ -17454,9 +17425,7 @@ fn batch235_riders_parse_and_needles_landed() {
     let b224 = corpus
         .entries
         .iter()
-        .find(|e| {
-            e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch"
-        })
+        .find(|e| e.rule_id == "moe-duplicate-id-compact-prepass-static-bound-tile-dispatch")
         .expect("batch-235 rider (b) host missing");
     for needle in [
         "the SECOND UB-contract face: the state-slot guarantee",
@@ -17486,7 +17455,7 @@ fn batch232_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-232: corpus 804 -> 805; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 rider count-neutral); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 863, "batch-232: corpus 804 -> 805; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480; the B224 #30501 rider count-neutral); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let e = corpus
         .entries
@@ -17545,7 +17514,7 @@ fn batch231_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-231: corpus 803 -> 804; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 863, "batch-231: corpus 803 -> 804; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let e = corpus
         .entries
@@ -17622,8 +17591,8 @@ fn batch237_rider_landed_on_autotune_host() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-237: count-neutral rider batch -- corpus stood 813; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)"
+        863,
+        "batch-237: count-neutral rider batch -- corpus stood 813; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion: E the subgroup tail-lane clamp + A the pad row-classification + B the f16 upcast at foreign-graph translation)"
     );
 
     let host = corpus
@@ -17663,8 +17632,8 @@ fn batch240_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-240: corpus 813 -> 816; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); the P67-P70 conversion (+3: E subgroup-tail-lane-clamp-live-loads-gate-stores + A pad-row-classification-interior-memcpy + B f16-upcast-at-foreign-graph-translation)"
+        863,
+        "batch-240: corpus 813 -> 816; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); the P67-P70 conversion (+3: E subgroup-tail-lane-clamp-live-loads-gate-stores + A pad-row-classification-interior-memcpy + B f16-upcast-at-foreign-graph-translation)"
     );
 
     // P67 -- the subgroup tail-lane law (E).
@@ -17774,7 +17743,7 @@ fn batch227_rules_parse_and_needles_landed() {
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
 
-    assert_eq!(corpus.entries.len(), 848, "batch-227: corpus 801 -> 803; re-pinned 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
+    assert_eq!(corpus.entries.len(), 863, "batch-227: corpus 801 -> 803; re-pinned 863 at Batch 249 slice 2 (+15 — the TensorFold drift-pool own-rule set: D +8, A +3, N +2, K +1, B +1 — Plan 253 / Research 282); was 848 at Batch 246 (+1 L) (+31, the mlx-serve GDN/QSA pack); was 816 at Batch 240 (+3, the P67-P70 conversion); was 813 at Batch 236 re-pinned 805 at Batch 232 (+1: the warm background pass quiet-hold yield-chunking cut-invariance law, TensorFold c724dd9d); re-pinned 806 at Batch 233 (+1: L the reshape-relabel axis-scramble content-oracle law, llama.cpp #28738 + #30480); was 804 at Batch 231 (+1: the host-pointer-buffer foreign-range pinning law, llama.cpp #30405 @ b9f3599f); re-pinned 812 at Batch 234 (+6: the llama.cpp #29353 GDN-MMA chunked-prefill pack)");
 
     let cases: [(&str, &[&str]); 2] = [
         (
@@ -17892,46 +17861,159 @@ fn batch242_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-242: corpus 816 -> 847 at landing; live 848 (Batch 246 +1 L, the prism fork shard law) (+31: the mlx-serve GDN/QSA pack — A +7, B +3, D +9, E +2, K +1, L +1, N +8)"
+        863,
+        "batch-242: corpus 816 -> 847 at landing; live 848 (Batch 246 +1 L, the prism fork shard law); re-pinned 863 at Batch 249 slice 2 (+15, the TensorFold drift-pool own-rule set) (+31: the mlx-serve GDN/QSA pack — A +7, B +3, D +9, E +2, K +1, L +1, N +8)"
     );
 
     let slice_a = [
-        ("split-prework-recompute-beats-inter-kernel-barrier", ["Bit-identical to the composed chain.", "cheaper than a barrier between kernels"].as_slice()),
-        ("resource-limit-first-dispatch-probe-decline-latch", ["maximum allowed threads per threadgroup", "Any other error stays latched"].as_slice()),
-        ("read-amplify-vs-sync-row-ceiling-admission", ["each threadgroup owns ONE 1024-block of the row"].as_slice()),
-        ("decay-gate-dtype-one-point-zero-lock", ["that head never forgets", "one inf poisons the state permanently"].as_slice()),
-        ("spec-tree-parents-first-walk-register-restart-states", ["A draft tree runs in two launches, one simdgroup per job"].as_slice()),
-        ("op-chain-collapse-membership-binary-search-mask", ["a sentinel never equals a block id"].as_slice()),
-        ("partial-softmax-l-zero-empty-split-skip-flag", ["underflowed to zero"].as_slice()),
-        ("gqa-shared-channel-block-write-once-owner", ["if (part == 0 && (sg == 2 || hv % GRP == 0)) {"].as_slice()),
-        ("joined-projection-in-place-stride-consumption", ["K1P does each row"].as_slice()),
-        ("device-keyed-threadgroup-size-row-independence", ["so the rows are bit-identical either way"].as_slice()),
+        (
+            "split-prework-recompute-beats-inter-kernel-barrier",
+            [
+                "Bit-identical to the composed chain.",
+                "cheaper than a barrier between kernels",
+            ]
+            .as_slice(),
+        ),
+        (
+            "resource-limit-first-dispatch-probe-decline-latch",
+            [
+                "maximum allowed threads per threadgroup",
+                "Any other error stays latched",
+            ]
+            .as_slice(),
+        ),
+        (
+            "read-amplify-vs-sync-row-ceiling-admission",
+            ["each threadgroup owns ONE 1024-block of the row"].as_slice(),
+        ),
+        (
+            "decay-gate-dtype-one-point-zero-lock",
+            [
+                "that head never forgets",
+                "one inf poisons the state permanently",
+            ]
+            .as_slice(),
+        ),
+        (
+            "spec-tree-parents-first-walk-register-restart-states",
+            ["A draft tree runs in two launches, one simdgroup per job"].as_slice(),
+        ),
+        (
+            "op-chain-collapse-membership-binary-search-mask",
+            ["a sentinel never equals a block id"].as_slice(),
+        ),
+        (
+            "partial-softmax-l-zero-empty-split-skip-flag",
+            ["underflowed to zero"].as_slice(),
+        ),
+        (
+            "gqa-shared-channel-block-write-once-owner",
+            ["if (part == 0 && (sg == 2 || hv % GRP == 0)) {"].as_slice(),
+        ),
+        (
+            "joined-projection-in-place-stride-consumption",
+            ["K1P does each row"].as_slice(),
+        ),
+        (
+            "device-keyed-threadgroup-size-row-independence",
+            ["so the rows are bit-identical either way"].as_slice(),
+        ),
     ];
     let slice_b = [
-        ("masked-in-place-field-prescale-other-operand", ["masked in place, the input pre-scaled by wpre(p) to cancel the shift", "as_type<float>(uint(127 - (BITS == 4 ? 4 * p : 8 * (p % 4))) << 23)"].as_slice()),
-        ("admission-clones-upstream-dispatch-for-bit-order", ["MTP verify rounds must keep its bits"].as_slice()),
-        ("row-count-invariant-bits-split-keyed-on-weight-shape", ["bits do not depend on how many rows ride with it"].as_slice()),
-        ("threadgroup-cap-halving-with-order-preserving-sum", ["Thread group size"].as_slice()),
-        ("canary-admission-per-config-bit-equal-stock", ["self-test failed; original kept"].as_slice()),
-        ("prompt-form-refused-toolchain-format-gap-reopen-trigger", ["Re-test if `uint2b_format` ever appears"].as_slice()),
-        ("per-generation-plan-table-unmeasured-generation-fallback", ["the sweep shapes are OUR league model"].as_slice()),
-        ("quad-lane-line-load-shuffle-word-exchange-ring", ["uint4 ring[2][4];"].as_slice()),
-        ("tp-rank-inferred-from-scale-grid-ambiguity-refused", ["return found orelse error.InvalidQkvGeometry;"].as_slice()),
+        (
+            "masked-in-place-field-prescale-other-operand",
+            [
+                "masked in place, the input pre-scaled by wpre(p) to cancel the shift",
+                "as_type<float>(uint(127 - (BITS == 4 ? 4 * p : 8 * (p % 4))) << 23)",
+            ]
+            .as_slice(),
+        ),
+        (
+            "admission-clones-upstream-dispatch-for-bit-order",
+            ["MTP verify rounds must keep its bits"].as_slice(),
+        ),
+        (
+            "row-count-invariant-bits-split-keyed-on-weight-shape",
+            ["bits do not depend on how many rows ride with it"].as_slice(),
+        ),
+        (
+            "threadgroup-cap-halving-with-order-preserving-sum",
+            ["Thread group size"].as_slice(),
+        ),
+        (
+            "canary-admission-per-config-bit-equal-stock",
+            ["self-test failed; original kept"].as_slice(),
+        ),
+        (
+            "prompt-form-refused-toolchain-format-gap-reopen-trigger",
+            ["Re-test if `uint2b_format` ever appears"].as_slice(),
+        ),
+        (
+            "per-generation-plan-table-unmeasured-generation-fallback",
+            ["the sweep shapes are OUR league model"].as_slice(),
+        ),
+        (
+            "quad-lane-line-load-shuffle-word-exchange-ring",
+            ["uint4 ring[2][4];"].as_slice(),
+        ),
+        (
+            "tp-rank-inferred-from-scale-grid-ambiguity-refused",
+            ["return found orelse error.InvalidQkvGeometry;"].as_slice(),
+        ),
     ];
     let slice_c = [
-        ("tree-attention-partial-share-tail-walk-ordered-merge", ["THE THREE-KERNEL DECOMPOSITION"].as_slice()),
-        ("lossy-route-physical-error-bar-from-noise-floor", ["This route is LOSSY, so the bar cannot be byte-equality or even stock"].as_slice()),
-        ("finiteness-before-diff-nan-blind-comparison-hole", ["the composed causal arm shipped NaN for months behind exactly this hole", "Finiteness is asserted BEFORE the diff."].as_slice()),
-        ("bit-equality-oracle-keyed-on-reference-dispatch", ["the test RE-IMPLEMENTS the reference"].as_slice()),
-        ("gqa-reshape-q-down-never-expand-packed-kv", ["THE ANTI-REGRESSION DISCIPLINE"].as_slice()),
-        ("bit-equal-fusion-mirrors-reference-reduction-regime", ["Gated residual: the product rounds to T before the add, like the chain"].as_slice()),
-        ("shared-transform-memo-on-underlying-descriptor-identity", ["The one sign vector every rotated weight of"].as_slice()),
-        ("row-bucket-threadgroup-staging-budget-decline", ["is the admission"].as_slice()),
-        ("strided-interleave-split-ordered-merge-serial-reference", ["THE PINNING TESTS"].as_slice()),
-        ("gqa-head-position-row-packing-keys-read-once", ["a second dispatch merges the splits"].as_slice()),
-        ("config-cache-keyed-full-layout-not-row-count", ["a forward alternates the two, and a rebuild per call is waste"].as_slice()),
-        ("where-not-multiply-additive-mask-inf", ["caught only once the parity loops became NaN-aware"].as_slice()),
+        (
+            "tree-attention-partial-share-tail-walk-ordered-merge",
+            ["THE THREE-KERNEL DECOMPOSITION"].as_slice(),
+        ),
+        (
+            "lossy-route-physical-error-bar-from-noise-floor",
+            ["This route is LOSSY, so the bar cannot be byte-equality or even stock"].as_slice(),
+        ),
+        (
+            "finiteness-before-diff-nan-blind-comparison-hole",
+            [
+                "the composed causal arm shipped NaN for months behind exactly this hole",
+                "Finiteness is asserted BEFORE the diff.",
+            ]
+            .as_slice(),
+        ),
+        (
+            "bit-equality-oracle-keyed-on-reference-dispatch",
+            ["the test RE-IMPLEMENTS the reference"].as_slice(),
+        ),
+        (
+            "gqa-reshape-q-down-never-expand-packed-kv",
+            ["THE ANTI-REGRESSION DISCIPLINE"].as_slice(),
+        ),
+        (
+            "bit-equal-fusion-mirrors-reference-reduction-regime",
+            ["Gated residual: the product rounds to T before the add, like the chain"].as_slice(),
+        ),
+        (
+            "shared-transform-memo-on-underlying-descriptor-identity",
+            ["The one sign vector every rotated weight of"].as_slice(),
+        ),
+        (
+            "row-bucket-threadgroup-staging-budget-decline",
+            ["is the admission"].as_slice(),
+        ),
+        (
+            "strided-interleave-split-ordered-merge-serial-reference",
+            ["THE PINNING TESTS"].as_slice(),
+        ),
+        (
+            "gqa-head-position-row-packing-keys-read-once",
+            ["a second dispatch merges the splits"].as_slice(),
+        ),
+        (
+            "config-cache-keyed-full-layout-not-row-count",
+            ["a forward alternates the two, and a rebuild per call is waste"].as_slice(),
+        ),
+        (
+            "where-not-multiply-additive-mask-inf",
+            ["caught only once the parity loops became NaN-aware"].as_slice(),
+        ),
     ];
 
     let mut all_ids: Vec<&str> = Vec::new();
@@ -17950,12 +18032,16 @@ fn batch242_rules_parse_and_needles_landed() {
         }
         // the pin rides every rule
         assert!(
-            entry.gpu_concept.contains("1015f7854fd8ee5c22e34993aaddee2443b9cfbf")
+            entry
+                .gpu_concept
+                .contains("1015f7854fd8ee5c22e34993aaddee2443b9cfbf")
                 || entry.gpu_concept.contains("1015f785"),
             "batch-242 rule '{id}' missing the pin citation"
         );
         assert!(
-            entry.gpu_concept.contains("Batch 242 / Plan 244 / Research 274"),
+            entry
+                .gpu_concept
+                .contains("Batch 242 / Plan 244 / Research 274"),
             "batch-242 rule '{id}' missing the batch tag"
         );
     }
@@ -18071,8 +18157,8 @@ fn batch246_rule_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-246: corpus 847 -> 848 (+1 L, the prism fork shard law)"
+        863,
+        "batch-246: corpus 847 -> 848 (+1 L, the prism fork shard law); re-pinned 863 at Batch 249 slice 2 (+15, the TensorFold drift-pool own-rule set — Plan 253 / Research 282)"
     );
 
     let entry = corpus
@@ -18147,8 +18233,8 @@ fn batch247_oracle_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-247: corpus STANDS at 848 (count-neutral rider pair)"
+        863,
+        "batch-247: corpus STOOD at 848 (count-neutral rider pair); re-pinned 863 at Batch 249 slice 2 (+15, the TensorFold drift-pool own-rule set)"
     );
 
     let entry = corpus
@@ -18222,8 +18308,8 @@ fn batch249_slice1_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        848,
-        "batch-249 slice-1: corpus STANDS at 848 (count-neutral rider trio)"
+        863,
+        "batch-249 slice-1: corpus STOOD at 848 (count-neutral rider trio); slice 2 +15 → 863 (the TensorFold drift-pool own-rule set — Plan 253 / Research 282)"
     );
 
     // rider 1 (A-10): the 2-bit in-place mask + compound prescale face
@@ -18311,6 +18397,201 @@ fn batch249_slice1_riders_landed() {
         assert!(
             verdict_passes(&KernelOptDomain::validate(id, entry.fixed_code())),
             "batch-249 host {id} opt_pattern must still parse"
+        );
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+#[test]
+fn batch249_slice2_rules_landed() {
+    // G1 for Batch 249 SLICE 2 (Plan 253 / Research 282): FIFTEEN own
+    // rules from the TensorFold drift pool (window f1aef9c3..9ccf4727:
+    // 9 from the original 1023-commit read agents A/B + 6 from the +770
+    // delta re-enumeration; 3 folds applied — A-4+D-A-3 the
+    // max_total_threads contract, B-20+D-B-9 the parser monotone-cursor,
+    // D-A-1+D-B-10 the cut-invariance oracle). Corpus 848 -> 863.
+    // Every quote re-verified at origin/main 9ccf4727 by the
+    // coordinator via git show this session.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        863,
+        "batch-249 slice-2: corpus 848 -> 863 (the TensorFold drift-pool own-rule set — Plan 253 / Research 282)"
+    );
+
+    // (rule_id, needles that must appear in its gpu_concept)
+    let rules: [(&str, &[&str]); 15] = [
+        (
+            "pipeline-thread-capacity-declared-by-launcher",
+            &[
+                "e73425a4d",
+                "38349612",
+                "[[max_total_threads_per_threadgroup(1024)]]",
+                "expect(row_pipe.maxThreads() >= 1024)",
+                "an M1 Max compiled them for 832",
+                "silent-green failure class",
+            ],
+        ),
+        (
+            "layout-check-values-mod-13-break-block-symmetry",
+            &[
+                "877f6d45",
+                "no symmetric block at row pitches 16 or 32",
+                "(i * 7 + salt * 3) % 13",
+                "must-fail twin",
+            ],
+        ),
+        (
+            "producer-launch-derived-from-actual-group-size",
+            &[
+                "b12a6a03",
+                "group_count: usize",
+                ".width = stride * p.group_count",
+                "read unwritten sums for half their groups",
+                "work-buffer-sized-by-execution-width-not-plan-tasks",
+            ],
+        ),
+        (
+            "slot-keeping-scan-runs-in-place-publish-only-what-moved",
+            &[
+                "20b37cd6",
+                "Each scan thread reads and writes only its own state words",
+                "fn inPlace(plan: Plan) bool",
+                "keep.state_slot != keep.next_slot",
+                "288 MiB",
+            ],
+        ),
+        (
+            "length-keyed-dispatch-cut-invariance",
+            &[
+                "53dbc1d6",
+                "69fa1cbd",
+                "Prompts take the decode step's arithmetic at every chunk size",
+                "1, 63, 64, 65 and 136",
+                "expf",
+            ],
+        ),
+        (
+            "kernel-contract-planted-gate-controls",
+            &[
+                "8c21d099",
+                "each breaks one gate on purpose, and that gate must go red",
+                "Gate 1: a row's maximum by fmax",
+                "Gate 2: five runs give the same bytes",
+            ],
+        ),
+        (
+            "tp-checkpoint-byte-agreement-hash-while-loading",
+            &[
+                "0089ac9c",
+                "0ce6bee2",
+                "its identity before any weight loads, then every byte as it loads",
+                "files: [][32]u8, // each file's sha256, every byte",
+                "64×4 KB",
+            ],
+        ),
+        (
+            "prompt-cache-branch-point-never-superseded",
+            &[
+                "e17e2776c",
+                "resumed again after a later prompt kept a longer state extending it: never superseded",
+                "a superseded one, no branch point, oldest; else the oldest, rewind last",
+                "prompt-cache-rewind-states-min-gap-eviction",
+            ],
+        ),
+        (
+            "kept-state-born-supersede-attribution",
+            &[
+                "5035a8119",
+                "the prompt length of the request that kept it (a reply's end and its warm pass: that reply's): a later turn's is longer",
+                "supersede none of their request's states",
+            ],
+        ),
+        (
+            "kept-state-copies-what-prompt-needs-not-window",
+            &[
+                "97b0fea5a",
+                "Bytes of a state at `at` tokens: the Mamba states, then a key and a value row a token a layer (the head's too).",
+                "nothing a later pass reads",
+                "62 MiB vs 543.7 MiB",
+            ],
+        ),
+        (
+            "calibrate-verify-window-on-text-not-proposer-chain",
+            &[
+                "2fd265568",
+                "A calibration times the window a drafted round verifies: the pending token, then drafts that all land.",
+                "a looping head chain shares experts, times too cheap",
+                "7-10%",
+            ],
+        ),
+        (
+            "parser-backtrack-bounded-by-monotone-cursor",
+            &[
+                "efbe595eb",
+                "fe4299b0",
+                "from = end; // the next link starts after this tag, so an unclosed one is read once",
+                "var last: usize = 0; // where the previous link ended: every search back stops there, so each byte is read once",
+                "var next: [calls.len]?usize = undefined",
+                "8x the bytes: near 8x the time, not a quadratic's 64x",
+                "finder-hoist-reuse",
+            ],
+        ),
+        (
+            "prompt-cache-stale-invalidation-push-borrower-boundary",
+            &[
+                "5477b36d",
+                "Cache invalidation is immediate; storage and peer drops wait for a host boundary and the last restore borrower.",
+                "hidden from lookups immediately, reclaimed only at safe host boundaries",
+                "borrowers: u32 = 0",
+                "e.borrowers == 0",
+            ],
+        ),
+        (
+            "device-divergence-fail-closed-queue-drain",
+            &[
+                "d22c6632",
+                "4c36b4ac",
+                "stale_message",
+                "Queued replies ended with `stale_message` while the device lacks a put-back: none is admitted, none holds a heal.",
+                "partly-restored device",
+            ],
+        ),
+        (
+            "residency-hold-gated-ram-fraction-not-working-set",
+            &[
+                "a2ecbecc",
+                "56800b60",
+                "kept wired by the server's idle keepalive, inside the 70% limit",
+                "The share of RAM a served model may hold: the rest stays with macOS and other processes.",
+                "recommendedMaxWorkingSetSize",
+                "cache_fit.residentFits",
+            ],
+        ),
+    ];
+
+    for (id, needles) in rules {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-249 slice-2 rule missing from corpus: {id}"));
+        for needle in needles {
+            assert!(
+                entry.gpu_concept.contains(needle),
+                "batch-249 slice-2 rule {id} missing needle: {needle}"
+            );
+        }
+        // both pseudocode halves parse (the batch-247/249-slice-1 pattern)
+        assert!(
+            verdict_passes(&KernelOptDomain::validate(id, entry.buggy_code())),
+            "batch-249 slice-2 rule {id} ref_shape must parse"
+        );
+        assert!(
+            verdict_passes(&KernelOptDomain::validate(id, entry.fixed_code())),
+            "batch-249 slice-2 rule {id} opt_pattern must parse"
         );
     }
 }
