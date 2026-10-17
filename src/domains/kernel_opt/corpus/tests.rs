@@ -18207,3 +18207,110 @@ fn batch247_oracle_riders_landed() {
         "batch-247 host opt_pattern must still parse"
     );
 }
+
+#[test]
+fn batch249_slice1_riders_landed() {
+    // G1 for Batch 249 SLICE 1 (Plan 253 / Research 281): THREE
+    // count-neutral riders from the TensorFold 1.0.x drift pool (the
+    // window f1aef9c3..c7137bb31, re-measured +770 mid-claim — the
+    // slice is the rider set the two read agents graded RIDER; the
+    // batch's own rules are the next slice). Corpus STANDS 848. Every
+    // commit read in full at the vendor clone ../vendor/tensorfold
+    // fetched origin/main 9ccf4727; every needle verbatim at the pins.
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+
+    assert_eq!(
+        corpus.entries.len(),
+        848,
+        "batch-249 slice-1: corpus STANDS at 848 (count-neutral rider trio)"
+    );
+
+    // rider 1 (A-10): the 2-bit in-place mask + compound prescale face
+    // on the B242 GOAT (c9673eaf + badfc9d6, #784).
+    let masked = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "masked-in-place-field-prescale-other-operand")
+        .expect("batch-249 rider-1 host in corpus");
+    for needle in [
+        "RIDER (Batch 249 slice 1 / Plan 253",
+        "c9673eaf",
+        "// 2^-(2s + 16h): 2-bit inputs pre-scaled for codes masked in place in a word's low (h = 0) or high (h = 1) half.",
+        "inline float tf_sqw_pre2(int s, int h) { return as_type<float>(uint(127 - 2 * s - 16 * h) << 23); }",
+        "Row-exact 2- to 8-bit projections before the M5 on simd_qmm tiles, rows at a stride; 4-bit gives simd_qmm sums.",
+        "1,516,773,088 bit-equal pairs",
+        "count-neutral",
+    ] {
+        assert!(
+            masked.gpu_concept.contains(needle),
+            "batch-249 rider-1 missing needle: {needle}"
+        );
+    }
+
+    // rider 2 (A-15): the training-acceptance consequence face on the
+    // split-K order pin (4315bc2d, #632 — the Lisbon witness).
+    let splitk = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "splitk-reduce-one-launch-slice-order-pinned")
+        .expect("batch-249 rider-2 host in corpus");
+    for needle in [
+        "RIDER (Batch 249 slice 1 / Plan 253",
+        "4315bc2d",
+        "#591's six facts kept Lisbon in one run and took it out in the next",
+        "// C [m, n] += the slices' parts P [split, m, n], added in slice order: the same sum on every run.",
+        "tf-cuda-test train runs each product twice and requires the same bits",
+        "katgpt-rs Issue 940",
+        "count-neutral",
+    ] {
+        assert!(
+            splitk.gpu_concept.contains(needle),
+            "batch-249 rider-2 missing needle: {needle}"
+        );
+    }
+
+    // rider 3 (B-5): the any-row successor era on the prompt-grid rule
+    // (cc692e6f6, #670 — the 17-cut-pattern byte-equal oracle).
+    let grid = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "zero-anchored-prompt-grid-chunk-identity")
+        .expect("batch-249 rider-3 host in corpus");
+    for needle in [
+        "THE ANY-ROW SUCCESSOR ERA (Batch 249 slice 1 / Plan 253",
+        "cc692e6f6",
+        "byte-equal at 17 cut patterns on sm_121 and sm_120",
+        "//! Where a prompt pass cuts its chunks: a row's bits are the same wherever the cuts fall, so states keep at any row.",
+        "tf-cuda-test resume keeps states at rows 1, 7, 1500, 2047, 2048, 2049 and the prompt's last rows again",
+        "the grid fell back to a chunk-length convention",
+        "count-neutral",
+    ] {
+        assert!(
+            grid.gpu_concept.contains(needle),
+            "batch-249 rider-3 missing needle: {needle}"
+        );
+    }
+
+    // the hosts' pseudocode halves are untouched and still parse
+    // (the batch-247 pattern: riders are gpu_concept-only).
+    for id in [
+        "masked-in-place-field-prescale-other-operand",
+        "splitk-reduce-one-launch-slice-order-pinned",
+        "zero-anchored-prompt-grid-chunk-identity",
+    ] {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .expect("rider host present");
+        assert!(
+            verdict_passes(&KernelOptDomain::validate(id, entry.buggy_code())),
+            "batch-249 host {id} ref_shape must still parse"
+        );
+        assert!(
+            verdict_passes(&KernelOptDomain::validate(id, entry.fixed_code())),
+            "batch-249 host {id} opt_pattern must still parse"
+        );
+    }
+}
