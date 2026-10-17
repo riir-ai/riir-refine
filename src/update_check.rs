@@ -446,19 +446,19 @@ pub fn release_target_triple() -> Option<&'static str> {
 pub fn release_target_triple_and_note() -> Option<(&'static str, Option<&'static str>)> {
     #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
     {
-        Some("aarch64-apple-darwin")
+        Some(("aarch64-apple-darwin", None))
     }
     #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
     {
-        Some("x86_64-apple-darwin")
+        Some(("x86_64-apple-darwin", None))
     }
     #[cfg(all(target_os = "linux", target_arch = "x86_64", target_env = "musl"))]
     {
-        Some("x86_64-unknown-linux-musl")
+        Some(("x86_64-unknown-linux-musl", None))
     }
     #[cfg(all(target_os = "linux", target_arch = "aarch64", target_env = "musl"))]
     {
-        Some("aarch64-unknown-linux-musl")
+        Some(("aarch64-unknown-linux-musl", None))
     }
     #[cfg(all(target_os = "windows", target_arch = "x86_64", target_env = "gnu"))]
     {
@@ -704,6 +704,7 @@ pub fn upgrade(
         sums_url: &sums_url,
         asset: &asset,
         to_version: &release.version,
+        abi_note,
     };
     let result = staged.install(downloader, &exe, installed);
     let _ = std::fs::remove_dir_all(&stage);
@@ -718,6 +719,9 @@ struct StagedUpgrade<'a> {
     sums_url: &'a str,
     asset: &'a str,
     to_version: &'a str,
+    /// The ABI-mapping note (windows-msvc → the gnu asset) carried from the
+    /// triple resolution into the report.
+    abi_note: Option<&'static str>,
 }
 
 impl StagedUpgrade<'_> {
@@ -809,7 +813,7 @@ impl StagedUpgrade<'_> {
             new_exe: exe.to_path_buf(),
             backup,
             replaced_symlink_target,
-            abi_note,
+            abi_note: self.abi_note,
         })
     }
 }
