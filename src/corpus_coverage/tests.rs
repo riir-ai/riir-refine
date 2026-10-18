@@ -46,7 +46,8 @@ fn help_fixture(n_filler: usize) -> String {
     s.push_str("                         clippy::style  clippy::needless-return\n");
     s.push_str("                      clippy::pedantic  clippy::must-use-candidate\n");
     s.push_str("                   clippy::correctness  clippy::approx-constant\n");
-    let mut restriction = String::from("                   clippy::restriction  clippy::absolute-paths");
+    let mut restriction =
+        String::from("                   clippy::restriction  clippy::absolute-paths");
     for i in 0..n_filler {
         let _ = write!(restriction, ", clippy::filler-lint-{i:04}");
     }
@@ -69,7 +70,9 @@ fn corpus_rules() -> Vec<String> {
 }
 
 fn fix_set() -> Vec<String> {
-    let mut v: Vec<String> = (0..MIN_FIX_SET).map(|i| format!("fix_only_{i:03}")).collect();
+    let mut v: Vec<String> = (0..MIN_FIX_SET)
+        .map(|i| format!("fix_only_{i:03}"))
+        .collect();
     // In the fix lane, absent from the corpus — the Issue-116 seam.
     v.push("approx_constant".into());
     v
@@ -78,6 +81,10 @@ fn fix_set() -> Vec<String> {
 /// Rows for the default-eco axis when a test does not exercise it — a
 /// named const so the lifetime outlives the helper's body.
 const NO_DEFAULT_ROWS: &[(String, u32)] = &[];
+
+/// Empty body-scan inputs — the default every arm that does not exercise
+/// the Issue-167 tier rides.
+const NO_BLOBS: &[String] = &[];
 
 fn inputs<'a>(
     surface: LintSurface,
@@ -103,6 +110,8 @@ fn inputs<'a>(
         }),
         default_histogram: NO_DEFAULT_ROWS,
         default_histogram_provenance: None,
+        corpus_blobs: NO_BLOBS,
+        corpus_docs_scanned: false,
     }
 }
 
@@ -188,8 +197,15 @@ fn a_lint_in_two_non_union_groups_is_ambiguous_not_guessed() {
     text.push_str("                          clippy::perf  clippy::needless-return\n");
     let s = parse_lint_help(&text);
     assert_eq!(s.ambiguous_group, 1);
-    let row = s.lints.iter().find(|l| l.name == "needless_return").unwrap();
-    assert_eq!(row.group, "(ambiguous)", "a two-group lint must not be silently bucketed");
+    let row = s
+        .lints
+        .iter()
+        .find(|l| l.name == "needless_return")
+        .unwrap();
+    assert_eq!(
+        row.group, "(ambiguous)",
+        "a two-group lint must not be silently bucketed"
+    );
 }
 
 #[test]
@@ -200,7 +216,11 @@ fn a_lint_in_no_group_is_ungrouped_not_bucketed() {
     );
     let s = parse_lint_help(&text);
     assert_eq!(s.ungrouped, 1);
-    let row = s.lints.iter().find(|l| l.name == "must_use_candidate").unwrap();
+    let row = s
+        .lints
+        .iter()
+        .find(|l| l.name == "must_use_candidate")
+        .unwrap();
     assert_eq!(row.group, "(ungrouped)");
 }
 
@@ -235,7 +255,10 @@ fn corpus_floor_refuses_an_uncompiled_domain() {
         r.blind.is_some(),
         "an absent clippy_lints corpus makes the debt read as TOTAL — refuse"
     );
-    assert!(r.uncovered.is_empty(), "no rows may be reported past a refusal");
+    assert!(
+        r.uncovered.is_empty(),
+        "no rows may be reported past a refusal"
+    );
 }
 
 #[test]
@@ -301,7 +324,13 @@ fn a_cross_domain_name_collision_is_a_finding_not_silence() {
         vec!["must-use-candidate".to_string()],
     );
     let (corpus, fixes) = (corpus_rules(), fix_set());
-    let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &others_hist()));
+    let r = coverage(&inputs(
+        full_surface(),
+        &corpus,
+        &fixes,
+        &others,
+        &others_hist(),
+    ));
     assert_eq!(r.collides_other_domain.len(), 1);
     assert_eq!(r.collides_other_domain[0].1, "rust_perf");
     assert!(r.render().contains("two domains claiming one name"));
@@ -327,9 +356,10 @@ fn a_corpus_rule_the_driver_no_longer_ships_is_reported() {
     corpus.push("renamed_away_lint".into());
     let fixes = fix_set();
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
-    assert!(r
-        .corpus_rules_not_in_surface
-        .contains(&"renamed_away_lint".to_string()));
+    assert!(
+        r.corpus_rules_not_in_surface
+            .contains(&"renamed_away_lint".to_string())
+    );
     assert!(r.render().contains("renamed/removed"));
 }
 
@@ -400,7 +430,10 @@ fn both_sources_produce_the_dual_evidence_tier() {
     assert_eq!(dual[0].lint, "missing_errors_doc");
     assert_eq!(
         dual[0].freq,
-        FreqEvidence::Both { fired: 90, study: 56_975 }
+        FreqEvidence::Both {
+            fired: 90,
+            study: 56_975
+        }
     );
 
     // Tier DOMINATES the count: 90 firings with two sources outranks 1011
@@ -440,7 +473,10 @@ fn a_study_only_lint_is_cited_and_ranks_below_local_evidence() {
 
 #[test]
 fn the_two_source_counts_are_never_summed() {
-    let e = FreqEvidence::Both { fired: 90, study: 56_975 };
+    let e = FreqEvidence::Both {
+        fired: 90,
+        study: 56_975,
+    };
     assert_eq!(
         e.rank(),
         90,
@@ -456,10 +492,15 @@ fn a_missing_source_is_unobserved_not_zero() {
     assert_eq!(join_evidence(None, None, None), FreqEvidence::Uncited);
     assert_eq!(join_evidence(Some(5), None, None), FreqEvidence::Fired(5));
     assert_eq!(join_evidence(None, None, Some(5)), FreqEvidence::Study(5));
-    assert_eq!(join_evidence(None, Some(7), None), FreqEvidence::FiredDefault(7));
+    assert_eq!(
+        join_evidence(None, Some(7), None),
+        FreqEvidence::FiredDefault(7)
+    );
     // An unobserved source must NOT rank below an observed rare lint by
     // being defaulted to 0 — it leaves the tier instead.
-    assert!(join_evidence(Some(1), None, None).tier() < join_evidence(None, None, Some(99_999)).tier());
+    assert!(
+        join_evidence(Some(1), None, None).tier() < join_evidence(None, None, Some(99_999)).tier()
+    );
 }
 
 #[test]
@@ -468,7 +509,10 @@ fn the_three_source_precedence_is_documented_not_accidental() {
     //    default-eco count (which remains in its own manifest).
     assert_eq!(
         join_evidence(Some(3), Some(9), Some(50_000)),
-        FreqEvidence::Both { fired: 3, study: 50_000 }
+        FreqEvidence::Both {
+            fired: 3,
+            study: 50_000
+        }
     );
     // 2. a default-eco count shadows a lone local count — same-level
     //    evidence is the axis this report's charter needs.
@@ -598,7 +642,10 @@ fn group_debt_is_ordered_by_debt_and_sums_to_the_surface() {
     let (corpus, fixes) = (corpus_rules(), fix_set());
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
     let total: usize = r.group_debt.iter().map(|g| g.total).sum();
-    assert_eq!(total, r.lints_derived, "the group table must be a partition");
+    assert_eq!(
+        total, r.lints_derived,
+        "the group table must be a partition"
+    );
     let unc: usize = r.group_debt.iter().map(|g| g.uncovered).sum();
     assert_eq!(unc, r.uncovered.len());
     let cov: usize = r.group_debt.iter().map(|g| g.covered).sum();
@@ -622,7 +669,10 @@ fn applicability_is_declared_underivable_rather_than_printed() {
 fn normalize_is_idempotent_and_prefix_free() {
     assert_eq!(normalize("clippy::needless-return"), "needless_return");
     assert_eq!(normalize("needless_return"), "needless_return");
-    assert_eq!(normalize(normalize("clippy::USE-Self").as_str()), "use_self");
+    assert_eq!(
+        normalize(normalize("clippy::USE-Self").as_str()),
+        "use_self"
+    );
 }
 
 #[test]
@@ -633,7 +683,6 @@ fn fires_by_default_matches_the_level_semantics() {
     assert_eq!(DefaultLevel::parse("forbid"), Some(DefaultLevel::Deny));
     assert_eq!(DefaultLevel::parse("mumble"), None);
 }
-
 
 #[test]
 fn the_firing_evidence_cross_tab_is_reported_and_its_disjoint_case_is_loud() {
@@ -647,7 +696,10 @@ fn the_firing_evidence_cross_tab_is_reported_and_its_disjoint_case_is_loud() {
     assert_eq!(r.firing_with_evidence(), 0);
     let out = r.render();
     assert!(out.contains("carry evidence"));
-    assert!(out.contains("⚠ DISJOINT"), "a disjoint cross-tab must be loud");
+    assert!(
+        out.contains("⚠ DISJOINT"),
+        "a disjoint cross-tab must be loud"
+    );
 
     // ...and the warning does NOT fire once a firing lint carries evidence.
     let hist2 = vec![("filler_lint_0000".to_string(), 12)];
@@ -667,7 +719,14 @@ fn a_default_eco_row_closes_the_default_firing_evidence_gap() {
     let others = BTreeMap::new();
     let (corpus, fixes) = (corpus_rules(), fix_set());
     let def = vec![("filler_lint_0000".to_string(), 8)];
-    let r = coverage(&inputs_with_default(full_surface(), &corpus, &fixes, &others, &[], &def));
+    let r = coverage(&inputs_with_default(
+        full_surface(),
+        &corpus,
+        &fixes,
+        &others,
+        &[],
+        &def,
+    ));
     assert_eq!(r.firing_with_evidence(), 1);
     assert_eq!(r.firing_with_default_evidence(), 1);
     let row = r
@@ -677,7 +736,10 @@ fn a_default_eco_row_closes_the_default_firing_evidence_gap() {
         .expect("filler is uncovered");
     assert_eq!(row.freq, FreqEvidence::FiredDefault(8));
     let out = r.render();
-    assert!(out.contains("default-eco: Bench 094"), "the source must print");
+    assert!(
+        out.contains("default-eco: Bench 094"),
+        "the source must print"
+    );
     assert!(out.contains("via the default-eco histogram"));
     assert!(!out.contains("⚠ DISJOINT"));
 }
@@ -706,7 +768,146 @@ fn default_eco_stale_rows_are_counted_not_silently_dropped() {
         ("filler_lint_0000".to_string(), 8),
         ("removed_lint_from_2023".to_string(), 500),
     ];
-    let r = coverage(&inputs_with_default(full_surface(), &corpus, &fixes, &others, &[], &def));
+    let r = coverage(&inputs_with_default(
+        full_surface(),
+        &corpus,
+        &fixes,
+        &others,
+        &[],
+        &def,
+    ));
     assert_eq!(r.default_histogram_rows_stale, 1);
     assert_eq!(r.default_histogram_provenance.as_ref().unwrap().rows, 2);
+}
+
+// ── Issue 167: the pattern-mentioned tier ───────────────────────────────
+
+/// The measured precedent, as a fixture: `len_zero` UNKEYED in the corpus,
+/// mentioned only in a doc-comment blob. It must land in
+/// `pattern_mentioned` while the buckets' counts stay identical to a run
+/// without the body scan — the disclosure, never a fold.
+/// The fixture with `len_zero` added: the lint row goes into the CHECKS
+/// section (before the groups header), the group membership rides the
+/// existing style row — the same insertion shape `help_with_study` uses.
+fn help_with_len_zero(n_filler: usize) -> String {
+    help_fixture(n_filler)
+        .replace(
+            "\nLint groups loaded by this crate:",
+            "         \x20   clippy::len-zero  warn     checks for comparisons to zero\
+             \n\nLint groups loaded by this crate:",
+        )
+        .replace(
+            "                      clippy::style  clippy::needless-return\n",
+            "                      clippy::style  clippy::needless-return, clippy::len-zero\n",
+        )
+}
+
+#[test]
+fn a_doc_only_mention_lands_in_pattern_mentioned_never_in_covered() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let text = help_with_len_zero(MIN_DERIVED_LINTS);
+    let surface = parse_lint_help(&text);
+    assert!(surface.blind.is_none());
+    assert!(surface.lints.iter().any(|l| l.name == "len_zero"));
+    let blobs = vec!["heals clippy's len_zero pattern (`.len() == 0` -> `is_empty()`)".to_string()];
+    let mut ins = inputs(surface, &corpus, &fixes, &others, &[]);
+    ins.corpus_blobs = &blobs;
+    ins.corpus_docs_scanned = true;
+    let r = coverage(&ins);
+    let base = coverage(&inputs(
+        parse_lint_help(&text),
+        &corpus,
+        &fixes,
+        &others,
+        &[],
+    ));
+    // The buckets are UNCHANGED by the scan (membership both directions):
+    assert_eq!(r.covered_corpus, base.covered_corpus);
+    assert_eq!(r.covered_fix_only, base.covered_fix_only);
+    assert_eq!(r.uncovered.len(), base.uncovered.len());
+    assert_eq!(r.group_debt, base.group_debt);
+    // len_zero is uncovered AND pattern-mentioned — disclosed, never folded:
+    assert!(r.uncovered.iter().any(|u| u.lint == "len_zero"));
+    assert_eq!(r.pattern_mentioned, vec!["len_zero".to_string()]);
+    let out = r.render();
+    assert!(out.contains("pattern-mentioned in rule bodies"));
+    assert!(out.contains("LOWER BOUND"));
+}
+
+/// `manual_len_zero` naming `len_zero` as a substring is NOT coverage of
+/// `len_zero` — the scan is word-boundary by construction, and this arm
+/// pins the construction against a substring-check regression.
+#[test]
+fn a_longer_identifier_mention_is_not_a_mention() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let text = help_with_len_zero(MIN_DERIVED_LINTS);
+    let surface = parse_lint_help(&text);
+    let blobs = vec!["see also manual_len_zero and its friends".to_string()];
+    let mut ins = inputs(surface, &corpus, &fixes, &others, &[]);
+    ins.corpus_blobs = &blobs;
+    let r = coverage(&ins);
+    assert!(r.pattern_mentioned.is_empty());
+}
+
+/// An empty blob set is the scan's honest zero — identical buckets, and
+/// the seams+limits disclosure ALWAYS prints; the docs-unavailable line
+/// rides only when the scan could not read the doc half.
+#[test]
+fn no_blobs_yield_no_mentions_and_the_lower_bound_still_discloses() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
+    assert!(r.pattern_mentioned.is_empty());
+    assert!(!r.corpus_docs_scanned);
+    let out = r.render();
+    assert!(out.contains("LOWER BOUND"));
+    assert!(
+        out.contains("pattern-literals-only"),
+        "an absent docs half must be loud, never a silent zero"
+    );
+}
+
+/// A body scan that DID read the doc half must not print the
+/// pattern-literals-only warning — the disclosure fires one way only.
+#[test]
+fn a_docs_scanned_run_prints_no_availability_warning() {
+    let others = BTreeMap::new();
+    let (corpus, fixes) = (corpus_rules(), fix_set());
+    let mut ins = inputs(full_surface(), &corpus, &fixes, &others, &[]);
+    ins.corpus_docs_scanned = true;
+    let r = coverage(&ins);
+    assert!(!r.render().contains("pattern-literals-only"));
+}
+
+/// The single-pass scanner itself: word boundaries, digits, trailing
+/// punctuation, no cross-boundary bleed in either direction, sorted out.
+#[test]
+fn mentioned_names_is_word_boundary_exact() {
+    let candidates: BTreeSet<String> = ["len_zero", "len_zero_2", "approx_constant"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let found = mentioned_names(
+        "len_zero, manual_len_zero xlen_zero len_zero_2 approx_constant::foo len_zero\n",
+        &candidates,
+    );
+    assert_eq!(found, vec!["approx_constant", "len_zero", "len_zero_2"]);
+    assert!(mentioned_names("", &candidates).is_empty());
+}
+
+/// The live corpus's own precedent, pinned at the source: the
+/// `comparison_to_empty` proposer names `len_zero` ONLY in its doc
+/// comments — the exact shape the name-keyed buckets go blind on. If this
+/// source ever stops carrying the mention, the fixture loses its
+/// real-world anchor and this test says so.
+#[test]
+fn the_len_zero_precedent_source_is_scannable() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src/domains/clippy_lints/proposers/comparison_to_empty.rs");
+    let text = std::fs::read_to_string(&path)
+        .expect("the precedent proposer source must be readable beside the crate");
+    let cands: BTreeSet<String> = ["len_zero".to_string()].into_iter().collect();
+    assert_eq!(mentioned_names(&text, &cands), vec!["len_zero".to_string()]);
 }

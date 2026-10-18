@@ -9780,7 +9780,11 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
 
     // The corpus side. `clippy_lints` is the diffed-against set; every OTHER
     // compiled domain feeds the dedup axis (the Batch-146 near-miss law).
-    let corpus_rules = clippy_corpus_rule_ids();
+    // One `build_seed_corpus()` call serves both the name-keyed buckets and
+    // the Issue-167 body scan.
+    let (corpus_rules, mut corpus_bodies) = clippy_corpus_ids_and_bodies();
+    let (doc_blobs, docs_scanned) = corpus_doc_blobs();
+    corpus_bodies.extend(doc_blobs);
     let fix_set = compiled_fix_set();
     let other_domains = other_domain_rule_ids();
 
@@ -9801,26 +9805,75 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
         histogram_provenance: provenance,
         default_histogram: &default_histogram,
         default_histogram_provenance: default_provenance,
+        corpus_blobs: &corpus_bodies,
+        corpus_docs_scanned: docs_scanned,
     })
 }
 
-/// The `clippy_lints` corpus rule ids, from the COMPILED builder — the same
-/// runtime-corpus source `--corpus-stats` prefers over a source walk.
-fn clippy_corpus_rule_ids() -> Vec<String> {
+/// The `clippy_lints` corpus rule ids AND their body text, from ONE
+/// `build_seed_corpus()` call — the ids feed the name-keyed buckets, the
+/// bodies (buggy/fixed/context text) feed the Issue-167 pattern-mentioned
+/// tier. From the COMPILED builder — the same runtime-corpus source
+/// `--corpus-stats` prefers over a source walk.
+fn clippy_corpus_ids_and_bodies() -> (Vec<String>, Vec<String>) {
     #[cfg(feature = "clippy_lints")]
     {
         use riir_refine::domain::HealEntry as _;
-        riir_refine::build_seed_corpus()
-            .entries
-            .iter()
-            .map(|e| e.rule_id().to_string())
-            .collect()
+        let corpus = riir_refine::build_seed_corpus();
+        let mut ids = Vec::with_capacity(corpus.entries.len());
+        let mut bodies = Vec::with_capacity(corpus.entries.len());
+        for entry in &corpus.entries {
+            ids.push(entry.rule_id().to_string());
+            let mut text =
+                String::with_capacity(entry.buggy_code().len() + entry.fixed_code().len() + 64);
+            text.push_str(entry.buggy_code());
+            text.push('\n');
+            text.push_str(entry.fixed_code());
+            if let Some(notes) = entry.context_notes() {
+                text.push('\n');
+                text.push_str(notes);
+            }
+            bodies.push(text);
+        }
+        (ids, bodies)
     }
     #[cfg(not(feature = "clippy_lints"))]
     {
         // The floor in `coverage()` turns this into a loud refusal.
-        Vec::new()
+        (Vec::new(), Vec::new())
     }
+}
+
+/// Issue 167 — the proposers' SOURCE text (doc comments + the pattern
+/// literals as written), read when the source tree is locatable beside this
+/// binary. The `len_zero` precedent lives ONLY in doc comments, so a
+/// binary run outside the checkout misses exactly that class of mention —
+/// the `false` half is disclosed in the report, never a silent zero.
+/// Read-only; never required.
+fn corpus_doc_blobs() -> (Vec<String>, bool) {
+    let Some(root) = resolve_corpus_repo_root() else {
+        return (Vec::new(), false);
+    };
+    let dir = root.join("src/domains/clippy_lints/proposers");
+    let Ok(read_dir) = std::fs::read_dir(&dir) else {
+        return (Vec::new(), false);
+    };
+    let mut blobs = Vec::new();
+    let mut any_rs = false;
+    for entry in read_dir.flatten() {
+        let path = entry.path();
+        if !path.is_file() || !path.extension().is_some_and(|x| x == "rs") {
+            continue;
+        }
+        any_rs = true;
+        match std::fs::read_to_string(&path) {
+            Ok(text) => blobs.push(text),
+            // A partial read would under-report the tier silently — fail
+            // the DISCLOSURE flag instead and keep what did read.
+            Err(_) => return (blobs, false),
+        }
+    }
+    (blobs, any_rs)
 }
 
 /// `FIXABLE_LINTS u VERIFY_LINTS` — the fix lane's compiled truth, which is

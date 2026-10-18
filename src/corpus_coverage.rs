@@ -91,6 +91,9 @@ pub const MIN_FIX_SET: usize = 20;
 
 /// How many frequency-ranked uncovered rows the head table prints.
 pub const FREQ_HEAD_ROWS: usize = 20;
+/// Issue 167 — how many pattern-mentioned names the head list prints
+/// before the `… N more` line.
+pub const PATTERN_MENTIONED_HEAD: usize = 8;
 
 /// The `clippy::all` group is the UNION of style/correctness/suspicious/
 /// complexity/perf — never a lint's own group, and folding it in would
@@ -182,6 +185,34 @@ pub fn normalize(name: &str) -> String {
         .trim_start_matches("clippy::")
         .replace('-', "_")
         .to_ascii_lowercase()
+}
+
+/// Issue 167 — single-pass word-boundary mention scan. Every maximal
+/// identifier run in `haystack` is extracted and looked up in `candidates`,
+/// so `len_zero` matches and `manual_len_zero` does not — by construction,
+/// not by a substring check. Returns the matched candidates sorted.
+#[must_use]
+pub fn mentioned_names(haystack: &str, candidates: &BTreeSet<String>) -> Vec<String> {
+    let mut found = BTreeSet::new();
+    let bytes = haystack.as_bytes();
+    let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut i = 0;
+    while i < bytes.len() {
+        if is_word(bytes[i]) {
+            let start = i;
+            while i < bytes.len() && is_word(bytes[i]) {
+                i += 1;
+            }
+            if let Ok(word) = std::str::from_utf8(&bytes[start..i]) {
+                if candidates.contains(word) {
+                    found.insert(word.to_string());
+                }
+            }
+        } else {
+            i += 1;
+        }
+    }
+    found.into_iter().collect()
 }
 
 /// Join the three frequency sources into one evidence value. Neither is
@@ -478,6 +509,20 @@ pub struct CoverageInputs<'a> {
     /// absence costs the default-eco axis and nothing else.
     pub default_histogram: &'a [(String, u32)],
     pub default_histogram_provenance: Option<HistogramProvenance>,
+    /// Issue 167 — corpus rule BODY text (the compiled entries' buggy/fixed/
+    /// context notes, plus the proposers' source doc comments when the
+    /// source tree is locatable). The name-keyed buckets are a LOWER BOUND:
+    /// the corpus heals by PATTERN, so a rule can fully cover a lint it
+    /// never keys (measured precedent: `len_zero` fully covered by
+    /// `comparison_to_empty`, which names it only in doc comments). Each
+    /// uncovered lint whose name appears (word-boundary) in any blob lands
+    /// in [`CoverageReport::pattern_mentioned`] — a text proxy, never
+    /// folded into `covered`.
+    pub corpus_blobs: &'a [String],
+    /// Whether the doc-comment half of `corpus_blobs` was actually read
+    /// (the source tree was locatable beside this binary). `false` means
+    /// the scan is pattern-literals-only — disclosed, never a silent zero.
+    pub corpus_docs_scanned: bool,
 }
 
 /// The report.
@@ -514,6 +559,14 @@ pub struct CoverageReport {
     pub surface_level_unparsed: usize,
     pub surface_ambiguous_group: usize,
     pub surface_ungrouped: usize,
+    /// Issue 167 — uncovered lints whose name appears in some corpus rule
+    /// BODY (pattern literals or doc comments): pattern-covered under a
+    /// different key, so the UNCOVERED bucket overstates authoring
+    /// opportunity by exactly these. A text proxy, never folded into
+    /// `covered`; sorted, deduped.
+    pub pattern_mentioned: Vec<String>,
+    /// Whether the doc-comment half of the body scan was actually read.
+    pub corpus_docs_scanned: bool,
     /// The refusal (frontier-report law): never a confident green zero.
     pub blind: Option<String>,
 }
@@ -573,7 +626,9 @@ impl CoverageReport {
     pub fn firing_with_default_evidence(&self) -> usize {
         self.uncovered
             .iter()
-            .filter(|r| r.level.fires_by_default() && matches!(r.freq, FreqEvidence::FiredDefault(_)))
+            .filter(|r| {
+                r.level.fires_by_default() && matches!(r.freq, FreqEvidence::FiredDefault(_))
+            })
             .count()
     }
 
@@ -604,6 +659,8 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         histogram_provenance,
         default_histogram,
         default_histogram_provenance,
+        corpus_blobs,
+        corpus_docs_scanned,
     } = inputs;
 
     let corpus: BTreeSet<String> = corpus_rules.iter().map(|r| normalize(r)).collect();
@@ -613,7 +670,9 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
     for (domain, rules) in *other_domains {
         other_rules += rules.len();
         for rule in rules {
-            others.entry(normalize(rule)).or_insert_with(|| domain.clone());
+            others
+                .entry(normalize(rule))
+                .or_insert_with(|| domain.clone());
         }
     }
     let freq: BTreeMap<String, u32> = histogram
@@ -668,10 +727,12 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
     let mut per_group: BTreeMap<String, GroupDebt> = BTreeMap::new();
 
     for lint in &surface.lints {
-        let debt = per_group.entry(lint.group.clone()).or_insert_with(|| GroupDebt {
-            group: lint.group.clone(),
-            ..GroupDebt::default()
-        });
+        let debt = per_group
+            .entry(lint.group.clone())
+            .or_insert_with(|| GroupDebt {
+                group: lint.group.clone(),
+                ..GroupDebt::default()
+            });
         debt.total += 1;
 
         let in_corpus = corpus.contains(&lint.name);
@@ -726,10 +787,29 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         .filter(|k| !surface_names.contains(k.as_str()))
         .count();
 
+    // Issue 167 — the pattern-mentioned tier. The name-keyed buckets are a
+    // LOWER BOUND (the corpus heals by pattern), so every uncovered lint
+    // whose name shows up in a corpus rule BODY is disclosed here — never
+    // folded into `covered`. One joined haystack, one pass.
+    report.corpus_docs_scanned = *corpus_docs_scanned;
+    if !report.uncovered.is_empty() && !corpus_blobs.is_empty() {
+        let uncovered_names: BTreeSet<String> =
+            report.uncovered.iter().map(|r| r.lint.clone()).collect();
+        let mut mentioned = BTreeSet::new();
+        for blob in *corpus_blobs {
+            for name in mentioned_names(blob, &uncovered_names) {
+                mentioned.insert(name);
+            }
+        }
+        report.pattern_mentioned = mentioned.into_iter().collect();
+    }
+
     report.group_debt = per_group.into_values().collect();
-    report
-        .group_debt
-        .sort_by(|a, b| b.uncovered.cmp(&a.uncovered).then_with(|| a.group.cmp(&b.group)));
+    report.group_debt.sort_by(|a, b| {
+        b.uncovered
+            .cmp(&a.uncovered)
+            .then_with(|| a.group.cmp(&b.group))
+    });
     report.uncovered.sort_by(|a, b| a.lint.cmp(&b.lint));
     report
 }
@@ -782,11 +862,34 @@ impl CoverageReport {
             "  fix set only (no corpus rule)        {:>5}   ← suggest cannot rank these",
             self.covered_fix_only
         );
-        let _ = writeln!(out, "  UNCOVERED                            {uncovered:>5}   ← the coverage debt");
+        let _ = writeln!(
+            out,
+            "  UNCOVERED                            {uncovered:>5}   ← the coverage debt"
+        );
         let _ = writeln!(
             out,
             "    of which fire by default           {firing:>5}   ← the debt a plain `cargo clippy` shows a user"
         );
+        // Issue 167 — the pattern-mentioned tier, disclosed beside the debt
+        // it qualifies. Never folded into `covered` (it is a text proxy).
+        if !self.pattern_mentioned.is_empty() {
+            let _ = writeln!(
+                out,
+                "    pattern-mentioned in rule bodies   {:>5}   ← possibly pattern-covered under a different key",
+                self.pattern_mentioned.len()
+            );
+            let head = self.pattern_mentioned.iter().take(PATTERN_MENTIONED_HEAD);
+            for chunk in head {
+                let _ = writeln!(out, "      · {chunk}");
+            }
+            if self.pattern_mentioned.len() > PATTERN_MENTIONED_HEAD {
+                let _ = writeln!(
+                    out,
+                    "      … {} more (the full list is this vec, sorted)",
+                    self.pattern_mentioned.len() - PATTERN_MENTIONED_HEAD
+                );
+            }
+        }
 
         out.push_str("\nuncovered by group\n");
         out.push_str("  group             total  covered  uncovered  firing\n");
@@ -926,6 +1029,14 @@ impl CoverageReport {
         }
 
         out.push_str("\nseams + limits\n");
+        out.push_str(
+            "  name-keyed coverage is a LOWER BOUND — the corpus heals by PATTERN, not lint name,\n  so a rule can fully cover a lint it never keys. Measured precedent: `len_zero`\n  reads UNCOVERED here while `comparison_to_empty` heals exactly that pattern (the\n  name appears only in its doc comments). `pattern-mentioned` is a text proxy over\n  rule bodies, never semantics — stage a dedup grep (Protocol A step 2) BEFORE\n  authoring anything this report calls uncovered.\n",
+        );
+        if !self.corpus_docs_scanned {
+            out.push_str(
+                "  ⚠ body scan is pattern-literals-only — the proposers' source tree was not\n    locatable beside this binary, so doc-comment mentions are invisible to it.\n",
+            );
+        }
         out.push_str(
             "  applicability (MachineApplicable/…) is a property of an EMITTED diagnostic, \
              not of\n  a lint declaration — no static sweep can report it; the \
