@@ -1,6 +1,7 @@
 # Issue 167 — coverage-report name-keyed mapping reads pattern-covered lints as UNCOVERED debt
 
 **Status:** open — instrument honesty, report-only surface, fix small
+**Claimed:** zed-4090-1018-late (shikuwa/4090 idle loop), 2026-10-18T01:52Z, expires 2026-10-20T01:52Z
 
 `cargo refine --coverage-report` derives coverage by matching clippy lint NAMES
 against corpus rule keys. But the corpus heals by PATTERN, not lint name — the
