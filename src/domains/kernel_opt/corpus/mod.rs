@@ -1900,6 +1900,7 @@ mod entries_gpu_100;
 mod entries_gpu_101;
 mod entries_gpu_102;
 mod entries_gpu_103;
+mod entries_gpu_104;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2068,6 +2069,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_101::entries());
     entries.extend(entries_gpu_102::entries());
     entries.extend(entries_gpu_103::entries());
+    entries.extend(entries_gpu_104::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2369,7 +2371,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quad-lane-line-load-shuffle-word-exchange-ring",
         ],
     ),
-    // B: Compute patterns (94 rules; Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652 — one switch to template instantiations, the NT=0 extent guard, bit-for-bit) + tokenizer-segment-memo-between-mutations (2d2930d8b — the (text, first) key, the 1024-byte floor, byte-LRU); Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (the quadratic-rescan bound: monotone cursor + per-marker memos + the 8x⇒24x linearity oracle); Batch 242 +3: the mlx-serve pack — row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once; Batch 240 +1: the f16 upcast at foreign-graph translation (llama.cpp #29200 — upcast every non-f32 INPUT at the boundary, build the subgraph in f32, convert back to the caller's type at the end; the honest supports_op refusal + the tolerance-that-names-its-reason pair ride in-rule); the comment read 86 through B240 — it missed Batch 225's +1 (subbyte-preexpand-int8-tile-reuses-validated-mma-consumer), repaired here: was 87 at Batch 225; Batch 207 +1: the minifloat normal-code decode -- the fused
+    // B: Compute patterns (100 rules; Batch 250 slice 2 +6: the envelope-pool slice-2 set — moe-weights-load-time-soa-accumulation-order-pinned (e707790c+f74e2fa6 — the SoA layout + the hazard face) + rms-norm-registers-carry-x-between-passes (623c1639 — float4 loads, x in registers across the barrier) + kquant-dequant-work-item-geometry-wide-stores (13de11e7 — 32 WI per block, wide stores, no scale staging) + mmvq-low-bit-vdr-two-rows-share-q8-loads (2744e48d — VDR 2 + the per-type geometry tables) + moe-group-selection-fused-into-topk (f2f667b0 — the 14-op mask subgraph fused) + attention-row-mask-bitmap-per-row-not-per-block (597e5e50 — one packed word per row + the head_dim-derived geometry); Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652 — one switch to template instantiations, the NT=0 extent guard, bit-for-bit) + tokenizer-segment-memo-between-mutations (2d2930d8b — the (text, first) key, the 1024-byte floor, byte-LRU); Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (the quadratic-rescan bound: monotone cursor + per-marker memos + the 8x⇒24x linearity oracle); Batch 242 +3: the mlx-serve pack — row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once; Batch 240 +1: the f16 upcast at foreign-graph translation (llama.cpp #29200 — upcast every non-f32 INPUT at the boundary, build the subgraph in f32, convert back to the caller's type at the end; the honest supports_op refusal + the tolerance-that-names-its-reason pair ride in-rule); the comment read 86 through B240 — it missed Batch 225's +1 (subbyte-preexpand-int8-tile-reuses-validated-mma-consumer), repaired here: was 87 at Batch 225; Batch 207 +1: the minifloat normal-code decode -- the fused
     // one-shift + bias-difference form with the placed E2M1 decode (the 2^14 lift folded
     // into the caller's block scale) and the emulated-conversion admission predicate, all
     // one cubecl commit; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
@@ -2391,6 +2393,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
+            // Batch 250 slice 2 +6 (the envelope pool, Plan 254 / Research 286):
+            // the SoA layout + the register carry + the wide-store geometry +
+            // the VDR rework + the group-selection fusion + the row masks.
+            "moe-weights-load-time-soa-accumulation-order-pinned",
+            "rms-norm-registers-carry-x-between-passes",
+            "kquant-dequant-work-item-geometry-wide-stores",
+            "mmvq-low-bit-vdr-two-rows-share-q8-loads",
+            "moe-group-selection-fused-into-topk",
+            "attention-row-mask-bitmap-per-row-not-per-block",
             // Batch 249 slice 3 +2 (TensorFold B+ remainder): the trip-count
             // specialization switch (4e63c652 — one switch, branch-free mma
             // bodies, the NT=0 extent guard) + the tokenizer segment memo

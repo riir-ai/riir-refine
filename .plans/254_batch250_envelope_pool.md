@@ -1,6 +1,6 @@
 # Plan 254 — Batch 250: the llama.cpp / prism / uzu envelope pool (staged claim b52a4874)
 
-**Status:** SLICE 1 LANDED 2026-10-18 (T1-T5, T7-T10; T6 `- [-]` the x86 Pareto rides slice 2's window — BENCH-VERDICT-PENDING-x86 disclosed in-rule; slice 2 T11-T12 open): kernel_opt 878→879 (+1 D, uzu `2c16e967` route retirement), rust_perf 230→231 (+1 simd, the `3dbcb7f` hadd butterfly, ANNOTATED), 2 count-neutral riders (B233 k-pool hoist, B166 FWHT graph fusion); gates: combo-posture full run 3341 passed, the 2 failures were stale pins (router total 878, the B249 rust_perf-rider count 230) — re-pinned and the 6 affected tests GREEN by name (the gpu_103 byte-copy + the two stale pins caught by the T8 gate, Research 285 §incidents), floors HELD, score-bench #189 FLAT, freeze NOT owed. Research 285 (284 taken mid-claim by the 4090 lane's Yukon enumeration — citations renumbered). Prior status: IN FLIGHT — claim `b52a4874` (zed-m3-idle/M3 lineage, posted 2026-10-17 ~04:4x +07, expiry 2026-10-18T21:45Z); staging + full diff-reads landed 2026-10-17 ~18:2x +07; quote re-verification at the pins landed 2026-10-17 ~23:3x +07 (the .distill pre-composition row); composition resumed post-B249-slices (plan 253 COMPLETE) with slice numbers shifted: kernel_opt lands at **entries_gpu_103** (100/101/102 taken by B249 slices 2-3), counts rebased (kernel_opt 878, rust_perf re-pinned by B249 slice 3).
+**Status:** COMPLETE — slices 1+2 landed (17511946 + this commit): kernel_opt 878→885 (+7: D the uzu route retirement, B×6 the slice-2 set), rust_perf 230→231 (+1 simd the hadd butterfly), 2 count-neutral riders, 4 platform watches disclosed (Research 286), T6 x86 Pareto BENCH-VERDICT-PENDING (the 4090 lane's runner fbab2963 carries the leg, coordinated); gates: slice-2 gate first-run PASS, full combo run 3343/1 (the router-total pin, re-pinned 885 + verified by name), floors HELD, freeze NOT owed. Prior status: SLICE 1 LANDED 2026-10-18 (T1-T5, T7-T10; T6 `- [-]` the x86 Pareto rides slice 2's window — BENCH-VERDICT-PENDING-x86 disclosed in-rule; slice 2 T11-T12 open): kernel_opt 878→879 (+1 D, uzu `2c16e967` route retirement), rust_perf 230→231 (+1 simd, the `3dbcb7f` hadd butterfly, ANNOTATED), 2 count-neutral riders (B233 k-pool hoist, B166 FWHT graph fusion); gates: combo-posture full run 3341 passed, the 2 failures were stale pins (router total 878, the B249 rust_perf-rider count 230) — re-pinned and the 6 affected tests GREEN by name (the gpu_103 byte-copy + the two stale pins caught by the T8 gate, Research 285 §incidents), floors HELD, score-bench #189 FLAT, freeze NOT owed. Research 285 (284 taken mid-claim by the 4090 lane's Yukon enumeration — citations renumbered). Original claim: b52a4874 (zed-m3-idle/M3, posted 2026-10-17, refreshed to 2026-10-20T00:30Z for the measured 3.7 h gate).
 
 ## Pool (all quotes verified at the pins this claim; the .distill row carries the verification record)
 
@@ -39,8 +39,8 @@ Pins: llama.cpp staged at `62318cd`, re-verified at tip `797de63b` (all candidat
 
 ### Slice 2
 
-- [ ] T11 The 6 remaining kernel_opt own-rules into `entries_gpu_104.rs` (+ mod registration) + the 4 watch rows disclosed in Research 286.
-- [ ] T12 Slice-2 gates + counts + docs + binary rebuild + push.
+- [x] T11 The 6 remaining kernel_opt own-rules into `entries_gpu_104.rs` (+ mod registration) + the 4 watch rows disclosed in Research 286.
+- [x] T12 Slice-2 gates + counts + docs + binary rebuild + push.
 
 ## Non-goals
 
