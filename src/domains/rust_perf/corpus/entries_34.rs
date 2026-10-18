@@ -90,10 +90,10 @@ pub fn make_input(n: usize) -> Input {
     // ---- SAMPLE PARITY (the B245 lesson, embedded at construction) ----
     let tile0 = &input.tiles[0];
     for i in 0..256 {
-        let (t, g) = ((i * 13) % tile0.len(), (i * 7) % tile0[0].len());
-        let bank = tile0[t][g];
-        let a = unsafe { buggy::epilogue(&bank) };
-        let b = unsafe { fixed::epilogue(&bank) };
+        let t = (i * 13) % tile0.len();
+        let bank = &tile0[t];
+        let a = unsafe { buggy::epilogue(bank) };
+        let b = unsafe { fixed::epilogue(bank) };
         let mut av = [0i32; 8];
         let mut bv = [0i32; 8];
         unsafe {
