@@ -1899,6 +1899,7 @@ mod entries_gpu_10;
 mod entries_gpu_100;
 mod entries_gpu_101;
 mod entries_gpu_102;
+mod entries_gpu_103;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2066,6 +2067,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_100::entries());
     entries.extend(entries_gpu_101::entries());
     entries.extend(entries_gpu_102::entries());
+    entries.extend(entries_gpu_103::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
