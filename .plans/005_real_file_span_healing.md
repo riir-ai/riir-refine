@@ -1466,12 +1466,18 @@ unreachable (Bench 030). Deferred.**
    Mitigation: T3.5 (the live Phase 3 contingency) plus the committed
    regression gate, which now floors every future corpus batch at baseline − 1
    span. Treat corpus growth as a precision liability, not a free win.
-   **Consumer-class scope (issue 166, closed negative 2026-10-18):** this
-   liability lives entirely in the RULE-corpus nearest-neighbour lane
-   (`LatentMatcher`/suggest); the scored sigmoid gates have no serve-path
-   weighted-sum/threshold consumer — `margin_weight`'s blend is
-   mining/measurement-side only, and the traj-store fused lane carried the
-   fixed-gate null at 1×→4× (`tests/issue166_gate_null.rs`).
+   **Consumer-class scope (issue 166, closed negative 2026-10-18; record
+   corrected same day — see HISTORY.md):** this liability lives entirely in
+   the RULE-corpus nearest-neighbour lane (`LatentMatcher`/suggest). Of the
+   scored sigmoid gates: `margin_weight`'s blend is mining/measurement-side
+   only; the traj-store fused lane carried the fixed-gate null at 1×→4×
+   (`tests/issue166_gate_null.rs`); and the one REAL serve-path weighted-sum
+   consumer — the `evolve` blend in `select_best_candidate` (heal Step 4,
+   `W_EVO·evo + W_RATE·rel`, `src/self_evolve.rs`) — has NO corpus-size input
+   by construction (the gate reads the per-lint evolved direction dot the
+   candidate direction), so the capacity axis cannot reach it; its open
+   question is relative-scale calibration (Issue-013 class), not corpus
+   growth.
 6. **NEW — false confidence from cold UQ state.** Any calibrated-confidence
    layer (Phase 9) emits a **zero-width, 0%-coverage interval** on an unwarmed
    key rather than an honestly-wide one (measured, Issue 023). Mitigation:
