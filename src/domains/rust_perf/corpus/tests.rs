@@ -1396,10 +1396,10 @@ fn batch109_sink_consumes_per_iteration_data() {
         sink
     };
     assert_eq!(
-            add_sink(0),
-            add_sink(0xDEAD_BEEF),
-            "wrapping_add over a balanced power-of-two batch must collapse to the seed-independent constant — the second trap the rule names"
-        );
+        add_sink(0),
+        add_sink(0xDEAD_BEEF),
+        "wrapping_add over a balanced power-of-two batch must collapse to the seed-independent constant — the second trap the rule names"
+    );
 
     // The shipped fix pattern: CHAINED state — every iteration
     // consumes the previous accumulator, so the final value depends on
@@ -1412,7 +1412,11 @@ fn batch109_sink_consumes_per_iteration_data() {
         }
         state
     };
-    assert_ne!(chained(0), chained(0xDEAD_BEEF), "the chained harness must stay seed-dependent — this is the fold-proof shape the rule prescribes");
+    assert_ne!(
+        chained(0),
+        chained(0xDEAD_BEEF),
+        "the chained harness must stay seed-dependent — this is the fold-proof shape the rule prescribes"
+    );
 }
 
 /// Batch 112 — the rule is present in the corpus.
@@ -1755,7 +1759,10 @@ fn eighty_six_rules_have_bench_specs() {
         .iter()
         .filter(|e| e.bench_spec.is_some())
         .count();
-    assert_eq!(with_spec, 119, "expected 119 benchable rules (Batch 248 +5 benchable -- the simdutf/unicode-normalization landing (mph / hangul-dispatch / emit-callback / drain-shift / shift-adjacency), flat-pool lands None (design-time layout) and the drop candidate rode its spec out with the rule, Plan 252 / Research 280; Batch 245 +3 benchable -- self-loop-state-memchr-skip / pair-probe-confirm-fused / finder-hoist-reuse, Plan 248; Batch 244 +10 ALL benchable -- the byte-scan batch, Plan 247; STALE-PIN REPAIR: this pin read 101 through Batch 244's landing -- the +10 were never re-pinned here because only the rust_perf_bench posture compiles this test and B244's gates ran the default-feature lib (the B239/B207 pin-hiding class repeating, repaired with the measured truth 111 + this batch's 3). Prior 101: Batch 243 +2 benchable -- the text/unicode family seed, the third lead dropped dominated, Plan 245; prior 99: Batch 179 added the three rsconstmap specs; the host-lock rule is NotBenchable -- deadlock class), got {with_spec}");
+    assert_eq!(
+        with_spec, 119,
+        "expected 119 benchable rules (Batch 248 +5 benchable -- the simdutf/unicode-normalization landing (mph / hangul-dispatch / emit-callback / drain-shift / shift-adjacency), flat-pool lands None (design-time layout) and the drop candidate rode its spec out with the rule, Plan 252 / Research 280; Batch 245 +3 benchable -- self-loop-state-memchr-skip / pair-probe-confirm-fused / finder-hoist-reuse, Plan 248; Batch 244 +10 ALL benchable -- the byte-scan batch, Plan 247; STALE-PIN REPAIR: this pin read 101 through Batch 244's landing -- the +10 were never re-pinned here because only the rust_perf_bench posture compiles this test and B244's gates ran the default-feature lib (the B239/B207 pin-hiding class repeating, repaired with the measured truth 111 + this batch's 3). Prior 101: Batch 243 +2 benchable -- the text/unicode family seed, the third lead dropped dominated, Plan 245; prior 99: Batch 179 added the three rsconstmap specs; the host-lock rule is NotBenchable -- deadlock class), got {with_spec}"
+    );
 }
 
 #[cfg(feature = "rust_perf_bench")]
@@ -1839,8 +1846,7 @@ fn not_benchable_fixable_pin() {
         .copied()
         .collect();
     assert_eq!(
-        derived,
-        NOT_BENCHABLE_FIXABLE,
+        derived, NOT_BENCHABLE_FIXABLE,
         "the posture gate's NotBenchable list must match the corpus (both directions)"
     );
 }
@@ -1895,7 +1901,11 @@ fn forty_three_annotated_rules_carry_context_notes() {
         .filter(|e| e.context_notes.is_some())
         .map(|e| e.rule_id.as_str())
         .collect();
-    assert_eq!(annotated.len(), 178, "expected 178 context-annotated rules (Batch 250 slice 1: +1 ANNOTATED -- the llama.cpp #30296 hadd-butterfly epilogue rule lands annotated (regime/anti-regime + distinct-from set + pin-verified quotes @ 3dbcb7f), Plan 254 / Research 285; (Batch 248: +7 ANNOTATED -- the simdutf + unicode-normalization conversion's seven rules ALL annotated (Plan 252 / Research 280: regime/anti-regime + distinct-from sets + pin-verified quotes at unicode-normalization 0.1.25 + simdutf-rs v0.7.0) AND the count-neutral smallvec-stack rider converts that rule from None to its FIRST annotation (the BOUNDED-ARITY face, replace.rs:20-22); the drop candidate was annotated too and left with the rule (177 = 170 + 7); Batch 246: +1 ANNOTATED -- the prism fork seq-fork rule, NotBenchable decision-content + pin-verified quotes + distinct-from set, Plan 250 / Research 278; Batch 245: +6 ALL ANNOTATED -- the defer-list conversion carries regime/anti-regime + distinct-from sets + pin-verified quotes incl. two premise corrections + one relabel, Plan 248 / Research 277; Batch 244: +10 ALL ANNOTATED -- the byte-scan batch lands every rule with regime/anti-regime + distinct-from sets + pin-verified quotes, Plan 247 / Research 276; Batch 243: +2 ALL ANNOTATED -- the text/unicode family seed carries regime/anti-regime + distinct-from sets + pin-verified quotes, Plan 245 / Research 275; Batch 241: +2 BOTH the serving slot-state cache pair land annotated (NotBenchable decision-content: the #30580 reuse-threshold law + the #30567 empty-first/save-before-overwrite pair), Plan 243 / Research 273; Batch 239: +2 BOTH the serving state-cache pair land annotated (NotBenchable decision-content: the #30514 partial-serialization contract + the #30498 admission law), Plan 241 / Research 270; Batch 237: +3 -- ALL THREE the P58-P61 conversion set rules land annotated (NotBenchable + pin-verified quotes + distinct-from sets), Plan 239; Batch 222: +2 -- BOTH the soroban wasm size rules land annotated (NotBenchable size-axis + anti-regime + distinct-from set + pin-verified quotes), Plan 216 / Research 252; Batch 221: +1 -- the bevy #25864 runtime-bool conditional-guard rule lands annotated (NotBenchable codegen-shape claim + the patch-1 anti-shape disclosure + the review-thread quotes verified at the API), Plan 221; Batch 219: +11 -- the TensorFold serving/timing pack, ALL ELEVEN land annotated (NotBenchable decision-content + verified quotes + Apache-2.0 provenance @ f1aef9c3), Plan 215 slot 2; Batch 211: +1 -- the bevy #26042 register-partition rule lands annotated (NotBenchable + the two-faces law + the rider face), Plan 211; Batch 207: +2 -- the CSE scope-map crossover (the measured-negative second arm + the attribute-less Hash key clause) + the inline-hint wrapper rule (the wrapper-attribute-audit discipline + the LLM-disclosure provenance note); Batch 204: +1 -- the PrismML NEON PQ2_0 vec_dot rule lands annotated (NotBenchable on the x86_64 host box + the M3 GOAT staging + the B62 bench-design law); Batch 203 en-route repair: B202's dataflow-fixpoint-convergence-traversal-order landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 → 125 -- the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 -- the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 -- the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations);");
+    assert_eq!(
+        annotated.len(),
+        178,
+        "expected 178 context-annotated rules (Batch 250 slice 1: +1 ANNOTATED -- the llama.cpp #30296 hadd-butterfly epilogue rule lands annotated (regime/anti-regime + distinct-from set + pin-verified quotes @ 3dbcb7f), Plan 254 / Research 285; (Batch 248: +7 ANNOTATED -- the simdutf + unicode-normalization conversion's seven rules ALL annotated (Plan 252 / Research 280: regime/anti-regime + distinct-from sets + pin-verified quotes at unicode-normalization 0.1.25 + simdutf-rs v0.7.0) AND the count-neutral smallvec-stack rider converts that rule from None to its FIRST annotation (the BOUNDED-ARITY face, replace.rs:20-22); the drop candidate was annotated too and left with the rule (177 = 170 + 7); Batch 246: +1 ANNOTATED -- the prism fork seq-fork rule, NotBenchable decision-content + pin-verified quotes + distinct-from set, Plan 250 / Research 278; Batch 245: +6 ALL ANNOTATED -- the defer-list conversion carries regime/anti-regime + distinct-from sets + pin-verified quotes incl. two premise corrections + one relabel, Plan 248 / Research 277; Batch 244: +10 ALL ANNOTATED -- the byte-scan batch lands every rule with regime/anti-regime + distinct-from sets + pin-verified quotes, Plan 247 / Research 276; Batch 243: +2 ALL ANNOTATED -- the text/unicode family seed carries regime/anti-regime + distinct-from sets + pin-verified quotes, Plan 245 / Research 275; Batch 241: +2 BOTH the serving slot-state cache pair land annotated (NotBenchable decision-content: the #30580 reuse-threshold law + the #30567 empty-first/save-before-overwrite pair), Plan 243 / Research 273; Batch 239: +2 BOTH the serving state-cache pair land annotated (NotBenchable decision-content: the #30514 partial-serialization contract + the #30498 admission law), Plan 241 / Research 270; Batch 237: +3 -- ALL THREE the P58-P61 conversion set rules land annotated (NotBenchable + pin-verified quotes + distinct-from sets), Plan 239; Batch 222: +2 -- BOTH the soroban wasm size rules land annotated (NotBenchable size-axis + anti-regime + distinct-from set + pin-verified quotes), Plan 216 / Research 252; Batch 221: +1 -- the bevy #25864 runtime-bool conditional-guard rule lands annotated (NotBenchable codegen-shape claim + the patch-1 anti-shape disclosure + the review-thread quotes verified at the API), Plan 221; Batch 219: +11 -- the TensorFold serving/timing pack, ALL ELEVEN land annotated (NotBenchable decision-content + verified quotes + Apache-2.0 provenance @ f1aef9c3), Plan 215 slot 2; Batch 211: +1 -- the bevy #26042 register-partition rule lands annotated (NotBenchable + the two-faces law + the rider face), Plan 211; Batch 207: +2 -- the CSE scope-map crossover (the measured-negative second arm + the attribute-less Hash key clause) + the inline-hint wrapper rule (the wrapper-attribute-audit discipline + the LLM-disclosure provenance note); Batch 204: +1 -- the PrismML NEON PQ2_0 vec_dot rule lands annotated (NotBenchable on the x86_64 host box + the M3 GOAT staging + the B62 bench-design law); Batch 203 en-route repair: B202's dataflow-fixpoint-convergence-traversal-order landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 → 125 -- the TensorFold serving-half ELEVEN, all annotated with verified quotes + Apache-2.0 provenance; Batch 198: 113 → 114 -- the PrismML selector-lattice-beam-over-greedy-walk NOT-ISOLATED annotation; Batch 196: 111 → 113 -- the TensorFold grammar-window + startup-estimate annotations; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta host-mirror + prompt-lookup + adoption-trial annotations);"
+    );
     assert!(annotated.contains(&"neon-tbl-replicate-2bit-codec-sdot-block-rescale")); // Batch 204 -- the NotBenchable-on-x86_64 note + the staged M3 GOAT + the B62 bench-design law
     assert!(annotated.contains(&"dataflow-fixpoint-convergence-traversal-order")); // Batch 202 -- the NotBenchable decision-content note (the pin B202's landing missed)
     assert!(annotated.contains(&"runtime-bool-duplicates-inlinable-body")); // Batch 221 -- the NotBenchable codegen-shape note + the patch-1 anti-shape disclosure
@@ -1987,7 +1997,10 @@ fn unannotated_rules_have_no_context_notes() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .count();
-    assert_eq!(unannotated, 53, "expected 53 unannotated rules (231 total - 178 annotated; Batch 250 slice 1 +1 ANNOTATED so unannotated UNCHANGED; Batch 248 -1 -- the count-neutral smallvec-stack rider converts that rule from None to its FIRST annotation (the BOUNDED-ARITY face), unannotated 54 -> 53, Plan 252 / Research 280; Batch 246 +1 ANNOTATED -- the prism fork seq-fork rule, both sides +1, unannotated UNCHANGED; Batch 245 +6 ALL ANNOTATED -- the defer-list conversion, unannotated UNCHANGED (170 + 54 = 224), Plan 248 / Research 277; Batch 244 +10 ALL ANNOTATED -- the byte-scan batch, unannotated UNCHANGED (163 + 54 = 217), Plan 247 / Research 276; Batch 243 +2 ALL ANNOTATED -- the text/unicode family seed, unannotated UNCHANGED, Plan 245 / Research 275; Batch 241 +2 BOTH ANNOTATED -- the serving slot-state cache pair, unannotated UNCHANGED, Plan 243 / Research 273; Batch 239 +2 BOTH ANNOTATED -- the serving state-cache pair, unannotated UNCHANGED, Plan 241; Batch 237 +3 ALL ANNOTATED -- both sides +3, the unannotated count is UNCHANGED, Plan 239; Batch 222 +2 BOTH ANNOTATED -- both sides +2, the unannotated count is UNCHANGED, Plan 216 / Research 252; Batch 219 +11 ALL ANNOTATED -- the TensorFold serving/timing pack, so both sides move +11 and the unannotated count is UNCHANGED; Batch 200 +11 ALL ANNOTATED -- the TensorFold serving half, so both sides move +11 and the unannotated count is UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat in context_notes, so the unannotated count is unchanged; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)");
+    assert_eq!(
+        unannotated, 53,
+        "expected 53 unannotated rules (231 total - 178 annotated; Batch 250 slice 1 +1 ANNOTATED so unannotated UNCHANGED; Batch 248 -1 -- the count-neutral smallvec-stack rider converts that rule from None to its FIRST annotation (the BOUNDED-ARITY face), unannotated 54 -> 53, Plan 252 / Research 280; Batch 246 +1 ANNOTATED -- the prism fork seq-fork rule, both sides +1, unannotated UNCHANGED; Batch 245 +6 ALL ANNOTATED -- the defer-list conversion, unannotated UNCHANGED (170 + 54 = 224), Plan 248 / Research 277; Batch 244 +10 ALL ANNOTATED -- the byte-scan batch, unannotated UNCHANGED (163 + 54 = 217), Plan 247 / Research 276; Batch 243 +2 ALL ANNOTATED -- the text/unicode family seed, unannotated UNCHANGED, Plan 245 / Research 275; Batch 241 +2 BOTH ANNOTATED -- the serving slot-state cache pair, unannotated UNCHANGED, Plan 243 / Research 273; Batch 239 +2 BOTH ANNOTATED -- the serving state-cache pair, unannotated UNCHANGED, Plan 241; Batch 237 +3 ALL ANNOTATED -- both sides +3, the unannotated count is UNCHANGED, Plan 239; Batch 222 +2 BOTH ANNOTATED -- both sides +2, the unannotated count is UNCHANGED, Plan 216 / Research 252; Batch 219 +11 ALL ANNOTATED -- the TensorFold serving/timing pack, so both sides move +11 and the unannotated count is UNCHANGED; Batch 200 +11 ALL ANNOTATED -- the TensorFold serving half, so both sides move +11 and the unannotated count is UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat in context_notes, so the unannotated count is unchanged; Batch 186 added both its rules annotated: the toggle-oracle + cold-LLC members)"
+    );
 }
 
 /// `context_notes` is backward-compatible via `#[serde(default)]`: an older
@@ -2039,12 +2052,37 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_some())
         .collect();
-    assert_eq!(annotated.len(), 178, "expected 178 annotated rules (Batch 250 slice 1: +1 the hadd-butterfly epilogue rule lands annotated, Plan 254 / Research 285; Batch 248: +6 landing rules + the drop candidate rode its annotation out + the count-neutral smallvec-stack rider converts that rule None->annotated, Plan 252 / Research 280; Batch 246: +1 the prism fork seq-fork rule lands annotated, Plan 250 / Research 278; Batch 245: +6 ALL the defer-list conversion rules land annotated, Plan 248 / Research 277; Batch 244: +10 ALL the byte-scan batch rules land annotated, Plan 247 / Research 276; Batch 243: +2 BOTH the text/unicode family seed rules land annotated, Plan 245 / Research 275; Batch 241: +2 BOTH the serving slot-state cache pair land annotated, Plan 243 / Research 273; Batch 239: +2 BOTH the serving state-cache pair land annotated, Plan 241 / Research 270; Batch 237: +3 ALL the P58-P61 conversion set rules land annotated, Plan 239; Batch 222: +2 BOTH the soroban wasm size rules land annotated, Plan 216 / Research 252; Batch 221: +1 the bevy #25864 runtime-bool conditional-guard rule lands annotated, Plan 221; Batch 219: +11 the TensorFold serving/timing pack, ALL annotated, Plan 215 slot 2; Batch 211: +1 the bevy #26042 register-partition rule lands annotated, Plan 211; Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule, Plan 207; Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated, Plan 204; Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)");
-    assert!(annotated.iter().any(|r| r.rule_id == "f16-to-f32-accumulator-lut-breaks-conversion-serialization")); // Batch 237 -- NotBenchable + the vpinsrw law + the per-direction discipline
-    assert!(annotated.iter().any(|r| r.rule_id == "work-buffer-sized-by-execution-width-not-plan-tasks")); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
-    assert!(annotated.iter().any(|r| r.rule_id == "discretionary-cache-growth-keys-on-spare-not-available")); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
-    assert!(annotated.iter().any(|r| r.rule_id == "partial-state-serialization-honors-rollback-contract-at-leaf-cache")); // Batch 239 -- NotBenchable + the rollback-defines-partial contract
-    assert!(annotated.iter().any(|r| r.rule_id == "cache-write-admission-requires-restoring-consumer")); // Batch 239 -- NotBenchable + the admission-by-reusability law
+    assert_eq!(
+        annotated.len(),
+        178,
+        "expected 178 annotated rules (Batch 250 slice 1: +1 the hadd-butterfly epilogue rule lands annotated, Plan 254 / Research 285; Batch 248: +6 landing rules + the drop candidate rode its annotation out + the count-neutral smallvec-stack rider converts that rule None->annotated, Plan 252 / Research 280; Batch 246: +1 the prism fork seq-fork rule lands annotated, Plan 250 / Research 278; Batch 245: +6 ALL the defer-list conversion rules land annotated, Plan 248 / Research 277; Batch 244: +10 ALL the byte-scan batch rules land annotated, Plan 247 / Research 276; Batch 243: +2 BOTH the text/unicode family seed rules land annotated, Plan 245 / Research 275; Batch 241: +2 BOTH the serving slot-state cache pair land annotated, Plan 243 / Research 273; Batch 239: +2 BOTH the serving state-cache pair land annotated, Plan 241 / Research 270; Batch 237: +3 ALL the P58-P61 conversion set rules land annotated, Plan 239; Batch 222: +2 BOTH the soroban wasm size rules land annotated, Plan 216 / Research 252; Batch 221: +1 the bevy #25864 runtime-bool conditional-guard rule lands annotated, Plan 221; Batch 219: +11 the TensorFold serving/timing pack, ALL annotated, Plan 215 slot 2; Batch 211: +1 the bevy #26042 register-partition rule lands annotated, Plan 211; Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule, Plan 207; Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated, Plan 204; Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)"
+    );
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "f16-to-f32-accumulator-lut-breaks-conversion-serialization")
+    ); // Batch 237 -- NotBenchable + the vpinsrw law + the per-direction discipline
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "work-buffer-sized-by-execution-width-not-plan-tasks")
+    ); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "discretionary-cache-growth-keys-on-spare-not-available")
+    ); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id
+                == "partial-state-serialization-honors-rollback-contract-at-leaf-cache")
+    ); // Batch 239 -- NotBenchable + the rollback-defines-partial contract
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "cache-write-admission-requires-restoring-consumer")
+    ); // Batch 239 -- NotBenchable + the admission-by-reusability law
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -2083,7 +2121,11 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         .iter()
         .filter(|e| e.context_notes.is_none())
         .collect();
-    assert_eq!(unannotated.len(), 53, "expected 53 unannotated rules (231 total - 178 annotated; Batch 250 slice 1 +1 ANNOTATED so unannotated UNCHANGED; Batch 248 -1 -- the count-neutral smallvec-stack rider converts that rule None->annotated, 54 -> 53, Plan 252 / Research 280; Batch 241 +2 ANNOTATED -- unannotated UNCHANGED, Plan 243 / Research 273; Batch 239 +2 ANNOTATED -- unannotated UNCHANGED, Plan 241; Batch 237 +3 ANNOTATED -- unannotated UNCHANGED, Plan 239; Batch 222 +2 ANNOTATED -- unannotated UNCHANGED, Plan 216 / Research 252; Batch 200 +11 ALL ANNOTATED -- both sides +11, unannotated UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat, unannotated unchanged)");
+    assert_eq!(
+        unannotated.len(),
+        53,
+        "expected 53 unannotated rules (231 total - 178 annotated; Batch 250 slice 1 +1 ANNOTATED so unannotated UNCHANGED; Batch 248 -1 -- the count-neutral smallvec-stack rider converts that rule None->annotated, 54 -> 53, Plan 252 / Research 280; Batch 241 +2 ANNOTATED -- unannotated UNCHANGED, Plan 243 / Research 273; Batch 239 +2 ANNOTATED -- unannotated UNCHANGED, Plan 241; Batch 237 +3 ANNOTATED -- unannotated UNCHANGED, Plan 239; Batch 222 +2 ANNOTATED -- unannotated UNCHANGED, Plan 216 / Research 252; Batch 200 +11 ALL ANNOTATED -- both sides +11, unannotated UNCHANGED; Batch 198 +1 ANNOTATED -- selector-lattice-beam-over-greedy-walk carries the NOT-ISOLATED caveat, unannotated unchanged)"
+    );
     for rule in &unannotated {
         assert!(
             HealEntry::context_notes(*rule).is_none(),
@@ -3500,7 +3542,9 @@ fn batch173_rules_present_and_parse() {
         assert_eq!(e.category, category, "batch-173 '{rid}' category");
         let blob = format!(
             "{}{}{}{}",
-            e.name, e.buggy_code, e.fixed_code,
+            e.name,
+            e.buggy_code,
+            e.fixed_code,
             e.context_notes.as_deref().unwrap_or("")
         );
         for needle in needles {
@@ -3565,12 +3609,22 @@ fn batch174_rules_present_and_parse() {
         (
             "host-lock-across-reentrant-blocking-call",
             "concurrency",
-            vec!["RE-TAKES", "decide under the lock", "guard dropped", "deadlock"],
+            vec![
+                "RE-TAKES",
+                "decide under the lock",
+                "guard dropped",
+                "deadlock",
+            ],
         ),
         (
             "deferred-command-flush-hoist-out-of-batch-loop",
             "concurrency",
-            vec!["flush per item", "ONE sync point", "observer", "despawn_all"],
+            vec![
+                "flush per item",
+                "ONE sync point",
+                "observer",
+                "despawn_all",
+            ],
         ),
     ] {
         let e = corpus
@@ -3581,7 +3635,9 @@ fn batch174_rules_present_and_parse() {
         assert_eq!(e.category, category, "batch-174 '{rid}' category");
         let blob = format!(
             "{}{}{}{}",
-            e.name, e.buggy_code, e.fixed_code,
+            e.name,
+            e.buggy_code,
+            e.fixed_code,
             e.context_notes.as_deref().unwrap_or("")
         );
         for needle in needles {
@@ -4104,7 +4160,10 @@ fn batch145_mincore_rule_present_and_annotated() {
         "a5e38bb7",
         "fixed stride",
     ] {
-        assert!(text.contains(needle), "batch-145 mincore concept {needle:?} missing");
+        assert!(
+            text.contains(needle),
+            "batch-145 mincore concept {needle:?} missing"
+        );
     }
     // The macOS caveat must be in the annotation (the Batch-139 instrument
     // note), never only in the fixture code.
@@ -4189,7 +4248,11 @@ fn batch146_dual_evidence_and_distinct_rows_present() {
         .iter()
         .find(|e| e.rule_id == "dense-table-bulk-update-via-contiguous-iter")
         .unwrap();
-    let text = format!("{} {}", bevy.name, bevy.context_notes.clone().unwrap_or_default());
+    let text = format!(
+        "{} {}",
+        bevy.name,
+        bevy.context_notes.clone().unwrap_or_default()
+    );
     for needle in [
         "5.58",
         "1.87",
@@ -4208,28 +4271,18 @@ fn batch146_dual_evidence_and_distinct_rows_present() {
     // Distinct-from rows: every rule names its nearest neighbors so
     // retrieval cannot shadow them (the dedup law, admission-time).
     for (id, neighbor) in [
-        (
-            "dispatch-pass-fusion-skips-empty-handlers",
-            "dyn-to-enum",
-        ),
+        ("dispatch-pass-fusion-skips-empty-handlers", "dyn-to-enum"),
         (
             "hot-alloc-struct-fits-cache-line-class",
             "hot-byval-move-over-memcpy-threshold",
         ),
-        (
-            "dense-table-bulk-update-via-contiguous-iter",
-            "AoS",
-        ),
+        ("dense-table-bulk-update-via-contiguous-iter", "AoS"),
         (
             "gpu-upload-repack-skipped-when-layout-matches",
             "entries_05",
         ),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == id)
-            .unwrap();
+        let e = corpus.entries.iter().find(|e| e.rule_id == id).unwrap();
         let notes = e.context_notes.clone().unwrap_or_default();
         assert!(
             notes.contains("Distinct from"),
@@ -4250,11 +4303,7 @@ fn batch147_rules_present_and_annotated() {
     let corpus = build_perf_seed_corpus();
     let ids = [
         ("bounded-batch-buffer-pool", "allocation", true),
-        (
-            "stack-read-fast-path-length-prefixed-record",
-            "io",
-            false,
-        ),
+        ("stack-read-fast-path-length-prefixed-record", "io", false),
         (
             "batch-verify-optimistic-aggregate-fallback-individual",
             "caching",
@@ -4291,7 +4340,10 @@ fn batch147_rules_present_and_annotated() {
         if benchable {
             assert!(e.bench_spec.is_some(), "batch-147 {id} must carry its spec");
         } else {
-            assert!(e.bench_spec.is_none(), "batch-147 {id} is NotBenchable as drafted");
+            assert!(
+                e.bench_spec.is_none(),
+                "batch-147 {id} is NotBenchable as drafted"
+            );
         }
     }
 }
@@ -4328,11 +4380,20 @@ fn batch147_distinct_rows_present() {
     // so retrieval cannot shadow them — including the two-sided B123 row.
     let corpus = build_perf_seed_corpus();
     for (id, neighbor) in [
-        ("bounded-batch-buffer-pool", "batch-pool-read-makes-serial-readahead-redundant"),
+        (
+            "bounded-batch-buffer-pool",
+            "batch-pool-read-makes-serial-readahead-redundant",
+        ),
         ("bounded-batch-buffer-pool", "reuse-allocation-clear"),
         ("bounded-batch-buffer-pool", "smallvec-stack"),
-        ("stack-read-fast-path-length-prefixed-record", "smallvec-stack"),
-        ("stack-read-fast-path-length-prefixed-record", "bounded-batch-buffer-pool"),
+        (
+            "stack-read-fast-path-length-prefixed-record",
+            "smallvec-stack",
+        ),
+        (
+            "stack-read-fast-path-length-prefixed-record",
+            "bounded-batch-buffer-pool",
+        ),
         ("partial-reset-watermark-pool", "bounded-batch-buffer-pool"),
         ("partial-reset-watermark-pool", "reuse-allocation-clear"),
         (
@@ -4344,11 +4405,7 @@ fn batch147_distinct_rows_present() {
             "sort-key-cache-precompute-out-of-lock",
         ),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == id)
-            .unwrap();
+        let e = corpus.entries.iter().find(|e| e.rule_id == id).unwrap();
         let notes = e.context_notes.clone().unwrap_or_default();
         assert!(
             notes.contains("Distinct from"),
@@ -4405,7 +4462,10 @@ fn batch147_verify_ladder_semantics() {
     assert_eq!(verify_batch(&[bad()], &msg), vec![false]);
 
     // All-valid N>1: tier 2 answers for the whole batch.
-    assert_eq!(verify_batch(&[good(1), good(2), good(3)], &msg), vec![true, true, true]);
+    assert_eq!(
+        verify_batch(&[good(1), good(2), good(3)], &msg),
+        vec![true, true, true]
+    );
 
     // Adversarial: one invalid vote — the aggregate fails, the per-item
     // fallback locates it. Same verdicts as individual-only, honestly.
@@ -4487,16 +4547,18 @@ fn batch152_distinct_rows_present() {
     for (id, neighbor) in [
         ("batch-blocking-pool-segment", "buffered-io"),
         ("batch-blocking-pool-segment", "bufwriter-batched"),
-        ("batch-blocking-pool-segment", "channel-send-batching-unpark"),
+        (
+            "batch-blocking-pool-segment",
+            "channel-send-batching-unpark",
+        ),
         ("adaptive-yield-consecutive-ready", "async-yield-point"),
-        ("adaptive-yield-consecutive-ready", "tokio-guard-across-await"),
+        (
+            "adaptive-yield-consecutive-ready",
+            "tokio-guard-across-await",
+        ),
         ("bounded-fanout-semaphore", "bounded-channel-backpressure"),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == id)
-            .unwrap();
+        let e = corpus.entries.iter().find(|e| e.rule_id == id).unwrap();
         let notes = e.context_notes.clone().unwrap_or_default();
         assert!(
             notes.contains("Distinct from"),
@@ -4581,12 +4643,21 @@ fn batch153_distinct_rows_present() {
     let corpus = build_perf_seed_corpus();
     for (id, neighbor) in [
         ("blocking-sleep-in-async", "async-yield-point"),
-        ("blocking-sleep-in-async", "adaptive-yield-consecutive-ready"),
+        (
+            "blocking-sleep-in-async",
+            "adaptive-yield-consecutive-ready",
+        ),
         ("blocking-sleep-in-async", "batch-blocking-pool-segment"),
         ("rayon-bridge-oneshot", "partitioned-mut-slices-zero-sync"),
         ("rayon-bridge-oneshot", "dynamic-work-parallelism-ladder"),
-        ("rayon-bridge-oneshot", "sender-per-work-item-terminates-channel"),
-        ("rayon-bridge-oneshot", "nested-par-inside-channel-bridge-deadlocks"),
+        (
+            "rayon-bridge-oneshot",
+            "sender-per-work-item-terminates-channel",
+        ),
+        (
+            "rayon-bridge-oneshot",
+            "nested-par-inside-channel-bridge-deadlocks",
+        ),
         ("rayon-bridge-oneshot", "batch-blocking-pool-segment"),
         (
             "tcp-nodelay-request-response-accepted-socket",
@@ -4597,11 +4668,7 @@ fn batch153_distinct_rows_present() {
             "bufwriter-batched",
         ),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == id)
-            .unwrap();
+        let e = corpus.entries.iter().find(|e| e.rule_id == id).unwrap();
         let notes = e.context_notes.clone().unwrap_or_default();
         assert!(
             notes.contains("Distinct from"),
@@ -4687,7 +4754,10 @@ fn batch154_distinct_rows_present() {
     for (id, neighbor) in [
         ("write-vectored-capability-flag", "buffered-io"),
         ("write-vectored-capability-flag", "bufwriter-batched"),
-        ("oneshot-response-send-unwrap-panics", "rayon-bridge-oneshot"),
+        (
+            "oneshot-response-send-unwrap-panics",
+            "rayon-bridge-oneshot",
+        ),
         (
             "actor-bounded-channel-cycle-deadlock",
             "bounded-channel-backpressure",
@@ -4697,11 +4767,7 @@ fn batch154_distinct_rows_present() {
             "nested-par-inside-channel-bridge-deadlocks",
         ),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == id)
-            .unwrap();
+        let e = corpus.entries.iter().find(|e| e.rule_id == id).unwrap();
         let notes = e.context_notes.clone().unwrap_or_default();
         assert!(
             notes.contains("Distinct from"),
@@ -4850,7 +4916,11 @@ fn batch143_pareto_benches() {
         }
     };
     assert!(b.ran, "batch-143 R1 bench must run: {:?}", b.error);
-    assert!(b.ran, "batch-143 debug-level-gated-computation bench must run: {:?}", b.error);
+    assert!(
+        b.ran,
+        "batch-143 debug-level-gated-computation bench must run: {:?}",
+        b.error
+    );
     println!(
         "batch-143 debug-level-gated-computation: {:?} faster={} slower={} tie={}",
         b.overall, b.faster_count, b.slower_count, b.tie_count
@@ -4903,7 +4973,11 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             let wide = std::arch::is_aarch64_feature_detected!("neon");
             #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
             let wide = false;
-            Self { is_searched, searched: searched.to_vec(), wide }
+            Self {
+                is_searched,
+                searched: searched.to_vec(),
+                wide,
+            }
         }
 
         fn scan_block(&self, block: &[u8]) -> DualMasks {
@@ -4912,13 +4986,19 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             if self.wide && block.len() == BLOCK {
                 // SAFETY: avx2 probed at construction; len checked == 64.
                 let (newlines, candidates) = unsafe { wide::scan_block(block, &self.searched) };
-                return DualMasks { newlines, candidates };
+                return DualMasks {
+                    newlines,
+                    candidates,
+                };
             }
             #[cfg(target_arch = "aarch64")]
             if self.wide && block.len() == BLOCK {
                 // SAFETY: neon probed at construction; len checked == 64.
                 let (newlines, candidates) = unsafe { wide::scan_block(block, &self.searched) };
-                return DualMasks { newlines, candidates };
+                return DualMasks {
+                    newlines,
+                    candidates,
+                };
             }
             self.scan_block_scalar(block)
         }
@@ -4933,7 +5013,10 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
                     candidates |= 1 << at;
                 }
             }
-            DualMasks { newlines, candidates }
+            DualMasks {
+                newlines,
+                candidates,
+            }
         }
 
         fn scan(&self, buf: &[u8]) -> (u64, u64, u64) {
@@ -4969,8 +5052,10 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
 
     #[cfg(target_arch = "x86_64")]
     mod wide {
-        use std::arch::x86_64::{__m256i, _mm256_cmpeq_epi8, _mm256_loadu_si256,
-            _mm256_movemask_epi8, _mm256_or_si256, _mm256_set1_epi8};
+        use std::arch::x86_64::{
+            __m256i, _mm256_cmpeq_epi8, _mm256_loadu_si256, _mm256_movemask_epi8, _mm256_or_si256,
+            _mm256_set1_epi8,
+        };
 
         /// Returns (newlines, candidates). SAFETY: caller probed avx2 and
         /// checked len == 64.
@@ -4985,10 +5070,7 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             let lo = _mm256_loadu_si256(block.as_ptr().cast::<__m256i>());
             let hi = _mm256_loadu_si256(block.as_ptr().add(32).cast::<__m256i>());
             let nl = _mm256_set1_epi8(b'\n' as i8);
-            let newlines = gather(
-                _mm256_cmpeq_epi8(lo, nl),
-                _mm256_cmpeq_epi8(hi, nl),
-            );
+            let newlines = gather(_mm256_cmpeq_epi8(lo, nl), _mm256_cmpeq_epi8(hi, nl));
             let (mut hits_lo, mut hits_hi) = (_mm256_set1_epi8(0), _mm256_set1_epi8(0));
             for &byte in searched {
                 let want = _mm256_set1_epi8(byte as i8);
@@ -5013,8 +5095,10 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
 
     #[cfg(target_arch = "aarch64")]
     mod wide {
-        use std::arch::aarch64::{uint8x16_t, vandq_u8, vceqq_u8, vdupq_n_u8,
-            vgetq_lane_u64, vld1q_u8, vorrq_u8, vpaddq_u8, vreinterpretq_u64_u8};
+        use std::arch::aarch64::{
+            uint8x16_t, vandq_u8, vceqq_u8, vdupq_n_u8, vgetq_lane_u64, vld1q_u8, vorrq_u8,
+            vpaddq_u8, vreinterpretq_u64_u8,
+        };
 
         const POWERS: [u8; 16] = [1, 2, 4, 8, 16, 32, 64, 128, 1, 2, 4, 8, 16, 32, 64, 128];
 
@@ -5040,7 +5124,7 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             for &byte in searched {
                 let want = vdupq_n_u8(byte);
                 for (hit, &quarter) in hits.iter_mut().zip(quarters.iter()) {
-                                       *hit = vorrq_u8(*hit, vceqq_u8(quarter, want));
+                    *hit = vorrq_u8(*hit, vceqq_u8(quarter, want));
                 }
             }
             (newlines, gather(hits))
@@ -5095,10 +5179,12 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
             block[pos] = byte;
             let sim = finder.scan_block(&block);
             let sca = finder.scan_block_scalar(&block);
-            assert_eq!(sim.newlines, sca.newlines, "newline mask at pos={pos} byte={byte:#04x}");
             assert_eq!(
-                sim.candidates,
-                sca.candidates,
+                sim.newlines, sca.newlines,
+                "newline mask at pos={pos} byte={byte:#04x}"
+            );
+            assert_eq!(
+                sim.candidates, sca.candidates,
                 "candidate mask at pos={pos} byte={byte:#04x}"
             );
         }
@@ -5118,7 +5204,10 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
         }
         let sim = finder.scan_block(&block);
         let sca = finder.scan_block_scalar(&block);
-        assert_eq!((sim.newlines, sim.candidates), (sca.newlines, sca.candidates));
+        assert_eq!(
+            (sim.newlines, sim.candidates),
+            (sca.newlines, sca.candidates)
+        );
     }
 
     // (c) short blocks: every length 0..=63 (the tail contract — a shorter
@@ -5127,11 +5216,19 @@ fn dual_mask_fused_block_scan_equivalence_gate() {
         let mut block = [0u8; BLOCK];
         for slot in &mut block[..len] {
             let r = next(&mut state);
-            *slot = if r.is_multiple_of(2) { b'\n' } else { needles[(r >> 40) as usize % needles.len()] };
+            *slot = if r.is_multiple_of(2) {
+                b'\n'
+            } else {
+                needles[(r >> 40) as usize % needles.len()]
+            };
         }
         let sim = finder.scan_block(&block[..len]);
         let sca = finder.scan_block_scalar(&block[..len]);
-        assert_eq!((sim.newlines, sim.candidates), (sca.newlines, sca.candidates), "len={len}");
+        assert_eq!(
+            (sim.newlines, sim.candidates),
+            (sca.newlines, sca.candidates),
+            "len={len}"
+        );
     }
 
     // (d) end-to-end: every length 0..=300 + 1 KiB/4 KiB/64 KiB, fused scan
@@ -5186,7 +5283,10 @@ fn batch177_rules_present_and_annotated() {
             "batch-177 {id} must carry context_notes (the annotation IS the content)"
         );
         let notes = e.context_notes.clone().unwrap_or_default();
-        assert!(notes.contains("NotBenchable"), "batch-177 {id} NotBenchable posture");
+        assert!(
+            notes.contains("NotBenchable"),
+            "batch-177 {id} NotBenchable posture"
+        );
     }
     // Mandated phrases (case-sensitive contains -- the B51 lesson).
     let aa = corpus
@@ -5200,10 +5300,13 @@ fn batch177_rules_present_and_annotated() {
         "prompt-class-conditional",
     ] {
         assert!(
-            aa.context_notes.clone().unwrap_or_default().contains(needle)
-            || aa.buggy_code.contains(needle)
-            || aa.fixed_code.contains(needle)
-            || aa.name.contains(needle),
+            aa.context_notes
+                .clone()
+                .unwrap_or_default()
+                .contains(needle)
+                || aa.buggy_code.contains(needle)
+                || aa.fixed_code.contains(needle)
+                || aa.name.contains(needle),
             "batch-177 aa-control lost phrase: {needle}"
         );
     }
@@ -5217,7 +5320,10 @@ fn batch177_rules_present_and_annotated() {
         "uniform across configurations, so comparisons hold",
     ] {
         assert!(
-            obs.context_notes.clone().unwrap_or_default().contains(needle),
+            obs.context_notes
+                .clone()
+                .unwrap_or_default()
+                .contains(needle),
             "batch-177 observer-sync lost phrase: {needle}"
         );
     }
@@ -5294,7 +5400,11 @@ fn paired_probe_layout_equivalence_gate() {
                 [data[i1], checks[i1]],
                 [data[i2], checks[i2]],
             );
-            assert_eq!(sv, [want, expect_fp], "paired slot must be [value, fingerprint]");
+            assert_eq!(
+                sv,
+                [want, expect_fp],
+                "paired slot must be [value, fingerprint]"
+            );
             #[cfg(target_arch = "aarch64")]
             {
                 let nv = xor3_neon(
@@ -5448,7 +5558,10 @@ fn batch196_rules_present_and_parse() {
                 .is_ok(),
             "batch-196 '{id}' fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-196 '{id}' must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-196 '{id}' must be annotated"
+        );
         let notes = e.context_notes.as_deref().unwrap_or_default();
         assert!(
             notes.contains("license flipped MIT→Apache-2.0 at 0.6.0"),
@@ -5602,7 +5715,10 @@ fn batch200_rules_present_and_parse() {
                 .is_ok(),
             "batch-200 '{id}' fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-200 '{id}' must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-200 '{id}' must be annotated"
+        );
         let notes = e.context_notes.as_deref().unwrap_or_default();
         assert!(
             notes.contains("license flipped MIT→Apache-2.0 at 0.6.0"),
@@ -5653,7 +5769,10 @@ fn batch202_rules_present_and_parse() {
                 .is_ok(),
             "batch-202 '{id}' fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-202 '{id}' must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-202 '{id}' must be annotated"
+        );
         let notes = e.context_notes.as_deref().unwrap_or_default();
         for needle in notes_needles {
             assert!(
@@ -5705,7 +5824,10 @@ fn batch204_rules_present_and_parse() {
                 .is_ok(),
             "batch-204 '{id}' fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-204 '{id}' must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-204 '{id}' must be annotated"
+        );
         let notes = e.context_notes.as_deref().unwrap_or_default();
         for needle in notes_needles {
             assert!(
@@ -5775,7 +5897,10 @@ fn batch207_rules_present_and_parse() {
                 .is_ok(),
             "batch-207 '{id}' fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-207 '{id}' must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-207 '{id}' must be annotated"
+        );
         // bench_spec is cfg(rust_perf_bench)-gated on PerfRule: at the
         // default posture the field compiles out and NotBenchable is
         // asserted by the without_spec pin instead.
@@ -5812,7 +5937,10 @@ fn batch211_rule_present_and_parse() {
             .is_ok(),
         "batch-211 fixtures must parse"
     );
-    assert!(e.context_notes.is_some(), "batch-211 rule must be annotated");
+    assert!(
+        e.context_notes.is_some(),
+        "batch-211 rule must be annotated"
+    );
     #[cfg(feature = "rust_perf_bench")]
     assert!(e.bench_spec.is_none(), "batch-211 rule is NotBenchable");
     let notes = e.context_notes.as_deref().unwrap_or_default();
@@ -5896,7 +6024,9 @@ fn batch219_rules_present_and_parse() {
 
 // The batch219 tail — extracted verbatim so the gate fn stays under the
 // line budget (the B209 pattern).
-fn batch219_split_adjoin_and_thermal_category(corpus: &crate::corpus::Corpus<crate::domains::rust_perf::RustPerfDomain>) {
+fn batch219_split_adjoin_and_thermal_category(
+    corpus: &crate::corpus::Corpus<crate::domains::rust_perf::RustPerfDomain>,
+) {
     // The split adjoin: the two prompt-cache rules cross-cite each other
     // (the authoring split kept one source + one measured figure, shared).
     let notes_of = |rid: &str| {
@@ -5910,10 +6040,14 @@ fn batch219_split_adjoin_and_thermal_category(corpus: &crate::corpus::Corpus<cra
             .unwrap_or_default()
             .to_string()
     };
-    assert!(notes_of("prompt-cache-canonical-interval-keys")
-        .contains("prompt-cache-rewind-states-min-gap-eviction"));
-    assert!(notes_of("prompt-cache-rewind-states-min-gap-eviction")
-        .contains("prompt-cache-canonical-interval-keys"));
+    assert!(
+        notes_of("prompt-cache-canonical-interval-keys")
+            .contains("prompt-cache-rewind-states-min-gap-eviction")
+    );
+    assert!(
+        notes_of("prompt-cache-rewind-states-min-gap-eviction")
+            .contains("prompt-cache-canonical-interval-keys")
+    );
     // The NEW 13th category rides this batch's thermal rule.
     assert!(corpus.entries.iter().any(|e| e.category == "thermal"));
 }
@@ -6081,7 +6215,10 @@ fn batch221_rule_present_and_parse() {
             .is_ok(),
         "batch-221 fixtures must parse"
     );
-    assert!(e.context_notes.is_some(), "batch-221 rule must be annotated");
+    assert!(
+        e.context_notes.is_some(),
+        "batch-221 rule must be annotated"
+    );
     #[cfg(feature = "rust_perf_bench")]
     assert!(e.bench_spec.is_none(), "batch-221 rule is NotBenchable");
     let notes = e.context_notes.as_deref().unwrap_or_default();
@@ -6133,7 +6270,10 @@ fn batch222_rules_present_and_parse() {
                 .is_ok(),
             "batch-222 {id} fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-222 {id} must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-222 {id} must be annotated"
+        );
         #[cfg(feature = "rust_perf_bench")]
         assert!(e.bench_spec.is_none(), "batch-222 {id} is NotBenchable");
     }
@@ -6381,14 +6521,10 @@ fn batch239_rules_present() {
 #[test]
 fn batch239_pseudocode_parses() {
     let corpus = build_perf_seed_corpus();
-    for e in corpus
-        .entries
-        .iter()
-        .filter(|e| {
-            e.rule_id == "partial-state-serialization-honors-rollback-contract-at-leaf-cache"
-                || e.rule_id == "cache-write-admission-requires-restoring-consumer"
-        })
-    {
+    for e in corpus.entries.iter().filter(|e| {
+        e.rule_id == "partial-state-serialization-honors-rollback-contract-at-leaf-cache"
+            || e.rule_id == "cache-write-admission-requires-restoring-consumer"
+    }) {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-239 rule {} must parse: {err}", e.rule_id));
@@ -6492,14 +6628,10 @@ fn batch241_rules_present() {
 #[test]
 fn batch241_pseudocode_parses() {
     let corpus = build_perf_seed_corpus();
-    for e in corpus
-        .entries
-        .iter()
-        .filter(|e| {
-            e.rule_id == "reuse-admission-threshold-must-equal-window-semantics"
-                || e.rule_id == "empty-slot-first-victim-order-save-before-overwrite"
-        })
-    {
+    for e in corpus.entries.iter().filter(|e| {
+        e.rule_id == "reuse-admission-threshold-must-equal-window-semantics"
+            || e.rule_id == "empty-slot-first-victim-order-save-before-overwrite"
+    }) {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-241 rule {} must parse: {err}", e.rule_id));
@@ -6541,7 +6673,10 @@ fn batch243_rules_present() {
         "simd-chunk",
         "Batch 243 / Plan 245.",
     ] {
-        assert!(notes.contains(needle), "batch-243 rule 1 missing needle: {needle}");
+        assert!(
+            notes.contains(needle),
+            "batch-243 rule 1 missing needle: {needle}"
+        );
     }
     let r2 = corpus
         .entries
@@ -6566,7 +6701,10 @@ fn batch243_rules_present() {
         "character_cache_matches_its_classifier",
         "Batch 243 / Plan 245.",
     ] {
-        assert!(notes.contains(needle), "batch-243 rule 2 missing needle: {needle}");
+        assert!(
+            notes.contains(needle),
+            "batch-243 rule 2 missing needle: {needle}"
+        );
     }
     // NEGATIVE (recorded, not landed): the batch's third lead
     // `transform-borrow-until-first-change` (rewriter.rs) was authored,
@@ -6576,7 +6714,10 @@ fn batch243_rules_present() {
     // + plan 245 T3; this test asserts the drop held (no such rule in the
     // corpus).
     assert!(
-        !corpus.entries.iter().any(|e| e.rule_id == "transform-borrow-until-first-change"),
+        !corpus
+            .entries
+            .iter()
+            .any(|e| e.rule_id == "transform-borrow-until-first-change"),
         "the dropped rule-3 lead must NOT be in the corpus"
     );
 }
@@ -6585,14 +6726,9 @@ fn batch243_rules_present() {
 #[test]
 fn batch243_pseudocode_parses() {
     let corpus = build_perf_seed_corpus();
-    for e in corpus
-        .entries
-        .iter()
-        .filter(|e| {
-            e.rule_id == "ascii-run-swar-block-skip"
-                || e.rule_id == "range-table-page-memoization"
-        })
-    {
+    for e in corpus.entries.iter().filter(|e| {
+        e.rule_id == "ascii-run-swar-block-skip" || e.rule_id == "range-table-page-memoization"
+    }) {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-243 rule {} must parse: {err}", e.rule_id));
@@ -6615,13 +6751,21 @@ fn batch244_pseudocode_parses() {
         "utf8-fast-lane-cold-diagnostics",
         "bufread-scan-in-buffer-scratch-fragment",
     ];
-    for e in corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())) {
+    for e in corpus
+        .entries
+        .iter()
+        .filter(|e| ids.contains(&e.rule_id.as_str()))
+    {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-244 rule {} must parse: {err}", e.rule_id));
     }
     assert_eq!(
-        corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())).count(),
+        corpus
+            .entries
+            .iter()
+            .filter(|e| ids.contains(&e.rule_id.as_str()))
+            .count(),
         10,
         "all ten batch-244 rules must be present"
     );
@@ -6645,7 +6789,10 @@ fn batch244_rules_present() {
     let notes_of = |id: &str| get(id).context_notes.as_deref().unwrap_or_default();
 
     // R1 — the alphabet law (layout)
-    assert_eq!(get("byte-class-equivalence-table-shrink").category, "layout");
+    assert_eq!(
+        get("byte-class-equivalence-table-shrink").category,
+        "layout"
+    );
     for needle in [
         "we collapse the alphabet of an automaton down into equivalence classes, where",
         "every byte in the same equivalence class never discriminates between a match or",
@@ -6678,7 +6825,10 @@ fn batch244_rules_present() {
     }
 
     // R3 — the common-prefix collapse (complexity)
-    assert_eq!(get("alternation-prefix-collapse-at-build").category, "complexity");
+    assert_eq!(
+        get("alternation-prefix-collapse-at-build").category,
+        "complexity"
+    );
     for needle in [
         "it's a good bet that it will be our fastest",
         "possible prefilter since single-substring search is so fast.",
@@ -6783,7 +6933,10 @@ fn batch244_rules_present() {
     }
 
     // R10 — the zero-copy BufRead drain (io)
-    assert_eq!(get("bufread-scan-in-buffer-scratch-fragment").category, "io");
+    assert_eq!(
+        get("bufread-scan-in-buffer-scratch-fragment").category,
+        "io"
+    );
     for needle in [
         "This saves read_until() from re-scanning a buffer we know",
         "contains no remaining terminators.",
@@ -6824,13 +6977,21 @@ fn batch245_pseudocode_parses() {
         "nonmax-sentinel-option-niche",
         "match-branch-cold-confirm",
     ];
-    for e in corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())) {
+    for e in corpus
+        .entries
+        .iter()
+        .filter(|e| ids.contains(&e.rule_id.as_str()))
+    {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-245 rule {} must parse: {err}", e.rule_id));
     }
     assert_eq!(
-        corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())).count(),
+        corpus
+            .entries
+            .iter()
+            .filter(|e| ids.contains(&e.rule_id.as_str()))
+            .count(),
         6,
         "all six batch-245 rules must be present"
     );
@@ -7014,13 +7175,21 @@ fn batch248_pseudocode_parses() {
         "inline-buffer-index-shift-over-drain",
         "shift-mask-adjacency-check",
     ];
-    for e in corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())) {
+    for e in corpus
+        .entries
+        .iter()
+        .filter(|e| ids.contains(&e.rule_id.as_str()))
+    {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-248 rule {} must parse: {err}", e.rule_id));
     }
     assert_eq!(
-        corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())).count(),
+        corpus
+            .entries
+            .iter()
+            .filter(|e| ids.contains(&e.rule_id.as_str()))
+            .count(),
         6,
         "all six batch-248 rules must be present"
     );
@@ -7046,7 +7215,10 @@ fn batch248_rules_present() {
     let notes_of = |id: &str| get(id).context_notes.as_deref().unwrap_or_default();
 
     // R1 — the two-level salted MPH (caching, benchable)
-    assert_eq!(get("minimal-perfect-hash-static-lookup").category, "caching");
+    assert_eq!(
+        get("minimal-perfect-hash-static-lookup").category,
+        "caching"
+    );
     for needle in [
         "The strategy is to hash twice. The first hash retrieves a salt value",
         "if x == fk(key_val) {",
@@ -7226,6 +7398,53 @@ fn batch248_pareto_benches() {
     }
 }
 
+/// SLOW (spawns a cargo build + run per rule in a temp crate): run
+/// explicitly with `cargo test -p riir-refine --lib --features
+/// rust_perf_bench batch250_pareto -- --ignored --nocapture` (release by
+/// the validator's own cargo invocation). x86_64-ONLY: the rule's two
+/// halves carry #[cfg(target_arch = "x86_64")], so on aarch64 the
+/// validator's generated crate compiles both arms to empty shims and the
+/// bench refuses — this test is cfg-gated to the arch that can measure it
+/// (plan 254 T6; the aarch64 posture reports a green zero BY ARCH LAW,
+/// disclosed here).
+#[cfg(all(feature = "rust_perf_bench", target_arch = "x86_64"))]
+#[test]
+#[ignore = "slow: spawns cargo build+run per rule (temp bench crates)"]
+fn batch250_pareto_benches() {
+    let corpus = build_perf_seed_corpus();
+    let validator = crate::domains::rust_perf::bench::PerfBenchValidator::new();
+    let rid = "avx2-tiled-accumulator-butterfly-epilogue";
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == rid)
+        .unwrap_or_else(|| panic!("batch-250 rule '{rid}' missing"));
+    let verdict = validator.validate(rid, e.bench_spec.as_ref());
+    assert!(!verdict.is_not_benchable(), "batch-250 '{rid}' has a spec");
+    let b = match &verdict {
+        crate::domains::rust_perf::bench::BenchVerdict::Pareto(p) => p,
+        crate::domains::rust_perf::bench::BenchVerdict::NotBenchable(n) => {
+            panic!("batch-250 '{rid}' unexpectedly NotBenchable: {n:?}")
+        }
+    };
+    assert!(b.ran, "batch-250 '{rid}' bench must run: {:?}", b.error);
+    println!(
+        "batch-250 {rid}: {:?} faster={} slower={} tie={}",
+        b.overall, b.faster_count, b.slower_count, b.tie_count
+    );
+    for r in &b.results {
+        println!(
+            "  n={}: {:?} speedup={:.2} allocs {} -> {}",
+            r.size, r.outcome, r.speedup, r.buggy_allocs, r.fixed_allocs
+        );
+    }
+    assert_eq!(
+        b.overall,
+        crate::domains::rust_perf::bench::BenchOverall::ParetoDominant,
+        "batch-250 '{rid}' must land ParetoDominant (a Dominated/Tied verdict drops or re-annotates the rule per the Batch-243/248 precedent)"
+    );
+}
+
 #[test]
 fn batch231_rider_landed_on_madvise_host() {
     // G1 for the Batch 231 rider (Plan 233): the macOS WILLNEED-prefetch
@@ -7271,9 +7490,18 @@ fn batch237_rules_parse_and_needles_landed() {
     // #1811) is gated by kernel_opt's own batch237 needle test.
     let corpus = build_perf_seed_corpus();
     for (id, category) in [
-        ("f16-to-f32-accumulator-lut-breaks-conversion-serialization", "simd"),
-        ("work-buffer-sized-by-execution-width-not-plan-tasks", "concurrency"),
-        ("discretionary-cache-growth-keys-on-spare-not-available", "io"),
+        (
+            "f16-to-f32-accumulator-lut-breaks-conversion-serialization",
+            "simd",
+        ),
+        (
+            "work-buffer-sized-by-execution-width-not-plan-tasks",
+            "concurrency",
+        ),
+        (
+            "discretionary-cache-growth-keys-on-spare-not-available",
+            "io",
+        ),
     ] {
         let e = corpus
             .entries
@@ -7287,7 +7515,10 @@ fn batch237_rules_parse_and_needles_landed() {
                 .is_ok(),
             "batch-237 {id} fixtures must parse"
         );
-        assert!(e.context_notes.is_some(), "batch-237 {id} must be annotated");
+        assert!(
+            e.context_notes.is_some(),
+            "batch-237 {id} must be annotated"
+        );
         #[cfg(feature = "rust_perf_bench")]
         assert!(e.bench_spec.is_none(), "batch-237 {id} is NotBenchable");
     }
@@ -7418,13 +7649,21 @@ fn batch246_pseudocode_parses() {
 fn batch250_slice1_pseudocode_parses() {
     let corpus = build_perf_seed_corpus();
     let ids = ["avx2-tiled-accumulator-butterfly-epilogue"];
-    for e in corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())) {
+    for e in corpus
+        .entries
+        .iter()
+        .filter(|e| ids.contains(&e.rule_id.as_str()))
+    {
         syn::parse_file(&e.buggy_code)
             .and_then(|_| syn::parse_file(&e.fixed_code))
             .unwrap_or_else(|err| panic!("batch-250 rule {} must parse: {err}", e.rule_id));
     }
     assert_eq!(
-        corpus.entries.iter().filter(|e| ids.contains(&e.rule_id.as_str())).count(),
+        corpus
+            .entries
+            .iter()
+            .filter(|e| ids.contains(&e.rule_id.as_str()))
+            .count(),
         1,
         "the batch-250 rust_perf rule must be present"
     );
@@ -7449,7 +7688,10 @@ fn batch250_slice1_rule_present() {
     };
     let notes_of = |id: &str| get(id).context_notes.as_deref().unwrap_or_default();
 
-    assert_eq!(get("avx2-tiled-accumulator-butterfly-epilogue").category, "simd");
+    assert_eq!(
+        get("avx2-tiled-accumulator-butterfly-epilogue").category,
+        "simd"
+    );
     for needle in [
         "auto hsum256_epi32 = [](const __m256i v) -> int32_t {",
         "s1_vals[t] = hsum256_epi32(acc[t]);",
