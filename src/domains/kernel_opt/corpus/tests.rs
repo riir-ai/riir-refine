@@ -18901,8 +18901,8 @@ fn batch249_slice3_rust_perf_riders() {
     let corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
     assert_eq!(
         corpus.entries.len(),
-        230,
-        "batch-249 slice-3 riders are count-neutral: rust_perf corpus STANDS at 230 (Batch 248)"
+        231,
+        "batch-249 slice-3 riders are count-neutral on their own landing (230 at Batch 248); Batch 250 slice 1 +1'd the corpus to 231 (the llama.cpp #30296 hadd-butterfly epilogue, Plan 254 / Research 285) — the riders' count-neutrality is unchanged"
     );
     let riders: [(&str, &[&str]); 3] = [
         (
@@ -18951,7 +18951,7 @@ fn batch249_slice3_rust_perf_riders() {
 
 #[test]
 fn batch250_slice1_riders_landed() {
-    // G1 for Batch 250 SLICE 1 (Plan 254 / Research 284): TWO
+    // G1 for Batch 250 SLICE 1 (Plan 254 / Research 285): TWO
     // count-neutral riders from the llama.cpp / prism envelope pool.
     // Every needle verbatim at the pins this claim (llama.cpp staged
     // 62318cd, tip 797de63b; prism 0082ac24a). The riders are
@@ -19027,7 +19027,7 @@ fn batch250_slice1_riders_landed() {
 
 #[test]
 fn batch250_slice1_rule_landed() {
-    // G1 for Batch 250 SLICE 1 (Plan 254 / Research 284): the pool's
+    // G1 for Batch 250 SLICE 1 (Plan 254 / Research 285): the pool's
     // strongest own-rule — the uzu M5 attention route-table retirement
     // (2c16e967, #973). Category D. Every needle verbatim at the pin
     // (uzu @ 5baa58b7).

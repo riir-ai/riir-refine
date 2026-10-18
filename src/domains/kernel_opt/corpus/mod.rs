@@ -2563,7 +2563,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-scope-by-barrier-cost-not-dispatch-count",
         ],
     ),
-    // D: Dispatch patterns (210 rules; Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
+    // D: Dispatch patterns (211 rules; Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2601,6 +2601,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // staging, 2 blocks/SM budget).
             "per-sequence-lazy-graph-capture-on-own-buffers",
             "one-barrier-a-tile-prefetch-occupancy-pair",
+            // Batch 250 slice 1 +1 (the uzu-ai envelope pool, Plan 254 /
+            // Research 285): the attention route-table retirement by
+            // measurement — the same evidence standard that ADDS a route
+            // (a measured crossover) RETIRES it when the crossover dies.
+            "attention-route-retirement-by-measurement",
             // Batch 249 slice 2 +8 (TensorFold own-rules): the launch-contract
             // pair, the cut-invariance oracle, the TP agreement protocol, and
             // the prompt-cache lifetime quartet.
