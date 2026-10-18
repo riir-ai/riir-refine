@@ -4,6 +4,8 @@
 **SLICE 1 LANDED 2026-10-18 ~03:5x +07 (zed-4090-1018):** T6 re-measure at the pool-growth condition — **+770 mid-claim** (`c7137bb31..origin/main`, window 1023 → 1793; non-merge 596; 344 kernel/src-touching); the T1/T2 read-agent reports (`.raw/b249/agentA/B_report.md`) adjudicated; **the rider set landed count-neutral** (A-10 → masked-in-place 2-bit face, A-15 → splitk train-acceptance face, B-5 → prompt-grid any-row era face; `batch249_slice1_riders_landed` needles + host-parse guards; kernel_opt lib 3145 ✓; retrieval kernel 100% / blended 90.6 ≥ floor — **floors HELD, no re-pin**; clippy clean). Record: `.research/281_batch249_slice1_rider_trio.md`. Work commit: see git log `batch 249 slice 1`. **REMAINING `- [ ]` rows (T3 dedup-adjudication of the own-rule set, T4/T5 authoring, T7/T8) carry to slice 2** — the strongest-8 lists are in the agent reports; the +770 delta pool re-enumeration rides slice 2's T0 re-fetch (staging pins are stale by the 1.0.12 wave).
 **SLICE 2 LANDED 2026-10-18 ~1x:xx +07 (zed-4090-1018, same claim):** T0 re-fetch — the pool did NOT move after slice 1 (pin `9ccf4727` stands; delta 770 / window 1793 confirmed). **+15 OWN rules landed** (`entries_gpu_101.rs`; D +8, A +3, N +2, K +1, B +1; 18 candidates → 15 after 3 folds — A-4+D-A-3 the max_total_threads contract, B-20+D-B-9 the parser monotone-cursor, D-A-1+D-B-10 the cut-invariance oracle); the two delta read agents' reports adjudicated (D-A: 75 kernel commits → 2 A− + 6 B+ + 5 B + 5 B− + 6 riders + 40 drops; D-B: 306 host commits → 4 A− + 11 B+ + 5 B + 5 B− + 4 riders + ~240 drops); T4 coordinator re-verification: 25 needle quotes + line numbers at the pin. Gates: `batch249_slice2_rules_landed` first-run PASS; kernel_opt lib 3145/0; default lib 2687; clippy -D ×3 postures; retrieval floors HELD no re-pin; freeze/score-bench NOT owed. Record: `.research/282_batch249_slice2_own_rules.md`. **REMAINING `- [ ]` (T7 docs tail — queue-snapshot row lands with this commit; T8 commit) + SLICE 3: the B+ remainder + the 10 delta riders** (the full staging list in Research 282 §What-remains). Incident disclosed: the entries_gpu_100 filename collision (B246's file; recovered — entries moved to 101, B246 content restored byte-exact); pre-existing HEAD break disclosed (bench_009 E0601 under --all-targets, not this batch's).
 
+**SLICE 3 LANDED 2026-10-18 ~0x:xx +07 (zed-4090-1018, same claim, refreshed `cb8ca0a0`):** the B+ REMAINDER +15 (`entries_gpu_102.rs`; A +1, B +2, D +2, E +3, F +1, K +1, L +1, N +4 — 9 originals from the read agents + 6 delta re-derivations; the delta agents' transcript-only reports re-derived at the pin by three read agents this session: four line drifts, zero text changes) + **9 count-neutral delta riders** (6 kernel_opt + 3 rust_perf; the 10th — row-independent-pass-block-bounded-scratch — honest NO-FACE, disclosed). Gates: batch249_slice3 gates first-run PASS; kernel_opt lib 3147/0; default lib 2687; clippy -D ×3 postures clean (incl. allow-only on the 2 pre-existing too_many_lines, disclosed Research 282); retrieval floors HELD (blended 90.6/94.2/95.3, kernel 100%) no re-pin; freeze/score-bench NOT owed. Record: `.research/283_batch249_slice3_bplus_remainder.md`. **THE BATCH IS COMPLETE — the pool is fully converted at `9ccf4727`: corpus 848 → 878 across three slices + 13 riders + 1 NO-FACE; the B-grade remainder stays unstaged (graded thin, the honest close).**
+
 ## Method (the B196 mega-intake shape)
 
 2 disjoint read subagents over commit slices (A: kernels/quant/attention/serving-exactness;
@@ -43,10 +45,13 @@ over new hosts; a graded-too-thin honest close is valid (corpus stands 848).
       **SLICE-2 DISCHARGED: Research 282 born-complete; AGENTS ×2 → 863 (slice-2
       leading + slice-1 retained); `.docs` Batch-249-slice-2 row; queue-snapshot
       row in the landing commit. T7's plan-COMPLETE tick awaits slice 3.**
-- [ ] T8. Commit `feat: batch 249 ...` + push (freeze/score-bench owed ONLY on a
+      **SLICE-3 DISCHARGED: Research 283 born-complete; AGENTS ×2 → 878;
+      `.docs` Batch-249-slice-3 row; queue-snapshot landing row in the
+      landing commit; plan ticked COMPLETE.**
+- [x] T8. Commit `feat: batch 249 ...` + push (freeze/score-bench owed ONLY on a
       clippy-corpus delta, P30). **SLICE-2 work commit = the `batch 249 slice 2`
       commit; slice 3 carries the B+ remainder + the 10 delta riders + its own
-      commit.**
+      commit. SLICE-3 DISCHARGED: the `batch 249 slice 3` commit.**
 
 ## Non-goals
 

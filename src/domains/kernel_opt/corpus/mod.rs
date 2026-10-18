@@ -1898,6 +1898,7 @@ mod entries_gpu_09;
 mod entries_gpu_10;
 mod entries_gpu_100;
 mod entries_gpu_101;
+mod entries_gpu_102;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2064,6 +2065,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_99::entries());
     entries.extend(entries_gpu_100::entries());
     entries.extend(entries_gpu_101::entries());
+    entries.extend(entries_gpu_102::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2113,8 +2115,12 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 ///
 /// # Plan 003 invariants (enforced by tests)
 ///
-/// - **Exhaustive:** every `rule_id` in the 863-rule corpus appears in exactly one
-///   category (no orphan rules, no duplicate appearances; re-pinned 863 at Batch
+/// - **Exhaustive:** every `rule_id` in the 878-rule corpus appears in exactly one
+///   category (no orphan rules, no duplicate appearances; re-pinned 878 at Batch
+///   249 slice 3 — the B+ remainder (+15: A +1, B +2, D +2, E +3, F +1, K +1,
+///   L +1, N +4) + 9 count-neutral delta riders on existing hosts (one honest
+///   NO-FACE: row-independent-pass-block-bounded-scratch — no delta commit
+///   genuinely matched); was 863 at Batch
 ///   249 slice 2 — the `TensorFold` drift-pool own-rule set; was 848 at Batch
 ///   246 (+1 L — the prism fork shard-alignment law, #363); 847 at Batch
 ///   242 — the mlx-serve GDN/QSA pack (+7 A, +3 B, +9 D, +2 E, +1 K, +1 L, +8 N:
@@ -2146,7 +2152,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (177 rules; Batch 249 slice 2 +3: the TensorFold own-rule set —
+    // A: Memory access patterns (178 rules; Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: room = free + reclaimable-without-writeback, bounded wait, loud refusal, pool fail-fast; the 70% residency bound stays a separate decision); Batch 249 slice 2 +3: the TensorFold own-rule set —
     // slot-keeping-scan-runs-in-place-publish-only-what-moved (the ownership-predicate alias + publish-what-moved split, #711) +
     // kept-state-copies-what-prompt-needs-not-window (the consumer-horizon state copy + the spare-pool arm, cuda_reuse) +
     // residency-hold-gated-ram-fraction-not-working-set (wired buffers are SYSTEM load: the bound is a RAM fraction, the working-set proxy measured-reverted); Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring; Batch 240 +1: the pad row-classification interior-memcpy law (llama.cpp #30526 — the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading); Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
@@ -2175,6 +2181,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            // Batch 249 slice 3 +1 (TensorFold B+ remainder, `9ccf4727` window):
+            // paced-load-room-counts-free-plus-reclaimable — the INTAKE gauge
+            // (free + reclaimable-without-writeback, bounded wait, loud
+            // refusal, pool fail-fast; 779c38cc) — composes with the
+            // residency-hold bound below (a separate decision point).
+            "paced-load-room-counts-free-plus-reclaimable",
             // Batch 249 slice 2 +3 (TensorFold own-rules, `9ccf4727` window):
             "slot-keeping-scan-runs-in-place-publish-only-what-moved",
             "kept-state-copies-what-prompt-needs-not-window",
@@ -2355,7 +2367,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "quad-lane-line-load-shuffle-word-exchange-ring",
         ],
     ),
-    // B: Compute patterns (92 rules; Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (the quadratic-rescan bound: monotone cursor + per-marker memos + the 8x⇒24x linearity oracle); Batch 242 +3: the mlx-serve pack — row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once; Batch 240 +1: the f16 upcast at foreign-graph translation (llama.cpp #29200 — upcast every non-f32 INPUT at the boundary, build the subgraph in f32, convert back to the caller's type at the end; the honest supports_op refusal + the tolerance-that-names-its-reason pair ride in-rule); the comment read 86 through B240 — it missed Batch 225's +1 (subbyte-preexpand-int8-tile-reuses-validated-mma-consumer), repaired here: was 87 at Batch 225; Batch 207 +1: the minifloat normal-code decode -- the fused
+    // B: Compute patterns (94 rules; Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652 — one switch to template instantiations, the NT=0 extent guard, bit-for-bit) + tokenizer-segment-memo-between-mutations (2d2930d8b — the (text, first) key, the 1024-byte floor, byte-LRU); Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (the quadratic-rescan bound: monotone cursor + per-marker memos + the 8x⇒24x linearity oracle); Batch 242 +3: the mlx-serve pack — row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once; Batch 240 +1: the f16 upcast at foreign-graph translation (llama.cpp #29200 — upcast every non-f32 INPUT at the boundary, build the subgraph in f32, convert back to the caller's type at the end; the honest supports_op refusal + the tolerance-that-names-its-reason pair ride in-rule); the comment read 86 through B240 — it missed Batch 225's +1 (subbyte-preexpand-int8-tile-reuses-validated-mma-consumer), repaired here: was 87 at Batch 225; Batch 207 +1: the minifloat normal-code decode -- the fused
     // one-shift + bias-difference form with the placed E2M1 decode (the 2^14 lift folded
     // into the caller's block scale) and the emulated-conversion admission predicate, all
     // one cubecl commit; Batch 205 +4: the in-place mma C-operand accumulation (the NVFP4 mmq alias face) + the partial-unroll register-spill cliff (the ROCm 63-VGPR repair) + the aux-sum add-site widening against exact cancellation + the TK-batched strided-loop prefetch (all four from the 10-06 unstaged pool); Batch 203 +1: the log-gate-diff decay no-clamp stability (the cute-triadic-GDN pool; the measured mid-chunk-reference refusal rides in-rule); Batch 201 +1: the pack11/pack12 encode arithmetic (the mlxfast MTP slice; the decode half is B181's); Batch 199 +1: the per-group epilogue
@@ -2377,6 +2389,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
+            // Batch 249 slice 3 +2 (TensorFold B+ remainder): the trip-count
+            // specialization switch (4e63c652 — one switch, branch-free mma
+            // bodies, the NT=0 extent guard) + the tokenizer segment memo
+            // (2d2930d8b — the (text, first) key + the amortization floor).
+            "nvfp4-row-tile-count-compile-time-switch-dispatch",
+            "tokenizer-segment-memo-between-mutations",
             // Batch 249 slice 2 +1 (TensorFold own-rules):
             "parser-backtrack-bounded-by-monotone-cursor",
             "dflash2-pack11-pack12-encode-arithmetic",
@@ -2543,7 +2561,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fusion-scope-by-barrier-cost-not-dispatch-count",
         ],
     ),
-    // D: Dispatch patterns (208 rules; Batch 249 slice 2 +8: the TensorFold own-rule set —
+    // D: Dispatch patterns (210 rules; Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2574,6 +2592,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 249 slice 3 +2 (TensorFold B+ remainder): per-sequence
+            // lazy graph capture on own buffers (3878785 — per-BINDING
+            // capture set, shape-keyed, epoch-invalidated) + the one-barrier
+            // tile / occupancy pair (f7336e8a — double-buffered whole-tile
+            // staging, 2 blocks/SM budget).
+            "per-sequence-lazy-graph-capture-on-own-buffers",
+            "one-barrier-a-tile-prefetch-occupancy-pair",
             // Batch 249 slice 2 +8 (TensorFold own-rules): the launch-contract
             // pair, the cut-invariance oracle, the TP agreement protocol, and
             // the prompt-cache lifetime quartet.
@@ -2797,6 +2822,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            // Batch 249 slice 3 +3 (TensorFold B+ remainder): per-stream
+            // by-value seg kernels, copies-not-shared-body (da676b0d), the
+            // fill-order SRPT-under-classes comparator (c4d07a54), the
+            // bounded-bypass admission queue (1eaa2c53).
+            "per-stream-buffers-by-value-seg-kernel-copies",
+            "fill-foreground-then-fewest-remaining-tokens",
+            "pool-wait-bounded-bypass-later-fitting-goes-first",
             "env-polarity-migration",
             "gather-signed-index-wrap-semantics",
             "spill-fragility-law-accumulator-regcap-cliff",
@@ -2885,6 +2917,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
         &[
+            // Batch 249 slice 3 +1 (TensorFold B+ remainder): the chain
+            // round's per-row key bound — the tail kernel's death kept
+            // bit-identical (64cc7b01, 7→5 dispatches).
+            "chain-rows-attend-own-keys-in-prefix-per-row-key-bound",
             "twisted-monoid-dependent-reduce-fusion",
             "online-softmax-streaming",
             "exp2-log2-base2",
@@ -3031,6 +3067,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
         &[
+            // Batch 249 slice 3 +1 (TensorFold B+ remainder): the AOT
+            // assume-less general pass + the int==1 constexpr carve-out
+            // (25690c3e + 462f1a15).
+            "triton-aot-variant-assume-less-fallback",
             // Batch 249 slice 2 +1 (TensorFold own-rules): the calibration
             // workload-shape law (verify-window on text, not the proposer's
             // own chain).
@@ -3058,6 +3098,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::ConvGemmLayout,
         "L: conv-as-GEMM + layout",
         &[
+            // Batch 249 slice 3 +1 (TensorFold B+ remainder): the canonical
+            // module key + disagree-refused table (b27726a4 — an override
+            // answers its module in any spelling; conflicting widths refuse).
+            "canonical-module-key-any-spelling-disagree-refused",
             "c-fragment-to-a-operand-register-repack",
             "ldmatrix-pair-x2-to-x4-adjacency",
             "conv-1x1-as-matmul",
@@ -3111,7 +3155,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (76 rules; Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry (test values must break block symmetry at the row pitch — mod 13 — and ship the must-fail twin) + kernel-contract-planted-gate-controls (every contract gate ships a planted broken control and must go red on it); Batch 242 +8: the mlx-serve pack — masked-in-place-field-prescale-other-operand (the GOAT: consume a packed field WITHOUT shifting it out of the word — mask in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern; portable CPU-exact, novel numerics) + decay-gate-dtype-one-point-zero-lock (a bf16 gate near one is exactly 1.0 and that head never forgets — the gate dtype follows the STATE under bf16 activations) + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor (the Issue-750-T3 lossy law's external validation #3) + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf; the stale 63 repaired at Batch 234 — the table held 65; now; Batch 215 +1: the HIP affine contraction-off row invariance (TensorFold — a quantized kernel that must bit-match a reference for EVERY row count builds with -ffp-contract=off so every row reduces the same way for any M + one fixed reduction order + one explicit RNE conversion with NaN preservation, verified by a comparator that rejects ANY single-bit mutation including signed zero; Rust spelling: the hazard inverts through explicit mul_add); Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
+    // N: dtype + alignment specialization (80 rules; Batch 249 slice 3 +4: dpas-block-scale-after-accumulate-not-in-operand (9f0d4c79 — the block scale rides the fp32 accumulator, raw codes feed as subnormals) + rank-partial-fp32-travel-round-once-at-epilogue (029bb341 — out = round(float(x) + y)) + hi-lo-split-pow2-prescale-clears-subnormal-floor (913cf15e — ASC 2^8) + cross-rank-reduce-pins-rank-order-not-ring-order (d309dad9 — ncclReduceScatter refused); Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry (test values must break block symmetry at the row pitch — mod 13 — and ship the must-fail twin) + kernel-contract-planted-gate-controls (every contract gate ships a planted broken control and must go red on it); Batch 242 +8: the mlx-serve pack — masked-in-place-field-prescale-other-operand (the GOAT: consume a packed field WITHOUT shifting it out of the word — mask in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern; portable CPU-exact, novel numerics) + decay-gate-dtype-one-point-zero-lock (a bf16 gate near one is exactly 1.0 and that head never forgets — the gate dtype follows the STATE under bf16 activations) + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor (the Issue-750-T3 lossy law's external validation #3) + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf; the stale 63 repaired at Batch 234 — the table held 65; now; Batch 215 +1: the HIP affine contraction-off row invariance (TensorFold — a quantized kernel that must bit-match a reference for EVERY row count builds with -ffp-contract=off so every row reduces the same way for any M + one fixed reduction order + one explicit RNE conversion with NaN preservation, verified by a comparator that rejects ANY single-bit mutation including signed zero; Rust spelling: the hazard inverts through explicit mul_add); Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
     // quantized stored-bytes rule (hold the wire bytes, never widened
     // patterns -- the storage-form pole beside B176's kernel-path axis);
     // Batch 198 +1: the tied-Hadamard output fold at load (the versioned metadata contract); Batch 195 +1: the enumerable-domain bit-identity admission gate; Batch 194 +1: the FP4 gather-LUT replicated index width; was 53; Batch 192 +1: the dot
@@ -3125,6 +3169,19 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 249 slice 3 +4 (TensorFold B+ remainder, `9ccf4727` window):
+            // dpas-block-scale-after-accumulate-not-in-operand (9f0d4c79 —
+            // the scale rides the fp32 accumulator, never the operand),
+            // rank-partial-fp32-travel-round-once-at-epilogue (029bb341 —
+            // widen once, add fp32, round once),
+            // hi-lo-split-pow2-prescale-clears-subnormal-floor (913cf15e —
+            // the residual clears the subnormal floor),
+            // cross-rank-reduce-pins-rank-order-not-ring-order (d309dad9 —
+            // the collective's ring order is not a contract).
+            "dpas-block-scale-after-accumulate-not-in-operand",
+            "rank-partial-fp32-travel-round-once-at-epilogue",
+            "hi-lo-split-pow2-prescale-clears-subnormal-floor",
+            "cross-rank-reduce-pins-rank-order-not-ring-order",
             // Batch 249 slice 2 +2 (TensorFold own-rules): the check-value
             // modulus law + the planted-gate-controls law.
             "layout-check-values-mod-13-break-block-symmetry",
