@@ -397,7 +397,7 @@ const FIXTURE_SEED: u64 = 0x0249_00F1_6C00_0007;
 
 // ── main ───────────────────────────────────────────────────────────────
 
-fn main() {
+pub fn main() {
     say("── bench_009: the Batch-237 staged x86 F16C GOAT (plan 249 / Bench 118) ──");
     // the ISA gate: the staged lane is x86-F16C-only (refuse loud, never a
     // green zero — the aarch64 posture stays NotBenchable in the corpus)
@@ -649,6 +649,11 @@ fn main() {
     }
 }
 
+} // mod x86_goat
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn main() {
+    x86_goat::main();
 }
 
 #[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
