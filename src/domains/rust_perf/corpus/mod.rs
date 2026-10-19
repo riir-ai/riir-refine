@@ -9,7 +9,7 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 232 entries across 13 categories as of Batch 255 (2026-10-19, Plan 259 /
+//! 235 entries across 13 categories as of Batch 256 (2026-10-19, Plan 260 /
 //! Research 290: +1 caching — `slru-probation-protected-promote-on-second-touch`,
 //! the llama.cpp `MoE` host-cache law @ `33d6135c` #30637 — a recency cache of
 //! EXPENSIVE entries runs a 50/50 SLRU, not one plain LRU list: first touch
@@ -570,13 +570,14 @@ mod entries_32;
 mod entries_33;
 mod entries_34;
 mod entries_35;
+mod entries_36;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 232 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 235 entries
 /// (Batch 255, 2026-10-19, Plan 259 / Research 290: +1 caching — the llama.cpp
 /// #30637 `MoE` SLRU host-cache law, `NotBenchable` annotated; prior — Batch 250
 /// slice 1, Plan 254 / Research 285: +1 simd, the hadd butterfly epilogue
@@ -677,5 +678,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_33::entries());
     entries.extend(entries_34::entries());
     entries.extend(entries_35::entries());
+    entries.extend(entries_36::entries());
     Corpus::new(entries)
 }
