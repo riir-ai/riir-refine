@@ -738,7 +738,7 @@ mod tests {
         assert_eq!(f[0].advice, super::ADVICE);
     }
 
-    /// The guarded (corpus fixed) form stays silent — the components()
+    /// The guarded (corpus fixed) form stays silent — the `components()`
     /// gate suppresses fn-wide.
     #[test]
     fn components_guard_suppresses() {
@@ -792,7 +792,7 @@ mod tests {
         assert_eq!(f.len(), 1, "to_string keeps the origin: {f:?}");
     }
 
-    /// Field origins stay silent — the read_dir iteration idiom is the
+    /// Field origins stay silent — the `read_dir` iteration idiom is the
     /// dominant benign shape (the honest NO).
     #[test]
     fn field_origin_silent() {
