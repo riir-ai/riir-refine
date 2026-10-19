@@ -1,10 +1,10 @@
 //! Entries slice 106 — Batch 251, the Yukon conversion (Plan 255 /
 //! Research 284): 8 `kernel_opt` own-rules from the yukon-engine clone
 //! (`Layr-Labs/cudafast-bonsai2-9b-engine` @ `36c9536`, MIT) — the GB10
-//! (sm_121) J=16 / J=128 MMQ kernels and the decode-layout lane:
+//! (`sm_121`) J=16 / J=128 MMQ kernels and the decode-layout lane:
 //! magic-anchor int/float epilogue algebra, the no-smem J=16 staging
 //! pole, the pure-permuted decode-layout registry, the value-exact
-//! PTQ1_0 transcode, the signed-trit single-mma fold, mbarriers in
+//! `PTQ1_0` transcode, the signed-trit single-mma fold, mbarriers in
 //! structural smem padding, aligned-word + funnel-shift payload loads,
 //! and stacked gate|up single-launch split stores.
 //!

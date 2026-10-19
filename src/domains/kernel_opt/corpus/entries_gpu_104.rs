@@ -1,21 +1,21 @@
 //! Entries slice 104 — Batch 250 slice 2 (Plan 254 / Research 286): the
 //! uzu / llama.cpp envelope pool, slice 2 of 2 — the six remaining
-//! kernel_opt own-rules, one per source commit, each quote verbatim at
+//! `kernel_opt` own-rules, one per source commit, each quote verbatim at
 //! its pin (llama.cpp local clone at 5ecbe1ac; the uzu vendor twin).
 //!
 //! - `moe-weights-load-time-soa-accumulation-order-pinned` (B) — SYCL
-//!   Q8_0 MoE load-time SoA + the hazard face (e707790c #29337 +
+//!   `Q8_0` `MoE` load-time `SoA` + the hazard face (e707790c #29337 +
 //!   f74e2fa6 #30374).
-//! - `rms-norm-registers-carry-x-between-passes` (B) — HIP/CUDA rms_norm
+//! - `rms-norm-registers-carry-x-between-passes` (B) — HIP/CUDA `rms_norm`
 //!   float4 loads, x in registers across the barrier (623c1639 #29720).
 //! - `kquant-dequant-work-item-geometry-wide-stores` (B) — SYCL
-//!   q4_K/q5_K per-block work-item geometry (13de11e7 #29696).
+//!   `q4_K/q5_K` per-block work-item geometry (13de11e7 #29696).
 //! - `mmvq-low-bit-vdr-two-rows-share-q8-loads` (B-) — the MMVQ low-bit
 //!   dequant/dot rework (2744e48d #30517).
 //! - `moe-group-selection-fused-into-topk` (B-) — grouped-experts
 //!   group-selection fused into the topk kernel (f2f667b0 #29181).
 //! - `attention-row-mask-bitmap-per-row-not-per-block` (B) — uzu
-//!   muse_glimmer int8 attention packed row masks + the head_dim-derived
+//!   `muse_glimmer` int8 attention packed row masks + the head_dim-derived
 //!   row geometry (597e5e50 #971).
 
 use super::KernelRule;

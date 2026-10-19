@@ -11,8 +11,8 @@
 //!   at every point the predicate used to split), the special cases
 //!   are DELETED together, not kept as folklore.
 //!
-//! Slice 2 (next window) lands the pool's remaining 6 kernel_opt
-//! own-rules into entries_gpu_104 + the 4 platform-watch disclosures.
+//! Slice 2 (next window) lands the pool's remaining 6 `kernel_opt`
+//! own-rules into `entries_gpu_104` + the 4 platform-watch disclosures.
 
 use super::KernelRule;
 

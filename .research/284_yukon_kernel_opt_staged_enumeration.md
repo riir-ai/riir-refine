@@ -1,6 +1,6 @@
 # 284 — Yukon engine kernel_opt STAGED ENUMERATION — Layr-Labs/cudafast-bonsai2-9b-engine @ 36c9536
 
-**Status:** RECORD — staged candidate enumeration for the post-B250 conversion claimant (zero-cargo/zero-GPU session under the plan-436 chain window; authoring done, gates owed at conversion).
+**Status:** RECORD — staged candidate enumeration; CONVERTED as Batch 251, 2026-10-19 (see the addendum at the end).
 
 ## Provenance
 
@@ -126,3 +126,14 @@ kernel.cuh:498-505 + :530 (C1); gated_delta_net.cu:20 TODO (threat-intel row con
 - Issue 168 stays deferred-on-B250 (unchanged).
 - The gates + freeze/score-bench at conversion (zero-cargo window lifts or a bounded window is approved).
 - The eager-GDN L8 bench in ai-971 stays parked for a GPU window (this note's candidate 1 IS that L8 class — the bench and the corpus rule share a source).
+
+
+## CONVERSION ADDENDUM (2026-10-19 — Batch 251 landed, Plan 255)
+
+- **Landed:** 16 own rules + 21 count-neutral rider faces; corpus 885→901 (A 178→183, B 100→103, C 55→57, D 211→212, G 38→39, L 23→26, N 80→81; M stands 21). Slice files `entries_gpu_105.rs` (Group 1) + `entries_gpu_106.rs` (Group 3); riders on 17 hosts. All quotes re-verified at the pin by the landing agents + 12 coordinator spot-checks char-for-char.
+- **Candidate 15 DROPPED** per its own drop-or-rider clause — no perf axis (toolchain-hazard annotation class, two in-tree instances); the drop is NEGATIVE-assert pinned in `batch251_rules_landed`.
+- **The note's category-spread line (A ×4) was a typo against its own rule list (A ×5 — candidate 28 is A)**; the per-candidate assignments governed and the measured truth is pinned.
+- **Line-number corrections folded in-rule:** candidate 2's GDN_LAZY_NOFINAL flag vs the GDN_LAZY_SLOT0_MARK0/1 constants split + the FNV naming precision; candidate 26's `mmq-ptq1-j16.cuh:10-12` → :10-11 (line 12 is a bare comment); the C1/C2 riders resolved `kernel.cuh` → `gated_delta_net_kernel.cuh` (the file does not exist under that name in this fork); several ±1-line drifts (mmq-pq2-j16 :241-243/:275-276, mmq-j16-dl :796/:806/:809, mmvq-ptq1_0 :12-15, dflash2_conv_equivalence.cpp :1-7) corrected at landing.
+- **NotBenchable refinement at landing:** 4 of the 16 own rules are CPU-exactness-testable and say so instead (magic-anchor, ptq1-transcode, signed-trit-remap, funnelshift — the needle gates now pin their real posture); 12 carry the standard no-host NotBenchable.
+- **Gates:** batch251 needle gates 2/2 first-run; kernel_opt lib 3161/0; default lib 2696/0; clippy −D ×3 clean; retrieval floors HELD (kernel 100%, blended 90.6) no re-pin; freeze/score-bench NOT owed (kernel_opt-only, the P30/B250 precedent).
+- **En-route repairs of pre-existing lane debris** swept by this batch's clippy gate: 10 doc_markdown residues in B250's entries_gpu_103/104, the batch250_slice1_riders items_after_statements use, the batch19/batch22 full-string concept asserts → the Batch-199 prefix-assert convention, slice-A's multi-line literals → the house single-line convention.

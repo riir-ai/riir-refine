@@ -1,6 +1,6 @@
 # Plan 255 — Batch 251: the Yukon kernel_opt conversion (Research 284)
 
-**Status:** IN PROGRESS — claimed by zed-m3-idle/M3, 2026-10-19 ~07:33 +07, expires 2026-10-21 ~07:33 +07 (the push is the arbiter; 48 h expiry per protocol).
+**Status:** LANDED 2026-10-19 — 16 own rules + 21 rider faces, corpus 885→901; gates all green (batch251 needles 2/2 first-run, kernel_opt lib 3161/0, default lib 2696/0, clippy −D ×3 clean, retrieval floors HELD 100%/90.6); freeze/score-bench NOT owed (kernel_opt-only, P30). Claimed by zed-m3-idle/M3, 2026-10-19 ~07:33 +07 (the push is the arbiter).
 
 Convert the staged Yukon enumeration (Research 284 — Layr-Labs/cudafast-bonsai2-9b-engine @ `36c9536`, MIT, GumbiiDigital; the riir-train fork's `licenses/yukon-cudafast` carries the notice) into Batch 251: **16 own rules** (17 staged minus the thin B− M candidate 15 `restrict-local-alias-not-template-formal-cudafe-host-stub`, DROPPED at conversion adjudication — no perf axis, toolchain-hazard annotation class, two in-tree instances, the research note's own drop-or-rider clause) + **~21 count-neutral rider faces** on 17 host entries. Target: corpus 885 → 901.
 
@@ -19,15 +19,16 @@ Clone: `.raw/yukon-engine/` re-cloned this session, detached HEAD verified `36c9
 
 ## Tasks
 
-- [ ] T0 claim row + this plan committed & pushed BEFORE authoring (the push is the arbiter)
-- [ ] T1 Slice A: candidates 1–8 → `entries_gpu_105.rs`, every quote re-verified at the pin (agent A)
-- [ ] T2 Slice B: candidates 23–30 → `entries_gpu_106.rs`, every quote re-verified at the pin (agent B)
-- [ ] T3 Rider slice C1: 11 faces on entries_gpu_01/07/20/27/39, quotes re-verified (agent C1)
-- [ ] T4 Rider slice C2: 10 faces on entries_gpu_02/09/18/22/23/36/53/99, quotes re-verified (agent C2)
-- [ ] T5 Coordinator spot-checks: ~8 load-bearing quotes re-verified char-for-char by the coordinator (the B223 law)
-- [ ] T6 mod.rs wiring: mod decls 105+106 + entries() extends + KERNEL_CATEGORIES additions
-- [ ] T7 Count pins: tests.rs total 885→901 (×4 sites: L114, L5505, L5516, L9624) + per-category pins (A/B/C/D/G/L/N) + mod.rs doc count + AGENTS.md kernel_opt bullet + .docs/11_domains/kernel_opt.md
-- [ ] T8 Batch gates: `batch251_rules_landed` (16 rule needle sets) + `batch251_riders_landed` (17 host faces) — needles verbatim at the pin
-- [ ] T9 Gates: kernel_opt+latent_retrieval retrieval floors re-measure (/tmp target) + full kernel_opt lib + default lib + clippy −D ×3 postures; freeze/score-bench NOT owed (kernel_opt-only, the P30/B250 precedent)
-- [ ] T10 Docs: AGENTS.md kernel_opt Role bullet (B251 row) + queue-snapshot landing row + plan [x] + research-note addendum (284 §Conversion: landed counts + the candidate-15 drop + the note's spread-typo correction)
-- [ ] T11 Commit `feat: batch 251: ...` + push; `.raw/yukon-engine` removed at close (the ephemeral-clone law)
+- [x] T0 claim row + this plan committed & pushed BEFORE authoring (the push is the arbiter)
+- [x] T1 Slice A: candidates 1–8 → `entries_gpu_105.rs`, every quote re-verified at the pin (agent A; 2 research-note corrections folded in-rule: NOFINAL flag vs SLOT0 mark constants, the FNV naming; multi-line literals normalized to the house single-line convention at wiring)
+- [x] T2 Slice B: candidates 23–30 → `entries_gpu_106.rs`, every quote re-verified at the pin (agent B; correction `mmq-ptq1-j16.cuh:10-12`→:10-11; committed `dbbfa518`)
+- [x] T3 Rider slice C1: 8 faces on entries_gpu_01/07/20/27/39 (the brief under-allocated — faces 21/32/31 moved to the coordinator's own pass on gpu_01)
+- [x] T4 Rider slice C2: 10 faces on entries_gpu_02/09/18/22/23/36/53/99 (39/39 quotes script-verified)
+- [x] T4b Coordinator's own rider pass: faces 21+32 (fuse-gate-up) + 31 (fuse-residual) on entries_gpu_01 — quotes hand-verified at the pin
+- [x] T5 Coordinator spot-checks: 12 load-bearing quotes re-verified char-for-char (lane-permute fold, magic anchor, lazy publish, funnelshift, SGN remap, sticky set, broadcast shuffles, k-way merge, decode-back atomicOr, host/device arm)
+- [x] T6 mod.rs wiring: mod decls 105+106 + entries() extends + KERNEL_CATEGORIES additions (7 slices + count comments; the L comment's stale 22 repaired to the table's 23→26)
+- [x] T7 Count pins: tests.rs total 885→901 (4 multi-line sites + 4 single-line batch-history sites) + 7 per-category pins + router.rs experts-cover pin + AGENTS.md kernel_opt bullet + .docs/11_domains/kernel_opt.md record
+- [x] T8 Batch gates: `batch251_rules_landed` (16 rule needle sets + the drop NEGATIVE assert) + `batch251_riders_landed` (17 host faces) — FIRST-RUN PASS after 5 needle-text corrections (the NotBenchable assumption wrong for the 4 CPU-exact rules: magic-anchor, ptq1, sgn, funnelshift)
+- [x] T9 Gates: retrieval floors re-measure (/tmp target) kernel 100% / blended 90.6 HELD no re-pin + kernel_opt lib 3161/0 + default lib 2696/0 + clippy −D ×3 postures clean; freeze/score-bench NOT owed (kernel_opt-only, P30)
+- [x] T10 Docs: AGENTS.md kernel_opt Role bullet + queue-snapshot landing row + this plan + Research-284 addendum
+- [x] T11 Commit `feat: batch 251: ...` + push; `.raw/yukon-engine` removed at close (the ephemeral-clone law)
