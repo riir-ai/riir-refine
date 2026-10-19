@@ -1,6 +1,6 @@
 # Plan 256 — Batch 252: the #369 prism verification kernel + the upstream leads conversion
 
-**Status:** IN FLIGHT 2026-10-19 — claimed by shikuwa/4090 idle loop, 2026-10-19 ~14:1x +07, expires 2026-10-21T14:1x+07 (the push is the arbiter). Sources staged by the 10-19 ~08:1x intake row; every quote read at the local pins this session.
+**Status:** LANDED 2026-10-19 — +2 own rules + 5 rider/second-instance faces + 1 watch disclosure, corpus 901→903 (C 57→58, F 20→21); gates all green (batch252 needles 2/2 FIRST-RUN, kernel_opt lib 3163/0, default lib 2696/0, clippy −D ×3 clean, retrieval HELD 100%/90.6); freeze/score-bench NOT owed (kernel_opt-only, P30). Claimed by shikuwa/4090 idle loop, 2026-10-19 ~14:1x +07, expires 2026-10-21T14:1x+07 (the push is the arbiter). Sources staged by the 10-19 ~08:1x intake row; every quote read at the local pins this session.
 
 Batch 252 converts the standing watch's staged leads (`.distill/001_mining_queue_snapshot.md` intake row 2026-10-19 ~08:1x) into corpus: **+2 own rules + 5 count-neutral rider/second-instance faces + 1 watch disclosure**. Target: corpus kernel_opt 901 → 903. GPU-window note: StartLux stack resident+idle (issue 635 lane, owner-gated stop) — this batch is CPU-only (corpus authoring + lib tests + clippy), no conflict.
 
@@ -26,13 +26,13 @@ Batch 252 converts the standing watch's staged leads (`.distill/001_mining_queue
 
 ## Tasks
 
-- [ ] T0 claim + this plan committed & pushed BEFORE authoring (the push is the arbiter)
-- [ ] T1 Dedup greps (DONE at plan time): oob/bounds families (no owner of the loop-bound law), hc_post/sigmoid-chain (no owner), swizzle stage (entries_gpu_41 host identified), window SMEM (B251 verify-window host), template arms (B251 gate-activation host)
-- [ ] T2 Own-rule drafts: 2 parallel subagents (one per rule) from the read sources; coordinator re-verifies every quote at the pins
-- [ ] T3 `entries_gpu_107.rs` authored (2 rules + module doc) + mod.rs wiring (mod decl + entries() extend)
-- [ ] T4 Riders R1–R5 appended to the four host entries (textual RIDER/SECOND-INSTANCE blocks, batch-tagged)
-- [ ] T5 Gates: `batch252_rules_landed` (needle sets + NON-OOP negative assert per house form) + `batch252_riders_landed` (5 hosts) in corpus/tests.rs
-- [ ] T6 Count pins: tests.rs total 901→903 + C 57→58 + F 10→11 (per-category pins) + router experts pin if category-count-keyed + KERNEL_CATEGORIES comment
-- [ ] T7 Gates run: kernel_opt lib + default lib + clippy −D ×3 postures + retrieval floors re-measure (/tmp target dir); freeze/score-bench NOT owed (kernel_opt-only, P30 precedent)
-- [ ] T8 Docs: Research 287 (`.research/287_batch252_prism369_upstream_leads.md`) + AGENTS.md kernel_opt bullet + `.docs/11_domains/kernel_opt.md` batch row + queue-snapshot landing row
-- [ ] T9 Commit `feat: batch 252: ...` + push; vendor clones stay (league-owned, not ephemeral)
+- [x] T0 claim + this plan committed & pushed BEFORE authoring (the push is the arbiter) — `90015e92`
+- [x] T1 Dedup greps (DONE at plan time): oob/bounds families (no owner of the loop-bound law), hc_post/sigmoid-chain (no owner), swizzle stage (entries_gpu_41 host identified), window SMEM (B251 verify-window host), template arms (B251 gate-activation host)
+- [x] T2 Own-rule drafts: 2 parallel subagents (one per rule) from the read sources; coordinator re-verifies every quote at the pins (corrections: fattn cite :955→:958-959; l8.cuh spans :9-10→:10-11, :11-19→:13-22, :37→:53, :72-73→:78-79, :93→:99, :126-134→:124-132, :137→:132; the 1/hc + 2.0f chain shape verified at the Vulkan origin #29520 test builder, not assumed)
+- [x] T3 `entries_gpu_107.rs` authored (2 rules + module doc) + mod.rs wiring (mod decl + entries() extend + C/F category-list additions)
+- [x] T4 Riders R1–R5 appended to the four host entries (R1 gpu_41 cp.async 4-byte swizzle stage; R2 gpu_105 fixed-token-window SMEM-by-MAX; R3 gpu_105 template-arm specialization; R4 gpu_105 lane-permuted SECOND INSTANCE; R5 gpu_105 host-dispatch SECOND INSTANCE) — every line cite re-verified at the pin
+- [x] T5 Gates: `batch252_rules_landed` (2 needle sets + the #28851 WATCH negative assert) + `batch252_riders_landed` (5 hosts) in corpus/tests.rs — FIRST-RUN PASS
+- [x] T6 Count pins: 18 sites in tests.rs 901→903 (each annotated) + C 57→58 + F 20→21 + router.rs:472 experts pin + mod.rs C/F count comments (F was STALE at 19 vs the table's 20 — repaired to 21 with the note)
+- [x] T7 Gates run: kernel_opt lib 3163/0 + default lib 2696/0 + clippy −D ×3 postures clean + retrieval floors HELD (kernel 100%, blended 90.6%, no re-pin); freeze/score-bench NOT owed (kernel_opt-only, P30 precedent)
+- [x] T8 Docs: Research 287 + AGENTS.md kernel_opt bullet + `.docs/11_domains/kernel_opt.md` batch row + queue-snapshot landing row
+- [x] T9 Commit `feat: batch 252: ...` + push; vendor clones stay (league-owned, not ephemeral)

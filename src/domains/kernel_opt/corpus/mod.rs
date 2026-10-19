@@ -1903,6 +1903,7 @@ mod entries_gpu_103;
 mod entries_gpu_104;
 mod entries_gpu_105;
 mod entries_gpu_106;
+mod entries_gpu_107;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2074,6 +2075,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_104::entries());
     entries.extend(entries_gpu_105::entries());
     entries.extend(entries_gpu_106::entries());
+    entries.extend(entries_gpu_107::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2517,7 +2519,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "signed-trit-remap-single-mma-bias-fold",
         ],
     ),
-    // C: Fusion patterns (57 rules; Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
+    // C: Fusion patterns (58 rules; Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
     // barrier cost (lithos-metal — the boundary decided on MEASURED barrier
     // cost, never dispatch count; in-kernel global barriers priced at
     // dispatch-boundary cost on M3 Pro/M5 Pro → layer-wise); Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
@@ -2532,6 +2534,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         "C: fusion",
         &[
             "accept-packet-one-launch",
+            // Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm
+            // (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the
+            // SCALE→SIGMOID→SCALE chain into the consumer as a `gated`
+            // template arm reading the RAW weights via src[0]; graph-pattern
+            // admission + zero-bias guard).
+            "sigmoid-gate-chain-folded-into-consumer-template-arm",
             "producer-folds-single-consumer-family",
             "fuse-norm-act-linear",
             "fuse-quant-matmul",
@@ -2947,7 +2955,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "tree-attention-partial-share-tail-walk-ordered-merge",
         ],
     ),
-    // F: Flash-attention tiling (19 rules; Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
+    // F: Flash-attention tiling (21 rules; Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile (fattn-tile #30572 @ 5aeac37a — the oob_check=false fast arm's loop bound is INCLUSIVE of the last fully-covered tile, `<` → `<=`, the one-character silent-perf-tax repair); Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
     // bit-visibility block-skip tree attention with its measured
     // dispatch cross-over)
     (
@@ -2976,6 +2984,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "fixed-ref-softmax-decode-walk",
             "ancestor-mask-bit-visibility-block-skip-tree-attention",
             "too-few-channels-token-tile-broadcast-ownership",
+            // Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile
+            // (fattn-tile #30572 @ 5aeac37a — the oob_check=false fast arm's
+            // bound takes the last fully-covered tile, `<` → `<=`).
+            "oob-free-loop-inclusive-of-last-full-tile",
             "paged-page-pair-deferred-permutation-bitmask",
         ],
     ),
