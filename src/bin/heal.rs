@@ -9787,6 +9787,15 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
     corpus_bodies.extend(doc_blobs);
     let fix_set = compiled_fix_set();
     let other_domains = other_domain_rule_ids();
+    // Issue 168 — the ahead-of-pin registry rides the same compiled-domain
+    // truth as the corpus itself: keys the registry carries are a known-good
+    // posture, not the renamed/removed drift (all five Batch-230 keys
+    // probe-verified at the isolated +1.99.0 driver, absent at the pinned
+    // 1.98.1).
+    #[cfg(feature = "clippy_lints")]
+    let ahead_of_pin: &[&str] = riir_refine::domains::clippy_lints::lint_level::AHEAD_OF_PIN_1_99;
+    #[cfg(not(feature = "clippy_lints"))]
+    let ahead_of_pin: &[&str] = &[];
 
     let (histogram, provenance) = resolve_corpus_repo_root()
         .map(|root| load_fired_histogram(&root))
@@ -9807,6 +9816,7 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
         default_histogram_provenance: default_provenance,
         corpus_blobs: &corpus_bodies,
         corpus_docs_scanned: docs_scanned,
+        ahead_of_pin,
     })
 }
 

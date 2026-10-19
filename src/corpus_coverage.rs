@@ -523,6 +523,12 @@ pub struct CoverageInputs<'a> {
     /// (the source tree was locatable beside this binary). `false` means
     /// the scan is pattern-literals-only — disclosed, never a silent zero.
     pub corpus_docs_scanned: bool,
+    /// Lint names the INSTALLED driver cannot know but a SHIPPED newer
+    /// clippy does (the Batch-230 `AHEAD_OF_PIN` registry): corpus rules keyed
+    /// to these land in [`CoverageReport::corpus_rules_ahead_of_pin`], a
+    /// known-good posture, NOT the renamed/removed drift. Empty is the
+    /// honest answer when the domain supplying the registry is compiled out.
+    pub ahead_of_pin: &'a [&'a str],
 }
 
 /// The report.
@@ -545,8 +551,18 @@ pub struct CoverageReport {
     pub collides_other_domain: Vec<(String, String)>,
     /// Corpus rules naming a lint the installed driver does not ship —
     /// the opposite drift (a renamed/removed lint), reported so the
-    /// coverage number is not read as symmetric.
+    /// coverage number is not read as symmetric. Keys on the inputs'
+    /// `ahead_of_pin` registry are EXEMPT — they partition into
+    /// [`CoverageReport::corpus_rules_ahead_of_pin`] instead (probe-verified
+    /// 2026-10-19: all five Batch-230 keys ship at clippy 1.99.0; none at
+    /// the pinned 1.98.1 — ahead-of-pin, not renamed/removed).
     pub corpus_rules_not_in_surface: Vec<String>,
+    /// Corpus rules keyed AHEAD-OF-PIN — known at a shipped newer clippy,
+    /// absent from the installed driver, verified against the isolated
+    /// `+<ver>` toolchain by the lint-level gate. They never rank on the
+    /// pinned driver until the bump; a disclosure, never a finding and
+    /// never silence.
+    pub corpus_rules_ahead_of_pin: Vec<String>,
     pub uncovered: Vec<CoverageRow>,
     pub group_debt: Vec<GroupDebt>,
     pub histogram_provenance: Option<HistogramProvenance>,
@@ -661,6 +677,7 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
         default_histogram_provenance,
         corpus_blobs,
         corpus_docs_scanned,
+        ahead_of_pin,
     } = inputs;
 
     let corpus: BTreeSet<String> = corpus_rules.iter().map(|r| normalize(r)).collect();
@@ -772,9 +789,19 @@ pub fn coverage(inputs: &CoverageInputs<'_>) -> CoverageReport {
 
     // The reverse drift: a corpus rule the installed clippy no longer ships
     // (renamed or removed). Without it the coverage fraction reads as if
-    // every corpus rule were still live.
+    // every corpus rule were still live. Keys the inputs register as
+    // ahead-of-pin are NOT drift — they ship in a newer clippy and wait for
+    // the toolchain bump; they disclose in their own bucket (Issue 168: the
+    // five Batch-230 keys measured ahead-of-pin at +1.99.0, absent at the
+    // pinned 1.98.1 — the old ⚠ line mislabeled them renamed/removed).
+    let ahead_of_pin: BTreeSet<&str> = ahead_of_pin.iter().copied().collect();
     for rule in &corpus {
-        if !surface_names.contains(rule.as_str()) {
+        if surface_names.contains(rule.as_str()) {
+            continue;
+        }
+        if ahead_of_pin.contains(rule.as_str()) {
+            report.corpus_rules_ahead_of_pin.push(rule.clone());
+        } else {
             report.corpus_rules_not_in_surface.push(rule.clone());
         }
     }
@@ -1065,6 +1092,16 @@ impl CoverageReport {
                  (renamed/removed): {}",
                 self.corpus_rules_not_in_surface.len(),
                 self.corpus_rules_not_in_surface.join(", ")
+            );
+        }
+        if !self.corpus_rules_ahead_of_pin.is_empty() {
+            let _ = writeln!(
+                out,
+                "  ℹ {} corpus rule(s) keyed AHEAD-OF-PIN (absent from this \
+                 driver, verified at the isolated newer toolchain; rank after \
+                 the pin bump): {}",
+                self.corpus_rules_ahead_of_pin.len(),
+                self.corpus_rules_ahead_of_pin.join(", ")
             );
         }
         for (n, what) in [

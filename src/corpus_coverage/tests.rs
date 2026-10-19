@@ -112,6 +112,7 @@ fn inputs<'a>(
         default_histogram_provenance: None,
         corpus_blobs: NO_BLOBS,
         corpus_docs_scanned: false,
+        ahead_of_pin: &[],
     }
 }
 
@@ -361,6 +362,40 @@ fn a_corpus_rule_the_driver_no_longer_ships_is_reported() {
             .contains(&"renamed_away_lint".to_string())
     );
     assert!(r.render().contains("renamed/removed"));
+}
+
+/// Issue 168: a key on the inputs' ahead-of-pin registry is a known-good
+/// posture — it partitions into `corpus_rules_ahead_of_pin`, never the
+/// renamed/removed drift, and the render discloses it on its own line.
+#[test]
+fn an_ahead_of_pin_key_is_disclosed_not_drift_flagged() {
+    let others = BTreeMap::new();
+    let mut corpus = corpus_rules();
+    corpus.push("manual_bit_width".into());
+    corpus.push("renamed_away_lint".into());
+    let fixes = fix_set();
+    let mut ins = inputs(full_surface(), &corpus, &fixes, &others, &[]);
+    ins.ahead_of_pin = &["manual_bit_width"];
+    let r = coverage(&ins);
+    assert_eq!(
+        r.corpus_rules_ahead_of_pin,
+        vec!["manual_bit_width".to_string()],
+        "the registered key discloses in its own bucket"
+    );
+    assert!(
+        r.corpus_rules_not_in_surface
+            .contains(&"renamed_away_lint".to_string()),
+        "an unregistered absent key stays the renamed/removed drift"
+    );
+    assert!(
+        !r.corpus_rules_not_in_surface
+            .contains(&"manual_bit_width".to_string()),
+        "the registered key must not double-report as drift"
+    );
+    let out = r.render();
+    assert!(out.contains("AHEAD-OF-PIN"));
+    assert!(out.contains("manual_bit_width"));
+    assert!(!out.contains("(renamed/removed): manual_bit_width"));
 }
 
 // ── T3: the frequency join ──────────────────────────────────────────────
