@@ -1,6 +1,7 @@
 # Issue 168 — five corpus rules key lints clippy 0.1.98 no longer ships
 
 **Status:** open — corpus hygiene, toolchain-move follow-up (the Batch-230 re-arm class, inverted)
+**Claimed:** zed-m3-idle/M3 (riir-refine idle loop continuation), 2026-10-19T07:2x+07, expires 2026-10-21T00:00Z — B250 closed, sequencing constraint satisfied.
 
 `cargo refine --coverage-report` discloses per run:
 
