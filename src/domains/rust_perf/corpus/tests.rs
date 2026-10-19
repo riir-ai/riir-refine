@@ -7402,7 +7402,7 @@ fn batch248_pareto_benches() {
 /// explicitly with `cargo test -p riir-refine --lib --features
 /// rust_perf_bench batch250_pareto -- --ignored --nocapture` (release by
 /// the validator's own cargo invocation). x86_64-ONLY: the rule's two
-/// halves carry #[cfg(target_arch = "x86_64")], so on aarch64 the
+/// halves carry `#[cfg(target_arch = "x86_64")]`, so on aarch64 the
 /// validator's generated crate compiles both arms to empty shims and the
 /// bench refuses — this test is cfg-gated to the arch that can measure it
 /// (plan 254 T6; the aarch64 posture reports a green zero BY ARCH LAW,

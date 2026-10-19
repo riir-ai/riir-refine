@@ -1,6 +1,6 @@
 # Plan 258 — Batch 254: the #30795 moe_reduce dst-input-aliasing refusal rule
 
-**Status:** ACTIVE (claimed 2026-10-19, shikuwa/4090 idle loop; claim row pushed before authoring)
+**Status:** LANDED 2026-10-19 (all tasks [x]; claim `98abf761` discharged by the landing commit)
 
 Source: `ggml-org/llama.cpp` @ `098ce526b546b5a190327c1da82929cee051b9ac` (#30795,
 MIT, merged 2026-10-19T08:55Z) — "metal : fix moe_reduce fusion race when dst
@@ -35,25 +35,30 @@ family-inherited (the later fusion omitted it).
       ADMISSION conjunct when intentional vs refusal when accidental] +
       loop-back-edge-scratch-war-trailing-warp-barrier [B253 — the intra-kernel
       WAR ordering law, adjacent race class, different surface]).
-- [ ] T3 Author `entries_gpu_109.rs` — 1 D rule
+- [x] T3 Author `entries_gpu_109.rs` — 1 D rule
       `fused-read-write-dst-input-overlap-refusal`, quotes verbatim at the
       pin (inner double-quotes rendered as single quotes per house
       string-literal safety, disclosed in the module header).
-- [ ] T4 Wire: `mod.rs` (mod decl + entries() call + KERNEL_CATEGORIES D
+- [x] T4 Wire: `mod.rs` (mod decl + entries() call + KERNEL_CATEGORIES D
       entry + D header comment 213→214); `router.rs` experts pin 905→906;
       count pins in `corpus/tests.rs` (the 905 sites → 906 with the B254
       annotation).
-- [ ] T5 `batch254_rules_landed` gate: parse both sides + needle asserts
+- [x] T5 `batch254_rules_landed` gate: parse both sides + needle asserts
       (rule present exactly once + the verbatim guard/comment needles).
-- [ ] T6 Gates: batch254 gate; kernel_opt lib full; default lib full; clippy
-      −D ×3 postures (default / all-features / no-default); retrieval floors
-      re-measure (kernel self-variants 100%, blended ≥ 90.6 floor HELD, no
-      re-pin expected). Freeze/score-bench NOT owed (kernel_opt-only corpus,
-      the P30 precedent).
-- [ ] T7 Research note `.research/289_batch254_moe_reduce_alias_refusal.md`
-      (highwater 288→289, dual_allocation_gate clean).
-- [ ] T8 Docs: AGENTS.md kernel_opt bullet count; `.docs/11_domains/kernel_opt.md`
-      batch row; queue-snapshot LANDING row (claim discharged).
+      FIRST-RUN PASS.
+- [x] T6 Gates: batch254 gate; kernel_opt lib full (3351/0, 3 ignored =
+      documented freeze-regen e2es; en-route: per-category expected table
+      Dispatch 213→214 repaired); default lib full (2696/0); clippy −D ×3
+      postures + kernel_opt posture, all --all-targets (en-route: my
+      module-header backtick + unused import + the PRE-EXISTING B250-T6
+      doc_markdown in rust_perf/corpus/tests.rs:7405 repaired); retrieval
+      floors re-measured — HELD (blended 90.6% == floor, no re-pin).
+      Freeze/score-bench NOT owed (kernel_opt-only corpus, P30).
+- [x] T7 Research note `.research/289_batch254_moe_reduce_alias_refusal.md`
+      (highwater 288→289, dual_allocation_gate clean 0/0/0).
+- [x] T8 Docs: AGENTS.md kernel_opt bullet count (Role bullet + feature
+      bullet → 906); `.docs/11_domains/kernel_opt.md` batch row;
+      queue-snapshot LANDING row (claim discharged).
 - [ ] T9 Commit `feat: batch 254: ...` + push; verify `git status` clean
       after.
 

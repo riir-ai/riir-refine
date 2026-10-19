@@ -1905,6 +1905,7 @@ mod entries_gpu_105;
 mod entries_gpu_106;
 mod entries_gpu_107;
 mod entries_gpu_108;
+mod entries_gpu_109;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2078,6 +2079,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_106::entries());
     entries.extend(entries_gpu_107::entries());
     entries.extend(entries_gpu_108::entries());
+    entries.extend(entries_gpu_109::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2601,7 +2603,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stacked-gate-up-single-launch-split-store",
         ],
     ),
-    // D: Dispatch patterns (213 rules; Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
+    // D: Dispatch patterns (214 rules; Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal — the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited — the mul_mat_add fusion carried it, this later fusion omitted it); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2859,6 +2861,8 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "topk-chunk-partial-lists-head-only-kway-merge",
             // Batch 253 +1 (the upstream window, Research 288):
             "loop-back-edge-scratch-war-trailing-warp-barrier",
+            // Batch 254 +1 (the #30795 moe_reduce aliasing refusal, Research 289):
+            "fused-read-write-dst-input-overlap-refusal",
         ],
     ),
     // E: Parallelism patterns (83 rules; Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork) with nwork = tiles * ceil(K/K_vram), never below the SM default, never an empty-range block; fixup sizing rides the capped grid; the ceiling side stays the B58 measured null); Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bound [STALE-COMMENT REPAIR at Batch 253 — this header read 79 through B249's +3; the tests table pinned 82]; Batch 242 +2: the mlx-serve pack — spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge; Batch 240 +1: the subgroup tail-lane clamp law (llama.cpp #30421 — every lane of a collective stays LIVE, its loads CLAMP to a valid row (gid_s = min(gid, LINE_STRIDE_A - 1)) at every read site, only its stores gate on the real bound; the pair/splitk store splits into per-element guards); Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
