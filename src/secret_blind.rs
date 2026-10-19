@@ -209,7 +209,8 @@ fn is_digest_pin(span: &str, f: &Finding) -> bool {
                 || (f.kind == FindingKind::HighEntropyHex
                     && (is_degenerate_hex_run(span, f)
                         || is_comment_citation_sha(span, f)
-                        || is_revision_named_pin(span, f)))
+                        || is_revision_named_pin(span, f)
+                        || is_revision_ident_line(span, f)))
                 || (f.kind == FindingKind::HighEntropyB64 && is_path_shaped_token(span, f))
         }
         FindingKind::PrivateKeyBlock => is_bodyless_key_delimiter(span, f),
@@ -507,6 +508,40 @@ fn is_revision_named_pin(span: &str, f: &Finding) -> bool {
         return false;
     }
     declaration_lhs_of_opening_literal(span, f.start).is_some_and(|lower| lower.starts_with("rev_"))
+}
+
+/// Guard (j) (P76, the P75-residue probe): an exactly-40-hex run whose own
+/// line carries the whole-word ident `revision` — the comparison-site twin
+/// of guards (g)/(h) (the live sites: `assert_eq!(revision, "4aeb85b9…")`
+/// golden pins in test bodies, where the binding is a tuple-destructured
+/// local, not a declaration — the LHS helper of (h) cannot see it).
+/// Whole-word matching keeps compound names (`revision_token`) firing;
+/// the exactly-40 commit-identity length keeps the class tight: a 64-hex
+/// digest beside the ident stays a finding.
+fn is_revision_ident_line(span: &str, f: &Finding) -> bool {
+    if f.len != 40 {
+        return false;
+    }
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = span[line_start..]
+        .find('\n')
+        .map_or(span.len(), |i| line_start + i);
+    let line = &span[line_start..line_end];
+    let bytes = line.as_bytes();
+    let mut from = 0;
+    while let Some(pos) = line[from..].find("revision") {
+        let at = from + pos;
+        let after = at + "revision".len();
+        let before_ok =
+            at == 0 || !bytes[at - 1].is_ascii_alphanumeric() && bytes[at - 1] != b'_';
+        let after_ok =
+            after >= bytes.len() || !bytes[after].is_ascii_alphanumeric() && bytes[after] != b'_';
+        if before_ok && after_ok {
+            return true;
+        }
+        from = at + 1;
+    }
+    false
 }
 
 /// Guard (i) (P75): a [`FindingKind::RustSecretLiteral`] whose value is a
@@ -1177,6 +1212,35 @@ mod tests {
         assert!(!scan_file(&t).is_empty(), "64-hex in comment must fire");
         let t2 = format!("const X: &str = \"{RANDOM_HEX_40}\";\n");
         assert!(!scan_file(&t2).is_empty(), "40-hex in string must fire");
+    }
+
+    /// (j) revision-compared pins — the distill.rs `assert_eq!(revision,
+    /// "<sha>")` golden-pin shape (the P75 residue: the tuple-destructured
+    /// local a declaration LHS cannot see). The shape is reachable ONLY by
+    /// this guard — macro args are no comment, no declaration, no tag — so
+    /// an empty findings set pins (j) specifically.
+    #[test]
+    fn p76_revision_compared_pins_are_suppressed() {
+        let t = format!(
+            "let (model, revision) = teacher_pins_with(|_| None);\nassert_eq!(revision, \"{RANDOM_HEX_40}\");\n"
+        );
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    /// (j) negatives: a 64-hex digest beside the ident stays (sha256-class
+    /// material, not a commit identity), and a compound name
+    /// (`revision_token`) keeps firing — whole-word matching only.
+    #[test]
+    fn p76_revision_compared_negatives_stay_firing() {
+        let t = format!("assert_eq!(revision, \"{RANDOM_HEX_64}\");\n");
+        assert!(
+            !scan_file(&t).is_empty(),
+            "64-hex beside revision ident must fire"
+        );
+        let t2 = format!("assert_eq!(revision_token, \"{RANDOM_HEX_40}\");\n");
+        assert!(!scan_file(&t2).is_empty(), "compound revision_token must fire");
     }
 
     /// (e) path-shaped b64 — the `basis_cert` doc-comment repo path.
