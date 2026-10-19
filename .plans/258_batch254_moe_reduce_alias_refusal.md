@@ -26,7 +26,7 @@ family-inherited (the later fusion omitted it).
       session).
 - [x] T1 Claim row in `.distill/001_mining_queue_snapshot.md`, commit+push
       BEFORE authoring (the push is the arbiter).
-- [ ] T2 Dedup greps both vocabularies (DONE at staging: zero owners of the
+- [x] T2 Dedup greps both vocabularies (DONE at staging: zero owners of the
       allocator-liveness aliasing law; distinct-from set = B208
       fusion-residual-selected-by-identity-not-negation [operand SELECTION vs
       aliasing REFUSAL] + fuse-residual-via-in-place-output-array [the SAFE
@@ -59,7 +59,7 @@ family-inherited (the later fusion omitted it).
 - [x] T8 Docs: AGENTS.md kernel_opt bullet count (Role bullet + feature
       bullet → 906); `.docs/11_domains/kernel_opt.md` batch row;
       queue-snapshot LANDING row (claim discharged).
-- [ ] T9 Commit `feat: batch 254: ...` + push; verify `git status` clean
+- [x] T9 Commit `feat: batch 254: ...` + push; verify `git status` clean
       after.
 
 ## Lane intel (recorded, no tree edit from this lane)
