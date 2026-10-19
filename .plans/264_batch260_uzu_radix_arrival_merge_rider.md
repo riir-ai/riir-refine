@@ -20,7 +20,7 @@ Thin-watch batch: ONE count-neutral rider, ZERO own rules, ZERO count moves. Sou
 - [x] T4 batch260 needle gate in `corpus/tests.rs` (host id + face name + pin fragment + Batch 260 tag) — FIRST-RUN PASS, incl. the count-neutral witness entries==920.
 - [x] T5 Gates: kernel_opt lib 3176/0 / default lib 2702/0 / clippy −D ×3 postures clean / retrieval floors HELD 21/21 no re-pin (362.7 s). Freeze + score-bench NOT owed (no clippy-corpus delta, P30); binary rebuild NOT owed (kernel_opt not in the release set).
 - [x] T6 Research note 296 + snapshot landing row + `.docs/11_domains/kernel_opt.md` Batch-260 row (count-neutral note). AGENTS.md count UNMOVED (920 stands).
-- [ ] T7 Commit `feat: batch 260: ...` + push; clones/scratch removed (C:\t_b260 scratch + /tmp target).
+- [x] T7 Commit `feat: batch 260: ...` + push; clones/scratch removed (C:\t_b260 scratch + /tmp target). LANDED `8c98f76b1`.
 
 ## Defers
 
