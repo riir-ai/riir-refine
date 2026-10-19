@@ -1,6 +1,6 @@
 # Plan 262 — Batch 258: the sec web-trust family (cloudflare/security-audit-skill distill)
 
-**Status:** OPEN — staged, corpus edits deferred to the next cargo-quiet slot (verdict: Research 292; source pin `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`, MIT)
+**Status:** IN FLIGHT — claimed 2026-10-20, zed-m3-idle/M3 idle loop (claim row in `.distill/001_mining_queue_snapshot.md`, pushed before authoring; expires 2026-10-22).
 
 Staged from the 2026-10-19 distill verdict on cloudflare/security-audit-skill. Sec-domain batch: 2-3 suggest-only rules + 1 possible rider, all transcriptions (the source is prose — every fixture is an ORIGINAL minimal Rust reproduction; never paste upstream text into fixtures).
 
