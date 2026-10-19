@@ -145,6 +145,44 @@ stands). Property evidence: the landed rule's Kani row pair (g2c/g2d)
 passed both ways on the WSL2 lane — see §Property evidence; the
 pre-validation block returns to EMPTY.
 
+## Batch 258 (2026-10-20) — the web-trust family seed
+
+The cloudflare/security-audit-skill distill (Research 292 / Plan 262; source
+@ `c1c8a8c`, MIT, a PROSE skill — every fixture an original synthesis).
+Three suggest-only rules across TWO existing families (no new family —
+adjudicated at authoring per the plan's prefer-existing-if-honest rule),
+the sec domain's web/multi-tenant trust classes:
+
+| Rule | Family | The class + the bounded form |
+|---|---|---|
+| `untrusted-path-join-escape` | `InputValidation` | a caller-supplied name joined onto a trusted base and sunk into `fs::*`/`File::*` with no component check lets `..`/absolute/prefix components escape the base (path traversal). Bounded form: the `components()` walk refusing everything but `Component::Normal(_)` — the riir-deployer `48d63f7` in-house shape. Gates: guard vocabulary (`components()`/`canonicalize`/`Component::{ParentDir,RootDir,CurDir,Prefix}`) suppresses fn-wide; lexical `starts_with`/`strip_prefix` do NOT suppress (the `..` escape survives both — a TRUE finding); literal/const args never fire; field origins (`entry.file_name()`) are an honest NO; detector `path_join_escape::detect` |
+| `webhook-signature-over-raw-bytes` | `CryptoHygiene` | a verify computed over a re-serialized body (`serde_json::to_string`/`to_vec` of a just-parsed value) instead of the exact received bytes — canonicalization drift makes attacker bodies verify (envelope/payload identity mismatch). Bounded form: verify over the raw bytes before/alongside any parse. Distinct-from `constant-time-secret-compare`: compare primitive (timing) vs coverage axis. Honest limits: canonical-signature schemes fire by design (review decides); detector `webhook_raw_bytes::detect` |
+| `unvalidated-egress-url` | `InputValidation` | a URL assembled from request/tenant input reaching a `reqwest::`/`ureq::` sink with no scheme/host allowlist and no private-range refusal — the caller picks the egress target (SSRF: cloud metadata, loopback admin edges). Bounded form: policy (allowlist + private-range refusal), never mechanical. Sink-distinct from `unbounded-read-into-vec` (URL choice vs read source, the Plan 156 T2 shape). Honest limits: client-binding method sinks + framework extractors are honest NOs; detector `egress_url::detect` |
+
+PLUS the count-neutral rider on `unbounded-read-into-vec`: decompression
+decoders (`GzDecoder`/`ZlibDecoder`/`BzDecoder`/`XzDecoder`/`ZstdDecoder`)
+are transparent to the taint walk (`take` stays a taint break) and the
+concept gains the bound-after-every-expansion-stage face — `Read::take`
+belongs on the DECODER (the decompressed side); the wrong-side-take
+composition (`GzDecoder::new(stream.take(n))`) is a disclosed recall
+limit, not a verified-safe form. `poisoned-lock-fail-open` (the verdict's
+C-grade fifth candidate) DROPPED at authoring: thin decision content.
+
+Gates at landing: sec lib 2848/0, default lib 2700/0; clippy `-D` ×3
+postures (`--all-targets` default/all-features/no-default); T7 probe (real
+clippy, pedantic+nursery+suspicious+correctness: ZERO lints on the three
+buggy fixtures — the doc-presence family excluded at the crate level, the
+only remaining output rustc `dead_code` on the private probe fixtures);
+boundary gate 2/2 (the probe crate grew `serde_json` + `ureq` deps — the
+Batch-88 compile contract); score-bench #192 FLAT (96.4/1.0, the P74
+expectation — 16th consecutive FLAT); retrieval floors HELD no re-pin
+(default state blended 125/131/133 of 141 == the B244 measured values;
+sec self-variants 19/19 top-1 at the sec posture, n=16 → 19;
+`poisoned-lock-fail-open` — see the drop above); freeze NOT owed (zero
+clippy-corpus delta — `generations.rs` builds from the clippy seed corpus
+only, verified); maintained-binary rebuild NOT owed (sec not in the
+release set).
+
 ## Property evidence — machine-checked (Kani, Issue 127)
 
 A second evidence axis beside probe evidence: Kani (model checking over

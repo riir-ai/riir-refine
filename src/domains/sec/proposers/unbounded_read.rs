@@ -61,6 +61,23 @@
 //! - The vocabulary proves a SOURCE CLASS, not peer control — a
 //!   `connect()` to localhost fires too, and review decides.
 //!   Suggest-only is the blast-radius control.
+//!
+//! ## Batch 258 rider — the decoder see-through (Plan 262)
+//!
+//! A decompression decoder between the reader and the drain is a
+//! TRANSPARENT wrapper: `GzDecoder::new(stream)` of a tracked stream is a
+//! tracked reader (the taint flows through the
+//! `GzDecoder`/`MultiGzDecoder`/`ZlibDecoder`/`DeflateDecoder`/
+//! `BzDecoder`/`XzDecoder`/`ZstdDecoder` constructors; the decoder's
+//! ARGUMENT decides — a `File` in stays trusted). `Read::take` stays a
+//! taint break: the bounded twin's binding form
+//! (`let t = stream.take(N); t.read_to_end(..)`) remains silent by
+//! construction. The concept gains the bound-after-every-expansion-stage
+//! face: `Read::take` belongs on the DECODER (the decompressed side) — a
+//! compressed body can expand orders of magnitude past any transfer-size
+//! check. `zstd::Decoder` (the bare-`Decoder` spelling) is deliberately
+//! untracked — a generic pair would over-match. Suggest-only throughout:
+//! no `FIXABLE_SEC` membership, no `collect_edits` arm.
 
 use std::ops::Range;
 
@@ -185,7 +202,7 @@ fn collect_bindings(block: &syn::Block, state: &mut ReadState) {
                             }
                         }
                     }
-                    if is_source_expr(&init.expr) {
+                    if is_source_expr(&init.expr, state) {
                         for p in &pats {
                             state.untrusted.insert(p.clone());
                         }
@@ -229,7 +246,7 @@ fn note_for_loop_sources(e: &Expr, state: &mut ReadState) {
     if let Expr::ForLoop(fl) = e {
         // `for stream in listener.incoming() { .. }` — the pattern binds
         // tracked readers when the iterable is a source.
-        if is_source_expr(&fl.expr) {
+        if is_source_expr(&fl.expr, state) {
             for p in local_idents(&fl.pat) {
                 state.untrusted.insert(p);
             }
@@ -343,7 +360,12 @@ fn path_ident(e: &Expr) -> Option<String> {
 }
 
 /// Is this expr an untrusted-reader SOURCE (parse-provable vocabulary)?
-fn is_source_expr(e: &Expr) -> bool {
+///
+/// Batch 258 rider: decompression decoders are TRANSPARENT wrappers — the
+/// taint flows through (`GzDecoder::new(stream)` of a tracked stream is a
+/// tracked reader); `take` deliberately stays a taint break (the bounded
+/// twin's binding form stays silent).
+fn is_source_expr(e: &Expr, state: &ReadState) -> bool {
     match e {
         Expr::Call(c) => {
             if let Expr::Path(p) = c.func.as_ref() {
@@ -364,8 +386,20 @@ fn is_source_expr(e: &Expr) -> bool {
                 {
                     return true;
                 }
+                // The decoder see-through (Batch 258 rider): the decoder's
+                // ARGUMENT decides — a tracked stream in, tracked reader
+                // out; a `File` in stays trusted.
+                if segs.len() >= 2
+                    && DECODERS
+                        .contains(&(segs[segs.len() - 2].as_str(), segs[segs.len() - 1].as_str()))
+                {
+                    return c
+                        .args
+                        .iter()
+                        .any(|a| is_source_expr(a, state) || tracked_arg(a, state));
+                }
             }
-            c.args.iter().any(is_source_expr)
+            c.args.iter().any(|a| is_source_expr(a, state))
         }
         Expr::MethodCall(m) => {
             // `listener.accept()`, `listener.incoming()`,
@@ -389,19 +423,37 @@ fn is_source_expr(e: &Expr) -> bool {
                     | "map_err"
                     | "flatten"
             ) {
-                return is_source_expr(&m.receiver);
+                return is_source_expr(&m.receiver, state);
             }
-            is_source_expr(&m.receiver)
+            is_source_expr(&m.receiver, state)
         }
-        Expr::Try(t) => is_source_expr(&t.expr),
-        Expr::Paren(p) => is_source_expr(&p.expr),
-        Expr::Cast(c) => is_source_expr(&c.expr),
+        Expr::Try(t) => is_source_expr(&t.expr, state),
+        Expr::Paren(p) => is_source_expr(&p.expr, state),
+        Expr::Cast(c) => is_source_expr(&c.expr, state),
         _ => false,
     }
 }
 
+/// The decompression-decoder constructors (last-two-segments pairs).
+/// The `zstd::Decoder` spelling is deliberately absent (a bare `Decoder`
+/// pair would over-match) — an honest recall limit.
+const DECODERS: &[(&str, &str)] = &[
+    ("GzDecoder", "new"),
+    ("MultiGzDecoder", "new"),
+    ("ZlibDecoder", "new"),
+    ("DeflateDecoder", "new"),
+    ("BzDecoder", "new"),
+    ("XzDecoder", "new"),
+    ("ZstdDecoder", "new"),
+];
+
+/// A bare (ref-stripped) ident that is a TRACKED untrusted binding.
+fn tracked_arg(e: &Expr, state: &ReadState) -> bool {
+    strip_refs_to_ident(e).is_some_and(|id| state.untrusted.contains(&id))
+}
+
 /// A readable label for a direct source chain (the fire report's ident).
-fn source_label(e: &Expr) -> Option<String> {
+fn source_label(e: &Expr, state: &ReadState) -> Option<String> {
     match e {
         Expr::Call(c) => {
             if let Expr::Path(p) = c.func.as_ref() {
@@ -418,7 +470,12 @@ fn source_label(e: &Expr) -> Option<String> {
                     return Some("reqwest".to_string());
                 }
             }
-            c.args.iter().find_map(source_label)
+            // Batch 258 rider: through a decoder wrapper the label is the
+            // tracked stream's name (or the inner chain's label).
+            c.args.iter().find_map(|a| {
+                source_label(a, state)
+                    .or_else(|| strip_refs_to_ident(a).filter(|id| state.untrusted.contains(id)))
+            })
         }
         Expr::MethodCall(m) => {
             if matches!(
@@ -427,15 +484,15 @@ fn source_label(e: &Expr) -> Option<String> {
             ) {
                 return Some(m.method.to_string());
             }
-            source_label(&m.receiver).or_else(|| {
+            source_label(&m.receiver, state).or_else(|| {
                 m.args
                     .iter()
-                    .find_map(source_label)
-                    .or_else(|| source_label(&m.receiver))
+                    .find_map(|a| source_label(a, state))
+                    .or_else(|| source_label(&m.receiver, state))
             })
         }
-        Expr::Try(t) => source_label(&t.expr),
-        Expr::Paren(p) => source_label(&p.expr),
+        Expr::Try(t) => source_label(&t.expr, state),
+        Expr::Paren(p) => source_label(&p.expr, state),
         _ => None,
     }
 }
@@ -497,9 +554,12 @@ fn shape_a_fire(e: &Expr, state: &ReadState) -> Option<String> {
                 }
                 return None;
             }
-            // Direct source chain: `TcpStream::connect(..)?.read_to_end(..)`.
-            if is_source_expr(&m.receiver) {
-                return source_label(&m.receiver);
+            // Direct source chain: `TcpStream::connect(..)?.read_to_end(..)`
+            // (or the Batch-258 decoder twin,
+            // `GzDecoder::new(stream).read_to_end(..)`).
+            if is_source_expr(&m.receiver, state) {
+                return source_label(&m.receiver, state)
+                    .or_else(|| Some(String::from("decoder chain")));
             }
             None
         }
@@ -521,8 +581,8 @@ fn shape_a_fire(e: &Expr, state: &ReadState) -> Option<String> {
             if let Some(id) = strip_refs_to_ident(first) {
                 return state.untrusted.contains(&id).then_some(id);
             }
-            if is_source_expr(first) {
-                return source_label(first);
+            if is_source_expr(first, state) {
+                return source_label(first, state).or_else(|| Some(String::from("decoder chain")));
             }
             None
         }
@@ -1115,5 +1175,80 @@ mod tests {
     fn batch140_advice_names_the_class() {
         assert!(ADVICE.contains("take"));
         assert!(ADVICE.contains("RUSTSEC-2024-0003"));
+    }
+
+    // ── Batch 258 rider: the decoder see-through (Plan 262) ─────────────
+
+    /// A tracked stream wrapped in a decompression decoder is a tracked
+    /// reader — the binding form fires.
+    #[test]
+    fn batch258_rider_decoder_wrapped_stream_fires() {
+        let src = "pub fn drain(stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    \
+             let mut gz = flate2::read::GzDecoder::new(stream);\n    \
+             let mut buf = Vec::new();\n    \
+             gz.read_to_end(&mut buf)?;\n    \
+             Ok(buf)\n}\n";
+        let f = findings(src);
+        assert_eq!(f.len(), 1, "decoder see-through fires: {f:?}");
+        assert_eq!(f[0].reader_ident, "gz");
+    }
+
+    /// The inline decoder chain fires with the tracked stream's name.
+    #[test]
+    fn batch258_rider_inline_decoder_chain_fires() {
+        let src = "pub fn drain(stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    \
+             let mut buf = Vec::new();\n    \
+             flate2::read::GzDecoder::new(stream).read_to_end(&mut buf)?;\n    \
+             Ok(buf)\n}\n";
+        let f = findings(src);
+        assert_eq!(f.len(), 1, "inline chain fires: {f:?}");
+        assert_eq!(f[0].reader_ident, "stream");
+    }
+
+    /// A decoder over a TRUSTED reader (a File) stays silent — the
+    /// decoder's argument decides.
+    #[test]
+    fn batch258_rider_decoder_of_file_is_silent() {
+        let src = "pub fn read_tgz(path: &str) -> std::io::Result<Vec<u8>> {\n    \
+             let file = std::fs::File::open(path)?;\n    \
+             let mut gz = flate2::read::GzDecoder::new(file);\n    \
+             let mut buf = Vec::new();\n    \
+             gz.read_to_end(&mut buf)?;\n    \
+             Ok(buf)\n}\n";
+        assert!(
+            findings(src).is_empty(),
+            "File readers stay the trusted regime"
+        );
+    }
+
+    /// The take taint-break property survives the rider: the bounded
+    /// twin's binding form stays silent.
+    #[test]
+    fn batch258_rider_take_binding_still_silent() {
+        let src = "pub fn drain_bounded(stream: std::net::TcpStream, n: u64) -> std::io::Result<Vec<u8>> {\n    \
+             let limited = stream.take(n);\n    \
+             let mut buf = Vec::new();\n    \
+             limited.read_to_end(&mut buf)?;\n    \
+             Ok(buf)\n}\n";
+        assert!(findings(src).is_empty(), "take stays a taint break");
+    }
+
+    /// The decoder-over-take composition is silent — a RECALL LIMIT,
+    /// not a verified-safe form: `GzDecoder::new(stream.take(n))` bounds
+    /// the COMPRESSED side while the decompressed output can still
+    /// expand ~1000× (the take is on the WRONG side of the decoder). The
+    /// pre-existing take-anywhere suppression covers the chain; the
+    /// wrong-side-take refinement is future work, disclosed here.
+    #[test]
+    fn batch258_rider_decoder_over_wrong_side_take_undetected() {
+        let src = "pub fn drain_bounded(stream: std::net::TcpStream, n: u64) -> std::io::Result<Vec<u8>> {\n    \
+             let mut gz = flate2::read::GzDecoder::new(stream.take(n));\n    \
+             let mut buf = Vec::new();\n    \
+             gz.read_to_end(&mut buf)?;\n    \
+             Ok(buf)\n}\n";
+        assert!(
+            findings(src).is_empty(),
+            "wrong-side take is an honest recall limit"
+        );
     }
 }

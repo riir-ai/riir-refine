@@ -76,11 +76,14 @@ fn run_clippy() -> Option<Vec<Diag>> {
     // Batch 88: the crypto fixtures import sha1/sha2/md-5/blake3/argon2/subtle —
     // the probe crate must declare them or the fixtures fail to COMPILE
     // (compile errors are not clippy diagnostics; the gate reads diagnostics).
+    // Batch 258: the webhook fixture re-serializes with serde_json and the
+    // egress fixture dials through ureq — same compile contract.
     std::fs::write(
         dir.join("Cargo.toml"),
         "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\
          \n[workspace]\n[dependencies]\nsha1 = \"0.10\"\nsha2 = \"0.10\"\
-         \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\n",
+         \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\
+         \nserde_json = \"1\"\nureq = \"2\"\n",
     )
     .expect("write toml");
     let mut lib = String::new();

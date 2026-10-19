@@ -56,19 +56,42 @@
 //! | Rule | Detector | Why suggest-only |
 //! |---|---|---|
 //! | `unchecked-wire-arithmetic` | `unchecked_wire_arithmetic::detect` | the fix is a checked op + an INVENTED error path the fn's signature may not carry — a protocol decision; sink-level novelty over `length_prefix_alloc` on the shared `wire_taint` walker (Plan 156 T2: sink-distinct, no composition gate — the derived-validated shape's overflow already happened at the op and a post-hoc range check validates the wrapped value) |
+//!
+//! ## Batch 258 (2026-10-20, Plan 262) — the web-trust family seed
+//!
+//! Three detectors from the cloudflare/security-audit-skill distill
+//! (Research 292), all transcriptions with ORIGINAL fixtures — the sec
+//! family's web/multi-tenant trust classes:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `untrusted-path-join-escape` | `path_join_escape::detect` | the refusal path's error type is the fn's choice (the `ffi-export-panicking-body` class); the `components()` walk refusal is the riir-deployer `48d63f7` in-house shape, cited in-rule |
+//! | `webhook-signature-over-raw-bytes` | `webhook_raw_bytes::detect` | which key, which fields, and the timestamp/nonce binding are per-scheme decisions; distinct-from `constant-time-secret-compare` (compare primitive vs coverage axis) |
+//! | `unvalidated-egress-url` | `egress_url::detect` | the allowlist is deployment policy (which hosts are legitimate is the operator's answer); sink-distinct from `unbounded_read` (URL choice vs read source, the Plan 156 T2 shape) |
+//!
+//! Plus the count-neutral rider on `unbounded_read`: decompression
+//! decoders are transparent to the taint walk (`take` stays a taint
+//! break) — the bound-after-every-expansion-stage face.
+//! `poisoned-lock-fail-open` (the verdict's C-grade fifth candidate)
+//! DROPPED at authoring: thin decision content — the guard is one method
+//! call (`PoisonError::into_inner`), the regime arguable in
+//! single-purpose daemons.
 
 use syn::File;
 
 pub mod drop_no_panic;
+pub mod egress_url;
 pub mod ffi_catch_unwind;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
+pub mod path_join_escape;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
 pub mod slice_len_guard;
-pub mod unchecked_wire_arithmetic;
 pub mod unbounded_read;
+pub mod unchecked_wire_arithmetic;
+pub mod webhook_raw_bytes;
 
 /// The shared wire-taint walker (Batch 165) — one walker, the
 /// InputValidation wire sinks. Crate-internal: the public surface is the

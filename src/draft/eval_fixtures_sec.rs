@@ -1,6 +1,7 @@
 //! Issue 134 T3 re-arm — `sec` domain eval fixtures (hand-authored variants
-//! of the 16 corpus anti-patterns; the `eval_fixtures_perf` convention —
-//! variant names, canonical shapes, one span per rule).
+//! of the 19 corpus anti-patterns; the `eval_fixtures_perf` convention —
+//! variant names, canonical shapes, one span per rule). Batch 258 added
+//! the web-trust seed's three (Plan 262).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -162,6 +163,36 @@ pub fn check_mac(received: &[u8], expected: &[u8]) -> bool {
 pub fn total_frame_size(wire_len: [u8; 4]) -> usize {
     let len = u32::from_be_bytes(wire_len) as usize;
     len + WIRE_HEADER_BYTES
+}
+"#,
+    ),
+    // Batch 258 (Plan 262) — the web-trust seed, one span per new rule.
+    (
+        "untrusted-path-join-escape",
+        r#"pub fn load_skin(base: &std::path::Path, skin: &str) -> std::io::Result<Vec<u8>> {
+    std::fs::read(base.join(skin))
+}
+"#,
+    ),
+    (
+        "webhook-signature-over-raw-bytes",
+        r#"fn check_tag(key: &[u8], mac: &[u8]) -> bool {
+    mac.len() == 24 && !key.is_empty()
+}
+
+fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
+    let note: serde_json::Value = serde_json::from_slice(wire).unwrap_or_default();
+    let round_trip = serde_json::to_vec(&note).unwrap_or_default();
+    check_tag(key, &round_trip)
+}
+"#,
+    ),
+    (
+        "unvalidated-egress-url",
+        r#"pub fn pull_artifact(store: &str, digest: &str) -> Result<String, String> {
+    let url = format!("https://{store}/artifacts/{digest}");
+    let body = ureq::get(&url).call().map_err(|e| e.to_string())?;
+    body.into_string().map_err(|e| e.to_string())
 }
 "#,
     ),

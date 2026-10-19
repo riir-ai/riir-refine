@@ -1,6 +1,6 @@
 # Research 292 — Distill verdict: cloudflare/security-audit-skill
 
-**Status:** DISTILLED — pending owner decision (Batch 258 staged, plan 262; corpus edits deferred to the next cargo-quiet slot)
+**Status:** DISTILLED — LANDED (Batch 258, plan 262; the landing addendum at the bottom of this note)
 
 ## Source
 
@@ -73,3 +73,69 @@ N/A — the source is not perf-relevant (no kernel, no serving config, no measur
 - Batch plan: `.plans/262_batch258_sec_web_trust_family.md` (this commit, staged — tasks open).
 - Skill deliverable: `../katgpt-rs/.agents/skills/security-audit/SKILL.md` (same day, katgpt-rs commit).
 - NOTHING INVENTED — every class quote above read from the pinned clone this session; every dedup grep run this session.
+
+## LANDING ADDENDUM (2026-10-20, Batch 258 landed)
+
+All three authorable candidates LANDED as suggest-only rules; the rider
+folded; the C-grade candidate dropped per the plan. Landed counts + the
+per-task dispositions (Plan 262's task numbering):
+
+- T0 re-clone + re-pin: PASS — `c1c8a8c1471069fb0e188eeaff69b8e8db6564a8`
+  re-verified byte-exact at the landing clone (zero drift, the B193
+  freshness law).
+- T1 dedup re-verification: PASS — all four greps re-run over
+  `src/domains/sec/` at the landing tree; zero new owners. The
+  `reqwest` grep hits are `unbounded_read`'s untrusted READ-source face
+  (distinct axis from candidate 3's URL-choice sink face, in-rule).
+- T2 `untrusted-path-join-escape` LANDED (B, InputValidation — no new
+  family; the plan's prefer-existing-if-honest adjudication). Detector
+  `proposers::path_join_escape`.
+- T3 `webhook-signature-over-raw-bytes` LANDED (B−, CryptoHygiene).
+  Detector `proposers::webhook_raw_bytes`; distinct-from note in-rule.
+- T4 `unvalidated-egress-url` LANDED (B−→C+ kept: the trigger scope IS
+  parse-shaped without fiction — `reqwest::`/`ureq::` first-segment
+  sinks + URL-vocabulary params / `format!`-placeholder locals; the
+  framework-extraction honesty is disclosed in-rule, the
+  `unbounded-read` style). Detector `proposers::egress_url`.
+- T5 decompression rider FOLDED into `unbounded-read-into-vec`
+  (count-neutral): decoder see-through in `is_source_expr` +
+  `source_label` (`take` stays a taint break — the bounded twin's
+  binding form stays silent, test-pinned), concept face
+  "verify limits after every expansion stage". One disclosed recall
+  limit: the wrong-side-take composition
+  (`GzDecoder::new(stream.take(n))`) stays silent (take-anywhere
+  suppression) — test-named as an honest limit, not a safe form.
+- T6 `poisoned-lock-fail-open` DROPPED (the batch carries three bodies;
+  thin decision content — one method call).
+- T7 probe PASS: real clippy (pinned 1.98.1 toolchain),
+  pedantic+nursery+suspicious+correctness: ZERO lints on all three
+  buggy fixtures. Two fixture-artifact lints on the first webhook stub
+  draft (`missing_const_for_fn` nursery + `must_use_candidate` pedantic)
+  were repaired AT THE FIXTURE (the stub made genuinely non-const,
+  fns made private) rather than excluded — the probe claim is a clean
+  zero. The doc-presence family (`missing_docs`,
+  `missing_errors_doc`, `missing_panics_doc`,
+  `module_name_repetitions`) is crate-level `#![allow]`ed in the probe,
+  disclosed.
+- T8 gates ALL GREEN: sec lib 2848/0; default lib 2700/0; clippy `-D`
+  ×3 postures (`--all-targets`, default/all-features/no-default);
+  boundary gate 2/2 (probe deps grew `serde_json` + `ureq`); the
+  webhook corpus fixture was made SELF-CONTAINED (a non-const private
+  `verify_sig` stub inside the fixture) so the boundary gate's probe
+  crate compiles it — the corpus parse contract is unchanged.
+  score-bench #192 appended FLAT (heal 0.9636, parse 1.0 — the P74
+  expectation). Retrieval floors HELD no re-pin: the default state
+  blended 125/131/133 of 141 == the B244 measured values; the sec
+  posture re-measured n=16 → 19 with all three new spans retrieving
+  their rule top-1 (sec 100/100/100). Freeze NOT owed (zero
+  clippy-corpus delta; `generations.rs` verified to build from the
+  clippy seed corpus only). Maintained-binary rebuild NOT owed (sec
+  not in the release set).
+- T9 count pins: sec 16 → 19 (6 fixable + 13 suggest-only; suggest-only
+  detectors 4 → 7) at AGENTS.md ×2 + README ×2 rows +
+  `eval_fixtures_sec.rs` header. Family table UNCHANGED (no new
+  family).
+- T10 docs: this addendum; the queue-snapshot landing row (same commit);
+  `.docs/11_domains/sec.md` Batch 258 section; `.raw/security-audit-skill`
+  REMOVED at close.
+- T11 commit + push: `feat:` prefix, Session marker in the body.

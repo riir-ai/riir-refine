@@ -26,6 +26,9 @@
 //! | `secret-file-create-without-0600` | `InputValidation` | no (suggest-only) | — (no lint fires; the fix is cfg(unix)-shaped — a portable rewrite is judgment-bearing) |
 //! | `unbounded-read-into-vec` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the fix must CHOOSE the limit — a protocol decision) |
 //! | `unchecked-wire-arithmetic` | `InputValidation` | no (suggest-only) | `arithmetic_side_effects` SILENT on literal/const operands (`len + 8`, `len + CONST` — measured 1.98 probe, Plan 156 T7 refinement); on variable-operand sites it fires blanket, w/o suggestion or wire-origin scoping — restriction/allow-by-default; `manual_checked_ops` is Div-only at this pin |
+//! | `untrusted-path-join-escape` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the refusal path's error type is the fn's choice) |
+//! | `webhook-signature-over-raw-bytes` | `CryptoHygiene` | no (suggest-only) | — (no lint fires; the coverage question is per-scheme, and canonical-signature schemes are deliberate) |
+//! | `unvalidated-egress-url` | `InputValidation` | no (suggest-only) | — (no lint fires; the allowlist is deployment policy, never mechanical) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -58,6 +61,28 @@
 //! suppress a true finding). Detector in
 //! `proposers::unchecked_wire_arithmetic`; probe evidence (real clippy
 //! 0.1.98, the pinned 1.98.1) recorded in Plan 156 T1.
+//!
+//! Batch 258 (2026-10-20, Plan 262 / Research 292): the web-trust family
+//! seed from the cloudflare/security-audit-skill distill (@ `c1c8a8c`,
+//! MIT) — THREE suggest-only rules across two existing families
+//! (adjudicated at authoring per the plan; no new family): path-traversal
+//! (`untrusted-path-join-escape`, `InputValidation` — the `components()`
+//! refusal, the riir-deployer `48d63f7` in-house shape), webhook
+//! signature-coverage (`webhook-signature-over-raw-bytes`,
+//! `CryptoHygiene` — distinct-from the compare primitive on the coverage
+//! axis), and egress selection (`unvalidated-egress-url`,
+//! `InputValidation` — sink-distinct from unbounded-read's read-source
+//! face, the Plan 156 T2 shape). PLUS the count-neutral rider on
+//! `unbounded-read-into-vec`: decompression decoders
+//! (`GzDecoder`/`ZlibDecoder`/`BzDecoder`/`XzDecoder`/`ZstdDecoder`) are
+//! transparent to the taint walk (`take` stays a taint break) and the
+//! concept gains the bound-after-every-expansion-stage face. The
+//! `poisoned-lock-fail-open` candidate DROPPED at authoring per the plan
+//! (thin decision content — the guard is one method call). Detector
+//! modules: `proposers::path_join_escape`,
+//! `proposers::webhook_raw_bytes`, `proposers::egress_url`; the probe
+//! evidence (real clippy, pedantic+nursery+suspicious+correctness, zero
+//! lints on the three buggy fixtures) recorded in Plan 262 T7.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -275,9 +300,14 @@ exhaustion class RUSTSEC-2024-0003 / CVE-2019-9514 (h2) anchors in the wild. The
 SECURITY, not cycles. Bound it: `Read::take(reader, MAX_BYTES)` + `Vec::with_capacity(..)`. \
 Suggest-only: choosing the limit is a protocol decision, never mechanical. Honest recall limits: \
 the untrusted-source proof is parse-provable vocabulary only (TcpStream-typed bindings, \
-listener accept()/incoming() children, connect()/reqwest::get() results) — a bare `R: Read` \
+listener accept()/incoming() children, connect()/reqwest::get() results — plus the \
+Batch-258 decoder see-through: `GzDecoder`/`ZlibDecoder`/`BzDecoder`/`XzDecoder`/`ZstdDecoder` \
+wrappers are TRANSPARENT, the taint flows through, while `take` stays a taint break) — a bare `R: Read` \
 generic is an honest NO; File readers are the trusted regime and never fire; cross-fn drains \
-undetected. Batch 140 / Research 161 / Plan 120 (rustsec/advisory-db @ b50980aa, CC0 — cited \
+undetected. A decoder between the reader and the drain does NOT excuse the cap — \
+`Read::take` belongs on the DECODER (the decompressed side): a compressed body can expand \
+orders of magnitude past any transfer-size check, so verify limits after EVERY expansion stage \
+(the Batch-258 rider). Batch 140 / Research 161 / Plan 120 (rustsec/advisory-db @ b50980aa, CC0 — cited \
 as class provenance; fixtures are original syntheses)."
                 .to_string(),
             buggy_code: "pub fn read_request(mut stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut buf = Vec::new();\n    std::io::Read::read_to_end(&mut stream, &mut buf)?;\n    Ok(buf)\n}\n"
@@ -316,6 +346,97 @@ pinned 1.98.1, zero safety lints on the shape)."
             buggy_code: "pub const FRAME_OVERHEAD: usize = 8;\n\npub fn framed_payload_len(header: [u8; 4]) -> usize {\n    let len = u32::from_be_bytes(header) as usize;\n    len + FRAME_OVERHEAD\n}\n"
                 .to_string(),
             fixed_code: "pub const FRAME_OVERHEAD: usize = 8;\n\npub fn framed_payload_len(header: [u8; 4]) -> Option<usize> {\n    let len = u32::from_be_bytes(header) as usize;\n    len.checked_add(FRAME_OVERHEAD)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ══ Batch 258 (security-audit-skill distill) — the web-trust ══
+        // ══ seed: three suggest-only rules across two families.      ══
+        // ── untrusted-path-join-escape (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "untrusted-path-join-escape".to_string(),
+            sec_concept: "a caller-supplied name joined onto a trusted base \
+(`base.join(name)`, name a fn parameter of the str/Path/OsStr family) and the \
+joined path sunk into `fs::*` / `File::{open,create}` with NO component check \
+in the fn lets `..`, absolute components, or Windows prefixes ESCAPE the base \
+directory — read any file the service's user can read, write the export \
+outside the export tree (the path-traversal class). The bounded repair is \
+the components() walk refusing everything but Normal: \
+`if joined.components().any(|c| !matches!(c, Component::Normal(_))) { \
+return Err(..) }` — the in-house riir-deployer `48d63f7` files-row fix \
+shape, cited in-rule. Suggest-only: the refusal path's error type is the \
+fn's choice, never mechanical. Honest recall limits: the shape proves a \
+MISSING GUARD, not an attacker — a helper joining two internal parameters \
+fires too and review decides; lexical `starts_with`/`strip_prefix` do NOT \
+suppress (a joined `..` survives both lexical checks — firing there is a \
+TRUE finding, the rule's subtle half); `components()`/`canonicalize`/the \
+`Component::{ParentDir,RootDir,CurDir,Prefix}` spellings anywhere in the fn \
+suppress (one hardened fn hides a sibling — conservative); literal/const \
+join args never fire (trusted by construction); field origins \
+(`entry.file_name()` — the read_dir iteration idiom) are an honest NO; \
+cross-fn joins undetected. Batch 258 / Plan 262 / Research 292 \
+(cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as class \
+provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "pub fn read_asset(base: &std::path::Path, name: &str) -> std::io::Result<String> {\n    std::fs::read_to_string(base.join(name))\n}\n"
+                .to_string(),
+            fixed_code: "pub fn read_asset(base: &std::path::Path, name: &str) -> std::io::Result<String> {\n    let joined = base.join(name);\n    if joined.components().any(|c| !matches!(c, std::path::Component::Normal(_))) {\n        return Err(std::io::Error::new(\n            std::io::ErrorKind::InvalidData,\n            \"path escapes the base directory\",\n        ));\n    }\n    std::fs::read_to_string(joined)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── webhook-signature-over-raw-bytes (CryptoHygiene; suggest-only) ──
+        SecRule {
+            rule_id: "webhook-signature-over-raw-bytes".to_string(),
+            sec_concept: "a signature/HMAC verification computed over a RE-SERIALIZED \
+body (`serde_json::to_string`/`to_vec` of a just-parsed value) instead of the \
+exact received bytes: canonicalization drift (key order, whitespace, number \
+format) lets an attacker reshape a payload and keep the check passing — the \
+envelope/payload identity mismatch class (a signature is over the raw bytes \
+the sender signed, verified BEFORE or alongside any parse). Suggest-only: \
+which key, which fields, and the timestamp/nonce binding are per-scheme \
+decisions. Distinct-from constant-time-secret-compare (owned): that rule \
+owns the COMPARE primitive (timing), this owns WHICH BYTES the signature \
+covers (coverage) — different axes. Honest recall limits: canonical-signature \
+schemes that DELIBERATELY sign the canonical re-serialization (JWS-style) \
+fire too and review decides — the rule flags the coverage question, not a \
+definite bug; the re-serialization must happen in the same fn as the verify; \
+to_writer forms and non-serde re-encodings unreached. Batch 258 / Plan 262 \
+/ Research 292 (cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as \
+class provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "fn verify_sig(secret: &[u8], body: &[u8]) -> bool {\n    let mut tag_ok = body.len() == 32;\n    for b in body {\n        if *b == 0 {\n            tag_ok = false;\n        }\n    }\n    let _ = secret;\n    tag_ok\n}\n\nfn verify_webhook(secret: &[u8], raw: &[u8]) -> bool {\n    let event: serde_json::Value = serde_json::from_slice(raw).unwrap_or_default();\n    let canonical = serde_json::to_vec(&event).unwrap_or_default();\n    verify_sig(secret, &canonical)\n}\n"
+                .to_string(),
+            fixed_code: "fn verify_sig(secret: &[u8], body: &[u8]) -> bool {\n    let mut tag_ok = body.len() == 32;\n    for b in body {\n        if *b == 0 {\n            tag_ok = false;\n        }\n    }\n    let _ = secret;\n    tag_ok\n}\n\nfn verify_webhook(secret: &[u8], raw: &[u8]) -> bool {\n    verify_sig(secret, raw)\n}\n"
+                .to_string(),
+            family: SecFamily::CryptoHygiene,
+        },
+        // ── unvalidated-egress-url (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "unvalidated-egress-url".to_string(),
+            sec_concept: "a URL assembled from request/tenant/config input reaching an \
+outbound client sink (`reqwest::get(u)`, `ureq::get(u)`) with no scheme/host \
+allowlist and no private-range refusal lets the caller pick the egress target: \
+cloud metadata endpoints, loopback admin edges, internal peers — the SSRF \
+class. The bounded repair is POLICY, never mechanical: pin the scheme, check \
+the host against an allowlist, refuse private/loopback/link-local ranges. \
+Suggest-only: the allowlist is deployment policy (which hosts are legitimate \
+is the operator's answer). Sink-level novelty over unbounded-read-into-vec \
+(owned): that rule owns `reqwest::get(..)` results as untrusted READ sources \
+(response bytes growing a buffer), this owns the URL-CHOICE side of the same \
+call — the Plan 156 T2 sink-distinct shape. Honest recall limits: only \
+parse-provable vocabulary fires (free calls under the `reqwest::`/`ureq::` \
+prefixes; a URL-vocabulary parameter or a format!-with-placeholder local as \
+the URL argument) — client-binding method sinks and framework extractors \
+(axum Path/Query) are honest NOs; a bare scheme check does NOT suppress (the \
+host is the SSRF axis); the validation vocabulary (allowlist/scheme()/\
+host_str()/private/loopback/link_local) anywhere in the fn suppresses; an \
+internal-only tool fetching its own config URL fires too and review decides; \
+cross-fn URL construction undetected. Batch 258 / Plan 262 / Research 292 \
+(cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as class \
+provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "pub fn fetch_report(base: &str, probe: &str) -> Result<String, String> {\n    let url = format!(\"https://{base}/report/{probe}\");\n    let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;\n    resp.into_string().map_err(|e| e.to_string())\n}\n"
+                .to_string(),
+            fixed_code: "const ALLOWED_HOSTS: [&str; 1] = [\"reports.internal\"];\n\npub fn fetch_report(base: &str, probe: &str) -> Result<String, String> {\n    if !ALLOWED_HOSTS.contains(&base) {\n        return Err(String::from(\"host not allowed\"));\n    }\n    let url = format!(\"https://{base}/report/{probe}\");\n    let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;\n    resp.into_string().map_err(|e| e.to_string())\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
