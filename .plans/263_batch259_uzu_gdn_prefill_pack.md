@@ -1,6 +1,6 @@
 # Plan 263 — Batch 259: the uzu chunked-GDN prefill pack + cubecl/llama.cpp riders
 
-**Status:** COMPLETE 2026-10-20 — Batch 259 landed (claim discharged by the landing row; T7 commit hash recorded in the snapshot landing row).
+**Status:** COMPLETE 2026-10-20 — Batch 259 landed (claim discharged by the landing row; T7 commit hash recorded in the snapshot landing row). Landing: `421c3239c` (claim `1a0c86375`).
 
 Staged from the 2026-10-19T18:4xZ item-11 upstream movement sweep (quotes verified at pins that pass). Zero-GPU batch (StartLux llama-server resident to 2026-10-20T13:30Z — corpus gates are CPU: syn parse + lib tests + clippy). kernel_opt-only corpus → freeze NOT owed, score-bench NOT owed, binary rebuild NOT owed (the P30/B250 precedent). Sources: uzu #978 `e744e7c` (the lead, league model Qwen3.8-27B-M, M5 Max e2e prefill −2.6% @30k / −3.5% @102k), cubecl #1853 `dbaf9b4` + #1858 `adf2378`, llama.cpp #30666 `f174553`.
 
