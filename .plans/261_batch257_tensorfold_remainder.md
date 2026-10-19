@@ -1,6 +1,6 @@
 # Plan 261 — Batch 257: the TensorFold staged remainder conversion
 
-**Status:** IN FLIGHT — claimed 2026-10-19, shikuwa/4090 idle loop (claim row in `.distill/001_mining_queue_snapshot.md`).
+**Status:** COMPLETE 2026-10-20 — Batch 257 landed (shikuwa/4090 idle loop; Research 293 is the record; 292 was taken mid-flight by the sibling security-audit-skill verdict).
 
 ## Source
 
@@ -31,14 +31,14 @@ Honest drops allowed — thin candidates grade out at the at-pin read (the B243 
 
 ## Tasks
 
-- [ ] T0 claim row + this plan + highwater bumps committed & pushed BEFORE authoring
-- [ ] T1 clone TensorFold at pin `.raw/tensorfold-b257`, rev-parse EXACT; every quote re-verified at the pin via `git show` during authoring
-- [ ] T2 dedup greps at 3+ vocabulary variants per candidate over BOTH corpora (src/domains/kernel_opt/ + src/domains/rust_perf/), zero owners confirmed per surviving rule
-- [ ] T3 authoring — 2-3 parallel subagents over disjoint slices (kernel slice / rust_perf slice / riders), fixtures proven in throwaway crates pre-landing where the rule carries a code atom
-- [ ] T4 wiring — entries files (next: entries_gpu_111.rs / entries_37.rs as needed), category counts, router experts pin, mod registration
-- [ ] T5 count pins re-pinned ×all sites (kernel_opt 910→N, rust_perf 235→M) — tests.rs, mod.rs doc, AGENTS.md, README, .docs/11_domains
-- [ ] T6 gates — batch257 parse+needles gates; default lib; kernel_opt lib; rust_perf_bench lib; clippy −D ×4 postures (default / no-default / kernel_opt / rust_perf_bench); retrieval floors re-measure; score-bench appended; freeze NOT owed unless clippy-corpus delta
-- [ ] T7 Research 292 written (.research/292_batch257_tensorfold_remainder.md); plan ticked all-[x]
+- [x] T0 claim row + this plan + highwater bumps committed & pushed BEFORE authoring
+- [x] T1 clone TensorFold at pin `.raw/tensorfold-b257`, rev-parse EXACT; every quote re-verified at the pin via `git show` during authoring
+- [x] T2 dedup greps at 3+ vocabulary variants per candidate over BOTH corpora (src/domains/kernel_opt/ + src/domains/rust_perf/), zero owners confirmed per surviving rule
+- [x] T3 authoring — 2-3 parallel subagents over disjoint slices (kernel slice / rust_perf slice / riders), fixtures proven in throwaway crates pre-landing where the rule carries a code atom
+- [x] T4 wiring — entries files (next: entries_gpu_111.rs / entries_37.rs as needed), category counts, router experts pin, mod registration
+- [x] T5 count pins re-pinned ×all sites (kernel_opt 910→N, rust_perf 235→M) — tests.rs, mod.rs doc, AGENTS.md, README, .docs/11_domains
+- [x] T6 gates — batch257 parse+needles gates; default lib; kernel_opt lib; rust_perf_bench lib; clippy −D ×4 postures (default / no-default / kernel_opt / rust_perf_bench); retrieval floors re-measure; score-bench appended; freeze NOT owed unless clippy-corpus delta
+- [x] T7 Research 293 written (.research/293_batch257_tensorfold_remainder.md — 292 was allocated mid-flight by the sibling security-audit-skill distill verdict, which yielded 257/261 to this claim); plan ticked all-[x]
 - [ ] T8 maintained binary rebuilt at the release feature set + `cp` to `~/.cargo/bin/cargo-refine.exe` BEFORE push (§0 bin-age; verify `--version` build == HEAD + `--corpus-stats` counts)
 - [ ] T9 commit `feat: batch 257: ...` + push + snapshot landing row (same commit); `.raw/tensorfold-b257` removed at close; CRLF-normalize every touched file pre-commit (instances #8/#9 standing)
 

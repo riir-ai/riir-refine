@@ -9,8 +9,16 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 235 entries across 13 categories as of Batch 256 (2026-10-19, Plan 260 /
-//! Research 290: +1 caching — `slru-probation-protected-promote-on-second-touch`,
+//! 241 entries across 13 categories as of Batch 257 (2026-10-20, Plan 261 /
+//! Research 293: +6 — the `TensorFold` staged remainder (the B256 read agents'
+//! B+ pool at the same pin `d1018b31`): `first-message-sized-to-smallest-job`
+//! (dispatch, @ `10ff8779`) + `draft-cost-timed-at-served-widths-not-extrapolated`
+//! (dispatch, @ `abb860c5`) + `checkpoint-reads-skip-page-cache-with-refusal-fallback`
+//! (io, @ `221c2b5d`+`6bb9daac`) + `reserve-stream-caches-at-admission-warm-request-paths-at-load`
+//! (allocation, @ `84c58d3f` sibling) + `cache-budget-first-sessions-take-remainder-never-reshrink`
+//! (allocation, @ `406b2090`) + `kept-prompt-states-pinned-host-cache-budget`
+//! (caching, @ `a739444c`), ALL ANNOTATED `NotBenchable`; Batch 256 (2026-10-19, Plan 260 /
+//! Research 291: +1 caching — `slru-probation-protected-promote-on-second-touch`,
 //! the llama.cpp `MoE` host-cache law @ `33d6135c` #30637 — a recency cache of
 //! EXPENSIVE entries runs a 50/50 SLRU, not one plain LRU list: first touch
 //! = probation, second touch promotes (protected capped `n_slots/2`, overflow
@@ -571,13 +579,14 @@ mod entries_33;
 mod entries_34;
 mod entries_35;
 mod entries_36;
+mod entries_37;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 235 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 241 entries
 /// (Batch 255, 2026-10-19, Plan 259 / Research 290: +1 caching — the llama.cpp
 /// #30637 `MoE` SLRU host-cache law, `NotBenchable` annotated; prior — Batch 250
 /// slice 1, Plan 254 / Research 285: +1 simd, the hadd butterfly epilogue
@@ -679,5 +688,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_34::entries());
     entries.extend(entries_35::entries());
     entries.extend(entries_36::entries());
+    entries.extend(entries_37::entries());
     Corpus::new(entries)
 }
