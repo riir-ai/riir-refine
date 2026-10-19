@@ -131,6 +131,17 @@ struct Args {
     /// with ≥1 (a)∧(c)-gold candidate get the per-fn differential driver,
     /// estimating P(behaviour-ok | a∧c-ok) for the T1.6 supply projection.
     harvest_behavioural: usize,
+    /// Plan 225 T2/T4: the frozen Bench-114 set (`cases.jsonl`).
+    frozen_cases: Option<PathBuf>,
+    /// Plan 225 T4: the replayed pool texts (`pool_texts.jsonl`, the
+    /// `--arm POOLTEXTS` output — candidate texts blake3-pinned to the
+    /// frozen rows).
+    frozen_pools: Option<PathBuf>,
+    /// Plan 225 T4: the frozen lint split (`split.json`).
+    frozen_split: Option<PathBuf>,
+    /// Plan 225 T4.2's A0 cost leg: verify-in-order wall on the first N
+    /// scored test rows (0 = off).
+    a0_cost_sample: usize,
 }
 
 impl Args {
@@ -158,6 +169,10 @@ impl Args {
             deadline_ms: 2_000,
             harvest_cap: 0,
             harvest_behavioural: 0,
+            frozen_cases: None,
+            frozen_pools: None,
+            frozen_split: None,
+            a0_cost_sample: 0,
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
@@ -199,8 +214,15 @@ impl Args {
                     a.harvest_cap = val().parse().expect("--harvest-cap must be an integer")
                 }
                 "--harvest-behavioural" => {
-                    a.harvest_behavioural =
-                        val().parse().expect("--harvest-behavioural must be an integer")
+                    a.harvest_behavioural = val()
+                        .parse()
+                        .expect("--harvest-behavioural must be an integer")
+                }
+                "--frozen-cases" => a.frozen_cases = Some(PathBuf::from(val())),
+                "--frozen-pools" => a.frozen_pools = Some(PathBuf::from(val())),
+                "--frozen-split" => a.frozen_split = Some(PathBuf::from(val())),
+                "--a0-cost-sample" => {
+                    a.a0_cost_sample = val().parse().expect("--a0-cost-sample must be an integer")
                 }
                 other => {
                     eprintln!("unknown arg: {other}");
@@ -560,6 +582,28 @@ fn main() {
         return;
     }
 
+    // Plan 225 T2 — the pool-text exporter: the frozen cases.jsonl carries
+    // gate flags + per-candidate blake3_12 but NOT candidate texts; this
+    // replay regenerates them (classify → verify blake3 → warm memory in
+    // the harvest's exact sequence) and emits pool_texts.jsonl for the
+    // trainer and the frozen read. Branches before `prepare` like HARVEST
+    // (no LLM prompts, no batch classify).
+    if args.arm == "POOLTEXTS" {
+        run_pooltexts(&args, &mut harness);
+        eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+        return;
+    }
+    // Plan 225 T4 — the frozen read: ONE paired pass of the frozen scored
+    // population (test lints only) through the LIVE seat, A0 derived from
+    // the frozen gate fields, verdict per T4.3. Also branches before
+    // `prepare` (the prepared samples are not the frozen population).
+    if args.arm == "FROZEN" {
+        let verifier = std::mem::replace(&mut harness.verifier, ClippyVerifier::new());
+        run_frozen(&args, &verifier);
+        eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+        return;
+    }
+
     let prepared = prepare(&mut harness, samples, args.few_shots);
     std::fs::create_dir_all(&args.behav_dir).ok();
     // The harness is consumed by `prepare`; arms get their own verifier
@@ -572,7 +616,9 @@ fn main() {
         "C" => run_daemon(&args, &verifier, &prepared),
         "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
         other => {
-            eprintln!("unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|BT8|BT8DRY)");
+            eprintln!(
+                "unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|POOLTEXTS|FROZEN|BT8|BT8DRY)"
+            );
             std::process::exit(2);
         }
     }
@@ -831,8 +877,7 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         // (riir-dapps Plan 035 T10).
         let neurons_from_client = summary.prompt_tokens as f64 / TOKENS_PER_MTOK as f64
             * DEFAULT_NEURONS_IN_PER_M
-            + summary.completion_tokens as f64 / TOKENS_PER_MTOK as f64
-                * DEFAULT_NEURONS_OUT_PER_M;
+            + summary.completion_tokens as f64 / TOKENS_PER_MTOK as f64 * DEFAULT_NEURONS_OUT_PER_M;
         if neurons_from_client > 0.0 {
             println!(
                 "  neuron cross-check: client tokens → {:.2} neurons vs server {:.2} ({:+.0}% — server counts template tokens)",
@@ -1601,7 +1646,9 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
     }
 
     let Some(out_dir) = args.out.clone() else {
-        eprintln!("FATAL: --arm HARVEST needs --out <dir> (cases.jsonl + census.json + split.json)");
+        eprintln!(
+            "FATAL: --arm HARVEST needs --out <dir> (cases.jsonl + census.json + split.json)"
+        );
         std::process::exit(2);
     };
     std::fs::create_dir_all(&out_dir).expect("create harvest out dir");
@@ -1616,7 +1663,10 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .unwrap_or_else(|| "unknown".to_string());
-    eprintln!("[harvest] {} samples; clippy {clippy_version}", samples.len());
+    eprintln!(
+        "[harvest] {} samples; clippy {clippy_version}",
+        samples.len()
+    );
 
     // ── Phase 0: labelling pass — the target lint is what FIRES in the ────
     // scaffold (row label first when it fires, else the first discovery;
@@ -1638,7 +1688,8 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
             .iter()
             .map(|l| l.strip_prefix("clippy::").unwrap_or(l))
             .collect();
-        let (target, source) = if let Some(l) = s.lints.iter().find(|l| fires.contains(&l.as_str())) {
+        let (target, source) = if let Some(l) = s.lints.iter().find(|l| fires.contains(&l.as_str()))
+        {
             (Some(l.clone()), "row")
         } else if let Some(first) = fires.first() {
             (Some((*first).to_string()), "discovered")
@@ -1648,7 +1699,11 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         if target.is_none() {
             no_control += 1;
         }
-        labelled.push(Labelled { sample: s, target, target_source: source });
+        labelled.push(Labelled {
+            sample: s,
+            target,
+            target_source: source,
+        });
         if (n + 1) % 200 == 0 {
             eprintln!(
                 "[harvest] labelled {}/{} ({:.1}s)",
@@ -1669,8 +1724,12 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
     // The pilot's clause-(b) tally (candidate-level): every gold_a_c
     // candidate on a pilot case gets behav-scored; the ok-rate IS
     // P(behav-ok | a∧c-ok) — the T1.6 full-oracle supply projection input.
-    let (mut pilot_gold_ac, mut pilot_behav_ok, mut pilot_behav_divergent, mut pilot_behav_unresolved) =
-        (0usize, 0usize, 0usize, 0usize);
+    let (
+        mut pilot_gold_ac,
+        mut pilot_behav_ok,
+        mut pilot_behav_divergent,
+        mut pilot_behav_unresolved,
+    ) = (0usize, 0usize, 0usize, 0usize);
     let mut per_lint: std::collections::BTreeMap<String, LintCensus> = Default::default();
     let t_replay = std::time::Instant::now();
     for (n, l) in labelled.into_iter().enumerate() {
@@ -1828,13 +1887,9 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
             served_idx = outcome.pool.iter().position(|p| p == served);
             if let Some(i) = served_idx {
                 let success = cands[i].gold_a_c;
-                harness.pipeline.report_outcome(
-                    &target,
-                    &l.sample.module,
-                    served,
-                    success,
-                    true,
-                );
+                harness
+                    .pipeline
+                    .report_outcome(&target, &l.sample.module, served, success, true);
             }
         }
 
@@ -1875,7 +1930,10 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         .iter_mut()
         .filter(|(_, c)| c.deciding + c.none_gold > 0)
         .collect();
-    let total_scored: usize = scored_lints.iter().map(|(_, c)| c.deciding + c.none_gold).sum();
+    let total_scored: usize = scored_lints
+        .iter()
+        .map(|(_, c)| c.deciding + c.none_gold)
+        .sum();
     scored_lints.sort_by(|a, b| {
         (b.1.deciding + b.1.none_gold)
             .cmp(&(a.1.deciding + a.1.none_gold))
@@ -1944,8 +2002,11 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         "split": &split,
         "split_test_scored": test_scored,
     });
-    std::fs::write(out_dir.join("census.json"), serde_json::to_string_pretty(&census).unwrap())
-        .expect("write census.json");
+    std::fs::write(
+        out_dir.join("census.json"),
+        serde_json::to_string_pretty(&census).unwrap(),
+    )
+    .expect("write census.json");
     std::fs::write(
         out_dir.join("split.json"),
         serde_json::to_string_pretty(&split).unwrap(),
@@ -1954,7 +2015,11 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
 
     println!("═ arm HARVEST — Plan 225 T1 case-set census ═");
     println!("  clippy {clippy_version}");
-    println!("  modules: {} ({} without a firing target)", n_total + no_control, no_control);
+    println!(
+        "  modules: {} ({} without a firing target)",
+        n_total + no_control,
+        no_control
+    );
     println!("  pool≥2: {pool_ge2_total}   deciding: {deciding_total}   none-gold: {none_gold_total}   all-gold(unscored): {all_gold_total}");
     println!(
         "  behav pilot cases: {}   deciding_full among them: {deciding_full_total}",
@@ -1963,8 +2028,16 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
     println!(
         "  clause-(b) pilot: {pilot_gold_ac} gold_a_c cands → ok {pilot_behav_ok} / divergent {pilot_behav_divergent} / unresolved {pilot_behav_unresolved}"
     );
-    println!("  split (lint-disjoint): test {} / {} scored", test_scored, total_scored);
-    println!("  T1.6 N(p_d): p_d=0.20 → {}, 0.35 → {}, 0.50 → {}", n_power(0.20), n_power(0.35), n_power(0.50));
+    println!(
+        "  split (lint-disjoint): test {} / {} scored",
+        test_scored, total_scored
+    );
+    println!(
+        "  T1.6 N(p_d): p_d=0.20 → {}, 0.35 → {}, 0.50 → {}",
+        n_power(0.20),
+        n_power(0.35),
+        n_power(0.50)
+    );
     for (lint, c) in &per_lint {
         println!(
             "    {:<28} n={:<4} corpus={} pool≥2={:<4} deciding={:<3} none-gold={:<3} all-gold={:<3}",
@@ -2068,9 +2141,7 @@ fn run_hosted(
         dispatch.row().modelless_cap,
         dispatch.row().max_rate,
         args.deadline_ms,
-        if std::env::var("RIIR_REFINE_CODE_EGRESS")
-            .is_ok_and(|v| v.trim() == "snippet")
-        {
+        if std::env::var("RIIR_REFINE_CODE_EGRESS").is_ok_and(|v| v.trim() == "snippet") {
             "granted"
         } else {
             "REFUSED (set RIIR_REFINE_CODE_EGRESS=snippet for live seats)"
@@ -2113,75 +2184,98 @@ fn run_hosted(
         eprintln!("[H] {} …", p.sample.id);
         // ── the modelless arm (the incumbent the chain protects) ───────
         let modelless_gen: String = p.modelless.clone().unwrap_or_default();
-        let score_m = cf_workers_ai::score_case(
-            verifier,
-            &p.sample,
-            &modelless_gen,
-            Some(&args.behav_dir),
-        );
+        let score_m =
+            cf_workers_ai::score_case(verifier, &p.sample, &modelless_gen, Some(&args.behav_dir));
         modelless_summary.add(&score_m, p.reachable_miss, 0, 0, 0.0, 0.0);
 
         // ── the escalation arm (worthiness → ceiling → transport) ──────
-        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms);
+        let deadline =
+            std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms);
         let (outcome_class, served_from, fix, receipt_note, wall_ms) = match kind.as_str() {
-                "seat_rerank" => {
-                    let t = std::time::Instant::now();
-                    let answer =
-                        dispatch.escalate_rerank(p.score, &p.sample.module, &p.pool, deadline, policy);
-                    let wall = t.elapsed().as_millis();
-                    // The R7 receipt tier (seat_rerank builds only): the
-                    // seat-side decision time + the build/confidence audit
-                    // note, read BEFORE the answer is consumed below.
-                    #[cfg(feature = "seat_rerank")]
-                    if let Some(r) = answer.receipt() {
-                        receipt_us_total += r.us.unwrap_or(0);
+            "seat_rerank" => {
+                let t = std::time::Instant::now();
+                let answer =
+                    dispatch.escalate_rerank(p.score, &p.sample.module, &p.pool, deadline, policy);
+                let wall = t.elapsed().as_millis();
+                // The R7 receipt tier (seat_rerank builds only): the
+                // seat-side decision time + the build/confidence audit
+                // note, read BEFORE the answer is consumed below.
+                #[cfg(feature = "seat_rerank")]
+                if let Some(r) = answer.receipt() {
+                    receipt_us_total += r.us.unwrap_or(0);
+                }
+                let note = receipt_audit_note(&answer);
+                match answer {
+                    EscalatedFix::Answer { fix, source, .. } => {
+                        n_pick += 1;
+                        (outcome_class_of(&fix), source.to_string(), fix, note, wall)
                     }
-                    let note = receipt_audit_note(&answer);
-                    match answer {
-                        EscalatedFix::Answer { fix, source, .. } => {
-                            n_pick += 1;
-                            (outcome_class_of(&fix), source.to_string(), fix, note, wall)
-                        }
-                        EscalatedFix::StoodByModelless { reason } => {
-                            let (class, reason) = stand_reason_axes(reason, &mut n_worthy, &mut n_abstain, &mut n_below_min, &mut n_declined, &mut n_latched);
-                            (class, "modelless".to_string(), modelless_gen.clone(), reason, wall)
-                        }
+                    EscalatedFix::StoodByModelless { reason } => {
+                        let (class, reason) = stand_reason_axes(
+                            reason,
+                            &mut n_worthy,
+                            &mut n_abstain,
+                            &mut n_below_min,
+                            &mut n_declined,
+                            &mut n_latched,
+                        );
+                        (
+                            class,
+                            "modelless".to_string(),
+                            modelless_gen.clone(),
+                            reason,
+                            wall,
+                        )
                     }
                 }
-                "hosted_expert" => {
-                    let t = std::time::Instant::now();
-                    let fix = dispatch.escalate_generate(
-                        p.score,
-                        &p.sample.module,
-                        deadline,
-                        args.max_new as u64,
-                    );
-                    let wall = t.elapsed().as_millis();
-                    match fix {
-                        EscalatedFix::Answer { fix, source, .. } => {
-                            n_generate += 1;
-                            (
-                                outcome_class_of(&fix),
-                                source.to_string(),
-                                fix,
-                                "no-receipt".to_string(),
-                                wall,
-                            )
-                        }
-                        EscalatedFix::StoodByModelless { reason } => {
-                            let (class, reason) = stand_reason_axes(reason, &mut n_worthy, &mut n_abstain, &mut n_below_min, &mut n_declined, &mut n_latched);
-                            (class, "modelless".to_string(), modelless_gen.clone(), reason, wall)
-                        }
+            }
+            "hosted_expert" => {
+                let t = std::time::Instant::now();
+                let fix = dispatch.escalate_generate(
+                    p.score,
+                    &p.sample.module,
+                    deadline,
+                    args.max_new as u64,
+                );
+                let wall = t.elapsed().as_millis();
+                match fix {
+                    EscalatedFix::Answer { fix, source, .. } => {
+                        n_generate += 1;
+                        (
+                            outcome_class_of(&fix),
+                            source.to_string(),
+                            fix,
+                            "no-receipt".to_string(),
+                            wall,
+                        )
+                    }
+                    EscalatedFix::StoodByModelless { reason } => {
+                        let (class, reason) = stand_reason_axes(
+                            reason,
+                            &mut n_worthy,
+                            &mut n_abstain,
+                            &mut n_below_min,
+                            &mut n_declined,
+                            &mut n_latched,
+                        );
+                        (
+                            class,
+                            "modelless".to_string(),
+                            modelless_gen.clone(),
+                            reason,
+                            wall,
+                        )
                     }
                 }
-                other => (
-                    "skip".to_string(),
-                    "modelless".to_string(),
-                    modelless_gen.clone(),
-                    format!("unknown kind {other:?}"),
-                    0,
-                ),
-            };
+            }
+            other => (
+                "skip".to_string(),
+                "modelless".to_string(),
+                modelless_gen.clone(),
+                format!("unknown kind {other:?}"),
+                0,
+            ),
+        };
         if served_from != "modelless" {
             esc_wall_ms_total += wall_ms;
             esc_wall_ms_max = esc_wall_ms_max.max(wall_ms);
@@ -2295,7 +2389,10 @@ fn run_hosted(
 
     // ── the paired summary + the cost axes ────────────────────────────
     let n = prepared.len();
-    println!("\n═ arm H summary ({n} paired cases; kind={}) ═", dispatch.row().target.kind);
+    println!(
+        "\n═ arm H summary ({n} paired cases; kind={}) ═",
+        dispatch.row().target.kind
+    );
     println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
     println!("{}", modelless_summary.markdown_row("H-modelless"));
     println!("{}", escalated_summary.markdown_row("H-escalated"));
@@ -2346,10 +2443,7 @@ fn run_hosted(
                 None => (*run_tally, riir_refine::memory::EvidenceTier::Heuristic),
             };
             riir_refine::rescue_mine::StateRescueTally {
-                state_id: format!(
-                    "{lint}:{}",
-                    riir_refine::traj_store::shape_hash(shape)
-                ),
+                state_id: format!("{lint}:{}", riir_refine::traj_store::shape_hash(shape)),
                 b0_attempts: tally.b0_attempts,
                 b0_successes: tally.b0_successes,
                 bd_attempts: tally.bd_attempts,
@@ -2461,19 +2555,461 @@ fn stand_reason_axes(
         }
         riir_refine::escalation_dispatch::StandReason::SeatAbstained => {
             *n_abstain += 1;
-            ("abstained".to_string(), "seat abstained — modelless stands".to_string())
+            (
+                "abstained".to_string(),
+                "seat abstained — modelless stands".to_string(),
+            )
         }
         riir_refine::escalation_dispatch::StandReason::BelowMinPool => {
             *n_below_min += 1;
-            ("below_min_pool".to_string(), "pool below the row's bound".to_string())
+            (
+                "below_min_pool".to_string(),
+                "pool below the row's bound".to_string(),
+            )
         }
         riir_refine::escalation_dispatch::StandReason::RateLatched => {
             *n_latched += 1;
-            ("rate_latched".to_string(), "cost ceiling latched (sticky)".to_string())
+            (
+                "rate_latched".to_string(),
+                "cost ceiling latched (sticky)".to_string(),
+            )
         }
         riir_refine::escalation_dispatch::StandReason::Declined(m) => {
             *n_declined += 1;
             ("declined".to_string(), m)
         }
+    }
+}
+
+// ── Plan 225 T2 — the POOLTEXTS arm: regenerate the frozen pools' texts ────
+//
+// The frozen cases.jsonl carries gate flags + per-candidate blake3_12 but
+// NOT candidate texts. This replay walks the frozen rows in file order,
+// re-runs `classify_outcome` per row (the harvest's exact pool birth),
+// verifies every regenerated candidate's blake3_12 against the frozen
+// entry, warms memory with the frozen served success (the harvest's exact
+// sequence), and emits `{case_id, texts, blake_ok, served_ok}` rows for
+// the trainer and the frozen read.
+fn run_pooltexts(args: &Args, harness: &mut RegateHarness) {
+    let cases_path = args
+        .frozen_cases
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm POOLTEXTS needs --frozen-cases <cases.jsonl>"));
+    let out_path = args
+        .out
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm POOLTEXTS needs --out <pool_texts.jsonl>"));
+    let raw = std::fs::read_to_string(cases_path)
+        .unwrap_or_else(|e| panic!("frozen cases {}: {e}", cases_path.display()));
+    let mut out = std::io::BufWriter::new(std::fs::File::create(out_path).expect("out creates"));
+    let (mut ok_rows, mut drift_rows) = (0usize, 0usize);
+    let t = std::time::Instant::now();
+    for (n, line) in raw.lines().enumerate() {
+        let row: serde_json::Value = serde_json::from_str(line).expect("frozen row parses");
+        let Some(target) = row["target_lint"].as_str().map(str::to_string) else {
+            continue; // no_control rows: skipped entirely, exactly as harvest
+        };
+        let module = row["module"].as_str().unwrap_or_default().to_string();
+        let frozen_pool = row["pool"].as_array().cloned().unwrap_or_default();
+
+        let outcome = harness.classify_outcome(&target, &module);
+        let mut blake_ok = outcome.pool.len() == frozen_pool.len();
+        let mut texts: Vec<String> = Vec::with_capacity(outcome.pool.len());
+        for (i, frozen) in frozen_pool.iter().enumerate() {
+            match outcome.pool.get(i) {
+                Some(text) => {
+                    let h = blake3::hash(text.as_bytes()).to_hex();
+                    if &h[..12] != frozen["blake3_12"].as_str().unwrap_or("") {
+                        blake_ok = false;
+                    }
+                    texts.push(text.clone());
+                }
+                None => blake_ok = false,
+            }
+        }
+
+        // Memory warming — the harvest's exact shape: the SERVED candidate's
+        // frozen (a∧c) verdict feeds the pipeline, in file order.
+        if let Some(served) = &outcome.served {
+            if let Some(i) = outcome.pool.iter().position(|p| p == served) {
+                let success = frozen_pool
+                    .get(i)
+                    .and_then(|c| c["gold_a_c"].as_bool())
+                    .unwrap_or(false);
+                harness
+                    .pipeline
+                    .report_outcome(&target, &module, served, success, true);
+            }
+        }
+        let served_ok = outcome
+            .served
+            .as_ref()
+            .and_then(|s| outcome.pool.iter().position(|p| p == s))
+            == row["served_idx"].as_u64().map(|v| v as usize);
+        if blake_ok && served_ok {
+            ok_rows += 1;
+        } else {
+            drift_rows += 1;
+            eprintln!(
+                "[pooltexts] DRIFT {} blake_ok={blake_ok} served_ok={served_ok}",
+                row["case_id"]
+            );
+        }
+        let row_out = serde_json::json!({
+            "case_id": row["case_id"],
+            "texts": texts,
+            "blake_ok": blake_ok,
+            "served_ok": served_ok,
+        });
+        writeln!(out, "{row_out}").ok();
+        if (n + 1) % 100 == 0 {
+            eprintln!(
+                "[pooltexts] {}/{} lines ({:.1}s)",
+                n + 1,
+                raw.lines().count(),
+                t.elapsed().as_secs_f32()
+            );
+        }
+    }
+    let total = ok_rows + drift_rows;
+    eprintln!(
+        "[pooltexts] done: {total} target rows, ok={ok_rows} drift={drift_rows} ({:.1}s)",
+        t.elapsed().as_secs_f32()
+    );
+    // Environment drift is measured, not refused here: the frozen pin is
+    // enforced PER CONSUMER (the trainer drops unpinned rows; the frozen
+    // read enforces the pre-registered ≤5%-of-scored-test wall). Only a
+    // total reproduction failure is fatal at this layer.
+    if total == 0 || ok_rows * 10 < total {
+        eprintln!("FATAL: pool replay reproduced under 10% — the frozen pin does not hold at all; investigate before training or reading");
+        std::process::exit(1);
+    }
+    out.flush().ok();
+}
+
+// ── Plan 225 T4 — the FROZEN arm: the one paired read over the live seat ──
+//
+// Pre-registered pins (Bench 119 records them beside the run): primary
+// oracle = a∧c (`gold_a_c`); deciding stratum = the pre-registered test
+// (T1.6's power population), none-gold reported with its n (no inference
+// at n<2); A0 = verify-in-order over the frozen gate fields (first
+// `compiled && target_resolved` else the served fallback); superiority
+// = paired LB95 > 0 (Holm, m=1 this round — A2/T3 not minted); NI route
+// = paired LB95 > −0.02 AND seat cost below the A0 verify-in-order wall.
+// Pool drift drops the case; >5% drift invalidates the read.
+#[cfg(feature = "escalation_manifest")]
+fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
+    use riir_refine::escalation_dispatch::{EscalatedFix, EscalationDispatch, ReadinessPolicy};
+    use riir_refine::escalation_manifest::EscalationManifest;
+
+    let cases_path = args
+        .frozen_cases
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-cases <cases.jsonl>"));
+    let pools_path = args
+        .frozen_pools
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-pools <pool_texts.jsonl>"));
+    let split_path = args
+        .frozen_split
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-split <split.json>"));
+    let split: std::collections::BTreeMap<String, String> =
+        serde_json::from_str(&std::fs::read_to_string(split_path).expect("split.json reads"))
+            .expect("split.json parses");
+
+    // case_id → (texts, pins_ok)
+    let mut pools = std::collections::BTreeMap::new();
+    for line in std::fs::read_to_string(pools_path)
+        .expect("pool_texts reads")
+        .lines()
+    {
+        let row: serde_json::Value = serde_json::from_str(line).expect("pool row parses");
+        let id = row["case_id"].as_str().unwrap_or_default().to_string();
+        let texts: Vec<String> = row["texts"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|t| t.as_str().unwrap_or_default().to_string())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let ok = row["blake_ok"].as_bool().unwrap_or(false)
+            && row["served_ok"].as_bool().unwrap_or(false);
+        pools.insert(id, (texts, ok));
+    }
+
+    let manifest = match EscalationManifest::load(&args.esc_manifest) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+    // The manifest is CONSULTED per case (a fresh dispatch per case — the
+    // rolling-rate latch's window is 200 observes and the bench posture is
+    // ~100% escalation, so one process-wide dispatch would RateLatch at
+    // case #200; the fresh-per-case posture keeps the window unfilled and
+    // the seat live for every scored case).
+    if matches!(
+        EscalationDispatch::arm(&manifest, &args.esc_domain),
+        Ok(None) | Err(_)
+    ) {
+        eprintln!(
+            "SKIP arm FROZEN: no armed escalation row for {:?} in {}",
+            args.esc_domain,
+            args.esc_manifest.display()
+        );
+        std::process::exit(3);
+    }
+
+    let mut out = args
+        .out
+        .as_ref()
+        .map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("ledger creates")));
+    let policy = ReadinessPolicy::default();
+    let (mut a1_dec, mut a0_dec) = (Vec::<bool>::new(), Vec::<bool>::new());
+    let (mut a1_none, mut a0_none) = (Vec::<bool>::new(), Vec::<bool>::new());
+    let (mut n_dropped_drift, mut n_scored) = (0usize, 0usize);
+    let (mut n_pick, mut n_abstain, mut n_stood_other) = (0usize, 0usize, 0usize);
+    let mut seat_wall_ms: Vec<f64> = Vec::new();
+    let mut seat_us: Vec<u64> = Vec::new();
+    let mut a0_cost_ms: Vec<f64> = Vec::new();
+    let t = std::time::Instant::now();
+
+    for line in std::fs::read_to_string(cases_path)
+        .expect("cases reads")
+        .lines()
+    {
+        let row: serde_json::Value = serde_json::from_str(line).expect("frozen row parses");
+        let Some(target) = row["target_lint"].as_str() else {
+            continue;
+        };
+        if split.get(target).map(String::as_str) != Some("test") {
+            continue;
+        }
+        let stratum = row["stratum"].as_str().unwrap_or_default();
+        if stratum != "deciding" && stratum != "none_gold" {
+            continue;
+        }
+        let id = row["case_id"].as_str().unwrap_or_default().to_string();
+        let Some((texts, pins_ok)) = pools.get(&id) else {
+            n_dropped_drift += 1;
+            continue;
+        };
+        if !pins_ok {
+            n_dropped_drift += 1;
+            eprintln!("[frozen] DROP (pool pin) {id}");
+            continue;
+        }
+        let frozen_pool = row["pool"].as_array().cloned().unwrap_or_default();
+        let gold: Vec<bool> = frozen_pool
+            .iter()
+            .map(|c| c["gold_a_c"].as_bool().unwrap_or(false))
+            .collect();
+
+        // A0 — verify-in-order over the FROZEN gate fields (T4.1).
+        let a0_idx = frozen_pool
+            .iter()
+            .position(|c| {
+                c["compiled"].as_bool().unwrap_or(false)
+                    && c["target_resolved"].as_bool().unwrap_or(false)
+            })
+            .or_else(|| row["served_idx"].as_u64().map(|v| v as usize));
+        let a0_score = a0_idx.and_then(|i| gold.get(i).copied()).unwrap_or(false);
+
+        // A0 cost leg — the verify-in-order wall on a pre-registered
+        // subsample (the first N scored rows; the gates run exactly as the
+        // harvest ran them).
+        if a0_cost_ms.len() < args.a0_cost_sample {
+            let module = row["module"].as_str().unwrap_or_default();
+            let score_sample = Sample {
+                id: id.clone(),
+                lints: vec![target.to_string()],
+                module: module.to_string(),
+                expected: row["expected"].as_str().map(str::to_string),
+                source: SampleSource::V2edit,
+            };
+            let tc = std::time::Instant::now();
+            for cand in texts {
+                let merged = cf_workers_ai::apply_edit(module, cand, false);
+                if let Some((merged_module, _)) = merged {
+                    let sc = cf_workers_ai::score_case(verifier, &score_sample, cand, None);
+                    let _ = merged_module;
+                    if sc.oracle_ran && sc.after_compiled && sc.target_resolved {
+                        break;
+                    }
+                }
+            }
+            a0_cost_ms.push(tc.elapsed().as_secs_f64() * 1000.0);
+        }
+
+        // A1 — the LIVE seat (fresh dispatch per case, see above).
+        let t_seat = std::time::Instant::now();
+        let answer = match EscalationDispatch::arm(&manifest, &args.esc_domain) {
+            Ok(Some(mut d)) => d.escalate_rerank(
+                row["modelless_score"].as_f64().unwrap_or(0.0) as f32,
+                row["module"].as_str().unwrap_or_default(),
+                texts,
+                std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms),
+                policy,
+            ),
+            _ => {
+                eprintln!("FATAL: dispatch refused mid-read");
+                std::process::exit(1);
+            }
+        };
+        let wall_ms = t_seat.elapsed().as_secs_f64() * 1000.0;
+        seat_wall_ms.push(wall_ms);
+        let (a1_score, seat_note): (bool, String) = match &answer {
+            EscalatedFix::Answer { fix, .. } => {
+                n_pick += 1;
+                let idx = texts.iter().position(|t| *t == *fix);
+                match idx.and_then(|i| gold.get(i).copied()) {
+                    Some(g) => (g, format!("pick:{:?}", idx.unwrap())),
+                    None => {
+                        eprintln!("[frozen] seat pick not in pool for {id} — scoring 0");
+                        (false, "pick:NOT_IN_POOL".to_string())
+                    }
+                }
+            }
+            EscalatedFix::StoodByModelless { reason } => {
+                // Abstention is first-class: abstain-when-none-gold = 1,
+                // abstain on a deciding case = 0 (no gold picked).
+                let abstained = matches!(
+                    reason,
+                    riir_refine::escalation_dispatch::StandReason::SeatAbstained
+                );
+                if abstained {
+                    n_abstain += 1;
+                } else {
+                    n_stood_other += 1;
+                }
+                (
+                    abstained && stratum == "none_gold",
+                    format!("stand:{reason:?}"),
+                )
+            }
+        };
+        #[cfg(feature = "seat_rerank")]
+        if let Some(r) = answer.receipt() {
+            if let Some(us) = r.us {
+                seat_us.push(us);
+            }
+        }
+
+        let modelless_idx = row["served_idx"].as_u64().map(|v| v as usize);
+        let modelless_score = modelless_idx
+            .and_then(|i| gold.get(i).copied())
+            .unwrap_or(false);
+        if stratum == "deciding" {
+            a1_dec.push(a1_score);
+            a0_dec.push(a0_score);
+        } else {
+            a1_none.push(a1_score);
+            a0_none.push(a0_score);
+        }
+        n_scored += 1;
+        if let Some(w) = out.as_mut() {
+            let receipt_us = seat_us.last().copied().unwrap_or(0);
+            let ledger = serde_json::json!({
+                "case_id": id,
+                "stratum": stratum,
+                "pool_size": texts.len(),
+                "a0": {"pick_idx": a0_idx, "score": a0_score},
+                "seat": {"note": seat_note, "score": a1_score, "wall_ms": wall_ms, "receipt_us": receipt_us},
+                "modelless": {"score": modelless_score},
+            });
+            writeln!(w, "{ledger}").ok();
+        }
+        if n_scored % 50 == 0 {
+            eprintln!(
+                "[frozen] {n_scored} scored ({:.1}s)",
+                t.elapsed().as_secs_f32()
+            );
+        }
+    }
+
+    // ── the paired verdict (T4.2/T4.3, pre-registered) ──────────────────
+    let paired = |a1: &[bool], a0: &[bool]| -> (f64, f64, usize, usize, usize) {
+        let n = a1.len();
+        let diffs: Vec<f64> = a1
+            .iter()
+            .zip(a0)
+            .map(|(&x, &y)| i8::from(x) as f64 - i8::from(y) as f64)
+            .collect();
+        let mean = diffs.iter().sum::<f64>() / n.max(1) as f64;
+        let wins = a1.iter().zip(a0).filter(|(x, y)| **x && !**y).count();
+        let losses = a1.iter().zip(a0).filter(|(x, y)| !**x && **y).count();
+        let se = if n > 1 {
+            let var = diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+            (var / n as f64).sqrt()
+        } else {
+            0.0
+        };
+        (mean, mean - 1.96 * se, wins, losses, n)
+    };
+    let (dec_mean, dec_lb95, dec_wins, dec_losses, dec_n) = paired(&a1_dec, &a0_dec);
+    let (none_mean, none_lb95, none_wins, none_losses, none_n) = paired(&a1_none, &a0_none);
+    let a1_dec_correct = a1_dec.iter().filter(|b| **b).count();
+    let a0_dec_correct = a0_dec.iter().filter(|b| **b).count();
+    let p50 = |v: &mut Vec<f64>| -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v.get(v.len() / 2).copied().unwrap_or(0.0)
+    };
+    let seat_p50 = p50(&mut seat_wall_ms);
+    let seat_max = seat_wall_ms.iter().cloned().fold(0.0f64, f64::max);
+    let a0_p50 = p50(&mut a0_cost_ms);
+
+    println!("\n═ arm FROZEN — Plan 225 T4: the heal-seat frozen read ═");
+    println!(
+        "scored: {n_scored} (deciding {} · none_gold {}) · dropped(pool pin) {n_dropped_drift}",
+        a1_dec.len(),
+        a1_none.len()
+    );
+    println!(
+        "DECIDING  n={dec_n}: A1 {a1_dec_correct}/{dec_n} · A0 {a0_dec_correct}/{dec_n} · W/L/T {dec_wins}/{dec_losses}/{} · mean {dec_mean:+.5} · LB95 {dec_lb95:+.5}",
+        dec_n - dec_wins - dec_losses
+    );
+    println!(
+        "NONE_GOLD n={none_n}: A1 {}/{} · A0 {}/{} · W/L/T {none_wins}/{none_losses}/{} · mean {none_mean:+.5} · LB95 {none_lb95:+.5} (no inference at n<2 — disclosed)",
+        a1_none.iter().filter(|b| **b).count(),
+        none_n,
+        a0_none.iter().filter(|b| **b).count(),
+        none_n,
+        none_n - none_wins - none_losses
+    );
+    println!("seat: picks {n_pick} · abstains {n_abstain} · stood-other {n_stood_other} · wall p50 {seat_p50:.2} ms (budget ≤ 50 ms) max {seat_max:.2} ms");
+    if !seat_us.is_empty() {
+        let mut us = seat_us.clone();
+        us.sort_unstable();
+        println!(
+            "seat receipt µs: p50 {} max {}",
+            us[us.len() / 2],
+            us[us.len() - 1]
+        );
+    }
+    if a0_p50 > 0.0 {
+        println!(
+            "A0 verify-in-order wall (n={} subsample): p50 {a0_p50:.1} ms — the seat's cost leg",
+            a0_cost_ms.len()
+        );
+    }
+    let superiority = dec_lb95 > 0.0;
+    let ni_quality = dec_lb95 > -0.02;
+    let ni_cost = a0_p50 <= 0.0 || seat_p50 < a0_p50;
+    println!(
+        "VERDICT: {}",
+        if superiority {
+            "SEAT WINS (superiority: Holm m=1, paired LB95 > 0) — arm the heal row by manifest edit (T5, OWNER-GATED — this bench prints, never edits)"
+        } else if ni_quality && ni_cost {
+            "SEAT WINS (non-inferiority at lower cost: paired LB95 > −0.02 AND seat p50 below the A0 verify-in-order wall) — arm the heal row by manifest edit (T5, OWNER-GATED — this bench prints, never edits)"
+        } else {
+            "DECLINE — the seat stays empty; decline is a correct answer (record the negative)"
+        }
+    );
+    if n_dropped_drift * 20 > n_scored + n_dropped_drift {
+        eprintln!("⚠ READ INVALID: pool drift exceeded 5% of scored rows");
+        std::process::exit(1);
     }
 }
