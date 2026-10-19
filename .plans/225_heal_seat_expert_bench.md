@@ -2,6 +2,8 @@
 
 **Status:** T1 EXECUTED 2026-10-11 (Bench 113, BLOCKED) → **ISSUE 161 LANDED SAME DAY (Bench 114): T1.6 PASSES** — deciding 3 → **1416** vs N(p_d=0.20)=621 (2.3×; also clears N(0.35)=1092); clause-(b) pilot 22 ok / 0 divergent / 18 unresolved → P(behav-ok | a∧c-ok) = 0.55, full-oracle projection ≈ 779 ≥ 621. δ₀ never lowered. The unblock was three changes (Issue 161): the proposer pool birth point (pool-only, R6 seam contract intact), the `rewrite` merge strategy (the instrument was mangling faithful whole-module rewrites — the FIRST widened census read 455 deciding with the proposer member `not_compiled` 91/91 on single_match while a direct probe showed the fixes compile+resolve ≈100%; the merge, not the proposers, was wrong), and the behav driver's real-module blockers (floats/int-slices/Option<float> + PRIVATE-FN E0603 — real modules declare private fns; the driver publicizes both sides). T2/T3 re-enter scope, owner-gated as before. Earlier: verdict round 1 REVISE folded (`1d410fd5`); round 2 **AGREE** (`bf1bb501`).
 
+**Claimed:** zed-225-seat-bench, 2026-10-19T12:45Z, expires 2026-10-21T12:45Z — executing T2 (A1 candidate) + T4 (the frozen paired read) this session; T3 (A2/Rethink encoder) and T5 (arming) stay as scoped.
+
 ## Why now
 
 Plan 202 (R1–R7) landed the whole decision stack and Bench 108 measured it end-to-end over the
