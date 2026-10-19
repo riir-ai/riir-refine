@@ -206,9 +206,16 @@ fn is_digest_pin(span: &str, f: &Finding) -> bool {
             preceded_by_known_tag(span, f.start)
                 || opens_pin_named_value(span, f.start)
                 || is_canonical_b64_alphabet(span, f)
+                || (f.kind == FindingKind::HighEntropyHex
+                    && (is_degenerate_hex_run(span, f)
+                        || is_comment_citation_sha(span, f)
+                        || is_revision_named_pin(span, f)))
+                || (f.kind == FindingKind::HighEntropyB64 && is_path_shaped_token(span, f))
         }
         FindingKind::PrivateKeyBlock => is_bodyless_key_delimiter(span, f),
-        FindingKind::RustSecretLiteral => is_kebab_credential_value(span, f),
+        FindingKind::RustSecretLiteral => {
+            is_kebab_credential_value(span, f) || is_env_name_value(span, f)
+        }
         _ => false,
     }
 }
@@ -248,30 +255,40 @@ fn preceded_by_tag_in(span: &str, start: usize, schemes: &[&str]) -> bool {
 
 /// Guard (b): the run opens a fresh string literal (the byte before it is
 /// the opening quote) that is the value of a declaration — this line, or
-/// the single rustfmt-wrapped line before it (the redact v3 convention) —
-/// whose NAME carries a [`PIN_NAME_SUFFIXES`] suffix.
-fn opens_pin_named_value(span: &str, start: usize) -> bool {
+/// the single rustfmt-wrapped line before it (the redact v3 convention).
+/// Returns the declaration's lowercased identifier, or `None` when the run
+/// is not a fresh literal value (P75: shared by the revision-pin guard).
+fn declaration_lhs_of_opening_literal(span: &str, start: usize) -> Option<String> {
     let line_start = span[..start].rfind('\n').map_or(0, |i| i + 1);
     let head = &span[line_start..start];
     if !head.ends_with('"') {
-        return false;
+        return None;
     }
-    let lhs = if let Some(eq) = head.rfind('=') { &head[..eq] } else {
-            // rustfmt-wrapped: `…NAME: TYPE =` ended the previous line.
-            if line_start == 0 {
-                return false;
-            }
-            let prev_start = span[..line_start - 1].rfind('\n').map_or(0, |i| i + 1);
-            let prev = span[prev_start..line_start - 1].trim_end();
-            let Some(eq) = prev.rfind('=') else {
-                return false;
-            };
-            if !prev[eq + 1..].trim().is_empty() {
-                return false; // the '=' already had a value — not the wrap
-            }
-            &prev[..eq]
-        };
-    pin_named_declaration(lhs)
+    let lhs = if let Some(eq) = head.rfind('=') {
+        &head[..eq]
+    } else {
+        // rustfmt-wrapped: `…NAME: TYPE =` ended the previous line.
+        if line_start == 0 {
+            return None;
+        }
+        let prev_start = span[..line_start - 1].rfind('\n').map_or(0, |i| i + 1);
+        let prev = span[prev_start..line_start - 1].trim_end();
+        let eq = prev.rfind('=')?;
+        if !prev[eq + 1..].trim().is_empty() {
+            return None; // the '=' already had a value — not the wrap
+        }
+        &prev[..eq]
+    };
+    declaration_ident(lhs)
+}
+
+/// Guard (b): the run opens a fresh string literal (the byte before it is
+/// the opening quote) that is the value of a declaration — this line, or
+/// the single rustfmt-wrapped line before it (the redact v3 convention) —
+/// whose NAME carries a [`PIN_NAME_SUFFIXES`] suffix.
+fn opens_pin_named_value(span: &str, start: usize) -> bool {
+    declaration_lhs_of_opening_literal(span, start)
+        .is_some_and(|lower| pin_named_declaration_lower(&lower))
 }
 
 /// `NAME` (after any `: TYPE` ascription and the `pub/const/static/let/mut`
@@ -320,11 +337,11 @@ fn declaration_ident(lhs: &str) -> Option<String> {
 }
 
 /// `NAME` carries a pin suffix — or (P74) the golden-pin convention: the
-/// repo-wide `GOLDEN_*` / `*_GOLDEN` wire-dual-pin naming.
-fn pin_named_declaration(lhs: &str) -> bool {
-    let Some(lower) = declaration_ident(lhs) else {
-        return false;
-    };
+/// repo-wide `GOLDEN_*` / `*_GOLDEN` wire-dual-pin naming. Takes the
+/// ALREADY-LOWERCASED identifier (the P75 refactor: the derivation lives
+/// in [`declaration_lhs_of_opening_literal`], shared with the guards that
+/// need different name evidence).
+fn pin_named_declaration_lower(lower: &str) -> bool {
     PIN_NAME_SUFFIXES.iter().any(|sfx| lower.ends_with(sfx))
         || lower.starts_with("golden_")
         || lower.ends_with("_golden")
@@ -338,8 +355,7 @@ fn credential_named_declaration(lhs: &str) -> bool {
 
 /// The canonical RFC 4648 base64 alphabet — its exact 64-char sequence is
 /// encoding vocabulary; no credential contains it as a substring.
-const B64_ALPHABET: &[u8; 64] =
-    b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const B64_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 /// Guard (c) (P74): the matched run CONTAINS the exact canonical base64
 /// alphabet sequence — an alphabet constant (`const CHARS: &[u8] =
@@ -375,10 +391,9 @@ fn is_bodyless_key_delimiter(span: &str, f: &Finding) -> bool {
     let text = &span[f.start..f.start + f.len];
     let bytes = text.as_bytes();
     // The BEGIN header's end — the same needles the scanner matches.
-    let block_end = find_sub(bytes, b"PRIVATE KEY BLOCK-----", 0)
-        .map(|e| e + "PRIVATE KEY BLOCK-----".len());
-    let key_end = find_sub(bytes, b"PRIVATE KEY-----", 0)
-        .map(|e| e + "PRIVATE KEY-----".len());
+    let block_end =
+        find_sub(bytes, b"PRIVATE KEY BLOCK-----", 0).map(|e| e + "PRIVATE KEY BLOCK-----".len());
+    let key_end = find_sub(bytes, b"PRIVATE KEY-----", 0).map(|e| e + "PRIVATE KEY-----".len());
     let Some(header_end) = block_end.max(key_end) else {
         return false; // cannot resolve the shape — fail closed
     };
@@ -425,6 +440,104 @@ fn is_kebab_credential_value(span: &str, f: &Finding) -> bool {
         return false;
     };
     credential_named_declaration(&head[..eq])
+}
+
+// ── The P75 benign classes (found live 2026-10-20, the item-3 reflex sweep;
+// probe-first per the Batch-33 discipline — the firing negatives below are
+// the probe corpus) ─────────────────────────────────────────────
+
+/// Guard (e) (P75): a [`FindingKind::HighEntropyB64`] token containing `.`.
+/// The entropy-body charset admits `.`, but NO base64 alphabet does —
+/// standard RFC 4648 is `A-Za-z0-9+/=`, the url-safe variant swaps `+` and
+/// `/` for `-` and `_`; neither carries a dot. A dot inside the run is
+/// therefore BY CONSTRUCTION filesystem-path shape (the live site: a
+/// doc-comment repo path `../repo/.research/Name.md` whose CamelCase
+/// cleared the 4.5 bits/char bar). A real encoded secret can never
+/// contain one.
+fn is_path_shaped_token(span: &str, f: &Finding) -> bool {
+    span.as_bytes()[f.start..f.start + f.len].contains(&b'.')
+}
+
+/// Guard (f) (P75): a [`FindingKind::HighEntropyHex`] run that is
+/// DEGENERATE — every byte identical, or a strict successor cycle of the
+/// hex alphabet (`0123456789abcdef0123…`, any starting offset). Both
+/// shapes carry ≈0 bits/char of entropy: the live sites were the
+/// all-zeros and the counting-sequence test fixtures, which the scanner's
+/// unconditional ≥32-hex rule flags by design (v2 dropped the entropy
+/// test — Bench 052). A real digest or key never equals either shape.
+fn is_degenerate_hex_run(span: &str, f: &Finding) -> bool {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let token = &span.as_bytes()[f.start..f.start + f.len];
+    if token.iter().all(|&b| b == token[0]) {
+        return true;
+    }
+    let Some(mut pos) = HEX.iter().position(|&c| c == token[0]) else {
+        return false;
+    };
+    token.windows(2).all(|w| {
+        pos = (pos + 1) % 16;
+        w[1].to_ascii_lowercase() == HEX[pos]
+    })
+}
+
+/// Guard (g) (P75): an exactly-40-hex run on a COMMENT line — a git/HF
+/// revision SHA cited in prose (the live sites: a `// repo @ <sha>` line
+/// and an `//!` line quoting the revision in backticks). Exactly 40 hex
+/// is the SHA-1 commit identity length; key material is 64-hex
+/// (sha256/blake3), provider-prefixed, or ≥32 base64 — the length itself
+/// is the shape evidence. The comment prefix is checked on the run's own
+/// line (backticks break the entropy run, so the token never spans
+/// lines).
+fn is_comment_citation_sha(span: &str, f: &Finding) -> bool {
+    if f.len != 40 {
+        return false;
+    }
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let line = span[line_start..].trim_start();
+    line.starts_with("//")
+}
+
+/// Guard (h) (P75): a fresh string literal of EXACTLY 40 hex opened by a
+/// declaration whose name starts `rev_` — the HF/git revision-pin const
+/// (`const REV_400M: &str = "4aeb85b9…"`). Both evidences AND-ed, and the
+/// exactly-40 length (the commit-identity shape) keeps the class tight: a
+/// 64-hex digest under a `rev_` name stays a finding.
+fn is_revision_named_pin(span: &str, f: &Finding) -> bool {
+    if f.len != 40 {
+        return false;
+    }
+    declaration_lhs_of_opening_literal(span, f.start).is_some_and(|lower| lower.starts_with("rev_"))
+}
+
+/// Guard (i) (P75): a [`FindingKind::RustSecretLiteral`] whose value is a
+/// `SCREAMING_SNAKE` env-NAME (`^[A-Z][A-Z0-9_]*$` with ≥1 underscore) AND
+/// whose binding name ends `_env` — the env-contract const (`pub const
+/// TOKEN_ENV: &str = "PPLX_API_KEY"`): the const holds the env var's
+/// NAME to read at runtime, never a secret. BOTH evidences AND-ed (the
+/// P63 doctrine): an all-caps value on a non-`_env` binding and any
+/// lowercase/digit-mixed value on a `_env` binding stay findings; the
+/// underscore requirement alone keeps `AKIA…`-shaped provider literals
+/// (no underscore) out of the class even before the kind split does.
+fn is_env_name_value(span: &str, f: &Finding) -> bool {
+    let lit = &span[f.start..f.start + f.len];
+    let Some(value) = lit.strip_prefix('"').and_then(|v| v.strip_suffix('"')) else {
+        return false;
+    };
+    if value.len() < 8
+        || !value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        || !value.as_bytes()[0].is_ascii_uppercase()
+        || !value.contains('_')
+    {
+        return false;
+    }
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let head = &span[line_start..f.start];
+    let Some(eq) = head.rfind('=') else {
+        return false;
+    };
+    declaration_ident(&head[..eq]).is_some_and(|lower| lower.ends_with("_env"))
 }
 
 /// Blind a file's text: every finding's bytes replaced by the scanner's
@@ -740,8 +853,7 @@ mod tests {
     /// `blake3: "<hex>"` — scheme + whitespace + quote before the run.
     #[test]
     fn digest_field_rows_are_suppressed() {
-        let text =
-            "        blake3: \"396b8e1fcf31e1488887baa2251dfb62fa5a19aa6eff44bb759f54498bfde22d\",\n";
+        let text = "        blake3: \"396b8e1fcf31e1488887baa2251dfb62fa5a19aa6eff44bb759f54498bfde22d\",\n";
         let out = scan_file_with_pins(text);
         assert!(out.findings.is_empty(), "{:?}", out.findings);
         assert_eq!(out.digest_pins.len(), 1);
@@ -853,7 +965,8 @@ mod tests {
 
     // ── P74: benign-class guards (probe-first; Batch-33 discipline) ──
 
-    const B64_ALPHABET_STR: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const B64_ALPHABET_STR: &str =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     /// The REAL sites from the 10-17 sweep, verbatim shapes.
     #[test]
@@ -921,7 +1034,9 @@ mod tests {
         // A real PEM body between the markers (short fixture body) — the
         // delimiter guard must NOT suppress a keyed block.
         let body = "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gd29ybGQg\naGVsbG8g\n";
-        let t = format!("const FIXTURE: &str = \"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}-----END OPENSSH PRIVATE KEY-----\";\n");
+        let t = format!(
+            "const FIXTURE: &str = \"-----BEGIN OPENSSH PRIVATE KEY-----\n{body}-----END OPENSSH PRIVATE KEY-----\";\n"
+        );
         let f = scan_file(&t);
         assert!(f.iter().any(|x| x.tag() == "private-key-block"), "{f:?}");
 
@@ -961,5 +1076,142 @@ mod tests {
         let out = scan_file_with_pins(t);
         assert!(out.findings.is_empty(), "plain delimiter pair suppresses");
         assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    // ── P75: the item-3 sweep's five benign classes (live reflex sites;
+    // each guard ships with its firing negatives — the Batch-33 probe) ──
+
+    const RANDOM_HEX_40: &str = "9f2c7a4e1b8d3f6a0c5e2b9d7f4a1c8e3b6d9f2c";
+    const RANDOM_HEX_64: &str = "9f2c7a4e1b8d3f6a0c5e2b9d7f4a1c8e3b6d9f2c7a4e1b8d3f6a1b2c3d4e5f60";
+    const RANDOM_B64: &str = "qP7mZ2xQvN4kR9tLwY3jH6sD1fG5aX0bE8cU2iO4pT7nM9rK";
+
+    /// (i) env-name-value consts — the four live lane sites' shape.
+    #[test]
+    fn p75_env_name_consts_are_suppressed() {
+        let t = concat!(
+            "pub const TOKEN_ENV: &str = \"PPLX_API_KEY\";\n",
+            "pub const API_KEY_ENV: &str = \"PAW_API_KEY\";\n",
+            "pub const TOKEN_ENV: &str = \"CLEF_API_TOKEN\";\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 3);
+    }
+
+    /// (i) negatives: the AND must hold both ways.
+    #[test]
+    fn p75_env_name_negatives_stay_firing() {
+        // All-caps value WITHOUT an underscore — could be key material.
+        let t = "pub const API_TOKEN_ENV: &str = \"SUPERSECRETKEY\";\n";
+        assert!(!scan_file(t).is_empty(), "no-underscore value must fire");
+        // SCREAMING_SNAKE value on a secret-named binding that does not
+        // end _env (the scanner needs a secret segment to fire at all).
+        let t2 = "pub const TOKEN_NAME: &str = \"ADMIN_ACCESS_LEVEL_9\";\n";
+        assert!(!scan_file(t2).is_empty(), "non-_env binding must fire");
+        // Lowercase value on an _env binding.
+        let t3 = "pub const TOKEN_ENV: &str = \"pplx-live-key-01\";\n";
+        assert!(!scan_file(t3).is_empty(), "lowercase value must fire");
+    }
+
+    /// (f) degenerate hex runs — the `corpus_db` fixture shapes.
+    #[test]
+    fn p75_degenerate_hex_is_suppressed() {
+        let t = concat!(
+            "fn corpus_key() { assert_eq!(k(\"0123456789abcdef0123456789abcdef\"), \"\"); }\n",
+            "fn pin() { db.get(\"0000000000000000000000000000000000000000000000000000000000000000\") }\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+    }
+
+    /// (f) negatives: real digest-shaped hex stays firing, including the
+    /// letter-digit alternation (a1b2c3…) that merely LOOKS ordered.
+    #[test]
+    fn p75_degenerate_hex_negatives_stay_firing() {
+        for hex in [RANDOM_HEX_40, "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"] {
+            let t = format!("const X: &str = \"{hex}\";\n");
+            assert!(!scan_file(&t).is_empty(), "{hex} must fire");
+        }
+    }
+
+    /// (h) revision-pin consts — the distill.rs REV_* shape.
+    #[test]
+    fn p75_revision_pins_are_suppressed() {
+        let t = format!("const REV_400M: &str = \"{RANDOM_HEX_40}\";\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    /// (h) negatives: a 64-hex digest under a rev_ name stays (the class
+    /// is the exactly-40 commit-identity shape), and a 40-hex under a
+    /// non-rev name stays.
+    #[test]
+    fn p75_revision_pin_negatives_stay_firing() {
+        let t = format!("const REV_HISTORY: &str = \"{RANDOM_HEX_64}\";\n");
+        assert!(!scan_file(&t).is_empty(), "64-hex under rev_ must fire");
+        let t2 = format!("const RIVER_TOKEN: &str = \"{RANDOM_HEX_40}\";\n");
+        assert!(!scan_file(&t2).is_empty(), "40-hex under non-rev must fire");
+    }
+
+    /// (g) comment citation SHAs — the runner.rs `@ <sha>` and the
+    /// pplx.rs backtick-revision shapes, both exactly 40 hex in `//` prose.
+    #[test]
+    fn p75_comment_citation_shas_are_suppressed() {
+        let t = concat!(
+            "// Pin: malevrigns/agent-jev @\n",
+            "// a965ca8ff06ccabc0c796dca5447b55cc2069cee (2026-09-23, Apache-2.0);\n",
+            "//! repo revision `3b45dead91dfa6d95aad6b95764a606fab2bf7a6`, published\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+    }
+
+    /// (g) negatives: 64-hex in a comment stays a finding (sha256-class
+    /// material, not a commit identity), and 40-hex in a STRING stays.
+    #[test]
+    fn p75_comment_citation_negatives_stay_firing() {
+        let t = format!("// internal ledger id {RANDOM_HEX_64}\n");
+        assert!(!scan_file(&t).is_empty(), "64-hex in comment must fire");
+        let t2 = format!("const X: &str = \"{RANDOM_HEX_40}\";\n");
+        assert!(!scan_file(&t2).is_empty(), "40-hex in string must fire");
+    }
+
+    /// (e) path-shaped b64 — the `basis_cert` doc-comment repo path.
+    #[test]
+    fn p75_doc_comment_paths_are_suppressed() {
+        let t = concat!(
+            "//! Source: `../katgpt-rs/.research/618_SplitJEPA_Inv_Variant_",
+            "Block_Identifiability.md`\n",
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    /// (e) negative: a real base64 secret (no dot — impossible in any b64
+    /// alphabet) stays firing.
+    #[test]
+    fn p75_path_shape_negative_stays_firing() {
+        let t = format!("const PAYLOAD: &str = \"{RANDOM_B64}\";\n");
+        assert!(!scan_file(&t).is_empty(), "dotless b64 must fire");
+    }
+
+    /// The adjudication is report-lane only: `blind` still redacts every
+    /// P75 class (fail-closed sharing, the P63 doctrine).
+    #[test]
+    fn p75_blind_still_redacts_the_new_classes() {
+        let t = concat!(
+            "pub const TOKEN_ENV: &str = \"PPLX_API_KEY\";\n",
+            "const REV_400M: &str = \"9f2c7a4e1b8d3f6a0c5e2b9d7f4a1c8e3b6d9f2c\";\n",
+            "//! see `../rs/.research/618_SplitJEPA_Invariant_Variant_Block.md`\n",
+        );
+        let out = blind(t);
+        assert!(out.contains("[REDACTED:"), "{out}");
+        assert!(!out.contains("PPLX_API_KEY"), "{out}");
+        assert!(!out.contains("9f2c7a4e"), "{out}");
+        assert!(!out.contains("SplitJEPA"), "{out}");
     }
 }
