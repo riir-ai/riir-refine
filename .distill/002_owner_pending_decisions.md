@@ -19,36 +19,57 @@ LIST here, act only on explicit owner approval, per item.
   `select vdisk … attach vdisk readonly … compact vdisk`. Expected reclaim: most of the 188 GB.
 - **Risk:** none to the workspace repos; Docker is not used by any active lane (verified dormant).
 
-## 2. C:/E: deletables — the "43GB class" (last full sweep 2026-10-14-era; re-measure pending quiet box)
+## 2. C:/E: deletables — fresh per-target-dir numbers (quiet-box scan 2026-10-19 ~05:0xZ, 4090 box, CPU 6%, no heavy jobs — the re-measure this row was waiting for)
 
-Class-level entries, each zero-risk-reclassifiable on inspection. C: free 27G / E: free 65G at
-2026-10-18 15:36 +07. **The per-target-dir size re-measure TIMED OUT twice this pass (2026-10-18,
-loaded box under the plan-436 chain — msys du and PowerShell recursion both) — run the disk-clean
-skill's scanner on a quiet box for fresh numbers before approving.** Known class members from the
-prior sweeps:
+**Drives at scan:** C: free 41G / E: free 77G / F: free 57G (all ~76-96% used). The box runs 26
+worktree target dirs; the quiet-box scan (PowerShell Measure-Object, ~8 min) reads:
 
-- `E:\git/*/target/debug/incremental` — the standing zero-risk pick (~30G when dirty, workspace-wide).
-- Cargo `target/` dirs of stale/sibling repos not built in weeks.
-- `C:\t980`-class temp worktree/scratch dirs (verify empty-of-WIP first).
-- Windows Update `SoftwareDistribution\Download` — measured 0.2 GB (2026-10-18, negligible).
-- Root `pagefile.sys` 36.5G + `hiberfil.sys` 13.6G — STATIC system files, listed for completeness;
-  shrink only with a conscious pagefile/hibernation decision (NOT recommended casually).
+**E:\git\*/target — 245 GB total across 26 dirs. Top rows (debug/release split):**
 
-## 3. F:/models per-item list (~88.5 GB total, enumerated live 2026-10-18 15:4x +07)
+| Repo | target total | debug | release | Note |
+|---|---|---|---|---|
+| riir-ai | 53.8 GB | 27.4 | 26.3 | release = league binaries (Bench-982/983 ours-arm builds) — kill-debug only |
+| riir-train | 34.8 GB | 8.7 | 26.0 | release = league + trainer binaries |
+| riir-shader | 24.9 GB | 24.9 | 0 | ALL debug (bevy tree); safest full-target kill on E: |
+| katgpt-rs | 18.7 GB | 12.1 | 6.5 | |
+| riir-infer | 18.0 GB | 13.5 | 4.4 | release holds the L8/chunked A/B binaries (plan-621 prep, GPU-queued) — keep until the L8 A/B runs |
+| riir-refine | 16.9 GB | — | — | **LOAD-BEARING**: target/release/cargo-refine is the global healer binary (re-linked 10-19) — never rm the whole target |
+| riir-dapps | 11.2 GB | 11.2 | 0 | all debug |
+| riir-chain | 8.5 GB | 8.5 | 0 | all debug |
+| zed (E:\git\zed) | 8.2 GB | 0 | 8.2 | cache; source is the only patched-Zed copy — target deletable, ~1h cold rebuild |
+| riir-mmorpg-examples | 6.4 GB | — | — | |
+| remaining 16 dirs | ~15 GB | — | — | small per-dir |
 
-| Item | Size | Last touched | Note / disposition ask |
+**⛔ Incremental dirs are ~EMPTY on this box** (0.0-0.8 GB across all 26) — the M3's "incremental
+sweep" zero-risk pick DOES NOT apply here; the unit of account is whole debug dirs.
+
+**Class answers this row previously lacked:**
+- `E:\git/*/target/debug/incremental` — measured ~2 GB workspace-wide (NOT the ~30G prior estimate). Stale row.
+- The big debug dirs (shader 24.9, ai 27.4, dapps 11.2, chain 8.5, katgpt-rs 12.1, infer 13.5 = ~97 GB) are the real reclaim class; each kills cold-rebuild time for its repo (10-30 min).
+- `C:\t980` — not re-checked this pass (C: side); pagefile/hiberfil unchanged-static.
+- C: cargo/rustup: registry 3.3 + git 1.4 + toolchains 4.9 ≈ 9.9 GB (normal; registry re-downloads).
+
+**Max-space zero-risk pick (this box):** riir-shader target (24.9 GB, all debug, bevy re-imports on
+next build) + riir-dapps debug (11.2) + riir-chain debug (8.5) + zed target (8.2) ≈ **53 GB on E:**
+for ~1h total cold-rebuild cost across four repos. NOTHING DELETED — owner approves per item.
+
+## 3. F:/models per-item list — RESCAN 2026-10-19 ~05:1xZ: 88.5 GB → **155 GB** (+66 GB in one day)
+
+| Item | Size (10-19 scan) | Last touched | Note / disposition ask |
 |---|---|---|---|
-| `qwen38-27b-dbirks-bf16.gguf` | 54.7 GB (54,657,734,368 B) | Aug 21 | The bf16 master copy of the league family — re-derivable? If quantized variants suffice, this is the single largest kill. |
-| `Qwen3.8-27B-UD-Q4_K_XL.gguf` | 17.6 GB | Aug 22 | Q4_K_XL quant — keep/kill per league needs. |
-| `qwen38-27b-dbirks-Q4_K_M.gguf` | 16.8 GB | Aug 21 | Q4_K_M quant — keep/kill per league needs. |
-| `d3-v3.1.0/` | (dir) | Oct 14 | **CLARIFIED 2026-10-18: the known d3 teacher lane's weights** (owner-approved E:→F: offload, cycle-79/80; plan 629 T0 licence-clear + reflex --d3 lane). KEEP unless the d3 teacher lane is retired. |
-| `dflash2-src/` | (dir) | Aug 22 | DFlash2 source — keep/kill. |
-| `dbirks-qwen38-27b-w4a16/` | (dir) | Aug 21 | W4A16 variant — keep/kill. |
-| `Qwen3.8-27B-DFlash2-Q2_K.gguf` | 0.7 GB | Aug 22 | Q2_K DFlash2 — small. |
+| `qwen38-27b-dbirks-bf16.gguf` | 51 GB | Aug 21 | The bf16 master copy — unchanged; still the single largest kill if quants suffice. |
+| `d3-v3.1.0/` | **49 GB** | Oct 14→18 | CLARIFIED 10-18: the d3 teacher lane's weights (owner-approved E:→F: offload). KEEP unless the lane retires. The +49 GB is this offload landing — the growth is EXPLAINED. |
+| `dbirks-qwen38-27b-w4a16/` | **19 GB** | Aug 21 | W4A16 variant — was unmeasured 10-18; keep/kill per league needs. |
+| `Qwen3.8-27B-UD-Q4_K_XL.gguf` | 17 GB | Aug 22 | Q4_K_XL quant — keep/kill per league needs. |
+| `qwen38-27b-dbirks-Q4_K_M.gguf` | 16 GB | Aug 21 | Q4_K_M quant — keep/kill per league needs. |
+| `dflash2-src/` | 3.6 GB | Aug 22 | DFlash2 source — keep/kill. |
 | `mmproj-BF16.gguf` | 0.9 GB | Aug 22 | Multimodal projector — keep/kill. |
+| `Qwen3.8-27B-DFlash2-Q2_K.gguf` | 0.7 GB | Aug 22 | Q2_K DFlash2 — small. |
 | `chat_template.jinja` | 9 KB | Aug 22 | Trivial. |
 
-F: total 233G, 177G used, 57G free (2026-10-18) — no imminent pressure; this list is opportunistic.
+F: total 233G, 177G used, 57G free (re-read 2026-10-19) — the 10-18 "no imminent pressure" read
+STANDS but the headroom halved vs the 10-14-era state; the growth is the d3 offload (explained),
+not drift. StartLux capture artifacts (GGUF Q4_K_M 15.4 GiB) live on E: under riir-train models/, not here.
 
 ## 4. M5-Ultra purchase cluster — 4 issues across 3 repos gated on ONE purchase
 
