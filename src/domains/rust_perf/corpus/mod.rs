@@ -9,6 +9,24 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
+//! 232 entries across 13 categories as of Batch 255 (2026-10-19, Plan 259 /
+//! Research 290: +1 caching — `slru-probation-protected-promote-on-second-touch`,
+//! the llama.cpp `MoE` host-cache law @ `33d6135c` #30637 — a recency cache of
+//! EXPENSIVE entries runs a 50/50 SLRU, not one plain LRU list: first touch
+//! = probation, second touch promotes (protected capped `n_slots/2`, overflow
+//! demotes the protected-LRU head), victims scan probation-head-first then
+//! protected while the request-scoped seen-set pins the current request's
+//! own selections, hits promote BEFORE victims are chosen, and the no-victim
+//! case is a loud impossibility terminal; `NotBenchable` — the upload-traffic
+//! win metric, the B136 decision-content class; the module header was stale
+//! at 230 through Batch 250 slice 1's +1 — repaired with this batch's
+//! landing).
+//!
+//! 231 entries across 13 categories as of Batch 250 slice 1 (2026-10-18,
+//! Plan 254 / Research 285: +1 simd —
+//! `avx2-tiled-accumulator-butterfly-epilogue`, the llama.cpp envelope
+//! pool's hadd butterfly @ `3dbcb7f` #30296 — the header paragraph above
+//! was not updated at that landing; this paragraph records it). Prior:
 //! 230 entries across 13 categories as of Batch 248 (2026-10-16, Plan 252 /
 //! Research 280: the staged simdutf + unicode-normalization conversion —
 //! minimal-perfect-hash-static-lookup, flat-pool-start-len-static-rows,
@@ -551,14 +569,22 @@ mod entries_31;
 mod entries_32;
 mod entries_33;
 mod entries_34;
+mod entries_35;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 223 entries
-/// (Batch 245, 2026-10-16, Plan 248 / Research 277: +6, the Batch-244 defer-list
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 232 entries
+/// (Batch 255, 2026-10-19, Plan 259 / Research 290: +1 caching — the llama.cpp
+/// #30637 `MoE` SLRU host-cache law, `NotBenchable` annotated; prior — Batch 250
+/// slice 1, Plan 254 / Research 285: +1 simd, the hadd butterfly epilogue
+/// (this doc was stale at 223 through B246/248/250s1 — repaired at the B255
+/// landing with the honest label). Prior — Batch 248, 2026-10-16, Plan 252 /
+/// Research 280: +6, the staged simdutf + unicode-normalization conversion
+/// (the batch chain continues in the module header); prior — Batch 245,
+/// 2026-10-16, Plan 248 / Research 277: +6, the Batch-244 defer-list
 /// conversion + the count-neutral char rider on `byte-find-position-to-memchr`;
 /// prior — Batch 244: +10, the byte-scan/search batch, Plan 247; Batch 243:
 /// +2, the serving slot-state cache pair from llama.cpp #30580 + #30567 — both `caching`, both
@@ -650,5 +676,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_32::entries());
     entries.extend(entries_33::entries());
     entries.extend(entries_34::entries());
+    entries.extend(entries_35::entries());
     Corpus::new(entries)
 }
