@@ -1,11 +1,11 @@
 //! Entries slice 34 — Batch 250 slice 1 (Plan 254 / Research 285): the
-//! llama.cpp envelope pool's rust_perf candidate — `3dbcb7f` "cpu: reduce
+//! llama.cpp envelope pool's `rust_perf` candidate — `3dbcb7f` "cpu: reduce
 //! AVX2 tiled accumulators together" (#30296). Every quote verbatim at
 //! the pin this claim (llama.cpp @ 62318cd; the commit also an ancestor
 //! of tip 797de63b). The rule is x86_64-only (`#[cfg(target_arch =
 //! "x86_64")]` in both halves): on the aarch64 M3 the bench fixture
 //! COMPILES but the AVX2 intrinsics are absent — the Pareto measurement
-//! rides an x86_64 host (the 4090 box), the B204 staging precedent.
+//! rides an `x86_64` host (the 4090 box), the B204 staging precedent.
 
 use crate::domains::rust_perf::PerfRule;
 
