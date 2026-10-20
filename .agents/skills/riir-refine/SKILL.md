@@ -294,7 +294,15 @@ skill points agents there). Per sweep:
   `Claimed:` line is the yield signal; to claim, append
   `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the item's
   Status line and push BEFORE implementing (48 h expiry; advisory — the
-  push stays the arbiter).
+  push stays the arbiter). **Closing a lease is a RESHAPE, not an append**
+  (measured 2026-10-20, three BLIND repairs): when the claimed work lands
+  or the lease is released, rewrite the line to a NON-claim form
+  (`**Lease closed:**` / `**Lease released:**` + the provenance in prose)
+  — never leave prose after the expiry token on a `Claimed:`-shaped line,
+  never put an ISO date in the epoch slot (digits only): an unparseable
+  claim-shaped line makes `claim_lease_check` exit 1 (BLIND) for the
+  WHOLE repo. Repaired this date: riir-refine `.plans/225` (`f58f194b7`),
+  riir-ai `.issues/971` + `.plans/638` (`6b379b3e6`).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
