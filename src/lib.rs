@@ -576,6 +576,13 @@ pub mod insight;
 // features. Report-first, gates nothing (the frontier-report law).
 pub mod config_audit;
 pub mod orphan_report;
+// P78 (2026-10-20): the ONE directory-name prune convention shared by the
+// scanner walks (suggest/fix span_source walk, the name-matched Dockerfile
+// walk, the config-audit walk) — ungated so the feature-free config-audit
+// lane and the latent-retrieval-gated draft walk consume a single
+// definition. Found live when the reflex sweep walked a custom
+// CARGO_TARGET_DIR (`target-cuda-w2`) and scanned build-script output.
+pub mod scan_prune;
 // Intake class P22: the platform-dead_code decl-vs-use cfg lattice —
 // items whose every use sits inside a platform gate the declaration
 // lacks (the NEON_U8 class no single-platform CI matrix can see).

@@ -1179,7 +1179,7 @@ fn collect_rust_files(p: &Path, out: &mut Vec<PathBuf>) {
         children.sort();
         for c in children {
             let name = c.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if matches!(name, "target" | ".git" | "node_modules") {
+            if crate::scan_prune::is_pruned_dir_name(name) {
                 continue;
             }
             // A NESTED foreign checkout is not this repo's scan surface:

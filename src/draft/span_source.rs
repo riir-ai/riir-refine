@@ -10,18 +10,20 @@
 //! dataset builder share ONE walker instead of drifting copies.
 //!
 //! Semantics preserved from the bin: hidden dirs, `target/` and `vendor/`
-//! are pruned; a FILE root matching the extension pushes itself; output
-//! order is `read_dir` traversal order (the bin's long-standing behavior —
-//! do not change it silently). Dataset code that needs reproducibility
-//! across machines uses [`collect_source_files_sorted`]: a BLAKE3-committed
-//! span set must not depend on filesystem enumeration order.
+//! are pruned (the prune set is [`crate::scan_prune::is_pruned_dir_name`],
+//! shared by every scanner walk — see that fn for the full convention); a
+//! FILE root matching the extension pushes itself; output order is
+//! `read_dir` traversal order (the bin's long-standing behavior — do not
+//! change it silently). Dataset code that needs reproducibility across
+//! machines uses [`collect_source_files_sorted`]: a BLAKE3-committed span
+//! set must not depend on filesystem enumeration order.
 
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 /// Recursive walk pushing every non-hidden file whose name ends with `ext`
 /// under `root` (or `root` itself when `root` is a matching file).
-/// Directories named `target` or `vendor` and any dot-directory are pruned.
+/// Build/vendored/dot directories are pruned — [`is_pruned_dir_name`].
 ///
 /// Unreadable directories are skipped silently — a walk over a live
 /// workspace must not fail because one dir lacks permissions. Output order
@@ -46,7 +48,7 @@ pub fn collect_source_files(root: &Path, ext: &str, out: &mut Vec<PathBuf>) {
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if name.starts_with('.') || name == "target" || name == "vendor" {
+            if crate::scan_prune::is_pruned_dir_name(name) {
                 continue;
             }
             if path.is_dir() {
@@ -76,8 +78,10 @@ mod tests {
     use super::*;
 
     /// A private scratch tree: a.rs, sub/b.rs, target/c.rs, .hidden/d.rs,
-    /// e.txt. Unique per test (parallel tests must not delete each other's
-    /// tree mid-walk).
+    /// e.txt, plus the P78 prune-set members: target-cuda-w2/g.rs (the
+    /// CARGO_TARGET_DIR-renamed build tree — the live reflex specimen) and
+    /// node_modules/n.rs. Unique per test (parallel tests must not delete
+    /// each other's tree mid-walk).
     fn temp_tree(tag: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
             "riir_span_source_test_{tag}_{}",
@@ -87,11 +91,17 @@ mod tests {
         std::fs::create_dir_all(root.join("sub")).expect("mkdir sub");
         std::fs::create_dir_all(root.join("target")).expect("mkdir target");
         std::fs::create_dir_all(root.join(".hidden")).expect("mkdir .hidden");
+        std::fs::create_dir_all(root.join("target-cuda-w2")).expect("mkdir target-cuda-w2");
+        std::fs::create_dir_all(root.join("node_modules")).expect("mkdir node_modules");
         std::fs::write(root.join("a.rs"), "fn a() {}").expect("write a.rs");
         std::fs::write(root.join("sub").join("b.rs"), "fn b() {}").expect("write b.rs");
         std::fs::write(root.join("target").join("c.rs"), "fn c() {}").expect("write c.rs");
         std::fs::write(root.join(".hidden").join("d.rs"), "fn d() {}").expect("write d.rs");
         std::fs::write(root.join("e.txt"), "not rust").expect("write e.txt");
+        std::fs::write(root.join("target-cuda-w2").join("g.rs"), "fn g() {}")
+            .expect("write g.rs");
+        std::fs::write(root.join("node_modules").join("n.rs"), "fn n() {}")
+            .expect("write n.rs");
         root
     }
 
@@ -119,6 +129,14 @@ mod tests {
         assert!(
             !names.contains(&"c.rs".to_string()),
             "target/ must be pruned"
+        );
+        assert!(
+            !names.contains(&"g.rs".to_string()),
+            "target-cuda-w2/ (the CARGO_TARGET_DIR-renamed build tree, P78) must be pruned"
+        );
+        assert!(
+            !names.contains(&"n.rs".to_string()),
+            "node_modules/ must be pruned"
         );
         assert!(
             !names.contains(&"d.rs".to_string()),

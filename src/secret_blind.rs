@@ -228,9 +228,11 @@ fn is_digest_pin(span: &str, f: &Finding) -> bool {
 const IDENTIFIER_SCHEMES: &[&str] = &["guid"];
 
 /// Guard (a): a known tag sits immediately before the run — glued
-/// (`blake3:EC32…`, `GUID:3F2A…`) or across horizontal whitespace and at
+/// (`blake3:EC32…`, `GUID:3F2A…`), across horizontal whitespace and at
 /// most one opening quote (`blake3: "396b…"` — the struct-field/TOML
-/// shape).
+/// shape), or in the JSON quoted-key shape (`"sha256": "396b…"` — both
+/// tag and value quoted, e.g. inside a `json!{}` fixture; found live
+/// 2026-10-20, the reflex sweep's `cua_s1` specimen). P78.
 fn preceded_by_known_tag(span: &str, start: usize) -> bool {
     preceded_by_tag_in(span, start, DIGEST_SCHEMES)
         || preceded_by_tag_in(span, start, IDENTIFIER_SCHEMES)
@@ -242,9 +244,18 @@ fn preceded_by_tag_in(span: &str, start: usize, schemes: &[&str]) -> bool {
         head = &head[..head.len() - 1];
     }
     let head = head.trim_end_matches([' ', '\t']);
-    let Some(before_colon) = head.strip_suffix(':') else {
+    let Some(mut before_colon) = head.strip_suffix(':') else {
         return false;
     };
+    // The JSON quoted-key shape: the tag's OWN closing quote sits between
+    // the tag and the colon ("sha256": — the value's opening quote was
+    // already stripped above). Strip one more so the backward scan reads
+    // the scheme. A secret keeps firing: a non-digest key (api_key, x509)
+    // either stops the scan at a non-alnum byte or reads a scheme that is
+    // not in the set.
+    if before_colon.ends_with('"') || before_colon.ends_with('\'') {
+        before_colon = &before_colon[..before_colon.len() - 1];
+    }
     let bytes = before_colon.as_bytes();
     let mut s = bytes.len();
     while s > 0 && (bytes[s - 1].is_ascii_alphanumeric() || bytes[s - 1] == b'-') {
@@ -898,6 +909,37 @@ mod tests {
         let out = scan_file_with_pins(pin);
         assert!(out.findings.is_empty(), "{:?}", out.findings);
         assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    /// P78: the JSON quoted-key shape (`"sha256": "<hex>"`, e.g. inside a
+    /// `json!{}` fixture) adjudicates like its unquoted TOML/struct-field
+    /// sibling. Live specimen 2026-10-20: the reflex sweep's
+    /// `examples/cua_s1_forms_arena.rs:669` fired while its `blake3:` sibling
+    /// row adjudicated. Negatives: a non-digest quoted key keeps firing —
+    /// the scheme scan stops at a non-alnum byte (`api_key`) or reads a
+    /// scheme outside the set (`x509`).
+    #[test]
+    fn json_quoted_key_digest_is_suppressed_and_secret_keys_still_fire() {
+        // The live specimen shape, verbatim structure.
+        let t = concat!(
+            "    let j = json!({\"fixture\": {\"repo\": \"cua-ai/cua-s1-forms\",\n",
+            "        \"sha256\": \"d63a7e0db195d4d20154a40b2f8dd09ce3bb65487a158c638da5c609d4475e7c\"},\n",
+            "        \"blake3\": \"396b8e1fcf31e1488887baa2251dfb62fa5a19aa6eff44bb759f54498bfde22d\"});\n"
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2, "both quoted-key rows adjudicate");
+
+        // A secret under the same quoted-key shape keeps firing.
+        let t = "    \"api_key\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
+        let out = scan_file_with_pins(t);
+        assert_eq!(out.findings.len(), 1, "api_key must keep firing");
+        assert!(out.digest_pins.is_empty());
+
+        let t = "    \"x509\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
+        let out = scan_file_with_pins(t);
+        assert_eq!(out.findings.len(), 1, "x509 must keep firing");
+        assert!(out.digest_pins.is_empty());
     }
 
     /// MUST-FIRE (the P63 probe contract): exact provider formats are

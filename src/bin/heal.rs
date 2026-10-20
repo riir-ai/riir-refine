@@ -7804,8 +7804,9 @@ fn collect_cargo_tomls(root: &Path, out: &mut Vec<PathBuf>) {
 }
 
 /// The shared walk behind both name-matched collectors: depth-first over
-/// real directories, skipping hidden dirs + `target`/`vendor` build noise,
-/// pushing every file whose name satisfies `keep`.
+/// real directories, skipping the shared prune set
+/// (`riir_refine::scan_prune::is_pruned_dir_name`), pushing every file
+/// whose name satisfies `keep`.
 fn collect_named_walk(root: &Path, keep: &dyn Fn(&str) -> bool, out: &mut Vec<PathBuf>) {
     let mut queue: VecDeque<PathBuf> = VecDeque::new();
     queue.push_back(root.to_path_buf());
@@ -7818,7 +7819,7 @@ fn collect_named_walk(root: &Path, keep: &dyn Fn(&str) -> bool, out: &mut Vec<Pa
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if name.starts_with('.') || name == "target" || name == "vendor" {
+            if riir_refine::scan_prune::is_pruned_dir_name(name) {
                 continue;
             }
             if path.is_dir() {
