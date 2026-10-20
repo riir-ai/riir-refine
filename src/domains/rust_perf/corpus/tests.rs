@@ -7446,6 +7446,38 @@ fn batch250_pareto_benches() {
 }
 
 #[test]
+fn batch265_rider_landed_on_f16_conversion_host() {
+    // G1 for the Batch 265 rust_perf rider (Plan 269 / Research 301): the
+    // DEFINED-BUT-NOT-SELECTED face on `f16-to-f32-accumulator-lut-breaks-
+    // conversion-serialization` (ggml-org/llama.cpp @ 119f68d7 #30505,
+    // MIT — the NEON f32->fp16 direction defined and never selected; the
+    // #error pair asserts defined-implies-selected per direction; upstream
+    // cites issue 30342, this rule's own source). Every needle verbatim at
+    // the pin. Count-neutral (rust_perf stands at 241).
+    let corpus = build_perf_seed_corpus();
+    let rule = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "f16-to-f32-accumulator-lut-breaks-conversion-serialization")
+        .expect("f16-to-f32-accumulator-lut-breaks-conversion-serialization in corpus");
+    for needle in [
+        "RIDER (Batch 265 external instance, ggml-org/llama.cpp @ 119f68d7 #30505",
+        "selects only FP16_TO_FP32, so FP32_TO_FP16 falls through to the portable software conversion",
+        "the only symptom is a hardware instruction nothing ever reaches",
+        "or the fallback takes over silently",
+        "because PR 30343 keeps that direction on the lookup table on purpose",
+        "Batch 265 rider.",
+    ] {
+        assert!(
+            rule.name.contains(needle),
+            "batch-265 rider on f16-to-f32 conversion missing needle: {needle}"
+        );
+    }
+    // rust_perf corpus count stays NEUTRAL (the rider is count-free).
+    assert_eq!(corpus.entries.len(), 241, "batch 265 rust_perf count-neutral");
+}
+
+#[test]
 fn batch231_rider_landed_on_madvise_host() {
     // G1 for the Batch 231 rider (Plan 233): the macOS WILLNEED-prefetch
     // NO-OP face on `madvise-random-for-key-gather-tables`

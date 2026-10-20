@@ -1911,6 +1911,7 @@ mod entries_gpu_111;
 mod entries_gpu_112;
 mod entries_gpu_113;
 mod entries_gpu_114;
+mod entries_gpu_115;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2090,6 +2091,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_112::entries());
     entries.extend(entries_gpu_113::entries());
     entries.extend(entries_gpu_114::entries());
+    entries.extend(entries_gpu_115::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -3187,7 +3189,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (16 rules; the stale 15 repaired at Batch 242 — the comment read 14 through B242; Batch 242 +1: the mlx-serve per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model); Batch 194 +1: the issue-latency MAD cost model)
+    // K: Autotune dispatch (19 rules; the stale 15 repaired at Batch 242 — the comment read 14 through B242; Batch 242 +1: the mlx-serve per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model); Batch 194 +1: the issue-latency MAD cost model; the comment read 16 while the table held 18 since B249 slice 3 — repaired at Batch 265; Batch 265 +1: autotuner-key-memoized-per-launch-not-rebuilt (vllm #61497)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -3216,6 +3218,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "issue-latency-priced-mad-cost-model",
             "autotune-fidelity-synthetic-carries-producer-params",
             "per-generation-plan-table-unmeasured-generation-fallback",
+            // Batch 265 +1 (vllm #61497): the per-launch autotuner-key
+            // rebuild memoized away (launch_autotuned, the SSD prefill
+            // host-overhead lead).
+            "autotuner-key-memoized-per-launch-not-rebuilt",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (26 rules; Batch 251 +3: the Yukon conversion, Research 284 — decode-layout-weight-permute-copy-registry (load-time PURE-PERMUTED weight copies TM/WM, originals stay in place, pointer-keyed registry with dl_type, prefix-view legality from the layout itself) + ptq1-value-exact-transcode-roundtrip-fallback (code-3-free PQ2_0 re-encodes to 28-byte PTQ1_0 trit groups, ≈18% fewer weight bytes, DECODE-BACK verified per block, whole-tensor fallback on any code-3 or failed round-trip) + host-dispatch-predicate-mirrors-kernel-compiled-arch (one host+device constexpr fed highest_compiled_arch(cc) on the host and __CUDA_ARCH__ on device, every consumer re-deriving through it); the comment read 22 while the table held 23 since B247 — repaired here; Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (the prism fork #363 tensor-split law — a shard boundary respects EVERY block constraint on the axis: lcm(type block, rotation block); the rotation reshape keeps the axis boundaries (4D not 2D) so the split survives; views inherit the parent's split scaled by their geometry; a feature-sharded elementwise op slices its full-width mirrored operand per shard); Batch 242 +1: the mlx-serve tp-rank-inferred-from-scale-grid-ambiguity-refused (the sushi/Hadamard pack layout inference — ambiguity refuses, never guesses); Batch 233 +1: the reshape-relabel axis-scramble content-oracle law (llama.cpp #28738 + #30480 — a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape); prior: Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
