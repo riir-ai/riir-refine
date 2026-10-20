@@ -19916,6 +19916,42 @@ fn batch261_rules_landed() {
 }
 
 #[test]
+fn batch262_rider_landed() {
+    // G1 for Batch 262 (Plan 266 / Research 298): the uzu window residue --
+    // ONE count-neutral rider face on the gpu_101 residency host
+    // (residency-hold-gated-ram-fraction-not-working-set). Source
+    // trymirai/uzu @ e6399cb #988 "Perf: Fix sparse queue residency stalls"
+    // (MIT), PR body quoted verbatim (fetched this session); the
+    // kernel+host window read in full (clone E:/git/vendor/uzu, pin 2b4c1ae).
+    // Count-neutral: corpus stands at the Batch-261 total.
+    let corpus = build_kernel_seed_corpus();
+
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "residency-hold-gated-ram-fraction-not-working-set")
+        .expect("rider host missing: residency-hold-gated-ram-fraction-not-working-set");
+    for needle in [
+        "PER-QUEUE SET-SCOPE face",
+        "e6399cb",
+        "Perf: Fix sparse queue residency stalls",
+        "mach_vm_wire_level_monitor",
+        "IOGPUScheduler::freeToWireSysMemory",
+        "IOGPUMemory::prepare_memory_slow",
+        "The compute queue keeps model residency for prefill/decode",
+        "Batch 262",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-262 rider missing needle: {needle}"
+        );
+    }
+    // Count-neutral witness: the corpus total is unchanged from Batch 261.
+    assert_eq!(corpus.entries.len(), 923, "batch 262 was count-neutral");
+}
+
+
+#[test]
 fn batch260_rider_landed() {
     // G1 for Batch 260 (Plan 264 / Research 296): the thin-watch conversion
     // -- ONE count-neutral rider face on the B223 host. Source trymirai/uzu

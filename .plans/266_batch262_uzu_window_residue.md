@@ -1,6 +1,6 @@
 # Plan 266 — Batch 262: the uzu radix-top-k window residue
 
-**Status:** CLAIMED — shikuwa/4090 idle loop, 2026-10-20T18:20+07 (epoch 1792658400), expires 2026-10-22T18:20+07
+**Status:** COMPLETE 2026-10-20 ~19:0x +07 — T1 adjudicated RIDER (the PR body carried the full mechanism; the in-source WHY hypothesis confirmed and exceeded), T2 landed (the count-neutral rider on the gpu_101 host), T3 needle gate FIRST-RUN PASS, T4 clippy ×2 postures clean + libs green (kernel_opt 3191/0, default 2715/0), T5 floors HELD / freeze/score-bench NOT owed / rebuild NOT owed, T6 docs landed (Research 298, snapshot row, this plan). **Claimed:** shikuwa/4090 idle loop, 2026-10-20T18:20+07 (epoch 1792658400), expires 2026-10-22T18:20+07 — discharged by the landing.
 
 ## Why now
 
