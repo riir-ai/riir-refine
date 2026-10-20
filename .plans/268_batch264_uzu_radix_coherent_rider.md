@@ -17,8 +17,8 @@ non-coherent, so a cross-threadgroup plain-store handshake buffer must carry
 the `coherent` qualifier; the atomic surface already carries explicit ordering.
 
 - [x] T0 — claim row in `.distill/001` + this plan (this commit; dual_allocation_gate 0/0/0, `.plans/.highwater` 267→268)
-- [ ] T1 — rider authoring: RIDER-2 face appended to the gpu_85 `gpu_concept` in `entries_gpu_85.rs` (CRLF-preserving — the file is 349-CRLF-native; quotes verbatim at the pin, read from the vendor clone `E:/git/vendor/uzu`)
-- [ ] T2 — needle gate: `tests.rs` `batch264_rider_landed` (verbatim needles incl. `coherent(device) ulong* selected_keys` + the count-neutral witness corpus == 923)
-- [ ] T3 — gates: batch264 needle gate, kernel_opt lib, default lib, clippy −D ×2 postures (default + no-default), retrieval floors re-measure (isolated CARGO_TARGET_DIR, removed after)
-- [ ] T4 — Research 300 note + `.distill/001` landing row + this plan tick + commit + push (single landing commit; binary rebuild NOT owed — kernel_opt outside the release set; freeze/score-bench NOT owed — zero clippy-corpus delta, P30)
+- [x] T1 — rider authoring: RIDER-2 face appended to the gpu_85 `gpu_concept` in `entries_gpu_85.rs` (CRLF-preserving — python byte splice, 349 CRLF / 0 LF before AND after; quotes verbatim at the pin, read from the vendor clone `E:/git/vendor/uzu`)
+- [x] T2 — needle gate: `tests.rs` `batch264_rider_landed` (verbatim needles incl. `coherent(device) ulong* selected_keys` + the count-neutral witness corpus == 923) — FIRST-RUN PASS
+- [x] T3 — gates: batch264 needle gate FIRST-RUN PASS; kernel_opt lib 3193/0 (+1); default lib 2715/0; clippy −D ×2 postures clean; retrieval floors HELD 21/21 no re-pin (291.1 s, isolated CARGO_TARGET_DIR removed)
+- [x] T4 — Research 300 note + `.distill/001` landing row + this plan tick + commit + push (single landing commit; binary rebuild NOT owed — kernel_opt outside the release set; freeze/score-bench NOT owed — zero clippy-corpus delta, P30)
 - [-] T5 — llama.cpp #30430 shared-weight layout-transform law: graded WATCH/lane-intel, NOT authored this batch (SYCL-lane fix; our lane's Hadamard folds happen at load, before any consumer — the in-place per-op transform class has no surface today; re-opens if a per-op weight-transform lane lands)

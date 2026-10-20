@@ -20031,6 +20031,38 @@ fn batch260_rider_landed() {
 }
 
 #[test]
+fn batch264_rider_landed() {
+    // G1 for Batch 264 (Plan 268 / Research 300): the thin-watch conversion
+    // -- ONE count-neutral rider face on the gpu_85 host. Source trymirai/uzu
+    // @ 32cd07c3f648d65e77063f3105f36c7c85bf5d81 (#994, MIT), quotes verbatim
+    // at the pin (the vendor clone diff --stat 1 file +1/-1, both spellings
+    // read this session). Count-neutral: corpus stands at 923.
+    let corpus = build_kernel_seed_corpus();
+
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "bounded-cross-worker-barrier-protocol-polling-fan-in-ladder")
+        .expect("rider host missing: bounded-cross-worker-barrier-protocol-polling-fan-in-ladder");
+    for needle in [
+        "CROSS-THREADGROUP COHERENT-QUALIFIER face",
+        "32cd07c3f648d65e77063f3105f36c7c85bf5d81",
+        "device coherent(device) ulong* selected_keys",
+        "device ulong* selected_keys",
+        "RadixTopKSmallCollect",
+        "radix_top_k_small.metal:164",
+        "Batch 264",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-264 rider missing needle: {needle}"
+        );
+    }
+    // Count-neutral witness: the corpus total is unchanged from Batch 261.
+    assert_eq!(corpus.entries.len(), 923, "batch 264 was count-neutral");
+}
+
+#[test]
 #[allow(clippy::too_many_lines)] // the rider faces + the 7-rule needle table exceed the 100-line default
 fn batch257_rules_landed() {
     // G1 for Batch 257 (Plan 261 / Research 293): the TensorFold staged
