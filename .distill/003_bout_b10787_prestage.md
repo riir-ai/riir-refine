@@ -73,6 +73,19 @@ one manifest edit + one harness command + the bench record. Everything else is D
    perf-path siblings (riir-infer, katgpt-rs) are no longer clean, STOP and re-adjudicate
    (wt-bout tuple per Bench-982 §Provenance) before running.
 
+## PRE-CHECK ADDENDUM 2026-10-20 ~05:0x UTC (shikuwa/4090 gated-window session, zero GPU)
+
+Re-validated the pre-stage 11h after staging, at riir-ai HEAD `9179ea2bc`:
+
+1. **Harness selftests green again**: run-path 23/23, detector 69/69 (CPU-only, live re-run).
+2. **Both bout postures compile clean at current HEAD** (`--no-run`, main target/, incremental):
+   decode posture (`--features bonsai2_hadamard`, `bench_734_t5_decode`) and pp posture
+   (8-feature set, both `bench_772_t0_gemm_share` + `bench_734_t5_decode` exes).
+   En route: THREE rustc `STATUS_ACCESS_VIOLATION` transients this window (attempt 1 on
+   `katgpt_core`, attempt 2 on `katgpt_forward` — crash-crash-**pass** on attempt 3; the
+   pre-stage's same documented infra class, NOT code; retry-ladder is the remedy).
+3. ✅ **THE step-6 TUPLE QUESTION ADJUDICATED (this session — the bout session need only RE-VERIFY no NEW movement):** katgpt-rs moved since the prep (Fathom 628 lane, lease to 2026-10-22): T0.2–T0.6 all inside `crates/katgpt-extract/src/` — and `cargo tree -p riir-gpu --edges normal` proves **katgpt-extract is NOT in the bench closure** (closure = katgpt core/dec/forward/hla/micro-belief/percepta/pruners/personality/sense/speculative/transformer/types). The one closure-adjacent commit is T0.1 `37d09d972` (extraction_wire): a katgpt-core **Cargo.toml feature-list ADDITION only** (new off-by-default feature; the bench postures do not enable it) → fingerprint churn (the crash-crash-pass rebuild recompiled katgpt_core + katgpt_forward), zero compiled-artifact change — the clean `--no-run` builds at the current tips ARE the proof. Both perf-path siblings verified **clean == origin** at adjudication time (riir-infer + katgpt-rs). **Verdict: NO wt-bout tuple freeze — record the tip tuple (riir-ai `9179ea2bc` + katgpt-rs `1f04468de` + riir-infer tip) in the attestation with this outside-closure note; the build is warm and verified, the ~15 min bout budget stands.** If the Fathom lane lands NEW closure-crate commits or dirties a perf-path tree before the bout, re-adjudicate then (the stop-condition stays armed).
+
 **Claim/lease note:** this prep is recorded in riir-refine `.distill/001` (the queue
 file) the same commit as this note. The bout session re-fetches before staging per the
 standing yield rule.
