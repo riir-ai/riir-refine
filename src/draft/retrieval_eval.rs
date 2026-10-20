@@ -2916,6 +2916,34 @@ mod tests {
         );
     }
 
+/// Batch 266 (Plan 270 / Research 302) T8: the new rule's own span must
+    /// land top-1 in the rust_perf lane — the standing self-variant assert
+    /// the retrieval floors ride.
+    #[test]
+    fn batch266_self_variant_retrieves_top1() {
+        use crate::domain::HealDomain;
+        use crate::domains::rust_perf::RustPerfDomain;
+        let corpus = RustPerfDomain::build_corpus();
+        let rule = corpus
+            .iter()
+            .find(|e| e.rule_id() == "isop-cover-from-decision-diagram-not-path-simplification")
+            .expect("batch-266 rule must be in the corpus");
+        let probe = mutate_shape(rule.buggy_code());
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let (_routed, by_domain) = matcher.suggest_span(&probe, 3);
+        let perf_rules = by_domain
+            .iter()
+            .find(|(d, _)| *d == DomainId::Perf)
+            .map(|(_, rules)| rules)
+            .expect("rust_perf domain present");
+        let top1 = perf_rules.first().map_or("", |r| r.rule_id.as_str());
+        assert_eq!(
+            top1,
+            "isop-cover-from-decision-diagram-not-path-simplification",
+            "batch-266 self-variant must land top-1 (got {top1})"
+        );
+    }
+
     /// Issue 070 T1 — the cross-domain agreement pre-check (`ThoughtComm`
     /// α-fusion `DoA` measurement; source Research 364; the issue was
     /// resolved + removed 2026-09-05 — record in AGENTS.md + git history).

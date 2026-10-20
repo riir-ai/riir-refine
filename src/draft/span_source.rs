@@ -80,7 +80,7 @@ mod tests {
     /// A private scratch tree: a.rs, sub/b.rs, target/c.rs, .hidden/d.rs,
     /// e.txt, plus the P78 prune-set members: target-cuda-w2/g.rs (the
     /// CARGO_TARGET_DIR-renamed build tree — the live reflex specimen) and
-    /// node_modules/n.rs. Unique per test (parallel tests must not delete
+    /// `node_modules/n.rs`. Unique per test (parallel tests must not delete
     /// each other's tree mid-walk).
     fn temp_tree(tag: &str) -> PathBuf {
         let root = std::env::temp_dir().join(format!(
