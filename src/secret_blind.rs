@@ -177,8 +177,20 @@ pub struct ScanOutcome {
 /// Digest-scheme tags that mark a following hex run as checksum-shaped.
 /// Lowercase-compare; a real API key never carries one of these prefixes.
 const DIGEST_SCHEMES: &[&str] = &[
-    "blake3", "blake2", "blake2b", "blake2s", "sha1", "sha256", "sha384", "sha512", "sha3",
-    "sha3-256", "sha3-512", "keccak", "keccak256", "md5",
+    "blake3",
+    "blake2",
+    "blake2b",
+    "blake2s",
+    "sha1",
+    "sha256",
+    "sha384",
+    "sha512",
+    "sha3",
+    "sha3-256",
+    "sha3-512",
+    "keccak",
+    "keccak256",
+    "md5",
 ];
 
 /// Self-describing pin-name suffixes for the identifier evidence: a
@@ -186,8 +198,19 @@ const DIGEST_SCHEMES: &[&str] = &[
 /// fresh ≥32-hex literal is a recorded pin, not a credential. `_HASH` is
 /// deliberately OUT (unprobed — a future probe corpus may add it).
 const PIN_NAME_SUFFIXES: &[&str] = &[
-    "_sha", "_sha1", "_sha256", "_sha384", "_sha512", "_sha3", "_blake3", "_blake2", "_md5",
-    "_keccak256", "_digest", "_baseline", "_commitment",
+    "_sha",
+    "_sha1",
+    "_sha256",
+    "_sha384",
+    "_sha512",
+    "_sha3",
+    "_blake3",
+    "_blake2",
+    "_md5",
+    "_keccak256",
+    "_digest",
+    "_baseline",
+    "_commitment",
 ];
 
 /// The report-lane adjudication: a canonical finding that is contextually
@@ -205,6 +228,8 @@ fn is_digest_pin(span: &str, f: &Finding) -> bool {
         FindingKind::HighEntropyHex | FindingKind::HighEntropyB64 => {
             preceded_by_known_tag(span, f.start)
                 || opens_pin_named_value(span, f.start)
+                || is_colon_named_algo_pin(span, f)
+                || is_markdown_scheme_citation(span, f)
                 || is_canonical_b64_alphabet(span, f)
                 || (f.kind == FindingKind::HighEntropyHex
                     && (is_degenerate_hex_run(span, f)
@@ -357,10 +382,141 @@ fn pin_named_declaration_lower(lower: &str) -> bool {
     PIN_NAME_SUFFIXES.iter().any(|sfx| lower.ends_with(sfx))
         || lower.starts_with("golden_")
         || lower.ends_with("_golden")
+        || is_algo_component_pin_name(lower)
 }
 
-/// `NAME` carries the credential-binding suffix (the systemd
-/// `LoadCredential=` filename-const shape).
+// ── The P80 benign class (found live 2026-10-20, the katgpt-extract
+// fixture census — probe-first; the firing negatives below are the probe
+// corpus) ─────────────────────────────────────────────
+
+/// The P80 name evidence: the identifier ends `_pin` AND one
+/// underscore-component is exactly a [`DIGEST_SCHEMES`] entry —
+/// `blake3_pin`, `vocab_sha256_pin`, `MD5_PIN` (lowercased). The algo
+/// component is the conservative half: bare `*_pin` is the CREDENTIAL
+/// sense of the word (`access_pin`, `sim_pin`) and never qualifies; a
+/// component can never carry the hyphenated spellings (`sha3-256`), which
+/// therefore never match — exactly-64-hex key material under those names
+/// keeps firing. Shared by both P80 surfaces: the `=`-declaration form
+/// (through [`pin_named_declaration_lower`]) and the colon-initializer
+/// form (through [`is_colon_named_algo_pin`]).
+fn is_algo_component_pin_name(lower: &str) -> bool {
+    lower.ends_with("_pin") && lower.split('_').any(|c| DIGEST_SCHEMES.contains(&c))
+}
+
+/// Guard (k) (P80): an opening string literal whose COLON-SEPARATED name —
+/// a Rust struct-literal field or a YAML-style key, `blake3_pin:
+/// "77a3…"`, in the raw or the JSON-quoted form (`"fixture_corpus_blake3":
+/// "f2a0…"`, the live reflex parity-fixture sites) — carries the full
+/// [`pin_named_declaration_lower`] evidence (the P63 suffixes, the golden
+/// convention, and the P80 algo-component `_pin` name). The
+/// P63 LHS helper derives `=`-declarations only (and the single
+/// rustfmt-wrap form); a struct-literal initializer has a colon, not an
+/// equals, so every earlier class missed the live shape (the katgpt-extract
+/// `FixtureRow` census: `blake3_pin` + `vocab_blake3_pin` fields).
+/// BOTH evidences AND-ed as one: the run must open a fresh literal on a
+/// `name:` head, and the name must carry pin-name evidence. A non-pin
+/// field (`secret:`) and a pin name without evidence (`api_pin:`) keep
+/// firing. A wrapped value (`name:` on one line, literal on the next) is
+/// uncovered — disclosed, never silently dropped.
+fn is_colon_named_algo_pin(span: &str, f: &Finding) -> bool {
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let head = &span[line_start..f.start];
+    if !head.ends_with('"') {
+        return false; // not a fresh literal on this line
+    }
+    let head = head[..head.len() - 1].trim_end();
+    let Some(before_colon) = head.strip_suffix(':') else {
+        return false;
+    };
+    // The JSON-quoted KEY form: the key's own quotes wrap the name —
+    // strip the pair so the ident scan reads it (an escaped closing
+    // quote `\"` declines the strip; the safe direction is to fire).
+    let key = if before_colon.len() >= 2
+        && before_colon.ends_with('"')
+        && !before_colon.ends_with("\\\"")
+    {
+        &before_colon[1..before_colon.len() - 1]
+    } else {
+        before_colon
+    };
+    let name = key
+        .rsplit(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .next()
+        .unwrap_or("");
+    !name.is_empty()
+        && !name.starts_with(|c: char| c.is_ascii_digit())
+        && pin_named_declaration_lower(&name.to_ascii_lowercase())
+}
+
+/// Guard (l) (P80, the `.md` residue — the same katgpt-extract census,
+/// `--secret-scan` walk): a hex run inside a CLOSED MARKDOWN CODE SPAN
+/// whose 3-line window (the run's line + the two above) carries a
+/// [`DIGEST_SCHEMES`] word — the provenance doc's bold-label pin (a
+/// `- **BLAKE3 pin:**` bullet whose value hex sits in a code span), its
+/// wrapped twin (the label bullet on one line, the bare code span on the
+/// next), and the list-continuation rows two lines under the shared
+/// label (`- test:` / `- train:` bullets). Three evidences AND-ed: the
+/// byte before the run is a backtick, the byte after closes the span,
+/// and the window match is a boundary-checked WORD (case-insensitive,
+/// hyphen-folded so `SHA-256` matches `sha256`; `resha256` / `sha256x`
+/// reject). The exactly-40-hex run also accepts the word `commit` — the
+/// markdown twin of the git-revision guards (g)/(h)/(j), the live
+/// `- **Commit:**` citation. A backticked hex with no scheme word
+/// nearby stays a finding; the window is LINES, not content — a blank
+/// line consumes a slot, so a label 3+ lines above the run falls
+/// outside — disclosed, never hidden.
+fn is_markdown_scheme_citation(span: &str, f: &Finding) -> bool {
+    let bytes = span.as_bytes();
+    if f.start == 0 || bytes[f.start - 1] != b'`' {
+        return false; // the run does not open a code span
+    }
+    let end = f.start + f.len;
+    if end >= bytes.len() || bytes[end] != b'`' {
+        return false; // the span is not closed on the same line
+    }
+    let line_start = span[..f.start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = span[line_start..]
+        .find('\n')
+        .map_or(span.len(), |i| line_start + i);
+    // The run's line + the two above (the wrapped-label and the
+    // list-continuation forms; a blank-line gap falls outside).
+    let l2 = if line_start == 0 {
+        0
+    } else {
+        span[..line_start - 1].rfind('\n').map_or(0, |i| i + 1)
+    };
+    let l3 = if l2 == 0 {
+        0
+    } else {
+        span[..l2 - 1].rfind('\n').map_or(0, |i| i + 1)
+    };
+    let window: String = span[l3..line_end]
+        .to_ascii_lowercase()
+        .chars()
+        .filter(|&c| c != '-')
+        .collect();
+    DIGEST_SCHEMES.iter().any(|s| has_word(&window, s))
+        || (f.len == 40 && has_word(&window, "commit"))
+}
+
+/// Boundary-checked substring on the folded window: the needle must not
+/// sit inside a longer alphanumeric run (`resha256`, `sha256x`).
+fn has_word(haystack: &str, needle: &str) -> bool {
+    let h = haystack.as_bytes();
+    let mut from = 0;
+    while let Some(pos) = haystack[from..].find(needle) {
+        let at = from + pos;
+        let after = at + needle.len();
+        let before_ok = at == 0 || !h[at - 1].is_ascii_alphanumeric();
+        let after_ok = after >= h.len() || !h[after].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        from = at + 1;
+    }
+    false
+}
+
 fn credential_named_declaration(lhs: &str) -> bool {
     declaration_ident(lhs).is_some_and(|lower| lower.ends_with("_credential"))
 }
@@ -543,8 +699,7 @@ fn is_revision_ident_line(span: &str, f: &Finding) -> bool {
     while let Some(pos) = line[from..].find("revision") {
         let at = from + pos;
         let after = at + "revision".len();
-        let before_ok =
-            at == 0 || !bytes[at - 1].is_ascii_alphanumeric() && bytes[at - 1] != b'_';
+        let before_ok = at == 0 || !bytes[at - 1].is_ascii_alphanumeric() && bytes[at - 1] != b'_';
         let after_ok =
             after >= bytes.len() || !bytes[after].is_ascii_alphanumeric() && bytes[after] != b'_';
         if before_ok && after_ok {
@@ -936,7 +1091,8 @@ mod tests {
         assert_eq!(out.findings.len(), 1, "api_key must keep firing");
         assert!(out.digest_pins.is_empty());
 
-        let t = "    \"x509\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
+        let t =
+            "    \"x509\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
         let out = scan_file_with_pins(t);
         assert_eq!(out.findings.len(), 1, "x509 must keep firing");
         assert!(out.digest_pins.is_empty());
@@ -1282,7 +1438,10 @@ mod tests {
             "64-hex beside revision ident must fire"
         );
         let t2 = format!("assert_eq!(revision_token, \"{RANDOM_HEX_40}\");\n");
-        assert!(!scan_file(&t2).is_empty(), "compound revision_token must fire");
+        assert!(
+            !scan_file(&t2).is_empty(),
+            "compound revision_token must fire"
+        );
     }
 
     /// (e) path-shaped b64 — the `basis_cert` doc-comment repo path.
@@ -1319,5 +1478,139 @@ mod tests {
         assert!(!out.contains("PPLX_API_KEY"), "{out}");
         assert!(!out.contains("9f2c7a4e"), "{out}");
         assert!(!out.contains("SplitJEPA"), "{out}");
+    }
+
+    // ── P80: the algo-named-pin classes (live katgpt-extract fixture
+    // census, 2026-10-20 — each guard ships with its firing negatives) ──
+
+    /// (k) the colon-initializer field form + the algo-component `_pin`
+    /// name. The const form adjudicates through the extended P63 name
+    /// evidence; the struct-literal and YAML key shapes through guard (k).
+    #[test]
+    fn p80_algo_named_pins_are_suppressed() {
+        // The live const shape: algo as a PREFIX component + `_pin` suffix.
+        let t = format!("const BLAKE3_PIN: &str = \"{RANDOM_HEX_64}\";\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // The live struct-literal shape (the FixtureRow census).
+        let t = concat!(
+            "FixtureRow {\n",
+            "    label: \"MIT-Movie trivia10k13 test\",\n",
+            "    blake3_pin: \"77a36d097177560e49378e9a3b7ea4496d43a06ae2ca43667f680bf0cf65c56d\",\n",
+            "    rows_expected: 1562,\n",
+            "}\n"
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // The vocab-prefixed field + YAML/TOML key spellings.
+        let t = concat!(
+            "    vocab_blake3_pin: \"3a7ba3868950deafa6f8f7eb4a578f72a954f661b009e85800169f6d3d1b9b4a\",\n",
+            "sha256_pin: \"d63a7e0db195d4d20154a40b2f8dd09ce3bb65487a158c638da5c609d4475e7c\"\n"
+        );
+        let out = scan_file_with_pins(t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+
+        // The JSON-quoted KEY form — the live reflex parity-fixture
+        // shapes: the P63 suffixes carry the evidence, quotes wrap it.
+        let t = concat!(
+            "  \"fixture_corpus_blake3\": \"f2a00354ef554f36d99509df160aaf8f35e68ac9058631d283d842ea329d9d26\",\n",
+            "  \"fixture_corpus_sha256\": \"{RANDOM_HEX_64}\",\n"
+        );
+        let t = t.replace("{RANDOM_HEX_64}", RANDOM_HEX_64);
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+    }
+
+    /// (k) negatives: the AND must hold both ways, and the disclosed
+    /// uncovered forms stay loud.
+    #[test]
+    fn p80_pin_name_negatives_stay_firing() {
+        // A `_pin` name WITHOUT an algo component — the credential sense.
+        let t = format!("const API_PIN: &str = \"{RANDOM_HEX_64}\";\n");
+        let out = scan_file_with_pins(&t);
+        assert_eq!(out.findings.len(), 1, "bare _pin must fire");
+        assert!(out.digest_pins.is_empty());
+
+        // The colon form without the name evidence keeps firing.
+        let t = format!("    secret: \"{RANDOM_HEX_64}\",\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+
+        // A QUOTED key without pin-name evidence keeps firing (the
+        // quoted form changed nothing about the AND).
+        let t = format!("    \"api_key\": \"{RANDOM_HEX_64}\",\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+    }
+
+    /// The adjudication is report-lane only: `blind` still redacts the
+    /// P80 class (fail-closed sharing, the P63 doctrine).
+    #[test]
+    fn p80_blind_still_redacts_the_new_class() {
+        let t = format!("const BLAKE3_PIN: &str = \"{RANDOM_HEX_64}\";\n");
+        let out = blind(&t);
+        assert!(out.contains("[REDACTED:"), "{out}");
+        assert!(!out.contains("9f2c7a4e"), "{out}");
+    }
+
+    /// (l) the markdown code-span scheme citation — the provenance-doc
+    /// shapes: inline bold-label, wrapped label, list continuation under
+    /// a shared label, and the 40-hex `**Commit:**` twin.
+    #[test]
+    fn p80_markdown_scheme_citations_are_suppressed() {
+        // Inline bold-label (the live `- **BLAKE3 pin:**` shape).
+        let t = format!("- **BLAKE3 pin:** `{RANDOM_HEX_64}`\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // Wrapped label: the scheme on the line above.
+        let t = format!("- **SHA-256 (upstream file pin):**\n  `{RANDOM_HEX_64}`\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+
+        // List continuation two lines under the shared label.
+        let t = format!(
+            "- **SHA-256 (upstream file pins):**\n  - test: `77a36d097177560e49378e9a3b7ea4496d43a06ae2ca43667f680bf0cf65c56d`\n  - train: `{RANDOM_HEX_64}`\n"
+        );
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 2);
+
+        // The 40-hex `**Commit:**` citation.
+        let t = format!("- **Commit:** `{RANDOM_HEX_40}` (short `da7edcff59f6`)\n");
+        let out = scan_file_with_pins(&t);
+        assert!(out.findings.is_empty(), "{:?}", out.findings);
+        assert_eq!(out.digest_pins.len(), 1);
+    }
+
+    /// (l) negatives: no scheme word nearby, boundary rejects, the
+    /// commit word never covers non-40 lengths, and a blank-line gap
+    /// pushes the label outside the window.
+    #[test]
+    fn p80_markdown_negatives_stay_firing() {
+        // Backticked hex with NO scheme word on the window.
+        let t = format!("see `{RANDOM_HEX_64}` for details\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+
+        // The scheme word inside a longer run rejects both sides.
+        let t = format!("xsha256 note `{RANDOM_HEX_64}`\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+        let t = format!("- **sha256x pin:** `{RANDOM_HEX_64}`\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+
+        // `commit` covers the commit-identity length only.
+        let t = format!("- **Commit:** `{RANDOM_HEX_64}`\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
+
+        // The window is LINES, not content: a blank line consumes a
+        // slot, so the label must sit 3+ lines above to fall outside.
+        let t = format!("- **SHA-256 pin:**\n\n\n  `{RANDOM_HEX_64}`\n");
+        assert_eq!(scan_file_with_pins(&t).findings.len(), 1);
     }
 }
