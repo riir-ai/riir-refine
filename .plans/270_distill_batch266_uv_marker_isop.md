@@ -1,6 +1,7 @@
 # Plan 270 — Batch 266: `isop-cover-from-decision-diagram-not-path-simplification` (rust_perf, complexity)
 
 **Status:** OPEN — staged by the distill verdict (Research 302, 2026-10-21), NOT claimed. The next idle-cycle claimant appends the Claimed line and works the tasks in order.
+**Claimed:** zed-m3-katopz-idle, 1792540800, expires 2026-10-23T00:00:00Z
 
 Source: astral-sh/uv PR #22651 "Extract marker DNF covers from decision diagrams" (head `551c17c` / merge `2978e76`, MIT OR Apache-2.0) — memoized Minato–Morreale ISOP extraction from the hash-consed marker decision diagram, replacing path enumeration + the quadratic clause-subset simplifier. Verdict: YES B / no lane mapping / seeds the decision-diagram family (corpus first). Full record: `.research/302_distill_uv_pr22651_marker_isop.md`.
 
