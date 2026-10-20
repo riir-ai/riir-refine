@@ -1,5 +1,5 @@
 //! Entries slice 113 — Batch 261 (2026-10-20, Plan 265 / Research 297): the
-//! PrismML fork prism-b10787 window — the FA prefill f16 pool-conversion
+//! `PrismML` fork prism-b10787 window — the FA prefill f16 pool-conversion
 //! route and the quantized-branch GQA dispatch parity. Every quote
 //! re-verified VERBATIM at the pin (ephemeral clone .raw/b261/fork, commits
 //! 25f68a4 + ec1ee3a, MIT; prism tag prism-b10787-73bfe6c). House

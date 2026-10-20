@@ -1,6 +1,6 @@
 # Plan 267: Batch 263 — the vLLM #59737 PDL-for-MoE-topk second-instance rider
 
-**Status:** In progress — claimed 2026-10-20T01:2xZ (zed-m3-idle/M3), expires 2026-10-22.
+**Status:** LANDED 2026-10-20 (Batch 263, zed-m3-idle/M3) — all gates green, see the landing row.
 
 ## Source (verified this session)
 
@@ -38,15 +38,15 @@ whether the launch carries the attribute at all — the axis the rider instantia
 ## Tasks
 
 - [x] Source verified: PR #59737 fetched (API + .diff), mechanism read, quotes extracted
-- [ ] Claim row in `.distill/001_mining_queue_snapshot.md` committed + pushed BEFORE authoring
-- [ ] Dedup grep: confirm no other rule owns the vLLM PDL face (B257 host is the home)
-- [ ] Rider text appended to the `pdl-admission-by-image-set-marker` gpu_concept (entries_gpu_111.rs) — count-neutral, surgical single-target edit (the B262 splice-corruption lesson: read the diff)
-- [ ] Needle gate: `batch263_rider_landed` in corpus/tests.rs (verbatim needles + the 923 count witness)
-- [ ] Gates: kernel_opt lib tests, default lib tests, clippy −D (default + no-default postures)
-- [ ] Retrieval floors: count-neutral precedent (B246/B260/B262) = HELD no re-pin; re-measure only on a warning sign
-- [ ] Verify NOT-owed claims: freeze tables (kernel_opt is not the clippy corpus), binary rebuild (kernel_opt outside the release set)
-- [ ] Research note 299 + AGENTS.md kernel_opt bullet line + `.docs/11_domains/kernel_opt.md` entry
-- [ ] Commit `feat: batch 263: ...` + push; snapshot landing row in the same commit
+- [x] Claim row in `.distill/001_mining_queue_snapshot.md` committed + pushed BEFORE authoring (`75292898`, rebased over the sibling's plan-225 fix `f58f194b`; en-route the first claim commit normalized the CRLF snapshot to LF — caught at the diff, restored to HEAD bytes + CRLF append, amended)
+- [x] Dedup grep: no other rule owns the vLLM PDL face (B257 host is the home; gpu_23/gpu_18/gpu_57 kinship respected)
+- [x] Rider text appended to the `pdl-admission-by-image-set-marker` gpu_concept (entries_gpu_111.rs) — count-neutral, surgical single-target edit, diff = 1 line
+- [x] Needle gate: `batch263_rider_landed` in corpus/tests.rs — FIRST-RUN PASS (17 needles + the 923 witness)
+- [x] Gates: kernel_opt lib 3192/0; default lib 2715/0; clippy −D ×3 postures clean (en-route: 3 PRE-EXISTING B261 doc_markdown findings in gpu_113/114 healed via the maintained binary to unblock −D)
+- [x] Retrieval floors: MEASURED 21/21 HELD (487 s) — no re-pin (went beyond the count-neutral precedent)
+- [x] Verified NOT-owed claims: freeze tables (zero clippy-corpus delta), binary rebuild (kernel_opt outside the release set)
+- [x] Research note 299 (CRLF per folder convention) + `.docs/11_domains/kernel_opt.md` Batch 263 section; AGENTS.md kernel_opt bullet SKIPPED per the B262 count-neutral precedent (count did not move; disclosed in the landing row)
+- [x] Commit `feat: batch 263: ...` + push; snapshot landing row in the same commit
 
 ## Records
 

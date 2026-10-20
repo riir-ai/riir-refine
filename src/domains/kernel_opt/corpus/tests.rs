@@ -19916,6 +19916,52 @@ fn batch261_rules_landed() {
 }
 
 #[test]
+fn batch263_rider_landed() {
+    // G1 for Batch 263 (Plan 267 / Research 299): the vLLM watch-leg staged
+    // item -- ONE count-neutral rider face on the B257 pdl admission host
+    // (pdl-admission-by-image-set-marker), the SOURCE-LEVEL ADMISSION face.
+    // Source vllm-project/vllm PR #59737 "[Perf] Enable PDL for fused MoE
+    // top-k gating" (Apache-2.0), MERGED 2026-10-19T19:17:28Z at merge
+    // 3c9beb82d1a92eb5a84cca4408a0a1b479d4dd03; the PR body + full .diff
+    // fetched and quoted verbatim this session (the staged "B257 second
+    // instance" verified before the claim). Count-neutral: corpus stands at
+    // the Batch-261 total.
+    let corpus = build_kernel_seed_corpus();
+
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "pdl-admission-by-image-set-marker")
+        .expect("rider host missing: pdl-admission-by-image-set-marker");
+    for needle in [
+        "SOURCE-LEVEL ADMISSION face",
+        "3c9beb82d1a92eb5a84cca4408a0a1b479d4dd03",
+        "[Perf] Enable PDL for fused MoE top-k gating",
+        "csrc/moe/topk_softmax_kernels.cu",
+        "PDL permits early launch, but logits/metadata still depend on the producer.",
+        "cudaGridDependencySynchronize()",
+        "cudaTriggerProgrammaticLaunchCompletion()",
+        "The dependency wait and completion signal precede dependent reads and row-dependent exits.",
+        "Threads with indices out of bounds should early exit here.",
+        "without a host architecture query",
+        "topk_softplus_sqrt and per_token_group_quant",
+        "programmaticStreamSerializationAllowed = 1",
+        "PDL topkGating launch failed: ",
+        "USE_ROCM keeps the plain triple-chevron launch",
+        "REGRESSES 0.54%/0.49%",
+        "6720/6720 patched vs 0/6720 baseline",
+        "Batch 263",
+    ] {
+        assert!(
+            entry.gpu_concept.contains(needle),
+            "batch-263 rider missing needle: {needle}"
+        );
+    }
+    // Count-neutral witness: the corpus total is unchanged from Batch 261.
+    assert_eq!(corpus.entries.len(), 923, "batch 263 was count-neutral");
+}
+
+#[test]
 fn batch262_rider_landed() {
     // G1 for Batch 262 (Plan 266 / Research 298): the uzu window residue --
     // ONE count-neutral rider face on the gpu_101 residency host

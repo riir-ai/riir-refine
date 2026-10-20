@@ -1,5 +1,5 @@
 //! Entries slice 114 — Batch 261 (2026-10-20, Plan 265 / Research 297): the
-//! PrismML fork prism-b10787 window — the Pascal PQ2_0 one-warp ordered
+//! `PrismML` fork prism-b10787 window — the Pascal `PQ2_0` one-warp ordered
 //! mat-vec, bit-identical to the generic mmvq by reduction-order
 //! preservation. Every quote re-verified VERBATIM at the pin (ephemeral
 //! clone .raw/b261/fork, commit 483bdab, MIT; prism tag
