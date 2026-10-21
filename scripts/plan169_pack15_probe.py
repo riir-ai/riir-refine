@@ -325,7 +325,7 @@ def run_clippy(lib_rs: Path, target: Path) -> tuple[dict[str, list[dict]], list[
         env=env,
         capture_output=True,
         text=True,
-        errors="replace",
+        errors="replace", encoding="utf-8"
     )
     found: dict[str, list[dict]] = {}
     suggestions: list[dict] = []

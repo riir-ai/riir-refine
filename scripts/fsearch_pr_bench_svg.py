@@ -54,7 +54,7 @@ def load(path):
     """rig output dict -> {(kind, cat): geomean_ms} using the rig's own
     aggregation: per query, the MEDIAN of its rounds; then the geomean
     across the category's queries (matches examples/rig.rs console tables)."""
-    data = json.load(open(path))
+    data = json.load(open(path, encoding="utf-8"))
     acc = defaultdict(list)
     for key, entry in data.items():
         if not isinstance(entry, dict) or "ms" not in entry:
@@ -86,7 +86,7 @@ def main():
     ap.add_argument("--out", required=True)
     a = ap.parse_args()
 
-    meta = json.load(open(a.meta)) if a.meta else {}
+    meta = json.load(open(a.meta, encoding="utf-8")) if a.meta else {}
     before = load(a.before)
     after = load(a.after) if a.after else None
 
@@ -151,7 +151,7 @@ def main():
     o.append(f'<text x="24" y="{y+22}" fill="#c9cdd3" font-size="13">fix + bench by cargo refine · harness: fsearch examples/rig.rs (upstream, identical corpus both arms)</text>')
     o.append(f'<text x="24" y="{y+42}" fill="#5b8def" font-size="14" font-weight="bold">refine.gist.rs — the modelless Rust fixer + bench tool</text>')
 
-    Path(a.out).write_text("\n".join(o) + "\n")
+    Path(a.out).write_text("\n".join(o) + "\n", encoding="utf-8")
     print(f"wrote {a.out} ({len(rows)} rows, after={'yes' if after else 'pending'})")
 
 

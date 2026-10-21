@@ -65,7 +65,7 @@ def run_clippy(lib_rs: Path, target: Path) -> dict[str, list[dict]]:
         ["cargo", "clippy", "--message-format=json", "--quiet"],
         cwd=lib_rs.parent.parent,
         env=env,
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     found: dict[str, list[dict]] = {}
     for line in proc.stdout.splitlines():
