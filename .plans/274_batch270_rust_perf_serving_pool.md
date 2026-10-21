@@ -69,7 +69,7 @@ lands only if it survives fresh dedup).
       re-measure), clippy -D x postures.
 - [x] T8 — freeze-table regeneration gen2+gen3 (rust_perf corpus delta, plan 137 T7.5) +
       score-bench appended via the rebuilt binary.
-- [ ] T9 — release-set binary rebuild + `cp` to `~/.cargo/bin` (the Windows plain-copy hazard:
+- [x] T9 — release-set binary rebuild + `cp` to `~/.cargo/bin` (the Windows plain-copy hazard:
       explicit cp, never a silent symlink assumption) + `--version` build hash == HEAD verified.
 - [x] T10 — Research 306 + AGENTS.md rust_perf bullet + `.docs/11_domains/rust_perf.md` entry +
       snapshot landing row (same commit as the landing).
