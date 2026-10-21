@@ -56,7 +56,17 @@ EXPECT_LIB="${EXPECT_LIB:-2695}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-/tmp/b250-target}"
 cd "$REPO"
 tmp="$(mktemp)"
-trap 'rm -f "$tmp"' EXIT
+B250_GATES_COMPLETED=0
+cleanup() {
+    st=$?
+    rm -f "$tmp"
+    if [ "$B250_GATES_COMPLETED" != "1" ] && [ "$st" = "0" ]; then
+        echo "✗ batch250_slice1_landing_gates ABORTED mid-run while reporting success — forcing exit 1" >&2
+        exit 1
+    fi
+    exit "$st"
+}
+trap cleanup EXIT
 
 fail() { echo "FAIL: $1" >&2; tail -40 "$tmp" >&2; exit 1; }
 
@@ -120,3 +130,4 @@ esac
 
 echo
 echo "=== landing gates DONE (runnable half). Remaining per plan 254: T9 docs/research rows, T10 .distill CRLF row + stamp==HEAD + push."
+B250_GATES_COMPLETED=1   # the last line — see cleanup above
