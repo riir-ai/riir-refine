@@ -24,6 +24,15 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
+# A non-UTF-8 console (cp874) would kill this script on its first
+# non-ASCII glyph; degrade the glyph, never the verdict (katgpt-rs
+# Issue 804). A captured stream without reconfigure is left alone.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(errors="backslashreplace")
+    except (AttributeError, ValueError):
+        pass
+
 # (kind, category) -> chart label; order is the chart order.
 ROWS = [
     ("name", "exact", "find a file by name (exact)"),
