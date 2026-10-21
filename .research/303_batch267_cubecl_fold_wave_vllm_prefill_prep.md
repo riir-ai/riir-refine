@@ -1,6 +1,6 @@
 # Research 303 — Batch 267: the cubecl fold/autotune/barrier wave + the vllm MLA-prefill prep fusion
 
-**Status:** LANDED — Batch 267 (Plan 271), 2026-10-21, shikuwa/4090 idle loop.
+**Status:** LANDED — Batch 267 (Plan 271), 2026-10-21, shikuwa/4090 idle loop. COLLISION ADDENDUM: the M3 lane's Batch 269 (Plan 272 / Research 304) landed the same morning with its own rule in the same slice file; the merge (commit 3252e7694) kept BOTH batches — corpus 926 (N 82 + B 106), both gates green; this note's 925-count statements describe the pre-merge state.
 Method: the standing-watch re-poll (blobless clones `.raw/bwatch1021/`, removed at close) enumerated
 the post-B265 delta across the watch set; 2 authoring subagents over disjoint slices
 (A: cubecl wave; B: vllm/bevy wave); coordinator wiring + gates. Every quote byte-verified at the

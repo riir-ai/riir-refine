@@ -1,6 +1,6 @@
 # Plan 271 — Batch 267: the cubecl autotune/barrier/fold wave + the vllm MLA-prefill prep fusion
 
-**Status:** LANDED 2026-10-21 ~08:xx +07 (shikuwa/4090, riir-refine idle loop) — all gates green; corpus 924→925.
+**Status:** LANDED 2026-10-21 (shikuwa/4090, riir-refine idle loop) — all gates green; COLLISION MERGE with the M3 lane's Batch 269 kept BOTH batches: corpus 924→926 (N 82 + B 106), merge commit 3252e7694.
 **Claim:** shikuwa/4090 idle lane, expires 2026-10-23 ~04:5x +07 (48 h); push is the arbiter; other lanes re-fetch before staging and yield to this row.
 
 ## Source window (the post-B265 poll delta)
