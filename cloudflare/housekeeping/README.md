@@ -67,7 +67,7 @@ Two dashboard gotchas, both doc-sourced:
 ### 2. Verify it BEFORE setting it — not optional here
 
 ```sh
-node cloudflare/housekeeping/verify_token.mjs <token>     # or CF_OPS_API_TOKEN=... node ...
+node cloudflare/housekeeping/verify_token.mjs <token>     # or CLOUDFLARE_OPS_API_TOKEN=... node ...
 ```
 
 This is a hard requirement rather than a nicety, because **Cloudflare does not
@@ -118,8 +118,8 @@ re-pasting.
 
 ```sh
 # From the repo root. Worker-side binding name stays CF_API_TOKEN (deployed
-# secret); locally it is CF_OPS_API_TOKEN.
-grep '^CF_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)
+# secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
+grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)
 curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set, ts, ok}'
 ```
 
@@ -134,7 +134,7 @@ curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set
 ### "Why not just use wrangler? It already authenticates."
 
 It does — **on the M3**. `scripts/gen_dashboard.py:_cf_token()` prefers
-`CF_OPS_API_TOKEN` but falls back to the wrangler OAuth file, so the generator and
+`CLOUDFLARE_OPS_API_TOKEN` but falls back to the wrangler OAuth file, so the generator and
 `scripts/ops_nightly.sh` need **zero secrets**. That fallback is the whole
 reason the nightly lives on the M3 rather than in CI.
 
@@ -246,7 +246,7 @@ curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates 
 
 > **Credentials (2026-10-21):** wrangler uses `CLOUDFLARE_API_TOKEN` (the
 > deploy token) when set, else your `wrangler login` OAuth session. The
-> analytics token lives in `.env` as `CF_OPS_API_TOKEN`, a name wrangler never
+> analytics token lives in `.env` as `CLOUDFLARE_OPS_API_TOKEN`, a name wrangler never
 > reads, so it cannot shadow a deploy. Only the Worker-side secret binding is
 > still called `CF_API_TOKEN`.
 

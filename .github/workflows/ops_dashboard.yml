@@ -19,7 +19,7 @@
 #                               the same token the housekeeping worker uses).
 #                               Feeds the CF daily-neurons + containers sections.
 #                               Repo-secret name kept; mapped to the process env
-#                               as CF_OPS_API_TOKEN (the local .env name).
+#                               as CLOUDFLARE_OPS_API_TOKEN (the local .env name).
 #        CLOUDFLARE_API_TOKEN — Cloudflare token permitted to deploy the
 #                               `riir-ops-dashboard` Worker. The deploy step
 #                               soft-skips when unset.
@@ -39,10 +39,10 @@
 #      braces fallback is therefore REMOVED: writing into a fabricated
 #      /Users/katopz on a Linux runner (as root) was only ever needed by the
 #      hardcoded path, and a sudo mkdir for a dead code path is pure risk.
-#   b) CF_OPS_API_TOKEN — gen_dashboard.py, env wins over the wrangler OAuth
+#   b) CLOUDFLARE_OPS_API_TOKEN — gen_dashboard.py, env wins over the wrangler OAuth
 #      file. The workflow therefore no longer needs to FABRICATE a macOS
 #      wrangler config from the secret; it just maps the CF_API_TOKEN repo
-#      secret onto CF_OPS_API_TOKEN.
+#      secret onto CLOUDFLARE_OPS_API_TOKEN.
 #
 # ── ⚠ THIS CI PATH IS THE FALLBACK, NOT THE PRIMARY (decision, T13) ─────────
 # The M3 is the correct home for the nightly refresh; see
@@ -280,14 +280,14 @@ jobs:
       - name: Regenerate dashboard (--sweep)
         env:
           RIIR_GIT_ROOT: ${{ runner.temp }}/git
-          CF_OPS_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_OPS_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           set -euo pipefail
-          # CF_OPS_API_TOKEN is read straight from env by the generator (header
+          # CLOUDFLARE_OPS_API_TOKEN is read straight from env by the generator (header
           # note (b)) — no fabricated wrangler config file, so the token never
           # lands on the runner's disk.
-          [ -n "${CF_OPS_API_TOKEN}" ] || \
-            echo "::warning::CF_OPS_API_TOKEN unset — CF analytics sections will be empty"
+          [ -n "${CLOUDFLARE_OPS_API_TOKEN}" ] || \
+            echo "::warning::CLOUDFLARE_OPS_API_TOKEN unset — CF analytics sections will be empty"
           python3 scripts/gen_dashboard.py --sweep
 
       - name: Commit refreshed artifacts

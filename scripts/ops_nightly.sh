@@ -223,16 +223,16 @@ if [ -f "${REPO}/.env" ]; then
   set +a
   log "loaded ${REPO}/.env"
 fi
-if [ -n "${CF_OPS_API_TOKEN:-}" ]; then
-  log "CF credential: CF_OPS_API_TOKEN from env"
+if [ -n "${CLOUDFLARE_OPS_API_TOKEN:-}" ]; then
+  log "CF credential: CLOUDFLARE_OPS_API_TOKEN from env"
 else
   _WT="${HOME}/Library/Preferences/.wrangler/config/default.toml"
   _EXP="$(sed -n 's/^expiration_time = "\(.*\)"$/\1/p' "${_WT}" 2>/dev/null || true)"
   _NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [ -z "${_EXP}" ]; then
-    log "WARN no CF_OPS_API_TOKEN and no wrangler OAuth token — CF analytics + container sections will render BLANK"
+    log "WARN no CLOUDFLARE_OPS_API_TOKEN and no wrangler OAuth token — CF analytics + container sections will render BLANK"
   elif [ "${_EXP}" \< "${_NOW}" ]; then
-    log "WARN no CF_OPS_API_TOKEN and the wrangler OAuth token EXPIRED at ${_EXP} (now ${_NOW}) — CF analytics + container sections will render BLANK; set CF_OPS_API_TOKEN in ${REPO}/.env"
+    log "WARN no CLOUDFLARE_OPS_API_TOKEN and the wrangler OAuth token EXPIRED at ${_EXP} (now ${_NOW}) — CF analytics + container sections will render BLANK; set CLOUDFLARE_OPS_API_TOKEN in ${REPO}/.env"
   else
     log "CF credential: wrangler OAuth, valid until ${_EXP}"
   fi
@@ -364,7 +364,7 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ] && [ -n "${DEPLOY_DIR}" ]; then
   # (Account -> Workers Scripts -> Edit, ideally script-scoped to
   # riir-ops-dashboard). No remap, no unset: when CLOUDFLARE_API_TOKEN is set
   # wrangler never consults its deprecated legacy alias, and the
-  # analytics token lives under CF_OPS_API_TOKEN, a name wrangler ignores.
+  # analytics token lives under CLOUDFLARE_OPS_API_TOKEN, a name wrangler ignores.
   # Absent -> the personal `wrangler login` OAuth session.
   #
   # `env` MUST come first and stays an argv prefix (never a leading
