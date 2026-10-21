@@ -460,7 +460,7 @@ pub mod router {
                 (true, _, false) | (_, true, false) => Ok(false),
                 (false, false, false) => Err(
                     "no LLM provider is armed: GROQ_API_KEY and INFRON_API_KEY are unset \
-                     (the free legs) and CF_API_TOKEN / CF_ACCOUNT_ID are unset (the metered \
+                     (the free legs) and CF_OPS_API_TOKEN / CF_ACCOUNT_ID are unset (the metered \
                      fallback) — set at least one"
                         .to_string(),
                 ),
@@ -472,7 +472,7 @@ pub mod router {
         /// window) from a MISCONFIGURED one (creds present, build refused,
         /// e.g. an unpriced model), which must never degrade silently.
         fn cf_creds_present() -> bool {
-            std::env::var_os("CF_API_TOKEN").is_some_and(|v| !v.is_empty())
+            std::env::var_os("CF_OPS_API_TOKEN").is_some_and(|v| !v.is_empty())
                 && std::env::var_os("CF_ACCOUNT_ID").is_some_and(|v| !v.is_empty())
         }
 
@@ -525,7 +525,7 @@ pub mod router {
                 Some(CfClient::from_env(cf_model)?)
             } else {
                 eprintln!(
-                    "[router] CF fallback NOT armed (CF_API_TOKEN / CF_ACCOUNT_ID unset) \
+                    "[router] CF fallback NOT armed (CF_OPS_API_TOKEN / CF_ACCOUNT_ID unset) \
                      — free-only window: exhausted free tiers end it"
                 );
                 None
@@ -810,7 +810,7 @@ pub mod router {
                     .collect::<Vec<_>>();
                     format!(
                         "{FREE_TIER_EXHAUSTED}: {} exhausted ({why}) — no CF fallback \
-                         (CF_API_TOKEN / CF_ACCOUNT_ID unset)",
+                         (CF_OPS_API_TOKEN / CF_ACCOUNT_ID unset)",
                         armed.join("+")
                     )
                 } else {
@@ -1040,7 +1040,7 @@ mod tests {
             let e = LlmRouter::arm_plan(false, false, false).expect_err("must refuse");
             assert!(e.contains("GROQ_API_KEY"), "names the fast free leg: {e}");
             assert!(e.contains("INFRON_API_KEY"), "names the slow free leg: {e}");
-            assert!(e.contains("CF_API_TOKEN"), "names the paid leg: {e}");
+            assert!(e.contains("CF_OPS_API_TOKEN"), "names the paid leg: {e}");
             assert!(e.contains("CF_ACCOUNT_ID"), "names the paid leg: {e}");
         }
 
@@ -1252,7 +1252,7 @@ mod tests {
     /// The Issue 051 fix, on the real API: a GROQ-ONLY environment (no CF
     /// creds, no infron key) must ARM and SERVE. Before the fix this path
     /// was unreachable — `LlmRouter::from_env` built the paid leg first and
-    /// returned its `"CF_API_TOKEN is not set"` refusal, so `kat_drain`
+    /// returned its `"CF_OPS_API_TOKEN is not set"` refusal, so `kat_drain`
     /// exited 3 without ever touching the free tier.
     ///
     /// Standing pre-flight for T7. Run with `GROQ_API_KEY` exported, CF
@@ -1275,8 +1275,8 @@ mod tests {
     fn live_router_groq_only() {
         use super::router::{LlmRouter, Provider};
         assert!(
-            std::env::var_os("CF_API_TOKEN").is_none(),
-            "unset CF_API_TOKEN — this test proves the groq-ONLY path"
+            std::env::var_os("CF_OPS_API_TOKEN").is_none(),
+            "unset CF_OPS_API_TOKEN — this test proves the groq-ONLY path"
         );
         assert!(
             std::env::var_os("INFRON_API_KEY").is_none(),

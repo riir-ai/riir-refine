@@ -1,7 +1,7 @@
 //! Issue 040 — the fixer re-gate POC runner.
 //!
 //! Arms:
-//! - `--arm A` — CF qwen3.8-27b raw prompt (needs `CF_API_TOKEN` +
+//! - `--arm A` — CF qwen3.8-27b raw prompt (needs `CF_OPS_API_TOKEN` +
 //!   `CF_ACCOUNT_ID`)
 //! - `--arm B` — same model, modelless pre-pass prompt (candidate + corpus
 //!   few-shots)
@@ -58,7 +58,7 @@
 //! # offline validation (always runnable)
 //! cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm DRY
 //!
-//! # arms A+B (once CF_API_TOKEN + CF_ACCOUNT_ID are exported)
+//! # arms A+B (once CF_OPS_API_TOKEN + CF_ACCOUNT_ID are exported)
 //! cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm A
 //! cargo run --release --features cf_workers_ai --bin fixer_regate -- --arm B
 //!

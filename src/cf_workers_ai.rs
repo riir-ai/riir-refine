@@ -45,7 +45,7 @@
 //!   semantics, copied per the t51 copy-don't-share precedent) → LCS merge
 //!   depth-bounded → unbounded), first-parses-wins, strategy reported.
 //! - CF transport: `ureq` behind this feature; token comes from
-//!   `CF_API_TOKEN` and is NEVER logged or included in any error string.
+//!   `CF_OPS_API_TOKEN` and is NEVER logged or included in any error string.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -1228,7 +1228,7 @@ const CALL_TIMEOUT: Duration = riir_llm::transport::CALL_TIMEOUT;
 /// (issue 124; same 10 s value, one home).
 const CONNECT_TIMEOUT: Duration = riir_llm::transport::CONNECT_TIMEOUT;
 /// Redaction placeholder, should the token ever surface in a payload.
-const TOKEN_REDACTED: &str = "<CF_API_TOKEN redacted>";
+const TOKEN_REDACTED: &str = "<CF_OPS_API_TOKEN redacted>";
 /// Byte ceiling on a server-controlled payload entering an error string.
 const MAX_PAYLOAD_IN_ERROR: usize = 512;
 
@@ -1357,7 +1357,7 @@ impl CfClient {
             .map_or_else(|| Self::DEFAULT_MODEL.to_string(), str::to_string)
     }
 
-    /// Build from `CF_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
+    /// Build from `CF_OPS_API_TOKEN` + `CF_ACCOUNT_ID` (+ optional model override).
     ///
     /// Issue 046: the model must be in the pricing table (an unpriced model
     /// is refused here, fail-fast, rather than per-call) and the USD daily
@@ -1372,8 +1372,9 @@ impl CfClient {
     /// A human-readable message naming exactly which env var is missing —
     /// never the token value — or the unpriced-model refusal.
     pub fn from_env(model: Option<&str>) -> Result<Self, String> {
-        let token = std::env::var("CF_API_TOKEN").map_err(|_| {
-            "CF_API_TOKEN is not set — arms A/B need it (export CF_API_TOKEN=...)".to_string()
+        let token = std::env::var("CF_OPS_API_TOKEN").map_err(|_| {
+            "CF_OPS_API_TOKEN is not set — arms A/B need it (export CF_OPS_API_TOKEN=...)"
+                .to_string()
         })?;
         let account = std::env::var("CF_ACCOUNT_ID").map_err(|_| {
             "CF_ACCOUNT_ID is not set — arms A/B need it (export CF_ACCOUNT_ID=...)".to_string()

@@ -2,8 +2,9 @@
 // verify_token.mjs — does this token actually do the job? (Issue 045 T4)
 //
 //   node cloudflare/housekeeping/verify_token.mjs <token>
-//   CF_API_TOKEN=... node cloudflare/housekeeping/verify_token.mjs
+//   CF_OPS_API_TOKEN=... node cloudflare/housekeeping/verify_token.mjs
 //
+// Worker-side binding name stays CF_API_TOKEN (deployed secret); locally it is CF_OPS_API_TOKEN.
 // Run this BEFORE `wrangler secret put CF_API_TOKEN`. A token with the wrong
 // permission still deploys fine and then fails silently at 00:00 UTC — the
 // worker degrades to heartbeat rows and the only symptom is `ok:false` in a
@@ -20,9 +21,9 @@ import { dirname, join } from "node:path";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GRAPHQL = "https://api.cloudflare.com/client/v4/graphql";
 
-const token = process.argv[2] || process.env.CF_API_TOKEN;
+const token = process.argv[2] || process.env.CF_OPS_API_TOKEN;
 if (!token) {
-  console.error("usage: node verify_token.mjs <token>   (or set CF_API_TOKEN)");
+  console.error("usage: node verify_token.mjs <token>   (or set CF_OPS_API_TOKEN)");
   process.exit(2);
 }
 
@@ -160,7 +161,7 @@ if (failed) {
   console.log("\nFAIL — the queries all work, but the token is wider than the job.");
 } else {
   console.log("\nPASS — this token runs every query the cron issues, and nothing more.");
-  console.log("  next: cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN");
+  console.log("  next (from the repo root): grep '^CF_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)");
 }
 // Over-privilege is a FAIL: a working-but-too-powerful token is the exact
 // case this script exists to catch, and it is invisible to the queries above.

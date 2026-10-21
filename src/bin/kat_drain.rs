@@ -71,7 +71,7 @@
 //! #   INFRON_API_KEY                → the slow free leg (llm.onerouter.pro,
 //! #                                    ~33 tok/s, qwen3.8-27b:free — Issue
 //! #                                    106; catches groq's 429s before CF)
-//! #   CF_API_TOKEN + CF_ACCOUNT_ID  → the metered fallback (USD-capped)
+//! #   CF_OPS_API_TOKEN + CF_ACCOUNT_ID  → the metered fallback (USD-capped)
 //! # Both armed is the intended daily shape (free tier absorbs the window,
 //! # CF catches the overflow). Free-only runs too: exhausted free legs
 //! # then end the window cleanly (`free-tier exhausted`), and zero neurons
@@ -473,7 +473,7 @@ fn run_preflight(args: &Args) -> ! {
         if llm.cf_armed() {
             format!("ARMED   model {}", llm.model_id())
         } else {
-            "unarmed (CF_API_TOKEN / CF_ACCOUNT_ID unset)".to_string()
+            "unarmed (CF_OPS_API_TOKEN / CF_ACCOUNT_ID unset)".to_string()
         }
     );
     println!(
@@ -708,7 +708,7 @@ fn main() {
         }
         println!(
             "\n{} queued → {} reach the LLM (modelless pre-pass kept {modelless_served} off), \
-             {blocked} blocked by redaction; run without --dry-run (CF_API_TOKEN + CF_ACCOUNT_ID) \
+             {blocked} blocked by redaction; run without --dry-run (CF_OPS_API_TOKEN + CF_ACCOUNT_ID) \
              to drain",
             kept.len() + modelless_served + blocked,
             kept.len(),
@@ -1506,7 +1506,7 @@ mod tests {
         assert_eq!(
             classify_error(
                 "free-tier exhausted: groq is the only armed provider (429 rate limit) — no \
-                 CF fallback (CF_API_TOKEN / CF_ACCOUNT_ID unset)"
+                 CF fallback (CF_OPS_API_TOKEN / CF_ACCOUNT_ID unset)"
             ),
             AttemptPlan::StopDay
         );

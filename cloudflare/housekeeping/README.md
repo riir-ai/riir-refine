@@ -67,7 +67,7 @@ Two dashboard gotchas, both doc-sourced:
 ### 2. Verify it BEFORE setting it — not optional here
 
 ```sh
-node cloudflare/housekeeping/verify_token.mjs <token>     # or CF_API_TOKEN=... node ...
+node cloudflare/housekeeping/verify_token.mjs <token>     # or CF_OPS_API_TOKEN=... node ...
 ```
 
 This is a hard requirement rather than a nicety, because **Cloudflare does not
@@ -117,11 +117,9 @@ re-pasting.
 ### 3. Set it
 
 ```sh
-cd cloudflare/housekeeping
-# The env strip is REQUIRED here, not cosmetic: an exported CF_API_TOKEN
-# shadows OAuth and this write fails. See "The trap" under Deploy / read.
-env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-  npx wrangler secret put CF_API_TOKEN   # paste at the prompt
+# From the repo root. Worker-side binding name stays CF_API_TOKEN (deployed
+# secret); locally it is CF_OPS_API_TOKEN.
+grep '^CF_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)
 curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set, ts, ok}'
 ```
 
@@ -136,7 +134,7 @@ curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set
 ### "Why not just use wrangler? It already authenticates."
 
 It does — **on the M3**. `scripts/gen_dashboard.py:_cf_token()` prefers
-`CF_API_TOKEN` but falls back to the wrangler OAuth file, so the generator and
+`CF_OPS_API_TOKEN` but falls back to the wrangler OAuth file, so the generator and
 `scripts/ops_nightly.sh` need **zero secrets**. That fallback is the whole
 reason the nightly lives on the M3 rather than in CI.
 
@@ -173,10 +171,8 @@ the schedule is alive).
 ## Optional secrets (budget alerting, Issue 044 T4)
 
 ```sh
-env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-  npx wrangler secret put ALERT_WEBHOOK_URL   # Discord-compatible webhook URL
-env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-  npx wrangler secret put MONTHLY_BUDGET_USD  # optional monthly container budget (USD)
+npx wrangler secret put ALERT_WEBHOOK_URL   # Discord-compatible webhook URL
+npx wrangler secret put MONTHLY_BUDGET_USD  # optional monthly container budget (USD)
 ```
 
 - **Alert thresholds:** `50% / 90% / 100%` of `NEURON_CAP` (`[vars]`, default
@@ -236,47 +232,23 @@ env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_
 ## Optional secret (read gating, Issue 045 T7)
 
 ```sh
-env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-  npx wrangler secret put READ_TOKEN   # gates /hours, /days, /backfill, /status config half
+npx wrangler secret put READ_TOKEN   # gates /hours, /days, /backfill, /status config half
 ```
 
 ## Deploy / read
 
 ```sh
-# Strip the API-token env vars first — see the trap below.
-env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL \
-  npx wrangler deploy
+npx wrangler deploy
 curl https://riir-kat-housekeeping.<account>.workers.dev/status
 curl -H "Authorization: Bearer $READ_TOKEN" '.../hours?n=24'   # hourly rows (403 without)
 curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates (403 without)
 ```
 
-> ### ⚠ The trap: `CF_API_TOKEN` in your shell breaks the commands that set it
->
-> **Measured 2026-08-28, wrangler 4.127.1**, from this directory:
->
-> ```
-> $ CF_API_TOKEN=bogus npx wrangler whoami
-> Using "CF_API_TOKEN" environment variable. This is deprecated.
->   Please use "CLOUDFLARE_API_TOKEN", instead.
-> ✘ [ERROR] A request to the Cloudflare API (/user/tokens/verify) failed.
->   Invalid request headers [code: 6003]
-> ```
->
-> wrangler honours `CF_API_TOKEN` as a deprecated alias of
-> `CLOUDFLARE_API_TOKEN`, so it **shadows the OAuth session** whenever that
-> name is exported — which is exactly what happens in any shell that has
-> sourced `.env`. With the *real* value it authenticates as the
-> analytics-scoped housekeeping token, which has no `workers_scripts` write
-> scope, and the deploy fails **auth error 10000**.
->
-> The sharp edge is the naming collision: the secret this worker needs is
-> *itself* called `CF_API_TOKEN`, so `wrangler secret put CF_API_TOKEN` — a
-> write, hence OAuth-only — **fails when a variable of that name is already in
-> the environment**. Strip the env for every wrangler *write* (`deploy`,
-> `secret put`); keep it for analytics *reads* (`gen_dashboard.py`), which want
-> the token. `scripts/ops_nightly.sh` was patched for this in `0d6ee64`; this
-> block is the manual-runbook counterpart.
+> **Credentials (2026-10-21):** wrangler uses `CLOUDFLARE_API_TOKEN` (the
+> deploy token) when set, else your `wrangler login` OAuth session. The
+> analytics token lives in `.env` as `CF_OPS_API_TOKEN`, a name wrangler never
+> reads, so it cannot shadow a deploy. Only the Worker-side secret binding is
+> still called `CF_API_TOKEN`.
 
 ### Access model (hardened 2026-08-28 — Issue 045 §T7, revised §T8, §T9e)
 

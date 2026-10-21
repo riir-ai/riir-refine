@@ -5,15 +5,14 @@
 # Each worker's wrangler project dir IS the deploy unit — vars, KV
 # bindings, cron triggers and observability config live in the projects'
 # own wrangler.toml and are NEVER generated here. `env:` stays empty:
-# every secret (CF_API_TOKEN, READ_TOKEN, DASHBOARD_TOKEN) is a
+# every Worker secret (CF_API_TOKEN, READ_TOKEN, DASHBOARD_TOKEN) is a
 # `wrangler secret put` ops step, and the adapter refuses secret-shaped
-# manifest keys at plan time anyway.
+# manifest keys at plan time anyway. (Worker-side binding name stays
+# CF_API_TOKEN (deployed secret); locally it is CF_OPS_API_TOKEN.)
 #
-# Auth note (encoded in the adapter, the riir-clippy Issue 044 T16.1
-# trap): wrangler honours CF_API_TOKEN as a deprecated alias of
-# CLOUDFLARE_API_TOKEN — a sourced-.env analytics token silently breaks
-# auth. The deployer strips the alias from the wrangler env and REQUIRES
-# the canonical deploy-scoped CLOUDFLARE_API_TOKEN.
+# Auth note: the deployer REQUIRES the deploy-scoped CLOUDFLARE_API_TOKEN
+# (the one token wrangler uses); the analytics token is CF_OPS_API_TOKEN,
+# a name wrangler never reads.
 #
 # Stage-and-verify-first (the Issue-080 convention) — the workers are
 # ALREADY live (hand-deployed), so the first deployer run proves the

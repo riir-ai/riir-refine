@@ -223,16 +223,16 @@ if [ -f "${REPO}/.env" ]; then
   set +a
   log "loaded ${REPO}/.env"
 fi
-if [ -n "${CF_API_TOKEN:-}" ]; then
-  log "CF credential: CF_API_TOKEN from env"
+if [ -n "${CF_OPS_API_TOKEN:-}" ]; then
+  log "CF credential: CF_OPS_API_TOKEN from env"
 else
   _WT="${HOME}/Library/Preferences/.wrangler/config/default.toml"
   _EXP="$(sed -n 's/^expiration_time = "\(.*\)"$/\1/p' "${_WT}" 2>/dev/null || true)"
   _NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   if [ -z "${_EXP}" ]; then
-    log "WARN no CF_API_TOKEN and no wrangler OAuth token — CF analytics + container sections will render BLANK"
+    log "WARN no CF_OPS_API_TOKEN and no wrangler OAuth token — CF analytics + container sections will render BLANK"
   elif [ "${_EXP}" \< "${_NOW}" ]; then
-    log "WARN no CF_API_TOKEN and the wrangler OAuth token EXPIRED at ${_EXP} (now ${_NOW}) — CF analytics + container sections will render BLANK; set CF_API_TOKEN in ${REPO}/.env"
+    log "WARN no CF_OPS_API_TOKEN and the wrangler OAuth token EXPIRED at ${_EXP} (now ${_NOW}) — CF analytics + container sections will render BLANK; set CF_OPS_API_TOKEN in ${REPO}/.env"
   else
     log "CF credential: wrangler OAuth, valid until ${_EXP}"
   fi
@@ -358,48 +358,25 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ] && [ -n "${DEPLOY_DIR}" ]; then
   # not answer.
   _t0="$(date -u +%Y-%m-%dT%H:%M:%S)"
   _dout="$(mktemp)"
-  # `env -u ...` is LOAD-BEARING (2026-08-29). Step 0b loads .env for the CF
-  # ANALYTICS credential; wrangler, unrelatedly, auto-adopts any ambient
-  # CLOUDFLARE_API_TOKEN and PREFERS it over the OAuth session. So an
-  # analytics-scoped token in the invoking shell silently SHADOWED an OAuth
-  # session that holds `workers_scripts (write)`, and the deploy was refused
-  # for missing scope -- which then read as "the owner must mint a deploy
-  # token" when no such gap existed. Two credentials, two jobs: analytics
-  # reads use the token, deploys use OAuth. Unsetting here also makes a
-  # MANUAL run behave exactly like the launchd run, whose spartan environment
-  # never had these set -- so a hand-run can no longer fail in a way the
-  # scheduled run would not.
+  # Deploy-credential resolution (one token name, 2026-10-21): wrangler reads
+  # CLOUDFLARE_API_TOKEN natively, so when it is set (from .env via step 0b, or
+  # CI env) wrangler simply uses it -- the least-privilege deploy token
+  # (Account -> Workers Scripts -> Edit, ideally script-scoped to
+  # riir-ops-dashboard). No remap, no unset: when CLOUDFLARE_API_TOKEN is set
+  # wrangler never consults its deprecated legacy alias, and the
+  # analytics token lives under CF_OPS_API_TOKEN, a name wrangler ignores.
+  # Absent -> the personal `wrangler login` OAuth session.
   #
-  # CF_API_TOKEN belongs in the same strip list (2026-08-29, Bench 057
-  # follow-up): wrangler honours it as a DEPRECATED ALIAS of
-  # CLOUDFLARE_API_TOKEN ("Using \"CF_API_TOKEN\" environment variable. This
-  # is deprecated."), and step 0b exports exactly that name from .env -- so
-  # under launchd the deploy was STILL shadowed by the analytics token after
-  # the CLOUDFLARE_API_TOKEN fix. Measured, not assumed: sourcing .env and
-  # running `env -u CLOUDFLARE_API_TOKEN wrangler whoami` reported the API
-  # token, not OAuth.
-  #
-  # Deploy-credential resolution (2026-08-29): CF_DEPLOY_API_TOKEN (optional
-  # .env entry) is the least-privilege deploy token (Account -> Workers
-  # Scripts -> Edit, ideally script-scoped to riir-ops-dashboard). When set
-  # it is PREFERRED over the personal OAuth session -- the OAuth file carries
-  # 29 scopes of near-total account authority, and an unattended launchd job
-  # only ever needs this one worker. It is mapped onto CLOUDFLARE_API_TOKEN
-  # for the individual command (wrangler's own var) -- never exported -- and
-  # the analytics credentials stay stripped in both arms. GitHub Actions sets
-  # the same value as its CLOUDFLARE_API_TOKEN secret, so local + CI deploy
-  # paths use one credential.
-  if [ -n "${CF_DEPLOY_API_TOKEN:-}" ]; then
-    log "deploy credential: CF_DEPLOY_API_TOKEN (least-privilege; overrides OAuth)"
-    # `env` MUST come first and the assignment must be an ARGUMENT to it.
-    # A leading `VAR=value` is an assignment prefix only when the SHELL PARSES
-    # it -- after `"${_w_env[@]}"` expansion it is just the first word, so the
-    # shell looked for a command literally named `CLOUDFLARE_API_TOKEN=<tok>`
-    # and every deploy died with `command not found`. `.env` HAS this var set,
-    # so that was 100% of deploys on the least-privilege path (2026-08-29).
-    _w_env=(env -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL "CLOUDFLARE_API_TOKEN=${CF_DEPLOY_API_TOKEN}")
+  # `env` MUST come first and stays an argv prefix (never a leading
+  # `VAR=value` word, which after array expansion is not an assignment), and
+  # the array is never empty (bash 3.2 + `set -u` rejects an empty "${a[@]}").
+  if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+    log "deploy credential: CLOUDFLARE_API_TOKEN (least-privilege; overrides OAuth)"
+    _w_env=(env)
   else
-    log "deploy credential: wrangler OAuth (CF_DEPLOY_API_TOKEN unset)"
+    log "deploy credential: wrangler OAuth (CLOUDFLARE_API_TOKEN unset)"
+    # OAuth guard: strip every env credential wrangler would prefer over the
+    # OAuth session (including its deprecated CF_API_TOKEN alias).
     _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
   fi
   if (cd "${DEPLOY_DIR}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then

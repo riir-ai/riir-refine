@@ -517,20 +517,18 @@ worker, the ops dashboard, and the nightly generator. State as of
 **Credentials live in `.env` (gitignored — never commit, never print).**
 [`.env.example`](.env.example) is the documented template: what each var is
 for, which consumer reads it, and where each is minted. The four core vars:
-`GROQ_API_KEY` (free-tier LLM routing, Issue 051) · `CF_API_TOKEN`
-(Account Analytics:Read — worker secret AND nightly generator; the only one
-that cannot be minted from this machine) · `CF_DEPLOY_API_TOKEN`
-(least-privilege deploy token, preferred by the nightly) · `READ_TOKEN`
+`GROQ_API_KEY` (free-tier LLM routing, Issue 051) · `CF_OPS_API_TOKEN`
+(Account Analytics:Read + Workers AI — nightly generator, Rust CF leg, and
+pushed as the housekeeping Worker secret `CF_API_TOKEN`; the only one that
+cannot be minted from this machine) · `CLOUDFLARE_API_TOKEN` (least-privilege
+deploy token wrangler uses natively; absent → `wrangler login` OAuth) · `READ_TOKEN`
 (the housekeeping read gate, 64-hex). Optional: `ALERT_WEBHOOK_URL` +
 `MONTHLY_BUDGET_USD` (cap-crossing paging — inert until set; crossings
 still land in KV + `/status alerts_today`) · `DASHBOARD_TOKEN`.
 
-Deploy rule (Issue 044 T16.1, load-bearing): wrangler honours
-`CF_API_TOKEN` as a deprecated alias of `CLOUDFLARE_API_TOKEN`, so an
-analytics-scoped value in the deploy environment silently breaks auth —
-deploys run under `env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN …` (the
-nightly and `cloudflare/housekeeping` runbooks already do; keep it that
-way).
+Deploy rule: `CLOUDFLARE_API_TOKEN` is the only token wrangler uses —
+plain `npx wrangler deploy`. The analytics token is `CF_OPS_API_TOKEN`, a
+name wrangler never reads, so it cannot shadow a deploy.
 
 Full narratives: Issues 044 (dashboard + alerting + nightly) and 045
 (housekeeping worker, rollout, backfill) RESOLVED + removed 2026-09-01
