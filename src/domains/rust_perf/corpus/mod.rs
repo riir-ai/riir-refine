@@ -9,7 +9,18 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 254 entries across 13 categories as of Batch 270 (2026-10-21, Plan 274 /
+//! 257 entries across 13 categories as of Batch 271 slice A (2026-10-21,
+//! Plan 275 / Research 307: +3 allocation — the splash-wave SECOND-TIER
+//! serving pool slice A (incoai/splash @ fa63d97f8956113b067dfdce46caf1fcd22213e1
+//! + rider 593f2a6d7427382a88a474a6a27c6dcc61b7415e,
+//! 88d0e57ee3a37305a895197538554ba9f3ea83d8,
+//! 81ae003e18d9362f6adf4131cf88a17a17803f65, Apache-2.0):
+//! `resume-admission-sized-to-per-command-window-not-suspended-peak` +
+//! `phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max` +
+//! `derived-reservation-taken-once-after-admission-settles` (entries_43), ALL
+//! ANNOTATED `NotBenchable` + 1 count-neutral rider face (the anchor-bound
+//! output face on rule 1). Prior state: 254 entries as of Batch 270
+//! (2026-10-21, Plan 274 /
 //! Research 306: +12 — the splash-wave serving pool (incoai/splash, the
 //! Batch-268 staged leads, Apache-2.0): `restore-point-chain-copies-keyed-on-disk-state-count`
 //! (caching) + `persistent-cache-teardown-needs-second-witness` (caching) +
@@ -607,6 +618,7 @@ mod entries_39;
 mod entries_40;
 mod entries_41;
 mod entries_42;
+mod entries_43;
 
 #[cfg(test)]
 mod tests;
@@ -724,5 +736,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_40::entries());
     entries.extend(entries_41::entries());
     entries.extend(entries_42::entries());
+    entries.extend(entries_43::entries());
     Corpus::new(entries)
 }
