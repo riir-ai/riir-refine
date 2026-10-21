@@ -1912,6 +1912,7 @@ mod entries_gpu_112;
 mod entries_gpu_113;
 mod entries_gpu_114;
 mod entries_gpu_115;
+mod entries_gpu_116;
 mod entries_gpu_11;
 mod entries_gpu_12;
 mod entries_gpu_13;
@@ -2092,6 +2093,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_113::entries());
     entries.extend(entries_gpu_114::entries());
     entries.extend(entries_gpu_115::entries());
+    entries.extend(entries_gpu_116::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2505,6 +2507,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "commit-over-maintained-item-digests",
             "length-prefix-shape-faithful-hash",
             "argmax-rng-tie-break-collect-ties",
+            "two-pass-partial-reduction-inter-dispatch-barrier",
             "non-saturating-outcome-reward-floor",
             "selective-projection-effective-rank-head",
             "rademacher-signs-over-gaussian-projection",

@@ -4,7 +4,7 @@
 //! read at the pin `551c17cbc663b67f7e0b72636f5ea8c6e6732408` = the branch tip
 //! at merge; every quote re-verified verbatim at the `.raw/uv` clone this
 //! batch). One own rule (complexity, suggestion-only, BENCHABLE) + two
-//! count-neutral rider faces in its context_notes (the shared-Cover
+//! count-neutral rider faces in its `context_notes` (the `shared-Cover`
 //! intermediate; the (lower, upper) don't-care interval memo key). Provenance
 //! chain: the PR cites Mishchenko IWLS03 section 4 in-source; the recurrence
 //! is Minato-Morreale ISOP. The fixture is ORIGINAL machinery (never uv code):
