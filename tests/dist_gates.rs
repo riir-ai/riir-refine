@@ -101,8 +101,8 @@ fn pgo_hint_fires_only_on_fully_tuned_bins() {
     // the audience has not exhausted the manifest-level levers yet.
     for missing_one in [
         "[[bin]]\nname = \"m\"\n\n[profile.release]\nlto = \"fat\"\npanic = \"abort\"\n", // no strip
-        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\npanic = \"abort\"\n",   // no lto
-        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\nlto = \"fat\"\n",         // no panic
+        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\npanic = \"abort\"\n",  // no lto
+        "[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\nlto = \"fat\"\n", // no panic
     ] {
         let findings = scan_source_with(missing_one, DistContext::default());
         assert!(

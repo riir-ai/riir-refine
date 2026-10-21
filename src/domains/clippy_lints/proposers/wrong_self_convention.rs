@@ -153,14 +153,20 @@ mod tests {
             out.contains("format!(\"sig-{}\", self.code)"),
             "body must stay byte-identical: {out}"
         );
-        assert!(out.contains("struct Sig { code: u32 }"), "impl head must stay: {out}");
+        assert!(
+            out.contains("struct Sig { code: u32 }"),
+            "impl head must stay: {out}"
+        );
     }
 
     #[test]
     fn by_value_receiver_untouched() {
         let input = "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(self) -> String { format!(\"sig-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input);
-        assert!(out.is_none(), "already-conventional shape must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "already-conventional shape must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -174,21 +180,30 @@ mod tests {
     fn pub_method_refused() {
         let input = "struct Sig { code: u32 }\nimpl Sig {\n    pub fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input);
-        assert!(out.is_none(), "exported method must refuse (API break the gate cannot see): {out:?}");
+        assert!(
+            out.is_none(),
+            "exported method must refuse (API break the gate cannot see): {out:?}"
+        );
     }
 
     #[test]
     fn trait_impl_refused() {
         let input = "struct Sig { code: u32 }\ntrait Make { fn into_label(&self) -> String; }\nimpl Make for Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input);
-        assert!(out.is_none(), "trait-impl receiver edit is an E0050 mismatch — refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "trait-impl receiver edit is an E0050 mismatch — refused: {out:?}"
+        );
     }
 
     #[test]
     fn attributed_method_refused() {
         let input = "struct Sig { code: u32 }\nimpl Sig {\n    #[cfg(unix)]\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input);
-        assert!(out.is_none(), "cfg'd method must refuse (view divergence): {out:?}");
+        assert!(
+            out.is_none(),
+            "cfg'd method must refuse (view divergence): {out:?}"
+        );
     }
 
     #[test]
@@ -209,8 +224,14 @@ mod tests {
     fn multiple_into_methods_all_spliced() {
         let input = "struct Sig { code: u32 }\nimpl Sig {\n    fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n    fn into_slug(&mut self) -> String { format!(\"s-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input).expect("matched");
-        assert!(out.contains("fn into_label(self)"), "method 1 not spliced: {out}");
-        assert!(out.contains("fn into_slug(self)"), "method 2 not spliced: {out}");
+        assert!(
+            out.contains("fn into_label(self)"),
+            "method 1 not spliced: {out}"
+        );
+        assert!(
+            out.contains("fn into_slug(self)"),
+            "method 2 not spliced: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -218,7 +239,10 @@ mod tests {
     fn async_fn_shape_fires() {
         let input = "struct Sig { code: u32 }\nimpl Sig {\n    async fn into_label(&self) -> String { format!(\"sig-{}\", self.code) }\n}";
         let out = propose_fix("wrong_self_convention", input).expect("matched");
-        assert!(out.contains("async fn into_label(self)"), "async shape must splice: {out}");
+        assert!(
+            out.contains("async fn into_label(self)"),
+            "async shape must splice: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

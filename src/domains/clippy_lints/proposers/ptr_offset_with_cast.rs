@@ -254,7 +254,9 @@ impl<'ast> Visit<'ast> for Scan {
 /// attrs (the std raw-pointer constructors; the only initializer
 /// spellings whose pointer-ness is syntax-visible).
 fn is_ptr_ctor_call(e: &Expr) -> bool {
-    let Expr::MethodCall(mc) = e else { return false };
+    let Expr::MethodCall(mc) = e else {
+        return false;
+    };
     matches!(mc.method.to_string().as_str(), "as_ptr" | "as_mut_ptr")
         && mc.args.is_empty()
         && mc.turbofish.is_none()
@@ -276,7 +278,9 @@ fn path_ident(e: &Expr) -> Option<String> {
 /// Is the cast target the plain `isize` path (pointer targets,
 /// multi-segment paths, generics refuse)?
 fn cast_target_is_isize(ty: &syn::Type) -> bool {
-    let syn::Type::Path(tp) = ty else { return false };
+    let syn::Type::Path(tp) = ty else {
+        return false;
+    };
     if tp.qself.is_some() || tp.path.leading_colon.is_some() || tp.path.segments.len() != 1 {
         return false;
     }

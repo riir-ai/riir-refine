@@ -75,7 +75,9 @@ impl ChainStore {
     /// Open (not create) the store over `repo_root`.
     #[must_use]
     pub fn open(repo_root: impl Into<PathBuf>) -> Self {
-        ChainStore { root: repo_root.into() }
+        ChainStore {
+            root: repo_root.into(),
+        }
     }
 
     /// The heads file path (diagnostics + tests).
@@ -145,9 +147,11 @@ impl ChainStore {
             fs::create_dir_all(parent)?;
         }
         let tmp = path.with_extension("json.tmp");
-        fs::write(&tmp, serde_json::to_vec_pretty(next).map_err(|e| {
-            StoreError::Corrupt(format!("heads.json serialize: {e}"))
-        })?)?;
+        fs::write(
+            &tmp,
+            serde_json::to_vec_pretty(next)
+                .map_err(|e| StoreError::Corrupt(format!("heads.json serialize: {e}")))?,
+        )?;
         fs::rename(&tmp, &path)?;
         Ok(())
     }
@@ -205,8 +209,8 @@ impl ChainStore {
 mod tests {
     use super::*;
     use crate::structural_admission::{
-        ChainState, StructuralProposal, ProposalPayload, BenchShape, artifact_hash,
-        canonical_artifact_bytes,
+        artifact_hash, canonical_artifact_bytes, BenchShape, ChainState, ProposalPayload,
+        StructuralProposal,
     };
     use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -262,9 +266,15 @@ mod tests {
         // corrupt the file behind the address
         fs::write(store.artifacts_dir().join(&addr), b"tampered").unwrap();
         // write refuses to reuse the corrupt address
-        assert!(matches!(store.write_artifact(&bytes), Err(StoreError::Corrupt(_))));
+        assert!(matches!(
+            store.write_artifact(&bytes),
+            Err(StoreError::Corrupt(_))
+        ));
         // read refuses the tampered bytes
-        assert!(matches!(store.read_artifact(&addr), Err(StoreError::Corrupt(_))));
+        assert!(matches!(
+            store.read_artifact(&addr),
+            Err(StoreError::Corrupt(_))
+        ));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -295,12 +305,17 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let store = ChainStore::open(&root);
         let observed = store.load_state().unwrap();
-        let next = observed.clone().advance(None, &"1".repeat(64), 100, "first").unwrap();
+        let next = observed
+            .clone()
+            .advance(None, &"1".repeat(64), 100, "first")
+            .unwrap();
         store.cas_save(&observed, &next).unwrap();
         assert_eq!(store.load_state().unwrap(), next);
 
         // a second writer that still observes genesis — its save is a race
-        let race_next = ChainState::genesis().advance(None, &"2".repeat(64), 101, "racer").unwrap();
+        let race_next = ChainState::genesis()
+            .advance(None, &"2".repeat(64), 101, "racer")
+            .unwrap();
         assert!(matches!(
             store.cas_save(&ChainState::genesis(), &race_next),
             Err(StoreError::CasRace)
@@ -308,7 +323,10 @@ mod tests {
 
         // a correct re-observe succeeds
         let fresh = store.load_state().unwrap();
-        let next2 = fresh.clone().advance(Some(1), &"3".repeat(64), 102, "second").unwrap();
+        let next2 = fresh
+            .clone()
+            .advance(Some(1), &"3".repeat(64), 102, "second")
+            .unwrap();
         store.cas_save(&fresh, &next2).unwrap();
         assert_eq!(store.load_state().unwrap(), next2);
         let _ = fs::remove_dir_all(&root);

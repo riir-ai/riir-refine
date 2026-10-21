@@ -188,7 +188,10 @@ fn fnv1a64(s: &str) -> u64 {
 /// Mirror one repo's `.refine/trajectories.kv` + `.refine/key` into a temp
 /// dir and open the MIRROR (never the original — sibling `.refine` trees are
 /// read-only to this session; opening a LocalKvStore may replay/compact).
-fn open_mirrored(repo_root: &std::path::Path, mirror_base: &std::path::Path) -> Option<(TrajStore, String)> {
+fn open_mirrored(
+    repo_root: &std::path::Path,
+    mirror_base: &std::path::Path,
+) -> Option<(TrajStore, String)> {
     let heal = repo_root.join(".refine");
     let kv_dir = heal.join("trajectories.kv");
     if !kv_dir.is_dir() {
@@ -260,8 +263,16 @@ fn rows_to_cells(rows: &[TrajRowDoc], repo: &str) -> (Vec<Cell>, usize, usize, u
 
 /// Exact Mann-Whitney AUC: P(score_pos > score_neg) + 0.5·P(tie).
 fn auc(pairs: &[(u8, f32)]) -> f32 {
-    let pos: Vec<f32> = pairs.iter().filter(|(l, _)| *l == 1).map(|(_, s)| *s).collect();
-    let neg: Vec<f32> = pairs.iter().filter(|(l, _)| *l == 0).map(|(_, s)| *s).collect();
+    let pos: Vec<f32> = pairs
+        .iter()
+        .filter(|(l, _)| *l == 1)
+        .map(|(_, s)| *s)
+        .collect();
+    let neg: Vec<f32> = pairs
+        .iter()
+        .filter(|(l, _)| *l == 0)
+        .map(|(_, s)| *s)
+        .collect();
     if pos.is_empty() || neg.is_empty() {
         return f32::NAN;
     }
@@ -286,15 +297,11 @@ fn main() {
         .expect("manifest dir has a parent");
     let roots: Vec<PathBuf> = match std::env::var("RIIR_TCA094_ROOTS") {
         Ok(v) if !v.trim().is_empty() => v.split(':').map(PathBuf::from).collect(),
-        _ => STORE_REPOS
-            .iter()
-            .map(|r| default_parent.join(r))
-            .collect(),
+        _ => STORE_REPOS.iter().map(|r| default_parent.join(r)).collect(),
     };
 
     // ── 2. Mirror + open every store, dump rows ─────────────────────────
-    let mirror_base =
-        std::env::temp_dir().join(format!("tca094-{}", std::process::id()));
+    let mirror_base = std::env::temp_dir().join(format!("tca094-{}", std::process::id()));
     let mut all_cells: Vec<Cell> = Vec::new();
     let mut stores_read = 0usize;
     let mut rows_seen = 0usize;
@@ -316,7 +323,10 @@ fn main() {
                 all_cells.extend(cells);
                 stores_read += 1;
             }
-            None => println!("[store] {}: no .refine/trajectories.kv — skipped", root.display()),
+            None => println!(
+                "[store] {}: no .refine/trajectories.kv — skipped",
+                root.display()
+            ),
         }
     }
     println!(
@@ -335,10 +345,18 @@ fn main() {
     let mut days: Vec<i64> = all_cells.iter().map(|c| c.day_index).collect();
     days.sort();
     days.dedup();
-    let rule_idx: BTreeMap<String, usize> =
-        rules.iter().cloned().enumerate().map(|(i, r)| (r, i)).collect();
-    let day_idx: BTreeMap<i64, usize> =
-        days.iter().cloned().enumerate().map(|(i, d)| (d, i)).collect();
+    let rule_idx: BTreeMap<String, usize> = rules
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, r)| (r, i))
+        .collect();
+    let day_idx: BTreeMap<i64, usize> = days
+        .iter()
+        .cloned()
+        .enumerate()
+        .map(|(i, d)| (d, i))
+        .collect();
 
     let n = rules.len();
     let t = days.len();
@@ -499,7 +517,10 @@ fn main() {
                 }
             }
         }
-        println!("  S_tca  ΔEVR_time   (robustness, r={r_probe}): {:.4}", auc(&probe));
+        println!(
+            "  S_tca  ΔEVR_time   (robustness, r={r_probe}): {:.4}",
+            auc(&probe)
+        );
     }
 
     // ── 8. Per-rule table for the labeled set ───────────────────────────
@@ -515,7 +536,11 @@ fn main() {
                 && (RE_MINED.contains(&name.as_str()) || STABLE.contains(&name.as_str()))
         })
         .map(|(name, &ri)| {
-            let label: u8 = if RE_MINED.contains(&name.as_str()) { 1 } else { 0 };
+            let label: u8 = if RE_MINED.contains(&name.as_str()) {
+                1
+            } else {
+                0
+            };
             (ri, label)
         })
         .collect();

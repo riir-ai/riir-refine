@@ -226,7 +226,11 @@ fn explicit_bench_path_flags_and_proceeds() {
     let dir = scaffold_bench("explicit", CLEAN_LIB, BROKEN_BENCH);
     let bench_path = dir.join("benches").join("bench_probe.rs");
     let driver = CompileDriver::isolated().with_max_iters(5);
-    let report = driver.run(&[dir.join("benches").join("bench_probe.rs")], &playbooks(), true);
+    let report = driver.run(
+        &[dir.join("benches").join("bench_probe.rs")],
+        &playbooks(),
+        true,
+    );
     assert!(report.ran, "cargo must have run");
     assert!(report.error.is_none(), "{:?}", report.error);
     assert!(

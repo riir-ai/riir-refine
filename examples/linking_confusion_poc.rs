@@ -37,13 +37,13 @@
 use std::collections::BTreeMap;
 
 use katgpt_core::linking_fold::{detect_linking, LinkingDetectorConfig};
+use riir_rag::{Embedder, ModellessEmbedder};
 use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::canonical_rank;
-use riir_refine::draft::{RetrievalConfig, RerankMode};
-use riir_rag::{Embedder, ModellessEmbedder};
+use riir_refine::draft::{RerankMode, RetrievalConfig};
 
 /// Variants per rule cloud (salt 1..=M + the base span = M+1 points).
 /// Must keep n ≥ k_neighbors + 1 (k=8 default → ≥9); 33 comfortably clears.
@@ -69,9 +69,9 @@ const KEYWORDS: &[&str] = &[
     "as", "async", "await", "break", "const", "continue", "crate", "dyn", "else", "enum", "false",
     "fn", "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
     "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe",
-    "use", "where", "while", "yield",
-    "bool", "char", "str", "String", "Vec", "Option", "Some", "None", "Ok", "Err", "Result",
-    "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64", "isize", "f32", "f64",
+    "use", "where", "while", "yield", "bool", "char", "str", "String", "Vec", "Option", "Some",
+    "None", "Ok", "Err", "Result", "u8", "u16", "u32", "u64", "usize", "i8", "i16", "i32", "i64",
+    "isize", "f32", "f64",
 ];
 
 /// Deterministic shape-preserving rename with a variant salt: every
@@ -164,8 +164,7 @@ fn fisher_right_tail(a: usize, b: usize, c: usize, d: usize) -> f64 {
     let row1 = a + b;
     let col1 = a + c;
     let n = a + b + c + d;
-    let denom =
-        ln_fact(row1) + ln_fact(n - row1) + ln_fact(col1) + ln_fact(n - col1) - ln_fact(n);
+    let denom = ln_fact(row1) + ln_fact(n - row1) + ln_fact(col1) + ln_fact(n - col1) - ln_fact(n);
     let log_p_at = |x: usize| -> f64 {
         ln_fact(x) + ln_fact(row1 - x) + ln_fact(col1 - x) + ln_fact(n - row1 - col1 + x) - denom
     };
@@ -249,10 +248,7 @@ fn main() {
             }
         }
         let n = points.len() / dim;
-        clouds.insert(
-            key.clone(),
-            RuleCloud { points, n },
-        );
+        clouds.insert(key.clone(), RuleCloud { points, n });
     }
     println!(
         "clouds: {} rules (min n = {})",
@@ -438,8 +434,7 @@ fn analyze(name: &str, set: &[&PairResult]) {
         .map(|r| r.confusion_rate)
         .sum();
     let enrich = if conf_mass_unlinked > 0.0 && !linked.is_empty() {
-        (conf_mass_linked / linked.len() as f64)
-            / (conf_mass_unlinked / (n - linked.len()) as f64)
+        (conf_mass_linked / linked.len() as f64) / (conf_mass_unlinked / (n - linked.len()) as f64)
     } else {
         f64::NAN
     };

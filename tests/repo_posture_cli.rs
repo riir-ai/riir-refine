@@ -68,7 +68,10 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     // Any best-effort tail transport (fix-stats, burn) fails in
     // milliseconds here and — by the tails' own contract — can never
     // change the exit code.
-    envs.insert("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:9/".to_string());
+    envs.insert(
+        "RIIR_REFINE_KAT_SERVICE_URL",
+        "http://127.0.0.1:9/".to_string(),
+    );
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .args(args)
         .envs(envs)

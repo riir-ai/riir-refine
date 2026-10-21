@@ -69,14 +69,22 @@ use riir_refine::traj_store::{shape_conditional_order, shape_conditional_score, 
 const STRATS: [(&str, &str, &str); N_STRATS] = [
     ("e0502-deref-removal", "E0502", ""),
     ("e0502-clone-out", "E0502", "head.clone()"),
-    ("e0499-swap-second-decl", "E0499", "let head = v; use(head);"),
+    (
+        "e0499-swap-second-decl",
+        "E0499",
+        "let head = v; use(head);",
+    ),
     ("e0505-clone-at-move", "E0505", "let v = v.clone();"),
     ("e0597-anon-lifetime", "E0597", "fn f<'_>(x: &'_ T)"),
     ("e0597-move", "E0597", "move |x| x"),
     ("e0597-move-clone", "E0597", "move |x| x.clone()"),
     ("e0597-drop-the-box", "E0597", "let owned = *boxed;"),
     ("e0597-shared-ownership", "E0597", "Rc::new(value)"),
-    ("e0597-scope-hoist", "E0597", "{ let inner = make(); take(inner); }"),
+    (
+        "e0597-scope-hoist",
+        "E0597",
+        "{ let inner = make(); take(inner); }",
+    ),
 ];
 const N_STRATS: usize = 10;
 const CODES: [&str; 4] = ["E0502", "E0499", "E0505", "E0597"];
@@ -277,7 +285,13 @@ fn ctx_hash(remaining: &[usize]) -> u64 {
 /// (world_seed, site, strategy, context). Identical context → identical
 /// outcome (the paired-world guarantee); changed context → fresh draw
 /// (the world responding to edits, as a real compiler would).
-fn outcome_for(table: &[[f32; 3]; N_STRATS], world_seed: u64, site: usize, strat: usize, ctx: u64) -> Outcome {
+fn outcome_for(
+    table: &[[f32; 3]; N_STRATS],
+    world_seed: u64,
+    site: usize,
+    strat: usize,
+    ctx: u64,
+) -> Outcome {
     let mut h = blake3::Hasher::new();
     h.update(&world_seed.to_le_bytes());
     h.update(&site.to_le_bytes());
@@ -968,7 +982,9 @@ fn main() {
         println!();
         // Per-regime + hard-file diagnostic (which world structure drives
         // the deltas — the defend-wrong transparency read).
-        println!("  per-regime resolved % (R0 copy / R1 clone / R2 scope / R3 lifetime) + hard files:");
+        println!(
+            "  per-regime resolved % (R0 copy / R1 clone / R2 scope / R3 lifetime) + hard files:"
+        );
         for (ai, arm) in arms.iter().enumerate() {
             let t = &totals[ai];
             let pct = |r: usize| {

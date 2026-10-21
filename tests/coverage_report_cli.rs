@@ -54,10 +54,7 @@ fn coverage_report_runs_against_the_installed_toolchain() {
         stdout.contains("toolchain      clippy"),
         "the version stamp is derived from the installed driver"
     );
-    assert!(
-        stdout.contains("UNCOVERED"),
-        "the debt headline"
-    );
+    assert!(stdout.contains("UNCOVERED"), "the debt headline");
     assert!(
         stdout.contains("uncovered by group"),
         "the group-debt table"
@@ -82,7 +79,10 @@ fn coverage_report_runs_against_the_installed_toolchain() {
 fn coverage_report_refuses_loudly_without_a_driver() {
     let out = Command::new(heal_bin())
         .arg("--coverage-report")
-        .env("RIIR_REFINE_CLIPPY_DRIVER", "definitely-not-a-clippy-driver-119")
+        .env(
+            "RIIR_REFINE_CLIPPY_DRIVER",
+            "definitely-not-a-clippy-driver-119",
+        )
         .env("RIIR_REFINE_KAT_METER", "0")
         .env("RIIR_REFINE_KAT_GATE", "0")
         .output()

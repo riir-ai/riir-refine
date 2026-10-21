@@ -44,7 +44,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -68,7 +71,9 @@ impl Collector<'_> {
         if !m.attrs.is_empty() || m.arms.len() != 2 {
             return None;
         }
-        let [arm1, arm2] = m.arms.as_slice() else { return None };
+        let [arm1, arm2] = m.arms.as_slice() else {
+            return None;
+        };
         if !arm1.attrs.is_empty() || !arm2.attrs.is_empty() {
             return None;
         }
@@ -159,7 +164,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); match x { v @ 0..=5 => true, _ => false } }",
         )
         .expect("matched");
-        assert!(out.contains("matches!(x, v @ 0..=5)"), "not rewritten: {out}");
+        assert!(
+            out.contains("matches!(x, v @ 0..=5)"),
+            "not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -170,7 +178,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); match x { 0 if x > 1 => true, _ => false } }",
         )
         .expect("matched");
-        assert!(out.contains("matches!(x, 0 if x > 1)"), "not rewritten: {out}");
+        assert!(
+            out.contains("matches!(x, 0 if x > 1)"),
+            "not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

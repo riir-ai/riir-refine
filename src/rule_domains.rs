@@ -145,7 +145,10 @@ mod tests {
         };
         assert_eq!(d.domain_for("needless_return"), "clippy");
         assert_eq!(d.domain_for("totally_unknown_rule"), "");
-        assert_eq!(d.domain_for("E0502:hoist-to-first-use"), RUSTC_ERRORS_DOMAIN);
+        assert_eq!(
+            d.domain_for("E0502:hoist-to-first-use"),
+            RUSTC_ERRORS_DOMAIN
+        );
         // A code NOT in the compiled playbook inventory stays unknown —
         // attribution is membership, never the `E…` SHAPE.
         assert_eq!(d.domain_for("E9999:not_a_playbook"), "");
@@ -167,7 +170,10 @@ mod tests {
     #[test]
     fn compiled_table_attributes_rustc_codes() {
         let d = RuleDomains::compiled();
-        assert_eq!(d.domain_for("E0502:hoist-to-first-use"), RUSTC_ERRORS_DOMAIN);
+        assert_eq!(
+            d.domain_for("E0502:hoist-to-first-use"),
+            RUSTC_ERRORS_DOMAIN
+        );
         assert_eq!(d.domain_for("E0614:deref-at-use"), RUSTC_ERRORS_DOMAIN);
     }
 
@@ -176,7 +182,10 @@ mod tests {
         let d = RuleDomains {
             rules: [
                 ("needless_return".to_string(), "clippy".to_string()),
-                ("shrink-to-fit-after-build".to_string(), "rust_perf".to_string()),
+                (
+                    "shrink-to-fit-after-build".to_string(),
+                    "rust_perf".to_string(),
+                ),
             ]
             .into_iter()
             .collect(),
@@ -200,6 +209,9 @@ mod tests {
                 (RUSTC_ERRORS_DOMAIN.to_string(), 2),
             ]
         );
-        assert!(d.fold_rule_domains(&[]).is_empty(), "the empty run folds empty");
+        assert!(
+            d.fold_rule_domains(&[]).is_empty(),
+            "the empty run folds empty"
+        );
     }
 }

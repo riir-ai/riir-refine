@@ -121,7 +121,10 @@ fn probe_root_probe(bytes: &[u8]) -> Result<(), String> {
         .run_once(b"format!(\"hello\")", DEFAULT_FUEL)
         .map_err(|e| format!("clean-span smoke trapped: {e:?}"))?;
     if clean.verdict != 0 {
-        return Err(format!("clean-span smoke returned verdict {}", clean.verdict));
+        return Err(format!(
+            "clean-span smoke returned verdict {}",
+            clean.verdict
+        ));
     }
     let braced = module
         .run_once(b"format!(\"{}\", x)", DEFAULT_FUEL)

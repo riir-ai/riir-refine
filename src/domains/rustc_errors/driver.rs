@@ -210,7 +210,10 @@ impl JourneyCredit {
     pub fn poverty(&self, alpha: f32, rho: f32) -> f32 {
         // Counts are small (< 2^24); f32 is exact.
         #[allow(clippy::cast_precision_loss)]
-        let (lam, res) = (self.journey_residual_sum as f32, self.terminal_residual as f32);
+        let (lam, res) = (
+            self.journey_residual_sum as f32,
+            self.terminal_residual as f32,
+        );
         katgpt_core::sigmoid(alpha * lam + rho * res)
     }
 
@@ -229,7 +232,10 @@ impl JourneyCredit {
     pub fn taint_composite_256(&self) -> u32 {
         // Counts are small (< 2^24); f32 is exact.
         #[allow(clippy::cast_precision_loss)]
-        let (lam, res) = (self.journey_residual_sum as f32, self.terminal_residual as f32);
+        let (lam, res) = (
+            self.journey_residual_sum as f32,
+            self.terminal_residual as f32,
+        );
         let c = JOURNEY_ALPHA * lam + JOURNEY_RHO * res;
         // Journey magnitudes are small (counts ~10⁰–10¹); ×256 cannot
         // approach u32::MAX before saturating honestly.
@@ -738,8 +744,7 @@ impl CompileDriver {
             // the default (no hook) keeps the shipped never-revive retain.
             let revive = self.revive.clone();
             candidates.retain(|c| {
-                !tried.contains(&tried_key(c))
-                    || revive.as_ref().is_some_and(|r| r(c))
+                !tried.contains(&tried_key(c)) || revive.as_ref().is_some_and(|r| r(c))
             });
             // Issue 118 T1 (the P30 lane shape, one domain over): a bench
             // target's numbers ARE its artifact, and a compile repair can
@@ -1232,8 +1237,7 @@ mod tests {
         // deserializes as (0, 0): the old rule's keeps all had a strict
         // count decrease at masking 0, so the default read is consistent,
         // never a misclassification.
-        let old =
-            r#"{"seq":0,"code":"E0502","span_hash":"x","strategy_id":"s","outcome":"Kept","errors":[2,1]}"#;
+        let old = r#"{"seq":0,"code":"E0502","span_hash":"x","strategy_id":"s","outcome":"Kept","errors":[2,1]}"#;
         let legacy: AttemptRecord = serde_json::from_str(old).unwrap();
         assert_eq!(legacy.masking, (0, 0));
         assert_eq!(legacy.errors, (2, 1));
@@ -1252,12 +1256,10 @@ mod tests {
         // quantized vector byte-exact.
         assert_eq!(legacy.span_embed, None);
         assert_eq!(legacy105.span_embed, None);
-        let t2 = serde_json::to_string(
-            &AttemptRecord {
-                span_embed: Some(r.span_embed.unwrap()),
-                ..r.clone()
-            },
-        )
+        let t2 = serde_json::to_string(&AttemptRecord {
+            span_embed: Some(r.span_embed.unwrap()),
+            ..r.clone()
+        })
         .unwrap();
         let back2: AttemptRecord = serde_json::from_str(&t2).unwrap();
         assert!(back2.span_embed.is_some());
@@ -1369,10 +1371,16 @@ mod tests {
         let p_strand = c_strand.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
         let p_rev = c_rev.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
         let p_empty = c_empty.poverty(JOURNEY_ALPHA, JOURNEY_RHO);
-        assert!(p_strand > p_f4, "strand {p_strand} must exceed clean {p_f4}");
+        assert!(
+            p_strand > p_f4,
+            "strand {p_strand} must exceed clean {p_f4}"
+        );
         assert!(p_rev > p_f4);
         assert!((p_empty - 0.5).abs() < 1e-6, "no-data neutral is 0.5");
-        assert!(p_f4 > p_empty, "a busy-but-clean journey is honest evidence, above neutral");
+        assert!(
+            p_f4 > p_empty,
+            "a busy-but-clean journey is honest evidence, above neutral"
+        );
 
         // The ×256 fixed-point composite is stable and only consumed for
         // tainted runs. (0.25·2 + 2·2)·256 = 1152 exactly.

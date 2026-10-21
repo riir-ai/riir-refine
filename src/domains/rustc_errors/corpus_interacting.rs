@@ -138,8 +138,10 @@ fn e0502_e0499_head_first_copy(out: &mut Vec<InteractingCase>) {
         // the shared scaffold.
         let a_fixed = "let head = v[0];".to_string();
         let a_broken = "let head = &v[0];".to_string();
-        let b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
-        let b_broken = format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
+        let b_fixed =
+            format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
+        let b_broken =
+            format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
         let head_use_fixed = "head + v[0]";
         let head_use_broken = "*head + v[0]";
         let wrap = |head: &str, pair: &str, usex: &str| {
@@ -187,8 +189,10 @@ fn e0502_e0499_head_first_string(out: &mut Vec<InteractingCase>) {
         ));
         let a_fixed = "let head = v[0].len();".to_string();
         let a_broken = "let head = &v[0];".to_string();
-        let b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
-        let b_broken = format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
+        let b_fixed =
+            format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
+        let b_broken =
+            format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
         let head_use_fixed = "head + v[0].len()";
         let head_use_broken = "head.len() + v[0].len()";
         let wrap = |head: &str, pair: &str, usex: &str| {
@@ -299,8 +303,10 @@ fn e0614_e0499_stale_star(out: &mut Vec<InteractingCase>) {
         let a_binding = "let head = v[0];";
         let use_fixed = "head + v[0]";
         let use_broken = "*head + v[0]";
-        let b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
-        let b_broken = format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
+        let b_fixed =
+            format!("let a = &mut *v;\n    a.push({x});\n    let b = &mut *v;\n    b.push({y});");
+        let b_broken =
+            format!("let a = &mut *v;\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
         let wrap = |usex: &str, pair: &str| {
             format!(
                 "pub fn probe(v: &mut Vec<{ty}>) -> {ty} {{\n    {a_binding}\n    {pair}\n    {usex}\n}}\n{gt}"
@@ -391,9 +397,12 @@ mod tests {
     #[test]
     fn braces_balance_in_all_four_variants() {
         for c in interacting_pairs() {
-            for (which, src) in
-                [("seed", &c.seed), ("broken", &c.broken), ("a_only", &c.a_only), ("b_only", &c.b_only)]
-            {
+            for (which, src) in [
+                ("seed", &c.seed),
+                ("broken", &c.broken),
+                ("a_only", &c.a_only),
+                ("b_only", &c.b_only),
+            ] {
                 let open = src.matches('{').count();
                 let close = src.matches('}').count();
                 assert_eq!(
@@ -435,15 +444,19 @@ mod tests {
     fn broken_and_a_only_share_all_lines_but_bs() {
         for c in interacting_pairs() {
             let a_lines: std::collections::BTreeMap<&str, usize> =
-                c.a_only.lines().fold(std::collections::BTreeMap::new(), |mut m, l| {
-                    *m.entry(l).or_default() += 1;
-                    m
-                });
+                c.a_only
+                    .lines()
+                    .fold(std::collections::BTreeMap::new(), |mut m, l| {
+                        *m.entry(l).or_default() += 1;
+                        m
+                    });
             let b_lines: std::collections::BTreeMap<&str, usize> =
-                c.broken.lines().fold(std::collections::BTreeMap::new(), |mut m, l| {
-                    *m.entry(l).or_default() += 1;
-                    m
-                });
+                c.broken
+                    .lines()
+                    .fold(std::collections::BTreeMap::new(), |mut m, l| {
+                        *m.entry(l).or_default() += 1;
+                        m
+                    });
             let only_in_a: usize = a_lines
                 .iter()
                 .map(|(l, n)| n.saturating_sub(*b_lines.get(l).unwrap_or(&0)))

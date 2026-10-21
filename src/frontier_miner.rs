@@ -168,21 +168,81 @@ pub struct Family {
 #[must_use]
 pub fn families() -> Vec<Family> {
     vec![
-        Family { id: "needless_return-heldout", target_lint: "needless_return", covered: true },
-        Family { id: "let_and_return", target_lint: "let_and_return", covered: true },
-        Family { id: "redundant_slicing", target_lint: "redundant_slicing", covered: true },
-        Family { id: "map_flatten", target_lint: "map_flatten", covered: true },
-        Family { id: "io_other_error", target_lint: "io_other_error", covered: true },
-        Family { id: "redundant_closure_for_method_calls", target_lint: "redundant_closure_for_method_calls", covered: true },
-        Family { id: "iter_skip_next", target_lint: "iter_skip_next", covered: true },
-        Family { id: "to_string_in_format_args", target_lint: "to_string_in_format_args", covered: true },
-        Family { id: "manual_range_contains", target_lint: "manual_range_contains", covered: true },
-        Family { id: "single_char_add_str", target_lint: "single_char_add_str", covered: true },
-        Family { id: "manual_clamp", target_lint: "manual_clamp", covered: true },
-        Family { id: "from_str_radix_10", target_lint: "from_str_radix_10", covered: true },
-        Family { id: "assign_op_pattern", target_lint: "assign_op_pattern", covered: true },
-        Family { id: "unit_arg", target_lint: "unit_arg", covered: true },
-        Family { id: "string_lit_as_bytes", target_lint: "string_lit_as_bytes", covered: true },
+        Family {
+            id: "needless_return-heldout",
+            target_lint: "needless_return",
+            covered: true,
+        },
+        Family {
+            id: "let_and_return",
+            target_lint: "let_and_return",
+            covered: true,
+        },
+        Family {
+            id: "redundant_slicing",
+            target_lint: "redundant_slicing",
+            covered: true,
+        },
+        Family {
+            id: "map_flatten",
+            target_lint: "map_flatten",
+            covered: true,
+        },
+        Family {
+            id: "io_other_error",
+            target_lint: "io_other_error",
+            covered: true,
+        },
+        Family {
+            id: "redundant_closure_for_method_calls",
+            target_lint: "redundant_closure_for_method_calls",
+            covered: true,
+        },
+        Family {
+            id: "iter_skip_next",
+            target_lint: "iter_skip_next",
+            covered: true,
+        },
+        Family {
+            id: "to_string_in_format_args",
+            target_lint: "to_string_in_format_args",
+            covered: true,
+        },
+        Family {
+            id: "manual_range_contains",
+            target_lint: "manual_range_contains",
+            covered: true,
+        },
+        Family {
+            id: "single_char_add_str",
+            target_lint: "single_char_add_str",
+            covered: true,
+        },
+        Family {
+            id: "manual_clamp",
+            target_lint: "manual_clamp",
+            covered: true,
+        },
+        Family {
+            id: "from_str_radix_10",
+            target_lint: "from_str_radix_10",
+            covered: true,
+        },
+        Family {
+            id: "assign_op_pattern",
+            target_lint: "assign_op_pattern",
+            covered: true,
+        },
+        Family {
+            id: "unit_arg",
+            target_lint: "unit_arg",
+            covered: true,
+        },
+        Family {
+            id: "string_lit_as_bytes",
+            target_lint: "string_lit_as_bytes",
+            covered: true,
+        },
         // ── Batch 162 graduation (Plan 153): both pack VIII leads landed —
         // `bytes_count_to_len` + `bool_comparison` joined FIXABLE_LINTS with
         // corpus lockstep; the heldout loop is 17 families deep. The Batch
@@ -190,10 +250,26 @@ pub fn families() -> Vec<Family> {
         // (Plan 154; probe-verified in the plan154 script: seed clean,
         // broken fires exactly its target; the nli seed keeps the
         // twice-used-binding `x + x` dodge).
-        Family { id: "bytes_count_to_len", target_lint: "bytes_count_to_len", covered: true },
-        Family { id: "bool_comparison", target_lint: "bool_comparison", covered: true },
-        Family { id: "manual_string_new", target_lint: "manual_string_new", covered: true },
-        Family { id: "needless_late_init", target_lint: "needless_late_init", covered: true },
+        Family {
+            id: "bytes_count_to_len",
+            target_lint: "bytes_count_to_len",
+            covered: true,
+        },
+        Family {
+            id: "bool_comparison",
+            target_lint: "bool_comparison",
+            covered: true,
+        },
+        Family {
+            id: "manual_string_new",
+            target_lint: "manual_string_new",
+            covered: true,
+        },
+        Family {
+            id: "needless_late_init",
+            target_lint: "needless_late_init",
+            covered: true,
+        },
         // ── Batch 164 graduation (Plan 155): the coverage-report RE-ARM —
         // the recorded-spare queue ran empty, so the leads came from the
         // fresh `--coverage-report` derivation probe-verified in
@@ -201,8 +277,16 @@ pub fn families() -> Vec<Family> {
         // exactly its target; both default-level style — mlmm's seed keeps
         // the `Vec::push` dodge, the ep seed's 7-digit float sits UNDER
         // unreadable_literal's threshold). ──
-        Family { id: "match_like_matches_macro", target_lint: "match_like_matches_macro", covered: true },
-        Family { id: "excessive_precision", target_lint: "excessive_precision", covered: true },
+        Family {
+            id: "match_like_matches_macro",
+            target_lint: "match_like_matches_macro",
+            covered: true,
+        },
+        Family {
+            id: "excessive_precision",
+            target_lint: "excessive_precision",
+            covered: true,
+        },
     ]
 }
 
@@ -237,7 +321,11 @@ pub fn generate(modes: &[Mode]) -> Vec<Candidate> {
     let want_heldout = modes.contains(&Mode::HeldOut);
     let want_frontier = modes.contains(&Mode::Frontier);
     for fam in families() {
-        let wanted = if fam.covered { want_heldout } else { want_frontier };
+        let wanted = if fam.covered {
+            want_heldout
+        } else {
+            want_frontier
+        };
         if !wanted {
             continue;
         }
@@ -245,7 +333,11 @@ pub fn generate(modes: &[Mode]) -> Vec<Candidate> {
             out.push(Candidate {
                 family: fam.id,
                 target_lint: fam.target_lint,
-                mode: if fam.covered { Mode::HeldOut } else { Mode::Frontier },
+                mode: if fam.covered {
+                    Mode::HeldOut
+                } else {
+                    Mode::Frontier
+                },
                 ops: 1,
                 seed: seed.to_string(),
                 broken: broken.to_string(),
@@ -567,7 +659,9 @@ impl CorpusView {
     /// their OWN rule; `held_out()` is the `needless_return` specialization).
     #[must_use]
     pub fn holding_out(rule: &str) -> Self {
-        Self { disabled: BTreeSet::from([rule.to_string()]) }
+        Self {
+            disabled: BTreeSet::from([rule.to_string()]),
+        }
     }
 
     fn override_for(&self) -> ComponentOverride {
@@ -623,21 +717,33 @@ pub enum Rejection {
     BrokenNotVerifiable { family: &'static str, why: String },
     /// The broken form does not fire the family's target lint (family drift
     /// — clippy moved; the row is reported, never silently skipped).
-    TargetLintNotFired { family: &'static str, saw: Vec<String> },
+    TargetLintNotFired {
+        family: &'static str,
+        saw: Vec<String>,
+    },
     /// The SEED itself trips clippy (a broken family table — measured, not
     /// asserted; the `corpus_interacting` lesson).
-    SeedNotClean { family: &'static str, saw: Vec<String> },
+    SeedNotClean {
+        family: &'static str,
+        saw: Vec<String>,
+    },
     /// The view's corpus HEALED it — not at the frontier (good news: the
     /// corpus is broader than the family table assumed).
     HealedByView { family: &'static str },
     /// BLAKE3 already committed (exactly-once held).
-    Duplicate { family: &'static str, blake3: String },
+    Duplicate {
+        family: &'static str,
+        blake3: String,
+    },
     /// (`HeldOut`) The solution failed to clear the target lint.
     SolutionDidNotClear { family: &'static str },
     /// (`HeldOut`) The solution perturbed a stock row's heal output — REFUSED
     /// (the adversarial clause: a solution that re-breaks a prior row never
     /// commits).
-    RegressionRefused { family: &'static str, perturbed: Vec<String> },
+    RegressionRefused {
+        family: &'static str,
+        perturbed: Vec<String>,
+    },
 }
 
 /// One admissible row: the committed record (jsonl shape).
@@ -697,7 +803,10 @@ pub fn admit(
             continue; // K-minimality: first admissible in the family won.
         }
         if known.blake3s.contains(&c.blake3) {
-            out.rejections.push(Rejection::Duplicate { family: c.family, blake3: c.blake3.clone() });
+            out.rejections.push(Rejection::Duplicate {
+                family: c.family,
+                blake3: c.blake3.clone(),
+            });
             continue;
         }
         // Clause 1a — the seed is clean (measured).
@@ -714,7 +823,10 @@ pub fn admit(
         if !broken_verdict.ran || !broken_verdict.compiles {
             out.rejections.push(Rejection::BrokenNotVerifiable {
                 family: c.family,
-                why: broken_verdict.error.clone().unwrap_or_else(|| "did not run".into()),
+                why: broken_verdict
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "did not run".into()),
             });
             continue;
         }
@@ -733,7 +845,8 @@ pub fn admit(
             && healed_verdict.compiles
             && !healed_verdict.lints.contains(c.target_lint)
         {
-            out.rejections.push(Rejection::HealedByView { family: c.family });
+            out.rejections
+                .push(Rejection::HealedByView { family: c.family });
             continue;
         }
         // Clause 3 — solved-after + regression (HeldOut mode only).
@@ -741,11 +854,15 @@ pub fn admit(
             (Mode::HeldOut, Some(sol)) => {
                 let (_solved, cleared) = apply_solution(c, sol, probe);
                 if !cleared {
-                    out.rejections.push(Rejection::SolutionDidNotClear { family: c.family });
+                    out.rejections
+                        .push(Rejection::SolutionDidNotClear { family: c.family });
                     continue;
                 }
                 if let Some(perturbed) = regression_perturbations(sol) {
-                    out.rejections.push(Rejection::RegressionRefused { family: c.family, perturbed });
+                    out.rejections.push(Rejection::RegressionRefused {
+                        family: c.family,
+                        perturbed,
+                    });
                     continue;
                 }
                 Some(sol.solving_rule())
@@ -753,7 +870,8 @@ pub fn admit(
             (Mode::HeldOut, None) => {
                 // A HeldOut pass without its solution is a caller error —
                 // loud, never a silent pending row.
-                out.rejections.push(Rejection::SolutionDidNotClear { family: c.family });
+                out.rejections
+                    .push(Rejection::SolutionDidNotClear { family: c.family });
                 continue;
             }
             (Mode::Frontier, _) => None, // pending mining lead
@@ -790,11 +908,8 @@ pub fn apply_solution(c: &Candidate, solution: &Solution, probe: OracleProbe) ->
     // the default view. Both are exactly what a mining batch's first
     // landing looks like to the pipeline.
     let sol_candidates = solution.candidates();
-    let (healed, _edits, _passes) = heal_fixpoint_cfg(
-        &c.broken,
-        &sol_candidates,
-        &ComponentOverride::default(),
-    );
+    let (healed, _edits, _passes) =
+        heal_fixpoint_cfg(&c.broken, &sol_candidates, &ComponentOverride::default());
     let verdict = probe(&healed);
     let cleared = verdict.ran && verdict.compiles && !verdict.lints.contains(c.target_lint);
     (healed, cleared)
@@ -808,14 +923,22 @@ pub fn regression_perturbations(solution: &Solution) -> Option<Vec<String>> {
     let sol_candidates = solution.candidates();
     let mut perturbed = Vec::new();
     for entry in &crate::build_seed_corpus().entries {
-        let (plain, _, _) = heal_fixpoint_cfg(&entry.buggy_code, &[], &ComponentOverride::default());
-        let (with_sol, _, _) =
-            heal_fixpoint_cfg(&entry.buggy_code, &sol_candidates, &ComponentOverride::default());
+        let (plain, _, _) =
+            heal_fixpoint_cfg(&entry.buggy_code, &[], &ComponentOverride::default());
+        let (with_sol, _, _) = heal_fixpoint_cfg(
+            &entry.buggy_code,
+            &sol_candidates,
+            &ComponentOverride::default(),
+        );
         if plain != with_sol {
             perturbed.push(entry.lint_name.clone());
         }
     }
-    if perturbed.is_empty() { None } else { Some(perturbed) }
+    if perturbed.is_empty() {
+        None
+    } else {
+        Some(perturbed)
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -832,7 +955,9 @@ pub fn band_rows(admitted: &[AdmittedRow]) -> Vec<(String, u32, u32)> {
     // (rule, r, f) — summarize's (rule, successes, fails) order.
     let mut per_rule: Vec<(String, u32, u32)> = Vec::new();
     for row in admitted.iter().filter(|r| r.mode == Mode::HeldOut) {
-        let Some(rule) = &row.solving_rule else { continue };
+        let Some(rule) = &row.solving_rule else {
+            continue;
+        };
         match per_rule.iter_mut().find(|(r, _, _)| r == rule) {
             Some((_, r, f)) => {
                 *r += 1;
@@ -901,7 +1026,10 @@ pub fn load_known(path: &std::path::Path) -> KnownSet {
     let Ok(text) = std::fs::read_to_string(path) else {
         return known;
     };
-    for row in text.lines().filter_map(|l| serde_json::from_str::<MinerRow>(l).ok()) {
+    for row in text
+        .lines()
+        .filter_map(|l| serde_json::from_str::<MinerRow>(l).ok())
+    {
         known.blake3s.insert(row.blake3);
         known.families.insert(row.family);
     }
@@ -918,7 +1046,10 @@ pub fn append_rows(path: &std::path::Path, rows: &[AdmittedRow]) -> std::io::Res
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     for row in rows {
         let m = MinerRow {
             ts: frontier_report::local_iso_timestamp(),
@@ -930,7 +1061,8 @@ pub fn append_rows(path: &std::path::Path, rows: &[AdmittedRow]) -> std::io::Res
             mode: match row.mode {
                 Mode::HeldOut => "heldout",
                 Mode::Frontier => "frontier",
-            }.to_string(),
+            }
+            .to_string(),
             solving_rule: row.solving_rule.clone(),
             lints_before: row.lints_before.clone(),
             lints_after: row.lints_after.clone(),
@@ -986,7 +1118,10 @@ mod tests {
             "io_other_error"
         } else if code.contains("&s[..]") {
             "redundant_slicing"
-        } else if code.contains("let out =") || code.contains("let sum =") || code.contains("let made =") {
+        } else if code.contains("let out =")
+            || code.contains("let sum =")
+            || code.contains("let made =")
+        {
             "let_and_return"
         } else if code.contains("&Vec<") {
             "ptr_arg"
@@ -1090,10 +1225,7 @@ mod tests {
         // (match_like_matches_macro + excessive_precision) GRADUATED at
         // landing (the next re-arm owes a fresh probe round — no recorded
         // spares remain).
-        assert_eq!(
-            a.iter().filter(|c| c.mode == Mode::HeldOut).count(),
-            44,
-        );
+        assert_eq!(a.iter().filter(|c| c.mode == Mode::HeldOut).count(), 44,);
         assert_eq!(a.iter().filter(|c| c.mode == Mode::Frontier).count(), 0);
     }
 
@@ -1117,25 +1249,59 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
-        assert_eq!(families.len(), 21, "the twenty-one covered (FIXABLE-tier) families");
+        assert_eq!(
+            families.len(),
+            21,
+            "the twenty-one covered (FIXABLE-tier) families"
+        );
         for fam in &families {
-            let fam_cands: Vec<_> = cands.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
+            let fam_cands: Vec<_> = cands
+                .iter()
+                .filter(|c| c.family == fam.as_str())
+                .cloned()
+                .collect();
             let rule = fam_rule(fam);
             let sol = Solution::Reenable(rule.clone());
             let view = CorpusView::holding_out(&rule);
-            let out = admit(&fam_cands, &view, Some(&sol), &KnownSet::new(), &family_probe);
-            assert_eq!(out.admitted.len(), 1, "K-minimality: first admissible per family {fam}");
-            assert!(out.rejections.is_empty(), "family {fam}: later members are skipped, not rejected");
+            let out = admit(
+                &fam_cands,
+                &view,
+                Some(&sol),
+                &KnownSet::new(),
+                &family_probe,
+            );
+            assert_eq!(
+                out.admitted.len(),
+                1,
+                "K-minimality: first admissible per family {fam}"
+            );
+            assert!(
+                out.rejections.is_empty(),
+                "family {fam}: later members are skipped, not rejected"
+            );
             let row = &out.admitted[0];
             assert_eq!(row.mode, Mode::HeldOut);
             assert_eq!(row.solving_rule.as_deref(), Some(rule.as_str()));
         }
         // The needless_return family's committed row is still its canonical-first.
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let nr: Vec<_> = cands.iter().filter(|c| c.family == "needless_return-heldout").cloned().collect();
-        let out = admit(&nr, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &family_probe);
+        let nr: Vec<_> = cands
+            .iter()
+            .filter(|c| c.family == "needless_return-heldout")
+            .cloned()
+            .collect();
+        let out = admit(
+            &nr,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &family_probe,
+        );
         let row = &out.admitted[0];
-        let first = nr.iter().min_by(|x, y| x.blake3.cmp(&y.blake3)).expect("non-empty family");
+        let first = nr
+            .iter()
+            .min_by(|x, y| x.blake3.cmp(&y.blake3))
+            .expect("non-empty family");
         assert_eq!(row.blake3, first.blake3);
     }
 
@@ -1162,18 +1328,24 @@ mod tests {
                 &[],
                 &CorpusView::holding_out(&rule).override_for(),
             );
-            assert_eq!(healed, c.broken, "family {fam}: own-view heal must leave the fixture untouched");
-            assert_eq!(edits, 0);
-            let (solved, edits, _) = heal_fixpoint_cfg(
-                &c.broken,
-                &[],
-                &ComponentOverride::default(),
+            assert_eq!(
+                healed, c.broken,
+                "family {fam}: own-view heal must leave the fixture untouched"
             );
-            assert_ne!(solved, c.broken, "family {fam}: default heal must change the fixture");
+            assert_eq!(edits, 0);
+            let (solved, edits, _) =
+                heal_fixpoint_cfg(&c.broken, &[], &ComponentOverride::default());
+            assert_ne!(
+                solved, c.broken,
+                "family {fam}: default heal must change the fixture"
+            );
             assert!(edits > 0);
         }
         // The needless_return original shape, spelled directly.
-        let c = cands.iter().find(|c| c.family == "needless_return-heldout").unwrap();
+        let c = cands
+            .iter()
+            .find(|c| c.family == "needless_return-heldout")
+            .unwrap();
         let (solved, _, _) = heal_fixpoint_cfg(&c.broken, &[], &ComponentOverride::default());
         assert!(!solved.contains("return "));
     }
@@ -1187,23 +1359,52 @@ mod tests {
             .filter(|c| c.family == "needless_return-heldout")
             .collect();
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let first = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &heldout_probe);
+        let first = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &heldout_probe,
+        );
         assert_eq!(first.admitted.len(), 1);
         // Cross-pass K-minimality: the family with a committed row is DONE —
         // no silent second admission from the same family.
         let known = KnownSet {
             blake3s: first.admitted.iter().map(|r| r.blake3.clone()).collect(),
-            families: first.admitted.iter().map(|r| r.family.to_string()).collect(),
+            families: first
+                .admitted
+                .iter()
+                .map(|r| r.family.to_string())
+                .collect(),
         };
-        let second = admit(&cands, &CorpusView::held_out(), Some(&sol), &known, &heldout_probe);
+        let second = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &known,
+            &heldout_probe,
+        );
         assert!(second.admitted.is_empty());
-        assert!(second.rejections.is_empty(), "family-done is a skip, not a rejection");
+        assert!(
+            second.rejections.is_empty(),
+            "family-done is a skip, not a rejection"
+        );
         // A known CONTENT ADDRESS in an uncommitted family is the exactly-once
         // rejection (the cross-family collision path).
         let mut orphan = KnownSet::new();
         orphan.blake3s.insert(first.admitted[0].blake3.clone());
-        let third = admit(&cands, &CorpusView::held_out(), Some(&sol), &orphan, &heldout_probe);
-        assert_eq!(third.admitted.len(), 1, "the family's NEXT candidate admits");
+        let third = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &orphan,
+            &heldout_probe,
+        );
+        assert_eq!(
+            third.admitted.len(),
+            1,
+            "the family's NEXT candidate admits"
+        );
         assert!(third
             .rejections
             .iter()
@@ -1221,8 +1422,17 @@ mod tests {
             buggy: "return ".to_string(),
             fixed: String::new(),
         };
-        let out = admit(&cands, &CorpusView::held_out(), Some(&broad), &KnownSet::new(), &heldout_probe);
-        assert!(out.admitted.is_empty(), "the adversarial solution must not commit");
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&broad),
+            &KnownSet::new(),
+            &heldout_probe,
+        );
+        assert!(
+            out.admitted.is_empty(),
+            "the adversarial solution must not commit"
+        );
         assert!(out
             .rejections
             .iter()
@@ -1241,7 +1451,13 @@ mod tests {
             fixed: "x * 2".to_string(),
         };
         assert_eq!(regression_perturbations(&narrow), None);
-        let out = admit(&cands, &CorpusView::held_out(), Some(&narrow), &KnownSet::new(), &heldout_probe);
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&narrow),
+            &KnownSet::new(),
+            &heldout_probe,
+        );
         assert_eq!(out.admitted.len(), 1);
     }
 
@@ -1250,7 +1466,13 @@ mod tests {
         let dirty = |_: &str| verdict(true, true, &["let_and_return"]);
         let cands = generate(&[Mode::HeldOut]);
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let out = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &dirty);
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &dirty,
+        );
         assert!(out.admitted.is_empty());
         assert!(out
             .rejections
@@ -1270,7 +1492,13 @@ mod tests {
         };
         let cands = generate(&[Mode::HeldOut]);
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let out = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &blind);
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &blind,
+        );
         assert!(out.admitted.is_empty());
         assert!(out
             .rejections
@@ -1287,26 +1515,48 @@ mod tests {
         // assertions (one admission per family, `solving_rule: None`, the
         // green-zero band shape) beside the new family's seed table rows.
         let cands = generate(&[Mode::Frontier]);
-        assert!(cands.is_empty(), "no pending frontier leads until the next re-arm");
-        let out = admit(&cands, &CorpusView::default(), None, &KnownSet::new(), &frontier_probe);
+        assert!(
+            cands.is_empty(),
+            "no pending frontier leads until the next re-arm"
+        );
+        let out = admit(
+            &cands,
+            &CorpusView::default(),
+            None,
+            &KnownSet::new(),
+            &frontier_probe,
+        );
         assert!(out.admitted.is_empty());
         assert!(band_rows(&out.admitted).is_empty());
         let summary = band_summary(&out.admitted);
-        assert_eq!(summary.population, 0, "green-zero shape for frontier-only passes");
+        assert_eq!(
+            summary.population, 0,
+            "green-zero shape for frontier-only passes"
+        );
     }
 
     #[test]
     fn band_rows_land_in_band_via_the_frontier_report_substrate() {
         let cands = generate(&[Mode::HeldOut]);
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let out = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &heldout_probe);
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &heldout_probe,
+        );
         let rows = band_rows(&out.admitted);
         assert_eq!(rows, vec![(HELD_OUT_RULE.to_string(), 1, 1)]);
         let summary = frontier_report::summarize(&rows);
         assert_eq!(summary.seen, 1);
         assert_eq!(summary.band_count, 1);
         assert!((summary.band_mass - 1.0).abs() < 1e-6);
-        assert_eq!(summary.rows[0].class, BandClass::InBand, "p̂=0.5 is the band edge");
+        assert_eq!(
+            summary.rows[0].class,
+            BandClass::InBand,
+            "p̂=0.5 is the band edge"
+        );
         // Provenance discipline: the feed is construction-priced (ε), never
         // organic — pin the vocabulary.
         assert_eq!(rows.len(), 1);
@@ -1317,22 +1567,32 @@ mod tests {
 
     #[test]
     fn jsonl_round_trips_and_dedups() {
-        let dir = std::env::temp_dir().join(format!(
-            "riir_frontier_miner_tests_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("riir_frontier_miner_tests_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("rows.jsonl");
         let cands = generate(&[Mode::HeldOut]);
         let sol = Solution::Reenable(HELD_OUT_RULE.to_string());
-        let out = admit(&cands, &CorpusView::held_out(), Some(&sol), &KnownSet::new(), &heldout_probe);
+        let out = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &KnownSet::new(),
+            &heldout_probe,
+        );
         append_rows(&path, &out.admitted).expect("append");
         let known = load_known(&path);
         assert_eq!(known.blake3s.len(), 1);
         assert!(known.blake3s.contains(&out.admitted[0].blake3));
         assert!(known.families.contains("needless_return-heldout"));
         // Exactly-once holds across a reload.
-        let second = admit(&cands, &CorpusView::held_out(), Some(&sol), &known, &heldout_probe);
+        let second = admit(
+            &cands,
+            &CorpusView::held_out(),
+            Some(&sol),
+            &known,
+            &heldout_probe,
+        );
         assert!(second.admitted.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
     }

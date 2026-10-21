@@ -62,8 +62,8 @@ use super::{edit, SourceEdit};
 /// primitive plus the shared-reference spellings the scalar derivation
 /// admits. `String` is deliberately absent — it is not `Copy`.
 const COPY_TYPES: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-    "isize", "f32", "f64", "bool", "char", "&str", "&String",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64", "bool", "char", "&str", "&String",
 ];
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -131,7 +131,9 @@ impl Collector<'_> {
         if m.turbofish.is_some() {
             return None;
         }
-        let Expr::Path(p) = &*m.receiver else { return None };
+        let Expr::Path(p) = &*m.receiver else {
+            return None;
+        };
         if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
             return None;
         }
@@ -174,7 +176,9 @@ impl Collector<'_> {
         if r.mutability.is_some() {
             return None;
         }
-        let Expr::Path(ap) = &*r.expr else { return None };
+        let Expr::Path(ap) = &*r.expr else {
+            return None;
+        };
         if ap.qself.is_some() || ap.path.leading_colon.is_some() || ap.path.segments.len() != 1 {
             return None;
         }
@@ -186,8 +190,8 @@ impl Collector<'_> {
         // Only BY-VALUE scalar idents: `&ident` on a `&str`/`&String` param
         // is a double reference — refuse (narrower than clippy).
         let by_value_copy = [
-            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-            "isize", "f32", "f64", "bool", "char",
+            "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+            "f32", "f64", "bool", "char",
         ];
         if !by_value_copy.contains(&ty.as_str()) {
             return None;
@@ -239,7 +243,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.clone() }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(0); x }"), "clone not dropped: {out}");
+        assert!(
+            out.contains("hits.push(0); x }"),
+            "clone not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -252,7 +259,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); s.clone() }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(0); s }"), "clone not dropped: {out}");
+        assert!(
+            out.contains("hits.push(0); s }"),
+            "clone not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -338,7 +348,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); Clone::clone(&x) }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(0); x }"), "UFCS clone not dropped: {out}");
+        assert!(
+            out.contains("hits.push(0); x }"),
+            "UFCS clone not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -349,7 +362,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); u32::clone(&x) }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(0); x }"), "UFCS type-path clone not dropped: {out}");
+        assert!(
+            out.contains("hits.push(0); x }"),
+            "UFCS type-path clone not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -360,7 +376,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: u64) -> u64 { hits.push(0); std::clone::Clone::clone(&x) }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(0); x }"), "std-qualified UFCS clone not dropped: {out}");
+        assert!(
+            out.contains("hits.push(0); x }"),
+            "std-qualified UFCS clone not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

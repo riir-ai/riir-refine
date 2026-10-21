@@ -205,7 +205,10 @@ mod tests {
             "fn f(x: Box<u8>) -> NonNull<u8> { unsafe { NonNull::new_unchecked(Box::into_raw(x)) } }",
         )
         .expect("matched");
-        assert!(out.contains("NonNull::from_mut(Box::leak(x))"), "not rewritten: {out}");
+        assert!(
+            out.contains("NonNull::from_mut(Box::leak(x))"),
+            "not rewritten: {out}"
+        );
         assert!(!out.contains("unsafe"), "unsafe block not removed: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -217,7 +220,10 @@ mod tests {
             "fn identity<T>(v: T) -> T { v } fn f(one: u8) -> NonNull<u8> { unsafe { NonNull::new_unchecked(Box::into_raw(identity(one))) } }",
         )
         .expect("matched");
-        assert!(out.contains("Box::leak(identity(one))"), "payload not spliced verbatim: {out}");
+        assert!(
+            out.contains("Box::leak(identity(one))"),
+            "payload not spliced verbatim: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -228,7 +234,10 @@ mod tests {
             "fn f(x: Box<u8>) -> NonNull<u8> { unsafe { NonNull::new_unchecked(Box::into_raw(x.clone())) } }",
         )
         .expect("matched");
-        assert!(out.contains("Box::leak(x.clone())"), "payload not spliced verbatim: {out}");
+        assert!(
+            out.contains("Box::leak(x.clone())"),
+            "payload not spliced verbatim: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -239,7 +248,10 @@ mod tests {
             "fn f(x: Box<u8>) -> NonNull<u8> { unsafe { std::ptr::NonNull::new_unchecked(std::boxed::Box::into_raw(x)) } }",
         )
         .expect("matched");
-        assert!(out.contains("NonNull::from_mut(Box::leak(x))"), "not rewritten: {out}");
+        assert!(
+            out.contains("NonNull::from_mut(Box::leak(x))"),
+            "not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -250,7 +262,10 @@ mod tests {
             "fn f(x: Box<u8>) { let p = unsafe { NonNull::new_unchecked(Box::into_raw(x)) }; drop(p); }",
         )
         .expect("matched");
-        assert!(out.contains("let p = NonNull::from_mut(Box::leak(x));"), "not rewritten: {out}");
+        assert!(
+            out.contains("let p = NonNull::from_mut(Box::leak(x));"),
+            "not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

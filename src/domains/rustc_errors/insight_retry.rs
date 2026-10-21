@@ -201,7 +201,9 @@ impl InsightConditioning {
             // lookup allocation to one String per CANDIDATE (scores are
             // computed exactly once each — the decorate pass).
             let snapshot = {
-                let s = inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                let s = inner
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
                 let mut out: HashMap<String, HashMap<String, (u32, u32)>> = HashMap::new();
                 for (k, f) in s.families.iter().filter(|(_, f)| f.armed) {
                     let mut per: HashMap<String, (u32, u32)> = HashMap::new();
@@ -268,7 +270,9 @@ impl InsightConditioning {
                 Mode::Raw => rec.span_hash.clone(),
                 Mode::Insight | Mode::Control => shape_class.clone(),
             };
-            let mut s = inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut s = inner
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             if matches!(mode, Mode::Insight) && !admit(insight) {
                 s.stats.refused_admission += 1;
                 return;
@@ -320,7 +324,10 @@ impl InsightConditioning {
     #[must_use]
     #[allow(clippy::cast_possible_truncation)] // family counts are corpus-scale (≤ 10³)
     pub fn stats(&self) -> PolicyStats {
-        let s = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let s = self
+            .inner
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let mut st = s.stats;
         st.armed = s.families.values().filter(|f| f.armed).count() as u32;
         st
@@ -369,7 +376,11 @@ mod tests {
             code: code.to_string(),
             span_hash: span.to_string(),
             strategy_id: strat.to_string(),
-            outcome: if kept { AttemptOutcome::Kept } else { AttemptOutcome::RevertedNoProgress },
+            outcome: if kept {
+                AttemptOutcome::Kept
+            } else {
+                AttemptOutcome::RevertedNoProgress
+            },
             errors: (2, if kept { 1 } else { 2 }),
             masking: (0, 0),
             journey_residual_sum: 0,
@@ -513,11 +524,25 @@ mod tests {
         let ins = "E0502 cannot borrow `v` as mutable — consider cloning the value";
         // deref-removal failed twice at this shape → family armed.
         for span in ["aa", "bb"] {
-            obs(&attempt("E0502", Some(sc), Some(ins), span, "e0502-deref-removal", false));
+            obs(&attempt(
+                "E0502",
+                Some(sc),
+                Some(ins),
+                span,
+                "e0502-deref-removal",
+                false,
+            ));
         }
         // read-relocate kept once (a DIFFERENT site — cross-site transfer
         // is the whole point of the family key).
-        obs(&attempt("E0502", Some(sc), Some(ins), "cc", "e0502-read-relocate", true));
+        obs(&attempt(
+            "E0502",
+            Some(sc),
+            Some(ins),
+            "cc",
+            "e0502-read-relocate",
+            true,
+        ));
         assert_eq!(pol.stats().armed, 1);
 
         let mut cands = vec![
@@ -542,7 +567,14 @@ mod tests {
         let sc = "cannot borrow _ as mutable";
         let ins = "E0502 cannot borrow `v` as mutable";
         // Oldest: a KEEP for deref-removal (beyond the eventual tail)...
-        obs(&attempt("E0502", Some(sc), Some(ins), "s0", "e0502-deref-removal", true));
+        obs(&attempt(
+            "E0502",
+            Some(sc),
+            Some(ins),
+            "s0",
+            "e0502-deref-removal",
+            true,
+        ));
         // ...then 5 failures (the tail), arming the family.
         for i in 1..=5 {
             obs(&attempt(
@@ -578,8 +610,22 @@ mod tests {
         let obs = pol.observer();
         let sc = "cannot borrow _ as mutable";
         let ins = "E0502 cannot borrow `v` as mutable";
-        obs(&attempt("E0502", Some(sc), Some(ins), "site-a", "e0502-deref-removal", false));
-        obs(&attempt("E0502", Some(sc), Some(ins), "site-b", "e0502-read-relocate", true));
+        obs(&attempt(
+            "E0502",
+            Some(sc),
+            Some(ins),
+            "site-a",
+            "e0502-deref-removal",
+            false,
+        ));
+        obs(&attempt(
+            "E0502",
+            Some(sc),
+            Some(ins),
+            "site-b",
+            "e0502-read-relocate",
+            true,
+        ));
         assert_eq!(pol.stats().families, 2, "site keys never merge");
         assert_eq!(pol.stats().recorded, 2);
         // And an ordering over a THIRD site consults nothing: both armed
@@ -600,13 +646,39 @@ mod tests {
             let obs = pol.observer();
             let sc = "cannot borrow _ as mutable";
             let ins = "E0502 cannot borrow `v` as mutable";
-            obs(&attempt("E0502", Some(sc), Some(ins), "aa", "e0502-deref-removal", false));
-            obs(&attempt("E0502", Some(sc), Some(ins), "bb", "e0502-read-relocate", true));
+            obs(&attempt(
+                "E0502",
+                Some(sc),
+                Some(ins),
+                "aa",
+                "e0502-deref-removal",
+                false,
+            ));
+            obs(&attempt(
+                "E0502",
+                Some(sc),
+                Some(ins),
+                "bb",
+                "e0502-read-relocate",
+                true,
+            ));
             pol
         };
         let mut a = vec![
-            cand("a.rs", 1, "E0502", "e0502-deref-removal", digest("cannot borrow _ as mutable", "i")),
-            cand("a.rs", 1, "E0502", "e0502-read-relocate", digest("cannot borrow _ as mutable", "i")),
+            cand(
+                "a.rs",
+                1,
+                "E0502",
+                "e0502-deref-removal",
+                digest("cannot borrow _ as mutable", "i"),
+            ),
+            cand(
+                "a.rs",
+                1,
+                "E0502",
+                "e0502-read-relocate",
+                digest("cannot borrow _ as mutable", "i"),
+            ),
         ];
         let mut b = a.clone();
         build().ordering()(&mut a);

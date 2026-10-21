@@ -36,11 +36,11 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use katgpt_core::gw_alignment::{gw_coupling, GwScratch, GW_MAX};
+use riir_refine::domain::HealDomain;
 use riir_refine::domains::clippy_lints::ClippyFixEntry;
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
 use riir_refine::domains::rust_perf::PerfRule;
 use riir_refine::domains::rust_perf::RustPerfDomain;
-use riir_refine::domain::HealDomain;
 
 /// Review budget per arm (matched): top-K pairs a maintainer would read.
 const BUDGET: usize = 60;
@@ -113,10 +113,7 @@ fn main() {
     }
 
     // ---- arm (b): name/keyword token Jaccard ----
-    let clippy_tok: Vec<BTreeSet<String>> = clippy
-        .iter()
-        .map(|e| tokens(&e.lint_name))
-        .collect();
+    let clippy_tok: Vec<BTreeSet<String>> = clippy.iter().map(|e| tokens(&e.lint_name)).collect();
     let perf_tok: Vec<BTreeSet<String>> = perf
         .iter()
         .map(|e| {
@@ -190,7 +187,8 @@ fn main() {
     });
     let mut by_base = pairs.clone();
     by_base.sort_by(|x, y| {
-        y.base.partial_cmp(&x.base)
+        y.base
+            .partial_cmp(&x.base)
             .unwrap()
             .then_with(|| pair_key(x, &clippy, &perf).cmp(&pair_key(y, &clippy, &perf)))
     });
@@ -278,7 +276,9 @@ fn normalize(d: &[Vec<f32>]) -> Vec<Vec<f32>> {
         }
     }
     let mean = (sum / ((n * n - n) as f64)).max(1e-9);
-    d.iter().map(|r| r.iter().map(|v| (f64::from(*v) / mean) as f32).collect()).collect()
+    d.iter()
+        .map(|r| r.iter().map(|v| (f64::from(*v) / mean) as f32).collect())
+        .collect()
 }
 
 /// Lowercase identifier tokens: split on `_`, `-`, whitespace, and strip
@@ -400,8 +400,8 @@ fn score(
     known_neg: &BTreeSet<(usize, usize)>,
     labels_path: &str,
 ) {
-    let raw = std::fs::read_to_string(labels_path)
-        .unwrap_or_else(|e| panic!("read {labels_path}: {e}"));
+    let raw =
+        std::fs::read_to_string(labels_path).unwrap_or_else(|e| panic!("read {labels_path}: {e}"));
     // (clippy_lint, perf_rule) -> true?
     let mut labels: BTreeMap<(String, String), bool> = BTreeMap::new();
     for line in raw.lines() {
@@ -426,10 +426,15 @@ fn score(
     }
     // Known negatives are FALSE by corpus evidence even if unlabeled.
     for &(i, j) in known_neg {
-        labels.entry((clippy[i].lint_name.clone(), perf[j].rule_id.clone()))
+        labels
+            .entry((clippy[i].lint_name.clone(), perf[j].rule_id.clone()))
             .or_insert(false);
     }
-    eprintln!("# labels loaded: {} (incl. {} corpus known-negatives)", labels.len(), known_neg.len());
+    eprintln!(
+        "# labels loaded: {} (incl. {} corpus known-negatives)",
+        labels.len(),
+        known_neg.len()
+    );
 
     let universe = (clippy.len() * perf.len()) as f64;
     let key = |p: &Pair| {
@@ -438,7 +443,11 @@ fn score(
             perf[p.perf_idx].rule_id.clone(),
         )
     };
-    fn labeled_true(list: &[Pair], labels: &BTreeMap<(String, String), bool>, key: impl Fn(&Pair) -> (String, String)) -> usize {
+    fn labeled_true(
+        list: &[Pair],
+        labels: &BTreeMap<(String, String), bool>,
+        key: impl Fn(&Pair) -> (String, String),
+    ) -> usize {
         list.iter()
             .filter(|p| labels.get(&key(p)) == Some(&true))
             .count()
@@ -476,18 +485,38 @@ fn score(
             }
         }
     }
-    let hat_p = if rand_n > 0 { rand_true as f64 / rand_n as f64 } else { 0.0 };
+    let hat_p = if rand_n > 0 {
+        rand_true as f64 / rand_n as f64
+    } else {
+        0.0
+    };
     let total_true_est = universe * hat_p;
 
     println!("== Issue 092 T1 PoC — defend-wrong score ==");
-    println!("universe: {} × {} = {} pairs; budget/arm = {BUDGET}", clippy.len(), perf.len(), universe as usize);
+    println!(
+        "universe: {} × {} = {} pairs; budget/arm = {BUDGET}",
+        clippy.len(),
+        perf.len(),
+        universe as usize
+    );
     println!("labels: {} (known-negatives folded as FALSE)", labels.len());
     println!();
     println!("| arm | trues in top-{BUDGET} | precision@{BUDGET} | recall est. |");
     println!("|---|---|---|---|");
-    println!("| (a) GW coupling | {gw_true} | {:.3} | {} |", gw_true as f64 / BUDGET as f64, recall_str(gw_true, total_true_est, hat_p));
-    println!("| (b) name/keyword | {base_true} | {:.3} | {} |", base_true as f64 / BUDGET as f64, recall_str(base_true, total_true_est, hat_p));
-    println!("| (c) no-alignment | — | base rate {hat_p:.3} | expected finds {:.1} |", BUDGET as f64 * hat_p);
+    println!(
+        "| (a) GW coupling | {gw_true} | {:.3} | {} |",
+        gw_true as f64 / BUDGET as f64,
+        recall_str(gw_true, total_true_est, hat_p)
+    );
+    println!(
+        "| (b) name/keyword | {base_true} | {:.3} | {} |",
+        base_true as f64 / BUDGET as f64,
+        recall_str(base_true, total_true_est, hat_p)
+    );
+    println!(
+        "| (c) no-alignment | — | base rate {hat_p:.3} | expected finds {:.1} |",
+        BUDGET as f64 * hat_p
+    );
     println!();
     println!("base-rate sample: {rand_true}/{rand_n} stride pairs TRUE → p̂ = {hat_p:.3}, total-true est ≈ {total_true_est:.0}");
     if rand_n < 20 {
@@ -502,7 +531,10 @@ fn score(
         .collect();
     println!("\nGW-exclusive TRUEs (baseline score 0): {}", gw_excl.len());
     for p in gw_excl.iter().take(15) {
-        println!("  - `{}` × `{}` (gw={:.5})", clippy[p.clippy_idx].lint_name, perf[p.perf_idx].rule_id, p.gw);
+        println!(
+            "  - `{}` × `{}` (gw={:.5})",
+            clippy[p.clippy_idx].lint_name, perf[p.perf_idx].rule_id, p.gw
+        );
     }
 
     // known-negative violations in either arm's budget
@@ -511,9 +543,17 @@ fn score(
             .iter()
             .filter(|p| known_neg.contains(&(p.clippy_idx, p.perf_idx)))
             .collect();
-        println!("\n{name}-arm known-negative violations (corpus asserts distinct): {}", viol.len());
+        println!(
+            "\n{name}-arm known-negative violations (corpus asserts distinct): {}",
+            viol.len()
+        );
         for p in viol.iter().take(10) {
-            println!("  - `{}` × `{}` ({:.5})", clippy[p.clippy_idx].lint_name, perf[p.perf_idx].rule_id, if name == "gw" { p.gw } else { p.base });
+            println!(
+                "  - `{}` × `{}` ({:.5})",
+                clippy[p.clippy_idx].lint_name,
+                perf[p.perf_idx].rule_id,
+                if name == "gw" { p.gw } else { p.base }
+            );
         }
     }
 }

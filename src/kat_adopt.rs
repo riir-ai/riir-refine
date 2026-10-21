@@ -149,7 +149,11 @@ fn kind_of(rel: &str) -> Option<StateFileKind> {
         ("corpus-lease/current.json", _) => StateFileKind::LeasePointer,
         ("corpus-lease/charge.json", _) => StateFileKind::LeaseCharge,
         (_, "pending.jsonl") if rel.starts_with("claims/") => StateFileKind::ClaimQueue,
-        (_, n) if rel.starts_with("outbox/") && n.rsplit_once('.').is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("jsonl")) => {
+        (_, n)
+            if rel.starts_with("outbox/")
+                && n.rsplit_once('.')
+                    .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("jsonl")) =>
+        {
             StateFileKind::OutboxBatch
         }
         _ => return None,
@@ -389,7 +393,9 @@ pub fn adopt_into_net(root: &Path, file: &StateFile, net_url: &str) -> Result<Pa
     debug_assert_eq!(file.placement, Placement::FlatLegacy);
     let inner = match &file.placement {
         Placement::FlatLegacy => file.rel.as_str(),
-        Placement::NetDir { .. } => return Err("only flat legacy files adopt into a net dir".into()),
+        Placement::NetDir { .. } => {
+            return Err("only flat legacy files adopt into a net dir".into())
+        }
     };
     let dest = kat_state_stamp::net_state_dir_for_url(root, net_url).join(inner);
     if dest.exists() {
@@ -402,13 +408,8 @@ pub fn adopt_into_net(root: &Path, file: &StateFile, net_url: &str) -> Result<Pa
     if let Some(parent) = dest.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create {}: {e}", parent.display()))?;
     }
-    std::fs::rename(&file.path, &dest).map_err(|e| {
-        format!(
-            "move {} -> {}: {e}",
-            file.path.display(),
-            dest.display()
-        )
-    })?;
+    std::fs::rename(&file.path, &dest)
+        .map_err(|e| format!("move {} -> {}: {e}", file.path.display(), dest.display()))?;
     Ok(dest)
 }
 
@@ -480,7 +481,11 @@ mod tests {
     #[test]
     fn scan_finds_flat_legacy_and_net_mirror() {
         let root = tmp("scan");
-        write(&root, "kat_burn_ack.json", &ack_body(true, Some("ab12"), None));
+        write(
+            &root,
+            "kat_burn_ack.json",
+            &ack_body(true, Some("ab12"), None),
+        );
         write(&root, "kat_charge.json", "{\"charged_kat\": 5}");
         write(&root, "outbox/batch-1.jsonl", "{}");
         write(
@@ -551,7 +556,11 @@ mod tests {
     #[test]
     fn verdict_matrix_the_t4_law() {
         let root = tmp("verdicts");
-        write(&root, "kat_burn_ack.json", &ack_body(true, Some("ab12"), None));
+        write(
+            &root,
+            "kat_burn_ack.json",
+            &ack_body(true, Some("ab12"), None),
+        );
         let files = scan_state_files(&root);
         let ack = &files[0];
         // declared matches → ADOPT
@@ -689,7 +698,10 @@ mod tests {
                     assert!(line.contains("adopt-state"), "{line}");
                 }
                 FileClass::StampedOk => {
-                    assert!(line.contains("last written against `mainnet.gist.rs`"), "{line}");
+                    assert!(
+                        line.contains("last written against `mainnet.gist.rs`"),
+                        "{line}"
+                    );
                     assert!(line.contains("01234567…"), "{line}");
                 }
                 FileClass::DirHostMismatch { .. } => {

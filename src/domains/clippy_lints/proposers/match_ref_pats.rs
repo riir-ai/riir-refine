@@ -50,9 +50,7 @@ use super::SourceEdit;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut scan = Scan {
-        edits: Vec::new(),
-    };
+    let mut scan = Scan { edits: Vec::new() };
     scan.visit_file(file);
     scan.edits
 }
@@ -87,7 +85,9 @@ fn binding_free(p: &Pat) -> bool {
 /// A plain single-segment ident path scrutinee (`f`, `self`).
 fn ident_scrutinee(e: &Expr) -> bool {
     let Expr::Path(p) = e else { return false };
-    p.qself.is_none() && p.path.leading_colon.is_none() && p.path.segments.len() == 1
+    p.qself.is_none()
+        && p.path.leading_colon.is_none()
+        && p.path.segments.len() == 1
         && p.path.segments[0].arguments.is_none()
 }
 
@@ -121,7 +121,9 @@ impl<'ast> Visit<'ast> for Scan {
         // edit 2..: strip each arm's leading `&` (plus any whitespace
         // between it and the sub-pattern)
         for arm in &m.arms {
-            let Pat::Reference(r) = &arm.pat else { continue };
+            let Pat::Reference(r) = &arm.pat else {
+                continue;
+            };
             let pat_start = byte_range(&arm.pat).start;
             let inner_start = byte_range(&r.pat).start;
             if inner_start > pat_start {
@@ -145,7 +147,10 @@ mod tests {
     fn seed_fires_and_rewrites() {
         let out = propose_fix("match_ref_pats", SEED).expect("matched");
         assert!(out.contains("match *x"), "scrutinee deref missing: {out}");
-        assert!(!out.contains("&Fruit::Apple") && !out.contains("&Fruit::Pear"), "leading & survived: {out}");
+        assert!(
+            !out.contains("&Fruit::Apple") && !out.contains("&Fruit::Pear"),
+            "leading & survived: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -216,7 +221,10 @@ mod tests {
     fn guard_rides_verbatim() {
         let src = "pub enum Fruit { Apple, Pear }\npub fn f(x: &Fruit, k: u64) -> u64 {\n    match x {\n        &Fruit::Apple if k > 1 => 1,\n        &Fruit::Pear => 2,\n    }\n}";
         let out = propose_fix("match_ref_pats", src).expect("matched");
-        assert!(out.contains("Fruit::Apple if k > 1"), "guard damaged: {out}");
+        assert!(
+            out.contains("Fruit::Apple if k > 1"),
+            "guard damaged: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

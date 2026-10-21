@@ -32,8 +32,8 @@
 
 use super::{src, SourceEdit};
 use proc_macro2::TokenTree;
-use syn::spanned::Spanned;
 use quote::ToTokens;
+use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{ExprPath, File, ItemUse, Path, UseTree};
 
@@ -224,13 +224,34 @@ mod tests {
     #[test]
     fn fires_on_every_probe_firing_shape() {
         for (buggy, fixed) in [
-            ("fn f() { let a = std::u32::MAX; }", "fn f() { let a = u32::MAX; }"),
-            ("fn f() { let a = std::i64::MIN; }", "fn f() { let a = i64::MIN; }"),
-            ("fn f() { let a = std::f64::EPSILON; }", "fn f() { let a = f64::EPSILON; }"),
-            ("fn f() { let a = std::f32::NAN; }", "fn f() { let a = f32::NAN; }"),
-            ("fn f() { let a = std::usize::MAX; }", "fn f() { let a = usize::MAX; }"),
-            ("fn f() { let a = std::f64::INFINITY; }", "fn f() { let a = f64::INFINITY; }"),
-            ("fn f() { let a = ::std::u8::MAX; }", "fn f() { let a = u8::MAX; }"),
+            (
+                "fn f() { let a = std::u32::MAX; }",
+                "fn f() { let a = u32::MAX; }",
+            ),
+            (
+                "fn f() { let a = std::i64::MIN; }",
+                "fn f() { let a = i64::MIN; }",
+            ),
+            (
+                "fn f() { let a = std::f64::EPSILON; }",
+                "fn f() { let a = f64::EPSILON; }",
+            ),
+            (
+                "fn f() { let a = std::f32::NAN; }",
+                "fn f() { let a = f32::NAN; }",
+            ),
+            (
+                "fn f() { let a = std::usize::MAX; }",
+                "fn f() { let a = usize::MAX; }",
+            ),
+            (
+                "fn f() { let a = std::f64::INFINITY; }",
+                "fn f() { let a = f64::INFINITY; }",
+            ),
+            (
+                "fn f() { let a = ::std::u8::MAX; }",
+                "fn f() { let a = u8::MAX; }",
+            ),
             (
                 "fn f() { let a = std::f64::MIN_POSITIVE; }",
                 "fn f() { let a = f64::MIN_POSITIVE; }",
@@ -239,7 +260,10 @@ mod tests {
                 "use std::u32::MAX as LEGACY_MAX;\nfn f() { let a = LEGACY_MAX; }",
                 "use u32::MAX as LEGACY_MAX;\nfn f() { let a = LEGACY_MAX; }",
             ),
-            ("use std::i16::MIN;\nfn main() {}", "use i16::MIN;\nfn main() {}"),
+            (
+                "use std::i16::MIN;\nfn main() {}",
+                "use i16::MIN;\nfn main() {}",
+            ),
         ] {
             assert_eq!(fix(buggy).as_deref(), Some(fixed), "case: {buggy}");
         }
@@ -248,10 +272,10 @@ mod tests {
     #[test]
     fn silent_on_every_non_target_shape() {
         for code in [
-            "fn f() { let a = u32::MAX; }", // already modern
-            "fn f() { let a = std::u32::MAX_VALUE; }", // no such legacy const
-            "fn f() { let a = std::f64::MAX; }", // no assoc-const twin — refuse
-            "fn f() { let a = core::u32::MAX; }", // not the std path
+            "fn f() { let a = u32::MAX; }",                      // already modern
+            "fn f() { let a = std::u32::MAX_VALUE; }",           // no such legacy const
+            "fn f() { let a = std::f64::MAX; }",                 // no assoc-const twin — refuse
+            "fn f() { let a = core::u32::MAX; }",                // not the std path
             "fn f() { let a = std::string::String::MAX_WRAP; }", // not a prim segment
         ] {
             assert_eq!(fix(code), None, "must stay silent: {code}");

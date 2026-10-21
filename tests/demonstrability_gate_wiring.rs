@@ -59,7 +59,10 @@ fn identity_policy_is_byte_identical() {
         let (routed_a, by_a) = plain.suggest_span(code, 3);
         let (routed_b, by_b) = ident.suggest_span(code, 3);
         assert_eq!(routed_a, routed_b);
-        assert_eq!(by_a, by_b, "identity policy must reproduce the default exactly");
+        assert_eq!(
+            by_a, by_b,
+            "identity policy must reproduce the default exactly"
+        );
     }
     for (_, code) in PERF_SPANS {
         let (routed_a, by_a) = plain.suggest_span(code, 3);

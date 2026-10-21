@@ -117,9 +117,9 @@ fn is_admissible_len(f: &syn::ImplItemFn) -> bool {
 }
 
 fn any_named_is_empty(i: &ItemImpl) -> bool {
-    i.items.iter().any(
-        |item| matches!(item, ImplItem::Fn(f) if f.sig.ident == "is_empty"),
-    )
+    i.items
+        .iter()
+        .any(|item| matches!(item, ImplItem::Fn(f) if f.sig.ident == "is_empty"))
 }
 
 /// The whitespace prefix of the line containing byte offset `at`, if the
@@ -210,7 +210,10 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
             )
         } else {
             let lead = if insert_at > 0
-                && source.as_bytes().get(insert_at - 1).is_some_and(u8::is_ascii_whitespace)
+                && source
+                    .as_bytes()
+                    .get(insert_at - 1)
+                    .is_some_and(u8::is_ascii_whitespace)
             {
                 ""
             } else {
@@ -257,7 +260,10 @@ mod tests {
             "method missing: {out}"
         );
         assert!(out.contains("self.len() == 0"), "body missing: {out}");
-        assert!(out.contains("    pub fn len(&self) -> usize"), "len moved: {out}");
+        assert!(
+            out.contains("    pub fn len(&self) -> usize"),
+            "len moved: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -267,7 +273,9 @@ mod tests {
         // The impl's `}` stays the LAST brace of the impl block.
         let impl_pos = out.find("impl Bag").expect("impl present");
         let is_empty_pos = out[impl_pos..].find("pub fn is_empty").expect("inserted");
-        let closing = out[impl_pos..].rfind("}\n").map_or(out.len(), |p| impl_pos + p);
+        let closing = out[impl_pos..]
+            .rfind("}\n")
+            .map_or(out.len(), |p| impl_pos + p);
         assert!(
             is_empty_pos < closing,
             "is_empty must sit inside the impl: {out}"
@@ -392,7 +400,11 @@ mod tests {
     fn two_candidates_each_get_their_method() {
         let src = "pub struct A { items: Vec<u8> }\nimpl A { pub fn len(&self) -> usize { self.items.len() } }\npub struct B { n: usize }\nimpl B { pub fn len(&self) -> usize { self.n } }";
         let out = propose_fix("len_without_is_empty", src).expect("matched");
-        assert_eq!(out.matches("pub fn is_empty(&self) -> bool").count(), 2, "{out}");
+        assert_eq!(
+            out.matches("pub fn is_empty(&self) -> bool").count(),
+            2,
+            "{out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

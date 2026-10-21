@@ -1257,7 +1257,11 @@ fn proposer_pool_candidate(_rule_id: &str, _buggy_code: &str) -> Option<String> 
 /// order), then the module-applicable proposer fix appended LAST, deduped
 /// against the collected pool (a memory trajectory may already carry the
 /// identical code).
-fn collect_pool_members(out: &mut Vec<String>, candidates: &[Candidate], proposer_fix: Option<&str>) {
+fn collect_pool_members(
+    out: &mut Vec<String>,
+    candidates: &[Candidate],
+    proposer_fix: Option<&str>,
+) {
     out.extend(candidates.iter().map(|c| c.code.clone()));
     if let Some(fix) = proposer_fix {
         if !out.iter().any(|c| c == fix) {
@@ -1381,7 +1385,10 @@ mod tests {
         assert_eq!(unique.len(), outcome.pool.len(), "pool must be deduped");
         assert_eq!(served.fixed_code, plain.fixed_code);
         assert_eq!(served.parses, plain.parses);
-        assert_eq!(served.evolution_score.to_bits(), plain.evolution_score.to_bits());
+        assert_eq!(
+            served.evolution_score.to_bits(),
+            plain.evolution_score.to_bits()
+        );
         assert_eq!(served.source, plain.source);
     }
 
@@ -1436,10 +1443,12 @@ mod tests {
         let plain = p2.heal(RULE, BUGGY, &corpus).expect("modelless serves");
         let served = outcome.result.expect("pool arm serves the same");
 
-        let proposer_fix =
-            crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
-                .expect("the needless_return proposer fires on this module");
-        assert!(proposer_fix.contains("fn bar"), "module-applicable: {proposer_fix}");
+        let proposer_fix = crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
+            .expect("the needless_return proposer fires on this module");
+        assert!(
+            proposer_fix.contains("fn bar"),
+            "module-applicable: {proposer_fix}"
+        );
         assert!(
             outcome.pool.iter().any(|c| c == &proposer_fix),
             "the proposer candidate joins the pool: {:?}",
@@ -1466,7 +1475,10 @@ mod tests {
         let mut p = make_pipeline();
         let empty: [ClippyFixEntry; 0] = [];
         let outcome = p.heal_with_pool("needless_return", BUGGY, &empty);
-        assert!(outcome.result.is_none(), "no corpus + no memory → modelless miss");
+        assert!(
+            outcome.result.is_none(),
+            "no corpus + no memory → modelless miss"
+        );
         let proposer_fix =
             crate::domains::clippy_lints::proposers::propose_fix("needless_return", BUGGY)
                 .expect("proposer fires on the module");
@@ -1485,9 +1497,8 @@ mod tests {
         const BUGGY: &str = "fn foo() -> i32 { return 42; }";
         let mut p = make_pipeline();
         let empty: [ClippyFixEntry; 0] = [];
-        let proposer_fix =
-            crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
-                .expect("proposer fires");
+        let proposer_fix = crate::domains::clippy_lints::proposers::propose_fix(RULE, BUGGY)
+            .expect("proposer fires");
         p.report_outcome(RULE, BUGGY, &proposer_fix, true, false);
         let outcome = p.heal_with_pool(RULE, BUGGY, &empty);
         let n_hits = outcome.pool.iter().filter(|c| *c == &proposer_fix).count();

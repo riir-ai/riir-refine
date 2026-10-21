@@ -30,7 +30,10 @@ fn a_lint_in_the_fix_set_is_the_freshness_delta_not_a_gap() {
     let d = delta(spans(&per_span), &fixable(), &verify());
     assert_eq!(d.delta_lints(), 1);
     assert_eq!(d.rows[0].tier, FixTier::Fixable);
-    assert_eq!(d.unfixable, 0, "the fix lane carries it — not a coverage gap");
+    assert_eq!(
+        d.unfixable, 0,
+        "the fix lane carries it — not a coverage gap"
+    );
 }
 
 #[test]
@@ -146,7 +149,10 @@ fn the_summary_line_fires_and_names_the_verify_share() {
         .expect("a fix-set-covered missing lint must announce itself");
     assert!(line.contains("1 lint at 1 span"), "{line}");
     assert!(line.contains("the leased corpus lags"), "{line}");
-    assert!(!line.contains("verify tier"), "no verify rows — no verify note");
+    assert!(
+        !line.contains("verify tier"),
+        "no verify rows — no verify note"
+    );
 
     let mixed = vec![missing(&["needless_return", "redundant_closure"])];
     let line = delta(spans(&mixed), &fixable(), &verify())
@@ -222,10 +228,10 @@ fn missing_spans_matches_the_run_summarys_own_count() {
 ))]
 #[test]
 fn a_lagging_lease_produces_a_real_freshness_delta() {
+    use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
     use crate::draft::clippy_feed::ClippyDiagnostic;
     use crate::draft::latent_matcher::LatentMatcher;
     use crate::DomainId;
-    use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
 
     const SRC: &str = "pub fn area(w: f64, h: f64) -> f64 {\n    return w * h;\n}\n";
 
@@ -257,9 +263,14 @@ fn a_lagging_lease_produces_a_real_freshness_delta() {
             suggestion: None,
         }],
     );
-    let per_span: Vec<&[String]> = spans.iter().map(|s| s.anchored_missing.as_slice()).collect();
+    let per_span: Vec<&[String]> = spans
+        .iter()
+        .map(|s| s.anchored_missing.as_slice())
+        .collect();
     assert!(
-        per_span.iter().any(|m| m.iter().any(|l| l == "needless_return")),
+        per_span
+            .iter()
+            .any(|m| m.iter().any(|l| l == "needless_return")),
         "the producer must mark the lagging lint [no corpus rule]"
     );
 
@@ -267,7 +278,11 @@ fn a_lagging_lease_produces_a_real_freshness_delta() {
     let verify: Vec<String> = VERIFY_LINTS.iter().map(|s| (*s).to_string()).collect();
     let d = delta(per_span, &fixable, &verify);
 
-    assert_eq!(d.delta_lints(), 1, "the fix lane carries it — this is the seam");
+    assert_eq!(
+        d.delta_lints(),
+        1,
+        "the fix lane carries it — this is the seam"
+    );
     assert_eq!(d.rows[0].lint, "needless_return");
     assert_eq!(d.rows[0].tier, FixTier::Fixable);
     assert_eq!(d.unfixable, 0, "it is NOT a coverage gap");

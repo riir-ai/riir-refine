@@ -824,19 +824,9 @@ fn rank_of_set(
     };
     let query: [f32; LATENT_DIM] = ModellessEmbedder.embed(code);
     let slate = super::set_rerank::counter_anchored_slate(
-        cfg,
-        &by_domain,
-        lookup,
-        &corpus,
-        query,
-        k,
-        scratch,
-        fan,
+        cfg, &by_domain, lookup, &corpus, query, k, scratch, fan,
     );
-    let rank = slate
-        .admitted
-        .iter()
-        .position(|m| m.rule_id == rule);
+    let rank = slate.admitted.iter().position(|m| m.rule_id == rule);
     let score = rank.map_or(0.0, |i| slate.admitted[i].score.unwrap_or(0.0));
     (rank, score)
 }

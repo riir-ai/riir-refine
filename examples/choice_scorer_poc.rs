@@ -29,9 +29,7 @@ use std::time::Instant;
 use riir_refine::domain::HealDomain;
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
 use riir_refine::domains::rust_perf::RustPerfDomain;
-use riir_refine::draft::choice_scorer::{
-    ChoiceScorer, Rng, ScorerConfig, ScorerGrads, AdamW,
-};
+use riir_refine::draft::choice_scorer::{AdamW, ChoiceScorer, Rng, ScorerConfig, ScorerGrads};
 use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
 use riir_refine::draft::instantiation_rerank::rule_family;
@@ -113,40 +111,55 @@ fn build_dataset() -> Result<Dataset, String> {
         let entries: Vec<&dyn riir_refine::domain::HealEntry> = clippy
             .iter()
             .map(|e| e as &dyn riir_refine::domain::HealEntry)
-            .chain(perf.iter().map(|e| e as &dyn riir_refine::domain::HealEntry))
+            .chain(
+                perf.iter()
+                    .map(|e| e as &dyn riir_refine::domain::HealEntry),
+            )
             .collect();
         for e in entries {
             let text = format!("{}\n{}", e.rule_id(), e.buggy_code());
             let text = text.as_bytes()[..text.len().min(cfg.opt_len)].to_vec();
             rule_idx.insert(e.rule_id().to_string(), rules.len() as u32);
-            rules.push(RuleOption { rule_id: e.rule_id().to_string(), text });
+            rules.push(RuleOption {
+                rule_id: e.rule_id().to_string(),
+                text,
+            });
         }
     }
 
     // ---- labeled spans ----
     let mut spans: Vec<LabeledSpan> = Vec::new();
     for (lint, code) in CLIPPY_SPANS {
-        spans.push(LabeledSpan { rule_id: lint.to_string(), code: code.to_string(), clean: false });
+        spans.push(LabeledSpan {
+            rule_id: lint.to_string(),
+            code: code.to_string(),
+            clean: false,
+        });
     }
     for (rule, code) in PERF_SPANS {
-        spans.push(LabeledSpan { rule_id: rule.to_string(), code: code.to_string(), clean: false });
+        spans.push(LabeledSpan {
+            rule_id: rule.to_string(),
+            code: code.to_string(),
+            clean: false,
+        });
     }
     for (_tag, code) in CLEAN_SPANS {
-        spans.push(LabeledSpan { rule_id: String::new(), code: code.to_string(), clean: true });
+        spans.push(LabeledSpan {
+            rule_id: String::new(),
+            code: code.to_string(),
+            clean: true,
+        });
     }
 
     // ---- production pools per span (the canonical merge, mirrored) ----
-    let mut matcher = LatentMatcher::from_enabled_domains()
-        .map_err(|e| format!("matcher: {e}"))?;
+    let mut matcher = LatentMatcher::from_enabled_domains().map_err(|e| format!("matcher: {e}"))?;
     let mut pools = Vec::with_capacity(spans.len());
     for span in &spans {
         let mut pool_ids: Vec<u32> = Vec::new();
         if !span.clean {
             let (_routed, by_domain) = matcher.suggest_span(&span.code, POOL_TOP_K);
-            let mut all: Vec<&riir_refine::draft::corpus_index::ScoredRule> = by_domain
-                .iter()
-                .flat_map(|(_, rs)| rs.iter())
-                .collect();
+            let mut all: Vec<&riir_refine::draft::corpus_index::ScoredRule> =
+                by_domain.iter().flat_map(|(_, rs)| rs.iter()).collect();
             // MUST mirror SpanSuggestion::all_rules' canonical key.
             all.sort_unstable_by(|a, b| {
                 b.instantiates
@@ -188,7 +201,13 @@ fn build_dataset() -> Result<Dataset, String> {
         }
     }
 
-    Ok(Dataset { rules, rule_idx, spans, pools, heldout_rules })
+    Ok(Dataset {
+        rules,
+        rule_idx,
+        spans,
+        pools,
+        heldout_rules,
+    })
 }
 
 const SKIP_TEXT: &[u8] = b"skip\nno rule applies to this span";
@@ -234,7 +253,11 @@ fn training_episodes(ds: &Dataset, span_i: usize, rng: &mut Rng, out: &mut Vec<E
             }
             options.push(SKIP_RULE_IDX);
             let label = options.len() - 1;
-            out.push(Episode { ctx: span.code.as_bytes().to_vec(), options, label });
+            out.push(Episode {
+                ctx: span.code.as_bytes().to_vec(),
+                options,
+                label,
+            });
         }
         return;
     }
@@ -249,7 +272,9 @@ fn training_episodes(ds: &Dataset, span_i: usize, rng: &mut Rng, out: &mut Vec<E
     {
         let base_options = pool.clone();
         let base_label = match gold_idx {
-            Some(g) if base_options.contains(&g) => base_options.iter().position(|&x| x == g).unwrap(),
+            Some(g) if base_options.contains(&g) => {
+                base_options.iter().position(|&x| x == g).unwrap()
+            }
             _ => {
                 // gold genuinely absent from the production pool — the
                 // HONEST decline row (skip is the correct answer here).
@@ -261,8 +286,16 @@ fn training_episodes(ds: &Dataset, span_i: usize, rng: &mut Rng, out: &mut Vec<E
                     if copy > 0 {
                         shuffle_options(&mut o2, rng);
                     }
-                    let l2 = if copy == 0 { l } else { o2.iter().position(|&x| x == SKIP_RULE_IDX).unwrap() };
-                    out.push(Episode { ctx: span.code.as_bytes().to_vec(), options: o2, label: l2 });
+                    let l2 = if copy == 0 {
+                        l
+                    } else {
+                        o2.iter().position(|&x| x == SKIP_RULE_IDX).unwrap()
+                    };
+                    out.push(Episode {
+                        ctx: span.code.as_bytes().to_vec(),
+                        options: o2,
+                        label: l2,
+                    });
                 }
                 // decline rows already emitted — continue to confusers
                 // with the aug loop below.
@@ -281,7 +314,11 @@ fn training_episodes(ds: &Dataset, span_i: usize, rng: &mut Rng, out: &mut Vec<E
                 shuffle_options(&mut o2, rng);
                 o2.iter().position(|&x| x == gold_idx.unwrap()).unwrap()
             };
-            out.push(Episode { ctx: span.code.as_bytes().to_vec(), options: o2, label: l2 });
+            out.push(Episode {
+                ctx: span.code.as_bytes().to_vec(),
+                options: o2,
+                label: l2,
+            });
         }
     }
 
@@ -334,7 +371,11 @@ fn emit_confuser_episode(
     }
     shuffle_options(&mut options, rng);
     let label = options.iter().position(|&x| x == gold).unwrap();
-    out.push(Episode { ctx: span.code.as_bytes().to_vec(), options, label });
+    out.push(Episode {
+        ctx: span.code.as_bytes().to_vec(),
+        options,
+        label,
+    });
 }
 
 fn shuffle_options(options: &mut [u32], rng: &mut Rng) {
@@ -392,7 +433,8 @@ fn train(ds: &Dataset, episodes: &[Episode], tag: &str) -> ChoiceScorer {
         }
         let mut step_i = 0u64;
         for batch_start in (0..episodes.len()).step_by(BATCH) {
-            let batch: Vec<&Episode> = order[batch_start..(batch_start + BATCH).min(episodes.len())]
+            let batch: Vec<&Episode> = order
+                [batch_start..(batch_start + BATCH).min(episodes.len())]
                 .iter()
                 .map(|&i| &episodes[i])
                 .collect();
@@ -467,7 +509,12 @@ struct GateReport {
     detail: String,
 }
 
-fn evaluate(ds: &Dataset, model: &ChoiceScorer, tag: &str, shuffled: bool) -> (usize, usize, usize) {
+fn evaluate(
+    ds: &Dataset,
+    model: &ChoiceScorer,
+    tag: &str,
+    shuffled: bool,
+) -> (usize, usize, usize) {
     // returns (n_eval, scorer_correct, baseline_correct) over gold spans
     let mut pools_cache: BTreeMap<u32, Vec<f32>> = BTreeMap::new();
     let mut n = 0;
@@ -512,7 +559,8 @@ fn evaluate(ds: &Dataset, model: &ChoiceScorer, tag: &str, shuffled: bool) -> (u
         let best = logits
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.total_cmp(b.1)).map_or(0, |(i, _)| i);
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map_or(0, |(i, _)| i);
         let scorer_pick = options[best];
         let gold_pos = options.iter().position(|&x| x == gold);
         if std::env::var("CHOICE_DEBUG").is_ok() && n < 10 {
@@ -520,14 +568,23 @@ fn evaluate(ds: &Dataset, model: &ChoiceScorer, tag: &str, shuffled: bool) -> (u
             let top3: Vec<String> = {
                 let mut idxs: Vec<usize> = (0..options.len()).collect();
                 idxs.sort_by(|&a, &b| logits[b].total_cmp(&logits[a]));
-                idxs.iter().take(3).map(|&i| {
-                    let rid = if options[i] == SKIP_RULE_IDX { "skip".to_string() } else { ds.rules[options[i] as usize].rule_id.clone() };
-                    format!("{rid}({:.2})", probs[i])
-                }).collect()
+                idxs.iter()
+                    .take(3)
+                    .map(|&i| {
+                        let rid = if options[i] == SKIP_RULE_IDX {
+                            "skip".to_string()
+                        } else {
+                            ds.rules[options[i] as usize].rule_id.clone()
+                        };
+                        format!("{rid}({:.2})", probs[i])
+                    })
+                    .collect()
             };
             println!(
                 "debug[span {span_i}] gold={} (pos {:?}) picks=[{}]",
-                span.rule_id, gold_pos, top3.join(", ")
+                span.rule_id,
+                gold_pos,
+                top3.join(", ")
             );
         }
         // Baseline: the canonical merge's top-1 (pool[0]) — the production
@@ -564,15 +621,26 @@ fn calibration(ds: &Dataset, model: &ChoiceScorer) -> (f32, f32, f32, f32) {
             continue;
         }
         let pool = &ds.pools[span_i];
-        let Some(&gold) = ds.rule_idx.get(&span.rule_id) else { continue };
+        let Some(&gold) = ds.rule_idx.get(&span.rule_id) else {
+            continue;
+        };
         let mut options = pool.clone();
         options.push(SKIP_RULE_IDX);
         let opt_pools: Vec<Vec<f32>> = options
             .iter()
-            .map(|&idx| pools_cache.entry(idx).or_insert_with(|| {
-                let text = if idx == SKIP_RULE_IDX { skip_option_text() } else { ds.rules[idx as usize].text.clone() };
-                model.encode_option(&text)
-            }).clone())
+            .map(|&idx| {
+                pools_cache
+                    .entry(idx)
+                    .or_insert_with(|| {
+                        let text = if idx == SKIP_RULE_IDX {
+                            skip_option_text()
+                        } else {
+                            ds.rules[idx as usize].text.clone()
+                        };
+                        model.encode_option(&text)
+                    })
+                    .clone()
+            })
             .collect();
         let refs: Vec<&[f32]> = opt_pools.iter().map(|v| v.as_slice()).collect();
         let logits = model.forward_logits_cached(span.code.as_bytes(), &refs);
@@ -580,8 +648,12 @@ fn calibration(ds: &Dataset, model: &ChoiceScorer) -> (f32, f32, f32, f32) {
         let best = probs
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.total_cmp(b.1)).map_or(0, |(i, _)| i);
-        decisons.push(Decision { conf: probs[best], correct: options[best] == gold });
+            .max_by(|a, b| a.1.total_cmp(b.1))
+            .map_or(0, |(i, _)| i);
+        decisons.push(Decision {
+            conf: probs[best],
+            correct: options[best] == gold,
+        });
     }
     let ece_brier = |decisions: &[Decision]| -> (f32, f32) {
         const BINS: usize = 15;
@@ -618,7 +690,8 @@ fn calibration(ds: &Dataset, model: &ChoiceScorer) -> (f32, f32, f32, f32) {
             for d in &decisons {
                 // softened confidence: p' = sigmoid(logit-approx / T) — we
                 // only have probs; use the logit of the top-1 confidence.
-                let lg = (d.conf.clamp(1e-6, 1.0 - 1e-6)).ln() - ((1.0 - d.conf.clamp(1e-6, 1.0 - 1e-6)).ln());
+                let lg = (d.conf.clamp(1e-6, 1.0 - 1e-6)).ln()
+                    - ((1.0 - d.conf.clamp(1e-6, 1.0 - 1e-6)).ln());
                 let p = 1.0 / (1.0 + (-lg / t).exp());
                 let y = if d.correct { 1.0 } else { 0.0 };
                 nll += -(y * p.ln() + (1.0 - y) * (1.0 - p).ln());
@@ -636,7 +709,10 @@ fn calibration(ds: &Dataset, model: &ChoiceScorer) -> (f32, f32, f32, f32) {
             let c = d.conf.clamp(1e-6, 1.0 - 1e-6);
             let lg = c.ln() - (1.0 - c).ln();
             let p = 1.0 / (1.0 + (-lg / best_t).exp());
-            Decision { conf: p, correct: d.correct }
+            Decision {
+                conf: p,
+                correct: d.correct,
+            }
         })
         .collect();
     let (ece_p, brier_p) = ece_brier(&platt);
@@ -663,10 +739,19 @@ fn latency_gate(ds: &Dataset, model: &ChoiceScorer) -> f32 {
         options.push(SKIP_RULE_IDX);
         let opt_pools: Vec<Vec<f32>> = options
             .iter()
-            .map(|&idx| pools_cache.entry(idx).or_insert_with(|| {
-                let text = if idx == SKIP_RULE_IDX { skip_option_text() } else { ds.rules[idx as usize].text.clone() };
-                model.encode_option(&text)
-            }).clone())
+            .map(|&idx| {
+                pools_cache
+                    .entry(idx)
+                    .or_insert_with(|| {
+                        let text = if idx == SKIP_RULE_IDX {
+                            skip_option_text()
+                        } else {
+                            ds.rules[idx as usize].text.clone()
+                        };
+                        model.encode_option(&text)
+                    })
+                    .clone()
+            })
             .collect();
         let refs: Vec<&[f32]> = opt_pools.iter().map(|v| v.as_slice()).collect();
         // warm
@@ -710,7 +795,10 @@ fn load_checkpoint(path: &str) -> Result<ChoiceScorer, String> {
     if !bytes.len().is_multiple_of(4) {
         return Err("corrupt checkpoint".into());
     }
-    let flat: Vec<f32> = bytes.as_chunks::<4>().0.iter()
+    let flat: Vec<f32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
     ChoiceScorer::from_flat(ScorerConfig::default(), &flat)
@@ -727,18 +815,32 @@ fn main() {
     match mode.as_str() {
         "selftest" => {
             let ds = build_dataset().expect("dataset");
-            println!("dataset: {} rules, {} spans", ds.rules.len(), ds.spans.len());
+            println!(
+                "dataset: {} rules, {} spans",
+                ds.rules.len(),
+                ds.spans.len()
+            );
             let mut eps = Vec::new();
             let mut rng = Rng::new(AUG_SEED);
             training_episodes(&ds, 0, &mut rng, &mut eps);
             let m = ChoiceScorer::new(ScorerConfig::default(), 1);
-            let l0 = m.loss(&eps[0].ctx, option_texts(&ds, &eps[0]).as_slice(), eps[0].label);
-            println!("smoke: {} episodes for span 0, loss at init {:.4}", eps.len(), l0);
+            let l0 = m.loss(
+                &eps[0].ctx,
+                option_texts(&ds, &eps[0]).as_slice(),
+                eps[0].label,
+            );
+            println!(
+                "smoke: {} episodes for span 0, loss at init {:.4}",
+                eps.len(),
+                l0
+            );
         }
         "render" => {
             let ds = build_dataset().expect("dataset");
             let eps = render_training_set(&ds);
-            let n_held = (0..ds.spans.len()).filter(|i| span_heldout(&ds, *i)).count();
+            let n_held = (0..ds.spans.len())
+                .filter(|i| span_heldout(&ds, *i))
+                .count();
             let n_gold = ds.spans.iter().filter(|s| !s.clean).count();
             println!(
                 "render: {} rules · {} gold spans · {} clean · {} held-out spans · {} training episodes",
@@ -748,13 +850,18 @@ fn main() {
                 n_held,
                 eps.len()
             );
-            let avg_opts: f32 = eps.iter().map(|e| e.options.len()).sum::<usize>() as f32 / eps.len() as f32;
+            let avg_opts: f32 =
+                eps.iter().map(|e| e.options.len()).sum::<usize>() as f32 / eps.len() as f32;
             println!("avg options/episode: {avg_opts:.1}");
         }
         "train" | "all" => {
             let ds = build_dataset().expect("dataset");
             let eps = render_training_set(&ds);
-            println!("training on {} episodes ({} epochs, batch {BATCH}, {WORKERS} workers)", eps.len(), EPOCHS);
+            println!(
+                "training on {} episodes ({} epochs, batch {BATCH}, {WORKERS} workers)",
+                eps.len(),
+                EPOCHS
+            );
             let model = train(&ds, &eps, "train");
             let ckpt = "/tmp/choice_scorer_ckpt.bin";
             match save_checkpoint(&model, ckpt) {
@@ -768,7 +875,8 @@ fn main() {
         }
         "eval" => {
             let ds = build_dataset().expect("dataset");
-            let model = load_checkpoint("/tmp/choice_scorer_ckpt.bin").expect("checkpoint — run --train first");
+            let model = load_checkpoint("/tmp/choice_scorer_ckpt.bin")
+                .expect("checkpoint — run --train first");
             run_eval(&ds, &model);
         }
         other => println!("unknown mode {other:?} (selftest|render|train|eval|all)"),
@@ -787,19 +895,53 @@ fn run_eval(ds: &Dataset, model: &ChoiceScorer) {
 
     let pct = |c: usize, n: usize| if n > 0 { c as f32 / n as f32 } else { 0.0 };
     println!("\n-- arms (top-1 on production pools) --");
-    println!("scorer  in-dist : {}/{} ({:.1}%)", sc_in, n_in, 100.0 * pct(sc_in, n_in));
-    println!("baseline in-dist: {}/{} ({:.1}%)", bl_in, n_in, 100.0 * pct(bl_in, n_in));
-    println!("scorer  OOD     : {}/{} ({:.1}%)", sc_ood, n_ood, 100.0 * pct(sc_ood, n_ood));
-    println!("baseline OOD    : {}/{} ({:.1}%)", bl_ood, n_ood, 100.0 * pct(bl_ood, n_ood));
-    println!("frozen  in-dist : {}/{} ({:.1}%)", sc_f, n_f, 100.0 * pct(sc_f, n_f));
-    println!("shuffled control: {}/{} ({:.1}%)", sc_sh, n_sh, 100.0 * pct(sc_sh, n_sh));
+    println!(
+        "scorer  in-dist : {}/{} ({:.1}%)",
+        sc_in,
+        n_in,
+        100.0 * pct(sc_in, n_in)
+    );
+    println!(
+        "baseline in-dist: {}/{} ({:.1}%)",
+        bl_in,
+        n_in,
+        100.0 * pct(bl_in, n_in)
+    );
+    println!(
+        "scorer  OOD     : {}/{} ({:.1}%)",
+        sc_ood,
+        n_ood,
+        100.0 * pct(sc_ood, n_ood)
+    );
+    println!(
+        "baseline OOD    : {}/{} ({:.1}%)",
+        bl_ood,
+        n_ood,
+        100.0 * pct(bl_ood, n_ood)
+    );
+    println!(
+        "frozen  in-dist : {}/{} ({:.1}%)",
+        sc_f,
+        n_f,
+        100.0 * pct(sc_f, n_f)
+    );
+    println!(
+        "shuffled control: {}/{} ({:.1}%)",
+        sc_sh,
+        n_sh,
+        100.0 * pct(sc_sh, n_sh)
+    );
 
     // ---- G1: composite top-1 >= structural baseline, same fixtures ----
     let g1 = pct(sc_in, n_in) >= pct(bl_in, n_in);
     gates.push(GateReport {
         name: "G1 in-dist >= baseline",
         passed: g1,
-        detail: format!("scorer {:.1}% vs baseline {:.1}%", 100.0 * pct(sc_in, n_in), 100.0 * pct(bl_in, n_in)),
+        detail: format!(
+            "scorer {:.1}% vs baseline {:.1}%",
+            100.0 * pct(sc_in, n_in),
+            100.0 * pct(bl_in, n_in)
+        ),
     });
 
     // ---- G1-OOD: gap <= 10pp where structural holds; memorization = REFUTED ----
@@ -808,12 +950,21 @@ fn run_eval(ds: &Dataset, model: &ChoiceScorer) {
     gates.push(GateReport {
         name: "G1-OOD gap <= 10pp",
         passed: ood_gap <= 0.10,
-        detail: format!("gap {:+.1}pp (scorer {:.1}% vs baseline {:.1}%)", 100.0 * ood_gap, 100.0 * pct(sc_ood, n_ood), 100.0 * pct(bl_ood, n_ood)),
+        detail: format!(
+            "gap {:+.1}pp (scorer {:.1}% vs baseline {:.1}%)",
+            100.0 * ood_gap,
+            100.0 * pct(sc_ood, n_ood),
+            100.0 * pct(bl_ood, n_ood)
+        ),
     });
     gates.push(GateReport {
         name: "no Bench-065 memorization signature",
         passed: !memorization,
-        detail: format!("in {:.1}% vs ood {:.1}% (collapse >30pp = REFUTED)", 100.0 * pct(sc_in, n_in), 100.0 * pct(sc_ood, n_ood)),
+        detail: format!(
+            "in {:.1}% vs ood {:.1}% (collapse >30pp = REFUTED)",
+            100.0 * pct(sc_in, n_in),
+            100.0 * pct(sc_ood, n_ood)
+        ),
     });
 
     // ---- G2: latency ----
@@ -830,7 +981,12 @@ fn run_eval(ds: &Dataset, model: &ChoiceScorer) {
     gates.push(GateReport {
         name: "shuffled-context control",
         passed: shuffle_ok,
-        detail: format!("shuffled {:.1}% vs real {:.1}% (chance ~{:.1}%)", 100.0 * pct(sc_sh, n_sh), 100.0 * pct(sc_in, n_in), 100.0 * chance),
+        detail: format!(
+            "shuffled {:.1}% vs real {:.1}% (chance ~{:.1}%)",
+            100.0 * pct(sc_sh, n_sh),
+            100.0 * pct(sc_in, n_in),
+            100.0 * chance
+        ),
     });
 
     // ---- calibration ----
@@ -845,11 +1001,20 @@ fn run_eval(ds: &Dataset, model: &ChoiceScorer) {
     println!("\n-- gates --");
     let mut all_pass = true;
     for g in &gates {
-        println!("{} {:-<40} {}", if g.passed { "PASS" } else { "FAIL" }, g.name, g.detail);
+        println!(
+            "{} {:-<40} {}",
+            if g.passed { "PASS" } else { "FAIL" },
+            g.name,
+            g.detail
+        );
         all_pass &= g.passed;
     }
     println!(
         "\nVERDICT: {} — modelless default stands; see .benchmarks/098_choice_scorer_poc.md",
-        if all_pass { "GOAT CANDIDATE (gates pass — promotion is a separate owner-gated plan)" } else { "REFUTED for promotion (recorded)" }
+        if all_pass {
+            "GOAT CANDIDATE (gates pass — promotion is a separate owner-gated plan)"
+        } else {
+            "REFUTED for promotion (recorded)"
+        }
     );
 }

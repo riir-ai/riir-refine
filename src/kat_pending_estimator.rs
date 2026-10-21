@@ -693,13 +693,14 @@ mod tests {
         // another component having run first).
         let rows = two_rows();
         let wm = watermark_after_sync(&rows, &allow_policy());
-        let dir = std::env::temp_dir().join(format!(
-            "kat_wm_dir_{}_{}",
-            std::process::id(),
-            line!()
-        ));
-        let path = dir.join("net").join("mainnet").join(SyncWatermark::FILE_NAME);
-        wm.save(&path).expect("save into a never-created nested dir");
+        let dir =
+            std::env::temp_dir().join(format!("kat_wm_dir_{}_{}", std::process::id(), line!()));
+        let path = dir
+            .join("net")
+            .join("mainnet")
+            .join(SyncWatermark::FILE_NAME);
+        wm.save(&path)
+            .expect("save into a never-created nested dir");
         let (loaded, warn) = SyncWatermark::load_at(&path);
         assert!(warn.is_none());
         assert_eq!(loaded, wm);

@@ -108,11 +108,7 @@ struct Census {
 
 /// Is this ident a rename candidate head? `_x` with an alphabetic tail.
 fn is_candidate_name(name: &str) -> bool {
-    name.starts_with('_')
-        && name
-            .chars()
-            .nth(1)
-            .is_some_and(|c| c.is_ascii_alphabetic())
+    name.starts_with('_') && name.chars().nth(1).is_some_and(|c| c.is_ascii_alphabetic())
 }
 
 impl Census {
@@ -278,8 +274,7 @@ mod tests {
     fn cross_fn_unused_binding_stays() {
         // fn A uses its `_x`; fn B merely binds `_x` — B's binding keeps
         // the underscore (renaming it would birth an unused-var warning).
-        let input =
-            "fn a(_x: u8) -> u8 { _x + 1 } fn b(_x: u8) -> u8 { 2 }";
+        let input = "fn a(_x: u8) -> u8 { _x + 1 } fn b(_x: u8) -> u8 { 2 }";
         let out = propose_fix("used_underscore_binding", input).expect("fn a renames");
         assert!(
             out.contains("fn a(x: u8) -> u8 { x + 1 }"),
@@ -297,7 +292,10 @@ mod tests {
         // The binding is a module const — upstream's items shape, not ours.
         let input = "const _c: u8 = 1; fn f() -> u8 { _c + 1 }";
         let out = propose_fix("used_underscore_binding", input);
-        assert!(out.is_none(), "uses without an in-fn binding refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "uses without an in-fn binding refuse: {out:?}"
+        );
     }
 
     #[test]

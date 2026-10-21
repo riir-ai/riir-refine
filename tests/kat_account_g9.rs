@@ -83,9 +83,10 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     // Issue 126 follow-up 3 (owner 2026-10-14): the grant line names the
     // TUNA trial credit — never a KAT figure (a KAT number reads as a mint
     // promise that does not exist).
-    assert!(first.summary_lines().iter().any(|l| {
-        l.contains("grant:") && l.contains("TUNA trial credit")
-    }));
+    assert!(first
+        .summary_lines()
+        .iter()
+        .any(|l| { l.contains("grant:") && l.contains("TUNA trial credit") }));
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved
     // byte-for-byte semantics: "granted once per account key".
@@ -179,11 +180,13 @@ fn parse_kat_micro(rendered: &str) -> Option<i64> {
         return None;
     }
     let whole: i64 = whole.parse().ok()?;
-    let frac_micro: i64 = if frac.is_empty() { 0 } else { frac.parse().ok()? };
+    let frac_micro: i64 = if frac.is_empty() {
+        0
+    } else {
+        frac.parse().ok()?
+    };
     let per_kat = i64::try_from(riir_refine::kat_units::MICRO_PER_KAT).ok()?;
-    whole
-        .checked_mul(per_kat)?
-        .checked_add(frac_micro)
+    whole.checked_mul(per_kat)?.checked_add(frac_micro)
 }
 
 /// L4 value-level pin (riir-dapps Plan 035 T6, client half). The g9d pin
@@ -202,7 +205,10 @@ fn l4_free_tier_grant_display_pins_string_and_value() {
         "the free-tier grant display drifted from the committed cross-repo string"
     );
     let micro = parse_kat_micro(&rendered).expect("the pinned display shape parses");
-    assert_eq!(micro, 100_000_000, "the rendered grant must read back 10⁸ µ");
+    assert_eq!(
+        micro, 100_000_000,
+        "the rendered grant must read back 10⁸ µ"
+    );
     assert_eq!(micro, FREE_TIER_GRANT_MICRO_KAT.0);
     // The µ→whole-KAT reading is exact at this value (the WholeKat contract).
     assert_eq!(FREE_TIER_GRANT_MICRO_KAT.to_whole().map(|w| w.0), Some(100));

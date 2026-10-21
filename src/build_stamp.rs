@@ -460,12 +460,8 @@ mod tests {
         let line = text
             .lines()
             .find(|l| l.starts_with("FEATURES=\""))
-            .unwrap_or_else(|| {
-                panic!("no FEATURES=\"…\" line in scripts/manual_release.sh")
-            });
-        let set = line
-            .trim_start_matches("FEATURES=\"")
-            .trim_end_matches('"');
+            .unwrap_or_else(|| panic!("no FEATURES=\"…\" line in scripts/manual_release.sh"));
+        let set = line.trim_start_matches("FEATURES=\"").trim_end_matches('"');
         assert_eq!(
             set.split(',').map(str::to_string).collect::<Vec<_>>(),
             RELEASE_FEATURES

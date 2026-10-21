@@ -202,8 +202,8 @@ pub mod block_scrutinee;
 pub mod bool_comparison;
 pub mod byte_char_slices;
 pub mod bytes_count_to_len;
-pub mod cast_lossless;
 pub mod cast_abs_to_unsigned;
+pub mod cast_lossless;
 pub mod chunks_exact_to_as_chunks;
 pub mod clone_on_copy;
 pub mod collapsible_else_if;
@@ -212,62 +212,59 @@ pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod doc_lazy_continuation;
 pub mod doc_markdown;
+pub mod double_parens;
 pub mod empty_line_after_doc_comments;
 pub mod excessive_precision;
 pub mod explicit_auto_deref;
-pub mod match_same_arms;
-pub mod manual_string_new;
-pub mod match_like_matches_macro;
-pub mod match_ref_pats;
-pub mod tabs_in_doc_comments;
-pub mod map_clone;
-pub mod mem_replace_with_default;
-pub mod unnecessary_get_then_check;
-pub mod used_underscore_binding;
-pub mod needless_late_init;
-pub mod new_without_default;
-pub mod nonnull_unchecked_on_box_ptr;
-pub mod double_parens;
 pub mod filter_map_bool_then;
 pub mod filter_next;
 pub mod format_collect;
 pub mod from_str_radix_10;
 pub mod helpers;
 pub mod identity_op;
-pub mod io_other_error;
 pub mod into_iter_on_ref;
-pub mod iter_skip_next;
+pub mod io_other_error;
 pub mod items_after_statements;
 pub mod iter_next_loop;
 pub mod iter_nth_zero;
+pub mod iter_skip_next;
 pub mod legacy_numeric_constants;
-pub mod let_and_return;
 pub mod len_without_is_empty;
-pub mod map_flatten;
+pub mod let_and_return;
 pub mod manual_checked_ops;
 pub mod manual_clamp;
 pub mod manual_is_multiple_of;
-pub mod manual_next_back;
-pub mod manual_ok_err;
-pub mod manual_repeat_n;
 pub mod manual_let_else;
 pub mod manual_map;
+pub mod manual_next_back;
+pub mod manual_ok_err;
 pub mod manual_range_contains;
 pub mod manual_range_patterns;
+pub mod manual_repeat_n;
 pub mod manual_slice_fill;
+pub mod manual_string_new;
 pub mod manual_unwrap_or;
+pub mod map_clone;
+pub mod map_flatten;
 pub mod map_unwrap_or;
 pub mod match_bool;
+pub mod match_like_matches_macro;
+pub mod match_ref_pats;
+pub mod match_same_arms;
+pub mod mem_replace_with_default;
+pub mod multiple_bound_locations;
 pub mod needless_bool;
 pub mod needless_bool_assign;
-pub mod needless_borrowed_reference;
-pub mod multiple_bound_locations;
 pub mod needless_borrow;
+pub mod needless_borrowed_reference;
+pub mod needless_late_init;
 pub mod needless_lifetimes;
 pub mod needless_match;
 pub mod needless_pass_by_ref_mut;
 pub mod needless_range_loop;
 pub mod needless_return;
+pub mod new_without_default;
+pub mod nonnull_unchecked_on_box_ptr;
 pub mod partialeq_to_none;
 pub mod print_write_with_newline;
 pub mod ptr_arg;
@@ -288,18 +285,21 @@ pub mod single_match;
 pub mod single_match_else;
 pub mod string_lit_as_bytes;
 pub mod suboptimal_flops;
+pub mod tabs_in_doc_comments;
 pub mod to_string_in_format_args;
 pub mod uninlined_format_args;
-pub mod unreadable_literal;
+pub mod unit_arg;
 pub mod unnecessary_cast;
+pub mod unnecessary_get_then_check;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
-pub mod unit_arg;
+pub mod unreadable_literal;
 pub mod unused_unit;
 pub mod use_self;
+pub mod used_underscore_binding;
 pub mod useless_conversion;
 pub mod useless_format;
 pub mod vec_init_then_push;
@@ -1303,7 +1303,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "unnecessary_cast" => unnecessary_cast::collect_edits(source, file),
         "clone_on_copy" => clone_on_copy::collect_edits(source, file),
         // ── Batch 168 (the coverage-report re-arm pack XII — Plan 159) ──
-        "empty_line_after_doc_comments" => empty_line_after_doc_comments::collect_edits(source, file),
+        "empty_line_after_doc_comments" => {
+            empty_line_after_doc_comments::collect_edits(source, file)
+        }
         "new_without_default" => new_without_default::collect_edits(source, file),
         // ── Batch 169 (the coverage-report pack XIII — Plan 160) ──
         "match_ref_pats" => match_ref_pats::collect_edits(source, file),
@@ -1321,9 +1323,7 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         // ── Batch 185 (the coverage-report pack XVII — Plan 180) ──
         "multiple_bound_locations" => multiple_bound_locations::collect_edits(source, file),
         // ── Batch 191 (the coverage-report pack XVIII — Plan 188) ──
-        "mem_replace_with_default" => {
-            mem_replace_with_default::collect_edits(source, file)
-        }
+        "mem_replace_with_default" => mem_replace_with_default::collect_edits(source, file),
         // ── Batch 228 (the coverage-report re-arm pack XIX — Plan 230) ──
         "manual_repeat_n" => manual_repeat_n::collect_edits(source, file),
         "manual_ok_err" => manual_ok_err::collect_edits(source, file),
@@ -1332,9 +1332,7 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "assert_is_empty" => assert_is_empty::collect_edits(source, file),
         "manual_bit_width" | "mismatched_bit_width_type" => bit_width::collect_edits(source, file),
         "block_scrutinee" => block_scrutinee::collect_edits(source, file),
-        "nonnull_unchecked_on_box_ptr" => {
-            nonnull_unchecked_on_box_ptr::collect_edits(source, file)
-        }
+        "nonnull_unchecked_on_box_ptr" => nonnull_unchecked_on_box_ptr::collect_edits(source, file),
         // ── P51a post-mining intake (2026-10-14, the batch-230 self-heal
         // run's no-corpus-rule classes) ──
         "unnecessary_get_then_check" => unnecessary_get_then_check::collect_edits(source, file),

@@ -56,16 +56,28 @@ fn main() {
     let mut populations: Vec<Population> = Vec::new();
     {
         let corpus = riir_refine::build_seed_corpus();
-        populations.push(fold("clippy_lints (corpus)", &corpus.entries, corpus.entries.len()));
+        populations.push(fold(
+            "clippy_lints (corpus)",
+            &corpus.entries,
+            corpus.entries.len(),
+        ));
     }
     {
         let corpus = riir_refine::build_perf_seed_corpus();
-        populations.push(fold("rust_perf (corpus)", &corpus.entries, corpus.entries.len()));
+        populations.push(fold(
+            "rust_perf (corpus)",
+            &corpus.entries,
+            corpus.entries.len(),
+        ));
     }
     #[cfg(feature = "kernel_opt")]
     {
         let corpus = riir_refine::build_kernel_seed_corpus();
-        populations.push(fold("kernel_opt (corpus)", &corpus.entries, corpus.entries.len()));
+        populations.push(fold(
+            "kernel_opt (corpus)",
+            &corpus.entries,
+            corpus.entries.len(),
+        ));
     }
     #[cfg(feature = "sec")]
     {
@@ -75,7 +87,11 @@ fn main() {
     #[cfg(feature = "docker")]
     {
         let corpus = riir_refine::build_docker_seed_corpus();
-        populations.push(fold("docker (corpus)", &corpus.entries, corpus.entries.len()));
+        populations.push(fold(
+            "docker (corpus)",
+            &corpus.entries,
+            corpus.entries.len(),
+        ));
     }
 
     println!("── per-domain corpus population (the K>=2 precondition) ──");

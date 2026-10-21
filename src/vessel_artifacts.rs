@@ -220,10 +220,8 @@ mod tests {
     fn verify_path_roundtrips_a_tmp_file() {
         let pins = operator_pins_from(Some(&vk_hex(4))).expect("posture");
         let bytes = mint(4, 2, 1, b"file payload");
-        let tmp = std::env::temp_dir().join(format!(
-            "refine_vessel_r4_{}.rflexvsl",
-            std::process::id()
-        ));
+        let tmp =
+            std::env::temp_dir().join(format!("refine_vessel_r4_{}.rflexvsl", std::process::id()));
         std::fs::write(&tmp, &bytes).expect("write fixture");
         let v = verify_path(&tmp, &pins).expect("path verify");
         assert_eq!(v.payload(), b"file payload");

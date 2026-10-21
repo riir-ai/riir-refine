@@ -159,12 +159,16 @@ pub fn literal_density(text: &str) -> f32 {
 /// classes and their rationale.
 #[must_use]
 fn is_episode_literal(tok: &str) -> bool {
-    let t: &str = tok
-        .trim_matches(|c: char| !(c.is_ascii_alphanumeric() || c == '/' || c == '\\' || c == '_' || c == '.'));
+    let t: &str = tok.trim_matches(|c: char| {
+        !(c.is_ascii_alphanumeric() || c == '/' || c == '\\' || c == '_' || c == '.')
+    });
     if t.len() >= 24 {
         return true; // mangled names / verbatim blob fragments
     }
-    if t.len() >= 8 && t.chars().all(|c| c.is_ascii_hexdigit()) && t.chars().any(|c| c.is_ascii_alphabetic()) {
+    if t.len() >= 8
+        && t.chars().all(|c| c.is_ascii_hexdigit())
+        && t.chars().any(|c| c.is_ascii_alphabetic())
+    {
         return true; // hex hash (alphabetic-present excludes plain line numbers)
     }
     if t.len() >= 3 && t.chars().all(|c| c.is_ascii_digit()) {
@@ -325,7 +329,10 @@ mod tests {
     #[test]
     fn admit_passes_generic_insight() {
         let insight = distill(&e0507_input());
-        assert!(admit(&insight), "distilled E0507 insight must admit: {insight}");
+        assert!(
+            admit(&insight),
+            "distilled E0507 insight must admit: {insight}"
+        );
         assert!(literal_density(&insight) < INSIGHT_LITERAL_DENSITY_THETA);
     }
 
@@ -333,7 +340,8 @@ mod tests {
     /// episode by path + line numbers + hash.
     #[test]
     fn admit_refuses_literal_laden_trace() {
-        let trace = "fix failed at /Users/x/git/repo/src/lib.rs:483 hash a1b2c3d4e5f60718 line 1204";
+        let trace =
+            "fix failed at /Users/x/git/repo/src/lib.rs:483 hash a1b2c3d4e5f60718 line 1204";
         assert!(!admit(trace));
         assert!(literal_density(trace) >= INSIGHT_LITERAL_DENSITY_THETA);
     }
@@ -355,7 +363,10 @@ mod tests {
         assert!(!is_episode_literal("`x`"), "short ident is not a literal");
         assert!(!is_episode_literal("mutable"));
         assert!(!is_episode_literal("48"), "2-digit number is not a literal");
-        assert!(is_episode_literal("12345678"), "all-digit 8 chars hits the line-number class (hex needs an alphabetic)");
+        assert!(
+            is_episode_literal("12345678"),
+            "all-digit 8 chars hits the line-number class (hex needs an alphabetic)"
+        );
     }
 
     /// The length leg refuses independently of density.
@@ -390,7 +401,10 @@ mod tests {
         // 5 tokens, 1 literal -> exactly 0.2 == theta -> refuse
         let text = "one two three four 483";
         let d = literal_density(text);
-        assert!((d - 0.2_f32).abs() < 1e-6, "density should be exactly 0.2, got {d}");
+        assert!(
+            (d - 0.2_f32).abs() < 1e-6,
+            "density should be exactly 0.2, got {d}"
+        );
         assert!(!admit(text));
         // 6 tokens, 1 literal -> 1/6 < 0.2 -> admit
         let text6 = "one two three four five 483";
@@ -413,7 +427,8 @@ mod tests {
     #[test]
     fn shape_class_blanks_backticked_identifiers() {
         let a = shape_class("cannot borrow `x` as mutable, as it is behind a `&` reference");
-        let b = shape_class("cannot borrow `owned_value` as mutable, as it is behind a `&` reference");
+        let b =
+            shape_class("cannot borrow `owned_value` as mutable, as it is behind a `&` reference");
         assert_eq!(a, "cannot borrow _ as mutable");
         assert_eq!(a, b, "episode identifiers must not split the family");
     }
@@ -423,7 +438,10 @@ mod tests {
     #[test]
     fn shape_class_splits_at_clause_boundaries() {
         assert_eq!(shape_class("use of moved value: `a`"), "use of moved value");
-        assert_eq!(shape_class("  cannot   borrow\n `v`  as mutable, more"), "cannot borrow _ as mutable");
+        assert_eq!(
+            shape_class("  cannot   borrow\n `v`  as mutable, more"),
+            "cannot borrow _ as mutable"
+        );
         assert_eq!(shape_class(""), "");
     }
 

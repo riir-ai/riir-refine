@@ -98,10 +98,8 @@ mod tests {
         std::fs::write(root.join("target").join("c.rs"), "fn c() {}").expect("write c.rs");
         std::fs::write(root.join(".hidden").join("d.rs"), "fn d() {}").expect("write d.rs");
         std::fs::write(root.join("e.txt"), "not rust").expect("write e.txt");
-        std::fs::write(root.join("target-cuda-w2").join("g.rs"), "fn g() {}")
-            .expect("write g.rs");
-        std::fs::write(root.join("node_modules").join("n.rs"), "fn n() {}")
-            .expect("write n.rs");
+        std::fs::write(root.join("target-cuda-w2").join("g.rs"), "fn g() {}").expect("write g.rs");
+        std::fs::write(root.join("node_modules").join("n.rs"), "fn n() {}").expect("write n.rs");
         root
     }
 

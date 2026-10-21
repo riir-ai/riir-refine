@@ -165,12 +165,12 @@ pub mod gate_calibration;
 // and the two-head commit-chain state machine. UNGATED pure: nothing here
 // mutates anything, and no auto-serve kind is activated (owner call
 // reserved). The only filesystem surface is the store below, feature-gated.
-pub mod structural_admission;
-#[cfg(feature = "structural_admission")]
-pub mod structural_admission_store;
 pub mod gp_acquisition;
 pub mod memory;
 pub mod recorder;
+pub mod structural_admission;
+#[cfg(feature = "structural_admission")]
+pub mod structural_admission_store;
 // Issue 105: the ungated journey-credit factor (PC-ALM consumption half —
 // the driver accumulator lives in the rustc_errors domain; both selection
 // layers consume this).
@@ -614,8 +614,8 @@ pub mod frame_time_report;
 // never closes it: the split is load-bearing. Pure over its inputs, silent
 // on an empty delta.
 pub mod corpus_delta;
-pub mod scope_hint;
 pub mod downstream_hint;
+pub mod scope_hint;
 
 // The KAT run footer (2026-09-13 redesign): the glanceable 3-line billing
 // readout that replaced the two `summary_line()` walls in bin/heal.rs —
@@ -752,7 +752,7 @@ pub use domains::dist::corpus::build_dist_seed_corpus;
 // ── shader_perf domain re-exports (behind `shader_perf` feature, opt-in — Plan 134) ────────
 #[cfg(feature = "shader_perf")]
 pub use domains::shader_perf::{
-    refuses as shader_refusals, entry_stages, ShaderFamily, ShaderPerfDomain, ShaderRule,
+    entry_stages, refuses as shader_refusals, ShaderFamily, ShaderPerfDomain, ShaderRule,
     ShaderVerdict, StageSet,
 };
 

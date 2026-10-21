@@ -105,9 +105,8 @@ impl Collector<'_> {
     fn scan_call_args(&mut self, args: &Punctuated<Expr, Token![,]>) {
         for arg in args {
             if let Expr::MethodCall(mc) = arg {
-                let plain_call = mc.method == "into_iter"
-                    && mc.args.is_empty()
-                    && mc.turbofish.is_none();
+                let plain_call =
+                    mc.method == "into_iter" && mc.args.is_empty() && mc.turbofish.is_none();
                 if plain_call {
                     if let Some(text) = src(self.source, &*mc.receiver) {
                         self.edits.push(edit(arg, text));
@@ -201,8 +200,7 @@ fn caller(v: Vec<u32>) { sink(v.into_iter()); }";
     fn leaves_chained_into_iter_arg_unchanged() {
         // `v.into_iter().map(..)` is NOT a direct argument — dropping the
         // inner call would break the chain; clippy does not fire this shape.
-        let input =
-            "fn sink<I: IntoIterator<Item = u32>>(items: I) {}
+        let input = "fn sink<I: IntoIterator<Item = u32>>(items: I) {}
 fn caller(v: Vec<u32>) { sink(v.into_iter().map(|x| x * 2)); }";
         let out = propose_fix("useless_conversion", input);
         assert!(out.is_none(), "chained into_iter touched: {out:?}");
@@ -247,15 +245,24 @@ fn caller(v: Vec<u32>) { sink(v.into_iter().map(|x| x * 2)); }";
             "fn pick(flag: bool, a: u64, b: u64) -> u64 { if flag { a.into() } else { b.into() } }";
         let out = propose_fix("useless_conversion", input).expect("matched");
         assert!(out.contains("flag { a }"), "if-arm into not dropped: {out}");
-        assert!(out.contains("else { b }"), "else-arm into not dropped: {out}");
+        assert!(
+            out.contains("else { b }"),
+            "else-arm into not dropped: {out}"
+        );
     }
 
     #[test]
     fn drops_tail_into_match_arm_blocks() {
         let input = "fn pick_match(mode: u8, a: u64, b: u64) -> u64 { match mode { 0 => { a.into() } _ => { b.into() } } }";
         let out = propose_fix("useless_conversion", input).expect("matched");
-        assert!(out.contains("0 => { a }"), "match-arm into not dropped: {out}");
-        assert!(out.contains("_ => { b }"), "match-arm into not dropped: {out}");
+        assert!(
+            out.contains("0 => { a }"),
+            "match-arm into not dropped: {out}"
+        );
+        assert!(
+            out.contains("_ => { b }"),
+            "match-arm into not dropped: {out}"
+        );
     }
 
     #[test]

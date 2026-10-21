@@ -111,31 +111,85 @@ use syn::File;
 /// exemptions a repo configures are a documented over-wrap divergence
 /// (cosmetic, and the oracle lane stays exact).
 const DOC_VALID_IDENTS: &[&str] = &[
-    "KiB", "MiB", "GiB", "TiB", "PiB", "EiB",
-    "MHz", "GHz", "THz",
+    "KiB",
+    "MiB",
+    "GiB",
+    "TiB",
+    "PiB",
+    "EiB",
+    "MHz",
+    "GHz",
+    "THz",
     "AccessKit",
-    "CoAP", "CoreFoundation", "CoreGraphics", "CoreText",
+    "CoAP",
+    "CoreFoundation",
+    "CoreGraphics",
+    "CoreText",
     "DevOps",
-    "Direct2D", "Direct3D", "DirectWrite", "DirectX",
+    "Direct2D",
+    "Direct3D",
+    "DirectWrite",
+    "DirectX",
     "ECMAScript",
-    "GPLv2", "GPLv3",
-    "GitHub", "GitLab",
-    "IPv4", "IPv6",
-    "InfiniBand", "RoCE",
-    "ClojureScript", "CoffeeScript", "JavaScript", "PostScript", "PureScript", "TypeScript",
-    "PowerPC", "PowerShell", "WebAssembly",
-    "NaN", "NaNs",
-    "OAuth", "GraphQL",
-    "SQLite", "MySQL", "PostgreSQL", "MariaDB", "MongoDB",
+    "GPLv2",
+    "GPLv3",
+    "GitHub",
+    "GitLab",
+    "IPv4",
+    "IPv6",
+    "InfiniBand",
+    "RoCE",
+    "ClojureScript",
+    "CoffeeScript",
+    "JavaScript",
+    "PostScript",
+    "PureScript",
+    "TypeScript",
+    "PowerPC",
+    "PowerShell",
+    "WebAssembly",
+    "NaN",
+    "NaNs",
+    "OAuth",
+    "GraphQL",
+    "SQLite",
+    "MySQL",
+    "PostgreSQL",
+    "MariaDB",
+    "MongoDB",
     "OCaml",
-    "OpenAL", "OpenDNS", "OpenGL", "OpenMP", "OpenSSH", "OpenSSL", "OpenStreetMap", "OpenTelemetry",
+    "OpenAL",
+    "OpenDNS",
+    "OpenGL",
+    "OpenMP",
+    "OpenSSH",
+    "OpenSSL",
+    "OpenStreetMap",
+    "OpenTelemetry",
     "OpenType",
-    "WebAuthn", "WebGL", "WebGL2", "WebGPU", "WebRTC", "WebSocket", "WebTransport",
-    "WebP", "OpenExr", "YCbCr", "sRGB",
+    "WebAuthn",
+    "WebGL",
+    "WebGL2",
+    "WebGPU",
+    "WebRTC",
+    "WebSocket",
+    "WebTransport",
+    "WebP",
+    "OpenExr",
+    "YCbCr",
+    "sRGB",
     "TensorFlow",
     "TrueType",
-    "iOS", "macOS", "FreeBSD", "NetBSD", "OpenBSD", "NixOS",
-    "TeX", "LaTeX", "BibTeX", "BibLaTeX",
+    "iOS",
+    "macOS",
+    "FreeBSD",
+    "NetBSD",
+    "OpenBSD",
+    "NixOS",
+    "TeX",
+    "LaTeX",
+    "BibTeX",
+    "BibLaTeX",
     "MinGW",
     "CamelCase",
 ];
@@ -196,7 +250,10 @@ pub fn doc_source_line_is_command(src: &str, offset: usize) -> bool {
     let start = before.rfind('\n').map_or(0, |i| i + 1);
     let end = src[start..].find('\n').map_or(src.len(), |i| start + i);
     let line = src[start..end].trim_start();
-    match line.strip_prefix("//!").or_else(|| line.strip_prefix("///")) {
+    match line
+        .strip_prefix("//!")
+        .or_else(|| line.strip_prefix("///"))
+    {
         Some(text) => doc_line_is_command(text),
         None => false,
     }
@@ -607,9 +664,13 @@ mod tests {
         }
         // Prose around the command line still fires; a capitalised head and
         // a lone head word are prose.
-        let src = "//! Regen the shader_perf corpus:\n//!\n//!   cargo run --bin gen_corpus\nfn go() {}";
+        let src =
+            "//! Regen the shader_perf corpus:\n//!\n//!   cargo run --bin gen_corpus\nfn go() {}";
         let out = propose_fix("doc_markdown", src).expect("fires on the prose line");
-        assert!(out.contains("`shader_perf`") && out.contains("--bin gen_corpus"), "{out}");
+        assert!(
+            out.contains("`shader_perf`") && out.contains("--bin gen_corpus"),
+            "{out}"
+        );
         assert!(propose_fix("doc_markdown", "/// Python runs shader_perf.\nfn go() {}").is_some());
         assert!(propose_fix("doc_markdown", "/// cargo\nfn go() {}").is_none());
     }
@@ -621,7 +682,10 @@ mod tests {
         let at = |needle: &str| src.find(needle).unwrap();
         assert!(probe(src, at("gen_corpus")));
         assert!(!probe(src, at("shader_perf")));
-        assert!(!probe(src, at("run x")), "a string literal is not a doc line");
+        assert!(
+            !probe(src, at("run x")),
+            "a string literal is not a doc line"
+        );
         assert!(!probe(src, src.len() + 5), "out-of-range offset");
     }
 
@@ -633,7 +697,14 @@ mod tests {
 
     #[test]
     fn valid_idents_stay_silent() {
-        for ident in ["macOS", "GraphQL", "sRGB", "WebAssembly", "MySQL", "CamelCase"] {
+        for ident in [
+            "macOS",
+            "GraphQL",
+            "sRGB",
+            "WebAssembly",
+            "MySQL",
+            "CamelCase",
+        ] {
             let src = format!("/// The {ident} lane.\nfn go() {{}}");
             assert!(
                 propose_fix("doc_markdown", &src).is_none(),
@@ -705,7 +776,8 @@ mod tests {
         // THE load-bearing safety property: a string literal containing
         // doc-shaped text is never an attribute — a line scan would
         // backtick (and so rewrite) STRING CONTENT here.
-        let src = "fn fixture() -> &'static str {\n    \"/// the shader_perf lane\\n\"\n}\nfn go() {}";
+        let src =
+            "fn fixture() -> &'static str {\n    \"/// the shader_perf lane\\n\"\n}\nfn go() {}";
         assert!(propose_fix("doc_markdown", src).is_none());
     }
 
@@ -740,7 +812,10 @@ mod tests {
             let out = propose_fix("doc_markdown", &src).expect("fires");
             assert!(out.contains(wrapped), "{url} -> {out}");
             assert!(syn::parse_file(&out).is_ok(), "{out}");
-            assert!(!out.contains(&format!("`{url}`")), "backtick shape is wrong: {out}");
+            assert!(
+                !out.contains(&format!("`{url}`")),
+                "backtick shape is wrong: {out}"
+            );
         }
     }
 
@@ -806,7 +881,8 @@ mod tests {
         // backticks the rustdoc path and breaks the link — a break the
         // compile gate cannot certify (broken intra-doc links are a rustdoc
         // diagnostic, not a rustc one).
-        let src = "/// [`DelegationAuthoriser`](super::delegation::DelegationAuthoriser)\nfn go() {}";
+        let src =
+            "/// [`DelegationAuthoriser`](super::delegation::DelegationAuthoriser)\nfn go() {}";
         assert!(propose_fix("doc_markdown", src).is_none(), "{src}");
         // Reference-style and plain-text link shapes too:
         for src in [

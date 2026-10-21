@@ -47,9 +47,7 @@ const BY_REF_ADAPTERS: [&str; 3] = ["iter", "values", "keys"];
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut scan = Scan {
-        edits: Vec::new(),
-    };
+    let mut scan = Scan { edits: Vec::new() };
     scan.visit_file(file);
     scan.edits
 }
@@ -88,14 +86,19 @@ enum Body {
 fn closure_body_shape(body: &Expr, param: &str) -> Option<Body> {
     let is_param = |e: &Expr| -> bool {
         let Expr::Path(p) = e else { return false };
-        p.qself.is_none() && p.path.leading_colon.is_none() && p.path.segments.len() == 1
+        p.qself.is_none()
+            && p.path.leading_colon.is_none()
+            && p.path.segments.len() == 1
             && p.path.segments[0].arguments.is_none()
             && p.path.segments[0].ident == param
     };
     match body {
         Expr::MethodCall(mc) => {
-            if mc.method == "clone" && mc.args.is_empty() && mc.turbofish.is_none()
-                && mc.attrs.is_empty() && is_param(&mc.receiver)
+            if mc.method == "clone"
+                && mc.args.is_empty()
+                && mc.turbofish.is_none()
+                && mc.attrs.is_empty()
+                && is_param(&mc.receiver)
             {
                 Some(Body::Clone)
             } else {
@@ -116,11 +119,16 @@ fn closure_body_shape(body: &Expr, param: &str) -> Option<Body> {
 impl<'ast> Visit<'ast> for Scan {
     fn visit_expr_method_call(&mut self, mc: &'ast syn::ExprMethodCall) {
         syn::visit::visit_expr_method_call(self, mc);
-        if mc.method != "map" || mc.turbofish.is_some() || mc.args.len() != 1 || !mc.attrs.is_empty()
+        if mc.method != "map"
+            || mc.turbofish.is_some()
+            || mc.args.len() != 1
+            || !mc.attrs.is_empty()
         {
             return;
         }
-        let Expr::Closure(c) = &mc.args[0] else { return };
+        let Expr::Closure(c) = &mc.args[0] else {
+            return;
+        };
         if !c.attrs.is_empty() {
             return;
         }
@@ -128,12 +136,16 @@ impl<'ast> Visit<'ast> for Scan {
         if c.inputs.len() != 1 {
             return;
         }
-        let syn::Pat::Ident(pi) = &c.inputs[0] else { return };
+        let syn::Pat::Ident(pi) = &c.inputs[0] else {
+            return;
+        };
         if pi.by_ref.is_some() || pi.mutability.is_some() || pi.subpat.is_some() {
             return;
         }
         let param = pi.ident.to_string();
-        let Some(shape) = closure_body_shape(&c.body, &param) else { return };
+        let Some(shape) = closure_body_shape(&c.body, &param) else {
+            return;
+        };
         if !chain_is_by_ref(&mc.receiver) {
             return;
         }
@@ -201,7 +213,8 @@ mod tests {
         // probe: clippy fires with an EMPTY suggestion (Copy-only
         // deletion); on owned non-Copy iterators that would erase a real
         // clone — refused (the documented divergence)
-        let src = "pub fn f(v: Vec<u8>) -> Vec<u8> {\n    v.into_iter().map(|x| x.clone()).collect()\n}";
+        let src =
+            "pub fn f(v: Vec<u8>) -> Vec<u8> {\n    v.into_iter().map(|x| x.clone()).collect()\n}";
         assert!(propose_fix("map_clone", src).is_none());
     }
 
@@ -215,14 +228,16 @@ mod tests {
     #[test]
     fn arbitrary_method_refuses() {
         // probe mc_arbitrary: a different method is not the identity
-        let src = "pub fn f(v: &Vec<String>) -> Vec<usize> {\n    v.iter().map(|x| x.len()).collect()\n}";
+        let src =
+            "pub fn f(v: &Vec<String>) -> Vec<usize> {\n    v.iter().map(|x| x.len()).collect()\n}";
         assert!(propose_fix("map_clone", src).is_none());
     }
 
     #[test]
     fn no_adapter_refuses() {
         // no by-ref adapter in the chain — element kind undecidable
-        let src = "pub fn f(v: &Vec<u8>) -> Vec<u8> {\n    v.clone().map(|x| x.clone()).collect()\n}";
+        let src =
+            "pub fn f(v: &Vec<u8>) -> Vec<u8> {\n    v.clone().map(|x| x.clone()).collect()\n}";
         assert!(propose_fix("map_clone", src).is_none());
     }
 
@@ -234,7 +249,8 @@ mod tests {
 
     #[test]
     fn multi_param_refuses() {
-        let src = "pub fn f(v: &Vec<u8>) -> Vec<u8> {\n    v.iter().map(|x, _| x.clone()).collect()\n}";
+        let src =
+            "pub fn f(v: &Vec<u8>) -> Vec<u8> {\n    v.iter().map(|x, _| x.clone()).collect()\n}";
         assert!(propose_fix("map_clone", src).is_none());
     }
 

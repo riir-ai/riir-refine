@@ -266,7 +266,10 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     assert!(text.contains("2 open per account"), "{text}");
     // The trust line (riir-kat Issue 006): the payer sees WHO is paid and
     // WHICH USDC mint the invoice names before scanning the QR.
-    assert!(text.contains("pays gistXmdXerQ8oWMpdxXhva65pgkAdteQJwyGLGRe5zN"), "{text}");
+    assert!(
+        text.contains("pays gistXmdXerQ8oWMpdxXhva65pgkAdteQJwyGLGRe5zN"),
+        "{text}"
+    );
     assert!(
         text.contains("USDC mint 4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
         "{text}"
@@ -287,7 +290,10 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     assert_eq!(caps[0].method, "GET");
     assert!(caps[0].path.starts_with("/pay/catalog"));
     assert_eq!(caps[1].method, "GET", "the T10 pre-flight: {caps:?}");
-    assert_eq!(caps[1].path, "/", "the service-info attestation read: {caps:?}");
+    assert_eq!(
+        caps[1].path, "/",
+        "the service-info attestation read: {caps:?}"
+    );
     assert_eq!(caps[2].method, "POST");
     assert!(caps[2].path.starts_with("/pay/intent"));
     // THE WIRE PIN: the body parses, and the signature verifies against
@@ -325,7 +331,10 @@ fn topup_qr_flag_renders_the_checkout_qr_even_piped() {
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("solana:pay?example"), "the URL line: {text}");
     assert!(has_qr(&text), "the QR must render (dense): {text}");
-    assert!(text.contains("Solana Pay wallet"), "the pointer line: {text}");
+    assert!(
+        text.contains("Solana Pay wallet"),
+        "the pointer line: {text}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -459,7 +468,9 @@ fn topup_capped_with_one_open_intent_shows_it_without_asking() {
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { return };
-            let Some((path, _, _)) = read_request(&mut stream) else { continue };
+            let Some((path, _, _)) = read_request(&mut stream) else {
+                continue;
+            };
             let route = path.split('?').next().unwrap_or(&path);
             let (status, reply) = match route {
                 "/pay/catalog" => (200, CATALOG_BODY.to_string()),
@@ -490,8 +501,15 @@ fn topup_capped_with_one_open_intent_shows_it_without_asking() {
     let dir = scratch("autoshow");
     login(&dir);
     let (code, text) = heal(&dir, &mock_base, &[], &["topup", "--pack", "1", "--qr"]);
-    assert_eq!(code, Some(0), "the auto-show SUCCEEDS (exit 0, a shown checkout): output:\n{text}");
-    assert!(text.contains("already have an open checkout (seq 7)"), "{text}");
+    assert_eq!(
+        code,
+        Some(0),
+        "the auto-show SUCCEEDS (exit 0, a shown checkout): output:\n{text}"
+    );
+    assert!(
+        text.contains("already have an open checkout (seq 7)"),
+        "{text}"
+    );
     assert!(text.contains("solana:pay?example"), "{text}");
     assert!(has_qr(&text), "the shown checkout's QR: {text}");
     let _ = std::fs::remove_dir_all(&dir);
@@ -522,7 +540,10 @@ fn pick_latest_shows_the_newest_without_asking() {
     assert!(
         mock.captured().iter().any(|c| c.path == "/pay/intent/show"),
         "the show route was asked: {:?}",
-        mock.captured().iter().map(|c| c.path.as_str()).collect::<Vec<_>>()
+        mock.captured()
+            .iter()
+            .map(|c| c.path.as_str())
+            .collect::<Vec<_>>()
     );
     assert!(text.contains("solana:pay?example"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);
@@ -566,7 +587,10 @@ fn buy_refuses_an_amount_no_pack_matches() {
     login(&dir);
     let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "100", "kat"]);
     assert_eq!(code, Some(2), "output:\n{text}");
-    assert!(text.contains("no pack sells exactly 100.000000 KAT"), "{text}");
+    assert!(
+        text.contains("no pack sells exactly 100.000000 KAT"),
+        "{text}"
+    );
     // The signed intent was never attempted.
     assert!(
         !mock.captured().iter().any(|c| c.path == "/pay/intent"),
@@ -582,7 +606,12 @@ fn buy_pick_latest_composes_on_the_cap() {
     let mock = spawn_topup_mock("capped2");
     let dir = scratch("buycapped");
     login(&dir);
-    let (code, text) = heal(&dir, &mock.base(), &[], &["buy", "10", "kat", "--pick", "latest"]);
+    let (code, text) = heal(
+        &dir,
+        &mock.base(),
+        &[],
+        &["buy", "10", "kat", "--pick", "latest"],
+    );
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(
         text.contains("--pick latest — showing the newest checkout (seq 8)"),
@@ -622,7 +651,8 @@ fn a_stored_config_row_never_steers_the_dial() {
     login(&dir);
     // The stale row: written through the SAME writer `config set` uses,
     // into the scratch account dir the child reads via the env override.
-    riir_refine::kat_service_config::store(&dir, &decoy.base()).expect("the bookkeeping row stores");
+    riir_refine::kat_service_config::store(&dir, &decoy.base())
+        .expect("the bookkeeping row stores");
     // The env names the dial; the row names the decoy. The dial must win.
     let (code, text) = heal(&dir, &dial.base(), &[], &["kat"]);
     assert_eq!(code, Some(0), "output:\n{text}");
@@ -630,10 +660,16 @@ fn a_stored_config_row_never_steers_the_dial() {
     assert!(
         decoy.captured().is_empty(),
         "the decoy captured nothing: {:?}",
-        decoy.captured().iter().map(|c| c.path.as_str()).collect::<Vec<_>>()
+        decoy
+            .captured()
+            .iter()
+            .map(|c| c.path.as_str())
+            .collect::<Vec<_>>()
     );
     assert!(
-        dial.captured().iter().any(|c| c.path.starts_with("/history")),
+        dial.captured()
+            .iter()
+            .any(|c| c.path.starts_with("/history")),
         "the dial mock served the read"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -655,7 +691,12 @@ fn topup_show_void_flags_validate_before_any_dial() {
     assert_eq!(code, Some(2), "{text}");
     assert!(text.contains("separate actions"), "{text}");
     // Outside topup: refused at parse.
-    let (code, text) = heal(&dir, CLOSED_PORT, &[], &["account", "--history", "--show", "7"]);
+    let (code, text) = heal(
+        &dir,
+        CLOSED_PORT,
+        &[],
+        &["account", "--history", "--show", "7"],
+    );
     assert_eq!(code, Some(2), "{text}");
     assert!(text.contains("--show/--void require"), "{text}");
     let _ = std::fs::remove_dir_all(&dir);

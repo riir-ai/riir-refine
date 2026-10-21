@@ -300,7 +300,11 @@ impl CrossOooReport {
             audited_units: self.audited_units,
             unique_feature_count: self.curated_kept,
             redundant_pairs: self.redundant_pairs.len(),
-            min_cross: self.rows.iter().map(|r| r.min_cross).fold(f32::INFINITY, f32::min),
+            min_cross: self
+                .rows
+                .iter()
+                .map(|r| r.min_cross)
+                .fold(f32::INFINITY, f32::min),
         }
     }
 }
@@ -442,7 +446,11 @@ fn bank_rows_and_pairs(
     let mut all_pairs: Vec<(String, String, f32)> = Vec::new();
     for (i, (lint_a, _)) in audited.iter().enumerate() {
         for (j, (lint_b, _)) in audited.iter().enumerate().skip(i + 1) {
-            all_pairs.push((lint_a.to_string(), lint_b.to_string(), audit.cross[i * u + j]));
+            all_pairs.push((
+                lint_a.to_string(),
+                lint_b.to_string(),
+                audit.cross[i * u + j],
+            ));
         }
     }
     all_pairs.sort_by(|a, b| {
@@ -497,8 +505,11 @@ pub fn audit_pool(pool: &[LabeledSpan], cfg: &OooAuditConfig) -> CrossOooReport 
     let mut curation = CurationResult::new(u);
     greedy_curate(&audit, cfg, &mut scratch, &mut curation);
     let lint_of = |unit: usize| audited[unit].0.to_string();
-    let pruned_redundant: Vec<String> =
-        curation.pruned_redundant.iter().map(|&u| lint_of(u)).collect();
+    let pruned_redundant: Vec<String> = curation
+        .pruned_redundant
+        .iter()
+        .map(|&u| lint_of(u))
+        .collect();
     let dropped_uninterpretable: Vec<String> = curation
         .dropped_uninterpretable
         .iter()
@@ -561,7 +572,11 @@ pub fn render_report(report: &CrossOooReport) -> String {
     .ok();
 
     out.push_str("\nper-rule rows (most-entangled first):\n");
-    let _ = writeln!(out, "{:<34}{:>6}{:>8}{:>10}  partner", "rule", "spans", "ooo", "min_x");
+    let _ = writeln!(
+        out,
+        "{:<34}{:>6}{:>8}{:>10}  partner",
+        "rule", "spans", "ooo", "min_x"
+    );
     for r in &report.rows {
         let _ = writeln!(
             out,
@@ -576,7 +591,9 @@ pub fn render_report(report: &CrossOooReport) -> String {
 
     out.push_str("\nabsorption candidates (cross < 0.6, ascending):\n");
     if report.redundant_pairs.is_empty() {
-        out.push_str("  NONE — the axis is hygiene-only at this pool (Issue 098 T3 negative condition)\n");
+        out.push_str(
+            "  NONE — the axis is hygiene-only at this pool (Issue 098 T3 negative condition)\n",
+        );
     } else {
         for (a, b, c) in &report.redundant_pairs {
             let _ = writeln!(out, "  {a} <-> {b} : {c:.3}");
@@ -609,7 +626,11 @@ mod tests {
         let a = clippy_span_pool();
         let b = clippy_span_pool();
         assert_eq!(a, b, "pool build must be bit-deterministic");
-        assert!(a.len() >= 100, "expected the 3-family pool, got {}", a.len());
+        assert!(
+            a.len() >= 100,
+            "expected the 3-family pool, got {}",
+            a.len()
+        );
         // Sorted (family, id) order.
         let sorted = a
             .windows(2)
@@ -627,8 +648,18 @@ mod tests {
         // and bit-identical symmetry are the pins, not approximations.
         #![allow(clippy::float_cmp)]
         let pool = vec![
-            span("t", "a", "lint_a", "pub fn a(x: u32) -> u32 { return x * 1; }"),
-            span("t", "b", "lint_b", "pub fn b(s: &str) -> String { format!(\"{}\", s) }"),
+            span(
+                "t",
+                "a",
+                "lint_a",
+                "pub fn a(x: u32) -> u32 { return x * 1; }",
+            ),
+            span(
+                "t",
+                "b",
+                "lint_b",
+                "pub fn b(s: &str) -> String { format!(\"{}\", s) }",
+            ),
             span("t", "c", "", "pub fn clean() {}"),
         ];
         let mut sim = Vec::new();
@@ -646,7 +677,11 @@ mod tests {
         // IDF zeroes it, so their similarity stays low. (i, j) keeps the
         // row×col index notation without the literal `0 * n` erasing-op.
         let (i, j) = (0usize, 1);
-        assert!(sim[i * n + j] < 0.5, "distinct spans read {} ", sim[i * n + j]);
+        assert!(
+            sim[i * n + j] < 0.5,
+            "distinct spans read {} ",
+            sim[i * n + j]
+        );
     }
 
     #[test]
@@ -717,11 +752,14 @@ mod tests {
         assert_eq!(report.audited_units, 3);
         // The planted pair is an absorption candidate at exactly 0.0
         // (identical MEI sets — every own/other comparison ties).
-        let pair = report
-            .redundant_pairs
-            .iter()
-            .find(|(a, b, _)| (a == "rule_a" && b == "rule_dup") || (a == "rule_dup" && b == "rule_a"));
-        assert_eq!(pair.map(|p| p.2), Some(0.0), "planted duplicate must read exactly 0.0");
+        let pair = report.redundant_pairs.iter().find(|(a, b, _)| {
+            (a == "rule_a" && b == "rule_dup") || (a == "rule_dup" && b == "rule_a")
+        });
+        assert_eq!(
+            pair.map(|p| p.2),
+            Some(0.0),
+            "planted duplicate must read exactly 0.0"
+        );
         // Fig-4a greedy semantics for a PURE clone pair: the clones sit AT
         // the OOO threshold (own == other), never strictly below — ooo
         // collapses to 0.5 and the ooo filter drops BOTH members before the
@@ -731,8 +769,12 @@ mod tests {
         // pinned by the real-pool anchor tests: manual_map 0.462.)
         assert_eq!(report.curated_kept, 1, "kept: {:?}", report.rows);
         assert!(
-            report.dropped_uninterpretable.contains(&"rule_a".to_string())
-                && report.dropped_uninterpretable.contains(&"rule_dup".to_string()),
+            report
+                .dropped_uninterpretable
+                .contains(&"rule_a".to_string())
+                && report
+                    .dropped_uninterpretable
+                    .contains(&"rule_dup".to_string()),
             "dropped: {:?}",
             report.dropped_uninterpretable
         );

@@ -155,9 +155,7 @@ impl<'ast> Visit<'ast> for Scan<'ast> {
             if new_found {
                 // Indent = the whitespace between the impl's line start and
                 // the `impl` keyword; a non-whitespace prefix reads as "".
-                let line_start = self.source[..range.start]
-                    .rfind('\n')
-                    .map_or(0, |i| i + 1);
+                let line_start = self.source[..range.start].rfind('\n').map_or(0, |i| i + 1);
                 let prefix = &self.source[line_start..range.start];
                 let indent = if !prefix.is_empty() && prefix.chars().all(char::is_whitespace) {
                     prefix.to_string()
@@ -216,7 +214,8 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
 mod tests {
     use super::super::propose_fix;
 
-    const WIDG: &str = "pub struct Widg { pub x: u8 }\nimpl Widg { pub fn new() -> Self { Widg { x: 1 } } }";
+    const WIDG: &str =
+        "pub struct Widg { pub x: u8 }\nimpl Widg { pub fn new() -> Self { Widg { x: 1 } } }";
 
     #[test]
     fn seed_is_clean() {
@@ -275,7 +274,8 @@ mod tests {
 
     #[test]
     fn generic_impl_refuses() {
-        let src = "pub struct W<T> { pub x: T }\nimpl<T> W<T> { pub fn new(x: T) -> Self { W { x } } }";
+        let src =
+            "pub struct W<T> { pub x: T }\nimpl<T> W<T> { pub fn new(x: T) -> Self { W { x } } }";
         assert!(propose_fix("new_without_default", src).is_none());
     }
 

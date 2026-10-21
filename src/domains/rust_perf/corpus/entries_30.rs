@@ -418,7 +418,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::first_hit(&input.hay, input.seed, &input.sub));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 /// Bench spec for `alternation_prefix_collapse_at_build`: 64 keywords
@@ -527,7 +528,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay, &input.keywords, &input.prefix));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -631,7 +633,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay, &input.needle, input.rare_probe));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -784,7 +787,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay, &input.needle));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 /// Bench spec for `iter_count_bulk_specialization`: newline census over
@@ -900,7 +904,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count_lines(&input.text));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -1010,7 +1015,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay, &input.needle));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -1084,7 +1090,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::census(&input.hay, &input.delims));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 /// Bench spec for `utf8_fast_lane_cold_diagnostics`: chunked valid-prefix
@@ -1194,7 +1201,8 @@ pub fn run_buggy(input: &Input) {
 pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::census(&input.text));
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
@@ -1298,6 +1306,7 @@ pub fn run_fixed(input: &Input) {
     let mut r = Cursor::new(input.data.as_slice());
     std::hint::black_box(fixed::count_lines(&mut r).ok());
 }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }

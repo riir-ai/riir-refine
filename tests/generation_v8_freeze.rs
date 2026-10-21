@@ -57,7 +57,8 @@ fn freeze_and_verify_generation_v8() {
         .iter()
         .map(|(id, l)| (*id, *l))
         .collect();
-    let claims: BTreeMap<String, Vec<String>> = generations::v8_created_claims().into_iter().collect();
+    let claims: BTreeMap<String, Vec<String>> =
+        generations::v8_created_claims().into_iter().collect();
 
     let mut fresh_exclusions: Vec<String> = Vec::new();
     let mut drift: Vec<String> = Vec::new();
@@ -81,7 +82,10 @@ fn freeze_and_verify_generation_v8() {
             continue;
         }
         if !before.compiles {
-            println!("⚠ spec {}: does not compile in the bare stub — excluding", s.id);
+            println!(
+                "⚠ spec {}: does not compile in the bare stub — excluding",
+                s.id
+            );
             fresh_exclusions.push(format!("{}  # no compile", s.id));
             continue;
         }
@@ -116,7 +120,10 @@ fn freeze_and_verify_generation_v8() {
         label.sort();
         label.dedup();
         if label.is_empty() {
-            println!("⚠ spec {}: zero vocabulary lints at freeze — excluding", s.id);
+            println!(
+                "⚠ spec {}: zero vocabulary lints at freeze — excluding",
+                s.id
+            );
             fresh_exclusions.push(format!("{}  # zero vocab lints", s.id));
             continue;
         }
@@ -157,8 +164,7 @@ fn freeze_and_verify_generation_v8() {
         if resolved.is_empty() {
             println!(
                 "⚠ spec {}: SHAPE-NEGATIVE — target did not clear (persist: {:?}) — excluding",
-                s.id,
-                label
+                s.id, label
             );
             fresh_exclusions.push(format!("{}  # target persisted", s.id));
             continue;
@@ -242,9 +248,8 @@ fn freeze_and_verify_generation_v8() {
         excluded.len(),
         relabeled.len()
     );
-    let per_class: BTreeMap<&str, usize> = verified
-        .iter()
-        .fold(BTreeMap::new(), |mut m, (id, _)| {
+    let per_class: BTreeMap<&str, usize> =
+        verified.iter().fold(BTreeMap::new(), |mut m, (id, _)| {
             *m.entry(generations::v8_creation_class(id)).or_default() += 1;
             m
         });

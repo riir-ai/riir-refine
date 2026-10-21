@@ -209,7 +209,13 @@ fn record_of(candidate: &Candidate, seq: usize) -> Record {
 }
 
 fn spec_blake3_hex(record: &Record) -> String {
-    corruption::spec_blake3(&record.id, record.k, &record.code, &record.spans, &record.classes)
+    corruption::spec_blake3(
+        &record.id,
+        record.k,
+        &record.code,
+        &record.spans,
+        &record.classes,
+    )
 }
 
 fn render_code_literal(code: &str) -> String {
@@ -259,14 +265,8 @@ fn render_table(name: &str, records: &[Record]) -> String {
             "        code: {},\n",
             render_code_literal(&record.code)
         ));
-        out.push_str(&format!(
-            "        spans: &[{}],\n",
-            spans.join(", ")
-        ));
-        out.push_str(&format!(
-            "        classes: &[{}],\n",
-            classes.join(", ")
-        ));
+        out.push_str(&format!("        spans: &[{}],\n", spans.join(", ")));
+        out.push_str(&format!("        classes: &[{}],\n", classes.join(", ")));
         out.push_str(&format!("        blake3: {:?},\n", record.blake3));
         out.push_str(&format!("        seed_program: {:?},\n", record.seed_id));
         out.push_str("    },\n");

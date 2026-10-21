@@ -214,11 +214,17 @@ fn train_mode(args: &[String]) {
         data.rule_texts.len(),
         fixtures.len(),
     );
-    let tr = train(&data, &TrainConfig { steps, ..TrainConfig::default() })
-        .unwrap_or_else(|e| {
-            eprintln!("train failed: {e}");
-            std::process::exit(1);
-        });
+    let tr = train(
+        &data,
+        &TrainConfig {
+            steps,
+            ..TrainConfig::default()
+        },
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("train failed: {e}");
+        std::process::exit(1);
+    });
     std::fs::write(&out, &tr.bytes).unwrap_or_else(|e| {
         eprintln!("write {} failed: {e}", out.display());
         std::process::exit(1);
@@ -239,7 +245,10 @@ fn eval_mode(path: &str, rest: Vec<String>) {
     while let (Some(flag), val) = (it.next().map(String::as_str), it.next()) {
         if flag == "--weights" {
             let v = val.expect("--weights needs a comma list");
-            weights = v.split(',').map(|w| w.trim().parse().expect("weight")).collect();
+            weights = v
+                .split(',')
+                .map(|w| w.trim().parse().expect("weight"))
+                .collect();
         }
     }
     let bytes = std::fs::read(path).unwrap_or_else(|e| {
@@ -317,7 +326,11 @@ fn eval_mode(path: &str, rest: Vec<String>) {
     let g2_ood_no_harm = rep.trained_withheld.hits_at_1 >= rep.baseline_withheld.hits_at_1;
     let g1 = rep.regressions_vs_baseline == 0;
     let g3 = rep.clean_top1_fixable_trained <= rep.clean_top1_fixable_baseline;
-    println!("\n  G1 no-regressions: {} regressions -> {}", rep.regressions_vs_baseline, verdict(g1));
+    println!(
+        "\n  G1 no-regressions: {} regressions -> {}",
+        rep.regressions_vs_baseline,
+        verdict(g1)
+    );
     println!(
         "  G2 full-rig top-1: trained {} vs baseline {} -> {}",
         rep.trained_train.hits_at_1 + rep.trained_withheld.hits_at_1,
@@ -326,11 +339,15 @@ fn eval_mode(path: &str, rest: Vec<String>) {
     );
     println!(
         "  G2-OOD no-harm (withheld): trained {} vs baseline {} -> {}",
-        rep.trained_withheld.hits_at_1, rep.baseline_withheld.hits_at_1, verdict(g2_ood_no_harm)
+        rep.trained_withheld.hits_at_1,
+        rep.baseline_withheld.hits_at_1,
+        verdict(g2_ood_no_harm)
     );
     println!(
         "  G3 clean FP top-1: trained {} vs baseline {} -> {}",
-        rep.clean_top1_fixable_trained, rep.clean_top1_fixable_baseline, verdict(g3)
+        rep.clean_top1_fixable_trained,
+        rep.clean_top1_fixable_baseline,
+        verdict(g3)
     );
     if !rep.clean_top1_changes.is_empty() {
         println!("  clean top-1 changes (G3 evidence):");
@@ -351,7 +368,11 @@ fn eval_mode(path: &str, rest: Vec<String>) {
 }
 
 fn verdict(ok: bool) -> &'static str {
-    if ok { "PASS" } else { "FAIL" }
+    if ok {
+        "PASS"
+    } else {
+        "FAIL"
+    }
 }
 
 // Keep the matcher import referenced even though run_split_eval builds its

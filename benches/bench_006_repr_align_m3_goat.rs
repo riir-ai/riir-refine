@@ -301,8 +301,8 @@ fn mirror_table(table: &[LocAlign4]) -> Vec<LocAlign8> {
 // ── provenance (the bench_005 pattern — the instrument is cross-repo) ────
 
 fn preflight() -> (String, String) {
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../riir-reflex/scripts/bench_preflight.sh");
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../riir-reflex/scripts/bench_preflight.sh");
     if !script.exists() {
         return (
             "UNAVAILABLE".to_string(),
@@ -333,7 +333,10 @@ fn preflight() -> (String, String) {
             };
             (verdict, prov)
         }
-        Err(e) => ("UNAVAILABLE".to_string(), format!("preflight spawn failed: {e}")),
+        Err(e) => (
+            "UNAVAILABLE".to_string(),
+            format!("preflight spawn failed: {e}"),
+        ),
     }
 }
 
@@ -382,7 +385,11 @@ fn main() {
         for (a, b) in table4.iter().zip(&table8) {
             let ka = a4::cell_key(*a);
             let kb = a8::cell_key(*b);
-            assert_eq!(ka, kb, "G1 FAIL: cell_key diverges at row={} table_row={}", a.row, a.table_row);
+            assert_eq!(
+                ka, kb,
+                "G1 FAIL: cell_key diverges at row={} table_row={}",
+                a.row, a.table_row
+            );
         }
         // shape F driver agreement
         let s4 = a4::shape_f(&table4, &mut dst4);
@@ -463,11 +470,19 @@ fn main() {
         for _ in 0..MEASURED_PASSES {
             let t0 = Instant::now();
             let s = a4::shape_f(&table4, &mut dst4);
-            assert_eq!(std::hint::black_box(s), ref_a4, "G2 sink drift (shape_f/align4) at n={n}");
+            assert_eq!(
+                std::hint::black_box(s),
+                ref_a4,
+                "G2 sink drift (shape_f/align4) at n={n}"
+            );
             best_a4 = best_a4.min(t0.elapsed().as_secs_f64());
             let t0 = Instant::now();
             let s = a8::shape_f(&table8, &mut dst8);
-            assert_eq!(std::hint::black_box(s), ref_a8, "G2 sink drift (shape_f/align8) at n={n}");
+            assert_eq!(
+                std::hint::black_box(s),
+                ref_a8,
+                "G2 sink drift (shape_f/align8) at n={n}"
+            );
             best_a8 = best_a8.min(t0.elapsed().as_secs_f64());
         }
 
@@ -477,11 +492,19 @@ fn main() {
         for _ in 0..MEASURED_PASSES {
             let t0 = Instant::now();
             let s = a4::shape_c(&table4, &mut cells4);
-            assert_eq!(std::hint::black_box(s), ref_c4, "G2 sink drift (shape_c/align4) at n={n}");
+            assert_eq!(
+                std::hint::black_box(s),
+                ref_c4,
+                "G2 sink drift (shape_c/align4) at n={n}"
+            );
             best_c4 = best_c4.min(t0.elapsed().as_secs_f64());
             let t0 = Instant::now();
             let s = a8::shape_c(&table8, &mut cells8);
-            assert_eq!(std::hint::black_box(s), ref_c8, "G2 sink drift (shape_c/align8) at n={n}");
+            assert_eq!(
+                std::hint::black_box(s),
+                ref_c8,
+                "G2 sink drift (shape_c/align8) at n={n}"
+            );
             best_c8 = best_c8.min(t0.elapsed().as_secs_f64());
         }
 

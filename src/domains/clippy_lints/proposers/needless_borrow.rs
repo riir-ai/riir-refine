@@ -172,7 +172,10 @@ mod tests {
         // with no `for &str` shadow impl in std — resolution-identical strip.
         let input = "fn upper(s: &str) -> String { (&s).to_uppercase() }";
         let out = propose_fix("needless_borrow", input).expect("matched");
-        assert!(out.contains("s.to_uppercase()"), "str receiver not stripped: {out}");
+        assert!(
+            out.contains("s.to_uppercase()"),
+            "str receiver not stripped: {out}"
+        );
 
         let input2 = "fn digits(s: &str) -> usize { (&s).matches(char::is_numeric).count() }";
         let out2 = propose_fix("needless_borrow", input2).expect("matched");
@@ -199,8 +202,7 @@ mod tests {
     fn strips_mut_receiver_borrow() {
         // Probe shapes: `(&mut v).as_mut_slice()` and `(&mut v).len()` both
         // fire in real clippy with the same strip — mutability-agnostic.
-        let input =
-            "fn go(mut v: Vec<u8>) -> usize { let s = (&mut v).as_mut_slice(); s.len() }";
+        let input = "fn go(mut v: Vec<u8>) -> usize { let s = (&mut v).as_mut_slice(); s.len() }";
         let out = propose_fix("needless_borrow", input).expect("matched");
         assert!(
             out.contains("v.as_mut_slice()"),
@@ -230,15 +232,13 @@ mod tests {
             out.contains("(a + 1).len()"),
             "parens must ride through the strip: {out}"
         );
-        assert!(
-            syn::parse_file(&out).is_ok(),
-            "output must re-parse: {out}"
-        );
+        assert!(syn::parse_file(&out).is_ok(), "output must re-parse: {out}");
     }
 
     #[test]
     fn leaves_turbofished_receiver_call() {
-        let input = "fn go(v: Vec<u8>) -> usize { (&v).iter::<std::slice::Iter<'_, u8>>().count() }";
+        let input =
+            "fn go(v: Vec<u8>) -> usize { (&v).iter::<std::slice::Iter<'_, u8>>().count() }";
         let out = propose_fix("needless_borrow", input);
         assert!(out.is_none(), "turbofished call touched: {out:?}");
     }

@@ -79,7 +79,7 @@ pub struct Q2Block {
 /// 64-weight whole) consumes TWO Q8 blocks (the two 32-weight halves).
 #[derive(Clone, Copy)]
 pub struct Q8Block {
-    pub d: u16,     // f16 bit pattern
+    pub d: u16, // f16 bit pattern
     pub qs: [i8; 32],
 }
 
@@ -219,7 +219,11 @@ pub mod avx2 {
     /// `("fma")` — the accumulation contract has no scalar fallback by
     /// design (a fallback would measure a DIFFERENT kernel).
     pub unsafe fn vec_dot_q2_q8(xs: &[Q2Block], ys: &[Q8Block]) -> f32 {
-        debug_assert_eq!(ys.len(), 2 * xs.len(), "the Q2/Q8 pairing (2 y-blocks per x-block)");
+        debug_assert_eq!(
+            ys.len(),
+            2 * xs.len(),
+            "the Q2/Q8 pairing (2 y-blocks per x-block)"
+        );
         let mut acc0 = _mm256_setzero_ps();
         let mut acc1 = _mm256_setzero_ps();
         let nb = xs.len();
@@ -297,14 +301,28 @@ impl Rng {
 /// One Q2 block's worth of random fixtures: one Q2 block (packed
 /// uniform-random 2-bit codes) + its TWO Q8 blocks (i8 full range). Scales
 /// are power-of-two (f16 bits) — the G1 exactness contract's precondition.
-fn gen_fixture(rng: &mut Rng, xd_bits: u16, y0d_bits: u16, y1d_bits: u16) -> (Q2Block, [Q8Block; 2]) {
-    let mut x = Q2Block { d: xd_bits, qs: [0; 16] };
+fn gen_fixture(
+    rng: &mut Rng,
+    xd_bits: u16,
+    y0d_bits: u16,
+    y1d_bits: u16,
+) -> (Q2Block, [Q8Block; 2]) {
+    let mut x = Q2Block {
+        d: xd_bits,
+        qs: [0; 16],
+    };
     for b in x.qs.iter_mut() {
         *b = (rng.next() & 0xFF) as u8;
     }
     let mut ys = [
-        Q8Block { d: y0d_bits, qs: [0; 32] },
-        Q8Block { d: y1d_bits, qs: [0; 32] },
+        Q8Block {
+            d: y0d_bits,
+            qs: [0; 32],
+        },
+        Q8Block {
+            d: y1d_bits,
+            qs: [0; 32],
+        },
     ];
     for y in &mut ys {
         for q in y.qs.iter_mut() {
@@ -320,15 +338,33 @@ fn edge_fixtures(xd_bits: u16, yd_bits: u16, q8_extreme: i8) -> (Q2Block, [Q8Blo
     let x = Q2Block {
         d: xd_bits,
         qs: [
-            0b11_10_01_00, 0b00_01_10_11, 0b11_10_01_00, 0b00_01_10_11,
-            0b11_10_01_00, 0b00_01_10_11, 0b11_10_01_00, 0b00_01_10_11,
-            0b11_10_01_00, 0b00_01_10_11, 0b11_10_01_00, 0b00_01_10_11,
-            0b11_10_01_00, 0b00_01_10_11, 0b11_10_01_00, 0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
+            0b11_10_01_00,
+            0b00_01_10_11,
         ],
     };
     let ys = [
-        Q8Block { d: yd_bits, qs: [q8_extreme; 32] },
-        Q8Block { d: yd_bits, qs: [q8_extreme; 32] },
+        Q8Block {
+            d: yd_bits,
+            qs: [q8_extreme; 32],
+        },
+        Q8Block {
+            d: yd_bits,
+            qs: [q8_extreme; 32],
+        },
     ];
     (x, ys)
 }
@@ -401,7 +437,9 @@ fn preflight() -> (String, String) {
                 .unwrap_or_else(|| {
                     haystack
                         .lines()
-                        .find(|l| l.contains("REFUSED") || l.contains("FAIL") || l.contains("refused"))
+                        .find(|l| {
+                            l.contains("REFUSED") || l.contains("FAIL") || l.contains("refused")
+                        })
                         .unwrap_or("preflight refused (no reason line parsed)")
                         .to_string()
                 });
@@ -412,7 +450,10 @@ fn preflight() -> (String, String) {
             };
             (verdict, prov)
         }
-        Err(e) => ("UNAVAILABLE".to_string(), format!("preflight spawn failed: {e}")),
+        Err(e) => (
+            "UNAVAILABLE".to_string(),
+            format!("preflight spawn failed: {e}"),
+        ),
     }
 }
 
@@ -439,7 +480,10 @@ struct Sweep {
 }
 
 fn gen_sweep(rows: usize, k: usize, seed_offset: u64) -> Sweep {
-    assert!(k.is_multiple_of(64), "K must be a multiple of 64 (the Q2_0 layout)");
+    assert!(
+        k.is_multiple_of(64),
+        "K must be a multiple of 64 (the Q2_0 layout)"
+    );
     let mut rng = Rng::new(FIXTURE_SEED ^ seed_offset);
     let n_q2_per_row = k / 64;
     let mut out = Sweep {
@@ -475,7 +519,9 @@ fn host_gate() {
     }
     #[cfg(target_arch = "x86_64")]
     {
-        if !std::arch::is_x86_feature_detected!("avx2") || !std::arch::is_x86_feature_detected!("fma") {
+        if !std::arch::is_x86_feature_detected!("avx2")
+            || !std::arch::is_x86_feature_detected!("fma")
+        {
             say("REFUSED — avx2 and/or fma not detected; the maddubs+FMA");
             say("accumulation contract is the rule's mechanism and a fallback");
             say("would measure a DIFFERENT kernel. Nothing was measured.");
@@ -576,7 +622,9 @@ fn main() {
         let _ = s;
         g1_cases += 1;
     }
-    say(&format!("G1 PASS — {g1_cases} cases bit-identical (random + edge + multi-block)"));
+    say(&format!(
+        "G1 PASS — {g1_cases} cases bit-identical (random + edge + multi-block)"
+    ));
 
     // ══ G4 — allocation-free (the measured path, both arms) ══
     say("── G4: zero allocations in the measured path ──");
@@ -585,7 +633,10 @@ fn main() {
         let row = &sweep.rows[0];
         let ys = &sweep.ys;
         let (_, n_allocs) = alloc_armed(|| vec_dot_scalar(row, ys));
-        assert_eq!(n_allocs, 0, "G4 FAIL: the SCALAR arm allocates ({n_allocs})");
+        assert_eq!(
+            n_allocs, 0,
+            "G4 FAIL: the SCALAR arm allocates ({n_allocs})"
+        );
         #[cfg(target_arch = "x86_64")]
         {
             let (_, n_allocs) = alloc_armed(|| unsafe { avx2::vec_dot_q2_q8(row, ys) });
@@ -596,7 +647,9 @@ fn main() {
 
     // ══ G2 — the GEMV sweep, interleaved best-of-N ══
     say("── G2: GEMV sweep (rows x K), AVX2 vs naive scalar ──");
-    say(&format!("    (interleaved best-of-{MEASURED_PASSES} per shape per arm; correctness-coupled sinks)"));
+    say(&format!(
+        "    (interleaved best-of-{MEASURED_PASSES} per shape per arm; correctness-coupled sinks)"
+    ));
     let mut all_avx2_win = true;
     for &rows in &ROWS_GRID {
         for &k in &K_GRID {

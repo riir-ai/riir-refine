@@ -216,9 +216,7 @@ pub fn from_rule_outcomes(rows: &[crate::score_bench::RuleOutcome]) -> Vec<Row> 
         let domain = if raw.is_empty() { "other" } else { raw };
         // [resolved, persist, shaped, broken] — the bench_row argument
         // order, one place.
-        let e = domains
-            .entry(domain.to_string())
-            .or_insert([0usize; 4]);
+        let e = domains.entry(domain.to_string()).or_insert([0usize; 4]);
         e[0] += r.resolved;
         e[1] += r.persist;
         e[2] += r.shaped;
@@ -251,7 +249,9 @@ pub fn from_rule_outcomes(rows: &[crate::score_bench::RuleOutcome]) -> Vec<Row> 
 #[must_use]
 pub fn render_column(rows: &[Row]) -> String {
     use std::fmt::Write as _;
-    let mut out = String::from("-- demonstrability column (134 T1: selection discriminability, coverage-conditioned) --\n");
+    let mut out = String::from(
+        "-- demonstrability column (134 T1: selection discriminability, coverage-conditioned) --\n",
+    );
     let qualifying: Vec<&Row> = rows.iter().filter(|r| r.qualifies()).collect();
     let per_rule: Vec<&Row> = rows
         .iter()
@@ -343,9 +343,7 @@ struct HistoryTail {
 ///
 /// Propagates filesystem errors (the file present but unreadable). A
 /// malformed line is skipped loudly, never silently pooled into a verdict.
-pub fn standing_from_jsonl(
-    path: &std::path::Path,
-) -> std::io::Result<Option<(String, Vec<Row>)>> {
+pub fn standing_from_jsonl(path: &std::path::Path) -> std::io::Result<Option<(String, Vec<Row>)>> {
     // A missing file is the honest "not yet measured" (Ok(None)), never an
     // error — the caller prints the not-yet-measured line either way.
     let text = match std::fs::read_to_string(path) {
@@ -368,9 +366,9 @@ pub fn standing_from_jsonl(
 
 #[cfg(test)]
 mod tests {
-    use super::{bench_row, canonical_domain, render_column, standing_from_jsonl};
     #[cfg(feature = "latent_retrieval")]
     use super::eval_row;
+    use super::{bench_row, canonical_domain, render_column, standing_from_jsonl};
     use super::{Row, Source, T3_DOMAINS};
 
     fn row(domain: &str, selected: u32, rejected: u32) -> Row {
@@ -484,7 +482,15 @@ mod tests {
         // landed — shaped ⊆ resolved), rejected=persist (available, not
         // landed — the wrong_rule analog), broken = generation-side.
         let r = bench_row("clippy", None, 7, 3, 2, 5);
-        assert_eq!((r.selected, r.rejected, r.selected_partial, r.excluded_generation), (7, 3, 2, 5));
+        assert_eq!(
+            (
+                r.selected,
+                r.rejected,
+                r.selected_partial,
+                r.excluded_generation
+            ),
+            (7, 3, 2, 5)
+        );
         let c = r.constant().expect("n>0");
         assert!((c - 0.7).abs() < 1e-6, "resolved/(resolved+persist) = 7/10");
     }
@@ -505,7 +511,15 @@ mod tests {
         };
         let r = eval_row("clippy", None, &t);
         assert_eq!(r.source, Source::EvalTaxonomy);
-        assert_eq!((r.selected, r.rejected, r.selected_partial, r.excluded_generation), (13, 7, 0, 9));
+        assert_eq!(
+            (
+                r.selected,
+                r.rejected,
+                r.selected_partial,
+                r.excluded_generation
+            ),
+            (13, 7, 0, 9)
+        );
         let c = r.constant().expect("n>0");
         assert!((c - 13.0 / 20.0).abs() < 1e-6);
     }
@@ -522,7 +536,9 @@ mod tests {
             r#"{"ts":"2026-09-24T11:00:00","sha":"c","n_ran":1,"n_healable":1,"n_clean":0,"heal_rate":0.5,"created_rate":0.0,"parse_safety":1.0,"decline_correctness":1.0,"edits_total":1,"vocab_size":10,"generation":1,"demonstrability":[{"domain":"rust_perf","rule":null,"source":"score_bench","selected":2,"rejected":2,"selected_partial":1,"excluded_generation":3}]}"#,
         ];
         std::fs::write(&path, lines.join("\n") + "\n").unwrap();
-        let got = standing_from_jsonl(&path).unwrap().expect("two rows carry the field");
+        let got = standing_from_jsonl(&path)
+            .unwrap()
+            .expect("two rows carry the field");
         assert_eq!(got.0, "2026-09-24T11:00:00", "the LAST carrying row wins");
         assert_eq!(got.1.len(), 1);
         assert_eq!(got.1[0].domain, "rust_perf");
@@ -535,7 +551,9 @@ mod tests {
     fn standing_from_jsonl_none_when_file_absent_or_field_never_present() {
         let dir = std::env::temp_dir().join(format!("demo_absent_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        assert!(standing_from_jsonl(&dir.join("nope.jsonl")).unwrap().is_none());
+        assert!(standing_from_jsonl(&dir.join("nope.jsonl"))
+            .unwrap()
+            .is_none());
         // A file whose rows predate the field → None (additive law).
         let path = dir.join("old.jsonl");
         std::fs::write(
@@ -577,24 +595,40 @@ mod tests {
         ];
         let out = from_rule_outcomes(&rows);
         // Domain aggregates first (BTreeMap order), then per-rule rows.
-        let clippy = out.iter().find(|r| r.domain == "clippy").expect("clippy row");
+        let clippy = out
+            .iter()
+            .find(|r| r.domain == "clippy")
+            .expect("clippy row");
         assert!(clippy.rule.is_none());
         assert_eq!(clippy.source, Source::ScoreBench);
         // selected=resolved, rejected=persist, half-win=shaped beside,
         // broken excluded — the formula-correction pin.
         assert_eq!(
-            (clippy.selected, clippy.rejected, clippy.selected_partial, clippy.excluded_generation),
+            (
+                clippy.selected,
+                clippy.rejected,
+                clippy.selected_partial,
+                clippy.excluded_generation
+            ),
             (30, 10, 5, 2)
         );
         let c = clippy.constant().expect("n>0");
-        assert!((c - 0.75).abs() < 1e-6, "resolved/(resolved+persist) = 30/40");
+        assert!(
+            (c - 0.75).abs() < 1e-6,
+            "resolved/(resolved+persist) = 30/40"
+        );
         // The n=40 aggregate qualifies for T3; "other" does not.
         assert!(clippy.qualifies());
         let other = out.iter().find(|r| r.domain == "other").expect("other row");
-        assert!(!other.qualifies(), "attribution is membership, never a guess");
+        assert!(
+            !other.qualifies(),
+            "attribution is membership, never a guess"
+        );
         // Per-rule floor: the clippy rule is at n=40 >= 20 → a per-rule row
         // exists; the n=10 mystery rule does not.
-        assert!(out.iter().any(|r| r.rule.as_deref() == Some("needless_return")));
+        assert!(out
+            .iter()
+            .any(|r| r.rule.as_deref() == Some("needless_return")));
         assert!(!out.iter().any(|r| r.rule.as_deref() == Some("mystery")));
         // The below-floor rule contributes to its DOMAIN aggregate even
         // though it never prints per-rule (aggregation is unconditional).

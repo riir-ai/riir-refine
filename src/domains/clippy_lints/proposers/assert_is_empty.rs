@@ -216,11 +216,15 @@ fn proven_params<'i>(
     let mut out = BTreeMap::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(family) = classify_param_type(&p.ty) else { continue };
+        let Some(family) = classify_param_type(&p.ty) else {
+            continue;
+        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
@@ -360,31 +364,36 @@ mod tests {
             "fn f(a: &str, b: String, c: &String) { assert!(a.is_empty()); assert!(b.is_empty()); assert!(c.is_empty()); }",
         )
         .expect("matched");
-        assert!(out.contains("assert_eq!(a, \"\")"), "a not rewritten: {out}");
-        assert!(out.contains("assert_eq!(b, \"\")"), "b not rewritten: {out}");
-        assert!(out.contains("assert_eq!(c, \"\")"), "c not rewritten: {out}");
+        assert!(
+            out.contains("assert_eq!(a, \"\")"),
+            "a not rewritten: {out}"
+        );
+        assert!(
+            out.contains("assert_eq!(b, \"\")"),
+            "b not rewritten: {out}"
+        );
+        assert!(
+            out.contains("assert_eq!(c, \"\")"),
+            "c not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn slice_param_fires() {
-        let out = propose_fix(
-            RULE,
-            "fn f(s: &[u32]) { assert!(s.is_empty()); }",
-        )
-        .expect("matched");
-        assert!(out.contains("assert_eq!(s, [])"), "slice not rewritten: {out}");
+        let out = propose_fix(RULE, "fn f(s: &[u32]) { assert!(s.is_empty()); }").expect("matched");
+        assert!(
+            out.contains("assert_eq!(s, [])"),
+            "slice not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn vec_ref_param_fires() {
         // `&Vec<T>` re-spells the slice view — the probe-verified form.
-        let out = propose_fix(
-            RULE,
-            "fn f(v: &Vec<u32>) { assert!(v.is_empty()); }",
-        )
-        .expect("matched");
+        let out =
+            propose_fix(RULE, "fn f(v: &Vec<u32>) { assert!(v.is_empty()); }").expect("matched");
         assert!(
             out.contains("assert_eq!(v.as_slice(), [])"),
             "vec-ref not rewritten: {out}"
@@ -395,11 +404,8 @@ mod tests {
     #[test]
     fn owned_vec_param_fires() {
         // Owned `Vec<T>` spells the element type in the cast.
-        let out = propose_fix(
-            RULE,
-            "fn f(v: Vec<u32>) { assert!(v.is_empty()); }",
-        )
-        .expect("matched");
+        let out =
+            propose_fix(RULE, "fn f(v: Vec<u32>) { assert!(v.is_empty()); }").expect("matched");
         assert!(
             out.contains("assert_eq!(v, [] as [u32; 0])"),
             "owned vec not rewritten: {out}"
@@ -409,11 +415,7 @@ mod tests {
 
     #[test]
     fn negated_fires_assert_ne() {
-        let out = propose_fix(
-            RULE,
-            "fn f(s: &str) { assert!(!s.is_empty()); }",
-        )
-        .expect("matched");
+        let out = propose_fix(RULE, "fn f(s: &str) { assert!(!s.is_empty()); }").expect("matched");
         assert!(
             out.contains("assert_ne!(s, \"\")"),
             "negated not rewritten: {out}"
@@ -482,11 +484,7 @@ mod tests {
     #[test]
     fn method_chain_receiver_refuses() {
         // `s.trim().is_empty()` — the receiver is not a bare ident.
-        assert!(propose_fix(
-            RULE,
-            "fn f(s: &str) { assert!(s.trim().is_empty()); }",
-        )
-        .is_none());
+        assert!(propose_fix(RULE, "fn f(s: &str) { assert!(s.trim().is_empty()); }",).is_none());
     }
 
     #[test]
@@ -502,30 +500,20 @@ mod tests {
     #[test]
     fn mut_vec_ref_refuses() {
         // `&mut Vec<u32>` — the mut reference refuses (conservative).
-        assert!(propose_fix(
-            RULE,
-            "fn f(v: &mut Vec<u32>) { assert!(v.is_empty()); }",
-        )
-        .is_none());
+        assert!(propose_fix(RULE, "fn f(v: &mut Vec<u32>) { assert!(v.is_empty()); }",).is_none());
     }
 
     #[test]
     fn macro_expanded_receiver_refuses() {
         // A macro-expansion receiver is not a bare proven ident.
-        assert!(propose_fix(
-            RULE,
-            "fn f() { assert!(mk!().is_empty()); }",
-        )
-        .is_none());
+        assert!(propose_fix(RULE, "fn f() { assert!(mk!().is_empty()); }",).is_none());
     }
 
     #[test]
     fn comment_in_span_refuses() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(s: &str) { assert!(s /* keep */ .is_empty()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(RULE, "fn f(s: &str) { assert!(s /* keep */ .is_empty()); }",).is_none()
+        );
     }
 
     #[test]

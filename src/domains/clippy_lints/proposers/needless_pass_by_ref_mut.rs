@@ -51,8 +51,23 @@ use syn::{Expr, File, Item, Visibility};
 /// one with a `&mut self` receiver is the documented divergence — E0596,
 /// revertable by the compile gate.
 const SHARED_STD_METHODS: &[&str] = &[
-    "as_slice", "as_str", "as_deref", "as_ptr", "capacity", "clone", "contains", "first", "get",
-    "is_empty", "iter", "keys", "last", "len", "to_string", "to_vec", "values",
+    "as_slice",
+    "as_str",
+    "as_deref",
+    "as_ptr",
+    "capacity",
+    "clone",
+    "contains",
+    "first",
+    "get",
+    "is_empty",
+    "iter",
+    "keys",
+    "last",
+    "len",
+    "to_string",
+    "to_vec",
+    "values",
 ];
 
 /// One same-file method declaration (any impl block, inherent or trait).
@@ -216,7 +231,10 @@ fn eligible_receiver(m: &syn::ImplItemFn) -> Option<&syn::Receiver> {
 
 /// Does the method body use `self` only through shared borrows?
 fn body_is_shared_only(block: &syn::Block, table: &[MethodDecl]) -> bool {
-    let mut scan = SelfUseScan { table, refused: false };
+    let mut scan = SelfUseScan {
+        table,
+        refused: false,
+    };
     scan.visit_block(block);
     !scan.refused
 }
@@ -324,10 +342,7 @@ impl SelfUseScan<'_> {
         if SHARED_STD_METHODS.iter().any(|m| name == *m) {
             return true;
         }
-        let mut hits = self
-            .table
-            .iter()
-            .filter(|d| name == d.name.as_str());
+        let mut hits = self.table.iter().filter(|d| name == d.name.as_str());
         // Exactly one same-file declaration, and it takes `&self`.
         matches!((hits.next(), hits.next()), (Some(d), None) if d.receiver_is_shared)
     }
@@ -538,9 +553,9 @@ fn cascade_edits(
         let own = receiver_uses
             .iter()
             .filter(|r| r.name == c.name && c.fn_range.contains(&r.path_range.start));
-        let unique = own.clone().all(|r| {
-            table.iter().filter(|d| d.name == r.method).count() == 1
-        });
+        let unique = own
+            .clone()
+            .all(|r| table.iter().filter(|d| d.name == r.method).count() == 1);
         if unique {
             edits.push(SourceEdit {
                 start: c.pat_range.start,
@@ -604,7 +619,10 @@ mod tests {
             "{IMPL_HEAD}    fn read(&mut self) -> u32 {{ self.hits }}\n    fn run() -> u32 {{ let mut p = Probe {{ hits: 1, label: String::new() }}; let r = p.read(); let p = r; p }}\n}}\n"
         );
         let out = propose_fix("needless_pass_by_ref_mut", &input).expect("matched");
-        assert!(out.contains("let mut p"), "shadowed binding must refuse: {out}");
+        assert!(
+            out.contains("let mut p"),
+            "shadowed binding must refuse: {out}"
+        );
     }
 
     #[test]
@@ -616,9 +634,8 @@ mod tests {
 
     #[test]
     fn pub_crate_fires() {
-        let input = format!(
-            "{IMPL_HEAD}    pub(crate) fn read(&mut self) -> u32 {{ self.hits }}\n}}\n"
-        );
+        let input =
+            format!("{IMPL_HEAD}    pub(crate) fn read(&mut self) -> u32 {{ self.hits }}\n}}\n");
         let out = propose_fix("needless_pass_by_ref_mut", &input).expect("matched");
         assert!(
             out.contains("pub(crate) fn read(&self)"),
@@ -728,6 +745,9 @@ mod tests {
         );
         let out = propose_fix("needless_pass_by_ref_mut", &input).expect("matched");
         // The let-else binding carries no `mut` to strip; run() still cascades.
-        assert!(out.contains("let p = Probe"), "clean cascade must fire: {out}");
+        assert!(
+            out.contains("let p = Probe"),
+            "clean cascade must fire: {out}"
+        );
     }
 }

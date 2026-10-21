@@ -111,7 +111,9 @@ impl Collector<'_> {
         // The target must be a plain single-segment path type (no args): the
         // scalar spelling the proven map stores. References / pointers /
         // multi-segment / generic targets refuse.
-        let syn::Type::Path(tp) = &*c.ty else { return None };
+        let syn::Type::Path(tp) = &*c.ty else {
+            return None;
+        };
         if tp.qself.is_some() || tp.path.leading_colon.is_some() {
             return None;
         }
@@ -206,8 +208,8 @@ impl Collector<'_> {
 /// The int/float spellings the literal sub-arm accepts — exactly the types
 /// that HAVE a literal suffix form (`char`/`bool` have none and refuse).
 const SUFFIX_TARGETS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-    "isize", "f32", "f64",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64",
 ];
 
 /// True when the numeric token is DECIMAL — no `0x`/`0o`/`0b` radix prefix
@@ -225,15 +227,16 @@ fn is_decimal_int_token(tok: &str) -> bool {
 /// separators handled; the token is non-negative — unary-minus operands are
 /// refused upstream of this call by the direct-`Expr::Lit` guard).
 fn parse_int_value(bare: &str) -> Option<u128> {
-    let (digits, radix) = if let Some(rest) = bare.strip_prefix("0x").or_else(|| bare.strip_prefix("0X")) {
-        (rest, 16)
-    } else if let Some(rest) = bare.strip_prefix("0o").or_else(|| bare.strip_prefix("0O")) {
-        (rest, 8)
-    } else if let Some(rest) = bare.strip_prefix("0b").or_else(|| bare.strip_prefix("0B")) {
-        (rest, 2)
-    } else {
-        (bare, 10)
-    };
+    let (digits, radix) =
+        if let Some(rest) = bare.strip_prefix("0x").or_else(|| bare.strip_prefix("0X")) {
+            (rest, 16)
+        } else if let Some(rest) = bare.strip_prefix("0o").or_else(|| bare.strip_prefix("0O")) {
+            (rest, 8)
+        } else if let Some(rest) = bare.strip_prefix("0b").or_else(|| bare.strip_prefix("0B")) {
+            (rest, 2)
+        } else {
+            (bare, 10)
+        };
     let cleaned: String = digits.chars().filter(|&c| c != '_').collect();
     if cleaned.is_empty() {
         return None;
@@ -266,8 +269,8 @@ fn fits_int_target(value: u128, target: &str) -> bool {
 /// `0xFF` — no `FF` suffix exists) returns it unchanged.
 fn strip_numeric_suffix(tok: &str) -> String {
     const SUFFIXES: &[&str] = &[
-        "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-        "isize", "f32", "f64",
+        "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
+        "f32", "f64",
     ];
     for s in SUFFIXES {
         // The underscore spelling (`5_u64`) and the tight spelling (`5u64`)
@@ -467,7 +470,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 0x8000 as u64 }",
         )
         .expect("matched");
-        assert!(out.contains("0x8000_u64"), "prefix lost or no suffix: {out}");
+        assert!(
+            out.contains("0x8000_u64"),
+            "prefix lost or no suffix: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

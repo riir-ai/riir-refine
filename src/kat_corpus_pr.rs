@@ -76,7 +76,7 @@ use std::path::{Path, PathBuf};
 use blake3::Hasher as B3;
 use ed25519_dalek::{Signer as _, SigningKey};
 use riir_kat::kat_net_intent::{
-    ServiceAttestation, ServiceNet, ensure_attested_intent, intended_net_for_url,
+    ensure_attested_intent, intended_net_for_url, ServiceAttestation, ServiceNet,
 };
 
 // ── the wire mirror (golden-pinned to riir-dapps src/kat/corpuspr.rs) ──────
@@ -640,8 +640,7 @@ pub fn build_signed_pr(
     let submitter = submitter_hex.trim();
     if unhex_fixed::<16>(submitter).is_none() {
         return Err(
-            "submitter must be 32 hex chars (the 16-byte account id — the payee of record)"
-                .into(),
+            "submitter must be 32 hex chars (the 16-byte account id — the payee of record)".into(),
         );
     }
     let src_hex = hex_bytes(&ctx.src_ledger_id);
@@ -735,8 +734,7 @@ pub fn write_submission_files(dir: &Path, signed: &SignedPr) -> std::io::Result<
 }
 
 fn write_atomic_json(path: &Path, v: &serde_json::Value) -> std::io::Result<()> {
-    let body =
-        serde_json::to_string_pretty(v).map_err(std::io::Error::other)?;
+    let body = serde_json::to_string_pretty(v).map_err(std::io::Error::other)?;
     write_atomic(path, &body)
 }
 
@@ -806,11 +804,7 @@ pub trait CorpusPrWire {
     /// `GET /lease` — the manifest read (a PUBLIC read; never gated).
     fn get_lease(&self, base: &str) -> crate::kat_lease_client::HttpResponse;
     /// `GET /segment/<hex>` — one content-addressed segment.
-    fn get_segment(
-        &self,
-        base: &str,
-        id: &[u8; 32],
-    ) -> crate::kat_lease_client::HttpResponse;
+    fn get_segment(&self, base: &str, id: &[u8; 32]) -> crate::kat_lease_client::HttpResponse;
     /// `POST /corpuspr` — register one envelope.
     fn post_envelope(&self, base: &str, body: &str) -> WireReply;
     /// `POST /corpuspr/chunk` — submit one chunk's rows.
@@ -924,11 +918,7 @@ impl CorpusPrWire for HttpCorpusPrWire {
         self.get(base, "/lease")
     }
 
-    fn get_segment(
-        &self,
-        base: &str,
-        id: &[u8; 32],
-    ) -> crate::kat_lease_client::HttpResponse {
+    fn get_segment(&self, base: &str, id: &[u8; 32]) -> crate::kat_lease_client::HttpResponse {
         self.get(base, &format!("/segment/{}", hex_bytes(id)))
     }
 
@@ -970,7 +960,9 @@ pub fn read_lease_pairs(wire: &dyn CorpusPrWire, base: &str) -> Result<LeaseRead
     let body = match wire.get_lease(base) {
         HttpResponse::Ok(b) => b,
         HttpResponse::NotModified => {
-            return Err(format!("{base}/lease answered 304 without a conditional request"));
+            return Err(format!(
+                "{base}/lease answered 304 without a conditional request"
+            ));
         }
         HttpResponse::Status(s) => return Err(format!("GET {base}/lease → HTTP {s}")),
         HttpResponse::Error(e) => return Err(format!("GET {base}/lease failed: {e}")),
@@ -983,7 +975,9 @@ pub fn read_lease_pairs(wire: &dyn CorpusPrWire, base: &str) -> Result<LeaseRead
         let seg = match wire.get_segment(base, &desc.id) {
             HttpResponse::Ok(b) => b,
             HttpResponse::NotModified => {
-                return Err(format!("{base}/segment/{id_hex}: 304 without a conditional"));
+                return Err(format!(
+                    "{base}/segment/{id_hex}: 304 without a conditional"
+                ));
             }
             HttpResponse::Status(s) => {
                 return Err(format!("GET {base}/segment/{id_hex} → HTTP {s}"));
@@ -1018,21 +1012,16 @@ pub fn read_lease_pairs(wire: &dyn CorpusPrWire, base: &str) -> Result<LeaseRead
 
 /// `GET /` + the T10 parse — what the server DECLARES about itself.
 #[cfg(feature = "kat_transport")]
-fn read_attestation(
-    wire: &dyn CorpusPrWire,
-    base: &str,
-) -> Result<ServiceAttestation, String> {
+fn read_attestation(wire: &dyn CorpusPrWire, base: &str) -> Result<ServiceAttestation, String> {
     use crate::kat_lease_client::HttpResponse;
     match wire.service_info(base) {
         HttpResponse::Ok(b) => {
             riir_kat::kat_net_intent::parse_attestation(&b).map_err(|e| format!("{base}: {e}"))
         }
-        HttpResponse::NotModified | HttpResponse::Status(_) => Err(format!(
-            "{base}: the service-info read did not answer 200"
-        )),
-        HttpResponse::Error(e) => {
-            Err(format!("{base}: the service-info read failed: {e}"))
+        HttpResponse::NotModified | HttpResponse::Status(_) => {
+            Err(format!("{base}: the service-info read did not answer 200"))
         }
+        HttpResponse::Error(e) => Err(format!("{base}: the service-info read failed: {e}")),
     }
 }
 
@@ -1132,8 +1121,7 @@ fn submit_pr(
     );
     state.last_pr_seq = signed.pr_seq;
     state.updated_unix = unix_now();
-    save_pair_state(pair_dir, &state)
-        .map_err(|e| format!("cannot persist the pair state: {e}"))?;
+    save_pair_state(pair_dir, &state).map_err(|e| format!("cannot persist the pair state: {e}"))?;
     lines.push(format!(
         "envelope: {} (pr_seq {}, {} chunks)",
         if registered {
@@ -1147,11 +1135,7 @@ fn submit_pr(
     for (i, body) in signed.chunks.iter().enumerate() {
         let reply = wire.post_chunk(&ctx.dst_url, &body.to_string());
         let v = reply_json(&reply, &format!("chunk {i}"))?;
-        let get_u64 = |k: &str| {
-            v.get(k)
-                .and_then(serde_json::Value::as_u64)
-                .unwrap_or(0)
-        };
+        let get_u64 = |k: &str| v.get(k).and_then(serde_json::Value::as_u64).unwrap_or(0);
         let complete = v
             .get("pr_complete")
             .and_then(serde_json::Value::as_bool)
@@ -1233,8 +1217,7 @@ fn draft_and_maybe_submit(
         last_pr_seq: existing_last_seq,
         updated_unix: unix_now(),
     };
-    save_pair_state(pair_dir, &state)
-        .map_err(|e| format!("cannot persist the pair state: {e}"))?;
+    save_pair_state(pair_dir, &state).map_err(|e| format!("cannot persist the pair state: {e}"))?;
     let _ = append_event(
         pair_dir,
         &serde_json::json!({
@@ -1251,9 +1234,10 @@ fn draft_and_maybe_submit(
         signed.chunk_count
     ));
     if !args.submit {
-        report
-            .lines
-            .push(format!("  POST {}/corpuspr        < envelope.json", ctx.dst_url));
+        report.lines.push(format!(
+            "  POST {}/corpuspr        < envelope.json",
+            ctx.dst_url
+        ));
         report.lines.push(format!(
             "  POST {}/corpuspr/chunk  < chunk_NNNN.json (in order)",
             ctx.dst_url
@@ -1328,8 +1312,7 @@ pub fn run_gated(
         report.lines.push(format!(
             "lease read: skipped {} + {} uncarriable rows (src + dst — empty/oversized \
              fields the wire caps refuse at ingest; the chunk stays valid)",
-            src_read.skipped_uncarriable,
-            dst_read.skipped_uncarriable
+            src_read.skipped_uncarriable, dst_read.skipped_uncarriable
         ));
     }
     let rb = rebase(&src_read.rows, &dst_read.rows);
@@ -1524,7 +1507,9 @@ mod tests {
 
     #[test]
     fn chunk_plan_splits_at_chunk_rows_and_refuses_past_the_cap() {
-        let rows: Vec<PrRow> = (0..=CHUNK_ROWS).map(|i| row(&format!("r{i}"), "s", "f")).collect();
+        let rows: Vec<PrRow> = (0..=CHUNK_ROWS)
+            .map(|i| row(&format!("r{i}"), "s", "f"))
+            .collect();
         let chunks = chunk_plan(rows).expect("1025 rows → 2 chunks");
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].len(), CHUNK_ROWS);
@@ -1539,9 +1524,15 @@ mod tests {
 
     #[test]
     fn row_caps_refuse_early() {
-        assert!(row(&"x".repeat(MAX_LINT_KEY_BYTES + 1), "s", "f").validate().is_err());
-        assert!(row("r", &"x".repeat(MAX_FIELD_BYTES + 1), "f").validate().is_err());
-        assert!(row("r", "s", &"x".repeat(MAX_FIELD_BYTES + 1)).validate().is_err());
+        assert!(row(&"x".repeat(MAX_LINT_KEY_BYTES + 1), "s", "f")
+            .validate()
+            .is_err());
+        assert!(row("r", &"x".repeat(MAX_FIELD_BYTES + 1), "f")
+            .validate()
+            .is_err());
+        assert!(row("r", "s", &"x".repeat(MAX_FIELD_BYTES + 1))
+            .validate()
+            .is_err());
         assert!(row("r", "s", "f").validate().is_ok());
         let mut no_domain = row("r", "s", "f");
         no_domain.domain = None;
@@ -1576,18 +1567,43 @@ mod tests {
         save_pair_state(&pd, &st).expect("save");
         assert_eq!(load_pair_state(&pd).expect("reload").unwrap(), st);
         // Matching pass.
-        assert!(judge_pair_state(&st, "https://src.example", "https://dst.example", &[1; 32], &[2; 32]).is_ok());
+        assert!(judge_pair_state(
+            &st,
+            "https://src.example",
+            "https://dst.example",
+            &[1; 32],
+            &[2; 32]
+        )
+        .is_ok());
         // A source reset refuses, naming the direction + the remedy.
-        let err = judge_pair_state(&st, "https://src.example", "https://dst.example", &[9; 32], &[2; 32])
-            .expect_err("src reset");
+        let err = judge_pair_state(
+            &st,
+            "https://src.example",
+            "https://dst.example",
+            &[9; 32],
+            &[2; 32],
+        )
+        .expect_err("src reset");
         assert!(err.contains("SOURCE ledger id moved"), "{err}");
         // A dst reset refuses.
-        let err = judge_pair_state(&st, "https://src.example", "https://dst.example", &[1; 32], &[9; 32])
-            .expect_err("dst reset");
+        let err = judge_pair_state(
+            &st,
+            "https://src.example",
+            "https://dst.example",
+            &[1; 32],
+            &[9; 32],
+        )
+        .expect_err("dst reset");
         assert!(err.contains("DESTINATION ledger id moved"), "{err}");
         // A copied dir (host drift) refuses.
-        let err = judge_pair_state(&st, "https://other.example", "https://dst.example", &[1; 32], &[2; 32])
-            .expect_err("host drift");
+        let err = judge_pair_state(
+            &st,
+            "https://other.example",
+            "https://dst.example",
+            &[1; 32],
+            &[2; 32],
+        )
+        .expect_err("host drift");
         assert!(err.contains("another lane"), "{err}");
         // A malformed file refuses loudly (never auto-rebirth).
         std::fs::write(pd.join(PAIR_STATE_FILE), "{ nope").unwrap();
@@ -1616,19 +1632,19 @@ mod tests {
             src_ledger_id: [1; 32],
             dst_ledger_id: [2; 32],
         };
-        let draft =
-            PrDraft::build(3, vec![vec![golden_row_a(), golden_row_b()]]).expect("draft");
-        let signed = build_signed_pr(&key, &draft, &ctx, "00112233445566778899aabbccddeeff")
-            .expect("sign");
+        let draft = PrDraft::build(3, vec![vec![golden_row_a(), golden_row_b()]]).expect("draft");
+        let signed =
+            build_signed_pr(&key, &draft, &ctx, "00112233445566778899aabbccddeeff").expect("sign");
         assert_eq!(signed.envelope["licence"], "MIT");
-        assert_eq!(signed.envelope["submitter"], "00112233445566778899aabbccddeeff");
+        assert_eq!(
+            signed.envelope["submitter"],
+            "00112233445566778899aabbccddeeff"
+        );
         assert_eq!(signed.envelope["total_rows"], 2);
         // The envelope sig verifies over the RECOMPUTED top root (the
         // server's own law, checked client-side).
-        let sig = unhex_fixed::<64>(
-            signed.envelope["signature_hex"].as_str().expect("sig hex"),
-        )
-        .expect("64 bytes");
+        let sig = unhex_fixed::<64>(signed.envelope["signature_hex"].as_str().expect("sig hex"))
+            .expect("64 bytes");
         let roots: Vec<[u8; 32]> = signed.envelope["chunk_roots"]
             .as_array()
             .expect("roots")
@@ -1643,10 +1659,10 @@ mod tests {
         // The chunk sig verifies over the recomputed chunk root at its
         // index.
         let chunk = &signed.chunks[0];
-        let csig = unhex_fixed::<64>(chunk["signature_hex"].as_str().expect("sig hex"))
-            .expect("64 bytes");
-        let croot = unhex_fixed::<32>(chunk["chunk_root"].as_str().expect("root hex"))
-            .expect("32 bytes");
+        let csig =
+            unhex_fixed::<64>(chunk["signature_hex"].as_str().expect("sig hex")).expect("64 bytes");
+        let croot =
+            unhex_fixed::<32>(chunk["chunk_root"].as_str().expect("root hex")).expect("32 bytes");
         let cmsg = chunk_message(&[1; 32], &[2; 32], 3, 0, &croot);
         assert!(key
             .verifying_key()
@@ -1701,7 +1717,7 @@ mod wire_tests {
     use super::*;
     use crate::kat_lease_client::HttpResponse;
     use crate::kat_protocol_lease::{
-        CORPUS_PACK_VERSION, CorpusPack, LeaseManifest, LeaseSegmentDesc, PatternEntry,
+        CorpusPack, LeaseManifest, LeaseSegmentDesc, PatternEntry, CORPUS_PACK_VERSION,
     };
     use ed25519_dalek::Verifier as _;
     use std::cell::RefCell;
@@ -1735,7 +1751,9 @@ mod wire_tests {
         }
 
         fn post_envelope(&self, _base: &str, body: &str) -> WireReply {
-            self.posts.borrow_mut().push(("/corpuspr".into(), body.into()));
+            self.posts
+                .borrow_mut()
+                .push(("/corpuspr".into(), body.into()));
             self.replies.borrow_mut().pop_front().unwrap_or(WireReply {
                 status: 200,
                 body: br#"{"registered":true,"pr_seq":1,"chunks":1}"#.to_vec(),
@@ -1756,7 +1774,13 @@ mod wire_tests {
         }
     }
 
-    fn fixture_env(maps: &mut Maps, base: &str, env_label: &str, ledger: [u8; 32], entries: &[(&str, &str, &str)]) {
+    fn fixture_env(
+        maps: &mut Maps,
+        base: &str,
+        env_label: &str,
+        ledger: [u8; 32],
+        entries: &[(&str, &str, &str)],
+    ) {
         let pack = CorpusPack {
             pack_version: CORPUS_PACK_VERSION,
             domain: "clippy".into(),
@@ -1868,8 +1892,8 @@ mod wire_tests {
     #[test]
     fn the_gauge_is_read_only() {
         let e = e2e_fixture("gauge");
-        let gauge = run_gated(&e.root, &e.wire, &e.ctx, &pr_args(&e, None, false, false))
-            .expect("gauge");
+        let gauge =
+            run_gated(&e.root, &e.wire, &e.ctx, &pr_args(&e, None, false, false)).expect("gauge");
         assert!(
             gauge
                 .lines
@@ -1880,7 +1904,10 @@ mod wire_tests {
         );
         assert!(gauge.lines.iter().any(|l| l.starts_with("gauge:")));
         let pd = pair_dir(&e.root, &e.ctx.dst_url, &e.ctx.src_url);
-        assert!(!pd.join(PAIR_STATE_FILE).exists(), "the gauge writes nothing");
+        assert!(
+            !pd.join(PAIR_STATE_FILE).exists(),
+            "the gauge writes nothing"
+        );
         let _ = std::fs::remove_dir_all(&e.root);
     }
 
@@ -1893,10 +1920,9 @@ mod wire_tests {
         assert!(pr_dir.join("envelope.json").exists());
         assert!(pr_dir.join("chunk_0000.json").exists());
         assert!(pr_dir.join("manifest.json").exists());
-        let st: PairState = serde_json::from_str(
-            &std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap(),
-        )
-        .unwrap();
+        let st: PairState =
+            serde_json::from_str(&std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap())
+                .unwrap();
         assert_eq!(st.last_pr_seq, 0, "a draft does not consume the seq");
         assert_eq!(st.src_ledger_id, hex_bytes(&[1; 32]));
         let _ = std::fs::remove_dir_all(&e.root);
@@ -1920,10 +1946,9 @@ mod wire_tests {
             run_gated(&e.root, &e.wire, &e.ctx, &pr_args(&e, Some(1), true, true)).expect("submit");
         assert!(sub.submitted && sub.pr_complete);
         let pd = pair_dir(&e.root, &e.ctx.dst_url, &e.ctx.src_url);
-        let st: PairState = serde_json::from_str(
-            &std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap(),
-        )
-        .unwrap();
+        let st: PairState =
+            serde_json::from_str(&std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap())
+                .unwrap();
         assert_eq!(st.last_pr_seq, 1, "registration consumes the seq");
         // Posts in manifest order + the posted envelope signature
         // verifies over its recomputed top root (recompute-not-trust).
@@ -1954,7 +1979,13 @@ mod wire_tests {
     #[test]
     fn all_duplicate_refuses_with_the_remedy_line() {
         let mut maps: Maps = (HashMap::new(), HashMap::new(), HashMap::new());
-        fixture_env(&mut maps, "https://src.example", "devnet", [1; 32], &[("r1", "s1", "f1")]);
+        fixture_env(
+            &mut maps,
+            "https://src.example",
+            "devnet",
+            [1; 32],
+            &[("r1", "s1", "f1")],
+        );
         fixture_env(
             &mut maps,
             "https://dst.example",
@@ -1970,14 +2001,19 @@ mod wire_tests {
             replies: RefCell::new(VecDeque::new()),
         };
         let root = temp_root("dup");
-        let err = run_gated(&root, &wire, &ctx(), &CorpusPrArgs {
-            src: "https://src.example".into(),
-            dst: "https://dst.example".into(),
-            seq: None,
-            submitter: "00112233445566778899aabbccddeeff".into(),
-            key_file: None,
-            submit: false,
-        })
+        let err = run_gated(
+            &root,
+            &wire,
+            &ctx(),
+            &CorpusPrArgs {
+                src: "https://src.example".into(),
+                dst: "https://dst.example".into(),
+                seq: None,
+                submitter: "00112233445566778899aabbccddeeff".into(),
+                key_file: None,
+                submit: false,
+            },
+        )
         .expect_err("kept == 0 refuses");
         assert_eq!(err, "nothing new for mainnet — mine on mainnet instead");
         let _ = std::fs::remove_dir_all(&root);
@@ -2013,8 +2049,9 @@ mod wire_tests {
         });
         wire.replies.borrow_mut().push_back(WireReply {
             status: 429,
-            body: br#"{"error":"corpus-pr: per-account hourly limit reached","code":"rate_limited"}"#
-                .to_vec(),
+            body:
+                br#"{"error":"corpus-pr: per-account hourly limit reached","code":"rate_limited"}"#
+                    .to_vec(),
             transport_error: None,
         });
         let err = run_gated(
@@ -2031,16 +2068,12 @@ mod wire_tests {
             },
         )
         .expect_err("429 stops the run");
-        assert!(
-            err.contains("resume later with the SAME --seq"),
-            "{err}"
-        );
+        assert!(err.contains("resume later with the SAME --seq"), "{err}");
         // Registration still consumed the seq (the envelope landed).
         let pd = pair_dir(&root, &ctx.dst_url, &ctx.src_url);
-        let st: PairState = serde_json::from_str(
-            &std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap(),
-        )
-        .unwrap();
+        let st: PairState =
+            serde_json::from_str(&std::fs::read_to_string(pd.join(PAIR_STATE_FILE)).unwrap())
+                .unwrap();
         assert_eq!(st.last_pr_seq, 1);
         assert_eq!(wire.posts.borrow().len(), 2, "envelope + the refused chunk");
         let _ = std::fs::remove_dir_all(&root);
@@ -2093,7 +2126,13 @@ mod wire_tests {
     #[test]
     fn seg_reads_are_blake3_gated_and_manifest_tamper_refuses() {
         let mut maps: Maps = (HashMap::new(), HashMap::new(), HashMap::new());
-        fixture_env(&mut maps, "https://src.example", "devnet", [1; 32], &[("r1", "s1", "f1")]);
+        fixture_env(
+            &mut maps,
+            "https://src.example",
+            "devnet",
+            [1; 32],
+            &[("r1", "s1", "f1")],
+        );
         // A tampered segment: right id, wrong bytes (the hash check).
         let mut wire = MockWire {
             infos: maps.0,
@@ -2109,7 +2148,13 @@ mod wire_tests {
 
         // A tampered manifest: the commitment must not verify.
         let mut maps2: Maps = (HashMap::new(), HashMap::new(), HashMap::new());
-        fixture_env(&mut maps2, "https://src.example", "devnet", [1; 32], &[("r1", "s1", "f1")]);
+        fixture_env(
+            &mut maps2,
+            "https://src.example",
+            "devnet",
+            [1; 32],
+            &[("r1", "s1", "f1")],
+        );
         let mut manifest = maps2.1.remove("https://src.example").unwrap();
         manifest[4] ^= 0xff; // corrupt the epoch inside the body
         maps2.1.insert("https://src.example".into(), manifest);

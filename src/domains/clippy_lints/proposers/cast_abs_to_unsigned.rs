@@ -127,7 +127,9 @@ impl Collector<'_> {
 
 /// The single-segment no-arg path ident of a cast target, else `None`.
 fn cast_target_ident(c: &ExprCast) -> Option<String> {
-    let syn::Type::Path(tp) = &*c.ty else { return None };
+    let syn::Type::Path(tp) = &*c.ty else {
+        return None;
+    };
     if tp.qself.is_some() || tp.path.leading_colon.is_some() {
         return None;
     }
@@ -150,7 +152,9 @@ fn method_abs_call(e: &Expr) -> Option<&ExprMethodCall> {
 /// call, and path-expression receivers all refuse (the provenance map
 /// speaks only for fn-head params).
 fn method_ident_receiver(mc: &ExprMethodCall) -> Option<String> {
-    let Expr::Path(p) = &*mc.receiver else { return None };
+    let Expr::Path(p) = &*mc.receiver else {
+        return None;
+    };
     if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
         return None;
     }

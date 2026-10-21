@@ -40,7 +40,9 @@ fn matcher(latent_weight: f32, lambda: f32) -> LatentMatcher {
 }
 
 fn blended_top1(r: &EvalReport) -> f32 {
-    r.blended.recall(1).expect("no labeled spans — feature set wrong")
+    r.blended
+        .recall(1)
+        .expect("no labeled spans — feature set wrong")
 }
 
 /// Per-rule own-domain top-1 win counts over the labeled spans → skewness.
@@ -85,7 +87,10 @@ fn g3_lambda_zero_is_bit_identical() {
             }
         }
     }
-    assert!(n > 100, "G3 compared only {n} scored rules — population floor");
+    assert!(
+        n > 100,
+        "G3 compared only {n} scored rules — population floor"
+    );
 }
 
 #[test]
@@ -117,7 +122,9 @@ fn g1_lambda_sweep_per_weight() {
         DomainId::Docker,
         DomainId::Dist,
     ];
-    println!("\n  w      λ    blend@1  blend@3  win-skew   per-domain @1 (clippy perf docker dist)");
+    println!(
+        "\n  w      λ    blend@1  blend@3  win-skew   per-domain @1 (clippy perf docker dist)"
+    );
     let mut verdicts = Vec::new();
     for &w in &WEIGHTS {
         let mut rows: Vec<(f32, f32)> = Vec::new();
@@ -172,7 +179,11 @@ fn g1_top1_flips_named() {
         let (_, by) = m.suggest_span(code, 12);
         by.iter()
             .find(|(x, _)| *x == d)
-            .and_then(|(_, r)| riir_refine::draft::retrieval_eval::canonical_rank(r).first().map(|s| s.rule_id.clone()))
+            .and_then(|(_, r)| {
+                riir_refine::draft::retrieval_eval::canonical_rank(r)
+                    .first()
+                    .map(|s| s.rule_id.clone())
+            })
             .unwrap_or_default()
     };
     let (mut gained, mut lost) = (0usize, 0usize);
@@ -187,7 +198,11 @@ fn g1_top1_flips_named() {
                 span.label,
                 if hb { "GAINED" } else { "LOST" }
             );
-            if hb { gained += 1 } else { lost += 1 }
+            if hb {
+                gained += 1
+            } else {
+                lost += 1
+            }
         }
     }
     println!("  flips: gained {gained}, lost {lost}");

@@ -173,7 +173,10 @@ struct Block {
 
 impl Block {
     fn is_loop(&self) -> bool {
-        matches!(self.kind, BlockKind::Loop | BlockKind::WhileTrue | BlockKind::For)
+        matches!(
+            self.kind,
+            BlockKind::Loop | BlockKind::WhileTrue | BlockKind::For
+        )
     }
     fn is_branch(&self) -> bool {
         matches!(self.kind, BlockKind::If | BlockKind::Else)
@@ -491,7 +494,9 @@ fn per_line_rules(
     }
     // derivative-in-nonuniform-flow: fragment-stage derivative inside a
     // loop or branch.
-    if has_deriv_tok && fn_stage == Some(Stage::Fragment) && stack.iter().any(|b| b.is_loop() || b.is_branch())
+    if has_deriv_tok
+        && fn_stage == Some(Stage::Fragment)
+        && stack.iter().any(|b| b.is_loop() || b.is_branch())
     {
         findings.push(ShaderFinding {
             rule_id: "derivative-in-nonuniform-flow",
@@ -612,7 +617,11 @@ mod tests {
     use super::*;
 
     fn rule_ids(src: &str) -> Vec<&'static str> {
-        ShaderScanner.scan(src).into_iter().map(|f| f.rule_id).collect()
+        ShaderScanner
+            .scan(src)
+            .into_iter()
+            .map(|f| f.rule_id)
+            .collect()
     }
 
     #[test]
@@ -638,7 +647,11 @@ mod tests {
     #[test]
     fn bounded_loop_with_break_is_clean() {
         let src = "@fragment\nfn fs_main() -> @location(0) vec4<f32> {\n  loop {\n    if (u() > 0.5) { break; }\n  }\n  return vec4<f32>(0.0);\n}\nfn u() -> f32 { return 0.1; }\n";
-        assert_eq!(rule_ids(src), Vec::<&'static str>::new(), "bounded + no sample");
+        assert_eq!(
+            rule_ids(src),
+            Vec::<&'static str>::new(),
+            "bounded + no sample"
+        );
     }
 
     #[test]
@@ -657,7 +670,10 @@ mod tests {
     fn loop_carried_sample_in_fragment_fires() {
         let src = "@fragment\nfn fs_main(t: texture_2d<f32>, s: sampler) -> @location(0) vec4<f32> {\n  loop {\n    if (u() > 0.5) { break; }\n    let c = textureSample(t, s, vec2<f32>(0.5));\n  }\n  return vec4<f32>(0.0);\n}\nfn u() -> f32 { return 0.1; }\n";
         let rules = rule_ids(src);
-        assert!(rules.contains(&"loop-carried-sample-to-explicit-lod"), "{rules:?}");
+        assert!(
+            rules.contains(&"loop-carried-sample-to-explicit-lod"),
+            "{rules:?}"
+        );
         assert!(!rules.contains(&"unbounded-render-loop-guard"));
     }
 
@@ -671,7 +687,10 @@ mod tests {
     fn branch_divergent_sample_pair_fires() {
         let src = "@fragment\nfn fs_main(t: texture_2d<f32>, s: sampler) -> @location(0) vec4<f32> {\n  var c = vec4<f32>(0.0);\n  if (u() > 0.5) {\n    c = textureSample(t, s, vec2<f32>(0.5));\n  } else {\n    c = vec4<f32>(1.0);\n  }\n  return c;\n}\nfn u() -> f32 { return 0.1; }\n";
         let rules = rule_ids(src);
-        assert!(rules.contains(&"branch-divergent-sample-select"), "{rules:?}");
+        assert!(
+            rules.contains(&"branch-divergent-sample-select"),
+            "{rules:?}"
+        );
     }
 
     #[test]
@@ -684,7 +703,10 @@ mod tests {
     fn derivative_in_fragment_loop_fires() {
         let src = "@fragment\nfn fs_main() -> @location(0) vec4<f32> {\n  for (var i = 0; i < 4; i++) {\n    let d = fwidth(d0());\n  }\n  return vec4<f32>(0.0);\n}\nfn d0() -> f32 { return 1.0; }\n";
         let rules = rule_ids(src);
-        assert!(rules.contains(&"derivative-in-nonuniform-flow"), "{rules:?}");
+        assert!(
+            rules.contains(&"derivative-in-nonuniform-flow"),
+            "{rules:?}"
+        );
     }
 
     #[test]
@@ -723,7 +745,10 @@ mod tests {
         }
         src.push_str("  return c0;\n}\n");
         let rules = rule_ids(&src);
-        assert!(rules.contains(&"fragment-sample-budget-annotation"), "{rules:?}");
+        assert!(
+            rules.contains(&"fragment-sample-budget-annotation"),
+            "{rules:?}"
+        );
     }
 
     #[test]
@@ -736,7 +761,10 @@ mod tests {
     fn vertex_texture_fetch_annotates() {
         let src = "@vertex\nfn vs_main() -> @builtin(position) vec4<f32> {\n  let c = textureLoad(t, s, vec2<i32>(0));\n  return vec4<f32>(0.0);\n}\n";
         let rules = rule_ids(src);
-        assert!(rules.contains(&"vertex-stage-texture-fetch-annotation"), "{rules:?}");
+        assert!(
+            rules.contains(&"vertex-stage-texture-fetch-annotation"),
+            "{rules:?}"
+        );
     }
 
     #[test]
@@ -745,7 +773,9 @@ mod tests {
         let a = ShaderScanner.scan(src);
         let b = ShaderScanner.scan(src);
         assert_eq!(a, b);
-        assert!(a.windows(2).all(|w| (w[0].line, w[0].rule_id) <= (w[1].line, w[1].rule_id)));
+        assert!(a
+            .windows(2)
+            .all(|w| (w[0].line, w[0].rule_id) <= (w[1].line, w[1].rule_id)));
     }
 
     #[test]

@@ -178,11 +178,10 @@ pub fn load_runs(root: &Path) -> (Vec<RunRing>, usize, usize) {
         lines.sort_by_key(|l| l.seq);
         if !lines.is_empty() {
             runs.push(RunRing {
-                source: p
-                    .file_name()
-                    .map_or_else(|| p.to_string_lossy().into_owned(), |n| {
-                        n.to_string_lossy().into_owned()
-                    }),
+                source: p.file_name().map_or_else(
+                    || p.to_string_lossy().into_owned(),
+                    |n| n.to_string_lossy().into_owned(),
+                ),
                 lines,
             });
         }
@@ -293,8 +292,7 @@ pub fn ridge_fit<const N: usize>(samples: &[([f64; N], bool)]) -> Option<[f64; N
     }
     // Gaussian elimination with partial pivoting (N×N — exact enough).
     for col in 0..size {
-        let pivot = (col..size)
-            .max_by(|&r, &s| aug[r][col].abs().total_cmp(&aug[s][col].abs()))?;
+        let pivot = (col..size).max_by(|&r, &s| aug[r][col].abs().total_cmp(&aug[s][col].abs()))?;
         aug.swap(col, pivot);
         let diag = aug[col][col];
         if diag.abs() < f64::EPSILON {
@@ -536,7 +534,9 @@ impl HorizonRefusal {
             Self::BlindWalk => {
                 "BLIND WALK — runs exist but no run reaches 2 attempts; lead-k needs depth"
             }
-            Self::SingleClass => "SINGLE CLASS — every measurable lead is one-label (AUC undefined)",
+            Self::SingleClass => {
+                "SINGLE CLASS — every measurable lead is one-label (AUC undefined)"
+            }
         }
     }
 }
@@ -582,7 +582,12 @@ impl HorizonSummary {
     /// when none does (report callers render the "none" wording).
     #[must_use]
     pub fn horizon(&self) -> usize {
-        self.rows.iter().filter(|r| r.beats()).map(|r| r.k).max().unwrap_or(0)
+        self.rows
+            .iter()
+            .filter(|r| r.beats())
+            .map(|r| r.k)
+            .max()
+            .unwrap_or(0)
     }
 
     /// The embed arm's horizon — max measurable k whose native+embedding
@@ -619,7 +624,8 @@ impl HorizonSummary {
 /// Panics on an internal invariant break ONLY: an embed-arm sample whose
 /// `span_embed` is `None` after [`HorizonSummary::embed_arm`] verified full
 /// column coverage (unreachable without a data race on the rings).
-#[allow(clippy::too_many_lines)] // one population, one algorithm — the pooled-lead sweep, the refusal ladder, and the family split share state that splitting would thread through every arm
+#[allow(clippy::too_many_lines)]
+// one population, one algorithm — the pooled-lead sweep, the refusal ladder, and the family split share state that splitting would thread through every arm
 #[allow(clippy::many_single_char_names)] // the lead-k sample grammar (k lead, i index, x features, y label) — math notation, not names
 #[allow(clippy::cast_precision_loss)] // usize/f32 rate + counter casts — the report's quantities
 #[allow(clippy::cast_possible_truncation)] // u32 is the LCB primitive's counter width; counts are ~10³
@@ -631,7 +637,9 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
     let mut embed_attempts = 0usize;
     let mut depth_hist: BTreeMap<usize, usize> = BTreeMap::new();
     for r in runs {
-        *depth_hist.entry(r.lines.len().saturating_sub(1)).or_default() += 1;
+        *depth_hist
+            .entry(r.lines.len().saturating_sub(1))
+            .or_default() += 1;
         for l in &r.lines {
             match l.kept() {
                 Some(true) => kept += 1,
@@ -701,7 +709,11 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
                 // T6: the feature record's PREV attempt — one lead OLDER
                 // than every native feature (i-k-1); None at a run head.
                 let j = i - k;
-                let prev = if j >= 1 { Some(&ring.lines[j - 1]) } else { None };
+                let prev = if j >= 1 {
+                    Some(&ring.lines[j - 1])
+                } else {
+                    None
+                };
                 if let Some(yb) = y.kept() {
                     group.push(LeadSample {
                         x: features_at(x, len),
@@ -716,8 +728,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
                     if embed_arm {
                         // unwrap is total by the embed_arm coverage check.
                         group_e.push(LeadSample {
-                            x: features_at_embed(x, len)
-                                .expect("embed_arm checked full coverage"),
+                            x: features_at_embed(x, len).expect("embed_arm checked full coverage"),
                             y: yb,
                             strategy: y.strategy_id.clone(),
                         });
@@ -740,11 +751,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
             continue;
         }
         let n: usize = run_groups.iter().map(Vec::len).sum();
-        let pos = run_groups
-            .iter()
-            .flatten()
-            .filter(|s| s.y)
-            .count();
+        let pos = run_groups.iter().flatten().filter(|s| s.y).count();
         let neg = n - pos;
         let (readout_scores, hist_scores) = loro_scores(&run_groups);
         let auc_readout = auc(&readout_scores);
@@ -798,18 +805,20 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
         for i in 1..m {
             let (x, y) = (&r.lines[i - 1], &r.lines[i]);
             if let Some(yb) = y.kept() {
-                per_code.entry(y.code.clone()).or_default().push(LeadSample {
-                    x: features_at(x, m),
-                    y: yb,
-                    strategy: y.strategy_id.clone(),
-                });
+                per_code
+                    .entry(y.code.clone())
+                    .or_default()
+                    .push(LeadSample {
+                        x: features_at(x, m),
+                        y: yb,
+                        strategy: y.strategy_id.clone(),
+                    });
                 if embed_arm {
                     per_code_e
                         .entry(y.code.clone())
                         .or_default()
                         .push(LeadSample {
-                            x: features_at_embed(x, m)
-                                .expect("embed_arm checked full coverage"),
+                            x: features_at_embed(x, m).expect("embed_arm checked full coverage"),
                             y: yb,
                             strategy: y.strategy_id.clone(),
                         });
@@ -831,11 +840,7 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
     let mut fam_rows: Vec<FamilyRow> = Vec::new();
     for (code, run_groups) in fam {
         let n: usize = run_groups.iter().map(Vec::len).sum();
-        let pos = run_groups
-            .iter()
-            .flatten()
-            .filter(|s| s.y)
-            .count();
+        let pos = run_groups.iter().flatten().filter(|s| s.y).count();
         let neg = n - pos;
         if n < MIN_FAMILY_SAMPLES || pos < 2 || neg < 2 {
             thin += 1;
@@ -865,7 +870,8 @@ pub fn summarize(runs: &[RunRing]) -> HorizonSummary {
 }
 
 /// Render the summary as the `--horizon-report` text (house style).
-#[allow(clippy::too_many_lines)] // one table renderer — the T2 embed column/lines kept inline with their native twins rather than split into fragments reading half a row each
+#[allow(clippy::too_many_lines)]
+// one table renderer — the T2 embed column/lines kept inline with their native twins rather than split into fragments reading half a row each
 #[must_use]
 pub fn render(s: &HorizonSummary) -> String {
     let mut out = String::with_capacity(2048);
@@ -1040,14 +1046,16 @@ fn render_family_table(families: &[FamilyRow], thin: usize) -> String {
         "  code |    n | pos | neg | auc(readout) | auc(embed) | auc(history)"
     )
     .unwrap();
-    writeln!(out, "-------+------+-----+-----+--------------+------------+-------------").unwrap();
+    writeln!(
+        out,
+        "-------+------+-----+-----+--------------+------------+-------------"
+    )
+    .unwrap();
     for f in families {
         let ro = f
             .auc_readout
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
-        let em = f
-            .auc_embed
-            .map_or("—".to_string(), |a| format!("{a:.3}"));
+        let em = f.auc_embed.map_or("—".to_string(), |a| format!("{a:.3}"));
         let hi = f
             .auc_history
             .map_or("UNMEASURABLE".to_string(), |a| format!("{a:.3}"));
@@ -1076,7 +1084,13 @@ pub fn fixseq_layout(root: &Path) -> std::path::PathBuf {
 mod tests {
     use super::*;
 
-    fn line(seq: usize, code: &str, strat: &str, outcome: &str, errors: (usize, usize)) -> RingLine {
+    fn line(
+        seq: usize,
+        code: &str,
+        strat: &str,
+        outcome: &str,
+        errors: (usize, usize),
+    ) -> RingLine {
         RingLine {
             seq,
             code: code.to_string(),
@@ -1160,7 +1174,11 @@ mod tests {
         let mk = || {
             let mut v = Vec::new();
             for i in 0..8usize {
-                let outcome = if i % 2 == 0 { "Kept" } else { "RevertedNoProgress" };
+                let outcome = if i % 2 == 0 {
+                    "Kept"
+                } else {
+                    "RevertedNoProgress"
+                };
                 v.push(line(i, "E0499", "s", outcome, (6, 6)));
             }
             run(v)
@@ -1233,7 +1251,10 @@ mod tests {
             r#"{"seq":2,"code":"E0507","span_hash":"z","strategy_id":"u","outcome":"Kept","errors":[2,1],"masking":[0,0],"span_embed":[0,1,-1,64,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"#,
         )
         .unwrap();
-        assert_eq!(t2.span_embed.as_ref().map(|v| v.len()), Some(crate::span_embed::SPAN_EMBED_DIMS));
+        assert_eq!(
+            t2.span_embed.as_ref().map(|v| v.len()),
+            Some(crate::span_embed::SPAN_EMBED_DIMS)
+        );
         assert_eq!(t2.span_embed.unwrap()[3], 64);
         assert_eq!(pre100.span_embed, None);
         assert_eq!(current.span_embed, None);
@@ -1266,7 +1287,10 @@ mod tests {
         }
         assert!((auc(&scored).unwrap() - 1.0).abs() < 1e-9);
         assert!(ridge_fit::<N_FEAT>(&[]).is_none());
-        assert!(ridge_fit::<N_FEAT_EMBED>(&[]).is_none(), "the embed arm's fit shares the empty-input contract");
+        assert!(
+            ridge_fit::<N_FEAT_EMBED>(&[]).is_none(),
+            "the embed arm's fit shares the empty-input contract"
+        );
     }
 
     // ── Refusals ───────────────────────────────────────────────────────────
@@ -1309,11 +1333,7 @@ mod tests {
                     .map(|i| {
                         let prog = (i + r) % 2 == 0;
                         let (eb, ea) = if prog { (5, 2) } else { (5, 5) };
-                        let kept_i = if i < 2 {
-                            false
-                        } else {
-                            (i - 2 + r) % 2 == 0
-                        };
+                        let kept_i = if i < 2 { false } else { (i - 2 + r) % 2 == 0 };
                         let outcome = if kept_i { "Kept" } else { "RevertedNoProgress" };
                         line(i, "E0502", "s", outcome, (eb, ea))
                     })
@@ -1392,8 +1412,7 @@ mod tests {
                     };
                     let mut l = line(i, "E0502", "s", outcome, (4, 4));
                     if with_col {
-                        l.span_embed =
-                            Some(crate::span_embed::span_embed("let v = Vec::new();"));
+                        l.span_embed = Some(crate::span_embed::span_embed("let v = Vec::new();"));
                     }
                     l
                 })
@@ -1464,11 +1483,7 @@ mod tests {
                         } else {
                             pattern[(i - 1 + r) % pattern.len()]
                         };
-                        let outcome = if kept_i {
-                            "Kept"
-                        } else {
-                            "RevertedNoProgress"
-                        };
+                        let outcome = if kept_i { "Kept" } else { "RevertedNoProgress" };
                         let mut l = line(i, "E0502", "s", outcome, (4, 4));
                         l.span_embed = Some(if is_k { emb_k } else { emb_r });
                         l

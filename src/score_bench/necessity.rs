@@ -73,8 +73,8 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::run_bench_overridden;
 use super::rule_outcomes;
+use super::run_bench_overridden;
 use super::wrap;
 use super::BenchFixture;
 use super::BenchScore;
@@ -233,7 +233,13 @@ pub fn co_occurrence(score: &BenchScore) -> BTreeMap<(String, String), usize> {
 pub fn donor_for(rule: &str, co: &BTreeMap<(String, String), usize>) -> Option<String> {
     let mut best: Option<(usize, &str)> = None;
     for (a, b) in co.keys() {
-        let other = if a == rule { b } else if b == rule { a } else { continue };
+        let other = if a == rule {
+            b
+        } else if b == rule {
+            a
+        } else {
+            continue;
+        };
         if other == rule {
             continue;
         }
@@ -277,7 +283,11 @@ pub fn presence_counts(score: &BenchScore) -> BTreeMap<String, usize> {
 /// `random` stride picks from the remaining present rules. Deterministic
 /// by construction — stride sampling, never RNG (the replay law).
 #[must_use]
-pub fn select_targets(presence: &BTreeMap<String, usize>, top: usize, random: usize) -> Vec<String> {
+pub fn select_targets(
+    presence: &BTreeMap<String, usize>,
+    top: usize,
+    random: usize,
+) -> Vec<String> {
     let mut present: Vec<(usize, &str)> = presence
         .iter()
         .map(|(rule, count)| (*count, rule.as_str()))
@@ -289,11 +299,7 @@ pub fn select_targets(presence: &BTreeMap<String, usize>, top: usize, random: us
         .take(top)
         .map(|(_, rule)| (*rule).to_string())
         .collect();
-    let remaining: Vec<&str> = present
-        .iter()
-        .skip(top)
-        .map(|(_, rule)| *rule)
-        .collect();
+    let remaining: Vec<&str> = present.iter().skip(top).map(|(_, rule)| *rule).collect();
     let k = random.min(remaining.len());
     if k > 0 {
         let len = remaining.len();
@@ -502,10 +508,7 @@ pub fn run_necessity(
             }
             (vec![rule.clone()], false)
         }
-        None => (
-            select_targets(&presence, cfg.top, cfg.random),
-            true,
-        ),
+        None => (select_targets(&presence, cfg.top, cfg.random), true),
     };
     let (mut rows, arms_run, swap_arms_skipped) = run_target_arms(
         oracle,
@@ -724,10 +727,7 @@ pub fn print_run(run: &NecessityRun) {
         let swap_delta = run.rows.get(i + 1).and_then(|next| {
             (next.rule == row.rule && next.arm.starts_with("swap:")).then_some(next.delta_resolved)
         });
-        let swap_cell = swap_delta.map_or_else(
-            || "(none)".to_string(),
-            |d| format!("{d:+}"),
-        );
+        let swap_cell = swap_delta.map_or_else(|| "(none)".to_string(), |d| format!("{d:+}"));
         println!(
             "{:<32} {:>5} {:>+8} {:>8}  {:>12}",
             row.rule, row.solo_resolved, row.delta_resolved, swap_cell, row.verdict
@@ -736,7 +736,11 @@ pub fn print_run(run: &NecessityRun) {
     }
     println!(
         "\ncanary load-bearing: {} — {}",
-        if run.load_bearing_canary.ok { "OK" } else { "FAIL" },
+        if run.load_bearing_canary.ok {
+            "OK"
+        } else {
+            "FAIL"
+        },
         run.load_bearing_canary.detail
     );
     println!(
@@ -751,9 +755,12 @@ mod tests {
     use super::*;
     use std::collections::BTreeSet;
 
-    fn outcome(id: &str, vocab: &[&str], persist: &[&str], edits: usize) ->
-        crate::score_bench::FixtureOutcome
-    {
+    fn outcome(
+        id: &str,
+        vocab: &[&str],
+        persist: &[&str],
+        edits: usize,
+    ) -> crate::score_bench::FixtureOutcome {
         crate::score_bench::FixtureOutcome {
             id: id.to_string(),
             ran: true,
@@ -802,8 +809,14 @@ mod tests {
         let mut ovr = ComponentOverride::default();
         ovr.disabled.insert("manual_map".to_string());
         let (healed, edits, _) = heal_fixpoint_cfg(code, &[], &ovr);
-        assert_eq!(edits, 0, "manual_map disabled — nothing else fires on this shape");
-        assert_eq!(healed, code, "byte-identical — the disabled slot contributed nothing");
+        assert_eq!(
+            edits, 0,
+            "manual_map disabled — nothing else fires on this shape"
+        );
+        assert_eq!(
+            healed, code,
+            "byte-identical — the disabled slot contributed nothing"
+        );
     }
 
     /// The matched-swap arm redirects dispatch OBSERVABLY: BOTH match-rule
@@ -825,7 +838,10 @@ mod tests {
             "needless_match".to_string(),
         );
         let (healed, edits, _) = heal_fixpoint_cfg(code, &[], &ovr);
-        assert!(edits > 0, "the donor must fire through the swapped slot: {healed}");
+        assert!(
+            edits > 0,
+            "the donor must fire through the swapped slot: {healed}"
+        );
         assert!(
             healed.contains("{ x }"),
             "needless_match's rewrite through the slot: {healed}"
@@ -845,7 +861,10 @@ mod tests {
         let code = "fn f(name: &str) -> String { format!(\"{}\", name) }";
         let mut ovr = ComponentOverride::default();
         ovr.disabled.insert(PLANTED_NOOP.to_string());
-        ovr.swap.insert("nonexistent-rule".to_string(), "also-nonexistent".to_string());
+        ovr.swap.insert(
+            "nonexistent-rule".to_string(),
+            "also-nonexistent".to_string(),
+        );
         assert_eq!(heal_fixpoint(code), heal_fixpoint_cfg(code, &[], &ovr));
         assert_eq!(ovr.dispatch(PLANTED_NOOP), None);
         assert_eq!(ovr.dispatch("manual_map"), Some("manual_map"));

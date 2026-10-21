@@ -48,7 +48,10 @@ use super::{src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -115,7 +118,8 @@ impl Collector<'_> {
         // body end (the match's own span would swallow the scrutinee).
         let start = byte_range(&first.pat).start;
         let end = byte_range(&last.body).end;
-        let mut kept: Vec<std::ops::Range<usize>> = run.iter().map(|a| byte_range(&a.pat)).collect();
+        let mut kept: Vec<std::ops::Range<usize>> =
+            run.iter().map(|a| byte_range(&a.pat)).collect();
         kept.push(byte_range(&first.body));
         if drops_interior_comment(self.source, start..end, &kept) {
             return None;
@@ -171,13 +175,15 @@ mod tests {
         // Clippy merges these (overlap analysis); the v1 subset refuses.
         let input = "fn f(x: u8) -> u8 { match x { 0 => 9, _other => 8, 1 => 9 } }";
         let out = propose_fix("match_same_arms", input);
-        assert!(out.is_none(), "non-adjacent merge needs overlap analysis: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-adjacent merge needs overlap analysis: {out:?}"
+        );
     }
 
     #[test]
     fn binding_pattern_refuses_the_run() {
-        let input =
-            "fn f(x: Option<u8>) -> u8 { match x { Some(v) => 9, None => 9 } }";
+        let input = "fn f(x: Option<u8>) -> u8 { match x { Some(v) => 9, None => 9 } }";
         let out = propose_fix("match_same_arms", input);
         assert!(
             out.is_none(),
@@ -213,6 +219,9 @@ mod tests {
     fn comment_between_arms_refused() {
         let input = "fn f(x: u8) -> u8 { match x { 0 => 9, // why\n 1 => 9 } }";
         let out = propose_fix("match_same_arms", input);
-        assert!(out.is_none(), "a comment the splice would drop refuses: {out:?}");
+        assert!(
+            out.is_none(),
+            "a comment the splice would drop refuses: {out:?}"
+        );
     }
 }

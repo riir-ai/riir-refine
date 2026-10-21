@@ -98,11 +98,7 @@ fn record_url(dir: &Path) -> Option<String> {
 #[test]
 fn join_env_forces_devnet_through_the_config_set_record() {
     let dir = scratch("devnet");
-    let (code, stdout, stderr) = run_heal(
-        &dir,
-        &[("RIIR_REFINE_JOIN_ENV", "devnet")],
-        &["login"],
-    );
+    let (code, stdout, stderr) = run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "devnet")], &["login"]);
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
@@ -132,12 +128,25 @@ fn an_existing_account_key_makes_the_switch_visible_in_the_join_output() {
     let work = scratch("had_key_work");
     let key = work.join("id_ed25519");
     let gen = Command::new("ssh-keygen")
-        .args(["-q", "-t", "ed25519", "-N", "", "-C", "join-cli-clause", "-f"])
+        .args([
+            "-q",
+            "-t",
+            "ed25519",
+            "-N",
+            "",
+            "-C",
+            "join-cli-clause",
+            "-f",
+        ])
         .arg(&key)
         .stdin(Stdio::null())
         .output()
         .expect("spawn ssh-keygen");
-    assert!(gen.status.success(), "ssh-keygen failed: {}", String::from_utf8_lossy(&gen.stderr));
+    assert!(
+        gen.status.success(),
+        "ssh-keygen failed: {}",
+        String::from_utf8_lossy(&gen.stderr)
+    );
     std::fs::copy(&key, dir.join("id_ed25519")).expect("seed the account key");
     let (code, stdout, stderr) = run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "devnet")], &["login"]);
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
@@ -169,11 +178,7 @@ fn an_existing_account_key_makes_the_switch_visible_in_the_join_output() {
 #[test]
 fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
     let dir = scratch("mainnet");
-    let (code, stdout, stderr) = run_heal(
-        &dir,
-        &[("RIIR_REFINE_JOIN_ENV", "mainnet")],
-        &["login"],
-    );
+    let (code, stdout, stderr) = run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "mainnet")], &["login"]);
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
@@ -226,7 +231,10 @@ fn non_tty_without_force_or_yes_refuses_and_records_nothing() {
         stderr.contains("RIIR_REFINE_JOIN_ENV"),
         "the remedy names the env var: {stderr}"
     );
-    assert!(stderr.contains("--yes"), "the remedy names the flag: {stderr}");
+    assert!(
+        stderr.contains("--yes"),
+        "the remedy names the flag: {stderr}"
+    );
     assert!(
         !stdout.contains("Join which kat network"),
         "no prompt raced the refusal: {stdout}"
@@ -241,11 +249,8 @@ fn non_tty_without_force_or_yes_refuses_and_records_nothing() {
 #[test]
 fn invalid_env_value_refuses_loud_and_records_nothing() {
     let dir = scratch("badenv");
-    let (code, _stdout, stderr) = run_heal(
-        &dir,
-        &[("RIIR_REFINE_JOIN_ENV", "staging")],
-        &["login"],
-    );
+    let (code, _stdout, stderr) =
+        run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "staging")], &["login"]);
     assert_eq!(code, Some(2), "stderr: {stderr}");
     assert!(
         stderr.contains("staging") && stderr.contains("mainnet|devnet"),
@@ -298,11 +303,7 @@ fn an_existing_config_is_never_prompted_and_never_rewritten() {
 #[test]
 fn config_get_reports_the_joined_record() {
     let dir = scratch("configget");
-    let (code, _stdout, stderr) = run_heal(
-        &dir,
-        &[("RIIR_REFINE_JOIN_ENV", "devnet")],
-        &["login"],
-    );
+    let (code, _stdout, stderr) = run_heal(&dir, &[("RIIR_REFINE_JOIN_ENV", "devnet")], &["login"]);
     assert_eq!(code, Some(0), "stderr: {stderr}");
     // Issue 126 follow-up 3 (the 2026-10-14 dialing law): the joined row is
     // BOOKKEEPING — `config get` shows the DIAL (mainnet, source: default)

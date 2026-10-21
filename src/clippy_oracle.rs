@@ -80,13 +80,21 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
-    if list.is_empty() { None } else { Some(list) }
+    if list.is_empty() {
+        None
+    } else {
+        Some(list)
+    }
 }
 
 /// The live env read.
 #[must_use]
 pub fn auto_oracle_features() -> Option<Vec<String>> {
-    features_from(std::env::var("RIIR_REFINE_AUTO_ORACLE_FEATURES").ok().as_deref())
+    features_from(
+        std::env::var("RIIR_REFINE_AUTO_ORACLE_FEATURES")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// Kill-switch predicate over the raw
@@ -260,7 +268,10 @@ mod tests {
         assert!(!enabled_from(Some("0")));
         assert!(!enabled_from(Some("false")));
         assert!(!enabled_from(Some("off")));
-        assert!(enabled_from(Some("2")), "unknown values default ON, not silent-off");
+        assert!(
+            enabled_from(Some("2")),
+            "unknown values default ON, not silent-off"
+        );
     }
 
     #[test]
@@ -268,7 +279,10 @@ mod tests {
         assert!(all_targets_from(None));
         assert!(all_targets_from(Some("")));
         assert!(all_targets_from(Some("0")));
-        assert!(all_targets_from(Some("false")), "falsy keeps the wide posture");
+        assert!(
+            all_targets_from(Some("false")),
+            "falsy keeps the wide posture"
+        );
         assert!(all_targets_from(Some("2")), "unknown values keep it ON");
         assert!(!all_targets_from(Some("1")));
         assert!(!all_targets_from(Some("true")));
@@ -280,7 +294,11 @@ mod tests {
         assert_eq!(features_from(None), None);
         assert_eq!(features_from(Some("")), None);
         assert_eq!(features_from(Some("   ")), None);
-        assert_eq!(features_from(Some(",, ,,")), None, "nothing but empty segments");
+        assert_eq!(
+            features_from(Some(",, ,,")),
+            None,
+            "nothing but empty segments"
+        );
     }
 
     #[test]
@@ -314,10 +332,7 @@ mod tests {
         let f = d.join("src").join("main.rs");
         fs::create_dir_all(f.parent().unwrap()).unwrap();
         fs::write(&f, "fn main() {}").unwrap();
-        assert_eq!(
-            detect_project_root(&[f], Path::new("/nowhere")),
-            Some(d)
-        );
+        assert_eq!(detect_project_root(&[f], Path::new("/nowhere")), Some(d));
     }
 
     #[test]
@@ -347,10 +362,12 @@ mod tests {
         let d = tmp_dir("relative");
         fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
         fs::create_dir_all(d.join("src")).unwrap();
-        let root =
-            detect_project_root(&[PathBuf::from("src")], &d).expect("root found via cwd");
+        let root = detect_project_root(&[PathBuf::from("src")], &d).expect("root found via cwd");
         assert_eq!(root, d, "the cwd-anchored walk finds the tmp project");
-        assert!(root.is_absolute(), "a relative root would spawn against the healer's own cwd");
+        assert!(
+            root.is_absolute(),
+            "a relative root would spawn against the healer's own cwd"
+        );
     }
 
     #[test]
@@ -362,8 +379,8 @@ mod tests {
         fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
         fs::create_dir_all(d.join("src")).unwrap();
         fs::write(d.join("src").join("lib.rs"), "").unwrap();
-        let root = detect_project_root(&[PathBuf::from("src/lib.rs")], &d)
-            .expect("root found via cwd");
+        let root =
+            detect_project_root(&[PathBuf::from("src/lib.rs")], &d).expect("root found via cwd");
         assert_eq!(root, d);
         assert!(root.is_absolute());
     }
@@ -374,8 +391,7 @@ mod tests {
         // cwd it IS the project. Must never walk through "" to find it.
         let d = tmp_dir("dot");
         fs::write(d.join("Cargo.toml"), "[package]\nname = \"x\"\n").unwrap();
-        let root =
-            detect_project_root(&[PathBuf::from(".")], &d).expect("root found via cwd");
+        let root = detect_project_root(&[PathBuf::from(".")], &d).expect("root found via cwd");
         assert_eq!(root, d);
         assert!(root.is_absolute());
     }

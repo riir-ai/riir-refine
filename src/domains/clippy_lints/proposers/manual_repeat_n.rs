@@ -57,7 +57,11 @@ use crate::edit_emitter::drops_interior_comment;
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let imports = RepeatImports::scan(file);
-    let mut v = Collector { source, edits: Vec::new(), imports };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+        imports,
+    };
     v.visit_file(file);
     v.edits
 }
@@ -113,9 +117,7 @@ impl<'ast> Visit<'ast> for Scan {
             syn::Item::Type(x) => Some(&x.ident),
             syn::Item::Const(x) => Some(&x.ident),
             syn::Item::Static(x) => Some(&x.ident),
-            syn::Item::ExternCrate(x) => {
-                x.rename.as_ref().map(|(_, id)| id).or(Some(&x.ident))
-            }
+            syn::Item::ExternCrate(x) => x.rename.as_ref().map(|(_, id)| id).or(Some(&x.ident)),
             _ => None,
         };
         if name.is_some_and(|n| n == "iter") {
@@ -147,26 +149,36 @@ impl<'ast> Visit<'ast> for Scan {
 /// `use std::iter;` — the exact plain tree proving the 2-segment
 /// `iter::repeat` spelling (no rename, no glob, no group).
 fn is_std_iter_tree(tree: &syn::UseTree) -> bool {
-    let syn::UseTree::Path(p0) = tree else { return false };
+    let syn::UseTree::Path(p0) = tree else {
+        return false;
+    };
     if p0.ident != "std" {
         return false;
     }
-    let syn::UseTree::Name(n1) = &*p0.tree else { return false };
+    let syn::UseTree::Name(n1) = &*p0.tree else {
+        return false;
+    };
     n1.ident == "iter"
 }
 
 /// `use std::iter::repeat;` — the exact plain tree proving the bare
 /// `repeat` spelling (no rename, no glob, no group).
 fn is_std_iter_repeat_tree(tree: &syn::UseTree) -> bool {
-    let syn::UseTree::Path(p0) = tree else { return false };
+    let syn::UseTree::Path(p0) = tree else {
+        return false;
+    };
     if p0.ident != "std" {
         return false;
     }
-    let syn::UseTree::Path(p1) = &*p0.tree else { return false };
+    let syn::UseTree::Path(p1) = &*p0.tree else {
+        return false;
+    };
     if p1.ident != "iter" {
         return false;
     }
-    let syn::UseTree::Name(n2) = &*p1.tree else { return false };
+    let syn::UseTree::Name(n2) = &*p1.tree else {
+        return false;
+    };
     n2.ident == "repeat"
 }
 
@@ -232,8 +244,7 @@ impl Collector<'_> {
         {
             return None;
         }
-        let segs: Vec<&syn::Ident> =
-            callee.path.segments.iter().map(|s| &s.ident).collect();
+        let segs: Vec<&syn::Ident> = callee.path.segments.iter().map(|s| &s.ident).collect();
         let spelling_ok = match segs.as_slice() {
             [std_seg, iter_seg, repeat_seg] => {
                 *std_seg == "std" && *iter_seg == "iter" && *repeat_seg == "repeat"
@@ -314,7 +325,10 @@ mod tests {
             out.contains("std::iter::repeat_n(\"x\", n)"),
             "not the fully-qualified upstream suggestion: {out}"
         );
-        assert!(out.contains("use std::iter::repeat;"), "import dropped: {out}");
+        assert!(
+            out.contains("use std::iter::repeat;"),
+            "import dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

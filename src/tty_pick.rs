@@ -134,7 +134,10 @@ fn draw<W: Write>(
     if prev > 0 {
         let _ = write!(buf, "\x1b[{prev}A\x1b[J");
     }
-    let _ = writeln!(buf, "  \x1b[1m↑/↓ move · Enter = show · v = void · q = quit\x1b[0m");
+    let _ = writeln!(
+        buf,
+        "  \x1b[1m↑/↓ move · Enter = show · v = void · q = quit\x1b[0m"
+    );
     for (i, r) in rows.iter().enumerate() {
         let marker = if i == sel { '▸' } else { ' ' };
         if i == sel {
@@ -394,7 +397,10 @@ mod tests {
         // last frame is everything after that prefix.
         let last = out.rsplit("\x1b[3A").next().unwrap_or("");
         assert!(last.contains("▸ \x1b[1mseq 2"), "last frame: {last}");
-        assert!(!last.contains("▸ \x1b[1mseq 4"), "the old marker is gone: {last}");
+        assert!(
+            !last.contains("▸ \x1b[1mseq 4"),
+            "the old marker is gone: {last}"
+        );
     }
 
     #[test]

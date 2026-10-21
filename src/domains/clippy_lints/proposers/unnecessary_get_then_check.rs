@@ -55,7 +55,10 @@ use super::{edit, src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -183,6 +186,9 @@ mod tests {
         let input =
             "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get( /* key */ &k).is_none() }";
         let out = propose_fix("unnecessary_get_then_check", input);
-        assert!(out.is_none(), "comment that the splice would drop refuses: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment that the splice would drop refuses: {out:?}"
+        );
     }
 }

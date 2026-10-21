@@ -89,14 +89,25 @@ fn write_sidecar(dir: &std::path::Path, name: &str, text: &str) -> PathBuf {
 #[test]
 fn budget_report_happy_path_exits_zero_with_verdicts() {
     let dir = scratch("happy");
-    write_sidecar(&dir, "gradient.frames.json", &sidecar_text("gradient", 10.0, (45, 750)));
-    write_sidecar(&dir, "fft-ocean.frames.json", &sidecar_text("fft-ocean", 20.0, (45, 750)));
+    write_sidecar(
+        &dir,
+        "gradient.frames.json",
+        &sidecar_text("gradient", 10.0, (45, 750)),
+    );
+    write_sidecar(
+        &dir,
+        "fft-ocean.frames.json",
+        &sidecar_text("fft-ocean", 20.0, (45, 750)),
+    );
     let (code, text) = heal(&["--frame-time-report", dir.to_str().expect("utf8")]);
     assert_eq!(code, Some(0), "output:\n{text}");
     assert!(text.contains("frame-time budget report"), "{text}");
     assert!(text.contains("OK"), "{text}");
     assert!(text.contains("OVER"), "{text}");
-    assert!(text.contains("--domain shader_perf"), "heal hint missing: {text}");
+    assert!(
+        text.contains("--domain shader_perf"),
+        "heal hint missing: {text}"
+    );
     fs::remove_dir_all(&dir).ok();
 }
 
@@ -111,7 +122,11 @@ fn empty_scan_refuses_exit_one() {
 #[test]
 fn unparsable_sidecar_refuses_exit_one_and_names_the_file() {
     let dir = scratch("bad");
-    write_sidecar(&dir, "gradient.frames.json", &sidecar_text("gradient", 10.0, (45, 750)));
+    write_sidecar(
+        &dir,
+        "gradient.frames.json",
+        &sidecar_text("gradient", 10.0, (45, 750)),
+    );
     write_sidecar(&dir, "broken.frames.json", "{ not json at all");
     let (code, text) = heal(&["--frame-time-report", dir.to_str().expect("utf8")]);
     assert_eq!(code, Some(1), "output:\n{text}");
@@ -134,7 +149,11 @@ fn no_budget_anywhere_still_reports_exit_zero_without_verdicts() {
 #[test]
 fn frame_budget_flag_overrides_the_sidecar_echo() {
     let dir = scratch("override");
-    write_sidecar(&dir, "gradient.frames.json", &sidecar_text("gradient", 10.0, (45, 750)));
+    write_sidecar(
+        &dir,
+        "gradient.frames.json",
+        &sidecar_text("gradient", 10.0, (45, 750)),
+    );
     // 10.0 ms p50 against a 5 ms CLI budget → OVER.
     let (code, text) = heal(&[
         "--frame-time-report",
@@ -151,8 +170,16 @@ fn frame_budget_flag_overrides_the_sidecar_echo() {
 fn ab_diff_reports_improved_across_a_real_pair() {
     let pre = scratch("ab_pre");
     let post = scratch("ab_post");
-    write_sidecar(&pre, "carrier.frames.json", &sidecar_text("carrier", 10.0, (45, 750)));
-    write_sidecar(&post, "carrier.frames.json", &sidecar_text("carrier", 8.0, (45, 750)));
+    write_sidecar(
+        &pre,
+        "carrier.frames.json",
+        &sidecar_text("carrier", 10.0, (45, 750)),
+    );
+    write_sidecar(
+        &post,
+        "carrier.frames.json",
+        &sidecar_text("carrier", 8.0, (45, 750)),
+    );
     let (code, text) = heal(&[
         "--frame-time-report",
         pre.to_str().expect("utf8"),
@@ -190,7 +217,11 @@ fn ab_diff_refuses_ambiguous_pairings() {
     let post = scratch("amb_post");
     write_sidecar(&pre, "c.frames.json", &sidecar_text("c", 10.0, (45, 750)));
     write_sidecar(&post, "c.frames.json", &sidecar_text("c", 10.0, (45, 750)));
-    write_sidecar(&post, "c.b02.frames.json", &sidecar_text("c", 9.0, (45, 750)));
+    write_sidecar(
+        &post,
+        "c.b02.frames.json",
+        &sidecar_text("c", 9.0, (45, 750)),
+    );
     let (code, text) = heal(&[
         "--frame-time-report",
         pre.to_str().expect("utf8"),

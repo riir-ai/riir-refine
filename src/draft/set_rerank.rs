@@ -104,7 +104,10 @@ impl LatentChoice {
     /// is skipped there by contract).
     #[must_use]
     pub fn project(self, v: [f32; LATENT_DIM]) -> [f32; DIM] {
-        debug_assert_eq!(LATENT_DIM, DIM, "the consumer space and the admission space must agree");
+        debug_assert_eq!(
+            LATENT_DIM, DIM,
+            "the consumer space and the admission space must agree"
+        );
         match self {
             Self::Full8 => v,
             Self::Structural4 => [0.0, 0.0, 0.0, 0.0, v[4], v[5], v[6], v[7]],
@@ -319,7 +322,11 @@ pub fn counter_anchored_slate(
             } else {
                 0.5
             };
-            base + if r.instantiates { cfg.structural_bonus } else { 0.0 }
+            base + if r.instantiates {
+                cfg.structural_bonus
+            } else {
+                0.0
+            }
         })
         .collect();
 
@@ -452,20 +459,29 @@ mod tests {
     fn corpus() -> RuleLatentCorpus {
         let entries: Vec<(String, DomainId, String)> = [
             ("needless_return", "pub fn a() -> u8 { return 7; }"),
-            ("needless_bool", "pub fn b(x: bool) -> u8 { if x { return 1; } return 0; }"),
-            ("vec-with-capacity", "let mut v: Vec<u8> = Vec::new(); v.push(1);"),
-            ("collect-append-to-extend", "let o: Vec<u8> = i.iter().map(|x| *x).collect();"),
-            ("hashmap-with-capacity", "let m: HashMap<u8, u8> = HashMap::new(); m.insert(1, 1);"),
-            ("static-str-ptrs", "let s: &'static str = \"constant text here\";"),
+            (
+                "needless_bool",
+                "pub fn b(x: bool) -> u8 { if x { return 1; } return 0; }",
+            ),
+            (
+                "vec-with-capacity",
+                "let mut v: Vec<u8> = Vec::new(); v.push(1);",
+            ),
+            (
+                "collect-append-to-extend",
+                "let o: Vec<u8> = i.iter().map(|x| *x).collect();",
+            ),
+            (
+                "hashmap-with-capacity",
+                "let m: HashMap<u8, u8> = HashMap::new(); m.insert(1, 1);",
+            ),
+            (
+                "static-str-ptrs",
+                "let s: &'static str = \"constant text here\";",
+            ),
         ]
         .iter()
-        .map(|&(id, text)| {
-            (
-                id.to_string(),
-                DomainId::Clippy,
-                text.to_string(),
-            )
-        })
+        .map(|&(id, text)| (id.to_string(), DomainId::Clippy, text.to_string()))
         .collect();
         RuleLatentCorpus::build(&entries)
     }
@@ -477,13 +493,14 @@ mod tests {
     #[test]
     fn slate_is_deterministic() {
         let c = corpus();
-        let pool = vec![(
-            DomainId::Clippy,
-            vec![
-                rule("needless_return", 9.0),
-                rule("needless_bool", 8.5),
-                rule("vec-with-capacity", 8.0),
-            ],
+        let pool = vec![
+            (
+                DomainId::Clippy,
+                vec![
+                    rule("needless_return", 9.0),
+                    rule("needless_bool", 8.5),
+                    rule("vec-with-capacity", 8.0),
+                ],
             ),
             (
                 DomainId::Perf,
@@ -499,8 +516,10 @@ mod tests {
         let mut s2 = AdmissionScratch::new();
         let mut f1 = FanScratch::new();
         let mut f2 = FanScratch::new();
-        let a = counter_anchored_slate(&cfg, &pool, matcher_latents(&c), &c, q, 4, &mut s1, &mut f1);
-        let b = counter_anchored_slate(&cfg, &pool, matcher_latents(&c), &c, q, 4, &mut s2, &mut f2);
+        let a =
+            counter_anchored_slate(&cfg, &pool, matcher_latents(&c), &c, q, 4, &mut s1, &mut f1);
+        let b =
+            counter_anchored_slate(&cfg, &pool, matcher_latents(&c), &c, q, 4, &mut s2, &mut f2);
         assert_eq!(a, b, "same inputs must produce a bit-identical slate");
         assert!(!a.admitted.is_empty());
         assert!(!a.baseline_fallback);
@@ -518,10 +537,7 @@ mod tests {
         let c = corpus();
         let pool = vec![(
             DomainId::Clippy,
-            vec![
-                rule("needless_return", 9.0),
-                rule("needless_bool", 8.5),
-            ],
+            vec![rule("needless_return", 9.0), rule("needless_bool", 8.5)],
         )];
         let cfg = SetRerankConfig::default();
         let q = ModellessEmbedder.embed("pub fn a() -> u8 { return 7; }");
@@ -553,9 +569,11 @@ mod tests {
         let mut s = AdmissionScratch::new();
         let mut f = FanScratch::new();
         let empty: Vec<(DomainId, Vec<ScoredRule>)> = Vec::new();
-        let out = counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 5, &mut s, &mut f);
+        let out =
+            counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 5, &mut s, &mut f);
         assert!(out.admitted.is_empty());
-        let out = counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 0, &mut s, &mut f);
+        let out =
+            counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 0, &mut s, &mut f);
         assert!(out.admitted.is_empty());
     }
 
@@ -564,10 +582,7 @@ mod tests {
         let c = corpus();
         let pool = vec![(
             DomainId::Clippy,
-            vec![
-                rule("needless_return", 9.0),
-                rule("vec-with-capacity", 8.0),
-            ],
+            vec![rule("needless_return", 9.0), rule("vec-with-capacity", 8.0)],
         )];
         let cfg = SetRerankConfig::default();
         let slate = baseline_slate(&cfg, &pool, matcher_latents(&c), 2);

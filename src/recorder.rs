@@ -246,7 +246,8 @@ impl EvolveRecorder {
         if self.opted_out {
             return;
         }
-        self.memory.record_journey(rule_id, fixed, taint_composite_256);
+        self.memory
+            .record_journey(rule_id, fixed, taint_composite_256);
     }
 
     /// Record a FAILURE with its decision-time signal (Issue 047): the

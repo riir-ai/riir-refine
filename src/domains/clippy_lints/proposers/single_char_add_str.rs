@@ -112,21 +112,22 @@ impl Collector<'_> {
         if !lit.attrs.is_empty() {
             return None;
         }
-        let syn::Lit::Str(ls) = &lit.lit else { return None };
+        let syn::Lit::Str(ls) = &lit.lit else {
+            return None;
+        };
         let value = ls.value();
         let mut chars = value.chars();
         let (c1, c2) = (chars.next(), chars.next());
-        let (Some(ch), None) = (c1, c2) else { return None };
+        let (Some(ch), None) = (c1, c2) else {
+            return None;
+        };
         // Comments inside the deleted glue (method name + literal) refuse;
         // the receiver text rides verbatim — its span is the keep-list.
         let recv_range = byte_range(&*c.receiver);
         if drops_interior_comment(self.source, byte_range(c), &[recv_range]) {
             return None;
         }
-        Some(format!(
-            "{recv_text}.push('{}')",
-            ch.escape_default()
-        ))
+        Some(format!("{recv_text}.push('{}')", ch.escape_default()))
     }
 }
 
@@ -154,10 +155,7 @@ mod tests {
             "fn mark(s: &mut String) { s.push_str(\"!\"); }",
         )
         .expect("matched");
-        assert!(
-            out.contains("s.push('!')"),
-            "not rewritten to push: {out}"
-        );
+        assert!(out.contains("s.push('!')"), "not rewritten to push: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -221,10 +219,7 @@ mod tests {
             "fn q(s: &mut String) { s.push_str(\"'\"); }",
         )
         .expect("matched");
-        assert!(
-            out.contains("s.push('\\'')"),
-            "quote not escaped: {out}"
-        );
+        assert!(out.contains("s.push('\\'')"), "quote not escaped: {out}");
         let out = propose_fix(
             "single_char_add_str",
             "fn b(s: &mut String) { s.push_str(\"\\\\\"); }",

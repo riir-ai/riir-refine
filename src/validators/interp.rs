@@ -18,7 +18,11 @@
 // here, not defects. Every usize cast below indexes a structure the
 // admission gate has already bounded (ctrls/memory/locals), so the value is
 // in range by construction.
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 // `step` is the opcode dispatch — one arm per basic op; splitting it would
 // hide the machine shape it exists to show.
 #![allow(clippy::too_many_lines)]
@@ -203,7 +207,12 @@ impl ValidatorModule {
             fuel,
         )?;
         let s = ABI_SCORE_ADDR as usize;
-        let score = u32::from_le_bytes([vm.memory[s], vm.memory[s + 1], vm.memory[s + 2], vm.memory[s + 3]]);
+        let score = u32::from_le_bytes([
+            vm.memory[s],
+            vm.memory[s + 1],
+            vm.memory[s + 2],
+            vm.memory[s + 3],
+        ]);
         let verdict = vm.stack.pop().unwrap_or(0);
         Ok(Outcome { verdict, score })
     }
@@ -386,7 +395,11 @@ impl Vm {
                 let ctrl = *func.ctrls.get(pc).ok_or(Trap::MalformedBranch)?;
                 // A loop label keeps nothing on `br` (MVP loops take no
                 // params); a block keeps its result arity.
-                let keep = if instr.opcode == OP_LOOP { 0 } else { ctrl.arity };
+                let keep = if instr.opcode == OP_LOOP {
+                    0
+                } else {
+                    ctrl.arity
+                };
                 self.push_label(instr.opcode == OP_LOOP, pc, ctrl.end_pc as usize, keep)?;
                 self.jump(next_pc)
             }
@@ -478,7 +491,13 @@ impl Vm {
         Ok(())
     }
 
-    fn push_label(&mut self, is_loop: bool, start_pc: usize, end_pc: usize, keep: u8) -> Result<(), Trap> {
+    fn push_label(
+        &mut self,
+        is_loop: bool,
+        start_pc: usize,
+        end_pc: usize,
+        keep: u8,
+    ) -> Result<(), Trap> {
         let frame = self.frames.last_mut().expect("step with no frame");
         if frame.labels.len() >= MAX_LABEL_DEPTH {
             return Err(Trap::LabelOverflow);
@@ -545,7 +564,13 @@ impl Vm {
         self.jump(next_pc)
     }
 
-    fn load(&mut self, next_pc: usize, offset_imm: i64, size: u32, ext: LoadExt) -> Result<(), Trap> {
+    fn load(
+        &mut self,
+        next_pc: usize,
+        offset_imm: i64,
+        size: u32,
+        ext: LoadExt,
+    ) -> Result<(), Trap> {
         let addr = (self.pop()? as u32).wrapping_add(offset_imm as u32);
         let start = addr as usize;
         let end = start + size as usize;
@@ -554,13 +579,19 @@ impl Vm {
         }
         let v = match (size, ext) {
             (4, LoadExt::None) => i32::from_le_bytes(
-                self.memory[start..start + 4].try_into().expect("static width"),
+                self.memory[start..start + 4]
+                    .try_into()
+                    .expect("static width"),
             ),
             (2, LoadExt::None) => i32::from(u16::from_le_bytes(
-                self.memory[start..start + 2].try_into().expect("static width"),
+                self.memory[start..start + 2]
+                    .try_into()
+                    .expect("static width"),
             )),
             (2, LoadExt::Sign16) => i32::from(i16::from_le_bytes(
-                self.memory[start..start + 2].try_into().expect("static width"),
+                self.memory[start..start + 2]
+                    .try_into()
+                    .expect("static width"),
             )),
             (1, LoadExt::None) => i32::from(self.memory[start]),
             (1, LoadExt::Sign8) => i32::from(self.memory[start] as i8),

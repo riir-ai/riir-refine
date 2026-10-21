@@ -176,11 +176,19 @@ fn self_check() {
         mk(2, "E0499", "cc"),
     ];
     let g = flips(&march);
-    assert_eq!((g.code, g.span, g.pair), (0, 0, 0), "canary: A->B->C must report 0");
+    assert_eq!(
+        (g.code, g.span, g.pair),
+        (0, 0, 0),
+        "canary: A->B->C must report 0"
+    );
     // Adjacent repeat (A -> A) is NOT a flip: no intervening attempt.
     let adj = [mk(0, "E0502", "aa"), mk(1, "E0502", "aa")];
     let h = flips(&adj);
-    assert_eq!((h.code, h.span, h.pair), (0, 0, 0), "canary: adjacent repeat must report 0");
+    assert_eq!(
+        (h.code, h.span, h.pair),
+        (0, 0, 0),
+        "canary: adjacent repeat must report 0"
+    );
     // An INVARIANT violation must also be visible.
     let bad = [AttemptRecord {
         seq: 0,
@@ -345,13 +353,17 @@ fn main() {
         );
     } else {
         match multi > 1 {
-            true => cases.extend(composed.iter().map(|(name, code, seed, broken)| HarnessCase {
-                name: name.as_str(),
-                expect_code: code,
-                kind: MutatorKind::NarrowScope,
-                seed: seed.as_str(),
-                broken: broken.clone(),
-            })),
+            true => cases.extend(
+                composed
+                    .iter()
+                    .map(|(name, code, seed, broken)| HarnessCase {
+                        name: name.as_str(),
+                        expect_code: code,
+                        kind: MutatorKind::NarrowScope,
+                        seed: seed.as_str(),
+                        broken: broken.clone(),
+                    }),
+            ),
             false => {
                 for c in MUTANT_CASES {
                     match HarnessCase::committed(c) {
@@ -478,7 +490,10 @@ fn main() {
         }
     }
     println!();
-    let depth3 = reports.iter().filter(|(_, r)| r.attempts.len() >= 3).count();
+    let depth3 = reports
+        .iter()
+        .filter(|(_, r)| r.attempts.len() >= 3)
+        .count();
     println!(
         "runs with >=3 attempts (the minimum depth a flip NEEDS): {depth3}  <- the measurement's power"
     );

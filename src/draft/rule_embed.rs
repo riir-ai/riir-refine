@@ -198,8 +198,7 @@ pub fn embedded_tables() -> &'static TrainedTables {
     static TABLES: std::sync::OnceLock<TrainedTables> = std::sync::OnceLock::new();
     TABLES.get_or_init(|| {
         const RAW: &[u8] = include_bytes!("../../assets/rule_embed_frozen_v1.bin");
-        decode_verified(RAW)
-            .unwrap_or_else(|e| panic!("embedded rule-embed artifact refused: {e}"))
+        decode_verified(RAW).unwrap_or_else(|e| panic!("embedded rule-embed artifact refused: {e}"))
     })
 }
 
@@ -236,7 +235,9 @@ pub fn decode_verified(bytes: &[u8]) -> Result<TrainedTables, String> {
     r.take(4)?; // magic, already checked
     let version = r.u32()?;
     if version != FORMAT_VERSION {
-        return Err(format!("format version {version} != {FORMAT_VERSION} — retrain"));
+        return Err(format!(
+            "format version {version} != {FORMAT_VERSION} — retrain"
+        ));
     }
     let buckets = r.u32()? as usize;
     let dim = r.u32()? as usize;
@@ -260,7 +261,10 @@ pub fn decode_verified(bytes: &[u8]) -> Result<TrainedTables, String> {
     // wrap warning is the point — both sides are the same two's-complement
     // byte, round-trip exact by construction.
     #[allow(clippy::cast_possible_wrap)]
-    let span_proj: Vec<f32> = span_i8.iter().map(|&b| dequant(b as i8, span_scale)).collect();
+    let span_proj: Vec<f32> = span_i8
+        .iter()
+        .map(|&b| dequant(b as i8, span_scale))
+        .collect();
     let mut rules = Vec::with_capacity(n_rules.min(65536));
     for _ in 0..n_rules {
         let id_len = r.u32()? as usize;
@@ -280,7 +284,10 @@ pub fn decode_verified(bytes: &[u8]) -> Result<TrainedTables, String> {
         rules.push(RuleRow { id, psi });
     }
     if r.pos != payload.len() {
-        return Err(format!("trailing bytes: {} unconsumed", payload.len() - r.pos));
+        return Err(format!(
+            "trailing bytes: {} unconsumed",
+            payload.len() - r.pos
+        ));
     }
     let mut index = HashMap::with_capacity(rules.len());
     for (i, row) in rules.iter().enumerate() {
@@ -485,8 +492,12 @@ pub fn train(data: &TrainData, cfg: &TrainConfig) -> Result<Trained, String> {
     }
 
     let mut rng = Rng::new(cfg.seed);
-    let mut w_span: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
-    let mut w_rule: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
+    let mut w_span: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+        .map(|_| rng.normal() * 0.05)
+        .collect();
+    let mut w_rule: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+        .map(|_| rng.normal() * 0.05)
+        .collect();
     let mut ws = Workspace::new(xs.len());
     let mut opt_span = FlatAdamW::new(w_span.len());
     let mut opt_rule = FlatAdamW::new(w_rule.len());
@@ -619,7 +630,12 @@ fn loss_and_grad(
         }
     }
     for i in 0..n {
-        scatter_grad(&mut ws.g_span, &ws.gphi[i * d..(i + 1) * d], &xs[i].0, &xs[i].1);
+        scatter_grad(
+            &mut ws.g_span,
+            &ws.gphi[i * d..(i + 1) * d],
+            &xs[i].0,
+            &xs[i].1,
+        );
         let y = &ys[pair_rule[i]];
         scatter_grad(&mut ws.g_rule, &ws.gpsi[i * d..(i + 1) * d], &y.0, &y.1);
     }
@@ -800,10 +816,17 @@ mod tests {
 
     #[test]
     fn split_is_deterministic_and_quarter_rate() {
-        for id in ["collapsible_if", "manual_clamp", "needless_return", "rule_a"] {
+        for id in [
+            "collapsible_if",
+            "manual_clamp",
+            "needless_return",
+            "rule_a",
+        ] {
             assert_eq!(fixture_is_withheld(id), fixture_is_withheld(id), "{id}");
         }
-        let ids: Vec<String> = (0..200).map(|i| format!("fixture_split_probe_{i}")).collect();
+        let ids: Vec<String> = (0..200)
+            .map(|i| format!("fixture_split_probe_{i}"))
+            .collect();
         let withheld = ids.iter().filter(|id| fixture_is_withheld(id)).count();
         // ~Binomial(200, 0.25), σ ≈ 6.1 — ±3σ.
         assert!(
@@ -815,8 +838,14 @@ mod tests {
     #[test]
     fn artifact_roundtrip_and_tamper_refusal() {
         let data = tiny_train_data();
-        let tr = train(&data, &TrainConfig { steps: 20, ..TrainConfig::default() })
-            .expect("tiny train");
+        let tr = train(
+            &data,
+            &TrainConfig {
+                steps: 20,
+                ..TrainConfig::default()
+            },
+        )
+        .expect("tiny train");
         let a = decode_verified(&tr.bytes).expect("decode");
         let b = decode_verified(&tr.bytes).expect("decode");
         assert_eq!(a.rule_count(), b.rule_count());
@@ -828,7 +857,10 @@ mod tests {
         let mut bad = tr.bytes.clone();
         let mid = bad.len() / 2;
         bad[mid] ^= 0x01;
-        assert!(decode_verified(&bad).is_err(), "tampered payload must refuse");
+        assert!(
+            decode_verified(&bad).is_err(),
+            "tampered payload must refuse"
+        );
         // truncation
         assert!(decode_verified(&tr.bytes[..tr.bytes.len() - 1]).is_err());
         // bad magic
@@ -843,27 +875,51 @@ mod tests {
     #[test]
     fn tiny_training_separates_positives() {
         let data = tiny_train_data();
-        let tr = train(&data, &TrainConfig { steps: 400, ..TrainConfig::default() })
-            .expect("tiny train");
+        let tr = train(
+            &data,
+            &TrainConfig {
+                steps: 400,
+                ..TrainConfig::default()
+            },
+        )
+        .expect("tiny train");
         assert!(tr.final_loss.is_finite());
         assert_eq!(tr.tables.rule_count(), 3);
         assert_eq!(tr.tables.dim, EMBED_DIM);
         let phi = tr.tables.project_span("let mut v = Vec::new(); v.push(1);");
-        let hit = tr.tables.score_rule(&phi, &name_not_withheld("rule_a")).expect("row");
-        let miss = tr.tables.score_rule(&phi, &name_not_withheld("rule_b")).expect("row");
+        let hit = tr
+            .tables
+            .score_rule(&phi, &name_not_withheld("rule_a"))
+            .expect("row");
+        let miss = tr
+            .tables
+            .score_rule(&phi, &name_not_withheld("rule_b"))
+            .expect("row");
         // MAGNITUDE, not just ordering: the pre-fix dequant bug passed this
         // test with every score at 0.5 ± 1e-4 (a ±1e-4 margin is noise).
         // A trained positive pair must sit clearly above the σ(0) = 0.5 null.
-        assert!(hit > 0.75, "positive σ {hit} must clear the null by a real margin");
-        assert!(hit > miss, "trained positive {hit} must outrank negative {miss}");
+        assert!(
+            hit > 0.75,
+            "positive σ {hit} must clear the null by a real margin"
+        );
+        assert!(
+            hit > miss,
+            "trained positive {hit} must outrank negative {miss}"
+        );
     }
 
     #[test]
     #[allow(clippy::float_cmp)] // σ(0) = 0.5 and never-touched grads are construction identities
     fn zero_span_scores_uniform_half() {
         let data = tiny_train_data();
-        let tr = train(&data, &TrainConfig { steps: 20, ..TrainConfig::default() })
-            .expect("tiny train");
+        let tr = train(
+            &data,
+            &TrainConfig {
+                steps: 20,
+                ..TrainConfig::default()
+            },
+        )
+        .expect("tiny train");
         let phi = tr.tables.project_span("   \n\t ");
         assert!(phi.iter().all(|&v| v == 0.0));
         let a = tr
@@ -891,7 +947,9 @@ mod tests {
                 break;
             }
         }
-        let Some(w) = withheld else { unreachable!("25% of 1000") };
+        let Some(w) = withheld else {
+            unreachable!("25% of 1000")
+        };
         let data = TrainData {
             pairs: vec![tiny_pair("let x = 1;", &w)],
             rule_texts: vec![(w.clone(), "let x = 1;".into())],
@@ -924,8 +982,12 @@ mod tests {
         let pair_rule: Vec<usize> = (0..data.pairs.len()).collect();
 
         let mut rng = Rng::new(cfg.seed);
-        let mut w_span: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
-        let mut w_rule: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
+        let mut w_span: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+            .map(|_| rng.normal() * 0.05)
+            .collect();
+        let mut w_rule: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+            .map(|_| rng.normal() * 0.05)
+            .collect();
         let mut ws = Workspace::new(xs.len());
         let _base = loss_and_grad(&w_span, &w_rule, &xs, &ys, &pair_rule, 1.0, &mut ws);
         let g_span_ref = ws.g_span.clone();
@@ -957,7 +1019,10 @@ mod tests {
             let num = (lp - lm) / (2.0 * eps);
             let ana = g_span_ref[coord];
             let err = (ana - num).abs() / 1.0_f32.max(ana.abs()).max(num.abs());
-            assert!(err < 5e-2, "span coord {coord}: analytic {ana} vs numeric {num} (err {err})");
+            assert!(
+                err < 5e-2,
+                "span coord {coord}: analytic {ana} vs numeric {num} (err {err})"
+            );
             // rule tower
             let orig = w_rule[coord];
             w_rule[coord] = orig + eps;
@@ -968,7 +1033,10 @@ mod tests {
             let num = (lp - lm) / (2.0 * eps);
             let ana = g_rule_ref[coord];
             let err = (ana - num).abs() / 1.0_f32.max(ana.abs()).max(num.abs());
-            assert!(err < 5e-2, "rule coord {coord}: analytic {ana} vs numeric {num} (err {err})");
+            assert!(
+                err < 5e-2,
+                "rule coord {coord}: analytic {ana} vs numeric {num} (err {err})"
+            );
         }
         // An inactive bucket's gradient is exactly zero in both towers.
         let empty = (0..FEATURE_BUCKETS)

@@ -183,9 +183,7 @@ impl CascadeStats {
         match (self.p_bad_given_bad(), self.p_bad_given_good()) {
             (Some(a), Some(b)) if a > b => {
                 match (self.ci_bad_given_bad(), self.ci_bad_given_good()) {
-                    (Some((al, _)), Some((_, bu))) if al >= bu => {
-                        CascadeVerdict::Separated
-                    }
+                    (Some((al, _)), Some((_, bu))) if al >= bu => CascadeVerdict::Separated,
                     _ => CascadeVerdict::Weak,
                 }
             }
@@ -337,8 +335,14 @@ impl CorpusStats {
             kept: 0,
             reverted: 0,
             transitions: 0,
-            cascade: Badness::ALL.iter().map(|i| (*i, CascadeStats::default())).collect(),
-            first_wrong: Badness::ALL.iter().map(|i| (*i, FirstWrong::default())).collect(),
+            cascade: Badness::ALL
+                .iter()
+                .map(|i| (*i, CascadeStats::default()))
+                .collect(),
+            first_wrong: Badness::ALL
+                .iter()
+                .map(|i| (*i, FirstWrong::default()))
+                .collect(),
             attribution: Attribution::default(),
             silent: SilentFailure::default(),
         }
@@ -510,8 +514,7 @@ pub fn analyze_corpus(label: &str, runs: &[RunRing]) -> CorpusStats {
                     *pos_sum.entry(ind).or_default() += p;
                     if ind == Badness::OutcomeReverted {
                         let code = &lines[p].code;
-                        *s
-                            .attribution
+                        *s.attribution
                             .first_wrong_by_code
                             .entry(code.clone())
                             .or_default() += 1;
@@ -538,9 +541,8 @@ pub fn analyze_corpus(label: &str, runs: &[RunRing]) -> CorpusStats {
     for ind in Badness::ALL {
         let h = hist.get(&ind);
         let runs_with = h.map_or(0, |m| m.values().sum());
-        let mean_pos = (runs_with > 0).then(|| {
-            pos_sum.get(&ind).copied().unwrap_or(0) as f64 / runs_with as f64
-        });
+        let mean_pos = (runs_with > 0)
+            .then(|| pos_sum.get(&ind).copied().unwrap_or(0) as f64 / runs_with as f64);
         let (max_share, ks) = h.map_or((0.0, 0.0), |m| {
             let total: usize = m.values().sum();
             // Mode = highest count, ties to the SMALLEST position (the
@@ -621,9 +623,9 @@ pub fn transfer_verdict(corpora: &[CorpusStats], ind: Badness) -> TransferVerdic
         0 | 1 => TransferVerdict::Unmeasured,
         _ => {
             let all_sep = with_support.iter().all(|v| *v == CascadeVerdict::Separated);
-            let all_pos = with_support.iter().all(|v| {
-                matches!(v, CascadeVerdict::Separated | CascadeVerdict::Weak)
-            });
+            let all_pos = with_support
+                .iter()
+                .all(|v| matches!(v, CascadeVerdict::Separated | CascadeVerdict::Weak));
             let all_null = with_support.iter().all(|v| *v == CascadeVerdict::Null);
             if all_sep {
                 TransferVerdict::AllSeparated
@@ -729,7 +731,9 @@ pub fn render(r: &FixseqReport) -> String {
         )
         .unwrap();
         for c in r.corpora.iter().chain(std::iter::once(&r.pooled)) {
-            let Some(cs) = c.cascade.get(&ind) else { continue };
+            let Some(cs) = c.cascade.get(&ind) else {
+                continue;
+            };
             if cs.transitions() == 0 {
                 writeln!(
                     out,
@@ -748,9 +752,7 @@ pub fn render(r: &FixseqReport) -> String {
             let pbg = cs
                 .p_bad_given_good()
                 .map_or("-".to_string(), |v| format!("{v:.3}"));
-            let ratio = cs
-                .ratio()
-                .map_or("-".to_string(), |v| format!("{v:.2}"));
+            let ratio = cs.ratio().map_or("-".to_string(), |v| format!("{v:.2}"));
             writeln!(
                 out,
                 "    {:<24} {:>5} {:>7} {:>12} {:>7} {:>12} {:>6} {:<12}",
@@ -917,7 +919,10 @@ mod tests {
     #[allow(clippy::float_cmp)] // exact-by-construction: k=0/40 short-circuit to the literal (0.0, 0.0) — the spec IS exact equality
     fn wilson_bounds_point_and_shrink() {
         let (lo, hi) = wilson(5, 10);
-        assert!((lo - 0.2367).abs() < 1e-3 && (hi - 0.7633).abs() < 1e-3, "({lo},{hi})");
+        assert!(
+            (lo - 0.2367).abs() < 1e-3 && (hi - 0.7633).abs() < 1e-3,
+            "({lo},{hi})"
+        );
         assert_eq!(wilson(3, 0), (0.0, 0.0));
         let zero = wilson(0, 40).0;
         assert_eq!(zero, 0.0);
@@ -1074,23 +1079,32 @@ mod tests {
             }
             ring(v)
         };
-        let s = analyze_corpus(
-            "t",
-            &[mk(0), mk(0)],
-        );
+        let s = analyze_corpus("t", &[mk(0), mk(0)]);
         let fw = &s.first_wrong[&Badness::OutcomeReverted];
         assert_eq!(fw.runs_with, 2);
-        assert!((fw.ks_vs_point_mass - 0.0).abs() < 1e-9, "{}", fw.ks_vs_point_mass);
+        assert!(
+            (fw.ks_vs_point_mass - 0.0).abs() < 1e-9,
+            "{}",
+            fw.ks_vs_point_mass
+        );
         assert!((fw.max_share - 1.0).abs() < 1e-9);
         assert!((fw.mean_pos.unwrap() - 0.0).abs() < 1e-9);
         // First-wrong at 0 and 2: F(0)=0.5, share 0.5 -> KS = 0.5.
         let s2 = analyze_corpus("t", &[mk(0), mk(2)]);
         let fw2 = &s2.first_wrong[&Badness::OutcomeReverted];
-        assert!((fw2.ks_vs_point_mass - 0.5).abs() < 1e-9, "{}", fw2.ks_vs_point_mass);
+        assert!(
+            (fw2.ks_vs_point_mass - 0.5).abs() < 1e-9,
+            "{}",
+            fw2.ks_vs_point_mass
+        );
         // 0 and 1: F(0)=0.5 share 0.5, mode=0 -> KS = max(0.5-0.5, 0.5)=0.5.
         let s3 = analyze_corpus("t", &[mk(0), mk(1)]);
         let fw3 = &s3.first_wrong[&Badness::OutcomeReverted];
-        assert!((fw3.ks_vs_point_mass - 0.5).abs() < 1e-9, "{}", fw3.ks_vs_point_mass);
+        assert!(
+            (fw3.ks_vs_point_mass - 0.5).abs() < 1e-9,
+            "{}",
+            fw3.ks_vs_point_mass
+        );
     }
 
     #[test]
@@ -1122,16 +1136,19 @@ mod tests {
             cascade: Badness::ALL
                 .iter()
                 .map(|i| {
-                    (*i, if *i == Badness::OutcomeReverted {
-                        CascadeStats {
-                            bad_after_bad: bab,
-                            good_after_bad: gab,
-                            bad_after_good: bag,
-                            good_after_good: gag,
-                        }
-                    } else {
-                        CascadeStats::default()
-                    })
+                    (
+                        *i,
+                        if *i == Badness::OutcomeReverted {
+                            CascadeStats {
+                                bad_after_bad: bab,
+                                good_after_bad: gab,
+                                bad_after_good: bag,
+                                good_after_good: gag,
+                            }
+                        } else {
+                            CascadeStats::default()
+                        },
+                    )
                 })
                 .collect(),
             ..CorpusStats::zeroed("t")

@@ -44,7 +44,9 @@ use super::helpers::{bool_lit, byte_range, is_postfix_safe, macro_expr_args};
 use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
 use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
-use syn::{Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type};
+use syn::{
+    Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type,
+};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -88,16 +90,24 @@ struct Collector<'a> {
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
-        self.scopes
-            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
+        self.scopes.push(ScopeKinds::from_fn(
+            &f.sig,
+            &f.block,
+            self.source,
+            &self.fn_rets,
+        ));
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_item_fn(self, f);
         self.scopes.pop();
     }
 
     fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
-        self.scopes
-            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
+        self.scopes.push(ScopeKinds::from_fn(
+            &f.sig,
+            &f.block,
+            self.source,
+            &self.fn_rets,
+        ));
         self.note_fn_tail_pin(&f.sig, &f.block);
         syn::visit::visit_impl_item_fn(self, f);
         self.scopes.pop();
@@ -210,8 +220,7 @@ fn scan_expr_for_matches(
     impl<'ast> Visit<'ast> for Sub<'ast> {
         fn visit_expr_method_call(&mut self, m: &'ast ExprMethodCall) {
             syn::visit::visit_expr_method_call(self, m);
-            if let Some(replacement) = try_map_or(self.source, m, self.scope, self.fn_rets, false)
-            {
+            if let Some(replacement) = try_map_or(self.source, m, self.scope, self.fn_rets, false) {
                 self.edits.push(edit(m, replacement));
             }
         }

@@ -46,11 +46,11 @@
 //! `RUSTUP_TOOLCHAIN` override for the child cargo — some sibling repos
 //! resolve a GNU host toolchain on this box and need the MSVC pin).
 
+use riir_rag::ast_chunker::AstChunker;
+use riir_rag::chunker::Chunker;
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
-use riir_rag::ast_chunker::AstChunker;
-use riir_rag::chunker::Chunker;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader};
@@ -621,7 +621,14 @@ fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
                 .unwrap_or_default();
             if matches!(
                 name.as_str(),
-                ".git" | "target" | "vendor" | "node_modules" | ".heal" | ".refine" | "dist" | "out"
+                ".git"
+                    | "target"
+                    | "vendor"
+                    | "node_modules"
+                    | ".heal"
+                    | ".refine"
+                    | "dist"
+                    | "out"
             ) {
                 continue;
             }

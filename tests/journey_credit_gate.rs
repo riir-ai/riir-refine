@@ -29,7 +29,14 @@ use riir_refine::domains::rustc_errors::driver::{
 use riir_refine::journey::journey_factor;
 use riir_refine::traj_store::TrajStore;
 
-fn rec(seq: usize, code: &str, strat: &str, outcome: AttemptOutcome, errors: (usize, usize), masking: (usize, usize)) -> AttemptRecord {
+fn rec(
+    seq: usize,
+    code: &str,
+    strat: &str,
+    outcome: AttemptOutcome,
+    errors: (usize, usize),
+    masking: (usize, usize),
+) -> AttemptRecord {
     AttemptRecord {
         seq,
         code: code.to_string(),
@@ -51,15 +58,43 @@ fn rec(seq: usize, code: &str, strat: &str, outcome: AttemptOutcome, errors: (us
 #[test]
 fn ring_replay_strand_ranks_above_clean() {
     let f4 = vec![
-        rec(0, "E0614", "e0614-deref-at-use", AttemptOutcome::Kept, (1, 1), (1, 0)),
-        rec(1, "E0499", "e0499-swap-second-decl", AttemptOutcome::Kept, (1, 0), (0, 0)),
+        rec(
+            0,
+            "E0614",
+            "e0614-deref-at-use",
+            AttemptOutcome::Kept,
+            (1, 1),
+            (1, 0),
+        ),
+        rec(
+            1,
+            "E0499",
+            "e0499-swap-second-decl",
+            AttemptOutcome::Kept,
+            (1, 0),
+            (0, 0),
+        ),
     ];
     let strand = vec![
         // The pre-100 poison: count-only rule KEPT the clone-out (2→1)
         // while masking went 0→1; the run ends masked, nothing left to
         // propose.
-        rec(0, "E0502", "e0502-deref-removal", AttemptOutcome::RevertedNoProgress, (2, 2), (0, 0)),
-        rec(1, "E0502", "e0502-clone-out", AttemptOutcome::Kept, (2, 1), (0, 1)),
+        rec(
+            0,
+            "E0502",
+            "e0502-deref-removal",
+            AttemptOutcome::RevertedNoProgress,
+            (2, 2),
+            (0, 0),
+        ),
+        rec(
+            1,
+            "E0502",
+            "e0502-clone-out",
+            AttemptOutcome::Kept,
+            (2, 1),
+            (0, 1),
+        ),
     ];
     let c_clean = JourneyCredit::from_attempts(&f4);
     let c_strand = JourneyCredit::from_attempts(&strand);
@@ -92,17 +127,21 @@ fn store_replay_tainted_key_scores_strictly_lower() {
     let fix = "let (head, tail) = v.split_first().unwrap();";
     let key = "E0502:e0502-clone-out";
     let strand_composite = {
-        let strand = vec![rec(0, "E0502", "e0502-clone-out", AttemptOutcome::Kept, (2, 1), (0, 1))];
+        let strand = vec![rec(
+            0,
+            "E0502",
+            "e0502-clone-out",
+            AttemptOutcome::Kept,
+            (2, 1),
+            (0, 1),
+        )];
         JourneyCredit::from_attempts(&strand).taint_composite_256()
     };
     assert!(strand_composite > 0);
 
     let score_in_store = |taint: Option<Option<u32>>| {
-        let root = std::env::temp_dir().join(format!(
-            "riir_105_gate_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let root =
+            std::env::temp_dir().join(format!("riir_105_gate_{}_{}", std::process::id(), line!()));
         let _ = std::fs::remove_dir_all(&root);
         let (store, bad) = TrajStore::open(&root).expect("store opens");
         assert_eq!(bad, 0);
@@ -114,7 +153,12 @@ fn store_replay_tainted_key_scores_strictly_lower() {
                     .expect("journey record");
             }
         }
-        let score = riir_refine::traj_store::shape_conditional_score(&store, "E0502", "e0502-clone-out", shape);
+        let score = riir_refine::traj_store::shape_conditional_score(
+            &store,
+            "E0502",
+            "e0502-clone-out",
+            shape,
+        );
         let _ = std::fs::remove_dir_all(&root);
         score
     };

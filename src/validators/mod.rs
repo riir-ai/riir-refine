@@ -17,7 +17,11 @@
 // Admission arithmetic casts between decoder widths (usize counts, u32
 // offsets, i64 segment bounds). Every cast feeds a bound check in the same
 // expression — the value is validated where it is consumed.
-#![allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+#![allow(
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap
+)]
 
 pub mod interp;
 pub mod store;
@@ -31,8 +35,8 @@ pub use store::{
 };
 
 use katgpt_percepta::wasm::{
-    check_basic_only, decode, lower_hard_ops, lower_i64_ops, DataSegment, DecodeError,
-    ExportKind, ImportKind, WasmInstr, OP_BLOCK, OP_ELSE, OP_END, OP_IF, OP_LOOP, VALTYPE_I32,
+    check_basic_only, decode, lower_hard_ops, lower_i64_ops, DataSegment, DecodeError, ExportKind,
+    ImportKind, WasmInstr, OP_BLOCK, OP_ELSE, OP_END, OP_IF, OP_LOOP, VALTYPE_I32,
 };
 use std::collections::HashMap;
 
@@ -87,7 +91,10 @@ impl std::fmt::Display for AdmissionError {
                 write!(f, "module carries {n} host imports (fixed ABI refuses all)")
             }
             AdmissionError::MissingExport => write!(f, "no `{ABI_FUNC}` function export"),
-            AdmissionError::ExportOob(i) => write!(f, "`{ABI_FUNC}` export names function {i} outside the declared space"),
+            AdmissionError::ExportOob(i) => write!(
+                f,
+                "`{ABI_FUNC}` export names function {i} outside the declared space"
+            ),
             AdmissionError::AbiSignature => {
                 write!(f, "`{ABI_FUNC}` is not `(i32, i32) -> i32`")
             }
@@ -102,9 +109,15 @@ impl std::fmt::Display for AdmissionError {
             AdmissionError::MalformedControl => {
                 write!(f, "structured control flow does not close")
             }
-            AdmissionError::DataOffsetNegative(o) => write!(f, "data segment at negative offset {o}"),
+            AdmissionError::DataOffsetNegative(o) => {
+                write!(f, "data segment at negative offset {o}")
+            }
             AdmissionError::DataTooLarge { offset, len } => {
-                write!(f, "data segment [{offset}, {}) exceeds {MEM_LEN} bytes", offset + len)
+                write!(
+                    f,
+                    "data segment [{offset}, {}) exceeds {MEM_LEN} bytes",
+                    offset + len
+                )
             }
             AdmissionError::DataOverlap { offset, len } => write!(
                 f,
@@ -112,10 +125,16 @@ impl std::fmt::Display for AdmissionError {
                 offset + len
             ),
             AdmissionError::LocalsCap { function, locals } => {
-                write!(f, "function {function} has {locals} locals (cap {MAX_LOCALS})")
+                write!(
+                    f,
+                    "function {function} has {locals} locals (cap {MAX_LOCALS})"
+                )
             }
             AdmissionError::TooManyParams { function, params } => {
-                write!(f, "function {function} takes {params} params (cap {MAX_PARAMS})")
+                write!(
+                    f,
+                    "function {function} takes {params} params (cap {MAX_PARAMS})"
+                )
             }
         }
     }
@@ -213,7 +232,10 @@ impl ValidatorModule {
             let ty = &module.types[module.func_type_indices[i] as usize];
             let num_params = ty.params.len();
             if num_params > MAX_PARAMS {
-                return Err(AdmissionError::TooManyParams { function: i, params: num_params });
+                return Err(AdmissionError::TooManyParams {
+                    function: i,
+                    params: num_params,
+                });
             }
             let lowered_i64 = lower_i64_ops(body);
             let lowered = lower_hard_ops(&lowered_i64, num_params as u32);
@@ -228,7 +250,10 @@ impl ValidatorModule {
             }
             let total_locals = num_params as u32 + lowered.num_locals;
             if total_locals > MAX_LOCALS {
-                return Err(AdmissionError::LocalsCap { function: i, locals: total_locals });
+                return Err(AdmissionError::LocalsCap {
+                    function: i,
+                    locals: total_locals,
+                });
             }
             let ctrls = build_ctrls(&lowered.instructions)?;
             functions.push(PreparedFunc {
@@ -251,12 +276,18 @@ impl ValidatorModule {
                 return Err(AdmissionError::DataOffsetNegative(*offset));
             }
             if end > MEM_LEN as i64 {
-                return Err(AdmissionError::DataTooLarge { offset: *offset as u32, len: data.len() as u32 });
+                return Err(AdmissionError::DataTooLarge {
+                    offset: *offset as u32,
+                    len: data.len() as u32,
+                });
             }
             let over_score = off < i64::from(ABI_SCORE_ADDR) + 4 && end > i64::from(ABI_SCORE_ADDR);
             let over_input = off < MEM_LEN as i64 && end > i64::from(ABI_INPUT_ADDR);
             if over_score || over_input {
-                return Err(AdmissionError::DataOverlap { offset: *offset as u32, len: data.len() as u32 });
+                return Err(AdmissionError::DataOverlap {
+                    offset: *offset as u32,
+                    len: data.len() as u32,
+                });
             }
             data_segments.push((*offset as u32, data.clone()));
         }
@@ -322,7 +353,9 @@ fn build_ctrls(instrs: &[WasmInstr]) -> Result<Vec<Ctrl>, AdmissionError> {
                 }));
             }
             OP_ELSE => match open.last() {
-                Some(Some(Open { pc, is_if: true, .. })) => {
+                Some(Some(Open {
+                    pc, is_if: true, ..
+                })) => {
                     if ctrls[*pc].else_pc.is_some() {
                         return Err(AdmissionError::MalformedControl);
                     }

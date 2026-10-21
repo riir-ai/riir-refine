@@ -48,7 +48,10 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     if file_shadows(file, SHADOW_NAMES) {
         return Vec::new(); // conservatively empty — the guard refused the file
     }
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -209,7 +212,10 @@ mod tests {
             "io_other_error",
             "fn mk(e: String) -> std::io::Error { std::io::Error::new(Other, e) }",
         );
-        assert!(out.is_none(), "bare Other (glob provenance) must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "bare Other (glob provenance) must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -222,7 +228,10 @@ mod tests {
             "io_other_error",
             "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e, 1) }",
         );
-        assert!(one.is_none() && three.is_none(), "arity must refuse: {one:?} {three:?}");
+        assert!(
+            one.is_none() && three.is_none(),
+            "arity must refuse: {one:?} {three:?}"
+        );
     }
 
     #[test]
@@ -240,7 +249,10 @@ mod tests {
             "io_other_error",
             "fn mk(e: String) -> std::io::Error { std::io::Error::new(\n    std::io::ErrorKind::Other,\n    // the payload\n    e) }",
         );
-        assert!(out.is_none(), "comment in the deleted range must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment in the deleted range must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -274,6 +286,9 @@ mod tests {
             "io_other_error",
             "use mycrate::Error;\nfn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }",
         );
-        assert!(out.is_none(), "non-std Error import must trip the guard: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-std Error import must trip the guard: {out:?}"
+        );
     }
 }

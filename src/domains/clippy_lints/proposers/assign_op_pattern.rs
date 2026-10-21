@@ -61,8 +61,8 @@ use super::{edit, SourceEdit};
 /// these by construction (`bool` refuses: its `&`/`|`/`^` shapes are real
 /// but vanishingly rare and outside the probe-verified surface).
 const ARITH_SCALARS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
-    "f32", "f64",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64",
 ];
 
 /// The emit spelling per op (same order as the `op_of` match).
@@ -205,7 +205,9 @@ impl<'ast> Visit<'ast> for LetScan<'_> {
             );
             return;
         }
-        let Some(init) = l.init.as_ref().map(|i| &*i.expr) else { return };
+        let Some(init) = l.init.as_ref().map(|i| &*i.expr) else {
+            return;
+        };
         // (c) init-transfer from an already-proven ident.
         if let Some(src_ty) = ident_text(init)
             .and_then(|n| self.proven.get(&n))
@@ -245,16 +247,27 @@ fn derive_bindings<'a>(
     // Params: annotation only.
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
         if let Some(ty) = bare_arith_type(&p.ty) {
-            insert_proven(&mut proven, counts, pi.ident.to_string(), ty, byte_range(p).end);
+            insert_proven(
+                &mut proven,
+                counts,
+                pi.ident.to_string(),
+                ty,
+                byte_range(p).end,
+            );
         }
     }
     // Lets, in source order (the walker visits in syntactic order).
-    let mut scan = LetScan { proven: &mut proven, counts };
+    let mut scan = LetScan {
+        proven: &mut proven,
+        counts,
+    };
     scan.visit_block(block);
     proven
 }
@@ -338,7 +351,9 @@ impl Collector<'_> {
             return None;
         }
         // RHS: a binary of the admitted op set (outer parens unwrapped).
-        let Expr::Binary(b) = unwrap_parens(&a.right) else { return None };
+        let Expr::Binary(b) = unwrap_parens(&a.right) else {
+            return None;
+        };
         if !b.attrs.is_empty() {
             return None;
         }
@@ -571,7 +586,10 @@ mod tests {
             "fn outer(hits: &mut Vec<i32>) -> i32 { hits.push(0); fn inner(q: u32) -> u32 { let mut z = q; z = z + 7; z } inner(1) }",
         )
         .expect("matched");
-        assert!(out.contains("z += 7"), "inner fn pattern not rewritten: {out}");
+        assert!(
+            out.contains("z += 7"),
+            "inner fn pattern not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -591,7 +609,10 @@ mod tests {
             "struct W { n: u8 }\nimpl W {\n    fn grow(&self, mut c: u8) -> u8 { c = c * 2; c }\n}",
         )
         .expect("matched");
-        assert!(out.contains("c *= 2"), "impl-method param not derived: {out}");
+        assert!(
+            out.contains("c *= 2"),
+            "impl-method param not derived: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

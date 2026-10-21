@@ -4057,10 +4057,7 @@ const V8_CREATED_CLAIMS: &[(&str, &[&str])] = &[
     ),
     // The three EXCLUDED atoms' claims (inherent/trait method calls, the
     // nrl splice) measured EMPTY — dissolved, excluded, recorded.
-    (
-        "gen8-birth-method",
-        &["redundant_closure_for_method_calls"],
-    ),
+    ("gen8-birth-method", &["redundant_closure_for_method_calls"]),
     (
         "gen8-birth-traitmethod",
         &["redundant_closure_for_method_calls"],
@@ -4362,7 +4359,10 @@ mod tests {
         // must never reach the bench. Post-freeze: every spec labeled or
         // excluded (freeze_status_for's own assertion).
         if FROZEN_LABELS_V8.is_empty() && EXCLUDED_IDS_V8.is_empty() {
-            assert!(v8_freeze_status().is_err(), "pre-freeze must not claim readiness");
+            assert!(
+                v8_freeze_status().is_err(),
+                "pre-freeze must not claim readiness"
+            );
         } else {
             assert!(v8_freeze_status().is_ok());
             // The created record covers every admitted atom (the shape

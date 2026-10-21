@@ -40,12 +40,7 @@ impl CompileProposer for E0614DerefAtUse {
         "E0614"
     }
 
-    fn propose(
-        &self,
-        diag: &RustcErrorDiag,
-        file: &Path,
-        source: &str,
-    ) -> Vec<FixCandidate> {
+    fn propose(&self, diag: &RustcErrorDiag, file: &Path, source: &str) -> Vec<FixCandidate> {
         if diag.code != self.code() {
             return Vec::new();
         }
@@ -55,9 +50,11 @@ impl CompileProposer for E0614DerefAtUse {
         let Some((pf, _)) = diag.primary.as_ref() else {
             return Vec::new();
         };
-        let Some(span) = diag.labeled_spans.iter().find(|ls| {
-            ls.file == *pf && ls.is_primary && ls.label.contains("dereferenced")
-        }) else {
+        let Some(span) = diag
+            .labeled_spans
+            .iter()
+            .find(|ls| ls.file == *pf && ls.is_primary && ls.label.contains("dereferenced"))
+        else {
             return Vec::new();
         };
         let Some(text) = source.get(span.byte_start..span.byte_end) else {
@@ -145,12 +142,7 @@ mod tests {
         assert_eq!(out[0].replacement, "");
         assert!(out[0].extra_edits.is_empty());
         // The spliced result reads `head + v[0]`.
-        let spliced = format!(
-            "{}{}{}",
-            &SRC[..at],
-            "",
-            &SRC[at + 1..]
-        );
+        let spliced = format!("{}{}{}", &SRC[..at], "", &SRC[at + 1..]);
         assert!(spliced.contains("head + v[0]"), "{spliced}");
         assert!(!spliced.contains("*head"));
     }
@@ -163,29 +155,23 @@ mod tests {
         let at2 = src.find("**x").unwrap();
         let _ = at;
         let diag = e0614_diag(at2, at2 + 3, "can't be dereferenced");
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), src)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), src)
+            .is_empty());
         // `*x.f` — field access under the star.
         let src = "struct S { f: i32 }\nfn g(x: S) -> i32 { *x.f }\n";
         let at3 = src.find("*x.f").unwrap();
         let diag = e0614_diag(at3, at3 + 4, "can't be dereferenced");
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), src)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), src)
+            .is_empty());
         // `*f(x)` — a call operand.
         let src = "fn h() -> i32 { 1 }\nfn i() -> i32 { *h() }\n";
         let at4 = src.find("*h()").unwrap();
         let diag = e0614_diag(at4, at4 + 4, "can't be dereferenced");
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), src)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), src)
+            .is_empty());
     }
 
     #[test]
@@ -194,24 +180,18 @@ mod tests {
         let at = star_at();
         let mut diag = e0614_diag(at, at + 5, "can't be dereferenced");
         diag.code = "E0502".to_string();
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), SRC)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), SRC)
+            .is_empty());
         // No labeled span with the deref label → silent (miss, not a guess).
         let diag = e0614_diag(at, at + 5, "first mutable borrow occurs here");
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), SRC)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), SRC)
+            .is_empty());
         // Labeled but the span does not carry bytes-identical source (drift).
         let diag = e0614_diag(at, at + 9, "can't be dereferenced");
-        assert!(
-            E0614DerefAtUse
-                .propose(&diag, Path::new("src/lib.rs"), SRC)
-                .is_empty()
-        );
+        assert!(E0614DerefAtUse
+            .propose(&diag, Path::new("src/lib.rs"), SRC)
+            .is_empty());
     }
 }

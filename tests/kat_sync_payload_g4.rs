@@ -28,7 +28,9 @@
 use riir_refine::kat_redact::{
     scan_secrets, BlockReason, RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION,
 };
-use riir_refine::kat_sync_payload::{parse_rows, verify_payload, PayloadHeader, RowOutcome, SyncPayloadBuilder};
+use riir_refine::kat_sync_payload::{
+    parse_rows, verify_payload, PayloadHeader, RowOutcome, SyncPayloadBuilder,
+};
 use riir_refine::traj_store::TrajRowDoc;
 
 /// The shipped-policy shape (mirrors `riir-refine/.refine-sync-policy`).
@@ -385,7 +387,11 @@ fn t12b_ledger_id_arms_the_v3_splice_and_none_keeps_v2_bytes() {
     use riir_refine::kat_sync_payload::{SYNC_SIGNING_DOMAIN, SYNC_SIGNING_DOMAIN_V3};
 
     let gate = RedactionGate::from_policy(shipped_policy());
-    let rows = vec![row("needless_return", "fn g() { return 1; }", "fn g() { 1 }")];
+    let rows = vec![row(
+        "needless_return",
+        "fn g() { return 1; }",
+        "fn g() { 1 }",
+    )];
     let signer = golden_signer();
     let id = [0xD8u8; 32];
 
@@ -403,11 +409,21 @@ fn t12b_ledger_id_arms_the_v3_splice_and_none_keeps_v2_bytes() {
         .with_ledger_id(Some(id))
         .build_at(&rows, 7);
     assert_eq!(
-        bound.ndjson.lines().next().unwrap().split("\"signature_hex\"").next().unwrap(),
+        bound
+            .ndjson
+            .lines()
+            .next()
+            .unwrap()
+            .split("\"signature_hex\"")
+            .next()
+            .unwrap(),
         head.split("\"signature_hex\"").next().unwrap(),
         "identical bytes up to the signature (same commitment, same header)"
     );
-    assert_ne!(legacy.ndjson, bound.ndjson, "the signatures differ (different domains)");
+    assert_ne!(
+        legacy.ndjson, bound.ndjson,
+        "the signatures differ (different domains)"
+    );
 
     // THE SPLICE LAW at the sync site: v3-message = v3-domain ‖ id ‖ v2-tail.
     // Verify through the SIGNED payload: parse the header (the wire shape is

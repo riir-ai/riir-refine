@@ -244,7 +244,14 @@ pub fn audit_sources(sources: &[(String, String)]) -> PlatformAuditReport {
         // ungated use — the note_ane_dispatch miss). `#![cfg(test)]` at
         // file level is test context, same as an item-level one.
         let ctx = lattice.effective_ctx(file);
-        walk_items(&parsed.items, &ctx, &mut decls, &mut sinks, file, &Vec::new());
+        walk_items(
+            &parsed.items,
+            &ctx,
+            &mut decls,
+            &mut sinks,
+            file,
+            &Vec::new(),
+        );
     }
 
     report.decls_tracked = decls.values().map(Vec::len).sum();
@@ -413,10 +420,7 @@ impl ModRowLattice {
         for (file, pf) in parsed_files {
             own.insert(
                 file.clone(),
-                (
-                    guaranteed_from_attrs(&pf.attrs),
-                    attrs_cfg_test(&pf.attrs),
-                ),
+                (guaranteed_from_attrs(&pf.attrs), attrs_cfg_test(&pf.attrs)),
             );
         }
 
@@ -481,26 +485,18 @@ impl ModRowLattice {
         let mut visiting: HashSet<String> = HashSet::new();
         let mut folded: HashSet<String> = HashSet::new();
         for (file, _) in parsed_files {
-            effective_root(
-                file,
-                &own,
-                &incoming,
-                &mut memo,
-                &mut visiting,
-                &mut folded,
-            );
+            effective_root(file, &own, &incoming, &mut memo, &mut visiting, &mut folded);
         }
-        Self { effective: memo, folded }
+        Self {
+            effective: memo,
+            folded,
+        }
     }
 
     /// The context a file's items walk under: its effective root ctx
     /// (own `#![cfg]` ∪ inherited mod-row gates).
     fn effective_ctx(&self, file: &str) -> Ctx {
-        let (atoms, in_test) = self
-            .effective
-            .get(file)
-            .cloned()
-            .unwrap_or_default();
+        let (atoms, in_test) = self.effective.get(file).cloned().unwrap_or_default();
         Ctx { atoms, in_test }
     }
 
@@ -530,14 +526,7 @@ fn effective_root(
             let contributions: Vec<(AtomSet, bool)> = rows
                 .iter()
                 .map(|r| {
-                    let (pa, pt) = effective_root(
-                        &r.parent,
-                        own,
-                        incoming,
-                        memo,
-                        visiting,
-                        folded,
-                    );
+                    let (pa, pt) = effective_root(&r.parent, own, incoming, memo, visiting, folded);
                     let mut a = pa;
                     a.extend(r.atoms.iter().cloned());
                     (a, pt || r.in_test)
@@ -634,9 +623,7 @@ fn resolution_base(file: &str) -> PathBuf {
         p.parent().map(Path::to_path_buf).unwrap_or_default()
     } else {
         let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-        p.parent()
-            .map(|d| d.join(stem))
-            .unwrap_or_default()
+        p.parent().map(|d| d.join(stem)).unwrap_or_default()
     }
 }
 
@@ -881,9 +868,27 @@ fn in_scope_evidence(
 /// braced word in a shader/yaml macro is data, not a capture — the miss
 /// direction).
 const FORMAT_MACROS: [&str; 21] = [
-    "format", "format_args", "println", "eprintln", "print", "eprint", "write", "writeln",
-    "panic", "assert", "assert_eq", "assert_ne", "todo", "unreachable", "info", "warn",
-    "error", "debug", "trace", "bail", "ensure",
+    "format",
+    "format_args",
+    "println",
+    "eprintln",
+    "print",
+    "eprint",
+    "write",
+    "writeln",
+    "panic",
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "todo",
+    "unreachable",
+    "info",
+    "warn",
+    "error",
+    "debug",
+    "trace",
+    "bail",
+    "ensure",
 ];
 
 /// Expression-argument macros whose ARGS are ordinary Rust expressions —
@@ -894,7 +899,12 @@ const FORMAT_MACROS: [&str; 21] = [
 /// are skipped so a multi-segment path counts once, on its last segment —
 /// the same rule as `visit_path`.
 const EXPR_ARG_MACROS: [&str; 7] = [
-    "assert", "assert_eq", "assert_ne", "debug_assert", "debug_assert_eq", "debug_assert_ne",
+    "assert",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
     "matches",
 ];
 
@@ -999,8 +1009,10 @@ fn scan_expr_idents(tokens: &proc_macro2::TokenStream, found: &mut BTreeMap<Stri
     let mut i = 0;
     while i < flat.len() {
         if let TokenTree::Ident(id) = &flat[i] {
-            let is_path_prefix = matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':');
-            let is_macro_name = matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
+            let is_path_prefix =
+                matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == ':');
+            let is_macro_name =
+                matches!(flat.get(i + 1), Some(TokenTree::Punct(p)) if p.as_char() == '!');
             let s = id.to_string();
             if !is_path_prefix && !is_macro_name {
                 *found.entry(s).or_insert(0) += 1;
@@ -1161,7 +1173,10 @@ impl PlatformAuditReport {
         );
         let _ = writeln!(out, "{}", self.walk.note());
         if let Some(reason) = &self.blind {
-            let _ = writeln!(out, "\n⛔ REFUSING: {reason} — never a confident green zero.");
+            let _ = writeln!(
+                out,
+                "\n⛔ REFUSING: {reason} — never a confident green zero."
+            );
             return out;
         }
         if self.findings.is_empty() {
@@ -1260,8 +1275,7 @@ mod tests {
     /// drops; the arch atom condemns.
     #[test]
     fn neon_specimen_pre_fix_flags() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const NEON_U8: usize = 16;
 #[cfg(target_arch = "x86_64")]
 const AVX2_U8: usize = 32;
@@ -1273,8 +1287,7 @@ unsafe fn neon_is_interval_closed(mask: &[bool]) -> bool {
 }
 
 fn word_is_interval_closed(mask: &[bool], width: usize) -> bool { mask.len() == width }
-"#,
-        );
+"#);
         let missing = missing_of(&report, "NEON_U8");
         assert_eq!(
             missing,
@@ -1289,8 +1302,7 @@ fn word_is_interval_closed(mask: &[bool], width: usize) -> bool { mask.len() == 
     /// caller keeps `word_is_interval_closed` two-platform).
     #[test]
     fn neon_specimen_post_fix_silent() {
-        let report = one(
-            r#"
+        let report = one(r#"
 #[cfg(target_arch = "aarch64")]
 const NEON_U8: usize = 16;
 #[cfg(target_arch = "x86_64")]
@@ -1308,37 +1320,32 @@ unsafe fn avx2_is_interval_closed(mask: &[bool]) -> bool {
 }
 
 fn word_is_interval_closed(mask: &[bool], width: usize) -> bool { mask.len() == width }
-"#,
-        );
+"#);
         assert!(report.findings.is_empty());
     }
 
     /// Uses on two different platforms intersect to nothing — silent.
     #[test]
     fn two_platform_uses_silent() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(target_os = "macos")]
 fn a() -> u32 { KEY }
 #[cfg(target_os = "linux")]
 fn b() -> u32 { KEY }
-"#,
-        );
+"#);
         assert!(missing_of(&report, "KEY").is_empty());
     }
 
     /// One ungated use saves the item even alongside gated uses.
     #[test]
     fn ungated_use_saves() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(target_os = "macos")]
 fn a() -> u32 { KEY }
 fn b() -> u32 { KEY }
-"#,
-        );
+"#);
         assert!(missing_of(&report, "KEY").is_empty());
     }
 
@@ -1346,13 +1353,11 @@ fn b() -> u32 { KEY }
     /// only save, never condemn.
     #[test]
     fn any_arm_gives_no_guarantee() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(any(target_os = "macos", feature = "gpu"))]
 fn a() -> u32 { KEY }
-"#,
-        );
+"#);
         assert!(missing_of(&report, "KEY").is_empty());
     }
 
@@ -1360,13 +1365,11 @@ fn a() -> u32 { KEY }
     /// intersection for other uses too (conservative).
     #[test]
     fn not_contributes_nothing() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(not(target_os = "windows"))]
 fn a() -> u32 { KEY }
-"#,
-        );
+"#);
         assert!(missing_of(&report, "KEY").is_empty());
     }
 
@@ -1374,13 +1377,11 @@ fn a() -> u32 { KEY }
     /// still condemns.
     #[test]
     fn feature_atoms_drop_but_all_keeps_platform() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(all(unix, feature = "z"))]
 fn a() -> u32 { KEY }
-"#,
-        );
+"#);
         assert_eq!(
             missing_of(&report, "KEY"),
             one_atom("target_family", "unix")
@@ -1390,37 +1391,30 @@ fn a() -> u32 { KEY }
     /// Mod-stack cfgs attribute to decls and uses inside the mod.
     #[test]
     fn mod_cfg_stack() {
-        let report = one(
-            r#"
+        let report = one(r#"
 #[cfg(unix)]
 mod m {
     pub const X: u32 = 3;
 }
 #[cfg(target_os = "macos")]
 fn user() -> u32 { m::X }
-"#,
-        );
+"#);
         // Decl D = {family unix}; the only use sits under macos — the
         // item is dead on the non-macos unix hosts (linux).
-        assert_eq!(
-            missing_of(&report, "X"),
-            one_atom("target_os", "macos")
-        );
+        assert_eq!(missing_of(&report, "X"), one_atom("target_os", "macos"));
     }
 
     /// Recursion inside the fn's own body is not a use; one gated external
     /// call still condemns.
     #[test]
     fn fn_recursion_not_a_use() {
-        let report = one(
-            r#"
+        let report = one(r#"
 fn walk(n: u32) -> u32 {
     if n == 0 { 0 } else { walk(n - 1) }
 }
 #[cfg(target_arch = "wasm32")]
 fn caller() -> u32 { walk(3) }
-"#,
-        );
+"#);
         assert_eq!(
             missing_of(&report, "walk"),
             one_atom("target_arch", "wasm32")
@@ -1430,14 +1424,12 @@ fn caller() -> u32 { walk(3) }
     /// Same name declared twice — ambiguous, skipped, never guessed.
     #[test]
     fn ambiguous_name_skipped() {
-        let report = one(
-            r#"
+        let report = one(r#"
 mod a { const MASK: u32 = 1; }
 mod b { const MASK: u32 = 2; }
 #[cfg(target_os = "macos")]
 fn user() -> u32 { a::MASK + b::MASK }
-"#,
-        );
+"#);
         assert!(report.findings.is_empty());
         assert_eq!(report.ambiguous_names, 1);
     }
@@ -1448,14 +1440,12 @@ fn user() -> u32 { a::MASK + b::MASK }
     /// of the local binding (it counts only for the source, below).
     #[test]
     fn ungated_import_with_gated_code_uses_flags() {
-        let report = one(
-            r#"
+        let report = one(r#"
 use std::sync::Mutex;
 
 #[cfg(target_os = "macos")]
 fn a(m: Mutex<()>) {}
-"#,
-        );
+"#);
         let f = report
             .findings
             .iter()
@@ -1485,11 +1475,10 @@ fn a(m: Mutex<()>) {}
                     .to_string(),
             ),
         ]);
-        assert!(report
-            .findings
-            .iter()
-            .all(|f| f.name == "SPEED"),
-            "the import decl itself stays silent");
+        assert!(
+            report.findings.iter().all(|f| f.name == "SPEED"),
+            "the import decl itself stays silent"
+        );
         let f = report
             .findings
             .iter()
@@ -1523,14 +1512,12 @@ fn a(m: Mutex<()>) {}
     /// ungated-import shape under a rename).
     #[test]
     fn rename_import_tracks_both_names() {
-        let report = one(
-            r#"
+        let report = one(r#"
 use std::sync::Mutex as Locked;
 
 #[cfg(target_os = "macos")]
 fn a(m: Locked) {}
-"#,
-        );
+"#);
         assert_eq!(
             missing_of(&report, "Locked"),
             one_atom("target_os", "macos")
@@ -1547,8 +1534,7 @@ fn a(m: Locked) {}
     /// scope does not guarantee.
     #[test]
     fn cfg_test_import_ignores_out_of_scope_uses() {
-        let report = one(
-            r#"
+        let report = one(r#"
 enum X { A, B }
 
 #[cfg(target_arch = "wasm32")]
@@ -1566,8 +1552,7 @@ mod tests {
         assert!(!X::A.eq(&X::B));
     }
 }
-"#,
-        );
+"#);
         assert!(
             !report.findings.iter().any(|f| f.name == "X"),
             "the test-scoped import cannot carry wasm32 atoms from out-of-scope uses"
@@ -1582,8 +1567,7 @@ mod tests {
     /// suppressed the flag).
     #[test]
     fn private_import_in_scope_gated_uses_flag_despite_out_of_scope_ungated() {
-        let report = one(
-            r#"
+        let report = one(r#"
 enum Engine { A }
 
 mod m {
@@ -1594,8 +1578,7 @@ mod m {
 }
 
 fn root(e: Engine) {}
-"#,
-        );
+"#);
         assert_eq!(
             missing_of(&report, "Engine"),
             one_atom("target_os", "linux"),
@@ -1609,8 +1592,7 @@ fn root(e: Engine) {}
     /// flags).
     #[test]
     fn pub_reexport_keeps_name_global_evidence() {
-        let report = one(
-            r#"
+        let report = one(r#"
 enum Engine { A }
 
 mod m {
@@ -1621,8 +1603,7 @@ mod m {
 }
 
 fn root(e: Engine) {}
-"#,
-        );
+"#);
         assert!(
             !report.findings.iter().any(|f| f.name == "Engine"),
             "pub use rows keep the name-global evidence"
@@ -1655,16 +1636,14 @@ fn root(e: Engine) {}
     /// test-only marker for adjudication.
     #[test]
     fn test_only_marker() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const KEY: u32 = 7;
 #[cfg(test)]
 mod tests {
     #[cfg(target_arch = "wasm32")]
     fn t() -> u32 { super::KEY }
 }
-"#,
-        );
+"#);
         let f = report
             .findings
             .iter()
@@ -1677,13 +1656,11 @@ mod tests {
     /// reader's to check — the downstream hint).
     #[test]
     fn pub_marker() {
-        let report = one(
-            r#"
+        let report = one(r#"
 pub const KEY: u32 = 7;
 #[cfg(target_os = "macos")]
 fn a() -> u32 { KEY }
-"#,
-        );
+"#);
         let f = report
             .findings
             .iter()
@@ -1696,13 +1673,11 @@ fn a() -> u32 { KEY }
     /// (both the const and the fn here are unused).
     #[test]
     fn zero_uses_is_footer_only() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const UNUSED_HERE: u32 = 1;
 #[cfg(target_os = "macos")]
 fn a() -> u32 { 0 }
-"#,
-        );
+"#);
         assert!(report.findings.is_empty());
         assert_eq!(report.no_use_names, 2);
     }
@@ -1724,13 +1699,11 @@ fn a() -> u32 { 0 }
     /// The static + bare-path + multi-segment use shapes all tally.
     #[test]
     fn static_and_qualified_use() {
-        let report = one(
-            r#"
+        let report = one(r#"
 mod constants { pub static POOL: u32 = 4; }
 #[cfg(target_os = "windows")]
 fn a() -> u32 { constants::POOL }
-"#,
-        );
+"#);
         assert_eq!(
             missing_of(&report, "POOL"),
             one_atom("target_os", "windows")
@@ -1744,8 +1717,7 @@ fn a() -> u32 { constants::POOL }
     /// into the decl's atoms.
     #[test]
     fn file_gate_shelters_whole_file_decls() {
-        let report = one(
-            r#"
+        let report = one(r#"
 #![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 
 pub const DEFAULT_MAX_ANE_BYTES: u64 = 13_000_000_000;
@@ -1753,8 +1725,7 @@ pub const DEFAULT_MAX_ANE_BYTES: u64 = 13_000_000_000;
 pub fn ane_stage_dump() -> String {
     format!("{}", DEFAULT_MAX_ANE_BYTES)
 }
-"#,
-        );
+"#);
         assert!(
             report.findings.is_empty(),
             "a whole-file gate covers the decl AND its uses: {:?}",
@@ -1779,7 +1750,7 @@ pub fn ane_stage_dump() -> String {
                 r#"#![cfg(all(target_os = "macos", target_arch = "aarch64"))]
 pub fn arm() { super::note_ane_dispatch(); }
 "#
-                    .to_string(),
+                .to_string(),
             ),
         ]);
         let missing = missing_of(&report, "note_ane_dispatch");
@@ -1834,7 +1805,7 @@ pub fn arm() { super::note_ane_dispatch(); }
                 r#"#[cfg(all(target_arch = "wasm32", feature = "mesh_visuals"))]
 pub mod web_link;
 "#
-                    .to_string(),
+                .to_string(),
             ),
             (
                 "src/web_link.rs".to_string(),
@@ -1876,8 +1847,7 @@ pub mod wasm;"
             ),
             (
                 "src/main.rs".to_string(),
-                "#[cfg(target_arch = \"wasm32\")] fn b() { crate::wasm::run_wasm(); }"
-                    .to_string(),
+                "#[cfg(target_arch = \"wasm32\")] fn b() { crate::wasm::run_wasm(); }".to_string(),
             ),
         ]);
         assert!(
@@ -1954,10 +1924,7 @@ pub mod wasm;"
     #[test]
     fn mod_rs_parent_resolves_sibling_dir() {
         let report = audit_sources(&[
-            (
-                "src/lib.rs".to_string(),
-                "pub mod util;".to_string(),
-            ),
+            ("src/lib.rs".to_string(), "pub mod util;".to_string()),
             (
                 "src/util/mod.rs".to_string(),
                 "#[cfg(windows)] pub mod win;".to_string(),
@@ -2062,7 +2029,10 @@ pub mod wasm;"
                 "src/main.rs".to_string(),
                 "#[cfg(windows)] pub mod dup;".to_string(),
             ),
-            ("src/dup.rs".to_string(), "pub fn d() -> u8 { 1 }".to_string()),
+            (
+                "src/dup.rs".to_string(),
+                "pub fn d() -> u8 { 1 }".to_string(),
+            ),
             (
                 "src/user.rs".to_string(),
                 "#[cfg(unix)] fn u() { crate::dup::d(); }".to_string(),
@@ -2088,7 +2058,10 @@ pub mod wasm;"
                 "src/lib.rs".to_string(),
                 "#[cfg(unix)] #[path = \"elsewhere.rs\"] pub mod gone;".to_string(),
             ),
-            ("src/gone.rs".to_string(), "pub fn g() -> u8 { 1 }".to_string()),
+            (
+                "src/gone.rs".to_string(),
+                "pub fn g() -> u8 { 1 }".to_string(),
+            ),
             (
                 "src/user.rs".to_string(),
                 "#[cfg(unix)] fn u() { crate::gone::g(); }".to_string(),
@@ -2129,7 +2102,10 @@ pub mod wasm;"
             .iter()
             .find(|f| f.name == "BASE")
             .expect("row present");
-        assert!(row.test_only, "#[cfg(test)] on the mod row marks the child's uses test-only");
+        assert!(
+            row.test_only,
+            "#[cfg(test)] on the mod row marks the child's uses test-only"
+        );
     }
 
     /// The bin-root shape: `src/bin/tool.rs` is its own crate root (a
@@ -2158,8 +2134,7 @@ pub mod wasm;"
     /// macro — counted, so the gated uses cannot condemn the decl alone.
     #[test]
     fn inline_format_capture_counts_as_ungated_use() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const SWEEP_COUNTS: [usize; 3] = [10, 100, 1000];
 
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
@@ -2168,8 +2143,7 @@ fn sweep() -> usize { SWEEP_COUNTS[0] }
 fn main() {
     println!("Sweep sizes: {SWEEP_COUNTS:?}");
 }
-"#,
-        );
+"#);
         assert!(
             report.findings.is_empty(),
             "the inline capture is an ungated use: {:?}",
@@ -2182,8 +2156,7 @@ fn main() {
     /// intersection, not hide behind the macro.
     #[test]
     fn assert_family_args_count_as_uses() {
-        let report = one(
-            r#"
+        let report = one(r#"
 const SIGNALING: u8 = 0x20;
 
 #[cfg(target_arch = "wasm32")]
@@ -2194,8 +2167,7 @@ mod tests {
     #[test]
     fn constants() { assert_eq!(super::SIGNALING, 0x20); }
 }
-"#,
-        );
+"#);
         assert!(
             report.findings.is_empty(),
             "the assert_eq! arg use breaks the all-wasm32 intersection: {:?}",

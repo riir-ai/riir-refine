@@ -117,7 +117,13 @@ impl Collector {
             return;
         };
         // Macro-name edit: the single path segment's own span.
-        let ident = mac.path.segments.last().expect("single segment").ident.clone();
+        let ident = mac
+            .path
+            .segments
+            .last()
+            .expect("single segment")
+            .ident
+            .clone();
         let r = ident.span().byte_range();
         self.edits.push(SourceEdit {
             start: r.start,
@@ -230,10 +236,19 @@ mod tests {
     fn fires_on_every_probe_firing_shape() {
         // (buggy, fixed) — every FIRES row of the probe matrix.
         for (buggy, fixed) in [
-            ("fn f() { print!(\"ready\\n\"); }", "fn f() { println!(\"ready\"); }"),
-            ("fn f() { eprint!(\"err\\n\"); }", "fn f() { eprintln!(\"err\"); }"),
+            (
+                "fn f() { print!(\"ready\\n\"); }",
+                "fn f() { println!(\"ready\"); }",
+            ),
+            (
+                "fn f() { eprint!(\"err\\n\"); }",
+                "fn f() { eprintln!(\"err\"); }",
+            ),
             ("fn f() { print!(\"\\n\"); }", "fn f() { println!(); }"),
-            ("fn f() { print!(\"{} items\\n\", 3); }", "fn f() { println!(\"{} items\", 3); }"),
+            (
+                "fn f() { print!(\"{} items\\n\", 3); }",
+                "fn f() { println!(\"{} items\", 3); }",
+            ),
             (
                 "fn f(x: u32) { print!(\"value {x}\\n\"); }",
                 "fn f(x: u32) { println!(\"value {x}\"); }",

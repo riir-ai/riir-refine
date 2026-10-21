@@ -201,7 +201,10 @@ fn float_and_int_slice_signatures_are_now_scoreable() {
     // -0.0 + 0.0 == 0.0 — the signed-zero counterexample the corpus reaches.
     match &div {
         Verdict::Divergent { input, .. } => {
-            assert!(input.contains("-0.0"), "the counterexample is -0.0, got {input}");
+            assert!(
+                input.contains("-0.0"),
+                "the counterexample is -0.0, got {input}"
+            );
         }
         other => panic!("expected Divergent on -0.0, got {other:?}"),
     }
@@ -214,7 +217,10 @@ fn option_float_and_vec_int_signatures_are_now_scoreable() {
         "pub fn f(o: Option<f32>, v: Vec<u32>) -> u32 { v.len() as u32 + o.map(|_| 1u32).unwrap_or(0) }",
         "pub fn f(o: Option<f32>, v: Vec<u32>) -> u32 { v.len() as u32 + o.map(|_| 1u32).unwrap_or(0) }",
     );
-    assert!(matches!(got, Verdict::Equivalent { cases: 64 }), "got {got:?}");
+    assert!(
+        matches!(got, Verdict::Equivalent { cases: 64 }),
+        "got {got:?}"
+    );
 }
 
 #[test]
@@ -230,7 +236,11 @@ fn private_fn_modules_are_scoreable() {
     // one check per top-level fn, name_hint = the fn's own ident).
     let got = check(orig, broken, "hash_label", 64, &dir.join("div"));
     match &got {
-        Verdict::Divergent { original, candidate, .. } => {
+        Verdict::Divergent {
+            original,
+            candidate,
+            ..
+        } => {
             assert_ne!(original, candidate);
         }
         other => panic!("expected Divergent on hash_label, got {other:?}"),

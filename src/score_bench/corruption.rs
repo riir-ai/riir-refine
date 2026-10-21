@@ -641,10 +641,7 @@ fn ident_plans_for_fn(f: &ItemFn) -> Vec<IdentPlan> {
         }
         for from in names {
             for to in names {
-                if from == to
-                    || walker.binds.contains(from)
-                    || walker.binds.contains(to)
-                {
+                if from == to || walker.binds.contains(from) || walker.binds.contains(to) {
                     continue;
                 }
                 let spans = walker.uses.get(from).cloned().unwrap_or_default();
@@ -979,7 +976,10 @@ fn verify_specs(table: &[CorruptionSpec], arm: &str) -> Result<(), String> {
             return Err(format!("{}: k {} outside the ladder", spec.id, spec.k));
         }
         if spec.spans.is_empty() {
-            return Err(format!("{}: zero error spans (a no-op cannot be a fixture)", spec.id));
+            return Err(format!(
+                "{}: zero error spans (a no-op cannot be a fixture)",
+                spec.id
+            ));
         }
         let mut previous_end = 0usize;
         for (start, end) in spec.spans {
@@ -1027,12 +1027,10 @@ fn verify_specs(table: &[CorruptionSpec], arm: &str) -> Result<(), String> {
 pub fn v9_freeze_status() -> Result<usize, String> {
     let table = corpus();
     if table.is_empty() {
-        return Err(
-            "generation v9 corpus not generated — run \
+        return Err("generation v9 corpus not generated — run \
              `cargo test --features score_bench --test corruption_corpus_freeze -- --ignored \
              --test-threads=1` with RIIR_CRB_GEN_WRITE=1 and commit the result"
-                .to_string(),
-        );
+            .to_string());
     }
     let recorded = corruption_corpus_v9::CORPUS_V9_DIGEST;
     let computed = corpus_digest();
@@ -1079,7 +1077,10 @@ mod tests {
     fn sites_are_collected_across_all_three_classes() {
         let program = &SEED_PROGRAMS[0];
         let sites = collect_sites(program.code).expect("seed parses");
-        assert!(sites.singles.len() >= 6, "expected a real operator/literal surface");
+        assert!(
+            sites.singles.len() >= 6,
+            "expected a real operator/literal surface"
+        );
         let operators = sites
             .singles
             .iter()
@@ -1129,10 +1130,7 @@ mod tests {
         let code = "pub fn f(n: usize) -> usize {\n    let mut i = 0usize;\n    while i < n {\n        i += 1;\n    }\n    i + 1\n}\n";
         let sites = collect_sites(code).expect("parses");
         assert!(
-            !sites
-                .singles
-                .iter()
-                .any(|s| &code[s.start..s.end] == "<"),
+            !sites.singles.iter().any(|s| &code[s.start..s.end] == "<"),
             "while-condition operator must be excluded (hang law)"
         );
         // the body's `i + 1` IS a site
@@ -1176,8 +1174,7 @@ mod tests {
     #[test]
     fn plan_candidates_replace_exactly_one_parameter_name() {
         let candidates = build_candidates(11, 16);
-        let plan_candidates: Vec<&Candidate> =
-            candidates.iter().filter(|c| c.via_plan).collect();
+        let plan_candidates: Vec<&Candidate> = candidates.iter().filter(|c| c.via_plan).collect();
         assert!(!plan_candidates.is_empty(), "no plan route drawn");
         for candidate in &plan_candidates {
             assert_eq!(candidate.classes, vec![CorruptionClass::Ident]);

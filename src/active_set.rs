@@ -142,10 +142,18 @@ impl std::fmt::Display for ActiveSetError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Corrupt { path, source } => {
-                write!(f, "active-set marker {} is corrupt: {source}", path.display())
+                write!(
+                    f,
+                    "active-set marker {} is corrupt: {source}",
+                    path.display()
+                )
             }
             Self::Io { path, source } => {
-                write!(f, "active-set marker {} unreadable: {source}", path.display())
+                write!(
+                    f,
+                    "active-set marker {} unreadable: {source}",
+                    path.display()
+                )
             }
         }
     }
@@ -181,7 +189,9 @@ impl ActiveSet {
     pub fn load(path: &Path) -> Result<Self, ActiveSetError> {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
-            Err(source) if source.kind() == std::io::ErrorKind::NotFound => return Ok(Self::empty()),
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self::empty())
+            }
             Err(source) => {
                 return Err(ActiveSetError::Io {
                     path: path.to_path_buf(),
@@ -189,12 +199,11 @@ impl ActiveSet {
                 })
             }
         };
-        let file: ActiveSetFile = serde_json::from_str(&text).map_err(|source| {
-            ActiveSetError::Corrupt {
+        let file: ActiveSetFile =
+            serde_json::from_str(&text).map_err(|source| ActiveSetError::Corrupt {
                 path: path.to_path_buf(),
                 source,
-            }
-        })?;
+            })?;
         Ok(Self::from(file))
     }
 
@@ -243,10 +252,7 @@ impl ActiveSet {
             None => false,
         };
         if removed {
-            let now_empty = self
-                .demoted
-                .get(domain_key)
-                .is_some_and(BTreeSet::is_empty);
+            let now_empty = self.demoted.get(domain_key).is_some_and(BTreeSet::is_empty);
             if now_empty {
                 self.demoted.remove(domain_key);
             }
@@ -274,7 +280,10 @@ impl ActiveSet {
     /// posture).
     #[must_use]
     pub fn caps(&self) -> Vec<(String, u32)> {
-        self.max_active_per_domain.iter().map(|(k, v)| (k.clone(), *v)).collect()
+        self.max_active_per_domain
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect()
     }
 
     /// Remove every demotion and every cap — the `--active-set-clear`
@@ -290,7 +299,8 @@ impl ActiveSet {
     /// admission path enforces it ([`ActiveSet::enforce_cap`]); writing
     /// the marker alone never demotes anything.
     pub fn set_cap(&mut self, domain_key: &str, cap: u32) {
-        self.max_active_per_domain.insert(domain_key.to_string(), cap);
+        self.max_active_per_domain
+            .insert(domain_key.to_string(), cap);
     }
 
     /// Remove the per-domain ceiling (`--active-set-cap domain:0`) —
@@ -362,7 +372,9 @@ impl ActiveSet {
         live.sort_unstable_by(|a, b| {
             let contrib_a = contributions.get(*a).copied().unwrap_or(0);
             let contrib_b = contributions.get(*b).copied().unwrap_or(0);
-            contrib_a.cmp(&contrib_b).then_with(|| a.as_str().cmp(b.as_str()))
+            contrib_a
+                .cmp(&contrib_b)
+                .then_with(|| a.as_str().cmp(b.as_str()))
         });
         let excess = live.len() - cap;
         let mut demoted_now = Vec::with_capacity(excess);
@@ -433,7 +445,9 @@ mod tests {
         set.demote(CLIPPY_DOMAIN_KEY, "needless_return");
         let marker = dir.join(ACTIVE_SET_FILE);
         set.save(&marker).expect("save");
-        assert!(ActiveSet::load_default(&dir).expect("reload").excludes(CLIPPY_DOMAIN_KEY, "needless_return"));
+        assert!(ActiveSet::load_default(&dir)
+            .expect("reload")
+            .excludes(CLIPPY_DOMAIN_KEY, "needless_return"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -460,7 +474,9 @@ mod tests {
         std::fs::create_dir_all(dir.join(ACTIVE_SET_FILE)).expect("plant a dir");
         match ActiveSet::load(&dir.join(ACTIVE_SET_FILE)) {
             Err(ActiveSetError::Io { .. }) => {}
-            other => panic!("a present-but-unreadable marker must be a loud Io error, got {other:?}"),
+            other => {
+                panic!("a present-but-unreadable marker must be a loud Io error, got {other:?}")
+            }
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -493,14 +509,29 @@ mod tests {
     fn readmit_removes_and_reports() {
         let mut set = ActiveSet::empty();
         set.demote(CLIPPY_DOMAIN_KEY, "needless_return");
-        assert!(set.readmit(CLIPPY_DOMAIN_KEY, "needless_return"), "known demotion removed");
-        assert!(!set.readmit(CLIPPY_DOMAIN_KEY, "needless_return"), "second readmit reports false");
-        assert!(!set.readmit(CLIPPY_DOMAIN_KEY, "never_demoted"), "unknown rule reports false");
-        assert!(!set.readmit("perf", "needless_return"), "unknown domain reports false");
+        assert!(
+            set.readmit(CLIPPY_DOMAIN_KEY, "needless_return"),
+            "known demotion removed"
+        );
+        assert!(
+            !set.readmit(CLIPPY_DOMAIN_KEY, "needless_return"),
+            "second readmit reports false"
+        );
+        assert!(
+            !set.readmit(CLIPPY_DOMAIN_KEY, "never_demoted"),
+            "unknown rule reports false"
+        );
+        assert!(
+            !set.readmit("perf", "needless_return"),
+            "unknown domain reports false"
+        );
         // Dropping the last demoted entry drops the domain row.
         set.demote(CLIPPY_DOMAIN_KEY, "last_one");
         set.readmit(CLIPPY_DOMAIN_KEY, "last_one");
-        assert!(set.is_empty(), "empty demoted map + no caps = the default posture");
+        assert!(
+            set.is_empty(),
+            "empty demoted map + no caps = the default posture"
+        );
     }
 
     #[test]
@@ -513,7 +544,12 @@ mod tests {
         // Duplicates in the fired list dedup; the return is sorted; rules
         // not demoted (fresh_clamp) are ignored; the perf demotion is
         // untouched — other domains re-admit via the operator path only.
-        let readmitted = set.auto_readmit_lints(&["zombie_rule", "fresh_clamp", "zombie_rule", "needless_return"]);
+        let readmitted = set.auto_readmit_lints(&[
+            "zombie_rule",
+            "fresh_clamp",
+            "zombie_rule",
+            "needless_return",
+        ]);
         assert_eq!(
             readmitted,
             vec![rule("needless_return"), rule("zombie_rule")],
@@ -547,21 +583,30 @@ mod tests {
         // and this test fails. One demotion slot, two candidates with
         // clearly different contributions.
         let mut set = ActiveSet::empty();
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
         let active = vec![rule("b_low"), rule("a_high")];
         let mut contributions = BTreeMap::new();
         contributions.insert("b_low".to_string(), 1);
         contributions.insert("a_high".to_string(), 100);
         let demoted = set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions);
-        assert_eq!(demoted, vec![rule("b_low")], "lowest contribution goes first");
+        assert_eq!(
+            demoted,
+            vec![rule("b_low")],
+            "lowest contribution goes first"
+        );
         assert!(set.excludes(CLIPPY_DOMAIN_KEY, "b_low"));
-        assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "a_high"), "the high contributor stays live");
+        assert!(
+            !set.excludes(CLIPPY_DOMAIN_KEY, "a_high"),
+            "the high contributor stays live"
+        );
     }
 
     #[test]
     fn enforce_cap_missing_contribution_counts_as_zero() {
         let mut set = ActiveSet::empty();
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
         let active = vec![rule("listed"), rule("unlisted")];
         let mut contributions = BTreeMap::new();
         contributions.insert("listed".to_string(), 5);
@@ -578,7 +623,11 @@ mod tests {
         // No contributions at all: every rule ties at 0 → pure id order.
         let contributions = BTreeMap::new();
         let demoted = set.enforce_cap("perf", &active, &contributions);
-        assert_eq!(demoted, vec![rule("alpha"), rule("mid")], "id-ascending, deterministic");
+        assert_eq!(
+            demoted,
+            vec![rule("alpha"), rule("mid")],
+            "id-ascending, deterministic"
+        );
         assert!(set.excludes("perf", "alpha") && set.excludes("perf", "mid"));
         assert!(!set.excludes("perf", "zeta"));
     }
@@ -586,14 +635,19 @@ mod tests {
     #[test]
     fn enforce_cap_respects_the_cap_exactly_and_reports_demotion_order() {
         let mut set = ActiveSet::empty();
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
         let active: Vec<String> = ["a", "b", "c", "d", "e"].iter().map(|s| rule(s)).collect();
         let mut contributions = BTreeMap::new();
         for (id, contrib) in [("a", 9), ("b", 7), ("c", 5), ("d", 3), ("e", 1)] {
             contributions.insert(rule(id), contrib);
         }
         let demoted = set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions);
-        assert_eq!(demoted, vec![rule("e"), rule("d"), rule("c")], "demotion order = ascending contribution");
+        assert_eq!(
+            demoted,
+            vec![rule("e"), rule("d"), rule("c")],
+            "demotion order = ascending contribution"
+        );
         let live: Vec<&String> = active
             .iter()
             .filter(|r| !set.excludes(CLIPPY_DOMAIN_KEY, r))
@@ -608,17 +662,25 @@ mod tests {
 
         // Absent cap: OFF.
         let mut set = ActiveSet::empty();
-        assert!(set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions).is_empty());
+        assert!(set
+            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
+            .is_empty());
         assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "a"));
 
         // Zero cap: OFF (the Library-Drift default posture).
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 0);
-        assert!(set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions).is_empty());
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 0);
+        assert!(set
+            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
+            .is_empty());
         assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "b"));
 
         // Cap ≥ live count: nothing to do.
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
-        assert!(set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions).is_empty());
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
+        assert!(set
+            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
+            .is_empty());
         // A noop pass demotes nothing — the CAP map may hold the armed cap,
         // but the demoted set (what the fan-out reads) stays empty.
         assert!(set.demoted_rules(CLIPPY_DOMAIN_KEY).is_empty());
@@ -627,25 +689,37 @@ mod tests {
     #[test]
     fn enforce_cap_never_demotes_rules_absent_from_active() {
         let mut set = ActiveSet::empty();
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 1);
         let active = vec![rule("in_active")];
         // Contributions name rules that are NOT active — they must never be
         // demoted, and an active rule absent from contributions counts as 0.
         let mut contributions = BTreeMap::new();
         contributions.insert(rule("phantom"), 0);
         let demoted = set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions);
-        assert!(demoted.is_empty(), "one live rule fits cap 1 — nothing demoted");
+        assert!(
+            demoted.is_empty(),
+            "one live rule fits cap 1 — nothing demoted"
+        );
         let two = vec![rule("in_active"), rule("also_active")];
         let demoted = set.enforce_cap(CLIPPY_DOMAIN_KEY, &two, &contributions);
-        assert_eq!(demoted, vec![rule("also_active")], "tie at 0 breaks by id; phantom is unreachable");
-        assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "phantom"), "non-active rules are never demoted");
+        assert_eq!(
+            demoted,
+            vec![rule("also_active")],
+            "tie at 0 breaks by id; phantom is unreachable"
+        );
+        assert!(
+            !set.excludes(CLIPPY_DOMAIN_KEY, "phantom"),
+            "non-active rules are never demoted"
+        );
     }
 
     #[test]
     fn enforce_cap_ignores_already_demoted_rules() {
         let mut set = ActiveSet::empty();
         set.demote(CLIPPY_DOMAIN_KEY, "b_already_gone");
-        set.max_active_per_domain.insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
+        set.max_active_per_domain
+            .insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
         // 4 active but one is already demoted → 3 live → cap 2 demotes ONE,
         // and the already-demoted rule neither counts against the cap nor
         // appears in the return.
@@ -656,17 +730,29 @@ mod tests {
             rule("d_low"),
         ];
         let mut contributions = BTreeMap::new();
-        for (id, contrib) in [("a_high", 50), ("b_already_gone", 40), ("c_high", 30), ("d_low", 1)] {
+        for (id, contrib) in [
+            ("a_high", 50),
+            ("b_already_gone", 40),
+            ("c_high", 30),
+            ("d_low", 1),
+        ] {
             contributions.insert(rule(id), contrib);
         }
         let demoted = set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions);
         // d_low (contribution 1) is the lowest LIVE rule — b is demoted and
         // skipped no matter its contribution — so d demotes, and a/c stay
         // live at the cap of 2.
-        assert_eq!(demoted, vec![rule("d_low")], "only the lowest LIVE rule demotes");
+        assert_eq!(
+            demoted,
+            vec![rule("d_low")],
+            "only the lowest LIVE rule demotes"
+        );
         assert!(set.excludes(CLIPPY_DOMAIN_KEY, "d_low"));
         assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "a_high"));
-        assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "c_high"), "both survivors fill the cap");
+        assert!(
+            !set.excludes(CLIPPY_DOMAIN_KEY, "c_high"),
+            "both survivors fill the cap"
+        );
     }
 
     #[test]
@@ -674,8 +760,14 @@ mod tests {
         let file = ActiveSetFile {
             version: ACTIVE_SET_VERSION,
             demoted: [
-                (CLIPPY_DOMAIN_KEY.to_string(), BTreeSet::from(["needless_return".to_string()])),
-                ("perf".to_string(), BTreeSet::from(["vec-with-capacity".to_string()])),
+                (
+                    CLIPPY_DOMAIN_KEY.to_string(),
+                    BTreeSet::from(["needless_return".to_string()]),
+                ),
+                (
+                    "perf".to_string(),
+                    BTreeSet::from(["vec-with-capacity".to_string()]),
+                ),
             ]
             .into_iter()
             .collect(),

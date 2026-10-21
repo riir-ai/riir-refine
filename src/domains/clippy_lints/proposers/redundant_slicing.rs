@@ -199,7 +199,10 @@ impl Collector<'_> {
     /// a resolvable slice/str param — the binding itself replaces the whole
     /// `&ident[..]` argument.
     fn redundant_full_slice_base<'e>(&self, e: &'e Expr) -> Option<&'e Expr> {
-        let Expr::Index(ExprIndex { expr: base, index, .. }) = e else {
+        let Expr::Index(ExprIndex {
+            expr: base, index, ..
+        }) = e
+        else {
             return None;
         };
         let Expr::Path(p) = &**base else {
@@ -233,13 +236,17 @@ mod tests {
         let input = "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }";
         let out = propose_fix("redundant_slicing", input).expect("matched");
         assert!(out.contains("first_char(s)"), "slice not stripped: {out}");
-        assert!(out.contains("fn first_char(s: &str)"), "signature must stay: {out}");
+        assert!(
+            out.contains("fn first_char(s: &str)"),
+            "signature must stay: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
     #[test]
     fn strips_full_slice_on_slice_param() {
-        let input = "fn sum(v: &[u8]) -> u32 { v.iter().sum() }\nfn go(v: &[u8]) -> u32 { sum(&v[..]) }";
+        let input =
+            "fn sum(v: &[u8]) -> u32 { v.iter().sum() }\nfn go(v: &[u8]) -> u32 { sum(&v[..]) }";
         let out = propose_fix("redundant_slicing", input).expect("matched");
         assert!(out.contains("sum(v)"), "slice not stripped: {out}");
     }
@@ -248,7 +255,10 @@ mod tests {
     fn method_arg_position_strips() {
         let input = "fn tag(v: &[u8]) -> String { String::from_utf8_lossy(&v[..]).into_owned() }";
         let out = propose_fix("redundant_slicing", input).expect("matched");
-        assert!(out.contains("String::from_utf8_lossy(v)"), "method arg not stripped: {out}");
+        assert!(
+            out.contains("String::from_utf8_lossy(v)"),
+            "method arg not stripped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -273,9 +283,13 @@ mod tests {
         let input = "fn tail_at(s: &str, at: usize) -> &str { &s[at..] }\nfn go(s: &str) -> &str { tail_at(&s[..], 1) }";
         // `&s[at..]`? No — the ARG here is `&s[..]` (full), fine, but a
         // partial-index arg shape must refuse:
-        let input2 = "fn tail(s: &str) -> &str { &s[1..] }\nfn go(s: &str) -> &str { tail(&s[1..]) }";
+        let input2 =
+            "fn tail(s: &str) -> &str { &s[1..] }\nfn go(s: &str) -> &str { tail(&s[1..]) }";
         let out = propose_fix("redundant_slicing", input).expect("matched");
-        assert!(out.contains("tail_at(s, 1)"), "full-range arg must strip: {out}");
+        assert!(
+            out.contains("tail_at(s, 1)"),
+            "full-range arg must strip: {out}"
+        );
         let out2 = propose_fix("redundant_slicing", input2);
         assert!(out2.is_none(), "partial range must refuse: {out2:?}");
     }

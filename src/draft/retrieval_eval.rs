@@ -50,7 +50,10 @@ use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, Collaps
 use super::latent_matcher::LatentMatcher;
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
-#[cfg_attr(not(all(feature = "clippy_lints", feature = "rust_perf")), allow(unused_imports))]
+#[cfg_attr(
+    not(all(feature = "clippy_lints", feature = "rust_perf")),
+    allow(unused_imports)
+)]
 use crate::domain::{HealDomain, HealEntry};
 
 /// Per-domain (or blended) recall counters.
@@ -361,8 +364,7 @@ pub struct EvalReport {
     /// demonstrability rows above the n≥20 floor live here (most rules
     /// carry 1–3 fixtures and never reach the floor; the map is the honest
     /// record either way). The `DomainId` is the span's own domain.
-    pub taxonomy_by_rule:
-        std::collections::BTreeMap<String, (DomainId, ChoiceTaxonomy)>,
+    pub taxonomy_by_rule: std::collections::BTreeMap<String, (DomainId, ChoiceTaxonomy)>,
     /// Issue 134 T4: the HOMOGENEOUS-budget control — the own-domain
     /// engine run at the fan-out's TOTAL pool budget
     /// (`n_enabled · RERANK_POOL` depth on ONE domain instead of
@@ -1052,12 +1054,10 @@ pub fn run_eval_on(mut matcher: LatentMatcher) -> EvalReport {
         // default; under `RerankMode::Off` nothing is marked, so every
         // signal-bearing span reads Declined — the honest reading of a run
         // that ran no probe).
-        let choice = classify_choice_span(
-            label,
-            &span.acceptable,
-            ranked.iter().copied(),
-            |rule_id| super::instantiation_rerank::probeable(domain, rule_id),
-        );
+        let choice =
+            classify_choice_span(label, &span.acceptable, ranked.iter().copied(), |rule_id| {
+                super::instantiation_rerank::probeable(domain, rule_id)
+            });
         report.taxonomy.absorb(choice);
         // Issue 134 T1: the same choice, partitioned by domain + gold rule —
         // the demonstrability column's eval half (SpanChoice is Copy, so
@@ -1228,7 +1228,8 @@ pub fn run_split_eval(
             rep.regressions_vs_baseline += 1;
         }
         if b_rank != Some(0) || t_rank != Some(0) {
-            rep.miss_detail.push((span.label.clone(), withheld, b_rank, t_rank));
+            rep.miss_detail
+                .push((span.label.clone(), withheld, b_rank, t_rank));
         }
     }
 
@@ -1323,8 +1324,7 @@ pub fn print_report(report: &EvalReport) {
         }
         if let Some((bi, bname, bhits)) = best {
             let share = bhits as f32 / report.blended.labeled as f32 * 100.0;
-            println!(
-                "  fanout controls (134 T4 — a fanout-wins claim must beat both):");
+            println!("  fanout controls (134 T4 — a fanout-wins claim must beat both):");
             println!(
                 "  best-single-domain  top-1 {share:.1}% on the whole set ({:<6} answering every span — its own-share ceiling; per-domain {:>5.1}% on its spans)",
                 bname.trim_end(),
@@ -1336,10 +1336,7 @@ pub fn print_report(report: &EvalReport) {
         // equalized-budget pass; `labeled == 0` means the control did not
         // run (a hand-built report), and the row says so rather than 0.0.
         if report.homogeneous.labeled > 0 {
-            let h = report
-                .homogeneous
-                .recall(1)
-                .map_or(0.0, |r| r * 100.0);
+            let h = report.homogeneous.recall(1).map_or(0.0, |r| r * 100.0);
             let b = report.blended.recall(1).map_or(0.0, |r| r * 100.0);
             println!(
                 "  homogeneous @budget top-1 {h:.1}% (one engine, pool = n_enabled x RERANK_POOL) — delta vs blended {:+.1}pp",
@@ -1476,13 +1473,7 @@ pub fn print_report(report: &EvalReport) {
             .iter()
             .enumerate()
             .filter(|(_, t)| t.labeled > 0)
-            .map(|(i, t)| {
-                eval_row(
-                    canonical_domain(DomainId::ALL[i].label()),
-                    None,
-                    t,
-                )
-            })
+            .map(|(i, t)| eval_row(canonical_domain(DomainId::ALL[i].label()), None, t))
             .collect();
         rows.extend(
             report
@@ -1492,9 +1483,7 @@ pub fn print_report(report: &EvalReport) {
                     t.correct_rule + t.correct_via_acceptable + t.wrong_rule
                         >= MIN_PER_RULE_N as usize
                 })
-                .map(|(rule, (d, t))| {
-                    eval_row(canonical_domain(d.label()), Some(rule), t)
-                }),
+                .map(|(rule, (d, t))| eval_row(canonical_domain(d.label()), Some(rule), t)),
         );
         print!("{}", render_column(&rows));
     }
@@ -1521,7 +1510,10 @@ const MISROUTE_FIXTURES: [(&str, DomainId); 2] = [
 /// the production path would build).
 #[allow(clippy::vec_init_then_push)] // cfg-gated per-domain pushes
 fn router_eval_domains() -> Vec<(DomainId, Vec<String>)> {
-    #[cfg_attr(not(any(feature = "clippy_lints", feature = "rust_perf")), allow(unused_mut))]
+    #[cfg_attr(
+        not(any(feature = "clippy_lints", feature = "rust_perf")),
+        allow(unused_mut)
+    )]
     let mut out = Vec::new();
     #[cfg(feature = "clippy_lints")]
     out.push((
@@ -1816,7 +1808,12 @@ pub fn print_rerank_sweep(rows: &[RerankSweepRow]) {
 // on the clippy+perf blend (blended floors sit ABOVE clippy-only precision),
 // and per_domain rows are positional (0=clippy, 1=perf). A latent-only
 // build (the matcher refuses a domain-less build) correctly drops them.
-#[cfg(all(test, feature = "latent_retrieval", feature = "clippy_lints", feature = "rust_perf"))]
+#[cfg(all(
+    test,
+    feature = "latent_retrieval",
+    feature = "clippy_lints",
+    feature = "rust_perf"
+))]
 mod tests {
     use super::*;
 
@@ -1895,15 +1892,24 @@ mod tests {
             .filter(|(_, c)| *c > 0)
             .map(|(d, c)| format!("{d:?}={c}"))
             .collect();
-        println!("primary-subset per-domain membership: {}", per_dom.join(", "));
-        println!("pre-registered bars: |subset| >= 8 AND subset_top1 <= overall - 0.05 for headroom");
+        println!(
+            "primary-subset per-domain membership: {}",
+            per_dom.join(", ")
+        );
+        println!(
+            "pre-registered bars: |subset| >= 8 AND subset_top1 <= overall - 0.05 for headroom"
+        );
     }
 
     /// The T0′ record's margin-spectrum row (finite margins, ascending).
     fn print_margin_quantiles(rows: &[(f32, bool)]) {
         // Fixture populations (≤ ~150) are exact in f32; the index cast is
         // clamped below — allowed with cause.
-        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
         let q = |p: f32| -> f32 {
             if rows.is_empty() {
                 return f32::NAN;
@@ -1923,8 +1929,18 @@ mod tests {
 
     /// One sensitivity-table row: subset/complement size + top-1 + the gap
     /// vs overall, at one margin threshold.
-    fn print_threshold_row(theta: f32, primary: bool, rows: &[(f32, bool)], n: usize, overall_t1: f32) {
-        let sub: Vec<bool> = rows.iter().filter(|(m, _)| *m < theta).map(|(_, c)| *c).collect();
+    fn print_threshold_row(
+        theta: f32,
+        primary: bool,
+        rows: &[(f32, bool)],
+        n: usize,
+        overall_t1: f32,
+    ) {
+        let sub: Vec<bool> = rows
+            .iter()
+            .filter(|(m, _)| *m < theta)
+            .map(|(_, c)| *c)
+            .collect();
         let comp: Vec<bool> = rows
             .iter()
             .filter(|(m, _)| *m >= theta)
@@ -1932,7 +1948,9 @@ mod tests {
             .collect();
         let tag = if primary { " [PRIMARY]" } else { "" };
         if sub.is_empty() {
-            println!("theta={theta:.2}{tag}: subset EMPTY (0 spans) — kill criterion 'empty subset'");
+            println!(
+                "theta={theta:.2}{tag}: subset EMPTY (0 spans) — kill criterion 'empty subset'"
+            );
             return;
         }
         let s_hits = sub.iter().filter(|c| **c).count();
@@ -2673,10 +2691,11 @@ mod tests {
     #[test]
     fn sec_fixture_labels_verify() {
         use crate::domain::HealDomain;
-        let corpus: std::collections::BTreeSet<String> = crate::domains::sec::SecDomain::build_corpus()
-            .into_iter()
-            .map(|e| e.rule_id().to_string())
-            .collect();
+        let corpus: std::collections::BTreeSet<String> =
+            crate::domains::sec::SecDomain::build_corpus()
+                .into_iter()
+                .map(|e| e.rule_id().to_string())
+                .collect();
         for &(rule, code) in super::super::eval_fixtures_sec::SEC_SPANS {
             assert!(
                 corpus.contains(rule),
@@ -2916,7 +2935,7 @@ mod tests {
         );
     }
 
-/// Batch 266 (Plan 270 / Research 302) T8: the new rule's own span must
+    /// Batch 266 (Plan 270 / Research 302) T8: the new rule's own span must
     /// land top-1 in the rust_perf lane — the standing self-variant assert
     /// the retrieval floors ride.
     #[test]
@@ -2938,8 +2957,7 @@ mod tests {
             .expect("rust_perf domain present");
         let top1 = perf_rules.first().map_or("", |r| r.rule_id.as_str());
         assert_eq!(
-            top1,
-            "isop-cover-from-decision-diagram-not-path-simplification",
+            top1, "isop-cover-from-decision-diagram-not-path-simplification",
             "batch-266 self-variant must land top-1 (got {top1})"
         );
     }
@@ -3208,7 +3226,10 @@ mod tests {
         assert_eq!(c.decline, DeclineClass::Covered);
 
         // acceptable hit: an authored alternative wins top-1, gold lower
-        let ranked = vec![scored("needless_return", true), scored("let_and_return", false)];
+        let ranked = vec![
+            scored("needless_return", true),
+            scored("let_and_return", false),
+        ];
         let c = classify_choice_span("let_and_return", &acc, &ranked, |_| true);
         assert_eq!(c.outcome, ChoiceOutcome::CorrectAcceptable);
 
@@ -3247,8 +3268,10 @@ mod tests {
         );
         // empty window: blind (no candidates at all)
         assert_eq!(
-            classify_choice_span("gold", &[], Vec::<&crate::draft::ScoredRule>::new(), |_| true)
-                .decline,
+            classify_choice_span("gold", &[], Vec::<&crate::draft::ScoredRule>::new(), |_| {
+                true
+            })
+            .decline,
             DeclineClass::ProposerBlind
         );
     }
@@ -3276,7 +3299,15 @@ mod tests {
         t.absorb(super::classify_choice_span("gold", &acc, &ranked, |_| true));
 
         assert_eq!(t.labeled, 5);
-        assert_eq!((t.correct_rule, t.correct_via_acceptable, t.wrong_rule, t.wrong_span), (1, 1, 2, 1));
+        assert_eq!(
+            (
+                t.correct_rule,
+                t.correct_via_acceptable,
+                t.wrong_rule,
+                t.wrong_span
+            ),
+            (1, 1, 2, 1)
+        );
         assert_eq!((t.covered, t.declined, t.proposer_blind), (3, 1, 1));
         assert_eq!(t.selective_correct, 2);
         assert!((t.coverage().unwrap() - 0.75).abs() < 1e-6);

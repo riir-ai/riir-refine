@@ -65,7 +65,7 @@ pub const PROBE_Z95: f64 = 1.959_963_984_540_054;
 /// acceptance authority; the probe can only narrow, never admit).
 #[cfg(feature = "rescue_probe")]
 pub mod probe_gate {
-    use super::{KB_EPSILON, PROBE_Z95, StateRescueTally};
+    use super::{StateRescueTally, KB_EPSILON, PROBE_Z95};
     use katgpt_core::state_probe::{classify, probe, ProbeClass, ProbeInput};
 
     /// The state's probe estimate over its ACCUMULATED no-tool leg:
@@ -120,7 +120,10 @@ pub mod probe_gate {
             ProbeClass::Productive => "exec",
             ProbeClass::Undetermined => "undet",
         };
-        format!("{word} [{:.2},{:.2}] n={}", e.wilson_lo, e.wilson_hi, t.b0_attempts)
+        format!(
+            "{word} [{:.2},{:.2}] n={}",
+            e.wilson_lo, e.wilson_hi, t.b0_attempts
+        )
     }
 }
 
@@ -323,12 +326,7 @@ impl RescueClass {
 /// b0=0 rescue-below-bar band, then execution-reachable.
 #[must_use]
 pub fn classify(t: &StateRescueTally) -> RescueClass {
-    match (
-        t.keep(),
-        t.bd_attempts,
-        t.bd_successes,
-        t.b0_successes,
-    ) {
+    match (t.keep(), t.bd_attempts, t.bd_successes, t.b0_successes) {
         (true, _, _, _) => RescueClass::Rescue,
         (_, 0, _, _) => RescueClass::Unprobed,
         (_, _, 0, _) => RescueClass::Intractable,
@@ -674,10 +672,16 @@ mod tests {
     fn classify_covers_the_state_vocabulary() {
         assert_eq!(classify(&state("a", 0, 4, 4, 4)), RescueClass::Rescue);
         assert_eq!(classify(&state("b", 0, 4, 3, 3)), RescueClass::Rescue);
-        assert_eq!(classify(&state("c", 0, 4, 1, 2)), RescueClass::LearnableHard);
+        assert_eq!(
+            classify(&state("c", 0, 4, 1, 2)),
+            RescueClass::LearnableHard
+        );
         assert_eq!(classify(&state("d", 0, 4, 0, 3)), RescueClass::Intractable);
         assert_eq!(classify(&state("e", 0, 4, 0, 0)), RescueClass::Unprobed);
-        assert_eq!(classify(&state("f", 1, 4, 4, 4)), RescueClass::ExecReachable);
+        assert_eq!(
+            classify(&state("f", 1, 4, 4, 4)),
+            RescueClass::ExecReachable
+        );
         // Rank order: rescue first, exec-reachable last.
         assert!(
             RescueClass::Rescue.rank() < RescueClass::LearnableHard.rank()
@@ -698,8 +702,14 @@ mod tests {
             assert_eq!(RescueDepth::from_u8(d.as_u8()), d);
         }
         assert_eq!(RescueDepth::from_u8(9), RescueDepth::None);
-        assert_eq!(RescueDepth::from_kind("seat_rerank"), Some(RescueDepth::SeatRerank));
-        assert_eq!(RescueDepth::from_kind("hosted_expert"), Some(RescueDepth::HostedExpert));
+        assert_eq!(
+            RescueDepth::from_kind("seat_rerank"),
+            Some(RescueDepth::SeatRerank)
+        );
+        assert_eq!(
+            RescueDepth::from_kind("hosted_expert"),
+            Some(RescueDepth::HostedExpert)
+        );
         assert_eq!(RescueDepth::from_kind("modelless"), None);
         assert_eq!(RescueDepth::from_kind(""), None);
     }
@@ -722,7 +732,9 @@ mod tests {
         // Deterministic across two renders (same transcripts).
         assert_eq!(rendered, render_misses_section(&states));
         // The rescue exemplar ranks first; exec-reachable last.
-        let aa = rendered.find("| 1 | aa_rescue").expect("aa_rescue at rank 1");
+        let aa = rendered
+            .find("| 1 | aa_rescue")
+            .expect("aa_rescue at rank 1");
         let zz = rendered.find("zz_reachable").expect("zz present");
         assert!(aa < zz, "rescue exemplar before exec-reachable");
         assert!(rendered.contains("keep-set hash:"), "{rendered}");
@@ -745,7 +757,7 @@ mod tests {
     /// truth table above is posture-independent and stays byte-identical).
     #[cfg(feature = "rescue_probe")]
     mod probe_gate {
-        use super::{state, super::probe_gate};
+        use super::{super::probe_gate, state};
 
         #[test]
         fn enough_zero_success_attempts_certify_knowledge_like() {
@@ -815,7 +827,10 @@ mod tests {
             assert!(rendered.contains("| probe b0 |"), "header: {rendered}");
             assert!(rendered.contains("KB ["), "kb cell: {rendered}");
             assert!(rendered.contains("undet ["), "thin cell: {rendered}");
-            assert!(rendered.contains("ADVICE"), "the augment-only legend: {rendered}");
+            assert!(
+                rendered.contains("ADVICE"),
+                "the augment-only legend: {rendered}"
+            );
         }
     }
 }

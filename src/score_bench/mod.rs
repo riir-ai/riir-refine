@@ -620,7 +620,9 @@ pub fn heal_fixpoint_cfg(
                 continue;
             };
             edits.extend(crate::domains::rust_perf::proposers::collect_edits(
-                dispatch_id, &current, &parsed,
+                dispatch_id,
+                &current,
+                &parsed,
             ));
         }
         for lint in FIXABLE_LINTS {
@@ -628,7 +630,9 @@ pub fn heal_fixpoint_cfg(
                 continue;
             };
             edits.extend(crate::domains::clippy_lints::proposers::collect_edits(
-                dispatch_id, &current, &parsed,
+                dispatch_id,
+                &current,
+                &parsed,
             ));
         }
         if edits.is_empty() {
@@ -953,9 +957,7 @@ mod tests {
             all_before: vocab_before.clone(),
             all_after: vocab_before.clone(),
             vocab_persist,
-            created: BTreeSet::from_iter(
-                (0..created).map(|i| format!("created_lint_{i}")),
-            ),
+            created: BTreeSet::from_iter((0..created).map(|i| format!("created_lint_{i}"))),
             edits,
             passes: usize::from(edits > 0),
             parses,
@@ -1009,14 +1011,23 @@ mod tests {
         assert_eq!(names, ["manual_map", "map_clone", "needless_return"]);
 
         let mm = &read.rows[0];
-        assert_eq!((mm.fixtures, mm.resolved, mm.persist, mm.broken), (2, 2, 0, 0));
+        assert_eq!(
+            (mm.fixtures, mm.resolved, mm.persist, mm.broken),
+            (2, 2, 0, 0)
+        );
         assert_eq!((mm.created, mm.edits, mm.shaped), (2, 5, 1));
 
         let nr = &read.rows[2];
-        assert_eq!((nr.fixtures, nr.resolved, nr.persist, nr.broken), (1, 0, 1, 0));
+        assert_eq!(
+            (nr.fixtures, nr.resolved, nr.persist, nr.broken),
+            (1, 0, 1, 0)
+        );
 
         let mc = &read.rows[1];
-        assert_eq!((mc.fixtures, mc.resolved, mc.persist, mc.broken), (1, 0, 0, 1));
+        assert_eq!(
+            (mc.fixtures, mc.resolved, mc.persist, mc.broken),
+            (1, 0, 0, 1)
+        );
 
         // The fork invariant: fixtures == resolved + persist + broken.
         for r in &read.rows {
@@ -1049,7 +1060,9 @@ mod tests {
             ProvenanceClass::Authored
         );
         assert_eq!(
-            provenance_class(provenance_family("construction:gen6:k2:match_bool+use_self")),
+            provenance_class(provenance_family(
+                "construction:gen6:k2:match_bool+use_self"
+            )),
             ProvenanceClass::Construction
         );
         assert_eq!(provenance_class("mystery"), ProvenanceClass::Other);
@@ -1161,7 +1174,10 @@ mod tests {
         assert_eq!(repo.created, 1);
         assert!((repo.heal_rate - 0.5).abs() < 1e-6);
         let authored = &strata[1];
-        assert_eq!((authored.n_ran, authored.vocab_before, authored.resolved), (1, 1, 1));
+        assert_eq!(
+            (authored.n_ran, authored.vocab_before, authored.resolved),
+            (1, 1, 1)
+        );
         assert!((authored.heal_rate - 1.0).abs() < 1e-6);
         let other = &strata[2];
         assert_eq!(other.n_ran, 1);
@@ -1172,8 +1188,8 @@ mod tests {
 
     #[test]
     fn shaped_verdict_prices_the_three_outcomes() {
-        let mk = |before: &[&str], persist: &[&str], created: &[&str], parses: bool| {
-            FixtureOutcome {
+        let mk =
+            |before: &[&str], persist: &[&str], created: &[&str], parses: bool| FixtureOutcome {
                 id: "x".to_string(),
                 ran: true,
                 vocab_before: before.iter().map(ToString::to_string).collect(),
@@ -1185,8 +1201,7 @@ mod tests {
                 passes: 1,
                 parses,
                 drifted: false,
-            }
-        };
+            };
         // Clean clear → 1.0.
         let clean_clear = mk(&["a"], &[], &[], true);
         assert!((clean_clear.shaped_verdict() - 1.0).abs() < 1e-6);

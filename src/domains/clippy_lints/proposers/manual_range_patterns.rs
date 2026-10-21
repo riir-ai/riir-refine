@@ -368,7 +368,8 @@ mod tests {
         assert!(out.contains("1u32..=3 => 9"), "{out}");
         let out = healed("fn f(n: u32) -> u8 { match n { 1_0 | 1_1 | 1_2 => 9, _ => 0 } }");
         assert!(out.contains("1_0..=1_2 => 9"), "{out}");
-        let out = healed("fn f(n: u64) -> u8 { match n { 900_u64 | 901_u64 | 902_u64 => 9, _ => 0 } }");
+        let out =
+            healed("fn f(n: u64) -> u8 { match n { 900_u64 | 901_u64 | 902_u64 => 9, _ => 0 } }");
         assert!(out.contains("900_u64..=902_u64 => 9"), "{out}");
     }
 
@@ -400,7 +401,9 @@ mod tests {
 
     #[test]
     fn nested_in_ctor_pattern_fires_at_the_inner_span() {
-        let out = healed("fn f(o: Option<u32>) -> u8 { match o { Some(0 | 1 | 2) => 9, None => 0, _ => 7 } }");
+        let out = healed(
+            "fn f(o: Option<u32>) -> u8 { match o { Some(0 | 1 | 2) => 9, None => 0, _ => 7 } }",
+        );
         assert!(out.contains("Some(0..=2) => 9"), "{out}");
     }
 

@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{ValidatorModule, AdmissionError};
+use super::{AdmissionError, ValidatorModule};
 
 /// The manifest's on-disk name inside the store root.
 pub const MANIFEST_FILE: &str = "manifest.json";
@@ -82,7 +82,10 @@ pub enum StoreError {
     /// The manifest row is missing.
     UnknownValidator(String),
     /// A revoked validator was loaded.
-    Revoked { name: String, reason: Option<String> },
+    Revoked {
+        name: String,
+        reason: Option<String>,
+    },
     /// The on-disk blake3 does not match the manifest row.
     Blake3Mismatch { expected: String, actual: String },
     /// Manifest or artifact I/O.
@@ -102,15 +105,23 @@ impl std::fmt::Display for StoreError {
             StoreError::Revoked { name, reason } => write!(
                 f,
                 "validator `{name}` is revoked{}",
-                reason.as_deref().map_or_else(String::new, |r| format!(": {r}"))
+                reason
+                    .as_deref()
+                    .map_or_else(String::new, |r| format!(": {r}"))
             ),
             StoreError::Blake3Mismatch { expected, actual } => {
-                write!(f, "artifact bytes do not match the manifest (expected {expected}, got {actual})")
+                write!(
+                    f,
+                    "artifact bytes do not match the manifest (expected {expected}, got {actual})"
+                )
             }
             StoreError::Io(e) => write!(f, "store io: {e}"),
             StoreError::AlreadyCurrent => write!(f, "artifact already installed at this content"),
             StoreError::InversionIsDurable => {
-                write!(f, "an inverted validator is never reinstated in place — install a new version")
+                write!(
+                    f,
+                    "an inverted validator is never reinstated in place — install a new version"
+                )
             }
         }
     }
@@ -160,7 +171,8 @@ impl ValidatorStore {
     fn write_manifest(&self, manifest: &ValidatorManifest) -> Result<(), StoreError> {
         std::fs::create_dir_all(&self.root).map_err(|e| StoreError::Io(e.to_string()))?;
         let tmp = self.manifest_path().with_extension("json.tmp");
-        let json = serde_json::to_string_pretty(manifest).map_err(|e| StoreError::Io(e.to_string()))?;
+        let json =
+            serde_json::to_string_pretty(manifest).map_err(|e| StoreError::Io(e.to_string()))?;
         std::fs::write(&tmp, json).map_err(|e| StoreError::Io(e.to_string()))?;
         std::fs::rename(&tmp, self.manifest_path()).map_err(|e| StoreError::Io(e.to_string()))?;
         Ok(())
@@ -177,7 +189,8 @@ impl ValidatorStore {
     /// the artifact or manifest write.
     pub fn install(&self, name: &str, bytes: &[u8]) -> Result<ValidatorRecord, StoreError> {
         // Admission FIRST: an uncertifiable module never reaches the store.
-        ValidatorModule::admit(bytes).map_err(|e: AdmissionError| StoreError::Admission(e.to_string()))?;
+        ValidatorModule::admit(bytes)
+            .map_err(|e: AdmissionError| StoreError::Admission(e.to_string()))?;
         let digest = blake3::hash(bytes).to_string();
 
         let mut manifest = self.read_manifest()?;
@@ -188,7 +201,8 @@ impl ValidatorStore {
         }
 
         let file = format!("{name}.wasm");
-        std::fs::write(self.artifact_path(&file), bytes).map_err(|e| StoreError::Io(e.to_string()))?;
+        std::fs::write(self.artifact_path(&file), bytes)
+            .map_err(|e| StoreError::Io(e.to_string()))?;
 
         let record = if let Some(row) = manifest.row_mut(name) {
             // Upgrade: bump the version, re-point the digest. A revoked
@@ -226,14 +240,18 @@ impl ValidatorStore {
     /// [`StoreError::Blake3Mismatch`], [`StoreError::Admission`], I/O.
     pub fn load(&self, name: &str) -> Result<AdmittedValidator, StoreError> {
         let manifest = self.read_manifest()?;
-        let row = manifest.row(name).cloned().ok_or_else(|| StoreError::UnknownValidator(name.to_string()))?;
+        let row = manifest
+            .row(name)
+            .cloned()
+            .ok_or_else(|| StoreError::UnknownValidator(name.to_string()))?;
         if row.state == ValidatorState::Revoked {
             return Err(StoreError::Revoked {
                 name: row.name.clone(),
                 reason: row.revoked_reason.clone(),
             });
         }
-        let bytes = std::fs::read(self.artifact_path(&row.file)).map_err(|e| StoreError::Io(e.to_string()))?;
+        let bytes = std::fs::read(self.artifact_path(&row.file))
+            .map_err(|e| StoreError::Io(e.to_string()))?;
         let actual = blake3::hash(&bytes).to_string();
         if actual != row.blake3 {
             return Err(StoreError::Blake3Mismatch {
@@ -241,8 +259,8 @@ impl ValidatorStore {
                 actual,
             });
         }
-        let module = ValidatorModule::admit(&bytes)
-            .map_err(|e| StoreError::Admission(e.to_string()))?;
+        let module =
+            ValidatorModule::admit(&bytes).map_err(|e| StoreError::Admission(e.to_string()))?;
         Ok(AdmittedValidator {
             record: row,
             module: Arc::new(module),
@@ -277,7 +295,11 @@ impl ValidatorStore {
     ///
     /// # Errors
     /// [`StoreError::UnknownValidator`] or manifest I/O.
-    pub fn record_inversion(&self, name: &str, evidence: &str) -> Result<ValidatorRecord, StoreError> {
+    pub fn record_inversion(
+        &self,
+        name: &str,
+        evidence: &str,
+    ) -> Result<ValidatorRecord, StoreError> {
         self.revoke(name, &format!("INVERTED: {evidence}"))
     }
 
@@ -289,7 +311,9 @@ impl ValidatorStore {
     /// Always [`StoreError::InversionIsDurable`] for a revoked row.
     pub fn reinstate(&self, name: &str) -> Result<ValidatorRecord, StoreError> {
         let manifest = self.read_manifest()?;
-        let row = manifest.row(name).ok_or_else(|| StoreError::UnknownValidator(name.to_string()))?;
+        let row = manifest
+            .row(name)
+            .ok_or_else(|| StoreError::UnknownValidator(name.to_string()))?;
         if row.state == ValidatorState::Revoked {
             return Err(StoreError::InversionIsDurable);
         }

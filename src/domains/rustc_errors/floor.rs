@@ -768,10 +768,16 @@ impl FloorHarness {
     /// # Errors
     ///
     /// cargo unspawnable / scaffold unwritable.
-    pub fn check_source(&self, name: &str, source: &str) -> Result<Vec<super::diag::RustcErrorDiag>, String> {
+    pub fn check_source(
+        &self,
+        name: &str,
+        source: &str,
+    ) -> Result<Vec<super::diag::RustcErrorDiag>, String> {
         let dir = self.scaffold(name, source)?;
         let out = run_cargo(&self.cargo_bin, &dir, &["check", "--message-format=json"])?;
-        Ok(super::diag::dedupe_by_site(&super::diag::parse_error_diags(&out)))
+        Ok(super::diag::dedupe_by_site(
+            &super::diag::parse_error_diags(&out),
+        ))
     }
 
     /// Run `cargo test` in a scaffold dir (the G1 semantics pass — every

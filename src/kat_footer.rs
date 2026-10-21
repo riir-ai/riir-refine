@@ -291,7 +291,9 @@ impl KatFooter<'_> {
                 )
             }
             SyncState::LoggedOut => {
-                format!("{gutter}local only — not logged in · nothing pushed (`cargo refine login`)")
+                format!(
+                    "{gutter}local only — not logged in · nothing pushed (`cargo refine login`)"
+                )
             }
             SyncState::Unknown => {
                 format!("{gutter}local accounting only — the server ledger reconciles at sync")
@@ -558,9 +560,18 @@ mod tests {
     #[test]
     fn no_grant_bar_tanks_render_in_server_draw_order() {
         let out = footer_mixed().render(false);
-        assert!(!out.contains("grant"), "the obsolete grant bar rendered: {out}");
-        assert!(!out.contains("of 100 burned"), "a burn-vs-grant caption rendered: {out}");
-        assert!(out.contains("47% (expires in 12d)"), "tuna tank missing: {out}");
+        assert!(
+            !out.contains("grant"),
+            "the obsolete grant bar rendered: {out}"
+        );
+        assert!(
+            !out.contains("of 100 burned"),
+            "a burn-vs-grant caption rendered: {out}"
+        );
+        assert!(
+            out.contains("47% (expires in 12d)"),
+            "tuna tank missing: {out}"
+        );
         assert!(
             out.contains("kat       84.92 KAT · server balance at the last sync"),
             "kat balance line missing: {out}"
@@ -742,9 +753,24 @@ mod tests {
     #[test]
     fn visual_print_every_state() {
         for (name, tuna, kat) in [
-            ("full tuna + kat balance", Some(tuna_line(100_000_000)), Some(MicroKat(84_919_281))),
-            ("drained tuna", Some(tuna_line(0)), Some(MicroKat(84_919_281))),
-            ("expired tuna", Some(TunaLine { now_unix: TUNA_EXPIRES + 86_400, ..tuna_line(47_200_000) }), None),
+            (
+                "full tuna + kat balance",
+                Some(tuna_line(100_000_000)),
+                Some(MicroKat(84_919_281)),
+            ),
+            (
+                "drained tuna",
+                Some(tuna_line(0)),
+                Some(MicroKat(84_919_281)),
+            ),
+            (
+                "expired tuna",
+                Some(TunaLine {
+                    now_unix: TUNA_EXPIRES + 86_400,
+                    ..tuna_line(47_200_000)
+                }),
+                None,
+            ),
             ("no truth at all", None, None),
         ] {
             println!("── {name} ──");
@@ -842,10 +868,7 @@ mod tests {
         let lines: Vec<&str> = with.lines().collect();
         assert_eq!(lines.len(), 3, "{with:?}");
         assert!(lines[0].contains("fixed     "), "{with:?}");
-        assert!(
-            lines[1].contains("47% (expires in 12d)"),
-            "{with:?}"
-        );
+        assert!(lines[1].contains("47% (expires in 12d)"), "{with:?}");
         assert!(lines[2].contains("sync"), "{with:?}");
     }
 

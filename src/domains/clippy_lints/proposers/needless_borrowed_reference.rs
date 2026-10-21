@@ -39,9 +39,7 @@ use super::SourceEdit;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector {
-        edits: Vec::new(),
-    };
+    let mut v = Collector { edits: Vec::new() };
     v.visit_file(file);
     v.edits
 }
@@ -69,7 +67,9 @@ impl Collector {
         if local.init.as_ref().is_some_and(|i| i.diverge.is_some()) {
             return None;
         }
-        let Pat::Reference(r) = &local.pat else { return None };
+        let Pat::Reference(r) = &local.pat else {
+            return None;
+        };
         if r.mutability.is_some() {
             return None;
         }

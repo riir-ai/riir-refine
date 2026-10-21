@@ -430,7 +430,11 @@ impl CompileProposer for E0502ReadRelocate {
         if !use_indent.trim().is_empty() {
             return Vec::new();
         }
-        let insert = format!("{indent}let {name} = {place};\n", indent = use_indent, name = rl.name);
+        let insert = format!(
+            "{indent}let {name} = {place};\n",
+            indent = use_indent,
+            name = rl.name
+        );
         let mut extras: Vec<SpanEdit> = Vec::with_capacity(1 + 1);
         extras.push(SpanEdit {
             byte_span: (use_line_start, use_line_start),
@@ -697,9 +701,7 @@ impl CompileProposer for E0382CloneAtMove {
             ".clone()".to_string(),
             self.name(),
         )
-        .with_note(
-            "clones at the move — the destination owns a copy; the source stays live",
-        )]
+        .with_note("clones at the move — the destination owns a copy; the source stays live")]
     }
 }
 
@@ -729,9 +731,7 @@ impl CompileProposer for E0382UseBeforeMove {
         let Some(moved) = anchor(diag, |l| l.contains("value moved here")) else {
             return Vec::new();
         };
-        let Some(usex) = anchor(diag, |l| {
-            l.contains("value used here after move")
-        }) else {
+        let Some(usex) = anchor(diag, |l| l.contains("value used here after move")) else {
             return Vec::new();
         };
         swap_move_with_use(diag, file, source, moved, usex, self.name())

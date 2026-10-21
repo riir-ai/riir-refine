@@ -19202,11 +19202,21 @@ fn batch251_rules_landed() {
     let expectations: [(&str, &[&str]); 16] = [
         (
             "lane-permuted-column-reduce-same-butterfly-tree-bit-identity",
-            &["40 shuffles per token", "GDN_L8_MIN_TOKENS 17", "GGML_CUDA_GDN_L8", "NotBenchable here"],
+            &[
+                "40 shuffles per token",
+                "GDN_L8_MIN_TOKENS 17",
+                "GGML_CUDA_GDN_L8",
+                "NotBenchable here",
+            ],
         ),
         (
             "lazy-rollback-journaled-window-replay-replaces-eager-state-snapshots",
-            &["GDN_LAZY_MAGIC", "__threadfence_block();", "GDN_LAZY_NOFINAL", "NotBenchable here"],
+            &[
+                "GDN_LAZY_MAGIC",
+                "__threadfence_block();",
+                "GDN_LAZY_NOFINAL",
+                "NotBenchable here",
+            ],
         ),
         (
             "dead-destination-scale-elided-consumer-applies-on-load",
@@ -19214,34 +19224,55 @@ fn batch251_rules_landed() {
         ),
         (
             "gate-activation-precompute-pass-token-threshold-gated",
-            &["G_PRECOMPUTED", "static_assert(!(RAW && G_PRECOMPUTED)", "NotBenchable here"],
+            &[
+                "G_PRECOMPUTED",
+                "static_assert(!(RAW && G_PRECOMPUTED)",
+                "NotBenchable here",
+            ],
         ),
         (
             "topk-chunk-partial-lists-head-only-kway-merge",
-            &["exact k-way merge", "TOPK_SELECT_MERGE_WARP", "NotBenchable here"],
+            &[
+                "exact k-way merge",
+                "TOPK_SELECT_MERGE_WARP",
+                "NotBenchable here",
+            ],
         ),
         (
             "per-request-dirty-range-clear-graph-capture-sticky-marks",
-            &["sticky set that no clear resets", "GGML_CUDA_DIRTY_ROW", "NotBenchable here"],
+            &[
+                "sticky set that no clear resets",
+                "GGML_CUDA_DIRTY_ROW",
+                "NotBenchable here",
+            ],
         ),
         (
             "verify-ubatch-full-prestage-lane-token-gate-broadcast",
-            &["__shfl_sync(0xffffffff", "n_tokens <= K", "NotBenchable here"],
+            &[
+                "__shfl_sync(0xffffffff",
+                "n_tokens <= K",
+                "NotBenchable here",
+            ],
         ),
         (
             "host-dispatch-predicate-mirrors-kernel-compiled-arch",
-            &["__CUDA_ARCH__", "highest_compiled_arch", "NotBenchable here"],
+            &[
+                "__CUDA_ARCH__",
+                "highest_compiled_arch",
+                "NotBenchable here",
+            ],
         ),
         (
             "magic-anchor-mma-exact-int-float-ffma-epilogue",
-            &["0x4B400000", "12582912", "PORTABLE to riir-gpu/cudarc int8 lanes"],
+            &[
+                "0x4B400000",
+                "12582912",
+                "PORTABLE to riir-gpu/cudarc int8 lanes",
+            ],
         ),
         (
             "j16-warp-fragment-direct-no-smem-tile",
-            &[
-                "36c9536",
-                "NotBenchable here",
-            ],
+            &["36c9536", "NotBenchable here"],
         ),
         (
             "decode-layout-weight-permute-copy-registry",
@@ -19299,7 +19330,10 @@ fn batch251_rules_landed() {
         .iter()
         .filter(|e| e.rule_id == "restrict-local-alias-not-template-formal-cudafe-host-stub")
         .count();
-    assert_eq!(dropped, 0, "batch-251: the dropped candidate must not be in the corpus");
+    assert_eq!(
+        dropped, 0,
+        "batch-251: the dropped candidate must not be in the corpus"
+    );
 }
 
 #[test]
@@ -19329,7 +19363,10 @@ fn batch251_riders_landed() {
             "fwht-wide-block-row-per-threadgroup-exchange-ladder",
             &["GGML_CUDA_FWHT_LEGACY"],
         ),
-        ("swar-lane-widened-base3-dp4a-dot", &["byte_perm(lo*m, hi*m, 0x7351)"]),
+        (
+            "swar-lane-widened-base3-dp4a-dot",
+            &["byte_perm(lo*m, hi*m, 0x7351)"],
+        ),
         (
             "tile-max-prefiltered-exact-topk",
             &["selection below runs on the untouched registers"],
@@ -19346,10 +19383,7 @@ fn batch251_riders_landed() {
             "reduction-restructure-needs-source-owned-comparator",
             &["Shared by the standalone kernel"],
         ),
-        (
-            "rht-epilogue-fusion-contract",
-            &["fwht_mmq_equivalence"],
-        ),
+        ("rht-epilogue-fusion-contract", &["fwht_mmq_equivalence"]),
         (
             "batch-invariance-locks-reduction-geometry",
             &["coastal waters"],
@@ -19489,11 +19523,17 @@ fn batch252_riders_landed() {
         ),
         (
             "lane-permuted-column-reduce-same-butterfly-tree-bit-identity",
-            &["Preserve the original xor-16,8,4,2,1 reduction tree", "Batch 252"],
+            &[
+                "Preserve the original xor-16,8,4,2,1 reduction tree",
+                "Batch 252",
+            ],
         ),
         (
             "host-dispatch-predicate-mirrors-kernel-compiled-arch",
-            &["n_tokens >= GDN_L8V_MIN_TOKENS && n_tokens <= GDN_L8V_MAX_TOKENS", "Batch 252"],
+            &[
+                "n_tokens >= GDN_L8V_MIN_TOKENS && n_tokens <= GDN_L8V_MAX_TOKENS",
+                "Batch 252",
+            ],
         ),
     ];
 
@@ -19589,7 +19629,10 @@ fn batch253_rules_landed() {
     let watch_hexagon_multi = corpus
         .entries
         .iter()
-        .filter(|e| e.gpu_concept.contains("ggml_hexagon_supported_flash_attn_ext"))
+        .filter(|e| {
+            e.gpu_concept
+                .contains("ggml_hexagon_supported_flash_attn_ext")
+        })
         .count();
     assert_eq!(
         watch_hexagon_multi, 0,
@@ -19775,27 +19818,15 @@ fn batch259_rules_landed() {
     let expectations: [(&str, &[&str]); 3] = [
         (
             "tile-history-packed-in-place-register-window-conv-scan",
-            &[
-                "tile frontier",
-                "register window",
-                "NotBenchable",
-            ],
+            &["tile frontier", "register window", "NotBenchable"],
         ),
         (
             "per-row-transcendental-hoist-not-per-element",
-            &[
-                "once per row slot",
-                "per-row scalar",
-                "NotBenchable",
-            ],
+            &["once per row slot", "per-row scalar", "NotBenchable"],
         ),
         (
             "precompute-chain-fused-intermediates-never-materialized",
-            &[
-                "one kernel",
-                "replaces",
-                "NotBenchable",
-            ],
+            &["one kernel", "replaces", "NotBenchable"],
         ),
     ];
 
@@ -19823,11 +19854,7 @@ fn batch259_rules_landed() {
     let riders: [(&str, &[&str]); 3] = [
         (
             "lifecycle-disjoint-intermediates-union-smem-scratch",
-            &[
-                "SMEM-INTERLEAVE LEGALITY face",
-                "dbaf9b4",
-                "Batch 259",
-            ],
+            &["SMEM-INTERLEAVE LEGALITY face", "dbaf9b4", "Batch 259"],
         ),
         (
             "mma-fragment-layout-m16n8k16",
@@ -19881,11 +19908,7 @@ fn batch261_rules_landed() {
         ),
         (
             "dtype-branch-dispatch-parity-in-place-precondition",
-            &[
-                "in-place precondition",
-                "1.21",
-                "NotBenchable",
-            ],
+            &["in-place precondition", "1.21", "NotBenchable"],
         ),
         (
             "one-warp-ordered-reduce-row-batched-no-smem-barrier",
@@ -19998,7 +20021,6 @@ fn batch262_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(corpus.entries.len(), 926, "batch 262 was count-neutral");
 }
-
 
 #[test]
 fn batch260_rider_landed() {
@@ -20350,10 +20372,7 @@ fn batch257_rules_landed() {
         ),
         (
             "pdl-admission-by-image-set-marker",
-            &[
-                "backbone_kernels.zig:80 at bef432bb",
-                "NotBenchable",
-            ],
+            &["backbone_kernels.zig:80 at bef432bb", "NotBenchable"],
         ),
         (
             "copy-source-quarantine-unproven-free-pinned",
@@ -20365,17 +20384,11 @@ fn batch257_rules_landed() {
         ),
         (
             "prefill-batch-atomic-fallback-individual",
-            &[
-                "none left prefilled, as the contract says",
-                "NotBenchable",
-            ],
+            &["none left prefilled, as the contract says", "NotBenchable"],
         ),
         (
             "teardown-takes-list-whole",
-            &[
-                "A failed round ends every job it admitted",
-                "NotBenchable",
-            ],
+            &["A failed round ends every job it admitted", "NotBenchable"],
         ),
         (
             "drain-device-work-before-free",

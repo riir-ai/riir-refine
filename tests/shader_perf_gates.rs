@@ -26,14 +26,18 @@
 #![cfg(feature = "shader_perf")]
 
 use riir_refine::domains::shader_perf::proposers::{
-    collect_all_edits, FIXABLE_SHADER, DEFAULT_GUARD_BOUND,
+    collect_all_edits, DEFAULT_GUARD_BOUND, FIXABLE_SHADER,
 };
 use riir_refine::domains::shader_perf::{refuses, ShaderPerfDomain, ShaderScanner};
 use riir_refine::edit_emitter::apply_edits;
 use riir_refine::HealDomain;
 
 fn rule_ids(src: &str) -> Vec<&'static str> {
-    ShaderScanner.scan(src).into_iter().map(|f| f.rule_id).collect()
+    ShaderScanner
+        .scan(src)
+        .into_iter()
+        .map(|f| f.rule_id)
+        .collect()
 }
 
 // ── Embedded fixtures (always run — the scanner is never fully unpinned) ──
@@ -88,7 +92,10 @@ fn loop_carried_sample_pair() {
 #[test]
 fn branch_divergent_pair() {
     let buggy = rule_ids(BUGGY_BRANCH);
-    assert!(buggy.contains(&"branch-divergent-sample-select"), "{buggy:?}");
+    assert!(
+        buggy.contains(&"branch-divergent-sample-select"),
+        "{buggy:?}"
+    );
 }
 
 #[test]
@@ -200,7 +207,13 @@ fn negative_control_zero_findings_on_vgpu_port_corpus() {
         }
         scanned += 1;
         for f in scanner.scan(&src) {
-            offenses.push(format!("{}:{} [{}] {}", path.display(), f.line, f.rule_id, f.excerpt));
+            offenses.push(format!(
+                "{}:{} [{}] {}",
+                path.display(),
+                f.line,
+                f.rule_id,
+                f.excerpt
+            ));
         }
     }
     assert!(

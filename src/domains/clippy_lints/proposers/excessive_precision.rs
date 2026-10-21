@@ -65,7 +65,10 @@ use super::{edit, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -206,7 +209,10 @@ fn split_mantissa_exponent(digits: &str) -> Option<MantissaParts<'_>> {
     }
     // Empty frac (`7f32`, shortest `3e-10`) is a valid shape here — the
     // integrality guard, not the shape, decides the original.
-    Some(MantissaParts { mantissa_int: int_part, frac })
+    Some(MantissaParts {
+        mantissa_int: int_part,
+        frac,
+    })
 }
 
 /// Digit characters of a mantissa, in source order (leading zeros included

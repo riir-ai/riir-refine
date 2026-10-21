@@ -293,7 +293,10 @@ mod tests {
         assert_eq!(read(&dir), StatsConsent::Unset);
         write(&dir, true).expect("opt in");
         assert_eq!(read(&dir), StatsConsent::OptedIn);
-        assert!(read(&dir).push_allowed(), "OptedIn is the ONLY sharing state");
+        assert!(
+            read(&dir).push_allowed(),
+            "OptedIn is the ONLY sharing state"
+        );
         write(&dir, false).expect("opt out");
         assert_eq!(read(&dir), StatsConsent::OptedOut);
         assert!(!read(&dir).push_allowed());

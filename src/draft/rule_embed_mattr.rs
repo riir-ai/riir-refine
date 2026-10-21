@@ -61,8 +61,8 @@ use katgpt_core::exact_mass_admit::exact_mass_admit_into;
 use super::choice_scorer::{AdamW, Rng};
 use super::rule_embed::{
     decode_verified, dot, encode_artifact, fixture_is_withheld, matvec, quantize, scatter_grad,
-    sigmoid, sparse_features, FlatAdamW, EMBED_DIM, FEATURE_BUCKETS, SIGMOID_TAU, Trained,
-    TrainConfig,
+    sigmoid, sparse_features, FlatAdamW, TrainConfig, Trained, EMBED_DIM, FEATURE_BUCKETS,
+    SIGMOID_TAU,
 };
 
 /// One supervised span: text, THIS split's gold rules, and the other split's
@@ -134,7 +134,11 @@ struct SpanPool {
 }
 
 impl SpanPool {
-    fn build(span: &SpanRow, n_rules: usize, rule_id_of: &dyn Fn(usize) -> String) -> Result<Self, String> {
+    fn build(
+        span: &SpanRow,
+        n_rules: usize,
+        rule_id_of: &dyn Fn(usize) -> String,
+    ) -> Result<Self, String> {
         if span.golds.is_empty() {
             return Err("a span carries no golds — drop it or label it".into());
         }
@@ -158,7 +162,9 @@ impl SpanPool {
         let mut next = 0_u32;
         for &f in &forbidden {
             if f >= n_rules {
-                return Err(format!("forbidden index {f} out of range ({n_rules} rules)"));
+                return Err(format!(
+                    "forbidden index {f} out of range ({n_rules} rules)"
+                ));
             }
             let id = rule_id_of(f);
             if !fixture_is_withheld(&id) {
@@ -217,10 +223,12 @@ pub fn train_spanwise(data: &SpanTrainData, cfg: &MattrConfig) -> Result<Trained
         .collect();
 
     let mut rng = Rng::new(cfg.base.seed);
-    let mut w_span: Vec<f32> =
-        (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
-    let mut w_rule: Vec<f32> =
-        (0..FEATURE_BUCKETS * EMBED_DIM).map(|_| rng.normal() * 0.05).collect();
+    let mut w_span: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+        .map(|_| rng.normal() * 0.05)
+        .collect();
+    let mut w_rule: Vec<f32> = (0..FEATURE_BUCKETS * EMBED_DIM)
+        .map(|_| rng.normal() * 0.05)
+        .collect();
     let mut ws = SpanWorkspace::new(xs.len(), ys.len());
     let mut opt_span = FlatAdamW::new(w_span.len());
     let mut opt_rule = FlatAdamW::new(w_rule.len());
@@ -239,7 +247,15 @@ pub fn train_spanwise(data: &SpanTrainData, cfg: &MattrConfig) -> Result<Trained
             KBudget::LogBoth(_) => (draw_k(&mut rng, cfg.budget), true),
         };
         final_loss = loss_and_grad_spanwise(
-            &w_span, &w_rule, &xs, &ys, &pools, k, both_sides, cfg.admit_temp, &mut ws,
+            &w_span,
+            &w_rule,
+            &xs,
+            &ys,
+            &pools,
+            k,
+            both_sides,
+            cfg.admit_temp,
+            &mut ws,
         );
         opt_span.step(&mut w_span, &ws.g_span, lr, cfg.base.weight_decay);
         opt_rule.step(&mut w_rule, &ws.g_rule, lr, cfg.base.weight_decay);
@@ -285,7 +301,8 @@ fn draw_k(rng: &mut Rng, budget: KBudget) -> u32 {
             // deterministic, no float-accumulation ambiguity.
             let inv: Vec<f64> = set.iter().map(|&k| 1.0 / f64::from(k)).collect();
             let total: f64 = inv.iter().sum();
-            let mut draw = f64::from(u32::try_from(rng.uniform_range(0, 1000)).unwrap_or(0)) / 1000.0;
+            let mut draw =
+                f64::from(u32::try_from(rng.uniform_range(0, 1000)).unwrap_or(0)) / 1000.0;
             for (i, &w) in inv.iter().enumerate() {
                 draw -= w / total;
                 if draw <= 0.0 {
@@ -345,7 +362,11 @@ fn loss_and_grad_spanwise(
         }
         // Budgets: the sentinel draw (k = 0) means Full — k = pool, which is
         // the admit's own k ≥ n all-ones branch; a drawn k clamps to the pool.
-        let kf = if k_draw == 0 { n as f32 } else { (k_draw as f32).min(n as f32) };
+        let kf = if k_draw == 0 {
+            n as f32
+        } else {
+            (k_draw as f32).min(n as f32)
+        };
         let m_plus = &mut ws.m_plus[..n];
         exact_mass_admit_into(z, kf, admit_temp, m_plus);
         let m_minus = if both_sides {
@@ -403,10 +424,10 @@ fn loss_and_grad_spanwise(
 /// Preallocated per-step scratch (the `choice_scorer` rule: capacities
 /// stabilize, the loop allocates nothing).
 struct SpanWorkspace {
-    phi: Vec<f32>,     // S × D — span tower outputs
-    psi: Vec<f32>,     // R × D — rule tower outputs
-    gphi: Vec<f32>,    // S × D
-    gpsi: Vec<f32>,    // R × D
+    phi: Vec<f32>,  // S × D — span tower outputs
+    psi: Vec<f32>,  // R × D — rule tower outputs
+    gphi: Vec<f32>, // S × D
+    gpsi: Vec<f32>, // R × D
     g_span: Vec<f32>,
     g_rule: Vec<f32>,
     z: Vec<f32>,       // R — per-span pool scores (scratch)
@@ -461,7 +482,11 @@ mod tests {
         };
         // A withheld gold is refused.
         let bad = SpanTrainData {
-            spans: vec![SpanRow { text: "let x = 1;".into(), golds: vec![w], forbidden: vec![] }],
+            spans: vec![SpanRow {
+                text: "let x = 1;".into(),
+                golds: vec![w],
+                forbidden: vec![],
+            }],
             rule_texts: rules.clone(),
         };
         assert!(train_spanwise(&bad, &MattrConfig::default())
@@ -469,7 +494,9 @@ mod tests {
             .unwrap_or_default()
             .contains("withheld"));
         // A forbidden NON-withheld rule is refused (builder bug).
-        let nw = (0..8).find(|&i| i != w && !fixture_is_withheld(&rules[i].0)).unwrap();
+        let nw = (0..8)
+            .find(|&i| i != w && !fixture_is_withheld(&rules[i].0))
+            .unwrap();
         let gold = (0..8)
             .find(|&i| i != w && i != nw && !fixture_is_withheld(&rules[i].0))
             .unwrap();
@@ -492,12 +519,14 @@ mod tests {
         // The book INCLUDES withheld rules (they need ψ rows); golds are the
         // non-withheld rows, the withheld ones ride as `forbidden`.
         let rules = tiny_rules(10);
-        let nonw: Vec<usize> =
-            (0..10).filter(|i| !fixture_is_withheld(&rules[*i].0)).collect();
+        let nonw: Vec<usize> = (0..10)
+            .filter(|i| !fixture_is_withheld(&rules[*i].0))
+            .collect();
         let gold = nonw[0];
         let gold2 = nonw[1 % nonw.len()];
-        let forbidden: Vec<usize> =
-            (0..10).filter(|i| fixture_is_withheld(&rules[*i].0)).collect();
+        let forbidden: Vec<usize> = (0..10)
+            .filter(|i| fixture_is_withheld(&rules[*i].0))
+            .collect();
         let data = SpanTrainData {
             spans: vec![
                 SpanRow {
@@ -514,7 +543,10 @@ mod tests {
             rule_texts: rules,
         };
         let cfg = MattrConfig {
-            base: TrainConfig { steps: 40, ..TrainConfig::default() },
+            base: TrainConfig {
+                steps: 40,
+                ..TrainConfig::default()
+            },
             ..MattrConfig::default()
         };
         let tr = train_spanwise(&data, &cfg).expect("full-budget spanwise training");
@@ -525,7 +557,10 @@ mod tests {
         let phi = tr.tables.project_span(&data.spans[0].text);
         let gold_id = data.rule_texts[data.spans[0].golds[0]].0.as_str();
         let s = tr.tables.score_rule(&phi, gold_id).expect("gold row");
-        assert!(s > 0.75, "self-pair σ = {s} — the artifact broke the weights");
+        assert!(
+            s > 0.75,
+            "self-pair σ = {s} — the artifact broke the weights"
+        );
     }
 
     #[test]
@@ -545,13 +580,19 @@ mod tests {
             rule_texts: rules,
         };
         let cfg = MattrConfig {
-            base: TrainConfig { steps: 60, ..TrainConfig::default() },
+            base: TrainConfig {
+                steps: 60,
+                ..TrainConfig::default()
+            },
             budget: KBudget::Uniform(&[1, 2, 3]),
             ..MattrConfig::default()
         };
         let tr = train_spanwise(&data, &cfg).expect("uniform-budget training");
         let phi = tr.tables.project_span(&data.spans[0].text);
-        let s = tr.tables.score_rule(&phi, &data.rule_texts[0].0).expect("gold row");
+        let s = tr
+            .tables
+            .score_rule(&phi, &data.rule_texts[0].0)
+            .expect("gold row");
         assert!(s > 0.75, "uniform-budget self-pair σ = {s}");
     }
 
@@ -572,13 +613,19 @@ mod tests {
             rule_texts: rules,
         };
         let cfg = MattrConfig {
-            base: TrainConfig { steps: 60, ..TrainConfig::default() },
+            base: TrainConfig {
+                steps: 60,
+                ..TrainConfig::default()
+            },
             budget: KBudget::LogBoth(&[1, 2, 3]),
             ..MattrConfig::default()
         };
         let tr = train_spanwise(&data, &cfg).expect("logboth training");
         let phi = tr.tables.project_span(&data.spans[0].text);
-        let s = tr.tables.score_rule(&phi, &data.rule_texts[0].0).expect("gold row");
+        let s = tr
+            .tables
+            .score_rule(&phi, &data.rule_texts[0].0)
+            .expect("gold row");
         assert!(s > 0.75, "logboth self-pair σ = {s}");
     }
 

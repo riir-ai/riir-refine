@@ -136,7 +136,14 @@ fn an_unstamped_ack_refuses_the_push_until_quarantined() {
     let (code, text) = heal(
         &dir,
         &mock.base(),
-        &["config", "adopt-state", "devnet", "--discard", "--url", &mock.base()],
+        &[
+            "config",
+            "adopt-state",
+            "devnet",
+            "--discard",
+            "--url",
+            &mock.base(),
+        ],
     );
     assert_eq!(code, Some(0), "discard must succeed. output:\n{text}");
     assert!(
@@ -154,10 +161,7 @@ fn an_unstamped_ack_refuses_the_push_until_quarantined() {
     let (code, text) = heal(&dir, &mock.base(), &[]);
     assert_eq!(code, Some(0), "the post-quarantine run. output:\n{text}");
     let captured = mock.captured();
-    let pushes: Vec<_> = captured
-        .iter()
-        .filter(|c| c.path == "/burn")
-        .collect();
+    let pushes: Vec<_> = captured.iter().filter(|c| c.path == "/burn").collect();
     assert_eq!(pushes.len(), 1, "exactly one push, the full total. {text}");
     let book_now = charged_kat(&dir);
     let wire_now = riir_refine::kat_burn_client::wire_kat_total(book_now);
@@ -289,7 +293,10 @@ fn a_v5_net_ack_adopts_its_charge_baseline_and_unsticks() {
         .expect("the net charge book"),
     )
     .expect("charge json");
-    let charged_now = book.get("charged_kat").and_then(serde_json::Value::as_u64).expect("charged");
+    let charged_now = book
+        .get("charged_kat")
+        .and_then(serde_json::Value::as_u64)
+        .expect("charged");
 
     // Plant the 0.3.0 shape: base 21, NO charged_at_ack_micro, fully
     // stamped (the mock's attestation).
@@ -344,7 +351,11 @@ fn a_v5_net_ack_adopts_its_charge_baseline_and_unsticks() {
     let (code, text) = heal(&dir, &mock.base(), &[]);
     assert_eq!(code, Some(0), "output:\n{text}");
     let captured = mock.captured();
-    assert_eq!(captured.len(), 2, "pre-flight GET / + the POST /burn. output:\n{text}");
+    assert_eq!(
+        captured.len(),
+        2,
+        "pre-flight GET / + the POST /burn. output:\n{text}"
+    );
     let v: serde_json::Value =
         serde_json::from_str(&captured[1].body).expect("the push body must be JSON");
     assert_eq!(

@@ -2233,9 +2233,9 @@ mod tests {
     },
 ];
 
-pub static CONTROL_SPECS_V9: &[CorruptionSpec] = &[
-];
+pub static CONTROL_SPECS_V9: &[CorruptionSpec] = &[];
 
 /// The blake3 append-refusal pin over both arms (mirrors
 /// `corruption::corpus_digest` over the committed statics).
-pub const CORPUS_V9_DIGEST: &str = "bfd2bef8d4a745d64582e2c8b672246c66a50566a2414572772b5550262ed631";
+pub const CORPUS_V9_DIGEST: &str =
+    "bfd2bef8d4a745d64582e2c8b672246c66a50566a2414572772b5550262ed631";

@@ -54,8 +54,8 @@ use super::{edit, SourceEdit};
 /// comparisons are `PartialOrd<&str>`/`PartialOrd<str>` impl pairs the range
 /// form does not mirror).
 const RANGE_SCALARS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
-    "f32", "f64", "bool", "char",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64", "bool", "char",
 ];
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -185,7 +185,9 @@ impl Collector<'_> {
 
 /// A comparison sub-expression: `((lhs, rhs), op)` after paren unwrap.
 fn as_cmp(e: &Expr) -> Option<((&Expr, &Expr), BinOp)> {
-    let Expr::Binary(b) = unwrap_parens(e) else { return None };
+    let Expr::Binary(b) = unwrap_parens(e) else {
+        return None;
+    };
     let op @ (BinOp::Ge(_) | BinOp::Gt(_) | BinOp::Le(_) | BinOp::Lt(_)) = b.op else {
         return None;
     };
@@ -232,7 +234,6 @@ fn literal_text(e: &Expr, source: &str) -> Option<String> {
         _ => None,
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -411,7 +412,10 @@ mod tests {
             "manual_range_contains",
             "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 /* lo */ && x <= 5 }",
         );
-        assert!(out.is_none(), "comment in deleted glue must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment in deleted glue must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -420,7 +424,10 @@ mod tests {
             "manual_range_contains",
             "fn out(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x < 3 || x > 5 }",
         );
-        assert!(out.is_none(), "|| chain is the outside-range form — never ours: {out:?}");
+        assert!(
+            out.is_none(),
+            "|| chain is the outside-range form — never ours: {out:?}"
+        );
     }
 
     #[test]
@@ -455,6 +462,9 @@ mod tests {
             "manual_range_contains",
             "fn go(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); (x) >= 3 && (x) <= 5 }",
         );
-        assert!(out.is_none(), "paren-wrapped operand text must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "paren-wrapped operand text must refuse: {out:?}"
+        );
     }
 }

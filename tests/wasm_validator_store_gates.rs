@@ -62,7 +62,9 @@ fn install_load_verify_round_trip() {
     let store = root.store();
     let bytes = committed_artifact_bytes();
 
-    let record = store.install("useless_format_brace", &bytes).expect("install v1");
+    let record = store
+        .install("useless_format_brace", &bytes)
+        .expect("install v1");
     assert_eq!(record.version, 1);
     assert_eq!(record.state, ValidatorState::Active);
 
@@ -174,11 +176,15 @@ fn revoked_validator_refuses_to_load_and_reinstatement_needs_a_new_version() {
     );
 
     // In-place reinstatement is refused — the inversion record is durable.
-    let err = store.reinstate("v").expect_err("in-place reinstate must refuse");
+    let err = store
+        .reinstate("v")
+        .expect_err("in-place reinstate must refuse");
     assert_eq!(err, StoreError::InversionIsDurable);
 
     // The path back: a NEW version through install.
-    store.install("v", &bytes).expect_err("identical bytes still AlreadyCurrent");
+    store
+        .install("v", &bytes)
+        .expect_err("identical bytes still AlreadyCurrent");
     let mutated = mutated_artifact_bytes();
     match store.install("v", &mutated) {
         Ok(record) => {

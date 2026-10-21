@@ -258,12 +258,10 @@ fn accumulator_name(pat_text: &str) -> Option<&'static str> {
 /// Does the file already import `std::fmt::Write` (any form, any alias)
 /// or a covering `std::fmt::*` glob?
 fn fmt_write_in_scope(file: &File) -> bool {
-    file.items
-        .iter()
-        .any(|item| match item {
-            Item::Use(u) => use_tree_imports_fmt_write(&u.tree, &mut Vec::new()),
-            _ => false,
-        })
+    file.items.iter().any(|item| match item {
+        Item::Use(u) => use_tree_imports_fmt_write(&u.tree, &mut Vec::new()),
+        _ => false,
+    })
 }
 
 /// Walk one use tree with its accumulated prefix segments.
@@ -443,10 +441,7 @@ mod tests {
             out.starts_with("use std::fmt::Write as _;\n"),
             "anonymous import must be inserted at file head: {out}"
         );
-        assert!(
-            syn::parse_file(&out).is_ok(),
-            "output must re-parse: {out}"
-        );
+        assert!(syn::parse_file(&out).is_ok(), "output must re-parse: {out}");
     }
 
     #[test]
@@ -605,10 +600,7 @@ mod tests {
             out.matches("use std::fmt::Write as _;").count() == 1,
             "exactly one import: {out}"
         );
-        assert!(
-            syn::parse_file(&out).is_ok(),
-            "output must re-parse: {out}"
-        );
+        assert!(syn::parse_file(&out).is_ok(), "output must re-parse: {out}");
     }
 
     #[test]
@@ -651,7 +643,12 @@ mod tests {
 
     #[test]
     fn two_mods_each_get_their_own_scoped_import() {
-        let input = format!("{TESTMOD_BUGGY}\n\n{}", TESTMOD_BUGGY.replace("deploy_tests", "other_tests").replace("fn render", "fn render2"));
+        let input = format!(
+            "{TESTMOD_BUGGY}\n\n{}",
+            TESTMOD_BUGGY
+                .replace("deploy_tests", "other_tests")
+                .replace("fn render", "fn render2")
+        );
         let out = propose_fix("format_collect", &input).expect("matched");
         assert_eq!(
             out.matches("use std::fmt::Write as _;").count(),

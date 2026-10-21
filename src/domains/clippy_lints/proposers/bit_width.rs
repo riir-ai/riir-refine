@@ -201,7 +201,9 @@ impl Collector<'_> {
         if !lhs_is_bits_path(&b.left) {
             return None;
         }
-        let Expr::MethodCall(m) = &*b.right else { return None };
+        let Expr::MethodCall(m) = &*b.right else {
+            return None;
+        };
         if m.method != "leading_zeros" || !m.args.is_empty() || m.turbofish.is_some() {
             return None;
         }
@@ -227,7 +229,9 @@ fn lhs_is_bits_path(left: &Expr) -> bool {
     if p.path.segments.len() < 2 {
         return false; // `<Ty>::BITS` always carries a type prefix
     }
-    let Some(last) = p.path.segments.last() else { return false };
+    let Some(last) = p.path.segments.last() else {
+        return false;
+    };
     last.ident == "BITS" && last.arguments.is_none()
 }
 
@@ -265,11 +269,15 @@ fn width_params_over<'i>(
     // shared one (plain Pat::Ident, never-rebound).
     for arg in args {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(w) = nonzero_width_of(&p.ty) else { continue };
+        let Some(w) = nonzero_width_of(&p.ty) else {
+            continue;
+        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
@@ -399,7 +407,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, x: i32) -> u32 { hits.push(0); i32::BITS - x.leading_zeros() }",
         )
         .expect("matched");
-        assert!(out.contains("x.cast_unsigned().bit_width()"), "wrong fix: {out}");
+        assert!(
+            out.contains("x.cast_unsigned().bit_width()"),
+            "wrong fix: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -421,7 +432,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, y: NonZeroI32) -> u32 { hits.push(0); NonZeroI32::BITS - y.leading_zeros() }",
         )
         .expect("matched");
-        assert!(out.contains("y.cast_unsigned().bit_width().get()"), "wrong fix: {out}");
+        assert!(
+            out.contains("y.cast_unsigned().bit_width().get()"),
+            "wrong fix: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -458,7 +472,10 @@ mod tests {
             "fn f(hits: &mut Vec<u8>, w: u32) -> u32 { hits.push(0); let b = u32::BITS - w.leading_zeros(); b * 2 }",
         )
         .expect("matched");
-        assert!(out.contains("let b = w.bit_width(); b * 2"), "tail not preserved: {out}");
+        assert!(
+            out.contains("let b = w.bit_width(); b * 2"),
+            "tail not preserved: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -469,7 +486,10 @@ mod tests {
             "struct S; impl S { fn f(&self, hits: &mut Vec<u8>, x: i64) -> u32 { hits.push(0); i64::BITS - x.leading_zeros() } }",
         )
         .expect("matched");
-        assert!(out.contains("x.cast_unsigned().bit_width()"), "wrong fix: {out}");
+        assert!(
+            out.contains("x.cast_unsigned().bit_width()"),
+            "wrong fix: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

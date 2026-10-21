@@ -269,7 +269,10 @@ mod tests {
 
     #[test]
     fn benches_directory_ancestor_forces() {
-        assert!(lexical_forces(&user("benches"), &file("benches/bench_x.rs")));
+        assert!(lexical_forces(
+            &user("benches"),
+            &file("benches/bench_x.rs")
+        ));
         // Nested: the named dir IS a benches dir one level down.
         assert!(lexical_forces(
             &user("crates/foo/benches"),

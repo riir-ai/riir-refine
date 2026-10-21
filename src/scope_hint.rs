@@ -129,7 +129,10 @@ mod tests {
         assert!(hint.contains("examples"), "names examples: {hint}");
         assert!(hint.contains("tests"), "names tests: {hint}");
         assert!(!hint.contains("benches"), "absent root never named: {hint}");
-        assert!(!hint.contains("src,"), "the covered root is not named: {hint}");
+        assert!(
+            !hint.contains("src,"),
+            "the covered root is not named: {hint}"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 

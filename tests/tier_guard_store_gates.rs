@@ -37,7 +37,14 @@ fn fresh_verified_success_still_certifies() {
     let root = tmp_root("fresh");
     let (store, _) = TrajStore::open(&root).unwrap();
     store
-        .record("clippy::needless_borrow", "let x = &y;", "*y", true, true, "run-1")
+        .record(
+            "clippy::needless_borrow",
+            "let x = &y;",
+            "*y",
+            true,
+            true,
+            "run-1",
+        )
         .unwrap();
     let row = &store.dump()[0];
     assert_eq!(row.tier, EvidenceTier::Certified.as_u8());

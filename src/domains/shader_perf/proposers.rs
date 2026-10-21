@@ -133,9 +133,9 @@ pub(crate) fn unbounded_loop_anchors(source: &str) -> Vec<LoopAnchor> {
         let lineno_offset = offset;
         let line = super::mask_string_literals(&super::strip_line_comment(raw));
         let trimmed = line.trim();
-        let opens_fn = line.find('(').is_some_and(|idx| {
-            line[..idx].split_whitespace().any(|t| t == "fn")
-        });
+        let opens_fn = line
+            .find('(')
+            .is_some_and(|idx| line[..idx].split_whitespace().any(|t| t == "fn"));
 
         if line.contains("@vertex") {
             pending_stage = Some(Stage::Vertex);
@@ -149,8 +149,8 @@ pub(crate) fn unbounded_loop_anchors(source: &str) -> Vec<LoopAnchor> {
             stack.pop();
         }
 
-        let is_loop_line = (contains_w(&line, "loop") || contains_w(&line, "while"))
-            && line.contains('{');
+        let is_loop_line =
+            (contains_w(&line, "loop") || contains_w(&line, "while")) && line.contains('{');
         let in_render_fn = stack.iter().any(|(r, _)| *r);
         if opens_fn {
             stack.push((pending_stage.is_some(), false));
@@ -253,7 +253,8 @@ fn contains_w(line: &str, word: &str) -> bool {
     let mut i = 0;
     while i + w.len() <= bytes.len() {
         if &bytes[i..i + w.len()] == w {
-            let before_ok = i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
+            let before_ok =
+                i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'_');
             let after = i + w.len();
             let after_ok = after >= bytes.len()
                 || !(bytes[after].is_ascii_alphanumeric() || bytes[after] == b'_');

@@ -129,11 +129,7 @@ impl HostedExpertL4 {
     /// Construction does NOT read the consent env and opens NO socket โ€”
     /// building a transport is inert; only `generate_fix` egresses.
     #[must_use]
-    pub fn new(
-        endpoint: String,
-        model: String,
-        spend: crate::llm_spend::SpendLedger,
-    ) -> Self {
+    pub fn new(endpoint: String, model: String, spend: crate::llm_spend::SpendLedger) -> Self {
         let bearer = match std::env::var(TOKEN_ENV) {
             Ok(t) if !t.trim().is_empty() => format!("Bearer {}", t.trim()),
             _ => String::new(),
@@ -372,10 +368,7 @@ mod tests {
                         break;
                     }
                     buf.extend_from_slice(&chunk[..n]);
-                    if let Some(hend) = buf
-                        .windows(4)
-                        .position(|w| w == b"\r\n\r\n")
-                        .map(|p| p + 4)
+                    if let Some(hend) = buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)
                     {
                         let head = String::from_utf8_lossy(&buf[..hend]).to_ascii_lowercase();
                         let clen: usize = head
@@ -544,8 +537,7 @@ mod tests {
             .expect("the happy path answers");
         assert_eq!(fix, "fn f() -> i32 { 1 }");
 
-        let sent =
-            String::from_utf8(rx.recv().expect("the server saw the request")).expect("utf8");
+        let sent = String::from_utf8(rx.recv().expect("the server saw the request")).expect("utf8");
         assert!(sent.contains(snippet), "snippet travels: {sent}");
         assert!(!sent.contains(file_marker), "file content never travels");
         assert!(sent.contains("retention"), "the rule rides the wire");

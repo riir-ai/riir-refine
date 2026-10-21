@@ -426,10 +426,7 @@ fn the_survey_zero_arm_renders_nothing_skipped() {
         text.contains("survey: 0 fixable findings"),
         "the zero arm must render its own wording. output:\n{text}"
     );
-    assert!(
-        text.contains("nothing was skipped"),
-        "output:\n{text}"
-    );
+    assert!(text.contains("nothing was skipped"), "output:\n{text}");
     assert!(
         !text.contains("NOT applied"),
         "zero fixable must not claim skipped work. output:\n{text}"

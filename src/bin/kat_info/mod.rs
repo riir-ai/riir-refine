@@ -50,10 +50,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     // substrate's computed account_line, the SAME grid the `account`
     // command and the welcome gate render through.
     use riir_refine::kat_account_client::account_line;
-    println!(
-        "{}",
-        account_line("account:", &state.account_id)
-    );
+    println!("{}", account_line("account:", &state.account_id));
     println!(
         "{}",
         account_line("key:", account.key_path().display().to_string())
@@ -69,7 +66,10 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     }
     println!(
         "{}",
-        account_line("mining:", format!("{} (contribution consent)", mining.label()))
+        account_line(
+            "mining:",
+            format!("{} (contribution consent)", mining.label())
+        )
     );
     let (stats, sw) = riir_refine::kat_stats_consent::read_with_warning(
         &riir_refine::kat_stats_consent::default_dir(),
@@ -83,13 +83,16 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     );
 
     // ── the network sections ────────────────────────────────────────────
-    let acct32 = riir_refine::kat_account_client::service_account_hex(&state.account_id)
-        .map(str::to_string);
+    let acct32 =
+        riir_refine::kat_account_client::service_account_hex(&state.account_id).map(str::to_string);
     #[cfg(feature = "kat_transport")]
     network_sections(acct32.as_deref());
     #[cfg(not(feature = "kat_transport"))]
     {
-        println!("{}", riir_refine::kat_account_client::account_header("SERVICE"));
+        println!(
+            "{}",
+            riir_refine::kat_account_client::account_header("SERVICE")
+        );
         println!("  (network sections need a kat_transport build — the local view follows)");
         let _ = &acct32;
     }
@@ -114,7 +117,10 @@ fn network_sections(acct32: Option<&str>) {
     let url = crate::command_service_url();
     let transport = svc::HttpAccountTransport::new(&url, 6);
 
-    println!("{}", riir_refine::kat_account_client::account_header("SERVICE"));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("SERVICE")
+    );
     match svc::service_line_via(&transport) {
         // The render half formats under the account label column (the
         // two-space indent is already in the line — never re-indent it).
@@ -136,7 +142,10 @@ fn network_sections(acct32: Option<&str>) {
     };
 
     // WALLET — `GET /history`: the server-truth position.
-    println!("{}", riir_refine::kat_account_client::account_header("WALLET (server truth)"));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("WALLET (server truth)")
+    );
     let mut offline = false;
     match transport.get_history(acct, 20) {
         HttpResponse::Ok(body) => match svc::parse_history(&body) {
@@ -155,7 +164,10 @@ fn network_sections(acct32: Option<&str>) {
     }
 
     // STAKING — `GET /stake/info` (the `stake --info` read, same render).
-    println!("{}", riir_refine::kat_account_client::account_header("STAKING"));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("STAKING")
+    );
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
@@ -184,7 +196,10 @@ fn network_sections(acct32: Option<&str>) {
     // MINING — `GET /mining/adoption`: the public per-machine queue
     // outcomes, this machine's row matched by the locally-computed
     // pseudonym (the full id never enters the public body).
-    println!("{}", riir_refine::kat_account_client::account_header("MINING (public table)"));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("MINING (public table)")
+    );
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
     } else {
@@ -217,7 +232,10 @@ fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<St
     // The label column is the substrate's computed account_line (issue 126
     // follow-ups 4+6) — never hand-padded.
     let mut lines = vec![
-        account_line("balance:", format!("{} service credit", kat(h.balance_micro))),
+        account_line(
+            "balance:",
+            format!("{} service credit", kat(h.balance_micro)),
+        ),
         account_line(
             "grant:",
             if h.granted {
@@ -331,13 +349,17 @@ fn local_section(paths: &[PathBuf]) {
     // flag-OFF posture compiles this fn but never runs it — the helper is
     // cfg'd, so the dir resolves through a stub there.
     #[cfg(feature = "kat_service")]
-    let net_dir = riir_refine::kat_state_stamp::net_state_dir_for_url(
-        &root,
-        &crate::net_partition_url(),
-    );
+    let net_dir =
+        riir_refine::kat_state_stamp::net_state_dir_for_url(&root, &crate::net_partition_url());
     #[cfg(not(feature = "kat_service"))]
     let net_dir = root.join(".refine");
-    println!("{}", riir_refine::kat_account_client::account_header(&format!("LOCAL WORK ({})", root.display())));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header(&format!(
+            "LOCAL WORK ({})",
+            root.display()
+        ))
+    );
 
     // healed rows — this repo's trajectory store.
     #[cfg(feature = "latent_retrieval")]
@@ -382,9 +404,9 @@ fn local_section(paths: &[PathBuf]) {
                 c.meter_watermark_tokens
             );
         }
-        None => println!(
-            "  local burn:  (no charge ledger for this net — heal this repo to start one)"
-        ),
+        None => {
+            println!("  local burn:  (no charge ledger for this net — heal this repo to start one)")
+        }
     }
 
     // the burn-ack server truth + the 075 soft gate over it (per-net — the
@@ -394,15 +416,13 @@ fn local_section(paths: &[PathBuf]) {
     if let Some(w) = warning {
         eprintln!("{w}");
     }
-    let verdict = riir_refine::kat_soft_gate::evaluate(
-        riir_refine::kat_soft_gate::SoftGateInput {
-            transport_capable: cfg!(feature = "kat_transport"),
-            account_present: true,
-            last_synced_balance_micro: ack.last_balance_micro,
-            contributed_and_synced: ack.contributed == Some(true),
-            tuna_balance_micro: ack.tuna_balance_micro,
-        },
-    );
+    let verdict = riir_refine::kat_soft_gate::evaluate(riir_refine::kat_soft_gate::SoftGateInput {
+        transport_capable: cfg!(feature = "kat_transport"),
+        account_present: true,
+        last_synced_balance_micro: ack.last_balance_micro,
+        contributed_and_synced: ack.contributed == Some(true),
+        tuna_balance_micro: ack.tuna_balance_micro,
+    });
     use riir_refine::kat_soft_gate::SoftGateVerdict;
     let kat = |micro: i64| riir_refine::kat_units::render_kat(micro);
     match verdict {
@@ -443,20 +463,27 @@ fn local_section(paths: &[PathBuf]) {
 /// fresh check is `cargo refine --version` or `upgrade`.
 fn corpus_section(paths: &[PathBuf]) {
     let root = crate::resolve_heal_root(paths);
-    println!("{}", riir_refine::kat_account_client::account_header("CORPUS"));
+    println!(
+        "{}",
+        riir_refine::kat_account_client::account_header("CORPUS")
+    );
 
     // The compiled-in rule counts — the corpus SHIPS IN the binary, so
     // "stale corpus" is first a function of the binary's age.
     #[cfg(feature = "clippy_lints")]
     {
-        let n = riir_refine::domains::clippy_lints::corpus::build_seed_corpus().entries.len();
+        let n = riir_refine::domains::clippy_lints::corpus::build_seed_corpus()
+            .entries
+            .len();
         println!("  compiled:   clippy_lints {n} rules");
     }
     #[cfg(not(feature = "clippy_lints"))]
     println!("  compiled:   clippy_lints (not compiled in this build)");
     #[cfg(feature = "rust_perf")]
     {
-        let n = riir_refine::domains::rust_perf::corpus::build_perf_seed_corpus().entries.len();
+        let n = riir_refine::domains::rust_perf::corpus::build_perf_seed_corpus()
+            .entries
+            .len();
         println!("  compiled:   rust_perf    {n} rules");
     }
     #[cfg(not(feature = "rust_perf"))]
@@ -484,9 +511,8 @@ fn corpus_section(paths: &[PathBuf]) {
     #[cfg(feature = "update_check")]
     {
         let installed = env!("CARGO_PKG_VERSION");
-        let cache = riir_refine::update_check::load_cache(
-            &riir_refine::update_check::cache_path(&root),
-        );
+        let cache =
+            riir_refine::update_check::load_cache(&riir_refine::update_check::cache_path(&root));
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
@@ -502,18 +528,23 @@ fn corpus_section(paths: &[PathBuf]) {
                     "  release:    STALE — {} is out (installed {installed}){detail}",
                     latest.version
                 );
-                println!("              `cargo refine upgrade` applies it (or {})", latest.url);
+                println!(
+                    "              `cargo refine upgrade` applies it (or {})",
+                    latest.url
+                );
             }
-            riir_refine::update_check::Plan::Fetch => println!(
-                "  release:    (no fresh check yet — `cargo refine --version` checks now)"
-            ),
+            riir_refine::update_check::Plan::Fetch => {
+                println!("  release:    (no fresh check yet — `cargo refine --version` checks now)")
+            }
             riir_refine::update_check::Plan::Silent => {
                 println!("  release:    current (installed {installed}, cache fresh)");
             }
         }
     }
     #[cfg(not(feature = "update_check"))]
-    println!("  release:    (the update lane needs a update_check build — the release set carries it)");
+    println!(
+        "  release:    (the update lane needs a update_check build — the release set carries it)"
+    );
 }
 
 #[cfg(test)]
@@ -522,26 +553,27 @@ mod tests {
 
     #[test]
     fn wallet_lines_render_trial_credit_only_when_the_server_sends_it() {
-        let base = |tuna: (Option<i64>, Option<u64>)| riir_refine::kat_protocol_account::ServiceHistory {
-            account_id: "ab".repeat(16),
-            balance_micro: 97_000_000,
-            granted: false,
-            burn_kat_total: Some(3),
-            burn_updated_tick: Some(9),
-            contributed: false,
-            first_commitment_hex: None,
-            receipts: vec![],
-            receipts_total_matching: 0,
-            receipts_truncated: false,
-            events: vec![],
-            events_total: 0,
-            events_truncated: false,
-            tuna_balance_micro: tuna.0,
-            tuna_expires_unix: tuna.1,
-            purchases: Vec::new(),
-            purchases_total: 0,
-            purchases_truncated: false,
-        };
+        let base =
+            |tuna: (Option<i64>, Option<u64>)| riir_refine::kat_protocol_account::ServiceHistory {
+                account_id: "ab".repeat(16),
+                balance_micro: 97_000_000,
+                granted: false,
+                burn_kat_total: Some(3),
+                burn_updated_tick: Some(9),
+                contributed: false,
+                first_commitment_hex: None,
+                receipts: vec![],
+                receipts_total_matching: 0,
+                receipts_truncated: false,
+                events: vec![],
+                events_total: 0,
+                events_truncated: false,
+                tuna_balance_micro: tuna.0,
+                tuna_expires_unix: tuna.1,
+                purchases: Vec::new(),
+                purchases_total: 0,
+                purchases_truncated: false,
+            };
 
         // Post-TUNA server: the line names the balance, the expiry, and
         // the conditions — the Proposal 006 vocabulary, one line.
@@ -552,7 +584,10 @@ mod tests {
             .expect("the trial-credit line must render");
         assert!(tuna_line.contains("47.200000 TUNA"), "{tuna_line}");
         assert!(tuna_line.contains("expires 2026-10-18"), "{tuna_line}");
-        assert!(tuna_line.contains("heals only, non-transferable"), "{tuna_line}");
+        assert!(
+            tuna_line.contains("heals only, non-transferable"),
+            "{tuna_line}"
+        );
         // And it sits beside the grant line, before the burn line.
         let grant_idx = with.iter().position(|l| l.contains("grant:")).unwrap();
         let tuna_idx = with.iter().position(|l| l.contains("tuna:")).unwrap();

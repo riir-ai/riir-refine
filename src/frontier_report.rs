@@ -389,9 +389,9 @@ pub fn domain_queue(
     let pool: Vec<PoolEntry> = corpus_rules
         .iter()
         .filter_map(|rule| {
-            outcomes
-                .get(rule)
-                .map(|(kept, reverted)| PoolEntry::new(rule.clone(), from_counts(*kept, *reverted, 0)))
+            outcomes.get(rule).map(|(kept, reverted)| {
+                PoolEntry::new(rule.clone(), from_counts(*kept, *reverted, 0))
+            })
         })
         .collect();
     frontier_order(&pool)
@@ -505,7 +505,8 @@ pub fn provenance_summary(pair_counts: &BTreeMap<String, usize>) -> Vec<Provenan
         .map(|p| {
             let pairs = pair_counts.get(&p).copied().unwrap_or(0);
             let weight = crate::frontier_pairs::provenance_weight(&p);
-            #[allow(clippy::cast_precision_loss)] // fractions over usize counts — the report's quantity
+            #[allow(clippy::cast_precision_loss)]
+            // fractions over usize counts — the report's quantity
             let share = if total == 0 {
                 0.0
             } else {
@@ -1119,9 +1120,7 @@ pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
         std::collections::BTreeMap::new();
     for row in &sweeps {
         for o in &row.outcomes {
-            let e = series
-                .entry(o.rule.clone())
-                .or_default();
+            let e = series.entry(o.rule.clone()).or_default();
             e.sweeps += 1;
             e.resolved += o.resolved;
             e.persist += o.persist;
@@ -1142,8 +1141,12 @@ pub fn fade_scan(rows: &[FadeRow]) -> FadeScan {
         classify_series(&mut scan, rule, s);
     }
     scan.never_contributed.sort();
-    scan.candidates
-        .sort_by(|a, b| b.persist_total.cmp(&a.persist_total).then(b.edits_total.cmp(&a.edits_total)).then(a.rule.cmp(&b.rule)));
+    scan.candidates.sort_by(|a, b| {
+        b.persist_total
+            .cmp(&a.persist_total)
+            .then(b.edits_total.cmp(&a.edits_total))
+            .then(a.rule.cmp(&b.rule))
+    });
     scan
 }
 
@@ -1441,8 +1444,7 @@ pub fn append_snapshot_at_frontier(
     if !kv.exists() {
         return Ok(SnapshotOutcome::NoStore);
     }
-    let (store, _bad) =
-        crate::traj_store::TrajStore::open(root).map_err(std::io::Error::other)?;
+    let (store, _bad) = crate::traj_store::TrajStore::open(root).map_err(std::io::Error::other)?;
     let entries: Vec<(String, u32, u32)> = store
         .learn_rows()
         .into_iter()
@@ -1530,7 +1532,11 @@ pub fn local_iso_timestamp() -> String {
 // Bounded intermediate ranges by construction (the algorithm's own
 // comments; the truncation/wrap/sign allows mirror the score_bench report's
 // module-level set — the fn moved homes, not semantics).
-#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+#[allow(
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::cast_possible_truncation
+)]
 fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
@@ -1558,18 +1564,18 @@ mod tests {
         // Covers every band class + both saturation edges + the proxy miss.
         vec![
             // band: hard-but-learnable (the admission band's exact interior)
-            ("band_mid".into(), 3, 3),          // p̂=0.5 band edge (inclusive)
-            ("band_low".into(), 1, 9),          // p̂=0.1
-            ("band_thin".into(), 1, 1),         // p̂=0.5, thin
-            ("band_deep".into(), 20, 30),       // p̂=0.4, deep — band head
+            ("band_mid".into(), 3, 3),    // p̂=0.5 band edge (inclusive)
+            ("band_low".into(), 1, 9),    // p̂=0.1
+            ("band_thin".into(), 1, 1),   // p̂=0.5, thin
+            ("band_deep".into(), 20, 30), // p̂=0.4, deep — band head
             // below: expressiveness gap (all-fail)
             ("gap_all_fail".into(), 0, 12),
             // above: mid rates + thin-perfect
-            ("above_mid".into(), 9, 1),         // p̂=0.9
-            ("perfect_thin".into(), 10, 0),     // p̂=1, n=10 < W → above
-            ("perfect_edge".into(), 49, 0),     // p̂=1, n=49 < W → above (edge)
+            ("above_mid".into(), 9, 1),     // p̂=0.9
+            ("perfect_thin".into(), 10, 0), // p̂=1, n=10 < W → above
+            ("perfect_edge".into(), 49, 0), // p̂=1, n=49 < W → above (edge)
             // saturated: all-time-perfect with deep evidence
-            ("saturated_edge".into(), 50, 0),   // p̂=1, n=50 = W → saturated (edge)
+            ("saturated_edge".into(), 50, 0), // p̂=1, n=50 = W → saturated (edge)
             ("saturated_deep".into(), 120, 0),
             // the proxy MISS: failed once long ago, then a long win streak
             // — trailing-50 IS perfect but p̂<1, so NOT a candidate
@@ -1609,7 +1615,11 @@ mod tests {
     fn band_mass_arithmetic() {
         let s = summarize(&fixtures());
         // 4 band of 11 seen (12 rows minus the 1 unseen).
-        assert!((s.band_mass - 4.0 / 11.0).abs() < 1e-6, "got {m}", m = s.band_mass);
+        assert!(
+            (s.band_mass - 4.0 / 11.0).abs() < 1e-6,
+            "got {m}",
+            m = s.band_mass
+        );
         assert_eq!(s.band_count, 4);
     }
 
@@ -1627,8 +1637,13 @@ mod tests {
         assert!((d.population_mass - 4.0 / 12.0).abs() < 1e-6);
         assert!((d.bias_bound - 1.0 / 12.0).abs() < 1e-6);
         assert!((d.hull.0 - 4.0 / 12.0).abs() < 1e-6 && (d.hull.1 - 5.0 / 12.0).abs() < 1e-6);
-        let far = (s.band_mass - d.hull.0).abs().max((s.band_mass - d.hull.1).abs());
-        assert!(far <= d.bias_bound + 1e-6, "hull must sit inside the budget: {far}");
+        let far = (s.band_mass - d.hull.0)
+            .abs()
+            .max((s.band_mass - d.hull.1).abs());
+        assert!(
+            far <= d.bias_bound + 1e-6,
+            "hull must sit inside the budget: {far}"
+        );
         assert!(filter_disclosure(&summarize(&[])).is_none());
         let text = render(&s, None);
         assert!(text.contains("filter disclosure (Issue 139 T3)"), "{text}");
@@ -1781,7 +1796,12 @@ mod tests {
         let order: Vec<&str> = rows.iter().map(|r| r.rule.as_str()).collect();
         assert_eq!(
             order,
-            vec!["mixed_rule", "zero_verdict_row", "all_fail_rule", "saturated_rule"],
+            vec![
+                "mixed_rule",
+                "zero_verdict_row",
+                "all_fail_rule",
+                "saturated_rule"
+            ],
             "frontier order must hold at rule granularity: {rows:?}"
         );
         // Ranks are 1-based and contiguous.
@@ -1807,12 +1827,18 @@ mod tests {
         let (corpus, outcomes) = domain_fixtures();
         let rows = domain_queue(&corpus, &outcomes);
         let text = render_domain_queue("clippy", &rows, corpus.len());
-        assert!(text.contains("# clippy — frontier rule queue (4 observed / 5 corpus rules)"), "{text}");
+        assert!(
+            text.contains("# clippy — frontier rule queue (4 observed / 5 corpus rules)"),
+            "{text}"
+        );
         assert!(text.contains("| 1 | mixed_rule | 2 | 2 |"), "{text}");
         assert!(text.contains("informative"), "{text}");
         assert!(text.contains("regenerate"), "{text}");
         assert!(text.contains("saturated"), "{text}");
-        assert!(text.contains("coverage: 4 of 5; 1 rule(s) unobserved"), "{text}");
+        assert!(
+            text.contains("coverage: 4 of 5; 1 rule(s) unobserved"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -1853,8 +1879,14 @@ mod tests {
         assert_eq!(organic.weight, 1.0);
         assert_eq!(organic.weighted, 10.0);
         assert_eq!(construction.pairs, 200);
-        assert_eq!(construction.weight, crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT);
-        assert!((construction.weighted - 200.0 * crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT).abs() < 1e-6);
+        assert_eq!(
+            construction.weight,
+            crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT
+        );
+        assert!(
+            (construction.weighted - 200.0 * crate::frontier_pairs::SYNTHETIC_PAIR_WEIGHT).abs()
+                < 1e-6
+        );
         assert_eq!(unknown.weight, 0.0, "unrecognized tags priced out entirely");
         assert_eq!(unknown.weighted, 0.0);
         let share_sum: f32 = rows.iter().map(|r| r.share).sum();
@@ -1880,16 +1912,19 @@ mod tests {
         assert!(text.contains("weighted"), "{text}");
         // The empty namespace is LOUD, not a green nothing.
         let empty = render_provenance_section(&[]);
-        assert!(empty.contains("EMPTY") && empty.contains("0 pair rows"), "{empty}");
+        assert!(
+            empty.contains("EMPTY") && empty.contains("0 pair rows"),
+            "{empty}"
+        );
     }
 
     #[test]
     fn provenance_yield_split_attributes_by_key_shape() {
         let entries = vec![
             // organic (plain keys): one in-band, one above, one unseen.
-            ("manual_is_multiple_of".into(), 2, 2),  // p̂=0.5 → band
-            ("use_self".into(), 172, 0),              // p̂=1 → above/saturated-class feed
-            ("never_fired".into(), 0, 0),             // n=0 unseen
+            ("manual_is_multiple_of".into(), 2, 2), // p̂=0.5 → band
+            ("use_self".into(), 172, 0),            // p̂=1 → above/saturated-class feed
+            ("never_fired".into(), 0, 0),           // n=0 unseen
             // synthetic (':'-shaped keys): one in-band, one below.
             ("E0597:e0597-scope-hoist".into(), 1, 3), // p̂=0.25 → band
             ("E0507:gen:E0507:clone-at-move".into(), 0, 4), // p̂=0 → below
@@ -1918,7 +1953,10 @@ mod tests {
         let [o, s] = provenance_yield_split(&[]);
         let text = render_provenance_yield(&[o, s]);
         assert!(text.contains("outcome-feed provenance split"), "{text}");
-        assert!(text.contains("organic") && text.contains("synthetic"), "{text}");
+        assert!(
+            text.contains("organic") && text.contains("synthetic"),
+            "{text}"
+        );
         assert!(text.contains("per-BATCH causal yield is BLOCKED"), "{text}");
         assert!(text.contains("band-mass"), "{text}");
     }
@@ -1935,7 +1973,7 @@ mod tests {
             ("use_self".into(), 172, 0),       // saturated — untouched below
         ];
         let half_counts = vec![
-            ("manual_map".into(), 2u32), // r_eff = 10, f_eff = 2 → p̂ 10/12
+            ("manual_map".into(), 2u32),   // r_eff = 10, f_eff = 2 → p̂ 10/12
             ("bench_only_rule".into(), 3), // r=f=0 → p̂ EXACTLY 0.5
         ];
         let rows = shaped_half_rows(&entries, &half_counts);
@@ -1958,15 +1996,15 @@ mod tests {
     #[allow(clippy::float_cmp)] // 0.0 comparisons on no-store rows — exact by construction
     fn shaped_half_rows_drop_zero_counts_and_render_empty_loud() {
         let rows = shaped_half_rows(&[("a".into(), 1, 1)], &[("a".into(), 0)]);
-        assert!(rows.is_empty(), "a zero-count half row is not a measurement");
+        assert!(
+            rows.is_empty(),
+            "a zero-count half row is not a measurement"
+        );
         let text = render_shaped_half_rows(&[]);
         assert!(text.contains("EMPTY"), "{text}");
         assert!(text.contains("generation 8 unrun"), "{text}");
         // The populated render carries the columns + the LCB caveat.
-        let rows = shaped_half_rows(
-            &[("manual_map".into(), 4, 1)],
-            &[("manual_map".into(), 1)],
-        );
+        let rows = shaped_half_rows(&[("manual_map".into(), 4, 1)], &[("manual_map".into(), 1)]);
         let text = render_shaped_half_rows(&rows);
         assert!(text.contains("shaped half-count fold"), "{text}");
         assert!(text.contains("p̂_folded"), "{text}");
@@ -2084,9 +2122,36 @@ mod tests {
     }
 
     const SWEEP_RULES: [&str; 30] = [
-        "r00", "r01", "r02", "r03", "r04", "r05", "r06", "r07", "r08", "r09", "r10", "r11",
-        "r12", "r13", "r14", "r15", "r16", "r17", "r18", "r19", "r20", "r21", "r22", "r23",
-        "r24", "r25", "r26", "r27", "r28", "faded_rule",
+        "r00",
+        "r01",
+        "r02",
+        "r03",
+        "r04",
+        "r05",
+        "r06",
+        "r07",
+        "r08",
+        "r09",
+        "r10",
+        "r11",
+        "r12",
+        "r13",
+        "r14",
+        "r15",
+        "r16",
+        "r17",
+        "r18",
+        "r19",
+        "r20",
+        "r21",
+        "r22",
+        "r23",
+        "r24",
+        "r25",
+        "r26",
+        "r27",
+        "r28",
+        "faded_rule",
     ];
 
     #[test]
@@ -2163,7 +2228,10 @@ mod tests {
         }
         let scan = fade_scan(&rows);
         assert!(scan.refused.is_none());
-        assert!(scan.candidates.is_empty(), "all rules healthy/thin/recovered");
+        assert!(
+            scan.candidates.is_empty(),
+            "all rules healthy/thin/recovered"
+        );
         assert!(scan.never_contributed.is_empty());
         // A genuinely all-zero rule lands in NEVER-CONTRIBUTED — printed,
         // triage-fork territory, never in the FADED table.
@@ -2177,7 +2245,10 @@ mod tests {
             let _ = i;
         }
         let scan = fade_scan(&rows);
-        assert!(scan.candidates.is_empty(), "all-zero is NEVER-CONTRIBUTED, not FADED");
+        assert!(
+            scan.candidates.is_empty(),
+            "all-zero is NEVER-CONTRIBUTED, not FADED"
+        );
         assert_eq!(scan.never_contributed, vec!["late_fade".to_string()]);
     }
 
@@ -2216,7 +2287,10 @@ mod tests {
         let scan = fade_scan(&rows);
         assert_eq!(scan.sweep_rows, 2);
         assert!(scan.refused.is_some(), "2 sweeps < 3 → loud refusal");
-        assert!(scan.candidates.is_empty(), "no candidates from a refused scan");
+        assert!(
+            scan.candidates.is_empty(),
+            "no candidates from a refused scan"
+        );
         assert!(scan.refused.as_ref().unwrap().contains("REFUSED"));
     }
 
@@ -2233,7 +2307,10 @@ mod tests {
         let text = render_fade_section(&refused);
         assert!(text.contains("REFUSED"));
         assert!(text.contains("gen 3 @ a (36 rules)"));
-        assert!(!text.contains("| rule |"), "no candidate table when refused");
+        assert!(
+            !text.contains("| rule |"),
+            "no candidate table when refused"
+        );
         // Live + empty: the honest all-healthy line, never a zero table
         // masquerading as a measurement.
         let live = FadeScan {
@@ -2376,10 +2453,8 @@ mod tests {
 
     #[cfg(feature = "latent_retrieval")]
     fn bench_tail_tmp(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!(
-            "frontier_bench_tail_{name}_{}",
-            std::process::id()
-        ));
+        let d =
+            std::env::temp_dir().join(format!("frontier_bench_tail_{name}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         std::fs::create_dir_all(&d).unwrap();
         d
@@ -2403,7 +2478,10 @@ mod tests {
         let _ = crate::traj_store::TrajStore::open(&dir).expect("open creates the store");
         let out = append_snapshot_at_frontier(&dir, &dir.join("snap.jsonl")).unwrap();
         assert_eq!(out, SnapshotOutcome::EmptyPopulation);
-        assert!(!dir.join("snap.jsonl").exists(), "no row over an empty population");
+        assert!(
+            !dir.join("snap.jsonl").exists(),
+            "no row over an empty population"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -2419,8 +2497,7 @@ mod tests {
         let first = append_snapshot_at_frontier(&dir, &path).unwrap();
         assert_eq!(first, SnapshotOutcome::Appended { generation: 8 });
         let text = std::fs::read_to_string(&path).unwrap();
-        let snap: FrontierSnapshot =
-            serde_json::from_str(text.lines().next().unwrap()).unwrap();
+        let snap: FrontierSnapshot = serde_json::from_str(text.lines().next().unwrap()).unwrap();
         assert_eq!(snap.generation, 8);
         assert_eq!(snap.population, 2);
         assert_eq!(snap.seen, 2);
@@ -2433,10 +2510,10 @@ mod tests {
         let second = append_snapshot_at_frontier(&dir, &path).unwrap();
         assert_eq!(second, SnapshotOutcome::Unchanged { generation: 8 });
         let rows = std::fs::read_to_string(&path)
-                       .unwrap()
-                       .lines()
-                       .filter(|l| !l.trim().is_empty())
-                       .count();
+            .unwrap()
+            .lines()
+            .filter(|l| !l.trim().is_empty())
+            .count();
         assert_eq!(rows, 1, "no second row for an unchanged boundary");
 
         // A NEW generation lands in the store → a new row at the new

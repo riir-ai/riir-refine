@@ -44,7 +44,9 @@ const SPACES: &str = "    ";
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut ranges = Vec::new();
     {
-        let mut v = DocRanges { ranges: &mut ranges };
+        let mut v = DocRanges {
+            ranges: &mut ranges,
+        };
         // file-level inner docs (`//!`) live on the File's own attrs
         for a in &file.attrs {
             if a.path().is_ident("doc") {
@@ -180,7 +182,10 @@ mod tests {
         // probe: two tabs -> eight spaces (two per-tab replacements)
         let src = "///\t\tTwo tabs.\npub fn f() -> u64 {\n    3\n}";
         let out = propose_fix("tabs_in_doc_comments", src).expect("matched");
-        assert!(out.starts_with("///        Two"), "double tab not doubled: {out:?}");
+        assert!(
+            out.starts_with("///        Two"),
+            "double tab not doubled: {out:?}"
+        );
     }
 
     #[test]
@@ -189,7 +194,10 @@ mod tests {
         // empty_line_after_doc_comments, whose scope is outer docs only)
         let src = "//!\tModule doc with a tab.\npub fn f() -> u64 {\n    4\n}";
         let out = propose_fix("tabs_in_doc_comments", src).expect("matched");
-        assert!(out.starts_with("//!    Module"), "inner tab not spaced: {out:?}");
+        assert!(
+            out.starts_with("//!    Module"),
+            "inner tab not spaced: {out:?}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -198,7 +206,10 @@ mod tests {
         // probe tid_block: `/** */` fires; edits stay inside the markers
         let src = "/**\tBlock doc with a tab. */\npub fn f() -> u64 {\n    5\n}";
         let out = propose_fix("tabs_in_doc_comments", src).expect("matched");
-        assert!(out.starts_with("/**    Block"), "block tab not spaced: {out:?}");
+        assert!(
+            out.starts_with("/**    Block"),
+            "block tab not spaced: {out:?}"
+        );
         assert!(out.contains(" */"), "closing marker damaged: {out:?}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -209,7 +220,10 @@ mod tests {
         // samples too — mirrored verbatim
         let src = "/// Example:\n/// ```\n///\tlet x = 1;\n/// ```\npub fn f() -> u64 {\n    6\n}";
         let out = propose_fix("tabs_in_doc_comments", src).expect("matched");
-        assert!(out.contains("///    let x = 1;"), "codeblock tab not spaced: {out:?}");
+        assert!(
+            out.contains("///    let x = 1;"),
+            "codeblock tab not spaced: {out:?}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -235,8 +249,14 @@ mod tests {
         // beside it still fires
         let src = "pub fn f() -> &'static str {\n    \"\ttab in a string\"\n}\n///\treal doc\npub fn g() -> u64 {\n    1\n}";
         let out = propose_fix("tabs_in_doc_comments", src).expect("matched");
-        assert!(out.contains("\ttab in a string"), "string tab touched: {out:?}");
-        assert!(out.contains("///    real doc"), "doc tab not spaced: {out:?}");
+        assert!(
+            out.contains("\ttab in a string"),
+            "string tab touched: {out:?}"
+        );
+        assert!(
+            out.contains("///    real doc"),
+            "doc tab not spaced: {out:?}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

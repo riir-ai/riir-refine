@@ -69,8 +69,8 @@ use super::SourceEdit;
 /// The scalar annotations whose Display-blanket `to_string` is structural
 /// (`scalar_param_heads_over` yields `&str`/`&String` for the ref forms).
 const BLANKET_SCALARS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
-    "f32", "f64", "bool", "char", "&str", "String", "&String",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64", "bool", "char", "&str", "String", "&String",
 ];
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -173,7 +173,9 @@ impl Collector<'_> {
 
     /// The replacement text when `expr` is a strippable `to_string` call.
     fn strip_one(&self, expr: &Expr) -> Option<String> {
-        let Expr::MethodCall(m) = expr else { return None };
+        let Expr::MethodCall(m) = expr else {
+            return None;
+        };
         if !is_plain_to_string(m) {
             return None;
         }
@@ -300,10 +302,7 @@ mod tests {
             "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }",
         )
         .expect("matched");
-        assert!(
-            out.contains("format!(\"n={}\", x)"),
-            "not stripped: {out}"
-        );
+        assert!(out.contains("format!(\"n={}\", x)"), "not stripped: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 

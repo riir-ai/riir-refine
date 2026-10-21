@@ -117,7 +117,11 @@ impl SeatReceipt {
         // An envelope with NO receipt and NO timing is a seat older than
         // the receipt tier — `None`, not an empty record.
         let empty = Self::default();
-        if parsed == empty { None } else { Some(parsed) }
+        if parsed == empty {
+            None
+        } else {
+            Some(parsed)
+        }
     }
 }
 
@@ -458,7 +462,6 @@ impl SeatRerankClient {
     }
 }
 
-
 /// JSON string escape, into the caller's buffer (no intermediate
 /// allocations; control bytes take the `\u00XX` form). The
 /// `decision_client`'s escape, byte-identical — one spelling of the
@@ -509,10 +512,7 @@ mod tests {
                         break;
                     }
                     buf.extend_from_slice(&chunk[..n]);
-                    if let Some(hend) = buf
-                        .windows(4)
-                        .position(|w| w == b"\r\n\r\n")
-                        .map(|p| p + 4)
+                    if let Some(hend) = buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)
                     {
                         let head = String::from_utf8_lossy(&buf[..hend]).to_ascii_lowercase();
                         let clen: usize = head
@@ -615,7 +615,10 @@ mod tests {
             panic!("junk must refuse as NotConsent: {err:?}")
         };
         assert_eq!(got, "true");
-        assert!(err.to_string().contains("snippet"), "the refusal names the accepted spelling: {err}");
+        assert!(
+            err.to_string().contains("snippet"),
+            "the refusal names the accepted spelling: {err}"
+        );
         silent.assert_no_connections();
     }
 
@@ -625,16 +628,9 @@ mod tests {
     fn expired_deadline_declines_before_the_socket() {
         let silent = SilentListener::bind();
         let client = SeatRerankClient::new("127.0.0.1:1", "clippy_fix").unwrap();
-        let past = Instant::now()
-            .checked_sub(Duration::from_secs(1))
-            .unwrap();
+        let past = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
         let err = client
-            .rerank_checked_with(
-                SNIPPET,
-                &candidates(),
-                past,
-                EgressConsent::Allowed,
-            )
+            .rerank_checked_with(SNIPPET, &candidates(), past, EgressConsent::Allowed)
             .unwrap_err();
         assert_eq!(err, SeatDecline::DeadlineExpired);
         silent.assert_no_connections();
@@ -676,7 +672,10 @@ mod tests {
         for c in CANDIDATES {
             assert!(body.contains(c), "each candidate rides options: {body}");
         }
-        assert!(body.contains("\"options\":[\""), "the candidates ARE the options array: {body}");
+        assert!(
+            body.contains("\"options\":[\""),
+            "the candidates ARE the options array: {body}"
+        );
         assert!(
             !body.contains(decoy),
             "the builder takes the snippet + candidates only — a file's content is \
@@ -685,7 +684,11 @@ mod tests {
         // One writer: the body is exactly the three-field envelope.
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let keys: Vec<&str> = v.as_object().unwrap().keys().map(String::as_str).collect();
-        assert_eq!(keys, ["options", "state", "suite"], "three fields, no extras");
+        assert_eq!(
+            keys,
+            ["options", "state", "suite"],
+            "three fields, no extras"
+        );
     }
 
     // ── the happy paths ───────────────────────────────────────────────
@@ -720,7 +723,10 @@ mod tests {
         for c in CANDIDATES {
             assert!(sent.contains(c), "candidate must ride verbatim: {sent}");
         }
-        assert!(sent.contains(&format!("Host: {addr}")), "host header: {sent}");
+        assert!(
+            sent.contains(&format!("Host: {addr}")),
+            "host header: {sent}"
+        );
     }
 
     #[test]
@@ -888,9 +894,7 @@ mod tests {
         // the parse gate drops it. Driven at the parse seam (the wire
         // half is timing-bound; the RULE is the parse-side gate).
         let doc = ok_doc(&CANDIDATES, 0, CANDIDATES[0]);
-        let past = Instant::now()
-            .checked_sub(Duration::from_secs(1))
-            .unwrap();
+        let past = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
         let err = SeatRerankClient::parse_reply(
             &format!("HTTP/1.1 200 OK\r\n\r\n{doc}"),
             &candidates(),

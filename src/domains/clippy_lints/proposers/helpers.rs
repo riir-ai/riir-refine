@@ -344,11 +344,15 @@ pub(crate) fn slice_param_heads_over<'i>(
     let mut out = std::collections::BTreeMap::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(head) = elem_head_of(&p.ty) else { continue };
+        let Some(head) = elem_head_of(&p.ty) else {
+            continue;
+        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
@@ -359,7 +363,9 @@ pub(crate) fn slice_param_heads_over<'i>(
 
 /// The element head of a shared `&[T]` / `&[T; N]` / `&Vec<T>` type.
 fn elem_head_of(ty: &syn::Type) -> Option<String> {
-    let syn::Type::Reference(r) = ty else { return None };
+    let syn::Type::Reference(r) = ty else {
+        return None;
+    };
     if r.mutability.is_some() {
         return None;
     }
@@ -367,10 +373,7 @@ fn elem_head_of(ty: &syn::Type) -> Option<String> {
         syn::Type::Slice(s) => &s.elem,
         syn::Type::Array(a) => &a.elem,
         syn::Type::Path(p) => {
-            if p.qself.is_some()
-                || p.path.leading_colon.is_some()
-                || p.path.segments.len() != 1
-            {
+            if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
                 return None;
             }
             let seg = p.path.segments.first()?;
@@ -387,7 +390,9 @@ fn elem_head_of(ty: &syn::Type) -> Option<String> {
         }
         _ => return None,
     };
-    let syn::Type::Path(ip) = inner else { return None };
+    let syn::Type::Path(ip) = inner else {
+        return None;
+    };
     if ip.qself.is_some() || ip.path.leading_colon.is_some() || ip.path.segments.len() != 1 {
         return None;
     }
@@ -438,7 +443,10 @@ pub(crate) fn body_rebinds(block: &syn::Block, ident: &str) -> bool {
             syn::visit::visit_expr_binary(self, b);
         }
     }
-    let mut v = R { ident: ident.to_string(), hit: false };
+    let mut v = R {
+        ident: ident.to_string(),
+        hit: false,
+    };
     v.visit_block(block);
     v.hit
 }
@@ -462,11 +470,15 @@ pub(crate) fn scalar_param_heads_over<'i>(
     let mut out = std::collections::BTreeMap::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(head) = scalar_head_of(&p.ty) else { continue };
+        let Some(head) = scalar_head_of(&p.ty) else {
+            continue;
+        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
@@ -479,10 +491,7 @@ pub(crate) fn scalar_param_heads_over<'i>(
 fn scalar_head_of(ty: &syn::Type) -> Option<String> {
     match ty {
         syn::Type::Path(p) => {
-            if p.qself.is_some()
-                || p.path.leading_colon.is_some()
-                || p.path.segments.len() != 1
-            {
+            if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
                 return None;
             }
             let seg = p.path.segments.first()?;
@@ -530,8 +539,8 @@ fn scalar_head_of(ty: &syn::Type) -> Option<String> {
 /// is unsized and cannot compile; `&str`/`&String` are handled as the
 /// reference forms in [`scalar_head_of`]).
 const PRIMITIVE_SCALARS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128",
-    "isize", "f32", "f64", "bool", "char",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32",
+    "f64", "bool", "char",
 ];
 
 /// Signature-proven MUTABLE-STRING bindings of `f`, as `{ident → type text}`
@@ -553,11 +562,15 @@ pub(crate) fn mut_string_param_heads_over<'i>(
     let mut out = std::collections::BTreeMap::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(head) = mut_string_head_of(&p.ty) else { continue };
+        let Some(head) = mut_string_head_of(&p.ty) else {
+            continue;
+        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
@@ -581,7 +594,9 @@ fn mut_string_head_of(ty: &syn::Type) -> Option<String> {
         }
         syn::Type::Reference(r) => {
             r.mutability?;
-            let syn::Type::Path(p) = &*r.elem else { return None };
+            let syn::Type::Path(p) = &*r.elem else {
+                return None;
+            };
             if p.qself.is_some()
                 || p.path.leading_colon.is_some()
                 || p.path.segments.len() != 1
@@ -653,7 +668,11 @@ pub(crate) fn doc_lines<'a>(source: &'a str, file: &File) -> Vec<DocLine<'a>> {
     // edit SILENTLY — the worse direction. Skip the line instead; the read
     // seam's BOM strip is the root-cause fix, this only bounds the blast
     // radius of the next span-corruption class.
-    let skipped = v.docs.iter().filter(|r| !source.is_char_boundary(r.start)).count();
+    let skipped = v
+        .docs
+        .iter()
+        .filter(|r| !source.is_char_boundary(r.start))
+        .count();
     if skipped > 0 {
         eprintln!(
             "doc_lines: skipped {skipped} doc attr(s) with non-char-boundary spans \
@@ -685,7 +704,10 @@ pub(crate) fn doc_lines<'a>(source: &'a str, file: &File) -> Vec<DocLine<'a>> {
         let line = &source[range.start..line_end];
         // Comment-style only: the marker is exactly 3 chars, and the doc
         // text (syn's `#[doc]` value) is the rest of the line verbatim.
-        let Some(_marker) = line.strip_prefix("///").or_else(|| line.strip_prefix("//!")) else {
+        let Some(_marker) = line
+            .strip_prefix("///")
+            .or_else(|| line.strip_prefix("//!"))
+        else {
             continue;
         };
         out.push(DocLine {

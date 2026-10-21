@@ -303,7 +303,11 @@ mod fence_tests {
         assert_eq!(provenance_weight(PROVENANCE), SYNTHETIC_PAIR_WEIGHT);
         const { assert!(SYNTHETIC_PAIR_WEIGHT > 0.0 && SYNTHETIC_PAIR_WEIGHT < 1.0) };
         assert_eq!(provenance_weight(""), 0.0);
-        assert_eq!(provenance_weight("Organic"), 0.0, "case-sensitive on purpose");
+        assert_eq!(
+            provenance_weight("Organic"),
+            0.0,
+            "case-sensitive on purpose"
+        );
         assert_eq!(provenance_weight("injected"), 0.0);
     }
 

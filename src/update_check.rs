@@ -73,16 +73,16 @@ pub enum UpdateError {
     /// The body was not the JSON shape this module parses.
     Parse(String),
     /// The running target triple has no release asset — refused, never guessed.
-        /// The running target triple has no release asset — refused, never guessed.
-        /// WINDOWS EXCEPTION (the msvc-bootstrap gap, v0.3.2): the dist ships ONE
-        /// windows asset (the gnu zip — installers prefer msvc when one exists,
-        /// but no msvc asset has ever been packaged). An msvc-compiled exe (a
-        /// dev-box `cargo build` copy per the Issue-164 convention) maps to that
-        /// SAME gnu asset with a printed ABI note: the archive is
-        /// runtime-self-contained (mingw CRT), SHA256SUMS-verified like any other,
-        /// and replacing the exe is the whole swap — refusing would mean a
-        /// windows dev box can NEVER self-upgrade, which is the gap this
-        /// exception closes. Any NON-windows unknown triple still refuses.
+    /// The running target triple has no release asset — refused, never guessed.
+    /// WINDOWS EXCEPTION (the msvc-bootstrap gap, v0.3.2): the dist ships ONE
+    /// windows asset (the gnu zip — installers prefer msvc when one exists,
+    /// but no msvc asset has ever been packaged). An msvc-compiled exe (a
+    /// dev-box `cargo build` copy per the Issue-164 convention) maps to that
+    /// SAME gnu asset with a printed ABI note: the archive is
+    /// runtime-self-contained (mingw CRT), SHA256SUMS-verified like any other,
+    /// and replacing the exe is the whole swap — refusing would mean a
+    /// windows dev box can NEVER self-upgrade, which is the gap this
+    /// exception closes. Any NON-windows unknown triple still refuses.
     NoAsset(String),
     /// The download/checksum/extraction/swap legs of [`upgrade`].
     Verify(String),
@@ -247,8 +247,11 @@ pub fn store_cache(path: &Path, cache: &UpdateCache) -> Result<(), UpdateError> 
     }
     // Temp + rename — a reader never sees a torn cache file.
     let tmp = path.with_extension("json.tmp");
-    std::fs::write(&tmp, serde_json::to_vec(cache).map_err(|e| UpdateError::Parse(e.to_string()))?)
-        .map_err(UpdateError::Io)?;
+    std::fs::write(
+        &tmp,
+        serde_json::to_vec(cache).map_err(|e| UpdateError::Parse(e.to_string()))?,
+    )
+    .map_err(UpdateError::Io)?;
     std::fs::rename(&tmp, path).map_err(UpdateError::Io)
 }
 
@@ -270,7 +273,11 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
     match cache {
         None => Plan::Fetch,
         Some(c) => {
-            let window = if c.ok { OK_WINDOW_SECS } else { FAIL_WINDOW_SECS };
+            let window = if c.ok {
+                OK_WINDOW_SECS
+            } else {
+                FAIL_WINDOW_SECS
+            };
             if now - c.checked_at_unix < window {
                 match &c.latest {
                     Some(l) if version_newer(&l.version, installed) => Plan::Alert(l.clone()),
@@ -593,7 +600,10 @@ impl Download for HttpDownload {
             .call()
             .map_err(|e| UpdateError::Http(e.to_string()))?;
         if resp.status() != 200 {
-            return Err(UpdateError::Http(format!("status {} for {url}", resp.status())));
+            return Err(UpdateError::Http(format!(
+                "status {} for {url}",
+                resp.status()
+            )));
         }
         let mut file = std::fs::File::create(dest).map_err(UpdateError::Io)?;
         std::io::copy(&mut resp.into_reader().take(512 * 1024 * 1024), &mut file)
@@ -693,9 +703,9 @@ pub fn upgrade(
     let sums_url = find("SHA256SUMS")?;
 
     // Everything stages beside the exe (same volume ⇒ rename is atomic).
-    let exe_dir = exe.parent().ok_or_else(|| {
-        UpdateError::Verify(format!("exe has no parent dir: {}", exe.display()))
-    })?;
+    let exe_dir = exe
+        .parent()
+        .ok_or_else(|| UpdateError::Verify(format!("exe has no parent dir: {}", exe.display())))?;
     let stage = exe_dir.join(format!(".cargo-refine-upgrade-{}", std::process::id()));
     std::fs::create_dir_all(&stage).map_err(UpdateError::Io)?;
     let staged = StagedUpgrade {
@@ -859,7 +869,10 @@ mod tests {
     #[test]
     fn newer_semver_matrix() {
         assert!(version_newer("0.3.0", "0.2.1"));
-        assert!(version_newer("0.10.0", "0.9.9"), "numeric, not lexicographic");
+        assert!(
+            version_newer("0.10.0", "0.9.9"),
+            "numeric, not lexicographic"
+        );
         assert!(version_newer("1.0.0", "0.99.99"));
         assert!(!version_newer("0.2.1", "0.2.1"));
         assert!(!version_newer("0.2.0", "0.2.1"));
@@ -885,14 +898,18 @@ mod tests {
         }"###;
         let r = parse_release_json(body).expect("parses");
         assert_eq!(r.version, "0.3.0");
-        assert_eq!(r.detail.as_deref(), Some("v0.3.0 — corpus: +12 rust_perf rules"));
+        assert_eq!(
+            r.detail.as_deref(),
+            Some("v0.3.0 — corpus: +12 rust_perf rules")
+        );
         assert_eq!(r.assets.len(), 2);
         assert_eq!(r.assets[1].0, "SHA256SUMS");
     }
 
     #[test]
     fn parse_falls_back_to_the_first_body_line_and_truncates() {
-        let body = r#"{"tag_name": "v1.2.3", "name": "", "body": "first line here\nsecond line\n"}"#;
+        let body =
+            r#"{"tag_name": "v1.2.3", "name": "", "body": "first line here\nsecond line\n"}"#;
         let r = parse_release_json(body).expect("parses");
         assert_eq!(r.detail.as_deref(), Some("first line here"));
 
@@ -926,8 +943,16 @@ mod tests {
 
     #[test]
     fn decide_windows_split_ok_from_failed() {
-        let ok_cache = UpdateCache { checked_at_unix: 1_000_000, ok: true, latest: None };
-        let fail_cache = UpdateCache { checked_at_unix: 1_000_000, ok: false, latest: None };
+        let ok_cache = UpdateCache {
+            checked_at_unix: 1_000_000,
+            ok: true,
+            latest: None,
+        };
+        let fail_cache = UpdateCache {
+            checked_at_unix: 1_000_000,
+            ok: false,
+            latest: None,
+        };
         // A failed check re-fetches well inside the ok window…
         assert!(matches!(
             decide(Some(&fail_cache), 1_000_000 + 3600, INSTALLED),
@@ -939,7 +964,10 @@ mod tests {
             Plan::Silent
         ));
         // …but BOTH go stale past their own window.
-        assert!(matches!(decide(Some(&ok_cache), 1_000_000 + OK_WINDOW_SECS, INSTALLED), Plan::Fetch));
+        assert!(matches!(
+            decide(Some(&ok_cache), 1_000_000 + OK_WINDOW_SECS, INSTALLED),
+            Plan::Fetch
+        ));
         assert!(matches!(
             decide(Some(&fail_cache), 1_000_000 + FAIL_WINDOW_SECS, INSTALLED),
             Plan::Fetch
@@ -953,18 +981,30 @@ mod tests {
             ok: true,
             latest: Some(release(INSTALLED, None)),
         };
-        assert!(matches!(decide(Some(&cache), 1_000_000 + 10, INSTALLED), Plan::Silent));
+        assert!(matches!(
+            decide(Some(&cache), 1_000_000 + 10, INSTALLED),
+            Plan::Silent
+        ));
         assert!(matches!(decide(None, 0, INSTALLED), Plan::Fetch));
     }
 
     // ── the alert text ──
     #[test]
     fn alert_line_carries_versions_detail_and_url() {
-        let line = alert_line(&release("0.3.0", Some("corpus: +12 rust_perf rules")), INSTALLED)
-            .expect("newer alerts");
-        assert!(line.contains("cargo-refine 0.3.0 (installed 0.2.1)"), "{line}");
+        let line = alert_line(
+            &release("0.3.0", Some("corpus: +12 rust_perf rules")),
+            INSTALLED,
+        )
+        .expect("newer alerts");
+        assert!(
+            line.contains("cargo-refine 0.3.0 (installed 0.2.1)"),
+            "{line}"
+        );
         assert!(line.contains("corpus: +12 rust_perf rules"), "{line}");
-        assert!(line.contains("https://github.com/gist-rs/cargo-refine"), "{line}");
+        assert!(
+            line.contains("https://github.com/gist-rs/cargo-refine"),
+            "{line}"
+        );
         assert!(alert_line(&release(INSTALLED, None), INSTALLED).is_none());
         assert!(alert_line(&release("0.1.0", None), INSTALLED).is_none());
     }
@@ -1055,8 +1095,7 @@ mod tests {
         let body = "abc123  cargo-refine-v1.0.0-x86_64-unknown-linux-musl.tar.gz\n\
                     def456  SHA256SUMS\n";
         assert_eq!(
-            sums_hash_for(body, "cargo-refine-v1.0.0-x86_64-unknown-linux-musl.tar.gz")
-                .as_deref(),
+            sums_hash_for(body, "cargo-refine-v1.0.0-x86_64-unknown-linux-musl.tar.gz").as_deref(),
             Some("abc123")
         );
         assert_eq!(sums_hash_for(body, "SHA256SUMS").as_deref(), Some("def456"));
@@ -1074,7 +1113,10 @@ mod tests {
             "2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824"
         ));
         assert!(!sha256_matches(b"hello", "0000"));
-        assert!(!sha256_matches(b"hellO", "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"));
+        assert!(!sha256_matches(
+            b"hellO",
+            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        ));
     }
 
     // ── the dev-build refusal ──
@@ -1083,9 +1125,7 @@ mod tests {
         assert!(is_dev_build(Path::new("/repo/target/release/cargo-refine")));
         assert!(is_dev_build(Path::new("/repo/target/dist/cargo-refine")));
         assert!(!is_dev_build(Path::new("/usr/local/bin/cargo-refine")));
-        assert!(!is_dev_build(Path::new(
-            "/Users/x/.cargo/bin/cargo-refine"
-        )));
+        assert!(!is_dev_build(Path::new("/Users/x/.cargo/bin/cargo-refine")));
     }
 
     // ── the cache round trip ──

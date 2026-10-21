@@ -136,10 +136,7 @@ impl Collector<'_> {
 /// Split the pair into (proven-ident candidate, literal value): the second
 /// operand must be a bool literal, the first a plain path. Either side
 /// being anything else refuses.
-fn split_operand<'a>(
-    x_expr: &'a Expr,
-    lit_expr: &'a Expr,
-) -> Option<(&'a Expr, bool)> {
+fn split_operand<'a>(x_expr: &'a Expr, lit_expr: &'a Expr) -> Option<(&'a Expr, bool)> {
     let Expr::Lit(l) = lit_expr else { return None };
     let lit_val = match &l.lit {
         Lit::Bool(b) => b.value,
@@ -235,7 +232,10 @@ mod tests {
             "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); true == x }",
         )
         .expect("matched");
-        assert!(out.contains("hits.push(x); x }"), "mirror not simplified: {out}");
+        assert!(
+            out.contains("hits.push(x); x }"),
+            "mirror not simplified: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -268,7 +268,10 @@ mod tests {
             "fn pick(x: bool, hits: &mut Vec<bool>) -> u32 { hits.push(x); if x == true { 1 } else { 0 } }",
         )
         .expect("matched");
-        assert!(out.contains("if x { 1 }"), "condition not simplified: {out}");
+        assert!(
+            out.contains("if x { 1 }"),
+            "condition not simplified: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

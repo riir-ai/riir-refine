@@ -66,7 +66,10 @@ use super::{src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -211,14 +214,20 @@ mod tests {
     fn mut_reference_refused() {
         let input = "fn f(b: &mut Box<u8>) { takes(&mut *b) } fn takes(e: &mut u8) {}";
         let out = propose_fix("explicit_auto_deref", input);
-        assert!(out.is_none(), "&mut forms refuse (reborrow semantics): {out:?}");
+        assert!(
+            out.is_none(),
+            "&mut forms refuse (reborrow semantics): {out:?}"
+        );
     }
 
     #[test]
     fn three_deref_chain_refused() {
         let input = "fn f(r: &&Box<u8>) { takes(&***r) } fn takes(e: &u8) {}";
         let out = propose_fix("explicit_auto_deref", input);
-        assert!(out.is_none(), "chains deeper than two derefs refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "chains deeper than two derefs refuse: {out:?}"
+        );
     }
 
     #[test]

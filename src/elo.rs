@@ -517,10 +517,16 @@ mod tests {
         // strictly toward the middle, and strictly less than a full win
         // (resp. loss) would move either.
         let (tie_a, tie_b) = update_pair_scored(1200.0, 800.0, 0.5);
-        assert!(tie_a < 1200.0 && tie_a > 1200.0 - ELO_K, "favorite: {tie_a}");
+        assert!(
+            tie_a < 1200.0 && tie_a > 1200.0 - ELO_K,
+            "favorite: {tie_a}"
+        );
         assert!(tie_b > 800.0 && tie_b < 800.0 + ELO_K, "underdog: {tie_b}");
         let (win_a, _) = update_pair(1200.0, 800.0, true);
-        assert!(win_a > 1200.0, "a full win lifts the favorite where a tie lowers it");
+        assert!(
+            win_a > 1200.0,
+            "a full win lifts the favorite where a tie lowers it"
+        );
         // Zero-sum at the tie too.
         assert!((tie_a + tie_b - 2000.0).abs() < 1e-3);
     }

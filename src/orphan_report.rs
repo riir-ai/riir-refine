@@ -464,8 +464,12 @@ fn is_serde_to_path(path: &syn::Path) -> bool {
 /// behind `use serde_json::json` is one import away from ambiguity with a
 /// local macro, and the pinned evidence is crate-rooted.
 fn macro_is_serde_json_value(mac: &syn::Macro) -> bool {
-    let segs: Vec<String> =
-        mac.path.segments.iter().map(|s| s.ident.to_string()).collect();
+    let segs: Vec<String> = mac
+        .path
+        .segments
+        .iter()
+        .map(|s| s.ident.to_string())
+        .collect();
     segs.len() == 2 && segs[0] == "serde_json" && segs[1] == "json"
 }
 
@@ -646,8 +650,11 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
             syn::visit::visit_expr_struct(self, e);
             return;
         }
-        let named: Vec<String> =
-            e.fields.iter().filter_map(|fv| field_member_name(&fv.member)).collect();
+        let named: Vec<String> = e
+            .fields
+            .iter()
+            .filter_map(|fv| field_member_name(&fv.member))
+            .collect();
         if literal_is_field_mismatch(&self.local_fields, &ty, &named) {
             // Provably not the scanned set's same-named struct (a field no
             // local decl has): neither a construction site nor wire-type
@@ -676,8 +683,7 @@ impl<'ast> syn::visit::Visit<'ast> for WireVisitor {
 
     fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
         if let syn::Expr::Path(p) = &*c.func {
-            if p
-                .path
+            if p.path
                 .segments
                 .last()
                 .is_some_and(|s| self.bridge_fns.contains(&s.ident.to_string()))
@@ -751,10 +757,7 @@ fn token_stream_has_serde_to(tts: &proc_macro2::TokenStream) -> bool {
 /// accepted (`other.intent` at token level is indistinguishable from
 /// `intent.clone()`'s receiver — inside a serializer argument the name
 /// appearing at all is strong evidence the value flows into it).
-fn token_stream_serde_to_mentions(
-    tts: &proc_macro2::TokenStream,
-    names: &[String],
-) -> bool {
+fn token_stream_serde_to_mentions(tts: &proc_macro2::TokenStream, names: &[String]) -> bool {
     let tokens: Vec<proc_macro2::TokenTree> = tts.clone().into_iter().collect();
     for (i, tt) in tokens.iter().enumerate() {
         if let proc_macro2::TokenTree::Group(g) = tt {
@@ -763,7 +766,9 @@ fn token_stream_serde_to_mentions(
             }
             continue;
         }
-        let proc_macro2::TokenTree::Ident(root) = tt else { continue };
+        let proc_macro2::TokenTree::Ident(root) = tt else {
+            continue;
+        };
         if *root != "serde_json" && *root != "serde_yaml" {
             continue;
         }
@@ -775,11 +780,15 @@ fn token_stream_serde_to_mentions(
         if !colon_pair {
             continue;
         }
-        let Some(proc_macro2::TokenTree::Ident(f)) = tokens.get(i + 3) else { continue };
+        let Some(proc_macro2::TokenTree::Ident(f)) = tokens.get(i + 3) else {
+            continue;
+        };
         if !f.to_string().starts_with("to_") {
             continue;
         }
-        let Some(proc_macro2::TokenTree::Group(g)) = tokens.get(i + 4) else { continue };
+        let Some(proc_macro2::TokenTree::Group(g)) = tokens.get(i + 4) else {
+            continue;
+        };
         if g.delimiter() == proc_macro2::Delimiter::Parenthesis
             && (names.is_empty() || group_mentions_ident(g.stream(), names))
         {
@@ -802,9 +811,7 @@ fn group_mentions_ident(tts: proc_macro2::TokenStream, names: &[String]) -> bool
                     return true;
                 }
             }
-            proc_macro2::TokenTree::Group(g)
-                if group_mentions_ident(g.stream(), names) =>
-            {
+            proc_macro2::TokenTree::Group(g) if group_mentions_ident(g.stream(), names) => {
                 return true;
             }
             _ => {}
@@ -931,8 +938,12 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
         .collect();
     let mut out = Vec::new();
     for input in &i.sig.inputs {
-        let syn::FnArg::Typed(pt) = input else { continue };
-        let syn::Pat::Ident(pi) = &*pt.pat else { continue };
+        let syn::FnArg::Typed(pt) = input else {
+            continue;
+        };
+        let syn::Pat::Ident(pi) = &*pt.pat else {
+            continue;
+        };
         let mut ty = &*pt.ty;
         loop {
             match ty {
@@ -967,7 +978,9 @@ fn serialized_concrete_param_types(i: &syn::ItemFn) -> Vec<String> {
             _ => None,
         };
         let syn::Type::Path(tp) = ty else { continue };
-        let Some(seg) = tp.path.segments.last() else { continue };
+        let Some(seg) = tp.path.segments.last() else {
+            continue;
+        };
         let name = seg.ident.to_string();
         if generics.contains(&name) {
             continue;
@@ -1156,9 +1169,7 @@ struct NameMentionFinder<'a> {
 
 impl<'ast> syn::visit::Visit<'ast> for NameMentionFinder<'_> {
     fn visit_path(&mut self, p: &'ast syn::Path) {
-        if p.segments.len() == 1
-            && self.names.iter().any(|n| p.segments[0].ident == *n)
-        {
+        if p.segments.len() == 1 && self.names.iter().any(|n| p.segments[0].ident == *n) {
             self.hit = true;
         }
         syn::visit::visit_path(self, p);
@@ -1211,14 +1222,14 @@ impl<'ast> syn::visit::Visit<'ast> for TurbofishTypes<'_> {
 pub fn wire_consumption(sources: &[(String, String)]) -> WireConsumption {
     let parsed: Vec<(String, syn::File)> = sources
         .iter()
-        .filter_map(|(name, src)| {
-            syn::parse_file(src).ok().map(|f| (name.clone(), f))
-        })
+        .filter_map(|(name, src)| syn::parse_file(src).ok().map(|f| (name.clone(), f)))
         .collect();
 
     let mut bridge_fns = HashSet::new();
     for (_name, file) in &parsed {
-        let mut f = BridgeFinder { out: &mut bridge_fns };
+        let mut f = BridgeFinder {
+            out: &mut bridge_fns,
+        };
         syn::visit::visit_file(&mut f, file);
     }
 
@@ -1482,11 +1493,7 @@ impl OrphanReport {
                 }
             })
             .collect();
-        let bridge_weak_count = self
-            .orphaned
-            .iter()
-            .filter(|r| r.bridge_weak)
-            .count();
+        let bridge_weak_count = self.orphaned.iter().filter(|r| r.bridge_weak).count();
         let silent = self.zero_read_fields
             - self.orphaned.len()
             - self.stillborn.len()
@@ -1747,7 +1754,10 @@ impl Default for V { fn default() -> Self { Self { f: true } } }
         assert_eq!(scan.marked_write_only.len(), 1, "the field doc is marked");
         let fake = FakeHistory::new(&DEPTHS); // no counts anywhere → stillborn branch
         let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
-        assert!(report.stillborn.is_empty(), "the marked row downgrades out of stillborn");
+        assert!(
+            report.stillborn.is_empty(),
+            "the marked row downgrades out of stillborn"
+        );
         assert_eq!(report.documented_write_only.len(), 1);
         let rendered = report.render();
         assert!(rendered.contains("[documented-write-only]"), "{rendered}");
@@ -1775,8 +1785,15 @@ impl Default for BehaviorConfig {
             .count("alarm_radius", "HEAD~50", 3)
             .commit("alarm_radius", "perf: const-table species behavior values");
         let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
-        assert_eq!(fake.pickaxe_calls.get(), 0, "the marked row never reaches the pickaxe");
-        assert!(report.orphaned.is_empty(), "the marked row downgrades out of [C1]");
+        assert_eq!(
+            fake.pickaxe_calls.get(),
+            0,
+            "the marked row never reaches the pickaxe"
+        );
+        assert!(
+            report.orphaned.is_empty(),
+            "the marked row downgrades out of [C1]"
+        );
         assert_eq!(report.documented_write_only.len(), 1);
         assert!(report.render().contains("[documented-write-only]"));
     }
@@ -1792,7 +1809,10 @@ pub struct W { pub g: u32 }
 impl Default for W { fn default() -> Self { Self { g: 1 } } }
 ";
         let scan = scan_of(src);
-        assert!(scan.marked_write_only.is_empty(), "struct doc does not mark one field");
+        assert!(
+            scan.marked_write_only.is_empty(),
+            "struct doc does not mark one field"
+        );
         let fake = FakeHistory::new(&DEPTHS)
             .count("g", "HEAD", 0)
             .count("g", "HEAD~50", 2);
@@ -1825,7 +1845,11 @@ impl Default for V { fn default() -> Self { Self { f: true } } }
         let report = classify_with_probe(&scan, &fake, &WireConsumption::default(), &DEPTHS);
         assert!(report.stillborn.is_empty(), "reads at HEAD → not stillborn");
         assert!(report.orphaned.is_empty(), "no delta → not orphaned");
-        assert_eq!(report.documented_write_only.len(), 1, "the marked silent row downgrades");
+        assert_eq!(
+            report.documented_write_only.len(),
+            1,
+            "the marked silent row downgrades"
+        );
         let rendered = report.render();
         assert!(rendered.contains("[documented-write-only]"), "{rendered}");
     }
@@ -1844,7 +1868,10 @@ impl Default for V { fn default() -> Self { Self { f: true } } }
         assert!(report.stillborn.is_empty());
         assert!(report.orphaned.is_empty());
         let rendered = report.render();
-        assert!(rendered.contains(" 1 silent (no vanished-reader evidence)"), "{rendered}");
+        assert!(
+            rendered.contains(" 1 silent (no vanished-reader evidence)"),
+            "{rendered}"
+        );
     }
 
     /// P26 scope: wire-const is a different class and STAYS — a marked field
@@ -1870,14 +1897,18 @@ pub fn main() {
 }
 "#;
         let scan = scan_of(src);
-        assert!(scan
-            .marked_write_only
-            .contains(&("EpochSummary".to_string(), "provenance_verified".to_string())));
+        assert!(scan.marked_write_only.contains(&(
+            "EpochSummary".to_string(),
+            "provenance_verified".to_string()
+        )));
         let wire = wire_of(src);
         let fake = FakeHistory::new(&DEPTHS); // zero read-shaped occurrences everywhere
         let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
         assert_eq!(report.wire_const.len(), 1, "wire-const keeps the row");
-        assert!(report.documented_write_only.is_empty(), "consumed outranks marked");
+        assert!(
+            report.documented_write_only.is_empty(),
+            "consumed outranks marked"
+        );
     }
 
     #[test]
@@ -2165,10 +2196,9 @@ pub fn main() {
 fn decide() -> Verdict { Verdict::default() }
 "#;
         let wire = wire_of(src);
-        assert!(
-            wire.cleared
-                .contains(&("EpochSummary".to_string(), "advisory".to_string()))
-        );
+        assert!(wire
+            .cleared
+            .contains(&("EpochSummary".to_string(), "advisory".to_string())));
     }
 
     /// The riir-kat queue-writer shape (the 2026-09-16 fn-A/fn-B intake,
@@ -2200,11 +2230,13 @@ pub const VOTE_VERSION: u32 = 1;
 "#;
         let wire = wire_of(src);
         assert!(
-            wire.cleared.contains(&("VoteIntent".to_string(), "vote_version".to_string())),
+            wire.cleared
+                .contains(&("VoteIntent".to_string(), "vote_version".to_string())),
             "a const-PATH field value is not a literal — the named const could change"
         );
         assert!(
-            wire.cleared.contains(&("VoteIntent".to_string(), "queued_unix".to_string())),
+            wire.cleared
+                .contains(&("VoteIntent".to_string(), "queued_unix".to_string())),
             "variable-valued field clears through the sibling-fn param link"
         );
     }
@@ -2246,15 +2278,20 @@ fn serde_metadata_shape() {
 "#;
         let wire = wire_of(src);
         assert!(
-            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "posture".to_string())),
+            wire.cleared
+                .contains(&("FusedGateRecommendation".to_string(), "posture".to_string())),
             "a variable-valued field clears through the return-value link"
         );
         assert!(
-            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "score".to_string())),
+            wire.cleared
+                .contains(&("FusedGateRecommendation".to_string(), "score".to_string())),
             "Option-valued fields clear with the struct"
         );
         assert!(
-            wire.cleared.contains(&("FusedGateRecommendation".to_string(), "distance".to_string())),
+            wire.cleared.contains(&(
+                "FusedGateRecommendation".to_string(),
+                "distance".to_string()
+            )),
             "the second Option field clears with the struct"
         );
     }
@@ -2315,15 +2352,21 @@ fn shadowed_binding_refuses() {
 ";
         let wire = wire_of(src);
         assert!(
-            !wire.cleared.contains(&("Dead1".to_string(), "a".to_string())),
+            !wire
+                .cleared
+                .contains(&("Dead1".to_string(), "a".to_string())),
             "a call-bound local that is not the serialized one clears nothing"
         );
         assert!(
-            !wire.cleared.contains(&("Dead2".to_string(), "b".to_string())),
+            !wire
+                .cleared
+                .contains(&("Dead2".to_string(), "b".to_string())),
             "an associated-fn callee is unknown to the same-file free-fn map"
         );
         assert!(
-            !wire.cleared.contains(&("Dead3".to_string(), "c".to_string())),
+            !wire
+                .cleared
+                .contains(&("Dead3".to_string(), "c".to_string())),
             "a shadowed binding refuses the name entirely"
         );
     }
@@ -2353,11 +2396,13 @@ pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire]) -> String {
 "#;
         let wire = wire_of(src);
         assert!(
-            wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            wire.cleared
+                .contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
             "json!-interpolated param fields are wire-consumed (the recorded FP specimen)"
         );
         assert!(
-            wire.cleared.contains(&("ShopSeedItemWire".to_string(), "item_id".to_string())),
+            wire.cleared
+                .contains(&("ShopSeedItemWire".to_string(), "item_id".to_string())),
             "both fields of the interpolated slice param clear"
         );
     }
@@ -2383,7 +2428,9 @@ pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire], count: usize) -> Str
 "#;
         let wire = wire_of(src);
         assert!(
-            !wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            !wire
+                .cleared
+                .contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
             "a json! body that does not mention the param must not clear it"
         );
     }
@@ -2404,7 +2451,9 @@ pub fn shop_seed_body(seq: u64, items: &[ShopSeedItemWire]) -> String {
 "#;
         let wire = wire_of(src);
         assert!(
-            !wire.cleared.contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
+            !wire
+                .cleared
+                .contains(&("ShopSeedItemWire".to_string(), "price_micro".to_string())),
             "the conservative crate-rooted-only rule: bare json! is not a serializer signal"
         );
     }
@@ -2439,11 +2488,14 @@ pub fn other(x: &StakeIntent, misc: &Misc) -> String {
 ";
         let wire = wire_of(src);
         assert!(
-            !wire.cleared.contains(&("StakeIntent".to_string(), "stake_version".to_string())),
+            !wire
+                .cleared
+                .contains(&("StakeIntent".to_string(), "stake_version".to_string())),
             "a serde call that does not serialize the param does not clear it"
         );
         assert!(
-            wire.cleared.contains(&("Misc".to_string(), "note".to_string())),
+            wire.cleared
+                .contains(&("Misc".to_string(), "note".to_string())),
             "the actually-serialized param's type clears through its literal sites"
         );
     }
@@ -2550,11 +2602,15 @@ mod tests {
 ";
         let wire = wire_of(src);
         assert!(
-            !wire.wire_const.contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
+            !wire
+                .wire_const
+                .contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
             "test-only const sites must not arm wire-const"
         );
         assert!(
-            !wire.cleared.contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
+            !wire
+                .cleared
+                .contains(&("ClaimRequest".to_string(), "queued_unix".to_string())),
             "test-only sites are no evidence in EITHER direction"
         );
     }
@@ -2588,7 +2644,8 @@ mod tests {
 ";
         let wire = wire_of(src);
         assert!(
-            wire.wire_const.contains(&("Pulse".to_string(), "era".to_string())),
+            wire.wire_const
+                .contains(&("Pulse".to_string(), "era".to_string())),
             "the production const site rules; the test var site is no evidence"
         );
     }
@@ -2620,10 +2677,13 @@ mod tests {
 ";
         let wire = wire_of(src);
         assert!(
-            wire.cleared.contains(&("Telemetry".to_string(), "session".to_string())),
+            wire.cleared
+                .contains(&("Telemetry".to_string(), "session".to_string())),
             "production variable site clears; the test const site cannot arm wire-const"
         );
-        assert!(!wire.wire_const.contains(&("Telemetry".to_string(), "session".to_string())));
+        assert!(!wire
+            .wire_const
+            .contains(&("Telemetry".to_string(), "session".to_string())));
     }
 
     /// A struct literal in a NON-serde fn is NOT wire evidence — the field
@@ -2695,11 +2755,15 @@ pub fn emit() -> String {
             ("crates/showcase/src/ui.rs".to_string(), other.to_string()),
         ]);
         assert!(
-            !wire.cleared.contains(&("Node".to_string(), "flex_direction".to_string())),
+            !wire
+                .cleared
+                .contains(&("Node".to_string(), "flex_direction".to_string())),
             "the foreign literal is not wire evidence for the local Node"
         );
         assert!(
-            !wire.cleared.contains(&("Node".to_string(), "id".to_string())),
+            !wire
+                .cleared
+                .contains(&("Node".to_string(), "id".to_string())),
             "the local Node itself was never literal-built in a serde fn"
         );
     }
@@ -2803,7 +2867,11 @@ impl<T> Repo<T> { fn get(_s: &Store, _id: i64) -> Result<T, E> { Err(E) } }
 struct E;
 ";
         let scan = scan_of(src);
-        assert_eq!(scan.fields.len(), 1, "updated_at is a zero-external-read candidate");
+        assert_eq!(
+            scan.fields.len(),
+            1,
+            "updated_at is a zero-external-read candidate"
+        );
         let wire = wire_of(src);
         let fake = FakeHistory::new(&DEPTHS);
         let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
@@ -2846,7 +2914,10 @@ struct E;
             .commit("updated_at", "refactor: move the form to a generic bridge");
         let report = classify_with_probe(&scan, &fake, &wire, &DEPTHS);
         assert_eq!(report.orphaned.len(), 1, "the history evidence stands");
-        assert!(report.orphaned[0].bridge_weak, "the row renders at wire-dto weak");
+        assert!(
+            report.orphaned[0].bridge_weak,
+            "the row renders at wire-dto weak"
+        );
         let rendered = report.render();
         assert!(rendered.contains("1 wire-dto weak"), "{rendered}");
         assert!(rendered.contains("wire-dto WEAK"), "{rendered}");
@@ -2981,8 +3052,14 @@ use editor_core::types::Node;
 pub fn row() -> Node { Node { id: 7 } }
 ";
         let scan = crate::config_audit::zero_external_read_fields(&[
-            ("crates/editor-core/src/types.rs".to_string(), core.to_string()),
-            ("crates/editor-data/src/store.rs".to_string(), data.to_string()),
+            (
+                "crates/editor-core/src/types.rs".to_string(),
+                core.to_string(),
+            ),
+            (
+                "crates/editor-data/src/store.rs".to_string(),
+                data.to_string(),
+            ),
         ]);
         assert!(
             scan.fields
@@ -3004,11 +3081,10 @@ mod types {
 pub fn row() -> Node { Node { id: 7 } }
 ";
         let scan = scan_of(src);
-        assert!(
-            scan.fields
-                .iter()
-                .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id")
-        );
+        assert!(scan
+            .fields
+            .iter()
+            .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id"));
     }
 
     // ── Issue 109 re-sight: the field-set closure ──
@@ -3038,8 +3114,14 @@ pub fn panel() {
 }
 ";
         let scan = crate::config_audit::zero_external_read_fields(&[
-            ("crates/riir-shader-graph/src/types.rs".to_string(), graph.to_string()),
-            ("crates/riir-shader-showcase/src/ui.rs".to_string(), ui.to_string()),
+            (
+                "crates/riir-shader-graph/src/types.rs".to_string(),
+                graph.to_string(),
+            ),
+            (
+                "crates/riir-shader-showcase/src/ui.rs".to_string(),
+                ui.to_string(),
+            ),
         ]);
         assert!(
             scan.fields
@@ -3099,8 +3181,14 @@ pub fn render(record: &Node, out: &mut Vec<u8>) {
 }
 ";
         let wire = wire_consumption(&[
-            ("crates/riir-shader-graph/src/types.rs".to_string(), graph.to_string()),
-            ("crates/riir-shader-showcase/src/ui.rs".to_string(), ui.to_string()),
+            (
+                "crates/riir-shader-graph/src/types.rs".to_string(),
+                graph.to_string(),
+            ),
+            (
+                "crates/riir-shader-showcase/src/ui.rs".to_string(),
+                ui.to_string(),
+            ),
         ]);
         assert!(
             !wire.cleared.iter().any(|(ty, _)| ty == "Node"),
@@ -3184,12 +3272,10 @@ impl Default for BehaviorConfig {
                 .any(|f| f.candidate.field_name == "calm"),
             "calm was never read — stillborn"
         );
-        assert!(
-            report
-                .stillborn
-                .iter()
-                .all(|f| f.candidate.field_name != "alarm_radius")
-        );
+        assert!(report
+            .stillborn
+            .iter()
+            .all(|f| f.candidate.field_name != "alarm_radius"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

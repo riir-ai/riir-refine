@@ -189,12 +189,7 @@ mod tests {
     fn overcertified_lucky_keep_is_excluded() {
         // favored rule (p_goal 0.95) + a mostly-failing row (p_outcome 0.2)
         assert!(lemma_4_2_excludes(0.95, 0.2, TIER_GUARD_EPSILON));
-        assert!(!certify_allowed(
-            default_elo() + 760.0,
-            default_elo(),
-            1,
-            4
-        ));
+        assert!(!certify_allowed(default_elo() + 760.0, default_elo(), 1, 4));
     }
 
     // ── boundary + arithmetic ─────────────────────────────────────────────

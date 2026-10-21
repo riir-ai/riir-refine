@@ -47,7 +47,9 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
         // different program. Method-position exclusion is load-bearing:
         // the family fixture itself is `let sum = v.iter().sum(); sum` —
         // `.sum()` is a different namespace and must not count.
-        let Some(body_text) = src(source, block) else { return };
+        let Some(body_text) = src(source, block) else {
+            return;
+        };
         if count_binding_occurrences(&body_text, &ident.to_string()) != 2 {
             return;
         }
@@ -198,7 +200,10 @@ mod tests {
         // binding's read. The twice-count guard fires (x occurs 3 times).
         let input = "fn f(x: u8) -> u8 { let x = x + 1; x }";
         let out = propose_fix("let_and_return", input);
-        assert!(out.is_none(), "self-referential init must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "self-referential init must be refused: {out:?}"
+        );
     }
 
     #[test]

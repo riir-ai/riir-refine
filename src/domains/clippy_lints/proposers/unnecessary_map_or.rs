@@ -72,15 +72,23 @@ struct Collector<'a> {
 
 impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
-        self.scopes
-            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
+        self.scopes.push(ScopeKinds::from_fn(
+            &f.sig,
+            &f.block,
+            self.source,
+            &self.fn_rets,
+        ));
         syn::visit::visit_item_fn(self, f);
         self.scopes.pop();
     }
 
     fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
-        self.scopes
-            .push(ScopeKinds::from_fn(&f.sig, &f.block, self.source, &self.fn_rets));
+        self.scopes.push(ScopeKinds::from_fn(
+            &f.sig,
+            &f.block,
+            self.source,
+            &self.fn_rets,
+        ));
         syn::visit::visit_impl_item_fn(self, f);
         self.scopes.pop();
     }

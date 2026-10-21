@@ -172,7 +172,12 @@ impl Machine {
     /// A plain text line under an open blockquote — the quote half.
     /// Clippy's count quirk: any `>` in the line reaches the depth, so
     /// prose like `a > b` never fires. Mirror exactly.
-    fn quote_plain_line(&mut self, line: &DocLine<'_>, indent: usize, fires: &mut Vec<(Fire, SourceEdit)>) {
+    fn quote_plain_line(
+        &mut self,
+        line: &DocLine<'_>,
+        indent: usize,
+        fires: &mut Vec<(Fire, SourceEdit)>,
+    ) {
         if line.text.trim_start().contains('>') {
             return;
         }
@@ -194,7 +199,12 @@ impl Machine {
     /// under-indent (lazy continuation) and over-indent (the dedent), the
     /// latter continuity-gated (the documented divergence: across a blank
     /// line clippy's event walk can still fire — we stay silent).
-    fn list_plain_line(&mut self, line: &DocLine<'_>, indent: usize, fires: &mut Vec<(Fire, SourceEdit)>) {
+    fn list_plain_line(
+        &mut self,
+        line: &DocLine<'_>,
+        indent: usize,
+        fires: &mut Vec<(Fire, SourceEdit)>,
+    ) {
         let Some(&cc) = self.list_stack.last() else {
             // Top-level plain text: no containers, no fires.
             self.para_open = true;
@@ -371,7 +381,8 @@ fn is_block_start(trimmed: &str) -> bool {
     // Thematic break: 3+ of one of - * _ (the `- item` marker form was
     // consumed by `list_content_col` before this runs).
     let t = trimmed.trim_end();
-    t.len() >= 3 && (t.starts_with("---") || t.starts_with("***") || t.starts_with("___"))
+    t.len() >= 3
+        && (t.starts_with("---") || t.starts_with("***") || t.starts_with("___"))
         && t.chars().all(|c| c == '-' || c == '*' || c == '_')
 }
 

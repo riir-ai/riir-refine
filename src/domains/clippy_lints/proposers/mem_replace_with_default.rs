@@ -52,7 +52,11 @@ use crate::edit_emitter::drops_interior_comment;
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let imports = MemImports::scan(file);
-    let mut v = Collector { source, edits: Vec::new(), imports };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+        imports,
+    };
     v.visit_file(file);
     v.edits
 }
@@ -69,7 +73,12 @@ struct MemImports {
 
 impl MemImports {
     fn scan(file: &File) -> Self {
-        let mut v = Scan { out: MemImports { has_std_mem_use: false, mem_shadowed: false } };
+        let mut v = Scan {
+            out: MemImports {
+                has_std_mem_use: false,
+                mem_shadowed: false,
+            },
+        };
         v.visit_file(file);
         v.out
     }
@@ -97,9 +106,7 @@ impl<'ast> Visit<'ast> for Scan {
             syn::Item::Type(x) => Some(&x.ident),
             syn::Item::Const(x) => Some(&x.ident),
             syn::Item::Static(x) => Some(&x.ident),
-            syn::Item::ExternCrate(x) => {
-                x.rename.as_ref().map(|(_, id)| id).or(Some(&x.ident))
-            }
+            syn::Item::ExternCrate(x) => x.rename.as_ref().map(|(_, id)| id).or(Some(&x.ident)),
             _ => None,
         };
         if name.is_some_and(|n| n == "mem") {
@@ -120,11 +127,15 @@ impl<'ast> Visit<'ast> for Scan {
 
 /// `use std::mem;` — the exact 2-segment plain tree (no rename, no glob).
 fn is_std_mem_tree(tree: &syn::UseTree) -> bool {
-    let syn::UseTree::Path(p0) = tree else { return false };
+    let syn::UseTree::Path(p0) = tree else {
+        return false;
+    };
     if p0.ident != "std" {
         return false;
     }
-    let syn::UseTree::Name(n1) = &*p0.tree else { return false };
+    let syn::UseTree::Name(n1) = &*p0.tree else {
+        return false;
+    };
     n1.ident == "mem"
 }
 
@@ -169,8 +180,7 @@ impl Collector<'_> {
         if callee.qself.is_some() || !callee.attrs.is_empty() {
             return None;
         }
-        let segs: Vec<&syn::Ident> =
-            callee.path.segments.iter().map(|s| &s.ident).collect();
+        let segs: Vec<&syn::Ident> = callee.path.segments.iter().map(|s| &s.ident).collect();
         let path_ok = match segs.as_slice() {
             [std_seg, mem_seg, replace_seg] => {
                 *std_seg == "std" && *mem_seg == "mem" && *replace_seg == "replace"
@@ -214,7 +224,9 @@ fn is_bare_default_call(e: &Expr) -> bool {
     if !c.args.is_empty() || !c.attrs.is_empty() {
         return false;
     }
-    let Expr::Path(p) = &*c.func else { return false };
+    let Expr::Path(p) = &*c.func else {
+        return false;
+    };
     if p.qself.is_some() || !p.attrs.is_empty() {
         return false;
     }
@@ -268,7 +280,10 @@ mod tests {
             "fn t(dst: &mut Vec<u8>) -> usize { std::mem::replace(dst, Default::default()).len() }",
         )
         .expect("matched");
-        assert!(out.contains("std::mem::take(dst).len()"), "not in place: {out}");
+        assert!(
+            out.contains("std::mem::take(dst).len()"),
+            "not in place: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

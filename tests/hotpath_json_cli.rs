@@ -78,7 +78,11 @@ fn toy_repo(tag: &str) -> (tempdir::TempDirGuard, String) {
         "fn main() {\n    let v: Vec<u32> = (0..100).collect();\n    let s: u64 = v.iter().map(|x| u64::from(*x)).sum();\n    println!(\"{s}\");\n}\n",
     )
     .unwrap();
-    for a in [vec!["init", "-q"], vec!["add", "-A"], vec!["commit", "-qm", "toy"]] {
+    for a in [
+        vec!["init", "-q"],
+        vec!["add", "-A"],
+        vec!["commit", "-qm", "toy"],
+    ] {
         let ok = Command::new("git")
             .args(["-c", "user.email=t@t", "-c", "user.name=t"])
             .args(&a)
@@ -86,7 +90,11 @@ fn toy_repo(tag: &str) -> (tempdir::TempDirGuard, String) {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false);
-        assert!(ok, "git {} failed (git is required for the keying arms)", a[0]);
+        assert!(
+            ok,
+            "git {} failed (git is required for the keying arms)",
+            a[0]
+        );
     }
     let sha = String::from_utf8(
         Command::new("git")
@@ -168,11 +176,16 @@ fn keyed_match_proceeds_and_discloses_the_ranked_span() {
     let (guard, sha) = toy_repo("match");
     let report = guard.path().join("report.json");
     std::fs::write(&report, report_json(Some(&sha))).unwrap();
-    let (code, out) = heal(&guard.path(), &["refine", "--hotpath-json", "report.json", "."]);
+    let (code, out) = heal(
+        &guard.path(),
+        &["refine", "--hotpath-json", "report.json", "."],
+    );
     assert_eq!(code, Some(0), "matched feed proceeds: {out}");
     assert!(out.contains("keyed MATCHED at repo HEAD"), "{out}");
     assert!(
-        out.contains("[hot] hp_toy::main — src/main.rs:2 — 500 calls x 200000 ns avg | alloc 150000 B"),
+        out.contains(
+            "[hot] hp_toy::main — src/main.rs:2 — 500 calls x 200000 ns avg | alloc 150000 B"
+        ),
         "the ranked span line carries the parsed duration + the joined alloc twin: {out}"
     );
 }
@@ -186,7 +199,10 @@ fn stale_mismatch_refuses_exit_2() {
         report_json(Some("deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")),
     )
     .unwrap();
-    let (code, out) = heal(&guard.path(), &["refine", "--hotpath-json", "report.json", "."]);
+    let (code, out) = heal(
+        &guard.path(),
+        &["refine", "--hotpath-json", "report.json", "."],
+    );
     assert_eq!(code, Some(2), "a stale profile REFUSES: {out}");
     assert!(out.contains("STALE PROFILE REFUSED"), "{out}");
     assert!(
@@ -198,8 +214,15 @@ fn stale_mismatch_refuses_exit_2() {
 #[test]
 fn unreadable_feed_is_a_hard_error() {
     let (guard, _sha) = toy_repo("unreadable");
-    let (code, out) = heal(&guard.path(), &["refine", "--hotpath-json", "nope.json", "."]);
-    assert_eq!(code, Some(2), "an unreadable requested oracle never falls back silently: {out}");
+    let (code, out) = heal(
+        &guard.path(),
+        &["refine", "--hotpath-json", "nope.json", "."],
+    );
+    assert_eq!(
+        code,
+        Some(2),
+        "an unreadable requested oracle never falls back silently: {out}"
+    );
     assert!(out.contains("cannot read"), "{out}");
 }
 
@@ -208,7 +231,10 @@ fn unkeyed_report_proceeds_with_loud_disclosure() {
     let (guard, _sha) = toy_repo("unkeyed");
     let report = guard.path().join("report.json");
     std::fs::write(&report, report_json(None)).unwrap();
-    let (code, out) = heal(&guard.path(), &["refine", "--hotpath-json", "report.json", "."]);
+    let (code, out) = heal(
+        &guard.path(),
+        &["refine", "--hotpath-json", "report.json", "."],
+    );
     assert_eq!(code, Some(0), "unkeyed cannot mismatch: {out}");
     assert!(out.contains("UNKEYED"), "{out}");
     assert!(out.contains("[hot] hp_toy::main"), "{out}");
@@ -219,5 +245,8 @@ fn absent_flag_prints_no_hotpath_lines() {
     let (guard, _sha) = toy_repo("absent");
     let (code, out) = heal(&guard.path(), &["refine", "."]);
     assert_eq!(code, Some(0), "{out}");
-    assert!(!out.contains("hotpath feed:"), "default-off stays silent: {out}");
+    assert!(
+        !out.contains("hotpath feed:"),
+        "default-off stays silent: {out}"
+    );
 }

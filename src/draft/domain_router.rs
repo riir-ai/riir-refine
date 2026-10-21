@@ -665,12 +665,24 @@ mod tests {
     fn domains_apply_to_their_file_kinds_only() {
         use DomainId::*;
         for (path, yes, no) in [
-            ("./src/lib.rs", &[Clippy, Perf, Sec, Kernel][..], &[Docker, Dist, ShaderPerf][..]),
-            ("deploy/Dockerfile", &[Docker][..], &[Clippy, Perf, Dist][..]),
+            (
+                "./src/lib.rs",
+                &[Clippy, Perf, Sec, Kernel][..],
+                &[Docker, Dist, ShaderPerf][..],
+            ),
+            (
+                "deploy/Dockerfile",
+                &[Docker][..],
+                &[Clippy, Perf, Dist][..],
+            ),
             ("Dockerfile.release", &[Docker][..], &[Dist][..]),
             ("crates/x/Cargo.toml", &[Dist][..], &[Clippy, Docker][..]),
             (".cargo/config.toml", &[Dist][..], &[Clippy][..]),
-            ("shaders/blur.wgsl", &[ShaderPerf, Kernel][..], &[Clippy, Docker][..]),
+            (
+                "shaders/blur.wgsl",
+                &[ShaderPerf, Kernel][..],
+                &[Clippy, Docker][..],
+            ),
             ("C:\\repo\\src\\main.rs", &[Clippy][..], &[Docker][..]),
         ] {
             for d in yes {

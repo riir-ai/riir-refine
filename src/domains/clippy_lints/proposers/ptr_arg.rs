@@ -94,8 +94,11 @@ mod tests {
 
     #[test]
     fn narrows_vec_param_to_slice() {
-        let out = propose_fix("ptr_arg", "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }")
-            .expect("matched");
+        let out = propose_fix(
+            "ptr_arg",
+            "fn total(v: &Vec<i32>) -> i32 { v.iter().sum() }",
+        )
+        .expect("matched");
         assert!(
             out.contains("fn total(v: &[i32]) -> i32"),
             "param not narrowed: {out}"
@@ -106,11 +109,8 @@ mod tests {
 
     #[test]
     fn narrows_string_param_to_str() {
-        let out = propose_fix(
-            "ptr_arg",
-            "fn greet(name: &String) -> usize { name.len() }",
-        )
-        .expect("matched");
+        let out = propose_fix("ptr_arg", "fn greet(name: &String) -> usize { name.len() }")
+            .expect("matched");
         assert!(
             out.contains("name: &str"),
             "String not narrowed to str: {out}"
@@ -134,11 +134,8 @@ mod tests {
 
     #[test]
     fn nested_generic_vec_spliced_verbatim() {
-        let out = propose_fix(
-            "ptr_arg",
-            "fn flat(v: &Vec<Vec<u8>>) -> usize { v.len() }",
-        )
-        .expect("matched");
+        let out = propose_fix("ptr_arg", "fn flat(v: &Vec<Vec<u8>>) -> usize { v.len() }")
+            .expect("matched");
         assert!(
             out.contains("v: &[Vec<u8>]"),
             "nested generic must ride verbatim: {out}"
@@ -149,7 +146,10 @@ mod tests {
     #[test]
     fn plain_slice_param_untouched() {
         let out = propose_fix("ptr_arg", "fn total(v: &[i32]) -> i32 { v.iter().sum() }");
-        assert!(out.is_none(), "already-narrowed param must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "already-narrowed param must not fire: {out:?}"
+        );
     }
 
     #[test]
@@ -164,7 +164,10 @@ mod tests {
             "ptr_arg",
             "fn keep<'a>(v: &'a Vec<u8>) -> usize { v.len() }",
         );
-        assert!(out.is_none(), "lifetime-annotated form must be refused: {out:?}");
+        assert!(
+            out.is_none(),
+            "lifetime-annotated form must be refused: {out:?}"
+        );
     }
 
     #[test]
@@ -180,7 +183,10 @@ mod tests {
         // The guard is per-PARAM attrs (cfg'd params); fn-level attrs ride.
         let input = "#[cfg(unix)]\nfn unix_only(v: &Vec<u8>) -> usize { v.len() }";
         let out = propose_fix("ptr_arg", input).expect("matched");
-        assert!(out.contains("&[u8]"), "fn-attr shape must still fire: {out}");
+        assert!(
+            out.contains("&[u8]"),
+            "fn-attr shape must still fire: {out}"
+        );
         assert!(out.contains("#[cfg(unix)]"), "attr must survive: {out}");
     }
 
@@ -188,7 +194,10 @@ mod tests {
     fn impl_method_param_narrows() {
         let input = "struct S;\nimpl S {\n    fn any_zero(&self, v: &Vec<u8>) -> bool { v.contains(&0) }\n}";
         let out = propose_fix("ptr_arg", input).expect("matched");
-        assert!(out.contains("v: &[u8]"), "impl method param must narrow: {out}");
+        assert!(
+            out.contains("v: &[u8]"),
+            "impl method param must narrow: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

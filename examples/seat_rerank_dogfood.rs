@@ -58,7 +58,10 @@ fn corpus_by_rule() -> (RulePools, usize, usize) {
             .push(e.fixed_code().to_string());
     }
     let rules = by_rule.len();
-    let multi = by_rule.values().filter(|(_, fixes)| fixes.len() > 1).count();
+    let multi = by_rule
+        .values()
+        .filter(|(_, fixes)| fixes.len() > 1)
+        .count();
     (
         by_rule
             .into_iter()
@@ -114,7 +117,15 @@ fn main() {
             snippet: snippet.clone(),
             options: fixes.clone(),
         };
-        run_case(&client, &suite, &case, &mut ledger, &mut picks, &mut abstains, &mut declines);
+        run_case(
+            &client,
+            &suite,
+            &case,
+            &mut ledger,
+            &mut picks,
+            &mut abstains,
+            &mut declines,
+        );
     }
 
     // ── pass wire_scale: payload/echo scale at the presentation cap ───
@@ -133,7 +144,15 @@ fn main() {
             snippet: snippet.clone(),
             options,
         };
-        run_case(&client, &suite, &case, &mut ledger, &mut picks, &mut abstains, &mut declines);
+        run_case(
+            &client,
+            &suite,
+            &case,
+            &mut ledger,
+            &mut picks,
+            &mut abstains,
+            &mut declines,
+        );
     }
 
     // ── the abstain probe ─────────────────────────────────────────────
@@ -144,7 +163,15 @@ fn main() {
             snippet: format!("ABSTAIN: no confident pick for {rule}"),
             options: fixes.clone(),
         };
-        run_case(&client, &suite, &case, &mut ledger, &mut picks, &mut abstains, &mut declines);
+        run_case(
+            &client,
+            &suite,
+            &case,
+            &mut ledger,
+            &mut picks,
+            &mut abstains,
+            &mut declines,
+        );
     }
 
     if let Some(parent) = std::path::Path::new(&out_path).parent() {
@@ -204,7 +231,10 @@ fn run_case(
                     )
                 })
                 .unwrap_or_else(|| " receipt=none".to_string());
-            ("pick", format!("index={index} bytes={} {audit}", candidate.len()))
+            (
+                "pick",
+                format!("index={index} bytes={} {audit}", candidate.len()),
+            )
         }
         Ok(SeatAnswer::Abstained { .. }) => {
             *abstains += 1;

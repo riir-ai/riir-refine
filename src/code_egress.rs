@@ -104,7 +104,10 @@ mod tests {
 
     #[test]
     fn parse_refuses_everything_but_the_deliberate_spelling() {
-        assert_eq!(EgressConsent::parse(None), EgressConsent::Refused(EgressRefusal::Unset));
+        assert_eq!(
+            EgressConsent::parse(None),
+            EgressConsent::Refused(EgressRefusal::Unset)
+        );
         assert_eq!(
             EgressConsent::parse(Some("")),
             EgressConsent::Refused(EgressRefusal::Unset)
@@ -113,10 +116,16 @@ mod tests {
             EgressConsent::parse(Some("   ")),
             EgressConsent::Refused(EgressRefusal::Unset)
         );
-        assert_eq!(EgressConsent::parse(Some("snippet")), EgressConsent::Allowed);
+        assert_eq!(
+            EgressConsent::parse(Some("snippet")),
+            EgressConsent::Allowed
+        );
         // Whitespace around the spelling is trimmed (the original R2
         // semantics — kept byte-identical by the move).
-        assert_eq!(EgressConsent::parse(Some(" snippet ")), EgressConsent::Allowed);
+        assert_eq!(
+            EgressConsent::parse(Some(" snippet ")),
+            EgressConsent::Allowed
+        );
         for junk in ["1", "true", "0", "yes", "file", "Snippet"] {
             let got = EgressConsent::parse(Some(junk));
             assert!(

@@ -68,8 +68,8 @@ struct MissRow {
 }
 
 fn main() {
-    let mut matcher =
-        LatentMatcher::from_enabled_domains_with(RetrievalConfig::default()).expect("build matcher");
+    let mut matcher = LatentMatcher::from_enabled_domains_with(RetrievalConfig::default())
+        .expect("build matcher");
     let spans = labeled_eval_spans();
     println!("p157 near-tie census — spans={} TOP_K={TOP_K}", spans.len());
     println!(
@@ -104,7 +104,10 @@ fn main() {
             .iter()
             .find(|r| r.rule_id == top1.rule_id)
             .map(|r| r.score);
-        let pool_gold_score = pool.iter().find(|r| r.rule_id == span.label).map(|r| r.score);
+        let pool_gold_score = pool
+            .iter()
+            .find(|r| r.rule_id == span.label)
+            .map(|r| r.score);
         let margin = match (pool_top1_score, pool_gold_score) {
             (Some(t), Some(g)) => Some(t - g),
             _ => None,
@@ -129,7 +132,10 @@ fn main() {
         "\nmeasured={measured} (hits={hits} misses={} skipped={skipped})",
         misses.len()
     );
-    println!("hits_at_1 = {:.1}%", 100.0 * hits as f32 / measured.max(1) as f32);
+    println!(
+        "hits_at_1 = {:.1}%",
+        100.0 * hits as f32 / measured.max(1) as f32
+    );
 
     println!("\n── per-miss anatomy ──");
     for m in &misses {

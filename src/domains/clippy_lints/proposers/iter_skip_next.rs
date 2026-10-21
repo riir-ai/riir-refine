@@ -188,10 +188,7 @@ mod tests {
             "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }",
         )
         .expect("matched");
-        assert!(
-            out.contains("{ v.get(n) }"),
-            "not rewritten to .get: {out}"
-        );
+        assert!(out.contains("{ v.get(n) }"), "not rewritten to .get: {out}");
         assert!(!out.contains("skip"), "skip must be gone: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -203,10 +200,7 @@ mod tests {
             "fn pick(v: &Vec<u8>, k: usize) -> Option<&u8> { v.iter().skip(k).next() }",
         )
         .expect("matched");
-        assert!(
-            out.contains("{ v.get(k) }"),
-            "not rewritten to .get: {out}"
-        );
+        assert!(out.contains("{ v.get(k) }"), "not rewritten to .get: {out}");
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -236,7 +230,8 @@ mod tests {
             "fn at(n: usize) -> Option<u8> { let v = [1u8, 2, 3]; v.iter().skip(n).copied().skip(n).next() }",
         );
         assert!(
-            out.as_deref().is_some_and(|o| o.contains("v.iter().skip(n).copied().nth(n)")),
+            out.as_deref()
+                .is_some_and(|o| o.contains("v.iter().skip(n).copied().nth(n)")),
             "arm 2 must fire on the unprovable chain: {out:?}"
         );
     }
@@ -312,7 +307,10 @@ mod tests {
             "iter_skip_next",
             "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(/* idx */ n).next() }",
         );
-        assert!(out.is_none(), "comment in a deleted range must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment in a deleted range must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -323,7 +321,10 @@ mod tests {
             "iter_skip_next",
             "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n /* the index */).next() }",
         );
-        assert!(out.is_none(), "comment in the deleted tail must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment in the deleted tail must refuse: {out:?}"
+        );
     }
 
     #[test]

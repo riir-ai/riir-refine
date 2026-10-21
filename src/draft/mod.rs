@@ -33,12 +33,12 @@
 //!   counter-anchored SET rerank of the merged seven-domain pool — the
 //!   first consumer of katgpt-core's `set_admission` primitive.
 
-#[cfg(feature = "clippy_verify")]
-pub mod clippy_oracle;
-pub mod clippy_feed;
-pub mod corpus_index;
 #[cfg(feature = "choice_scorer_poc")]
 pub mod choice_scorer;
+pub mod clippy_feed;
+#[cfg(feature = "clippy_verify")]
+pub mod clippy_oracle;
+pub mod corpus_index;
 pub mod domain_router;
 pub mod eval_fixtures_clippy;
 pub mod eval_fixtures_composite;
@@ -65,10 +65,10 @@ pub mod rule_embed;
 // (span-structured BCE over `katgpt_core::exact_mass_admit` masks) —
 // measurement-only, same towers/artifact wire as `rule_embed`. Gated on the
 // FULL feature (it alone carries the katgpt-core/exact_mass_admit forward).
-#[cfg(feature = "mattr_k_poc")]
-pub mod rule_embed_mattr;
 pub mod op_tokenizer;
 pub mod retrieval_eval;
+#[cfg(feature = "mattr_k_poc")]
+pub mod rule_embed_mattr;
 #[cfg(feature = "set_rerank")]
 pub mod set_rerank;
 pub mod span_source;
@@ -106,24 +106,24 @@ pub use margin_weight::{
     SpanMargin,
 };
 pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
-pub use retrieval_eval::{
-    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval,
-    ChoiceTaxonomy, DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
-};
 #[cfg(feature = "set_rerank")]
 pub use retrieval_eval::VendiAxis;
+pub use retrieval_eval::{
+    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, ChoiceTaxonomy,
+    DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
+};
 #[cfg(feature = "set_rerank")]
 pub use set_rerank::{
-    baseline_slate, counter_anchored_slate, merge_pool, AdmittedRule, LatentChoice, RuleLatentCorpus,
-    SetRerankConfig, SetSlate, DEFAULT_SLATE_K, NO_SET_RERANK_ENV,
+    baseline_slate, counter_anchored_slate, merge_pool, AdmittedRule, LatentChoice,
+    RuleLatentCorpus, SetRerankConfig, SetSlate, DEFAULT_SLATE_K, NO_SET_RERANK_ENV,
 };
 pub use span_source::{collect_source_files, collect_source_files_sorted};
 pub use switch_cost::{
     cross_domain_spans, print_switch_cost_report, run_switch_cost_eval, SwitchCostReport,
 };
+#[cfg(feature = "set_rerank")]
+pub use withheld_pair_ood::run_withheld_pair_set_admission;
 pub use withheld_pair_ood::{
     atomic_keys, classify_rustc_shape, classify_shape, normalized_tokens, run_withheld_pair,
     ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport,
 };
-#[cfg(feature = "set_rerank")]
-pub use withheld_pair_ood::run_withheld_pair_set_admission;

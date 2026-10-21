@@ -154,16 +154,10 @@ impl DepthPolicy {
             // special-cased away, so the invariant stays visible.
             return Self::identity();
         }
-        let mean =
-            measured.iter().map(|(_, raw)| raw).sum::<f32>() / measured.len() as f32;
+        let mean = measured.iter().map(|(_, raw)| raw).sum::<f32>() / measured.len() as f32;
         let factors = measured
             .into_iter()
-            .map(|(domain, raw)| {
-                (
-                    domain,
-                    (raw / mean).clamp(MIN_FACTOR, MAX_FACTOR),
-                )
-            })
+            .map(|(domain, raw)| (domain, (raw / mean).clamp(MIN_FACTOR, MAX_FACTOR)))
             .collect();
         Self { factors }
     }
@@ -449,8 +443,7 @@ mod tests {
     fn standing_returns_none_when_the_policy_would_be_identity() {
         // One measured row → identity → standing() declines to arm (the
         // caller's arming line would be a lie).
-        let rows =
-            serde_json::to_string(&[row("clippy", 935, 65)]).expect("serialize rows");
+        let rows = serde_json::to_string(&[row("clippy", 935, 65)]).expect("serialize rows");
         let line = format!("{{\"ts\":\"t\",\"demonstrability\":{rows}}}");
         let tmp_root = temp_path("standing_identity_root");
         let _ = std::fs::create_dir_all(tmp_root.join(".benchmarks"));
@@ -469,6 +462,9 @@ mod tests {
         let p = DepthPolicy::from_rows(&[row("clippy", 20, 80), row("rust_perf", 100, 0)]);
         let r = p.render();
         assert!(r.contains("clippy") && r.contains("rust_perf"));
-        assert_eq!(DepthPolicy::identity().render(), "identity (no reallocation)");
+        assert_eq!(
+            DepthPolicy::identity().render(),
+            "identity (no reallocation)"
+        );
     }
 }

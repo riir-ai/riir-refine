@@ -173,8 +173,18 @@ fn row_dot_masked4(groups: &[Group4], xs_pre: &[f32]) -> f32 {
 /// The staging pass (the opt arm's ONE multiply per element, paid once per
 /// GEMV and amortized over every weight row that reads it).
 fn stage4(x: &[f32], xs_pre: &mut [f32]) {
-    for (src, dst) in x.as_chunks::<64>().0.iter().zip(xs_pre.as_chunks_mut::<64>().0.iter_mut()) {
-        for (xw, dw) in src.as_chunks::<8>().0.iter().zip(dst.as_chunks_mut::<8>().0.iter_mut()) {
+    for (src, dst) in x
+        .as_chunks::<64>()
+        .0
+        .iter()
+        .zip(xs_pre.as_chunks_mut::<64>().0.iter_mut())
+    {
+        for (xw, dw) in src
+            .as_chunks::<8>()
+            .0
+            .iter()
+            .zip(dst.as_chunks_mut::<8>().0.iter_mut())
+        {
             for (p, &wp) in WPRE4.iter().enumerate() {
                 dw[p] = xw[p] * wp; // exact: power-of-two scaling
             }
@@ -215,8 +225,18 @@ fn row_dot_masked8(groups: &[Group8], xs_pre: &[f32]) -> f32 {
 }
 
 fn stage8(x: &[f32], xs_pre: &mut [f32]) {
-    for (src, dst) in x.as_chunks::<64>().0.iter().zip(xs_pre.as_chunks_mut::<64>().0.iter_mut()) {
-        for (xw, dw) in src.as_chunks::<4>().0.iter().zip(dst.as_chunks_mut::<4>().0.iter_mut()) {
+    for (src, dst) in x
+        .as_chunks::<64>()
+        .0
+        .iter()
+        .zip(xs_pre.as_chunks_mut::<64>().0.iter_mut())
+    {
+        for (xw, dw) in src
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(dst.as_chunks_mut::<4>().0.iter_mut())
+        {
             for (p, &wp) in WPRE8.iter().enumerate() {
                 dw[p] = xw[p] * wp;
             }
@@ -321,7 +341,12 @@ fn row_dot_exc6_wpre1(groups: &[Group6], xs_pre: &[f32]) -> f32 {
 }
 
 fn stage6_wpre1(x: &[f32], xs_pre: &mut [f32]) {
-    for (src, dst) in x.as_chunks::<16>().0.iter().zip(xs_pre.as_chunks_mut::<16>().0.iter_mut()) {
+    for (src, dst) in x
+        .as_chunks::<16>()
+        .0
+        .iter()
+        .zip(xs_pre.as_chunks_mut::<16>().0.iter_mut())
+    {
         for (d, &s) in dst.iter_mut().zip(src.iter()) {
             *d = s * WPRE6; // wpre = 1: the exception's staging is the identity
         }
@@ -524,7 +549,9 @@ fn preflight() -> (String, String) {
                 .unwrap_or_else(|| {
                     haystack
                         .lines()
-                        .find(|l| l.contains("REFUSED") || l.contains("FAIL") || l.contains("refused"))
+                        .find(|l| {
+                            l.contains("REFUSED") || l.contains("FAIL") || l.contains("refused")
+                        })
                         .unwrap_or("preflight refused (no reason line parsed)")
                         .to_string()
                 });
@@ -535,7 +562,10 @@ fn preflight() -> (String, String) {
             };
             (verdict, prov)
         }
-        Err(e) => ("UNAVAILABLE".to_string(), format!("preflight spawn failed: {e}")),
+        Err(e) => (
+            "UNAVAILABLE".to_string(),
+            format!("preflight spawn failed: {e}"),
+        ),
     }
 }
 
@@ -561,7 +591,10 @@ struct Sweep4 {
 }
 
 fn gen_sweep4(rows: usize, k: usize, seed_offset: u64) -> Sweep4 {
-    assert!(k.is_multiple_of(64), "K must be a multiple of 64 (the 4-bit layout)");
+    assert!(
+        k.is_multiple_of(64),
+        "K must be a multiple of 64 (the 4-bit layout)"
+    );
     let mut rng = Rng::new(FIXTURE_SEED ^ seed_offset);
     let n_groups = k / 64;
     let mut out = Sweep4 {
@@ -590,7 +623,10 @@ struct Sweep8 {
 }
 
 fn gen_sweep8(rows: usize, k: usize, seed_offset: u64) -> Sweep8 {
-    assert!(k.is_multiple_of(64), "K must be a multiple of 64 (the 8-bit layout)");
+    assert!(
+        k.is_multiple_of(64),
+        "K must be a multiple of 64 (the 8-bit layout)"
+    );
     let mut rng = Rng::new(FIXTURE_SEED ^ seed_offset);
     let n_groups = k / 64;
     let mut out = Sweep8 {
@@ -619,7 +655,10 @@ struct Sweep2 {
 }
 
 fn gen_sweep2(rows: usize, k: usize, seed_offset: u64) -> Sweep2 {
-    assert!(k.is_multiple_of(32), "K must be a multiple of 32 (the 2-bit ALU-twin layout)");
+    assert!(
+        k.is_multiple_of(32),
+        "K must be a multiple of 32 (the 2-bit ALU-twin layout)"
+    );
     let mut rng = Rng::new(FIXTURE_SEED ^ seed_offset);
     let n_groups = k / 32;
     let mut out = Sweep2 {
@@ -667,7 +706,11 @@ fn main() {
         );
     }
     for (p, &m) in MASKS8.iter().enumerate() {
-        assert_eq!(m, 0xFFu32 << (8 * p), "MASKS8[{p}] disagrees with 0xFF << 8p");
+        assert_eq!(
+            m,
+            0xFFu32 << (8 * p),
+            "MASKS8[{p}] disagrees with 0xFF << 8p"
+        );
         assert_eq!(
             WPRE8[p].to_bits(),
             2.0f32.powi(-8 * p as i32).to_bits(),
@@ -769,7 +812,10 @@ fn main() {
     }
     for &ew in &EDGE_WORDS {
         let g: Group8 = [ew; 16];
-        for &xb in BOUNDARY_X.iter().chain([1.0f32, -1.0, 65536.0, -65536.0].iter()) {
+        for &xb in BOUNDARY_X
+            .iter()
+            .chain([1.0f32, -1.0, 65536.0, -65536.0].iter())
+        {
             let x = [xb; 64];
             let mut xs_pre = [0.0f32; 64];
             stage8(&x, &mut xs_pre);
@@ -820,12 +866,7 @@ fn main() {
         );
         g1_cases += 1;
     }
-    for &eb in &[
-        0b11_10_01_00u8,
-        0b00_01_10_11,
-        0xFF,
-        0x00,
-    ] {
+    for &eb in &[0b11_10_01_00u8, 0b00_01_10_11, 0xFF, 0x00] {
         let grp = Group2 {
             bytes: [eb; 8],
             sv: 1.0,
@@ -936,7 +977,11 @@ fn main() {
     let mut best8 = (f64::INFINITY, f64::INFINITY);
     for &rows in &ROWS_GRID {
         for &k in &K_GRID {
-            let mut s = gen_sweep8(rows, k, 0x8000_0000_0000_0000 | ((rows as u64) << 32) | k as u64);
+            let mut s = gen_sweep8(
+                rows,
+                k,
+                0x8000_0000_0000_0000 | ((rows as u64) << 32) | k as u64,
+            );
             let reference = gemv_naive8(&s.rows, &s.x);
             let opt = gemv_masked8(&s.rows, &s.x, &mut s.scratch);
             assert_bits_eq(reference, opt, &format!("8-bit sink rows={rows} k={k}"));
@@ -975,7 +1020,11 @@ fn main() {
     let mut best2 = (f64::INFINITY, f64::INFINITY);
     for &rows in &ROWS_GRID {
         for &k in &K_GRID {
-            let mut s = gen_sweep2(rows, k, 0x4000_0000_0000_0000 | ((rows as u64) << 32) | k as u64);
+            let mut s = gen_sweep2(
+                rows,
+                k,
+                0x4000_0000_0000_0000 | ((rows as u64) << 32) | k as u64,
+            );
             let reference = gemv_naive2(&s.rows, &s.x);
             let opt = gemv_masked2(&s.rows, &s.x, &mut s.scratch);
             assert_bits_eq(reference, opt, &format!("2-bit sink rows={rows} k={k}"));

@@ -111,23 +111,33 @@ impl Collector<'_> {
         // Where predicates of kind Type, keyed by the subject's ident text.
         let mut where_preds: Vec<(&str, &PredicateType)> = Vec::new();
         for pred in &clause.predicates {
-            let WherePredicate::Type(pt) = pred else { continue };
+            let WherePredicate::Type(pt) = pred else {
+                continue;
+            };
             if let Some(text) = plain_ident_text(self.source, &pt.bounded_ty) {
                 where_preds.push((text, pt));
             }
         }
         for param in &generics.params {
-            let syn::GenericParam::Type(tp) = param else { continue };
+            let syn::GenericParam::Type(tp) = param else {
+                continue;
+            };
             if tp.bounds.is_empty() {
                 continue; // inline-only never fires; where-only is the
                           // single-location shape upstream is silent on
             }
             let ident_text = tp.ident.to_string();
-            let Some(pt) = where_preds.iter().find(|(t, _)| *t == ident_text).map(|(_, pt)| *pt) else {
+            let Some(pt) = where_preds
+                .iter()
+                .find(|(t, _)| *t == ident_text)
+                .map(|(_, pt)| *pt)
+            else {
                 continue; // inline-only — upstream silent (probe)
             };
-            let inline_set: BTreeSet<&str> = tp.bounds.iter().map(|b| text_at(self.source, b)).collect();
-            let where_set: BTreeSet<&str> = pt.bounds.iter().map(|b| text_at(self.source, b)).collect();
+            let inline_set: BTreeSet<&str> =
+                tp.bounds.iter().map(|b| text_at(self.source, b)).collect();
+            let where_set: BTreeSet<&str> =
+                pt.bounds.iter().map(|b| text_at(self.source, b)).collect();
             if inline_set.is_empty() || where_set.is_empty() {
                 continue;
             }
@@ -154,7 +164,11 @@ impl Collector<'_> {
     /// Deletion of one type predicate: its span plus the trailing comma,
     /// or the preceding comma + the predicate (last-position), or the
     /// whole `where` clause when it was the only predicate.
-    fn where_predicate_deletion(&self, clause: &syn::WhereClause, pt: &PredicateType) -> SourceEdit {
+    fn where_predicate_deletion(
+        &self,
+        clause: &syn::WhereClause,
+        pt: &PredicateType,
+    ) -> SourceEdit {
         if clause.predicates.len() == 1 {
             // The clause dissolves: delete `where` and everything after it
             // (the body braces survive outside the span).
@@ -193,7 +207,9 @@ impl Collector<'_> {
             // Last predicate: swallow the comma BEFORE it instead (the
             // line scaffolding is already inside the span).
             let mut back = end;
-            while back > 0 && (bytes[back - 1] == b' ' || bytes[back - 1] == b'\n' || bytes[back - 1] == b'\r') {
+            while back > 0
+                && (bytes[back - 1] == b' ' || bytes[back - 1] == b'\n' || bytes[back - 1] == b'\r')
+            {
                 back -= 1;
             }
             if back > 0 && bytes[back - 1] == b',' {
@@ -312,7 +328,10 @@ mod tests {
             "pub fn f<T: Default + Clone + Send>(t: T) -> T\nwhere\n    T: Default,\n    T: Send,\n{\n    t.clone()\n}",
         )
         .expect("matched");
-        assert!(out.contains("pub fn f<T: Default + Clone + Send>(t: T)"), "{out}");
+        assert!(
+            out.contains("pub fn f<T: Default + Clone + Send>(t: T)"),
+            "{out}"
+        );
         assert!(out.contains("where"), "{out}");
         assert!(out.contains("T: Send"), "{out}");
         assert!(!out.contains("T: Default,"), "{out}");

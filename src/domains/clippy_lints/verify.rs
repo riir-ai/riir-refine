@@ -102,14 +102,14 @@ pub struct ClippyVerifier {
     /// Path to the cargo binary.
     cargo_bin: String,
     /// Root directory for temp crates (default: `std::env::temp_dir()/riir_refine_verify/`).
-///
-/// DELIBERATE fixed root — `[documented-fixed-root]` (katgpt-rs Issue 832 T5
-/// adjudication): the crate dirs under it are BLAKE3 content-addressed and each
-/// carries its own `target/`, so two concurrent processes share the root safely
-/// — different code lands in different dirs, identical code writes nothing
-/// (read-before-write via `write_probe_source`), and cargo's per-target build
-/// lock serializes any same-dir race. A pid suffix here would kill the
-/// cross-run cargo cache, which is the design's point.
+    ///
+    /// DELIBERATE fixed root — `[documented-fixed-root]` (katgpt-rs Issue 832 T5
+    /// adjudication): the crate dirs under it are BLAKE3 content-addressed and each
+    /// carries its own `target/`, so two concurrent processes share the root safely
+    /// — different code lands in different dirs, identical code writes nothing
+    /// (read-before-write via `write_probe_source`), and cargo's per-target build
+    /// lock serializes any same-dir race. A pid suffix here would kill the
+    /// cross-run cargo cache, which is the design's point.
     work_root: PathBuf,
 }
 
@@ -465,7 +465,10 @@ mod tests {
         );
         assert!(r.ran, "cargo ran: {r:?}");
         assert!(!r.compiled);
-        assert!(!r.lint_resolved, "a broken compile must never resolve a lint");
+        assert!(
+            !r.lint_resolved,
+            "a broken compile must never resolve a lint"
+        );
     }
 
     // ── ClippyVerifier construction ───────────────────────────────────────

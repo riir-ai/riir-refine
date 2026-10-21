@@ -45,8 +45,7 @@ use super::{edit, SourceEdit};
 /// (ints + char). `f32`/`f64` refuse (the NaN divergence); `bool` refuses
 /// (no real-world shape).
 const CLAMP_SCALARS: &[&str] = &[
-    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize",
-    "char",
+    "u8", "u16", "u32", "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "char",
 ];
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -151,11 +150,7 @@ impl Collector<'_> {
         let x_range = byte_range(unwrap_parens(&inner.receiver));
         let lo_range = byte_range(lo);
         let hi_range = byte_range(hi);
-        if drops_interior_comment(
-            self.source,
-            byte_range(c),
-            &[x_range, lo_range, hi_range],
-        ) {
+        if drops_interior_comment(self.source, byte_range(c), &[x_range, lo_range, hi_range]) {
             return None;
         }
         let lo_text = self.source.get(byte_range(lo))?;
@@ -399,11 +394,9 @@ mod tests {
     #[test]
     fn same_method_pair_and_triple_chain_refuse() {
         // max+max is not the clamp shape.
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn band(x: i32) -> i32 { x.max(3).max(5) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix("manual_clamp", "fn band(x: i32) -> i32 { x.max(3).max(5) }",).is_none()
+        );
         // A three-deep chain — the outer rewrite would leave a half-shape;
         // the outermost pair matches only if it IS a clamp pair.
         let out = propose_fix(
@@ -412,7 +405,8 @@ mod tests {
         );
         assert!(out.is_some());
         assert!(
-            out.as_ref().is_some_and(|o| o.contains("x.clamp(3, 5).max(1)")),
+            out.as_ref()
+                .is_some_and(|o| o.contains("x.clamp(3, 5).max(1)")),
             "sub-chain must rewrite in place: {}",
             out.unwrap_or_default()
         );

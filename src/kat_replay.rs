@@ -86,7 +86,9 @@ pub fn toolchain_fingerprint() -> Result<[u8; 32], String> {
     let out = std::process::Command::new("rustc")
         .arg("-vV")
         .output()
-        .map_err(|e| format!("rustc is not reachable on PATH ({e}) — cannot fingerprint the toolchain"))?;
+        .map_err(|e| {
+            format!("rustc is not reachable on PATH ({e}) — cannot fingerprint the toolchain")
+        })?;
     if !out.status.success() {
         return Err("rustc -vV failed — cannot fingerprint the toolchain".to_string());
     }
@@ -150,16 +152,8 @@ impl ReplayJudgment {
 pub fn verdict_from_lints(shape: &OracleVerdict, fix: &OracleVerdict) -> ReplayJudgment {
     let shape_lints: Vec<String> = shape.lints.iter().cloned().collect();
     let fix_lints: Vec<String> = fix.lints.iter().cloned().collect();
-    let removed_lints: Vec<String> = shape
-        .lints
-        .difference(&fix.lints)
-        .cloned()
-        .collect();
-    let created_lints: Vec<String> = fix
-        .lints
-        .difference(&shape.lints)
-        .cloned()
-        .collect();
+    let removed_lints: Vec<String> = shape.lints.difference(&fix.lints).cloned().collect();
+    let created_lints: Vec<String> = fix.lints.difference(&shape.lints).cloned().collect();
     // The pinned rule, field by field:
     let compile_ok = fix.compiles;
     let oracle_resolved = shape.compiles && fix.compiles && !removed_lints.is_empty();
@@ -274,7 +268,10 @@ mod tests {
         OracleVerdict {
             ran: true,
             compiles,
-            lints: lints.iter().map(|s| (*s).to_string()).collect::<BTreeSet<_>>(),
+            lints: lints
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<BTreeSet<_>>(),
             error: None,
         }
     }
@@ -305,7 +302,10 @@ mod tests {
 
     #[test]
     fn a_persisting_lint_is_a_fail_vector() {
-        let j = verdict_from_lints(&v(true, &["needless_return"]), &v(true, &["needless_return"]));
+        let j = verdict_from_lints(
+            &v(true, &["needless_return"]),
+            &v(true, &["needless_return"]),
+        );
         assert!(j.compile_ok);
         assert!(!j.oracle_resolved);
         assert_eq!(j.heal_rate_milli, 0);
@@ -317,7 +317,10 @@ mod tests {
         let j = verdict_from_lints(&v(true, &["manual_map"]), &v(true, &["redundant_closure"]));
         assert!(j.oracle_resolved, "the target is gone");
         assert_eq!(j.heal_rate_milli, 1000);
-        assert_eq!(j.created_rate_milli, 1000, "the created axis rides the commitment");
+        assert_eq!(
+            j.created_rate_milli, 1000,
+            "the created axis rides the commitment"
+        );
         assert_eq!(j.created_lints, vec!["redundant_closure".to_string()]);
     }
 
@@ -395,7 +398,10 @@ mod tests {
         let mut bad = item("fn a() { 1 }", "fn a() { 1 }");
         bad.fix_hash = "zz".into();
         let oracle = ClippyOracle::new();
-        assert!(matches!(judge_item(&oracle, &bad), ReplayVerdict::Unmeasurable(_)));
+        assert!(matches!(
+            judge_item(&oracle, &bad),
+            ReplayVerdict::Unmeasurable(_)
+        ));
     }
 
     /// The real-oracle happy path: one spawn, the pass vector. Spawns real
@@ -428,7 +434,10 @@ mod tests {
         let b = toolchain_fingerprint().unwrap();
         assert_eq!(a, b);
         // And the operator derivation agrees byte-for-byte.
-        let out = std::process::Command::new("rustc").arg("-vV").output().unwrap();
+        let out = std::process::Command::new("rustc")
+            .arg("-vV")
+            .output()
+            .unwrap();
         assert_eq!(blake3::hash(&out.stdout).as_bytes(), &a);
     }
 }

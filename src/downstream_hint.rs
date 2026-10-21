@@ -90,7 +90,12 @@ pub fn downstream_consumers_hint(targets: &[PathBuf]) -> String {
     let mut parts: Vec<String> = consumers
         .iter()
         .take(MAX_LISTED)
-        .map(|(name, crates)| format!("{name} ({crates} crate{s})", s = if *crates == 1 { "" } else { "s" }))
+        .map(|(name, crates)| {
+            format!(
+                "{name} ({crates} crate{s})",
+                s = if *crates == 1 { "" } else { "s" }
+            )
+        })
         .collect();
     if total > MAX_LISTED {
         parts.push(format!("+{} more", total - MAX_LISTED));
@@ -162,7 +167,10 @@ fn member_manifests(root_manifest: &Path) -> Vec<PathBuf> {
     if let Ok(text) = std::fs::read_to_string(root_manifest) {
         for member in workspace_members(&text) {
             if let Some((prefix, _)) = member.split_once('*') {
-                push_subdir_manifests(&mut out, &sibling.join(prefix.trim_end_matches(['/', '\\'])));
+                push_subdir_manifests(
+                    &mut out,
+                    &sibling.join(prefix.trim_end_matches(['/', '\\'])),
+                );
             } else {
                 let m = sibling.join(member).join("Cargo.toml");
                 if m.is_file() {
@@ -337,7 +345,10 @@ mod tests {
             &format!("{PKG}\n[dependencies]\nx = {{ path = \"../repoA\" }}\n"),
         );
         let hint = downstream_consumers_hint(&[a.join("src")]);
-        assert!(hint.contains("repoB (1 crate)"), "names the consumer: {hint}");
+        assert!(
+            hint.contains("repoB (1 crate)"),
+            "names the consumer: {hint}"
+        );
         assert!(hint.contains("1 sibling repo"), "counts repos: {hint}");
         let _ = fs::remove_dir_all(&parent);
     }
@@ -392,7 +403,11 @@ mod tests {
         // every real workspace manifest uses.
         let parent = fake_parent("member");
         let a = fake_repo(&parent, "repoA", PKG);
-        let b = fake_repo(&parent, "repoB", "[workspace]\nmembers = [\n  \"crates/*\",\n]\n");
+        let b = fake_repo(
+            &parent,
+            "repoB",
+            "[workspace]\nmembers = [\n  \"crates/*\",\n]\n",
+        );
         fake_member(
             &b,
             "crates/b",
@@ -562,7 +577,13 @@ mod tests {
         let members = workspace_members(text);
         assert!(members.contains(&"crates/*"), "{members:?}");
         assert!(members.contains(&"tools/tidy"), "{members:?}");
-        assert!(!members.contains(&"not-workspace"), "package section: {members:?}");
-        assert!(!members.contains(&"no"), "workspace.metadata section: {members:?}");
+        assert!(
+            !members.contains(&"not-workspace"),
+            "package section: {members:?}"
+        );
+        assert!(
+            !members.contains(&"no"),
+            "workspace.metadata section: {members:?}"
+        );
     }
 }

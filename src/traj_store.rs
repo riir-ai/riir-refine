@@ -981,7 +981,9 @@ impl TrajStore {
         let key = Self::row_key(lint_key, shape);
         let mut row = self.load_or_new_row(&key, lint_key, shape, fix);
         row.b0_attempts = row.b0_attempts.saturating_add(1);
-        row.b0_successes = row.b0_successes.saturating_add(u32::from(modelless_success));
+        row.b0_successes = row
+            .b0_successes
+            .saturating_add(u32::from(modelless_success));
         if let Some((success, depth)) = escalated {
             row.bd_attempts = row.bd_attempts.saturating_add(1);
             row.bd_successes = row.bd_successes.saturating_add(u32::from(success));
@@ -2268,7 +2270,13 @@ mod tests {
         let legacy = r#"{"lint_key":"ptr_arg","shape":"s","fix":"f","direction":[],"success_count":1,"fail_count":0,"consecutive_fails":0,"tier":0}"#;
         let row: TrajRowDoc = serde_json::from_str(legacy).unwrap();
         assert_eq!(
-            (row.b0_attempts, row.b0_successes, row.bd_attempts, row.bd_successes, row.rescue_depth),
+            (
+                row.b0_attempts,
+                row.b0_successes,
+                row.bd_attempts,
+                row.bd_successes,
+                row.rescue_depth
+            ),
             (0, 0, 0, 0, 0)
         );
     }
@@ -2678,10 +2686,7 @@ mod tests {
                     true,
                     "run-1",
                     None,
-                    Some(&[
-                        "e0597-deref".to_string(),
-                        "rustc-suggestion".to_string(),
-                    ]),
+                    Some(&["e0597-deref".to_string(), "rustc-suggestion".to_string()]),
                 )
                 .unwrap();
             let label = || {
@@ -2700,7 +2705,16 @@ mod tests {
             // keeps the label; the sourced path survives the same way.
             store
                 .sourced("src/a.rs")
-                .record_classified(key, "&v[0]", "v[0].clone()", true, true, "run-2", None, None)
+                .record_classified(
+                    key,
+                    "&v[0]",
+                    "v[0].clone()",
+                    true,
+                    true,
+                    "run-2",
+                    None,
+                    None,
+                )
                 .unwrap();
             assert_eq!(label().len(), 2, "None kept the driver-lane label");
             // The revert record (`Some(component)`) refreshes through the

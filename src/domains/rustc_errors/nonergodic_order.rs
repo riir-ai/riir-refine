@@ -262,8 +262,7 @@ impl Inner {
         for (k, model) in self.models.iter().enumerate() {
             let eta = f.component(k);
             let m = &model.q;
-            score += f.weights()[k]
-                * (eta[0] * m[0][mi][0] + eta[1] * m[1][mi][0]);
+            score += f.weights()[k] * (eta[0] * m[0][mi][0] + eta[1] * m[1][mi][0]);
         }
         score
     }
@@ -436,8 +435,7 @@ impl NonergodicOrdering {
                     };
                     let final_score = match &store {
                         Some(s) => {
-                            let ss =
-                                shape_conditional_score(s, &c.code, &c.strategy_id, &c.shape);
+                            let ss = shape_conditional_score(s, &c.code, &c.strategy_id, &c.shape);
                             (1.0 - lambda) * ss + lambda * fs
                         }
                         None => fs,
@@ -490,37 +488,34 @@ impl NonergodicOrdering {
             }
             let key = (rec.span_hash.clone(), rec.strategy_id.clone());
             if let AttemptOutcome::Kept = rec.outcome {
-                    // The strategy worked — the site is gone; a future
-                    // proposal here is a new question (the `PoC`'s
-                    // `tried.remove` on resolve).
-                    g.suppressions.remove(&key);
-                } else {
-                    let sup_argmax = g
-                        .filter
-                        .as_ref()
-                        .map_or(0, |f| f.committed().0);
-                    // The context this attempt was proposed under = the
-                    // last ordering pass's hash for its file.
-                    let sup_ctx = g
-                        .span_file
-                        .get(&rec.span_hash)
-                        .and_then(|f| g.ctx.get(f).copied())
-                        .unwrap_or_default();
-                    match g.suppressions.entry(key) {
-                        std::collections::hash_map::Entry::Occupied(mut e) => {
-                            let e = e.get_mut();
-                            e.sup_argmax = sup_argmax;
-                            e.sup_ctx = sup_ctx;
-                        }
-                        std::collections::hash_map::Entry::Vacant(v) => {
-                            v.insert(Suppression {
-                                sup_argmax,
-                                sup_ctx,
-                                revive_used: false,
-                            });
-                        }
+                // The strategy worked — the site is gone; a future
+                // proposal here is a new question (the `PoC`'s
+                // `tried.remove` on resolve).
+                g.suppressions.remove(&key);
+            } else {
+                let sup_argmax = g.filter.as_ref().map_or(0, |f| f.committed().0);
+                // The context this attempt was proposed under = the
+                // last ordering pass's hash for its file.
+                let sup_ctx = g
+                    .span_file
+                    .get(&rec.span_hash)
+                    .and_then(|f| g.ctx.get(f).copied())
+                    .unwrap_or_default();
+                match g.suppressions.entry(key) {
+                    std::collections::hash_map::Entry::Occupied(mut e) => {
+                        let e = e.get_mut();
+                        e.sup_argmax = sup_argmax;
+                        e.sup_ctx = sup_ctx;
+                    }
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        v.insert(Suppression {
+                            sup_argmax,
+                            sup_ctx,
+                            revive_used: false,
+                        });
                     }
                 }
+            }
         })
     }
 
@@ -555,9 +550,8 @@ impl NonergodicOrdering {
             };
             let (cur_argmax, _w) = f.committed();
             let cur_ctx = g.ctx.get(&c.file).copied().unwrap_or_default();
-            let revived = sup_argmax != cur_argmax
-                && sup_ctx != cur_ctx
-                && f.revive_gate() >= REVIVE_GATE;
+            let revived =
+                sup_argmax != cur_argmax && sup_ctx != cur_ctx && f.revive_gate() >= REVIVE_GATE;
             if revived {
                 g.suppressions
                     .get_mut(&key)
@@ -617,7 +611,12 @@ fn freeze_menu(g: &mut Inner, cands: &[FixCandidate], store: Option<&TrajStore>)
                 .get(a.as_str())
                 .copied()
                 .unwrap_or(usize::MAX)
-                .cmp(&incumbent_rank.get(b.as_str()).copied().unwrap_or(usize::MAX))
+                .cmp(
+                    &incumbent_rank
+                        .get(b.as_str())
+                        .copied()
+                        .unwrap_or(usize::MAX),
+                )
         })
     });
     let rank_of: HashMap<&str, usize> = ranked
@@ -643,9 +642,8 @@ fn freeze_menu(g: &mut Inner, cands: &[FixCandidate], store: Option<&TrajStore>)
             Box::leak(Box::new(RotationModel::new(k % n, &rank_of_menu)));
         models.push(&*leaked);
     }
-    let refs: [&'static dyn ComponentModel; K_COMPONENTS] = [
-        models[0], models[1], models[2], models[3],
-    ];
+    let refs: [&'static dyn ComponentModel; K_COMPONENTS] =
+        [models[0], models[1], models[2], models[3]];
     #[allow(clippy::cast_precision_loss)] // K_COMPONENTS = 4 — lossless.
     let filter = NonergodicFilter::new(refs, [1.0 / K_COMPONENTS as f32; K_COMPONENTS])
         .with_initial_eta([[1.0 - INITIAL_MESSY, INITIAL_MESSY]; K_COMPONENTS]);

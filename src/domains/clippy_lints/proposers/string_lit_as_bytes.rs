@@ -49,7 +49,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -74,7 +77,9 @@ impl Collector<'_> {
             return None;
         }
         // The receiver must be the literal itself.
-        let Expr::Lit(lit) = &*m.receiver else { return None };
+        let Expr::Lit(lit) = &*m.receiver else {
+            return None;
+        };
         let Lit::Str(s) = &lit.lit else { return None };
         let lit_text = self.lit_snippet(s)?;
         if !literal_is_ascii_bytes(&lit_text) {
@@ -98,8 +103,12 @@ impl Collector<'_> {
 /// The byte-literal admissibility audit on the snippet's QUOTED content:
 /// every char ASCII, and no `\u{` escape (byte strings cannot spell it).
 fn literal_is_ascii_bytes(lit_text: &str) -> bool {
-    let Some(start) = lit_text.find('"') else { return false };
-    let Some(end) = lit_text.rfind('"') else { return false };
+    let Some(start) = lit_text.find('"') else {
+        return false;
+    };
+    let Some(end) = lit_text.rfind('"') else {
+        return false;
+    };
     if end <= start {
         return false;
     }

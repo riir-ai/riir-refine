@@ -39,9 +39,7 @@
 use std::time::{Duration, Instant};
 
 use crate::code_egress::EgressConsent;
-use crate::escalation_manifest::{
-    EscalationManifest, EscalationRow, TargetKind, DEMOTE_ENV,
-};
+use crate::escalation_manifest::{EscalationManifest, EscalationRow, TargetKind, DEMOTE_ENV};
 
 /// The suite every healing rerank rides (the R7 freeze: ONE suite for v1 —
 /// one seat lane hosts the healing rerank expert; per-domain lanes wait
@@ -114,7 +112,9 @@ pub enum EscalatedFix {
         #[cfg(feature = "seat_rerank")]
         receipt: Option<crate::seat_rerank::SeatReceipt>,
     },
-    StoodByModelless { reason: StandReason },
+    StoodByModelless {
+        reason: StandReason,
+    },
 }
 
 impl EscalatedFix {
@@ -396,17 +396,10 @@ impl EscalationDispatch {
         #[cfg(feature = "seat_rerank")]
         if let Some(client) = self.seat.as_ref() {
             return match rerank_with_readiness_checked(
-                client,
-                snippet,
-                &presented,
-                deadline,
-                policy,
-                consent,
+                client, snippet, &presented, deadline, policy, consent,
             ) {
                 Ok(crate::seat_rerank::SeatAnswer::Pick {
-                    candidate,
-                    receipt,
-                    ..
+                    candidate, receipt, ..
                 }) => EscalatedFix::Answer {
                     fix: candidate,
                     source: "seat_pick",
@@ -517,14 +510,7 @@ pub fn rerank_with_readiness(
     policy: ReadinessPolicy,
 ) -> Result<crate::seat_rerank::SeatAnswer, crate::seat_rerank::SeatDecline> {
     let consent = EgressConsent::from_env();
-    rerank_with_readiness_checked(
-        client,
-        snippet,
-        pool,
-        deadline,
-        policy,
-        &consent,
-    )
+    rerank_with_readiness_checked(client, snippet, pool, deadline, policy, &consent)
 }
 
 /// The consent-injectable core. Retries ONLY the lazy seat's loading code
@@ -564,7 +550,6 @@ pub fn rerank_with_readiness_checked(
         policy.max_attempts
     )))
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -667,8 +652,7 @@ mod tests {
                         if let Some(pos) =
                             buf.windows(4).position(|w| w == b"\r\n\r\n").map(|p| p + 4)
                         {
-                            let head =
-                                String::from_utf8_lossy(&buf[..pos]).to_ascii_lowercase();
+                            let head = String::from_utf8_lossy(&buf[..pos]).to_ascii_lowercase();
                             let clen: usize = head
                                 .lines()
                                 .find_map(|l| l.strip_prefix("content-length:"))
@@ -933,7 +917,10 @@ mod tests {
                 other => panic!("expected the stand-down decline, got {other:?}"),
             }
             let n = drain(&rx).len();
-            assert!((1..=4).contains(&n), "requests bounded by the belt, got {n}");
+            assert!(
+                (1..=4).contains(&n),
+                "requests bounded by the belt, got {n}"
+            );
         }
 
         #[test]

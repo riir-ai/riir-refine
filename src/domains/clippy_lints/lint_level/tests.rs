@@ -36,7 +36,12 @@ const PKG: &str = "[package]\nname = \"x\"\nversion = \"0.1.0\"\nedition = \"202
 fn table_is_sorted_and_unique() {
     // `default_group` binary-searches — an unsorted row is a silent miss.
     for w in LINT_GROUPS.windows(2) {
-        assert!(w[0].0 < w[1].0, "LINT_GROUPS not strictly sorted at {:?} / {:?}", w[0], w[1]);
+        assert!(
+            w[0].0 < w[1].0,
+            "LINT_GROUPS not strictly sorted at {:?} / {:?}",
+            w[0],
+            w[1]
+        );
     }
 }
 
@@ -51,7 +56,10 @@ fn table_covers_exactly_the_fix_set() {
         );
     }
     for (lint, _) in LINT_GROUPS {
-        assert!(set.contains(lint), "LINT_GROUPS row {lint} is not in the fix set (dead row)");
+        assert!(
+            set.contains(lint),
+            "LINT_GROUPS row {lint} is not in the fix set (dead row)"
+        );
     }
 }
 
@@ -60,7 +68,10 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
     // Measured against clippy 0.1.98 (Issue 135): 15 FIXABLE + 5 VERIFY.
     // The issue's corpus-derived count said 13 and named two wrong lints —
     // a set, not a count, is what this pins.
-    let mut got: Vec<&str> = fix_set().into_iter().filter(|l| is_allow_by_default(l)).collect();
+    let mut got: Vec<&str> = fix_set()
+        .into_iter()
+        .filter(|l| is_allow_by_default(l))
+        .collect();
     got.sort_unstable();
     // Batch 230 note: the two new pedantic rows (assert_is_empty,
     // manual_bit_width) are AHEAD-OF-PIN (clippy 1.99) — their rows are
@@ -98,7 +109,10 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
     ];
     want.sort_unstable();
     assert_eq!(got, want);
-    assert!(!is_allow_by_default("unnecessary_map_or"), "style at 1.98 — the stale corpus label");
+    assert!(
+        !is_allow_by_default("unnecessary_map_or"),
+        "style at 1.98 — the stale corpus label"
+    );
     assert!(!is_allow_by_default("needless_return"));
 }
 
@@ -109,11 +123,18 @@ fn corpus_groups_agree_with_the_table() {
     for e in &corpus.entries {
         if let Some(g) = default_group(&e.lint_name) {
             if g != e.lint_group {
-                bad.push(format!("{}: corpus {} vs pinned {g}", e.lint_name, e.lint_group));
+                bad.push(format!(
+                    "{}: corpus {} vs pinned {g}",
+                    e.lint_name, e.lint_group
+                ));
             }
         }
     }
-    assert!(bad.is_empty(), "corpus lint_group disagrees with LINT_GROUPS:\n{}", bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "corpus lint_group disagrees with LINT_GROUPS:\n{}",
+        bad.join("\n")
+    );
 }
 
 #[test]
@@ -135,13 +156,23 @@ fn table_and_corpus_match_installed_driver() {
         .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
         .unwrap_or_default();
     if !out.status.success() || !version.contains("0.1.98") {
-        eprintln!("UNSEEN: clippy-driver is `{}` — not the pinned {PINNED_TOOLCHAIN}", version.trim());
+        eprintln!(
+            "UNSEEN: clippy-driver is `{}` — not the pinned {PINNED_TOOLCHAIN}",
+            version.trim()
+        );
         return;
     }
     let surface = crate::corpus_coverage::parse_lint_help(&String::from_utf8_lossy(&out.stdout));
-    assert!(surface.blind.is_none(), "driver surface blind: {:?}", surface.blind);
-    let driver: HashMap<&str, &str> =
-        surface.lints.iter().map(|r| (r.name.as_str(), r.group.as_str())).collect();
+    assert!(
+        surface.blind.is_none(),
+        "driver surface blind: {:?}",
+        surface.blind
+    );
+    let driver: HashMap<&str, &str> = surface
+        .lints
+        .iter()
+        .map(|r| (r.name.as_str(), r.group.as_str()))
+        .collect();
     let mut bad = Vec::new();
     for (lint, g) in LINT_GROUPS {
         // AHEAD-OF-PIN rows (Batch 230): the pinned 1.98.1 driver cannot
@@ -163,11 +194,18 @@ fn table_and_corpus_match_installed_driver() {
     for e in &corpus.entries {
         if let Some(d) = driver.get(e.lint_name.as_str()) {
             if *d != e.lint_group {
-                bad.push(format!("corpus {}: {} vs driver {d}", e.lint_name, e.lint_group));
+                bad.push(format!(
+                    "corpus {}: {} vs driver {d}",
+                    e.lint_name, e.lint_group
+                ));
             }
         }
     }
-    assert!(bad.is_empty(), "re-derive from the driver:\n{}", bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "re-derive from the driver:\n{}",
+        bad.join("\n")
+    );
 }
 
 /// The AHEAD-OF-PIN half of the driver check (Batch 230): every
@@ -181,7 +219,9 @@ fn ahead_of_pin_rows_match_the_1_99_driver() {
         .stdin(std::process::Stdio::null())
         .output()
     else {
-        eprintln!("UNSEEN: clippy-driver +1.99.0 not spawnable — the ahead-of-pin check did not run");
+        eprintln!(
+            "UNSEEN: clippy-driver +1.99.0 not spawnable — the ahead-of-pin check did not run"
+        );
         return;
     };
     let version = std::process::Command::new("clippy-driver")
@@ -197,9 +237,16 @@ fn ahead_of_pin_rows_match_the_1_99_driver() {
         return;
     }
     let surface = crate::corpus_coverage::parse_lint_help(&String::from_utf8_lossy(&out.stdout));
-    assert!(surface.blind.is_none(), "1.99 driver surface blind: {:?}", surface.blind);
-    let driver: HashMap<&str, &str> =
-        surface.lints.iter().map(|r| (r.name.as_str(), r.group.as_str())).collect();
+    assert!(
+        surface.blind.is_none(),
+        "1.99 driver surface blind: {:?}",
+        surface.blind
+    );
+    let driver: HashMap<&str, &str> = surface
+        .lints
+        .iter()
+        .map(|r| (r.name.as_str(), r.group.as_str()))
+        .collect();
     let mut bad = Vec::new();
     for lint in AHEAD_OF_PIN_1_99 {
         let want = default_group(lint).expect("ahead-of-pin row missing from LINT_GROUPS");
@@ -208,7 +255,11 @@ fn ahead_of_pin_rows_match_the_1_99_driver() {
             other => bad.push(format!("ahead row {lint}: {want} vs 1.99 driver {other:?}")),
         }
     }
-    assert!(bad.is_empty(), "re-derive ahead-of-pin rows from the +1.99.0 driver:\n{}", bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "re-derive ahead-of-pin rows from the +1.99.0 driver:\n{}",
+        bad.join("\n")
+    );
 }
 
 // ── T2: effective level ─────────────────────────────────────────────────
@@ -224,10 +275,14 @@ fn group_and_lint_directives_resolve_in_order() {
     assert!(levels(&[("pedantic", Level::Warn)]).enables("doc_markdown"));
     assert!(levels(&[("doc_markdown", Level::Deny)]).enables("doc_markdown"));
     assert!(levels(&[("doc_markdown", Level::Expect)]).enables("doc_markdown"));
-    assert!(!levels(&[("pedantic", Level::Warn), ("doc_markdown", Level::Allow)])
-        .enables("doc_markdown"));
-    assert!(levels(&[("doc_markdown", Level::Allow), ("pedantic", Level::Warn)])
-        .enables("doc_markdown"));
+    assert!(
+        !levels(&[("pedantic", Level::Warn), ("doc_markdown", Level::Allow)])
+            .enables("doc_markdown")
+    );
+    assert!(
+        levels(&[("doc_markdown", Level::Allow), ("pedantic", Level::Warn)])
+            .enables("doc_markdown")
+    );
     // A different allow-by-default group does not reach it.
     assert!(!levels(&[("nursery", Level::Warn)]).enables("doc_markdown"));
     assert!(levels(&[("nursery", Level::Warn)]).enables("use_self"));
@@ -239,8 +294,10 @@ fn group_and_lint_directives_resolve_in_order() {
 
 #[test]
 fn forbid_is_sticky() {
-    assert!(levels(&[("pedantic", Level::Forbid), ("doc_markdown", Level::Allow)])
-        .enables("doc_markdown"));
+    assert!(
+        levels(&[("pedantic", Level::Forbid), ("doc_markdown", Level::Allow)])
+            .enables("doc_markdown")
+    );
 }
 
 #[test]
@@ -253,7 +310,10 @@ fn manifest_section_and_inline_table_forms() {
     // Group at priority -1 sorts BEFORE the lint at 0 — the lint wins.
     assert_eq!(
         ds,
-        vec![directive("pedantic", Level::Warn), directive("doc_markdown", Level::Allow)]
+        vec![
+            directive("pedantic", Level::Warn),
+            directive("doc_markdown", Level::Allow)
+        ]
     );
     assert!(!LintLevels { directives: ds }.enables("doc_markdown"));
 }
@@ -268,17 +328,28 @@ fn manifest_equal_priority_puts_groups_first() {
 
 #[test]
 fn manifest_dotted_keys_workspace_flag_and_workspace_table() {
-    let pkg = "[lints]\nworkspace = true\nclippy.match-bool = \"warn\"\nrust.unsafe_code = \"deny\"\n";
+    let pkg =
+        "[lints]\nworkspace = true\nclippy.match-bool = \"warn\"\nrust.unsafe_code = \"deny\"\n";
     let (ds, inherits) = parse_manifest_lints(pkg, false);
     assert!(inherits);
     assert_eq!(ds, vec![directive("match_bool", Level::Warn)]);
 
     let ws = "[workspace]\nmembers = []\n[workspace.lints.clippy]\npedantic = \"warn\"\n\
               [lints.clippy]\nnursery = \"warn\"\n";
-    assert_eq!(parse_manifest_lints(ws, true).0, vec![directive("pedantic", Level::Warn)]);
-    assert_eq!(parse_manifest_lints(ws, false).0, vec![directive("nursery", Level::Warn)]);
+    assert_eq!(
+        parse_manifest_lints(ws, true).0,
+        vec![directive("pedantic", Level::Warn)]
+    );
+    assert_eq!(
+        parse_manifest_lints(ws, false).0,
+        vec![directive("nursery", Level::Warn)]
+    );
     // Other sections never leak in.
-    assert!(parse_manifest_lints("[dependencies]\npedantic = \"warn\"\n", false).0.is_empty());
+    assert!(
+        parse_manifest_lints("[dependencies]\npedantic = \"warn\"\n", false)
+            .0
+            .is_empty()
+    );
 }
 
 #[test]
@@ -308,13 +379,28 @@ fn crate_roots_follow_cargo_layout() {
     // No lib.rs, no main.rs → a src module has no known root.
     assert_eq!(crate_root_for(&pkg, &p("src/a.rs")), None);
     write(&p("src/main.rs"), "");
-    assert_eq!(crate_root_for(&pkg, &p("src/a/b.rs")), Some(p("src/main.rs")));
+    assert_eq!(
+        crate_root_for(&pkg, &p("src/a/b.rs")),
+        Some(p("src/main.rs"))
+    );
     write(&p("src/lib.rs"), "");
     assert_eq!(crate_root_for(&pkg, &p("src/a.rs")), Some(p("src/lib.rs")));
-    assert_eq!(crate_root_for(&pkg, &p("src/bin/t.rs")), Some(p("src/bin/t.rs")));
-    assert_eq!(crate_root_for(&pkg, &p("src/bin/t/m.rs")), Some(p("src/bin/t/main.rs")));
-    assert_eq!(crate_root_for(&pkg, &p("tests/it.rs")), Some(p("tests/it.rs")));
-    assert_eq!(crate_root_for(&pkg, &p("benches/b/x.rs")), Some(p("benches/b/main.rs")));
+    assert_eq!(
+        crate_root_for(&pkg, &p("src/bin/t.rs")),
+        Some(p("src/bin/t.rs"))
+    );
+    assert_eq!(
+        crate_root_for(&pkg, &p("src/bin/t/m.rs")),
+        Some(p("src/bin/t/main.rs"))
+    );
+    assert_eq!(
+        crate_root_for(&pkg, &p("tests/it.rs")),
+        Some(p("tests/it.rs"))
+    );
+    assert_eq!(
+        crate_root_for(&pkg, &p("benches/b/x.rs")),
+        Some(p("benches/b/main.rs"))
+    );
     assert_eq!(crate_root_for(&pkg, &p("build.rs")), Some(p("build.rs")));
     assert_eq!(crate_root_for(&pkg, &p("other/x.rs")), None);
     let _ = std::fs::remove_dir_all(&pkg);
@@ -342,7 +428,10 @@ fn resolver_issue_135_repro_crate_does_not_enable_doc_markdown() {
 fn resolver_reads_crate_root_attrs_for_a_module_file() {
     let pkg = scratch("rootattr");
     write(&pkg.join("Cargo.toml"), PKG);
-    write(&pkg.join("src/lib.rs"), "#![warn(clippy::pedantic)]\nmod m;\n");
+    write(
+        &pkg.join("src/lib.rs"),
+        "#![warn(clippy::pedantic)]\nmod m;\n",
+    );
     let m = pkg.join("src/m.rs");
     write(&m, "pub fn f() {}\n");
     let mut r = LevelResolver::new();
@@ -364,14 +453,23 @@ fn resolver_reads_package_and_inherited_workspace_lints() {
         "[workspace]\nmembers = [\"a\", \"b\"]\n[workspace.lints.clippy]\npedantic = \"warn\"\n",
     );
     let a = ws.join("a");
-    write(&a.join("Cargo.toml"), &format!("{PKG}[lints]\nworkspace = true\n"));
+    write(
+        &a.join("Cargo.toml"),
+        &format!("{PKG}[lints]\nworkspace = true\n"),
+    );
     write(&a.join("src/lib.rs"), "pub fn f() {}\n");
     let b = ws.join("b");
-    write(&b.join("Cargo.toml"), &format!("{PKG}[lints.clippy]\nnursery = \"warn\"\n"));
+    write(
+        &b.join("Cargo.toml"),
+        &format!("{PKG}[lints.clippy]\nnursery = \"warn\"\n"),
+    );
     write(&b.join("src/lib.rs"), "pub fn f() {}\n");
     assert!(resolve(&a.join("src/lib.rs")).enables("doc_markdown"));
     let lb = resolve(&b.join("src/lib.rs"));
-    assert!(!lb.enables("doc_markdown"), "b does not inherit the workspace table");
+    assert!(
+        !lb.enables("doc_markdown"),
+        "b does not inherit the workspace table"
+    );
     assert!(lb.enables("use_self"));
     let _ = std::fs::remove_dir_all(&ws);
 }
@@ -381,8 +479,15 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
     let none = LintLevels::default();
     let all_gated = gated_lints(&none, &[]);
     assert!(all_gated.contains(&"doc_markdown") && all_gated.contains(&"use_self"));
-    assert!(!all_gated.contains(&"needless_return"), "default-on lints are never gated");
-    assert_eq!(all_gated.len(), 24, "the pinned allow-by-default fix-set membership");
+    assert!(
+        !all_gated.contains(&"needless_return"),
+        "default-on lints are never gated"
+    );
+    assert_eq!(
+        all_gated.len(),
+        24,
+        "the pinned allow-by-default fix-set membership"
+    );
 
     let ped = gated_lints(&none, &["pedantic".to_string()]);
     assert!(!ped.contains(&"doc_markdown") && ped.contains(&"use_self"));
@@ -390,7 +495,10 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
 
     let crate_ped = levels(&[("pedantic", Level::Warn), ("doc_markdown", Level::Allow)]);
     let g = gated_lints(&crate_ped, &[]);
-    assert!(g.contains(&"doc_markdown"), "an explicit allow keeps it gated");
+    assert!(
+        g.contains(&"doc_markdown"),
+        "an explicit allow keeps it gated"
+    );
     assert!(!g.contains(&"match_bool"), "the crate enables pedantic");
     assert!(g.contains(&"use_self"), "nursery is not pedantic");
 }

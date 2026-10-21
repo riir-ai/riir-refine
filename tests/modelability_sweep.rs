@@ -58,6 +58,7 @@
 
 use std::collections::HashSet;
 
+use riir_rag::{Embedder, ModellessEmbedder};
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
 #[cfg(feature = "kernel_opt")]
@@ -74,7 +75,6 @@ use riir_refine::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
 use riir_refine::modelability::{
     rank_correlation, scaffold_value, ModelabilityConfig, ModelabilityReport,
 };
-use riir_rag::{Embedder, ModellessEmbedder};
 
 /// Ranked-list depth (mirrors the eval's `PROBE_TOP_K`; top-1 only needs 1,
 /// the extra depth keeps the measurement shaped like the eval's).

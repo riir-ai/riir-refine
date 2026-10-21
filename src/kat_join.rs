@@ -105,10 +105,8 @@ impl JoinEnv {
 /// bracketed default; the owner call 2026-10-12). `testnet` is absent and,
 /// since riir-dapps Plan 047, no longer a `config set` alias either (the
 /// deployment was torn down 2026-10-03).
-pub const JOIN_CHOICES: &[(JoinEnv, &str)] = &[
-    (JoinEnv::Mainnet, "mainnet"),
-    (JoinEnv::Devnet, "devnet"),
-];
+pub const JOIN_CHOICES: &[(JoinEnv, &str)] =
+    &[(JoinEnv::Mainnet, "mainnet"), (JoinEnv::Devnet, "devnet")];
 
 /// What the first-join choice decided.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,10 +176,9 @@ pub fn decide(
 ) -> Result<JoinDecision, JoinRefusal> {
     // An EMPTY value is "unset" (the SERVICE_URL_ENV_VAR spelling).
     let forced = match env_join {
-        Some(raw) if !raw.trim().is_empty() => Some(
-            JoinEnv::from_alias(raw)
-                .ok_or_else(|| JoinRefusal::BadJoinEnv(raw.to_string()))?,
-        ),
+        Some(raw) if !raw.trim().is_empty() => {
+            Some(JoinEnv::from_alias(raw).ok_or_else(|| JoinRefusal::BadJoinEnv(raw.to_string()))?)
+        }
         _ => None,
     };
     if configured {
@@ -420,8 +417,15 @@ mod tests {
     #[test]
     fn the_picker_offers_exactly_mainnet_and_devnet() {
         let aliases: Vec<&str> = JOIN_CHOICES.iter().map(|(_, a)| *a).collect();
-        assert_eq!(aliases, ["mainnet", "devnet"], "mainnet first: the bracketed default");
-        assert!(!aliases.contains(&"testnet"), "A2: testnet is never offered");
+        assert_eq!(
+            aliases,
+            ["mainnet", "devnet"],
+            "mainnet first: the bracketed default"
+        );
+        assert!(
+            !aliases.contains(&"testnet"),
+            "A2: testnet is never offered"
+        );
         assert_eq!(JoinEnv::from_alias("testnet"), None);
         // …and since riir-dapps Plan 047 the alias itself is RETIRED too:
         // two networks, mainnet + devnet — the word resolves to nothing.
@@ -468,7 +472,11 @@ mod tests {
         std::fs::write(dir.join("id_ed25519"), b"not-a-real-key\n").expect("seed the key file");
         assert!(account_key_present(&dir));
         let lines = join_lines(JoinEnv::Mainnet, true);
-        assert_eq!(lines.len(), 4, "the clause appends to the line, never a new one");
+        assert_eq!(
+            lines.len(),
+            4,
+            "the clause appends to the line, never a new one"
+        );
         assert!(
             lines[0].starts_with(
                 "recorded to config: mainnet (bookkeeping — commands dial mainnet by default; cargo refine --net mainnet targets mainnet)"
@@ -477,7 +485,9 @@ mod tests {
             lines[0]
         );
         assert!(
-            lines[0].contains("(this machine had an account key already; the pre-join default was mainnet)"),
+            lines[0].contains(
+                "(this machine had an account key already; the pre-join default was mainnet)"
+            ),
             "the clause: {}",
             lines[0]
         );
@@ -617,7 +627,10 @@ mod tests {
             "503 fail-closed",
             "settles nothing",
         ] {
-            assert!(posture.contains(needle), "posture must name {needle}: {posture}");
+            assert!(
+                posture.contains(needle),
+                "posture must name {needle}: {posture}"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -633,7 +646,10 @@ mod tests {
         assert_eq!(reads, 0, "the refusal must not read a closed pipe");
         assert_eq!(err, JoinRefusal::NonInteractive);
         let msg = err.message();
-        assert!(msg.contains(JOIN_ENV_ENV_VAR), "names the env remedy: {msg}");
+        assert!(
+            msg.contains(JOIN_ENV_ENV_VAR),
+            "names the env remedy: {msg}"
+        );
         assert!(msg.contains("--yes"), "names the flag remedy: {msg}");
         assert!(msg.contains("re-run"), "names the re-run: {msg}");
         assert!(
@@ -658,7 +674,10 @@ mod tests {
             !eof_msg.contains("not a terminal"),
             "the EOF arm must not claim a non-terminal stdin: {eof_msg}"
         );
-        assert!(eof_msg.contains(JOIN_ENV_ENV_VAR), "names the remedy: {eof_msg}");
+        assert!(
+            eof_msg.contains(JOIN_ENV_ENV_VAR),
+            "names the remedy: {eof_msg}"
+        );
         // A bare Enter is the bracketed default (mainnet).
         assert_eq!(
             answer_ask(true, &mut || Some("\n".to_string())).expect("decides"),
@@ -698,10 +717,7 @@ mod tests {
     #[test]
     fn the_prompt_block_is_the_owner_call_shape() {
         let mut lines = PROMPT_BLOCK.lines();
-        assert_eq!(
-            lines.next(),
-            Some("Join which kat network?  [mainnet]")
-        );
+        assert_eq!(lines.next(), Some("Join which kat network?  [mainnet]"));
         assert_eq!(
             lines.next(),
             Some(
@@ -710,12 +726,13 @@ mod tests {
         );
         assert_eq!(
             lines.next(),
-            Some(
-                "  devnet  \u{2014} the operator's test network: real pipeline, test credit"
-            )
+            Some("  devnet  \u{2014} the operator's test network: real pipeline, test credit")
         );
         assert_eq!(lines.next(), Some("> "));
-        assert!(lines.next().is_none(), "the block ends at the answer prompt");
+        assert!(
+            lines.next().is_none(),
+            "the block ends at the answer prompt"
+        );
         assert!(PROMPT_BLOCK.ends_with("> "));
     }
 
@@ -730,10 +747,10 @@ mod tests {
         assert_eq!(url.as_deref(), Some(JoinEnv::Devnet.url()));
         // …and validate_service_url accepts the stored value (the read
         // path re-validates; a record that fails reads as not-set).
-        assert!(riir_kat::kat_service_config::validate_service_url(
-            url.as_deref().expect("url")
-        )
-        .is_ok());
+        assert!(
+            riir_kat::kat_service_config::validate_service_url(url.as_deref().expect("url"))
+                .is_ok()
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

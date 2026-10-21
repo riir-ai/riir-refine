@@ -44,8 +44,18 @@ fn from_impl_exists(src: &str, dst: &str) -> bool {
     match src {
         "u8" => matches!(
             dst,
-            "u16" | "u32" | "u64" | "u128" | "usize" | "i16" | "i32" | "i64" | "i128" | "isize"
-                | "f32" | "f64"
+            "u16"
+                | "u32"
+                | "u64"
+                | "u128"
+                | "usize"
+                | "i16"
+                | "i32"
+                | "i64"
+                | "i128"
+                | "isize"
+                | "f32"
+                | "f64"
         ),
         "u16" => matches!(
             dst,

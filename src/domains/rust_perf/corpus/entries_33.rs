@@ -657,7 +657,6 @@ pub fn run_fixed(input: &Input) {
     }
 }
 
-
 #[cfg(feature = "rust_perf_bench")]
 #[allow(clippy::too_many_lines)] // data table: the harness is a single embedded raw string
 fn shift_mask_adjacency_check_bench_spec() -> BenchSpec {

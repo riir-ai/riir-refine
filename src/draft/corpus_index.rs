@@ -232,9 +232,8 @@ impl DiffAnchor {
     /// Fit the mean-corpus anchor over every chunk the index embeds — the
     /// SAME texts `index_chunks` embeds, so ā lives in the index's space.
     fn fit(chunks: &[RawChunk]) -> Self {
-        let mut b = katgpt_core::differential_anchor::AnchorBuilder::new(
-            riir_rag::query::LATENT_DIM,
-        );
+        let mut b =
+            katgpt_core::differential_anchor::AnchorBuilder::new(riir_rag::query::LATENT_DIM);
         for c in chunks {
             b.observe(&ModellessEmbedder.embed(&c.content));
         }

@@ -285,7 +285,10 @@ impl ClippyOracle {
         let dir = self.work_root.join(&hex[..16]);
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
-        crate::domains::probe_witness::write_probe_source(&dir.join("Cargo.toml"), ORACLE_CARGO_TOML)?;
+        crate::domains::probe_witness::write_probe_source(
+            &dir.join("Cargo.toml"),
+            ORACLE_CARGO_TOML,
+        )?;
         crate::domains::probe_witness::write_probe_source(&src_dir.join("lib.rs"), code)?;
         Ok(dir)
     }
@@ -315,11 +318,17 @@ impl ClippyOracle {
         let src_dir = dir.join("src");
         std::fs::create_dir_all(&src_dir).map_err(|e| format!("create_dir_all failed: {e}"))?;
         // Read-before-write, same contract as `prepare_crate` above.
-        crate::domains::probe_witness::write_probe_source(&dir.join("Cargo.toml"), ORACLE_CARGO_TOML)?;
+        crate::domains::probe_witness::write_probe_source(
+            &dir.join("Cargo.toml"),
+            ORACLE_CARGO_TOML,
+        )?;
         let mut lib = String::new();
         for (i, s) in snippets.iter().enumerate() {
             let _ = writeln!(lib, "pub mod s{i};");
-            crate::domains::probe_witness::write_probe_source(&src_dir.join(format!("s{i}.rs")), s)?;
+            crate::domains::probe_witness::write_probe_source(
+                &src_dir.join(format!("s{i}.rs")),
+                s,
+            )?;
         }
         crate::domains::probe_witness::write_probe_source(&src_dir.join("lib.rs"), &lib)?;
         Ok(dir)
@@ -882,7 +891,10 @@ mod tests {
 
         let code = "pub fn oracle_mtime_probe(x: i32) -> i32 { x }";
         let dir = oracle.prepare_crate(code).expect("prepare");
-        let (lib_t, toml_t) = (mtime(&dir.join("src/lib.rs")), mtime(&dir.join("Cargo.toml")));
+        let (lib_t, toml_t) = (
+            mtime(&dir.join("src/lib.rs")),
+            mtime(&dir.join("Cargo.toml")),
+        );
         let dir2 = oracle.prepare_crate(code).expect("prepare repeat");
         assert_eq!(dir, dir2, "same code must key the same crate dir");
         assert_eq!(
@@ -897,10 +909,18 @@ mod tests {
             "pub fn a(x: i32) -> i32 { x }",
             "pub fn b(x: u8) -> u8 { x }",
         ];
-        let bdir = oracle.prepare_batch_crate(&snippets).expect("batch prepare");
-        let (blib_t, bs0_t) = (mtime(&bdir.join("src/lib.rs")), mtime(&bdir.join("src/s0.rs")));
+        let bdir = oracle
+            .prepare_batch_crate(&snippets)
+            .expect("batch prepare");
+        let (blib_t, bs0_t) = (
+            mtime(&bdir.join("src/lib.rs")),
+            mtime(&bdir.join("src/s0.rs")),
+        );
         let bdir2 = oracle.prepare_batch_crate(&snippets).expect("batch repeat");
-        assert_eq!(bdir, bdir2, "same snippet sequence must key the same crate dir");
+        assert_eq!(
+            bdir, bdir2,
+            "same snippet sequence must key the same crate dir"
+        );
         assert_eq!(mtime(&bdir2.join("src/lib.rs")), blib_t);
         assert_eq!(mtime(&bdir2.join("src/s0.rs")), bs0_t);
 

@@ -394,7 +394,11 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
                 candidates.push(c);
             }
         }
-        candidates.sort_by(|a, b| a.struct_name.cmp(&b.struct_name).then(a.field_name.cmp(&b.field_name)));
+        candidates.sort_by(|a, b| {
+            a.struct_name
+                .cmp(&b.struct_name)
+                .then(a.field_name.cmp(&b.field_name))
+        });
     }
     // The measured serde boundary (Issue 934's `ConversationEntry` FP):
     // `skip_serializing_if` fields are conditionally-emitted output schema —
@@ -439,7 +443,11 @@ pub fn zero_external_read_fields(sources: &[(String, String)]) -> ZeroReadScan {
 /// current leg): parse → Default-impl candidates → interaction tally.
 fn scan_core(
     sources: &[(String, String)],
-) -> (Vec<FieldCandidate>, InteractionIndex, Vec<(String, syn::File)>) {
+) -> (
+    Vec<FieldCandidate>,
+    InteractionIndex,
+    Vec<(String, syn::File)>,
+) {
     let files: Vec<(String, syn::File)> = sources
         .iter()
         .filter_map(|(name, src)| syn::parse_file(src).ok().map(|f| (name.clone(), f)))
@@ -589,7 +597,9 @@ fn collect_field_docs(files: &[(String, syn::File)]) -> FieldDocs {
 /// stillborn lanes consume this precomputed set (P26: downgrade-not-suppress,
 /// the `[wire-const]` precedent — marked rows render at the weak
 /// `[documented-write-only]` annotation instead of strong severity).
-pub(crate) fn marked_write_only_fields(files: &[(String, syn::File)]) -> BTreeSet<(String, String)> {
+pub(crate) fn marked_write_only_fields(
+    files: &[(String, syn::File)],
+) -> BTreeSet<(String, String)> {
     collect_field_docs(files)
         .into_iter()
         .filter(|(_, doc)| is_deliberate_write_only_marker(doc))
@@ -645,23 +655,25 @@ pub(crate) fn is_deliberate_write_only_marker(doc: &str) -> bool {
 impl Visit<'_> for SerdeStructMarker<'_> {
     fn visit_item_struct(&mut self, item: &syn::ItemStruct) {
         let derives_deserialize = item.attrs.iter().any(|a| {
-            a.path().is_ident("derive")
-                && a.to_token_stream().to_string().contains("Deserialize")
+            a.path().is_ident("derive") && a.to_token_stream().to_string().contains("Deserialize")
         });
-        let has_serde_attr = item
-            .attrs
-            .iter()
-            .any(|a| a.path().is_ident("serde"))
-            || item.fields.iter().any(|f| {
-                f.attrs.iter().any(|a| a.path().is_ident("serde"))
-            });
+        let has_serde_attr = item.attrs.iter().any(|a| a.path().is_ident("serde"))
+            || item
+                .fields
+                .iter()
+                .any(|f| f.attrs.iter().any(|a| a.path().is_ident("serde")));
         if derives_deserialize || has_serde_attr {
             self.out.insert(item.ident.to_string());
-            let skip_fields = self.skip_ser_fields.entry(item.ident.to_string()).or_default();
+            let skip_fields = self
+                .skip_ser_fields
+                .entry(item.ident.to_string())
+                .or_default();
             for f in &item.fields {
                 if f.attrs.iter().any(|a| {
                     a.path().is_ident("serde")
-                        && a.to_token_stream().to_string().contains("skip_serializing_if")
+                        && a.to_token_stream()
+                            .to_string()
+                            .contains("skip_serializing_if")
                 }) {
                     skip_fields.insert(f.ident.as_ref().map_or_default(ToString::to_string));
                 }
@@ -698,10 +710,7 @@ pub(crate) fn collect_gpu_uniform_structs(files: &[(String, syn::File)]) -> BTre
                 if f.attrs.iter().any(|a| a.path().is_ident("uniform")) {
                     direct.extend(idents.iter().cloned());
                 }
-                field_types
-                    .entry(sname.clone())
-                    .or_default()
-                    .extend(idents);
+                field_types.entry(sname.clone()).or_default().extend(idents);
             }
         }
     }
@@ -1019,9 +1028,7 @@ pub enum WalkMode {
     /// came from `git ls-files --cached --others --exclude-standard` —
     /// GITIGNORED files excluded (the mining-corpus masquerade class),
     /// untracked non-ignored WIP files kept.
-    Git {
-        roots: usize,
-    },
+    Git { roots: usize },
     /// No directory root inside a git repository (or git missing from
     /// PATH, or explicit file arguments only) — plain filesystem walk,
     /// nothing excluded.
@@ -1105,7 +1112,10 @@ pub(crate) fn read_sources_walk(paths: &[PathBuf]) -> SourcesWalk {
     let mode = match (git_roots, plain_roots) {
         (g, 0) if g > 0 => WalkMode::Git { roots: g },
         (0, p) if p > 0 => WalkMode::Plain,
-        (g, p) if g + p > 0 => WalkMode::Mixed { git_roots: g, plain_roots: p },
+        (g, p) if g + p > 0 => WalkMode::Mixed {
+            git_roots: g,
+            plain_roots: p,
+        },
         _ => WalkMode::Plain,
     };
     let sources = rust_files
@@ -1167,7 +1177,12 @@ fn parse_ls_files_z(bytes: &[u8], base: &Path) -> Vec<PathBuf> {
 /// Run `git -C <dir> <args>`, capturing output. `None` when the binary
 /// cannot be spawned.
 fn git_output(dir: &Path, args: &[&str]) -> Option<std::process::Output> {
-    Command::new("git").arg("-C").arg(dir).args(args).output().ok()
+    Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .ok()
 }
 
 fn collect_rust_files(p: &Path, out: &mut Vec<PathBuf>) {
@@ -1289,7 +1304,14 @@ fn classify(
             }
         }
     }
-    classify_self_referential(candidates, ix, &mut report, gpu_uniform, test_rig, field_docs);
+    classify_self_referential(
+        candidates,
+        ix,
+        &mut report,
+        gpu_uniform,
+        test_rig,
+        field_docs,
+    );
     report
 }
 
@@ -1315,7 +1337,10 @@ fn classify_self_referential(
         // Every read under a tests-path file (the path axis — distinct
         // from cfg(test) confinement): the `[C2·test-rig]` input.
         let mut all_reads_in_tests_tree = true;
-        for f in candidates.iter().filter(|c| c.struct_name == cand.struct_name) {
+        for f in candidates
+            .iter()
+            .filter(|c| c.struct_name == cand.struct_name)
+        {
             let total = ix.field_reads.get(&f.field_name).copied().unwrap_or(0);
             let tree = ix
                 .field_reads_tests_tree
@@ -1479,11 +1504,10 @@ impl<'ast> Visit<'ast> for DefaultImplVisitor<'_> {
 }
 
 fn is_default_impl(impl_block: &syn::ItemImpl) -> bool {
-    impl_block.trait_.as_ref().is_some_and(|(_, p, _)| {
-        p.segments
-            .last()
-            .is_some_and(|s| s.ident == "Default")
-    })
+    impl_block
+        .trait_
+        .as_ref()
+        .is_some_and(|(_, p, _)| p.segments.last().is_some_and(|s| s.ident == "Default"))
 }
 
 /// Walks one `impl Default for T`, recording struct-literal fields.
@@ -1555,16 +1579,14 @@ fn tally_field_read(
 ) {
     *ix.field_reads.entry(name.to_string()).or_insert(0) += 1;
     if tests_tree {
-        *ix
-            .field_reads_tests_tree
+        *ix.field_reads_tests_tree
             .entry(name.to_string())
             .or_insert(0) += 1;
     }
     if in_test {
         *ix.field_reads_tests.entry(name.to_string()).or_insert(0) += 1;
     } else if let Some(ty) = internal_impl {
-        *ix
-            .field_reads_in_impl
+        *ix.field_reads_in_impl
             .entry((name.to_string(), ty.to_string()))
             .or_insert(0) += 1;
     }
@@ -1574,11 +1596,7 @@ fn tally_field_read(
 /// not `not` — `cfg(not(test))` is production-only, not test).
 pub(crate) fn attr_is_cfg_test(attr: &syn::Attribute) -> bool {
     if let syn::Meta::List(list) = &attr.meta {
-        let is_cfg = list
-            .path
-            .segments
-            .last()
-            .is_some_and(|s| s.ident == "cfg");
+        let is_cfg = list.path.segments.last().is_some_and(|s| s.ident == "cfg");
         if is_cfg {
             let tok = list.tokens.to_string();
             return tok.contains("test") && !tok.contains("not");
@@ -1762,7 +1780,12 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
             .unwrap_or_default();
         let is_assert = matches!(
             name.as_str(),
-            "assert" | "assert_eq" | "assert_ne" | "debug_assert" | "debug_assert_eq" | "debug_assert_ne"
+            "assert"
+                | "assert_eq"
+                | "assert_ne"
+                | "debug_assert"
+                | "debug_assert_eq"
+                | "debug_assert_ne"
         );
         let is_ne = name.ends_with("_ne");
         let suppress_const = self.suppress_const;
@@ -1794,9 +1817,7 @@ impl<'ast> Visit<'ast> for InteractionVisitor<'_> {
                             match (comparator.as_deref(), init_token.as_deref()) {
                                 // assert_eq!(c.f, <init token/const>)
                                 (Some(c), Some(t)) => c == t,
-                                (Some(c), None) => {
-                                    const_last.as_deref() == Some(c)
-                                }
+                                (Some(c), None) => const_last.as_deref() == Some(c),
                                 // assert!(c.f) / assert!(!c.f): truthiness —
                                 // default-eq iff the bool default agrees.
                                 (None, Some(t)) => {
@@ -1957,7 +1978,9 @@ fn init_token_of(expr: &Expr) -> Option<String> {
 fn is_screaming(seg: &str) -> bool {
     !seg.is_empty()
         && seg.chars().any(char::is_alphabetic)
-        && seg.chars().all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
+        && seg
+            .chars()
+            .all(|c| c.is_uppercase() || c == '_' || c.is_ascii_digit())
 }
 
 fn path_string(path: &syn::Path) -> String {
@@ -2028,7 +2051,7 @@ fn result_payload_is_unit(seg: &syn::PathSegment) -> bool {
     match args.args.first() {
         Some(syn::GenericArgument::Type(syn::Type::Tuple(t))) => t.elems.is_empty(),
         Some(syn::GenericArgument::Type(_)) => false, // real payload — flow-out
-        _ => true, // undecidable — conservative (check)
+        _ => true,                                    // undecidable — conservative (check)
     }
 }
 
@@ -2250,8 +2273,7 @@ mod tests {
 
     #[test]
     fn inert_knob_fires() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const AUDIT_RING_K: usize = 64;
 pub struct AuditConfig { pub ring_capacity: usize, pub live: usize }
 impl Default for AuditConfig {
@@ -2259,8 +2281,7 @@ impl Default for AuditConfig {
 }
 pub fn bound(_c: &AuditConfig) -> usize { AUDIT_RING_K }
 pub fn live(c: &AuditConfig) -> usize { c.live }
-",
-        );
+");
         assert_eq!(r.inert_knobs.len(), 1, "ring_capacity fires");
         assert_eq!(r.inert_knobs[0].candidate.field_name, "ring_capacity");
         assert!(r.inert_knobs[0].const_reads >= 1);
@@ -2272,16 +2293,14 @@ pub fn live(c: &AuditConfig) -> usize { c.live }
         // The seal-game-editor WaterParams shape (P28): the params struct is
         // the type of a #[uniform(0)]-bound field, its fields are const-inited
         // in Default and never read in Rust — the WGSL consumes the block.
-        let r = one(
-            r"
+        let r = one(r"
 pub const RING: usize = 64;
 #[derive(Clone, Copy)]
 pub struct Params { pub ring: usize, pub live: usize }
 impl Default for Params { fn default() -> Self { Self { ring: RING, live: RING } } }
 pub struct Material { #[uniform(0)] pub params: Params }
 pub fn bind(_m: &Material) -> usize { RING }
-",
-        );
+");
         assert!(
             r.inert_knobs.is_empty(),
             "gpu-bound struct downgrades out of [A]"
@@ -2294,8 +2313,7 @@ pub fn bind(_m: &Material) -> usize { RING }
     fn gpu_uniform_downgrade_is_transitive_through_nested_shader_structs() {
         // A ShaderType struct nested in the uniform block is flattened into
         // it — the closure descends through field types.
-        let r = one(
-            r"
+        let r = one(r"
 pub const INNER_K: usize = 8;
 #[derive(Clone, Copy)]
 pub struct Inner { pub k: usize }
@@ -2305,8 +2323,7 @@ pub struct Params { pub inner: Inner }
 impl Default for Params { fn default() -> Self { Self { inner: Inner::default() } } }
 pub struct Material { #[uniform(0)] pub params: Params }
 pub fn ext() -> usize { INNER_K }
-",
-        );
+");
         assert!(
             r.inert_knobs.is_empty(),
             "Inner is in the block transitively"
@@ -2318,30 +2335,26 @@ pub fn ext() -> usize { INNER_K }
     #[test]
     fn non_uniform_const_inited_field_still_fires() {
         // Precision guard: without the #[uniform(..)] bind the row stays [A].
-        let r = one(
-            r"
+        let r = one(r"
 pub const RING: usize = 64;
 #[derive(Clone, Copy)]
 pub struct Params { pub ring: usize }
 impl Default for Params { fn default() -> Self { Self { ring: RING } } }
 pub struct Material { pub params: Params }
 pub fn bind(_m: &Material) -> usize { RING }
-",
-        );
+");
         assert_eq!(r.inert_knobs.len(), 1);
         assert!(r.gpu_uniform.is_empty());
     }
 
     #[test]
     fn gpu_uniform_c2_downgrades_to_weak_annotation() {
-        let r = one(
-            r"
+        let r = one(r"
 #[derive(Clone, Copy)]
 pub struct Params { pub a: u32, pub b: u32 }
 impl Default for Params { fn default() -> Self { Self { a: 1, b: 2 } } }
 pub struct Material { #[uniform(0)] pub params: Params }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty());
         assert_eq!(r.self_referential.len(), 1);
         assert!(
@@ -2359,17 +2372,15 @@ pub struct Material { #[uniform(0)] pub params: Params }
     /// the row stays visible at the weak annotation.
     #[test]
     fn tests_tree_struct_c2_downgrades_to_test_rig() {
-        let r = audit_sources(&[
-            (
-                "tests/rig.rs".to_string(),
-                r"
+        let r = audit_sources(&[(
+            "tests/rig.rs".to_string(),
+            r"
 pub struct Rig { pub a: f32, pub b: f32 }
 impl Default for Rig { fn default() -> Self { Self { a: 1.0, b: 2.0 } } }
 fn probe(r: &Rig) -> f32 { if r.a > r.b { r.a } else { r.b } }
 "
-                .to_string(),
-            ),
-        ]);
+            .to_string(),
+        )]);
         assert_eq!(r.self_referential.len(), 1);
         assert!(
             r.self_referential[0].test_rig,
@@ -2386,10 +2397,9 @@ fn probe(r: &Rig) -> f32 { if r.a > r.b { r.a } else { r.b } }
     /// class is what C2 exists for.
     #[test]
     fn src_cfg_test_struct_stays_full_c2() {
-        let r = audit_sources(&[
-            (
-                "src/lib.rs".to_string(),
-                r"
+        let r = audit_sources(&[(
+            "src/lib.rs".to_string(),
+            r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 1.0 } } }
 #[cfg(test)]
@@ -2397,9 +2407,8 @@ mod tests {
     fn probe(p: &super::P) -> f32 { p.a }
 }
 "
-                .to_string(),
-            ),
-        ]);
+            .to_string(),
+        )]);
         assert_eq!(r.self_referential.len(), 1);
         assert!(!r.self_referential[0].test_rig);
         let rendered = r.render();
@@ -2443,65 +2452,62 @@ mod t {
 
     #[test]
     fn live_via_field_silent() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const K: usize = 4;
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: K } } }
 pub fn use_it(c: &C) -> usize { c.f }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty());
         assert!(r.assert_only.is_empty());
     }
 
     #[test]
     fn live_via_destructuring_silent_the_blind_spot_guard() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const K: usize = 4;
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: K } } }
 pub fn destructure(c: &C) -> usize { let C { f, .. } = c; f }
 pub fn also_const() -> usize { K }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty(), "destructuring counts as a read");
     }
 
     #[test]
     fn live_via_macro_silent() {
-        let r = one(
-            r#"
+        let r = one(r#"
 pub const K: usize = 4;
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: K } } }
 pub fn show(c: &C) { println!("{} {}", c.f, K); }
-"#,
+"#);
+        assert!(
+            r.inert_knobs.is_empty(),
+            "field read inside non-assert macro counts as a read"
         );
-        assert!(r.inert_knobs.is_empty(), "field read inside non-assert macro counts as a read");
     }
 
     #[test]
     fn array_length_use_fires_with_note() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const RING_K: usize = 8;
 pub struct C { pub ring: usize }
 impl Default for C { fn default() -> Self { Self { ring: RING_K } } }
 pub struct Entry { pub v: u32 }
 pub fn slot(_c: &C) -> [Entry; RING_K] { [Entry { v: 0 }; RING_K] }
-",
-        );
+");
         assert_eq!(r.inert_knobs.len(), 1);
-        assert!(r.inert_knobs[0].array_len_uses >= 1, "array-length use detected");
+        assert!(
+            r.inert_knobs[0].array_len_uses >= 1,
+            "array-length use detected"
+        );
         assert!(r.render().contains("structurally un-honorable"));
     }
 
     #[test]
     fn assert_only_fires_class_b() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct C { pub sc: bool }
 impl Default for C { fn default() -> Self { Self { sc: true } } }
 pub fn consume(_c: &C) -> u32 { 1 }
@@ -2511,8 +2517,7 @@ mod t {
     #[test]
     fn fake_coverage() { let c = C::default(); assert!(c.sc); }
 }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty());
         assert_eq!(r.assert_only.len(), 1, "assert-only field fires class B");
         assert_eq!(r.assert_only[0].candidate.field_name, "sc");
@@ -2525,8 +2530,7 @@ mod t {
     /// the `[wire-const]` precedent — still visible, never counted as [B]).
     #[test]
     fn documented_write_only_marker_downgrades_class_b() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct GuardVerdict {
     /// Deliberate, not dead payload — the layout pin counts this field.
     pub redirect: Option<u8>,
@@ -2540,21 +2544,22 @@ mod t {
     #[test]
     fn pin() { let v = GuardVerdict::default(); assert_eq!(v.redirect, None); }
 }
-",
-        );
+");
         assert!(r.assert_only.is_empty(), "marked row downgrades out of [B]");
         assert_eq!(r.documented_write_only.len(), 1);
         let rendered = r.render();
         assert!(rendered.contains("[documented-write-only]"));
-        assert!(rendered.contains("0 assert-only field(s) [B]"), "header [B] count is zero");
+        assert!(
+            rendered.contains("0 assert-only field(s) [B]"),
+            "header [B] count is zero"
+        );
     }
 
     /// The Issue-147 field-doc wording ("GOAT-gate territory") — the
     /// vocabulary the canonical specimen's field doc carries TODAY.
     #[test]
     fn goat_gate_territory_wording_downgrades() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct V {
     /// Phase-6 GOAT-gate territory — the channel is live and pinned.
     pub redirect: Option<u8>,
@@ -2566,10 +2571,13 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert_eq!(v.redirect, None); }
 }
-",
-        );
+");
         assert!(r.assert_only.is_empty());
-        assert_eq!(r.documented_write_only.len(), 1, "the Issue-147 wording downgrades");
+        assert_eq!(
+            r.documented_write_only.len(),
+            1,
+            "the Issue-147 wording downgrades"
+        );
     }
 
     /// The P29 class-A extension (the `HlaKarcConfig.delay_k` shape): a
@@ -2578,8 +2586,7 @@ mod t {
     /// instead of deletion-grade [A].
     #[test]
     fn documented_write_only_marker_downgrades_class_a() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const SHAPE_K: usize = 4;
 pub struct ForecasterConfig {
     /// Deliberate write-only forward surface — a future dispatcher picks
@@ -2594,14 +2601,19 @@ mod t {
     #[test]
     fn pin() { let c = ForecasterConfig::default(); assert_eq!(c.delay_k, SHAPE_K); }
 }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty(), "marked row downgrades out of [A]");
         assert_eq!(r.documented_write_only_knobs.len(), 1);
-        assert_eq!(r.documented_write_only_knobs[0].candidate.field_name, "delay_k");
+        assert_eq!(
+            r.documented_write_only_knobs[0].candidate.field_name,
+            "delay_k"
+        );
         let rendered = r.render();
         assert!(rendered.contains("[A·documented-write-only]"));
-        assert!(rendered.contains("0 inert knob(s) [A]"), "header [A] count is zero");
+        assert!(
+            rendered.contains("0 inert knob(s) [A]"),
+            "header [A] count is zero"
+        );
     }
 
     /// Precedence: a gpu-bound struct's const-inited field with a marker doc
@@ -2609,8 +2621,7 @@ mod t {
     /// is the more specific annotation.
     #[test]
     fn gpu_uniform_takes_precedence_over_write_only_marker() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const RING: usize = 64;
 #[derive(Clone, Copy)]
 pub struct Params {
@@ -2620,8 +2631,7 @@ pub struct Params {
 impl Default for Params { fn default() -> Self { Self { ring: RING } } }
 pub struct Material { #[uniform(0)] pub params: Params }
 pub fn bind(_m: &Material) -> usize { RING }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty());
         assert!(r.documented_write_only_knobs.is_empty(), "gpu-uniform wins");
         assert_eq!(r.gpu_uniform.len(), 1);
@@ -2629,8 +2639,7 @@ pub fn bind(_m: &Material) -> usize { RING }
 
     #[test]
     fn canonical_token_downgrades() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct V {
     /// documented-write-only: pinned wire surface.
     pub f: bool,
@@ -2642,8 +2651,7 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-",
-        );
+");
         assert!(r.assert_only.is_empty());
         assert_eq!(r.documented_write_only.len(), 1);
     }
@@ -2652,8 +2660,7 @@ mod t {
     /// for the whole type, not for one write-only member.
     #[test]
     fn struct_doc_marker_does_not_downgrade_field() {
-        let r = one(
-            r"
+        let r = one(r"
 /// Deliberate forward surface struct.
 pub struct V { pub f: bool }
 impl Default for V { fn default() -> Self { Self { f: true } } }
@@ -2663,9 +2670,12 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-",
+");
+        assert_eq!(
+            r.assert_only.len(),
+            1,
+            "struct doc does not speak for one field"
         );
-        assert_eq!(r.assert_only.len(), 1, "struct doc does not speak for one field");
         assert!(r.documented_write_only.is_empty());
     }
 
@@ -2673,8 +2683,7 @@ mod t {
     /// stays a class-B finding.
     #[test]
     fn plain_doc_stays_class_b() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct V {
     /// The redirect authority index.
     pub f: bool,
@@ -2686,16 +2695,14 @@ mod t {
     #[test]
     fn pin() { let v = V::default(); assert!(v.f); }
 }
-",
-        );
+");
         assert_eq!(r.assert_only.len(), 1, "unmarked doc stays [B]");
         assert!(r.documented_write_only.is_empty());
     }
 
     #[test]
     fn class_a_precedence_over_b() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const K: usize = 4;
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: K } } }
@@ -2705,35 +2712,34 @@ mod t {
     #[test]
     fn a() { let c = C::default(); assert_eq!(c.f, K); }
 }
-",
+");
+        assert_eq!(
+            r.inert_knobs.len(),
+            1,
+            "A wins over B (K is read inside the assert macro tokens)"
         );
-        assert_eq!(r.inert_knobs.len(), 1, "A wins over B (K is read inside the assert macro tokens)");
         assert!(r.assert_only.is_empty());
     }
 
     #[test]
     fn non_const_default_silent() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: 7 } } }
 pub fn x() -> usize { 7 }
-",
-        );
+");
         assert!(r.inert_knobs.is_empty());
         assert!(r.assert_only.is_empty(), "no asserts, no const path");
     }
 
     #[test]
     fn default_own_const_read_does_not_satisfy_condition_3() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const K: usize = 4;
 pub struct C { pub f: usize }
 impl Default for C { fn default() -> Self { Self { f: K } } }
 pub fn consume(_c: &C) -> u32 { 1 }
-",
-        );
+");
         assert!(
             r.inert_knobs.is_empty(),
             "the default's own RHS is not an external consumer"
@@ -2757,22 +2763,24 @@ impl Default for C { fn default() -> Self { Self { ring: RING_K } } }
                 r"pub fn bound() -> usize { crate::config::RING_K }".to_string(),
             ),
         ]);
-        assert_eq!(r.inert_knobs.len(), 1, "const read in another file satisfies condition 3");
+        assert_eq!(
+            r.inert_knobs.len(),
+            1,
+            "const read in another file satisfies condition 3"
+        );
         assert_eq!(r.files_scanned, 2);
     }
 
     #[test]
     fn qualified_default_no_cross_type_collision() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct A { pub n: usize }
 pub struct B { pub n: usize }
 impl Default for A { fn default() -> Self { Self { n: B::COUNT } } }
 impl Default for B { fn default() -> Self { Self { n: 1 } } }
 impl B { pub const COUNT: usize = 2; }
 pub fn other() -> usize { A::COUNT }
-",
-        );
+");
         // A::COUNT is read but is NOT B::COUNT — the qualified default must
         // not fire off a different type's const.
         assert!(r.inert_knobs.is_empty(), "no cross-type ::COUNT collision");
@@ -2780,14 +2788,12 @@ pub fn other() -> usize { A::COUNT }
 
     #[test]
     fn struct_update_silent() {
-        let r = one(
-            r"
+        let r = one(r"
 pub const K: usize = 4;
 pub struct C { pub f: usize, pub g: usize }
 impl Default for C { fn default() -> Self { Self { f: K, g: 1 } } }
 pub fn mk(base: C) -> C { C { g: 2, ..base } }
-",
-        );
+");
         // K is read only by the Default itself (suppressed) and the
         // functional-update `..base` is not a read of `f` — but condition 3
         // needs an EXTERNAL const read, which does not exist here.
@@ -2799,8 +2805,7 @@ pub fn mk(base: C) -> C { C { g: 2, ..base } }
         // The riir-chain shape that forced the precision clause: asserts
         // against COMPUTED expectations are behavioral coverage, not
         // default-equality fake coverage.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct V { pub backoff_ticks: u32, pub other: u32 }
 impl Default for V { fn default() -> Self { Self { backoff_ticks: 0, other: 0 } } }
 pub fn severe() -> u32 { 9 }
@@ -2816,9 +2821,11 @@ mod t {
     }
 }
 fn None_other() -> u32 { 3 }
-",
+");
+        assert!(
+            r.assert_only.is_empty(),
+            "behavioral asserts (computed expectations) are reads"
         );
-        assert!(r.assert_only.is_empty(), "behavioral asserts (computed expectations) are reads");
         assert!(r.inert_knobs.is_empty());
     }
 
@@ -2826,8 +2833,7 @@ fn None_other() -> u32 { 3 }
     fn none_comparator_matches_none_default() {
         // assert_eq!(v.redirect, None) with a `None` default IS default-
         // equality — the riir-chain redirect row (accurate B).
-        let r = one(
-            r"
+        let r = one(r"
 pub struct V { pub redirect: Option<u8> }
 impl Default for V { fn default() -> Self { Self { redirect: None } } }
 pub fn make() -> V { V::default() }
@@ -2837,16 +2843,18 @@ mod t {
     #[test]
     fn a() { let v = make(); assert_eq!(v.redirect, None); }
 }
-",
+");
+        assert_eq!(
+            r.assert_only.len(),
+            1,
+            "None-comparator against None default is class B"
         );
-        assert_eq!(r.assert_only.len(), 1, "None-comparator against None default is class B");
         assert_eq!(r.assert_only[0].candidate.field_name, "redirect");
     }
 
     #[test]
     fn negated_bool_shape_tautological_fires() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct C { pub off: bool }
 impl Default for C { fn default() -> Self { Self { off: false } } }
 #[cfg(test)]
@@ -2855,9 +2863,12 @@ mod t {
     #[test]
     fn a() { let c = C::default(); assert!(!c.off); }
 }
-",
+");
+        assert_eq!(
+            r.assert_only.len(),
+            1,
+            "assert!(!c.off) with default false is tautological"
         );
-        assert_eq!(r.assert_only.len(), 1, "assert!(!c.off) with default false is tautological");
     }
 
     // ── Class C2 — the self-referential config struct (Plan 125) ──
@@ -2866,8 +2877,7 @@ mod t {
     fn self_referential_validate_plus_tests_fires_c2() {
         // The PlasmaConfig shape: own validate() reads + test reads, nothing
         // external. Classes A/B are blind here (reads > 0).
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32, pub b: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5, b: 0.25 } } }
 impl P {
@@ -2879,8 +2889,7 @@ mod t {
     #[test]
     fn smoke() { let p = P::default(); assert!(p.a > p.b); }
 }
-",
-        );
+");
         assert_eq!(r.self_referential.len(), 1, "confined reads fire C2");
         assert_eq!(r.self_referential[0].struct_name, "P");
         assert_eq!(r.self_referential[0].fields.len(), 2);
@@ -2891,13 +2900,11 @@ mod t {
     fn never_plumbed_literal_default_fires_c2() {
         // Zero reads anywhere, literal init — A needs a const, B needs an
         // assert; only C2 sees the dead struct.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct Dead { pub x: u32 }
 impl Default for Dead { fn default() -> Self { Self { x: 3 } } }
 pub fn make() -> Dead { Dead::default() }
-",
-        );
+");
         assert_eq!(r.self_referential.len(), 1);
         assert!(r.inert_knobs.is_empty() && r.assert_only.is_empty());
     }
@@ -2907,8 +2914,7 @@ pub fn make() -> Dead { Dead::default() }
         // The seal-remake FeatureFlags shape: every field doc carries the
         // exact marker vocabulary, zero reads anywhere — the strong C2
         // verdict renders at the weak annotation instead.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct Flags {
     /// Forward surface: read from KV/env at load time once the runtime grows a loader (Issue 030).
     pub big: bool,
@@ -2916,28 +2922,26 @@ pub struct Flags {
     pub live: bool,
 }
 impl Default for Flags { fn default() -> Self { Self { big: true, live: false } } }
-",
-        );
+");
         assert_eq!(r.self_referential.len(), 1);
         let s = &r.self_referential[0];
         assert!(s.documented_write_only, "all fields marked → downgrade");
         assert!(r.render().contains("[C2·documented-write-only]"));
-        assert!(!r.render().contains("  [C2] "));    }
+        assert!(!r.render().contains("  [C2] "));
+    }
 
     #[test]
     fn c2_marker_needs_every_field_marked() {
         // One unmarked field keeps the strong verdict — the marker speaks
         // per field, the C2 verdict per struct.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct Mixed {
     /// Forward surface: read from KV/env once the loader lands.
     pub marked: bool,
     pub unmarked: bool,
 }
 impl Default for Mixed { fn default() -> Self { Self { marked: true, unmarked: false } } }
-",
-        );
+");
         assert_eq!(r.self_referential.len(), 1);
         let s = &r.self_referential[0];
         assert!(!s.documented_write_only, "one unmarked field → strong C2");
@@ -2946,15 +2950,16 @@ impl Default for Mixed { fn default() -> Self { Self { marked: true, unmarked: f
 
     #[test]
     fn external_read_suppresses_c2() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
 impl P { pub fn validate(&self) -> bool { self.a > 0.0 } }
 pub fn consume(c: &P) -> f32 { c.a * 2.0 }
-",
+");
+        assert!(
+            r.self_referential.is_empty(),
+            "one external read keeps the struct live"
         );
-        assert!(r.self_referential.is_empty(), "one external read keeps the struct live");
     }
 
     #[test]
@@ -2962,17 +2967,18 @@ pub fn consume(c: &P) -> f32 { c.a * 2.0 }
         // A read inside impl Engine (bool-returning, validate-SHAPED even) is
         // an EXTERNAL consumer of P — the impl-type check precedes the
         // method-shape check.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
 pub struct Engine { pub p: P }
 impl Engine {
     fn enabled(&self) -> bool { self.p.a > 0.0 }
 }
-",
+");
+        assert!(
+            r.self_referential.is_empty(),
+            "impl Engine reading .a is external for P"
         );
-        assert!(r.self_referential.is_empty(), "impl Engine reading .a is external for P");
     }
 
     #[test]
@@ -2983,8 +2989,7 @@ impl Engine {
         // (`fmt::Result`'s last path segment is `Result`) and fired C2 —
         // the katgpt-rs 772 three-FP class, probe-reproduced at HEAD
         // (ColinearityBatchGate / RuleBasedVerifier / EntropyConflictDetector).
-        let r = one(
-            r#"
+        let r = one(r#"
 pub struct Gate { pub threshold: f32 }
 impl Default for Gate { fn default() -> Self { Self { threshold: 0.5 } } }
 impl core::fmt::Display for Gate {
@@ -2992,8 +2997,7 @@ impl core::fmt::Display for Gate {
         write!(f, "{}", self.threshold)
     }
 }
-"#,
-        );
+"#);
         assert!(
             r.self_referential.is_empty(),
             "Display-impl reads are dispatchable, not self-referential: {:?}",
@@ -3007,16 +3011,14 @@ impl core::fmt::Display for Gate {
         // bool-returning method reading the config's fields — validate-
         // shaped, but a trait impl: any generic/dyn caller dispatches
         // through it, so the reads are external.
-        let r = one(
-            r"
+        let r = one(r"
 pub trait Verifier { fn accepts(&self) -> bool; }
 pub struct RuleBased { pub limit: u32 }
 impl Default for RuleBased { fn default() -> Self { Self { limit: 8 } } }
 impl Verifier for RuleBased {
     fn accepts(&self) -> bool { self.limit > 0 }
 }
-",
-        );
+");
         assert!(
             r.self_referential.is_empty(),
             "trait-impl validate-shaped reads are dispatchable: {:?}",
@@ -3031,8 +3033,7 @@ impl Verifier for RuleBased {
         // the fields' influence out through the return type. Pre-fix the
         // last-segment "Result" heuristic read these as validate-shaped
         // internal checks and fired C2.
-        let r = one(
-            r#"
+        let r = one(r#"
 pub struct Solver { pub eps_reg: f32 }
 impl Default for Solver { fn default() -> Self { Self { eps_reg: 1e-8 } } }
 impl Solver {
@@ -3040,8 +3041,7 @@ impl Solver {
         if self.eps_reg > 0.0 { Ok(vec![0.0; n]) } else { Err("bad".into()) }
     }
 }
-"#,
-        );
+"#);
         assert!(
             r.self_referential.is_empty(),
             "payload-Result reads flow the value out: {:?}",
@@ -3054,8 +3054,7 @@ impl Solver {
         // The boundary pin: `Result<(), E>` is a CHECK (unit payload —
         // nothing derived from the fields can leave) and stays
         // validate-shaped internal. The canonical C2 shape keeps firing.
-        let r = one(
-            r#"
+        let r = one(r#"
 pub struct Chk { pub tol: f32 }
 impl Default for Chk { fn default() -> Self { Self { tol: 0.5 } } }
 impl Chk {
@@ -3063,9 +3062,12 @@ impl Chk {
         if self.tol < 0.0 { Err("neg".into()) } else { Ok(()) }
     }
 }
-"#,
+"#);
+        assert_eq!(
+            r.self_referential.len(),
+            1,
+            "unit-Result checks stay internal"
         );
-        assert_eq!(r.self_referential.len(), 1, "unit-Result checks stay internal");
     }
 
     #[test]
@@ -3073,8 +3075,7 @@ impl Chk {
         // The boundary discipline: an INHERENT validate() keeps counting as
         // internal when it is the ONLY confinement left (the C2 canonical
         // shape unchanged by the refinement).
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32, pub b: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5, b: 0.25 } } }
 impl P {
@@ -3086,36 +3087,41 @@ mod t {
     #[test]
     fn smoke() { let p = P::default(); assert!(p.a > p.b); }
 }
-",
+");
+        assert_eq!(
+            r.self_referential.len(),
+            1,
+            "inherent-only confinement still fires C2"
         );
-        assert_eq!(r.self_referential.len(), 1, "inherent-only confinement still fires C2");
     }
 
     #[test]
     fn accessor_method_is_flow_out_not_internal() {
         // `fn a(&self) -> f32 { self.a }` exposes the value — the field IS
         // honored through the accessor; only validate-shaped returns confine.
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
 impl P { pub fn a(&self) -> f32 { self.a } }
-",
+");
+        assert!(
+            r.self_referential.is_empty(),
+            "accessor return = flow-out = external"
         );
-        assert!(r.self_referential.is_empty(), "accessor return = flow-out = external");
     }
 
     #[test]
     fn external_destructuring_suppresses_c2() {
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
 impl P { pub fn validate(&self) -> bool { self.a > 0.0 } }
 pub fn take(c: &P) -> f32 { let P { a, .. } = c; a }
-",
+");
+        assert!(
+            r.self_referential.is_empty(),
+            "external destructuring reads the fields"
         );
-        assert!(r.self_referential.is_empty(), "external destructuring reads the fields");
     }
 
     #[test]
@@ -3123,16 +3129,17 @@ pub fn take(c: &P) -> f32 { let P { a, .. } = c; a }
         // Name-matching: an unrelated struct's same-named field read
         // externally suppresses T's finding — the documented under-reporting
         // direction (never a false positive).
-        let r = one(
-            r"
+        let r = one(r"
 pub struct P { pub a: f32 }
 impl Default for P { fn default() -> Self { Self { a: 0.5 } } }
 pub struct Other { pub a: f32 }
 impl Default for Other { fn default() -> Self { Self { a: 1.0 } } }
 pub fn consume(o: &Other) -> f32 { o.a }
-",
+");
+        assert!(
+            r.self_referential.is_empty(),
+            "name-masking = false negative, pinned"
         );
-        assert!(r.self_referential.is_empty(), "name-masking = false negative, pinned");
     }
 
     #[test]
@@ -3155,7 +3162,11 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
                     .to_string(),
             ),
         ]);
-        assert_eq!(r.self_referential.len(), 1, "tests/-file reads are test-context");
+        assert_eq!(
+            r.self_referential.len(),
+            1,
+            "tests/-file reads are test-context"
+        );
     }
 
     // ── P25: the git-derived walk ─────────────────────────────────────
@@ -3194,10 +3205,8 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
     #[test]
     fn parse_ls_files_z_splits_joins_and_drops_missing() {
         let _base = Path::new("/base");
-        let here = std::env::temp_dir().join(format!(
-            "cfgaudit_p25_exists_{}.rs",
-            std::process::id()
-        ));
+        let here =
+            std::env::temp_dir().join(format!("cfgaudit_p25_exists_{}.rs", std::process::id()));
         fs::write(&here, b"x").unwrap();
         let rel = here
             .strip_prefix(std::env::temp_dir())
@@ -3246,10 +3255,22 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
         let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
         assert!(names.iter().any(|f| f.contains("tracked.rs")));
-        assert!(names.iter().any(|f| f.contains("wip.rs")), "untracked non-ignored WIP kept");
-        assert!(names.iter().any(|f| f.contains("tbi.rs")), "tracked-but-later-ignored kept");
-        assert!(names.iter().all(|f| !f.contains("ignored/")), "gitignored dir excluded");
-        assert!(names.iter().all(|f| !f.contains("y.gen.rs")), "gitignored glob excluded");
+        assert!(
+            names.iter().any(|f| f.contains("wip.rs")),
+            "untracked non-ignored WIP kept"
+        );
+        assert!(
+            names.iter().any(|f| f.contains("tbi.rs")),
+            "tracked-but-later-ignored kept"
+        );
+        assert!(
+            names.iter().all(|f| !f.contains("ignored/")),
+            "gitignored dir excluded"
+        );
+        assert!(
+            names.iter().all(|f| !f.contains("y.gen.rs")),
+            "gitignored glob excluded"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -3270,7 +3291,10 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
         let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
         assert!(names.iter().any(|f| f.contains("own.rs")));
-        assert!(names.iter().all(|f| !f.contains("foreign.rs")), "nested repo's files not ours");
+        assert!(
+            names.iter().all(|f| !f.contains("foreign.rs")),
+            "nested repo's files not ours"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -3284,7 +3308,10 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
         let names: Vec<&str> = walk.sources.iter().map(|(f, _)| f.as_str()).collect();
         assert!(names.iter().any(|f| f.contains("inner.rs")));
-        assert!(names.iter().all(|f| !f.contains("top.rs")), "cwd-limited listing, not repo-wide");
+        assert!(
+            names.iter().all(|f| !f.contains("top.rs")),
+            "cwd-limited listing, not repo-wide"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -3305,8 +3332,16 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         fs::write(tmp.join(".gitignore"), "b.rs\n").unwrap();
         fs::write(tmp.join("b.rs"), "pub fn b() {}").unwrap();
         let walk = read_sources_walk(&[tmp.join("b.rs")]);
-        assert_eq!(walk.mode, WalkMode::Plain, "explicit file(s) only — no dir roots");
-        assert_eq!(walk.sources.len(), 1, "caller intent wins over the ignore rule");
+        assert_eq!(
+            walk.mode,
+            WalkMode::Plain,
+            "explicit file(s) only — no dir roots"
+        );
+        assert_eq!(
+            walk.sources.len(),
+            1,
+            "caller intent wins over the ignore rule"
+        );
         let _ = fs::remove_dir_all(&tmp);
     }
 
@@ -3317,7 +3352,11 @@ fn t() { let p = P::default(); assert!(p.a > 0.0); }"
         fs::create_dir_all(tmp.join("corpus")).unwrap();
         fs::write(tmp.join("corpus/x.rs"), "pub fn x() {}").unwrap();
         let walk = read_sources_walk(&[tmp.join("corpus")]);
-        assert_eq!(walk.mode, WalkMode::Plain, "ignored dir named on purpose = intent");
+        assert_eq!(
+            walk.mode,
+            WalkMode::Plain,
+            "ignored dir named on purpose = intent"
+        );
         assert_eq!(walk.sources.len(), 1);
         let _ = fs::remove_dir_all(&tmp);
     }

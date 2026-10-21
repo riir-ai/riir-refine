@@ -96,7 +96,10 @@ mod tests {
     fn bare_flatten_untouched() {
         let input = "fn go(xs: Vec<Vec<u8>>) -> Vec<u8> { xs.into_iter().flatten().collect() }";
         let out = propose_fix("map_flatten", input);
-        assert!(out.is_none(), "flatten without map receiver must not fire: {out:?}");
+        assert!(
+            out.is_none(),
+            "flatten without map receiver must not fire: {out:?}"
+        );
     }
 
     #[test]

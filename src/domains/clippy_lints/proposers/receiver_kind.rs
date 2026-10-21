@@ -274,18 +274,14 @@ fn collect_safe_lets(
     impl<'ast> Visit<'ast> for Scan<'ast> {
         fn visit_pat(&mut self, p: &'ast Pat) {
             if let Pat::Ident(id) = p {
-                *self
-                    .binding_counts
-                    .entry(id.ident.to_string())
-                    .or_insert(0) += 1;
+                *self.binding_counts.entry(id.ident.to_string()).or_insert(0) += 1;
             }
             syn::visit::visit_pat(self, p);
         }
         fn visit_local(&mut self, l: &'ast Local) {
             if let (Pat::Ident(id), Some(init)) = (&l.pat, l.init.as_ref()) {
                 if id.mutability.is_none() {
-                    self.candidates
-                        .push((id.ident.to_string(), &*init.expr));
+                    self.candidates.push((id.ident.to_string(), &*init.expr));
                 }
             }
             syn::visit::visit_local(self, l);
@@ -394,8 +390,7 @@ mod tests {
             // Capture the FIRST fn's scope (multi-fn fixtures classify the
             // fn under test, which is written first).
             if self.scope.is_none() {
-                *self.scope =
-                    Some(ScopeKinds::from_fn(&f.sig, &f.block, self.src, self.rets));
+                *self.scope = Some(ScopeKinds::from_fn(&f.sig, &f.block, self.src, self.rets));
             }
         }
     }
@@ -408,7 +403,8 @@ mod tests {
 
     #[test]
     fn safe_let_from_param_alias_classifies() {
-        let k = kinds_of("fn f(x: Option<u8>) -> bool { let best = x; best.map_or(false, |v| v > 1) }");
+        let k =
+            kinds_of("fn f(x: Option<u8>) -> bool { let best = x; best.map_or(false, |v| v > 1) }");
         assert_eq!(k.let_kinds.get("best"), Some(&ReceiverKind::OptionLike));
     }
 
@@ -433,10 +429,7 @@ mod tests {
         let k = kinds_of("fn f(a: &[u8], b: &[u8]) -> bool { let best = a.iter().find(|x| **x > 1); let other = b.iter().find(|x| **x > 1); best = other; best.map_or(false, |x| *x > 2) }");
         assert_eq!(k.let_kinds.get("best"), None);
         // `other` is fine (never reassigned) — the guard is per-name.
-        assert_eq!(
-            k.let_kinds.get("other"),
-            Some(&ReceiverKind::OptionLike)
-        );
+        assert_eq!(k.let_kinds.get("other"), Some(&ReceiverKind::OptionLike));
     }
 
     #[test]

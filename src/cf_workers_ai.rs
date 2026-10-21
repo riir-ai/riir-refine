@@ -315,8 +315,12 @@ pub fn load_v2edit_full(data_dir: &Path, cap: usize) -> Result<Vec<Sample>, Stri
     let mut seen = std::collections::HashSet::new();
     for file in FILES {
         let p = data_dir.join(file);
-        let raw = std::fs::read_to_string(&p)
-            .map_err(|e| format!("cannot read {}: {e} — the harvest population must not be silently truncated", p.display()))?;
+        let raw = std::fs::read_to_string(&p).map_err(|e| {
+            format!(
+                "cannot read {}: {e} — the harvest population must not be silently truncated",
+                p.display()
+            )
+        })?;
         for (i, line) in raw.lines().enumerate() {
             if line.trim().is_empty() {
                 continue;
@@ -1820,8 +1824,7 @@ pub fn score_case(
     // compile reports an empty lint list (errors, not clippy codes), which
     // before the gate read as "strictly fewer + target resolved" for code
     // that never linted at all (Plan 225 T1.4 clause (a)).
-    s.strictly_fewer =
-        s.oracle_ran && s.after_compiled && s.findings_after < s.findings_before;
+    s.strictly_fewer = s.oracle_ran && s.after_compiled && s.findings_after < s.findings_before;
     s.target_resolved = s.oracle_ran
         && s.after_compiled
         && !after
@@ -3170,19 +3173,16 @@ mod tests {
     fn attr_silence_added_flags_a_new_allowance_not_a_preexisting_one() {
         let original = "pub fn f(v: &Vec<u8>) -> usize { v.len() }";
         // The heal: the attribute is ADDED — refused.
-        let silenced =
-            "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        let silenced = "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
         assert!(attr_silence_added(original, silenced));
         // The legitimate fix: no attribute anywhere — accepted.
         let healed = "pub fn f(v: &[u8]) -> usize { v.len() }";
         assert!(!attr_silence_added(original, healed));
         // A PRE-EXISTING allowance that survives the edit is not an addition.
-        let orig_with =
-            "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        let orig_with = "#[allow(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
         assert!(!attr_silence_added(orig_with, orig_with));
         // `expect` is the same class.
-        let expected =
-            "#[expect(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
+        let expected = "#[expect(clippy::ptr_arg)]\npub fn f(v: &Vec<u8>) -> usize { v.len() }";
         assert!(attr_silence_added(original, expected));
     }
 

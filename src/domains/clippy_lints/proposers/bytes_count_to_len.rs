@@ -38,7 +38,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -82,7 +85,10 @@ impl Collector<'_> {
             return None;
         }
         // `<receiver>.len()` — the receiver spine re-emits verbatim.
-        let receiver_src = self.source.get(byte_range(&bytes_call.receiver))?.to_string();
+        let receiver_src = self
+            .source
+            .get(byte_range(&bytes_call.receiver))?
+            .to_string();
         Some(format!("{receiver_src}.len()"))
     }
 }

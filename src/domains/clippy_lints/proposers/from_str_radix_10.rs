@@ -33,7 +33,7 @@
 use syn::visit::Visit;
 use syn::{ExprCall, File};
 
-use super::helpers::{byte_range, drops_interior_comment, is_postfix_safe, int_lit};
+use super::helpers::{byte_range, drops_interior_comment, int_lit, is_postfix_safe};
 use super::{edit, SourceEdit};
 
 /// The int primitives — exactly the types with BOTH a `from_str_radix`
@@ -44,7 +44,10 @@ const RADIX_TYPES: &[&str] = &[
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -67,7 +70,9 @@ impl Collector<'_> {
     fn try_rewrite(&self, c: &ExprCall) -> Option<String> {
         // Bare 2-segment path: `TY::from_str_radix` (no qself, no leading
         // colon, no path arguments on either segment).
-        let syn::Expr::Path(p) = &*c.func else { return None };
+        let syn::Expr::Path(p) = &*c.func else {
+            return None;
+        };
         if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 2 {
             return None;
         }

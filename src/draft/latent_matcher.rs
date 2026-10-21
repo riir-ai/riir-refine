@@ -11,8 +11,8 @@
 //! Phase 4/5 proposers). Composes riir-rag as-is; nothing here reimplements
 //! chunking, embedding, or retrieval.
 
-use riir_rag::Chunker;
 use riir_rag::ast_chunker::AstChunker;
+use riir_rag::Chunker;
 
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
@@ -1381,11 +1381,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .position(|s| s.start_line == 4 && s.end_line == 4)
             .expect("synthesized line-span at the gap");
         let span = &sugg[pos];
-        assert!(
-            span.anchored_rules
-                .iter()
-                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
-        );
+        assert!(span
+            .anchored_rules
+            .iter()
+            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
         assert!(
             span.by_domain.is_empty(),
             "no retrieval on a synthetic span"
@@ -1488,11 +1487,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .iter()
             .find(|s| s.start_line <= 2 && s.end_line >= 2)
             .expect("a chunk covers line 2");
-        assert!(
-            span.anchored_rules
-                .iter()
-                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
-        );
+        assert!(span
+            .anchored_rules
+            .iter()
+            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
         assert_eq!(span.hot.len(), 1, "both oracles attach independently");
         assert!(!span.heuristic_only);
     }
@@ -1569,10 +1567,9 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         let mut m = LatentMatcher::from_enabled_domains()
             .expect("build")
             .with_active_set(set);
-        assert!(
-            m.active_exclusions()
-                .excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top)
-        );
+        assert!(m
+            .active_exclusions()
+            .excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top));
         let (_, by_domain) = m.suggest_span(query, 3);
         // The domain ENTRY is not dropped — only the rule is gone, and the
         // freed top slot backfills from deeper ranks.
@@ -1631,11 +1628,9 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             "the demoted rule still anchors — oracle truth is not demotable"
         );
         // ...while the same rule left the similarity list of that span.
-        assert!(
-            !span
-                .by_domain
-                .iter()
-                .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return"))
-        );
+        assert!(!span
+            .by_domain
+            .iter()
+            .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return")));
     }
 }

@@ -114,7 +114,10 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         // unchanged. A bound iterator (`let it = x.chunks_exact(4);
         // it.map(..)`) has a `Path` receiver and never reaches here, which
         // is exactly the remainder()-safety boundary.
-        if matches!(m.method.to_string().as_str(), "remainder" | "into_remainder") {
+        if matches!(
+            m.method.to_string().as_str(),
+            "remainder" | "into_remainder"
+        ) {
             // Defensive: never rewrite the root under a remainder consumer,
             // even though these shapes need `&mut self` bindings to compile.
             return;
@@ -340,7 +343,10 @@ mod tests {
     fn chain_all_any_enumerate_fire() {
         let input = "fn f(bytes: &[u8]) -> bool { bytes.chunks_exact(4).all(|c| c[0] == 0) && bytes.chunks_exact(4).any(|c| c[1] > 0) }";
         let out = propose_fix("chunks_exact_to_as_chunks", input).expect("matched");
-        assert!(out.matches("as_chunks::<4>().0.iter()").count() == 2, "both roots rewritten: {out}");
+        assert!(
+            out.matches("as_chunks::<4>().0.iter()").count() == 2,
+            "both roots rewritten: {out}"
+        );
     }
 
     #[test]
@@ -375,8 +381,15 @@ mod tests {
         // directly).
         let input = "fn f(bytes: &[u8], out: &mut Vec<u32>) { for chunk in bytes.chunks_exact(4) { out.push(u32::from_le_bytes(chunk.try_into().unwrap())); } }";
         let out = propose_fix("chunks_exact_to_as_chunks", input).expect("matched");
-        assert_eq!(out.matches("as_chunks::<4>().0").count(), 1, "exactly one rewrite: {out}");
-        assert!(!out.contains(".0.iter()"), "legacy for shape gains no .iter(): {out}");
+        assert_eq!(
+            out.matches("as_chunks::<4>().0").count(),
+            1,
+            "exactly one rewrite: {out}"
+        );
+        assert!(
+            !out.contains(".0.iter()"),
+            "legacy for shape gains no .iter(): {out}"
+        );
     }
 
     #[test]
@@ -410,6 +423,9 @@ mod tests {
             !fixed.contains("zip(b.as_chunks"),
             "arg-position root must stay untouched: {fixed}"
         );
-        assert!(fixed.contains("a.as_chunks::<4>().0.iter()"), "receiver root rewritten: {fixed}");
+        assert!(
+            fixed.contains("a.as_chunks::<4>().0.iter()"),
+            "receiver root rewritten: {fixed}"
+        );
     }
 }

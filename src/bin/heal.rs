@@ -336,9 +336,7 @@ fn net_partition_url() -> String {
     let raw = riir_refine::kat_lease_client::service_url_for_command();
     match riir_refine::kat_net_pin::ensure_net_allowed(&raw) {
         Ok(url) => url,
-        Err(e)
-            if riir_refine::kat_net_pin::NET_PIN.starts_with("conflict") =>
-        {
+        Err(e) if riir_refine::kat_net_pin::NET_PIN.starts_with("conflict") => {
             eprintln!(
                 "net-pin conflict posture: local state partitions under the default net; \
                  hosted dials still refuse (net: {e})"
@@ -446,11 +444,8 @@ fn enforce_kat_soft_gate(args: &Args) {
     // measured 2026-10-12 split-brain: the gate judged the pre-split flat
     // ack (a stale balance, possibly another net's) while the sync
     // advanced the per-net one.
-    let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
-        &root,
-        &net_partition_url(),
-    )
-    .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+    let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(&root, &net_partition_url())
+        .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
     let (ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
     if let Some(w) = warning {
         eprintln!("{w}");
@@ -513,10 +508,7 @@ fn enforce_kat_soft_gate(args: &Args) {
     let account_id = riir_refine::kat_account::KatAccount::load(&account_dir)
         .map(|a| a.state().account_id.clone())
         .unwrap_or_default();
-    let top_up = riir_refine::kat_lease_client::payment_url(
-        &command_service_url(),
-        &account_id,
-    );
+    let top_up = riir_refine::kat_lease_client::payment_url(&command_service_url(), &account_id);
     eprintln!(
         "cargo refine: REFUSED — the account's last synced KAT balance is {balance} \
          (depleted) and this machine has not yet contributed (Issue 075 soft gate)."
@@ -643,13 +635,11 @@ fn mining_queued_batches() -> u32 {
         &net_partition_url(),
     )
     .join("outbox");
-    u32::try_from(
-        std::fs::read_dir(&outbox).map_or(0, |rd| {
-                rd.filter_map(std::result::Result::ok)
-                    .filter(|e| e.path().is_file())
-                    .count()
-            }),
-    )
+    u32::try_from(std::fs::read_dir(&outbox).map_or(0, |rd| {
+        rd.filter_map(std::result::Result::ok)
+            .filter(|e| e.path().is_file())
+            .count()
+    }))
     .unwrap_or(u32::MAX)
 }
 
@@ -1214,10 +1204,8 @@ fn run_unmine(purge_server: bool) {
     // The watermark goes (the pending-unsynced estimator reads it) — the
     // PER-NET one first (T1), then the pre-T1 flat one if it lingers.
     let url = command_service_url();
-    let watermark = riir_refine::kat_pending_estimator::SyncWatermark::net_path(
-        &resolve_heal_root(&[]),
-        &url,
-    );
+    let watermark =
+        riir_refine::kat_pending_estimator::SyncWatermark::net_path(&resolve_heal_root(&[]), &url);
     match std::fs::remove_file(&watermark) {
         Ok(()) => println!(
             "UNSYNC: cleared the sync watermark ({})",
@@ -1280,7 +1268,10 @@ fn run_stats_consent(on: bool, off: bool) {
         None
     }) else {
         println!("{}", before.status_line());
-        println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+        println!(
+            "record: {}",
+            kat_stats_consent::consent_path(&dir).display()
+        );
         println!();
         println!(
             "mining consent: separate — `--mine`/`--unmine` govern batch contributions; \
@@ -1310,7 +1301,10 @@ fn run_stats_consent(on: bool, off: bool) {
         } else {
             println!("stats: recorded — work-stats sharing is opted OUT for this machine");
         }
-        println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+        println!(
+            "record: {}",
+            kat_stats_consent::consent_path(&dir).display()
+        );
         println!();
         println!(
             "NOTHING is pushed for this lane while opted out, and nothing was ever deleted — \
@@ -1346,7 +1340,10 @@ fn run_stats_consent(on: bool, off: bool) {
     } else {
         println!("stats: recorded — work-stats sharing is opted IN for this machine");
     }
-    println!("record: {}", kat_stats_consent::consent_path(&dir).display());
+    println!(
+        "record: {}",
+        kat_stats_consent::consent_path(&dir).display()
+    );
     println!();
     println!(
         "WHAT future --fix runs share: one tiny signed row each — {{lane, rule_id, count}} \
@@ -1606,11 +1603,9 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // arg or cwd) when one exists. Per-repo by design (Plans 023/024) until
     // the server aggregates at Phase 1.
     let root = resolve_heal_root(paths);
-    let charge_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
-        &root,
-        &command_service_url(),
-    )
-    .join("kat_charge.json");
+    let charge_path =
+        riir_refine::kat_state_stamp::net_state_dir_for_url(&root, &command_service_url())
+            .join("kat_charge.json");
     let charge = std::fs::read_to_string(&charge_path).ok().and_then(|text| {
         match serde_json::from_str::<ChargeState>(&text) {
             Ok(charge) => Some(charge),
@@ -1721,7 +1716,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                                         "{}",
                                         riir_refine::kat_account_client::account_line(
                                             "grant:",
-                                            format!("already claimed (balance {})", kat(claim.balance_micro)),
+                                            format!(
+                                                "already claimed (balance {})",
+                                                kat(claim.balance_micro)
+                                            ),
                                         )
                                     );
                                 } else {
@@ -1778,7 +1776,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     // below, hence the cfg'd allow.)
     #[cfg_attr(not(feature = "kat_transport"), allow(unused_variables))]
     #[cfg(not(feature = "kat_transport"))]
-    let (served, history_acct): (Option<riir_refine::kat_account_client::ServiceBalance>, Option<String>) = {
+    let (served, history_acct): (
+        Option<riir_refine::kat_account_client::ServiceBalance>,
+        Option<String>,
+    ) = {
         if spent == 0 {
             println!(
                 "{}",
@@ -1818,9 +1819,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 }
                 return;
             }
-            eprintln!(
-                "kat account: the /history route did not answer — the /balance view follows"
-            );
+            eprintln!("kat account: the /history route did not answer — the /balance view follows");
         }
         match &served {
             Some(balance) => {
@@ -1876,7 +1875,10 @@ fn run_kat_update() {
                 }
             }
         }
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied {
+            epoch,
+            charge_micro_kat,
+        } => {
             println!(
                 "{}",
                 riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
@@ -2102,7 +2104,10 @@ fn maybe_auto_corpus() {
     let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
     match outcome.status {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {}
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied {
+            epoch,
+            charge_micro_kat,
+        } => {
             eprintln!(
                 "auto-corpus: {}",
                 riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
@@ -2137,7 +2142,10 @@ fn run_self_upgrade() {
     );
     match report {
         Ok(r) => {
-            println!("upgraded: cargo-refine {} → {}", r.from_version, r.to_version);
+            println!(
+                "upgraded: cargo-refine {} → {}",
+                r.from_version, r.to_version
+            );
             println!("  installed at {}", r.new_exe.display());
             println!(
                 "  old binary kept at {} (delete it when happy)",
@@ -2407,9 +2415,7 @@ fn push_mining_batch(
         .build(&rows);
     if sv {
         if ledger_id.is_some() {
-            println!(
-                "sync: network-bound signature armed (ledger instance bound)"
-            );
+            println!("sync: network-bound signature armed (ledger instance bound)");
         }
         println!(
             "sync payload: {} row(s) included, {} blocked, signed as {}… (batch {})",
@@ -2514,12 +2520,9 @@ fn push_mining_batch(
             // Real acceptance → advance the watermark (the pushed rows are
             // no longer "pending-unsynced").
             let wm = riir_refine::kat_pending_estimator::SyncWatermark::from_payload(&payload);
-            if let Err(e) = wm.save(
-                &riir_refine::kat_pending_estimator::SyncWatermark::net_path(
-                    &root,
-                    url,
-                ),
-            ) {
+            if let Err(e) =
+                wm.save(&riir_refine::kat_pending_estimator::SyncWatermark::net_path(&root, url))
+            {
                 eprintln!("sync: watermark save failed: {e}");
             }
             MinePush::Accepted {
@@ -2624,12 +2627,7 @@ fn run_kat_config(
                 // COMPUTED across the page, so the per-file diagnosis text
                 // starts on one column instead of drifting with the path
                 // lengths.
-                let name_w = files
-                    .iter()
-                    .map(|f| f.rel.len())
-                    .max()
-                    .unwrap_or(4)
-                    .max(4);
+                let name_w = files.iter().map(|f| f.rel.len()).max().unwrap_or(4).max(4);
                 println!("state files (under {}):", root.join(".refine").display());
                 for f in &files {
                     let line = riir_refine::kat_adopt::diagnosis_line(f);
@@ -2732,8 +2730,10 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
         None => default_url.to_string(),
     };
     if let Err(e) = riir_refine::kat_net_pin::ensure_net_allowed(&net_url) {
-        eprintln!("config adopt-state {net}: the target {net_url} is outside this build's net \
-             pin — {e}");
+        eprintln!(
+            "config adopt-state {net}: the target {net_url} is outside this build's net \
+             pin — {e}"
+        );
         std::process::exit(2);
     }
 
@@ -2809,7 +2809,11 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
             AdoptVerdict::Adopt => match adopt::adopt_into_net(&root, f, &net_url) {
                 Ok(dest) => {
                     adopted += 1;
-                    println!("  adopted {} → {} (oracle-confirmed)", f.rel, dest.display());
+                    println!(
+                        "  adopted {} → {} (oracle-confirmed)",
+                        f.rel,
+                        dest.display()
+                    );
                 }
                 Err(e) => refused.push(format!("{}: {e}", f.rel)),
             },
@@ -2846,7 +2850,10 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
             }
         }
     }
-    println!("adopted {adopted} file(s); {} refused (discard-only or wrong net)", refused.len());
+    println!(
+        "adopted {adopted} file(s); {} refused (discard-only or wrong net)",
+        refused.len()
+    );
     for r in &refused {
         eprintln!("  REFUSED {r}");
     }
@@ -2871,8 +2878,11 @@ fn adopt_oracle_facts(url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<S
 
     let unreach = |why: String| (HostFacts::unreachable(), Some(why));
     let Ok(account) = KatAccount::load(&KatAccount::default_dir()) else {
-        return unreach("no local account key — the oracle cannot query a ledger without \
-             one (run `cargo refine login` first)".into());
+        return unreach(
+            "no local account key — the oracle cannot query a ledger without \
+             one (run `cargo refine login` first)"
+                .into(),
+        );
     };
     let Some(hex) =
         riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
@@ -2904,17 +2914,13 @@ fn adopt_oracle_facts(url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<S
 /// file reads discard-only with the rebuild named (the honest degradation
 /// — never a silent pretend-match).
 #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
-fn adopt_oracle_facts(
-    _url: &str,
-) -> (
-    riir_refine::kat_adopt::HostFacts,
-    Option<String>,
-) {
+fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<String>) {
     (
         riir_refine::kat_adopt::HostFacts::unreachable(),
         Some(
             "this build has no service transport — rebuild with \
-             --features kat_service,kat_transport to run the oracle".into(),
+             --features kat_service,kat_transport to run the oracle"
+                .into(),
         ),
     )
 }
@@ -3001,7 +3007,10 @@ fn run_kat_sync() {
         riir_refine::kat_lease_client::UpdateStatus::NotModified => {
             println!("corpus lease: up to date (epoch {current}, 304 — no charge)");
         }
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied {
+            epoch,
+            charge_micro_kat,
+        } => {
             println!(
                 "{}",
                 riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
@@ -3071,11 +3080,7 @@ fn run_kat_claim(sig: Option<&str>) {
         }
     }
     let root = resolve_heal_root(&[]);
-    match queue_claim(
-        &root,
-        &command_service_url(),
-        &req,
-    ) {
+    match queue_claim(&root, &command_service_url(), &req) {
         Ok(path) => {
             println!(
                 "claim: service plane not yet live — queued locally at {}",
@@ -3083,10 +3088,7 @@ fn run_kat_claim(sig: Option<&str>) {
             );
             println!(
                 "claim: the queued claim submits when the Worker lands; payment page: {}",
-                riir_refine::kat_lease_client::payment_url(
-                    &command_service_url(),
-                    &req.account_id
-                )
+                riir_refine::kat_lease_client::payment_url(&command_service_url(), &req.account_id)
             );
             println!("claim: nothing is minted client-side (the server ledger is the authority)");
         }
@@ -3156,13 +3158,18 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
                 Ok(key) => {
                     if let Some(posture) = restake {
                         riir_refine::kat_stake_client::restake_flow(
-                            &transport, &key, posture, &account_id,
+                            &transport,
+                            &key,
+                            posture,
+                            &account_id,
                         )
                     } else {
                         riir_refine::kat_stake_client::redeem_flow(&transport, &key, &account_id)
                     }
                 }
-                Err(e) => Err(format!("stake: account key unreadable ({e}) — run `cargo refine login`")),
+                Err(e) => Err(format!(
+                    "stake: account key unreadable ({e}) — run `cargo refine login`"
+                )),
             };
             match flow {
                 Ok(line) => println!("{line}"),
@@ -3303,10 +3310,16 @@ fn run_kat_unstake() {
         // Issue 096 (riir-dapps): the unstake route is signature-gated —
         // the request signs with the account key (the claim key).
         let flow = match account.signing_key() {
-            Ok(key) => {
-                riir_refine::kat_stake_client::unstake_flow(&transport, &key, &account_id, &root, now_unix)
-            }
-            Err(e) => Err(format!("unstake: account key unreadable ({e}) — run `cargo refine login`")),
+            Ok(key) => riir_refine::kat_stake_client::unstake_flow(
+                &transport,
+                &key,
+                &account_id,
+                &root,
+                now_unix,
+            ),
+            Err(e) => Err(format!(
+                "unstake: account key unreadable ({e}) — run `cargo refine login`"
+            )),
         };
         match flow {
             Ok(line) => println!("{line}"),
@@ -3442,11 +3455,7 @@ fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::Pa
         };
         let v: serde_json::Value = serde_json::from_slice(&body).ok()?;
         let (rows, _, _) = riir_refine::kat_protocol_pay::parse_purchases_page(&v).ok()?;
-        Some(
-            rows.into_iter()
-                .filter(|r| r.status == "open")
-                .collect(),
-        )
+        Some(rows.into_iter().filter(|r| r.status == "open").collect())
     }
     #[cfg(not(feature = "kat_transport"))]
     {
@@ -3483,9 +3492,7 @@ fn topup_checkout_line(
 ) -> String {
     let mins = now_unix.saturating_sub(row.created_unix) / 60;
     let kat = match kat_micro {
-        Some(m) => {
-            riir_refine::kat_payreq_client::render_kat(i64::try_from(m).unwrap_or(i64::MAX))
-        }
+        Some(m) => riir_refine::kat_payreq_client::render_kat(i64::try_from(m).unwrap_or(i64::MAX)),
         None => "? KAT".to_string(),
     };
     let mut reference = row.reference.clone();
@@ -3569,17 +3576,17 @@ fn fetch_service_history() -> riir_refine::kat_protocol_account::ServiceHistory 
     );
     let transport = HttpAccountTransport::new(&command_service_url(), 10);
     match transport.get_history(&acct_hex, 1) {
-        HttpResponse::Ok(body) => {
-            match riir_refine::kat_protocol_account::parse_history(&body) {
-                Ok(h) => h,
-                Err(e) => {
-                    eprintln!("kat: {e} — try `cargo refine account --history`");
-                    std::process::exit(1);
-                }
+        HttpResponse::Ok(body) => match riir_refine::kat_protocol_account::parse_history(&body) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("kat: {e} — try `cargo refine account --history`");
+                std::process::exit(1);
             }
-        }
+        },
         _ => {
-            eprintln!("kat: the service did not answer /history — try `cargo refine account --history`");
+            eprintln!(
+                "kat: the service did not answer /history — try `cargo refine account --history`"
+            );
             std::process::exit(1);
         }
     }
@@ -3739,8 +3746,16 @@ fn run_kat_topup_void(seq: u64) {
                 assert_eq!(v.status.as_str(), "voided");
                 println!("checkout seq {} voided — the slot is free; a payment already scanned still lands on your account until its TTL", v.seq);
             }
-            topup::TopupOutcome::Refused { status, code, detail } => {
-                eprintln!("topup: the void was refused ({status} {}{})", code.as_deref().unwrap_or("no code"), detail);
+            topup::TopupOutcome::Refused {
+                status,
+                code,
+                detail,
+            } => {
+                eprintln!(
+                    "topup: the void was refused ({status} {}{})",
+                    code.as_deref().unwrap_or("no code"),
+                    detail
+                );
                 std::process::exit(1);
             }
             topup::TopupOutcome::Unexpected(e) => {
@@ -3809,7 +3824,11 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
                     }
                 }
             }
-            topup::TopupOutcome::Refused { status, code, detail } => {
+            topup::TopupOutcome::Refused {
+                status,
+                code,
+                detail,
+            } => {
                 eprintln!(
                     "topup: the show was refused ({status} {}{})",
                     code.as_deref().unwrap_or("no code"),
@@ -3877,7 +3896,11 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
         let transport = topup::HttpTopupTransport::new(&url, 10);
         let catalog = match topup::catalog(&transport) {
             topup::TopupOutcome::Ok(c) => c,
-            topup::TopupOutcome::Refused { status, code, detail } => {
+            topup::TopupOutcome::Refused {
+                status,
+                code,
+                detail,
+            } => {
                 if code.as_deref() == Some(riir_refine::kat_protocol_pay::CODE_UNCONFIGURED) {
                     eprintln!(
                         "topup: the pay lane is not armed on {host_label} ({status}) — the \
@@ -3956,7 +3979,9 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                         std::process::exit(2);
                     })
                 } else {
-                    eprintln!("topup: choose a pack — pass --pack N (agents/CI never guess a price)");
+                    eprintln!(
+                        "topup: choose a pack — pass --pack N (agents/CI never guess a price)"
+                    );
                     std::process::exit(2);
                 }
             }
@@ -4007,7 +4032,11 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                     }
                 }
             }
-            topup::TopupOutcome::Refused { status, code, detail } => {
+            topup::TopupOutcome::Refused {
+                status,
+                code,
+                detail,
+            } => {
                 match code.as_deref() {
                     Some(riir_refine::kat_protocol_pay::CODE_RATE_LIMITED) => {
                         // The 429 dead-end's fix (issue 126): an open
@@ -4093,9 +4122,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                                                 );
                                                 let mut out = std::io::stdout();
                                                 let picked = riir_refine::tty_pick::pick(
-                                                    &rows,
-                                                    &mut keys,
-                                                    &mut out,
+                                                    &rows, &mut keys, &mut out,
                                                 );
                                                 // Restore the terminal BEFORE
                                                 // anything else prints (the QR
@@ -4480,11 +4507,9 @@ fn run_kat_refill(wait_secs: u64) {
             // T7 (riir-kat Issue 003): the PER-NET ack — the same file the
             // gate reads (the flat write here fed a file nothing reads
             // since the per-net move — the 2026-10-12 split-brain family).
-            let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
-                &root,
-                &command_service_url(),
-            )
-            .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            let ack_path =
+                riir_refine::kat_state_stamp::net_state_dir_for_url(&root, &command_service_url())
+                    .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
             let (mut ack, warning) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = warning {
                 eprintln!("{w}");
@@ -4775,7 +4800,7 @@ fn run_kat_corpus_pr(
     submit: bool,
     root: &std::path::Path,
 ) {
-    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
+    use riir_refine::kat_corpus_pr::{run_corpus_pr, CorpusPrArgs, HttpCorpusPrWire};
 
     let args = CorpusPrArgs {
         src: src.unwrap_or_default().to_string(),
@@ -4809,13 +4834,13 @@ fn run_kat_corpus_pr(
     feature = "latent_retrieval"
 ))]
 fn run_kat_replay() {
+    use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
     use riir_refine::kat_replay::{
-        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
+        judge_item, toolchain_display, toolchain_fingerprint, ReplayVerdict,
     };
     use riir_refine::kat_replay_client::{
-        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
+        accept_line, request_lease, submit_verdict, unhex32, HttpReplayTransport,
     };
-    use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
 
     // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
     const REPLAY_LEASE_LIMIT: u32 = 16;
@@ -4945,7 +4970,11 @@ fn run_kat_replay() {
                 ReplayOutcomeWire::Tamper
             }
             ReplayVerdict::Judgment(j) => {
-                let pass = if j.compile_ok && j.oracle_resolved { "PASS" } else { "FAIL" };
+                let pass = if j.compile_ok && j.oracle_resolved {
+                    "PASS"
+                } else {
+                    "FAIL"
+                };
                 println!(
                     "replay:   {span_short}… {pass} (compile {}, oracle {}, heal {}/1000, \
                      created {}/1000{})",
@@ -6678,7 +6707,9 @@ fn parse_args() -> Args {
             "--necessity-smoke" => args.necessity_smoke = true,
             "--necessity-rule" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--necessity-rule requires a value (the corpus rule id, e.g. map_clone)");
+                    eprintln!(
+                        "--necessity-rule requires a value (the corpus rule id, e.g. map_clone)"
+                    );
                     usage();
                 };
                 args.necessity_rule = Some(value);
@@ -6804,7 +6835,9 @@ fn parse_args() -> Args {
             }
             "--groups" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--groups requires a value (pedantic,nursery,restriction,cargo or all)");
+                    eprintln!(
+                        "--groups requires a value (pedantic,nursery,restriction,cargo or all)"
+                    );
                     usage();
                 };
                 for g in value.split(',').map(str::trim).filter(|g| !g.is_empty()) {
@@ -6970,14 +7003,20 @@ fn parse_args() -> Args {
             // composition (hash + row + body + caps), no network, no
             // secrets read.
             "--dry-run"
-                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)) =>
+                if matches!(
+                    args.command,
+                    Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+                ) =>
             {
                 args.tuna_dry_run = true;
             }
             // The `--gov <id>` pin — skips the listing's unique-hash
             // mandate resolution.
             "--gov"
-                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)) =>
+                if matches!(
+                    args.command,
+                    Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+                ) =>
             {
                 let Some(value) = it.next() else {
                     eprintln!("--gov requires a proposal id");
@@ -7059,9 +7098,7 @@ fn parse_args() -> Args {
             "--no-update" => args.no_update = true,
             "--url" => {
                 let Some(value) = it.next() else {
-                    eprintln!(
-                        "--url requires a value (devnet | mainnet | an absolute https url)"
-                    );
+                    eprintln!("--url requires a value (devnet | mainnet | an absolute https url)");
                     usage();
                 };
                 args.config_url = Some(value);
@@ -7160,9 +7197,9 @@ fn parse_args() -> Args {
                 eprintln!("unknown flag {flag:?}");
                 usage();
             }
-            "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake"
-            | "unstake" | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet"
-            | "wetrun" | "config" | "replay" | "corpus-pr" | "get" | "send"
+            "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake" | "unstake"
+            | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet" | "wetrun"
+            | "config" | "replay" | "corpus-pr" | "get" | "send"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -7244,15 +7281,19 @@ fn parse_args() -> Args {
             // Issue 129 §9: the `get|send <amt> tuna [account]` positionals
             // — the buy precedent's consumed-inline shape.
             tuna_amount_word
-                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
-                    && args.tuna_amount.is_none()
+                if matches!(
+                    args.command,
+                    Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+                ) && args.tuna_amount.is_none()
                     && args.tuna_unit.is_none() =>
             {
                 args.tuna_amount = Some(tuna_amount_word.to_string());
             }
             tuna_unit_word
-                if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
-                    && args.tuna_amount.is_some()
+                if matches!(
+                    args.command,
+                    Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+                ) && args.tuna_amount.is_some()
                     && args.tuna_unit.is_none() =>
             {
                 args.tuna_unit = Some(tuna_unit_word.to_string());
@@ -7293,7 +7334,10 @@ fn parse_args() -> Args {
     // Issue 129 §9: the airdrop verbs' words belong to them, --gov/--dry-run
     // ride only with them, and `get` takes no recipient word.
     if (args.tuna_amount.is_some() || args.tuna_unit.is_some() || args.tuna_target.is_some())
-        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+        && !matches!(
+            args.command,
+            Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+        )
     {
         eprintln!(
             "the amount/unit/recipient words require the `get` or `send` command — cargo refine send <amt> tuna [account-id]"
@@ -7301,13 +7345,19 @@ fn parse_args() -> Args {
         usage();
     }
     if args.tuna_gov.is_some()
-        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+        && !matches!(
+            args.command,
+            Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+        )
     {
         eprintln!("--gov requires the `get` or `send` command");
         usage();
     }
     if args.tuna_dry_run
-        && !matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
+        && !matches!(
+            args.command,
+            Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+        )
     {
         eprintln!("--dry-run requires the `get`, `send` or `wetrun` command");
         usage();
@@ -7317,15 +7367,29 @@ fn parse_args() -> Args {
         usage();
     }
     if args.command == Some(KatCommand::TunaSend) && args.tuna_target.is_none() {
-        eprintln!("send: a recipient account id is required — cargo refine send <amt> tuna <account-id>");
+        eprintln!(
+            "send: a recipient account id is required — cargo refine send <amt> tuna <account-id>"
+        );
         usage();
     }
-    if matches!(args.command, Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend))
-        && !args.paths.is_empty()
+    if matches!(
+        args.command,
+        Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+    ) && !args.paths.is_empty()
     {
-        eprintln!("{}: unexpected extra words — cargo refine {} <amt> tuna [account-id]",
-            if args.command == Some(KatCommand::TunaGet) { "get" } else { "send" },
-            if args.command == Some(KatCommand::TunaGet) { "get" } else { "send" });
+        eprintln!(
+            "{}: unexpected extra words — cargo refine {} <amt> tuna [account-id]",
+            if args.command == Some(KatCommand::TunaGet) {
+                "get"
+            } else {
+                "send"
+            },
+            if args.command == Some(KatCommand::TunaGet) {
+                "get"
+            } else {
+                "send"
+            }
+        );
         usage();
     }
     if args.topup_pick_latest && !matches!(args.command, Some(KatCommand::Topup | KatCommand::Buy))
@@ -7336,7 +7400,9 @@ fn parse_args() -> Args {
     if args.command == Some(KatCommand::Buy)
         && (args.topup_pack.is_some() || args.topup_show.is_some() || args.topup_void.is_some())
     {
-        eprintln!("buy: --pack/--show/--void belong to `topup` — buy resolves the pack from the amount");
+        eprintln!(
+            "buy: --pack/--show/--void belong to `topup` — buy resolves the pack from the amount"
+        );
         usage();
     }
     if args.command == Some(KatCommand::Buy) && !args.paths.is_empty() {
@@ -7371,15 +7437,26 @@ fn parse_args() -> Args {
     // topup field (the same flag spells pay/faucet's QR; the command
     // decides which checkout surface it means). `--no-qr` is topup/buy
     // only. Both at once is no defensible resolution (the --stats shape).
-    if matches!(args.command, Some(KatCommand::Topup) | Some(KatCommand::Buy)) && args.pay_qr {
+    if matches!(
+        args.command,
+        Some(KatCommand::Topup) | Some(KatCommand::Buy)
+    ) && args.pay_qr
+    {
         args.topup_qr = true;
         args.pay_qr = false;
     }
     if args.topup_qr && args.topup_no_qr {
-        eprintln!("--qr and --no-qr conflict — choose one (the default is auto: a TTY renders the QR)");
+        eprintln!(
+            "--qr and --no-qr conflict — choose one (the default is auto: a TTY renders the QR)"
+        );
         std::process::exit(2);
     }
-    if args.topup_no_qr && !matches!(args.command, Some(KatCommand::Topup) | Some(KatCommand::Buy)) {
+    if args.topup_no_qr
+        && !matches!(
+            args.command,
+            Some(KatCommand::Topup) | Some(KatCommand::Buy)
+        )
+    {
         eprintln!("--no-qr requires the `topup` or `buy` command");
         usage();
     }
@@ -7407,7 +7484,9 @@ fn parse_args() -> Args {
     }
     if let Some(net) = &args.config_adopt_state {
         if args.command != Some(KatCommand::Config) || args.config_set {
-            eprintln!("adopt-state is a `config` subcommand: cargo refine config adopt-state <net>");
+            eprintln!(
+                "adopt-state is a `config` subcommand: cargo refine config adopt-state <net>"
+            );
             usage();
         }
         if net != "devnet" && net != "mainnet" {
@@ -7481,9 +7560,7 @@ fn parse_args() -> Args {
         usage();
     }
     if args.purge_server && !args.unmine {
-        eprintln!(
-            "--purge-server requires --unmine (it is the server-side half of opting out)"
-        );
+        eprintln!("--purge-server requires --unmine (it is the server-side half of opting out)");
         usage();
     }
     if args.blind && !args.secret_scan {
@@ -7627,11 +7704,7 @@ fn parse_args() -> Args {
 /// the two hand-mirrored lists drifted exactly as the --misses regression
 /// predicted (see [`standalone_mode`] for the --version casualty).
 fn is_bare_posture(args: &Args) -> bool {
-    !args.suggest
-        && !args.fix
-        && !args.fix_compile
-        && !args.repo_posture
-        && !standalone_mode(args)
+    !args.suggest && !args.fix && !args.fix_compile && !args.repo_posture && !standalone_mode(args)
 }
 
 /// Every standalone early-return mode — the flags that need NO scan paths
@@ -8131,8 +8204,7 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
                     })
                     .collect();
                 if !states.is_empty() {
-                    let section =
-                        riir_refine::rescue_mine::render_misses_section(&states);
+                    let section = riir_refine::rescue_mine::render_misses_section(&states);
                     print_report_capped(&section, limit);
                 }
             }
@@ -8548,8 +8620,7 @@ fn run_gate_calibration() {
                 if line.is_empty() {
                     continue;
                 }
-                match serde_json::from_str::<riir_refine::frontier_report::FrontierSnapshot>(line)
-                {
+                match serde_json::from_str::<riir_refine::frontier_report::FrontierSnapshot>(line) {
                     Ok(snap) => snapshots.push(snap),
                     Err(_) => bad_rows += 1,
                 }
@@ -8612,8 +8683,11 @@ fn run_necessity_bench(
                 .find(|r| &r.rule == rule && r.arm == "disabled")
             {
                 Some(row) => {
-                    let verdict =
-                        sb::necessity::disabled_verdict(false, row.solo_resolved, row.delta_resolved);
+                    let verdict = sb::necessity::disabled_verdict(
+                        false,
+                        row.solo_resolved,
+                        row.delta_resolved,
+                    );
                     let reading = match verdict {
                         "LOAD-BEARING" => "evidence AGAINST demotion — the composition uses it",
                         "DECORATIVE" | "NO-EVIDENCE" => {
@@ -8904,10 +8978,7 @@ fn finish_score_bench(
     // rule→domain table. Computed BEFORE the rows are moved into the record.
     let demo = riir_refine::demonstrability::from_rule_outcomes(&rule_read.rows);
     rec = rec.with_rule_outcomes(rule_read.rows);
-    print!(
-        "{}",
-        riir_refine::demonstrability::render_column(&demo)
-    );
+    print!("{}", riir_refine::demonstrability::render_column(&demo));
     rec = rec.with_demonstrability(demo);
     // Issue 098 T4 — the cross-OOO axis on the console (the row carries it
     // too, via HistoryRecord::cross_ooo; one shared cached measurement).
@@ -9612,7 +9683,11 @@ const CORPUS_DOMAIN_TABLE: &[(&str, &str, &str)] = &[
     ("dist", "src/domains/dist/corpus.rs", "    rule("),
     // Plan 134: shader_perf uses the same positional `rule()` shorthand —
     // same needle convention.
-    ("shader_perf", "src/domains/shader_perf/corpus.rs", "    rule("),
+    (
+        "shader_perf",
+        "src/domains/shader_perf/corpus.rs",
+        "    rule(",
+    ),
 ];
 
 /// Whether the domain's feature is compiled into THIS binary (the honest
@@ -9667,7 +9742,8 @@ fn runtime_corpus_count(domain: &str) -> Option<u32> {
         ),
         #[cfg(feature = "shader_perf")]
         "shader_perf" => Some(
-            u32::try_from(riir_refine::build_shader_seed_corpus().entries.len()).unwrap_or(u32::MAX),
+            u32::try_from(riir_refine::build_shader_seed_corpus().entries.len())
+                .unwrap_or(u32::MAX),
         ),
         _ => None,
     }
@@ -9738,7 +9814,8 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
     use riir_refine::corpus_coverage as cc;
 
-    let driver = std::env::var("RIIR_REFINE_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
+    let driver =
+        std::env::var("RIIR_REFINE_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
 
     // The lint surface. `-W help` prints to stdout and exits 0 with no
     // input; stdin is nulled so a driver that DOES want one fails fast
@@ -9952,13 +10029,25 @@ fn other_domain_rule_ids() -> std::collections::BTreeMap<String, Vec<String>> {
             {
                 out.insert(
                     $name.to_string(),
-                    $build().entries.iter().map(|e| e.rule_id().to_string()).collect(),
+                    $build()
+                        .entries
+                        .iter()
+                        .map(|e| e.rule_id().to_string())
+                        .collect(),
                 );
             }
         };
     }
-    domain_rules!("rust_perf", "rust_perf", riir_refine::build_perf_seed_corpus);
-    domain_rules!("kernel_opt", "kernel_opt", riir_refine::build_kernel_seed_corpus);
+    domain_rules!(
+        "rust_perf",
+        "rust_perf",
+        riir_refine::build_perf_seed_corpus
+    );
+    domain_rules!(
+        "kernel_opt",
+        "kernel_opt",
+        riir_refine::build_kernel_seed_corpus
+    );
     domain_rules!("sec", "sec", riir_refine::build_sec_seed_corpus);
     domain_rules!("docker", "docker", riir_refine::build_docker_seed_corpus);
     domain_rules!("dist", "dist", riir_refine::build_dist_seed_corpus);
@@ -10679,10 +10768,7 @@ fn main() {
                 } else {
                     None
                 };
-                let ask = parse_buy_ask(
-                    args.buy_amount.as_deref(),
-                    args.buy_unit.as_deref(),
-                );
+                let ask = parse_buy_ask(args.buy_amount.as_deref(), args.buy_unit.as_deref());
                 run_kat_topup(ask, qr_mode, args.topup_pick_latest);
             }
             KatCommand::Faucet => run_kat_faucet(args.pay_qr),
@@ -10746,7 +10832,11 @@ fn main() {
             // the build stamp (the three facts + the rebuild).
             #[cfg(feature = "admin")]
             KatCommand::TunaGet | KatCommand::TunaSend => {
-                let verb = if cmd == KatCommand::TunaGet { "get" } else { "send" };
+                let verb = if cmd == KatCommand::TunaGet {
+                    "get"
+                } else {
+                    "send"
+                };
                 // `run` exits the process itself (the house command
                 // convention) — never returns.
                 riir_refine::tuna_admin::run(&riir_refine::tuna_admin::TunaAdminArgs {
@@ -10774,7 +10864,11 @@ fn main() {
                 // set, and the rebuild — the three facts the 00:21 diagnosis
                 // had to reconstruct by hand.
                 riir_refine::build_stamp::refuse(
-                    if cmd == KatCommand::Update { "update" } else { "sync" },
+                    if cmd == KatCommand::Update {
+                        "update"
+                    } else {
+                        "sync"
+                    },
                     &["kat_transport"],
                 );
             }
@@ -11243,7 +11337,10 @@ fn main() {
                     let jrows = riir_refine::frontier_report::journey_summary(&jrows_all, 12);
                     print!(
                         "{}",
-                        riir_refine::frontier_report::render_journey_section(&jrows, jrows_all.len())
+                        riir_refine::frontier_report::render_journey_section(
+                            &jrows,
+                            jrows_all.len()
+                        )
                     );
                     // Issue 102 T1 — the contribution-fade section
                     // (report-first; the live state REFUSES until ≥3
@@ -11260,10 +11357,8 @@ fn main() {
                                         serde_json::from_str::<serde_json::Value>(l).ok()
                                     })
                                     .filter_map(|v| {
-                                        let generation = u8::try_from(
-                                            v.get("generation")?.as_u64()?,
-                                        )
-                                        .ok()?;
+                                        let generation =
+                                            u8::try_from(v.get("generation")?.as_u64()?).ok()?;
                                         let ts = v.get("ts")?.as_str()?.to_string();
                                         let outcomes = v
                                             .get("rule_outcomes")?
@@ -11272,16 +11367,16 @@ fn main() {
                                             .filter_map(|o| {
                                                 Some(riir_refine::frontier_report::FadeOutcome {
                                                     rule: o.get("rule")?.as_str()?.to_string(),
-                                                    resolved:
-                                                        u32::try_from(o.get("resolved")?.as_u64()?)
-                                                            .ok()?,
-                                                    persist:
-                                                        u32::try_from(o.get("persist")?.as_u64()?)
-                                                            .ok()?,
-                                                    edits: u32::try_from(
-                                                        o.get("edits")?.as_u64()?,
+                                                    resolved: u32::try_from(
+                                                        o.get("resolved")?.as_u64()?,
                                                     )
                                                     .ok()?,
+                                                    persist: u32::try_from(
+                                                        o.get("persist")?.as_u64()?,
+                                                    )
+                                                    .ok()?,
+                                                    edits: u32::try_from(o.get("edits")?.as_u64()?)
+                                                        .ok()?,
                                                 })
                                             })
                                             .collect();
@@ -11613,14 +11708,9 @@ fn main() {
                 .frame_delta_pct
                 .unwrap_or(riir_refine::frame_time_report::DEFAULT_DELTA_PCT);
             let pre_rows = riir_refine::frame_time_report::budget_rows(&pre, args.frame_budget);
-            let post_rows =
-                riir_refine::frame_time_report::budget_rows(&post, args.frame_budget);
+            let post_rows = riir_refine::frame_time_report::budget_rows(&post, args.frame_budget);
             let report = riir_refine::frame_time_report::diff_ab(
-                &pre_rows,
-                &post_rows,
-                threshold,
-                pre_fail,
-                post_fail,
+                &pre_rows, &post_rows, threshold, pre_fail, post_fail,
             );
             print!("{}", report.render());
             if report.blind() {
@@ -12358,9 +12448,7 @@ fn main() {
     #[cfg(feature = "demonstrability_gate")]
     {
         if let Some(root) = resolve_corpus_repo_root() {
-            if let Some(policy) =
-                riir_refine::demonstrability_gate::DepthPolicy::standing(&root)
-            {
+            if let Some(policy) = riir_refine::demonstrability_gate::DepthPolicy::standing(&root) {
                 println!(
                     "demonstrability gate: armed from {} — per-domain depth factors: {}",
                     riir_refine::demonstrability_gate::STANDING_RELPATH,
@@ -12544,8 +12632,10 @@ fn main() {
                 out_of_kat,
                 Some(deadline),
             );
-            if let riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } =
-                outcome.status
+            if let riir_refine::kat_lease_client::UpdateStatus::Applied {
+                epoch,
+                charge_micro_kat,
+            } = outcome.status
             {
                 // The visible charge line + the matcher rebuild onto E+1 for
                 // THIS run (rule 1: proceed on the freshest applied epoch).
@@ -12595,7 +12685,8 @@ fn main() {
     // the map stays empty and the tail skips). Accumulated beside the
     // n_fixed_* counters so the two can never disagree about what a run
     // "fixed".
-    let mut fixstat_rules: std::collections::BTreeMap<String, u32> = std::collections::BTreeMap::new();
+    let mut fixstat_rules: std::collections::BTreeMap<String, u32> =
+        std::collections::BTreeMap::new();
     // ── the clippy-fed oracle anchors (2026-09-13 retrieval-miss intake):
     // a real clippy JSON stream force-includes its diagnostic spans/rules
     // AHEAD of similarity ranking — the top-N gate must never eat a span
@@ -12611,87 +12702,88 @@ fn main() {
     // the stale-profile hazard; unkeyed = loud disclosure), top hot spans
     // printed in the run summary. T0.2 wires the anchoring (`[hot: …]`
     // spans ahead of similarity ranking) — the flag pins the wire early.
-    let hotpath_spans: Option<Vec<riir_refine::hotpath_report::HotSpan>> =
-        if let Some(path) = args.hotpath_json.as_ref() {
-            let text = match std::fs::read_to_string(path) {
-                Ok(t) => t,
-                // The clippy-feed precedent: a requested oracle that cannot
-                // be read is a HARD error — a silent fallback to ranking-only
-                // would re-create the confident miss this flag exists to
-                // prevent.
-                Err(e) => {
-                    eprintln!("hotpath feed: cannot read {path}: {e}");
-                    std::process::exit(2);
-                }
-            };
-            let report: riir_refine::hotpath_report::HotpathReport =
-                match serde_json::from_str(&text) {
-                    Ok(r) => r,
-                    Err(e) => {
-                        eprintln!("hotpath feed: cannot parse {path}: {e}");
-                        std::process::exit(2);
-                    }
-                };
-            let spans = riir_refine::hotpath_report::hot_spans(&report);
-            let n_entries = report
-                .functions_timing
-                .as_ref()
-                .map_or(0, |l| l.data.len());
-            let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-            let report_keyed = report.meta.git.is_some();
-            match riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) {
-                Some(root) => {
-                    let repo_sha = std::process::Command::new("git")
-                        .arg("-C")
-                        .arg(&root)
-                        .arg("rev-parse")
-                        .arg("HEAD")
-                        .output()
-                        .ok()
-                        .filter(|o| o.status.success())
-                        .and_then(|o| String::from_utf8(o.stdout).ok())
-                        .map(|s| s.trim().to_string());
-                    match repo_sha.as_deref().map(|sha| {
-                        riir_refine::hotpath_report::key_verdict(&report, sha)
-                    }) {
-                        Some(riir_refine::hotpath_report::KeyVerdict::Matched { sha }) => {
-                            eprintln!(
+    let hotpath_spans: Option<Vec<riir_refine::hotpath_report::HotSpan>> = if let Some(path) =
+        args.hotpath_json.as_ref()
+    {
+        let text = match std::fs::read_to_string(path) {
+            Ok(t) => t,
+            // The clippy-feed precedent: a requested oracle that cannot
+            // be read is a HARD error — a silent fallback to ranking-only
+            // would re-create the confident miss this flag exists to
+            // prevent.
+            Err(e) => {
+                eprintln!("hotpath feed: cannot read {path}: {e}");
+                std::process::exit(2);
+            }
+        };
+        let report: riir_refine::hotpath_report::HotpathReport = match serde_json::from_str(&text) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("hotpath feed: cannot parse {path}: {e}");
+                std::process::exit(2);
+            }
+        };
+        let spans = riir_refine::hotpath_report::hot_spans(&report);
+        let n_entries = report.functions_timing.as_ref().map_or(0, |l| l.data.len());
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let report_keyed = report.meta.git.is_some();
+        match riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) {
+            Some(root) => {
+                let repo_sha = std::process::Command::new("git")
+                    .arg("-C")
+                    .arg(&root)
+                    .arg("rev-parse")
+                    .arg("HEAD")
+                    .output()
+                    .ok()
+                    .filter(|o| o.status.success())
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.trim().to_string());
+                match repo_sha
+                    .as_deref()
+                    .map(|sha| riir_refine::hotpath_report::key_verdict(&report, sha))
+                {
+                    Some(riir_refine::hotpath_report::KeyVerdict::Matched { sha }) => {
+                        eprintln!(
                                 "hotpath feed: keyed MATCHED at repo HEAD {sha} — {n_entries} timed entr(ies), {} located hot span(s)",
                                 spans.len()
                             );
-                        }
-                        Some(riir_refine::hotpath_report::KeyVerdict::Mismatched { report_sha, repo_sha }) => {
-                            eprintln!(
+                    }
+                    Some(riir_refine::hotpath_report::KeyVerdict::Mismatched {
+                        report_sha,
+                        repo_sha,
+                    }) => {
+                        eprintln!(
                                 "hotpath feed: STALE PROFILE REFUSED — report was taken at {report_sha} but the repo is at {repo_sha}; re-profile at the current HEAD or checkout that SHA"
                             );
-                            std::process::exit(2);
-                        }
-                        _ => {
-                            if report_keyed {
-                                eprintln!(
+                        std::process::exit(2);
+                    }
+                    _ => {
+                        if report_keyed {
+                            eprintln!(
                                     "hotpath feed: the report carries meta.git but the project root's git HEAD could not be read (not a git checkout / git failed) — CANNOT VERIFY the key; {} located hot span(s) shown best-effort",
                                     spans.len()
                                 );
-                            } else {
-                                eprintln!(
+                        } else {
+                            eprintln!(
                                     "hotpath feed: report is UNKEYED (no meta.git — plain hotpath without hotpath-cloud); proceeding with a loud disclosure: span lines are best-effort against the current tree — {} located hot span(s)",
                                     spans.len()
                                 );
-                            }
                         }
                     }
                 }
-                None => {
-                    eprintln!(
+            }
+            None => {
+                eprintln!(
                         "hotpath feed: no project root detected — cannot key the report; {} located hot span(s) shown best-effort",
                         spans.len()
                     );
-                }
             }
-            Some(spans)
-        } else {
-            None
-        };
+        }
+        Some(spans)
+    } else {
+        None
+    };
     // The T0 inspection surface: the ranked hot spans, printed beside the
     // keying verdict (anchoring into the retrieval lane is T0.2; this print
     // is what makes the feed useful TODAY — the operator sees what reality
@@ -12741,10 +12833,8 @@ fn main() {
                 std::process::exit(2);
             }
         }
-    } else if matches!(
-        args.domain,
-        Some(DomainId::Docker) | Some(DomainId::Dist)
-    ) || !riir_refine::clippy_oracle::auto_oracle_enabled()
+    } else if matches!(args.domain, Some(DomainId::Docker) | Some(DomainId::Dist))
+        || !riir_refine::clippy_oracle::auto_oracle_enabled()
     {
         // Non-rust lanes have no spans to anchor; the kill-switch restores
         // the pre-113 never-spawn posture. Both are quiet by design —
@@ -12755,8 +12845,7 @@ fn main() {
         match riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) {
             None => None,
             Some(root) => {
-                let cargo_bin =
-                    std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+                let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
                 // Issue 115: the operator can re-aim the spawn at a feature
                 // set — diagnostics that only fire behind a non-default
                 // feature are invisible at the default posture (the exact
@@ -13030,11 +13119,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-            // The bench-target guard (2026-09-16 intake, P30): applying a
-            // perf rule to a bench target changes WHAT the bench measures —
-            // `--verify` proves compilation, never measurement validity,
-            // and a bench file's numbers ARE its artifact. Decline loudly,
-            // never silently; the operator can still apply manually.
+                             // The bench-target guard (2026-09-16 intake, P30): applying a
+                             // perf rule to a bench target changes WHAT the bench measures —
+                             // `--verify` proves compilation, never measurement validity,
+                             // and a bench file's numbers ARE its artifact. Decline loudly,
+                             // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
             // P39 (post-mining intake, 2026-09-25): under --repo-posture the
             // rust_perf lane is exempt from the posture MECHANISM (the
@@ -13044,15 +13133,14 @@ fn main() {
             // (loudly, with the explicit --apply-notbenchable override) —
             // the bench-guard pattern one lane over. Scope: the posture mode
             // ONLY; plain --fix keeps the operator's full intent.
-            let notbench_guard =
-                run_perf && args.repo_posture && !args.apply_notbenchable;
+            let notbench_guard = run_perf && args.repo_posture && !args.apply_notbenchable;
             let mut n_bench_declined = 0usize;
             let mut n_notbench_declined = 0usize;
             // Issue 146 T0.3: hotpath-instrumentation-line declines, this
             // file (pass-0 count; the filter itself runs every pass).
             let mut n_hotattr_declined_file = 0usize;
-                             // fxhashmap dep gate (Issue 015): skip the rule for files in
-                             // crates without the rustc-hash dependency.
+            // fxhashmap dep gate (Issue 015): skip the rule for files in
+            // crates without the rustc-hash dependency.
             #[cfg(feature = "fix_verify")]
             let fxhashmap_allowed = {
                 let pkg = riir_refine::fix_verify::owning_package_root(file);
@@ -13075,9 +13163,9 @@ fn main() {
             // splices (authority-follows-replacement) before gating.
             let posture_index: Option<std::collections::BTreeMap<String, Vec<(usize, usize)>>> =
                 if args.repo_posture {
-                    clippy_feed.as_ref().map(|feed| {
-                        riir_refine::draft::clippy_feed::posture_spans(feed, &display)
-                    })
+                    clippy_feed
+                        .as_ref()
+                        .map(|feed| riir_refine::draft::clippy_feed::posture_spans(feed, &display))
                 } else {
                     None
                 };
@@ -13274,7 +13362,9 @@ fn main() {
                         for d in feed.iter().filter(|d| {
                             d.suggestion.is_some()
                                 && level_gated.contains(&d.lint.as_str())
-                                && riir_refine::draft::clippy_feed::paths_ref_match(&d.file, &display)
+                                && riir_refine::draft::clippy_feed::paths_ref_match(
+                                    &d.file, &display,
+                                )
                         }) {
                             *level_skipped_file.entry(d.lint.clone()).or_default() += 1;
                         }
@@ -13342,7 +13432,9 @@ fn main() {
                         } else {
                             for oe in lane.edits {
                                 let overlaps = edits.iter().any(|pe| {
-                                    riir_refine::draft::clippy_feed::spans_overlap(&pe.edit, &oe.edit)
+                                    riir_refine::draft::clippy_feed::spans_overlap(
+                                        &pe.edit, &oe.edit,
+                                    )
                                 });
                                 if !overlaps {
                                     oracle_keys.insert((oe.edit.start, oe.edit.end));
@@ -13430,8 +13522,7 @@ fn main() {
                 // only, the bench-guard re-proposal law. A false decline is
                 // loud + manually overridable; a missed one is silent
                 // breakage — the asymmetry picks conservative.
-                let hot_attr_lines =
-                    riir_refine::hotpath_report::attribute_line_ranges(&current);
+                let hot_attr_lines = riir_refine::hotpath_report::attribute_line_ranges(&current);
                 if !hot_attr_lines.is_empty() {
                     let before = edits.len();
                     edits.retain(|re| {
@@ -13997,13 +14088,12 @@ fn main() {
     // proposer ONLY (everything else ships suggest-only by design — the
     // DL3059 refusal table).
     #[cfg(feature = "shader_perf")]
-    let n_shader = if args.domain.is_none_or(|d| d == DomainId::ShaderPerf)
-        && !wgsl_files.is_empty()
-    {
-        run_shader_lane(&wgsl_files, args.suggest, args.fix && args.write)
-    } else {
-        0
-    };
+    let n_shader =
+        if args.domain.is_none_or(|d| d == DomainId::ShaderPerf) && !wgsl_files.is_empty() {
+            run_shader_lane(&wgsl_files, args.suggest, args.fix && args.write)
+        } else {
+            0
+        };
     #[cfg(not(feature = "shader_perf"))]
     let n_shader = 0usize;
     let _ = n_shader;
@@ -14140,12 +14230,9 @@ fn main() {
                     continue;
                 };
                 marks.extend(
-                    riir_refine::fix_verify::cfg_unverified_edits(
-                        std::slice::from_ref(b),
-                        set,
-                    )
-                    .into_iter()
-                    .filter(|m| !reverted_lines.contains(&m.line)),
+                    riir_refine::fix_verify::cfg_unverified_edits(std::slice::from_ref(b), set)
+                        .into_iter()
+                        .filter(|m| !reverted_lines.contains(&m.line)),
                 );
             }
             if !marks.is_empty() {
@@ -14166,8 +14253,10 @@ fn main() {
         // suggestion shape.
         {
             let mut marks: Vec<riir_refine::fix_verify::ReqFeatUnverified> = Vec::new();
-            let mut sets: std::collections::HashMap<PathBuf, (String, riir_refine::fix_verify::FeatureSet)> =
-                std::collections::HashMap::new();
+            let mut sets: std::collections::HashMap<
+                PathBuf,
+                (String, riir_refine::fix_verify::FeatureSet),
+            > = std::collections::HashMap::new();
             for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
                 if *whole {
                     continue;
@@ -14701,9 +14790,8 @@ fn main() {
         "suggestions"
     };
     let oracle_note = if clippy_feed.is_some() {
-        let mut s = format!(
-            " · {n_oracle_spans} oracle-anchored · {n_anchored_missing} no-corpus-rule"
-        );
+        let mut s =
+            format!(" · {n_oracle_spans} oracle-anchored · {n_anchored_missing} no-corpus-rule");
         // P21: the fix lane's consumed suggestions. Zero in suggest-only
         // runs stays silent — the count names fix-lane behavior only.
         if n_oracle_edits > 0 {
@@ -14764,7 +14852,11 @@ fn main() {
     };
     if !secret_findings.is_empty() {
         let total = secret_total;
-        let file_pl2 = if secret_findings.len() == 1 { "file" } else { "files" };
+        let file_pl2 = if secret_findings.len() == 1 {
+            "file"
+        } else {
+            "files"
+        };
         println!(
             "secrets: {total} finding(s) in {} {file_pl2}{pins_note} — suggest-only, never auto-fixed \
              (run `cargo refine --secret-scan` for the report)",
@@ -14788,15 +14880,16 @@ fn main() {
             .map(|(_, f)| f.len().min(MAX_SECRET_DISCLOSURE_PER_FILE))
             .sum::<usize>();
         if shown < total || shown_files < secret_findings.len() {
-            println!("  … and {} more (the report lists every finding)", total - shown);
+            println!(
+                "  … and {} more (the report lists every finding)",
+                total - shown
+            );
         }
     } else if secret_pinned > 0 {
         // P63: every finding in the run adjudicated benign — still loud
         // (never a silent green zero), but no longer the recurring
         // all-false [sec] noise the digest-pin class measured at.
-        println!(
-            "secrets: 0 finding(s){pins_note}"
-        );
+        println!("secrets: 0 finding(s){pins_note}");
     }
     if secret_total > 0 {
         domain_tally.add_secrets(secret_total);
@@ -14930,10 +15023,7 @@ fn main() {
                     .ok()
                     .map(|a| a.state().account_id.clone())
                     .unwrap_or_default();
-                let url = riir_refine::kat_lease_client::payment_url(
-                    &command_service_url(),
-                    &acct,
-                );
+                let url = riir_refine::kat_lease_client::payment_url(&command_service_url(), &acct);
                 eprintln!(
                     "kat-charge: top up — {url} (KAT packs), or contribute: cargo refine --mine"
                 );
@@ -15052,8 +15142,9 @@ fn main() {
         && riir_refine::kat_stats_consent::read(&riir_refine::kat_stats_consent::default_dir())
             .push_allowed()
     {
-        let account =
-            riir_refine::kat_account::KatAccount::load(&riir_refine::kat_account::KatAccount::default_dir());
+        let account = riir_refine::kat_account::KatAccount::load(
+            &riir_refine::kat_account::KatAccount::default_dir(),
+        );
         let pushed = match account.ok().and_then(|a| a.signing_key().ok()) {
             Some(key) => {
                 let url = command_service_url();
@@ -15089,22 +15180,19 @@ fn main() {
                     None => {
                         #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
                         {
-                            let pairs: Vec<(String, u32)> = rules
-                                .iter()
-                                .map(|e| (e.name.clone(), e.count))
-                                .collect();
+                            let pairs: Vec<(String, u32)> =
+                                rules.iter().map(|e| (e.name.clone(), e.count)).collect();
                             riir_refine::kat_sync_payload::RuleDomains::compiled()
                                 .fold_rule_domains(&pairs)
                                 .into_iter()
                                 .map(|(name, count)| {
-                                    riir_refine::kat_protocol_fixstat::FixStatCount::new(name, count)
+                                    riir_refine::kat_protocol_fixstat::FixStatCount::new(
+                                        name, count,
+                                    )
                                 })
                                 .collect()
                         }
-                        #[cfg(not(all(
-                            feature = "kat_service",
-                            feature = "latent_retrieval"
-                        )))]
+                        #[cfg(not(all(feature = "kat_service", feature = "latent_retrieval")))]
                         {
                             Vec::new()
                         }
@@ -15128,9 +15216,15 @@ fn main() {
                 fixstat_rules.values().sum::<u32>(),
                 n_fixed_files,
                 ack.epoch,
-                if ack.recorded_new { "recorded" } else { "duplicate run id — already shared" },
+                if ack.recorded_new {
+                    "recorded"
+                } else {
+                    "duplicate run id — already shared"
+                },
             ),
-            Err(e) => eprintln!("stats: push failed ({e}) — not retried; the next run shares its own row"),
+            Err(e) => {
+                eprintln!("stats: push failed ({e}) — not retried; the next run shares its own row")
+            }
         }
     }
     // Issue 117 (the delta half) — the loud companion: a consenting --fix
@@ -15174,8 +15268,7 @@ fn main() {
             .map(|_| {
                 format!(
                     "{}/leaderboard",
-                    command_service_url()
-                        .trim_end_matches('/')
+                    command_service_url().trim_end_matches('/')
                 )
             })
             .unwrap_or_default();
@@ -15199,25 +15292,24 @@ fn main() {
             // burn sync advances (the flat read here was the measured
             // 2026-10-12 split-brain: the footer displayed the pre-split
             // flat ack's stale balance while the sync lived in the net dir).
-            let ack_path = riir_refine::kat_state_stamp::net_state_dir_for_url(
-                &root,
-                &net_partition_url(),
-            )
-            .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
+            let ack_path =
+                riir_refine::kat_state_stamp::net_state_dir_for_url(&root, &net_partition_url())
+                    .join(riir_refine::kat_burn_client::KatBurnAck::FILE_NAME);
             let (ack, _) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             kat_balance = ack.last_balance_micro.map(MicroKat);
-            tuna_line = ack.tuna_balance_micro.zip(ack.tuna_expires_unix).map(
-                |(balance, expires)| riir_refine::kat_footer::TunaLine {
-                    balance_micro: MicroKat(balance.max(0)),
-                    // The trial scale mirrors the KAT grant projection
-                    // until the server reports the real claim size (B2).
-                    grant_micro: riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
-                    expires_unix: expires,
-                    now_unix: std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map_or(0, |d| d.as_secs()),
-                },
-            );
+            tuna_line =
+                ack.tuna_balance_micro
+                    .zip(ack.tuna_expires_unix)
+                    .map(|(balance, expires)| riir_refine::kat_footer::TunaLine {
+                        balance_micro: MicroKat(balance.max(0)),
+                        // The trial scale mirrors the KAT grant projection
+                        // until the server reports the real claim size (B2).
+                        grant_micro: riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+                        expires_unix: expires,
+                        now_unix: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map_or(0, |d| d.as_secs()),
+                    });
             // The burn wire is whole-KAT granular (wire_kat_total truncates),
             // so the sub-KAT sliver of `charged` is BY DESIGN unacked until
             // the next whole-KAT crossing — it is not a stuck delta. Current
@@ -15226,10 +15318,8 @@ fn main() {
             // total is the acked ACCOUNT base plus this net's whole-KAT
             // delta (pending_report_total — the net-vs-account scope mismatch
             // deadlocked the sync; the footer mirrors the sync's arithmetic).
-            let report_total = riir_refine::kat_burn_client::pending_report_total(
-                &ack,
-                c.state().charged_kat,
-            );
+            let report_total =
+                riir_refine::kat_burn_client::pending_report_total(&ack, c.state().charged_kat);
             let wire = riir_refine::kat_burn_client::WIRE_PER_CHARGE_UNITS;
             if report_total <= ack.burn_kat_total {
                 riir_refine::kat_footer::SyncState::Current {
@@ -15449,7 +15539,10 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
             match riir_refine::domains::shader_perf::verify::validate_naga(&healed) {
                 Ok(Some(true)) => {}
                 Ok(Some(false)) => {
-                    eprintln!("  REFUSED {} — naga rejected the healed module", path.display());
+                    eprintln!(
+                        "  REFUSED {} — naga rejected the healed module",
+                        path.display()
+                    );
                     continue;
                 }
                 Ok(None) => eprintln!("  note: naga tier unavailable — standing on Tier-0"),
@@ -15460,7 +15553,11 @@ fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
             }
         }
         match std::fs::write(path, &healed) {
-            Ok(()) => println!("  wrote {} ({} bounded fix(es))", path.display(), edits.len()),
+            Ok(()) => println!(
+                "  wrote {} ({} bounded fix(es))",
+                path.display(),
+                edits.len()
+            ),
             Err(e) => eprintln!("  FAILED to write {}: {e}", path.display()),
         }
     }
@@ -15740,8 +15837,8 @@ fn reheat_fix_pass(
     // P30 bench-target guard — same policy as the main fix lane: a perf
     // edit on a bench target alters what the bench measures; decline
     // loudly (count reported once, pass 0), never silently.
-    let bench_guard = run_perf
-        && riir_refine::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
+    let bench_guard =
+        run_perf && riir_refine::domains::rust_perf::bench_guard::is_bench_target(&display, &src);
     // P39: the posture lane's NotBenchable decline rides the reheat too —
     // the guard semantic must be uniform across both fix paths.
     let notbench_guard = run_perf && notbench_guard;
@@ -15906,10 +16003,8 @@ fn run_reheat_pass(
     // One bounded lease check: did a new epoch land?
     let url = riir_refine::kat_lease_client::service_url_from_env()?;
     let transport = HttpLeaseTransport::new(&url, args.update_timeout.max(1));
-    let store = riir_refine::kat_lease_client::LeaseStore::open_net(
-        &resolve_heal_root(&args.paths),
-        &url,
-    );
+    let store =
+        riir_refine::kat_lease_client::LeaseStore::open_net(&resolve_heal_root(&args.paths), &url);
     let mut charge = riir_refine::kat_lease_client::LeaseCharge::open(&store);
     let current = store.current();
     let etag = current
@@ -15934,7 +16029,10 @@ fn run_reheat_pass(
     let out_of_kat = false; // the reheat bill is the delta bill, not a new grant gate
     let outcome = run_update_phase(&transport, &store, &mut charge, out_of_kat, None);
     match outcome.status {
-        riir_refine::kat_lease_client::UpdateStatus::Applied { epoch, charge_micro_kat } => {
+        riir_refine::kat_lease_client::UpdateStatus::Applied {
+            epoch,
+            charge_micro_kat,
+        } => {
             // Rebuild the matcher under E+1 (a failed rebuild aborts the
             // reheat — pass 1's results stand). T2.4: promotions merge into
             // the rebuilt overlay too (same helper as the run-start build).
@@ -16364,10 +16462,16 @@ mod mode_flag_tests {
             ("--blind", Box::new(|m| m.blind = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),
             ("--orphan-report", Box::new(|m| m.orphan_report = true)),
-            ("--frame-time-report", Box::new(|m| m.frame_time_report = true)),
+            (
+                "--frame-time-report",
+                Box::new(|m| m.frame_time_report = true),
+            ),
             ("--refill", Box::new(|m| m.refill = true)),
             ("--info", Box::new(|m| m.info = true)),
-            ("--gate-calibration", Box::new(|m| m.gate_calibration = true)),
+            (
+                "--gate-calibration",
+                Box::new(|m| m.gate_calibration = true),
+            ),
             ("--active-set", Box::new(|m| m.active_set_list = true)),
             (
                 "--active-set-demote clippy:x",
@@ -16377,7 +16481,10 @@ mod mode_flag_tests {
                 "--active-set-readmit clippy:x",
                 Box::new(|m| m.active_set_readmit = Some("clippy:x".to_string())),
             ),
-            ("--active-set-clear", Box::new(|m| m.active_set_clear = true)),
+            (
+                "--active-set-clear",
+                Box::new(|m| m.active_set_clear = true),
+            ),
             (
                 "--active-set-cap clippy:40",
                 Box::new(|m| m.active_set_cap = Some("clippy:40".to_string())),
@@ -16418,7 +16525,10 @@ mod mode_flag_tests {
             repo_posture: true,
             ..Args::default()
         };
-        assert!(!bare(&m), "--repo-posture alone must not take the bare suggest default");
+        assert!(
+            !bare(&m),
+            "--repo-posture alone must not take the bare suggest default"
+        );
         assert_eq!(
             v(&m),
             Err("--repo-posture requires --fix (it gates the fix lane's edits)")
@@ -16448,7 +16558,10 @@ mod mode_flag_tests {
             purge_server: true,
             ..Args::default()
         };
-        assert!(!bare(&m), "--purge-server alone must not take the bare suggest default");
+        assert!(
+            !bare(&m),
+            "--purge-server alone must not take the bare suggest default"
+        );
         assert!(
             standalone_mode(&m),
             "--purge-server must pass the paths guard (no paths required)"
@@ -16463,12 +16576,18 @@ mod mode_flag_tests {
             unmine: true,
             ..Args::default()
         };
-        assert!(v(&combo).is_err(), "the combo exits at the --unmine early-return before validate_mode_flags");
+        assert!(
+            v(&combo).is_err(),
+            "the combo exits at the --unmine early-return before validate_mode_flags"
+        );
         let unmine_alone = Args {
             unmine: true,
             ..Args::default()
         };
-        assert!(v(&unmine_alone).is_err(), "the --unmine early-return precedent");
+        assert!(
+            v(&unmine_alone).is_err(),
+            "the --unmine early-return precedent"
+        );
     }
 
     /// Named-field construction keeps each matrix row self-describing —
@@ -16718,10 +16837,7 @@ mod issue_149_resplice_dedup_tests {
             edit(0, "needless_return", 10, 25, "cents;"),
             edit(1, "let_and_return", 2, 22, "expr"),
         ];
-        let pass_splices = vec![
-            vec![splice(10, 25, "cents;")],
-            vec![splice(2, 22, "expr")],
-        ];
+        let pass_splices = vec![vec![splice(10, 25, "cents;")], vec![splice(2, 22, "expr")]];
         let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
         assert_eq!(edits.len(), 1, "one visible repair, one record");
         assert_eq!(edits[0].1, "let_and_return");
@@ -16756,10 +16872,7 @@ mod issue_149_resplice_dedup_tests {
             edit(0, "collapsible_if", 4, 20, "compact"),
             edit(1, "bool_comparison", 25, 40, "flag"),
         ];
-        let pass_splices = vec![
-            vec![splice(4, 20, "compact")],
-            vec![splice(20, 35, "flag")],
-        ];
+        let pass_splices = vec![vec![splice(4, 20, "compact")], vec![splice(20, 35, "flag")]];
         let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
         assert_eq!(edits.len(), 2);
         assert!(dropped.is_empty());
@@ -16767,10 +16880,7 @@ mod issue_149_resplice_dedup_tests {
 
     #[test]
     fn same_pass_edits_never_subsume_each_other() {
-        let mut edits = vec![
-            edit(0, "a", 4, 20, "one"),
-            edit(0, "b", 30, 40, "two"),
-        ];
+        let mut edits = vec![edit(0, "a", 4, 20, "one"), edit(0, "b", 30, 40, "two")];
         let pass_splices = vec![vec![splice(4, 20, "one"), splice(30, 40, "two")]];
         let dropped = dedup_respliced_edits(&mut edits, &pass_splices);
         assert_eq!(edits.len(), 2);
@@ -16790,11 +16900,8 @@ mod p44_bom_seam_tests {
 
     #[test]
     fn bom_is_stripped_and_the_rest_is_verbatim() {
-        let dir = std::env::temp_dir().join(format!(
-            "p44_bom_seam_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("p44_bom_seam_{}_{}", std::process::id(), line!()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("bommed.rs");
         let body = "/// the seat’s pool —uléiš text\nfn go() {}\n";
@@ -16820,11 +16927,8 @@ mod p44_bom_seam_tests {
 
     #[test]
     fn bom_free_source_is_returned_verbatim() {
-        let dir = std::env::temp_dir().join(format!(
-            "p44_bom_free_{}_{}",
-            std::process::id(),
-            line!()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("p44_bom_free_{}_{}", std::process::id(), line!()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("clean.rs");
         std::fs::write(&path, "fn go() {}\n").unwrap();
@@ -16847,9 +16951,15 @@ mod run_rollup_tests {
         t.add_citation("clippy", false);
         t.add_citation("perf", false);
         t.add_secrets(95);
-        assert_eq!(t.rollup_line(), "findings by domain: clippy 2 · perf 1 · sec 95 — 98 total");
+        assert_eq!(
+            t.rollup_line(),
+            "findings by domain: clippy 2 · perf 1 · sec 95 — 98 total"
+        );
         assert_eq!(t.total(), 98);
-        assert_eq!(t.citations, 3, "secrets are display-only, never fix-surface");
+        assert_eq!(
+            t.citations, 3,
+            "secrets are display-only, never fix-surface"
+        );
         assert_eq!(t.fixable_clippy, 1);
     }
 
@@ -16860,9 +16970,18 @@ mod run_rollup_tests {
         t.add_count("dist", 0);
         t.add_count("kernel", 5);
         t.add_count("shader", 0);
-        assert_eq!(t.rollup_line(), "findings by domain: docker 2 · kernel 5 — 7 total");
-        assert!(!t.rollup_line().contains("dist"), "a zero lane never prints");
-        assert!(!t.rollup_line().contains("shader"), "a zero lane never prints");
+        assert_eq!(
+            t.rollup_line(),
+            "findings by domain: docker 2 · kernel 5 — 7 total"
+        );
+        assert!(
+            !t.rollup_line().contains("dist"),
+            "a zero lane never prints"
+        );
+        assert!(
+            !t.rollup_line().contains("shader"),
+            "a zero lane never prints"
+        );
     }
 
     #[test]

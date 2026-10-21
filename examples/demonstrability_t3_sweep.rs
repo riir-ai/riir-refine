@@ -127,12 +127,7 @@ fn main() {
         .copied()
         .filter(|d| labeled.contains_key(d))
         .collect();
-    ordered.extend(
-        labeled
-            .keys()
-            .copied()
-            .filter(|k| !T3_DOMAINS.contains(k)),
-    );
+    ordered.extend(labeled.keys().copied().filter(|k| !T3_DOMAINS.contains(k)));
     println!(
         "\n{:<12} {:>8} {:>10} {:>10} {:>10} {:>12}",
         "domain", "labeled", "top1@28", "top1@56", "top1@112", "demonstr."
@@ -207,7 +202,11 @@ fn main() {
              corpus scale — top-1 is decided within the head-28 in every domain, and\n\
              domains whose corpus is smaller than the baseline pool (dist: 6 rules)\n\
              cannot gain from depth by construction.",
-            if !const_var { "demonstrability" } else { "gain-from-depth" }
+            if !const_var {
+                "demonstrability"
+            } else {
+                "gain-from-depth"
+            }
         );
         return;
     }
@@ -217,7 +216,9 @@ fn main() {
     // our gate bar is the standard 0.5-tier for a promotion GOAT — below it,
     // keep measurement-only.
     if rho >= 0.5 {
-        println!("VERDICT: PASS — the rank-agreement clears the 0.5 bar; promote per the standard rule.");
+        println!(
+            "VERDICT: PASS — the rank-agreement clears the 0.5 bar; promote per the standard rule."
+        );
     } else {
         println!("VERDICT: FAIL — keep measurement-only (T1 survives as instrumentation); record the negative.");
     }

@@ -42,7 +42,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -65,14 +68,13 @@ impl Collector<'_> {
     /// `<recv>.rev().next()` → `<recv>.next_back()` — the two-call tail
     /// re-spelled; the receiver below `.rev()` re-emits verbatim.
     fn try_rewrite(&self, c: &ExprMethodCall) -> Option<String> {
-        if c.method != "next"
-            || !c.args.is_empty()
-            || c.turbofish.is_some()
-            || !c.attrs.is_empty()
+        if c.method != "next" || !c.args.is_empty() || c.turbofish.is_some() || !c.attrs.is_empty()
         {
             return None;
         }
-        let Expr::MethodCall(rev) = &*c.receiver else { return None };
+        let Expr::MethodCall(rev) = &*c.receiver else {
+            return None;
+        };
         if rev.method != "rev"
             || !rev.args.is_empty()
             || rev.turbofish.is_some()
@@ -124,7 +126,10 @@ mod tests {
             "fn t(vals: &mut [u32]) -> Option<&mut u32> { vals.iter_mut().rev().next() }",
         )
         .expect("matched");
-        assert!(out.contains(".iter_mut().next_back()"), "not rewritten: {out}");
+        assert!(
+            out.contains(".iter_mut().next_back()"),
+            "not rewritten: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

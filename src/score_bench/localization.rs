@@ -128,7 +128,9 @@ pub trait SpanScorer {
 }
 
 fn overlaps(range: &Range<usize>, spans: &[(usize, usize)]) -> bool {
-    spans.iter().any(|(s, e)| range.start < *e && *s < range.end)
+    spans
+        .iter()
+        .any(|(s, e)| range.start < *e && *s < range.end)
 }
 
 /// Perfect confidence: 1.0 on clean tokens, 0.0 on error tokens. The
@@ -495,11 +497,7 @@ pub fn evaluate(scorer: &dyn SpanScorer, programs: &[ScoredProgram]) -> EvalRepo
         } else {
             0.0
         },
-        hit: [
-            hit_sum[0] / n,
-            hit_sum[1] / n,
-            hit_sum[2] / n,
-        ],
+        hit: [hit_sum[0] / n, hit_sum[1] / n, hit_sum[2] / n],
         fpr5: fpr_sum / n,
         mrr: rr_sum / n,
         constant,
@@ -591,11 +589,7 @@ impl Refusal {
 /// refusal): constant → regressive → no signal over the shuffled control →
 /// gap floor → hit@1 floor → FPR cap.
 #[must_use]
-pub fn arming_verdict(
-    real: &EvalReport,
-    shuffled: &EvalReport,
-    floors: &ArmingFloors,
-) -> Arming {
+pub fn arming_verdict(real: &EvalReport, shuffled: &EvalReport, floors: &ArmingFloors) -> Arming {
     if real.constant {
         return Arming::Refused(Refusal::ConstantConfidence);
     }
@@ -690,7 +684,10 @@ pub fn class_floor_verdict(rows: &[ClassRow], floors: &ArmingFloors) -> Arming {
 
 /// The first class failing a floor, for the panel's naming print.
 #[must_use]
-pub fn first_failing_class(rows: &[ClassRow], floors: &ArmingFloors) -> Option<(CorruptionClass, Refusal)> {
+pub fn first_failing_class(
+    rows: &[ClassRow],
+    floors: &ArmingFloors,
+) -> Option<(CorruptionClass, Refusal)> {
     for row in rows {
         if row.gap < floors.min_gap {
             return Some((row.class, Refusal::GapBelowFloor));
@@ -713,8 +710,7 @@ pub fn wilson95(hits: usize, n: usize) -> (f64, f64, f64) {
     let n = count_to_f64(n);
     let denom = 1.0 + z * z / n;
     let center = (p + z * z / (2.0 * n)) / denom;
-    let half = (z / denom)
-        * ((p * (1.0 - p) / n + z * z / (4.0 * n * n)).sqrt());
+    let half = (z / denom) * ((p * (1.0 - p) / n + z * z / (4.0 * n * n)).sqrt());
     (p, (center - half).max(0.0), (center + half).min(1.0))
 }
 
@@ -786,11 +782,7 @@ pub fn loop_harm_verdict(
 /// # Errors
 ///
 /// Length mismatch, an empty vector, or a kept rate below the margin.
-pub fn paired_non_inferior(
-    before: &[bool],
-    after: &[bool],
-    margin: f64,
-) -> Result<(), String> {
+pub fn paired_non_inferior(before: &[bool], after: &[bool], margin: f64) -> Result<(), String> {
     if before.len() != after.len() {
         return Err(format!(
             "paired: length mismatch ({} before, {} after)",
@@ -842,7 +834,13 @@ fn score_all<'a>(
 fn print_report_line(report: &EvalReport) {
     println!(
         "{:<22} gap {:+.3}  hit@1 {:.3}  hit@3 {:.3}  hit@5 {:.3}  fpr@5 {:.3}  mrr {:.3}",
-        report.scorer, report.gap, report.hit[0], report.hit[1], report.hit[2], report.fpr5, report.mrr
+        report.scorer,
+        report.gap,
+        report.hit[0],
+        report.hit[1],
+        report.hit[2],
+        report.fpr5,
+        report.mrr
     );
 }
 
@@ -875,9 +873,7 @@ fn enforce_control_laws(
         );
         std::process::exit(1);
     }
-    println!(
-        "  controls: constant refused ✓  shuffled ≤ chance+0.15 ✓  inverse regressive ✓"
-    );
+    println!("  controls: constant refused ✓  shuffled ≤ chance+0.15 ✓  inverse regressive ✓");
 }
 
 /// The arming-verdict block (each control + the oracle's own sanity arm).
@@ -937,7 +933,10 @@ fn print_class_rows(oracle_scored: &[ScoredProgram], floors: &ArmingFloors) {
                 refusal.tag(),
                 class.tag()
             ),
-            None => println!("  class-floor binding (min-class): REFUSED {}", refusal.tag()),
+            None => println!(
+                "  class-floor binding (min-class): REFUSED {}",
+                refusal.tag()
+            ),
         },
     }
 }
@@ -980,10 +979,16 @@ pub fn run_generation9_panel() {
     }
 
     // the chance band + the controls
-    let chance1 = mean(oracle_report.reads.iter().map(|read| {
-        chance_hit_at_k(read.n_tokens, read.n_error_tokens, 1)
-    }));
-    let constant_report = evaluate(&ConstantScorer(0.5), &score_all(&ConstantScorer(0.5), &fixtures));
+    let chance1 = mean(
+        oracle_report
+            .reads
+            .iter()
+            .map(|read| chance_hit_at_k(read.n_tokens, read.n_error_tokens, 1)),
+    );
+    let constant_report = evaluate(
+        &ConstantScorer(0.5),
+        &score_all(&ConstantScorer(0.5), &fixtures),
+    );
     let shuffled_scorer = ShuffledScorer::new(Box::new(OracleScorer), 1);
     let shuffled_report = evaluate(&shuffled_scorer, &score_all(&shuffled_scorer, &fixtures));
     let inverse_scorer = InverseScorer::new(Box::new(OracleScorer));
@@ -1118,15 +1123,26 @@ fn run_healer_ranking_poc() {
     // item is the LOWEST-similarity item (flagged first).
     let mut fixtures_total = 0usize;
     let mut hit1 = 0usize;
-    for fixture_id in corrupted.iter().map(|read| read.fixture_id).collect::<BTreeSet<_>>() {
-        let items: Vec<&ItemRead> = reads.iter().filter(|read| read.fixture_id == fixture_id).collect();
+    for fixture_id in corrupted
+        .iter()
+        .map(|read| read.fixture_id)
+        .collect::<BTreeSet<_>>()
+    {
+        let items: Vec<&ItemRead> = reads
+            .iter()
+            .filter(|read| read.fixture_id == fixture_id)
+            .collect();
         if items.len() < 2 {
             continue;
         }
         fixtures_total += 1;
         let worst = items
             .iter()
-            .min_by(|a, b| a.score.partial_cmp(&b.score).unwrap_or(std::cmp::Ordering::Equal))
+            .min_by(|a, b| {
+                a.score
+                    .partial_cmp(&b.score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
             .expect("non-empty");
         if worst.corrupted {
             hit1 += 1;
@@ -1136,8 +1152,15 @@ fn run_healer_ranking_poc() {
     // per-fixture rank-random chance: 1 / items-in-fixture, averaged over
     // the fixtures the hit arm actually scored
     let mut chance_sum = 0.0f64;
-    for fixture_id in corrupted.iter().map(|read| read.fixture_id).collect::<BTreeSet<_>>() {
-        let items = reads.iter().filter(|read| read.fixture_id == fixture_id).count();
+    for fixture_id in corrupted
+        .iter()
+        .map(|read| read.fixture_id)
+        .collect::<BTreeSet<_>>()
+    {
+        let items = reads
+            .iter()
+            .filter(|read| read.fixture_id == fixture_id)
+            .count();
         if items >= 2 {
             chance_sum += 1.0 / count_to_f64(items);
         }
@@ -1237,7 +1260,11 @@ mod tests {
         // FPR@5 floor: every synthetic fixture has |E|=1, so even the
         // perfect scorer flags (5−1)/5 = 0.8 clean slots — the structural
         // (K−|E|)/K floor, not a scorer defect.
-        assert!((report.fpr5 - 0.8).abs() < 1e-6, "fpr5 {} must read the (K−|E|)/K floor", report.fpr5);
+        assert!(
+            (report.fpr5 - 0.8).abs() < 1e-6,
+            "fpr5 {} must read the (K−|E|)/K floor",
+            report.fpr5
+        );
         assert!((report.mrr - 1.0).abs() < 1e-6);
         assert!(!report.constant);
         let shuffled = ShuffledScorer::new(Box::new(OracleScorer), 7);
@@ -1264,7 +1291,11 @@ mod tests {
         // the loud-zero law: EXACT zero — never "within epsilon"
         #[allow(clippy::float_cmp)]
         let is_exact_zero = report.gap == 0.0;
-        assert!(is_exact_zero, "gap must read exactly 0.0, got {}", report.gap);
+        assert!(
+            is_exact_zero,
+            "gap must read exactly 0.0, got {}",
+            report.gap
+        );
         let shuffled = ShuffledScorer::new(Box::new(ConstantScorer(0.5)), 7);
         let shuffled_scored: Vec<ScoredProgram> = fixtures
             .iter()
@@ -1286,16 +1317,23 @@ mod tests {
             .map(|fixture| score_program(&shuffler, fixture).expect("scores"))
             .collect();
         let report = evaluate(&shuffler, &scored);
-        let chance = mean(report.reads.iter().map(|read| {
-            chance_hit_at_k(read.n_tokens, read.n_error_tokens, 1)
-        }));
+        let chance = mean(
+            report
+                .reads
+                .iter()
+                .map(|read| chance_hit_at_k(read.n_tokens, read.n_error_tokens, 1)),
+        );
         assert!(
             report.hit[0] <= chance + 0.15,
             "shuffled hit@1 {} must sit in the chance band {}",
             report.hit[0],
             chance + 0.15
         );
-        assert!(report.gap.abs() < 0.15, "shuffled gap {} must collapse toward 0", report.gap);
+        assert!(
+            report.gap.abs() < 0.15,
+            "shuffled gap {} must collapse toward 0",
+            report.gap
+        );
     }
 
     #[test]
@@ -1459,9 +1497,11 @@ mod tests {
         ];
         // the pooled MEAN of hit1 (0.6·… weighted by n would be ~0.77) would
         // clear the 0.30 floor — the min-class rule must refuse anyway.
-        let pooled_mean_hit1 =
-            (0.9 * 10.0 + 0.1 * 2.0) / 12.0;
-        assert!(pooled_mean_hit1 > floors.min_hit1, "test premise: pooled passes");
+        let pooled_mean_hit1 = (0.9 * 10.0 + 0.1 * 2.0) / 12.0;
+        assert!(
+            pooled_mean_hit1 > floors.min_hit1,
+            "test premise: pooled passes"
+        );
         assert_eq!(
             class_floor_verdict(&rows, &floors),
             Arming::Refused(Refusal::Hit1BelowFloor)

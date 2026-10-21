@@ -115,7 +115,13 @@ impl WireSink for AllocSink<'_> {
 #[must_use]
 pub fn detect(source: &str, file: &File) -> Vec<FrameAllocFinding> {
     let mut findings = Vec::new();
-    wire_taint::walk_file(source, file, &mut AllocSink { findings: &mut findings });
+    wire_taint::walk_file(
+        source,
+        file,
+        &mut AllocSink {
+            findings: &mut findings,
+        },
+    );
     findings
 }
 

@@ -58,11 +58,11 @@ pub const PINNED_TOOLCHAIN: &str = "1.98.1";
 /// list (the rows re-merge into the live driver check in the same commit
 /// it bumps `rust-toolchain.toml` to ≥1.99).
 pub const AHEAD_OF_PIN_1_99: &[&str] = &[
-    "assert_is_empty",               // pedantic, clippy 1.99 (#17149)
-    "block_scrutinee",               // suspicious, clippy 1.99 (#16855)
-    "manual_bit_width",              // pedantic, clippy 1.99 (#16902)
-    "mismatched_bit_width_type",     // suspicious, clippy 1.99 (#16902)
-    "nonnull_unchecked_on_box_ptr",  // complexity, clippy 1.99 (#17336)
+    "assert_is_empty",              // pedantic, clippy 1.99 (#17149)
+    "block_scrutinee",              // suspicious, clippy 1.99 (#16855)
+    "manual_bit_width",             // pedantic, clippy 1.99 (#16902)
+    "mismatched_bit_width_type",    // suspicious, clippy 1.99 (#16902)
+    "nonnull_unchecked_on_box_ptr", // complexity, clippy 1.99 (#17336)
 ];
 
 /// The clippy groups whose lints are allow-by-default.
@@ -253,7 +253,10 @@ pub struct Directive {
 }
 
 fn directive(name: &str, level: Level) -> Directive {
-    Directive { name: name.trim().replace('-', "_"), level }
+    Directive {
+        name: name.trim().replace('-', "_"),
+        level,
+    }
 }
 
 /// The directives in effect for one file, in precedence order (later wins).

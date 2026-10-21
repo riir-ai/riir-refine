@@ -45,12 +45,12 @@
 
 use std::collections::BTreeMap;
 
+use riir_rag::{Embedder, ModellessEmbedder};
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::{canonical_rank, labeled_eval_spans};
 use riir_refine::draft::DomainId;
 use riir_refine::memory::EvidenceTier;
 use riir_refine::rule_domains::RuleDomains;
-use riir_rag::{Embedder, ModellessEmbedder};
 
 use katgpt_core::basis_split::{
     build_zca_whitener, held_out_leakage, split, PairDifferenceMoment, Verdict, Whitening,
@@ -287,8 +287,8 @@ fn load_pairs(
             if line.trim().is_empty() {
                 continue;
             }
-            let row: PairRow = serde_json::from_str(line)
-                .map_err(|e| format!("{p}: bad jsonl row: {e}"))?;
+            let row: PairRow =
+                serde_json::from_str(line).map_err(|e| format!("{p}: bad jsonl row: {e}"))?;
             total += 1;
             failed += u64::from(row.fail_count);
             if !filter.keeps(&row) {
@@ -374,8 +374,11 @@ struct RawCorpus {
     latents: Vec<[f32; 8]>,
 }
 
-fn build_raw_corpus(book: &std::collections::HashMap<String, riir_refine::draft::latent_matcher::RuleInfo>) -> RawCorpus {
-    let mut entries: Vec<(&String, &riir_refine::draft::latent_matcher::RuleInfo)> = book.iter().collect();
+fn build_raw_corpus(
+    book: &std::collections::HashMap<String, riir_refine::draft::latent_matcher::RuleInfo>,
+) -> RawCorpus {
+    let mut entries: Vec<(&String, &riir_refine::draft::latent_matcher::RuleInfo)> =
+        book.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
     let mut ids = Vec::with_capacity(entries.len());
     let mut latents = Vec::with_capacity(entries.len());
@@ -395,7 +398,12 @@ impl ChannelCtx<'_> {
     /// The channel's top-1 for a span. `own_domain` scopes the fused channel
     /// to the family's own-domain list (the shipped suggest posture); the
     /// raw channels are corpus-wide by construction.
-    fn top1(&mut self, span: &str, own_domain: Option<DomainId>, channel: Channel) -> Option<String> {
+    fn top1(
+        &mut self,
+        span: &str,
+        own_domain: Option<DomainId>,
+        channel: Channel,
+    ) -> Option<String> {
         match channel {
             Channel::Fused => {
                 let domain = own_domain?;
@@ -412,7 +420,9 @@ impl ChannelCtx<'_> {
                     }
                 }
             }
-            Channel::Full8 => raw_top1(&self.corpus, LatentChoice::Full8, embed8(span)).map(|(id, _)| id),
+            Channel::Full8 => {
+                raw_top1(&self.corpus, LatentChoice::Full8, embed8(span)).map(|(id, _)| id)
+            }
             Channel::Structural4 => {
                 raw_top1(&self.corpus, LatentChoice::Structural4, embed8(span)).map(|(id, _)| id)
             }
@@ -536,7 +546,14 @@ fn basis_direction(
     let mut w_eigvals = vec![0.0f64; d];
     let mut w_eigvecs = vec![0.0f64; d * d];
     let mut sym0 = SymmetricEigScratch::new();
-    if let Err(e) = build_zca_whitener(&sigma, d, &mut whitener, &mut w_eigvals, &mut w_eigvecs, &mut sym0) {
+    if let Err(e) = build_zca_whitener(
+        &sigma,
+        d,
+        &mut whitener,
+        &mut w_eigvals,
+        &mut w_eigvecs,
+        &mut sym0,
+    ) {
         out.push_str(&format!("  {}: whitener REFUSED: {e}\n", run.label));
         return out;
     }
@@ -545,7 +562,10 @@ fn basis_direction(
     out.push_str(&format!(
         "  {}: Σ spectrum (desc) [{}] cond={:.3e}\n",
         run.label,
-        spec.iter().map(|v| format!("{v:.2e}")).collect::<Vec<_>>().join(", "),
+        spec.iter()
+            .map(|v| format!("{v:.2e}"))
+            .collect::<Vec<_>>()
+            .join(", "),
         spec[0] / spec[d - 1]
     ));
     let mut m = vec![0.0f64; d * d];
@@ -553,9 +573,10 @@ fn basis_direction(
         let mut acc = PairDifferenceMoment::new(&mut m, d).expect("moment");
         let mut w_scratch = vec![0.0f64; d];
         for (i, dv) in deltas.iter().enumerate() {
-            if let 0 = i % 2 { acc
-                    .accumulate_whitened(&whitener, dv, &mut w_scratch)
-                    .expect("finite deltas") }
+            if let 0 = i % 2 {
+                acc.accumulate_whitened(&whitener, dv, &mut w_scratch)
+                    .expect("finite deltas")
+            }
         }
         acc.finish();
     }
@@ -626,7 +647,9 @@ fn basis_direction(
     // holdout read).
     let mut odd: Vec<&[f64]> = Vec::new();
     for (i, dv) in deltas.iter().enumerate() {
-        if let 1 = i % 2 { odd.push(dv) }
+        if let 1 = i % 2 {
+            odd.push(dv)
+        }
     }
     let mut proj = vec![0.0f64; d];
     let mut bx = vec![0.0f64; d];
@@ -755,7 +778,10 @@ fn main() {
         }
     };
     let corpus = build_raw_corpus(matcher.rule_book_map());
-    let mut ctx = ChannelCtx { matcher: &mut matcher, corpus };
+    let mut ctx = ChannelCtx {
+        matcher: &mut matcher,
+        corpus,
+    };
 
     // ── family census ──────────────────────────────────────────────────────
     let mut by_family: BTreeMap<String, Vec<usize>> = BTreeMap::new();
@@ -825,7 +851,11 @@ fn main() {
                 t.own_rank_sum[1] as f64 / n as f64
             ),
         };
-        println!(" {:>14} {:>10}", format!("{}/{}", t.own_rule_lost, t.own_rank_seen), rk);
+        println!(
+            " {:>14} {:>10}",
+            format!("{}/{}", t.own_rule_lost, t.own_rank_seen),
+            rk
+        );
     }
 
     // ── N3: whitespace floor over the committed fixtures ───────────────────
@@ -882,8 +912,10 @@ fn main() {
 
     // ── N4: the formatting basis ────────────────────────────────────────
     println!("\n── formatting basis (basis_split, whitened pair differences) ──");
-    let pairs_embed: Vec<([f32; 8], [f32; 8])> =
-        pairs.iter().map(|p| (embed8(&p.before), embed8(&p.after))).collect();
+    let pairs_embed: Vec<([f32; 8], [f32; 8])> = pairs
+        .iter()
+        .map(|p| (embed8(&p.before), embed8(&p.after)))
+        .collect();
     // The 32-D token channel contrast (span_embed): mean ΔL2 + mean cosine.
     println!("  token-channel contrast (span_embed 32-D, per family):");
     for (fam, idxs) in &by_family {
@@ -894,7 +926,11 @@ fn main() {
             let ea = riir_refine::span_embed::span_embed(&pairs[i].after);
             let fb: Vec<f32> = eb.iter().map(|&v| f32::from(v) / 127.0).collect();
             let fa: Vec<f32> = ea.iter().map(|&v| f32::from(v) / 127.0).collect();
-            let d2: f32 = fb.iter().zip(fa.iter()).map(|(x, y)| (x - y) * (x - y)).sum();
+            let d2: f32 = fb
+                .iter()
+                .zip(fa.iter())
+                .map(|(x, y)| (x - y) * (x - y))
+                .sum();
             sum_d += f64::from(d2.sqrt());
             let dot: f32 = fb.iter().zip(fa.iter()).map(|(x, y)| x * y).sum();
             let nb = f32::sqrt(fb.iter().map(|x| x * x).sum());
@@ -904,7 +940,11 @@ fn main() {
             }
         }
         let n = idxs.len();
-        println!("    {fam}: mean ΔL2={:.4} mean cos={:.4} (n={n})", sum_d / n as f64, sum_c / n as f64);
+        println!(
+            "    {fam}: mean ΔL2={:.4} mean cos={:.4} (n={n})",
+            sum_d / n as f64,
+            sum_c / n as f64
+        );
     }
 
     // The rule id of every pair (the generator that produced the fix).
@@ -914,8 +954,10 @@ fn main() {
         .collect();
 
     // The family order (size desc, name asc) — the fit family is the head.
-    let mut order: Vec<(String, usize)> =
-        by_family.iter().map(|(f, v)| (f.clone(), v.len())).collect();
+    let mut order: Vec<(String, usize)> = by_family
+        .iter()
+        .map(|(f, v)| (f.clone(), v.len()))
+        .collect();
     order.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
 
     // Run 1 — the issue's FAMILY-level holdout: fit the largest family,

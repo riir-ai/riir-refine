@@ -56,7 +56,7 @@ use std::time::Instant;
 /// [`f16_bits_to_f32`].
 #[derive(Clone, Copy)]
 pub struct Pq2Block {
-    pub d: u16,      // f16 bit pattern
+    pub d: u16,       // f16 bit pattern
     pub qs: [u8; 32], // 128 weights x 2 bits, LSB pair first
 }
 
@@ -75,8 +75,8 @@ fn f16_bits_to_f32(bits: u16) -> f32 {
     let exp = ((bits >> 10) & 0x1F) as i32;
     let man = (bits & 0x03FF) as f32;
     match exp {
-        0 => sign * man * 2.0f32.powi(-24),          // zero + subnormals
-        0x1F => sign * f32::INFINITY,                // Inf/NaN boundary (unused)
+        0 => sign * man * 2.0f32.powi(-24), // zero + subnormals
+        0x1F => sign * f32::INFINITY,       // Inf/NaN boundary (unused)
         e => sign * (1.0 + man / 1024.0) * 2.0f32.powi(e - 15),
     }
 }
@@ -126,9 +126,7 @@ pub mod neon {
     pub unsafe fn vec_dot_pq2_q8k(xs: &[Pq2Block], ys: &[Q8KBlock]) -> f32 {
         let idx_lo: [u8; 16] = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3];
         let idx_hi: [u8; 16] = [4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7];
-        let shifts: [i8; 16] = [
-            0, -2, -4, -6, 0, -2, -4, -6, 0, -2, -4, -6, 0, -2, -4, -6,
-        ];
+        let shifts: [i8; 16] = [0, -2, -4, -6, 0, -2, -4, -6, 0, -2, -4, -6, 0, -2, -4, -6];
         let (t_lo, t_hi, sh) = unsafe {
             (
                 vld1q_u8(idx_lo.as_ptr()),
@@ -232,15 +230,24 @@ impl Rng {
 /// contract's precondition.
 fn gen_fixture(rng: &mut Rng, xd_bits: u16, yd: f32) -> ([Pq2Block; 2], Q8KBlock) {
     let mut xs = [
-        Pq2Block { d: xd_bits, qs: [0; 32] },
-        Pq2Block { d: xd_bits, qs: [0; 32] },
+        Pq2Block {
+            d: xd_bits,
+            qs: [0; 32],
+        },
+        Pq2Block {
+            d: xd_bits,
+            qs: [0; 32],
+        },
     ];
     for x in &mut xs {
         for b in x.qs.iter_mut() {
             *b = (rng.next() & 0xFF) as u8;
         }
     }
-    let mut yb = Q8KBlock { d: yd, qs: [0; 256] };
+    let mut yb = Q8KBlock {
+        d: yd,
+        qs: [0; 256],
+    };
     for q in yb.qs.iter_mut() {
         *q = (rng.below(256) as i32 - 128) as i8;
     }
@@ -251,10 +258,19 @@ fn gen_fixture(rng: &mut Rng, xd_bits: u16, yd: f32) -> ([Pq2Block; 2], Q8KBlock
 /// carries codes {3,2,1,0} LSB-pair-first), q8 at one extreme.
 fn edge_fixtures(xd_bits: u16, yd: f32, q8_extreme: i8) -> ([Pq2Block; 2], Q8KBlock) {
     let xs = [
-        Pq2Block { d: xd_bits, qs: [0b11_10_01_00; 32] },
-        Pq2Block { d: xd_bits, qs: [0b00_01_10_11; 32] }, // reversed pairs
+        Pq2Block {
+            d: xd_bits,
+            qs: [0b11_10_01_00; 32],
+        },
+        Pq2Block {
+            d: xd_bits,
+            qs: [0b00_01_10_11; 32],
+        }, // reversed pairs
     ];
-    let yb = Q8KBlock { d: yd, qs: [q8_extreme; 256] };
+    let yb = Q8KBlock {
+        d: yd,
+        qs: [q8_extreme; 256],
+    };
     (xs, yb)
 }
 
@@ -282,8 +298,8 @@ fn gemv_neon(rows: &[Vec<Pq2Block>], ys: &[Q8KBlock]) -> f32 {
 // ── provenance (the bench_004 pattern — the instrument is cross-repo) ────
 
 fn preflight() -> (String, String) {
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../riir-reflex/scripts/bench_preflight.sh");
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../riir-reflex/scripts/bench_preflight.sh");
     if !script.exists() {
         return (
             "UNAVAILABLE".to_string(),
@@ -314,7 +330,10 @@ fn preflight() -> (String, String) {
             };
             (verdict, prov)
         }
-        Err(e) => ("UNAVAILABLE".to_string(), format!("preflight spawn failed: {e}")),
+        Err(e) => (
+            "UNAVAILABLE".to_string(),
+            format!("preflight spawn failed: {e}"),
+        ),
     }
 }
 
@@ -341,11 +360,17 @@ struct Sweep {
 }
 
 fn gen_sweep(rows: usize, k: usize, seed_offset: u64) -> Sweep {
-    assert!(k.is_multiple_of(256), "K must be a multiple of 256 (the Q8_K layout)");
+    assert!(
+        k.is_multiple_of(256),
+        "K must be a multiple of 256 (the Q8_K layout)"
+    );
     let mut rng = Rng::new(FIXTURE_SEED ^ seed_offset);
     let n_pq2_per_row = k / 128;
     let n_q8k = k / 256;
-    let mut out = Sweep { rows: Vec::with_capacity(rows), ys: Vec::with_capacity(n_q8k) };
+    let mut out = Sweep {
+        rows: Vec::with_capacity(rows),
+        ys: Vec::with_capacity(n_q8k),
+    };
     for _ in 0..rows {
         let mut r = Vec::with_capacity(n_pq2_per_row);
         for _ in 0..(n_pq2_per_row / 2) {
@@ -481,7 +506,9 @@ fn main() {
         let _ = s;
         g1_cases += 1;
     }
-    say(&format!("G1 PASS — {g1_cases} cases bit-identical (random + edge + multi-block)"));
+    say(&format!(
+        "G1 PASS — {g1_cases} cases bit-identical (random + edge + multi-block)"
+    ));
 
     // ══ G4 — allocation-free (the measured path, both arms) ══
     say("── G4: zero allocations in the measured path ──");
@@ -490,11 +517,13 @@ fn main() {
         let row = &sweep.rows[0];
         let ys = &sweep.ys;
         let (_, n_allocs) = alloc_armed(|| vec_dot_scalar(row, ys));
-        assert_eq!(n_allocs, 0, "G4 FAIL: the SCALAR arm allocates ({n_allocs})");
+        assert_eq!(
+            n_allocs, 0,
+            "G4 FAIL: the SCALAR arm allocates ({n_allocs})"
+        );
         #[cfg(target_arch = "aarch64")]
         {
-            let (_, n_allocs) =
-                alloc_armed(|| unsafe { neon::vec_dot_pq2_q8k(row, ys) });
+            let (_, n_allocs) = alloc_armed(|| unsafe { neon::vec_dot_pq2_q8k(row, ys) });
             assert_eq!(n_allocs, 0, "G4 FAIL: the NEON arm allocates ({n_allocs})");
         }
     }
@@ -502,7 +531,9 @@ fn main() {
 
     // ══ G2 — the GEMV sweep, interleaved best-of-N ══
     say("── G2: GEMV sweep (rows x K), NEON vs naive scalar ──");
-    say(&format!("    (interleaved best-of-{MEASURED_PASSES} per shape per arm; correctness-coupled sinks)"));
+    say(&format!(
+        "    (interleaved best-of-{MEASURED_PASSES} per shape per arm; correctness-coupled sinks)"
+    ));
     let mut all_neon_win = true;
     for &rows in &ROWS_GRID {
         for &k in &K_GRID {

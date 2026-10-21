@@ -85,10 +85,7 @@ fn version_prints_the_compiled_feature_stamp() {
         text.contains(&format!("net: {}", riir_refine::kat_net_pin::NET_PIN)),
         "the version block must carry the net pin. output:\n{text}"
     );
-    match (
-        cfg!(feature = "net-mainnet"),
-        cfg!(feature = "net-devnet"),
-    ) {
+    match (cfg!(feature = "net-mainnet"), cfg!(feature = "net-devnet")) {
         (false, false) => {
             assert_eq!(
                 riir_refine::kat_net_pin::NET_PIN,

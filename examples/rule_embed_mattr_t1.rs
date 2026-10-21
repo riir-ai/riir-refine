@@ -56,13 +56,13 @@ use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::{canonical_rank, labeled_eval_spans, run_split_eval};
 use riir_refine::draft::rule_embed::{
-    decode_verified, embedded_tables, fixture_is_withheld, train, Trained, TrainConfig, TrainData,
+    decode_verified, embedded_tables, fixture_is_withheld, train, TrainConfig, TrainData, Trained,
     TrainedTables,
 };
 use riir_refine::draft::rule_embed_mattr::{
     train_spanwise, KBudget, MattrConfig, SpanRow, SpanTrainData,
 };
-use riir_refine::draft::{RetrievalConfig, RerankMode};
+use riir_refine::draft::{RerankMode, RetrievalConfig};
 
 // ---------------------------------------------------------------------------
 // The pinned corpus shape (Issue 133's 2026-10-08 re-check — the corpus
@@ -187,7 +187,11 @@ struct SplitCurves {
 impl SplitCurves {
     /// Macro recall at index i over the split's lints (≥1 pair).
     fn macro_recall(&self, split: usize, i: usize, capped: bool) -> (f64, usize) {
-        let map = if capped { &self.capped_per_lint } else { &self.per_lint };
+        let map = if capped {
+            &self.capped_per_lint
+        } else {
+            &self.per_lint
+        };
         let mut sum = 0.0_f64;
         let mut n = 0_usize;
         for stats in map.values() {
@@ -196,7 +200,14 @@ impl SplitCurves {
                 n += 1;
             }
         }
-        (if n == 0 { f64::NAN } else { sum / f64::from(n as u32) }, n)
+        (
+            if n == 0 {
+                f64::NAN
+            } else {
+                sum / f64::from(n as u32)
+            },
+            n,
+        )
     }
 }
 
@@ -233,7 +244,11 @@ struct Sinks {
 impl Sinks {
     fn new(out_dir: PathBuf) -> Self {
         let _ = std::fs::create_dir_all(&out_dir);
-        Self { jsonl_path: out_dir.join("results.jsonl"), md: String::new(), out_dir }
+        Self {
+            jsonl_path: out_dir.join("results.jsonl"),
+            md: String::new(),
+            out_dir,
+        }
     }
 
     fn md(&mut self, line: &str) {
@@ -244,8 +259,10 @@ impl Sinks {
 
     fn jsonl(&self, value: serde_json::Value) {
         use std::io::Write;
-        if let Ok(mut f) =
-            std::fs::OpenOptions::new().create(true).append(true).open(&self.jsonl_path)
+        if let Ok(mut f) = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.jsonl_path)
         {
             let _ = writeln!(f, "{value}");
         }
@@ -365,21 +382,39 @@ fn aux_triples() -> Vec<(String, String, String)> {
     let mut triples = Vec::new();
     #[cfg(feature = "rust_perf")]
     triples.extend(
-        riir_refine::domains::rust_perf::RustPerfDomain::build_corpus().into_iter().map(|e| {
-            (e.rule_id().to_string(), e.buggy_code().to_string(), e.fixed_code().to_string())
-        }),
+        riir_refine::domains::rust_perf::RustPerfDomain::build_corpus()
+            .into_iter()
+            .map(|e| {
+                (
+                    e.rule_id().to_string(),
+                    e.buggy_code().to_string(),
+                    e.fixed_code().to_string(),
+                )
+            }),
     );
     #[cfg(feature = "docker")]
     triples.extend(
-        riir_refine::domains::docker::DockerDomain::build_corpus().into_iter().map(|e| {
-            (e.rule_id().to_string(), e.buggy_code().to_string(), e.fixed_code().to_string())
-        }),
+        riir_refine::domains::docker::DockerDomain::build_corpus()
+            .into_iter()
+            .map(|e| {
+                (
+                    e.rule_id().to_string(),
+                    e.buggy_code().to_string(),
+                    e.fixed_code().to_string(),
+                )
+            }),
     );
     #[cfg(feature = "dist")]
     triples.extend(
-        riir_refine::domains::dist::DistDomain::build_corpus().into_iter().map(|e| {
-            (e.rule_id().to_string(), e.buggy_code().to_string(), e.fixed_code().to_string())
-        }),
+        riir_refine::domains::dist::DistDomain::build_corpus()
+            .into_iter()
+            .map(|e| {
+                (
+                    e.rule_id().to_string(),
+                    e.buggy_code().to_string(),
+                    e.fixed_code().to_string(),
+                )
+            }),
     );
     triples
 }
@@ -397,10 +432,16 @@ fn build_book() -> Book {
         }
         rule_texts.push((id, text));
     }
-    let mut clippy_pool: Vec<String> =
-        rule_texts[..clippy_n].iter().map(|(id, _)| id.clone()).collect();
+    let mut clippy_pool: Vec<String> = rule_texts[..clippy_n]
+        .iter()
+        .map(|(id, _)| id.clone())
+        .collect();
     clippy_pool.sort();
-    Book { rule_texts, index, clippy_pool }
+    Book {
+        rule_texts,
+        index,
+        clippy_pool,
+    }
 }
 
 /// The spans.jsonl corpus builder — a REPRODUCTION of Issue 133's re-check
@@ -408,7 +449,10 @@ fn build_book() -> Book {
 /// the eval spans + the per-lint pair histogram in file order.
 fn load_span_corpus(vocab: &HashSet<String>) -> (Vec<EvalSpan>, Vec<(String, usize)>) {
     let path = std::env::var("MATTR_SPANS_PATH").unwrap_or_else(|_| {
-        format!("{}/.benchmarks/data/049_t01/spans.jsonl", env!("CARGO_MANIFEST_DIR"))
+        format!(
+            "{}/.benchmarks/data/049_t01/spans.jsonl",
+            env!("CARGO_MANIFEST_DIR")
+        )
     });
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("read {path} failed: {e} — the supervision corpus is required"));
@@ -452,26 +496,52 @@ fn load_span_corpus(vocab: &HashSet<String>) -> (Vec<EvalSpan>, Vec<(String, usi
             } else {
                 true
             };
-            gps.push(GoldPair { withheld: fixture_is_withheld(&lint), capped_in, lint });
+            gps.push(GoldPair {
+                withheld: fixture_is_withheld(&lint),
+                capped_in,
+                lint,
+            });
         }
         spans.push(EvalSpan { code, golds: gps });
     }
 
     // Loud reproduction checks — the issue's re-check numbers ARE the spec.
     let check = |cond: bool, what: &str, measured: String| {
-        assert!(cond, "corpus drift vs the Issue-133 re-check: {what} = {measured}");
+        assert!(
+            cond,
+            "corpus drift vs the Issue-133 re-check: {what} = {measured}"
+        );
     };
-    check(labeled == EXPECT_LABELED, "labeled spans", format!("{labeled} (want {EXPECT_LABELED})"));
-    check(single == EXPECT_SINGLE, "single-label", format!("{single} (want {EXPECT_SINGLE})"));
-    check(multi == EXPECT_MULTI, "multi-label", format!("{multi} (want {EXPECT_MULTI})"));
-    check(pairs == EXPECT_PAIRS, "pairs", format!("{pairs} (want {EXPECT_PAIRS})"));
+    check(
+        labeled == EXPECT_LABELED,
+        "labeled spans",
+        format!("{labeled} (want {EXPECT_LABELED})"),
+    );
+    check(
+        single == EXPECT_SINGLE,
+        "single-label",
+        format!("{single} (want {EXPECT_SINGLE})"),
+    );
+    check(
+        multi == EXPECT_MULTI,
+        "multi-label",
+        format!("{multi} (want {EXPECT_MULTI})"),
+    );
+    check(
+        pairs == EXPECT_PAIRS,
+        "pairs",
+        format!("{pairs} (want {EXPECT_PAIRS})"),
+    );
     check(
         pair_counts.len() == EXPECT_LINTS,
         "distinct lints",
         format!("{} (want {EXPECT_LINTS})", pair_counts.len()),
     );
-    let train_pairs: usize =
-        pair_counts.iter().filter(|(l, _)| !fixture_is_withheld(l)).map(|(_, c)| *c).sum();
+    let train_pairs: usize = pair_counts
+        .iter()
+        .filter(|(l, _)| !fixture_is_withheld(l))
+        .map(|(_, c)| *c)
+        .sum();
     check(
         train_pairs == EXPECT_TRAIN_PAIRS,
         "train-split pairs",
@@ -503,7 +573,11 @@ fn print_histogram(sinks: &mut Sinks, by_count: &[(String, usize)]) {
             "  {lint:<36} {c:4} pairs ({:4.1}% cum {:5.1}%)  split: {}",
             100.0 * f64::from(*c as u32) / f64::from(total as u32),
             100.0 * f64::from(cum as u32) / f64::from(total as u32),
-            if fixture_is_withheld(lint) { "WITHHELD" } else { "train" },
+            if fixture_is_withheld(lint) {
+                "WITHHELD"
+            } else {
+                "train"
+            },
         ));
     }
     let top4: usize = by_count.iter().take(4).map(|(_, c)| *c).sum();
@@ -531,15 +605,20 @@ fn ranked_fused(matcher: &mut LatentMatcher, code: &str) -> Vec<String> {
         .iter()
         .find(|(d, _)| *d == DomainId::Clippy)
         .map(|(_, rules)| {
-            canonical_rank(rules).into_iter().map(|r| r.rule_id.clone()).collect::<Vec<_>>()
+            canonical_rank(rules)
+                .into_iter()
+                .map(|r| r.rule_id.clone())
+                .collect::<Vec<_>>()
         })
         .unwrap_or_default()
 }
 
 fn ranked_tower(tables: &TrainedTables, code: &str, pool: &[String]) -> Vec<String> {
     let phi = tables.project_span(code);
-    let mut scored: Vec<(f32, &String)> =
-        pool.iter().filter_map(|id| tables.score_rule(&phi, id).map(|s| (s, id))).collect();
+    let mut scored: Vec<(f32, &String)> = pool
+        .iter()
+        .filter_map(|id| tables.score_rule(&phi, id).map(|s| (s, id)))
+        .collect();
     scored.sort_by(|a, b| b.0.total_cmp(&a.0).then_with(|| a.1.cmp(b.1)));
     scored.into_iter().map(|(_, id)| id.clone()).collect()
 }
@@ -671,7 +750,11 @@ fn build_arm_data(book: &Book, eval_spans: &[EvalSpan]) -> ArmData {
         }
         let buggy = text.lines().next().unwrap_or_default().to_string();
         self_pairs.push((buggy.clone(), id.clone()));
-        self_span_rows.push(SpanRow { text: buggy, golds: vec![i], forbidden: vec![] });
+        self_span_rows.push(SpanRow {
+            text: buggy,
+            golds: vec![i],
+            forbidden: vec![],
+        });
     }
     // (b) the fixture train-split pairs — kept in EVERY arm so the
     // fixture-rig comparison vs the shipped asset is apples-to-apples.
@@ -685,7 +768,11 @@ fn build_arm_data(book: &Book, eval_spans: &[EvalSpan]) -> ArmData {
             panic!("fixture label {:?} missing from the rule book", span.label);
         };
         fixture_pairs.push((span.code.clone(), span.label.clone()));
-        fixture_span_rows.push(SpanRow { text: span.code, golds: vec![idx], forbidden: vec![] });
+        fixture_span_rows.push(SpanRow {
+            text: span.code,
+            golds: vec![idx],
+            forbidden: vec![],
+        });
     }
     // (c) the spans.jsonl train-split supervision (the T1 addition); the
     // withheld golds ride along as `forbidden` (excluded in BOTH directions).
@@ -710,7 +797,11 @@ fn build_arm_data(book: &Book, eval_spans: &[EvalSpan]) -> ArmData {
         for g in &golds {
             span_pairs.push((es.code.clone(), book.rule_texts[*g].0.clone()));
         }
-        span_rows.push(SpanRow { text: es.code.clone(), golds, forbidden });
+        span_rows.push(SpanRow {
+            text: es.code.clone(),
+            golds,
+            forbidden,
+        });
     }
     let n_span_pairs_train = span_pairs.len();
     let n_span_spans = span_rows.len();
@@ -725,8 +816,14 @@ fn build_arm_data(book: &Book, eval_spans: &[EvalSpan]) -> ArmData {
     spans.extend(self_span_rows);
 
     ArmData {
-        pairs_data: TrainData { pairs, rule_texts: book.rule_texts.clone() },
-        spanwise_data: SpanTrainData { spans, rule_texts: book.rule_texts.clone() },
+        pairs_data: TrainData {
+            pairs,
+            rule_texts: book.rule_texts.clone(),
+        },
+        spanwise_data: SpanTrainData {
+            spans,
+            rule_texts: book.rule_texts.clone(),
+        },
         n_span_spans,
         n_span_pairs_train,
         n_fixture_pairs,
@@ -737,7 +834,10 @@ fn build_arm_data(book: &Book, eval_spans: &[EvalSpan]) -> ArmData {
 fn train_arm(arm: Arm, data: &ArmData, steps: usize) -> Result<Trained, String> {
     match arm {
         Arm::ShippedControl => {
-            let cfg = TrainConfig { steps, ..TrainConfig::default() };
+            let cfg = TrainConfig {
+                steps,
+                ..TrainConfig::default()
+            };
             train(&data.pairs_data, &cfg)
         }
         Arm::SpanwiseFull | Arm::Uniform | Arm::UniformAllWidths | Arm::LogBoth => {
@@ -748,7 +848,10 @@ fn train_arm(arm: Arm, data: &ArmData, steps: usize) -> Result<Trained, String> 
                 _ => KBudget::LogBoth(BUDGET_SET),
             };
             let cfg = MattrConfig {
-                base: TrainConfig { steps, ..TrainConfig::default() },
+                base: TrainConfig {
+                    steps,
+                    ..TrainConfig::default()
+                },
                 budget,
                 ..MattrConfig::default()
             };
@@ -790,7 +893,11 @@ fn main() {
     }
     let quick = steps != TrainConfig::default().steps;
     let run_tag = arms.iter().map(|a| a.tag()).collect::<Vec<_>>().join("+");
-    let run_tag = if quick { format!("quick_{run_tag}") } else { run_tag };
+    let run_tag = if quick {
+        format!("quick_{run_tag}")
+    } else {
+        run_tag
+    };
     let mut sinks = Sinks::new(out_dir);
 
     sinks.md(&format!(
@@ -818,14 +925,25 @@ fn main() {
     let rows = rig_sweep(&shipped);
     let pinned = pin_weight(&rows);
     emit_rig(&mut sinks, "shipped_asset", &rows, pinned);
-    let g = rows.iter().find(|r| r.w == GATE_WEIGHT).expect("gate weight row");
+    let g = rows
+        .iter()
+        .find(|r| r.w == GATE_WEIGHT)
+        .expect("gate weight row");
     sinks.md(&format!(
         "  at the gate's pinned w={GATE_WEIGHT}: baseline {}/{} train + {}/{} withheld | \
          trained {}/{} train + {}/{} withheld | regressions {} | clean {}/{} \
          (floors: baseline >= 90/34, trained >= 95/34, clean <= 31, G1 = 0)",
-        g.baseline_train, g.n_train, g.baseline_withheld, g.n_withheld,
-        g.trained_train, g.n_train, g.trained_withheld, g.n_withheld,
-        g.regressions, g.clean_b, g.clean_t,
+        g.baseline_train,
+        g.n_train,
+        g.baseline_withheld,
+        g.n_withheld,
+        g.trained_train,
+        g.n_train,
+        g.trained_withheld,
+        g.n_withheld,
+        g.regressions,
+        g.clean_b,
+        g.clean_t,
     ));
     let shipped_total_at_gate = g.trained_train + g.trained_withheld;
     sinks.jsonl(serde_json::json!({
@@ -842,7 +960,9 @@ fn main() {
     let mut baseline_matcher = LatentMatcher::from_enabled_domains_with(RetrievalConfig::default())
         .expect("build matcher")
         .with_rerank_mode(RerankMode::default());
-    let baseline_curves = run_curves(&eval_spans, |code| ranked_fused(&mut baseline_matcher, code));
+    let baseline_curves = run_curves(&eval_spans, |code| {
+        ranked_fused(&mut baseline_matcher, code)
+    });
     emit_curves(&mut sinks, "-", "fused_baseline", &baseline_curves);
     sinks.jsonl(serde_json::json!({
         "arm": "-", "section": "done_posture", "posture": "fused_baseline",
@@ -851,7 +971,11 @@ fn main() {
 
     // ---- arms ---------------------------------------------------------------
     sinks.md("\n## 3. Arms");
-    let data = if eval_only { None } else { Some(build_arm_data(&book, &eval_spans)) };
+    let data = if eval_only {
+        None
+    } else {
+        Some(build_arm_data(&book, &eval_spans))
+    };
     if let Some(d) = &data {
         sinks.md(&format!(
             "  data: {} fixture pairs + {} span-corpus pairs ({} spans) + {} self-pairs = {} pair \
@@ -883,10 +1007,11 @@ fn main() {
                 steps: 0,
             }
         } else {
-            let tr = train_arm(arm, data.as_ref().expect("train data"), steps).unwrap_or_else(|e| {
-                eprintln!("train failed for {}: {e}", arm.tag());
-                std::process::exit(1);
-            });
+            let tr =
+                train_arm(arm, data.as_ref().expect("train data"), steps).unwrap_or_else(|e| {
+                    eprintln!("train failed for {}: {e}", arm.tag());
+                    std::process::exit(1);
+                });
             std::fs::write(&artifact_path, &tr.bytes)
                 .unwrap_or_else(|e| panic!("write artifact failed: {e}"));
             tr
@@ -960,7 +1085,9 @@ fn main() {
 
         // span-corpus curves: tower-only + fused-at-pinned-w
         let t4 = Instant::now();
-        let tower = run_curves(&eval_spans, |code| ranked_tower(&tr.tables, code, &book.clippy_pool));
+        let tower = run_curves(&eval_spans, |code| {
+            ranked_tower(&tr.tables, code, &book.clippy_pool)
+        });
         emit_curves(&mut sinks, arm.tag(), "tower_only", &tower);
         let mut trained_matcher =
             LatentMatcher::from_enabled_domains_with(RetrievalConfig::default())
@@ -977,9 +1104,17 @@ fn main() {
 
     let jsonl_path = sinks.jsonl_path.clone();
     let (report_path, _) = sinks.flush(&run_tag);
-    println!("\nreport: {}\njsonl:  {}", report_path.display(), jsonl_path.display());
+    println!(
+        "\nreport: {}\njsonl:  {}",
+        report_path.display(),
+        jsonl_path.display()
+    );
 }
 
 fn verdict(ok: bool) -> &'static str {
-    if ok { "PASS" } else { "FAIL" }
+    if ok {
+        "PASS"
+    } else {
+        "FAIL"
+    }
 }

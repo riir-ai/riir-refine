@@ -177,7 +177,10 @@ fn set_rerank_ab_composite() {
     if truth.len() < 5 {
         // Not a floor — a refuse-to-guess guard (a verdict over a starving
         // rig is noise wearing a percentage).
-        eprintln!("SKIP: only {} scorable spans on this toolchain", truth.len());
+        eprintln!(
+            "SKIP: only {} scorable spans on this toolchain",
+            truth.len()
+        );
         return;
     }
 
@@ -319,7 +322,12 @@ fn set_rerank_ood_withheld_pair() {
     let pop = riir_refine::draft::withheld_pair_ood::clippy_population();
     println!("\n== Issue 121 OOD rig — clippy_population, pure retrieval arms ==");
 
-    let base = run_withheld_pair(pop.clone(), None, RerankMode::Off, "shipped (pure retrieval)");
+    let base = run_withheld_pair(
+        pop.clone(),
+        None,
+        RerankMode::Off,
+        "shipped (pure retrieval)",
+    );
     println!(
         "  shipped                 ID top-5 {:>5.1}%  OOD top-5 {:>5.1}%  NOROLE top-5 {:.1}%",
         base.id_topk(5),

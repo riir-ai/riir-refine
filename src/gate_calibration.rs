@@ -162,15 +162,12 @@ fn f32_field(
     idx: usize,
 ) -> Result<f32, String> {
     match element.get(key) {
-        Some(value) => value
-            .as_f64()
-            .map(|n| n as f32)
-            .ok_or_else(|| {
-                format!(
-                    "strata[{idx}].`{key}` is not a number (found {})",
-                    json_kind(value)
-                )
-            }),
+        Some(value) => value.as_f64().map(|n| n as f32).ok_or_else(|| {
+            format!(
+                "strata[{idx}].`{key}` is not a number (found {})",
+                json_kind(value)
+            )
+        }),
         None => Err(format!("strata[{idx}] is missing the `{key}` field")),
     }
 }
@@ -247,9 +244,9 @@ pub fn stratum_runs(row: &serde_json::Value) -> Result<Vec<StratumRunView>, Stri
     };
     let mut out = Vec::with_capacity(strata.len());
     for (idx, item) in strata.iter().enumerate() {
-        let element = item.as_object().ok_or_else(|| {
-            format!("strata[{idx}] is not an object (found {})", json_kind(item))
-        })?;
+        let element = item
+            .as_object()
+            .ok_or_else(|| format!("strata[{idx}] is not an object (found {})", json_kind(item)))?;
         out.push(StratumRunView {
             generation,
             ts: ts.clone(),
@@ -550,15 +547,12 @@ fn ood_f32_field(
     key: &str,
 ) -> Result<f32, String> {
     match block.get(key) {
-        Some(value) => value
-            .as_f64()
-            .map(|n| n as f32)
-            .ok_or_else(|| {
-                format!(
-                    "score-history row's `ood`.`{key}` is not a number (found {})",
-                    json_kind(value)
-                )
-            }),
+        Some(value) => value.as_f64().map(|n| n as f32).ok_or_else(|| {
+            format!(
+                "score-history row's `ood`.`{key}` is not a number (found {})",
+                json_kind(value)
+            )
+        }),
         None => Err(format!(
             "score-history row's `ood` is missing the `{key}` field"
         )),
@@ -720,9 +714,11 @@ pub fn calibrate_ood(runs: &[OodRunView]) -> Vec<OodAxisGroup> {
             if run.ts > ts_last {
                 ts_last.clone_from(&run.ts);
             }
-            let state = per_state
-                .entry(run.artifact.as_str())
-                .or_insert((0, f32::INFINITY, f32::NEG_INFINITY));
+            let state = per_state.entry(run.artifact.as_str()).or_insert((
+                0,
+                f32::INFINITY,
+                f32::NEG_INFINITY,
+            ));
             state.0 += 1;
             state.1 = state.1.min(run.mean_gap);
             state.2 = state.2.max(run.mean_gap);
@@ -735,9 +731,7 @@ pub fn calibrate_ood(runs: &[OodRunView]) -> Vec<OodAxisGroup> {
             state_delta_max = state_delta_max.max(*state_max - *state_min);
         }
         let verdict = if group.len() < MIN_REPEAT_RUNS {
-            CalibrationVerdict::Deferred(
-                "single run at this axis — no repeat evidence".to_string(),
-            )
+            CalibrationVerdict::Deferred("single run at this axis — no repeat evidence".to_string())
         } else if n_ood_max < MIN_STRATUM_FINDINGS {
             CalibrationVerdict::Deferred(format!(
                 "thin OOD sample ({n_ood_max} fixtures) — grow the OOD fixture corpus first"
@@ -814,10 +808,7 @@ fn render_ood_axis_read(out: &mut String, biggest: &OodAxisGroup) {
              corpus state — the same class the repeats refutation named; T2 path (a) \
              narrows further (re-arm: a nondeterminism source in the entropy kernel, or \
              an OOD set grown past {MIN_STRATUM_FINDINGS} fixtures)",
-            biggest.delta,
-            biggest.states,
-            biggest.max_plateau,
-            biggest.state_delta_max
+            biggest.delta, biggest.states, biggest.max_plateau, biggest.state_delta_max
         );
     } else if biggest.state_delta_max > 0.0 {
         let _ = writeln!(
@@ -965,8 +956,7 @@ pub fn stall_scan(snapshots: &[FrontierSnapshot]) -> Vec<StallRow> {
         let start = chron.len().saturating_sub(STALL_WINDOW);
         let window = &chron[start..];
         let rows_in_window = window.len();
-        let window_generations: Vec<u32> =
-            window.iter().map(|s| u32::from(s.generation)).collect();
+        let window_generations: Vec<u32> = window.iter().map(|s| u32::from(s.generation)).collect();
         let mut boundaries = 0;
         for pair in window_generations.windows(2) {
             if pair[1] > pair[0] {
@@ -1008,7 +998,10 @@ pub fn stall_scan(snapshots: &[FrontierSnapshot]) -> Vec<StallRow> {
 pub fn render_stall(rows: &[StallRow]) -> String {
     use std::fmt::Write as _;
     let mut out = String::with_capacity(512);
-    let _ = writeln!(out, "## Corpus stall scan (Issue 130 T3 — report-first, gates nothing)");
+    let _ = writeln!(
+        out,
+        "## Corpus stall scan (Issue 130 T3 — report-first, gates nothing)"
+    );
     let _ = writeln!(
         out,
         "σ_t per store over the last {STALL_WINDOW} snapshot rows (stall = zero generation \
@@ -1056,10 +1049,7 @@ pub fn render_stall(rows: &[StallRow]) -> String {
     } else {
         let names = flagged.join(", ");
         let flagged_count = flagged.len();
-        let _ = writeln!(
-            out,
-            "⚠ {flagged_count} stalled store window(s): {names}"
-        );
+        let _ = writeln!(out, "⚠ {flagged_count} stalled store window(s): {names}");
     }
     out
 }
@@ -1158,10 +1148,9 @@ mod tests {
         let err = stratum_runs(&not_an_object).unwrap_err();
         assert!(err.contains("strata[0] is not an object"), "{err}");
 
-        let missing_field: serde_json::Value = serde_json::from_str(
-            r#"{"generation": 1, "ts": "t", "strata": [{"class": "repo"}]}"#,
-        )
-        .unwrap();
+        let missing_field: serde_json::Value =
+            serde_json::from_str(r#"{"generation": 1, "ts": "t", "strata": [{"class": "repo"}]}"#)
+                .unwrap();
         let err = stratum_runs(&missing_field).unwrap_err();
         assert!(err.contains("`vocab_before`"), "{err}");
 
@@ -1177,8 +1166,7 @@ mod tests {
         // attribution fields (the old history) extracts to empty — it is
         // not an error, and demanding `generation` from it would print
         // cries-wolf errors for every pre-strata row on every report.
-        let pre_strata: serde_json::Value =
-            serde_json::from_str(r#"{"ts": "t"}"#).unwrap();
+        let pre_strata: serde_json::Value = serde_json::from_str(r#"{"ts": "t"}"#).unwrap();
         assert!(stratum_runs(&pre_strata).unwrap().is_empty());
         let no_strata_at_all: serde_json::Value =
             serde_json::from_str(r#"{"generation": 1}"#).unwrap();
@@ -1383,7 +1371,9 @@ mod tests {
         ]);
         let text = render_calibration(&deep);
         assert!(
-            text.contains("repo stratum (latest generation 4): ✓ admission floor may be calibrated"),
+            text.contains(
+                "repo stratum (latest generation 4): ✓ admission floor may be calibrated"
+            ),
             "{text}"
         );
 
@@ -1529,7 +1519,10 @@ mod tests {
         let rows = stall_scan(&flat);
         assert_eq!(rows[0].generation_boundaries, 0);
         assert!(!rows[0].flagged);
-        assert_eq!(rows[0].note, "insufficient window (2 rows < 3) — no verdict");
+        assert_eq!(
+            rows[0].note,
+            "insufficient window (2 rows < 3) — no verdict"
+        );
     }
 
     #[test]
@@ -1637,8 +1630,7 @@ mod tests {
         let missing: serde_json::Value =
             serde_json::from_str(r#"{"generation": 1, "ts": "t"}"#).unwrap();
         assert!(ood_runs(&missing).unwrap().is_empty());
-        let null: serde_json::Value =
-            serde_json::from_str(r#"{"ts": "t", "ood": null}"#).unwrap();
+        let null: serde_json::Value = serde_json::from_str(r#"{"ts": "t", "ood": null}"#).unwrap();
         assert!(ood_runs(&null).unwrap().is_empty());
         // The axis does NOT demand `generation` or `strata`: 13 ood-bearing
         // rows predate the strata field. A bare ts+ood row parses.
@@ -1664,7 +1656,10 @@ mod tests {
         )
         .unwrap();
         let err = ood_runs(&missing_field).unwrap_err();
-        assert!(err.contains("`ood` is missing the `artifact` field"), "{err}");
+        assert!(
+            err.contains("`ood` is missing the `artifact` field"),
+            "{err}"
+        );
 
         let bad_gap: serde_json::Value = serde_json::from_str(
             r#"{"ts": "t", "ood": {"ref_set": "v1_frozen", "ood_set": "s",
@@ -1784,7 +1779,10 @@ mod tests {
         assert!(text.contains("δ=0.020"), "{text}");
         // Differing states, each state constant → the drift reading, not
         // the noise one.
-        assert!(text.contains("corpus-state drift, NOT repeat noise"), "{text}");
+        assert!(
+            text.contains("corpus-state drift, NOT repeat noise"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -1819,7 +1817,10 @@ mod tests {
         assert!(text.contains("regime=anomalous_negative"), "{text}");
         assert!(text.contains("max plateau 28"), "{text}");
         assert!(text.contains("DEFERRED: thin OOD sample"), "{text}");
-        assert!(text.contains("corpus-state drift, NOT repeat noise"), "{text}");
+        assert!(
+            text.contains("corpus-state drift, NOT repeat noise"),
+            "{text}"
+        );
         assert!(text.contains("T2 path (a) narrows further"), "{text}");
         assert!(!text.contains("SUPPORTED"), "{text}");
 

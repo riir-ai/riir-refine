@@ -55,9 +55,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use katgpt_core::escalation_guard::{
-    demote_only_decode, RollingRateLatch, DEFAULT_WINDOW,
-};
+use katgpt_core::escalation_guard::{demote_only_decode, RollingRateLatch, DEFAULT_WINDOW};
 
 /// The domain keys this manifest accepts — the exact
 /// `crate::draft::DomainId::label` spellings. Mirrored locally so the
@@ -229,9 +227,7 @@ impl EscalationManifest {
                      (clippy/perf/kernel/sec/docker/dist/shader)"
                 ));
             }
-            if !row.modelless_cap.is_finite()
-                || !(0.0..=1.0).contains(&row.modelless_cap)
-            {
+            if !row.modelless_cap.is_finite() || !(0.0..=1.0).contains(&row.modelless_cap) {
                 return Err(format!(
                     "escalation.{label}.modelless_cap: {} must be finite in [0, 1]",
                     row.modelless_cap
@@ -324,10 +320,7 @@ impl EscalationManifest {
     /// here without re-derivation.
     #[must_use]
     pub fn is_armed_with(&self, domain_label: &str, env: Option<&str>) -> bool {
-        demote_only_decode(env)
-            && self
-                .row(domain_label)
-                .is_some_and(|row| !row.demoted)
+        demote_only_decode(env) && self.row(domain_label).is_some_and(|row| !row.demoted)
     }
 
     /// Construct the domain's rate guard (the cost-ceiling shape — no
@@ -342,11 +335,7 @@ impl EscalationManifest {
     /// The testable composition of [`Self::guard`] — `env` is the
     /// kill-switch value the caller read (or None).
     #[must_use]
-    pub fn guard_with(
-        &self,
-        domain_label: &str,
-        env: Option<&str>,
-    ) -> Option<RollingRateLatch> {
+    pub fn guard_with(&self, domain_label: &str, env: Option<&str>) -> Option<RollingRateLatch> {
         if !self.is_armed_with(domain_label, env) {
             return None;
         }
@@ -376,8 +365,7 @@ mod tests {
     }
 
     fn parse(s: &str) -> Result<EscalationManifest, String> {
-        let m: EscalationManifest =
-            serde_json::from_str(s).map_err(|e| e.to_string())?;
+        let m: EscalationManifest = serde_json::from_str(s).map_err(|e| e.to_string())?;
         m.validate()?;
         Ok(m)
     }
@@ -411,7 +399,10 @@ mod tests {
     #[test]
     fn exact_literal_env_demotes_only() {
         let m = parse(&row_json(0.05)).expect("valid row");
-        assert!(!m.is_armed_with("clippy", Some("0")), "the exact literal demotes");
+        assert!(
+            !m.is_armed_with("clippy", Some("0")),
+            "the exact literal demotes"
+        );
         assert!(m.is_armed_with("clippy", Some(" 0")), "not the literal");
         assert!(m.is_armed_with("clippy", Some("0.0")), "not the literal");
     }
@@ -430,8 +421,8 @@ mod tests {
 
     #[test]
     fn unknown_domain_label_refused() {
-        let e = parse(&row_json(0.05).replace("clippy", "not_a_domain"))
-            .expect_err("unknown domain");
+        let e =
+            parse(&row_json(0.05).replace("clippy", "not_a_domain")).expect_err("unknown domain");
         assert!(e.contains("not a DomainId label"), "{e}");
     }
 
@@ -538,7 +529,10 @@ mod tests {
              \"target\":{\"kind\":\"hosted_expert\",\"endpoint\":\"http://127.0.0.1:9\"}}}}",
         )
         .expect_err("hosted_expert without model");
-        assert!(e.contains("target.model") && e.contains("hosted_expert"), "{e}");
+        assert!(
+            e.contains("target.model") && e.contains("hosted_expert"),
+            "{e}"
+        );
         // With the model the row loads.
         let m = parse(
             "{\"domains\":{\"clippy\":{\"modelless_cap\":0.0,\"max_rate\":0.1,\
@@ -555,12 +549,10 @@ mod tests {
     #[test]
     fn model_on_a_non_hosted_row_is_a_dead_knob_and_refused() {
         for kind in ["l4_daemon", "seat_rerank"] {
-            let e = parse(
-                &format!(
-                    "{{\"domains\":{{\"clippy\":{{\"modelless_cap\":0.0,\"max_rate\":0.1,\
+            let e = parse(&format!(
+                "{{\"domains\":{{\"clippy\":{{\"modelless_cap\":0.0,\"max_rate\":0.1,\
                      \"target\":{{\"kind\":\"{kind}\",\"model\":\"x\"}}}}}}}}"
-                ),
-            )
+            ))
             .expect_err("model on a non-hosted row");
             assert!(e.contains("only hosted_expert rows"), "{kind}: {e}");
         }
@@ -572,7 +564,11 @@ mod tests {
         let mut g = m
             .guard_with("clippy", None)
             .expect("armed row constructs a guard");
-        assert_eq!(g.bounds(), (None, 0.05), "no min — rate_below_min cannot exist");
+        assert_eq!(
+            g.bounds(),
+            (None, 0.05),
+            "no min — rate_below_min cannot exist"
+        );
         assert_eq!(g.window(), DEFAULT_WINDOW);
         // The cost-ceiling law: zero misses (every modelless fix stands)
         // fill the window and NEVER latch — a low rate is good, not a
@@ -605,8 +601,7 @@ mod tests {
     fn round_trip_is_stable() {
         let m = parse(&row_json(0.05)).expect("valid row");
         let bytes = serde_json::to_string_pretty(&m).expect("serialize");
-        let back: EscalationManifest =
-            serde_json::from_str(&bytes).expect("deserialize");
+        let back: EscalationManifest = serde_json::from_str(&bytes).expect("deserialize");
         assert_eq!(m, back);
     }
 

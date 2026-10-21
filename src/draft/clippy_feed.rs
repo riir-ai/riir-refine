@@ -183,7 +183,9 @@ fn suggestion_from_message(
                     continue;
                 }
                 let repl = repl.as_str()?;
-                if sp.get("suggestion_applicability").and_then(serde_json::Value::as_str)
+                if sp
+                    .get("suggestion_applicability")
+                    .and_then(serde_json::Value::as_str)
                     != Some("MachineApplicable")
                 {
                     // The suggestion grades itself unsure — refuse the
@@ -287,7 +289,10 @@ pub fn paths_ref_match(feed_file: &str, display_path: &str) -> bool {
 /// only strictly inside the other's range — an insertion AT a boundary is
 /// compatible.
 #[must_use]
-pub fn spans_overlap(a: &crate::edit_emitter::SourceEdit, b: &crate::edit_emitter::SourceEdit) -> bool {
+pub fn spans_overlap(
+    a: &crate::edit_emitter::SourceEdit,
+    b: &crate::edit_emitter::SourceEdit,
+) -> bool {
     a.start < b.end && b.start < a.end
 }
 
@@ -337,9 +342,7 @@ pub fn posture_allows(
     let Some(spans) = index.get(lint) else {
         return false;
     };
-    spans
-        .iter()
-        .any(|&(s, e)| s < end && start < e)
+    spans.iter().any(|&(s, e)| s < end && start < e)
 }
 
 /// The `--fix`-lane result of feeding one file's anchors through the
@@ -493,7 +496,12 @@ pub fn oracle_edits(
         kept.push(cand);
     }
     if kept.is_empty() {
-        return OracleLane { edits: Vec::new(), dropped, range_declined, doc_command_declined };
+        return OracleLane {
+            edits: Vec::new(),
+            dropped,
+            range_declined,
+            doc_command_declined,
+        };
     }
     // The whole-file syntax gate: the oracle edits ALONE must leave the
     // file parseable. All-or-nothing on failure.
@@ -522,7 +530,12 @@ pub fn oracle_edits(
             edit,
         })
         .collect();
-    OracleLane { edits, dropped, range_declined, doc_command_declined }
+    OracleLane {
+        edits,
+        dropped,
+        range_declined,
+        doc_command_declined,
+    }
 }
 
 /// P34 (riir-ai Issue 981, live evidence): does the for-loop containing
@@ -597,7 +610,10 @@ fn range_loop_len_proof(src: &str, edit_start: usize) -> bool {
     let Ok(file) = syn::parse_file(src) else {
         return false;
     };
-    let mut v = InnermostFor { start: edit_start, best: None };
+    let mut v = InnermostFor {
+        start: edit_start,
+        best: None,
+    };
     v.visit_file(&file);
     let Some((_, fl)) = v.best else {
         return false;
@@ -640,7 +656,12 @@ fn range_loop_len_proof(src: &str, edit_start: usize) -> bool {
     // over a tail-slice slot (`0..buf.len() { gs[i] }`, `gs = &mut
     // buf[1..]`) passes the end-shape check and is exactly as unsound as
     // the plain-ident bound — the receiver identity is the proof.
-    let mut slots = Slots { idx: &pi.ident, bound: &bound, n: 0, all_match: true };
+    let mut slots = Slots {
+        idx: &pi.ident,
+        bound: &bound,
+        n: 0,
+        all_match: true,
+    };
     slots.visit_block(&fl.body);
     slots.n >= 1 && slots.all_match
 }
@@ -706,9 +727,7 @@ mod tests {
     use super::*;
 
     fn row(level: &str, code: Option<&str>, file: &str, line: u64, primary: bool) -> String {
-        let code_json = code.map_or("null".to_string(), |c| {
-            format!(r#"{{"code": "{c}"}}"#)
-        });
+        let code_json = code.map_or("null".to_string(), |c| format!(r#"{{"code": "{c}"}}"#));
         format!(
             r#"{{"reason": "compiler-message", "message": {{"level": "{level}", "code": {code_json}, "spans": [{{"file_name": "{file}", "line_start": {line}, "is_primary": {primary}}}]}}}}"#
         )
@@ -757,7 +776,13 @@ mod tests {
             "{}\n{}\n{}\nnot json\n",
             row("warning", Some("unused_variables"), "src/a.rs", 3, true),
             row("note", Some("clippy::collapsible_if"), "src/a.rs", 4, true),
-            row("error", Some("clippy::needless_return"), "src/b.rs", 5, true),
+            row(
+                "error",
+                Some("clippy::needless_return"),
+                "src/b.rs",
+                5,
+                true
+            ),
         );
         let got = parse_clippy_feed(&stream);
         // -W runs report lints as "warning"; -D runs as "error" — both count.
@@ -800,7 +825,12 @@ mod tests {
     // child: method rename + `false, ` deletion, `(` gap preserved).
 
     /// One diagnostic row carrying a suggestion child.
-    fn row_with_suggestion(file: &str, line: u64, lint_id: &str, parts: &[(u64, u64, &str, &str)]) -> String {
+    fn row_with_suggestion(
+        file: &str,
+        line: u64,
+        lint_id: &str,
+        parts: &[(u64, u64, &str, &str)],
+    ) -> String {
         let spans: Vec<String> = parts
             .iter()
             .map(|(bs, be, repl, applic)| {
@@ -884,7 +914,13 @@ mod tests {
 
     #[test]
     fn dedup_upgrades_a_suggestionless_first_occurrence() {
-        let bare = row("warning", Some("clippy::unnecessary_map_or"), "src/lib.rs", 11, true);
+        let bare = row(
+            "warning",
+            Some("clippy::unnecessary_map_or"),
+            "src/lib.rs",
+            11,
+            true,
+        );
         let with = row_with_suggestion(
             "src/lib.rs",
             11,
@@ -900,7 +936,8 @@ mod tests {
 
     /// A src whose `map_or(false, ` site sits at a KNOWN byte offset.
     fn probe_src() -> String {
-        "fn f(items: &[u32]) -> bool {\n    items.iter().min().map_or(false, |x| *x > 1)\n}\n".to_string()
+        "fn f(items: &[u32]) -> bool {\n    items.iter().min().map_or(false, |x| *x > 1)\n}\n"
+            .to_string()
     }
 
     fn mapor_feed(src: &str) -> Vec<ClippyDiagnostic> {
@@ -944,7 +981,10 @@ mod tests {
         assert_eq!(lane.edits[0].rule_id, "doc_markdown");
         assert_eq!(lane.edits[0].edit.replacement, "`shader_perf`");
         let patched = splice_sorted(src, std::slice::from_ref(&lane.edits[0].edit));
-        assert!(patched.contains("Runs the `shader_perf` stage"), "{patched}");
+        assert!(
+            patched.contains("Runs the `shader_perf` stage"),
+            "{patched}"
+        );
         // The lane-set gate is the point: the SAME feed is refused when
         // the lint is not in the lane (the corpus-gap signal).
         let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"]);
@@ -955,7 +995,12 @@ mod tests {
     fn oracle_edits_merge_parts_with_gap_text_preserved() {
         let src = probe_src();
         let off = src.find("map_or").unwrap();
-        let lane = oracle_edits(&mapor_feed(&src), "src/lib.rs", &src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(
+            &mapor_feed(&src),
+            "src/lib.rs",
+            &src,
+            &["unnecessary_map_or"],
+        );
         assert_eq!(lane.dropped, 0);
         assert_eq!(lane.edits.len(), 1);
         let edit = &lane.edits[0].edit;
@@ -982,7 +1027,12 @@ mod tests {
     #[test]
     fn oracle_edits_refuse_non_matching_files() {
         let src = probe_src();
-        let lane = oracle_edits(&mapor_feed(&src), "other/mod.rs", &src, &["unnecessary_map_or"]);
+        let lane = oracle_edits(
+            &mapor_feed(&src),
+            "other/mod.rs",
+            &src,
+            &["unnecessary_map_or"],
+        );
         assert!(lane.edits.is_empty());
     }
 
@@ -1053,7 +1103,10 @@ mod tests {
         let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
         assert!(lane.edits.is_empty(), "981 shape must not be applied");
         assert_eq!(lane.range_declined, 1);
-        assert_eq!(lane.dropped, 0, "a decline is a deliberate refusal, not staleness");
+        assert_eq!(
+            lane.dropped, 0,
+            "a decline is a deliberate refusal, not staleness"
+        );
     }
 
     #[test]
@@ -1077,7 +1130,13 @@ mod tests {
         // (b) `0..=n` — even a len() end there iterates one EXTRA element
         // (n+1 vs len): inclusive limits carry no proof this lane accepts.
         let parent = "fn f(grad_s: &mut [f32], h: usize, heads: usize) {\n    let sph = grad_s.len() / heads;\n    let gs = &mut grad_s[h * sph..];\n    for i in 0..(grad_s.len() / heads) {\n        gs[i] *= 0.5;\n    }\n}\n";
-        let feed = range_loop_feed(parent, "i in 0..(grad_s.len() / heads)", "g in gs.iter_mut()", "gs[i]", "*g");
+        let feed = range_loop_feed(
+            parent,
+            "i in 0..(grad_s.len() / heads)",
+            "g in gs.iter_mut()",
+            "gs[i]",
+            "*g",
+        );
         let lane = oracle_edits(&feed, "src/lib.rs", parent, &["needless_range_loop"]);
         assert!(lane.edits.is_empty(), "parent-len bound must decline");
         assert_eq!(lane.range_declined, 1);
@@ -1097,7 +1156,13 @@ mod tests {
         // the suggestion iterates gs. The 981 hazard wearing a len() bound;
         // the receiver identity is the proof the end-shape cannot supply.
         let src = "fn decay(buf: &mut [f32], base: usize, sph: usize) {\n    let gs = &mut buf[base..];\n    for i in 0..buf.len() {\n        gs[i] *= 0.5;\n    }\n}\n";
-        let feed = range_loop_feed(src, "i in 0..buf.len()", "g in gs.iter_mut()", "gs[i]", "*g");
+        let feed = range_loop_feed(
+            src,
+            "i in 0..buf.len()",
+            "g in gs.iter_mut()",
+            "gs[i]",
+            "*g",
+        );
         let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
         assert!(
             lane.edits.is_empty(),
@@ -1112,7 +1177,13 @@ mod tests {
         // the outer loop carries the len proof, the inner does not — the
         // guard must not be satisfied by the enclosing loop's proof.
         let src = "fn f(v: Vec<Vec<i32>>, n: usize) -> i32 {\n    let mut t = 0;\n    for r in 0..v.len() {\n        for i in 0..n {\n            t += v[r][i];\n        }\n    }\n    t\n}\n";
-        let feed = range_loop_feed(src, "i in 0..n", "(r, row) in v.iter().enumerate()", "v[r][i]", "row[i]");
+        let feed = range_loop_feed(
+            src,
+            "i in 0..n",
+            "(r, row) in v.iter().enumerate()",
+            "v[r][i]",
+            "row[i]",
+        );
         let lane = oracle_edits(&feed, "src/lib.rs", src, &["needless_range_loop"]);
         assert!(lane.edits.is_empty(), "inner unproven bound must decline");
         assert_eq!(lane.range_declined, 1);
@@ -1179,7 +1250,7 @@ mod tests {
         let src = "fn f() -> String {\n    format!(\"{{x}}\")\n}\n".to_string();
         let off = src.find("format!").expect("fixture has the site");
         let covered = "format!(\"{{x}}\")"; // 17 bytes, brace-carrying
-        // clippy's own (wrong) suggestion: the escaped literal verbatim.
+                                            // clippy's own (wrong) suggestion: the escaped literal verbatim.
         let feed = vec![ClippyDiagnostic {
             span: None,
             file: "src/lib.rs".to_string(),

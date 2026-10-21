@@ -148,12 +148,18 @@ fn committed_artifact_admits_and_rules_the_fixture_family() {
 fn reruns_are_deterministic_and_vm_reuse_is_stable() {
     let module = ValidatorModule::admit(&committed_artifact()).expect("admit");
     let mut vm = Vm::default();
-    let first = module.run(b"format!(\"{}\", x)", DEFAULT_FUEL, &mut vm).unwrap();
+    let first = module
+        .run(b"format!(\"{}\", x)", DEFAULT_FUEL, &mut vm)
+        .unwrap();
     for _ in 0..3 {
-        let again = module.run(b"format!(\"{}\", x)", DEFAULT_FUEL, &mut vm).unwrap();
+        let again = module
+            .run(b"format!(\"{}\", x)", DEFAULT_FUEL, &mut vm)
+            .unwrap();
         assert_eq!(again, first, "rerun must be byte-identical (shared Vm)");
     }
-    let once = module.run_once(b"format!(\"{}\", x)", DEFAULT_FUEL).unwrap();
+    let once = module
+        .run_once(b"format!(\"{}\", x)", DEFAULT_FUEL)
+        .unwrap();
     assert_eq!(once, first);
 }
 

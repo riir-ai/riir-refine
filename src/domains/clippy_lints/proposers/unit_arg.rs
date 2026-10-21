@@ -52,7 +52,10 @@ use crate::edit_emitter::{drops_interior_comment, line_indent, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -72,9 +75,11 @@ impl Collector<'_> {
         }
         let first = c.args.first()?;
         // Index-0 gate + the only-block-arg guard.
-        if c.args.iter().enumerate().any(|(i, a)| {
-            matches!(a, Expr::Block(_)) && !(i == 0 && std::ptr::eq(a, first))
-        }) {
+        if c.args
+            .iter()
+            .enumerate()
+            .any(|(i, a)| matches!(a, Expr::Block(_)) && !(i == 0 && std::ptr::eq(a, first)))
+        {
             return None;
         }
         let Expr::Block(be) = first else { return None };
@@ -95,7 +100,11 @@ impl Collector<'_> {
         let arg_rel = block_span.start - call_span.start..block_span.end - call_span.start;
         // Comments in the re-spelled glue (call span minus the block span)
         // refuse; the block text rides verbatim.
-        if drops_interior_comment(self.source, call_span.clone(), std::slice::from_ref(&block_span)) {
+        if drops_interior_comment(
+            self.source,
+            call_span.clone(),
+            std::slice::from_ref(&block_span),
+        ) {
             return None;
         }
         let block_text = self.source.get(block_span)?;
@@ -105,10 +114,7 @@ impl Collector<'_> {
         new_call.push_str("()");
         new_call.push_str(&call_text[arg_rel.end..]);
         let indent = line_indent(self.source, call_span.start);
-        Some((
-            call_span,
-            format!("{block_text};\n{indent}{new_call}"),
-        ))
+        Some((call_span, format!("{block_text};\n{indent}{new_call}")))
     }
 }
 
@@ -237,9 +243,7 @@ mod tests {
     fn labeled_block_refuses() {
         assert!(propose_fix(
             "unit_arg",
-            &format!(
-                "{TOUCH_SEED}\n{GO} touch('a: {{ hits.push(1); }}, hits) }}",
-            ),
+            &format!("{TOUCH_SEED}\n{GO} touch('a: {{ hits.push(1); }}, hits) }}"),
         )
         .is_none());
     }
@@ -280,9 +284,7 @@ mod tests {
     fn comment_in_glue_refuses() {
         assert!(propose_fix(
             "unit_arg",
-            &format!(
-                "{TOUCH_SEED}\n{GO} touch(/* unit */ {{ hits.push(1); }}, hits) }}",
-            ),
+            &format!("{TOUCH_SEED}\n{GO} touch(/* unit */ {{ hits.push(1); }}, hits) }}"),
         )
         .is_none());
     }
@@ -291,12 +293,13 @@ mod tests {
     fn comment_inside_block_rides() {
         let out = propose_fix(
             "unit_arg",
-            &format!(
-                "{TOUCH_SEED}\n{GO} touch({{ /* tick */ hits.push(1); }}, hits) }}",
-            ),
+            &format!("{TOUCH_SEED}\n{GO} touch({{ /* tick */ hits.push(1); }}, hits) }}"),
         )
         .expect("matched");
-        assert!(out.contains("/* tick */"), "interior comment dropped: {out}");
+        assert!(
+            out.contains("/* tick */"),
+            "interior comment dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

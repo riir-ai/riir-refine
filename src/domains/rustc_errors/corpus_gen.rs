@@ -766,12 +766,9 @@ fn e0382_clone_use_after_move(out: &mut Vec<GeneratedCase>) {
         ("u64", "vec![100u64]", 1),
     ];
     for (i, (ty, init, n)) in TABLE.iter().enumerate() {
-        let gt = gt_module(&format!(
-            "assert_eq!(super::probe({init}), 2 * {n});"
-        ));
-        let wrap = |pair: &str| {
-            format!("pub fn probe(v: Vec<{ty}>) -> usize {{\n    {pair}\n}}\n{gt}")
-        };
+        let gt = gt_module(&format!("assert_eq!(super::probe({init}), 2 * {n});"));
+        let wrap =
+            |pair: &str| format!("pub fn probe(v: Vec<{ty}>) -> usize {{\n    {pair}\n}}\n{gt}");
         let seed = wrap("let n = v.len();\n    let w = v;\n    n + w.len()");
         let broken = wrap("let w = v;\n    let n = v.len();\n    n + w.len()");
         push_case(

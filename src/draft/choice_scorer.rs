@@ -158,14 +158,20 @@ impl Rng {
 pub struct Layer {
     pub ln1_g: Vec<f32>,
     pub ln1_b: Vec<f32>,
-    pub wq: Vec<f32>, pub bq: Vec<f32>,
-    pub wk: Vec<f32>, pub bk: Vec<f32>,
-    pub wv: Vec<f32>, pub bv: Vec<f32>,
-    pub wo: Vec<f32>, pub bo: Vec<f32>,
+    pub wq: Vec<f32>,
+    pub bq: Vec<f32>,
+    pub wk: Vec<f32>,
+    pub bk: Vec<f32>,
+    pub wv: Vec<f32>,
+    pub bv: Vec<f32>,
+    pub wo: Vec<f32>,
+    pub bo: Vec<f32>,
     pub ln2_g: Vec<f32>,
     pub ln2_b: Vec<f32>,
-    pub w1: Vec<f32>, pub b1: Vec<f32>,
-    pub w2: Vec<f32>, pub b2: Vec<f32>,
+    pub w1: Vec<f32>,
+    pub b1: Vec<f32>,
+    pub w2: Vec<f32>,
+    pub b2: Vec<f32>,
 }
 
 impl Layer {
@@ -241,14 +247,22 @@ pub enum LayerField {
 
 impl LayerField {
     pub const ALL: [Self; 16] = [
-        Self::Ln1G, Self::Ln1B,
-        Self::Wq, Self::Bq,
-        Self::Wk, Self::Bk,
-        Self::Wv, Self::Bv,
-        Self::Wo, Self::Bo,
-        Self::Ln2G, Self::Ln2B,
-        Self::W1, Self::B1,
-        Self::W2, Self::B2,
+        Self::Ln1G,
+        Self::Ln1B,
+        Self::Wq,
+        Self::Bq,
+        Self::Wk,
+        Self::Bk,
+        Self::Wv,
+        Self::Bv,
+        Self::Wo,
+        Self::Bo,
+        Self::Ln2G,
+        Self::Ln2B,
+        Self::W1,
+        Self::B1,
+        Self::W2,
+        Self::B2,
     ];
 }
 
@@ -309,9 +323,12 @@ pub struct ChoiceScorer {
     pub ctx_ln_b: Vec<f32>,
     pub opt_ln_g: Vec<f32>,
     pub opt_ln_b: Vec<f32>,
-    pub wq: Vec<f32>, pub bq: Vec<f32>, // head: W×W, W
-    pub wk: Vec<f32>, pub bk: Vec<f32>,
-    pub wv: Vec<f32>, pub bv: Vec<f32>,
+    pub wq: Vec<f32>,
+    pub bq: Vec<f32>, // head: W×W, W
+    pub wk: Vec<f32>,
+    pub bk: Vec<f32>,
+    pub wv: Vec<f32>,
+    pub bv: Vec<f32>,
 }
 
 impl ChoiceScorer {
@@ -320,16 +337,19 @@ impl ChoiceScorer {
         let mut rng = Rng::new(seed);
         let w = cfg.width;
         let std = 0.02_f32;
-        let normal = |n: usize, rng: &mut Rng| -> Vec<f32> {
-            (0..n).map(|_| rng.normal() * std).collect()
-        };
+        let normal =
+            |n: usize, rng: &mut Rng| -> Vec<f32> { (0..n).map(|_| rng.normal() * std).collect() };
         Self {
             cfg,
             byte_emb: normal(BYTE_VOCAB * w, &mut rng),
             pos_ctx: normal(cfg.ctx_len * w, &mut rng),
             pos_opt: normal(cfg.opt_len * w, &mut rng),
-            ctx_layers: (0..cfg.ctx_layers).map(|_| Layer::new(&cfg, &mut rng)).collect(),
-            opt_layers: (0..cfg.opt_layers).map(|_| Layer::new(&cfg, &mut rng)).collect(),
+            ctx_layers: (0..cfg.ctx_layers)
+                .map(|_| Layer::new(&cfg, &mut rng))
+                .collect(),
+            opt_layers: (0..cfg.opt_layers)
+                .map(|_| Layer::new(&cfg, &mut rng))
+                .collect(),
             ctx_ln_g: vec![1.0; w],
             ctx_ln_b: vec![0.0; w],
             opt_ln_g: vec![1.0; w],
@@ -543,10 +563,14 @@ fn ln_fwd(
     for i in 0..t {
         let row = &x[i * w..(i + 1) * w];
         let mean = row.iter().sum::<f32>() / wf;
-        let var = row.iter().map(|v| {
-            let d = v - mean;
-            d * d
-        }).sum::<f32>() / wf;
+        let var = row
+            .iter()
+            .map(|v| {
+                let d = v - mean;
+                d * d
+            })
+            .sum::<f32>()
+            / wf;
         let inv = 1.0 / (var + LN_EPS).sqrt();
         inv_std[i] = inv;
         for j in 0..w {
@@ -752,7 +776,16 @@ fn layer_forward(layer: &Layer, x: &[f32], t: usize, cfg: &ScorerConfig) -> (Lay
         f1: Vec::new(),
         g_act: Vec::new(),
     };
-    ln_fwd(x, t, w, &layer.ln1_g, &layer.ln1_b, &mut c.ln1_out, &mut c.ln1_xhat, &mut c.ln1_inv);
+    ln_fwd(
+        x,
+        t,
+        w,
+        &layer.ln1_g,
+        &layer.ln1_b,
+        &mut c.ln1_out,
+        &mut c.ln1_xhat,
+        &mut c.ln1_inv,
+    );
     linear_fwd(&c.ln1_out, t, w, &layer.wq, &layer.bq, w, &mut c.q);
     linear_fwd(&c.ln1_out, t, w, &layer.wk, &layer.bk, w, &mut c.k);
     linear_fwd(&c.ln1_out, t, w, &layer.wv, &layer.bv, w, &mut c.v);
@@ -783,7 +816,14 @@ fn layer_forward(layer: &Layer, x: &[f32], t: usize, cfg: &ScorerConfig) -> (Lay
     }
     let mut ln2_out = Vec::new();
     ln_fwd(
-        &c.y, t, w, &layer.ln2_g, &layer.ln2_b, &mut ln2_out, &mut c.ln2_xhat, &mut c.ln2_inv,
+        &c.y,
+        t,
+        w,
+        &layer.ln2_g,
+        &layer.ln2_b,
+        &mut ln2_out,
+        &mut c.ln2_xhat,
+        &mut c.ln2_inv,
     );
     c.ln2_out = ln2_out;
     let mut f1 = Vec::new();
@@ -818,15 +858,34 @@ fn layer_backward(
 
     // ---- FFN backward: out = y + f2; f2 = gelu(ln2_out@W1+B1)@W2+B2 ----
     let mut dg_act = Vec::new();
-    linear_bwd(&c.g_act, dout, &layer.w2, t, cfg.d_ff, w, &mut g.w2, &mut g.b2, &mut dg_act);
+    linear_bwd(
+        &c.g_act,
+        dout,
+        &layer.w2,
+        t,
+        cfg.d_ff,
+        w,
+        &mut g.w2,
+        &mut g.b2,
+        &mut dg_act,
+    );
     for i in 0..t * cfg.d_ff {
         dg_act[i] *= gelu_grad(c.f1[i]);
     }
     let mut dh2 = Vec::new();
-    linear_bwd(&c.ln2_out, &dg_act, &layer.w1, t, w, cfg.d_ff, &mut g.w1, &mut g.b1, &mut dh2);
+    linear_bwd(
+        &c.ln2_out, &dg_act, &layer.w1, t, w, cfg.d_ff, &mut g.w1, &mut g.b1, &mut dh2,
+    );
     let mut dx_ln2 = Vec::new();
     ln_bwd(
-        &dh2, &c.ln2_xhat, &c.ln2_inv, t, w, &layer.ln2_g, &mut g.ln2_g, &mut g.ln2_b,
+        &dh2,
+        &c.ln2_xhat,
+        &c.ln2_inv,
+        t,
+        w,
+        &layer.ln2_g,
+        &mut g.ln2_g,
+        &mut g.ln2_b,
         &mut dx_ln2,
     );
     // dy = dout (residual) + LN2 backward
@@ -837,7 +896,17 @@ fn layer_backward(
 
     // ---- Attention backward: y = x + proj; proj = att_concat@Wo+Bo ----
     let mut datt_concat = Vec::new();
-    linear_bwd(&c.att_concat, &dy, &layer.wo, t, w, w, &mut g.wo, &mut g.bo, &mut datt_concat);
+    linear_bwd(
+        &c.att_concat,
+        &dy,
+        &layer.wo,
+        t,
+        w,
+        w,
+        &mut g.wo,
+        &mut g.bo,
+        &mut datt_concat,
+    );
 
     let mut dq = vec![0.0_f32; t * w];
     let mut dk = vec![0.0_f32; t * w];
@@ -894,16 +963,29 @@ fn layer_backward(
     let mut dx_q = Vec::new();
     let mut dx_k = Vec::new();
     let mut dx_v = Vec::new();
-    linear_bwd(&c.ln1_out, &dq, &layer.wq, t, w, w, &mut g.wq, &mut g.bq, &mut dx_q);
-    linear_bwd(&c.ln1_out, &dk, &layer.wk, t, w, w, &mut g.wk, &mut g.bk, &mut dx_k);
-    linear_bwd(&c.ln1_out, &dv, &layer.wv, t, w, w, &mut g.wv, &mut g.bv, &mut dx_v);
+    linear_bwd(
+        &c.ln1_out, &dq, &layer.wq, t, w, w, &mut g.wq, &mut g.bq, &mut dx_q,
+    );
+    linear_bwd(
+        &c.ln1_out, &dk, &layer.wk, t, w, w, &mut g.wk, &mut g.bk, &mut dx_k,
+    );
+    linear_bwd(
+        &c.ln1_out, &dv, &layer.wv, t, w, w, &mut g.wv, &mut g.bv, &mut dx_v,
+    );
     let mut dh1 = vec![0.0_f32; t * w];
     for i in 0..t * w {
         dh1[i] = dx_q[i] + dx_k[i] + dx_v[i];
     }
     let mut dx_ln1 = Vec::new();
     ln_bwd(
-        &dh1, &c.ln1_xhat, &c.ln1_inv, t, w, &layer.ln1_g, &mut g.ln1_g, &mut g.ln1_b,
+        &dh1,
+        &c.ln1_xhat,
+        &c.ln1_inv,
+        t,
+        w,
+        &layer.ln1_g,
+        &mut g.ln1_g,
+        &mut g.ln1_b,
         &mut dx_ln1,
     );
     // dx = dy (residual) + LN1 backward
@@ -919,7 +1001,14 @@ fn layer_backward(
 // ---------------------------------------------------------------------------
 
 /// Embed bytes (`byte_emb[b+1`] + pos[i]) into `x`; returns token count.
-fn embed_bytes(x: &mut Vec<f32>, emb: &[f32], pos: &[f32], bytes: &[u8], max_len: usize, w: usize) -> usize {
+fn embed_bytes(
+    x: &mut Vec<f32>,
+    emb: &[f32],
+    pos: &[f32],
+    bytes: &[u8],
+    max_len: usize,
+    w: usize,
+) -> usize {
     let t = bytes.len().min(max_len);
     x.clear();
     x.resize(t * w, 0.0);
@@ -940,7 +1029,14 @@ struct StackFwd {
     caches: Vec<LayerCache>,
 }
 
-fn stack_forward(layers: &[Layer], bytes: &[u8], emb: &[f32], pos: &[f32], max_len: usize, cfg: &ScorerConfig) -> StackFwd {
+fn stack_forward(
+    layers: &[Layer],
+    bytes: &[u8],
+    emb: &[f32],
+    pos: &[f32],
+    max_len: usize,
+    cfg: &ScorerConfig,
+) -> StackFwd {
     let w = cfg.width;
     let mut x = Vec::new();
     let t = embed_bytes(&mut x, emb, pos, bytes, max_len, w);
@@ -951,28 +1047,67 @@ fn stack_forward(layers: &[Layer], bytes: &[u8], emb: &[f32], pos: &[f32], max_l
         caches.push(cache);
         cur = out;
     }
-    StackFwd { t, out: cur, caches }
+    StackFwd {
+        t,
+        out: cur,
+        caches,
+    }
 }
 
 /// Context encoding → final-LN'd hidden states [T, W] (+ caches).
 fn ctx_forward(m: &ChoiceScorer, ctx_bytes: &[u8]) -> (StackFwd, Vec<f32>, Vec<f32>, Vec<f32>) {
     let w = m.cfg.width;
-    let stack = stack_forward(&m.ctx_layers, ctx_bytes, &m.byte_emb, &m.pos_ctx, m.cfg.ctx_len, &m.cfg);
+    let stack = stack_forward(
+        &m.ctx_layers,
+        ctx_bytes,
+        &m.byte_emb,
+        &m.pos_ctx,
+        m.cfg.ctx_len,
+        &m.cfg,
+    );
     let mut out = Vec::new();
     let mut xhat = Vec::new();
     let mut inv = Vec::new();
-    ln_fwd(&stack.out, stack.t, w, &m.ctx_ln_g, &m.ctx_ln_b, &mut out, &mut xhat, &mut inv);
+    ln_fwd(
+        &stack.out,
+        stack.t,
+        w,
+        &m.ctx_ln_g,
+        &m.ctx_ln_b,
+        &mut out,
+        &mut xhat,
+        &mut inv,
+    );
     (stack, out, xhat, inv)
 }
 
 /// Option encoding → mean-pooled final-LN vector [W] (+ caches).
-fn opt_forward(m: &ChoiceScorer, opt_bytes: &[u8]) -> (StackFwd, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
+fn opt_forward(
+    m: &ChoiceScorer,
+    opt_bytes: &[u8],
+) -> (StackFwd, Vec<f32>, Vec<f32>, Vec<f32>, Vec<f32>) {
     let w = m.cfg.width;
-    let stack = stack_forward(&m.opt_layers, opt_bytes, &m.byte_emb, &m.pos_opt, m.cfg.opt_len, &m.cfg);
+    let stack = stack_forward(
+        &m.opt_layers,
+        opt_bytes,
+        &m.byte_emb,
+        &m.pos_opt,
+        m.cfg.opt_len,
+        &m.cfg,
+    );
     let mut out = Vec::new();
     let mut xhat = Vec::new();
     let mut inv = Vec::new();
-    ln_fwd(&stack.out, stack.t, w, &m.opt_ln_g, &m.opt_ln_b, &mut out, &mut xhat, &mut inv);
+    ln_fwd(
+        &stack.out,
+        stack.t,
+        w,
+        &m.opt_ln_g,
+        &m.opt_ln_b,
+        &mut out,
+        &mut xhat,
+        &mut inv,
+    );
     // mean-pool
     let mut p = vec![0.0_f32; w];
     for i in 0..stack.t {
@@ -990,21 +1125,16 @@ fn opt_forward(m: &ChoiceScorer, opt_bytes: &[u8]) -> (StackFwd, Vec<f32>, Vec<f
 
 /// The head: K/V over context tokens + per-option q/attention/logit.
 struct HeadIO {
-    k_mat: Vec<f32>,     // [T,W]
-    v_mat: Vec<f32>,     // [T,W]
-    logits: Vec<f32>,    // [N]
-    p_n: Vec<Vec<f32>>,  // [N][W] option pools
-    q_n: Vec<Vec<f32>>,  // [N][W]
-    a_n: Vec<Vec<f32>>,  // [N][T] attention rows
+    k_mat: Vec<f32>,      // [T,W]
+    v_mat: Vec<f32>,      // [T,W]
+    logits: Vec<f32>,     // [N]
+    p_n: Vec<Vec<f32>>,   // [N][W] option pools
+    q_n: Vec<Vec<f32>>,   // [N][W]
+    a_n: Vec<Vec<f32>>,   // [N][T] attention rows
     att_n: Vec<Vec<f32>>, // [N][W]
 }
 
-fn head_forward(
-    m: &ChoiceScorer,
-    t_ctx: usize,
-    ctx_h: &[f32],
-    opt_pools: &[&[f32]],
-) -> HeadIO {
+fn head_forward(m: &ChoiceScorer, t_ctx: usize, ctx_h: &[f32], opt_pools: &[&[f32]]) -> HeadIO {
     let w = m.cfg.width;
     let scale = 1.0 / (w as f32).sqrt();
     let n = opt_pools.len();
@@ -1038,7 +1168,15 @@ fn head_forward(
         att_n.push(att);
         logits.push(logit);
     }
-    HeadIO { k_mat, v_mat, logits, p_n: opt_pools.iter().map(|p| p.to_vec()).collect(), q_n, a_n, att_n }
+    HeadIO {
+        k_mat,
+        v_mat,
+        logits,
+        p_n: opt_pools.iter().map(|p| p.to_vec()).collect(),
+        q_n,
+        a_n,
+        att_n,
+    }
 }
 
 /// Everything the episode backward needs.
@@ -1069,7 +1207,17 @@ fn forward_cached(m: &ChoiceScorer, ctx_bytes: &[u8], options: &[&[u8]]) -> Epis
     }
     let pool_refs: Vec<&[f32]> = pools.iter().map(Vec::as_slice).collect();
     let head = head_forward(m, ctx_stack.t, &ctx_h, &pool_refs);
-    EpisodeCache { t_ctx: ctx_stack.t, ctx_stack, ctx_h, ctx_xhat, ctx_inv, head, opt_stacks, opt_ln_xhat, opt_ln_inv }
+    EpisodeCache {
+        t_ctx: ctx_stack.t,
+        ctx_stack,
+        ctx_h,
+        ctx_xhat,
+        ctx_inv,
+        head,
+        opt_stacks,
+        opt_ln_xhat,
+        opt_ln_inv,
+    }
 }
 
 impl ChoiceScorer {
@@ -1180,8 +1328,28 @@ impl ChoiceScorer {
         // ---- ctx side: dctx_h = Wk^T·dK + Wv^T·dV + head LN/proj grads ----
         let mut dx_k = Vec::new();
         let mut dx_v = Vec::new();
-        linear_bwd(&cache.ctx_h, &dk_mat, &self.wk, t, w, w, &mut g.wk, &mut g.bk, &mut dx_k);
-        linear_bwd(&cache.ctx_h, &dv_mat, &self.wv, t, w, w, &mut g.wv, &mut g.bv, &mut dx_v);
+        linear_bwd(
+            &cache.ctx_h,
+            &dk_mat,
+            &self.wk,
+            t,
+            w,
+            w,
+            &mut g.wk,
+            &mut g.bk,
+            &mut dx_k,
+        );
+        linear_bwd(
+            &cache.ctx_h,
+            &dv_mat,
+            &self.wv,
+            t,
+            w,
+            w,
+            &mut g.wv,
+            &mut g.bv,
+            &mut dx_v,
+        );
         let mut dctx_h = vec![0.0_f32; t * w];
         for i in 0..t * w {
             dctx_h[i] = dx_k[i] + dx_v[i];
@@ -1189,13 +1357,26 @@ impl ChoiceScorer {
         // final LN backward
         let mut dstack = Vec::new();
         ln_bwd(
-            &dctx_h, &cache.ctx_xhat, &cache.ctx_inv, t, w, &self.ctx_ln_g, &mut g.ctx_ln_g,
-            &mut g.ctx_ln_b, &mut dstack,
+            &dctx_h,
+            &cache.ctx_xhat,
+            &cache.ctx_inv,
+            t,
+            w,
+            &self.ctx_ln_g,
+            &mut g.ctx_ln_g,
+            &mut g.ctx_ln_b,
+            &mut dstack,
         );
         // ctx layers backward (reverse), then embedding scatter
         let mut d = dstack;
         for l in (0..self.ctx_layers.len()).rev() {
-            d = layer_backward(&self.ctx_layers[l], &cache.ctx_stack.caches[l], &d, &self.cfg, &mut g.ctx_layers[l]);
+            d = layer_backward(
+                &self.ctx_layers[l],
+                &cache.ctx_stack.caches[l],
+                &d,
+                &self.cfg,
+                &mut g.ctx_layers[l],
+            );
         }
         for (i, &b) in ctx_bytes.iter().take(t).enumerate() {
             let row = &d[i * w..(i + 1) * w];
@@ -1222,12 +1403,25 @@ impl ChoiceScorer {
             // final LN backward
             let mut dopt_stack = Vec::new();
             ln_bwd(
-                &doln, &cache.opt_ln_xhat[n], &cache.opt_ln_inv[n], s, w, &self.opt_ln_g,
-                &mut g.opt_ln_g, &mut g.opt_ln_b, &mut dopt_stack,
+                &doln,
+                &cache.opt_ln_xhat[n],
+                &cache.opt_ln_inv[n],
+                s,
+                w,
+                &self.opt_ln_g,
+                &mut g.opt_ln_g,
+                &mut g.opt_ln_b,
+                &mut dopt_stack,
             );
             let mut d = dopt_stack;
             for l in (0..self.opt_layers.len()).rev() {
-                d = layer_backward(&self.opt_layers[l], &cache.opt_stacks[n].caches[l], &d, &self.cfg, &mut g.opt_layers[l]);
+                d = layer_backward(
+                    &self.opt_layers[l],
+                    &cache.opt_stacks[n].caches[l],
+                    &d,
+                    &self.cfg,
+                    &mut g.opt_layers[l],
+                );
             }
             // embedding scatter
             for (i, &b) in opt.iter().take(s).enumerate() {
@@ -1298,7 +1492,13 @@ impl AdamW {
     /// One decoupled-weight-decay step (in-place param update).
     pub fn step(&mut self, params: &mut ChoiceScorer, grads: &ScorerGrads) {
         self.step += 1;
-        let lr = Self::lr_at(self.lr, self.step - 1, self.total_steps, self.warmup, self.min_ratio);
+        let lr = Self::lr_at(
+            self.lr,
+            self.step - 1,
+            self.total_steps,
+            self.warmup,
+            self.min_ratio,
+        );
         let bc1 = 1.0 - self.b1.powi(self.step as i32);
         let bc2 = 1.0 - self.b2.powi(self.step as i32);
         for p in params.paths() {
@@ -1352,7 +1552,10 @@ mod tests {
     fn param_count_is_cua_s1_class() {
         let m = ChoiceScorer::new(ScorerConfig::default(), 7);
         let n = m.param_count();
-        assert!((600_000..800_000).contains(&n), "param count {n} outside CUA-S1 class");
+        assert!(
+            (600_000..800_000).contains(&n),
+            "param count {n} outside CUA-S1 class"
+        );
         assert_eq!(m.to_flat().len(), n);
     }
 
@@ -1404,10 +1607,8 @@ mod tests {
             b"single_char_add_str\ns.push('a')".to_vec(),
             b"skip\nno rule".to_vec(),
         ];
-        let episodes: Vec<(Vec<u8>, Vec<Vec<u8>>, usize)> = vec![
-            (ctx_a, opts_a, 1),
-            (ctx_b, opts_b, 0),
-        ];
+        let episodes: Vec<(Vec<u8>, Vec<Vec<u8>>, usize)> =
+            vec![(ctx_a, opts_a, 1), (ctx_b, opts_b, 0)];
         let loss_of = |m: &ChoiceScorer| -> f32 {
             let mut s = 0.0_f32;
             for (ctx, opts, label) in &episodes {
@@ -1548,14 +1749,16 @@ mod tests {
                 // h-unstable; when the clamped h gives a loss delta under
                 // ~1e-5 the FD is rounding-dominated and cannot adjudicate
                 // — such indices are covered by the directional layer.
-                if analytic.abs() + numeric.abs() < 1e-3
-                    || 2.0 * h * analytic.abs() < 1e-5
-                {
+                if analytic.abs() + numeric.abs() < 1e-3 || 2.0 * h * analytic.abs() < 1e-5 {
                     continue;
                 }
                 checked += 1;
                 let rel = (analytic - numeric).abs() / (analytic.abs() + numeric.abs() + 1e-4);
-                let tol = if analytic.abs() + numeric.abs() < 3e-3 { 0.25 } else { 0.08 };
+                let tol = if analytic.abs() + numeric.abs() < 3e-3 {
+                    0.25
+                } else {
+                    0.08
+                };
                 if rel > max_rel {
                     max_rel = rel;
                 }

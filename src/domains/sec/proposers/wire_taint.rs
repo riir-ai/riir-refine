@@ -109,12 +109,7 @@ pub(crate) fn walk_fn(source: &str, block: &syn::Block, sink: &mut impl WireSink
 
 /// Walk statements IN ORDER: bindings track, validations suppress, sinks
 /// fire — the same-name-later ordering is what makes the gates honest.
-fn walk_stmts(
-    source: &str,
-    stmts: &[Stmt],
-    state: &mut FnState,
-    sink: &mut impl WireSink,
-) {
+fn walk_stmts(source: &str, stmts: &[Stmt], state: &mut FnState, sink: &mut impl WireSink) {
     for stmt in stmts {
         match stmt {
             Stmt::Local(l) => {
@@ -381,12 +376,7 @@ pub(crate) fn vec_repeat_len(expr: &Expr) -> Option<Expr> {
 /// In-order expr walk: validations first (a comparison anywhere in this
 /// expr suppresses everything below it), then the sink, then recursion.
 /// Macro tokens are never descended into (the sinks' shared recall limit).
-pub(crate) fn walk_expr(
-    source: &str,
-    expr: &Expr,
-    state: &mut FnState,
-    sink: &mut impl WireSink,
-) {
+pub(crate) fn walk_expr(source: &str, expr: &Expr, state: &mut FnState, sink: &mut impl WireSink) {
     check_validation(expr, state);
     sink.check(source, expr, state);
     // Recurse in syntactic order.

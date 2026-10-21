@@ -85,7 +85,8 @@ fn braces_balanced(source: &str) -> bool {
 mod tests {
     use super::*;
 
-    const CLEAN: &str = "@fragment\nfn f() -> @location(0) vec4<f32> {\n  return vec4<f32>(0.0);\n}\n";
+    const CLEAN: &str =
+        "@fragment\nfn f() -> @location(0) vec4<f32> {\n  return vec4<f32>(0.0);\n}\n";
 
     #[test]
     fn tier0_passes_a_structural_identity() {

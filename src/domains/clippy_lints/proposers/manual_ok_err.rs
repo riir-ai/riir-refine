@@ -54,7 +54,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -80,7 +83,9 @@ impl Collector<'_> {
         if !m.attrs.is_empty() || m.arms.len() != 2 {
             return None;
         }
-        let [ok_arm, err_arm] = m.arms.as_slice() else { return None };
+        let [ok_arm, err_arm] = m.arms.as_slice() else {
+            return None;
+        };
         if !ok_arm.attrs.is_empty() || !err_arm.attrs.is_empty() {
             return None;
         }
@@ -105,7 +110,11 @@ impl Collector<'_> {
         // The postfix `.ok()`/`.err()` binds correctly on each allowed
         // shape; anything else (unary, cast, reference, binary) refuses.
         match &*m.expr {
-            Expr::Path(_) | Expr::Call(_) | Expr::MethodCall(_) | Expr::Field(_) | Expr::Index(_) => {}
+            Expr::Path(_)
+            | Expr::Call(_)
+            | Expr::MethodCall(_)
+            | Expr::Field(_)
+            | Expr::Index(_) => {}
             _ => return None,
         }
         if drops_interior_comment(self.source, byte_range(m), &[]) {
@@ -120,11 +129,16 @@ impl Collector<'_> {
 /// one ident binding (no `ref`, no subpattern/`@`); `Ctor(_)` is not a
 /// binding and returns `None` here.
 fn ctor_binding<'a>(pat: &'a Pat, ctor: &str) -> Option<&'a Ident> {
-    let Pat::TupleStruct(ts) = pat else { return None };
-    if !ts.attrs.is_empty() || ts.qself.is_some() || !ts.path.is_ident(ctor) || ts.elems.len() != 1 {
+    let Pat::TupleStruct(ts) = pat else {
+        return None;
+    };
+    if !ts.attrs.is_empty() || ts.qself.is_some() || !ts.path.is_ident(ctor) || ts.elems.len() != 1
+    {
         return None;
     }
-    let Pat::Ident(id) = ts.elems.first()? else { return None };
+    let Pat::Ident(id) = ts.elems.first()? else {
+        return None;
+    };
     if id.by_ref.is_some() || id.subpat.is_some() {
         return None;
     }
@@ -133,7 +147,9 @@ fn ctor_binding<'a>(pat: &'a Pat, ctor: &str) -> Option<&'a Ident> {
 
 /// `Ctor(_)` — the same tuple-struct shape with a lone wildcard field.
 fn ctor_wild(pat: &Pat, ctor: &str) -> bool {
-    let Pat::TupleStruct(ts) = pat else { return false };
+    let Pat::TupleStruct(ts) = pat else {
+        return false;
+    };
     ts.attrs.is_empty()
         && ts.qself.is_none()
         && ts.path.is_ident(ctor)
@@ -148,11 +164,15 @@ fn is_some_of(body: &Expr, ident: &Ident) -> bool {
     if !c.attrs.is_empty() || c.args.len() != 1 {
         return false;
     }
-    let Expr::Path(func) = &*c.func else { return false };
+    let Expr::Path(func) = &*c.func else {
+        return false;
+    };
     if !func.attrs.is_empty() || func.qself.is_some() || !func.path.is_ident("Some") {
         return false;
     }
-    let Some(Expr::Path(arg)) = c.args.first() else { return false };
+    let Some(Expr::Path(arg)) = c.args.first() else {
+        return false;
+    };
     arg.attrs.is_empty() && arg.qself.is_none() && arg.path.is_ident(ident)
 }
 

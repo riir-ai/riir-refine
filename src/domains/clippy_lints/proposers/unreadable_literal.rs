@@ -98,7 +98,8 @@ fn array_suffix_width(expr: &Expr) -> Option<bool> {
     };
     for e in &arr.elems {
         if let Expr::Lit(ExprLit {
-            lit: Lit::Float(fl), ..
+            lit: Lit::Float(fl),
+            ..
         }) = e
         {
             let s = fl.suffix();
@@ -294,14 +295,26 @@ mod tests {
         // proposer ever ran.
         for (buggy, fixed) in [
             ("fn f() { let a = 999999; }", "fn f() { let a = 999_999; }"),
-            ("fn f() { let a = 1000000; }", "fn f() { let a = 1_000_000; }"),
-            ("fn f() { let a = 1234567; }", "fn f() { let a = 1_234_567; }"),
+            (
+                "fn f() { let a = 1000000; }",
+                "fn f() { let a = 1_000_000; }",
+            ),
+            (
+                "fn f() { let a = 1234567; }",
+                "fn f() { let a = 1_234_567; }",
+            ),
             (
                 "fn f() { let a = 1234567890123_i64; }",
                 "fn f() { let a = 1_234_567_890_123_i64; }",
             ),
-            ("fn f() { let a = 123456.789; }", "fn f() { let a = 123_456.789; }"),
-            ("fn f() { let a = 100000u64; }", "fn f() { let a = 100_000u64; }"),
+            (
+                "fn f() { let a = 123456.789; }",
+                "fn f() { let a = 123_456.789; }",
+            ),
+            (
+                "fn f() { let a = 100000u64; }",
+                "fn f() { let a = 100_000u64; }",
+            ),
             (
                 "fn f() { let a = 123456.789012; }",
                 "fn f() { let a = 123_456.789_012; }",
@@ -326,7 +339,7 @@ mod tests {
             "fn f() { let a = 6186491_8973511; }", // any underscore → other lint's territory
             "fn f() { let a = 0xFFAA; }", // hex
             "fn f() { let a = 0b101010; }", // binary
-            "fn f() { let a = 1e6; }", // exponent
+            "fn f() { let a = 1e6; }",   // exponent
             "fn f() { let a = 1.5e3; }", // float exponent
             "fn f() { let a = 12345; }", // 5 digits
             "fn f() { let a = \"123456\"; }", // string, not numeric

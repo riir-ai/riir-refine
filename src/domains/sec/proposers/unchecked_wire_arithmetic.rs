@@ -154,7 +154,13 @@ impl ArithSink<'_> {
 #[must_use]
 pub fn detect(source: &str, file: &File) -> Vec<WireArithFinding> {
     let mut findings = Vec::new();
-    wire_taint::walk_file(source, file, &mut ArithSink { findings: &mut findings });
+    wire_taint::walk_file(
+        source,
+        file,
+        &mut ArithSink {
+            findings: &mut findings,
+        },
+    );
     findings
 }
 

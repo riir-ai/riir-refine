@@ -240,7 +240,7 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay));
 }
 "#
-            .to_string(),
+        .to_string(),
     }
 }
 
@@ -370,7 +370,7 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.hay));
 }
 "#
-            .to_string(),
+        .to_string(),
     }
 }
 
@@ -462,6 +462,6 @@ pub fn run_fixed(input: &Input) {
     std::hint::black_box(fixed::count(&input.lines, NEEDLE));
 }
 "#
-            .to_string(),
+        .to_string(),
     }
 }

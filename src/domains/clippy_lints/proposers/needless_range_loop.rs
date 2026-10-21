@@ -781,9 +781,16 @@ fn binding_base(collection: &syn::ExprPath) -> String {
     let plural = seg.ident.to_string();
     let singular = if let Some(stem) = plural.strip_suffix("ies").filter(|s| s.len() >= 2) {
         Some(format!("{stem}y"))
-    } else if ["sses", "shes", "ches", "xes"].iter().any(|e| plural.ends_with(e)) {
+    } else if ["sses", "shes", "ches", "xes"]
+        .iter()
+        .any(|e| plural.ends_with(e))
+    {
         plural.strip_suffix("es").map(str::to_string)
-    } else if plural.len() >= 3 && plural.ends_with('s') && !plural.ends_with("ss") && !plural.ends_with("us") {
+    } else if plural.len() >= 3
+        && plural.ends_with('s')
+        && !plural.ends_with("ss")
+        && !plural.ends_with("us")
+    {
         plural.strip_suffix('s').map(str::to_string)
     } else {
         None
@@ -918,7 +925,11 @@ fn family_index(base: &str, ident: Option<&syn::Ident>) -> Option<u32> {
     suffix.parse::<u32>().ok().filter(|n| *n >= 2)
 }
 
-fn collect_token_indices(base: &str, toks: impl Iterator<Item = TokenTree>, taken: &mut BTreeSet<u32>) {
+fn collect_token_indices(
+    base: &str,
+    toks: impl Iterator<Item = TokenTree>,
+    taken: &mut BTreeSet<u32>,
+) {
     for t in toks {
         match t {
             TokenTree::Ident(id) => {
@@ -1161,7 +1172,8 @@ mod tests {
     /// a body that already says the singular gets the next family name.
     #[test]
     fn readable_binding_from_collection_name() {
-        let base = |c: &str| super::binding_base(&syn::parse_str::<syn::ExprPath>(c).expect("path"));
+        let base =
+            |c: &str| super::binding_base(&syn::parse_str::<syn::ExprPath>(c).expect("path"));
         assert_eq!(base("values"), "value");
         assert_eq!(base("entries"), "entry");
         assert_eq!(base("matches"), "item", "keyword singular falls back");
@@ -1183,7 +1195,10 @@ mod tests {
             "pub fn scaled(values: &[u64], value: u64) -> u64 { let mut t = 0; for i in 0..values.len() { t += values[i] * value; } t }",
         )
         .expect("matched");
-        assert!(out.contains("for value2 in values"), "the body's `value` is never shadowed: {out}");
+        assert!(
+            out.contains("for value2 in values"),
+            "the body's `value` is never shadowed: {out}"
+        );
         assert!(out.contains("t += *value2 * value;"), "{out}");
         syn::parse_file(&out).expect("re-parses");
     }
@@ -1460,10 +1475,7 @@ mod tests {
     fn converts_loop_with_format_macro_args() {
         let input = "pub fn describe_all(names: &[String]) -> Vec<String> {\n    let mut out = Vec::new();\n    for i in 0..names.len() {\n        out.push(format!(\"{}\", names[i]));\n    }\n    out\n}\n";
         let out = propose_fix("needless_range_loop", input).expect("pattern matched");
-        assert!(
-            out.contains("for name in names"),
-            "header rewritten: {out}"
-        );
+        assert!(out.contains("for name in names"), "header rewritten: {out}");
         assert!(
             out.contains("format!(\"{}\", *name)"),
             "macro slot substituted: {out}"

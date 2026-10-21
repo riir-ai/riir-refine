@@ -90,8 +90,7 @@ impl Rng {
 }
 
 const WORDS: [&str; 10] = [
-    "cargo", "format", "span", "literal", "refactor", "inline", "healer", "lint", "wasm",
-    "bounded",
+    "cargo", "format", "span", "literal", "refactor", "inline", "healer", "lint", "wasm", "bounded",
 ];
 
 /// One generated span. `braces` is the brace count the archetype INJECTED —
@@ -185,7 +184,10 @@ fn gen_spans(n: usize, seed: u64) -> Vec<SpanFixture> {
                 }
             }
         }
-        out.push(SpanFixture { text: s.into_bytes(), braces });
+        out.push(SpanFixture {
+            text: s.into_bytes(),
+            braces,
+        });
     }
     out
 }
@@ -244,54 +246,42 @@ where
     // loud-zero defense, so it rides the measured passes themselves, not a
     // separate counting pass. (The adds are identical across arms.)
     let mut run_set = || {
-
         for s in spans {
-
             let o = verdict(&s.text);
 
             sink_verdicts += u64::from(o.verdict as u32);
 
             sink_braces += u64::from(o.score);
-
         }
-
     };
-
-
 
     run_set(); // warmup + correctness-coupled pass
 
     let mut totals = Vec::with_capacity(MEASURED_PASSES);
 
     for _ in 0..MEASURED_PASSES {
-
         let t0 = Instant::now();
 
         run_set();
 
         totals.push(t0.elapsed());
-
     }
 
     totals.sort();
 
     let mut chunks: Vec<u128> = Vec::with_capacity(SPAN_COUNT / CHUNK + 1);
     for chunk in spans.chunks(CHUNK) {
-
         let t0 = Instant::now();
 
         for s in chunk {
-
             let o = verdict(&s.text);
 
             sink_verdicts += u64::from(o.verdict as u32);
 
             sink_braces += u64::from(o.score);
-
         }
 
         chunks.push(t0.elapsed().as_nanos() / CHUNK as u128);
-
     }
 
     chunks.sort();
@@ -307,12 +297,15 @@ where
 // ── provenance (never skipped) ───────────────────────────────────────────
 
 fn preflight() -> (String, String) {
-    let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../riir-reflex/scripts/bench_preflight.sh");
+    let script =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../riir-reflex/scripts/bench_preflight.sh");
     if !script.exists() {
         return (
             "UNAVAILABLE".to_string(),
-            format!("preflight script absent at {} — provenance never skipped", script.display()),
+            format!(
+                "preflight script absent at {} — provenance never skipped",
+                script.display()
+            ),
         );
     }
     let out = match Command::new("sh")
@@ -321,7 +314,12 @@ fn preflight() -> (String, String) {
         .output()
     {
         Ok(o) => o,
-        Err(e) => return ("UNAVAILABLE".to_string(), format!("preflight spawn failed: {e}")),
+        Err(e) => {
+            return (
+                "UNAVAILABLE".to_string(),
+                format!("preflight spawn failed: {e}"),
+            )
+        }
     };
     let text = String::from_utf8_lossy(&out.stdout).to_string();
     let prov = text
@@ -342,7 +340,10 @@ fn preflight() -> (String, String) {
         }
         _ => (
             "UNAVAILABLE".to_string(),
-            format!("preflight exit {:?} — the instrument could not read the box", out.status.code()),
+            format!(
+                "preflight exit {:?} — the instrument could not read the box",
+                out.status.code()
+            ),
         ),
     }
 }
@@ -374,7 +375,11 @@ fn safety_family() -> Vec<SafetyCase> {
     case("anonymous_positional", "fmt {}", 2);
     case("unicode_adjacent", "héllo {name}", 2);
     case("cjk_emoji_adjacent", "措辞 🦀 {flag}", 2);
-    case("lookalikes_only", "[vec](tuple)<angle>|pipe:colon;comma,stop.", 0);
+    case(
+        "lookalikes_only",
+        "[vec](tuple)<angle>|pipe:colon;comma,stop.",
+        0,
+    );
     case("utf8_continuation_bytes_only", "\u{80}\u{bf}\u{7f}tail", 0);
     case("brace_heavy", &"{k}".repeat(512), 1024);
     // The closed form over the whole byte space: exactly 0x7B and 0x7D are
@@ -435,8 +440,10 @@ const CLIPPY_PROBE_FNS: usize = 64;
 /// the finding count the oracle actually emits (the baseline's HONESTY
 /// check: a clippy that finds nothing is not a baseline).
 fn clippy_baseline() -> Result<(std::time::Duration, usize), String> {
-    let dir = std::env::temp_dir()
-        .join(format!("wasm_validator_bench_clippy_{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!(
+        "wasm_validator_bench_clippy_{}",
+        std::process::id()
+    ));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let r = (|| {
         std::fs::write(
@@ -446,7 +453,9 @@ fn clippy_baseline() -> Result<(std::time::Duration, usize), String> {
         .map_err(|e| e.to_string())?;
         let mut lib = String::with_capacity(CLIPPY_PROBE_FNS * 96);
         for i in 0..CLIPPY_PROBE_FNS {
-            lib.push_str(&format!("pub fn f{i}() -> String {{ format!(\"static text only\") }}\n"));
+            lib.push_str(&format!(
+                "pub fn f{i}() -> String {{ format!(\"static text only\") }}\n"
+            ));
         }
         std::fs::write(dir.join("lib.rs"), lib).map_err(|e| e.to_string())?;
 
@@ -495,9 +504,8 @@ fn main() {
     ));
 
     // The production read path: manifest row → blake3 verify → admission.
-    let committed = ValidatorStore::new(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/validators"),
-    );
+    let committed =
+        ValidatorStore::new(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/validators"));
     let admitted = committed
         .load(VALIDATOR_NAME)
         .unwrap_or_else(|e| panic!("committed artifact failed the store load: {e}"));
@@ -584,9 +592,8 @@ fn main() {
             .join("assets/validators/useless_format_brace.wasm"),
     )
     .unwrap_or_else(|e| panic!("committed artifact unreadable: {e}"));
-    let root = std::env::temp_dir()
-
-        .join(format!("wasm_validator_bench_store_{}", std::process::id()));
+    let root =
+        std::env::temp_dir().join(format!("wasm_validator_bench_store_{}", std::process::id()));
 
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap_or_else(|e| panic!("temp store root: {e}"));
@@ -629,11 +636,7 @@ fn main() {
     let mut truth_verdict_sum = 0u64;
     let mut truth_brace_sum = 0u64;
     for s in &spans {
-        let counted = s
-            .text
-            .iter()
-            .filter(|&&b| b == b'{' || b == b'}')
-            .count();
+        let counted = s.text.iter().filter(|&&b| b == b'{' || b == b'}').count();
         assert_eq!(counted, s.braces, "generator truth drifted on its own set");
         if s.violating() {
             truth_violating += 1;
@@ -735,8 +738,7 @@ fn main() {
 
     say("== done ==");
     if prov_state != "PASSED"
-        && std::env::var("WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE")
-            .is_ok_and(|v| v == "1")
+        && std::env::var("WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE").is_ok_and(|v| v == "1")
     {
         say("GATE POSTURE: provenance not PASSED and WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE=1 — exit 2");
         std::process::exit(2);

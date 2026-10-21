@@ -700,7 +700,11 @@ mod tests {
             body.contains("**component:** E (corpus/proposer)"),
             "Issue 047 attribution line present: {body}"
         );
-        assert!(root.join(".refine").join("misses").join("README.md").exists());
+        assert!(root
+            .join(".refine")
+            .join("misses")
+            .join("README.md")
+            .exists());
 
         // Second dump: README NOT rewritten (idempotent), new entry lands.
         let m2 = miss("E0499");
@@ -747,9 +751,7 @@ mod tests {
                 terminal_residual: 0,
                 // Issue 107 T2 — a REAL embedding on the first record so the
                 // dump round-trip pins the column end-to-end.
-                span_embed: Some(crate::span_embed::span_embed(
-                    "let r = v.as_str();",
-                )),
+                span_embed: Some(crate::span_embed::span_embed("let r = v.as_str();")),
                 shape_class: None,
                 insight: None,
             },
@@ -775,7 +777,11 @@ mod tests {
         // Case-sensitive ON PURPOSE: this asserts dump_fixseq's OWN on-disk
         // name round-trip (lowercase `.jsonl` is what the writer emits).
         assert!(name.starts_with("run-"), "{name}");
-        assert_eq!(path.extension().and_then(|e| e.to_str()), Some("jsonl"), "{name}");
+        assert_eq!(
+            path.extension().and_then(|e| e.to_str()),
+            Some("jsonl"),
+            "{name}"
+        );
 
         // The ORDERED sequence round-trips, line per attempt — with the
         // Issue-105 run-level stamps the dump adds (every row of THIS run
@@ -785,7 +791,9 @@ mod tests {
         let body = std::fs::read_to_string(&path).unwrap();
         // Issue 107 T2 — the column lands in the dumped jsonl verbatim.
         assert!(
-            body.lines().next().is_some_and(|l| l.contains("\"span_embed\":")),
+            body.lines()
+                .next()
+                .is_some_and(|l| l.contains("\"span_embed\":")),
             "first dumped row carries the embedding column: {}",
             body.lines().next().unwrap_or("")
         );
@@ -796,7 +804,10 @@ mod tests {
             .collect();
         assert_eq!(back.len(), attempts.len());
         for (b, a) in back.iter().zip(&attempts) {
-            assert_eq!((b.seq, &b.code, b.outcome, b.errors, b.masking), (a.seq, &a.code, a.outcome, a.errors, a.masking));
+            assert_eq!(
+                (b.seq, &b.code, b.outcome, b.errors, b.masking),
+                (a.seq, &a.code, a.outcome, a.errors, a.masking)
+            );
             assert_eq!(b.journey_residual_sum, 4, "run integral stamped");
             assert_eq!(b.terminal_residual, 2, "terminal residual stamped");
         }

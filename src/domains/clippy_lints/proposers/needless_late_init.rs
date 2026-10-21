@@ -50,7 +50,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -79,7 +82,9 @@ impl Collector<'_> {
         // Statement 1: the init-less local, plain non-mut ident pattern
         // (optionally type-annotated — syn 2.x folds `pat: Type` into
         // Pat::Type), no attributes.
-        let Stmt::Local(local) = first else { return None };
+        let Stmt::Local(local) = first else {
+            return None;
+        };
         if local.init.is_some() || !local.attrs.is_empty() {
             return None;
         }
@@ -98,7 +103,9 @@ impl Collector<'_> {
             },
             _ => return None,
         };
-        if ident_pat.by_ref.is_some() || ident_pat.mutability.is_some() || ident_pat.subpat.is_some()
+        if ident_pat.by_ref.is_some()
+            || ident_pat.mutability.is_some()
+            || ident_pat.subpat.is_some()
         {
             return None;
         }
@@ -112,7 +119,9 @@ impl Collector<'_> {
         if !assign.attrs.is_empty() {
             return None;
         }
-        let Expr::Path(lhs) = &*assign.left else { return None };
+        let Expr::Path(lhs) = &*assign.left else {
+            return None;
+        };
         if lhs.qself.is_some()
             || lhs.path.leading_colon.is_some()
             || lhs.path.segments.len() != 1
@@ -129,10 +138,7 @@ impl Collector<'_> {
         // statement's first non-whitespace text must BE the lhs ident — an
         // attribute (`#[…]`) or any other token before it refuses, because
         // the rewrite would drop it.
-        let head = self
-            .source
-            .get(byte_range(second).start..)?
-            .trim_start();
+        let head = self.source.get(byte_range(second).start..)?.trim_start();
         if !head.starts_with(ident.to_string().as_str()) {
             return None;
         }
@@ -216,7 +222,10 @@ mod tests {
             "fn late(c: bool, hits: &mut Vec<u8>) -> u32 { hits.push(0); if c { let y; y = 3u32; y + y } else { 0 } }",
         )
         .expect("matched");
-        assert!(out.contains("let y = 3u32;"), "nested pair not merged: {out}");
+        assert!(
+            out.contains("let y = 3u32;"),
+            "nested pair not merged: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -324,7 +333,10 @@ mod tests {
             "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x; x = 1u32 /* keep */ + 2u32; x + x }",
         )
         .expect("matched");
-        assert!(out.contains("let x = 1u32 /* keep */ + 2u32;"), "rhs comment lost: {out}");
+        assert!(
+            out.contains("let x = 1u32 /* keep */ + 2u32;"),
+            "rhs comment lost: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 }

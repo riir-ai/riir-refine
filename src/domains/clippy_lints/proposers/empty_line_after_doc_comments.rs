@@ -108,7 +108,9 @@ impl<'ast> Visit<'ast> for ItemDocs<'_> {
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut ranges = Vec::new();
     {
-        let mut v = ItemDocs { ranges: &mut ranges };
+        let mut v = ItemDocs {
+            ranges: &mut ranges,
+        };
         v.visit_file(file);
     }
     ranges.sort_unstable_by_key(|r| r.start);

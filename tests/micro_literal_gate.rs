@@ -346,7 +346,10 @@ fn collect_rs(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
 /// structural exemptions (comments/strings/tests) — NOT by the allowlist.
 fn scan_src_findings() -> (usize, Vec<(String, Finding)>) {
     let mut files = Vec::new();
-    collect_rs(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+    collect_rs(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
     files.sort();
 
     let mut all = Vec::with_capacity(files.len());
@@ -434,7 +437,11 @@ fn allowlist_rows_stay_fresh_in_both_directions() {
 fn planted_bare_million_fires() {
     let src = "fn f() {\n    let x: u64 = 1_000_000;\n}\n";
     let findings = scan_text(&strip_non_code(src));
-    assert_eq!(findings.len(), 1, "the bare literal must fire: {findings:?}");
+    assert_eq!(
+        findings.len(),
+        1,
+        "the bare literal must fire: {findings:?}"
+    );
     assert_eq!(findings[0].line, 2);
 }
 

@@ -84,14 +84,22 @@ fn main() {
             );
         }
     }
-    println!("seed-clean gate: {} seeds checked, {} dirty", all.len(), dirty_seeds);
+    println!(
+        "seed-clean gate: {} seeds checked, {} dirty",
+        all.len(),
+        dirty_seeds
+    );
 
     // ── 2+3. Fresh admission (both modes, exactly-once vs the store) ─────
     // Batch 155: EVERY covered family runs its own held-out loop (view =
     // its rule disabled, solution = re-enable) — the graduated rules
     // re-prove unsolved-before/solved-after/regression on
     // every e2e rerun, alongside the needless_return original.
-    let covered: Vec<_> = all.iter().filter(|c| c.mode == Mode::HeldOut).cloned().collect();
+    let covered: Vec<_> = all
+        .iter()
+        .filter(|c| c.mode == Mode::HeldOut)
+        .cloned()
+        .collect();
     let heldout_families: Vec<String> = covered
         .iter()
         .map(|c| c.family.to_string())
@@ -103,7 +111,11 @@ fn main() {
     let mut heldout_admitted: Vec<AdmittedRow> = Vec::new();
     let mut heldout_admitted_families: BTreeSet<String> = BTreeSet::new();
     for fam in &heldout_families {
-        let fam_cands: Vec<_> = covered.iter().filter(|c| c.family == fam.as_str()).cloned().collect();
+        let fam_cands: Vec<_> = covered
+            .iter()
+            .filter(|c| c.family == fam.as_str())
+            .cloned()
+            .collect();
         let sol = Solution::Reenable(fam_target_lint(fam));
         let view = CorpusView::holding_out(&fam_target_lint(fam));
         let pass = admit(&fam_cands, &view, Some(&sol), &known, &probe);
@@ -124,8 +136,18 @@ fn main() {
         heldout_rejections
     );
 
-    let frontier_cands: Vec<_> = all.iter().filter(|c| c.mode == Mode::Frontier).cloned().collect();
-    let frontier = admit(&frontier_cands, &CorpusView::default(), None, &known, &probe);
+    let frontier_cands: Vec<_> = all
+        .iter()
+        .filter(|c| c.mode == Mode::Frontier)
+        .cloned()
+        .collect();
+    let frontier = admit(
+        &frontier_cands,
+        &CorpusView::default(),
+        None,
+        &known,
+        &probe,
+    );
     report("Frontier", &frontier.rejections);
 
     // ── 4. Committed-row verification (reruns are verify-passes) ─────────
@@ -134,7 +156,10 @@ fn main() {
     for row in &committed {
         if !verify_committed(row, &probe) {
             verify_failures += 1;
-            eprintln!("⛔ committed row {} no longer holds — toolchain drift?", row.blake3);
+            eprintln!(
+                "⛔ committed row {} no longer holds — toolchain drift?",
+                row.blake3
+            );
         }
     }
     println!(
@@ -185,8 +210,7 @@ fn main() {
     // nothing by construction, and the floor is satisfied by the store
     // itself — `all_graduated` records that state explicitly instead of
     // letting the yield arithmetic read zero as "nothing verified".
-    let all_graduated = !committed.is_empty()
-        && committed.iter().all(|r| r.solving_rule.is_some());
+    let all_graduated = !committed.is_empty() && committed.iter().all(|r| r.solving_rule.is_some());
     let frontier_yield = frontier.admitted.len()
         + committed
             .iter()
@@ -195,15 +219,29 @@ fn main() {
 
     let mut fresh = heldout_admitted;
     fresh.extend(frontier.admitted.iter().cloned());
-    if heldout_ok && dirty_seeds == 0 && verify_failures == 0 && (frontier_yield >= 1 || all_graduated) {
+    if heldout_ok
+        && dirty_seeds == 0
+        && verify_failures == 0
+        && (frontier_yield >= 1 || all_graduated)
+    {
         if fresh.is_empty() {
             println!("\nstore: no new rows (families already committed this epoch)");
         } else {
             append_rows(path, &fresh).expect("append miner rows");
-            println!("store: appended {} row(s) to {}", fresh.len(), MINER_ROWS_JSONL);
+            println!(
+                "store: appended {} row(s) to {}",
+                fresh.len(),
+                MINER_ROWS_JSONL
+            );
         }
-        println!("\n✓ e2e VERDICT: invariant loop holds; frontier yield {frontier_yield} lead(s){}",
-            if all_graduated && frontier_yield == 0 { " — ALL LEADS GRADUATED (verify-pass; the next re-arm pair is owed)" } else { "" });
+        println!(
+            "\n✓ e2e VERDICT: invariant loop holds; frontier yield {frontier_yield} lead(s){}",
+            if all_graduated && frontier_yield == 0 {
+                " — ALL LEADS GRADUATED (verify-pass; the next re-arm pair is owed)"
+            } else {
+                ""
+            }
+        );
     } else {
         eprintln!(
             "\n✗ e2e VERDICT: heldout_ok={heldout_ok} dirty_seeds={dirty_seeds} verify_failures={verify_failures} frontier_yield={frontier_yield} — no rows committed"
@@ -257,7 +295,11 @@ fn verify_committed(row: &MinerRow, probe: &dyn Fn(&str) -> OracleVerdict) -> bo
 
 fn load_rows(path: &std::path::Path) -> Vec<MinerRow> {
     std::fs::read_to_string(path)
-        .map(|t| t.lines().filter_map(|l| serde_json::from_str(l).ok()).collect())
+        .map(|t| {
+            t.lines()
+                .filter_map(|l| serde_json::from_str(l).ok())
+                .collect()
+        })
         .unwrap_or_default()
 }
 
@@ -268,11 +310,19 @@ fn report(mode: &str, rejections: &[Rejection]) {
         match r {
             Duplicate { family, blake3 } => println!("  {family}: duplicate {blake3}"),
             SeedNotClean { family, saw } => println!("  {family}: seed NOT clean, saw {saw:?}"),
-            TargetLintNotFired { family, saw } => println!("  {family}: target lint not fired, saw {saw:?}"),
-            BrokenNotVerifiable { family, why } => println!("  {family}: broken not verifiable ({why})"),
-            HealedByView { family } => println!("  {family}: healed by the view — not at the frontier"),
+            TargetLintNotFired { family, saw } => {
+                println!("  {family}: target lint not fired, saw {saw:?}")
+            }
+            BrokenNotVerifiable { family, why } => {
+                println!("  {family}: broken not verifiable ({why})")
+            }
+            HealedByView { family } => {
+                println!("  {family}: healed by the view — not at the frontier")
+            }
             SolutionDidNotClear { family } => println!("  {family}: solution did not clear"),
-            RegressionRefused { family, perturbed } => println!("  {family}: REGRESSION refused, perturbed {perturbed:?}"),
+            RegressionRefused { family, perturbed } => {
+                println!("  {family}: REGRESSION refused, perturbed {perturbed:?}")
+            }
         }
     }
 }

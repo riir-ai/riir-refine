@@ -130,7 +130,9 @@ pub fn span_embed(text: &str) -> [i8; SPAN_EMBED_DIMS] {
         #[allow(clippy::cast_possible_truncation)] // post-clamp: exact
         #[allow(clippy::cast_sign_loss)] // i8 carries the sign, not u32
         {
-            *o = (v * SPAN_EMBED_SCALE).round().clamp(-SPAN_EMBED_SCALE, SPAN_EMBED_SCALE) as i8;
+            *o = (v * SPAN_EMBED_SCALE)
+                .round()
+                .clamp(-SPAN_EMBED_SCALE, SPAN_EMBED_SCALE) as i8;
         }
     }
     out
@@ -178,14 +180,16 @@ mod tests {
     #[test]
     fn quantized_norm_bound_holds() {
         let e = span_embed("pub fn probe() -> usize { let v = Vec::new(); v.push(1); v.len() }");
-        let l2: f32 = e.iter().map(|&v| {
-            #[allow(clippy::cast_precision_loss)] // i8 → f32 is exact
-            {
-                let f = f32::from(v) / SPAN_EMBED_SCALE;
-                f * f
-            }
-        })
-        .sum();
+        let l2: f32 = e
+            .iter()
+            .map(|&v| {
+                #[allow(clippy::cast_precision_loss)] // i8 → f32 is exact
+                {
+                    let f = f32::from(v) / SPAN_EMBED_SCALE;
+                    f * f
+                }
+            })
+            .sum();
         // L2-normalized to 1 before quantization; rounding costs < 1 per
         // dim, so the decoded norm stays within ~sqrt(32)/127 ≈ 4.5% of 1.
         #[allow(clippy::cast_precision_loss)]
@@ -194,7 +198,10 @@ mod tests {
             (l2.sqrt() - 1.0).abs() <= slack,
             "decoded L2 norm {l2:.4} outside quantization slack"
         );
-        assert!(e.iter().all(|&v| v >= -127), "i8 lower bound holds by construction");
+        assert!(
+            e.iter().all(|&v| v >= -127),
+            "i8 lower bound holds by construction"
+        );
     }
 
     #[test]

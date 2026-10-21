@@ -64,7 +64,11 @@ fn write_state(dir: &Path, rel: &str, body: &str) {
 /// The hermetic local login (zero network — the key-ops-only chain).
 fn login(dir: &Path) {
     let (code, text) = heal(dir, CLOSED_PORT, &["login"]);
-    assert_eq!(code, Some(0), "hermetic login must succeed. output:\n{text}");
+    assert_eq!(
+        code,
+        Some(0),
+        "hermetic login must succeed. output:\n{text}"
+    );
 }
 
 fn ack_body(contributed: bool, hex: Option<&str>) -> String {
@@ -119,8 +123,14 @@ fn config_get_names_the_state_stamps() {
     );
     let (code, text) = heal(&dir, CLOSED_PORT, &["config", "get"]);
     assert_eq!(code, Some(0), "config get is a pure read. output:\n{text}");
-    assert!(text.contains("UNSTAMPED"), "the flat file must flag: {text}");
-    assert!(text.contains("adopt-state"), "the remedy must be named: {text}");
+    assert!(
+        text.contains("UNSTAMPED"),
+        "the flat file must flag: {text}"
+    );
+    assert!(
+        text.contains("adopt-state"),
+        "the remedy must be named: {text}"
+    );
     assert!(
         text.contains("last written against `devnet.gist.rs`"),
         "the stamped net-dir file must name its host: {text}"
@@ -170,7 +180,14 @@ fn adopt_state_discard_quarantines_everything() {
     let (code, text) = heal(
         &dir,
         CLOSED_PORT,
-        &["config", "adopt-state", "devnet", "--discard", "--url", CLOSED_PORT],
+        &[
+            "config",
+            "adopt-state",
+            "devnet",
+            "--discard",
+            "--url",
+            CLOSED_PORT,
+        ],
     );
     assert_eq!(code, Some(0), "discard is a local move. output:\n{text}");
     assert!(text.contains("quarantined 2 file(s)"), "{text}");

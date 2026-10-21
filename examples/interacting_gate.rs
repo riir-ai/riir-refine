@@ -52,7 +52,9 @@ fn set_key(diags: &[RustcErrorDiag], source: &str) -> Vec<(String, String)> {
         .iter()
         .filter_map(|d| {
             let line = d.primary.as_ref().map(|(_, l)| *l)?;
-            let text = lines.get(line.saturating_sub(1)).map(|s| s.trim().to_string());
+            let text = lines
+                .get(line.saturating_sub(1))
+                .map(|s| s.trim().to_string());
             Some((d.code.clone(), text.unwrap_or_default()))
         })
         .collect();
@@ -170,12 +172,12 @@ fn main() {
             );
             if !interacts || verbose {
                 println!(
-                "      seed={} a_only={:?} b_only={:?} broken={:?}",
-                d_seed.len(),
-                codes_of(&d_a),
-                codes_of(&d_b),
-                codes_of(&d_bb)
-            );
+                    "      seed={} a_only={:?} b_only={:?} broken={:?}",
+                    d_seed.len(),
+                    codes_of(&d_a),
+                    codes_of(&d_b),
+                    codes_of(&d_bb)
+                );
                 println!("      broken-set: {:?}", set_key(&d_bb, &case.broken));
                 println!("      union-set : {:?}", union);
             }
@@ -191,7 +193,9 @@ fn main() {
     // Loud bookkeeping: the tier distribution, so a corpus that is entirely
     // ladder-only (weaker evidence) cannot quietly pass as set-interacting.
     if admitted < cases.len() {
-        eprintln!("NON-INTERACTING CASES (drop from the family or investigate rustc drift): {failed:?}");
+        eprintln!(
+            "NON-INTERACTING CASES (drop from the family or investigate rustc drift): {failed:?}"
+        );
         std::process::exit(1);
     }
 }

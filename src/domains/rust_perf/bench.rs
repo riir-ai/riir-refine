@@ -1163,7 +1163,10 @@ some garbage line
         };
 
         let (dir, stem) = v.prepare_crate("rule_mtime", &spec).unwrap();
-        let (main_t, toml_t) = (mtime(&dir.join("src/main.rs")), mtime(&dir.join("Cargo.toml")));
+        let (main_t, toml_t) = (
+            mtime(&dir.join("src/main.rs")),
+            mtime(&dir.join("Cargo.toml")),
+        );
         let (dir2, stem2) = v.prepare_crate("rule_mtime", &spec).unwrap();
         assert_eq!(dir, dir2, "same key must reuse one crate dir");
         assert_eq!(stem, stem2);

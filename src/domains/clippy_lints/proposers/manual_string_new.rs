@@ -42,7 +42,10 @@ use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut v = Collector { source, edits: Vec::new() };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
     v.visit_file(file);
     v.edits
 }
@@ -107,7 +110,9 @@ fn is_string_from_path(p: &syn::ExprPath) -> Result<(), ()> {
     if a.ident != "From" {
         return Err(());
     }
-    let syn::Type::Path(tp) = &*q.ty else { return Err(()) };
+    let syn::Type::Path(tp) = &*q.ty else {
+        return Err(());
+    };
     if tp.qself.is_none()
         && tp.path.leading_colon.is_none()
         && tp.path.segments.len() == 1

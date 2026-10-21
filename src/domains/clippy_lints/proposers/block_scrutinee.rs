@@ -182,7 +182,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, x: u32) -> u32 { hits.push(0); match { x } { v => v } }",
         )
         .expect("matched");
-        assert!(out.contains("match x { v => v }"), "braces not dropped: {out}");
+        assert!(
+            out.contains("match x { v => v }"),
+            "braces not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -193,7 +196,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, xs: &mut Vec<u32>) { hits.push(0); if let Some(v) = { xs.pop() } { hits.push(v) } }",
         )
         .expect("matched");
-        assert!(out.contains("if let Some(v) = xs.pop()"), "scrutinee not un-braced: {out}");
+        assert!(
+            out.contains("if let Some(v) = xs.pop()"),
+            "scrutinee not un-braced: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -204,7 +210,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, xs: &mut Vec<u32>) { hits.push(0); while let Some(v) = { xs.pop() } { hits.push(v) } }",
         )
         .expect("matched");
-        assert!(out.contains("while let Some(v) = xs.pop()"), "scrutinee not un-braced: {out}");
+        assert!(
+            out.contains("while let Some(v) = xs.pop()"),
+            "scrutinee not un-braced: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -215,7 +224,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, xs: &mut Vec<u32>) -> u32 { hits.push(0); match { xs.pop().unwrap_or(0) } { v => v } }",
         )
         .expect("matched");
-        assert!(out.contains("match xs.pop().unwrap_or(0)"), "braces not dropped: {out}");
+        assert!(
+            out.contains("match xs.pop().unwrap_or(0)"),
+            "braces not dropped: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -228,7 +240,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, c: bool) -> u32 { hits.push(0); match { if c { 1 } else { 2 } } { v => v } }",
         )
         .expect("matched");
-        assert!(out.contains("match if c { 1 } else { 2 } { v => v }"), "inner braces mangled: {out}");
+        assert!(
+            out.contains("match if c { 1 } else { 2 } { v => v }"),
+            "inner braces mangled: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 
@@ -239,7 +254,10 @@ mod tests {
             "fn f(hits: &mut Vec<u32>, x: u32) -> u32 { hits.push(0); let n = match { x } { v => v }; n + 1 }",
         )
         .expect("matched");
-        assert!(out.contains("let n = match x { v => v };"), "tail context not preserved: {out}");
+        assert!(
+            out.contains("let n = match x { v => v };"),
+            "tail context not preserved: {out}"
+        );
         syn::parse_file(&out).expect("re-parses");
     }
 

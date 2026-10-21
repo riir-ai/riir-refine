@@ -93,11 +93,12 @@ fn main() {
         floor_section();
     }
     if want("driver") {
-        let dump_fixseq_root: Option<String> = std::env::args().position(|a| a == "--dump-fixseq")
+        let dump_fixseq_root: Option<String> = std::env::args()
+            .position(|a| a == "--dump-fixseq")
             .and_then(|p| std::env::args().nth(p + 1));
-        let dump_fixseq_cfg: Option<String> =
-            std::env::args().position(|a| a == "--dump-fixseq-cfg")
-                .and_then(|p| std::env::args().nth(p + 1));
+        let dump_fixseq_cfg: Option<String> = std::env::args()
+            .position(|a| a == "--dump-fixseq-cfg")
+            .and_then(|p| std::env::args().nth(p + 1));
         // Plan 432 T0.2a (riir-train) — the TEACHER-corpus mint: per case,
         // the self-contained (seed, broken source, attempts-with-shapes+
         // digests) row. The rings alone cannot serve the teacher pass —
@@ -106,7 +107,8 @@ fn main() {
         // with ZERO riir-clippy dep (the boundary law — riir-train cannot
         // path-dep this crate). Composable with --dump-fixseq; early-returns
         // like it.
-        let dump_teacher_root: Option<String> = std::env::args().position(|a| a == "--dump-teacher")
+        let dump_teacher_root: Option<String> = std::env::args()
+            .position(|a| a == "--dump-teacher")
             .and_then(|p| std::env::args().nth(p + 1));
         // Issue 128 T5 — cfg validation at the door: a cfg without a dump
         // root, or an unknown cfg name, refuses loudly (exit 2) rather than
@@ -302,8 +304,10 @@ fn driver_section(
         use std::path::PathBuf;
         let root = PathBuf::from(root);
         let _ = std::fs::create_dir_all(&root);
-        let by_name: std::collections::HashMap<&str, &riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> =
-            cases.iter().map(|c| (c.name, c)).collect();
+        let by_name: std::collections::HashMap<
+            &str,
+            &riir_refine::domains::rustc_errors::floor::HarnessCase<'_>,
+        > = cases.iter().map(|c| (c.name, c)).collect();
         let mut rows = 0usize;
         let mut attempts_total = 0usize;
         let path = root.join("teacher_cases.jsonl");
@@ -312,7 +316,9 @@ fn driver_section(
             if rep.attempts.is_empty() {
                 continue;
             }
-            let Some(case) = by_name.get(name.as_str()) else { continue };
+            let Some(case) = by_name.get(name.as_str()) else {
+                continue;
+            };
             // The edit-level legs (Plan 432's scaffold wants the FAILED edit
             // and the CORRECTED edit, not just their strategy ids): the
             // applied/reverted records carry shape + fix text verbatim.
@@ -374,7 +380,10 @@ fn driver_section(
                 .unwrap_or(0),
         });
         let mpath = root.join("manifest.json");
-        let _ = std::fs::write(&mpath, serde_json::to_string_pretty(&manifest).unwrap_or_default());
+        let _ = std::fs::write(
+            &mpath,
+            serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+        );
         println!("  manifest: {}", mpath.display());
         harness.cleanup();
         return;
@@ -414,7 +423,9 @@ fn driver_section(
             for a in &rep.attempts {
                 match a.outcome {
                     AttemptOutcome::Kept => kept += 1,
-                    AttemptOutcome::RevertedNoProgress | AttemptOutcome::RevertedIo => reverted += 1,
+                    AttemptOutcome::RevertedNoProgress | AttemptOutcome::RevertedIo => {
+                        reverted += 1
+                    }
                 }
                 if a.span_embed.is_some() {
                     with_embed += 1;
@@ -581,17 +592,16 @@ fn template_covered<'a>(
 /// plus the one-sided 95% lower bound on the mean paired difference
 /// (`clean_a − clean_b` ∈ {−1, 0, +1} per case). `n < 2` or zero variance
 /// reads UNDEFINED — printed as such, never as a pass.
-fn paired_lb95(
-    a: &[(String, bool)],
-    b: &[(String, bool)],
-) -> (usize, usize, f64) {
+fn paired_lb95(a: &[(String, bool)], b: &[(String, bool)]) -> (usize, usize, f64) {
     let bm: std::collections::HashMap<&str, bool> =
         b.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     let mut wins = 0usize;
     let mut losses = 0usize;
     let mut diffs: Vec<f64> = Vec::with_capacity(a.len());
     for (k, va) in a {
-        let Some(vb) = bm.get(k.as_str()) else { continue };
+        let Some(vb) = bm.get(k.as_str()) else {
+            continue;
+        };
         let d = f64::from(u8::from(*va)) - f64::from(u8::from(*vb));
         if d > 0.0 {
             wins += 1;
@@ -614,15 +624,14 @@ fn paired_lb95(
 /// (POSITIVE ⇒ `a` reached its verdict on fewer apply→recheck decisions —
 /// the axis that discriminates when every arm eventually cleans; the
 /// clean axis saturates on corpora where all arms converge).
-fn paired_attempts_lb95(
-    a: &[(String, usize)],
-    b: &[(String, usize)],
-) -> f64 {
+fn paired_attempts_lb95(a: &[(String, usize)], b: &[(String, usize)]) -> f64 {
     let bm: std::collections::HashMap<&str, usize> =
         b.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     let mut diffs: Vec<f64> = Vec::with_capacity(a.len());
     for (k, va) in a {
-        let Some(vb) = bm.get(k.as_str()) else { continue };
+        let Some(vb) = bm.get(k.as_str()) else {
+            continue;
+        };
         diffs.push(*vb as f64 - *va as f64);
     }
     let n = diffs.len();
@@ -644,8 +653,8 @@ fn paired_attempts_lb95(
 /// paper's own measurement shape. The corpus flags are the ab section's
 /// (`--multi K`, `--strided`, `--interacting`).
 fn insight_ab_section() {
-    use riir_refine::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
     use riir_refine::domains::rustc_errors::floor::DriverFixer;
+    use riir_refine::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
 
     println!("\n── 6. Issue 140 T3 — insight-conditioned retry A/B (static vs control vs insight vs raw) ──\n");
     let harness = FloorHarness::new();
@@ -678,30 +687,35 @@ fn insight_ab_section() {
             (false, _) => generate_corpus(),
         }
     };
-    let (cases, n): (Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>>, usize) =
-        match multi > 1 || interacting {
-            true => {
-                let v: Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> = generated
-                    .iter()
-                    .map(riir_refine::domains::rustc_errors::floor::HarnessCase::generated)
-                    .collect();
-                let n = v.len();
-                (v, n)
-            }
-            false => {
-                // The template-covered stratum: codes our playbooks propose
-                // for — ordering cannot matter where the menu is empty.
-                let (v, n) = template_covered_pub(MUTANT_CASES, &generated);
-                (v, n)
-            }
-        };
+    let (cases, n): (
+        Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>>,
+        usize,
+    ) = match multi > 1 || interacting {
+        true => {
+            let v: Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'_>> = generated
+                .iter()
+                .map(riir_refine::domains::rustc_errors::floor::HarnessCase::generated)
+                .collect();
+            let n = v.len();
+            (v, n)
+        }
+        false => {
+            // The template-covered stratum: codes our playbooks propose
+            // for — ordering cannot matter where the menu is empty.
+            let (v, n) = template_covered_pub(MUTANT_CASES, &generated);
+            (v, n)
+        }
+    };
     println!(
         "  corpus: {} — {n} cases",
         if interacting {
             "INTERACTING pairs".to_string()
         } else {
             match multi > 1 {
-                true => format!("MULTI-{multi} ({})", if strided { "strided" } else { "chunked" }),
+                true => format!(
+                    "MULTI-{multi} ({})",
+                    if strided { "strided" } else { "chunked" }
+                ),
                 false => "template-covered stratum".to_string(),
             }
         }
@@ -1166,9 +1180,19 @@ fn ordering_ab_section() {
             }
             println!("    discord {la} vs {lb}: {aw} wins / {al} losses");
         };
-        discord(&neo_shared_arm.3, &shape_arm.3, "nonergodic shared", "shape");
+        discord(
+            &neo_shared_arm.3,
+            &shape_arm.3,
+            "nonergodic shared",
+            "shape",
+        );
         discord(&per_run_arm.3, &shape_arm.3, "nonergodic per-run", "shape");
-        discord(&per_run_arm.3, &static_arm.3, "nonergodic per-run", "static");
+        discord(
+            &per_run_arm.3,
+            &static_arm.3,
+            "nonergodic per-run",
+            "static",
+        );
 
         let multi = static_arm.4 + shape_arm.4 + neo_shared_arm.4 + per_run_arm.4;
         println!(
@@ -1192,15 +1216,20 @@ fn ordering_ab_section() {
         static_arm.0,
         shape_arm.2,
         static_arm.2,
-        match (shape_arm.0.cmp(&static_arm.0), shape_arm.2.cmp(&static_arm.2)) {
+        match (
+            shape_arm.0.cmp(&static_arm.0),
+            shape_arm.2.cmp(&static_arm.2)
+        ) {
             // Improvement must hold BOTH axes: Issue 099 T4 measured a
             // corpus where the learned arm reverts less but cleans 12 FEWER
             // cases (keeps that strand the run unfixable) — a reverts-only
             // verdict printed "IMPROVEMENT" over a regression.
-            (std::cmp::Ordering::Greater, _) | (std::cmp::Ordering::Equal, std::cmp::Ordering::Less) => {
+            (std::cmp::Ordering::Greater, _)
+            | (std::cmp::Ordering::Equal, std::cmp::Ordering::Less) => {
                 "IMPROVEMENT (T4.2 earns its keep)"
             }
-            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) => "no difference on this corpus",
+            (std::cmp::Ordering::Equal, std::cmp::Ordering::Equal) =>
+                "no difference on this corpus",
             (std::cmp::Ordering::Equal, std::cmp::Ordering::Greater)
             | (std::cmp::Ordering::Less, _) => {
                 "WORSE (record honest negative; keep static)"
@@ -1226,7 +1255,10 @@ fn ordering_ab_section() {
 /// empty block or a reordered-but-equivalent program reads as diverged), and
 /// the two are only separable by looking. Off by default (0) — this prints
 /// whole source files.
-fn dump_diverged(cases: &[riir_refine::domains::rustc_errors::floor::HarnessCase<'static>], report: &FloorReport) {
+fn dump_diverged(
+    cases: &[riir_refine::domains::rustc_errors::floor::HarnessCase<'static>],
+    report: &FloorReport,
+) {
     let k: usize = std::env::args()
         .position(|a| a == "--dump-diverged")
         .and_then(|i| std::env::args().nth(i + 1))
@@ -1290,7 +1322,9 @@ fn floor_case_list() -> Vec<riir_refine::domains::rustc_errors::floor::HarnessCa
         cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
     }
     for ix in riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs() {
-        cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
+        cases.push(HarnessCase::generated(Box::leak(Box::new(
+            ix.as_generated(),
+        ))));
     }
     cases
 }
@@ -1302,7 +1336,9 @@ fn floor_case_list() -> Vec<riir_refine::domains::rustc_errors::floor::HarnessCa
 /// two seeds of one composer. Both configs append the interacting pairs
 /// (the E0614 masking chains) and EXCLUDE the solo MUTANT_CASES anchors
 /// (single-attempt runs carry no transitions).
-fn composed_case_list(cfg: &str) -> Option<Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'static>>> {
+fn composed_case_list(
+    cfg: &str,
+) -> Option<Vec<riir_refine::domains::rustc_errors::floor::HarnessCase<'static>>> {
     use riir_refine::domains::rustc_errors::corpus_gen::{compose_multi, compose_multi_strided};
     use riir_refine::domains::rustc_errors::floor::HarnessCase;
     const K: usize = 5;
@@ -1312,13 +1348,14 @@ fn composed_case_list(cfg: &str) -> Option<Vec<riir_refine::domains::rustc_error
         "strided" => compose_multi_strided(&generated, K),
         _ => return None,
     };
-    let mut cases: Vec<HarnessCase<'static>> =
-        Vec::with_capacity(composed.len() + 4);
+    let mut cases: Vec<HarnessCase<'static>> = Vec::with_capacity(composed.len() + 4);
     for g in composed {
         cases.push(HarnessCase::generated(Box::leak(Box::new(g))));
     }
     for ix in riir_refine::domains::rustc_errors::corpus_interacting::interacting_pairs() {
-        cases.push(HarnessCase::generated(Box::leak(Box::new(ix.as_generated()))));
+        cases.push(HarnessCase::generated(Box::leak(Box::new(
+            ix.as_generated(),
+        ))));
     }
     Some(cases)
 }
@@ -1340,7 +1377,10 @@ fn write_ring_manifest(root: &std::path::Path, cfg: &str) -> std::io::Result<std
             continue;
         }
         let bytes = std::fs::read(&p)?;
-        let attempts = bytes.split(|&b| b == b'\n').filter(|l| !l.is_empty()).count();
+        let attempts = bytes
+            .split(|&b| b == b'\n')
+            .filter(|l| !l.is_empty())
+            .count();
         let hash = blake3::hash(&bytes).to_hex().to_string();
         total_attempts += attempts;
         files.push(serde_json::json!({
@@ -1365,7 +1405,10 @@ fn write_ring_manifest(root: &std::path::Path, cfg: &str) -> std::io::Result<std
         "files": files,
     });
     let out = root.join("manifest.json");
-    std::fs::write(&out, serde_json::to_string_pretty(&manifest).unwrap_or_default())?;
+    std::fs::write(
+        &out,
+        serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+    )?;
     Ok(out)
 }
 

@@ -116,8 +116,8 @@ impl std::fmt::Display for SidecarError {
 /// [`SidecarError::Parse`] on invalid JSON, [`SidecarError::Schema`] when
 /// the `schema` field is not [`SIDECAR_SCHEMA`].
 pub fn parse_sidecar_text(text: &str) -> Result<FrameTimeSidecar, SidecarError> {
-    let sidecar: FrameTimeSidecar = serde_json::from_str(text)
-        .map_err(|e| SidecarError::Parse(e.to_string()))?;
+    let sidecar: FrameTimeSidecar =
+        serde_json::from_str(text).map_err(|e| SidecarError::Parse(e.to_string()))?;
     if sidecar.schema != SIDECAR_SCHEMA {
         return Err(SidecarError::Schema {
             expected: SIDECAR_SCHEMA.to_string(),
@@ -196,15 +196,14 @@ fn walk_dir(dir: &Path, out: &mut Vec<PathBuf>) {
             let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
-            if name.starts_with('.')
-                || matches!(name, "target" | "vendor" | "node_modules")
-            {
+            if name.starts_with('.') || matches!(name, "target" | "vendor" | "node_modules") {
                 continue;
             }
             walk_dir(&path, out);
-        } else if path.file_name().is_some_and(|n| {
-            n.to_string_lossy().ends_with(".frames.json")
-        }) {
+        } else if path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().ends_with(".frames.json"))
+        {
             out.push(path);
         }
     }
@@ -310,7 +309,11 @@ pub enum AbMismatch {
     },
     /// Multiple sidecars for one effect on a side (the burst class) — the
     /// tool refuses to invent pairings.
-    Ambiguous { effect: String, pre: usize, post: usize },
+    Ambiguous {
+        effect: String,
+        pre: usize,
+        post: usize,
+    },
 }
 
 /// The A/B diff report.
@@ -333,6 +336,8 @@ pub struct AbReport {
 /// else [`AbVerdict::Flat`]. Unpaired and no-sample effects get their own
 /// verdicts; warmup-parity and pairing-ambiguity refusals land in
 /// `mismatches`.
+#[allow(clippy::too_many_lines)]
+// one verdict fn over every effect class — splitting the verdict ladder apart hides the pairing invariants
 #[must_use]
 pub fn diff_ab(
     pre: &[BudgetRow],
@@ -384,8 +389,16 @@ pub fn diff_ab(
             });
             rows.push((
                 (*effect).to_string(),
-                p.unwrap_or(AbSide { p50_ms: None, warmup: None, count: 0 }),
-                q.unwrap_or(AbSide { p50_ms: None, warmup: None, count: 0 }),
+                p.unwrap_or(AbSide {
+                    p50_ms: None,
+                    warmup: None,
+                    count: 0,
+                }),
+                q.unwrap_or(AbSide {
+                    p50_ms: None,
+                    warmup: None,
+                    count: 0,
+                }),
                 None,
                 AbVerdict::Unpaired,
             ));
@@ -408,8 +421,16 @@ pub fn diff_ab(
         let (Some(a), Some(b)) = (pre_row.p50_ms, post_row.p50_ms) else {
             rows.push((
                 (*effect).to_string(),
-                AbSide { p50_ms: pre_row.p50_ms, warmup: pre_row.warmup, count: 1 },
-                AbSide { p50_ms: post_row.p50_ms, warmup: post_row.warmup, count: 1 },
+                AbSide {
+                    p50_ms: pre_row.p50_ms,
+                    warmup: pre_row.warmup,
+                    count: 1,
+                },
+                AbSide {
+                    p50_ms: post_row.p50_ms,
+                    warmup: post_row.warmup,
+                    count: 1,
+                },
                 None,
                 AbVerdict::NoSamples,
             ));
@@ -425,8 +446,16 @@ pub fn diff_ab(
         };
         rows.push((
             (*effect).to_string(),
-            AbSide { p50_ms: Some(a), warmup: pre_row.warmup, count: 1 },
-            AbSide { p50_ms: Some(b), warmup: post_row.warmup, count: 1 },
+            AbSide {
+                p50_ms: Some(a),
+                warmup: pre_row.warmup,
+                count: 1,
+            },
+            AbSide {
+                p50_ms: Some(b),
+                warmup: post_row.warmup,
+                count: 1,
+            },
             Some(delta_pct),
             verdict,
         ));
@@ -448,7 +477,12 @@ impl AbReport {
     pub fn usable_pairs(&self) -> usize {
         self.rows
             .iter()
-            .filter(|(.., v)| matches!(v, AbVerdict::Improved | AbVerdict::Regressed | AbVerdict::Flat))
+            .filter(|(.., v)| {
+                matches!(
+                    v,
+                    AbVerdict::Improved | AbVerdict::Regressed | AbVerdict::Flat
+                )
+            })
             .count()
     }
 
@@ -472,7 +506,10 @@ impl AbReport {
             s,
             "paired: {} · unpaired/no-samples: {} · mismatches: {} · unparsable: {}",
             self.usable_pairs(),
-            self.rows.iter().filter(|(.., v)| matches!(v, AbVerdict::Unpaired | AbVerdict::NoSamples)).count(),
+            self.rows
+                .iter()
+                .filter(|(.., v)| matches!(v, AbVerdict::Unpaired | AbVerdict::NoSamples))
+                .count(),
             self.mismatches.len(),
             self.failures.len(),
         );
@@ -683,7 +720,10 @@ mod tests {
         let sc = parse_sidecar_text(text).expect("parses");
         assert_eq!(sc.p50_ms, None);
         let rows = budget_rows(
-            &[LoadedSidecar { path: PathBuf::from("/x"), sidecar: sc }],
+            &[LoadedSidecar {
+                path: PathBuf::from("/x"),
+                sidecar: sc,
+            }],
             None,
         );
         assert_eq!(rows[0].over_budget, None);
@@ -770,8 +810,7 @@ mod tests {
                 loaded("a", 10.0, (1, 1)),
                 LoadedSidecar {
                     path: PathBuf::from("/x/a.b02.frames.json"),
-                    sidecar: parse_sidecar_text(&sidecar_text("a", 10.0, (1, 1)))
-                        .expect("parses"),
+                    sidecar: parse_sidecar_text(&sidecar_text("a", 10.0, (1, 1))).expect("parses"),
                 },
             ],
             None,
@@ -792,10 +831,16 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("fft_walk_{}", std::process::id()));
         let nested = dir.join("nested");
         std::fs::create_dir_all(&nested).expect("mkdir");
-        std::fs::write(dir.join("gradient.frames.json"), sidecar_text("gradient", 1.0, (1, 1)))
-            .expect("write");
-        std::fs::write(nested.join("ocean.frames.json"), sidecar_text("ocean", 2.0, (1, 1)))
-            .expect("write");
+        std::fs::write(
+            dir.join("gradient.frames.json"),
+            sidecar_text("gradient", 1.0, (1, 1)),
+        )
+        .expect("write");
+        std::fs::write(
+            nested.join("ocean.frames.json"),
+            sidecar_text("ocean", 2.0, (1, 1)),
+        )
+        .expect("write");
         std::fs::write(dir.join("ignored.json"), "{}").expect("write");
         let (loaded, failures) = collect_sidecars(std::slice::from_ref(&dir));
         assert!(failures.is_empty(), "{failures:?}");
@@ -808,7 +853,10 @@ mod tests {
     #[test]
     fn blind_laws() {
         // Zero rows → blind.
-        let rep = FrameTimeReport { rows: Vec::new(), failures: Vec::new() };
+        let rep = FrameTimeReport {
+            rows: Vec::new(),
+            failures: Vec::new(),
+        };
         assert!(rep.blind());
         // Any unparsable → blind.
         let rep = FrameTimeReport {

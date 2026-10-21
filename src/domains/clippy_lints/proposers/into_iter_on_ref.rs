@@ -82,7 +82,13 @@ use super::SourceEdit;
 /// `iter()`/`iter_mut()` — the delegation law (std defines the impls by
 /// calling the inherent methods; arrays yield the same slice `Iter`).
 const CONTAINER_HEADS: &[&str] = &[
-    "Vec", "HashMap", "HashSet", "BTreeMap", "BTreeSet", "VecDeque", "BinaryHeap",
+    "Vec",
+    "HashMap",
+    "HashSet",
+    "BTreeMap",
+    "BTreeSet",
+    "VecDeque",
+    "BinaryHeap",
 ];
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -112,8 +118,7 @@ fn container_head(ty: &syn::Type) -> Option<&'static str> {
         syn::Type::Reference(r) => container_head(&r.elem),
         syn::Type::Array(_) => Some("[T; N]"),
         syn::Type::Path(p) => {
-            if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1
-            {
+            if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
                 return None;
             }
             let id = p.path.segments[0].ident.to_string();
@@ -126,7 +131,9 @@ fn container_head(ty: &syn::Type) -> Option<&'static str> {
 /// A plain single-segment ident path expression (`v`).
 fn plain_ident(e: &Expr) -> Option<String> {
     let Expr::Path(p) = e else { return None };
-    if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1
+    if p.qself.is_some()
+        || p.path.leading_colon.is_some()
+        || p.path.segments.len() != 1
         || !p.path.segments[0].arguments.is_none()
     {
         return None;
@@ -135,11 +142,16 @@ fn plain_ident(e: &Expr) -> Option<String> {
 }
 
 /// True when the ident is proven by `f`'s signature (params only v1).
-fn proven_params(inputs: &syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma>, block: &syn::Block) -> BTreeSet<String> {
+fn proven_params(
+    inputs: &syn::punctuated::Punctuated<syn::FnArg, syn::token::Comma>,
+    block: &syn::Block,
+) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
-        let syn::Pat::Ident(pi) = &*p.pat else { continue };
+        let syn::Pat::Ident(pi) = &*p.pat else {
+            continue;
+        };
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
@@ -182,9 +194,15 @@ impl<'ast> Visit<'ast> for Scan {
         if m.method != "into_iter" || !m.args.is_empty() || m.turbofish.is_some() {
             return;
         }
-        let Expr::Paren(paren) = &*m.receiver else { return };
-        let Expr::Reference(r) = &*paren.expr else { return };
-        let Some(name) = plain_ident(&r.expr) else { return };
+        let Expr::Paren(paren) = &*m.receiver else {
+            return;
+        };
+        let Expr::Reference(r) = &*paren.expr else {
+            return;
+        };
+        let Some(name) = plain_ident(&r.expr) else {
+            return;
+        };
         if !self.proven.contains(&name) {
             return;
         }
@@ -206,7 +224,11 @@ impl<'ast> Visit<'ast> for Scan {
         // proven plain ident, so the splice is postfix-safe by the guard
         // set itself.
         let recv_start = byte_range(m.receiver.as_ref()).start;
-        let method = if r.mutability.is_some() { "iter_mut" } else { "iter" };
+        let method = if r.mutability.is_some() {
+            "iter_mut"
+        } else {
+            "iter"
+        };
         self.edits.push(SourceEdit {
             start: recv_start,
             end: method_span.end,
@@ -224,7 +246,10 @@ mod tests {
         let src = "pub fn f(v: Vec<u64>) -> Option<u64> {\n    (&v).into_iter().next().copied()\n}";
         let out = propose_fix("into_iter_on_ref", src).expect("matched");
         assert!(out.contains("v.iter()"), "splice missing: {out}");
-        assert!(!out.contains("(&v)"), "parens survived (the born needless_borrow form): {out}");
+        assert!(
+            !out.contains("(&v)"),
+            "parens survived (the born needless_borrow form): {out}"
+        );
         assert!(!out.contains("into_iter"), "old name survived: {out}");
         syn::parse_file(&out).expect("re-parses");
     }

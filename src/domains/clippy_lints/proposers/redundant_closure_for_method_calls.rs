@@ -43,9 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use syn::visit::Visit;
 use syn::{Expr, ExprClosure, ExprMethodCall, File, ItemFn};
 
-use super::helpers::{
-    byte_range, drops_interior_comment, file_shadows, slice_param_heads_over,
-};
+use super::helpers::{byte_range, drops_interior_comment, file_shadows, slice_param_heads_over};
 use super::{edit, SourceEdit};
 
 /// Names whose file-level shadowing makes the emit meaning-changing.
@@ -66,7 +64,12 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     if file_shadows(file, SHADOW_NAMES) {
         return Vec::new(); // conservatively empty — the guard refused the file
     }
-    let mut v = Collector { source, edits: Vec::new(), ctx: None, saved: None };
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+        ctx: None,
+        saved: None,
+    };
     v.visit_file(file);
     v.edits
 }
@@ -325,7 +328,10 @@ mod tests {
             "redundant_closure_for_method_calls",
             "struct Foo;\nimpl Foo { fn len(&self) -> usize { 0 } }\nfn lens(v: &[Foo]) -> Vec<usize> { v.iter().map(|f| f.len()).collect() }",
         );
-        assert!(out.is_none(), "non-whitelisted element head must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "non-whitelisted element head must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -391,7 +397,10 @@ impl S {
             "redundant_closure_for_method_calls",
             "fn lens(v: &[String]) -> Vec<usize> {\n    let probe = |v: &str| v.len();\n    let _ = probe(\"\");\n    v.iter().map(|s| s.len()).collect()\n}",
         );
-        assert!(out.is_none(), "same-name closure binding must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "same-name closure binding must refuse: {out:?}"
+        );
     }
 
     #[test]
@@ -432,7 +441,10 @@ impl S {
             "redundant_closure_for_method_calls",
             "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(|s| /* s */ s.len()).collect() }",
         );
-        assert!(out.is_none(), "comment in the replaced range must refuse: {out:?}");
+        assert!(
+            out.is_none(),
+            "comment in the replaced range must refuse: {out:?}"
+        );
     }
 
     #[test]
