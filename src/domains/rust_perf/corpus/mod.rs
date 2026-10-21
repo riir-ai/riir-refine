@@ -9,7 +9,24 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 242 entries across 13 categories as of Batch 266 (2026-10-21, Plan 270 /
+//! 254 entries across 13 categories as of Batch 270 (2026-10-21, Plan 274 /
+//! Research 306: +12 — the splash-wave serving pool (incoai/splash, the
+//! Batch-268 staged leads, Apache-2.0): `restore-point-chain-copies-keyed-on-disk-state-count`
+//! (caching) + `persistent-cache-teardown-needs-second-witness` (caching) +
+//! `hot-slot-recycler-flat-tables-zero-alloc-claims` (caching) +
+//! `cache-share-capped-at-measured-distinct-working-set` (caching) +
+//! `cache-reuse-assertion-gated-on-eviction-counter` (caching) +
+//! `publication-takes-over-condemned-cache-entry` (caching) +
+//! `reclaim-progress-keyed-on-refused-resource-returned` (allocation) +
+//! `refusal-wait-keyed-on-shortfall-returning-transfer` (concurrency) +
+//! `watchdog-deadline-moves-on-command-progress` (dispatch) +
+//! `page-miss-blocks-one-ranged-read-scatter` (io) +
+//! `tier-write-defers-to-urgent-reads-except-a-read-behind-it` (io) +
+//! `constrained-unconstrained-lanes-one-decode-command` (dispatch, the f52d1ad
+//! grade LAND verdict — -23.7%/-34.0% time/token source-reported), entries_39-42
+//! (four authoring slices), ALL ANNOTATED `NotBenchable` + 4 count-neutral rider
+//! faces (3 on this batch's own rules, 1 on `discretionary-cache-growth-keys-on-spare-not-available`).
+//! Prior state: 242 entries as of Batch 266 (2026-10-21, Plan 270 /
 //! Research 302: +1 complexity — `isop-cover-from-decision-diagram-not-path-
 //! simplification`, the decision-diagram family seed from astral-sh/uv PR
 //! #22651; BENCHABLE with a Pareto verdict; +2 count-neutral rider faces in
@@ -586,13 +603,17 @@ mod entries_35;
 mod entries_36;
 mod entries_37;
 mod entries_38;
+mod entries_39;
+mod entries_40;
+mod entries_41;
+mod entries_42;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 242 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 254 entries
 /// (Batch 266, 2026-10-21, Plan 270 / Research 302: +1 complexity — the uv
 /// marker-ISOP decision-diagram rule, benchable; prior — Batch 257, Plan 261
 /// / Research 293: +6, the `TensorFold` staged remainder; prior — Batch 255,
@@ -699,5 +720,9 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_36::entries());
     entries.extend(entries_37::entries());
     entries.extend(entries_38::entries());
+    entries.extend(entries_39::entries());
+    entries.extend(entries_40::entries());
+    entries.extend(entries_41::entries());
+    entries.extend(entries_42::entries());
     Corpus::new(entries)
 }

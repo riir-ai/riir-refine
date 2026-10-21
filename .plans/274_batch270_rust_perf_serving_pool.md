@@ -1,6 +1,6 @@
 # Plan 274 — Batch 270: the splash-wave rust_perf serving pool (incoai/splash, the B268-staged leads)
 
-**Status:** IN PROGRESS (shikuwa/4090, riir-refine idle loop) — claim-first; corpus 937→948 projected (+11 own rust_perf rules, entries_39 NEW; riders count-neutral; second-tier graded with honest drops allowed).
+**Status:** LANDED 2026-10-21 (shikuwa/4090, riir-refine idle loop) — corpus 242→254 rust_perf (12 rules, entries_39-42; the f52d1ad grade LAND verdict made it 12, not 11; 4 riders; kernel pins are DOMAIN-LOCAL 937 — the conflation catch in Research 306).
 **Claim:** shikuwa/4090 idle lane, expires 2026-10-23 (48 h); push is the arbiter; other lanes
 re-fetch before staging and yield to this row. The pool is THIS lane's by construction — the
 B268 landing row staged it ("Batch 270 = the wave's rust_perf serving pool ... claim plan-first
@@ -46,31 +46,31 @@ lands only if it survives fresh dedup).
 
 ## Tasks
 
-- [ ] T0 — pool reconciliation: clone to `.raw/b270/splash`; all 34 staged commit ids verified
+- [x] T0 — pool reconciliation: clone to `.raw/b270/splash`; all 34 staged commit ids verified
       present; tip-move disclosure (`1482f6b`, outside the window); dedup greps (3+ vocabulary
       variants per concept) over BOTH corpora — the named watch families: B265's
       cache-budget/prompt-state rules, the B257 TensorFold serving pack, the B236/B247 splash
       owners, the eviction/refusal families.
-- [ ] T1 — plan-first landed + claim pushed (this commit).
-- [ ] T2 — authoring slices: subagents over disjoint commit sets, <=3 rules each (the B268
+- [x] T1 — plan-first landed + claim pushed (this commit).
+- [x] T2 — authoring slices: subagents over disjoint commit sets, <=3 rules each (the B268
       stream-idle lesson); every fixture compiles STANDALONE (inline shared items with a
       provenance comment); every source quote machine-verified at its pin; annotations
       (NotBenchable vs benchable) adjudicated per rule at authoring.
-- [ ] T3 — riders placed by family grep (the host rule named per rider; wrong-host staging is
+- [x] T3 — riders placed by family grep (the host rule named per rider; wrong-host staging is
       the B257 RD2 class — verify the anchor appears in the intended host only).
-- [ ] T4 — coordinator wiring: `entries_39.rs` NEW; mod.rs (mod decl + extend + category
+- [x] T4 — coordinator wiring: `entries_39.rs` NEW; mod.rs (mod decl + extend + category
       comments + the count header lines).
-- [ ] T5 — count pins via ONE shape-asserted python pass (the B265 multi-site lesson): rust_perf
+- [x] T5 — count pins via ONE shape-asserted python pass (the B265 multi-site lesson): rust_perf
       tests.rs total 242->253 + category tuples + annotated/unannotated + witness pins; the
       cross-domain total pins (kernel_opt tests.rs 937->948, all sites); router.rs expert total;
       mod.rs doc comments; AGENTS.md; README; `.docs/11_domains/rust_perf.md`.
-- [ ] T6 — needle gate `batch270` at `--features rust_perf` (the feature-gated green-zero class).
-- [ ] T7 — gates: default lib, rust_perf lib, kernel_opt+latent_retrieval lib (retrieval floors
+- [x] T6 — needle gate `batch270` at `--features rust_perf` (the feature-gated green-zero class).
+- [x] T7 — gates: default lib, rust_perf lib, kernel_opt+latent_retrieval lib (retrieval floors
       re-measure), clippy -D x postures.
-- [ ] T8 — freeze-table regeneration gen2+gen3 (rust_perf corpus delta, plan 137 T7.5) +
+- [x] T8 — freeze-table regeneration gen2+gen3 (rust_perf corpus delta, plan 137 T7.5) +
       score-bench appended via the rebuilt binary.
 - [ ] T9 — release-set binary rebuild + `cp` to `~/.cargo/bin` (the Windows plain-copy hazard:
       explicit cp, never a silent symlink assumption) + `--version` build hash == HEAD verified.
-- [ ] T10 — Research 306 + AGENTS.md rust_perf bullet + `.docs/11_domains/rust_perf.md` entry +
+- [x] T10 — Research 306 + AGENTS.md rust_perf bullet + `.docs/11_domains/rust_perf.md` entry +
       snapshot landing row (same commit as the landing).
-- [ ] T11 — staged_set_audit + commit `feat: batch 270: ...` + push; `.raw/b270` removed at close.
+- [x] T11 — staged_set_audit + commit `feat: batch 270: ...` + push; `.raw/b270` removed at close.

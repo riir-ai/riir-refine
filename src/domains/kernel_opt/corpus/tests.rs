@@ -18908,8 +18908,8 @@ fn batch249_slice3_rust_perf_riders() {
     let corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
     assert_eq!(
         corpus.entries.len(),
-        242,
-        "batch-249 slice-3 riders are count-neutral on their own landing; re-pinned at Batch 266 (+1: the uv marker-ISOP rule, Plan 270 / Research 302 -- the B266 lane's missed pin, repaired en route by Batch 269); (230 at Batch 248); Batch 250 slice 1 +1'd the corpus to 231 (the llama.cpp #30296 hadd-butterfly epilogue, Plan 254 / Research 285); Batch 255 +1 (the SLRU host-cache rule, Plan 259); Batch 256 +3 (the TensorFold 9ccf4727..d1018b31 campaign, Plan 260 / Research 291) — the riders' count-neutrality is unchanged"
+        254,
+        "batch-249 slice-3 riders are count-neutral on their own landing; re-pinned at Batch 270 (+12: the splash-wave rust_perf serving pool, Plan 274 / Research 306); prior re-pinned at Batch 266 (+1: the uv marker-ISOP rule, Plan 270 / Research 302 -- the B266 lane's missed pin, repaired en route by Batch 269); (230 at Batch 248); Batch 250 slice 1 +1'd the corpus to 231 (the llama.cpp #30296 hadd-butterfly epilogue, Plan 254 / Research 285); Batch 255 +1 (the SLRU host-cache rule, Plan 259); Batch 256 +3 (the TensorFold 9ccf4727..d1018b31 campaign, Plan 260 / Research 291) — the riders' count-neutrality is unchanged"
     );
     let riders: [(&str, &[&str]); 3] = [
         (
