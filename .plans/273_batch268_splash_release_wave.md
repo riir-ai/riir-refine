@@ -1,17 +1,21 @@
-# Plan 273 — Batch 268: the splash release wave (incoai/splash be3b083c..1e532541)
+# Plan 273 — Batch 268: the splash release wave (incoai/splash be3b083c..origin/main)
 
-**Status:** IN FLIGHT 2026-10-21 (shikuwa/4090, riir-refine idle loop).
+**Status:** LANDED 2026-10-21 (shikuwa/4090, riir-refine idle loop) — corpus 926→937 (+11 own kernel_opt rules, entries_gpu_117; the wave's rust_perf serving leads STAGED as Batch 270's pool).
 **Claim:** shikuwa/4090 idle lane, expires 2026-10-23 ~08:2x +07 (48 h); push is the arbiter;
 other lanes re-fetch before staging and yield to this row. The M3's Batch 269 landing row
 (`3252e7694` era) already routed this pool to THIS lane ("B268 = the 4090 lane's splash pool").
 
 ## Source window
 
-`incoai/splash be3b083c..1e532541` — 205 non-merge commits, the release/01-memory→11-cache-quota
-wave (enumerated by the B267 standing-watch re-poll, Research 303 §STAGED). Prior splash pins:
-B236 (mid-prefill capture boundary @ 711f8e5+c3dcf53+985463c+79a4329), B247 riders (KV-ALIKE +
-retained-rows oracle @ 4919202 + 3903390, read at vendor clone `be3b083c5` — the wave's exact
-base), B254 slice-2 face `597e5e50` (attention-row-mask-bitmap, uzu). Named leads to grade:
+`incoai/splash be3b083c..origin/main` — **205 non-merge commits** (reconciled at T0: the
+original `..1e532541` range-end was the B267 lane's mid-poll view; the 36-commit delta past it
+carries ALL 11 remaining named leads — the Spill-series resume pair, publication-under-reader,
+the chain-copy free/keep pair, disk relabel, cache floor, alloc-refusal, ANE lag, one-command
+decode lanes, pendingGdnRows. Research 303's 205-count matches origin/main exactly). Prior
+splash pins: B236 (mid-prefill capture boundary @ 711f8e5+c3dcf53+985463c+79a4329), B247 riders
+(KV-ALIKE + retained-rows oracle @ 4919202 + 3903390, read at vendor clone `be3b083c5` — the
+wave's exact base), B254 slice-2 face `597e5e50` (attention-row-mask-bitmap, uzu). Named leads
+to grade:
 
 - split-K sixteen ways on the register tile's narrowest grids (`6198321`)
 - constrained+unconstrained decode lanes in one command (`f52d1ad`)
@@ -36,25 +40,35 @@ base), B254 slice-2 face `597e5e50` (attention-row-mask-bitmap, uzu). Named lead
 
 ## Tasks
 
-- [ ] T0 — clone splash to `.raw/splash` at the range; enumerate the 205 commits by
-      release/NN area; dedup grep each candidate concept against the corpus
-      (`src/domains/kernel_opt/` + rust_perf) BEFORE proposing; partition into 2 disjoint
-      slices (memory/prefill-serving vs cache-quota/durability, exact split at T0).
-- [ ] T1 — plan-first landed + claim pushed (this commit).
-- [ ] T2 — Slice A (subagent): read its slice, propose rules with verbatim quotes + line
-      numbers (pattern, bounded fix-space, category, rationale); every quote re-verified at
-      the pin by the coordinator.
-- [ ] T3 — Slice B (subagent): same, disjoint file set.
-- [ ] T4 — coordinator: dedup adjudication (rider faces vs own rules vs drops with reasons),
-      entry authoring (entries_gpu_117.rs NEW — 116 holds B267+B269), mod.rs wiring, count
-      pins (every corpus-total site), batch268 needle gate.
-- [ ] T5 — gates: kernel_opt lib; default lib; clippy −D ×3 postures (default / kernel_opt /
-      no-default); retrieval floors re-measure (kernel_opt rules landed — the Issue-017 gate:
-      kernel self-variant 100%, blended floors; re-pin only with attribution).
-      freeze/score-bench NOT owed if zero clippy-corpus delta (P30); binary rebuild NOT owed
-      (kernel_opt outside the release set).
-- [ ] T6 — Research 305 + AGENTS.md corpus count bump + `.docs/11_domains/kernel_opt.md` B268
-      entry + watch rows (ANE lag M3 intel; any remaining pool leads) in the SAME landing
-      commit.
-- [ ] T7 — snapshot landing row + commit `feat: batch 268: ...` + push; `.raw/splash` removed
-      at close.
+- [x] T0 — clone splash to `.raw/splash`; enumerate the wave; RANGE RECONCILED: the
+      staged `..1e532541` was the B267 lane's mid-poll view — the 36-commit delta past it
+      carries ALL 11 remaining named leads; scope = `be3b083c..origin/main` = exactly 205
+      non-merge (the Research-303 count); dedup greps done (B265 cache-budget family,
+      B236/B247 splash owners, splitk/register-tile/mask/verify families); slices split
+      A (kernel, ~40 commits) + B (serving/memory, ~55 commits).
+- [x] T1 — plan-first landed + claim pushed (`b75ac0dbf`).
+- [x] T2 — Slice A (subagents, split 3+3 after two 6-rule stream-idle timeouts): 15
+      proposals (11 kernel_opt strong + 4 rust_perf); 11 drops with reasons; full dedup
+      ledger. Citations re-verified against the corpus (gpu_37 not gpu_56, gpu_67 not
+      gpu_99, c-fragment not a-fragment) and applied.
+- [x] T3 — Slice B (subagent): 11 full rust_perf proposals + 4 rider faces + 13
+      second-tier + 5 drops, all grep-zero verified — STAGED as Batch 270's pool (NOT
+      landed: freeze regen + binary rebuild is a lane of its own).
+- [x] T4 — coordinator: 11 kernel_opt rules authored (entries_gpu_117 NEW; the a2 agent
+      watchdog-cancelled post-write pre-validation — its 3 opt_patterns repaired to
+      inline ref-shape shared items; 22/22 fixtures compile + pass standalone); mod.rs
+      wiring (mod decl + extend + 7 category comments + 7 KERNEL_CATEGORIES rule-id
+      lists); count pins 926→937 ×30 sites via ONE shape-asserted python pass (2
+      historical narrative lines kept at 926); batch268 needle gate (FIRST-RUN PASS);
+      the B269 landing's duplicated-phrase comment residue ("the vllm #61497 K lead"
+      ×2) repaired in the 5510 re-pin, disclosed.
+- [x] T5 — gates: kernel_opt lib 3208/0; default lib 2726/0; combo 3395/0 (3 ignored);
+      clippy −D ×3 postures clean (5 doc_markdown healed by the cargo-refine healer,
+      compile-gated; 8 secret-scan suggest-only findings = FALSE POSITIVES on kebab-case
+      rule ids, disclosed); retrieval floors HELD 22/22 no re-pin (blended 90.6/94.2/95.3,
+      kernel self-variant top-1 green); freeze/score-bench NOT owed (zero clippy-corpus
+      delta, P30); binary rebuild NOT owed (kernel_opt outside the release set).
+- [x] T6 — Research 305 + AGENTS.md corpus count (937) + `.docs/11_domains/kernel_opt.md`
+      B268 entry + the Batch-270 staging row in the SAME landing commit.
+- [x] T7 — snapshot landing row + commit `feat: batch 268: ...` + push; `.raw/splash` +
+      slice/check scratch removed at close.

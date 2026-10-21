@@ -1914,6 +1914,7 @@ mod entries_gpu_113;
 mod entries_gpu_114;
 mod entries_gpu_115;
 mod entries_gpu_116;
+mod entries_gpu_117;
 mod entries_gpu_12;
 mod entries_gpu_13;
 mod entries_gpu_14;
@@ -2094,6 +2095,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_114::entries());
     entries.extend(entries_gpu_115::entries());
     entries.extend(entries_gpu_116::entries());
+    entries.extend(entries_gpu_117::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2180,7 +2182,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
 /// See [Plan 003](../../../.plans/003_kernel_opt_router_corpus_wiring.md) for the
 /// design rationale (one expert per category, not one per rule).
 pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
-    // A: Memory access patterns (187 rules; Batch 261 +1: prefill-batch-pool-f16-conversion-sized-by-actual-length (PrismML 25f68a4 #330 -- the FA prefill f16 pool-conversion route: prefill-sized batches (>8 queries) convert a quantized K/V cache of at most N cells to f16 in POOL memory sized by the ACTUAL KV length, decode keeps the in-place quantized read, nothing is reserved at load); Batch 259 +1: tile-history-packed-in-place-register-window-conv-scan (uzu e744e7c -- the conv stage packs each tile's 3 previous rows into O(tiles) scratch and the scan runs the 16 tiles IN PLACE with a register window, no padded history buffer; 460->47 us @T=1024); Batch 257 +1: verify-row-tiles-share-loaded-weight-panel (4d1a3f15 — 32 GB10 verify rows share ONE loaded affine-4 weight panel; the panel is loaded once and tiled across the rows, never per-row); Batch 256 +1: expert-prompt-row-batch-amortizes-weight-pool-stream (7bcab59f — the weight-STREAM amortization over ROW BATCH, the first owner of the axis the corpus explicitly dropped as not-a-rule); Batch 251 +5: the Yukon conversion, Research 284 — lane-permuted-column-reduce-same-butterfly-tree-bit-identity (the L8 arm permutes the lane→row map so the same fold tree runs 40→6 shuffles/token BIT-IDENTICAL, the lazy-rollback checksum depends on it) + per-request-dirty-range-clear-graph-capture-sticky-marks (row-granularity dirty-prefix clear + the stream-capture STICKY mark set no clear resets) + verify-ubatch-full-prestage-lane-token-gate-broadcast (verify-band 8–16 tokens stage ALL inputs once, gate activation distributed + __shfl_sync broadcast — each transcendental evaluated exactly once) + j16-warp-fragment-direct-no-smem-tile (at J=16 an smem tile buys no reuse a register fragment lacks — the anti-pole of the dequant-once staging family) + mbarrier-staged-in-structural-padding (the stream-K arm's two mbarriers live in stride-alignment padding bytes at zero smem cost); Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: room = free + reclaimable-without-writeback, bounded wait, loud refusal, pool fail-fast; the 70% residency bound stays a separate decision); Batch 249 slice 2 +3: the TensorFold own-rule set —
+    // A: Memory access patterns (188 rules; Batch 268 +1: mma-lane-map-whole-run-vector-loads-split-accumulator-chains (the splash wave — an MMA B-operand lane map re-indexed so each lane's operands are whole contiguous 8-input runs, weights load a step ahead, even/odd MMAs accumulate into separate fp32 chains; a lane-map change moves the split optimum — re-measure it, 16→8); Batch 261 +1: prefill-batch-pool-f16-conversion-sized-by-actual-length (PrismML 25f68a4 #330 -- the FA prefill f16 pool-conversion route: prefill-sized batches (>8 queries) convert a quantized K/V cache of at most N cells to f16 in POOL memory sized by the ACTUAL KV length, decode keeps the in-place quantized read, nothing is reserved at load); Batch 259 +1: tile-history-packed-in-place-register-window-conv-scan (uzu e744e7c -- the conv stage packs each tile's 3 previous rows into O(tiles) scratch and the scan runs the 16 tiles IN PLACE with a register window, no padded history buffer; 460->47 us @T=1024); Batch 257 +1: verify-row-tiles-share-loaded-weight-panel (4d1a3f15 — 32 GB10 verify rows share ONE loaded affine-4 weight panel; the panel is loaded once and tiled across the rows, never per-row); Batch 256 +1: expert-prompt-row-batch-amortizes-weight-pool-stream (7bcab59f — the weight-STREAM amortization over ROW BATCH, the first owner of the axis the corpus explicitly dropped as not-a-rule); Batch 251 +5: the Yukon conversion, Research 284 — lane-permuted-column-reduce-same-butterfly-tree-bit-identity (the L8 arm permutes the lane→row map so the same fold tree runs 40→6 shuffles/token BIT-IDENTICAL, the lazy-rollback checksum depends on it) + per-request-dirty-range-clear-graph-capture-sticky-marks (row-granularity dirty-prefix clear + the stream-capture STICKY mark set no clear resets) + verify-ubatch-full-prestage-lane-token-gate-broadcast (verify-band 8–16 tokens stage ALL inputs once, gate activation distributed + __shfl_sync broadcast — each transcendental evaluated exactly once) + j16-warp-fragment-direct-no-smem-tile (at J=16 an smem tile buys no reuse a register fragment lacks — the anti-pole of the dequant-once staging family) + mbarrier-staged-in-structural-padding (the stream-K arm's two mbarriers live in stride-alignment padding bytes at zero smem cost); Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: room = free + reclaimable-without-writeback, bounded wait, loud refusal, pool fail-fast; the 70% residency bound stays a separate decision); Batch 249 slice 2 +3: the TensorFold own-rule set —
     // slot-keeping-scan-runs-in-place-publish-only-what-moved (the ownership-predicate alias + publish-what-moved split, #711) +
     // kept-state-copies-what-prompt-needs-not-window (the consumer-horizon state copy + the spare-pool arm, cuda_reuse) +
     // residency-hold-gated-ram-fraction-not-working-set (wired buffers are SYSTEM load: the bound is a RAM fraction, the working-set proxy measured-reverted); Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring; Batch 240 +1: the pad row-classification interior-memcpy law (llama.cpp #30526 — the pad op classifies ROWS: interior+contig rows are memset+memcpy+memset, boundary rows one whole-row memset, row-major threading); Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 — a buffer from a host pointer pins everything it wraps; subtract the foreign ranges, one buffer per disjoint owned range); Batch 227 +1: the
@@ -2209,6 +2211,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
+            // Batch 268 +1 (the splash release wave, Plan 273 / Research 305):
+            // the MMA B-operand lane map re-indexed so each lane's operands are
+            // whole contiguous 8-input runs + split fp32 accumulator chains.
+            "mma-lane-map-whole-run-vector-loads-split-accumulator-chains",
             // Batch 256 +1 (the TensorFold `9ccf4727..d1018b31` +988-commit
             // campaign, Plan 260 / Research 291): the weight-STREAM
             // amortization over ROW BATCH — the first owner of the axis
@@ -2564,7 +2570,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-warp-ordered-reduce-row-batched-no-smem-barrier",
         ],
     ),
-    // C: Fusion patterns (59 rules; Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
+    // C: Fusion patterns (61 rules; Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles (the splash wave — N float projections OF ONE INPUT sharing one dispatch via concatenated column-tile ranges, each keeping its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave — a table built by a row-serialized producer moves into the consumer's existing covering prepare phase, byte-identical); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
     // barrier cost (lithos-metal — the boundary decided on MEASURED barrier
     // cost, never dispatch count; in-kernel global barriers priced at
     // dispatch-boundary cost on M3 Pro/M5 Pro → layer-wise); Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
@@ -2578,6 +2584,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Fusion,
         "C: fusion",
         &[
+            // Batch 268 +2 (the splash release wave, Plan 273): same-input
+            // projection fusion via concatenated column-tile ranges; the
+            // table built by a row-serialized producer moves into the
+            // consumer's covering prepare phase.
+            "same-input-consecutive-projections-one-dispatch-concatenated-tiles",
+            "consumer-prepares-consumed-table-producer-writes-plain-rows",
             "accept-packet-one-launch",
             // Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm
             // (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the
@@ -2648,7 +2660,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "precompute-chain-fused-intermediates-never-materialized",
         ],
     ),
-    // D: Dispatch patterns (221 rules; Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307 -- the quantized K/V branch of the Ada kernel-choice ladder lacked the F16 branch's GQA>4 ratio rule, 1.21-2.95x at long context on the league model; the widening carries the IN-PLACE PRECONDITION kv_native_supported -- otherwise the MMA path converts the whole cache to f16 on every call); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb — the DEPLOYMENT-level PDL admission: the launch carries PDL only when BOTH embedded images hold the pdl_marker contract, fail-closed probe) + prefill-batch-atomic-fallback-individual (c4995966 — prefill_many batch with the atomic fall-back to individual launches) + teardown-takes-list-whole (30f05c6d — a failed round/cancel/close ends every held job, copying nothing) + drain-device-work-before-free (98571a84 — learning drains its device work before it frees; a failed pocket read is an ERROR, not an empty pocket) + copy-source-quarantine-unproven-free-pinned (2ba81a06 — freeing async GPU memory requires WAIT PROOF; unprovable drops enter a charged quarantine)); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead: relocate the turn's selected prefix before evicting it, the overlap-safe move order, the one counted restore report, fixes #966); Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal — the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited — the mul_mat_add fusion carried it, this later fusion omitted it); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
+    // D: Dispatch patterns (224 rules; Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core (the splash wave — kernel-variant selection by a threadgroups-per-core occupancy bound, halved for sub-4-bit formats) + prefix-active-split-axis-linearized-one-dimensional-grid (the splash wave — a data-dependent-prefix split axis linearizes into x, bit-identical by order preservation, up to 1.7× faster past ~32 splits) + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave — a one-lane decode under 4.5 bpw takes the 16-row tile over two storage lanes, rows independent so bit-for-bit); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307 -- the quantized K/V branch of the Ada kernel-choice ladder lacked the F16 branch's GQA>4 ratio rule, 1.21-2.95x at long context on the league model; the widening carries the IN-PLACE PRECONDITION kv_native_supported -- otherwise the MMA path converts the whole cache to f16 on every call); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb — the DEPLOYMENT-level PDL admission: the launch carries PDL only when BOTH embedded images hold the pdl_marker contract, fail-closed probe) + prefill-batch-atomic-fallback-individual (c4995966 — prefill_many batch with the atomic fall-back to individual launches) + teardown-takes-list-whole (30f05c6d — a failed round/cancel/close ends every held job, copying nothing) + drain-device-work-before-free (98571a84 — learning drains its device work before it frees; a failed pocket read is an ERROR, not an empty pocket) + copy-source-quarantine-unproven-free-pinned (2ba81a06 — freeing async GPU memory requires WAIT PROOF; unprovable drops enter a charged quarantine)); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead: relocate the turn's selected prefix before evicting it, the overlap-safe move order, the one counted restore report, fixes #966); Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal — the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited — the mul_mat_add fusion carried it, this later fusion omitted it); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2679,6 +2691,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 268 +3 (the splash release wave, Plan 273): the tg/core
+            // kernel-variant gate, the prefix-active split-axis
+            // linearization, the sub-4.5-bpw one-lane wide-row tile.
+            "apple10-narrow-grid-register-tile-threadgroups-per-core",
+            "prefix-active-split-axis-linearized-one-dimensional-grid",
+            "wide-row-tile-under-bits-per-weight-floor-one-lane",
             // Batch 256 +1 (the TensorFold +988 campaign, Plan 260 / Research
             // 291): the NAMED lead — the selected-prefix relocation before
             // eviction, the overlap-safe move order, the one counted restore
@@ -2925,7 +2943,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "dtype-branch-dispatch-parity-in-place-precondition",
         ],
     ),
-    // E: Parallelism patterns (83 rules; Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork) with nwork = tiles * ceil(K/K_vram), never below the SM default, never an empty-range block; fixup sizing rides the capped grid; the ceiling side stays the B58 measured null); Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bound [STALE-COMMENT REPAIR at Batch 253 — this header read 79 through B249's +3; the tests table pinned 82]; Batch 242 +2: the mlx-serve pack — spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge; Batch 240 +1: the subgroup tail-lane clamp law (llama.cpp #30421 — every lane of a collective stays LIVE, its loads CLAMP to a valid row (gid_s = min(gid, LINE_STRIDE_A - 1)) at every read site, only its stores gate on the real bound; the pair/splitk store splits into per-element guards); Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
+    // E: Parallelism patterns (84 rules; Batch 268 +1: splitk-tier-ladder-per-tier-ceiling-min-partition-inputs (the splash wave — split-K depth from a tier ladder of occupancy triggers with per-tier ceilings and partition-input floors, ceiling 16 tier-keyed, reassociation disclosed); Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork) with nwork = tiles * ceil(K/K_vram), never below the SM default, never an empty-range block; fixup sizing rides the capped grid; the ceiling side stays the B58 measured null); Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bound [STALE-COMMENT REPAIR at Batch 253 — this header read 79 through B249's +3; the tests table pinned 82]; Batch 242 +2: the mlx-serve pack — spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge; Batch 240 +1: the subgroup tail-lane clamp law (llama.cpp #30421 — every lane of a collective stays LIVE, its loads CLAMP to a valid row (gid_s = min(gid, LINE_STRIDE_A - 1)) at every read site, only its stores gate on the real bound; the pair/splitk store splits into per-element guards); Batch 223 +2: the bounded cross-worker barrier protocol polling fan-in ladder (lithos-metal — serial/simd/wide/leader-release variants, monotone epochs, the 1M-spin loud-fail bound) + the own-slice coprime-stride steal with the claimant-invariance fence elision (gated on measured skew — none of the dense targets' ops qualifies); Batch 215 +1: the staggered segments two-queue fences (TensorFold — cross-queue segment overlap: one MTLFence a segment + an MTLEvent between, the 4,096-row gate, the structural fan-out ceiling, TTFT −5..−8% from 8k); Batch 201 +2: the env-polarity migration hazard (2 flips in ~40 envs, audit method in-rule) + the gather signed-index wrap semantics (the WALKROWS face); Batch 197 +2: the composed-backward A− GOAT lead (tiled library GEMMs through a bounded materialized tile — the fused kernel lost, closed PR #3241) + the threadgroup-scope reduction single-writer; Batch 195 +1: the cross-queue output-retention-until-completion rule; Batch 194 +1: the parity stage-ownership scale lane; was 65; Batch 178 +2: the warp-role
     // specialization by query width + the row-slice epilogue rule;
     // Batch 180 +1: the fixed-order interleaved-accumulator epilogue;
     // Batch 182 +2: the draft-block KV-split simdgroup exchange + the
@@ -2935,6 +2953,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            // Batch 268 +1 (the splash release wave, Plan 273): split-K depth
+            // from a tier ladder of occupancy triggers with per-tier ceilings
+            // and partition-input floors.
+            "splitk-tier-ladder-per-tier-ceiling-min-partition-inputs",
             // Batch 249 slice 3 +3 (TensorFold B+ remainder): per-stream
             // by-value seg kernels, copies-not-shared-body (da676b0d), the
             // fill-order SRPT-under-classes comparator (c4d07a54), the
@@ -3118,11 +3140,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lazy-rollback-journaled-window-replay-replaces-eager-state-snapshots",
         ],
     ),
-    // H: MoE dispatch + backward pass (38 rules; Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
+    // H: MoE dispatch + backward pass (40 rules; Batch 268 +2: moe-lone-tile-register-gemv-uniform-tile-kind (the splash wave — an expert's lone ≤2-row tile runs a lane-per-column register GEMV, all of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (the splash wave — rows past a lane's verify count route ZERO experts while every kernel keeps its dense shape, rows priced by expected committed tokens per cost); Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
         &[
+            // Batch 268 +2 (the splash release wave, Plan 273): the lone
+            // ≤2-row tile's lane-per-column register GEMV (uniform tile kind
+            // per expert); rows past a lane's verify count route ZERO experts
+            // under the dense shape.
+            "moe-lone-tile-register-gemv-uniform-tile-kind",
+            "moe-unverified-rows-route-zero-experts-dense-shape",
             "grouped-launch-cumsum-offsets",
             "l2-grouped-tile-schedule",
             "fused-matmul-activation",
@@ -3163,13 +3191,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "moe-readiness-queue-no-grid-barrier-producer-scans-before-retire",
         ],
     ),
-    // I: NSA block-sparse selection (8 rules; Batch 199 +1: the
+    // I: NSA block-sparse selection (9 rules; Batch 268 +1: block-sparse-union-lists-packed-entry-token-major-values (the splash wave — per-tile-of-8-rows union block lists, packed (block<<ROW_BITS)|row_bitmask entries, token-major values so a block's keys AND values are one contiguous run, closed-form split sizing); Batch 199 +1: the
     // visibility-bounded scan with shape-stable allocations -- the
     // scored-range suffix skip + the graph-reuse bucket contract)
     (
         KernelCategory::NsaBlockSparse,
         "I: NSA block-sparse",
         &[
+            // Batch 268 +1 (the splash release wave, Plan 273): per-tile
+            // union block lists, packed (block<<ROW_BITS)|row_bitmask
+            // entries, token-major values, closed-form split sizing.
+            "block-sparse-union-lists-packed-entry-token-major-values",
             "block-sparse-gather",
             "precompute-scalar-reduction",
             "block-compression-before-routing",
@@ -3404,7 +3436,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "partial-constant-float-fold-ieee-unsound",
         ],
     ),
-    // O: IR strength reduction (8 rules; Batch 201 +1: the single-pass continuation scan (the two-phase prompt-lookup scan replaced by the one endpoint pass); Batch 195 +2: the io32
+    // O: IR strength reduction (9 rules; Batch 268 +1: constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers (the splash wave — a local array indexed under a RUNTIME loop bound leaves registers; the compile-time capacity bound under #pragma unroll with a zero guard keeps every word in a register, same output); Batch 201 +1: the single-pass continuation scan (the two-phase prompt-lookup scan replaced by the one endpoint pass); Batch 195 +2: the io32
     // count-pinned kernel-source-text narrowing (the TEXT-level static
     // member) + the strided-view offset fit32 launch proof (the
     // launch-proven arbitrary-view member — the family's admission half);
@@ -3415,6 +3447,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::IrStrengthReduction,
         "O: IR strength reduction",
         &[
+            // Batch 268 +1 (the splash release wave, Plan 273): the
+            // capacity-bound zero-guarded unroll holds the local array in
+            // registers where a runtime loop bound spilled it.
+            "constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers",
             "single-pass-continuation-scan",
             "strength-reduce-mul-pow2",
             "strength-reduce-mul-pow2-plus-minus-one",
