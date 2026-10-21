@@ -619,6 +619,12 @@ mod x86_goat {
                     std::hint::black_box(s);
                     t_soft = t_soft.min(t0.elapsed().as_secs_f64());
                 }
+                // Loud zero (katgpt-rs Issue 855): an elided arm reads 0 and
+                // would decide the ratio over absent work.
+                assert!(
+                    t_intr > 0.0 && t_lut > 0.0 && t_soft > 0.0,
+                    "G2 dot n={n} seed={seed}: an arm timed 0 — region elided"
+                );
                 let ratio = t_intr / t_lut;
                 if t_lut >= t_intr {
                     lut_all_win = false;
@@ -660,6 +666,10 @@ mod x86_goat {
                     std::hint::black_box(&out_s);
                     t_soft = t_soft.min(t0.elapsed().as_secs_f64());
                 }
+                assert!(
+                    t_intr > 0.0 && t_soft > 0.0,
+                    "G2 store n={n} seed={seed}: an arm timed 0 — region elided"
+                );
                 let ratio = t_soft / t_intr;
                 if t_intr > t_soft {
                     store_all_ok = false;
