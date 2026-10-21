@@ -19189,6 +19189,7 @@ fn batch250_slice2_rules_landed() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // exhaustive presence gate: 16 rules + their needles belong together (the batch-270 gate's own allow set, the gate-ordering class)
 fn batch251_rules_landed() {
     // G1 for Batch 251 (Plan 255 / Research 284): the Yukon conversion —
     // 16 own rules from Layr-Labs/cudafast-bonsai2-9b-engine @ 36c9536
@@ -20318,6 +20319,7 @@ fn batch269_rule_and_rider_landed() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // exhaustive presence gate: 11 rules + riders + their needles belong together (the batch-270 gate's own allow set, the gate-ordering class)
 fn batch268_rules_landed() {
     // G1 for Batch 268 (Plan 273 / Research 305): the splash release wave,
     // incoai/splash be3b083c..origin/main (205 non-merge commits; the B267

@@ -2936,7 +2936,7 @@ mod tests {
     }
 
     /// Batch 266 (Plan 270 / Research 302) T8: the new rule's own span must
-    /// land top-1 in the rust_perf lane — the standing self-variant assert
+    /// land top-1 in the `rust_perf` lane — the standing self-variant assert
     /// the retrieval floors ride.
     #[test]
     fn batch266_self_variant_retrieves_top1() {

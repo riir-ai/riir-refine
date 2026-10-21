@@ -111,7 +111,29 @@ pub(super) fn entries() -> Vec<PerfRule> {
                  small (~150 B) and let growth ride the reuse, clamping only the extremes. \
                  Third retention policy beside this rule (reuse, unbounded) and kernel_opt's \
                  grow-only staging (the opposite): bounded reuse. Source: subamanis/mezura \
-                 consumer.rs MAX_RETAINED_FILE_BUFFER_BYTES @ 2dbacb7. Batch 172 / Plan 166."
+                 consumer.rs MAX_RETAINED_FILE_BUFFER_BYTES @ 2dbacb7. Batch 172 / Plan 166. \
+                 BATCH 271 RIDER (count-neutral, Plan 275 / Research 307 — the FOURTH retention \
+                 policy: task-scoped, no sticky buffer at all; incoai/splash @ \
+                 4d1799564d2ff9092a7963b914b9fc86f20fd640 'Read restores into memory of their own \
+                 size, whole ones on fewer readers', Apache-2.0, Jian Chen, 2026-10-17): the \
+                 replaced mechanism was a thread_local reader buffer grown to the largest task's \
+                 slot size and kept for the reader's next task — under an explicit memory plan \
+                 with BIMODAL size classes that ratchets every worker's footprint to the worst \
+                 class, OUTSIDE the memory plan (the commit: 'outside the memory plan, 13 MiB at \
+                 Flash-Next's slot size but 32 to 64 MiB on the dense 27B; an index restore of \
+                 24 KiB grew it as far'). The repair: allocate task-scoped at the read's own \
+                 aligned size, freed at task end (KvPageTier.cpp:31-42, verbatim): '// Memory a \
+                 restore's read lands in, aligned for uncached IO, of the read's own size: the \
+                 range starts the slot and ends a segment, which a read of an adopted slot \
+                 widens it to no further (model::SlotFile::readAt).' + 'const ReadBuffer \
+                 buffer(range);' per read (:188-190). When the retention policies compose: \
+                 unbounded reuse for hot single-class loops (this rule's own verdict), the 4 \
+                 MiB clamp where one huge input would ratchet a whole pool, grow-only staging \
+                 where a kernel owns its scratch, and TASK-SCOPED where a memory plan owns the \
+                 footprint and the size classes are bimodal — the sticky buffer's reuse value \
+                 loses to the plan-external ratchet. (The commit's OTHER half — the \
+                 size-class-keyed reader cap — lands as its own rule, \
+                 size-class-keyed-reader-cap-bimodal-reads, same batch.) Batch 271 / Plan 275."
                     .to_string(),
             ),
             #[cfg(feature = "rust_perf_bench")]

@@ -9,17 +9,44 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 257 entries across 13 categories as of Batch 271 slice A (2026-10-21,
-//! Plan 275 / Research 307: +3 allocation — the splash-wave SECOND-TIER
-//! serving pool slice A (incoai/splash @ fa63d97f8956113b067dfdce46caf1fcd22213e1
-//! + rider 593f2a6d7427382a88a474a6a27c6dcc61b7415e,
-//! 88d0e57ee3a37305a895197538554ba9f3ea83d8,
-//! 81ae003e18d9362f6adf4131cf88a17a17803f65, Apache-2.0):
-//! `resume-admission-sized-to-per-command-window-not-suspended-peak` +
-//! `phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max` +
-//! `derived-reservation-taken-once-after-admission-settles` (entries_43), ALL
-//! ANNOTATED `NotBenchable` + 1 count-neutral rider face (the anchor-bound
-//! output face on rule 1). Prior state: 254 entries as of Batch 270
+//! 266 entries across 13 categories as of Batch 271 (2026-10-21,
+//! Plan 275 / Research 307: +12 — the splash-wave SECOND-TIER serving pool
+//! (incoai/splash, the B268/B270 staged second tier, Apache-2.0, author Jian
+//! Chen). Allocation +3: `resume-admission-sized-to-per-command-window-not-suspended-peak`
+//! (@ fa63d97f8956113b067dfdce46caf1fcd22213e1 + rider face
+//! 593f2a6d7427382a88a474a6a27c6dcc61b7415e, the anchor-bound output face),
+//! `phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max`
+//! (@ 88d0e57ee3a37305a895197538554ba9f3ea83d8),
+//! `derived-reservation-taken-once-after-admission-settles`
+//! (@ 81ae003e18d9362f6adf4131cf88a17a17803f65) — `entries_43`.
+//! Dispatch +3: `size-class-keyed-reader-cap-bimodal-reads`
+//! (@ 4d1799564d2ff9092a7963b914b9fc86f20fd640),
+//! `fixed-read-command-runs-alone-sized-by-its-own-reads`
+//! (@ 68b9e7069df0a64c2ad95cc322f4d293f4d0ce53),
+//! `reject-plan-runs-before-setup-with-outliving-side-effects`
+//! (@ dab88419a70128eaa9d61c1c05d866cef7fec1f6) — `entries_44`.
+//! Dispatch +2: `admission-tests-the-bound-the-admitted-mode-serves`
+//! (@ 5ea4043fbecf7612a9b0066e7f9c10481eae4e1b + enabler
+//! 82b93c5f32a39865ac945a507134f3ab01b59d92),
+//! `in-use-state-retry-under-serving-mark-keyed-on-refusal-cause`
+//! (@ b7844dcf745909fb5caf79f82dd985d64041393b); concurrency +1:
+//! `one-event-per-writer-consumer-waits-on-the-side-it-needs`
+//! (@ e2c0af27e8cb31ffd5990fac001b111e0894da93) — `entries_45`.
+//! Concurrency +1: `finished-command-copy-leaves-at-once-slot-returns-at-last-reader`
+//! (@ 91d4ddb8d8125eb89aac12762b2c8bcf727fd7e3); complexity +2:
+//! `part-cost-measured-by-planning-ablation-not-component-sum`
+//! (@ ed1092f8631e579e09906805b9dd4544ebf327a4),
+//! `plan-input-precomputed-per-output-variant-bounded-convergence`
+//! (@ 2f5fe8dd3d4cbd986812beee4652f4d4e0f2d765) — `entries_46`.
+//! ALL ANNOTATED `NotBenchable` + 4 count-neutral rider faces (the
+//! anchor-bound output face on slice A's own rule 1; the spill-tier
+//! victim-exclusion face @ 253506f393b17c9253e0a105f479908c7a3d15d7 and the
+//! durable-label-at-reclassification face @ 4fc7465e85648402bbe8d2db5d8da8e2bb443841
+//! on `restore-point-chain-copies-keyed-on-disk-state-count`, `entries_39`;
+//! the task-scoped-read-buffer face @ 4d1799564d2ff9092a7963b914b9fc86f20fd640
+//! on `reuse-allocation-clear`, `entries_02`). Drops at the T0 re-read:
+//! 6fcd9b1 (error-copy), 25502fd (DRY, 'Effect: none'), 7e51fcb (error-copy).
+//! Prior state: 254 entries as of Batch 270
 //! (2026-10-21, Plan 274 /
 //! Research 306: +12 — the splash-wave serving pool (incoai/splash, the
 //! Batch-268 staged leads, Apache-2.0): `restore-point-chain-copies-keyed-on-disk-state-count`
@@ -619,14 +646,20 @@ mod entries_40;
 mod entries_41;
 mod entries_42;
 mod entries_43;
+mod entries_44;
+mod entries_45;
+mod entries_46;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 254 entries
-/// (Batch 266, 2026-10-21, Plan 270 / Research 302: +1 complexity — the uv
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 266 entries
+/// (Batch 271, 2026-10-21, Plan 275 / Research 307: +12, the splash-wave
+/// SECOND-TIER serving pool — see the module header for the batch chain;
+/// prior — Batch 270, Plan 274 / Research 306: +12, the splash-wave serving
+/// pool; prior — Batch 266, Plan 270 / Research 302: +1 complexity — the uv
 /// marker-ISOP decision-diagram rule, benchable; prior — Batch 257, Plan 261
 /// / Research 293: +6, the `TensorFold` staged remainder; prior — Batch 255,
 /// 2026-10-19, Plan 259 / Research 290: +1 caching — the llama.cpp
@@ -737,5 +770,8 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_41::entries());
     entries.extend(entries_42::entries());
     entries.extend(entries_43::entries());
+    entries.extend(entries_44::entries());
+    entries.extend(entries_45::entries());
+    entries.extend(entries_46::entries());
     Corpus::new(entries)
 }
