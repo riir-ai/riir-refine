@@ -21905,6 +21905,43 @@ fn batch277_rules_landed() {
         watch_int8, 0,
         "batch-277: the humming INT8 support row is WATCH-ONLY — no corpus entry"
     );
+
+    // The Batch 277 count-neutral rider faces (the T3-prepass six, two
+    // honestly dropped -- one-pack + expected-load-headroom own those
+    // faces as slice_a rules above), pinned by their verbatim quotes.
+    let rider_marks = [
+        (
+            "cpasync-multistage-tile-pipeline",
+            "one group in flight over the next load and dequant",
+        ),
+        (
+            "cpasync-multistage-tile-pipeline",
+            "a bulk-copy weight load without a producer warpgroup measured 5-24% slower",
+        ),
+        (
+            "swept-shape-bucket-launch-tables",
+            "the two tie at 904-936",
+        ),
+        (
+            "occupancy-before-async-consumer-ada",
+            "none of 91 swept layouts beats the heuristic",
+        ),
+    ];
+    for (rid, mark) in rider_marks {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-277 rider host '{rid}' missing"));
+        assert!(
+            entry.gpu_concept.contains(mark),
+            "batch-277 rider on '{rid}' missing its mark text"
+        );
+        assert!(
+            entry.gpu_concept.contains("novitalabs/chord @ 6199d44a"),
+            "batch-277 rider on '{rid}' missing its chord provenance"
+        );
+    }
 }
 
 #[test]

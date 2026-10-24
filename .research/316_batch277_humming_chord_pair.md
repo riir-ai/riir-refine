@@ -65,8 +65,19 @@ rows (FP4 e2m1 activation SM120+, README:30; INT8 SM75+, README:31).
   the floors are pinned to the retrieval channel, re-measure owed only if moved; the
   kernel_opt-only delta rides the P30/B250 precedent for freeze/score-bench; binary rebuild
   NOT owed — kernel_opt outside the release set).
-- Riders: the T3-prepass six (rounding-order family, gpu_09 ×2, gpu_17, gpu_21, gpu_43)
-  DEFERRED to a rider commit under the same claim (plan 281 T4 `- [-]` disclosure).
+- Riders: the T3-prepass six went out as the RIDER PACK 2026-10-25 ~07:1x +07 (claim
+  `23c6e8d3d` discharged): FOUR faces landed count-neutral (WGMMA wait<1> + TMA
+  producer-warpgroup STRUCTURE on `cpasync-multistage-tile-pipeline` — the gpu_09 slice's
+  ring-wait + B130 TMA-vs-cp.async hosts; the measured crossover + asymmetric TIE BAND
+  888/904-936/1120 on `swept-shape-bucket-launch-tables` — gpu_17; the 91-layout residency
+  negative on `occupancy-before-async-consumer-ada` — gpu_43), each with a verbatim-quote
+  rider mark + chord-provenance assert in the batch277 gate (tests.rs). TWO honest drops
+  at authoring, both owned by THIS batch's own slice-125 rules (the T3-prepass list
+  predated the landing's staging upgrades): the fused-dequant single-rounding face →
+  `one-pack-serves-all-schedules-nibble-order-contract` carries the verbatim
+  RN((w-8)*bs) law; the expected-load-headroom second instance → the FULL rule
+  `expected-load-headroom-kdepth-split-spill-asymmetry` is the superset. Riders add zero
+  rules — count-neutral against 962 (the B277 landing) and 966 (live, post-B278 merge).
 
 ## Notes
 

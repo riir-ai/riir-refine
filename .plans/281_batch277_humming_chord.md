@@ -95,9 +95,21 @@ TMA-producer-warpgroup, swap-AB decode, WGMMA wait<1> pipelining).
       (heuristics.py:58-73). 3 authoring subagents over disjoint slices; fixtures
       compiled AND test-run pre-assembly (19/19; 3 bugs + 1 quote-accuracy fix caught
       by running). WATCH ROW negative-assert pinned (humming README:30/31 platform
-      rows). RIDERS `- [-]` DEFERRED — the T3-prepass six (rounding-order family,
-      gpu_09 ×2, gpu_17, gpu_21, gpu_43) move as a count-neutral rider commit under
-      this claim before close.
+      rows). RIDERS LANDED 2026-10-25 ~07:1x +07 (rider-pack claim `23c6e8d3d` discharged
+      by the rider commit): FOUR faces landed count-neutral — WGMMA wait<1> + TMA
+      producer-warpgroup (both on cpasync-multistage-tile-pipeline, gpu_09), measured
+      crossover + asymmetric TIE BAND (swept-shape-bucket-launch-tables, gpu_17), the
+      91-layout residency negative (occupancy-before-async-consumer-ada, gpu_43) — each
+      pinned by a verbatim-quote rider mark in the batch277 gate. TWO honest drops at
+      authoring (the T3-prepass list predated the landing's own upgrades): the
+      rounding-order family face — ALREADY OWNED by this batch's slice-125 rule
+      one-pack-serves-all-serves-nibble-order-contract (its concept carries the verbatim
+      RN((w-8)*bs) single-rounding law + the subtract_then_scale test, same chord pin);
+      the gpu_21 headroom second-instance face — ALREADY OWNED by this batch's slice-125
+      FULL rule expected-load-headroom-kdepth-split-spill-asymmetry (a superset of the
+      design.md:125-127 material, whose kinship section adjudicates smem-envelope-gate
+      as family kin, not host). Corpus count UNCHANGED (955 +7 = 962 at the B277 landing;
+      966 live after the B278 merge — the riders are count-neutral against both).
 - [x] T5 — gates: batch277 needle+parse FIRST-RUN PASS 2/2; kernel_opt lib 3223/0;
       default lib 2729/0; count pins 955→962 re-pinned (30 sites in tests.rs + the
       two historical gate messages + router.rs + the Plan-003 table + category
