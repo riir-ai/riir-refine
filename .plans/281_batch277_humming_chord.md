@@ -2,7 +2,7 @@
 
 **Claimed:** shikuwa/4090 idle loop, 1792874338, expires 2026-10-26T20:38:00Z
 
-**Status:** LANDED 2026-10-25 ~06:0x +07 — landing `0daa5bcb7` + snapshot row `6bb4cb574`, corpus 955→962 (slice 125), Research 315 allocated, claim `aa52ff31b` DISCHARGED; the 6 count-neutral riders DEFERRED (T4 `- [-]`, the next session may land them as a rider pack under a fresh claim; batch gate OPEN for the next claimant) — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
+**Status:** LANDED 2026-10-25 ~06:0x +07 — landing `0daa5bcb7` + snapshot row `6bb4cb574`, corpus 955→962 (slice 125), Research 316 allocated (RENUMBERED from the landing's 315 — the 315 dual allocation adjudicated to the M3's `7fa36a9b7` file allocation, first-allocation keeps; renumber commit in the landing family), claim `aa52ff31b` DISCHARGED; the 6 count-neutral riders DEFERRED (T4 `- [-]`, the next session may land them as a rider pack under a fresh claim; batch gate OPEN for the next claimant) — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
 (2026-10-25T03:35+07, both boxes' claims stamped the same minute; push is the arbiter —
 the M3's qwen38 claim `6104cf444` + plan `280_batch276_qwen38_kernel_opt.md` landed on
 origin first and KEEP Batch 276 + plan 280; this lane's local 280 commit was renumbered
@@ -108,8 +108,10 @@ TMA-producer-warpgroup, swap-AB decode, WGMMA wait<1> pipelining).
       postures + the rider commit still owed before push.
 - [x] T6 — docs: AGENTS ×2 counts (955→962), README head (917→962 with the honest
       5-batch staleness label), `.docs/11_domains/kernel_opt.md` Batch-277 section,
-      Research 315 (`.research/.highwater` 314→315 — the M3 B278 staging's prose-315
-      anticipated; renumber at their landing), plan ticks, `.distill/001` landing row
+      Research 316 (RENUMBERED — allocated as 315 at landing, but the M3's `7fa36a9b7`
+      had ALREADY allocated 315 as a tracked file + highwater bump; first allocation
+      keeps, this note renumbered to 316 with every citing site in the same commit),
+      plan ticks, `.distill/001` landing row
 - [x] T7 — commit `feat: batch 277: ...` (`0daa5bcb7`) + push; snapshot row
       `6bb4cb574`; `.raw/b277/` removed at close; claim discharged by the landing row.
       Workspace-wide all-features clippy keep-going clean post-push.

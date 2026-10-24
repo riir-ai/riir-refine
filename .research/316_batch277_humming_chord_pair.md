@@ -1,4 +1,4 @@
-# Research 315 — Batch 277: the Humming + Chord quantized-GEMM pair (kernel_opt corpus, Plan 281)
+# Research 316 — Batch 277: the Humming + Chord quantized-GEMM pair (kernel_opt corpus, Plan 281)
 
 **Status:** RECORD — landed 2026-10-25 (shikuwa/4090, riir-refine idle loop; the claim
 `aa52ff31b` discharged by the landing row).
@@ -70,9 +70,12 @@ rows (FP4 e2m1 activation SM120+, README:30; INT8 SM75+, README:31).
 
 ## Notes
 
-- Research numbering: the M3's Batch-278 staging row (7fa36a9b7) anticipated "Research 315"
-  for B278 in prose; the highwater at this landing read 314, so 315 allocates HERE per the
-  numbering law (value+1; prose is not an allocation — the B267-consumed-302 precedent).
-  The B278 lane renumbers to 316 at its own landing (a one-token prose fix in its staging
-  row).
+- Research numbering (CORRECTED — the 315 dual allocation adjudicated 2026-10-25 ~06:2x +07):
+  the landing judged the M3's Batch-278 staging (7fa36a9b7) as prose-only — WRONG: that
+  commit carried the FILE `.research/315_locals_mlx_constrained_decode_gdn_distill.md`
+  plus the `.research/.highwater` bump (a COMPLETE allocation, landed first in linear
+  history). First allocation keeps — the M3 keeps 315; this note renumbered 315→316
+  (git mv + every citing site moved in the same commit, per the renumber law). The
+  B267-consumed-302 precedent governs prose pointers; a tracked file + counter bump is
+  an allocation, never prose.
 - `.raw/b277/` clones removed at close per the plan-281 T7 law.
