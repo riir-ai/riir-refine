@@ -1,6 +1,6 @@
 # Plan 276 — Batch 272: dphnAI/sonar PR #1788 paired-PCIe-all-reduce distill conversion
 
-**Status:** CLAIMED — zed-m3-idle-b272, 2026-10-24, expires 2026-10-26T12:00:00+00:00 (48 h; mining slot claimed per T12 claim-first; verdict Research 308 stands)
+**Lease closed:** zed-m3-idle-b272 claimed this 2026-10-24 (48 h, would expire 2026-10-26); the batch LANDED the same day at `ee164da7` (corpus 937→940, +3 own rules + 4 riders, all gates green) — the landing row in `.distill/001_mining_queue_snapshot.md` is the discharge record (mining verdict Research 308)
 
 Source: dphnAI/sonar PR #1788 commit `927f3262f87936e518b602538f2fe24a25359675` (Apache-2.0, PR-stage OPEN) — paired PCIe all-reduce, SM120 TP4. Verdict: YES B− corpus / lane-intel N/A / product-coverage MODERATE (Research 308). Target: `kernel_opt` categories D/E — 2–3 rules + 3–4 riders, all NotBenchable-annotated (multi-GPU domain reason, the dial9 split).
 
