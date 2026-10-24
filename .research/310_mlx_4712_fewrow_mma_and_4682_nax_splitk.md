@@ -1,6 +1,6 @@
 # Research 310 — ml-explore/mlx #4712 few-row qmv_mma/qmv_nax + #4682 staged affine_qmm_t_nax split-K
 
-**Status:** DISTILLED — pending owner decision (staged as nominal Batch 273; NOT claimed — the next claimant opens it per the queue, after the in-flight Batch 272 sonar lane)
+**Status:** DISTILLED — LANDED as Batch 273 (see the queue snapshot's BATCH 273 row for the landing commit; the plan file is `.plans/277_batch273_mlx_fewrow_mma_and_nax_splitk.md`)
 
 ## Source
 
