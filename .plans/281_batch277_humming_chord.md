@@ -34,22 +34,58 @@ fused dequant single-rounding chain, deterministic stream-K, measured crossovers
 expected-load headroom, residency-for-latency-hiding + the 91-layout negative,
 TMA-producer-warpgroup, swap-AB decode, WGMMA wait<1> pipelining).
 
-- [ ] T0 — this claim (plan-first, pushed BEFORE authoring)
-- [ ] T0b — clone `.raw/b277/{humming,chord}` at pins (full shas resolved); licence
-      chain verified at clone: humming LICENSE, chord LICENSE + DeepGEMM MIT +
-      CUTLASS submodule BSD-3 read at pin `59b61c60` (API/partial clone; init not
-      required for mining chord's own code) — MAY run pre-gate, read-only
-- [ ] T1 — read the ONE open chord issue (conversion reads it per the staging)
-- [ ] T2 — at-pin quote re-verification of the 10 Chord + 5 Humming staged contents
-      (byte-level at the pins; corrections recorded) — MAY run pre-gate, read-only
-- [ ] T3 — dedup greps per candidate: B251 swap-AB/cudafast-pack, Batch-220
-      rounding-order, B273 fp32-partials-single-rounding rider, gpu_101 residency,
-      B130 l2-grouped-schedule + B98 bridge-rung, B116 crossover, magic-div family,
-      B9/B242 embedding, TMA producer faces (gpu_12/B16 staged loader), fusion families
+- [x] T0 — this claim (plan-first, pushed BEFORE authoring)
+- [x] T0b — clones DONE 2026-10-25 ~04:0x +07: `.raw/b277/{humming,chord}`; pins resolved —
+      chord main tip `6199d44a863a` == the staged tree sha EXACTLY (zero drift); humming pinned
+      at main tip `db930afa` (4 commits past the benchmark pin `7ec54ed` — heuristic/CI/dtype-cache
+      drift only; chord's own performance.md discloses the b4f3fc6..tip window "within 1.6%"/GPU-unchanged).
+      Licence chain VERIFIED AT PINS: humming LICENSE blob `57bc88a15a0e` == staging exactly (Apache-2.0);
+      chord LICENSE blob `261eeb9e9f8b` size 11357 == staging exactly (Apache-2.0); vendored DeepGEMM
+      at chord_kernels/operator/include/deep_gemm/LICENSE = MIT (DeepSeek 2025); CUTLASS submodule
+      @ `59b61c60` read via raw.githubusercontent = BSD-3-Clause (SPDX line verbatim; commit exists
+      upstream, "add support matrix"). CHAIN CLEAN.
+- [x] T1 — the ONE open chord issue = #6 "docs: update Novita blog link" — zero mining content;
+      discharged.
+- [x] T2 — at-pin quote re-verification 15/15 PASS (2026-10-25 ~04:1x +07): Chord 10/10 @
+      `6199d44a` — (a) design.md:13-15 one-pack-serves-all, (b) :21-22 semi-static tiles −7%/186-vs-216µs,
+      (c) :23-24 lop3→hsub2→hmul2 single rounding RN((w−8)*bs), (d) :27-34 stream-K serial-chain/counter
+      + lock-word-reuse + FP32 partials + k=0 CTA-order rounds once, (e) :44-52 crossover 888/tie-904-936/
+      from-1120 + the schedule table, (f) design.md:125-127 expected_m 1.3x/ceil(1.25x,8), (g) :128-131
+      residency 2 CTAs/SM halved ring + performance.md:167-169 the 91-layout negative ("closed by running
+      two resident CTAs per SM, not by a tile"), (h) performance.md:64-67 TMA producer warpgroup vs bulk
+      copy 5-24% + 96x256x64 3% on down, (i) design.md:19-20 swap-AB decode m16n8k16 block-M 8 legal,
+      (j) :17-18 WGMMA wait<1> 3-6%/1-5%; code confirmed: `__hsub2` chain in include/humming/datatype/
+      dequant.cuh:34, barrier.cuh at include/humming/utils/ptx/barrier.cuh. Humming 5/5 @ `db930af` —
+      (a) regime selection config/config.py is_umma_supported keyed sm_version/dtypes + config/mma.py
+      get_default_mma_type, (b) in-kernel MXFP4 conversion include/humming/datatype/dequant_fused.cuh
+      (fused_dequant_single_for_mxfp4<Float8E4M3>/<Int8> template specializations) + kernel/process_mxfp4.cuh,
+      (c) zero-exponent ladder dtypes.py:205-211 float2e0m1..float8e0m7 (+float4e0m3/float8e3m4 present),
+      (d) hardware-intel rows disclosed as watches (not rules), (e) config-triple JIT: kernel/humming.py
+      renders ONE templated kernel with LayerConfig/ComputeConfig/TuningConfig via to_cpp_str ×3 — unused
+      branches compiled out. Staged NUMBERS (W4A8 4.2-4.5x, TTFT −25-32%, 23.35s→1.82s 12.8x) remain
+      blog-cited (vllm.ai announcement) — re-cited with provenance labels at authoring, never re-measured.
+- [x] T3-PREPASS — dedup kinship map (re-verified per-candidate at authoring): UNOWNED own-rule
+      candidates: swap-AB decode (grep swap-AB/mma-M/weight-on-mma = ZERO owners; entries_gpu_01's
+      "swap" hits are staging-axis transpose + norm-fold, different), stream-K deterministic sequencing
+      (B268/B273 own split-K PARTITION SIZING + fp32-partials; the lock-word-reuse-without-reset +
+      serial-chain ≤3-slices + k=0-CTA-order axis is unowned), one-pack-serves-multiple-schedules
+      (gpu_71 owns pack WORTH admission per shape; layout-sharing-across-consumers unowned),
+      in-kernel format transcoding for tensor-core reach (mxfp4 hits are dequant-cost riders, not
+      transcode-to-mma-native), zero-exponent-bit reinterpret dequant (value-set hits are prose).
+      RIDER/second-instance faces: fused-dequant single rounding → the rounding-order family
+      (gpu_03/04/24, Batch-220); WGMMA wait<1> one-group-in-flight → gpu_09's ring wait-discipline
+      axis (Batch-251 consumer-permuted rider is the newest face); measured crossover + TIE BAND
+      (888/904-936/1120 asymmetric bands) → gpu_17 constexpr-table + worst-case-regret family;
+      expected-load headroom 1.3x/ceil(1.25x,8) → gpu_21 derived-capacity-predicate family;
+      91-layout negative → gpu_43 occupancy-before-async-consumer family (the "closed by residency,
+      not by a tile" datum); TMA producer-warpgroup-vs-bulk-copy → gpu_09's Batch-130 TMA-vs-cp.async
+      rider (per-thread issue cost) — the producer-warpgroup STRUCTURE half is the new face.
+      WATCH ROWS (count-neutral, B250 precedent): Humming hardware intel (float4e0m3+float8e3m4
+      absent from the PTX type system; B300/SM103 UMMA drops INT8).
 - [ ] T4 — author own rules + count-neutral rider faces into the NEXT free slice
       (124 nominal at claim time; re-read after B276 lands — it may take 124)
       with silicon-distance + NotBenchable annotations honest (staged cells are
-      H200/B300; ours SM89)
+      H200/B300; ours SM89) — GATED on B276 landing
 - [ ] T5 — gates: batch277 needle+parse; kernel_opt lib; default lib; clippy −D ×3
       postures; count pins at EVERY site re-read post-B276 (category tuples, router
       total, Plan-003 sum pins, cross-domain rust_perf pin — the batch-274
