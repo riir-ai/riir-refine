@@ -2,7 +2,7 @@
 
 **Claimed:** shikuwa/4090 idle loop, 1792874338, expires 2026-10-26T20:38:00Z
 
-**Status:** IN PROGRESS — GATE OPEN 2026-10-25 ~05:4x +07 (B276 landed `c3aac106e`, corpus 953→955); slice 125 authored+gated, rider commit + clippy + landing row + push owed — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
+**Status:** LANDED 2026-10-25 ~06:0x +07 — landing `0daa5bcb7` + snapshot row `6bb4cb574`, corpus 955→962 (slice 125), Research 315 allocated, claim `aa52ff31b` DISCHARGED; the 6 count-neutral riders DEFERRED (T4 `- [-]`, the next session may land them as a rider pack under a fresh claim; batch gate OPEN for the next claimant) — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
 (2026-10-25T03:35+07, both boxes' claims stamped the same minute; push is the arbiter —
 the M3's qwen38 claim `6104cf444` + plan `280_batch276_qwen38_kernel_opt.md` landed on
 origin first and KEEP Batch 276 + plan 280; this lane's local 280 commit was renumbered
@@ -106,11 +106,13 @@ TMA-producer-warpgroup, swap-AB decode, WGMMA wait<1> pipelining).
       retrieval floors + freeze/score-bench NOT owed (kernel_opt-only delta, P30);
       binary rebuild NOT owed (kernel_opt outside the release set). Clippy ×3
       postures + the rider commit still owed before push.
-- [ ] T6 — docs: AGENTS ×2 counts, README row, `.docs/11_domains/kernel_opt.md`,
-      Research note (highwater re-read at landing), plan ticks, `.distill/001`
-      landing row
-- [ ] T7 — commit `feat: batch 277: ...` + push; `.raw/b277/` removed at close;
-      claim discharged by the landing row
+- [x] T6 — docs: AGENTS ×2 counts (955→962), README head (917→962 with the honest
+      5-batch staleness label), `.docs/11_domains/kernel_opt.md` Batch-277 section,
+      Research 315 (`.research/.highwater` 314→315 — the M3 B278 staging's prose-315
+      anticipated; renumber at their landing), plan ticks, `.distill/001` landing row
+- [x] T7 — commit `feat: batch 277: ...` (`0daa5bcb7`) + push; snapshot row
+      `6bb4cb574`; `.raw/b277/` removed at close; claim discharged by the landing row.
+      Workspace-wide all-features clippy keep-going clean post-push.
 
 Adjudicated NOT owed: freeze regen + score-bench (kernel_opt-only corpus, P30);
 maintained-binary rebuild (kernel_opt outside the release set).
