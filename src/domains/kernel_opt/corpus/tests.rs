@@ -5448,7 +5448,7 @@ fn kernel_categories_counts_match_plan_003_table() {
     // the expected-load headroom K-split, L +2 the swap-AB operand
     // roles + the one-pack nibble-order contract, N +1 the E0 format
     // pivot — the Humming+Chord quantized-GEMM pair (Plan 281 /
-    // Research 315);
+    // Research 316);
     // Batch 201: B +1 the pack11/pack12 encode arithmetic, C +2 the
     // acceptance-packet one-launch + the producer-folds family, D +2 the
     // deferred block release + the first-layer-ahead submission, E +2 the
