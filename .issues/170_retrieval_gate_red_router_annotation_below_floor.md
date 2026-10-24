@@ -9,13 +9,19 @@ identical at plain `latent_retrieval` without the PoC feature.
 1. **ROUTER ANNOTATION — already below floor.**
    `draft::retrieval_eval::tests::retrieval_precision_regression_gate` panics:
    `router annotation accuracy 60.3% below floor 72.3%` (retrieval_eval.rs:2580).
-   Measured 85/141 routed-correct vs the 4-domain-state floor constant 72.3%
-   (`router_annotation_floor()`, the per-state table from the Plan 134/030
-   restructure). The Issue-020 contract: floor = measured − 5 spans of
-   corpus-growth headroom, "re-measure + re-pin with the delta recorded; never
-   weaken silently." The floor was last re-pinned at a smaller corpus; the
-   rust_perf corpus has grown 254→266 (batch 271) with 245–270 growth before
-   it — TF-cosine routing decayed under corpus growth and nobody re-measured.
+   The router axis's OWN counts: `router_checked` = 141 (the labeled spans,
+   all four domains enabled) and `router_correct` = 85 — 60.28% is the only
+   integer fit over 141 (84/141 = 59.6%, 86/141 = 61.0%). ⚠ **Coincidence
+   warning:** arm (e)'s blended top-1 in Bench 120 is ALSO 85/141 (60.3%) —
+   a different axis, a different measurement; the shared 85/141 shape is
+   numeric coincidence, never the same number. The floor 72.3% is the
+   4-domain-state constant (`router_annotation_floor()`, the per-state table
+   from the Plan 134/030 restructure). The Issue-020 contract: floor =
+   measured − 5 spans of corpus-growth headroom, "re-measure + re-pin with
+   the delta recorded; never weaken silently." The floor was last re-pinned
+   at a smaller corpus; the rust_perf corpus has grown 254→266 (batch 271)
+   with 245–270 growth before it — TF-cosine routing decayed under corpus
+   growth and nobody re-measured.
 2. **BLENDED TOP-1 — zero margin.** Arm (a) measures exactly **124/141 =
    `BLENDED_TOP1`** (the floor's own convention is measured − ONE span). The
    next cross-pool competition event (one perf rule outranking one fixture,
