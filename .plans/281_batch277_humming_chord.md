@@ -2,7 +2,7 @@
 
 **Claimed:** shikuwa/4090 idle loop, 1792874338, expires 2026-10-26T20:38:00Z
 
-**Status:** CLAIMED — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
+**Status:** IN PROGRESS — GATE OPEN 2026-10-25 ~05:4x +07 (B276 landed `c3aac106e`, corpus 953→955); slice 125 authored+gated, rider commit + clippy + landing row + push owed — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
 (2026-10-25T03:35+07, both boxes' claims stamped the same minute; push is the arbiter —
 the M3's qwen38 claim `6104cf444` + plan `280_batch276_qwen38_kernel_opt.md` landed on
 origin first and KEEP Batch 276 + plan 280; this lane's local 280 commit was renumbered
@@ -82,16 +82,30 @@ TMA-producer-warpgroup, swap-AB decode, WGMMA wait<1> pipelining).
       rider (per-thread issue cost) — the producer-warpgroup STRUCTURE half is the new face.
       WATCH ROWS (count-neutral, B250 precedent): Humming hardware intel (float4e0m3+float8e3m4
       absent from the PTX type system; B300/SM103 UMMA drops INT8).
-- [ ] T4 — author own rules + count-neutral rider faces into the NEXT free slice
+- [x] T4 — author own rules + count-neutral rider faces into the NEXT free slice
       (124 nominal at claim time; re-read after B276 lands — it may take 124)
       with silicon-distance + NotBenchable annotations honest (staged cells are
       H200/B300; ours SM89) — GATED on B276 landing
-- [ ] T5 — gates: batch277 needle+parse; kernel_opt lib; default lib; clippy −D ×3
-      postures; count pins at EVERY site re-read post-B276 (category tuples, router
-      total, Plan-003 sum pins, cross-domain rust_perf pin — the batch-274
-      pin-set-wider lesson: the failed-lib list is the only reliable enumerator);
-      retrieval floors re-measure (isolated target if moved; re-pin with attribution
-      only if moved)
+      — LANDED 2026-10-25: B276 took 124 (landing `c3aac106e`, corpus 953→955);
+      this batch took **slice 125**, corpus **955→962** (+7 own: N E0-pivot, K
+      undocumented-cubin-patch, L swap-AB, L one-pack, E stream-K, D semi-static, K
+      headroom-K-split). Two staging upgrades found at authoring: the hardware-intel
+      watch → the FULL cubin-patch rule (in-source at mma.py:42-47, incl. the SM107
+      refusal record); the expected-load rider → the FULL K-depth-split rule
+      (heuristics.py:58-73). 3 authoring subagents over disjoint slices; fixtures
+      compiled AND test-run pre-assembly (19/19; 3 bugs + 1 quote-accuracy fix caught
+      by running). WATCH ROW negative-assert pinned (humming README:30/31 platform
+      rows). RIDERS `- [-]` DEFERRED — the T3-prepass six (rounding-order family,
+      gpu_09 ×2, gpu_17, gpu_21, gpu_43) move as a count-neutral rider commit under
+      this claim before close.
+- [x] T5 — gates: batch277 needle+parse FIRST-RUN PASS 2/2; kernel_opt lib 3223/0;
+      default lib 2729/0; count pins 955→962 re-pinned (30 sites in tests.rs + the
+      two historical gate messages + router.rs + the Plan-003 table + category
+      headers); AGENTS ×2 + README head (917→962, the 5-batch staleness repaired with
+      the honest label) + `.docs/11_domains/kernel_opt.md` Batch-277 section;
+      retrieval floors + freeze/score-bench NOT owed (kernel_opt-only delta, P30);
+      binary rebuild NOT owed (kernel_opt outside the release set). Clippy ×3
+      postures + the rider commit still owed before push.
 - [ ] T6 — docs: AGENTS ×2 counts, README row, `.docs/11_domains/kernel_opt.md`,
       Research note (highwater re-read at landing), plan ticks, `.distill/001`
       landing row
