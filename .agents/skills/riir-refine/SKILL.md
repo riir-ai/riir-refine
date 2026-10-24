@@ -182,6 +182,19 @@ until the claims clear.
      batch → fix retrieval
      quality, or re-pin the floors + record the delta in the Research note
      (never weaken silently).
+   - **retrieval regression gate at the DEFAULT posture (Issue 170 T3,
+     corpus batches — the lane that was missing):** any corpus delta (any
+     domain) also runs Layer 5b2's command at the batch's landing —
+     `cargo test --lib --features latent_retrieval retrieval_` (~2 min
+     debug; the gate + the fixture-label verifies + determinism). The
+     router/blended/clippy/perf floors are pinned at the DEFAULT state (the
+     `router_annotation_floor()` `(false, false, true)` arm), and this is
+     the lane that catches their decay — the B248–B271 waves sat RED here
+     for 11 days because every standing lane compiled the gate out. A decay
+     FAILS the batch → re-measure + re-pin with the delta recorded (the
+     Issue-020 contract), or fix retrieval quality. The per-span dump +
+     vocab probe (`tests/router_per_span_dump.rs --nocapture`, diffed
+     against a worktree at the last pin) is the attribution instrument.
    - rust_perf rules: the Pareto bench (`rust_perf_bench` feature) +
      `context_notes` annotations on regime-fragile/Mixed verdicts;
      demote/annotate losers. Never promote a perf gain on a wrong result.

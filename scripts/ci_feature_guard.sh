@@ -13,6 +13,10 @@
 #                               documented in riir-neuron-db AGENTS.md)
 #   5a. clippy               → lint under both feature extremes
 #   5b. lib tests            → default features (all-features is 5c's job)
+#   5b2. retrieval gate      → the regression gates compiled OUT of 5b (the
+#                              whole `draft` tree is latent_retrieval-only);
+#                              named run at the posture its floors pin
+#                              (Issue 170)
 #   5c. integration + bins   → EVERY tests/*.rs and bin, all-features, no
 #                              allowlist (an allowlist rots silently)
 #   5d. zero-test detector   → a cfg-gated test file that compiles empty
@@ -75,6 +79,42 @@ cargo test --lib
 echo "✓ lib tests pass (default features)"
 
 echo
+echo "=== Layer 5b2: retrieval regression gate (the latent_retrieval posture) ==="
+# Issue 170: the whole `draft` tree — the retrieval-precision regression gate
+# included — compiles ONLY under `latent_retrieval`, so Layer 5b (default
+# features) never sees it. The corpus batches that move its floors land
+# through lanes that run clippy gates, so the router-annotation floor sat RED
+# (85/141 vs the 102/141 pin) across Batches 248–271 with every standing lane
+# green. Corpus growth is exactly what this gate exists to catch, so it runs
+# HERE, named, at the posture its floors are pinned at (default features +
+# latent_retrieval: clippy_lints + rust_perf + docker + dist).
+#
+# The PASS line is asserted by name: a name filter that matches nothing
+# prints `test result: ok` with 0 tests — the green-zero trap. The grep
+# below refuses that shape (Layer 5d's law, one layer up).
+GATELOG="$(mktemp "${TMPDIR:-/tmp}/ci_feature_guard_5b2.XXXXXX")"
+set +e
+cargo test --lib --features latent_retrieval retrieval_ 2>&1 | tee "$GATELOG"
+_5B2_RC=${PIPESTATUS[0]}
+set -e
+if [ "$_5B2_RC" != 0 ]; then
+    echo "✗ Layer 5b2: the retrieval gate suite FAILED (rc=$_5B2_RC) — see the panic above."
+    echo "  Corpus batches shift the router vocab + centroids; the Issue-020"
+    echo "  contract is re-measure + re-pin with the delta recorded, never silently."
+    exit "$_5B2_RC"
+fi
+if ! grep -q "draft::retrieval_eval::tests::retrieval_precision_regression_gate ... ok" "$GATELOG"; then
+    echo "✗ Layer 5b2: the named gate never RAN — its filter matched nothing or"
+    echo "  the test compiled out (the green-zero shape: 'ok' with 0 tests)."
+    echo "  Check the latent_retrieval posture and the test's name."
+    exit 1
+fi
+grep -q "^test draft::retrieval_eval::tests::eval_report_is_deterministic ... ok" "$GATELOG" \
+    || { echo "✗ Layer 5b2: eval_report_is_deterministic did not run — the filter drifted"; exit 1; }
+rm -f "$GATELOG"
+echo "✓ retrieval regression gate ran + passed at the latent_retrieval posture"
+
+echo
 echo "=== Layer 5c: every integration test + bin (all-features, no allowlist) ==="
 # This layer used to name each test binary explicitly. That allowlist was an
 # omission-SILENT design, and it had already rotted: 39 of 51 test binaries
@@ -119,6 +159,7 @@ GUARD_COMPLETED=0
 guard_cleanup() {
     guard_st=$?
     rm -f "$RUNLOG"
+    rm -f "${GATELOG:-}" 2>/dev/null || true
     if [ "$GUARD_COMPLETED" != "1" ] && [ "$guard_st" = "0" ]; then
         echo "✗ guard ABORTED mid-run while reporting success — it did not reach its" >&2
         echo "  own last line, so the layers past the error above ran NOTHING." >&2
