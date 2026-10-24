@@ -1923,6 +1923,7 @@ mod entries_gpu_121;
 mod entries_gpu_122;
 mod entries_gpu_123;
 mod entries_gpu_124;
+mod entries_gpu_125;
 mod entries_gpu_13;
 mod entries_gpu_14;
 mod entries_gpu_15;
@@ -2110,6 +2111,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_122::entries());
     entries.extend(entries_gpu_123::entries());
     entries.extend(entries_gpu_124::entries());
+    entries.extend(entries_gpu_125::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2604,7 +2606,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-warp-ordered-reduce-row-batched-no-smem-barrier",
         ],
     ),
-    // C: Fusion patterns (61 rules; Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles (the splash wave — N float projections OF ONE INPUT sharing one dispatch via concatenated column-tile ranges, each keeping its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave — a table built by a row-serialized producer moves into the consumer's existing covering prepare phase, byte-identical); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
+    // C: Fusion patterns (62 rules; Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the ENTIRE recurrent-layer decode step as ONE launch, state rows register-resident across an S <= 16 token window, Plan 282 / Research 315); Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles (the splash wave — N float projections OF ONE INPUT sharing one dispatch via concatenated column-tile ranges, each keeping its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave — a table built by a row-serialized producer moves into the consumer's existing covering prepare phase, byte-identical); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
     // barrier cost (lithos-metal — the boundary decided on MEASURED barrier
     // cost, never dispatch count; in-kernel global barriers priced at
     // dispatch-boundary cost on M3 Pro/M5 Pro → layer-wise); Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
@@ -2618,6 +2620,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Fusion,
         "C: fusion",
         &[
+            // Batch 278 +1 (the Locals conversion, Plan 282 / Research 315):
+            // the ENTIRE recurrent decode step — conv+silu+gates, both
+            // norms, the delta recurrence, the gated output norm — as ONE
+            // launch; state rows register-resident across the S <= 16
+            // window (the verify-band carrier).
+            "whole-step-gdn-decode-window-one-launch",
             // Batch 268 +2 (the splash release wave, Plan 273): same-input
             // projection fusion via concatenated column-tile ranges; the
             // table built by a row-serialized producer moves into the
@@ -2694,7 +2702,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "precompute-chain-fused-intermediates-never-materialized",
         ],
     ),
-    // D: Dispatch patterns (228 rules; Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a custom collective with a DIFFERENT rounding contract from the stock backend is fail-stop: selectors agreed bit-exact across ranks at init, any transport fault terminal + pinned to process exit, surfaced through a per-step output gate -- never a numerics fallback); Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core (the splash wave — kernel-variant selection by a threadgroups-per-core occupancy bound, halved for sub-4-bit formats) + prefix-active-split-axis-linearized-one-dimensional-grid (the splash wave — a data-dependent-prefix split axis linearizes into x, bit-identical by order preservation, up to 1.7× faster past ~32 splits) + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave — a one-lane decode under 4.5 bpw takes the 16-row tile over two storage lanes, rows independent so bit-for-bit); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307 -- the quantized K/V branch of the Ada kernel-choice ladder lacked the F16 branch's GQA>4 ratio rule, 1.21-2.95x at long context on the league model; the widening carries the IN-PLACE PRECONDITION kv_native_supported -- otherwise the MMA path converts the whole cache to f16 on every call); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb — the DEPLOYMENT-level PDL admission: the launch carries PDL only when BOTH embedded images hold the pdl_marker contract, fail-closed probe) + prefill-batch-atomic-fallback-individual (c4995966 — prefill_many batch with the atomic fall-back to individual launches) + teardown-takes-list-whole (30f05c6d — a failed round/cancel/close ends every held job, copying nothing) + drain-device-work-before-free (98571a84 — learning drains its device work before it frees; a failed pocket read is an ERROR, not an empty pocket) + copy-source-quarantine-unproven-free-pinned (2ba81a06 — freeing async GPU memory requires WAIT PROOF; unprovable drops enter a charged quarantine)); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead: relocate the turn's selected prefix before evicting it, the overlap-safe move order, the one counted restore report, fixes #966); Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal — the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited — the mul_mat_add fusion carried it, this later fusion omitted it); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
+    // D: Dispatch patterns (230 rules; Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion — the grammar mask recomputed per step ON DEVICE without the V×|Q| table, and the host-side branch speculation with the frequency-gated early build, Plan 282 / Research 315); Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a custom collective with a DIFFERENT rounding contract from the stock backend is fail-stop: selectors agreed bit-exact across ranks at init, any transport fault terminal + pinned to process exit, surfaced through a per-step output gate -- never a numerics fallback); Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core (the splash wave — kernel-variant selection by a threadgroups-per-core occupancy bound, halved for sub-4-bit formats) + prefix-active-split-axis-linearized-one-dimensional-grid (the splash wave — a data-dependent-prefix split axis linearizes into x, bit-identical by order preservation, up to 1.7× faster past ~32 splits) + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave — a one-lane decode under 4.5 bpw takes the 16-row tile over two storage lanes, rows independent so bit-for-bit); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307 -- the quantized K/V branch of the Ada kernel-choice ladder lacked the F16 branch's GQA>4 ratio rule, 1.21-2.95x at long context on the league model; the widening carries the IN-PLACE PRECONDITION kv_native_supported -- otherwise the MMA path converts the whole cache to f16 on every call); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb — the DEPLOYMENT-level PDL admission: the launch carries PDL only when BOTH embedded images hold the pdl_marker contract, fail-closed probe) + prefill-batch-atomic-fallback-individual (c4995966 — prefill_many batch with the atomic fall-back to individual launches) + teardown-takes-list-whole (30f05c6d — a failed round/cancel/close ends every held job, copying nothing) + drain-device-work-before-free (98571a84 — learning drains its device work before it frees; a failed pocket read is an ERROR, not an empty pocket) + copy-source-quarantine-unproven-free-pinned (2ba81a06 — freeing async GPU memory requires WAIT PROOF; unprovable drops enter a charged quarantine)); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead: relocate the turn's selected prefix before evicting it, the overlap-safe move order, the one counted restore report, fixes #966); Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal — the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited — the mul_mat_add fusion carried it, this later fusion omitted it); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its own trailing warp barrier, scoped by slice ownership); Batch 251 +1: the Yukon conversion, Research 284 — topk-chunk-partial-lists-head-only-kway-merge (two-pass exact top-k: per-chunk k best DESCENDING, then only a list HEAD can win and only the winner's list advances — exact k-way merge, no re-scanning); Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 route-table retirement — the M5 re-measurement collapsed the kv-length/dim special cases, grouped wins at every kv length); Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785 — the capture set is per-BINDING, keyed by body shape, epoch-invalidated; the relocation design crashed) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a — one barrier a tile hides only at 2 blocks/SM, the budget is part of the law); Batch 249 slice 2 +8: the TensorFold own-rule set —
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2725,6 +2733,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 278 +2 (the Locals conversion, Plan 282 / Research 315):
+            // the grammar constraint recomputed per step ON DEVICE — one
+            // thread per vocab token walks the token's bytes through the
+            // automaton from the device-resident state, no V×|Q| table,
+            // pipeline stays async; the host-side branch speculation —
+            // prebuild the common branch while the device runs step n,
+            // snapshot/restore on force, per-state frequency gate.
+            "constraint-row-recompute-on-device-not-table",
+            "overlapped-branch-speculation-commit-or-discard",
             // Batch 274 +1 (uzu 034294c #1002): the dimension-variant kernel family
             // collapsed to ONE kernel + a runtime layout struct over MAX-sized
             // threadgroup buffers with a compile-time budget assert.
@@ -3268,11 +3285,20 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "visibility-bounded-scan-shape-stable-allocations",
         ],
     ),
-    // J: Varlen packing + chunked reductions (5 rules)
+    // J: Varlen packing + chunked reductions (6 rules; Batch 278 +1:
+    // ragged-batch-hybrid-feed-two-contracts (the Locals conversion —
+    // per-layer-kind feed contracts over ragged hybrid batches:
+    // right_padding for attention, lengths for recurrent, BOTH for
+    // sliding-window; Plan 282 / Research 315))
     (
         KernelCategory::VarlenChunkedReduction,
         "J: varlen + chunked reduction",
         &[
+            // Batch 278 +1 (the Locals conversion, Plan 282 / Research 315):
+            // the per-layer-kind ragged-feed contract — state-unobserved
+            // is never zero-fill, and the window layer needs the lengths
+            // too or the pad evicts the row's real tokens.
+            "ragged-batch-hybrid-feed-two-contracts",
             "varlen-packing",
             "chunk-reset-cumsum",
             "cumsum-additive-bias",

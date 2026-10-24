@@ -1,6 +1,6 @@
 # Research 315 — Locals (Generated-Computers/Locals) distill verdict: the whole-step GDN decode window + device-side constraint recompute
 
-**Status:** DISTILLED — pending owner decision (queued as Batch 278, plan 282, GATED on Batch 276's landing — the `entries_gpu_124.rs` serial-corpus discipline; the issue lane is riir-infer Issue 1108 T3)
+**Status:** RECORD — LANDED as Batch 278 (plan 282, T6's commit, 2026-10-25): corpus 955 → 959 (C 61→62, D 228→230, J 5→6; `entries_gpu_125.rs` — the NEXT slice, B276 consumed 124 and B277 is live-claimed for it). Four own rules: C `whole-step-gdn-decode-window-one-launch` + D `constraint-row-recompute-on-device-not-table` + D `overlapped-branch-speculation-commit-or-discard` + J `ragged-batch-hybrid-feed-two-contracts`. The two riders (crash-quarantine tune face, lazy-row prefetch) DEFERRED to a later batch. Gates ALL GREEN (kernel_opt lib 3223/0 incl. the two batch278 G1 gates; default lib 2729/0; clippy −D ×3 postures; retrieval floors HELD — the latent_retrieval eval battery 21/21, no re-pin; count pins via ONE shape-asserted pass, residue ZERO; score-bench/freeze not owed — the P30/B250/B276 kernel_opt-only precedent). All four quotes re-verified verbatim at the pin pre-authoring.
 
 ## Source
 
