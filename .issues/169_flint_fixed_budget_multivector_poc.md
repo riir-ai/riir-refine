@@ -1,6 +1,7 @@
 # Issue 169 — PoC: fixed-budget deterministic multi-vector span matching (FLINT-style, modelless)
 
 **Status:** OPEN — filed 2026-10-24 from Research 309 (arXiv:2610.27273, FLINT).
+**Claimed:** zed-m3-katopz-169t0, epoch=1792806343 (2026-10-24T01:45:43Z), expires 2026-10-26T01:45:43+00:00
 Primary modelless arm; the trained-pooler control arm is riir-train Issue 647
 (contingent on this issue's read). Paired-read discipline REQUIRED: `set_rerank`
 (Issue 121 / Bench 096) is this repo's measured-negative retrieval-layer
