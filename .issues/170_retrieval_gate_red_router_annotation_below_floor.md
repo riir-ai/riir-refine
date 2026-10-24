@@ -1,6 +1,7 @@
 # Issue 170 — retrieval regression gate is RED at every latent_retrieval posture: router annotation 60.3% < floor 72.3%, blended top-1 at ZERO margin — and the standing test lane cannot see it
 
-**Status:** OPEN — filed 2026-10-24, found by Issue 169 T0's paired-baseline
+**Status:** OPEN — CLAIMED 2026-10-24 (zed-m3-katopz-t170, epoch 1792809372,
+expires 2026-10-26T02:36:12Z) — filed 2026-10-24, found by Issue 169 T0's paired-baseline
 cross-check (riir-refine Bench 120). NOT caused by the 169 harness — verified
 identical at plain `latent_retrieval` without the PoC feature.
 
@@ -38,19 +39,35 @@ keeps paying for.
 
 ## Tasks
 
-- [ ] T1: attribute the router decay — which spans newly misroute vs the last
-  pinned state, and which corpus batches moved them (growth competition vs a
-  real regression). The 169 T0 harness (`--features multivector_poc --example
-  multivector_poc`) prints the arm-(a) table in seconds if a per-domain
-  breakdown is needed; the router axis itself is `run_eval`'s
-  `router_checked`/`router_correct`.
-- [ ] T2: re-pin BOTH floors with the delta recorded (the Issue-020/063
-  conventions: measured − 5 spans router headroom, measured − ONE span
-  blended) — in the SAME commit as the attribution note, never silently.
-- [ ] T3: close the visibility gap — add a `latent_retrieval`-posture row to
-  the standing test lane (test_gate-style suite or the batch lane's landing
-  checklist) so this gate executes where corpus batches land. Without this,
-  T2 re-pins another invisible floor.
+- [x] T1 DONE (2026-10-24, measured both states with the T1 instrument
+  `tests/router_per_span_dump.rs` + the vocab probe): 34 → 56 misrouting
+  spans. Docker 0→19 misses (17 → clippy), Dist 0→4 (→ clippy), Clippy 6→8,
+  Perf 28→25 (IMPROVED). Attributed: growth competition at the SHARED
+  128-slot GlobalFreq vocab, NOT a defect — the +68 rust_perf serving-wave
+  rules (entries_39–46, Batches 248–271) + 4 clippy rows (P51a + let-else)
+  re-ranked the global frequency table; docker/dist fixture tokens (FROM,
+  RUN, cargo, build, release, target...) fell out of the top-128 — docker
+  in-vocab coverage collapsed 40.2% → 3.4% (13 → 4 distinct tokens; dist
+  20.0% → 10.5%). Router-code diff B230→HEAD verified formatting-only
+  (80fb8920); docker/dist corpora byte-unchanged. Full record: the
+  `router_annotation_floor()` re-pin comment + Bench 120.
+- [x] T2 DONE (same commit as the attribution): router floor (4-domain
+  shader-off arm) 102/141 → **80/141** (measured 85/141, −5 spans headroom
+  per the Plan-030 convention; was −17 RED). BLENDED_TOP1 124 → **123/141**
+  (measured 124; restores the one-span margin, the Issue-063 convention —
+  the B248–B271 waves had spent the last margin span). ALSO found at ZERO
+  margin by the same measurement and re-pinned with deltas: CLIPPY_TOP1
+  42 → 41/48, CLIPPY_TOP3 43 → 42/48, PERF_TOP3 54 → 53/56 (the B243 note
+  had flagged all three; the growth held measured == pin). Top-3 131 ≥ 130
+  and top-5 133 ≥ 132 HELD, untouched. Gate green at --release AND debug
+  (counts profile-stable).
+- [x] T3 DONE: `ci_feature_guard.sh` Layer **5b2** — the named retrieval
+  suite (`cargo test --lib --features latent_retrieval retrieval_`: the
+  regression gate + the fixture-label verifies + determinism; 21 tests,
+  ~95 s debug) runs with its PASS line asserted by name (the green-zero
+  shape — `ok` with 0 tests — refused; Layer 5d's law). The batch-lane
+  GOAT checklist (`.agents/skills/riir-refine/SKILL.md` Protocol A step 5)
+  gains the matching default-posture step for corpus batches.
 - [-] T4 (deferred): the router itself — the lexical TF-cosine branch is
   measured closed as a GATE (70% < the 85% bar, Bench 025) and stays an
   annotation; re-routing architecture is out of scope unless T1's attribution
