@@ -1,6 +1,7 @@
 # Plan 282: Batch 278 — the Locals conversion (whole-step GDN window + device-side constraint recompute + the hybrid-feed pair)
 
-**Status:** QUEUED — GATED on Batch 276's landing (the `entries_gpu_124.rs` serial-corpus discipline: B276 in-flight on the M3 sibling session, B277 staged on the 4090 behind it; T0b clone + quote re-verification may run read-only pre-gate). Verdict: riir-refine Research 315 (YES B, kernel_opt, NotBenchable-annotated); source pin `32cf2feb07cd6e92cde4871347435773393f1812` (MIT); the filing lane is riir-infer Issue 1108 T3.
+**Status:** CLAIMED — B276 landed (`c3aac106`), gate OPEN; executing per the idle-loop continuation (the staging session ended in the context-overflow handoff; no lease was ever taken, the staging is prior-box work this box continues).
+**Claimed:** zed-m3-b278, 1792881263, expires 2026-10-26T22:34:23+00:00 Verdict: riir-refine Research 315 (YES B, kernel_opt, NotBenchable-annotated); source pin `32cf2feb07cd6e92cde4871347435773393f1812` (MIT); the filing lane is riir-infer Issue 1108 T3.
 
 ## Tasks
 
