@@ -56,6 +56,11 @@ pub mod latent_matcher;
 // Issue 077 T2+T3: the margin law's shared substrate — pure math + the
 // matcher access pattern, no oracle. Gated latent_retrieval (the matcher).
 pub mod margin_weight;
+// Issue 169 T0 (Research 309 FLINT): the multi-vector kill-test — per-op-token
+// hashed embeddings + the shipped maxsim_score vs the single-vector matcher.
+// Measurement-only (examples/multivector_poc.rs); implies latent_retrieval.
+#[cfg(feature = "multivector_poc")]
+pub mod multivector;
 // Issue 126 lane (a): the sigmoid-NCE two-tower span↔rule embeddings + the
 // frozen i8 artifact. PoC posture (implies choice_scorer_poc — shared Rng +
 // schedule); the shipped suggest lane stays modelless until the gates pass.

@@ -377,6 +377,16 @@ rule_embed_poc = ["choice_scorer_poc"]
 # Gates `examples/rule_embed_mattr_t1.rs` + `draft::rule_embed_mattr`.
 mattr_k_poc = ["rule_embed_poc", "katgpt-core/exact_mass_admit"]
 
+# Issue 169 T0 (Research 309 FLINT): the multi-vector kill-test — per-op-token
+# hashed embeddings (D ∈ {8,32,64}) scored by the SHIPPED katgpt-core
+# `maxsim_score`, vs the shipped single-vector matcher, on the oracle
+# retrieval_eval fixtures. Measurement-only (`examples/multivector_poc.rs` +
+# `draft::multivector`); implies latent_retrieval (the matcher + fixtures it
+# measures against) and forwards katgpt-core/maxsim for the scoring kernel —
+# PoC-scoped, never default (the T2 discipline: the feature rides the PoC
+# feature set only).
+multivector_poc = ["latent_retrieval", "katgpt-core/maxsim"]
+
 # Issue 097: linking↔retrieval-confusion PoC — does topological linking
 # (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
 # span-embedding clouds predict retrieval top-1 confusion between those
@@ -860,6 +870,12 @@ required-features = ["rule_embed_poc"]
 [[example]]
 name = "rule_embed_mattr_t1"
 required-features = ["mattr_k_poc"]
+
+# Issue 169 T0 — the full-token MaxSim kill-test harness (arm (a) vs arm (e)
+# at D ∈ {8,32,64}; measurement-only, never a standing gate until promotion).
+[[example]]
+name = "multivector_poc"
+required-features = ["multivector_poc"]
 
 [[example]]
 name = "nonergodic_driver_poc"
