@@ -22,9 +22,17 @@ Tasks (Protocol A; mark `[x]` as complete, `- [-]` for defers with reasons):
 - [ ] T0 — clone both to `.raw/b275/`, verify pins EXACT (`8cee3ef` / `59160bd` via rev-parse),
       **licence check FIRST** (LICENSE files + licenses/ dirs at both roots + the vendored
       engine trees' own licences; every mined file's provenance chain permissive)
-- [ ] T1 — enumerate both trees (file inventory, kernel/shader inventory, the submission
+- [x] T1 — enumerate both trees (file inventory, kernel/shader inventory, the submission
       diff-history shape if the repo carries it); scope adjudication: one batch or split
       (B275 bonsai2 + B276 qwen38) if the pair exceeds ~16 rules of scope
+      **→ ADJUDICATED SPLIT 2026-10-25**: bonsai2-9b = 130 commits / 123 submissions over 6 hot
+      vendored files (Hadamard.swift ×63, Qwen35.swift ×62, DFlash2Draft.swift ×42,
+      Qwen35MTP.swift ×20, ContinuousBatchingV2/* ×~60, gemv.cpp ×3) — a full batch alone;
+      qwen38-125b = 67 commits over Runner/FastModel/* (TrackFastModel ×25, TrackFastMoE ×24,
+      TrackFastKernels2 ×11, quantized_nax.cpp/.h ×15, TrackPrefillIndirect* ×~20,
+      TrackFastGDNDecode ×5, sdpa_vector.h ×6) — equally a full batch. B275 = bonsai2-9b
+      ONLY (this plan); qwen38 = Batch 276 at the next slot (plan-first, same claim-lease
+      protocol; this T0 clone stays until B276 claims).
 - [ ] T2 — dedup grep BEFORE proposing: every candidate concept × 3+ vocabulary variants
       against `src/domains/kernel_opt/` (941 standing) + `src/domains/rust_perf/` (266
       standing), with the B251 CUDA-sibling entries (`entries_gpu_105`/`entries_gpu_106`)
@@ -43,7 +51,7 @@ Tasks (Protocol A; mark `[x]` as complete, `- [-]` for defers with reasons):
       no-default, all --all-targets), retrieval floors RE-MEASURE (corpus delta owed);
       freeze/score-bench NOT owed (kernel_opt-only corpus, P30/B250) unless clippy_lints
       sneaks in; binary rebuild NOT owed (kernel_opt outside the release set)
-- [ ] T6 — Research note `.research/312_*` (`.research/.highwater` 311→312 at landing),
+- [ ] T6 — Research note `.research/313_*` (`.research/.highwater` 312→313 at landing — B274 took 312 mid-flight, disclosed),
       AGENTS.md kernel_opt bullet re-pin, `.docs/11_domains/kernel_opt.md` if owed,
       queue-snapshot landing row (byte-level splice), mining-queue snapshot update in the
       same commit
