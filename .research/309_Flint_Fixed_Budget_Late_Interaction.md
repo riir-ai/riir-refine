@@ -1,10 +1,12 @@
 # Research 309 — FLINT: Fixed-budget Late Interaction (arXiv:2610.27273)
 
-**Status:** RECORD — distilled 2026-10-24. GAIN verdict: two PoC issues filed
-(riir-refine Issue 169 — the modelless fixed-budget multi-vector arm, primary;
-riir-train Issue 647 — the trained-pooler control arm, secondary/owner-gated).
-No tier above GAIN is claimable until the paired read measures the quality axis
-(§3.6 — quality claims need the PoC, architectural reasoning is not sufficient).
+**Status:** RECORD — distilled 2026-10-24; **T0 MEASURED 2026-10-24: KILL
+(§7)** — the modelless multi-vector arm is closed by its own kill-test
+(riir-refine Bench 120); the trained-pooler arm (riir-train Issue 647) is
+closed with it. The GAIN verdict below was the PRE-measurement tier and is
+superseded by §7 for the modelless track; the distillation record (mechanism
+inventory, prior art, reframes) stands.
+Primary modelless arm measured first, per its own pre-registration.
 Source: Handa, Arabzadeh, Zaharia (UIUC/Berkeley), 2026-10-19,
 <https://arxiv.org/abs/2610.27273>. Zero-GPU distill (panel + web searches only).
 
@@ -258,3 +260,26 @@ separately as secondary. Reasoning per gate:
   pooling variants COLLAPSE (erank→1, quality loss). The PoC pools with ONE
   shallow deterministic assignment — no self-attention stacks, per their
   Appendix D.
+
+---
+
+## 7. T0 outcome (2026-10-24) — KILL
+
+Issue 169's pre-registered kill-test ran FIRST and the answer is NO:
+full-token MaxSim over hashed `op_tokenizer` op-token embeddings (D ∈ {8, 32,
+64}, BLAKE3-XOF scheme, document-dedup exact) loses to the shipped single-
+vector matcher at EVERY width — best (e) arm 85/141 (60.3%) blended top-1 at
+D=64 vs arm (a) 124/141 (87.9%); paired +3 wins / −44 losses / 94 ties; with
+the shipped instantiation rerank already riding the (e) arm. Width sweep:
+44.7 → 56.0 → 60.3 — monotone but mechanism-bound: hashed random directions
+carry no token similarity and no IDF, so MaxSim degenerates to unweighted
+token-overlap counting (the tiny-token-crowding defect re-created inside the
+scorer). The paper's per-token vectors are trained-encoder outputs — the
+representation law does not transfer to untrained hashed tokens on this task.
+Mechanism diagnosis, full tables, cost disclosure, and the honest residuals
+(MaxSim-as-ensemble-channel untested; trained token embedder is a different
+lane): **`riir-refine/.benchmarks/120_flint_t0_fulltoken_maxsim_killtest.md`**.
+Per the issue's own STOP rule: T1 is never built, Issue 169 closed (file
+removed, `HISTORY.md` carries the row), and riir-train Issue 647 stays closed
+— its gate needed BOTH (b)>(a) AND (e)>(a). The §2.2 Path-0 component
+inventory remains accurate; its quality premise is measured false HERE.
