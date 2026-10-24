@@ -480,6 +480,10 @@ mod tests {
     use super::*;
 
     #[test]
+    // The comparisons are deliberate BIT-exactness pins on a deterministic
+    // hash-derived vector: float equality IS the assertion (any drift means
+    // the scheme moved).
+    #[allow(clippy::float_cmp)]
     fn hash_embed_is_deterministic_and_unit() {
         let a = hash_embed::<64>("op:&*");
         let b = hash_embed::<64>("op:&*");
@@ -490,9 +494,9 @@ mod tests {
         assert_ne!(a, c, "distinct tokens must embed distinctly");
     }
 
-    /// The scheme pin: SCHEME_TAG + layout + this digest must move together.
+    /// The scheme pin: `SCHEME_TAG` + layout + this digest must move together.
     /// Any change to `hash_embed`'s byte layout, normalization, or the tag
-    /// REFUSES to look like the old scheme — bump SCHEME_TAG and re-pin here.
+    /// REFUSES to look like the old scheme — bump `SCHEME_TAG` and re-pin here.
     #[test]
     fn hash_embed_digest_pin_d8() {
         let mut h = Hasher::new();
@@ -506,6 +510,9 @@ mod tests {
     }
 
     #[test]
+    // Same bit-exactness pin: MaxSim over a multiset must equal MaxSim over
+    // its support, exactly.
+    #[allow(clippy::float_cmp)]
     fn document_dedup_is_exact_under_maxsim() {
         // max over a multiset with duplicate rows == max over its support.
         let q: Vec<String> = vec!["fn".into(), "op:&*".into()];

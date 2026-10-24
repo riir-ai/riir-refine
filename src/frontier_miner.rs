@@ -166,6 +166,10 @@ pub struct Family {
 /// both probe fixtures unchanged, groups pinned by the plan152
 /// default-groups arms — complexity/default-on + NURSERY).
 #[must_use]
+// The batch-landing INDEX (the corpus.rs enumeration precedent): a flat
+// `vec!` table whose length is content, not complexity — each block is one
+// family's provenance comment + a 3-field struct literal.
+#[allow(clippy::too_many_lines)]
 pub fn families() -> Vec<Family> {
     vec![
         Family {

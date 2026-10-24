@@ -181,6 +181,10 @@ impl ValidatorModule {
     /// export, non-basic opcodes surviving the lowering, unbalanced control
     /// flow, data segments outside the ABI-legal regions, or a
     /// locals/params cap breach.
+    // The admission GATE: one sequential refusal ladder over the decoded
+    // module — every arm is a named security contract (splitting it would
+    // scatter the fail-closed order the Lemma-4.2 exclusion reads).
+    #[allow(clippy::too_many_lines)]
     pub fn admit(bytes: &[u8]) -> Result<Self, AdmissionError> {
         let module = decode(bytes)?;
 
