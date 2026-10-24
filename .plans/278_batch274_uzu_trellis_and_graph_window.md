@@ -24,18 +24,18 @@ fetched — the fork carries both prism post-tag commits AND serves as the upstr
 | 10 | incoai/splash | `0341410`/`2c645f3` | split-GGUF metadata-first-part layout | rust_perf/io candidate — dedup at read |
 | 11 | incoai/splash release/12-20 wave | `28d0e98`, `772ba56`, `e88a0d0`, `84b0e16`, `720f5fd` | memory-budget refusal / start-failure reason / penalized-greedy check / pruned experts | rust_perf serving candidates — graded thin at T0, honest drops allowed |
 
-- [ ] T0 — re-verify every pin at clone/checkout; confirm sources' licenses (uzu MIT; llama.cpp MIT; splash Apache-2.0)
-- [ ] T1 — dedup grep (DONE pre-claim: trellis ZERO owners; graph-key face → identity-keyed arena rider; f32-copy → dispatch-collapse family; chunk-graphs → capture-region family; moe-prune → B268 neighbor)
-- [ ] T2 — spawn 2 parallel authoring subagents over disjoint slices (A: uzu trellis trio + #996; B: prism #378/#379 + upstream #30804 + splash residue); re-verify every quoted line at the pin
-- [ ] T3 — corpus entries + fixtures (standalone compile per field) + count pins via ONE shape-asserted script pass
-- [ ] T4 — batch274 needle gate + syn-parse gate
-- [ ] T5 — kernel_opt lib + default lib + clippy −D ×3 postures
-- [ ] T6 — retrieval floors re-measure (own rules expected → re-measure OWED)
-- [ ] T7 — freeze/score-bench NOT owed (kernel_opt-only corpus, P30) — verify the delta stays kernel_opt/rust_perf-rider-only; if a clippy-lints rule sneaks in, regen owed
-- [ ] T8 — binary rebuild NOT owed (kernel_opt outside release set) — verify; if release-set surface moves, rebuild + install
-- [ ] T9 — Research 311 + AGENTS.md corpus bump + .docs/11_domains/ + snapshot landing row, one commit
-- [ ] T10 — commit `feat: batch 274: ...` + push; `.raw/` scratch removed at close
-- [ ] T11 — scored-tag check recorded: `prism-b10787-73bfe6c` STILL tip at claim time (ls-remote this session) — bout re-arm NOT fired; the post-tag fork commits #378/#379 are MINING material only, zero league-matrix movement claimed
+- [x] T0 — re-verify every pin at clone/checkout; confirm sources' licenses (uzu MIT; llama.cpp MIT; splash Apache-2.0)
+- [x] T1 — dedup grep (DONE pre-claim: trellis ZERO owners; graph-key face → identity-keyed arena rider; f32-copy → dispatch-collapse family; chunk-graphs → capture-region family; moe-prune → B268 neighbor)
+- [x] T2 — spawn 2 parallel authoring subagents over disjoint slices (A: uzu trellis trio + #996; B: prism #378/#379 + upstream #30804 + splash residue); re-verify every quoted line at the pin
+- [x] T3 — corpus entries + fixtures (standalone compile per field) + count pins via ONE shape-asserted script pass
+- [x] T4 — batch274 needle gate + syn-parse gate
+- [x] T5 — kernel_opt lib + default lib + clippy −D ×3 postures
+- [x] T6 — retrieval floors re-measure (own rules expected → re-measure OWED)
+- [x] T7 — freeze/score-bench NOT owed (kernel_opt-only corpus, P30) — verify the delta stays kernel_opt/rust_perf-rider-only; if a clippy-lints rule sneaks in, regen owed
+- [x] T8 — binary rebuild NOT owed (kernel_opt outside release set) — verify; if release-set surface moves, rebuild + install
+- [x] T9 — Research 312 + AGENTS.md corpus bump + .docs/11_domains/ + snapshot landing row, one commit
+- [x] T10 — commit `feat: batch 274: ...` + push; `.raw/` scratch removed at close
+- [x] T11 — scored-tag check recorded: `prism-b10787-73bfe6c` STILL tip at claim time (ls-remote this session) — bout re-arm NOT fired; the post-tag fork commits #378/#379 are MINING material only, zero league-matrix movement claimed
 
 ## Gates owed
 needle+parse (new rules), kernel_opt lib, default lib, clippy −D ×3 postures, retrieval floors
@@ -44,3 +44,9 @@ re-measure. NOT owed unless scope drifts: freeze regen, score-bench, binary rebu
 ## Non-goals
 No league-matrix or bout work (no scored tag fired). No GPU. Zero-CUDA-driver work; this is
 mining-only. The vendor/prismml-llama.cpp/build dir stays deleted (disk-clean, owner-approved).
+
+## Landing note (2026-10-25)
+
+All tasks complete. Landing commit: (this commit). Binary rebuilt + installed at the landing
+HEAD after commit (build stamp == landing). Slice A's two subagent timeouts + the coordinator
+authoring pass, the four en-route lessons, and the lane intel are recorded in Research 312.

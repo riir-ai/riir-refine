@@ -9,7 +9,7 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 266 entries across 13 categories as of Batch 271 (2026-10-21,
+//! 267 entries across 13 categories as of Batch 274 (+1: allocation, `entries_47`) — prior: Batch 271 (2026-10-21,
 //! Plan 275 / Research 307: +12 — the splash-wave SECOND-TIER serving pool
 //! (incoai/splash, the B268/B270 staged second tier, Apache-2.0, author Jian
 //! Chen). Allocation +3: `resume-admission-sized-to-per-command-window-not-suspended-peak`
@@ -649,13 +649,14 @@ mod entries_43;
 mod entries_44;
 mod entries_45;
 mod entries_46;
+mod entries_47;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 266 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 267 entries
 /// (Batch 271, 2026-10-21, Plan 275 / Research 307: +12, the splash-wave
 /// SECOND-TIER serving pool — see the module header for the batch chain;
 /// prior — Batch 270, Plan 274 / Research 306: +12, the splash-wave serving
@@ -773,5 +774,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_44::entries());
     entries.extend(entries_45::entries());
     entries.extend(entries_46::entries());
+    entries.extend(entries_47::entries());
     Corpus::new(entries)
 }
