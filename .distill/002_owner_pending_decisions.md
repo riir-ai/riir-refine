@@ -6,6 +6,18 @@ the first time the per-item lists are persisted. Freshness: each item carries it
 date; re-measure before acting on stale rows. Deletion items follow the disk-clean contract:
 LIST here, act only on explicit owner approval, per item.
 
+## 0. HF token ROLLED — the `data_backup.sh` pull lane is DOWN (surfaced 2026-10-25 ~02:40 +07)
+
+- **Source:** riir-infer `0cf6384` (plan-622 T2.5 commit message, zed-m3-continue): "the .env HF
+  token is rolled — the data_backup pull lane is down until the owner refreshes".
+- **Impact:** HF restores (`pull` / `pull-all`) fail until the owner puts a fresh token in
+  `riir-train/.env` (`HF_TOKEN`). Blocked today: riir-train Issue 640-style archive pulls, the
+  infer Issue 1110 T2 checkpoint precondition (b) (`gemma-2-2b-it-f16.gguf` restore).
+- **Workaround in use:** sibling lanes scp prerequisites box-to-box (plan-622 restored the 0.8B Q8_0
+  GGUF + chat_probe corpus from the 4090 that way, byte-count verified) — lane-level, not a fix.
+- **The owner action:** mint/rotate a fine-grained read token per the Plan-444 rig convention and
+  update `.env` on every box that pulls (M3 + 4090).
+
 ## 1. Docker vhdx compact — 188 GB reclaimable (measured 2026-10-18)
 
 - **Path:** `C:\Users\katop\AppData\Local\Docker\wsl\disk\docker_data.vhdx` — 187,927,887,872 B.
