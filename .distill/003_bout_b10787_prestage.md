@@ -1,9 +1,17 @@
 # Decode re-pin bout — PRE-STAGED 2026-10-20 ~00:5x UTC (shikuwa/4090 prep session)
 
-**What this is:** the `prism-b10787-73bfe6c` decode re-pin re-cut trigger (fired at B261,
-2026-10-20) is fully PRE-BUILT. The bout itself is GPU-gated (StartLux llama-server
-resident; window ends ~13:30Z Oct 20). At the verified-idle window, the run is ~15 min:
-one manifest edit + one harness command + the bench record. Everything else is DONE.
+**Status: DISCHARGED 2026-10-20 ~13:50-14:10Z** — the bout RAN from this runbook verbatim;
+record = riir-ai `.benchmarks/992_prism_b10787_bout.md` (all holds held + prefill WIDENED,
+decode parity-flat, NO escalation trigger; ours tip `fea367f2c`, G1 pins EXACT ×3). This
+file now serves as (a) the 4090-side standing prebuild intel (fork rebuilt at tag
+`prism-b10787-73bfe6c`, llama-bench fresh, model sha verified) and (b) the runbook
+template for any FUTURE re-cut window. Nothing below is pending. Marked stale-discharged
+2026-10-24 (zed-m3 idle loop — the file's waiting status was never flipped at landing).
+
+**What this was:** the `prism-b10787-73bfe6c` decode re-pin re-cut trigger (fired at B261,
+2026-10-20) fully PRE-BUILT. The bout itself was GPU-gated (StartLux llama-server
+resident; window ended ~13:30Z Oct 20). At the verified-idle window, the run was ~15 min:
+one manifest edit + one harness command + the bench record. Everything else was DONE.
 
 ## Already done (this prep, zero GPU, all verified by run)
 
