@@ -1530,6 +1530,18 @@ required-features = ["kat_transport"]
 name = "latent_suggest_goat"
 required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
 
+# Issue 170 T1/T3 — the per-span router-annotation dump + the full eval pin
+# basis (the corpus-batch re-pin instrument; prints under --nocapture, asserts
+# only the population floor + walk/run_eval parity — the regression GATE in
+# `src/draft/retrieval_eval.rs` owns the floor assertions). The whole-file
+# `#![cfg(feature = "latent_retrieval")]` protects the count; this row
+# protects the reader; the domain features name the corpora the suggest path
+# touches (the latent_suggest_goat lesson — a latent-only row is an E0433
+# wall, not a green zero).
+[[test]]
+name = "router_per_span_dump"
+required-features = ["latent_retrieval", "clippy_lints", "rust_perf"]
+
 [[test]]
 name = "llm_spend_g2_alloc"
 required-features = ["cf_workers_ai"]
