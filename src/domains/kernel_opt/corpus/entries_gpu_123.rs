@@ -1,7 +1,7 @@
 //! Entries slice 123 — Batch 275 (Plan 279 / Research 313): the
 //! mlxfast-bonsai2-9b B- trio. Source: Layr-Labs/mlxfast-bonsai2-9b-engine @
 //! 8cee3ef (MIT) — the three B- candidates of the Batch 275 mining pass
-//! (.raw/b275/proposals/bonsai2_9b_candidates.md §1.7–1.9), every quote
+//! (`.raw/b275/proposals/bonsai2_9b_candidates.md` §1.7–1.9), every quote
 //! re-verified VERBATIM at the pin (vendor clone at
 //! .raw/b275/mlxfast-bonsai2-9b-engine, HEAD
 //! 8cee3ef44dc2ad832281a5f16ac0730278213f0a, fetched 2026-10-25). The
