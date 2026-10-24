@@ -130,7 +130,13 @@ convention is measured − ONE span; the standing note last measured 125 at
 Batch 244). Corpus batches 245–271 have grown the perf pool since; the
 zero-margin state means the next corpus landing owes the Issue-063 one-span
 repair per the floor's own text. Recorded here as the paired baseline's
-context; the re-pin belongs to the next corpus-batch lane.
+context; the re-pin belongs to the next corpus-batch lane. **Filed as
+`.issues/170_retrieval_gate_red_router_annotation_below_floor.md`** — which
+also carries the WORSE leg found right after this record landed: the gate's
+router-annotation axis is ALREADY below floor (60.3% < 72.3%, verified at
+plain `latent_retrieval`, pre-existing), and the gate only compiles under
+`latent_retrieval`, so the standing default-features test lane cannot see
+either leg.
 
 ## Honest residuals (what this negative does NOT claim)
 
