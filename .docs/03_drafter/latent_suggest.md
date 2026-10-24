@@ -92,6 +92,15 @@ cargo test --features latent_retrieval --lib retrieval_precision_regression_gate
 cargo test --features latent_retrieval,kernel_opt --lib retrieval -- --nocapture
 ```
 
+Since Issue 170 (2026-10-24) the gate also runs in the STANDING lane —
+`scripts/ci_feature_guard.sh` Layer **5b2** executes the named retrieval
+suite (the gate + the fixture-label verifies + determinism) with its PASS
+line asserted by name; before that, the whole `draft` tree compiled out of
+every default-features lane and the router floor sat RED across B248–B271
+unseen. The re-pin instrument (`tests/router_per_span_dump.rs`: per-span
+routing dump + the 128-slot GlobalFreq vocab-membership probe) is the
+attribution tool for any future floor delta.
+
 **Baseline (Bench 022, 2026-08-16; RE-PINNED same day by Issue 022 — Bench
 024):** clippy **54.2/70.8/83.3** (top-1/3/5), perf 87.5/95.0/97.5, kernel
 self-variants 100/100/100. The 12-fixture 100%
