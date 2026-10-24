@@ -73,3 +73,14 @@ Criterion 1 fails for a **DOMAIN** reason — multi-GPU sys-scope collective lat
 ## Bottom line
 
 Mine as **nominal Batch 272 (plan 276)**, lead with `faulted-collective-fail-stop-no-numerics-fallback`; authoring at the next mining slot (the queue is post-splash-window; the batch claims plan-first per protocol). Queue line landed in the snapshot; this note + plan 276 landed in the same commit (highwaters 307→308, 275→276). NOTHING INVENTED — every quote read at the fetched commit diff this session.
+
+## Corroboration addendum (2026-10-24, second independent pass)
+
+A second `@distill` pass over the same PR re-derived the verdict independently before finding this note — agreement on every load-bearing call (YES B− / lane N/A / the three-rule + four-rider shape / the D1+D2 drops). Its additions, recorded so the batch lane inherits them (all facts from the fetched PR page + a full shallow clone at the pins below):
+
+- **Upstream absence (novelty provenance):** `https://raw.githubusercontent.com/vllm-project/vllm/main/csrc/pcie_pull_all_reduce.cu` → **404** at vLLM main (checked 2026-10-24) — the mechanism is sonar-original, not a vLLM port; the sonar repo itself is a vLLM sync fork (HEAD `chore(sync): port vLLM through 255f14599`), so the absence is meaningful.
+- **The NCCL baseline was TUNED, not a strawman:** the PR body's launch recipe sets `NCCL_ALGO='allreduce:Tree' NCCL_PROTO=Simple` — the low-latency algo/proto pair — and still lost the DSpark cell by 12.7%. This strengthens the note's "confounded by nothing within the DSpark rows" claim with direct evidence.
+- **The +12.7% is spec-path-specific:** the two non-spec rows are BOTH NCCL (100.0/100.5 tok/s — no paired cell), so the headline never claims a non-spec win; and draft acceptance dipped 59.43% → 59.05%, consistent with the disclosed rounding-contract difference (a real, disclosed trade, not noise).
+- **Pin shas for the T0 re-fetch:** sonar main `11c991b7d7ad1b58bd9dfbfe8f803dd16a29db50`, PR head `f653ba4e156a585531608bb59e51bd1fb63e866e` (commit under verdict `927f3262` = its parent), fetched via `git fetch --depth 3 origin pull/1788/head`. Clone `.raw/sonar` created for this pass and REMOVED after the addendum (unreferenced by the artifacts; T0 re-clones per plan).
+- **Dedup independently reproduced** (4 grep families, same four owners) plus one addition: `tma-single-issuer-bulk-tile` (B130) owns the INBOUND tensor-tile mbarrier path — further evidence the R3 rider's OUTBOUND `wait_group.read` staging face is unowned (home adjudication at T2 stands).
+- **D2 confirmed live:** the Codex review finding (output gate enqueued before `speculator.propose(...)` queues draft collectives → fault observed one step late) is visible on the fetched PR page, dated 2026-10-23 — the watch row stands.
