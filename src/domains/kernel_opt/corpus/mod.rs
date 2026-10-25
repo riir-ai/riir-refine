@@ -1927,6 +1927,7 @@ mod entries_gpu_125;
 mod entries_gpu_126;
 mod entries_gpu_127;
 mod entries_gpu_128;
+mod entries_gpu_129;
 mod entries_gpu_13;
 mod entries_gpu_14;
 mod entries_gpu_15;
@@ -2118,6 +2119,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_126::entries());
     entries.extend(entries_gpu_127::entries());
     entries.extend(entries_gpu_128::entries());
+    entries.extend(entries_gpu_129::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2612,7 +2614,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "one-warp-ordered-reduce-row-batched-no-smem-barrier",
         ],
     ),
-    // C: Fusion patterns (62 rules; Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the ENTIRE recurrent-layer decode step as ONE launch, state rows register-resident across an S <= 16 token window, Plan 282 / Research 315); Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles (the splash wave — N float projections OF ONE INPUT sharing one dispatch via concatenated column-tile ranges, each keeping its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave — a table built by a row-serialized producer moves into the consumer's existing covering prepare phase, byte-identical); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
+    // C: Fusion patterns (63 rules; Batch 284 +1: fusion-unfusable-head-settles-prefix-to-next-search (the burn fusion-search settle law — when no builder fuses from a block head, the head settles unfused with exactly the prefix no fresh builder would start (operations_settled_once_every_builder_closed / operations_settled_while_no_builder_would_start) and the rest goes to the next search — one unfusable op SPLITS the chain at the point fusion dies, never kills the tail; Plan 288 / Research 321); Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the ENTIRE recurrent-layer decode step as ONE launch, state rows register-resident across an S <= 16 token window, Plan 282 / Research 315); Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles (the splash wave — N float projections OF ONE INPUT sharing one dispatch via concatenated column-tile ranges, each keeping its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave — a table built by a row-serialized producer moves into the consumer's existing covering prepare phase, byte-identical); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c -- ONE kernel replaces cumsum/gram/a_diag_inv/causal_inv, 6->3 dispatches, kk/a_packed/a_inv never born; 101->78 us); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337 — fold the SCALE→SIGMOID→SCALE chain into the consumer as a `gated` template arm reading the RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard); Batch 251 +2: the Yukon conversion, Research 284 — dead-destination-scale-elided-consumer-applies-on-load (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — the launcher detects it by pointer+byte-size+n_seqs==1 and the kernel applies the scale's expression during the state load) + stacked-gate-up-single-launch-split-store (TM tile-contiguity makes the stacked gate|up copy the concatenation, so ONE pure-tiling launch computes both with each tile's store split at nrows_lo); Batch 223 +1: the fusion scope by
     // barrier cost (lithos-metal — the boundary decided on MEASURED barrier
     // cost, never dispatch count; in-kernel global barriers priced at
     // dispatch-boundary cost on M3 Pro/M5 Pro → layer-wise); Batch 201 +2: the acceptance-packet one-launch walk (five launches -> one thread) + the producer-folds single-consumer family (7 fusions; the 19% SwiGLU negative rides in-rule); Batch 199 +1: the split-K reduce in
@@ -2626,6 +2628,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Fusion,
         "C: fusion",
         &[
+            // Batch 284 +1 (the burn/cubek laws, Plan 288 / Research 321):
+            // the unfusable-head settle — one unfusable op SPLITS the
+            // chain at the point fusion dies; the prefix settles with the
+            // head, the rest goes to the next search under fresh builders.
+            "fusion-unfusable-head-settles-prefix-to-next-search",
             // Batch 278 +1 (the Locals conversion, Plan 282 / Research 315):
             // the ENTIRE recurrent decode step — conv+silu+gates, both
             // norms, the delta recurrence, the gated output norm — as ONE
@@ -3346,7 +3353,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "ragged-chunk-pad",
         ],
     ),
-    // K: Autotune dispatch (22 rules; Batch 277 +2: undocumented-fp-dtype-cubin-patch-per-sm-verified + expected-load-headroom-kdepth-split-spill-asymmetry (the Humming+Chord pair, Plan 281 / Research 316); Batch 275 +1: bit-parity-geometry-adoption-no-boot-timing (Plan 279 / Research 313); the stale 15 repaired at Batch 242 — the comment read 14 through B242; Batch 242 +1: the mlx-serve per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model); Batch 194 +1: the issue-latency MAD cost model; the comment read 16 while the table held 18 since B249 slice 3 — repaired at Batch 265; Batch 265 +1: autotuner-key-memoized-per-launch-not-rebuilt (vllm #61497)
+    // K: Autotune dispatch (25 rules; Batch 284 +3: autotune-round-bounded-by-roofline-ceiling + autotune-sample-read-cold-not-cache-fill + cost-model-counts-work-the-kernel-skips (the burn/cubek autotune laws, Plan 288 / Research 321 — the bounded round + the family-named Ceiling + the read-pole sample guard + the visited-work cost model); Batch 277 +2: undocumented-fp-dtype-cubin-patch-per-sm-verified + expected-load-headroom-kdepth-split-spill-asymmetry (the Humming+Chord pair, Plan 281 / Research 316); Batch 275 +1: bit-parity-geometry-adoption-no-boot-timing (Plan 279 / Research 313); the stale 15 repaired at Batch 242 — the comment read 14 through B242; Batch 242 +1: the mlx-serve per-generation-plan-table-unmeasured-generation-fallback (measured on the Bonsai 27B shapes — OUR league model); Batch 194 +1: the issue-latency MAD cost model; the comment read 16 while the table held 18 since B249 slice 3 — repaired at Batch 265; Batch 265 +1: autotuner-key-memoized-per-launch-not-rebuilt (vllm #61497)
     (
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
@@ -3389,6 +3396,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // small-K).
             "undocumented-fp-dtype-cubin-patch-per-sm-verified",
             "expected-load-headroom-kdepth-split-spill-asymmetry",
+            // Batch 284 +3 (the burn/cubek autotune laws, Plan 288 / Research
+            // 321): the bounded round + the family-named Ceiling (A) + the
+            // cold-sample read pole (B) + the visited-work cost model (D).
+            "autotune-round-bounded-by-roofline-ceiling",
+            "autotune-sample-read-cold-not-cache-fill",
+            "cost-model-counts-work-the-kernel-skips",
         ],
     ),
     // L: Conv-as-GEMM + memory layout (29 rules; Batch 281 +1: physical-warp-size-keys-tile-legality-and-dispatch (the upstream llama.cpp warp-size pair — #30837's static_assert tile-height contract + #30836's wave64 device-warp dispatch repair, Plan 285 / Research 318); Batch 277 +2: swap-ab-decode-operand-roles-tile-legality + one-pack-serves-all-schedules-nibble-order-contract (the Humming+Chord pair, Plan 281 / Research 316); Batch 251 +3: the Yukon conversion, Research 284 — decode-layout-weight-permute-copy-registry (load-time PURE-PERMUTED weight copies TM/WM, originals stay in place, pointer-keyed registry with dl_type, prefix-view legality from the layout itself) + ptq1-value-exact-transcode-roundtrip-fallback (code-3-free PQ2_0 re-encodes to 28-byte PTQ1_0 trit groups, ≈18% fewer weight bytes, DECODE-BACK verified per block, whole-tensor fallback on any code-3 or failed round-trip) + host-dispatch-predicate-mirrors-kernel-compiled-arch (one host+device constexpr fed highest_compiled_arch(cc) on the host and __CUDA_ARCH__ on device, every consumer re-deriving through it); the comment read 22 while the table held 23 since B247 — repaired here; Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (the prism fork #363 tensor-split law — a shard boundary respects EVERY block constraint on the axis: lcm(type block, rotation block); the rotation reshape keeps the axis boundaries (4D not 2D) so the split survives; views inherit the parent's split scaled by their geometry; a feature-sharded elementwise op slices its full-width mirrored operand per shard); Batch 242 +1: the mlx-serve tp-rank-inferred-from-scale-grid-ambiguity-refused (the sushi/Hadamard pack layout inference — ambiguity refuses, never guesses); Batch 233 +1: the reshape-relabel axis-scramble content-oracle law (llama.cpp #28738 + #30480 — a reshape re-declares bounds over fixed memory and cannot permute axes; the oracle is content comparison vs the per-axis decomposition, never shape); prior: Batch 196 +1: the affine block address pipeliner lead; the comment read 17 while the table held 18 since B193's register-built add — the stale-comment miss repaired here)
