@@ -15,11 +15,11 @@
 #   2. Settings → Secrets and variables → Actions → Secrets:
 #        GH_PAT               — PAT with read access to the private gist-rs/*
 #                               repos (sibling checkouts)
-#        CF_API_TOKEN         — Cloudflare token with Analytics:Read (GraphQL;
+#        CLOUDFLARE_OPS_API_TOKEN         — Cloudflare token with Analytics:Read (GraphQL;
 #                               the same token the housekeeping worker uses).
 #                               Feeds the CF daily-neurons + containers sections.
-#                               Repo-secret name kept; mapped to the process env
-#                               as CLOUDFLARE_OPS_API_TOKEN (the local .env name).
+#                               ONE name everywhere: repo secret = process env =
+#                               the local .env var = the Worker secret binding.
 #        CLOUDFLARE_API_TOKEN — Cloudflare token permitted to deploy the
 #                               `riir-ops-dashboard` Worker. The deploy step
 #                               soft-skips when unset.
@@ -41,15 +41,15 @@
 #      hardcoded path, and a sudo mkdir for a dead code path is pure risk.
 #   b) CLOUDFLARE_OPS_API_TOKEN — gen_dashboard.py, env wins over the wrangler OAuth
 #      file. The workflow therefore no longer needs to FABRICATE a macOS
-#      wrangler config from the secret; it just maps the CF_API_TOKEN repo
-#      secret onto CLOUDFLARE_OPS_API_TOKEN.
+#      wrangler config from the secret; it reads the CLOUDFLARE_OPS_API_TOKEN repo
+#      secret straight into the same-named env var.
 #
 # ── ⚠ THIS CI PATH IS THE FALLBACK, NOT THE PRIMARY (decision, T13) ─────────
 # The M3 is the correct home for the nightly refresh; see
 # `scripts/ops_nightly.sh`. Measured/structural reasons:
 #   * ZERO secrets. Locally the 11 repos are already checked out, cargo-refine is
 #     already installed, and wrangler OAuth already authenticates — so
-#     the GH_PAT / CF_API_TOKEN / CLOUDFLARE_API_TOKEN repo secrets are all unnecessary. This
+#     the GH_PAT / CLOUDFLARE_OPS_API_TOKEN / CLOUDFLARE_API_TOKEN repo secrets are all unnecessary. This
 #     CI path cannot run at all until an owner provisions three credentials.
 #   * ~5 min vs ~30-50. The local sweep is ~30-60 s per large repo (from the
 #     coverage cache's own measured_at deltas: riir-ai 57 s, riir-train 35 s).
@@ -123,11 +123,11 @@ jobs:
       - name: Preflight (config sanity — warnings only, never fatal)
         env:
           GH_PAT_SET: ${{ secrets.GH_PAT != '' }}
-          CF_API_SET: ${{ secrets.CF_API_TOKEN != '' }}
+          CF_API_SET: ${{ secrets.CLOUDFLARE_OPS_API_TOKEN != '' }}
           CF_DEPLOY_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         run: |
           [ "${GH_PAT_SET}" = "true" ] || echo "::warning::GH_PAT not set — private sibling checkouts will fail (coverage for those repos will be skipped)"
-          [ "${CF_API_SET}" = "true" ] || echo "::warning::CF_API_TOKEN secret not set — CF analytics sections will be empty"
+          [ "${CF_API_SET}" = "true" ] || echo "::warning::CLOUDFLARE_OPS_API_TOKEN secret not set — CF analytics sections will be empty"
           [ "${CF_DEPLOY_SET}" = "true" ] || echo "::warning::CLOUDFLARE_API_TOKEN not set — Worker deploy will be skipped"
 
       - name: Checkout riir-refine
@@ -280,7 +280,7 @@ jobs:
       - name: Regenerate dashboard (--sweep)
         env:
           RIIR_GIT_ROOT: ${{ runner.temp }}/git
-          CLOUDFLARE_OPS_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CLOUDFLARE_OPS_API_TOKEN: ${{ secrets.CLOUDFLARE_OPS_API_TOKEN }}
         run: |
           set -euo pipefail
           # CLOUDFLARE_OPS_API_TOKEN is read straight from env by the generator (header

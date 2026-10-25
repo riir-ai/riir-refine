@@ -17,10 +17,10 @@
 #      ops dashboard / future live mode. POST /backfill?days=&end= repairs
 #      missing hour rows from GraphQL (Issue 045 T9, token-gated write).
 #
-# Auth: set the CF_API_TOKEN secret once (dedicated API token, scope
+# Auth: set the CLOUDFLARE_OPS_API_TOKEN secret once (dedicated API token, scope
 #   Account → Analytics : Read), from the repo root:
-#     grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)
-#   Worker-side binding name stays CF_API_TOKEN (deployed secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
+#     grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CLOUDFLARE_OPS_API_TOKEN)
+#   Worker-side binding name stays CLOUDFLARE_OPS_API_TOKEN (deployed secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
 #
 # Read-side hardening (Issue 045 T7 + T8 + T9e):
 #   READ_TOKEN (optional secret) is the one read gate. Two levels:

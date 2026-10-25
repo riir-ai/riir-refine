@@ -376,7 +376,7 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ] && [ -n "${DEPLOY_DIR}" ]; then
   else
     log "deploy credential: wrangler OAuth (CLOUDFLARE_API_TOKEN unset)"
     # OAuth guard: strip every env credential wrangler would prefer over the
-    # OAuth session (including its deprecated CF_API_TOKEN alias).
+    # OAuth session (including the deprecated CF_API_TOKEN alias name).
     _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
   fi
   if (cd "${DEPLOY_DIR}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then

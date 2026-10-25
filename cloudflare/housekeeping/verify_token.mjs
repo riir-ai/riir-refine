@@ -4,8 +4,8 @@
 //   node cloudflare/housekeeping/verify_token.mjs <token>
 //   CLOUDFLARE_OPS_API_TOKEN=... node cloudflare/housekeeping/verify_token.mjs
 //
-// Worker-side binding name stays CF_API_TOKEN (deployed secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
-// Run this BEFORE `wrangler secret put CF_API_TOKEN`. A token with the wrong
+// Worker-side binding name stays CLOUDFLARE_OPS_API_TOKEN (deployed secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
+// Run this BEFORE `wrangler secret put CLOUDFLARE_OPS_API_TOKEN`. A token with the wrong
 // permission still deploys fine and then fails silently at 00:00 UTC — the
 // worker degrades to heartbeat rows and the only symptom is `ok:false` in a
 // KV row nobody reads. This exercises the three queries `worker.js` actually
@@ -161,7 +161,7 @@ if (failed) {
   console.log("\nFAIL — the queries all work, but the token is wider than the job.");
 } else {
   console.log("\nPASS — this token runs every query the cron issues, and nothing more.");
-  console.log("  next (from the repo root): grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)");
+  console.log("  next (from the repo root): grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CLOUDFLARE_OPS_API_TOKEN)");
 }
 // Over-privilege is a FAIL: a working-but-too-powerful token is the exact
 // case this script exists to catch, and it is invisible to the queries above.

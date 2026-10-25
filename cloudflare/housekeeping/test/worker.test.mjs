@@ -58,7 +58,7 @@ function kvStub(seed = {}) {
 const env = (kv, extra = {}) => ({
   HOUSEKEEPING_KV: kv,
   CF_ACCOUNT_ID: "acct",
-  CF_API_TOKEN: "collector-token",
+  CLOUDFLARE_OPS_API_TOKEN: "collector-token",
   MEM_USD_PER_GIB_S: "0.0000025",
   DISK_USD_PER_GB_S: "0.00000007",
   CPU_USD_PER_S: "0.000020",
@@ -282,7 +282,7 @@ test("unauthenticated /hours and /days are refused, and spend nothing", async ()
 
 test("a wrong token cannot read a memo entry a valid one populated", async () => {
   const kv = kvStub();
-  const opts = { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" };
+  const opts = { READ_TOKEN: "s3cret", CLOUDFLARE_OPS_API_TOKEN: "t" };
   const e = env(kv, opts);
   await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
   const warm = await (await fetchAt(e, "/hours?n=2", { token: "s3cret" })).json();
@@ -307,8 +307,8 @@ test("unauthenticated /status echoes the projection, never the full row", async 
 
 test("a presented token returns the full detail on every route", async () => {
   const kv = kvStub();
-  const e = env(kv, { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" });
-  await runHour(kv, "2026-08-28T12:00:06.549Z", { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" });
+  const e = env(kv, { READ_TOKEN: "s3cret", CLOUDFLARE_OPS_API_TOKEN: "t" });
+  await runHour(kv, "2026-08-28T12:00:06.549Z", { READ_TOKEN: "s3cret", CLOUDFLARE_OPS_API_TOKEN: "t" });
   for (const path of ["/latest", "/status"]) {
     const body = await (await fetchAt(e, path, { token: "s3cret" })).json();
     const row = path === "/status" ? body.latest : body;
@@ -346,7 +346,7 @@ test("unauthenticated /status spends zero KV list ops", async () => {
 // "memoised" held trivially and the assertions measured nothing.
 test("/hours fan-out is bounded and memoised per isolate", async () => {
   const kv = kvStub();
-  const opts = { READ_TOKEN: "s3cret", CF_API_TOKEN: "t" };
+  const opts = { READ_TOKEN: "s3cret", CLOUDFLARE_OPS_API_TOKEN: "t" };
   const e = env(kv, opts);
   await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
   const tok = { token: "s3cret" };
@@ -555,7 +555,7 @@ test("backfill is a write route: POST only, and it never fails open", async () =
   assert.equal(g.status, 405);
 
   // Token present but no collector token -> 503, not a silent empty success.
-  const noCollector = { ...env(kv, { READ_TOKEN: "s3cret" }), CF_API_TOKEN: undefined };
+  const noCollector = { ...env(kv, { READ_TOKEN: "s3cret" }), CLOUDFLARE_OPS_API_TOKEN: undefined };
   assert.equal((await postBackfill(noCollector, "?days=1", { token: "s3cret" })).status, 503);
   assert.equal(kv.ops.put, 0);
 });
@@ -718,8 +718,8 @@ test("a long backfill stops on a wall-clock budget with a resumable cursor", asy
 
 test("backfill replaces heartbeat rows — existence is not data", async () => {
   const kv = kvStub();
-  // Reproduce the live shape: cron running, CF_API_TOKEN unset.
-  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  // Reproduce the live shape: cron running, CLOUDFLARE_OPS_API_TOKEN unset.
+  const noToken = { ...env(kv), CLOUDFLARE_OPS_API_TOKEN: undefined };
   const realFetch = globalThis.fetch;
   globalThis.fetch = fetchStub();
   try {
@@ -837,7 +837,7 @@ test("a throwing housekeeping run is logged, not swallowed", async () => {
 
 test("heartbeat runs still write a day aggregate", async () => {
   const kv = kvStub();
-  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  const noToken = { ...env(kv), CLOUDFLARE_OPS_API_TOKEN: undefined };
   const realFetch = globalThis.fetch;
   globalThis.fetch = fetchStub();
   try {
@@ -862,7 +862,7 @@ test("heartbeat runs still write a day aggregate", async () => {
 
 test("a collected day reports hours and hours_present distinctly", async () => {
   const kv = kvStub();
-  const noToken = { ...env(kv), CF_API_TOKEN: undefined };
+  const noToken = { ...env(kv), CLOUDFLARE_OPS_API_TOKEN: undefined };
   const realFetch = globalThis.fetch;
   globalThis.fetch = fetchStub();
   try {
@@ -970,7 +970,7 @@ test("token acceptance is independent of token length", async () => {
   // unlocked by a guess of the other's length. The digest compare makes the
   // loop 64 hex chars wide in every case.
   for (const secret of ["x", "s3cret", "z".repeat(200)]) {
-    const opts = { READ_TOKEN: secret, CF_API_TOKEN: "t" };
+    const opts = { READ_TOKEN: secret, CLOUDFLARE_OPS_API_TOKEN: "t" };
     const e = env(kv, opts);
     __resetMemoForTests();
     await runHour(kv, "2026-08-28T12:00:06.549Z", opts);
@@ -1071,7 +1071,7 @@ test("mint env unset: no POST, and the truthful status strings are pinned", asyn
   // nothing is accruing.
   const kv2 = kvStub();
   const hb = await runHourMint(kv2, "2026-08-28T12:00:06.549Z", mintFetchStub({ posts }),
-    { CF_API_TOKEN: undefined });
+    { CLOUDFLARE_OPS_API_TOKEN: undefined });
   assert.equal(hb.mint, "idle");
   assert.equal(hb.mint_anchor, undefined);
   assert.equal(posts.length, 0, "heartbeat mode never POSTs either");

@@ -117,9 +117,10 @@ re-pasting.
 ### 3. Set it
 
 ```sh
-# From the repo root. Worker-side binding name stays CF_API_TOKEN (deployed
-# secret); locally it is CLOUDFLARE_OPS_API_TOKEN.
-grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CF_API_TOKEN)
+# From the repo root. ONE name everywhere: the local .env var and the Worker
+# secret binding are both CLOUDFLARE_OPS_API_TOKEN (renamed from the old
+# CF_API_TOKEN binding 2026-10-25 — re-push the secret under the new name once).
+grep '^CLOUDFLARE_OPS_API_TOKEN=' .env | cut -d= -f2- | (cd cloudflare/housekeeping && npx wrangler secret put CLOUDFLARE_OPS_API_TOKEN)
 curl -s https://riir-kat-housekeeping.foxfox.workers.dev/status | jq '{token_set, ts, ok}'
 ```
 
@@ -165,7 +166,7 @@ could collect on the M3 (wrangler already works there) and push rows in with
 entire reason this Worker exists — for a laptop that must be awake, to save a
 one-time 30-second step. Not worth it.
 
-Until `CF_API_TOKEN` is set the cron still writes heartbeat rows (proves
+Until `CLOUDFLARE_OPS_API_TOKEN` is set the cron still writes heartbeat rows (proves
 the schedule is alive).
 
 ## Optional secrets (budget alerting, Issue 044 T4)
@@ -226,7 +227,7 @@ npx wrangler secret put MONTHLY_BUDGET_USD  # optional monthly container budget 
   run sums the authoritative `hour:<day>*` rows. The previous
   read-modify-write double-counted on a cron double-fire or manual invoke and
   could lose an update between overlapping runs.
-- Alerting only runs when `CF_API_TOKEN` is set (neurons are only known
+- Alerting only runs when `CLOUDFLARE_OPS_API_TOKEN` is set (neurons are only known
   there). Without a webhook, alerts still land in KV (`notified: false`).
 
 ## Optional secret (read gating, Issue 045 T7)
@@ -247,8 +248,9 @@ curl -H "Authorization: Bearer $READ_TOKEN" '.../days?n=14'    # day aggregates 
 > **Credentials (2026-10-21):** wrangler uses `CLOUDFLARE_API_TOKEN` (the
 > deploy token) when set, else your `wrangler login` OAuth session. The
 > analytics token lives in `.env` as `CLOUDFLARE_OPS_API_TOKEN`, a name wrangler never
-> reads, so it cannot shadow a deploy. Only the Worker-side secret binding is
-> still called `CF_API_TOKEN`.
+> reads, so it cannot shadow a deploy. The Worker secret binding carries the
+> SAME name (`CLOUDFLARE_OPS_API_TOKEN`; renamed from the old `CF_API_TOKEN`
+> binding 2026-10-25) — one name everywhere.
 
 ### Access model (hardened 2026-08-28 — Issue 045 §T7, revised §T8, §T9e)
 
@@ -325,7 +327,7 @@ cache on the path. Same bug class, one layer down.
   which meant `GET /status` and `GET /hours?n=1` each returned the full row
   to an anonymous caller: two silent bypasses of a redaction documented as
   unconditional. Harmless while the rows are heartbeats — it arms itself the
-  moment T4 sets `CF_API_TOKEN` and the rows start carrying the breakdown.
+  moment T4 sets `CLOUDFLARE_OPS_API_TOKEN` and the rows start carrying the breakdown.
 - **`alerts_today` is hard-gated (§T8).** It issues a KV `list` per request
   and sat behind the fail-open gate, so anonymous traffic drove one list op
   each. The free tier allows **1,000 list ops/day against 100,000 reads**
@@ -334,7 +336,7 @@ cache on the path. Same bug class, one layer down.
   list-based: the day-aggregate recompute and the monthly-budget check.
   Cheaper to trip and more damaging than the read amplification T7 fixed.
 - `token_set` / `read_gated` stay readable while the gate fails open — that
-  is the check that the `CF_API_TOKEN` step landed.
+  is the check that the `CLOUDFLARE_OPS_API_TOKEN` step landed.
 - **CORS is an allowlist**, not `*` — set `ALLOWED_ORIGINS` (`[vars]`,
   comma-separated, no trailing slash) to the origins allowed to read
   cross-origin. A non-allowlisted `Origin` gets no `Access-Control-Allow-Origin`.

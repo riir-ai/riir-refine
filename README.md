@@ -510,7 +510,7 @@ worker, the ops dashboard, and the nightly generator. State as of
 
 | Piece | URL / where | State |
 |---|---|---|
-| Housekeeping worker | `https://riir-kat-housekeeping.foxfox.workers.dev` | **LIVE** — hourly cron, T9 code deployed, `READ_TOKEN` gate on (`/hours` `/days` `/backfill` anon → 401), `CF_API_TOKEN` set (`/status` → `token_set:true`, neurons + containers collecting, 14-day backfill run) |
+| Housekeeping worker | `https://riir-kat-housekeeping.foxfox.workers.dev` | **LIVE** — hourly cron, T9 code deployed, `READ_TOKEN` gate on (`/hours` `/days` `/backfill` anon → 401), `CLOUDFLARE_OPS_API_TOKEN` set (`/status` → `token_set:true`, neurons + containers collecting, 14-day backfill run) |
 | Ops dashboard | `https://riir-ops-dashboard.foxfox.workers.dev` | LIVE — serves the self-contained HTML; fetches `/latest` from the housekeeping worker. **Auth gate ships OPEN** (owner decision 2026-08-28; one `wrangler secret put DASHBOARD_TOKEN` closes it) |
 | Nightly generator | `scripts/ops_nightly.sh` + `scripts/com.riir.ops-nightly.plist` | **Shipped, NOT bootstrapped** — two commands: `cp scripts/com.riir.ops-nightly.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.riir.ops-nightly.plist` |
 
@@ -519,7 +519,7 @@ worker, the ops dashboard, and the nightly generator. State as of
 for, which consumer reads it, and where each is minted. The four core vars:
 `GROQ_API_KEY` (free-tier LLM routing, Issue 051) · `CLOUDFLARE_OPS_API_TOKEN`
 (Account Analytics:Read + Workers AI — nightly generator, Rust CF leg, and
-pushed as the housekeeping Worker secret `CF_API_TOKEN`; the only one that
+pushed as the housekeeping Worker secret `CLOUDFLARE_OPS_API_TOKEN`; the only one that
 cannot be minted from this machine) · `CLOUDFLARE_API_TOKEN` (least-privilege
 deploy token wrangler uses natively; absent → `wrangler login` OAuth) · `READ_TOKEN`
 (the housekeeping read gate, 64-hex). Optional: `ALERT_WEBHOOK_URL` +

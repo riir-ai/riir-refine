@@ -160,7 +160,7 @@ function safeJson(v) {
 // hard-gated instead. See the gate comment there.
 //
 // Harmless while the rows are heartbeats; it arms itself the moment T4 sets
-// CF_API_TOKEN and the rows start carrying per-app breakdown.
+// CLOUDFLARE_OPS_API_TOKEN and the rows start carrying per-app breakdown.
 function publicRow(r) {
   if (!r) return r;
   return {
@@ -268,7 +268,7 @@ const HOUR_KEY_RE = /^hour:\d{10}$/;
 // Does this hour row carry a REAL collection, or is it a placeholder?
 //
 // `ok` is load-bearing, not decorative. Two kinds of row have a `containers`
-// object and no data behind it: the heartbeat row written while CF_API_TOKEN
+// object and no data behind it: the heartbeat row written while CLOUDFLARE_OPS_API_TOKEN
 // is unset (no `containers` at all), and the all-collectors-failed row, which
 // DOES get `containers: {est_usd: 0, apps: {}}` because the collectors return
 // empty maps rather than throwing. Treating that false zero as data would
@@ -339,7 +339,7 @@ async function gql(env, query) {
   const res = await fetch(GRAPHQL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.CF_API_TOKEN}`,
+      Authorization: `Bearer ${env.CLOUDFLARE_OPS_API_TOKEN}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ query }),
@@ -504,9 +504,9 @@ async function runHousekeeping(env) {
     notes: [],
   };
 
-  if (!env.CF_API_TOKEN) {
+  if (!env.CLOUDFLARE_OPS_API_TOKEN) {
     // Heartbeat mode: prove the cron is alive; data collection waits on the
-    // one-time owner step (wrangler secret put CF_API_TOKEN).
+    // one-time owner step (wrangler secret put CLOUDFLARE_OPS_API_TOKEN).
     //
     // This block used to `return` here, skipping the day aggregate below —
     // which is why a live KV inventory on 2026-08-29 found EIGHT keys after
@@ -517,9 +517,9 @@ async function runHousekeeping(env) {
     // Fall through instead: a heartbeat day is now reported honestly as
     // hours:0 / hours_present:24 rather than being absent.
     row.ok = false;
-    row.notes.push("CF_API_TOKEN secret not set — heartbeat only");
+    row.notes.push("CLOUDFLARE_OPS_API_TOKEN secret not set — heartbeat only");
     row.mint = "idle";
-    row.mint_note = "no CF_API_TOKEN: nothing collected, no anchor recorded (the completed-day POST needs the same token)";
+    row.mint_note = "no CLOUDFLARE_OPS_API_TOKEN: nothing collected, no anchor recorded (the completed-day POST needs the same token)";
   } else try {
     // allSettled, not all: one failing dataset used to discard the other two
     // and record a bare ok=false row, losing an hour of collectable data.
@@ -1078,9 +1078,9 @@ async function handleFetch(request, env, ctx) {
           { status: 403 }), request, env);
       }
       if (!ok) return cors(new Response("unauthorized", { status: 401 }), request, env);
-      if (!env.CF_API_TOKEN) {
+      if (!env.CLOUDFLARE_OPS_API_TOKEN) {
         return cors(Response.json(
-          { error: "CF_API_TOKEN is not set; there is no source to backfill from" },
+          { error: "CLOUDFLARE_OPS_API_TOKEN is not set; there is no source to backfill from" },
           { status: 503 }), request, env);
       }
       const reqDays = parseInt(url.searchParams.get("days") || "7", 10);
@@ -1135,7 +1135,7 @@ async function handleFetch(request, env, ctx) {
       };
       if (ok) {
         Object.assign(body, {
-          token_set: !!env.CF_API_TOKEN,
+          token_set: !!env.CLOUDFLARE_OPS_API_TOKEN,
           cap: parseFloat(env.NEURON_CAP) || 0,
           thresholds: [0.5, 0.9, 1.0],
           has_webhook: !!env.ALERT_WEBHOOK_URL,
@@ -1170,7 +1170,7 @@ async function handleFetch(request, env, ctx) {
       // projection is by construction everything the dashboard consumes, so
       // hard-gating the detail costs no functionality. The other routes fail
       // open so the owner keeps a diagnostic path (notably `token_set`, the
-      // check for whether the T4 CF_API_TOKEN step landed) before any token
+      // check for whether the T4 CLOUDFLARE_OPS_API_TOKEN step landed) before any token
       // exists to present.
       const full = await readLatest(kv);
       if (!full) return cors(new Response("null", { status: 200,
