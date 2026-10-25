@@ -9,7 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 270 entries across 13 categories as of Batch 282 (+3: arithmetic, dispatch,
+//! 271 entries across 13 categories as of Batch 283 (+1: caching, `entries_49`
+//! — the certifying-identity-token revalidation skip, `PrismML` #393) — prior:
+//! Batch 282 (+3: arithmetic, dispatch,
 //! iterators, `entries_48` — the `PerfR` C-to-Rust translation classes, arXiv
 //! 2610.23044v1) — prior: Batch 274 (+1: allocation, `entries_47`) — prior: Batch 271 (2026-10-21,
 //! Plan 275 / Research 307: +12 — the splash-wave SECOND-TIER serving pool
@@ -653,6 +655,7 @@ mod entries_45;
 mod entries_46;
 mod entries_47;
 mod entries_48;
+mod entries_49;
 
 #[cfg(test)]
 mod tests;
@@ -784,5 +787,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_46::entries());
     entries.extend(entries_47::entries());
     entries.extend(entries_48::entries());
+    entries.extend(entries_49::entries());
     Corpus::new(entries)
 }

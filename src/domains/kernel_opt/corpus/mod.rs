@@ -1926,6 +1926,7 @@ mod entries_gpu_124;
 mod entries_gpu_125;
 mod entries_gpu_126;
 mod entries_gpu_127;
+mod entries_gpu_128;
 mod entries_gpu_13;
 mod entries_gpu_14;
 mod entries_gpu_15;
@@ -2116,6 +2117,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_125::entries());
     entries.extend(entries_gpu_126::entries());
     entries.extend(entries_gpu_127::entries());
+    entries.extend(entries_gpu_128::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2706,7 +2708,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "precompute-chain-fused-intermediates-never-materialized",
         ],
     ),
-    // D: Dispatch patterns (231 rules; Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion — the grammar mask recomputed per step ON DEVICE without the V×|Q| table, and the host-side branch speculation with the frequency-gated early build, Plan 282 / Research 315); Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316 — the note renumbered at the B278 merge, first allocation keeps); Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a
+    // D: Dispatch patterns (232 rules; Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window — #391 e75baeeb24 #391: the layer-start look-ahead fusion computes the norm+signed-transform chain AHEAD of its graph position, records the downstream nodes in a `precomputed` set the evaluation loop SKIPS, gated by the memory-overlap walk over the intervening GDN conv-state nodes + leaf-only early operands + unit use-counts + no stream concurrency; the deeper transform+quant fusion wins the shared nodes — the norm+transform fusion stands aside through the alias-aware 8-node window; bit-identity by arithmetic-order replay, Plan 287 / Research 320); Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion — the grammar mask recomputed per step ON DEVICE without the V×|Q| table, and the host-side branch speculation with the frequency-gated early build, Plan 282 / Research 315); Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316 — the note renumbered at the B278 merge, first allocation keeps); Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2737,6 +2739,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 283 +1 (the prism b10819 window, Plan 287 / Research
+            // 320): the layer-start look-ahead fusion — compute the
+            // norm+signed-transform chain ahead of its graph position,
+            // record the downstream nodes in a precomputed set the
+            // evaluation loop skips; gated by the memory-overlap walk,
+            // leaf-only early operands, unit use-counts, no concurrency.
+            "look-ahead-fusion-precomputed-skip-overlap-walk",
             // Batch 278 +2 (the Locals conversion, Plan 282 / Research 315):
             // the grammar constraint recomputed per step ON DEVICE — one
             // thread per vocab token walks the token's bytes through the
