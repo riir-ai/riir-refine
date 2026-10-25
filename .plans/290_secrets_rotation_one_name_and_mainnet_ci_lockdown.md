@@ -87,7 +87,14 @@ same-name secret — the owner deletes the old repo secret and creates
 - [x] GLM_API_KEY (seal-game-editor) — owner rolled it at the provider;
       new value in seal-game-editor/.env (2026-10-25 (3)). Sole consumer is
       that local .env — no worker secret, no further wiring
-- [ ] HELIUS_API_KEY (jup-tool) roll — provider portal, owner-gated
+- [x] HELIUS_API_KEY — DONE 2026-10-25 (4). The live consumer was never
+      jup-tool (archived; empty .env, zero code refs) — it is the kat-service
+      `SOLANA_RPC_URL`, which EMBEDS the key: owner minted the new key;
+      verified shaped + probed `getHealth` OK on BOTH networks BEFORE any
+      push; then rebuilt both URLs (hosts preserved) and pushed the
+      `SOLANA_RPC_URL` worker secret to kat-service apex + devnet (2/2
+      rc=0); `riir-dapps/.env` + `kat-service/.env` mirrors synced. Old key
+      dies with the Helius dashboard revocation
 - [x] HELIUS_WEBHOOK_SECRET — OWNER half DONE 2026-10-25 (3): rotated at the
       Helius dashboard (provider-first flip), new value → riir-dapps/.env.
       WORKER half DONE same hour: both kat-service deployments (apex + devnet)
@@ -169,9 +176,11 @@ same-name secret — the owner deletes the old repo secret and creates
       and rotate to a worker-held deposit wallet (kat-service holding the key
       as a worker secret used only server-side) vs accept owner-held. Money
       migration is required either way — owner-gated, never automated here
-- [ ] **jup-tool TEMP_PRI_KEY_1/2 + TEMP_BURNER_KEY**: compromised-wallet keys
-      by definition — once rescue operations confirm zero remaining funds,
-      delete the lines (the keys are already public knowledge to the attacker)
+- [x] jup-tool TEMP_PRI_KEY_1/2 + TEMP_BURNER_KEY — MOOT per owner verdict
+      2026-10-25 (4): jup-tool is ARCHIVED to `/git/obsolete/jup-tool` (the
+      rescue is complete); the keys live only in the obsolete copy's .env and
+      fold into Phase 5's obsolete-purge (assume every credential there is
+      burned; nothing live reads them)
 - [ ] TEST_WALLET_KEYPAIR (riir-dapps/.env): devnet-only — delete after
       confirming no remaining consumer
 - [ ] AccountKey lineage: after the SSH rotation, confirm
