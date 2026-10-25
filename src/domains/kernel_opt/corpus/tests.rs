@@ -491,7 +491,10 @@ fn batch7_burn_cubecl_concepts_covered() {
         .iter()
         .any(|c| c.starts_with("panic-resilient autotune candidate")));
     assert!(concepts.contains(&"shape-keyed priority-ranked autotune groups"));
-    assert!(concepts.contains(&"matmul-kind-keyed kernel family dispatch"));
+    // (rider-tolerant prefix pin: Batch 280 appended the prism #380 thin-src0 widening face to this concept)
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("matmul-kind-keyed kernel family dispatch")));
     assert!(concepts.contains(&"vectorization width as an autotune dimension"));
     assert!(concepts.contains(&"1x1 convolution as direct matmul (skip im2col)"));
     // (rider-tolerant prefix pin: Batch 225 appended the vLLM #59340 processing-set face to this concept)
@@ -22041,6 +22044,103 @@ fn batch278_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-278 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch280_rules_and_riders_landed() {
+    // G1 for Batch 280: the four count-neutral prism-b10809 rider faces
+    // (Plan 284; sources the LOCAL prism clone at the scored tag
+    // `prism-b10809-b3ebc47`, detached HEAD b3ebc47c28), pinned by their
+    // verbatim marks + provenance. Count witness: corpus stays 966.
+    let corpus = build_kernel_seed_corpus();
+    let rider_marks: [(&str, &[&str]); 4] = [
+        (
+            // #308 4c3c02b9d0 -- the KV-stage-window residency purchase
+            "occupancy-before-async-consumer-ada",
+            &[
+                "nbatch_fa` 64 -> 32 and bought 2 -> 5 blocks/SM",
+                "fits only 2 blocks per SM because of shared memory and reaches 58% of the DRAM bandwidth",
+                "32k keys 122 -> 87 us",
+                "the KV STAGE WINDOW (how many keys stream through smem per iteration), NOT the compute tile",
+                "Batch 280 / Plan 284",
+            ],
+        ),
+        (
+            // #309 f386da27b7 + #209 gate-1 0493f9517f -- the GB10 pair
+            "dispatcher-eligibility-predicate-lags-kernel-capability",
+            &[
+                "was enabled only for cc 12.1 (DGX Spark)",
+                "one block per output row and about 6 useful elements per block",
+                "2 tokens 8.8 -> 2.5 us",
+                "although the kernel uses no architecture-specific instructions",
+                "the audit instrument is REACHABILITY",
+                "Batch 280 / Plan 284",
+            ],
+        ),
+        (
+            // #209 gate-2 0493f9517f -- the exact-alias carve-out
+            "fuse-add-rms-norm",
+            &[
+                "shares the base pointer, type and contiguous layout of a source",
+                "a partial overlap is still rejected for everyone",
+                "block_reduce synchronizes the block before dst[col] is written",
+                "is broadcast across rows",
+                "tg128 63.88 vs 63.89 t/s",
+                "Batch 280 / Plan 284",
+            ],
+        ),
+        (
+            // #380 23f6463d2c -- the thin-src0 admission widening
+            "shape-kind-dispatch",
+            &[
+                "gives the tiled mul_mat_f",
+                "only a block or two; the vector kernel is several times faster up to its batch limit",
+                "src0_ne[1] <= 512 && ne11 <= MMVF_MAX_BATCH_SIZE",
+                "The columns are batch-invariant and exact FP32",
+                "+6% MTP K=3 decode on H200",
+                "Batch 280 / Plan 284",
+            ],
+        ),
+    ];
+    for (rid, marks) in rider_marks {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-280 rider host '{rid}' missing"));
+        for mark in marks {
+            assert!(
+                entry.gpu_concept.contains(mark),
+                "batch-280 rider on '{rid}' missing mark: {mark}"
+            );
+        }
+    }
+
+    // Count witness: the batch is count-neutral -- corpus stays 966.
+    assert_eq!(
+        corpus.entries.len(),
+        966,
+        "batch 280: count-neutral rider pack (966 stands; prior: batch 278 re-pin 966)"
+    );
+
+    // Provenance: every Batch-280 rider names the fork pin.
+    let pin = "prism-b10809-b3ebc47";
+    for rid in [
+        "occupancy-before-async-consumer-ada",
+        "dispatcher-eligibility-predicate-lags-kernel-capability",
+        "fuse-add-rms-norm",
+        "shape-kind-dispatch",
+    ] {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-280 rider host '{rid}' missing"));
+        assert!(
+            entry.gpu_concept.contains(pin) || entry.gpu_concept.contains("4c3c02b9d0") || entry.gpu_concept.contains("f386da27b7") || entry.gpu_concept.contains("0493f9517f") || entry.gpu_concept.contains("23f6463d2c"),
+            "batch-280 rider on '{rid}' missing its fork provenance"
         );
     }
 }

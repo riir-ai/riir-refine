@@ -1,6 +1,6 @@
 # Plan 284 — Batch 280: the prism-b10809 +22 residual rider faces
 
-**Status:** IN PROGRESS — claim `PENDING` (claim row lands with this plan in the same commit)
+**Status:** COMPLETE — landed; claim `70146d741` discharged by the landing commit
 **Claimed:** shikuwa/4090 riir-refine idle loop, 2026-10-25, expires 2026-10-27T~14:xx +07
 
 Batch 280 converts the four sm_89-relevant residual faces staged detection-only in the
@@ -30,11 +30,11 @@ Count-neutral: corpus stays **966**. All four land as RIDER marks with verbatim 
 - [x] T0: sources at the pin — local prism clone verified at `b3ebc47c28` (scored tag), all four commits read in full
 - [x] T1: dedup greps — gpu_43 (B277 91-layout rider), gpu_16 (B116/B204/B225 riders), popcorn `fuse-add-rms-norm` (bare-thin; Research 091 flagged the rider home), popcorn `shape-kind-dispatch` (bare-thin); #30804 same-face REFUTED; gpu_49's mmvq family = layout lane, NOT admission (cite-only kinship for #380)
 - [x] T2: claim row in `.distill/001_mining_queue_snapshot.md` + this plan, one commit, PUSH before authoring
-- [ ] T3: author the four rider marks (verbatim quotes at the pin; cross-cites between the #209 halves; the nbatch_fa-is-not-the-compute-tile boundary named explicitly in face 1)
-- [ ] T4: extend the corpus gate — `batch280_rules_and_riders_landed`: rider (rule_id, mark, provenance) triples + count witness 966
-- [ ] T5: gates — kernel_opt lib (floor 3225+), default lib (floor 2729), clippy −D ×3 postures (default / all-features / no-default)
-- [ ] T6: Research 317 rider paragraph + snapshot landing row + plan ticks
-- [ ] T7: commit + push (`feat: batch 280: ...`)
+- [x] T3: author the four rider marks (verbatim quotes at the pin; cross-cites between the #209 halves; the nbatch_fa-is-not-the-compute-tile boundary named explicitly in face 1)
+- [x] T4: extend the corpus gate — `batch280_rules_and_riders_landed`: rider (rule_id, mark, provenance) triples + count witness 966 (plus the batch7 concept pin repaired rider-tolerant — third occurrence of the established pattern)
+- [x] T5: gates — batch280 gate 1/0; kernel_opt lib 3226/0; default lib 2729/0; clippy −D ×3 postures clean (hard-link notices only, the known box artifact)
+- [x] T6: Research 317 rider paragraph + snapshot landing row + plan ticks
+- [x] T7: commit + push (`feat: batch 280: ...`)
 
 ## Defers
 
