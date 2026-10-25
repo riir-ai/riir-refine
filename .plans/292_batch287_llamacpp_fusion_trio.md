@@ -1,0 +1,38 @@
+# Batch 287 — the llama.cpp fusion trio: P81 (#29948 gate/up MMQ+GLU), P82 (#30489 GLU-into-quantize), P83 (#31025 MRoPE+set-rows)
+
+**Status:** CLAIMED 2026-10-26 ~02:0x +07 (shikuwa/4090, riir-refine idle loop — overflow-continuation session; the league-intel row's staged "post-B285/B279 batch leads", slot cleared by the B286 landing `861857af1`; zero GPU throughout — the sibling QRR cell holds it, kernel_opt corpus work is CPU-only; box quiet-enough: CPU 13%, ~17 GiB free, 0 cargo/rustc). Plan + claim land in one commit, PUSH before authoring.
+
+## Sources (verify EVERY quote verbatim at these revs at T0 — the B96-98 law)
+
+- `ggml-org/llama.cpp @ c49edf0963a76d5e78b2a7278c9bd5b71d26c84f` (#29948 "CUDA: fuse FFN gate/up matmuls and GLU in MMQ with interleaved gate/up rows", merged 2026-10-25T09:24:38Z, MIT) — P81's surface.
+- `ggml-org/llama.cpp` PR #30489 "ggml-cuda: fuse GLU into the MMQ Q8_1 activation quantization" (**OPEN at authoring** — head pinned at fetch time, disclosed in-rule; watch-join re-verifies at merge) — P82's surface. In-PR content risk classes on record: the #29171 F16-scores in-PR revert (adopt-nothing-without-the-revert-reason law); P82's own body quotes the +1.0..+1.8% pp figures at OUR box class.
+- `ggml-org/llama.cpp @ a55c16e4ee532aa36d55f5756f3ba28a21a2b62b` (#31025 "ggml-cuda: fuse qwen MRoPE + set-rows", merged 2026-10-25T09:15:45Z, MIT) — P83's surface.
+
+## Candidates (the enrichment's face split is INPUT; T1 greps + T2 authoring adjudicate final disposition)
+
+- **P81 #29948** — face split per the 10-25 enrichment row (vocabulary-variant grep already run there):
+  - core interleave+GLU-write-back: **EXISTS** at the B251 rider on `fuse-gate-up-gemv-activation` (the GEMV instance; #29948 is the MMQ/prefill instance — same law family EXTENDED → dedup-note/rider face, never a duplicate rule; B205 a3a1c47 / B236 convergence precedents).
+  - column-tiles-innermost tile-order: **LIKELY-NOVEL FACE** → rider on `l2-grouped-tile-schedule` (the fused-pair footprint>L2 binary ordering face + the measured ±20% order-swing datum [GB10 pp2048: Q4_K 14.61 row-innermost vs 9.97 column-innermost ms; Q8_0 21.0 vs 9.1] + the launch-order-inherits-the-fusion clause).
+  - wave-efficiency fusion-admission: **PARTIAL** (B127 streamk-starved + B253 stream-k-grid-capped own starvation/grid faces; the "fuse only when the UNFUSED dispatch would pick tiling" face is unowned) → small rider on either host.
+  - per-op-vs-block verdict divergence (5090 fused matmul +2% slower per-op, whole-FFN block −14%): context_notes face, not a rule.
+  - Conditions/faces from the merge body: loaders interleave up/gate weight rows in chunks of 8 (rows r/r+8 of an MMA tile, one thread holds an up+gate pair); fused write-back computes GLU from registers, output rows HALVED; the ≥90% wave-efficiency fuse-gate `ggml_cuda_should_fuse_mul_mat_q`; types Q4_K/Q5_K/Q6_K/Q8_0/IQ4_XS on Turing+; anchor-priority interaction with #30489 (GLU anchored first → #30489's down-side fusion skips those FFNs; complementary split for mixed gate/up types, UD quants 30/64 layers; both together 3040 vs 3023 t/s Ada pp512).
+- **P82 #30489** — the CONSUMER-FOLD axis: fold the activation into the CONSUMER's quantization kernel; the standalone GLU kernel's F32 output is written to global and re-read exactly once by the down-projection's Q8_1 quantizer; computing it in the quantize kernel's registers deletes one launch + one full write+read of [n_ff, n_expert_used, n_tokens] F32 per FFN per ubatch. Decision content: the bounded FORWARD WINDOW (fusion skips unless every intervening node + its sources are disjoint from the output's allocated memory and the matmul's other inputs incl. view chains are already computed); MUL_MAT_ID restricted to non-broadcast activations (`glu->ne[1] == ids->ne[0]`), scatter path unfused; covers {GLU,MUL_MAT} dense AND {GLU,MUL_MAT_ID} routed incl. the MoE-cache slot map; bit-identical (52.4M-float census); decode unaffected (already fused on MMVQ). Host: own rule OR rider on `fused-activation-quantize-for-gemv-consumer` (the family host — the enrichment names its B111 vllm rider) — T1 decides; the forward-window disjointness conditions are the likely own-rule warrant if any.
+- **P83 #31025** — count-neutral rider on `fused-activation-quantize-for-gemv-consumer` (the enrichment's verdict): extends rope+set-rows fusion from NORMAL/NEOX to MROPE/IMROPE; `rope_multi` gains `row_indices`/`set_rows_stride` — rotated output writes DIRECTLY to its KV-cache slot (`idst = i1*s1 + i0/2 + row_indices[i2]*set_rows_stride`), zero intermediate round-trip; separate D template param = f32 compute, cast-at-write to f16 cache; partial rotation (`n_dims < ne00/2`) covered at all 4 modes × f16/f32.
+
+## Tasks
+
+- [ ] T0 Clone `.raw/b287-llamacpp` (blob-filtered; dump+grep per file — the plan-288 T0 lesson: tree-wide `git grep` hangs on blob-filtered clones) at the two squash pins + fetch #30489's diff/head at conversion time; re-verify every quote verbatim; record #30489's head SHA in-rule disclosure.
+- [ ] T1 Dedup re-verification, 3+ vocabulary variants per candidate face (corpus moved +3 via B286 since the enrichment's grep): interleave/epilogue/glu/wave/l2-reuse/set_rows/tile-order/swizzle/pair-launch/column-innermost/consumer-fold/quantize-fuse/forward-window. Confirm the enrichment's dispositions at the CURRENT corpus head or re-adjudicate.
+- [ ] T2 Author: riders on their owned hosts (entries files per host) + any own rule into `entries_gpu_131.rs` (renumber per first-allocation-keeps; count-neutral honest if T1 lands all-rider) + ORIGINAL minimal fixtures (#[test]-carrying, no upstream literals) + the batch287 needle + parse gates.
+- [ ] T3 Count pins ONLY if an own rule lands (the failing-test enumerator is the reliable list; riders are count-neutral, the B235 precedent) — kernel_opt total, category counts, router expert total, Plan-003 table if touched, AGENTS.md ×2.
+- [ ] T4 Standing gates: batch287 needle + parse gates; kernel_opt lib (`--features kernel_opt`) 0F; default lib 0F; clippy `-D warnings` ×3 postures (default / all-features / no-default, --all-targets).
+- [ ] T5 Retrieval floors re-measure (kernel_opt corpus delta even count-neutral — riders edit rule bodies; ~50-500 s at this box's load): kernel self-variants + blended floors HELD, no re-pin expected; a decay FAILS the batch.
+- [ ] T6 NOT owed (record): freeze gen2/gen3 (P30 — zero clippy-corpus delta); score-bench (kernel_opt-only delta); release-set binary rebuild (kernel_opt outside the release set).
+- [ ] T7 Research note `.research/NNN_batch287_llamacpp_fusion_trio.md` — number RE-DERIVED AT LANDING (walk #17's claim holds 325 for its own landing, due 07:00 +07 today; if B287 lands first it takes 325 and the walk re-derives 326 — re-read `.research/.highwater` + `dual_allocation_gate` at both landings) + `.docs/11_domains/kernel_opt.md` batch row (the B286 missing-row repair precedent — land it WITH the batch) + the snapshot landing row; `rm -rf .raw/b287-*` at close.
+- [ ] T8 Commit `feat: batch 287: ...` + push (claim discharged by the landing row).
+
+## Sequencing
+
+- Walk #17 (this lane's claim, expiry 2026-10-27 ~04:3x +07): due 07:00 +07 today, note slot 325-unless-re-derived. Grading is zero-cargo/zero-GPU — it interleaves with any remaining B287 gate at the window (the B286 claim row's own sequencing law, applied in reverse).
+- B285 (M3, bbtree → rust_perf corpus) is DISJOINT from this batch's kernel_opt slice; AGENTS.md shared — different bullets.
+- #30489 watch-join: at merge, re-verify the P82 pin against the merge SHA (the rule's disclosure names this owed re-verification).
