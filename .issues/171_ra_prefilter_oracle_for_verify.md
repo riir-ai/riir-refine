@@ -1,7 +1,7 @@
 # Issue 171 — The blaze idea, ported: rust-analyzer in-process pre-filter oracle for `fix_verify` + `--fix-compile`
 
-**Status:** VERDICT PASSED — `#Verdict: AGREE` (round 1, final_round confirmed 2026-10-25) on the five adjudication questions; implementation still gated on T0 (measure-first) and the GOAT below on a recorded corpus
-**Claimed:** claude-amo-171, 1792924800, expires 2026-10-27T12:00Z (T0a census + T0b package-scoped re-checks first)
+**Status:** T0b LANDED + PROMOTED (`1f77c585`, GOAT PASS — `fix_verify` implies `scoped_recheck`); T0a + T1 MEASURED → **T2–T5 DEFERRED** ([Bench 121](../.benchmarks/121_issue171_t0_scoped_recheck_and_ra_prefilter_load.md)): RA load is 8.5× an incremental cargo round on riir-refine (11.7s vs 1.38s; 3.17s floor on a 1-file crate) and E0308 false-reds on clean code — the prefilter cannot pay below ~10 rounds/run, the census tops out at 2. Re-open trigger: RA per-run cost < one cargo round, or a recorded ≥10-round corpus.
+**Lease released:** 2026-10-25 (claude-amo-171) — T0a/T0b/T1 done (`1f77c585`); nothing further claimed.
 **Lease closed:** 2026-10-25 ~18:1x +07 (zed-glm-m3-verdict171) — the claimed verdict session ran to `#Verdict: AGREE — final_round confirmed` and landed in the verdict record above; nothing further claimed under this lease.
 (the verdict ping-pong session for the five adjudication questions below — claim posted before the session; the M3 path the release note invites. The preserved five questions ride the release note; no other work claimed.)
 
@@ -137,13 +137,13 @@ authority must stay cargo. In-process RA keeps the dep tree honest and the autho
 
 ## Tasks
 
-- [ ] T0a `n_checks` distribution on the Bench-019 corpus + misses-queue replays (defer-if-2 gate, verdict-tightened: defer only if 2-check AND no high-agreement class set covers most dirty runs).
-- [ ] T0b Package-scoped re-checks: skip clean packages unaffected by a round's reverts (land regardless).
-- [ ] T1 Spike: the INSTALLED rust-analyzer binary (the `rust_analyzer_bin` seam, pruner.rs:68) over the Bench-019 fixtures; the per-CLASS agreement table vs rustc; escalate to in-process `ra_ap_*` ONLY if the binary mode cannot span-match.
-- [ ] T2 The tiered prefilter: class-split pre-reverts, trusted classes final, disagreeing classes through the rescue round; rescue feeds `attribute_and_revert`; rescue-scoped revert fallback (never RestoreAll cascade).
-- [ ] T3 Corpus GOAT (G1–G4 above) on recorded batches; verdict lands in `.benchmarks/`.
-- [ ] T4 Divergence log → post-mining intake; re-tier classes on evidence; adapt or demote on the record.
-- [ ] T5 (only after T3 PASS) the `--fix-compile` consumer spike.
+- [x] T0a `n_checks` distribution on the Bench-019 corpus + misses-queue replays (defer-if-2 gate, verdict-tightened: defer only if 2-check AND no high-agreement class set covers most dirty runs).
+- [x] T0b Package-scoped re-checks: skip clean packages unaffected by a round's reverts (land regardless). — `1f77c585`, GOAT PASS, promoted.
+- [x] T1 Spike: the INSTALLED rust-analyzer binary (the `rust_analyzer_bin` seam, pruner.rs:68) over the Bench-019 fixtures; the per-CLASS agreement table vs rustc; escalate to in-process `ra_ap_*` ONLY if the binary mode cannot span-match. — binary span-matches (no escalation); load 8.5× a cargo round; 113 (file,code) false-reds on a clean tree incl. E0308 (Bench 121).
+- [-] T2 The tiered prefilter: class-split pre-reverts, trusted classes final, disagreeing classes through the rescue round; rescue feeds `attribute_and_revert`; rescue-scoped revert fallback (never RestoreAll cascade).
+- [-] T3 Corpus GOAT (G1–G4 above) on recorded batches; verdict lands in `.benchmarks/`.
+- [-] T4 Divergence log → post-mining intake; re-tier classes on evidence; adapt or demote on the record.
+- [-] T5 (only after T3 PASS) the `--fix-compile` consumer spike.
 
 ## Related
 
