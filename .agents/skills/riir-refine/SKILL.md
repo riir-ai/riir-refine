@@ -314,8 +314,9 @@ skill points agents there). Per sweep:
   — never leave prose after the expiry token on a `Claimed:`-shaped line,
   never put an ISO date in the epoch slot (digits only): an unparseable
   claim-shaped line makes `claim_lease_check` exit 1 (BLIND) for the
-  WHOLE repo. Repaired this date: riir-refine `.plans/225` (`f58f194b7`),
-  riir-ai `.issues/971` + `.plans/638` (`6b379b3e6`).
+  Repaired this date: riir-refine `.plans/225` (`f58f194b7`),
+  riir-ai `.issues/971` + `.plans/638` (`6b379b3e6`); riir-ai `.issues/1122` reshaped 2026-10-25
+  (`dcf0262af` — trailing prose after the expiry token; claim preserved).
 - **Plan selection reads ORIGIN, not the working tree** (2026-08-27, the
   Plan-346 stale-copy trap): before ranking/dispatching any `.plans/` work,
   use `riir-refine/scripts/plan_read_origin.sh <repo> (--list | <file>)` —
