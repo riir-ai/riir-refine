@@ -1,6 +1,6 @@
 # Plan 290 — Secrets rotation, one-name CF token, and mainnet CI-only lockdown
 
-**Status:** IN PROGRESS — audit confirmed 2026-10-25; owner rotation steps open
+**Status:** IN PROGRESS — Phase 0+1 COMPLETE, Phase 2 ~70% (deferrals named), Phases 3–5 open. Session record 2026-10-25 (2): ops token wired end-to-end (secret push + deploy `07046fa0` + backfill verify), riir-refine bearers re-minted, `GH_PAT` retired for `SIBLING_REPOS_TOKEN` (`9c66ce72`).
 
 ## Context (the audit, 2026-10-25)
 
@@ -56,7 +56,8 @@ same-name secret — the owner deletes the old repo secret and creates
       riir-reflexer/.env, jup-tool/.env (gitignored local files)
 - [x] `riir-refine/.env` already carries no CF tokens (consistent with the revoke)
 - [ ] Owner: CF dashboard → API Tokens → confirm the token LIST shows zero
-      ACTIVE tokens (tokens minted on other boxes wouldn't be on this disk)
+      ACTIVE tokens besides the fresh `CLOUDFLARE_OPS_API_TOKEN` (minted
+      2026-10-25) — i.e. nothing stale-active from other boxes
 
 ## Phase 1 — one name (LANDED this commit)
 
@@ -64,41 +65,70 @@ same-name secret — the owner deletes the old repo secret and creates
       (worker.js, worker.test.mjs, wrangler.toml comment, verify_token.mjs,
       README, AGENTS.md, root README, .env.example, ops_dashboard.yml,
       gen_dashboard.py disclosure text) — 48/48 housekeeping tests pass
-- [ ] Owner: `wrangler secret put CLOUDFLARE_OPS_API_TOKEN` (housekeeping) with
-      the NEW analytics token once Phase 2 mints it; old `CF_API_TOKEN`
-      binding deleted by the same push being overwritten? No — binding rename
-      lands with the next worker deploy; push BOTH the deploy and the secret
-      in the same rotation window
-- [ ] Owner: GitHub riir-refine → Secrets: delete `CF_API_TOKEN`, create
-      `CLOUDFLARE_OPS_API_TOKEN` (same value class: Analytics:Read + Workers AI)
+- [x] Owner: `wrangler secret put CLOUDFLARE_OPS_API_TOKEN` (housekeeping)
+      with the NEW analytics token — DONE 2026-10-25 (2): value minted by the
+      owner (scopes verified live: Analytics GraphQL + Workers AI read),
+      pushed via the documented pipe, deployed same window (version
+      `07046fa0`) — binding rename ACTIVE; stale `CF_API_TOKEN` binding
+      confirmed GONE from the worker (secret list = exactly the two names);
+      `/backfill?days=1` completed 18 GraphQL subrequests clean = the token
+      works end-to-end (the pre-fix dead hours stay `ok:false` by the
+      never-overwrite design; the next hourly cron writes live rows)
+- [x] Owner: GitHub riir-refine → Secrets: delete `CF_API_TOKEN`, create
+      `CLOUDFLARE_OPS_API_TOKEN` — DONE 2026-10-25 (2): owner set the repo
+      secret (timestamp verified); no `CF_API_TOKEN` repo secret existed to
+      delete; `GH_PAT` repo secret deleted in the same window (see Phase 2)
 
 ## Phase 2 — roll every live credential (owner, dashboards)
 
-- [ ] **GH_RAW_TOKEN (LIVE)** — revoke at github.com/settings/tokens; re-mint
-      fine-grained with only what the raw fetch needs; new value → riir-dapps/.env
-- [ ] GLM_API_KEY (seal-game-editor) roll
+- [x] **GH_RAW_TOKEN (LIVE)** — owner regenerated 2026-10-25 (1) as
+      `riir-kat-service-score-read` (fine-grained score-history read); wired
+      into BOTH kat-service CF envs (devnet + apex) + riir-dapps/.env
+- [ ] GLM_API_KEY (seal-game-editor) roll — provider portal, owner-gated
 - [ ] HELIUS_API_KEY (jup-tool) + HELIUS_WEBHOOK_SECRET (riir-dapps/.env +
       kat-service/.env) roll — kat-service already carries the
-      `helius_webhook_secret_previous` rotation window, use it
-- [ ] Self-minted bearers re-mint (64-hex, `wrangler secret put` + matching
-      local .env): READ_TOKEN + DASHBOARD_TOKEN (riir-refine two workers),
-      KAT_CRANK_TOKEN + KAT_MINT_TOKEN (kat-service; housekeeping also carries
-      KAT_MINT_TOKEN), AUDIT_DRAIN_TOKEN (riir-chain), DECISION_TOKEN
-      (riir-rethink), WEBHOOK_TOKEN (jup-tool)
+      `helius_webhook_secret_previous` rotation window, use it (owner-gated:
+      Helius dashboard)
+- [x] Self-minted bearers re-mint (64-hex, `wrangler secret put` + matching
+      local .env) — DONE 2026-10-25 (2) for the five with no cross-service
+      pairing: READ_TOKEN + DASHBOARD_TOKEN (riir-refine housekeeping +
+      dashboard workers; new READ_TOKEN verified 200 on `/hours`; dashboard
+      gate is DORMANT — `AUTH_MODE=public` — so no consumer breaks),
+      AUDIT_DRAIN_TOKEN (riir-chain-audit-drain worker; NO client configured
+      anywhere on this box — verified deployer/dapps/seal-remake/sdk clean),
+      DECISION_TOKEN (riir-rethink/.env only — `wrangler containers list` is
+      EMPTY: no live stage exists, the next stage deploy carries the fresh
+      `wrangler secret put` per deploy.yaml's own comment). DEFERRED with
+      reasons: WEBHOOK_TOKEN (jup-tool) must rotate IN PAIR with the token
+      stored in the HELIUS dashboard webhook config — rotating the worker
+      secret alone breaks the rescue webhook (owner action); KAT_CRANK_TOKEN
+      + KAT_MINT_TOKEN ride the kat-service lane — another agent's KAT
+      account-key rotation (`riir-dao/.proposals/001`) is in flight on that
+      surface; rotate after it lands. Correction while executing:
+      housekeeping does NOT carry KAT_MINT_TOKEN (secret roster = exactly
+      `CLOUDFLARE_OPS_API_TOKEN` + `READ_TOKEN`; the mint-anchor POST lane is
+      inert there) — only kat-service holds the KAT bearers
 - [ ] KAT_WALLET_SESSION_SECRET + KAT_WAL_PASSPHRASE rotate;
       KAT_WALLET_OAUTH_CLIENT_SECRET rotates at the OAuth provider
 - [x] GitHub secrets: SIBLING_REPOS_TOKEN (regen 2026-10-25, ~90-day expiry,
       read-only posture — owner done) · RELEASE_PAT (`cargo-heal-release-bot`
       regen 2026-10-25, value → riir-refine repo secret) · maxion-riir-* trio
       DELETED (obsolete project, never used) · duplicate `riir-chain CI sibling
-      read` deleted after the sibling regen · CF_DEPLOY_API_TOKEN (riir-reflexer)
-      still open · GH_PAT (ops_dashboard lane) owner-declined/deferred
+      read` deleted after the sibling regen · **GH_PAT RESOLVED 2026-10-25
+      (2), structurally**: the nightly's 8 private sibling checkouts +
+      preflight retargeted to the LIVE `SIBLING_REPOS_TOKEN` (one read-only
+      sibling token everywhere — the same secret rust.yml already uses;
+      `9c66ce72`), the dead `GH_PAT` repo secret DELETED, no new PAT minted —
+      the owner's token-page "done" on `riir-clippy-ops-dashboard-nightly`
+      lands as a retirement, not a rotation · CF_DEPLOY_API_TOKEN
+      (riir-reflexer) still open — owner must mint a fresh deploy-scoped CF
+      token for the repo secret
 - [ ] HF reconcile: owner says new HF_TOKEN is READ-ONLY, but M3 is the
       publisher for riir-train `data_backup.sh push` (needs WRITE scoped to
       the gist-rs dataset repos). Either the M3 token keeps a narrow write
       scope or pushes move to CI. Owner decision; rigs stay read-only
-- [ ] riir-ai/.env `HF_READ_API_KEY` — no tracked consumer; remove the line
-      after confirming nothing one-off needs it
+- [x] riir-ai/.env `HF_READ_API_KEY` — line REMOVED 2026-10-25 (2); workspace
+      grep confirmed zero tracked consumers
 
 ## Phase 3 — private keys never on disk or in plain env (the "generated on CF" law)
 
