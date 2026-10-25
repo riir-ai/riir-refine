@@ -1,7 +1,7 @@
 # Bench 121 — Issue 171 T0/T1: scoped re-check GOAT + the RA-prefilter load-cost refutation
 
 **Status:** DONE 2026-10-25. T0b GOAT **PASS → promoted** (`fix_verify` implies `scoped_recheck`). T1: the RA pre-filter **cannot pay** on measured load cost, so T2–T5 are **DEFERRED** with the numbers below.
-**Issue:** [171](../.issues/171_ra_prefilter_oracle_for_verify.md) · **Session:** claude-amo-171
+**Issue:** Issue 171 (closed 2026-10-26 — record in [HISTORY](../HISTORY.md)) · **Session:** claude-amo-171
 
 ## Box state (disclosure)
 
