@@ -85,10 +85,19 @@ same-name secret — the owner deletes the old repo secret and creates
       `riir-kat-service-score-read` (fine-grained score-history read); wired
       into BOTH kat-service CF envs (devnet + apex) + riir-dapps/.env
 - [ ] GLM_API_KEY (seal-game-editor) roll — provider portal, owner-gated
-- [ ] HELIUS_API_KEY (jup-tool) + HELIUS_WEBHOOK_SECRET (riir-dapps/.env +
-      kat-service/.env) roll — kat-service already carries the
-      `helius_webhook_secret_previous` rotation window, use it (owner-gated:
-      Helius dashboard)
+- [ ] HELIUS_API_KEY (jup-tool) roll — provider portal, owner-gated
+- [x] HELIUS_WEBHOOK_SECRET — OWNER half DONE 2026-10-25 (3): rotated at the
+      Helius dashboard (provider-first flip), new value → riir-dapps/.env.
+      WORKER half DONE same hour: both kat-service deployments (apex + devnet)
+      got the documented secret-first cutover pair —
+      `HELIUS_WEBHOOK_SECRET_PREVIOUS` = old (from kat-service/.env, len 29)
+      THEN `HELIUS_WEBHOOK_SECRET` = new (len 39), 4/4 pushes rc=0;
+      kat-service/.env synced to the new value. The provider-first order had
+      webhooks 401ing into retry until the worker push landed — the RPC poll
+      + 60 s alarm fallback kept settlement alive through the window.
+      FOLLOW-UP: after the Helius retry horizon passes (≥ 24 h), delete
+      `HELIUS_WEBHOOK_SECRET_PREVIOUS` on BOTH deployments — the toml's
+      "set ONLY during a cutover" rule
 - [x] Self-minted bearers re-mint (64-hex, `wrangler secret put` + matching
       local .env) — DONE 2026-10-25 (2) for the five with no cross-service
       pairing: READ_TOKEN + DASHBOARD_TOKEN (riir-refine housekeeping +
@@ -98,16 +107,15 @@ same-name secret — the owner deletes the old repo secret and creates
       anywhere on this box — verified deployer/dapps/seal-remake/sdk clean),
       DECISION_TOKEN (riir-rethink/.env only — `wrangler containers list` is
       EMPTY: no live stage exists, the next stage deploy carries the fresh
-      `wrangler secret put` per deploy.yaml's own comment). DEFERRED with
-      reasons: WEBHOOK_TOKEN (jup-tool) must rotate IN PAIR with the token
-      stored in the HELIUS dashboard webhook config — rotating the worker
-      secret alone breaks the rescue webhook (owner action); KAT_CRANK_TOKEN
-      + KAT_MINT_TOKEN ride the kat-service lane — another agent's KAT
-      account-key rotation (`riir-dao/.proposals/001`) is in flight on that
-      surface; rotate after it lands. Correction while executing:
-      housekeeping does NOT carry KAT_MINT_TOKEN (secret roster = exactly
-      `CLOUDFLARE_OPS_API_TOKEN` + `READ_TOKEN`; the mint-anchor POST lane is
-      inert there) — only kat-service holds the KAT bearers
+      `wrangler secret put` per deploy.yaml's own comment). OWNER VERDICT
+      2026-10-25 (3): WEBHOOK_TOKEN (jup-tool) is OBSOLETE — SKIP, no
+      rotation, strike it from every roll list. DEFERRED with reason:
+      KAT_CRANK_TOKEN + KAT_MINT_TOKEN ride the kat-service lane — another
+      agent's KAT account-key rotation (`riir-dao/.proposals/001`) is in
+      flight on that surface; rotate after it lands. Correction while
+      executing: housekeeping does NOT carry KAT_MINT_TOKEN (secret roster =
+      exactly `CLOUDFLARE_OPS_API_TOKEN` + `READ_TOKEN`; the mint-anchor POST
+      lane is inert there) — only kat-service holds the KAT bearers
 - [ ] KAT_WALLET_SESSION_SECRET + KAT_WAL_PASSPHRASE rotate;
       KAT_WALLET_OAUTH_CLIENT_SECRET rotates at the OAuth provider
 - [x] GitHub secrets: SIBLING_REPOS_TOKEN (regen 2026-10-25, ~90-day expiry,
