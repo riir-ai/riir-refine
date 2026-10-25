@@ -87,8 +87,12 @@ same-name secret — the owner deletes the old repo secret and creates
       (riir-rethink), WEBHOOK_TOKEN (jup-tool)
 - [ ] KAT_WALLET_SESSION_SECRET + KAT_WAL_PASSPHRASE rotate;
       KAT_WALLET_OAUTH_CLIENT_SECRET rotates at the OAuth provider
-- [ ] GitHub secrets: SIBLING_REPOS_TOKEN, GH_PAT, RELEASE_PAT,
-      CF_DEPLOY_API_TOKEN (riir-reflexer) — re-mint fine-grained, short expiry
+- [x] GitHub secrets: SIBLING_REPOS_TOKEN (regen 2026-10-25, ~90-day expiry,
+      read-only posture — owner done) · RELEASE_PAT (`cargo-heal-release-bot`
+      regen 2026-10-25, value → riir-refine repo secret) · maxion-riir-* trio
+      DELETED (obsolete project, never used) · duplicate `riir-chain CI sibling
+      read` deleted after the sibling regen · CF_DEPLOY_API_TOKEN (riir-reflexer)
+      still open · GH_PAT (ops_dashboard lane) owner-declined/deferred
 - [ ] HF reconcile: owner says new HF_TOKEN is READ-ONLY, but M3 is the
       publisher for riir-train `data_backup.sh push` (needs WRITE scoped to
       the gist-rs dataset repos). Either the M3 token keeps a narrow write
