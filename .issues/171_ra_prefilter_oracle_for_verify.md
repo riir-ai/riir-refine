@@ -1,8 +1,18 @@
 # Issue 171 — The blaze idea, ported: rust-analyzer in-process pre-filter oracle for `fix_verify` + `--fix-compile`
 
-**Status:** PROPOSED — awaiting Claude verdict; implementation only after the GOAT below passes on a recorded corpus
-**Claimed:** zed-glm-m3-verdict171, 1792922094, expires 2026-10-27T09:54:54Z
+**Status:** VERDICT PASSED — `#Verdict: AGREE` (round 1, final_round confirmed 2026-10-25) on the five adjudication questions; implementation still gated on T0 (measure-first) and the GOAT below on a recorded corpus
+**Lease closed:** 2026-10-25 ~18:1x +07 (zed-glm-m3-verdict171) — the claimed verdict session ran to `#Verdict: AGREE — final_round confirmed` and landed in the verdict record above; nothing further claimed under this lease.
 (the verdict ping-pong session for the five adjudication questions below — claim posted before the session; the M3 path the release note invites. The preserved five questions ride the release note; no other work claimed.)
+
+## Verdict record (2026-10-25)
+
+`#Verdict: AGREE` on all five questions; `#Verdict: AGREE — final_round confirmed` on the closing call. Reviewer path: harness `request_verdict` unavailable → headless claude CLI sub-agent reviewer (fresh context, same `#Verdict:` reply contract, one thread via `--resume`) — the research skill's reviewer-unavailable fallback, an equal verdict, recorded per its law. Session `8fd928e5-c789-40fc-8837-1ddb9f27cd14`.
+
+Three callouts ADOPTED into the design (they amend, not weaken):
+
+1. **Q3 arithmetic tightened (was an understatement):** "a pre-filter can only pay when rounds WITHOUT it exceed 2" is amended — in the ALL-TRUSTED-CLASSES case the prefilter-on loop is write-all → RA pre-revert (final) → 1 confirming cargo round = **1 round** vs prefilter-off's 2, so the prefilter pays AT 2 checks whenever RA load + one cargo check < two cargo checks. **T0a's defer condition is therefore: defer only if the corpus is 2-check AND T1 finds no high-agreement class set that covers most dirty runs** (the plain 2-check census alone no longer defers).
+2. **T0b's dependency clause is load-bearing:** "(own or dependency)" — a package depending on a reverted package MUST be re-checked. T0b resolves the intra-workspace dependency graph (cargo metadata or manifest walk) and never shortcuts that clause; its cost is weighed against the per-skipped-package saving (subprocess spawn + JSON parse).
+3. **G2 tests the all-trusted case as a GAIN:** the "no regression on clean or 2-check cases" clause explicitly includes the all-trusted-classes case at 2 checks, where the mechanism should show a GAIN, not merely no regression — the promotion bar must prove what the mechanism actually delivers.
 **Lease released:** 2026-10-25T17:5x +07 (shikuwa/4090) — the verdict session could NOT run from this box: three `request_verdict` attempts (2 sessions + 1 fresh) all returned "Authentication required" from the `claude_code` reviewer backend (no Claude Code auth on the 4090). The verdict claim (commit `56a602a3`) is RELEASED so an unblocked lane (e.g. the M3, which ruled rethink 037 today) can run the ping-pong. The five adjudication questions were composed and are preserved in the session record — a claiming lane can reuse them verbatim: (1) does the T0→T1→T2→T3 ladder merit AGREE as written — any flaw in the tiered-rescue mechanism, class-split trust model, or G1 SUPERSET-OR-EQUAL yield contract; (2) is T0b correctly severable — safe to skip re-checking packages a round's reverts (own or dependency) did not touch given the verify loop's revert semantics; (3) is the 2-check arithmetic sound, or is there a case class where the pre-filter pays even at 2 checks (rescue round avoided when ALL dirty classes measure trusted); (4) installed-binary-first vs co-spiking the in-process ra_ap_* lane at T1; (5) should T0b land ahead of/independent of the verdict, or wait for the ruling. Implementation does NOT follow from this release — T0 measures first per the issue's own gate.
 **Date:** 2026-10-25
 **Type:** POC / optimization (healer wall-clock; verification oracle substrate)
@@ -33,8 +43,7 @@ rounds come from rustc hiding later errors behind earlier ones, not from per-edi
 In the common dirty case (round 1 dirty + round 2 clean = 2 checks), a pre-filter plus an
 unconditional rescue round costs the SAME 2 checks plus RA load — zero saving. A pre-filter can
 only pay when (a) rounds WITHOUT it exceed 2, AND (b) trusted pre-reverts skip the rescue round.
-So this issue measures first (T0) and closes as DEFER-with-number if the corpus says 2-check
-world.
+So this issue measures first (T0). The DEFER condition (verdict-tightened 2026-10-25): defer only if the corpus is 2-check AND T1 finds no high-agreement class set that covers most dirty runs — in the all-trusted-classes case the prefilter pays AT 2 checks (1 round + RA vs 2 rounds), so a plain 2-check census alone no longer defers.
 
 ## The port (tiered, substrate-first — T0 gates everything)
 
@@ -101,8 +110,7 @@ authority must stay cargo. In-process RA keeps the dep tree honest and the autho
 2. **If the binary-mode seam suffices, there is no new dep at all.** The `ra_ap_*` escalation
    (no semver — pin + GOAT on bump) happens only if T1 proves the installed binary cannot do
    the span-matching.
-3. **The 2-check world is the likely one.** Batch-revert-per-round is already near-optimal;
-   T0a may honestly close this issue. That is a correct answer, recorded with the number.
+3. **The 2-check world is the likely one — but no longer sufficient to defer by itself.** The all-trusted-classes case pays at 2 checks (verdict Q3 amendment); T0a defers only when the corpus is 2-check AND T1 finds no high-agreement class set covering most dirty runs. A plain DEFER on the census alone would close an issue whose mechanism has a live 2-check win.
 4. **RA load time can exceed the checks it replaces** on a large workspace warm-cache. G2
    counts it IN the total — never an amortization footnote.
 5. **The naive prefilter is REJECTED by design:** reverting on RA red with no rescue trades
@@ -128,7 +136,7 @@ authority must stay cargo. In-process RA keeps the dep tree honest and the autho
 
 ## Tasks
 
-- [ ] T0a `n_checks` distribution on the Bench-019 corpus + misses-queue replays (defer-if-2 gate).
+- [ ] T0a `n_checks` distribution on the Bench-019 corpus + misses-queue replays (defer-if-2 gate, verdict-tightened: defer only if 2-check AND no high-agreement class set covers most dirty runs).
 - [ ] T0b Package-scoped re-checks: skip clean packages unaffected by a round's reverts (land regardless).
 - [ ] T1 Spike: the INSTALLED rust-analyzer binary (the `rust_analyzer_bin` seam, pruner.rs:68) over the Bench-019 fixtures; the per-CLASS agreement table vs rustc; escalate to in-process `ra_ap_*` ONLY if the binary mode cannot span-match.
 - [ ] T2 The tiered prefilter: class-split pre-reverts, trusted classes final, disagreeing classes through the rescue round; rescue feeds `attribute_and_revert`; rescue-scoped revert fallback (never RestoreAll cascade).
