@@ -1,6 +1,7 @@
 # Issue 171 — The blaze idea, ported: rust-analyzer in-process pre-filter oracle for `fix_verify` + `--fix-compile`
 
 **Status:** PROPOSED — awaiting Claude verdict; implementation only after the GOAT below passes on a recorded corpus
+**Claimed:** shikuwa-riir-refine-idle (4090), 2026-10-25T17:2x +07, expires 2026-10-27T17:2x +07 — VERDICT-SESSION claim only (the Claude ping-pong on the design; zero cargo, zero GPU, Plan-337-safe). Implementation does NOT follow from this claim — T0 measures first per the issue's own gate.
 **Date:** 2026-10-25
 **Type:** POC / optimization (healer wall-clock; verification oracle substrate)
 **Origin:** [seal-remake Proposal 009](../../seal-remake/.proposals/009_blaze_dev_loop_build_driver.md) (the dev-loop half of the same idea) · blaze (indexable-inc) as prior art, NOT as a dependency
