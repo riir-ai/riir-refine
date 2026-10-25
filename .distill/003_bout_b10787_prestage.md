@@ -1,6 +1,63 @@
 # Decode re-pin bout — PRE-STAGED 2026-10-20 ~00:5x UTC (shikuwa/4090 prep session)
 
-**Status: DISCHARGED 2026-10-20 ~13:50-14:10Z** — the bout RAN from this runbook verbatim;
+## b10819 PRE-STAGE COMPLETE 2026-10-25 ~12:1x +07 (shikuwa/4090 idle lane — the fired `prism-b10819-909f0ca` trigger's 4090-side prep; GPU window closed mid-prep, the RUN stays queued)
+
+**Done this session (all zero-GPU at write time):**
+
+1. **Fork fetched + checked out + REBUILT at the new tag**: `E:/git/vendor/prismml-llama.cpp`
+   HEAD = `909f0cac9c` (tag `prism-b10819-909f0ca`), detached (was b10809 `b3ebc47c28`;
+   the fetch moved prism `63f16c408f..909f0cac9c`). Incremental MSVC Release rebuild GREEN;
+   `build/bin/Release/llama-bench.exe` fresh 12:06 at `909f0cac`. Cache posture verified
+   byte-identical to the pinned bout posture (VS 17 2022, GGML_CUDA=ON, GGML_CUDA_FA=ON,
+   GGML_CUDA_GRAPHS=ON, GGML_NATIVE=ON, CMAKE_CUDA_ARCHITECTURES=89).
+   ⚠ **BUILD LESSON: `-j 8` DIED with `ptxas fatal: Memory allocation failure` +
+   `LLVM error: out of memory` + C1356 mspdbcore.dll (the first attempt also hit the
+   25-min tool timeout with `| tail` swallowing all output — stream to a log file
+   instead). Retry at `-j 4` = clean pass. nvcc's fat template-instance matrix +
+   CUDA 13.3 does not fit 8-way on this 32 GB box alongside the desktop.**
+2. **Model sha256 re-verified byte-exact**: `3907dc1658db1f78a9826bf8d5bcb8dc65db0d466388937af57f2294fae62ec1` (same pin as the b10787 bout).
+3. **Ours-side tuple clean == origin at prep time** (riir-ai `fd3516b65`, katgpt-rs
+   `a91b4ded7`, riir-infer `c598a9e` — all docs-only since the bout-relevant tips) →
+   **NO wt-bout tuple needed**; attestation = riir-ai HEAD at run time (Bench-983
+   precedent). RE-VERIFY at the window (step 6's stop-condition stays armed).
+4. **No `.run_lock`** in `E:/git/riir-ai/.benchmarks/rematch/` at prep time.
+
+**The b10787→b10819 delta (10 commits) adjudicated for sm_89:**
+
+- **#393 `63f16c408f` — LOAD-BEARING**: cuts ~55-65 µs host time per decode step
+  (batched sched input uploads, no node scans on CUDA graph replay; byte-identical).
+  Host-side, every NVIDIA box with graphs — the decode cells' expected opponent gain
+  (~0.5-0.6% at our ~10.5-11 ms/step decode cadence).
+- **#391 `e75baeeb24` — sm_89-RELEVANT, 27B-caveated**: fuses residual ADD + RMS_NORM +
+  MUL + signed FWHT into one launch at both norms, bit-identical; arch-gated only by
+  `GGML_CUDA_CC_IS_NVIDIA` (verified in-diff — NOT Hopper-gated), so it fires here.
+  Their measured 9B decode +4.8-5.4% on H200 but **27B NEUTRAL** — our model is the 27B;
+  expect little at pp/tg cells, disclosed not assumed.
+- **#387 `16cedb2445` + #383 `97ea5aeee1` + #394 `8bd114795e` — INERT at sm_89 without
+  env**: #387 chunked MMA GDN prefill is opt-in `GGML_CUDA_GDN_MMA=1` + Hopper-enabled;
+  #383 GDN decode fusion is opt-in `GGML_CUDA_GDN_FUSION=1`; #394 PTQ1_0 mat-vec is
+  Hopper-class. llama-bench sets none of these.
+- #392 (x86 CPU vec_dot) / #389 (sampler host time; llama-bench's greedy path barely
+  touches it) / #325 (PTQ1_0 Turing/Ampere; we serve PQ2_0) / #296 (tests) / #400
+  (build fix): bench-inert or negligible for our three cells.
+
+**Bout-time steps (when the GPU verifies idle; ~15 min after this pre-stage):**
+unchanged from the template below — idle gate → manifest re-pin ×3
+(`d00e252587` → `909f0cac9c`; prior_pin extends with the 10-20 Bench-992 row: decode
+93.48/88.75 = 1.0528×, pp2048 3991/3360.88 = 1.1875× PASS, pp4096 3803/3332.56 =
+1.1412×; delta note = #393 host-time cut + #391 Hadamard fusion [27B-neutral datum]
++ the opt-in/Hopper trio inert at sm_89) → run the 3 cells → adjudicate (decode hold
+≥1.0×; the ±8.4% clock band watches #391's fusion; G1 pins MUST re-print: decode
+`98412dc406c4ea19` + `63496f6688c8f742`, pp2048 `0f8fddb9ef217548`, pp4096
+`23a39649102714ec`) → record (next .benchmarks number — highwater + dual-allocation
+check at write time) → push riir-ai ONE commit. New bench record for the escalation
+question: the watch's second-pass prediction was "a REAL escalation event, ~+3-8%
+opp-side vs the 1.0502× decode hold" — #391's own 27B-neutral datum suggests the
+realized opp gain lands BELOW that band; measure, never assume.
+
+---
+
+**Status: DISCHARGED 2026-10-20 ~13:50-14:10Z** — the b10787 bout RAN from this runbook verbatim;
 record = riir-ai `.benchmarks/992_prism_b10787_bout.md` (all holds held + prefill WIDENED,
 decode parity-flat, NO escalation trigger; ours tip `fea367f2c`, G1 pins EXACT ×3). This
 file now serves as (a) the 4090-side standing prebuild intel (fork rebuilt at tag
