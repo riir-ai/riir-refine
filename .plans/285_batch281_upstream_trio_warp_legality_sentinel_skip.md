@@ -48,26 +48,29 @@
 ## Tasks
 
 - [x] Plan first (this file), `.plans/.highwater` 284→285, push before authoring.
-- [ ] `entries_gpu_127.rs`: 3 own rules (L `physical-warp-size-keys-tile-legality-and-dispatch`,
+- [x] `entries_gpu_127.rs`: 3 own rules (L `physical-warp-size-keys-tile-legality-and-dispatch`,
       H `sentinel-id-skip-shrinks-work-set-zero-unowned-rows`,
       E `all-threads-reach-workgroup-barrier-no-pre-barrier-return`), fixtures
       original Rust reproductions (no upstream string literals in fixtures), quotes
       verbatim from the fetched patch text, GREP EVIDENCE + KINSHIP in-rule.
-- [ ] Rider: the Vulkan clamp-then-mask face on `clamp-tile-indices-to-sentinel-discard-at-write`.
-- [ ] `mod.rs`: mod decl + extend + 3 category-row prepends + 3 header comments
+- [x] Rider: the Vulkan clamp-then-mask face on `clamp-tile-indices-to-sentinel-discard-at-write`
+      (+ the batch17 concept pin moved to seed-prefix starts_with).
+- [x] `mod.rs`: mod decl + extend + 3 category-row prepends + 3 header comments
       (E 87→88, H 40→41, L 28→29).
-- [ ] `tests.rs`: count pins 966→969 (14 sites incl. the category-sum asserts) +
-      `batch281_rules_and_riders_landed` + `batch281_pseudocode_parses` gates.
-- [ ] `router.rs` Plan-003 assert 966→969 (line 472).
-- [ ] AGENTS.md ×2 + README.md row + `.docs/11_domains/kernel_opt.md` ledger paragraph.
-- [ ] `.research/318_batch281_upstream_trio.md` + `.research/.highwater` 317→318.
-- [ ] `.distill/001_mining_queue_snapshot.md` landing row (claim discharged).
-- [ ] Gates: batch281 gate first-run; kernel_opt lib (floor 3226 + new);
-      default lib (floor 2729); clippy −D ×3 postures; retrieval floors re-measured
-      (kernel_opt+latent_retrieval ~1 min + default `retrieval_` ~2 min, the
-      Issue-017/170 batch law). freeze/score-bench NOT owed (kernel_opt-only, P30);
-      binary rebuild NOT owed (kernel_opt outside the release set).
-- [ ] Commit `feat: batch 281: ...` + push.
+- [x] `tests.rs`: count pins 966→969 (shape-asserted python pass, 36 sites incl.
+      the Plan-003 expected table E/H/L + the stale Sum-comment repair) + the
+      batch-280 witness message prepended + `batch281_rules_and_riders_landed` +
+      `batch281_pseudocode_parses` gates (FIRST-RUN PASS).
+- [x] `router.rs` Plan-003 assert 966→969.
+- [x] AGENTS.md ×2 + README.md row + `.docs/11_domains/kernel_opt.md` ledger paragraph.
+- [x] `.research/318_batch281_upstream_llamacpp_trio.md` + `.research/.highwater` 317→318.
+- [x] `.distill/001_mining_queue_snapshot.md` landing row (claim discharged, RESHAPE not append).
+- [x] Gates: batch281 gate first-run PASS; kernel_opt lib 3228/0 (floor 3226 +2);
+      default lib 2729/0; clippy −D ×3 postures clean (hard-link notices only);
+      retrieval floors HELD 22/22 (kernel posture) + 21/21 (default posture), no
+      re-pin. freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild
+      NOT owed (kernel_opt outside the release set).
+- [x] Commit `feat: batch 281: ...` + push.
 
 ## Notes
 
