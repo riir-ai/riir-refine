@@ -30,7 +30,11 @@
 //! - [`owning_package_root`] / [`workspace_root`] — the manifest walk.
 //! - [`resolve_reported_path`] — rustc reports workspace-relative file
 //!   names; this resolves them back to on-disk paths.
+//! - [`PackageGraph`] — the resolved package dependency graph (one
+//!   `cargo metadata` per workspace), so a verify round can skip re-checking
+//!   packages no revert could have reached (Issue 171 T0b).
 
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -241,6 +245,134 @@ impl CheckRunner {
             exit_ok: output.status.success(),
         })
     }
+
+    /// The resolved package dependency graph covering `pkgs` (Issue 171
+    /// T0b): one `cargo metadata --format-version 1 --all-features` per
+    /// distinct workspace root. The FULL resolve is read (never
+    /// `--no-deps`), so path dependencies in sibling workspaces, `[patch]`
+    /// redirects and every dependency kind (normal, dev, build — the check
+    /// runs `--all-targets`) and every platform are edges. `--all-features`
+    /// makes optional deps edges too: a SUPERSET of any posture the check
+    /// runs under, which only ever costs a skipped skip.
+    ///
+    /// Never fails: a workspace whose metadata cannot be read contributes
+    /// nothing, its packages stay UNKNOWN, and [`PackageGraph::reaches_any`]
+    /// answers `None` for them — callers re-check (the pre-T0b behaviour).
+    #[must_use]
+    pub fn package_graph(&self, pkgs: &[PathBuf]) -> PackageGraph {
+        let mut graph = PackageGraph::default();
+        let mut seen_ws: HashSet<PathBuf> = HashSet::new();
+        for pkg in pkgs {
+            let ws = workspace_root(pkg).unwrap_or_else(|| pkg.clone());
+            if !seen_ws.insert(std::fs::canonicalize(&ws).unwrap_or(ws)) {
+                continue;
+            }
+            let output = Command::new(&self.cargo_bin)
+                .current_dir(pkg)
+                .args(["metadata", "--format-version", "1", "--all-features"])
+                .output();
+            match output {
+                Ok(o) if o.status.success() => {
+                    graph.absorb_metadata(&String::from_utf8_lossy(&o.stdout));
+                }
+                _ => {}
+            }
+        }
+        graph
+    }
+}
+
+/// A resolved package dependency graph, keyed by cargo package id, with
+/// on-disk directories for the path-sourced packages (the only ones an
+/// edit can touch). Built from `cargo metadata` output by
+/// [`CheckRunner::package_graph`]; several workspaces' metadata merge (a
+/// path package's id is the same in every resolve that contains it).
+#[derive(Debug, Default, Clone)]
+pub struct PackageGraph {
+    /// package id → direct dependency ids (every kind, every platform).
+    deps: HashMap<String, Vec<String>>,
+    /// package id → canonical package dir (path-sourced packages only).
+    dir_of: HashMap<String, PathBuf>,
+    /// canonical package dir → package id (path-sourced packages only).
+    id_of: HashMap<PathBuf, String>,
+}
+
+impl PackageGraph {
+    /// Merge one `cargo metadata --format-version 1` JSON document.
+    /// Returns `false` (graph unchanged) when the document is unreadable or
+    /// carries no resolve (`--no-deps` output).
+    pub fn absorb_metadata(&mut self, json: &str) -> bool {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+            return false;
+        };
+        let Some(nodes) = v.pointer("/resolve/nodes").and_then(|n| n.as_array()) else {
+            return false;
+        };
+        if let Some(pkgs) = v.get("packages").and_then(|p| p.as_array()) {
+            for p in pkgs {
+                // `source: null` = path-sourced (workspace member or a
+                // `path =` dependency): the packages edits can live in.
+                if !p.get("source").is_some_and(serde_json::Value::is_null) {
+                    continue;
+                }
+                let (Some(id), Some(manifest)) = (
+                    p.get("id").and_then(|x| x.as_str()),
+                    p.get("manifest_path").and_then(|x| x.as_str()),
+                ) else {
+                    continue;
+                };
+                let Some(dir) = Path::new(manifest).parent() else {
+                    continue;
+                };
+                let dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+                self.id_of.insert(dir.clone(), id.to_string());
+                self.dir_of.insert(id.to_string(), dir);
+            }
+        }
+        for n in nodes {
+            let Some(id) = n.get("id").and_then(|x| x.as_str()) else {
+                continue;
+            };
+            let deps: Vec<String> = n
+                .get("dependencies")
+                .and_then(|d| d.as_array())
+                .map(|d| {
+                    d.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default();
+            self.deps.insert(id.to_string(), deps);
+        }
+        true
+    }
+
+    /// Does the package at `pkg` — itself or through any transitive
+    /// dependency — include one of the `changed` package dirs (all
+    /// canonical)? `None` when `pkg` is not in the graph: UNKNOWN, and the
+    /// caller must treat it as reached (re-check).
+    #[must_use]
+    pub fn reaches_any(&self, pkg: &Path, changed: &HashSet<PathBuf>) -> Option<bool> {
+        let key = std::fs::canonicalize(pkg).unwrap_or_else(|_| pkg.to_path_buf());
+        let start = self.id_of.get(&key)?;
+        if !self.deps.contains_key(start) {
+            return None; // a package row with no resolve node — unknown
+        }
+        let mut seen: HashSet<&str> = HashSet::new();
+        let mut stack: Vec<&str> = vec![start.as_str()];
+        while let Some(id) = stack.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            if self.dir_of.get(id).is_some_and(|d| changed.contains(d)) {
+                return Some(true);
+            }
+            if let Some(ds) = self.deps.get(id) {
+                stack.extend(ds.iter().map(String::as_str));
+            }
+        }
+        Some(false)
+    }
 }
 
 pub(crate) fn is_json_line(line: &str) -> bool {
@@ -386,6 +518,75 @@ pub fn resolve_reported_path(p: &Path, ws: &Path, pkg: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 171 T0b: the graph answers transitive reach over every edge
+    /// kind, crosses a registry node, and answers UNKNOWN (`None`) for a
+    /// package missing from the resolve — never a confident `false`.
+    #[test]
+    fn package_graph_reach_is_transitive_and_unknown_is_none() {
+        let tmp = std::env::temp_dir().join(format!("co_pkg_graph_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        for d in ["a", "b", "c", "d", "lone"] {
+            std::fs::create_dir_all(tmp.join(d)).unwrap();
+        }
+        let m = |d: &str| tmp.join(d).join("Cargo.toml").display().to_string();
+        // c -> b (dev-dep) -> a ; d -> reg -> a (a [patch]-shaped edge
+        // through a registry node) ; lone has a package row but no node.
+        let json = serde_json::json!({
+            "packages": [
+                {"id": "a", "source": null, "manifest_path": m("a")},
+                {"id": "b", "source": null, "manifest_path": m("b")},
+                {"id": "c", "source": null, "manifest_path": m("c")},
+                {"id": "d", "source": null, "manifest_path": m("d")},
+                {"id": "lone", "source": null, "manifest_path": m("lone")},
+                {"id": "reg", "source": "registry+https://x", "manifest_path": "/nowhere/Cargo.toml"}
+            ],
+            "resolve": {"nodes": [
+                {"id": "a", "dependencies": []},
+                {"id": "b", "dependencies": ["a"]},
+                {"id": "c", "dependencies": ["b"]},
+                {"id": "d", "dependencies": ["reg"]},
+                {"id": "reg", "dependencies": ["a"]}
+            ]}
+        })
+        .to_string();
+        let mut g = PackageGraph::default();
+        assert!(g.absorb_metadata(&json));
+        assert!(
+            !g.absorb_metadata("{\"packages\": []}"),
+            "no resolve = no-deps output, refused"
+        );
+        let canon = |d: &str| std::fs::canonicalize(tmp.join(d)).unwrap();
+        let changed: HashSet<PathBuf> = [canon("a")].into_iter().collect();
+        assert_eq!(g.reaches_any(&tmp.join("a"), &changed), Some(true), "self");
+        assert_eq!(
+            g.reaches_any(&tmp.join("c"), &changed),
+            Some(true),
+            "transitive"
+        );
+        assert_eq!(
+            g.reaches_any(&tmp.join("d"), &changed),
+            Some(true),
+            "via registry node"
+        );
+        let only_c: HashSet<PathBuf> = [canon("c")].into_iter().collect();
+        assert_eq!(
+            g.reaches_any(&tmp.join("a"), &only_c),
+            Some(false),
+            "edges are directed"
+        );
+        assert_eq!(
+            g.reaches_any(&tmp.join("lone"), &changed),
+            None,
+            "no node = unknown"
+        );
+        assert_eq!(
+            g.reaches_any(&tmp.join("nope"), &changed),
+            None,
+            "absent = unknown"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn owning_package_root_walks_up() {

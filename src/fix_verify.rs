@@ -85,7 +85,7 @@ use serde::Deserialize;
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
     check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict,
+    CheckVerdict, PackageGraph,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -146,6 +146,11 @@ pub struct VerifyReport {
     pub reverted: Vec<RevertRecord>,
     /// cargo check invocations (baseline + rounds).
     pub n_checks: usize,
+    /// Per-package re-checks SKIPPED because the package was clean in the
+    /// previous round and no revert reached it — its own files nor any
+    /// (transitive, any-kind) dependency (Issue 171 T0b). Each skip is a
+    /// check whose verdict is already known: same inputs, same verdict.
+    pub skipped_checks: usize,
     /// Why verification could not run (cargo missing, spawn failure...).
     pub error: Option<String>,
 }
@@ -166,6 +171,18 @@ struct CheckOutcome {
 /// path.
 pub struct FixVerifier {
     runner: CheckRunner,
+    /// Issue 171 T0b: skip re-checking packages a round's reverts could
+    /// not reach. Defaults to [`scoped_recheck_default`].
+    scoped_recheck: bool,
+}
+
+/// The default posture for package-scoped re-checks (Issue 171 T0b): ON
+/// with the `scoped_recheck` feature, unless the kill-switch
+/// `RIIR_REFINE_SCOPED_RECHECK=0` is set.
+#[must_use]
+pub fn scoped_recheck_default() -> bool {
+    cfg!(feature = "scoped_recheck")
+        && std::env::var("RIIR_REFINE_SCOPED_RECHECK").map_or(true, |v| v != "0")
 }
 
 impl Default for FixVerifier {
@@ -179,7 +196,16 @@ impl FixVerifier {
     pub fn new() -> Self {
         Self {
             runner: CheckRunner::new(),
+            scoped_recheck: scoped_recheck_default(),
         }
+    }
+
+    /// Force package-scoped re-checks on or off (Issue 171 T0b; the GOAT
+    /// gate's A/B seam — production callers take the default).
+    #[must_use]
+    pub fn with_scoped_recheck(mut self, on: bool) -> Self {
+        self.scoped_recheck = on;
+        self
     }
 
     /// Append extra cargo args to every check (feature sets etc.).
@@ -195,6 +221,7 @@ impl FixVerifier {
     pub fn with_cargo_bin(bin: impl Into<String>) -> Self {
         Self {
             runner: CheckRunner::new().with_cargo_bin(bin),
+            scoped_recheck: scoped_recheck_default(),
         }
     }
 
@@ -231,6 +258,13 @@ impl FixVerifier {
         }
         let mut pkgs: Vec<PathBuf> = by_pkg.keys().cloned().collect();
         pkgs.sort();
+        // touched-file index → owning package index (T0b bookkeeping).
+        let mut pkg_of: Vec<usize> = vec![0; touched.len()];
+        for (pi, pkg) in pkgs.iter().enumerate() {
+            for &idx in &by_pkg[pkg] {
+                pkg_of[idx] = pi;
+            }
+        }
 
         // 1. Baseline on the unmodified tree (nothing has been written
         // yet — a broken tree cannot host a verification).
@@ -259,40 +293,35 @@ impl FixVerifier {
         let mut state = LoopState {
             current: touched.iter().map(|f| f.fixed.clone()).collect(),
             applied: touched.iter().map(|f| vec![true; f.edits.len()]).collect(),
+            modified: vec![false; touched.len()],
         };
+        // T0b: which packages the next round must check. Round 1 checks
+        // all of them (every package received writes).
+        let mut must_check: Vec<bool> = vec![true; pkgs.len()];
+        let mut graph: Option<PackageGraph> = None; // lazy: only when a skip is possible
         for _round in 0..max_rounds {
-            let mut error_lines: HashMap<PathBuf, Vec<(usize, usize)>> = HashMap::new();
-            let mut run_err: Option<String> = None;
-            for pkg in &pkgs {
-                match self.classified_check(pkg, &mut report) {
-                    // Errors present: merge them for attribution. Clean:
-                    // nothing to do. Err (unrunnable or incomplete — Issue
-                    // 841): restore everything, keep nothing unverified.
-                    Ok(Some(json)) => merge_error_locations(
-                        &json,
-                        workspace_root(pkg).as_deref(),
-                        pkg,
-                        &mut error_lines,
-                    ),
-                    Ok(None) => {}
-                    Err(e) => run_err = Some(e),
+            let (error_lines, dirty) = match self.check_round(&pkgs, &must_check, &mut report) {
+                Ok(r) => r,
+                Err(e) => {
+                    // cargo could not run — restore everything, leave
+                    // nothing unverified behind.
+                    report.error = Some(e);
+                    restore_all(&touched);
+                    return report;
                 }
-            }
-            if let Some(e) = run_err {
-                // cargo could not run — restore everything, leave nothing
-                // unverified behind.
-                report.error = Some(e);
-                restore_all(&touched);
-                return report;
-            }
+            };
 
             if error_lines.is_empty() {
                 break; // clean everywhere — everything still applied survives
             }
+            state.modified.fill(false);
             let step =
                 attribute_and_revert(&touched, &canon, &error_lines, &mut state, &mut report);
             match step {
-                RevertStep::Progress => {}
+                RevertStep::Progress => {
+                    must_check =
+                        self.next_round_checks(&pkgs, &pkg_of, &state.modified, &dirty, &mut graph);
+                }
                 RevertStep::RestoreAll(reason) => {
                     restore_all_state(&touched, &mut state);
                     for f in &touched {
@@ -317,6 +346,85 @@ impl FixVerifier {
             }
         }
         report
+    }
+
+    /// One verify round: check every package `must_check` selects (the
+    /// rest count as skipped — Issue 171 T0b), merging error diagnostics
+    /// for attribution. Returns the merged error lines + which packages
+    /// came back dirty. `Err` (unrunnable or incomplete — Issue 841) is
+    /// returned only after every selected package ran, so the caller
+    /// restores everything and keeps nothing unverified.
+    #[allow(clippy::type_complexity)] // (error map, per-package dirty flags) — local tuple
+    fn check_round(
+        &self,
+        pkgs: &[PathBuf],
+        must_check: &[bool],
+        report: &mut VerifyReport,
+    ) -> Result<(HashMap<PathBuf, Vec<(usize, usize)>>, Vec<bool>), String> {
+        let mut error_lines: HashMap<PathBuf, Vec<(usize, usize)>> = HashMap::new();
+        let mut run_err: Option<String> = None;
+        let mut dirty: Vec<bool> = vec![false; pkgs.len()];
+        for (pi, pkg) in pkgs.iter().enumerate() {
+            if !must_check[pi] {
+                report.skipped_checks += 1;
+                continue;
+            }
+            match self.classified_check(pkg, report) {
+                // Errors present: merge them for attribution. Clean:
+                // nothing to do.
+                Ok(Some(json)) => {
+                    dirty[pi] = true;
+                    merge_error_locations(
+                        &json,
+                        workspace_root(pkg).as_deref(),
+                        pkg,
+                        &mut error_lines,
+                    );
+                }
+                Ok(None) => {}
+                Err(e) => run_err = Some(e),
+            }
+        }
+        match run_err {
+            Some(e) => Err(e),
+            None => Ok((error_lines, dirty)),
+        }
+    }
+
+    /// Issue 171 T0b: which packages the next round must re-check. A
+    /// package is skipped ONLY when it was checked clean this round (a
+    /// skipped package carries its earlier clean verdict, inductively) AND
+    /// no file this round's reverts rewrote lives in it or in any package
+    /// it transitively depends on. Its inputs are then byte-identical to
+    /// the clean check's, so the verdict is known. Anything unknown — the
+    /// feature off, a single package, a package missing from the metadata
+    /// graph — re-checks (the pre-T0b behaviour).
+    fn next_round_checks(
+        &self,
+        pkgs: &[PathBuf],
+        pkg_of: &[usize],
+        modified: &[bool],
+        dirty: &[bool],
+        graph: &mut Option<PackageGraph>,
+    ) -> Vec<bool> {
+        let all = vec![true; pkgs.len()];
+        if !self.scoped_recheck || pkgs.len() < 2 || dirty.iter().all(|d| *d) {
+            return all;
+        }
+        let changed: std::collections::HashSet<PathBuf> = modified
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| **m)
+            .map(|(idx, _)| {
+                let p = &pkgs[pkg_of[idx]];
+                std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())
+            })
+            .collect();
+        let graph = graph.get_or_insert_with(|| self.runner.package_graph(pkgs));
+        pkgs.iter()
+            .enumerate()
+            .map(|(pi, pkg)| dirty[pi] || graph.reaches_any(pkg, &changed).unwrap_or(true))
+            .collect()
     }
 
     /// Step 1 of the loop: the baseline check over every owning package.
@@ -390,6 +498,9 @@ impl FixVerifier {
 struct LoopState {
     current: Vec<String>,
     applied: Vec<Vec<bool>>,
+    /// Files rewritten by the latest `attribute_and_revert` round (T0b:
+    /// their packages, and every package depending on them, re-check).
+    modified: Vec<bool>,
 }
 
 /// One revert-round outcome: progress, or a terminal restore-all.
@@ -454,6 +565,7 @@ fn attribute_and_revert(
         }
         // Write the modified text back before the next check.
         let _ = std::fs::write(&f.path, &state.current[idx]);
+        state.modified[idx] = true;
     }
 
     if !attributed_any {

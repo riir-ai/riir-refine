@@ -435,7 +435,17 @@ compile_oracle = []
 # bounds attempted; E0308 backs the revert) + redundant_closure returns
 # as an attempted lint (VERIFY_LINTS). Implies latent_retrieval (extends
 # the cargo-refine bin surface).
-fix_verify = ["compile_oracle", "latent_retrieval"]
+# Issue 171 T0b: implies `scoped_recheck` (GOAT PASS 2026-10-25,
+# .benchmarks/121 — identical kept/reverted sets, checks = off − skipped).
+fix_verify = ["compile_oracle", "latent_retrieval", "scoped_recheck"]
+
+# Issue 171 T0b: package-scoped re-checks in the `--fix --verify` loop — a
+# round skips re-checking a package that was clean last round and that no
+# revert reached (its own files nor any transitive dependency, resolved via
+# one `cargo metadata` per workspace). Authority-preserving: a skipped check
+# is one whose inputs are byte-identical to a clean check's. Kill-switch:
+# RIIR_REFINE_SCOPED_RECHECK=0. GOAT: tests/scoped_recheck_goat.rs.
+scoped_recheck = ["compile_oracle"]
 
 # Plan 014: clippy-bench — the frozen real-code healing bench + SVG score
 # history. Runs the production `--fix` proposer path over FROZEN fixtures
@@ -1630,6 +1640,10 @@ required-features = ["kat_service"]
 [[test]]
 name = "kat_wetrun_gwet"
 required-features = ["kat_transport"]
+
+[[test]]
+name = "scoped_recheck_goat"
+required-features = ["fix_verify", "scoped_recheck"]
 
 [[test]]
 name = "p12_suppress_reverted_e2e"

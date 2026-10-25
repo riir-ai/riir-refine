@@ -14159,8 +14159,16 @@ fn main() {
             eprintln!("verify: nothing to verify (no edits)");
         } else {
             eprintln!(
-                "verify: {} cargo check(s) — kept {} file(s) / {} edit(s), reverted {} edit(s)",
+                "verify: {} cargo check(s){} — kept {} file(s) / {} edit(s), reverted {} edit(s)",
                 report.n_checks,
+                if report.skipped_checks > 0 {
+                    format!(
+                        " (+{} skipped: unreached clean package)",
+                        report.skipped_checks
+                    )
+                } else {
+                    String::new()
+                },
                 report.kept_files,
                 report.kept_edits,
                 report.reverted.len()
