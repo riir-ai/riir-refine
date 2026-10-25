@@ -114,16 +114,16 @@ order above; on defer, they stay parked (no action needed — all are doc-parked
   starts accepting from the same peer — byte-exact match with the file mtime (Oct 25 00:10):
   the M3's key was ROTATED and the file rewritten to the new key ALONE (old key dropped).
   Zero `Failed publickey` events in the 2000-event window; one `Failed password` pair from
-  Tailscale peer `seal1` (100.111.186.76) on 10-24 15:21 — the key-locked-out fallback
+  Tailscale peer `amo` (100.111.186.76) on 10-24 15:21 — the key-locked-out fallback
   signature (and proof PasswordAuthentication is ON; consider `no` once keys are restored).
 - **Impact:** the M5-Ultra lane's recorded lockout (riir-ai `.issues/1113` 10-24 note: "LAN
   timeout + Tailscale now refuses key auth (Permission denied publickey — auth changed since
   10-01)") fits this surface exactly — the M5's key has been absent since ~10-01, and today's
   rewrite guarantees every non-M3 box is key-locked-out now. Blocks: the M5 kv_f16 mma route
   (4090-gated), the two-box sync law (M3/4090 divergence guard) for every box except the M3,
-  seal1/seal2 ops lanes. m3-1 (100.125.16.103, offline 5h) unknown — likely also dropped.
+  amo/bmo ops lanes. m3-1 (100.125.16.103, offline 5h) unknown — likely also dropped.
 - **The owner action (one elevated command per box):** append each box's `~/.ssh/id_ed25519.pub`
-  line to the file (M5-Ultra, m3-1, seal1/seal2 as desired), keep the M3 line, then from each
+  line to the file (M5-Ultra, m3-1, amo/bmo as desired), keep the M3 line, then from each
   box verify `ssh katop@100.85.179.44 "nvidia-smi"`. The file+logs are ACL-protected
   (non-elevated read denied — verified this session), which is why no agent lane can self-serve
   this; the standing elevated zombie shells COULD have done the 00:10 write, owner may want to
