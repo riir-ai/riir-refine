@@ -1,0 +1,33 @@
+# Batch 286 — the burn/cubek remainder: H/I/J (Plan 288's unconverted candidates)
+
+**Status:** CLAIMED 2026-10-26 ~00:4x +07 (shikuwa/4090, riir-refine idle loop — the box freed: 0 rustc/cargo, 18.2 GiB free; the fourth measured refusal round lifted; zero GPU throughout [the sibling QRR cell C owns the GPU, and kernel_opt corpus work is CPU-only]). The B284 landing row named the pool: "F/H/I/J remain unowned for a future slot."
+
+## Sources (same pins as plan 288 — re-verify EVERY quote at these revs at authoring time)
+
+- `tracel-ai/burn @ v0.22.1 = 907ab111a02c2dea47bc41633754f095c6b2220e` (MIT OR Apache-2.0) — H's surface: `crates/burn-cubecl/src/kernel/memory_order.rs` (module doc).
+- `tracel-ai/cubek @ tip 08659297eec3414311df573aada3f22fb8142054` (MIT OR Apache-2.0) — I's surface: `crates/cubek-std/src/autotune/base.rs` module doc + priority doc; `crates/cubek-matmul/src/kernels/tune/candidate.rs` (coverage priority); J's surface: `GUIDE.md` (Blueprint section).
+- Burn-pin cubek rev `51c43a1af7eb07a904b8a13568e953d377d20bb4` — I's fallback quote: burn-pin `crates/burn-cubecl/src/kernel/attention/tune.rs` ("First entry should always work, since it is considered the fallback" — the T0 path CORRECTION: Research 321 first said "tune/base.rs").
+- The T0 quote map (plan 288 T0, verified 2026-10-25 ~19:2x): H = memory_order.rs:12,16,17,19,35; I = cubek base.rs:9,20,26 + priority.rs:138 + candidate.rs (coverage) + burn attention/tune.rs; J = GUIDE.md Include/Exclude (all four exclusion bullets). Re-verify at the re-clone regardless (B96-98 precedent).
+
+## Candidates (Research 321 §4)
+
+- **H** `elementwise-operands-presented-in-memory-order` (B−, kernel_opt layout): permute elementwise operands into the order the bulk of them occupy memory in before launch, permute back after — "Permutation changes metadata, not data". The caveats ARE the decision content (Research 321 §9: the rule lands CONDITIONAL or not at all): locality heuristic not guarantee; a later reshape that cannot be expressed through strides materializes logical value order and "the extra copy can outweigh the elementwise speedup"; "Choosing the order here cannot account for consumers that have not run yet"; the vote rule: "Only operands of exactly that shape vote on the order". Distinct-from: `decode-layout-weight-permute-copy-registry` (load-time weight copies; this is per-op presentation), `dual-layout-transpose-at-stage` (smem staging), `gpu-upload-repack-skipped-when-layout-matches`.
+- **I** `autotune-candidate-priority-orders-try-first` (B−, kernel_opt D/tune): "Group priority is a **cutoff**, not a tie-break: cubecl measures the highest-priority group whose candidates launch and stops there"; "A candidate's priority is therefore a claim about which candidate to *try first*, never about which can win: a wrong priority costs a compile, and a round with no bound compiles the whole group"; the one proof: "a setting that compiles a launch an earlier candidate already compiles *is* that candidate"; matmul priority formula = "the output block one cube covers against the key's extents" (coverage ordering); fallback law: "First entry should always work, since it is considered the fallback".
+- **J** `blueprint-minimal-compile-specialization-key` (C+, kernel_opt codegen — convert ONLY IF authoring holds it above the thinness bar; honest drop allowed with the reason recorded): "A different blueprint will retrigger JIT compilation... the blueprint must be kept minimal." Include: algorithm variants, per-algorithm comptime settings, safety logic (masks vs branching). EXCLUDE (already in the JIT key or runtime): Vectorization ("would duplicate data already present in the JIT key"), Cube Dimensions ("already part of the compilation key"), Hardware Properties ("accessed directly within the kernel"), Problem Sizes ("passed as runtime arguments"). Docs-borne — no enforcement site at the pins (Research 321 §9 disclosed); land with the provenance caveat in-rule or drop.
+
+## Tasks
+
+- [ ] T0 Re-clone `.raw/b286-{burn,cubek}` at the pins (blob-filtered, dump+grep per file — the plan-288 T0 lesson: tree-wide `git grep` hangs on blob-filtered clones); re-verify every H/I/J quote verbatim; verify the category routing (H layout, I tune, J codegen) against the live corpus category tables.
+- [ ] T1 Dedup re-verification, 3+ vocabulary variants per candidate (corpus moved +4 via B284 since the census): H (memory-order/presented/logical-order/permute-operands), I (priority/cutoff/try-first/fallback/candidate-order), J (blueprint/minimal/jit-key/specialization-key). Confirm unowned or drop.
+- [ ] T2 Author the rules into `entries_gpu_130.rs` (renumber per first-allocation-keeps if a concurrent landing takes 130) + ORIGINAL minimal fixtures (#[test]-carrying, no upstream literals) + the batch286 needle + parse gates. Expected yield: 2-3 own rules (J may drop honest).
+- [ ] T3 Count pins: kernel_opt 974→(974+N) at ALL witness sites (the failing-test enumerator is the only reliable list — the B274 lesson); category counts per the landed letters; router expert total; Plan-003 table if the touched categories appear there; AGENTS.md ×2.
+- [ ] T4 Standing gates: batch286 needle + parse gates; kernel_opt lib (`--features kernel_opt`) 0F; default lib 0F; clippy `-D warnings` ×3 postures (default / all-features / no-default, --all-targets).
+- [ ] T5 Retrieval floors re-measure (kernel_opt corpus delta — B284 precedent, ~82s): kernel self-variants 100% + blended floors HELD, no re-pin expected; a decay FAILS the batch.
+- [ ] T6 NOT owed (recorded): freeze gen2/gen3 (P30 — zero clippy-corpus delta); score-bench (kernel_opt-only delta, the B284 precedent); release-set binary rebuild (kernel_opt outside the release set).
+- [ ] T7 Research note `.research/324_batch286_burn_cubek_remainder.md` (highwater re-read AT landing — 323 at claim time; walk #17's note re-derives to 325 at ITS landing per its own claim) + AGENTS.md count bump + `.docs/11_domains/kernel_opt.md` batch row + the snapshot landing row + `.research/.highwater` bump; `rm -rf .raw/b286-*` at close.
+- [ ] T8 Commit `feat: batch 286: ...` + push (claim discharged by the landing row).
+
+## Sequencing
+
+- Walk #17 (this lane's claim, expiry 2026-10-27 ~04:3x +07): due 07:00 +07 today. If B286 authoring runs past 07:00, walk #17 grades AFTER this landing in the same session (grading is zero-cargo/zero-GPU), or via a posted re-claim if the session must close first — the walk claim row's own sequencing law, applied to B286.
+- B285 (M3, bbtree → rust_perf corpus) is DISJOINT from this batch's kernel_opt slice; only AGENTS.md shared — different bullets.
