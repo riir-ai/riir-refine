@@ -4,7 +4,8 @@
 
 Research: `.research/322_bbtree_cache_conscious_ordered_map.md` (source pin `XiangpengHao/bbtree @ 8adae97a0ed97e5c98fa2790312eb0aec9719846`, MIT OR Apache-2.0, v0.1.5). RENUMBERED 288→289 at birth (dual allocation with the burn-cubecl lane's `.plans/288_burn_cubek_*`, their commit `795f2e38` landed first — pushed numbers never reused; the local dual_allocation gate predated their push). B-number note: the burn lane's plan 288 owns the B284 authoring slot; this plan converts at the NEXT batch number after theirs (285+), still behind the rust_perf slot gate. Workspace manual track: 8 sibling issues filed 2026-10-25 citing the research note (those are NOT this batch's tasks — this plan is the CORPUS half only).
 
-**Claimed:** zed-m3max/M3 (user-directed bbtree distill session), 2026-10-25 ~16:4x +07, expires 2026-10-27 ~16:4x +07 (48 h; advisory — push is the arbiter). Yields to walk #17 and B279/plan-283 for any shared gate (never run two cargo lanes on one target dir — `CARGO_TARGET_DIR=/tmp/plan289`).
+**Claimed:** zed-m3max/M3, 1792921440, expires 2026-10-27T16:44:00+07:00
+(user-directed bbtree distill session; 48 h lease, advisory — push is the arbiter. Yields to walk #17 and B279/plan-283 for any shared gate — never run two cargo lanes on one target dir, `CARGO_TARGET_DIR=/tmp/plan289`.)
 
 ## Tasks
 
