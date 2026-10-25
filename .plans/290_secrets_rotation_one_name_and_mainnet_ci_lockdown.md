@@ -84,7 +84,9 @@ same-name secret — the owner deletes the old repo secret and creates
 - [x] **GH_RAW_TOKEN (LIVE)** — owner regenerated 2026-10-25 (1) as
       `riir-kat-service-score-read` (fine-grained score-history read); wired
       into BOTH kat-service CF envs (devnet + apex) + riir-dapps/.env
-- [ ] GLM_API_KEY (seal-game-editor) roll — provider portal, owner-gated
+- [x] GLM_API_KEY (seal-game-editor) — owner rolled it at the provider;
+      new value in seal-game-editor/.env (2026-10-25 (3)). Sole consumer is
+      that local .env — no worker secret, no further wiring
 - [ ] HELIUS_API_KEY (jup-tool) roll — provider portal, owner-gated
 - [x] HELIUS_WEBHOOK_SECRET — OWNER half DONE 2026-10-25 (3): rotated at the
       Helius dashboard (provider-first flip), new value → riir-dapps/.env.
