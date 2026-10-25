@@ -13,8 +13,10 @@
 #   1. Settings → Secrets and variables → Actions → Variables:
 #        OPS_DASHBOARD_ENABLED = true
 #   2. Settings → Secrets and variables → Actions → Secrets:
-#        GH_PAT               — PAT with read access to the private gist-rs/*
-#                               repos (sibling checkouts)
+#        SIBLING_REPOS_TOKEN  — read-only PAT for the private gist-rs/* sibling
+#                               checkouts (the SAME secret rust.yml uses; the
+#                               retired GH_PAT was a second, unrotated copy —
+#                               one read-only sibling token everywhere, 2026-10-25)
 #        CLOUDFLARE_OPS_API_TOKEN         — Cloudflare token with Analytics:Read (GraphQL;
 #                               the same token the housekeeping worker uses).
 #                               Feeds the CF daily-neurons + containers sections.
@@ -49,7 +51,7 @@
 # `scripts/ops_nightly.sh`. Measured/structural reasons:
 #   * ZERO secrets. Locally the 11 repos are already checked out, cargo-refine is
 #     already installed, and wrangler OAuth already authenticates — so
-#     the GH_PAT / CLOUDFLARE_OPS_API_TOKEN / CLOUDFLARE_API_TOKEN repo secrets are all unnecessary. This
+#     the SIBLING_REPOS_TOKEN / CLOUDFLARE_OPS_API_TOKEN / CLOUDFLARE_API_TOKEN repo secrets are all unnecessary. This
 #     CI path cannot run at all until an owner provisions three credentials.
 #   * ~5 min vs ~30-50. The local sweep is ~30-60 s per large repo (from the
 #     coverage cache's own measured_at deltas: riir-ai 57 s, riir-train 35 s).
@@ -122,11 +124,11 @@ jobs:
     steps:
       - name: Preflight (config sanity — warnings only, never fatal)
         env:
-          GH_PAT_SET: ${{ secrets.GH_PAT != '' }}
+          SIBLING_TOKEN_SET: ${{ secrets.SIBLING_REPOS_TOKEN != '' }}
           CF_API_SET: ${{ secrets.CLOUDFLARE_OPS_API_TOKEN != '' }}
           CF_DEPLOY_SET: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
         run: |
-          [ "${GH_PAT_SET}" = "true" ] || echo "::warning::GH_PAT not set — private sibling checkouts will fail (coverage for those repos will be skipped)"
+          [ "${SIBLING_TOKEN_SET}" = "true" ] || echo "::warning::SIBLING_REPOS_TOKEN not set — private sibling checkouts will fail (coverage for those repos will be skipped)"
           [ "${CF_API_SET}" = "true" ] || echo "::warning::CLOUDFLARE_OPS_API_TOKEN secret not set — CF analytics sections will be empty"
           [ "${CF_DEPLOY_SET}" = "true" ] || echo "::warning::CLOUDFLARE_API_TOKEN not set — Worker deploy will be skipped"
 
@@ -158,7 +160,7 @@ jobs:
         with:
           repository: gist-rs/riir-ai
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-ai
           fetch-depth: 2000
 
@@ -168,7 +170,7 @@ jobs:
         with:
           repository: gist-rs/riir-train
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-train
           fetch-depth: 2000
 
@@ -178,7 +180,7 @@ jobs:
         with:
           repository: gist-rs/riir-neuron-db
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-neuron-db
           fetch-depth: 2000
 
@@ -188,7 +190,7 @@ jobs:
         with:
           repository: gist-rs/riir-chain
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-chain
           fetch-depth: 2000
 
@@ -198,7 +200,7 @@ jobs:
         with:
           repository: gist-rs/riir-game-sdk
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-game-sdk
           fetch-depth: 2000
 
@@ -208,7 +210,7 @@ jobs:
         with:
           repository: gist-rs/riir-mmorpg-examples
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-mmorpg-examples
           fetch-depth: 2000
 
@@ -218,7 +220,7 @@ jobs:
         with:
           repository: gist-rs/riir-viewbridge
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-viewbridge
           fetch-depth: 2000
 
@@ -228,7 +230,7 @@ jobs:
         with:
           repository: gist-rs/riir-dapps
           ref: develop
-          token: ${{ secrets.GH_PAT }}
+          token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-dapps
           fetch-depth: 2000
 
