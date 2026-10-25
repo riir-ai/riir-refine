@@ -138,7 +138,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
         // ── simd: chunked loop for auto-vectorization ─────────────────────
         PerfRule {
             rule_id: "simd-chunk".to_string(),
-            name: "Chunked loop (4-wide) to help LLVM auto-vectorize".to_string(),
+            name: "Chunked loop (4-wide) to help LLVM auto-vectorize. RIDER (Batch 282 external instance, arXiv 2610.23044v1 Table IV class 3 `Missed Loop Vectorization`, Plan 286 / Research 319): the vectorization-BARRIER face -- the paper finds LLVM vectorizes a C loop but leaves the translated Rust counterpart SCALAR, with remarks naming the barriers: control-flow, calls, or memory-dependence ('remarks identify control-flow, call, or memory-dependence barriers' -- e.g. bzip2's five hot decode loops, where each array access carries a bounds check that adds a loop exit and LLVM 'could not determine the number of loop iterations'); the corpus's chunk rules own the HOW (the rewrite that vectorizes), this face owns the WHY-it-was-blocked diagnosis: enablement = restructure the blocking control flow or calls, or expose the dependence/bounds information; cross-project match 24% of hot functions. NotBenchable (paper-reported, foreign toolchain).".to_string(),
             category: "simd".to_string(),
             buggy_code: "fn sum(v: &[f32]) -> f32 {\n    let mut s = 0.0;\n    for i in 0..v.len() { s += v[i]; }\n    s\n}".to_string(),
             fixed_code: "fn sum(v: &[f32]) -> f32 {\n    let chunks = v.chunks_exact(4);\n    let rem = v.chunks_exact(4).remainder();\n    let mut acc = [0.0f32; 4];\n    for c in chunks {\n        acc[0] += c[0]; acc[1] += c[1]; acc[2] += c[2]; acc[3] += c[3];\n    }\n    acc.iter().chain(rem).copied().sum()\n}".to_string(),
@@ -458,7 +458,7 @@ pub(super) fn entries() -> Vec<PerfRule> {
         // chunk size, enabling auto-vectorization. ~13-16× at all sizes.
         PerfRule {
             rule_id: "chunks-exact".to_string(),
-            name: "slice::chunks (variable last) → slice::chunks_exact (uniform, vectorizes)".to_string(),
+            name: "slice::chunks (variable last) → slice::chunks_exact (uniform, vectorizes). RIDER (Batch 282 external instance, arXiv 2610.23044v1 Table IV class 1 `Residual Bounds Checks` + class 3's bounds-check barrier, Plan 286 / Research 319): the BOUNDS-CHECK-ELIMINATION face -- uniform slice/iterator traversal is not only about chunk uniformity: expressing valid iteration bounds through slices/iterators EXPOSES the index-length relationship, which is what lets LLVM drop the per-access bounds checks the C build never had ('Loop invariants establish valid indices, but optimized Rust IR retains checks leading to panic_bounds_check that are absent from C IR' -- the bzip2 BZ2_decompress state-machine shape where the translated control flow prevents LLVM from recovering the range invariant; direction: 'Express valid iteration bounds through slices or iterators'); cross-project match 18% of hot functions. NotBenchable (paper-reported, foreign toolchain).".to_string(),
             category: "simd".to_string(),
             buggy_code: "fn sum_chunks(data: &[u32]) -> u64 {\n    let mut sum = 0u64;\n    for chunk in data.chunks(8) {\n        for &v in chunk { sum += v as u64; }\n    }\n    sum\n}".to_string(),
             fixed_code: "fn sum_chunks(data: &[u32]) -> u64 {\n    let mut sum = 0u64;\n    for chunk in data.chunks_exact(8) {\n        for &v in chunk { sum += v as u64; }\n    }\n    for &v in data.chunks_exact(8).remainder() { sum += v as u64; }\n    sum\n}".to_string(),

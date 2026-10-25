@@ -9,7 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 267 entries across 13 categories as of Batch 274 (+1: allocation, `entries_47`) — prior: Batch 271 (2026-10-21,
+//! 270 entries across 13 categories as of Batch 282 (+3: arithmetic, dispatch,
+//! iterators, `entries_48` — the `PerfR` C-to-Rust translation classes, arXiv
+//! 2610.23044v1) — prior: Batch 274 (+1: allocation, `entries_47`) — prior: Batch 271 (2026-10-21,
 //! Plan 275 / Research 307: +12 — the splash-wave SECOND-TIER serving pool
 //! (incoai/splash, the B268/B270 staged second tier, Apache-2.0, author Jian
 //! Chen). Allocation +3: `resume-admission-sized-to-per-command-window-not-suspended-peak`
@@ -650,14 +652,20 @@ mod entries_44;
 mod entries_45;
 mod entries_46;
 mod entries_47;
+mod entries_48;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 267 entries
-/// (Batch 271, 2026-10-21, Plan 275 / Research 307: +12, the splash-wave
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 270 entries
+/// (Batch 282, 2026-10-25, Plan 286 / Research 319: +3 — the `PerfR` C-to-Rust
+/// translation classes, arXiv 2610.23044v1 — arithmetic +1 the
+/// saturating-f2i range-proven conversion, dispatch +1 the loop-invariant
+/// dispatch resolution hoist, iterators +1 the raw-pointer slice-view
+/// recovery; all `NotBenchable` annotated; prior — Batch 274, Plan 278 /
+/// Research 312: +1 allocation; prior — Batch 271, 2026-10-21, Plan 275 / Research 307: +12, the splash-wave
 /// SECOND-TIER serving pool — see the module header for the batch chain;
 /// prior — Batch 270, Plan 274 / Research 306: +12, the splash-wave serving
 /// pool; prior — Batch 266, Plan 270 / Research 302: +1 complexity — the uv
@@ -775,5 +783,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_45::entries());
     entries.extend(entries_46::entries());
     entries.extend(entries_47::entries());
+    entries.extend(entries_48::entries());
     Corpus::new(entries)
 }

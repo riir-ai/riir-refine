@@ -1,6 +1,6 @@
 # Plan 286: Batch 282 — PerfR C-to-Rust translation perf classes → rust_perf
 
-**Status:** IN PROGRESS — claim posted, pre-authoring (2026-10-25)
+**Status:** COMPLETE — Batch 282 landed + pushed 2026-10-25 (see the snapshot landing row + Research 319)
 **Session:** shikuwa-b282-claim, 2026-10-25
 
 Batch 282 converts the staged B282 lead: **arXiv 2610.23044v1** ("Where Does the
@@ -30,17 +30,17 @@ divergence classes. Their rules land VERIFY-tier or suggest-only with mandatory
 
 ## Tasks
 
-- [x] T0: Claim row + this plan in one commit, PUSHED before authoring
+- [x] T0: Claim row + this plan in one commit, PUSHED before authoring (`1904cfdb8`)
 - [x] T0b: Full-text source read at the pin (arXiv HTML v1, this session — Table IV + §IV-C instances + §V-D optimization cards + §V-E two-gate validation + §VII-B applicability)
-- [ ] T1: Dedup grep each class against rust_perf (267) + kernel_opt with 3+ vocabulary variants; record verdicts (the enrichment's pre-read verdicts are the starting point, re-verify in-tree)
-- [ ] T2: Author own rules via disjoint slices (entries_47 NEW expected; fixtures standalone-compile before landing; context_notes on all unsafe-adjacent + regime-fragile verdicts)
-- [ ] T3: Coordinator wiring (mod.rs category/expert registration, count pins via ONE shape-asserted pass, batch282 needle + parse gates)
-- [ ] T4: Gates — default lib, rust_perf_bench lib, clippy −D ×3 postures
-- [ ] T5: Retrieval floors re-measure (corpus delta owed)
-- [ ] T6: Freeze gen2/gen3 e2es run-to-confirm (rust_perf-only delta expected no movement — P30 line); score-bench appended
-- [ ] T7: Maintained binary rebuilt at the release set + installed BEFORE push (rust_perf is release-set surface — the §0 bin-age law)
-- [ ] T8: Research 319 (`.research/.highwater` 318→319) + AGENTS.md rust_perf count bump + `.docs/11_domains/` + snapshot landing row, one commit
-- [ ] T9: Commit `feat: batch 282: ...` + push; verify `--version` stamp == landing HEAD
+- [x] T1: Dedup grep each class against rust_perf (267) + kernel_opt with 3+ vocabulary variants; record verdicts (the enrichment's pre-read verdicts are the starting point, re-verify in-tree) — classes 6/7/8 DROPPED (arena/pool/copy-byte-order/chunk families own them), 1/3/4 → rider faces, 2/5/9 → own rules
+- [x] T2: Author own rules via disjoint slices (entries_48 NEW, 3 rules; fixtures standalone-compiled + EXECUTED 6/6 green before landing; context_notes carry the proof obligations on the unsafe-adjacent pair; NO proposers — suggest-only by construction)
+- [x] T3: Coordinator wiring (mod.rs mod decl + builder + header count; count pins via shape-asserted python passes ×9 sites incl. the annotated 214→217 triple + without_spec 146→149 + the batch265 witness; batch282 needle gate with the nine paper-class-name negative asserts)
+- [x] T4: Gates — default lib 2730/0, rust_perf_bench lib 2761/0, clippy −D ×3 postures clean (4 doc_markdown PerfR backticks + 1 too_many_lines allow healed in-batch)
+- [x] T5: Retrieval floors re-measure — latent_retrieval full lib 2916/0 (435 s), floors HELD no re-pin
+- [x] T6: Freeze gen2/gen3 e2es run-to-confirm — both PASS, no table movement (P30 held: rust_perf-only delta moves nothing); score-bench #199 heal 0.9636 FLAT parse 1.0 + frontier snapshot appended
+- [x] T7: Maintained binary rebuilt at the release set + installed; --info CORPUS serves rust_perf 270
+- [x] T8: Research 319 (`.research/.highwater` 318→319) + AGENTS.md ×2 count pins + `.docs/11_domains/rust_perf.md` (header figure + Batch-282 row) + snapshot landing row, one commit
+- [x] T9: Commit `feat: batch 282: ...` + push; verify `--version` stamp == landing HEAD
 
 ## Notes
 
