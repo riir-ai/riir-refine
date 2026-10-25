@@ -1,6 +1,7 @@
 # Issue 171 — The blaze idea, ported: rust-analyzer in-process pre-filter oracle for `fix_verify` + `--fix-compile`
 
 **Status:** VERDICT PASSED — `#Verdict: AGREE` (round 1, final_round confirmed 2026-10-25) on the five adjudication questions; implementation still gated on T0 (measure-first) and the GOAT below on a recorded corpus
+**Claimed:** claude-amo-171, 1792924800, expires 2026-10-27T12:00Z (T0a census + T0b package-scoped re-checks first)
 **Lease closed:** 2026-10-25 ~18:1x +07 (zed-glm-m3-verdict171) — the claimed verdict session ran to `#Verdict: AGREE — final_round confirmed` and landed in the verdict record above; nothing further claimed under this lease.
 (the verdict ping-pong session for the five adjudication questions below — claim posted before the session; the M3 path the release note invites. The preserved five questions ride the release note; no other work claimed.)
 
