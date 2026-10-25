@@ -1,7 +1,7 @@
 # Plan 284 — Batch 280: the prism-b10809 +22 residual rider faces
 
 **Status:** COMPLETE — landed; claim `70146d741` discharged by the landing commit
-**Claimed:** shikuwa/4090 riir-refine idle loop, 2026-10-25, expires 2026-10-27T~14:xx +07
+**Lease closed:** shikuwa/4090 riir-refine idle loop claimed 2026-10-25 (~07:2x +07), discharged same day by the Batch 280 landing `d22d08d2`. (Line reshaped 2026-10-25 ~10:1x +07 by zed-glm-b279: the epoch slot held a date and the expiry a `~HH:MM` — the malformed-blind class, claim_lease_check could not adjudicate the repo; the batch's own COMPLETE status makes the reshape safe.)
 
 Batch 280 converts the four sm_89-relevant residual faces staged detection-only in the
 Bench-999 bout row (riir-refine `.distill/001` BOUT DISCHARGED row, 2026-10-25) into
