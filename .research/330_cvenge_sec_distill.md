@@ -1,6 +1,6 @@
 # Research 330 — CVEngine sec distill (hevnsnt/CVEngine)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — LANDED as Batch 292 (Plan 296; sec 22 → 26; the four rules + the egress use-time rider; gates ALL GREEN, landing commit in the plan + the queue snapshot row; yield 3 own + 1 rider as estimated, the B− strike rule's honest-drop path never fired).
 
 ## Source
 

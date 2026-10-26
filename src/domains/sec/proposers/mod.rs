@@ -88,14 +88,35 @@
 //! | `cors-any-origin-with-credentials` | `cors_any_creds::detect` | legitimate origins are deployment policy; `very_permissive()` fires alone (credentials + reflected origin by construction), `any()`/`permissive()` need the `allow_credentials(true)` marker in the same fn |
 //! | `jwt-insecure-validation-flags` | `jwt_insecure_validation::detect` | some debug/tooling decodes deliberately skip validation; the signature surfaces fire on unique names (the 9.x method/field + the 10.x `dangerous::insecure_decode`), `validate_exp = false` is jwt-vocabulary-gated |
 //! | `auth-cookie-without-secure-flags` | `auth_cookie_missing_flags::detect` | JS-readable/cross-site cookies are deliberate choices; the name-vocabulary literal gate is the FP control, the fn-wide flag marker the secret-file-0600 suppression shape |
+//!
+//! ## Batch 292 (2026-10-27, Plan 296) — the `CVEngine` distill joins
+//!
+//! Four detectors from the hevnsnt/`CVEngine` distill (Research 330, GPL-3.0
+//! @ `9dd9c441`; pure-Python source — the transcription law, fixtures are
+//! ORIGINAL Rust), all `InputValidation`, on the two most universal std
+//! surfaces (`IpAddr`, `Command`) plus the identity/strike web classes:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `client-ip-from-untrusted-forwarded-header` | `client_ip_forwarded::detect` | the trusted-proxy set is deployment policy; the header-literal + identity-vocabulary gates fire, the `trusted` marker suppresses fn-wide (the fixed three-regime resolver always names it) |
+//! | `shell-string-command-interpolation` | `shell_string_command::detect` | the shell-features regime is a design decision; shell-literal + `-c`/`/C` + interpolated-arg gates, static scripts and non-shell binaries stay silent |
+//! | `ipv4-mapped-range-check-unwrap` | `ipv4_mapped_range::detect` | some guards deliberately treat all V6 as external; the V4/V6 match pair + range-test vocabulary fires, any `to_ipv4_mapped` in the fn suppresses |
+//! | `abuse-strike-counts-cross-site-requests` | `strike_cross_site::detect` | label-honoring policy is deployment-specific; strike + rejection vocabulary fires, any site-label token suppresses (the guard already classifies) |
+//!
+//! Plus the count-neutral USE-TIME rider on `unvalidated-egress-url`
+//! (corpus DATA): stored names rot — the sink re-filters; narrows the
+//! DNS-rebinding window, never closes it (`CVEngine` `scannable_hosts` /
+//! `discovery.py` verbatim law).
 
 use syn::File;
 
 pub mod auth_cookie_missing_flags;
+pub mod client_ip_forwarded;
 pub mod cors_any_creds;
 pub mod drop_no_panic;
 pub mod egress_url;
 pub mod ffi_catch_unwind;
+pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
@@ -103,19 +124,21 @@ pub mod path_join_escape;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
+pub mod shell_string_command;
 pub mod slice_len_guard;
+pub mod strike_cross_site;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;
 pub mod webhook_raw_bytes;
 
 /// The shared wire-taint walker (Batch 165) — one walker, the
-/// InputValidation wire sinks. Crate-internal: the public surface is the
+/// `InputValidation` wire sinks. Crate-internal: the public surface is the
 /// two detectors.
 pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
 };
 
 /// The `--fix`-eligible sec rules.

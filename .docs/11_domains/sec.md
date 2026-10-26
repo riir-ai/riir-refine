@@ -174,6 +174,31 @@ routed non-Rust sources.
 | `jwt-insecure-validation-flags` | `CryptoHygiene` | a JWT decode configured to NOT verify: the 9.x `insecure_disable_signature_validation()` (method or field form — REMOVED at jsonwebtoken 10.0), its 10.x replacement `dangerous::insecure_decode` (the alg:none bypass class), and `validate_exp = false` (the expiry skip). Bounded form: the default posture (alg list pinned, sig + exp ON). Gates: signature surfaces fire on unique names (any receiver); `validate_exp = false` is jwt-vocabulary-gated (`jsonwebtoken::` path or a `Validation`/`DecodingKey`/`Algorithm` token in the fn) — other crates' fields silent; explicit `validate_exp = true` silent. Honest limits: statement/field-init shapes only; helper-based decodes unconnected. The probe crate pins jsonwebtoken 9 (the 9.x fixture must COMPILE — the pin is load-bearing); detector `jwt_insecure_validation::detect` |
 | `auth-cookie-without-secure-flags` | `InputValidation` | an auth/session-named cookie (session/sid/token/auth/jwt literal vocabulary — penthera's severity gate) built via `Cookie::build`/`Cookie::new` with NO `.secure(..)`/`.http_only(..` marker anywhere in the fn — the session ships JS-readable over plain http. Bounded form: `.http_only(true).secure(true).same_site(SameSite::Lax)` on the builder chain. Gates: the name must be a string literal (direct or tuple-first — variable names an honest NO); non-auth names never fire (the FP control); ANY flag marker suppresses fn-wide (the secret-file-0600 conservative rule — an explicit `.secure(false)` is a written decision, never flagged). Honest limits: framework `SET_COOKIE` writes out of scope; detector `auth_cookie_missing_flags::detect` |
 
+## Batch 292 (2026-10-27) — the CVEngine distill, the std `IpAddr`/`Command` + identity classes
+
+Four suggest-only rules from the hevnsnt/CVEngine distill (GPL-3.0 @
+`9dd9c441` — a hardened attack-surface-management scanner, pure Python;
+Research 330: the transcription law applies — the source contributes
+class knowledge, the fixtures are original Rust). All `InputValidation`
+— the corpus's first rules on the two most universal std surfaces.
+
+| Rule | Family | Shape |
+|---|---|---|
+| `client-ip-from-untrusted-forwarded-header` | `InputValidation` | an `x-forwarded-for` header read used as the client identity (rate-limit key, ban key, audit actor) with no trusted-proxy gate — the header is attacker-settable, so the leftmost read rotates the identity a throttle keys on. Bounded form: the three-regime resolver (no trusted proxies → ignore; peer trusted → right-to-left walk, first untrusted hop; malformed hop → fail closed to the peer). Gates: the header STRING LITERAL + identity/throttle vocabulary (client_ip/rate_limit/ratelimit/throttle/identity/audit/banned) co-fire; any `trusted` token suppresses fn-wide (the fixed resolver names it — `untrusted` implies the same awareness); a bare header read with no identity use stays silent. Honest limits: framework extractors that never name the literal are honest NOs; cross-fn identity flow undetected; detector `client_ip_forwarded::detect` |
+| `shell-string-command-interpolation` | `InputValidation` | user data interpolated into a shell-string command (`Command::new("sh")` + `.arg("-c")` + a `format!`/concat arg) — a metacharacter allowlist does NOT make the shell string safe (argument injection, CWE-88, survives it; the CVEngine tlsx site is the live specimen). Bounded form: the ARG ARRAY on the real binary — no shell, no metacharacter layer. Gates: shell-name literal (sh/bash/zsh/cmd/powershell/pwsh) + a `-c`/`-Command`/`/C` literal + an interpolated `.arg(..)` in the same fn; a format! arg on a NON-shell binary stays silent (a different, narrower class); a static `-c` script with no interpolation stays silent; `Command::new(..)` is an ASSOCIATED-FN Call, not a method call (the cors_any_creds parse precedent). Honest limits: builder assembled across helpers unconnected; detector `shell_string_command::detect` |
+| `ipv4-mapped-range-check-unwrap` | `InputValidation` | an `IpAddr` match whose V4 arm runs a range/allowlist test and whose V6 arm rejects WITHOUT unwrapping — `::ffff:127.0.0.1` is a V6 address whose bits are loopback, so a version-split check waves it through every guard (the bypass class for SSRF refusals, allowlists, firewall rules). Bounded form: `to_ipv4_mapped()` before the test (the V6 arm routes mapped addresses down the V4 path). The companion law rides the context: pass the PARSED form onward, never the raw token (Rust's parser already refuses scope ids — `fe80::1%eth0`). Gates: the V4/V6 match PAIR + range-test vocabulary (contains/is_loopback/is_private/is_link_local/allowlist/blocked/nets) fire; ANY `to_ipv4_mapped` in the fn suppresses (the normalize-up-front form); a debug-print match stays silent. Honest limits: a folded single-arm match is parse-only unreachable; non-IpAddr enums with V4/V6-shaped variants fire and review decides; detector `ipv4_mapped_range::detect` |
+| `abuse-strike-counts-cross-site-requests` | `InputValidation` | an abuse/strike counter incremented on EVERY rejected request regardless of the browser's site label — a hostile page can forge attack-shaped requests from a victim's browser, so counting those rejections bans the VICTIM (denial-of-service via the defense itself; CVEngine's guard docstring is the decision content). Bounded form: the site-label gate before the increment (`sec-fetch-site` cross-site/same-site — or Origin/Referer fallback) rejects but never counts. Gates: strike/abuse/penalty vocabulary + a rejection marker (400/403/BAD_REQUEST/FORBIDDEN/reject) co-fire; ANY site-label token (sec_fetch/same-site/cross-site/origin_header/referer) suppresses fn-wide (the guard already classifies); a strike counter with no rejection path stays silent. Honest limits: counting split across fns unconnected; detector `strike_cross_site::detect` |
+
+PLUS the count-neutral USE-TIME rider on `unvalidated-egress-url` (corpus
+DATA): an admission-time check on a STORED name rots — DNS moves, and a
+name a tenant controls can be pointed at metadata or an internal range
+AFTER it was validated — so every path that aims an outbound sink at a
+stored host list re-filters at the sink; use-time re-validation narrows
+the DNS-rebinding window, never closes it (CVEngine `scannable_hosts` /
+`discovery.py` verbatim law). The `abuse-strike` rule's honest-drop path
+recorded in the plan never fired — the fixture carried a zero-FP
+negative suite.
+
 PLUS the count-neutral rider on `unbounded-read-into-vec`: decompression
 decoders (`GzDecoder`/`ZlibDecoder`/`BzDecoder`/`XzDecoder`/`ZstdDecoder`)
 are transparent to the taint walk (`take` stays a taint break) and the
@@ -282,6 +307,15 @@ proposer.
   recorded in-code (the Issue-170 shared-vocab decay, not this batch —
   pre-batch baseline measured 62/160 = 38.8% in a sibling worktree at the
   landing base)
+- Batch 292 (2026-10-27): corpus 22 → 26 (6 fixable + 20 suggest-only;
+  the CVEngine distill, Plan 296) — sec self-variants 26/26 top-1 (the
+  sec Fixture_labels gate green at the new population), router annotation
+  (sec arm) re-pinned 58/163 → 60/167 (measured 65/167 = 38.9%; all 4 new
+  spans routed correctly, delta +2 correct +0.2pp — the std-only
+  identity/IpAddr/Command vocabulary is retrieval-neutral); boundary gate
+  2/2 (real clippy fires no equivalent-fix lint on the std-only buggy
+  fixtures — no probe deps added); sec-module detectors 196/0; clippy −D
+  ×4 postures (default/sec/all-features/no-default) + all-targets+sec
 - Promotion to default: needs ≥1 workspace repo adopting sec in CI
 
 ## See also

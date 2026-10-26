@@ -2,7 +2,8 @@
 //! of the corpus anti-patterns; the `eval_fixtures_perf` convention —
 //! variant names, canonical shapes, one span per rule). Batch 258 added
 //! the web-trust seed's three (Plan 262); Batch 291 the penthera
-//! distill's three (Plan 295).
+//! distill's three (Plan 295); Batch 292 the `CVEngine` distill's four
+//! (Plan 296).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -220,6 +221,52 @@ fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
         "auth-cookie-without-secure-flags",
         r#"pub fn auth_cookie(token: &str) -> cookie::Cookie<'static> {
     cookie::Cookie::build(("auth", token.to_owned())).build()
+}
+"#,
+    ),
+    // Batch 292 (Plan 296) — the CVEngine distill, one span per new rule.
+    (
+        "client-ip-from-untrusted-forwarded-header",
+        r#"pub fn throttle_key(req: &Request) -> std::net::IpAddr {
+    let ip = req.header("x-forwarded-for")
+        .and_then(|chain| chain.split(',').next())
+        .and_then(|hop| hop.trim().parse::<std::net::IpAddr>().ok());
+    if banned(ip) { panic!("rejected"); }
+    ip.unwrap()
+}
+"#,
+    ),
+    (
+        "shell-string-command-interpolation",
+        r#"pub fn probe(domain: &str) -> std::io::Result<String> {
+    let out = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("tlsx -san -silent -host {domain}"))
+        .output()?;
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+"#,
+    ),
+    (
+        "ipv4-mapped-range-check-unwrap",
+        r#"pub fn is_blocked(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => BLOCKED.contains(&v4),
+        std::net::IpAddr::V6(_) => false,
+    }
+}
+"#,
+    ),
+    (
+        "abuse-strike-counts-cross-site-requests",
+        r#"impl Guard {
+    pub fn inspect(&mut self, body: &str) -> Verdict {
+        if body.contains("; cat ") {
+            self.strikes += 1;
+            return Verdict::Rejected;
+        }
+        Verdict::Ok
+    }
 }
 "#,
     ),

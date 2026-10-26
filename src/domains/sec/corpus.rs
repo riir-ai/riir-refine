@@ -109,6 +109,30 @@
 //! vocabulary probe for the secret-scan lane; an agent-tooling audit phase
 //! for the katgpt-rs security-audit skill) stay named in Research 329,
 //! unfiled.
+//!
+//! Batch 292 (2026-10-27, Plan 296 / Research 330): the hevnsnt/CVEngine
+//! distill (GPL-3.0 @ `9dd9c441` — a hardened attack-surface scanner;
+//! pure-Python source, the transcription law applies: language is never a
+//! gate). FOUR suggest-only rules, all `InputValidation`, on the two most
+//! universal std surfaces: spoofed client identity
+//! (`client-ip-from-untrusted-forwarded-header` — the header literal +
+//! identity/throttle vocabulary, the trusted marker suppresses fn-wide),
+//! shell-string interpolation (`shell-string-command-interpolation` — the
+//! `sh -c`/`cmd /C` literal + a format!/concat arg; the metacharacter
+//! allowlist ≠ safety, CWE-88), the mapped-address bypass
+//! (`ipv4-mapped-range-check-unwrap` — the V4/V6 match pair without
+//! `to_ipv4_mapped`, range-test vocabulary gated), and the strike-count
+//! asymmetry (`abuse-strike-counts-cross-site-requests` — a strike
+//! increment beside a rejection with no site-label vocabulary; the
+//! honest-drop path recorded in the plan never fired — the fixture
+//! carried a zero-FP negative suite). PLUS the count-neutral USE-TIME
+//! rider on `unvalidated-egress-url` (stored names rot; the sink
+//! re-filters; narrows the rebinding window, never closes it). Detector
+//! modules: `proposers::client_ip_forwarded`,
+//! `proposers::shell_string_command`, `proposers::ipv4_mapped_range`,
+//! `proposers::strike_cross_site`; probe evidence (the boundary-gate
+//! protocol — std-only fixtures, no probe deps added) recorded in Plan
+//! 296 T7.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -455,8 +479,15 @@ the URL argument) — client-binding method sinks and framework extractors \
 (axum Path/Query) are honest NOs; a bare scheme check does NOT suppress (the \
 host is the SSRF axis); the validation vocabulary (allowlist/scheme()/\
 host_str()/private/loopback/link_local) anywhere in the fn suppresses; an \
-internal-only tool fetching its own config URL fires too and review decides; \
-cross-fn URL construction undetected. Batch 258 / Plan 262 / Research 292 \
+	internal-only tool fetching its own config URL fires too and review decides; \
+cross-fn URL construction undetected. USE-TIME face (Batch 292 rider, \
+count-neutral — CVEngine `scannable_hosts`/`discovery.py` verbatim law, \
+GPL-3.0 @ `9dd9c441`, cited as class provenance): an admission-time check on \
+a STORED name rots — DNS moves, and a name a tenant controls can be pointed \
+at metadata or an internal range AFTER it was validated — so every path that \
+aims an outbound sink at a stored host list re-filters at the sink; the \
+honest framing is that use-time re-validation narrows the DNS-rebinding \
+window, never closes it. Batch 258 / Plan 262 / Research 292 \
 (cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as class \
 provenance; the fixture is an original synthesis)."
                 .to_string(),
@@ -553,6 +584,129 @@ class provenance; the fixture is an original synthesis)."
             buggy_code: "use cookie::Cookie;\n\npub fn session_cookie(value: &str) -> Cookie<'static> {\n    Cookie::build((\"sid\", value.to_owned()))\n        .path(\"/\")\n        .same_site(cookie::SameSite::Lax)\n        .build()\n}\n"
                 .to_string(),
             fixed_code: "use cookie::Cookie;\n\npub fn session_cookie(value: &str) -> Cookie<'static> {\n    Cookie::build((\"sid\", value.to_owned()))\n        .path(\"/\")\n        .http_only(true)\n        .secure(true)\n        .same_site(cookie::SameSite::Lax)\n        .build()\n}\n"
+                .to_string(),
+        family: SecFamily::InputValidation,
+        },
+        // ══ Batch 292 (2026-10-27, Plan 296 / Research 330) — the         ══
+        // ══ hevnsnt/CVEngine distill (GPL-3.0 @ `9dd9c441`): three         ══
+        // ══ suggest-only InputValidation rules on the two most universal  ══
+        // ══ std surfaces (`std::net::IpAddr`, `std::process::Command`).   ══
+        // ══ Pure-Python source (the transcription law: language is never  ══
+        // ══ a gate); fixtures are ORIGINAL Rust syntheses; the source     ══
+        // ══ contributes class knowledge only.                              ══
+        // ── client-ip-from-untrusted-forwarded-header (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "client-ip-from-untrusted-forwarded-header".to_string(),
+            sec_concept: "an `x-forwarded-for` header read used as the CLIENT IDENTITY \
+(rate-limit key, ban key, audit actor) without any trusted-proxy gate: the \
+header is attacker-settable, so the leftmost (or unconditional whole-header) \
+read lets any caller rotate the identity that a throttle/ban decision keys on \
+— the rate-limit/ban bypass class. The bounded repair is the three-regime \
+resolver (CVEngine `client_ip.py`'s decision content): no trusted proxies \
+configured → ignore the header entirely (use the peer address); the peer IS \
+a trusted proxy → walk the chain RIGHT-TO-LEFT, the first untrusted hop wins; \
+a malformed hop mid-chain → the whole chain is untrusted → fail closed to \
+the peer. Plus the mapped-unwrap inside the parse (`::ffff:1.2.3.4` is \
+`1.2.3.4` — ipv4-mapped-range-check-unwrap owns the range-test face). \
+Suggest-only: the trusted-proxy set is deployment policy. Honest recall \
+limits: fires only when the header LITERAL co-occurs with identity/throttle \
+vocabulary (client_ip/rate_limit/ratelimit/throttle/identity/audit/banned) \
+in the same fn and NO trusted-proxy marker (trusted) — a proxy-aware resolver \
+suppresses fn-wide; an xff read with no identity use (logging/debug) stays \
+silent; framework header extractors that never name the literal are honest \
+NOs; cross-fn identity flow undetected. Batch 292 / Plan 296 / Research 330 \
+(hevnsnt/CVEngine @ `9dd9c441`, GPL-3.0 — cited as class provenance; the \
+fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use std::net::IpAddr;\n\npub fn client_ip(forwarded: Option<&str>, peer: IpAddr) -> IpAddr {\n    forwarded\n        .and_then(|chain| chain.split(',').next())\n        .and_then(|hop| hop.trim().parse::<IpAddr>().ok())\n        .unwrap_or(peer)\n}\n\npub fn throttle_key(forwarded: Option<&str>, peer: IpAddr) -> IpAddr {\n    let ip = client_ip(forwarded, peer);\n    if banned(ip) {\n        panic!(\"rejected\");\n    }\n    ip\n}\n\nfn banned(_ip: IpAddr) -> bool {\n    false\n}\n"
+                .to_string(),
+            fixed_code: "use std::net::IpAddr;\n\nfn trusted(peer: IpAddr) -> bool {\n    // the deployment's proxy list — policy, never mechanical\n    let _ = peer;\n    false\n}\n\npub fn client_ip(forwarded: Option<&str>, peer: IpAddr) -> Option<IpAddr> {\n    if !trusted(peer) {\n        return Some(peer); // no trusted proxies: the header is attacker-settable\n    }\n    let chain = forwarded?;\n    let mut client = peer;\n    for hop in chain.split(',').rev() {\n        let Ok(ip) = hop.trim().parse::<IpAddr>() else {\n            return Some(peer); // a malformed hop: the chain is untrusted, fail closed\n        };\n        if !trusted(ip) {\n            client = ip;\n            break;\n        }\n    }\n    Some(client)\n}\n\npub fn throttle_key(forwarded: Option<&str>, peer: IpAddr) -> Option<IpAddr> {\n    let ip = client_ip(forwarded, peer);\n    if banned(ip?) {\n        panic!(\"rejected\");\n    }\n    ip\n}\n\nfn banned(_ip: IpAddr) -> bool {\n    false\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── shell-string-command-interpolation (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "shell-string-command-interpolation".to_string(),
+            sec_concept: "user-influenced data interpolated into a SHELL-STRING command \
+(`Command::new(\"sh\")` + `.arg(\"-c\")` + a `format!`/concat expression carrying \
+the data): a metacharacter allowlist on the data does NOT make the shell string \
+safe — argument injection (CWE-88) survives every allowlist that excludes only \
+`;|&$` (the CVEngine tlsx site: `f'tlsx -host {domain}'` passes its own \
+`[A-Za-z0-9._:/\\[\\] -]` charset and still reaches `foo -oG /tmp/x`). The bounded \
+repair is the ARG ARRAY on the real binary (no shell, no metacharacter layer at \
+all); where shell features are genuinely needed, strict per-token validation \
+faces the injected datum and review owns it. Suggest-only: the shell-features \
+regime is a design decision. Honest recall limits: fires on the `sh`/`bash`/\
+`zsh`/`cmd`/`powershell` literal + a `-c`/`-Command`/`/C` literal + a \
+`format!`/concat arg in the same fn; a format! arg on a NON-shell binary \
+(nmap, tlsx invoked directly) stays silent (argument injection there is a \
+different, narrower class); a STATIC `-c` script with no interpolation stays \
+silent; macro-token bodies are never descended into; cross-fn construction \
+undetected. Batch 292 / Plan 296 / Research 330 (hevnsnt/CVEngine @ \
+`9dd9c441`, GPL-3.0 — cited as class provenance; the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "use std::process::Command;\n\npub fn probe(domain: &str) -> std::io::Result<String> {\n    let out = Command::new(\"sh\")\n        .arg(\"-c\")\n        .arg(format!(\"tlsx -san -silent -host {domain}\"))\n        .output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
+                .to_string(),
+            fixed_code: "use std::process::Command;\n\npub fn probe(domain: &str) -> std::io::Result<String> {\n    let out = Command::new(\"tlsx\")\n        .arg(\"-san\")\n        .arg(\"-silent\")\n        .arg(\"-host\")\n        .arg(domain) // the arg array: no shell, no metacharacter layer\n        .output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── ipv4-mapped-range-check-unwrap (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "ipv4-mapped-range-check-unwrap".to_string(),
+            sec_concept: "an `IpAddr` match whose V4 arm runs a range/allowlist/denylist \
+test and whose V6 arm rejects or falls through WITHOUT unwrapping the mapped \
+form: `::ffff:127.0.0.1` is a V6 address whose bits are loopback, so a \
+version-split check waves it through every guard it was meant to fail — the \
+bypass class for SSRF refusals, allowlists and firewall rules (CVEngine \
+unwraps `ipv4_mapped` BEFORE any range test in both its resolver and its \
+scanner gate). The bounded repair is `to_ipv4_mapped()` before the test: \
+`if let Some(v4) = v6.to_ipv4_mapped() { v4 path } else { v6 path }`, or the \
+normalize-up-front form. The companion law rides the context: PASS THE PARSED \
+FORM ONWARD, never the raw token — Rust's `IpAddr::from_str` refuses scope ids \
+(`fe80::1%eth0`), which is itself the boundary (CVEngine must refuse them \
+manually; Rust's parser already did). Suggest-only: some guards deliberately \
+treat all V6 as external. Honest recall limits: fires on an `IpAddr::V4`/\
+`IpAddr::V6` match pair whose V6 arm carries no `to_ipv4_mapped` and whose fn \
+lacks it entirely, gated on range-test vocabulary (contains/is_loopback/\
+is_private/is_link_local/allowlist/blocked/nets) so a debug-print match stays \
+silent; an fn with `to_ipv4_mapped` anywhere suppresses (the normalize is \
+present); a folded single-arm match is parse-only unreachable. Batch 292 / \
+Plan 296 / Research 330 (hevnsnt/CVEngine @ `9dd9c441`, GPL-3.0 — cited as \
+class provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use std::net::{IpAddr, Ipv4Addr};\n\nconst BLOCKED: [Ipv4Addr; 2] = [Ipv4Addr::LOCALHOST, Ipv4Addr::new(169, 254, 169, 254)];\n\npub fn is_blocked(ip: IpAddr) -> bool {\n    match ip {\n        IpAddr::V4(v4) => BLOCKED.contains(&v4),\n        IpAddr::V6(_) => false,\n    }\n}\n"
+                .to_string(),
+            fixed_code: "use std::net::{IpAddr, Ipv4Addr};\n\nconst BLOCKED: [Ipv4Addr; 2] = [Ipv4Addr::LOCALHOST, Ipv4Addr::new(169, 254, 169, 254)];\n\npub fn is_blocked(ip: IpAddr) -> bool {\n    match ip {\n        IpAddr::V4(v4) => BLOCKED.contains(&v4),\n        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {\n            Some(v4) => BLOCKED.contains(&v4), // ::ffff:127.0.0.1 IS loopback\n            None => false,\n        },\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── abuse-strike-counts-cross-site-requests (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "abuse-strike-counts-cross-site-requests".to_string(),
+            sec_concept: "an abuse/strike counter incremented on EVERY rejected request \
+regardless of the browser's site label: a hostile page can make a victim's \
+browser send attack-shaped requests (an image tag, an auto-submitted form), so \
+counting those rejections bans the VICTIM — denial-of-service via the defense \
+itself (CVEngine's guard docstring: requests a browser marks cross-site are \
+rejected but never counted, so a hostile page cannot get a visitor banned). \
+The bounded repair is the site-label gate before the increment: `sec-fetch-site` \
+(cross-site/same-site) — or Origin/Referer where the label is absent — rejects \
+the request but skips the strike. Suggest-only: which labels to honor and the \
+fallback ordering are deployment policy. Honest recall limits: fires only on \
+strike-vocabulary (strike/abuse/penalty) incrementing beside a rejection \
+marker (400/403/StatusCode/reject) with NO site-label vocabulary (sec_fetch/\
+sec-fetch-site/same-site/cross-site/origin-header/referer vocabulary) anywhere \
+in the fn — a guard that already classifies suppresses; a strike counter with \
+no rejection path (game score, retry budget) stays silent; cross-fn counting \
+undetected. Batch 292 / Plan 296 / Research 330 (hevnsnt/CVEngine @ \
+`9dd9c441`, GPL-3.0 — cited as class provenance; the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "pub struct Guard { strikes: u32 }\n\npub enum Verdict { Ok, Rejected }\n\nimpl Guard {\n    pub fn inspect(&mut self, body: &str) -> Verdict {\n        if body.contains(\"; cat \") || body.contains(\"../\") {\n            self.strikes += 1; // counts the victim's forged requests too\n            return Verdict::Rejected;\n        }\n        Verdict::Ok\n    }\n}\n"
+                .to_string(),
+            fixed_code: "pub struct Guard { strikes: u32 }\n\npub enum Verdict { Ok, Rejected }\n\nimpl Guard {\n    pub fn inspect(&mut self, body: &str, site_label: Option<&str>) -> Verdict {\n        if body.contains(\"; cat \") || body.contains(\"../\") {\n            // a hostile page forged this: reject, never count (the victim\n            // must not be banned by it)\n            if site_label != Some(\"same-site\") {\n                return Verdict::Rejected;\n            }\n            self.strikes += 1;\n            return Verdict::Rejected;\n        }\n        Verdict::Ok\n    }\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
