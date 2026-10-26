@@ -1,5 +1,6 @@
 # 174 — CLI tests that `login` adopt the box's real `~/.ssh/id_ed25519` (HOME not isolated)
 **Status:** OPEN — census done, fix pattern proven in `build_stamp_cli` + `kat_refill_cli` (`7f076057`, this issue's filing commit)
+**Claimed:** zed-m3-idle-174, 1793029400, expires 2026-10-28T09:30:00+00:00
 
 ## Finding
 riir-auth `account_key` resolves `$HOME/.ssh/id_ed25519` (then `USERPROFILE`) and, when present,
