@@ -1,6 +1,7 @@
 # Plan 294 — Batch 290: the resin serving-engine conversion (rust_perf)
 
 **Status:** STAGED — authoring gated behind the live mining-lane claims (plan-289 bbtree lane holds the slot; B284 burn authoring pending); verdict landed as Research 328.
+**Claimed:** zed-m3-294t0, 1793003333, expires 2026-10-28T08:28:53+00:00
 
 Source: ekzhang/resin @ `c14ee9d0e84a79cf0168fa117745787de968f63f` (Apache-2.0, pinned 2026-10-26). Verdict: **YES B corpus / lane-intel HIGH / product-coverage LOW-MODERATE** — see `.research/328_resin_serving_engine_distill.md` (the ranked table + dedup evidence IS the working inventory).
 
