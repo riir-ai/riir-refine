@@ -320,7 +320,7 @@ fn providers_fixture_record(account_id: &str) -> String {
         "providers": [
             {
                 "provider": "github",
-                "numeric_id": 5_832_31u64,
+                "numeric_id": 583_231u64,
                 "login_display": "octocat",
                 "bound_at_unix": 1_764_000_000u64
             }
@@ -351,7 +351,7 @@ fn g9f_provider_rows_round_trip_through_load_and_a_recovery_rewrite() {
     let rows = &loaded.state().providers;
     assert_eq!(rows.len(), 1, "the binding row must survive the parse");
     assert_eq!(
-        rows[0].numeric_id, 5_832_31,
+        rows[0].numeric_id, 583_231,
         "the NUMERIC id is THE identity"
     );
     assert_eq!(rows[0].login_display, "octocat");

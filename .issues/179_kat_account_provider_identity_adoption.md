@@ -29,9 +29,7 @@ precedent). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
-**Claimed:** zed-amo-179-after, 1793061000, expires 2026-10-29T23:40:00Z
-
-Scope: item (4) `login --provider github` (device flow + local bind + the server bind route) + item (5) the `rebind_required` verbatim remedy line — the AFTER half, unblocked by dapps 140's landing (`1258eef`/`39d1343`). Items (1)–(3) + the closed item (6) untouched; 175's operational lease unaffected.
+**Lease closed:** zed-amo-179-after (claimed 2026-10-27, epoch 1793061000) — items (4)+(5) LANDED 2026-10-27 ~06:5x+07 the same hour; scope was item (4) `login --provider github` (device flow + local bind + the server bind route) + item (5) the `rebind_required` verbatim remedy line, unblocked by dapps 140's landing (`1258eef`/`39d1343`).
 
 **Lease closed:** zed-amo-179-residue (claimed 2026-10-27, epoch 1793055600) — the residue LANDED 2026-10-27 ~05:5x+07 (riir-kat `70c951c` + the tree reconciliation); item (6) fully landed, nothing further in this item.
 
@@ -103,14 +101,35 @@ collide on one lease.
 
 ## AFTER half (blocked on the dapps route hosts — one lease each)
 
-4. **`provider_login` wiring** — a `cargo refine login --provider
-   github` arm (device flow) that CREATES the binding rows (numeric id,
-   display login). Blocked on: the bind/unbind route host (dapps 140).
-5. **The re-bind lane surface** — when a caller hits a name-only
-   refusal, quote `REBIND_REQUIRED` VERBATIM (byte-equal; the shared-
-   string law — a drift breaks the client remedy) and offer the re-bind
-   two-step. Blocked on: the recovery route host (dapps 140) + a
-   server-issued nonce seam.
+4. **`provider_login` wiring — LANDED 2026-10-27 (the AFTER half; lease
+   closed at the top). ⚠ THE RACE: TWO lanes authored the client tier the
+   same hour (the claim epochs overlapped — the leaf landed FIRST via
+   `9f51008`/`zed-amo-179-recovery-client`'s `kat_recovery_client`, the
+   BROADER surface covering all seven flows; this lane YIELDED its
+   duplicate `kat_provider_client` unpushed and REBASED onto the
+   canonical one, contributing the deltas the canonical lane lacked:
+   `CODE_GITHUB_BOUND` + `DerefMut` on `KatAccount` + the binding
+   vocabulary re-exports — riir-kat `2e7dc53`/`1a66a07`/`26a4d7d`).**
+   `cargo refine login --provider github [--totp-code <c>]` — the device
+   flow composed END TO END through riir-kat's `kat_recovery_client`
+   (the leaf's `provider_login` feature chain, riding refine's
+   `kat_transport`): token captured mid-flow → the LOCAL row via the
+   substrate's `bind_provider` → the SERVER row via nonce →
+   `compose_numeric_claim` (the SSHSIG `RebindClaim` as
+   `RebindIdentity::Numeric` — the token re-check IS the resolution
+   step; the wire-compat law checks the two key halves; v2-first; the
+   token never persisted; `X-Kat-Totp` for armed accounts). The
+   substrate re-exports live on the leaf so refine never names
+   riir-auth. Client id: `RIIR_AUTH_GITHUB_CLIENT_ID`.
+5. **The re-bind lane surface — LANDED in the same commit:** the
+   provider CLI's `rebind_required` refusal arm displays the refusal
+   body's `error` field — which IS `REBIND_REQUIRED` VERBATIM (the
+   kat_recovery_client tier's own law: display it, never re-derive it;
+   byte-equal by construction, one home) — then names the remedy (this
+   command IS the re-bind lane's client); `totp_required` names the
+   flag; `github_bound` (`CODE_GITHUB_BOUND`, this lane's addition to
+   the leaf's refusal vocabulary) names the unbind. The server-issued
+   nonce seam is the landed `/account/provider/nonce` route.
 6. **TOTP on the migrate/consent routes' client half** — the
    `kat_totp_client` companion (plan 053's honest-limits split names
    refine/riir-kat as its home). Blocked on: plan 053's wire contract

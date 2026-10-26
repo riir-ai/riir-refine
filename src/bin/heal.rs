@@ -1551,8 +1551,27 @@ fn ensure_logged_in() -> Option<riir_refine::kat_account::KatAccount> {
 /// stays for import (`--import-key`), repair, and scripts that want login
 /// as a distinct step.
 #[cfg(feature = "kat_service")]
-fn run_kat_login(import_key: Option<&Path>) {
+fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: Option<&str>) {
     use riir_refine::kat_account::KatAccount;
+
+    // refine 179 item 4: the provider lane is its own flow (the device
+    // flow + the local row + the server bind) — it composes the substrate
+    // login itself, so the two entry arms are exclusive.
+    if let Some(name) = provider {
+        if import_key.is_some() {
+            eprintln!(
+                "kat login: --key and --provider are exclusive — the import path binds an \
+                 existing key, the provider flow logs in through the substrate chain"
+            );
+            std::process::exit(2);
+        }
+        run_kat_login_provider(name, totp_code);
+        return;
+    }
+    if totp_code.is_some() {
+        eprintln!("kat login: --totp-code only means something with --provider github");
+        std::process::exit(2);
+    }
 
     // Plan 045 A1: the explicit login is a join path too — a fresh machine
     // chooses its network here (the same no-config-only prompt as `--mine`).
@@ -1574,6 +1593,167 @@ fn run_kat_login(import_key: Option<&Path>) {
     print_login_outcome(&outcome, "kat");
     for line in account.summary_lines() {
         println!("{line}");
+    }
+}
+
+/// refine 179 item 4 (the AFTER half, unblocked by dapps issue 140):
+/// `login --provider github` — the GitHub device flow composed END TO END
+/// through the leaf's [`riir_kat::kat_recovery_client`] (the recovery
+/// class's client tier, landed `9f51008`): the token is captured mid-flow,
+/// the LOCAL binding row written (the substrate's `bind_provider` —
+/// persisted), and the SERVER binding driven to the recovery class's
+/// routes (nonce → key-signed bind → the SSHSIG `RebindClaim` evidence,
+/// `RebindIdentity::Numeric` — the token re-check IS the resolution
+/// step). The token dies in the flow; the v2-first law rides the ledger
+/// id from the service info; an ARMED account's bind route takes the
+/// current factor via `--totp-code` (the `X-Kat-Totp` header).
+#[cfg(feature = "kat_transport")]
+fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
+    use riir_kat::kat_recovery_client::{
+        bind_flow, compose_numeric_claim, github_device_login, nonce_flow, BindRequest,
+        HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure,
+    };
+
+    debug_assert_eq!(provider, "github", "the parse arm gates the vocabulary");
+    ensure_join_env_recorded();
+    let url = command_service_url();
+    // The v2-first law: the ledger id from the service info (the totp
+    // lane's read); an old server answers None and the legacy signature
+    // goes out.
+    let ledger_id = match riir_refine::kat_migrate_client::fetch_ledger_id(&url) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("kat login --provider {provider}: reading the service info: {e}");
+            std::process::exit(1);
+        }
+    };
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    // The device flow FIRST (the token exists only inside this frame —
+    // the client-id refusal surfaces from the leaf, naming the env var).
+    let (token, identity) = match github_device_login() {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("kat login --provider {provider}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let dir = riir_refine::kat_account::KatAccount::default_dir();
+    let (mut kat, key_outcome) = match riir_refine::kat_account::KatAccount::login(&dir) {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("kat login --provider {provider}: the local record: {e}");
+            std::process::exit(1);
+        }
+    };
+    // The LOCAL row first (persisted; idempotent refresh on the same id; a
+    // conflicting id refuses as a SERVER-signed act before any dial).
+    let binding = riir_refine::kat_account::ProviderBinding::new(
+        riir_refine::kat_account::IdentityProvider::GitHub,
+        identity.numeric_id,
+        identity.login.clone(),
+    );
+    let newly_bound = match kat.bind_provider(binding) {
+        Ok(added) => added,
+        Err(e) => {
+            eprintln!("kat login --provider {provider}: {e}");
+            std::process::exit(1);
+        }
+    };
+    let signing = match kat.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("kat login --provider {provider}: the signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    let transport = HttpRecoveryTransport::new(&url, 15);
+    // nonce → claim (the nonce rides INSIDE the claim) → bind. The bind
+    // refusal branches on the typed class (the vocabulary re-exported
+    // beside the flows).
+    let bound = (|| -> Result<ProviderBindResponse, RecoveryFailure> {
+        let nonce = nonce_flow(&transport, &signing, ledger_id, now_unix)?;
+        let claim = compose_numeric_claim(&kat, &signing, identity.numeric_id, &nonce.nonce_hex)
+            .map_err(RecoveryFailure::Fault)?;
+        bind_flow(
+            &transport,
+            &signing,
+            &BindRequest {
+                provider: "github",
+                numeric_id: identity.numeric_id,
+                nonce_hex: &nonce.nonce_hex,
+                claim_json: &claim.claim_json,
+                rebind_sig_pem: &claim.rebind_sig_pem,
+                github_token: &token,
+                totp_code,
+                ledger_id,
+                created_at_unix: now_unix,
+            },
+        )
+    })();
+    // The token dies HERE — after its last use, before any return.
+    drop(token);
+    match bound {
+        Ok(server) => {
+            print_login_outcome(&key_outcome, "kat");
+            println!(
+                "kat: provider binding LOCAL — numeric id {} ({}){}",
+                identity.numeric_id,
+                identity.login,
+                if newly_bound { " added" } else { " refreshed" }
+            );
+            println!(
+                "kat: provider binding SERVER — {} bound={} refreshed={} (the recovery \
+                 class reads this row; the token was never stored)",
+                server.provider, server.bound, server.refreshed
+            );
+        }
+        Err(RecoveryFailure::Refused(r)) => {
+            match r.code() {
+                Some(riir_kat::kat_recovery_client::CODE_REBIND_REQUIRED) => {
+                    // The shared-vocabulary law: the `error` field IS the
+                    // substrate's REBIND_REQUIRED text VERBATIM (display
+                    // it, never re-derive it) — then the remedy THIS CLI
+                    // offers.
+                    eprintln!(
+                        "kat login: {}",
+                        r.body.as_ref().map_or("", |b| b.text.as_str())
+                    );
+                    eprintln!(
+                        "kat login: remedy — this command IS the re-bind lane's client: \
+                         rerun it and the device flow resolves the login to its numeric \
+                         id, the account key re-signs the resolved binding"
+                    );
+                }
+                Some(riir_kat::kat_protocol_totp::CODE_TOTP_REQUIRED) => {
+                    eprintln!(
+                        "kat login: the account is ARMED — pass the current factor: \
+                         `cargo refine login --provider {provider} --totp-code <code>`"
+                    );
+                }
+                Some(riir_kat::kat_protocol_recovery::CODE_GITHUB_BOUND) => {
+                    eprintln!(
+                        "kat login: that GitHub numeric id is already bound to a different \
+                         account — unbind it there first (the numeric id is THE identity; \
+                         one provider row per account)"
+                    );
+                }
+                _ => match (r.status, &r.body) {
+                    (Some(s), Some(b)) => eprintln!("kat login: HTTP {s} — {}", b.error),
+                    (Some(s), None) => eprintln!("kat login: HTTP {s}"),
+                    (None, Some(b)) => eprintln!("kat login: {}", b.error),
+                    (None, None) => {
+                        eprintln!("kat login: the service refused (no readable body)")
+                    }
+                },
+            }
+            std::process::exit(1);
+        }
+        Err(RecoveryFailure::Fault(e)) => {
+            eprintln!("kat login --provider {provider}: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
@@ -6574,6 +6754,15 @@ struct Args {
     /// `--key <path>` — import an existing OpenSSH Ed25519 private key at
     /// `login` instead of generating one.
     import_key: Option<PathBuf>,
+    /// refine 179 item 4: `--provider <name>` on `login` — the provider
+    /// bind lane (the closed vocabulary: `github`). Mutually exclusive
+    /// with `--key` (the import path binds an existing key; the provider
+    /// flow logs in through the substrate chain).
+    login_provider: Option<String>,
+    /// refine 179 item 4: `--totp-code <c>` on `login --provider` — the
+    /// current factor for an ARMED account (the bind route is
+    /// TOTP-gated, the `X-Kat-Totp` header).
+    login_totp: Option<String>,
     /// T1.6: `--tx <sig>` — the Solana transaction signature `claim`
     /// submits/queues.
     claim_tx: Option<String>,
@@ -6925,6 +7114,8 @@ fn parse_args() -> Args {
         collapse_report: false,
         command: None,
         import_key: None,
+        login_provider: None,
+        login_totp: None,
         claim_tx: None,
         config_url: None,
         config_set: false,
@@ -7317,6 +7508,33 @@ fn parse_args() -> Args {
                     usage();
                 };
                 args.import_key = Some(PathBuf::from(value));
+            }
+            // refine 179 item 4: the login provider lane (the closed
+            // vocabulary — github only today).
+            "--provider" => {
+                let Some(value) = it.next() else {
+                    eprintln!("--provider requires a value (github)");
+                    usage();
+                };
+                if value != "github" {
+                    eprintln!("--provider: unknown provider {value:?} — the closed vocabulary is `github`");
+                    usage();
+                }
+                args.login_provider = Some(value);
+            }
+            // refine 179 item 4: the login lane's current factor (an ARMED
+            // account's bind route is TOTP-gated; rides the X-Kat-Totp
+            // header).
+            "--totp-code" if args.command == Some(KatCommand::Login) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--totp-code requires the current authenticator code");
+                    usage();
+                };
+                if args.login_totp.is_some() {
+                    eprintln!("--totp-code given twice");
+                    usage();
+                }
+                args.login_totp = Some(value);
             }
             "--tx" => {
                 let Some(value) = it.next() else {
@@ -11273,7 +11491,11 @@ fn main() {
     #[cfg(feature = "kat_service")]
     if let Some(cmd) = args.command {
         match cmd {
-            KatCommand::Login => run_kat_login(args.import_key.as_deref()),
+            KatCommand::Login => run_kat_login(
+                args.import_key.as_deref(),
+                args.login_provider.as_deref(),
+                args.login_totp.as_deref(),
+            ),
             KatCommand::Account => run_kat_account(&args.paths, args.account_history),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]

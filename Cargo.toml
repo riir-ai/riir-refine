@@ -560,8 +560,11 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # src/kat_lease_client.rs §golden).
 # Proposal 001 T4: the migrate filing's PoW measure rides the same
 # transport tier (riir-auth's ureq source through riir-kat's dep edge;
-# dep-weight-neutral — ureq is already here).
-kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport", "riir-kat/github_pow_fetch"]
+# dep-weight-neutral — ureq is already here). refine 179 item 4: the
+# provider-bind lane rides it too (`riir-kat/provider_login` — the GitHub
+# device flow + the recovery class's bind routes; the leaf's own
+# feature chain pulls github_login + rebind).
+kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport", "riir-kat/github_pow_fetch", "riir-kat/provider_login"]
 
 # riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17):
 # `cargo refine get|send <amt> tuna` — the marketing-airdrop ADMIN hand
