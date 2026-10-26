@@ -16,7 +16,7 @@ per plan 053 T0.5 item 4). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
-Context: [issue 175](../../.issues/175_refine_mainnet_account_migration.md)
+Context: [issue 175](175_refine_mainnet_account_migration.md)
 (the live mainnet migration) is leased through 2026-10-28T13:30Z for its
 T-PREFLIGHT scope with "no code changes in this lease" — this issue does
 NOT touch 175's operational tasks (T-E2E/T-MIGRATE/T-POST/T-KEYS are
