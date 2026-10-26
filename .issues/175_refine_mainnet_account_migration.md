@@ -117,6 +117,23 @@ lands, no drain owed first.
   chain ops bearers) — inventory + steps in
   `../riir-chain/.issues/169_api_key_rotation_sweep.md`; CF half verified
   via the deployer sibling guard `--live` after the roll.
+  - [x] **T-KEYS pre-roll baseline MEASURED 2026-10-26 ~15:0xZ**
+    (zed-m3-tkeys-preroll; full record: riir-chain
+    [169 addendum](../../riir-chain/.issues/169_api_key_rotation_sweep.md)
+    @ `4f433d35`). Guard `--static` 0 red / 6 advisory + `--live` 0 red
+    / 0 advisory (all refusal legs hold with TODAY's tokens — any
+    post-roll red is attributable). Resolved from "unknown": wrangler
+    OAuth session stale-live (access token minted ~10:10Z today, refresh
+    present, drop still preferred; real path
+    `~/Library/Preferences/.wrangler/config/default.toml`). **The
+    load-bearing finding: the riir-train/.env HF WRITE token (the M3
+    publisher) is INVALID** — whoami-v2 refuses it; the HF push lane
+    (`data_backup.sh push*`) fails auth until the owner mints (the
+    refine/.env read token is VALID, role read). Items 6/7/9/10 stay
+    owner mints (not locally resolvable; CI-dispatch verifiers held
+    until post-roll per the spending convention). KAT-plane verifier
+    baseline recorded (d54e39a8: ledger 0 KAT @ epoch 2964, TUNA 100
+    / 29 d, planes healthy).
 
 ## Acceptance
 
