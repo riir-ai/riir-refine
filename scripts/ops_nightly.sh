@@ -358,26 +358,31 @@ if [ "${OPS_NIGHTLY_NO_DEPLOY:-0}" != "1" ] && [ -n "${DEPLOY_DIR}" ]; then
   # not answer.
   _t0="$(date -u +%Y-%m-%dT%H:%M:%S)"
   _dout="$(mktemp)"
-  # Deploy-credential resolution (one token name, 2026-10-21): wrangler reads
-  # CLOUDFLARE_API_TOKEN natively, so when it is set (from .env via step 0b, or
-  # CI env) wrangler simply uses it -- the least-privilege deploy token
-  # (Account -> Workers Scripts -> Edit, ideally script-scoped to
-  # riir-ops-dashboard). No remap, no unset: when CLOUDFLARE_API_TOKEN is set
-  # wrangler never consults its deprecated legacy alias, and the
-  # analytics token lives under CLOUDFLARE_OPS_API_TOKEN, a name wrangler ignores.
-  # Absent -> the personal `wrangler login` OAuth session.
+  # Deploy-credential ladder (the deploy-token law, runbook
+  # ../riir-deployer/.docs/02_runbooks/deploy_tokens.md): the ONLY deploy
+  # credential honored here is CLOUDFLARE_DEPLOY_API_TOKEN (the LOCAL dev-lane
+  # name), mapped onto CLOUDFLARE_API_TOKEN for the wrangler child only.
+  # CLOUDFLARE_API_TOKEN / CF_API_TOKEN are the PROD/CI-only names — if one is
+  # set in this shell it is IGNORED loudly (the nightly then deploys through
+  # the wrangler login OAuth session); the analytics token lives under
+  # CLOUDFLARE_OPS_API_TOKEN, a name wrangler ignores. Absent both → OAuth.
   #
   # `env` MUST come first and stays an argv prefix (never a leading
   # `VAR=value` word, which after array expansion is not an assignment), and
   # the array is never empty (bash 3.2 + `set -u` rejects an empty "${a[@]}").
-  if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
-    log "deploy credential: CLOUDFLARE_API_TOKEN (least-privilege; overrides OAuth)"
-    _w_env=(env)
+  if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] || [ -n "${CF_API_TOKEN:-}" ]; then # prod/CI-only names set — the local lane is CLOUDFLARE_DEPLOY_API_TOKEN
+    # The WARN names BOTH spellings so the deploy-token guard's both-names
+    # rule sees a refusal line, not a bare prod-name reference.
+    log "WARN deploy credential: prod/CI-only name set (CLOUDFLARE_API_TOKEN / CF_API_TOKEN) — IGNORED; the local lane is CLOUDFLARE_DEPLOY_API_TOKEN (mapped for wrangler) or the wrangler OAuth session"
+    _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_DEPLOY_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
+  elif [ -n "${CLOUDFLARE_DEPLOY_API_TOKEN:-}" ]; then
+    log "deploy credential: CLOUDFLARE_DEPLOY_API_TOKEN (local dev-lane; mapped for wrangler)"
+    _w_env=(env "CLOUDFLARE_API_TOKEN=${CLOUDFLARE_DEPLOY_API_TOKEN}")
   else
-    log "deploy credential: wrangler OAuth (CLOUDFLARE_API_TOKEN unset)"
+    log "deploy credential: wrangler OAuth (CLOUDFLARE_DEPLOY_API_TOKEN unset)"
     # OAuth guard: strip every env credential wrangler would prefer over the
-    # OAuth session (including the deprecated CF_API_TOKEN alias name).
-    _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
+    # OAuth session (prod name + deprecated alias + local name alike).
+    _w_env=(env -u CLOUDFLARE_API_TOKEN -u CF_API_TOKEN -u CLOUDFLARE_DEPLOY_API_TOKEN -u CLOUDFLARE_API_KEY -u CLOUDFLARE_EMAIL)
   fi
   if (cd "${DEPLOY_DIR}/cloudflare/dashboard" && "${_w_env[@]}" timeout 600 npx --yes "wrangler@${WRANGLER_VERSION}" deploy >"${_dout}" 2>&1); then
     cat "${_dout}" >> "${LOG}"

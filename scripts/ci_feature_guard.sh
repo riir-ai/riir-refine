@@ -21,6 +21,12 @@
 #                              allowlist (an allowlist rots silently)
 #   5d. zero-test detector   → a cfg-gated test file that compiles empty
 #                              is a pass that proves nothing
+#   6. deploy-token guard    → the local dev-lane credential law (runbook
+#                              ../riir-deployer/.docs/02_runbooks/deploy_tokens.md):
+#                              only CLOUDFLARE_DEPLOY_API_TOKEN in local env
+#                              files; prod-name tracked refs carry the local
+#                              name or a comment (skips loud without the
+#                              deployer checkout — a deferral, never a pass)
 #
 # No Lean proof gate (this repo has no `.proofs/`).
 # No wasm32 gate (the `wasm_pruner` feature is deferred on rubrc maturity).
@@ -292,6 +298,19 @@ if [ -n "$ZERO_TEST_TARGETS" ]; then
     exit 1
 fi
 echo "✓ every tests/*.rs target ran at least one test"
+
+echo
+echo "=== Layer 6: deploy-token guard (the local dev-lane credential law) ==="
+# The owner deploy-token law (runbook: ../riir-deployer/.docs/02_runbooks/deploy_tokens.md):
+# local env files carry ONLY CLOUDFLARE_DEPLOY_API_TOKEN (dev-lane scoped) —
+# CLOUDFLARE_API_TOKEN / CF_API_TOKEN are the prod/CI-only names, forbidden in
+# local env files and never an auth source for local scripts; a tracked
+# non-comment reference to a prod name must carry the local name on the same
+# line (a mapping/refusal line) or be a doc. The static half is cheap and
+# CI-includable; a missing deployer checkout is a loud DEFERRAL, never a green.
+GUARD="../riir-deployer/scripts/deploy_token_guard.sh"
+if [ -f "$GUARD" ]; then sh "$GUARD" --repo "$(pwd)" --static --quiet || exit 1
+else echo "  · ../riir-deployer absent — deploy-token guard SKIPPED (deferral, not a pass)"; fi
 
 echo
 echo "=== All layers PASS ==="
