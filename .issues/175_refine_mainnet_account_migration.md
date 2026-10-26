@@ -9,6 +9,7 @@ account; T-WIRE/T4 stays the dao lane's, no code changes in this lease) Executes
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
 NOT a wetrun.
+**Claimed:** zed-shikuwa-4090-idle, epoch=2026-10-26T20:30:00+07:00, expires 2026-10-28T20:30:00+07:00 — T-PREFLIGHT (4090 leg) drain.
 **Progress 2026-10-26 (doctor sweep):** M3 preflight leg DONE — the
 account dir was missing under the post-uid-502 HOME (`~/.config/riir-auth/
 did not exist → every run read "not logged in"`); `cargo refine login`
