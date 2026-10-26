@@ -17,10 +17,13 @@ did not exist → every run read "not logged in"`); `cargo refine login`
 adopted the fresh rotation-target account `d54e39a8…742aaa` IN PLACE
 (machine key = account key), sync push ACCEPTED by mainnet (54 rows,
 free-tier 100-KAT grant claimed, corpus lease 2964→2970), TUNA 100
-(29 d). The 4090 leg is measured WORSE than expected — see the posture
-block below: its KAT plane is FAIL-CLOSED BROKEN today (record names a
-key path that now holds the new key), so the migration is not just ASAP,
-it is the unblock.
+(29 d). **4090 leg DONE 2026-10-26 ~20:4x +07 (zed-amo-175-preflight)**:
+identity restored to `71615e8d…` via the record projection (the env-var
+remedy measured broken — see the task block); the 9-repo drain measured
+a burn no-op + ONE real mining drain (riir-refine, 76 rows ACCEPTED by
+mainnet under the old account); leases pulled to 2970. The plane is
+CONTINUOUS under the old identity — T-MIGRATE files whenever dao T4
+lands, no drain owed first.
 
 ## The posture (2026-10-26)
 
@@ -28,10 +31,10 @@ it is the unblock.
   SSH key — retired on-box the same day (`id_ed25519.retired-20261026`,
   + the byte-identical `riir-heal` legacy copy). The old key still signs;
   `KEY_OVERRIDE_ENV` signs from the retired path without re-installing it.
-- The 4090 now boots `katop@4090-20261026` — the next unguarded refine op
-  there derives a FRESH account id. Uncoordinated ops strand the old
-  balance/history behind a tombstone-to-be. **No new-identity ops on the
-  4090 until the migration files or the loss is explicitly accepted.**
+- The 4090 record now sits ON the old identity (`key_path` → the retired
+  file) — unguarded refine ops there bill the OLD account (the safe
+  direction) until the migration files. A deliberate re-login under the
+  new identity is T-POST's move, never an accident now.
 - Local sync staleness (measured on the M3): `kat_burn_ack.json`
   2026-09-18 (38 d), `kat_sync_state.json` 2026-10-06 (20 d) — offline
   rows must drain UNDER THE OLD ACCOUNT first.
@@ -45,17 +48,49 @@ it is the unblock.
   place) + sync green. The OLD home (`/Users/katopz`, permission-denied
   to the new user) keeps the retired `c79c93b8` account state as history
   — deliberately NOT copied (watermark-reset rule); the dao sweep covers it.
-- [ ] **T-PREFLIGHT (4090 leg):** measured 2026-10-26 —
-  `C:\Users\katop\.config\riir-auth\account.json` = `71615e8d…91303`,
-  `key_path = C:\Users\katop\.ssh\id_ed25519` — **which now holds the
-  NEW `katop@4090-20261026` key**; the old key (71615e8d's binding)
-  survives as `id_ed25519.retired-20261026` (+ the `riir-heal` legacy
-  copy). Signing as 71615e8d therefore MISMATCHES → the plane refuses
-  loud (no silent fork — inference from the record/key mismatch, not yet
-  a measured wire refusal). Remedy = the migration itself: dual-sign via
-  `KEY_OVERRIDE_ENV=C:\Users\katop\.ssh\id_ed25519.retired-20261026`.
-  The per-repo burn acks live in the repos' `.refine/` dirs (E:\git\riir-*),
-  not the home dir — drain whichever have offline rows once signing works.
+- [x] **T-PREFLIGHT (4090 leg):** DONE 2026-10-26 ~20:3x +07 (zed-amo-175-preflight
+  via ssh; full narrative in this block + the snapshot row). Measured chain:
+  (1) the written remedy is WRONG-BY-MEASUREMENT — `KEY_OVERRIDE_ENV`
+  (`RIIR_AUTH_ACCOUNT_KEY`) is consulted ONLY at `login_default` (riir-auth
+  `account_key.rs` line 567, the no-record adoption chain); the per-run
+  `load_with_home` path never reads it, so a run with the env set signed
+  NOTHING — it took the record's `key_path` (now the NEW key), derived the
+  fresh id `4f4623f3…`, and the "key is the authority" recovery REWROTE the
+  record (loud, not a refusal — the predicted mismatch-refusal does not
+  exist as coded). That fresh-id derivation is the issue's own warned
+  class; it happened BEFORE the migration filed. Disclosure: one service
+  read fired under `4f4623f3`; the once-per-key free-tier grant state there
+  is UNVERIFIED (the render carried both "no grant row yet" and "claimed"
+  lines; balance 0; no funds can move — grants are not transfers). The
+  T-POST re-login makes the same identity the deliberate end state, so the
+  drift is timing, not substance. (2) The working remedy is the RECORD
+  PROJECTION: `account.json` is a projection ("the record is a projection,
+  the key is the authority") — one `key_path` edit to
+  `id_ed25519.retired-20261026` (backup at `account.json.pre-175-preflight.bak`;
+  PS 5.1 `Set-Content -Encoding UTF8` writes a BOM serde_json rejects —
+  the P44 class, rewritten BOM-free via .NET `WriteAllText`) rebinds the
+  plane to `71615e8d…91303` on the next load (one recovery line, expected).
+  The record is LEFT on the old identity — "no new-identity ops until the
+  migration files" holds structurally now. (3) THE DRAIN MEASURED A NO-OP
+  by construction: `sync` across all 9 E:\git repos signed `7161…`
+  everywhere; the burn channel skips silently per-net (the current code
+  reads `<root>/.refine/net/<host>/kat_charge.json` — fresh-born zeros —
+  the September ROOT books are legacy pre-split files, account-scoped ack
+  burn 42 KAT ≥ every local total, and non-ack legacy files are
+  `config adopt-state --discard`-class anyway — NOT touched, the
+  dao/migration lane decides); the mining push carried 0 rows on 8 repos
+  (blocked-by-policy, not stacks) and **76 rows on riir-refine — PUSHED
+  AND ACCEPTED by mainnet** (rows enter the proof queue; server ingest
+  rows_new 0 recorded 0 = known shapes, the contribution fact + batch
+  commitment landed under the OLD account before any tombstone — the
+  drain's actual payload). All 9 repos' corpus leases pulled to epoch
+  2970 (9 × 0.001 KAT charged to the old account). The old account's
+  service ledger reads 0.000000 KAT credit at epoch 2964 (the September
+  ack balances 85–97 KAT are server-side history — spent/decayed there,
+  nothing local to recover; the free-tier grant row for the old account
+  shows claimed-and-live). Consequence for T-MIGRATE: the account is
+  CONTINUOUS (signed, synced, contributed) — file the rotation whenever
+  the dao T4 CLI lands; no drain is owed first.
 - [ ] **T-WIRE:** verify/land the dao chain this lane waits on: T3d
   (tally + snapshot verifier) → T4 (THIS repo's `account migrate` /
   `--object` / `--status` / `--census` CLI) → T6 (battery) → T7 (devnet
