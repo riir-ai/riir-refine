@@ -1,7 +1,12 @@
 # Issue 179 — `kat_account` adopts the provider-identity substrate (numeric-id GitHub binding + the signing session)
 
 **Status:** OPEN — filed 2026-10-27 (amo, auth-plane follow-through
-session). Scoped consumer-adopts ticket for
+session). **NOW half LANDED 2026-10-27 (`95bc8c18`)**: items 1–3 done —
+the render + the byte-preserve tests (`tests/kat_account_g9.rs` g9f) +
+the survey table below; the claim record `179_claim_now_half.md` removed
+per the noise rule. The AFTER half ((4)–(6)) stays blocked on the dapps
+139/140 route hosts; item 6's client half is claimed (`amo-idle-totp`).
+Scoped consumer-adopts ticket for
 [`riir-auth/.plans/001_provider_bound_biometric_identity.md`](../../riir-auth/.plans/001_provider_bound_biometric_identity.md)
 T9's by-design split ("consumers (riir-refine `kat_account`,
 seal-editor, riir-rethink) adopt via their own follow-ups after the
@@ -67,6 +72,20 @@ collide on one lease.
    lane: issue 175's T-WIRE CLI is the first candidate — the dual-sign
    request is the wallet-class op the session class exists for).
    Report-only; arming is owner-gated.
+
+   ✅ **LANDED (survey table, folded from the `95bc8c18` session record):**
+
+   | refine op | class | session-gate fit | note |
+   |---|---|---|---|
+   | `account migrate --github` (dual-sign filing) | WALLET (a key-identity act on the ledger) | STRONGEST — the exact `OpClass::Wallet` the T2 session refuses to seed | issue 175's T-MIGRATE; would require the operator to re-biometric every filing attempt within a 15-min window |
+   | `--fix` compile-gated writes | local code mutation | NO — never a seed door; the fixer runs unattended (cron/idle) and a TTL gate would break every schedule-bearing lane | disclosed, deliberately out of scope |
+   | `--mine`/sync push tails | network write, non-money | WEAK — the burn ack is accounting, not authority | a session here adds friction without an authority win |
+   | `stake`/`pay`/`buy`/`topup` money verbs | WALLET-class on the wire | STRONG — the seed door exists precisely for these | but they are interactive verbs today; the session's ABSOLUTE TTL means a fresh biometric per 15-min window |
+
+   Verdict: the only ops the session class fits WITHOUT breaking the
+   unattended lanes are the interactive wallet verbs (`migrate` filing
+   included). Arming any of them is an owner call (a behavior change to
+   every schedule-bearing workflow is NOT implied); nothing here arms.
 
 ## AFTER half (blocked on the dapps route hosts — one lease each)
 

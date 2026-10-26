@@ -666,6 +666,22 @@ Full text in AGENTS.md: monotonic never-reused counters per directory, one count
 - riir-auth `account_key` adopts `$HOME/.ssh/id_ed25519` IN PLACE as the account key when one exists, so every CLI test that ran `login` with only the account dirs isolated signed with the developer's real SSH identity on a box that had one and a minted key elsewhere — two code paths chosen by the box. **Fix:** `tests/support/hermetic_home.rs` (not a target; `#[path]`-included) — `vars(scratch)` points HOME/USERPROFILE at the scratch dir and pins CARGO_HOME/RUSTUP_HOME to the real ones so spawned cargo/rustup children keep working; `assert_minted(login_output)` reds a regression that re-adopts. Wired into all 10 CLI targets that reach the account plane (`cargo_convention_cli`, `kat_adopt_state_cli`, `kat_burn_stack`, `kat_join_cli`, `kat_soft_gate_cli`, `sync_export_cli`, `unmine_consent_cli`, `topup_cli`, `build_stamp_cli`, `kat_refill_cli`); green at the kat_service set, the kat_transport set and `--all-features`.
 - Same session, Issue 172's two out-of-lane notes: `7f076057` — `--refill` in a build without `kat_transport` now refuses for the compiled-out feature FIRST (exit 2), not "log in" (exit 1) after an account read (`build_stamp_cli::refill_refuses_loudly_too` was red at its own feature set on any box without an account); the `tuna_airdrop` rows run against a hermetic account + the build's pinned hosted URL with each branch asserted deterministically (new row: no account → `no local account`). `b543c256` — `kat_refill_cli` asserts the strict-seam loopback refusal under a single net pin without `allow-local` (the shipped release posture; Issue 159 precedent). Both verified across unpinned / net-mainnet / net-devnet / ±allow-local / all-features. ⚠ Claim collision: `zed-m3-idle-174` claimed 174 (`3b89cba1`) while the amo session — which filed it and did not claim it — was already mid-implementation; amo landed the verified fix and closed it. Lesson: claim at filing time when you intend to implement. Issue file removed per the noise rule; this entry is the record.
 
+## 2026-10-27 — Issue 179 NOW half CLOSED: the account surfaces render the provider-binding rows; the rows survive the refine consumer byte-identically
+
+Landed `95bc8c18` (amo-auth-followup): `kat account` + `--info` render the
+record's `providers` rows through the ONE formatter (`kat_info/provider_bindings.rs`,
+bin-local — the substrate render lives in riir-auth/riir-kat; empty record =
+byte-identical output, pinned) + the byte-preserve fixture test: a record WITH
+provider rows round-trips load→serialize→parse unchanged (the
+feature-off-rewrite hazard asserted for the refine consumer) —
+`tests/kat_account_g9.rs` g9f, 2 tests. The NOW-3 signing-session survey
+(report-only; arming owner-gated) is folded into
+`.issues/179_kat_account_provider_identity_adoption.md` item 3; the claim
+record `.issues/179_claim_now_half.md` removed per the noise rule. AFTER half
+(provider_login wiring, rebind surface, TOTP client) stays blocked on the
+dapps 139/140 route hosts — item 6's TOTP client half claimed by
+`amo-idle-totp` (expires 2026-10-28T20:00Z).
+
 ## Lessons
 - A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
 - `git fetch origin` BEFORE any sizing/dry-run on a repo not touched this session — the reflog can be 8 commits stale and the residue phantom.
