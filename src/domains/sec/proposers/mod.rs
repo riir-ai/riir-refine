@@ -107,10 +107,23 @@
 //! (corpus DATA): stored names rot — the sink re-filters; narrows the
 //! DNS-rebinding window, never closes it (`CVEngine` `scannable_hosts` /
 //! `discovery.py` verbatim law).
+//!
+//! ## Batch 294 (2026-10-27, Plan 298) — the `RustSec` transcription joins
+//!
+//! Two detectors from the wasmtime RUSTSEC-2026-0380/0379 distill
+//! (Research 332, CC0 — cited as class provenance; fixtures are ORIGINAL
+//! syntheses), both suggest-only `InputValidation` — the JIT-compiler
+//! failure classes generalized to their Rust-shaped userland forms:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `packed-field-silent-overflow-wrong-key` | `packed_field_wrong_key::detect` | the corrupt key may be a DESIGNED alias (ring buffer, hash bucket — the vocabulary gate keeps the common spellings out, counter-named ring indices still fire and review decides); the range-assert / checked-newtype / widen-the-field choice is a protocol decision. Mask-site sink novelty: `&` is deliberately absent from `unchecked-wire-arithmetic`'s operator set; the B258 recorded drop (bare-op overflow + blanket as-narrowing) adjudicated in-rule — this rule owns neither half |
+//! | `capacity-exceeded-silent-fallback-not-refusal` | `capacity_silent_truncate::detect` | the refusal path's error type is the fn's choice (the `ffi-export-panicking-body` class); benign truncation (log limits, warned drops) inside encode-vocabulary fns fires too and review decides. Distinct-from `length-prefix-validate-before-alloc`: that rule owns the MISSING-CHECK face (no cap — alloc-DoS sink), this the LYING-CAP face (a cap that silently drops — wrong-dispatch sink) |
 
 use syn::File;
 
 pub mod auth_cookie_missing_flags;
+pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
 pub mod cors_any_creds;
 pub mod drop_no_panic;
@@ -120,6 +133,7 @@ pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
+pub mod packed_field_wrong_key;
 pub mod path_join_escape;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
@@ -138,7 +152,7 @@ pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
+    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
 };
 
 /// The `--fix`-eligible sec rules.

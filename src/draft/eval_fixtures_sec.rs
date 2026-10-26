@@ -3,7 +3,7 @@
 //! variant names, canonical shapes, one span per rule). Batch 258 added
 //! the web-trust seed's three (Plan 262); Batch 291 the penthera
 //! distill's three (Plan 295); Batch 292 the `CVEngine` distill's four
-//! (Plan 296).
+//! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -267,6 +267,29 @@ fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
         }
         Verdict::Ok
     }
+}
+"#,
+    ),
+    // Batch 294 (Plan 298) — the RustSec transcription, one span per new rule.
+    (
+        "packed-field-silent-overflow-wrong-key",
+        r#"pub fn find_entry(header: [u8; 4], table: &[Entry; 65536]) -> &Entry {
+    let id = u32::from_be_bytes(header);
+    let slot = (id & 0xFFFF) as usize;
+    &table[slot]
+}
+"#,
+    ),
+    (
+        "capacity-exceeded-silent-fallback-not-refusal",
+        r#"pub fn build_section(entries: &[Entry]) -> Vec<u8> {
+    let mut owned = entries.to_vec();
+    if owned.len() > MAX_ENTRIES {
+        owned.truncate(MAX_ENTRIES);
+    }
+    let mut out = Vec::new();
+    out.extend_from_slice(&(owned.len() as u16).to_be_bytes());
+    out
 }
 "#,
     ),

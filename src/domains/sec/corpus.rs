@@ -32,6 +32,12 @@
 //! | `cors-any-origin-with-credentials` | `InputValidation` | no (suggest-only) | — (no lint fires; legitimate origins are deployment policy) |
 //! | `jwt-insecure-validation-flags` | `CryptoHygiene` | no (suggest-only) | — (no lint fires; debug/tooling decodes skip validation deliberately — review decides) |
 //! | `auth-cookie-without-secure-flags` | `InputValidation` | no (suggest-only) | — (no lint fires; JS-readable/cross-site cookies are deliberate choices) |
+//! | `client-ip-from-untrusted-forwarded-header` | `InputValidation` | no (suggest-only) | — (no lint fires; the trusted-proxy set is deployment policy) |
+//! | `shell-string-command-interpolation` | `InputValidation` | no (suggest-only) | — (no lint fires; the shell-features regime is a design decision) |
+//! | `ipv4-mapped-range-check-unwrap` | `InputValidation` | no (suggest-only) | — (no lint fires; some guards deliberately treat all V6 as external) |
+//! | `abuse-strike-counts-cross-site-requests` | `InputValidation` | no (suggest-only) | — (no lint fires; label-honoring policy is deployment-specific) |
+//! | `packed-field-silent-overflow-wrong-key` | `InputValidation` | no (suggest-only) | — (no lint fires; `cast_possible_truncation` is blanket `as`-cast pedantic with no key scoping and no fix; the mask site is invisible to `unchecked-wire-arithmetic` — `BitAnd` is not in its operator set) |
+//! | `capacity-exceeded-silent-fallback-not-refusal` | `InputValidation` | no (suggest-only) | — (no lint fires; the refusal path's error type is the fn's choice) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -133,6 +139,27 @@
 //! `proposers::strike_cross_site`; probe evidence (the boundary-gate
 //! protocol — std-only fixtures, no probe deps added) recorded in Plan
 //! 296 T7.
+//!
+//! Batch 294 (2026-10-27, Plan 298 / Research 332): the wasmtime
+//! RUSTSEC-2026-0380/0379 distill (CC0 — the two CVSS-9.9 sandbox-escape
+//! advisories; the JIT-internal failures generalized to their Rust-shaped
+//! userland classes). TWO suggest-only rules, all `InputValidation`:
+//! the masked-key packing site (`packed-field-silent-overflow-wrong-key`
+//! — a count/ID masked to a 2^k−1 literal then used as a lookup key
+//! silently loses the high bits; CVE-2026-115889's 24-bit packed
+//! value-number class; the B258 recorded drop adjudicated in-rule — the
+//! mask site is invisible to `unchecked-wire-arithmetic` (`BitAnd` is not
+//! in its operator set) and `cast_possible_truncation` is blanket
+//! `as`-cast pedantic with no key scoping) and the silent-cap degrade
+//! (`capacity-exceeded-silent-fallback-not-refusal` — the cap-exceeded
+//! branch truncates and falls through; CVE-2026-115893's `br_table` class,
+//! the >65,520-targets REFUSAL half is the lesson; distinct-from
+//! `length-prefix-validate-before-alloc` on the missing-check vs
+//! lying-cap axis). Detector modules:
+//! `proposers::packed_field_wrong_key`,
+//! `proposers::capacity_silent_truncate`; probe evidence (the
+//! boundary-gate protocol — std-only fixtures, no probe deps added)
+//! recorded in Plan 298 T1.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -707,6 +734,75 @@ synthesis)."
             buggy_code: "pub struct Guard { strikes: u32 }\n\npub enum Verdict { Ok, Rejected }\n\nimpl Guard {\n    pub fn inspect(&mut self, body: &str) -> Verdict {\n        if body.contains(\"; cat \") || body.contains(\"../\") {\n            self.strikes += 1; // counts the victim's forged requests too\n            return Verdict::Rejected;\n        }\n        Verdict::Ok\n    }\n}\n"
                 .to_string(),
             fixed_code: "pub struct Guard { strikes: u32 }\n\npub enum Verdict { Ok, Rejected }\n\nimpl Guard {\n    pub fn inspect(&mut self, body: &str, site_label: Option<&str>) -> Verdict {\n        if body.contains(\"; cat \") || body.contains(\"../\") {\n            // a hostile page forged this: reject, never count (the victim\n            // must not be banned by it)\n            if site_label != Some(\"same-site\") {\n                return Verdict::Rejected;\n            }\n            self.strikes += 1;\n            return Verdict::Rejected;\n        }\n        Verdict::Ok\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ══ Batch 294 (2026-10-27, Plan 298 / Research 332) — the      ══
+        // ══ wasmtime RUSTSEC-2026-0380/0379 distill: two suggest-only  ══
+        // ══ InputValidation rules (the JIT classes, userland-shaped).  ══
+        // ── packed-field-silent-overflow-wrong-key (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "packed-field-silent-overflow-wrong-key".to_string(),
+            sec_concept: "a count/ID masked to a fixed bit-width (`& 0xFF` … the 2^k-1 \
+literals) and used as a LOOKUP KEY silently loses every bit above the mask — values \
+whose legitimate range exceeds the field width alias onto wrong keys: wrong-item \
+access, no panic (the wasmtime 24-bit packed value-number class, RUSTSEC-2026-0380 / \
+CVE-2026-115889: release builds lose the overflow checks, the corrupt value keys a \
+lookup, type confusion follows; CVSS 9.9). The bounded repair is a range assert at the \
+packing site (`assert!(id <= MASK)`), a checked newtype that refuses construction past \
+the field width, or widening the field. Suggest-only: the corrupt key may be a DESIGNED \
+alias (ring buffer `i & (SIZE-1)`, hash-bucket `fnv & 0xFF` — the counter/ID vocabulary \
+gate keeps the common hash/checksum spellings out; a counter-named ring index still \
+fires and review decides). Distinct-from: unchecked-wire-arithmetic owns the bare-op \
+overflow sink (+ - * << >> — BitAnd is deliberately absent from its operator set, so the \
+mask site is invisible to it); clippy cast_possible_truncation is blanket as-cast \
+pedantic with no key-usage scoping and no fix; the B258 recorded drop (integer \
+overflow/truncation owned by those two) is adjudicated in-rule — this rule owns NEITHER \
+half, the packing SITE is third-sink novelty (the Plan 156 T2 pattern); Research 161's \
+renewal check clears (its dropped set — recursion/set_len/uninit/symlink — does not \
+overlap). Honest recall limits: type-blind (`b: u8 & 0xFF` no-ops fire — parse-only \
+cannot see the operand width); named-const masks (`id & VALUE_MASK`) are unprovable \
+values — silent; method-based lookups (`map.get(&(id & MASK))`) out — the index form \
+only; cross-fn packing undetected. Batch 294 / Plan 298 / Research 332 \
+(RUSTSEC-2026-0380, CC0 — cited as class provenance; the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "pub struct Row {\n    pub kind: u8,\n}\n\npub fn resolve_row(header: [u8; 4], table: &[Row; 4096]) -> &Row {\n    let id = u32::from_be_bytes(header);\n    let slot = (id & 0xFFF) as usize;\n    &table[slot]\n}\n"
+                .to_string(),
+            fixed_code: "pub struct Row {\n    pub kind: u8,\n}\n\npub fn resolve_row(header: [u8; 4], table: &[Row; 4096]) -> &Row {\n    let id = u32::from_be_bytes(header);\n    assert!(id < 4096, \"id past the 12-bit packing width\");\n    let slot = id as usize; // full width — no mask, no alias\n    &table[slot]\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── capacity-exceeded-silent-fallback-not-refusal (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "capacity-exceeded-silent-fallback-not-refusal".to_string(),
+            sec_concept: "a fixed-capacity structure built from variable-length input \
+DEGRADES SILENTLY when capacity is exceeded — the cap-exceeded branch truncates and \
+falls through, so the encode/build continues with silently-dropped entries: wrong \
+encoding, wrong dispatch, no refusal (the wasmtime aarch64 br_table class, \
+RUSTSEC-2026-0379 / CVE-2026-115893: >256K-target jump tables silently pointed at the \
+WRONG target — the fix's refusal half is the lesson: >65,520 targets now REFUSE loud; \
+CVSS 9.9). The bounded repair is the early capacity check + typed error at the \
+encode/build boundary: `if items.len() > CAP { return Err(..) }` — a cap that lies is \
+worse than no cap. Suggest-only: the error type is the fn's choice (a protocol \
+decision). Gates: the same-cap shape (the if compares `.len() > CAP` and the branch \
+truncates the SAME receiver to the SAME cap text — const-vs-literal compare by token \
+text) + encode/build vocabulary (fn name segments — encode/build/pack/serial/marshal/\
+emit/table/dispatch/jump/frame/section/vessel — or `to_{be,le,ne}_bytes` in the body); \
+the refusal twin (any return/?/panic-family/unwrap/expect in the branch) suppresses; \
+benign caps outside that vocabulary (\"limit the preview to 10 lines\") stay silent. \
+Distinct-from length-prefix-validate-before-alloc: that rule owns the MISSING-CHECK \
+face (no cap at all — the allocation-DoS sink); this owns the LYING-CAP face (a cap \
+that silently drops — the wrong-dispatch sink); complementary defects, distinct \
+repairs. Honest recall limits: a warned truncate or a log-limit drop inside \
+encode-vocabulary fns fires too and review decides (suggest-only is the blast-radius \
+control); the slice form (`&entries[..CAP]`) and `take(n)` clamps are out; cross-fn \
+builds unconnected. Batch 294 / Plan 298 / Research 332 (RUSTSEC-2026-0379, CC0 — \
+cited as class provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "const MAX_TARGETS: usize = 64;\n\npub fn encode_table(targets: &[u16], out: &mut Vec<u8>) {\n    let mut owned = targets.to_vec();\n    if owned.len() > MAX_TARGETS {\n        owned.truncate(MAX_TARGETS); // silently drops the excess\n    }\n    out.extend_from_slice(&(owned.len() as u16).to_be_bytes());\n    for t in &owned {\n        out.extend_from_slice(&t.to_be_bytes());\n    }\n}\n"
+                .to_string(),
+            fixed_code: "const MAX_TARGETS: usize = 64;\n\npub fn encode_table(targets: &[u16]) -> Result<Vec<u8>, String> {\n    if targets.len() > MAX_TARGETS {\n        return Err(format!(\"too many targets: {}\", targets.len()));\n    }\n    let mut out = Vec::with_capacity(targets.len() * 2 + 2);\n    out.extend_from_slice(&(targets.len() as u16).to_be_bytes());\n    for t in targets {\n        out.extend_from_slice(&t.to_be_bytes());\n    }\n    Ok(out)\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },

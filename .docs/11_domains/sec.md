@@ -223,6 +223,37 @@ clippy-corpus delta — `generations.rs` builds from the clippy seed corpus
 only, verified); maintained-binary rebuild NOT owed (sec not in the
 release set).
 
+## Batch 294 (2026-10-27) — the RustSec transcription, the JIT classes userland-shaped
+
+Two suggest-only rules from the wasmtime RUSTSEC-2026-0380/0379 distill
+(Research 332, CC0 — the two CVSS-9.9 sandbox-escape advisories behind
+riir-ai's pinned 28.0.1; the JIT-internal failures generalized to their
+Rust-shaped userland classes). Both `InputValidation`.
+
+| Rule | Family | Shape |
+|---|---|---|
+| `packed-field-silent-overflow-wrong-key` | `InputValidation` | a count/ID masked to a 2^k−1 literal (`& 0xFFF`) and used as a LOOKUP KEY silently loses the high bits — values past the field width alias onto wrong keys: wrong-item access, no panic (CVE-2026-115889: the 24-bit packed value-number class). Bounded form: range assert at the packing site / checked newtype / widen the field. Gates: lookup-key scoping (index form only) + origin gate (same-fn parse origin or counter/ID vocabulary segments) + 2^k−1 mask literals; `try_from`/`checked_` anywhere in the fn suppresses, any comparison/match/assert naming the origin suppresses. Distinct-from: `unchecked-wire-arithmetic` owns the bare-op sink (BitAnd is not in its operator set); `cast_possible_truncation` is blanket as-cast pedantic with no key scoping; the B258 recorded drop adjudicated in-rule — this rule owns neither half. Honest limits: designed aliases (ring buffers, hash buckets) fire and review decides; type-blind (`u8 & 0xFF` no-ops fire); named-const masks and method lookups out; detector `packed_field_wrong_key::detect` |
+| `capacity-exceeded-silent-fallback-not-refusal` | `InputValidation` | the cap-exceeded branch TRUNCATES and falls through — the encode/build continues with silently-dropped entries: wrong encoding, wrong dispatch, no refusal (CVE-2026-115893: the br_table class; the fix's >65,520-targets REFUSAL half is the lesson). Bounded form: `if items.len() > CAP { return Err(..) }` — a cap that lies is worse than no cap. Gates: the same-cap shape (`.len() > CAP` + the branch truncates the SAME receiver to the SAME cap text) + encode/build vocabulary (fn-name segments or `to_{be,le,ne}_bytes` in the body); the refusal twin (any return/?/panic-family in the branch) suppresses. Distinct-from `length-prefix-validate-before-alloc`: missing-check (alloc-DoS sink) vs lying-cap (wrong-dispatch sink). Honest limits: benign truncation inside encode-vocabulary fns fires and review decides; slice form + `take(n)` out; cross-fn builds unconnected; detector `capacity_silent_truncate::detect` |
+
+Gates at landing: sec module 215/0 (19 new detector tests); sec lib 2964/0;
+default lib 2749/0; clippy `-D` ×4 postures (default / sec / all-features /
+no-default) + all-targets+sec; T7 wide probe (real clippy,
+pedantic+nursery+suspicious+correctness+perf+style+complexity: ZERO
+default/suspicious/correctness safety lints on either buggy shape —
+`cast_possible_truncation` fires on r2's unrelated `as u16` length-encode
+(the B258-owned axis, not the rule's site, no fix) + two nursery
+fixture-noise candidates; boundary gate 2/2 — `indexing_slicing` fires on
+the packed-key fixture with no machine fix (the ffi-export additive
+precedent), the silent-cap fixture fully silent); retrieval floors
+re-measured at the sec posture: sec self-variants 28/28 top-1, fixture
+labels green, router annotation (sec arm) re-pinned 60/167 → 62/169
+(measured 67/169 = 39.6%; both new spans routed correctly — delta +2
+correct +0.7pp); score-bench run 204 appended (sec spans ride the
+demonstrability column at n=28, constant 1.000); freeze NOT owed
+(`generations.rs::atoms()` builds from the clippy seed corpus only —
+verified live; the P30 confirm, sec-only delta); release-set binary
+rebuild + install executed (sec compiles into the default build).
+
 ## Property evidence — machine-checked (Kani, Issue 127)
 
 A second evidence axis beside probe evidence: Kani (model checking over
@@ -316,6 +347,14 @@ proposer.
   2/2 (real clippy fires no equivalent-fix lint on the std-only buggy
   fixtures — no probe deps added); sec-module detectors 196/0; clippy −D
   ×4 postures (default/sec/all-features/no-default) + all-targets+sec
+- Batch 294 (2026-10-27): corpus 26 → 28 (6 fixable + 22 suggest-only;
+  the RustSec transcription, Plan 298) — sec self-variants 28/28 top-1,
+  router annotation (sec arm) re-pinned 60/167 → 62/169 (measured 67/169
+  = 39.6%; both new spans routed correctly, delta +2 correct +0.7pp);
+  boundary gate 2/2 (indexing_slicing on the packed-key fixture, no
+  machine fix — additive; silent-cap fully silent); wide probe clean
+  (zero default/suspicious/correctness safety lints); freeze NOT owed
+  (clippy-seeded corpus unmoved); binary rebuilt + installed
 - Promotion to default: needs ≥1 workspace repo adopting sec in CI
 
 ## See also

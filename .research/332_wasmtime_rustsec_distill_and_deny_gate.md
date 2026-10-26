@@ -1,6 +1,6 @@
 # Research 332 — wasmtime RUSTSEC-2026-0379/0380 distill + the cargo-deny supply-chain gate
 
-**Status:** DISTILLED — pending owner decision (pilot gate LANDED green in riir-refine this commit — `deny.toml` + `scripts/deny_gate.sh`; corpus Batch 294 staged plan-first under `.plans/298`; the riir-ai wasmtime adjudication and the workspace remediation backlog are owner/roadmap calls named below).
+**Status:** RECORD — the pilot gate LANDED green in riir-refine (deny.toml + scripts/deny_gate.sh); the corpus batch (T1) LANDED 2026-10-27 (sec 26 → 28, Plan 298 / claim `3dc941e9`); the T2.4 fan-out landed 19 repos; T2.5/T2.6 landed (auditable + --deep); the riir-ai wasmtime adjudication (T2.1) and T2.7 (CI lane) remain OWNER-gated; the remaining remediation lanes are the owning lanes' edits (recorded below).
 
 ## Source
 
@@ -157,3 +157,11 @@ Measured gates (zero-cargo until the i1117 flashmemory timing measurement verifi
 | lib tests: postcard-named + closure module (the heaviest postcard user) | 66 passed / 0 failed |
 
 Scope note: the nested-lock 0089 rows recorded under T2.6 (mmorpg-examples wasm + warm-tier-do, train poc, editor tools ×2) are OUT of this lane — their owning lanes re-lock and drop their pins when they next touch those trees; the katgpt-rs deny.toml comment carries the drop-your-pin disclosure. The no-upgrade-crate pin rows (paste / ttf-parser / crossbeam-epoch classes) were already landed with T2.4's ledgers (every row reason + tracking reference) — no second pass needed.
+
+## T1 — LANDED 2026-10-27 (shikuwa-4090-b294-rustsec-t1, the 4090 box; the corpus batch)
+
+Claim `3dc941e9` (epoch 1793053492) → landed same cycle. The class analysis table's two candidates shipped VERBATIM (grade B− both, no drops): `packed-field-silent-overflow-wrong-key` (the 0380 class — mask-site sink, the B258 recorded drop adjudicated in-rule) + `capacity-exceeded-silent-fallback-not-refusal` (the 0379 class — the lying-cap face, distinct-from the alloc rule on the missing-check vs wrong-dispatch axis). Sec corpus 26 → 28 (6 fixable + 22 suggest-only).
+
+Landed surfaces: `src/domains/sec/proposers/packed_field_wrong_key.rs` (10 tests), `src/domains/sec/proposers/capacity_silent_truncate.rs` (9 tests), corpus entries + header table rows, `eval_fixtures_sec` +2 spans (both routed correctly — router annotation re-pinned 60/167 → 62/169, measured 67/169 = 39.6%), count pins 26 → 28 via one shape-asserted script pass (`.plans/298_count_pins_b294.py`), the doc tables (AGENTS ×2, README ×2, sec.md §Batch 294).
+
+Gates: sec module 215/0; sec lib 2964/0; default lib 2749/0; clippy −D ×4 postures + all-targets+sec zero; T7 wide probe (pedantic+nursery+suspicious+correctness+perf+style+complexity over both buggy fixtures): ZERO default/suspicious/correctness safety lints — `cast_possible_truncation` fires on r2's unrelated `as u16` length-encode (the B258-owned axis, not the rule's site, no fix for the degrade shape) + two nursery fixture-noise candidates (`missing_const_for_fn`, `must_use_candidate`); boundary gate 2/2 — `indexing_slicing` fires on the packed-key fixture with no machine fix (the ffi-export additive precedent), silent-cap fully silent; score-bench run 204 (gen-1 appended); freeze NOT owed (`generations.rs::atoms()` builds from the clippy seed corpus only — verified live, the P30 confirm).
