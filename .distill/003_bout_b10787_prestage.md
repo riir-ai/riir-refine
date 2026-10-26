@@ -1,5 +1,7 @@
 # Decode re-pin bout — PRE-STAGED 2026-10-20 ~00:5x UTC (shikuwa/4090 prep session)
 
+**Status: DISCHARGED 2026-10-26 18:12–18:33 +07 — the b10826 bout ran from this runbook (record = riir-ai Bench 1004; the decode hold BROKE 0.9730×, escalation → riir-infer Issue 1125; the pp4096 first-read was voided box-state and re-run per the posture; the 9e9cd0f07 prior_pin chain defect repaired in the re-pin). The file now serves as the standing runbook template; nothing pending.**
+
 ## b10826 PRE-STAGE COMPLETE 2026-10-26 ~14:2x +07 (shikuwa/4090 idle lane — GPU held by the sibling QRR cell A until ~14:45; all prep zero-GPU)
 
 **Timeline correction (found this session):** Bench 1000 (`229007fe8`) ALREADY discharged the b10819 bout 10-25 ~13:1x (decode 92.83/90.68 = 1.0237× — the hold narrowed BELOW 1.05 first time; pp2048 4099/3400.45 = 1.2054× BEST; pp4096 3897/3380.56 = 1.1531×; G1 ×4 EXACT; one-pass). Then `9e9cd0f07` re-pinned ×3 to b10822 `bf8c069fde8c` + rebuilt (22:45) — run never scored (queued behind the sibling 22:55 cell-B window, then superseded). The prior_pin chain from that re-pin is DEFECTIVE — repaired in this window's re-pin:
