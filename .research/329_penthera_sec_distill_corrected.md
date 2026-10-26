@@ -69,7 +69,7 @@ Claimed + authoring slot re-adjudicated by this lane (no sec-domain claim was li
 
 **Drops at authoring:** none beyond the first pass — all three staged candidates survived T0 verification + falsification; the honest-drops rows (rate-limit/IDOR/authz/OpenAPI/IOC/URL-templates/npm-capability/secrets-scanner) stand from the verdict table above.
 
-**Defers unchanged (named, not filed):** the secrets.json AI-key vocabulary probe (secret-scan lane, own unit); the agent-tooling audit phase for the katgpt-rs security-audit skill (sibling edit, owner-directed).
+**Defers unchanged (named, not filed):** the secrets.json AI-key vocabulary probe (secret-scan lane, own unit) - **DISCHARGED 2026-10-26**: filed as refine Issue 176, probed same day, and LANDED as riir-kat redact v6 (`a92d162` - r8_/lsv2_/pcsk_ rows, REDACT_VERSION 6, self-scan instrument validated against the 339 datum); the agent-tooling audit phase for the katgpt-rs security-audit skill (sibling edit, owner-directed).
 
 ## Queue slot
 
