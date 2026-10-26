@@ -11,10 +11,10 @@
 //!   is already perfect there — zero headroom; the split is the
 //!   anti-memorization read, no harm off-distribution).
 //! - **G1 (wall at 0):** zero top-1 regressions vs baseline.
-//! - **G3 (floor):** clean-span fixable top-1 ≤ 31 (baseline's own count —
-//!   the FP class must not grow).
+//! - **G3 (same-run):** clean-span fixable top-1 trained ≤ baseline (the FP
+//!   class must not grow; the baseline count itself is floored at 29).
 //!
-//! The BASELINE counts are pinned too (90/34/31): a baseline shift re-pins
+//! The BASELINE counts are pinned too (88/34/29, re-pinned 2026-10-26): a baseline shift re-pins
 //! the trained floors beside it — a silent re-pin is the failure shape the
 //! count law exists for.
 //!
@@ -37,15 +37,35 @@ const PINNED_WEIGHT: f32 = 16.0;
 // every (clean span, ENABLED DOMAIN) top-1 pair — docker/dist were enabled
 // by default and added pairs whose top-1 is probeable. The G3 semantic is
 // unchanged: trained (31) must not exceed the baseline's own count (31).
-const BASELINE_TRAIN_HITS: usize = 90;
+//
+// Re-pinned 2026-10-26 (issue 172): baseline train 90 → 88 and clean
+// fixable 31 → 29, trained UNCHANGED (95 / 36). Bisected in a symlinked
+// /tmp workspace: the first drop is 4085aa24 (batch 239, rust_perf corpus
+// 198 → 200) and the series then walks 90 ↔ 89 ↔ 88 as mined rules land —
+// new rules take top-1 on a few labeled spans in the UNTRAINED baseline,
+// while the trained posture holds. Corpus growth, not a retrieval defect.
+const BASELINE_TRAIN_HITS: usize = 88;
 const BASELINE_WITHHELD_HITS: usize = 34;
-const BASELINE_CLEAN_FIXABLE: usize = 31;
+const BASELINE_CLEAN_FIXABLE: usize = 29;
 
 // Trained floors at PINNED_WEIGHT (the landing's measured values; the G2
 // win floor is their SUM — 95 + 34 = 129 vs baseline 90 + 34 = 124).
 const TRAINED_TRAIN_HITS: usize = 95;
 const TRAINED_WITHHELD_HITS: usize = 34;
-const TRAINED_CLEAN_FIXABLE: usize = 31;
+
+/// The labeled population at the DEFAULT domain set.
+const DEFAULT_SET_POPULATION: usize = 141;
+
+/// `true` when an opt-in retrieval domain is compiled in (`--all-features`,
+/// ci_feature_guard Layer 5c): every (span, enabled domain) count grows, so
+/// the exact population pin only holds at the default set (clippy_lints,
+/// rust_perf, docker, dist). Measured at all-features 2026-10-26: population
+/// 198, clean fixable 38/38 — issue 172.
+const OPT_IN_DOMAINS: bool = cfg!(any(
+    feature = "kernel_opt",
+    feature = "sec",
+    feature = "shader_perf"
+));
 
 #[test]
 fn rule_embed_posture_holds_the_pinned_gates() {
@@ -101,11 +121,14 @@ fn rule_embed_posture_holds_the_pinned_gates() {
         "G2 win gate lost: trained {trained_total} vs baseline {baseline_total}"
     );
 
-    // G3 — the clean FP class must not grow.
+    // G3 — the clean FP class must not grow: trained ≤ the baseline's OWN
+    // count in the same run (the gate's stated semantic; a fixed ceiling is
+    // only true at one domain set).
     assert!(
-        rep.clean_top1_fixable_trained <= TRAINED_CLEAN_FIXABLE,
-        "clean fixable top-1 {} > pinned {TRAINED_CLEAN_FIXABLE} (false-positive growth)",
-        rep.clean_top1_fixable_trained
+        rep.clean_top1_fixable_trained <= rep.clean_top1_fixable_baseline,
+        "clean fixable top-1 trained {} > baseline {} (false-positive growth)",
+        rep.clean_top1_fixable_trained,
+        rep.clean_top1_fixable_baseline
     );
     assert!(
         rep.clean_top1_fixable_baseline >= BASELINE_CLEAN_FIXABLE,
@@ -123,5 +146,16 @@ fn rule_embed_posture_holds_the_pinned_gates() {
     // labeled population grew 138 → 141 from corpus growth after the
     // Issue-134 T3 re-arm; found red on develop by the Issue-133 T1
     // Matryoshka harness session (its sanity check reproduces this run).
-    assert_eq!(total_rules, 141, "labeled span population shifted");
+    if OPT_IN_DOMAINS {
+        assert!(
+            total_rules >= DEFAULT_SET_POPULATION,
+            "labeled population {total_rules} < the default-set {DEFAULT_SET_POPULATION} — \
+             an opt-in domain cannot remove spans"
+        );
+    } else {
+        assert_eq!(
+            total_rules, DEFAULT_SET_POPULATION,
+            "labeled span population shifted"
+        );
+    }
 }
