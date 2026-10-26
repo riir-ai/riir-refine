@@ -4403,7 +4403,24 @@ fn run_kat_faucet(qr: bool) {
 /// 3. the exit contract: 0 iff the final synced balance is positive
 ///    (explicit command — unlike the burn push, the outcome IS the code);
 ///    a posture refusal exits 1.
+///
+/// A build WITHOUT `kat_transport` refuses FIRST (exit 2, the Issue 117
+/// compiled-out contract) — before the account load, so a user on a
+/// compiled-out build is never told to `login` only to meet the rebuild
+/// refusal afterwards (`build_stamp_cli::refill_refuses_loudly_too`).
 fn run_kat_refill(wait_secs: u64) {
+    #[cfg(feature = "kat_transport")]
+    run_kat_refill_transport(wait_secs);
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = wait_secs;
+        riir_refine::build_stamp::refuse("--refill", &["kat_transport"]);
+    }
+}
+
+/// [`run_kat_refill`]'s body in a build that HAS the transport.
+#[cfg(feature = "kat_transport")]
+fn run_kat_refill_transport(wait_secs: u64) {
     let dir = riir_refine::kat_account::KatAccount::default_dir();
     // ── riir-dapps Issue 094 D4: the posture gate, FIRST ─────────────────
     // Before the account load below, so a mainnet user meets the retirement
@@ -4527,11 +4544,6 @@ fn run_kat_refill(wait_secs: u64) {
             }
         }
         std::process::exit(riir_refine::kat_refill::refill_exit_code(&outcome));
-    }
-    #[cfg(not(feature = "kat_transport"))]
-    {
-        let _ = (signing_key, acct_hex, wait_secs);
-        riir_refine::build_stamp::refuse("--refill", &["kat_transport"]);
     }
 }
 

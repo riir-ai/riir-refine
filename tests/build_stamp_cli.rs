@@ -289,43 +289,63 @@ fn asserted_net_conflict_refusal(code: Option<i32>, text: &str) -> bool {
     true
 }
 
+/// A per-test scratch dir for the hermetic tuna rows (pid + nanos: no
+/// fixed temp path — a concurrent PROCESS running this test must not share it).
 #[cfg(feature = "admin")]
-#[test]
-fn tuna_airdrop_missing_key_refuses_pre_network() {
-    let acct = "bb".repeat(16);
-    for argv in [
-        vec!["get", "100", "tuna"],
-        vec!["send", "100", "tuna", acct.as_str()],
-    ] {
-        let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
-            .args(&argv)
-            .env_remove("TUNA_CAN_OPENER_KEY")
-            .output()
-            .expect("spawn cargo-refine");
-        let text = format!(
-            "{}{}",
-            String::from_utf8_lossy(&out.stdout),
-            String::from_utf8_lossy(&out.stderr)
-        );
-        if asserted_net_conflict_refusal(out.status.code(), &text) {
-            continue;
-        }
-        assert_eq!(out.status.code(), Some(1), "output:\n{text}");
-        assert!(
-            text.contains("TUNA_CAN_OPENER_KEY"),
-            "the refusal must name the env var. output:\n{text}"
-        );
-    }
+fn tuna_scratch(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "riir_refine_build_stamp_tuna_{tag}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("scratch dir");
+    dir
 }
 
+/// The hosted service URL this build's net pin admits (unpinned and the
+/// both-pins conflict posture take the mainnet default; the conflict
+/// posture refuses every URL and is asserted by the callers).
+#[cfg(all(
+    feature = "admin",
+    feature = "net-devnet",
+    not(feature = "net-mainnet")
+))]
+const TUNA_PINNED_URL: &str = riir_kat::kat_service_urls::DEVNET_SERVICE_URL;
+#[cfg(all(
+    feature = "admin",
+    not(all(feature = "net-devnet", not(feature = "net-mainnet")))
+))]
+const TUNA_PINNED_URL: &str = riir_kat::kat_service_urls::MAINNET_SERVICE_URL;
+
+/// One HERMETIC tuna-verb invocation: the account dirs point at `dir`, so the
+/// verdict never depends on whether the box has a real `~/.config/riir-auth`
+/// key (Issue 172 out-of-lane note — `get` resolves the OWN account first,
+/// and on a box with no account it refused for THAT, not the missing key).
+/// Secrets are removed. The service URL is THIS build's pinned hosted host
+/// (a loopback URL is refused under a single-net pin without `allow-local`,
+/// and the mainnet default is refused under a devnet pin) — every row here
+/// refuses or previews before any socket, so nothing dials it.
 #[cfg(feature = "admin")]
-#[test]
-fn tuna_airdrop_below_floor_refuses_locally_at_exit_2() {
-    // 99 TUNA < the 100-TUNA floor — refused BEFORE any secret is read
-    // (the cap mirror fires ahead of the env discipline by design).
+fn tuna(dir: &std::path::Path, args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
-        .args(["get", "99", "tuna"])
+        .current_dir(dir)
+        // HOME too: `login` adopts `$HOME/.ssh/id_ed25519` IN PLACE when one
+        // exists (riir-auth `account_key`), so without this the hermetic
+        // account would be the box's real SSH identity.
+        .env("HOME", dir)
+        .env("USERPROFILE", dir)
+        .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
+        .env("RIIR_AUTH_ACCOUNT_DIR", dir)
+        .env("RIIR_REFINE_TRAJ_ROOT", dir)
+        .env("RIIR_REFINE_KAT_SERVICE_URL", TUNA_PINNED_URL)
+        .env("RIIR_REFINE_KAT_LEASE", "0")
+        .env("RIIR_REFINE_UPDATE_CHECK", "0")
         .env_remove("TUNA_CAN_OPENER_KEY")
+        .env_remove("KAT_CRANK_TOKEN")
+        .args(args)
         .output()
         .expect("spawn cargo-refine");
     let text = format!(
@@ -333,35 +353,102 @@ fn tuna_airdrop_below_floor_refuses_locally_at_exit_2() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
-    if asserted_net_conflict_refusal(out.status.code(), &text) {
+    (out.status.code(), text)
+}
+
+/// A scratch dir carrying a hermetic local account (`login` is key-ops only,
+/// zero network — it succeeds in every posture, the net-conflict one
+/// included; the VERBS are what that posture refuses).
+#[cfg(feature = "admin")]
+fn tuna_logged_in(tag: &str) -> std::path::PathBuf {
+    let dir = tuna_scratch(tag);
+    let (code, text) = tuna(&dir, &["login"]);
+    assert_eq!(
+        code,
+        Some(0),
+        "hermetic login must succeed. output:\n{text}"
+    );
+    assert!(
+        text.contains("account key generated") && !text.contains("adopted IN PLACE"),
+        "login must mint a scratch key, never adopt the box's SSH key. output:\n{text}"
+    );
+    dir
+}
+
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_missing_key_refuses_pre_network() {
+    let dir = tuna_logged_in("missing_key");
+    let acct = "bb".repeat(16);
+    for argv in [
+        vec!["get", "100", "tuna"],
+        vec!["send", "100", "tuna", acct.as_str()],
+    ] {
+        let (code, text) = tuna(&dir, &argv);
+        if asserted_net_conflict_refusal(code, &text) {
+            continue;
+        }
+        assert_eq!(code, Some(1), "{argv:?}: output:\n{text}");
+        assert!(
+            text.contains("TUNA_CAN_OPENER_KEY"),
+            "{argv:?}: the refusal must name the env var. output:\n{text}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The other deterministic branch: with NO local account, `get` (which
+/// targets the own account id) refuses exit 1 for the account — pre-network,
+/// before any secret is read.
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_get_without_account_refuses_pre_network() {
+    let dir = tuna_scratch("no_account");
+    for argv in [
+        vec!["get", "100", "tuna"],
+        vec!["get", "100", "tuna", "--dry-run"],
+    ] {
+        let (code, text) = tuna(&dir, &argv);
+        if asserted_net_conflict_refusal(code, &text) {
+            break;
+        }
+        assert_eq!(code, Some(1), "{argv:?}: output:\n{text}");
+        assert!(
+            text.contains("no local account"),
+            "{argv:?}: output:\n{text}"
+        );
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(feature = "admin")]
+#[test]
+fn tuna_airdrop_below_floor_refuses_locally_at_exit_2() {
+    // 99 TUNA < the 100-TUNA floor — refused BEFORE any secret or account is
+    // read (the cap mirror fires ahead of the env discipline by design).
+    let dir = tuna_scratch("below_floor");
+    let (code, text) = tuna(&dir, &["get", "99", "tuna"]);
+    let _ = std::fs::remove_dir_all(&dir);
+    if asserted_net_conflict_refusal(code, &text) {
         return;
     }
-    assert_eq!(out.status.code(), Some(2), "output:\n{text}");
+    assert_eq!(code, Some(2), "output:\n{text}");
     assert!(text.contains("free-tier floor"), "output:\n{text}");
 }
 
 #[cfg(feature = "admin")]
 #[test]
 fn tuna_airdrop_dry_run_is_fully_local_and_shows_the_hash() {
-    // `get` needs the LOCAL account (not a network) for the target — on a
-    // test box without one, the refusal is the honest answer; either way
-    // nothing dials (the dry-run path never constructs a transport).
-    let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
-        .args(["get", "100", "tuna", "--dry-run"])
-        .env_remove("TUNA_CAN_OPENER_KEY")
-        .env_remove("KAT_CRANK_TOKEN")
-        .output()
-        .expect("spawn cargo-refine");
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
-    if asserted_net_conflict_refusal(out.status.code(), &text) {
+    // `get` needs the LOCAL account (not a network) for the target — provided
+    // hermetically, so the preview is the ONLY acceptable answer (the
+    // no-account branch is its own row above). Nothing dials: the dry-run
+    // path never constructs a transport, and the URL is a dead port anyway.
+    let dir = tuna_logged_in("dry_run");
+    let (code, text) = tuna(&dir, &["get", "100", "tuna", "--dry-run"]);
+    let _ = std::fs::remove_dir_all(&dir);
+    if asserted_net_conflict_refusal(code, &text) {
         return;
     }
-    assert!(
-        text.contains("DRY RUN") || text.contains("no local account"),
-        "either the local preview or the honest account refusal — output:\n{text}"
-    );
+    assert_eq!(code, Some(0), "output:\n{text}");
+    assert!(text.contains("DRY RUN"), "output:\n{text}");
 }
