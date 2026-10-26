@@ -5,6 +5,7 @@
 batch sidecar). Filed from the penthera DEFER named in
 [Research 329](../.research/329_penthera_sec_distill_corrected.md)
 ("Two DEFERS named, not filed"); this filing converts it.
+**Claimed:** shikuwa-i176-redact-rows, 1793031546, expires 2026-10-28T16:19:06+00:00
 **Source:** danoszz/penthera @ `07421f95ced357e0d7e184353e65821748478235`
 (the Research-329 pin; local `.raw/penthera` HEAD == pin, verified at probe time).
 **Probe date:** 2026-10-26.
