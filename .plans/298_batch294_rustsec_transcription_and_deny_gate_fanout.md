@@ -1,6 +1,7 @@
 # Plan 298 — Batch 294: RustSec transcription batch + the supply-chain deny-gate fan-out
 
 **Status:** IN PROGRESS — pilot LANDED 2026-10-26 (`deny.toml` + `scripts/deny_gate.sh` green in riir-refine; the first workspace scan recorded in `.research/332`; corpus batch + fan-out open below)
+**Claimed:** zed-amo-b294-t25t26, 1793045356, expires 2026-10-28T20:09:00Z — scope T2.5 (cargo-auditable in release.yml) + T2.6 (deny_gate.sh `--scan --deep` nested-lockfile mode). T2.7 stays owner-gated; T1 stays staged behind the sec-pool queue.
 **Lease closed:** zed-amo-b294-fanout (claimed 2026-10-26T19:28Z, epoch 1793042891) — the claimed T2.4 scope LANDED same cycle: 19 repos adopted the gate (the 16-repo small-ledger slice + the big sets seal-remake/game-sdk/editor), all scans PASS, hashes + ledgers in `.research/332` §T2.4; the not-on-amo repos (riir-ai owner-gated, katgpt-web/refab/viewbridge/deployer, train restricted, mmorpg-examples stale-lock, seal-online-remaster deprecated) stay with their lanes as recorded. T2.5/T2.6/T2.8 remain unclaimed (T2.8's AGENTS.md line landed with this close).
 Scope: T2.4 fan-out slice — every repo whose ledger is ≤ 6 rows (the 6 CLEAN + the 8 atomic-polyfill-only + neuron-db/seal-render/riir-infer/riir-chain/katgpt-rs). NOT in this claim: T1 (the corpus batch — jumps no sec-pool queue), riir-ai (T2.1 owner-gated adjudication + contended lane), riir-train (routing restriction, trainers live), the big-family sets (game-sdk/seal-remake/seal-game-editor/mmorpg-examples/deployer/seal-online-remaster).
 
