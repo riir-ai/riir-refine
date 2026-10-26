@@ -1,6 +1,6 @@
 ---
 name: distill
-description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-refine's rule corpora — kernel_opt, rust_perf, clippy_lints, and proposed future domains (sec, wasm). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification (two failure classes — domain-unbenchable is an annotation, pattern weakness is MARGINAL), the product-coverage axis for famous-lib families, and honest WIP/provenance caveats.
+description: Verdict workflow for evaluating external code sources (GitHub repos, crates, kernel libraries, benchmark suites, perf articles) as mining candidates for riir-refine's rule corpora — kernel_opt, rust_perf, clippy_lints, sec, and future domains (wasm, ...). Use when the user asks whether a repo/crate is a good distill source or mining candidate, before opening a mining batch on an external source, when deciding which domain a source routes to, or when grading rule candidates and estimating batch yield. Enforces corpus dedup grep, domain routing, decision-content testing, GOAT candidate identification (two failure classes — domain-unbenchable is an annotation, pattern weakness is MARGINAL), the product-coverage axis for famous-lib families, and honest WIP/provenance caveats.
 ---
 
 # Distillation-Source Verdict Workflow — riir-refine Mining
@@ -13,7 +13,7 @@ This skill does for CODE SOURCES what the `research` skill does for papers: a di
 - Before opening any mining batch on a NEW external source (already-approved in-repo mining is the `riir-refine` skill's workflow, not this one).
 - Deciding which domain a source routes to (the CPU-SIMD-vs-kernel_opt trap).
 - Grading individual rule candidates + estimating realistic batch yield.
-- A new domain is being proposed (sec, wasm, ...) and the source would be its seed.
+- A future domain is being proposed (wasm, ...) and the source would be its seed.
 
 Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug fixes, clippy heal sweeps, or paper distillation (that is `research`).
 
@@ -24,9 +24,12 @@ Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug 
 | `kernel_opt` | GPU kernel rules (`src/domains/kernel_opt/`, corpus COMPLETE for riir-gpu files since Batch 51) | CubeCL/WGSL/CUDA/Metal kernel patterns, host-orchestration around GPU, measured-GOAT distillations of landed fixes | CPU SIMD → `rust_perf`; generic Rust → `rust_perf` |
 | `rust_perf` | CPU hot-path rules (`src/domains/rust_perf/`) | simd, allocation, layout, concurrency, arithmetic, iterators, dispatch, caching, io, bevy, wasm categories | GPU kernels → `kernel_opt` |
 | `clippy_lints` | Structural lint fix patterns | Parse-only provable lint shapes | Perf patterns |
-| Proposed (`sec`, ...) | **DOES NOT EXIST YET** | — | A security-shaped source is NOT mineable today. The verdict may RECOMMEND opening the domain (Proposal + `HealDomain` trait extension per Plan 001), but must state the gap explicitly — never pretend the domain exists. |
+| `sec` | Security-pattern rules (`src/domains/sec/`, 19 rules — LIVE since Batch 258 / plan 262) | Transcribed security CLASSES with a Rust-shaped bounded fix-space — web-trust (CORS/JWT/cookies/egress/path-join/wire), crypto hygiene (dep-gated swaps), input validation, unsafe/FFI hygiene; source may be ANY language (the transcription law below); suggestion-grade entries, NotBenchable-by-domain (the dial9 split) | Architectural posture with no Rust code shape (session/auth architecture, rate-limit policy) → skill-checklist material; secrets-in-code detection → the scanner lane, never corpus |
+| Future (`wasm`, ...) | **DOES NOT EXIST YET** | — | A source whose ONLY home is an unlanded domain is NOT mineable today. The verdict may RECOMMEND opening the domain (Proposal + `HealDomain` trait extension per Plan 001), but must state the gap explicitly — never pretend the domain exists. |
 
-**Routing rule of thumb:** CPU SIMD tiering/polyfill libraries → `rust_perf` simd. GPU shader/kernel code → `kernel_opt`. Lint-shaped fix patterns → `clippy_lints`. A source landed a perf fix we can re-measure → measured-GOAT distillation (B49/B52/B54/B55 precedent), any domain.
+**The transcription law — source language is never a gate (added 2026-10-26, the penthera miss).** The `Accepts` column names the RULE's Rust shape, never the SOURCE's language. Fixtures are ALWAYS our own original Rust reproductions (Constraints), so a source in ANY language is mineable in any domain whose class carries Rust-shaped decision content. Precedent chain: B258 landed 3 sec rules from a pure-Markdown audit procedure (cloudflare/security-audit-skill — zero Rust in the source); dial9 landed 3 tokio rules from a blog; penthera (Node/TS, zero `.rs`) graded YES B− with 3 transcription candidates (Research 329 / Plan 295). The founding failure: penthera's first pass graded NO on "no Rust surface to transcribe" — a gate that exists NOWHERE in this skill; the Accepts columns' Rust-shaped wording invited the misread. ⛔ "Zero `.rs` files in the source" is NEVER a kill. The kill questions are unchanged: does the CLASS have a bounded fix-space + regime conditions, and can WE author the Rust fixture? Both yes → transcribe. Either no → drop, with the reason recorded.
+
+**Routing rule of thumb:** CPU SIMD tiering/polyfill libraries → `rust_perf` simd. GPU shader/kernel code → `kernel_opt`. Lint-shaped fix patterns → `clippy_lints`. A source landed a perf fix we can re-measure → measured-GOAT distillation (B49/B52/B54/B55 precedent), any domain. The source's LANGUAGE routes nothing — any-language sources transcribe into whichever domain owns their class shape (the transcription law above).
 
 **Domain-complete state awareness:** the kernel_opt riir-gpu file-mining frontier is CLOSED. Live intake paths are (a) `rust_perf` external sources, (b) measured-GOAT distillations, (c) new-domain proposals. A verdict proposing "mine this GPU repo file-by-file" must check the mining queue snapshot first.
 
@@ -38,7 +41,7 @@ Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug 
 
 ## Source inspection protocol
 
-Parallelize round 1: repo structure fetch (2-3 levels deep) + web search (what is it, crates.io presence, maintenance) + nothing local yet. Round 2 after structure: read `Cargo.toml` + `lib.rs` + the 3-5 files **whose names carry mechanism** (`divider.rs`, `dp.rs`, `policy.rs` — the load-bearing heuristic). Round 3: dedup greps (below).
+Parallelize round 1: repo structure fetch (2-3 levels deep) + web search (what is it, crates.io presence, maintenance) + nothing local yet. Round 2 after structure: read `Cargo.toml` + `lib.rs` + the 3-5 files **whose names carry mechanism** (`divider.rs`, `dp.rs`, `policy.rs` — the load-bearing heuristic). For a non-Rust source the equivalents are its own manifest + entrypoint + the mechanism-named files in ITS language (penthera: `package.json` + `cli.js` + `lib/rules/*.json`) — the protocol is language-agnostic even though the FIXTURE output is always Rust. Round 3: dedup greps (below).
 
 Inspection checklist:
 
@@ -172,12 +175,16 @@ User: distill `dial9-rs "Principles for fast Tokio applications"`. First pass gr
 - Candidates: `batch-blocking-pool-segment` B (zero corpus hits; distinct from buffered-io/bufwriter-batched SYSCALL batching) · adaptive-yield-K-consecutive-ready B+ content (distinct-from `async-yield-point` BOTH directions + the light/heavy-load anti-regime — long polls are benign until the runtime OR the OS is loaded) · bounded-fanout-semaphore B− (expected drop; adjacent to `bounded-channel-backpressure`, same family distinct fix-space).
 - The reusable lesson: **a corrected verdict keeps BOTH grades in the research note** — the correction is resolved precedent the next borderline call cites, not history to quietly overwrite.
 
+## Third worked example (penthera, 2026-10-26 — the language-gate miss)
+
+Source: danoszz/penthera — an offline security agent in Node/TS with ZERO `.rs` files. First pass graded NO C+ on "no Rust surface to transcribe": the then-stale routing table ("`sec` DOES NOT EXIST YET") plus the Rust-shaped `Accepts` columns were read as a language gate the skill never owned. Owner challenge ("the distill should just map to the right domain and not skip it by language — rewrite anylang to Rust") forced the correction: **YES B−** (Research 329 / Plan 295 / nominal Batch 291) with 3 transcription candidates — `cors-any-origin-with-credentials` (tower-http dep-gated co-occurrence), `jwt-insecure-validation-flags` (jsonwebtoken field-literal), `auth-cookie-without-secure-flags` (cookie crate + session-vocabulary name gate) — all suggest-only, all NotBenchable-by-domain, all dedup-clean. The lesson is the transcription law above; the dial9 lesson (a corrected verdict keeps BOTH grades) applied unchanged.
+
 ## Constraints (non-negotiable)
 
 - Corpus fixtures are ORIGINAL minimal reproductions. Never paste external source verbatim into `buggy_code`/`fixed_code` — license hygiene + the binary-only distribution rule.
 - **Ported numeric algorithm ⇒ exhaustive equivalence gate.** When a batch ports a numeric construction (magic-number division, approx identities, bit tricks), an exhaustive/boundary equivalence test against the reference op (e.g. all divisors 1..=4096 × boundary + LCG numerators vs hardware `/`) is MANDATORY before landing — casual tests miss subtle wrongness (Batch 59: floor-vs-ceil magic at d=3 x=3 + u32-wrap carry loss at d=7 x=u32::MAX, both caught pre-landing, both invisible at small random tests).
 - WIP sources: snapshot/quote at mine time (siblings drift), mine completed modules only.
-- New domains (sec, wasm, ...) require a Proposal + `HealDomain` trait extension before any corpus entry — a verdict may recommend opening one but must not assume it.
+- Unlanded domains (wasm, ...) require a Proposal + `HealDomain` trait extension before any corpus entry — a verdict may recommend opening one but must not assume it (`sec` is LANDED — Batch 258; route to it, never re-propose).
 - Large sources: split inspection across 2 subagent lanes by module tree with disjoint scopes (the established 2-lane mining pattern); the coordinator verifies every CRITICAL reachability claim with its own grep (the Research 057 lesson — a subagent's failed grep is not evidence of absence).
 - **Plan-first for mining batches.** A YES verdict that proceeds to implementation opens its `.plans/NNN_*.md` plan (checkbox tasks per the global rule) BEFORE the first corpus edit; the batch's Research note and queue line reference the plan. A batch implemented without a plan is a process defect — record it honestly if it ever happens again (precedent: Plan 006 was created retroactively at owner request).
 - Commit the queue update + research note in the same unit (idle-loop commit discipline), `feat:`/`docs:` prefix per convention, on `develop`.
