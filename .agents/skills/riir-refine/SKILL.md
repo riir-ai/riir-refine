@@ -75,13 +75,27 @@ after the safety checks named per step.
 3. **Worktree clean.** Per repo: `git worktree list` + `git worktree prune
    --dry-run` (prunable = stale registration — prune immediately). For each
    non-main worktree: `git -C <wt> status --porcelain` — CLEAN + detached →
-   `git worktree remove --force`; DIRTY → report the dirt, remove only when
-   it is plainly build churn (Cargo.lock), never source WIP. Also sweep
-   `.wNNN`-style dirs beside the repos and temp-path worktrees
+   ⛔ ANCHOR-BEFORE-REMOVE (incident 2026-10-27: the sweep removed a staging
+   worktree whose detached HEAD held the unlanded issue-099 fmt drain — the
+   KEEP clause below covers branch-holding worktrees, and a detached HEAD
+   with an unlanded commit is the same class of work): if the worktree's
+   HEAD commit is reachable from NO branch and NO origin
+   (`git branch --all --contains HEAD` empty + `git merge-base --is-ancestor
+   HEAD origin/<default>` failing), create a holding branch in the MAIN repo
+   first (`git branch hold/<wt-name> <sha>`) or KEEP the worktree — only
+   then `git worktree remove --force`; DIRTY → report the dirt, remove only
+   when it is plainly build churn (Cargo.lock), never source WIP. Also
+   sweep `.wNNN`-style dirs beside the repos and temp-path worktrees
    (`/private/tmp/*`, `E:\git\wt*`, `C:\t980`). KEEP: anything holding ops
    credentials (the 4090's `E:\git\kat141` carries live signing keys),
    branch-holding worktrees whose branch has unmerged commits, and another
    session's checked-out worktree (parent = live session).
+   ⛔ Shell discipline in this step (and everywhere): never chain a mutating
+   git command after a `cd` in one line without `&&`-asserting the cd (a
+   failed cd silently runs the rest in the WRONG cwd — measured: a misfired
+   chain reset a sibling's WIP in a shared tree); never pipe a mutating git
+   command through a filter (`| tail/head` masks the exit); verify `pwd`
+   before any `reset --hard` in a shared worktree.
 4. **Disk check → clean only when needed.** `df -h /` and `df -h
    /Volumes/SDXC1TB` — internal < 100Gi free OR SD < 100Gi free → invoke the
    `disk-clean` skill (its contract: LIST first, delete only user-approved

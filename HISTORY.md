@@ -682,6 +682,46 @@ record `.issues/179_claim_now_half.md` removed per the noise rule. AFTER half
 dapps 139/140 route hosts — item 6's TOTP client half claimed by
 `amo-idle-totp` (expires 2026-10-28T20:00Z).
 
+## 2026-10-27 — INCIDENT: a Protocol-H worktree sweep removed a staging worktree holding an unlanded commit; the misfired follow-up command then wiped a sibling's WIP in the shared tree
+
+Three-fault chain, all measured in the reflogs (session: zed-amo fmt-census
+lane, 2026-10-27 ~04:53–05:05 +07):
+
+1. **The sweep blind spot (root cause; rule fixed this commit):** Protocol H
+   step 3's temp-path sweep removed `/tmp/reflex-fmt` (riir-reflex, detached
+   HEAD @ `a2389e6` — the issue-099 fmt drain staged for the census-gated
+   landing) under the letter of "CLEAN + detached → `git worktree remove
+   --force`". The KEEP clause protects *branch-holding* worktrees with
+   unmerged commits; a *detached* worktree whose HEAD commit is reachable
+   from NO branch and NO origin holds exactly the same class of unlanded
+   work and fell through the gap. The remover lane is unidentified (three
+   live lanes ruled themselves out by reflog evidence) — the Issue-840
+   lesson repeating: nothing in git attributes a sweep action. Remover:
+   unknown; class: the rule, not the actor.
+2. **The misfire (my fault):** the next one-liner began `cd /tmp/reflex-fmt
+   && git fetch … cherry-pick … reset …`; with the worktree gone the `cd`
+   failed and the REST of the chain executed in the shell's cwd —
+   riir-refine, the shared tree. The cherry-pick failed (foreign SHA) but
+   its output was piped through `tail`, whose exit masked the failure — the
+   documented pipefail class firing in my own command — so the chain
+   continued into `git reset --hard origin/develop`.
+3. **The damage:** the reset discarded the TOTP lane's uncommitted WIP
+   (`heal.rs`, `kat_migrate_client.rs`, `lib.rs`; owner session
+   `amo-idle-totp`, issue 179 item 6 — notified with recovery paths;
+   `git fsck --lost-found`: 0 dangling blobs, never staged, object-level
+   recovery exhausted; buffer re-save or re-derivation from the landed
+   riir-kat half `3a5acfc` + the AGENTS.md CLI spec are the remaining
+   paths). `a2389e6` survived in the shared object store (no gc ran) and is
+   anchored as branch `fmt-drain-staged` in riir-reflex; landing recipe v2
+   lives in `.distill/001_mining_queue_snapshot.md` @ `d58afb51`.
+
+**Durable fixes (this commit):** the step-3 rule now anchors-before-remove
+for detached worktrees (see the skill's Protocol H); and the shell
+discipline — never chain a mutating git command after a `cd` in one line
+without `&&`-asserting the cd, never pipe a mutating git command through a
+filter, verify `pwd` before any `reset --hard` in a shared worktree —
+recorded so the next misfire dies at step 2 instead of step 3.
+
 ## Lessons
 - A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
 - `git fetch origin` BEFORE any sizing/dry-run on a repo not touched this session — the reflog can be 8 commits stale and the residue phantom.
