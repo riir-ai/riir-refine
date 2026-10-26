@@ -599,9 +599,26 @@ fn main() {
     // `prepare` (the prepared samples are not the frozen population).
     if args.arm == "FROZEN" {
         let verifier = std::mem::replace(&mut harness.verifier, ClippyVerifier::new());
-        run_frozen(&args, &verifier);
-        eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
-        return;
+        // Issue 177: the arm is compiled by cf_workers_ai alone, so the
+        // escalation_manifest-gated fn needs its own two-arm pair (the
+        // hosted_dispatch precedent) — an ungated call is E0425 at every
+        // legal posture without the feature.
+        #[cfg(feature = "escalation_manifest")]
+        {
+            run_frozen(&args, &verifier);
+            eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+            return;
+        }
+        #[cfg(not(feature = "escalation_manifest"))]
+        {
+            let _ = &verifier;
+            eprintln!(
+                "--arm FROZEN requires --features escalation_manifest -- the frozen\
+                 read runs through the escalation dispatch; compile with the feature\
+                 or use the hosted arm"
+            );
+            std::process::exit(2);
+        }
     }
 
     let prepared = prepare(&mut harness, samples, args.few_shots);
