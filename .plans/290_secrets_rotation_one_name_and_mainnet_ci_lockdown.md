@@ -2,6 +2,8 @@
 
 **Status:** IN PROGRESS — Phase 0+1 COMPLETE, Phase 2 ~70% (deferrals named), Phases 3–5 open. Session record 2026-10-25 (2): ops token wired end-to-end (secret push + deploy `07046fa0` + backfill verify), riir-refine bearers re-minted, `GH_PAT` retired for `SIBLING_REPOS_TOKEN` (`9c66ce72`).
 
+**⚠ Credential-home sweep measured 2026-10-26T22:3xZ (riir-refine-idle-amo, Protocol H + Helius-cleanup attempt):** the local credential picture changed since the 10-25/26 baselines — `seal-remake/.env` (the CF deploy+account pair's home, the guard --live source) MISSING; `riir-deployer/.env`, `riir-dapps/.env`, `riir-reflex/.env` MISSING; `riir-refine/.env` present but 0 lines (held READ_TOKEN/DASHBOARD_TOKEN/GROQ/INFRON/HF-read per Phase 2); `~/Library/Preferences/.wrangler/config/default.toml` (the OAuth session, seen 10-26 ~15:0xZ in the 169 baseline with a refresh token) GONE. Values never read; names only. Consequences: NO Cloudflare credential of any scope is currently reachable from this box — the Helius `HELIUS_WEBHOOK_SECRET_PREVIOUS` cleanup (due: cutover was 10-25, the ≥24 h retry horizon has passed) is BLOCKED on re-homing a credential, and every CF-surface op (guard --live, secret pushes, deploys) fails at auth. Cause unknown (deliberate rotation-lane move vs third-actor wipe); queried the active overflow lane, no answer at record time. Owner decision needed: re-home the CF deploy+account pair (and the OAuth posture — token-only per issue 169 item 5 remains the preferred end state) OR confirm the sweep was deliberate and point the lanes at the new home.
+
 ## Context (the audit, 2026-10-25)
 
 Owner directive: all SSH already revoked/rotated; now revoke + roll every API
