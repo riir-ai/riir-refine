@@ -103,3 +103,15 @@ Fan-out notes:
 - **Portability fix rode first:** the pilot's `--scan` hardcoded `/Users/kat/git/*/`; `be23c8dd` derives the farm root from the script location.
 - **Two push races recovered per the shared-worktree recipe:** dapps + infer had siblings push between commit and push (my success-grep false-POSITIVED on the rejection text — the grep matched "develop" in `! [rejected]`); both landed via the temp-worktree cherry-pick path (`915b39e`, `1f99c7e`), local checkouts realigned by update-ref + mixed reset, sibling WIP untouched throughout. Lesson: a push-success check must grep for the ref-update arrow, never the branch name.
 - NOT in this slice: riir-ai (T2.1 owner-gated adjudication + contended lane), riir-train (routing restriction; trainers live), the big sets (game-sdk 20 / seal-remake 14 / seal-game-editor 12 / mmorpg-examples 21 / deployer 7 / seal-online-remaster 27-deprecated) — a follow-up slice under the same claim until expiry, else re-claim.
+
+## T2.4 big-set slice — LANDED same cycle (the second unit, 2026-10-27 ~03:5x +07)
+
+The three remaining on-box big sets adopted with FULL per-finding pins (titles + crate versions read from fresh scans; every bump row names its plan-298 T2.2 owning lane — quinn→riir-net, rustls/emSign→the rustls lane, zstd stack→the zstd/bundle lanes, quick-xml/webbrowser→the small-bump set):
+
+| Repo | Ledger (all PINNED, scan PASS) | Commit |
+|---|---|---|
+| seal-remake | 14 rows: 0089 · 0141 Bincode · 0134 rustls-pemfile · 0449 unsafe-libyaml · quinn 0338/0340/0343 · rustls 0285/0346/0348/0349 · emSign 0381/0382 · ruzstd 0344 (the vessel reader's caps noted) | `4c7a15e` |
+| riir-game-sdk | 20 rows: the seal-remake set + quinn 0185/0339/0341/0342 + quick-xml 0194/0195 + webbrowser 0257 | `54c137a` |
+| seal-game-editor | 12 rows: ttf-parser 0192 · unsafe-libyaml 0449 · quick-xml 0194/0195 · webbrowser 0257 · zbus/zvariant 0370/0371/0372 (Linux-desktop transitive, editor runs on macOS) · zstd 0391/0398/0403/0410 (0410 = the wasm32 allocator shim, browser-bundle posture) | `d636452c5` |
+
+New unmaintained IDs classified this pass: 2025-0134 rustls-pemfile (superseded by rustls-pki-types), 2025-0141 Bincode, 2026-0370/0371/0372 the zbus/zvariant family. seal-online-remaster (27 rows, deprecated) stays scan-only; riir-mmorpg-examples scan ERROR (stale-lock class) needs its lane's re-lock before adoption; the not-on-amo repos (riir-ai / katgpt-web / riir-refab / riir-viewbridge / riir-deployer) + riir-train stay with their lanes as recorded above.
