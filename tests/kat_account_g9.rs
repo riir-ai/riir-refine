@@ -28,6 +28,13 @@ use riir_refine::kat_account::{
 };
 use riir_refine::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_MICRO_KAT};
 
+// Issue 179 NOW-1: the ONE renderer file, included here by PATH so the
+// pinned suite tests the exact source the bins compile (the test target
+// cannot name a bin-local module; the file is pure — `riir_refine::` paths
+// resolve as the extern crate in both hosts).
+#[path = "../src/bin/kat_info/provider_bindings.rs"]
+mod provider_bindings;
+
 fn temp_dir(tag: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("kat_acct_g9_{tag}_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -294,4 +301,111 @@ fn g9_record_round_trips_through_the_persisted_json() {
     // The canonical record shape: provenance instead of a grant field (the
     // grant is the meter constant — the render carries it).
     assert!(parsed.github_user.is_none());
+}
+
+// ── G9f (issue 179 NOW half): provider-binding rows survive the refine ─────
+// ── consumer, and the render is additive ──────────────────────────────────
+
+/// A providers-bearing record fixture (the riir-auth Plan 001 T3 v3 shape,
+/// spelled as JSON so the test needs no named binding type — the EXACT
+/// hazard under test: a consumer binary that never names the type must
+/// still parse, hold, and re-write the rows; serde drops what its struct
+/// does not name, and the parse here proves the STRUCT names them).
+fn providers_fixture_record(account_id: &str) -> String {
+    serde_json::json!({
+        "account_version": ACCOUNT_VERSION,
+        "account_id": account_id,
+        "created_at_unix": 1_700_000_000u64,
+        "github_user": "octocat",
+        "providers": [
+            {
+                "provider": "github",
+                "numeric_id": 5_832_31u64,
+                "login_display": "octocat",
+                "bound_at_unix": 1_764_000_000u64
+            }
+        ]
+    })
+    .to_string()
+}
+
+#[test]
+fn g9f_provider_rows_round_trip_through_load_and_a_recovery_rewrite() {
+    // The consumer-side byte-preserve law (issue 179 NOW-2): a record WITH
+    // provider rows, loaded by THIS crate's facade (which names the type
+    // only inside riir-auth), survives a load → record-rewrite cycle
+    // byte-identically. This is the feature-off-rewrite hazard asserted
+    // for the refine consumer specifically: refine enables NO auth
+    // binding feature, and must still preserve the rows it cannot create.
+    let dir = temp_dir("g9f");
+    let (account, _) = KatAccount::login(&dir).unwrap();
+    let account_id = account.state().account_id.clone();
+
+    // Overwrite the fresh record with the providers-bearing fixture — the
+    // key is untouched, so verify() still passes after the load.
+    let fixture = providers_fixture_record(&account_id);
+    std::fs::write(dir.join(KatAccount::RECORD_FILE), &fixture).unwrap();
+
+    let loaded = KatAccount::load(&dir).unwrap();
+    loaded.verify().unwrap();
+    let rows = &loaded.state().providers;
+    assert_eq!(rows.len(), 1, "the binding row must survive the parse");
+    assert_eq!(
+        rows[0].numeric_id, 5_832_31,
+        "the NUMERIC id is THE identity"
+    );
+    assert_eq!(rows[0].login_display, "octocat");
+
+    // The rewrite half: serialize the loaded state exactly as the
+    // substrate's write_record does (pretty + trailing newline) — the
+    // provider rows must be byte-present, not silently dropped.
+    let rewritten = serde_json::to_string_pretty(loaded.state()).unwrap();
+    let reparsed: AccountState = serde_json::from_str(&rewritten).unwrap();
+    assert_eq!(
+        reparsed.providers, *rows,
+        "a rewrite must carry the rows forward (the serde-drop class)"
+    );
+    assert!(rewritten.contains("\"numeric_id\""));
+}
+
+#[test]
+fn g9f_render_is_additive_and_labels_the_numeric_identity() {
+    // The empty-record arm: ZERO render lines — byte-identical to the
+    // pre-179 surfaces (the additive law; pinned, not conventional).
+    let dir = temp_dir("g9f_empty");
+    let (account, _) = KatAccount::login(&dir).unwrap();
+    let empty_lines = provider_bindings::provider_binding_lines(account.state());
+    assert!(
+        empty_lines.is_empty(),
+        "an unbound record must add zero lines, got: {empty_lines:?}"
+    );
+
+    // The bound arm: a lead count line + one continuation per binding —
+    // numeric id FIRST (the identity), display login as provenance, the
+    // UTC bound date — through the ONE account_line grid (issue 126
+    // follow-up 6: two-space indent, the 13-col label column).
+    let dir2 = temp_dir("g9f_bound");
+    let (account2, _) = KatAccount::login(&dir2).unwrap();
+    let fixture = providers_fixture_record(&account2.state().account_id);
+    std::fs::write(dir2.join(KatAccount::RECORD_FILE), &fixture).unwrap();
+    let loaded = KatAccount::load(&dir2).unwrap();
+    let lines = provider_bindings::provider_binding_lines(loaded.state());
+    assert_eq!(lines.len(), 2, "lead + one row: {lines:?}");
+    assert!(
+        lines[0].starts_with("  bindings:"),
+        "grid lead: {}",
+        lines[0]
+    );
+    assert!(lines[0].contains("1 provider(s) bound"));
+    assert!(lines[1].starts_with("  "), "continuation keeps the indent");
+    assert!(
+        lines[1].contains("github #583231") && lines[1].contains("#5"),
+        "the numeric id renders: {}",
+        lines[1]
+    );
+    assert!(lines[1].contains("as octocat"), "display login renders");
+    assert!(
+        lines[1].contains("(bound 2025-"),
+        "UTC date renders (1_764_000_000 ≈ 2025-11)"
+    );
 }

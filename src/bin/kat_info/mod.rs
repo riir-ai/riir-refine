@@ -20,6 +20,8 @@
 
 use std::path::PathBuf;
 
+pub(crate) mod provider_bindings;
+
 /// The entry (dispatched from `main` before `validate_mode_flags` and
 /// before the 075 soft gate — a read must never be refused by the gate it
 /// reports on). Exits 1 only on a missing/unverifiable account; every
@@ -57,6 +59,11 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     );
     if let Some(user) = &state.github_user {
         println!("{}", account_line("github:", user));
+    }
+    // Issue 179 NOW-1: the provider-binding rows (riir-auth Plan 001 T3's
+    // `providers`) — zero lines on an unbound record (the additive law).
+    for line in provider_bindings::provider_binding_lines(state) {
+        println!("{line}");
     }
     let (mining, mw) = riir_refine::kat_mining_consent::read_with_warning(
         &riir_refine::kat_mining_consent::default_dir(),
