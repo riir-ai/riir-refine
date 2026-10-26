@@ -21,9 +21,7 @@ per plan 053 T0.5 item 4). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
-**Claimed:** zed-amo-179-residue, 1793055600, expires 2026-10-29T22:40:00Z
-
-Scope: item (6) RESIDUE ONLY (the `kat_consent_client.rs` env affordance landing + the riir-kat stale-draft tree reconciliation); items (1)–(5) untouched; 175's operational lease unaffected (no migration ops here). (Lease-line reshaped 2026-10-26, riir-refine idle loop: trailing prose after the expiry token made the line unparseable — the riir-ai-1122 class; claim preserved verbatim.)
+**Lease closed:** zed-amo-179-residue (claimed 2026-10-27, epoch 1793055600) — the residue LANDED 2026-10-27 ~05:5x+07 (riir-kat `70c951c` + the tree reconciliation); item (6) fully landed, nothing further in this item.
 
 Context: [issue 175](175_refine_mainnet_account_migration.md)
 (the live mainnet migration) is leased through 2026-10-28T13:30Z for its
@@ -157,16 +155,20 @@ collide on one lease.
      `src/kat_migrate_client.rs` +121 — `totp_code` on `FileParams`,
      `post_json_with_totp`, the `totp_required` remedy line,
      `fetch_ledger_id` pub; the AGENTS.md CLI row). dapps recorded the
-     pair (`93cd35c`). **RESIDUE (not landed, verified on origin
-     2026-10-27): the consent heartbeat env affordance — riir-kat
-     `kat_consent_client.rs` carries the authored edit
-     (`RIIR_KAT_TOTP_CODE` → `X-Kat-Totp` on the consent route for
-     ARMED accounts, unset = byte-path unchanged) ONLY in its dirty
-     worktree; origin has ZERO TOTP mentions in that file. The env form
-     is the residue; the `--totp-code` flag form landed. Finish = land
-     that one-file edit when the auth lane's tree clears (or descope
-     with the reason here). The dirty tree is the auth lane's WIP — not
-     this lane's to commit.**
+     pair (`93cd35c`). **RESIDUE — LANDED 2026-10-27 ~05:5x+07 (riir-kat
+     `70c951c`, lease closed at the top of this file):** the consent
+     heartbeat env affordance (`RIIR_KAT_TOTP_CODE` → `X-Kat-Totp` on
+     `/mining/consent`, armed accounts only via dapps 139's edge gate,
+     unset = byte-path unchanged) landed after the auth lane's tree
+     reconciled — the pre-gate drafts (374/189-line
+     `kat_protocol_totp.rs`/`kat_totp_client.rs` + the superseded staged
+     lib.rs rows) cleared against origin `45cb2d3`'s grown versions
+     (477/435), tree ff'd `80b929f`→`b0879f6`, the migrate-tally sibling
+     WIP untouched (staged_set_audit verified the split; stale drafts
+     backed up under `/tmp/riir-kat-stale-drafts-backup/`). Gates:
+     clippy `-D warnings` × 3 postures, lib 350/0, rustfmt on the
+     touched file. Untested-by-construction disclosure (no HTTP seam;
+     env-global): riir-kat issue 007 + `cfeb2e9`.
 
 ## Gates
 
