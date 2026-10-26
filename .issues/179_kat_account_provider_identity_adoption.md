@@ -82,7 +82,36 @@ collide on one lease.
    `kat_totp_client` companion (plan 053's honest-limits split names
    refine/riir-kat as its home). Blocked on: plan 053's wire contract
    landing (shapes pinned in its T0.4: enroll signed over
-   `kat:totpenroll:v1:`, disarm + current-step code).
+   `kat:totpenroll:v1:`, disarm + current-step code). **UNBLOCKED
+   2026-10-27: dapps 139 LANDED (`eae0f05`, plan 053 T8) — the route
+   host + the wire contract exist.**
+
+   **Claimed:** amo-idle-totp, 1793043273, expires 2026-10-28T20:00:00Z
+   - Scope: riir-kat `kat_protocol_totp.rs` (feature-free wire: the
+     enroll/disarm message composers v1+v2, the body composers, the
+     base32 seed decode from the one-time URI, the response parsers —
+     byte-symmetric with the landed
+     `cloudflare/kat-service/src/totp_routes.rs` composers) +
+     `kat_totp_client.rs` (the `client`+`kat_transport` gate, the
+     `kat_consent_client` shape: enroll mint/confirm legs, disarm,
+     `current_code` via the ungated `riir_auth::totp_sha256`, the
+     `X-Kat-Totp` header const) + the two consumption sites (refine
+     `kat_migrate_client` header attach — the OLD account's armed
+     factor, `--totp-code`/`RIIR_KAT_TOTP_CODE`; the consent heartbeat
+     env affordance, unset = byte-path unchanged) + the
+     `cargo refine totp --enroll|--disarm` CLI verbs (interactive; the
+     operator's authenticator app holds the seed — refine stores NO
+     seed, the headless-lane custody non-goal holds).
+   - Plan-337 posture: authored against the elephant window-3
+     saturation (no cargo in this window — the R1 watcher lane holds
+     the box). GATE RECIPE for the landing window: `cargo clippy -p
+     kat-* --all-targets -- -D warnings` × (default / --features
+     kat_transport / --no-default-features) → `cargo test -p
+     kat-* --lib totp` + the refine lib tests → `cargo fmt` on the
+     touched files → the release-set binary rebuild + `--version`
+     stamp (§0 bin-age — the client surface IS release-set) → THEN
+     the landing commit + push; the wip checkpoint stays LOCAL until
+     the gates pass.
 
 ## Gates
 

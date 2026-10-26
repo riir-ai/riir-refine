@@ -11,7 +11,10 @@ byte-preserve fixture test, (3) the report-only signing-session survey
 "no code changes in this lease") was untouched — the claim was code in
 `src/bin/` + `tests/`, zero wire ops.
 
-**Claimed:** amo-auth-followup, 1795800000, expires 2026-10-28T00:00:00Z
+**Lease closed:** amo-auth-followup — the NOW half landed 2026-10-27 as
+`95bc8c18` (see the Status line above); the claim line reshaped to this
+non-claim form the same day, when the AFTER half's item 6 claimed its own
+line (`amo-idle-totp`, the TOTP client half).
 
 ## Execution notes (the session record — updated as work lands)
 
