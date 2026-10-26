@@ -115,3 +115,29 @@ The three remaining on-box big sets adopted with FULL per-finding pins (titles +
 | seal-game-editor | 12 rows: ttf-parser 0192 · unsafe-libyaml 0449 · quick-xml 0194/0195 · webbrowser 0257 · zbus/zvariant 0370/0371/0372 (Linux-desktop transitive, editor runs on macOS) · zstd 0391/0398/0403/0410 (0410 = the wasm32 allocator shim, browser-bundle posture) | `d636452c5` |
 
 New unmaintained IDs classified this pass: 2025-0134 rustls-pemfile (superseded by rustls-pki-types), 2025-0141 Bincode, 2026-0370/0371/0372 the zbus/zvariant family. seal-online-remaster (27 rows, deprecated) stays scan-only; riir-mmorpg-examples scan ERROR (stale-lock class) needs its lane's re-lock before adoption; the not-on-amo repos (riir-ai / katgpt-web / riir-refab / riir-viewbridge / riir-deployer) + riir-train stay with their lanes as recorded above.
+
+## T2.5 + T2.6 — LANDED 2026-10-27 (zed-amo-b294-t25t26, amo)
+
+**T2.5 — cargo-auditable in the dist release lane** (riir-refine `.github/workflows/release.yml`): the build job installs `cargo-auditable` via `taiki-e/install-action@v2` (prebuilt; listed in the action's supported-tools table — no compile cost) and the dist build runs `cargo auditable build` — a pass-through wrapper, same flags, embedding the resolved dependency tree as the AUDITABLE_VERSION_INFO data section so `cargo audit bin`-class scanners can attribute vulnerable deps in the SHIPPED binaries without the source tree. YAML parse-validated locally; first exercised at the next `v*` tag run (release lanes are tag-triggered — the dry-run dispatch also carries it).
+
+**T2.6 — `deny_gate.sh --scan --deep`**: one cargo-deny pass PER nested Cargo.lock (sub-workspaces excluded from their repo's root workspace), reusing the repo-root deny.toml where present — advisory pins are per-advisory-ID and path-free, so the same repo's ledger is the right config; no root deny.toml = default config (may report pinned advisories as findings — a read-the-row row, never a silent pass). Hidden/ephemeral trees (dot-dirs, target/, vendor/, node_modules/) are PRUNED in the find (traversal skipped, giant target/ stays cheap); a lockfile without a manifest beside it SKIPs loud. Report-only like `--scan`; plain `--scan` is unchanged. The header's former "Known scope gap" paragraph is replaced by the mode doc.
+
+First deep pass, 13 nested locks across the farm (root-scan rows unchanged from the T2.4 ledgers except: riir-chain / riir-infer / seal-render / katgpt-rs now scan CLEAN at root — their T2.4 pins hold; riir-ai + riir-train + zed remain unpinned FINDINGS rows as recorded):
+
+| Nested lock | Verdict | Note / owning lane |
+|---|---|---|
+| reflex-site/wasm-head | CLEAN | default config (no root deny.toml) |
+| riir-chain/crates/riir-chain-engine-bridge | CLEAN | |
+| riir-rethink/cloudflare/access | CLEAN | |
+| riir-mmorpg-examples/cloudflare/container-tick-test | CLEAN | (its ROOT lock is the known stale-lock ERROR — nested workers scan fine) |
+| riir-train/poc/discoloop_lab | CLEAN | |
+| riir-ai/repro/wgpu_metal_contention | FINDINGS 2024-0436 | the never-wired reproducer — pin or leave, riir-ai T2.1's lane |
+| riir-dapps/cloudflare/kat-service | FINDINGS 0285 · 0346 · 0348 · 0349 · 0381 · 0382 | the rustls + emSign sets — the T2.2 rustls lane; worker dep re-lock |
+| riir-mmorpg-examples/cloudflare/warm-tier-do | FINDINGS 2023-0089 | atomic-polyfill class — T2.3 lane |
+| riir-mmorpg-examples/wasm | FINDINGS 0089 · 2024-0449 | atomic-polyfill + unsafe-libyaml (serde_yaml dev class) — T2.3 lane |
+| riir-train/poc/mdl_collapse_probe | FINDINGS 2023-0089 | poc scratch, atomic-polyfill class — T2.3 lane (routing-restricted) |
+| seal-game-editor/tools/neuron-publish | FINDINGS 14: 0089 · 0192 · 0194 · 0195 · 0257 · 0370 · 0371 · 0372 · 0381 · 0382 · 0391 · 0398 · 0403 · 0410 | the editor's ROOT ledger (12 rows) does NOT cover its tools/* trees — they pull their own dep set incl. zbus/zvariant + zstd; the editor lane re-locks/pins per-tool when it next touches them |
+| seal-game-editor/tools/seal-e2e | FINDINGS 14: 0089 · 0192 · 0194 · 0195 · 0257 · 0346 · 0347 · 0348 · 0349 · 0370 · 0371 · 0372 · 0381 · 0382 | same class as neuron-publish (+ quinn 0346/0347) — editor lane |
+| seal-game-editor/tools/legacy-import | ERROR (stale lock) | manifest moved, lock not re-generated — the editor lane's re-lock, never a silent pass |
+
+New ID this pass: 2026-0347 (quinn). Scope note: T2.6 delivers the INSTRUMENT; adjudicating the nested FINDINGS rows belongs to the owning lanes per the T2.2 discipline — this lane records, never bumps.
