@@ -7515,6 +7515,13 @@ fn parse_args() -> Args {
             "set" if args.command == Some(KatCommand::Config) && args.paths.is_empty() => {
                 args.config_set = true;
             }
+            // riir-dao Proposal 001 T4: the `account migrate` two-word
+            // shape (the dao flow's own spelling) — the same modifier
+            // law: consumed inline, re-aims the command at Migrate. The
+            // bare `migrate` command word stays valid too.
+            "migrate" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
+                args.command = Some(KatCommand::Migrate);
+            }
             // riir-kat Issue 003 T4: the `config adopt-state <net>` modifier —
             // the `set` precedent's shape, with its net word consumed inline.
             "adopt-state"
