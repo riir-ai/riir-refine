@@ -118,6 +118,16 @@ enum KatCommand {
     /// A base58 pubkey shape refuses with the account-id hint. Same
     /// `admin` gate.
     TunaSend,
+    /// riir-dao Proposal 001 T4 (Proposal 023): `account migrate` —
+    /// the account-key rotation lane's CLI surface. `--github <user>`
+    /// files the dual-signed request (the OLD key via the explicit
+    /// `--old-key <path>` — the per-invocation key source, never the env
+    /// var; the T-PREFLIGHT measured finding), `--object <request-id>`
+    /// composes the prefilled objection-issue URL, `--status <id>` reads
+    /// the lifecycle, `--census` is the report-only continuity preflight
+    /// (the E-3 filing gate). Needs `kat_service`; the filing + status
+    /// halves need `kat_transport`.
+    Migrate,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -3426,6 +3436,178 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
     }
 }
 
+/// riir-dao Proposal 001 T4 (`account migrate`): the rotation lane's CLI
+/// surface. Exactly one mode per invocation; the census doubles as the
+/// filing's E-3 gate. The OLD key comes ONLY from the explicit
+/// `--old-key <path>` (the per-invocation key source — the env var is
+/// NEVER consulted, the measured T-PREFLIGHT finding).
+#[allow(clippy::too_many_arguments)]
+fn run_kat_migrate(
+    github: Option<&str>,
+    object: Option<&str>,
+    status_id: Option<&str>,
+    census_mode: bool,
+    old_key_path: Option<&str>,
+    github_token: Option<String>,
+    repo_base: Option<&str>,
+) {
+    let modes = github.is_some() as u8
+        + object.is_some() as u8
+        + status_id.is_some() as u8
+        + census_mode as u8;
+    if modes != 1 {
+        eprintln!(
+            "migrate: exactly one mode is required — \
+             --github <user> (file) | --object <request-id> | --status <request-id> | --census"
+        );
+        std::process::exit(2);
+    }
+    let repo_base = repo_base
+        .map(str::to_owned)
+        .unwrap_or_else(|| riir_refine::kat_migrate_client::DEFAULT_OBJECTION_REPO_BASE.to_owned());
+    let root = resolve_heal_root(&[]);
+
+    // ── the census mode (report-only; kat_service, no transport) ──
+    if census_mode {
+        let url = riir_refine::kat_lease_client::service_url_for_command();
+        let c = riir_refine::kat_migrate_client::census(
+            &root,
+            &riir_refine::kat_account::KatAccount::default_dir(),
+            &url,
+        );
+        print!(
+            "{}",
+            riir_refine::kat_migrate_client::render_census(&c, &url)
+        );
+        if !c.blockers.is_empty() {
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    // The modes below resolve the net-pinned dial (the strict seam).
+    let url = command_service_url();
+
+    // ── the objection URL (offline compose) ──
+    if let Some(request_id_hex) = object {
+        // The compose needs the request's accounts; the CLI knows only the
+        // id, so the URL composes with the id alone (the worker's ack URL
+        // carried the accounts — an offline re-compose keeps the id, which
+        // is the part every filter matches on).
+        println!(
+            "{}",
+            riir_kat::kat_protocol_migrate::compose_objection_issue_url(
+                &repo_base,
+                request_id_hex,
+                "",
+                "",
+                "",
+            )
+        );
+        println!(
+            "objection: open the URL, state the reason, react 👍 to SUPPORT the objection \
+             (blocks) or 👎 to REJECT it (proceeds); label {LABEL} is prefilled",
+            LABEL = riir_kat::kat_protocol_migrate::OBJECTION_LABEL,
+        );
+        return;
+    }
+
+    // ── the status read ──
+    if let Some(request_id_hex) = status_id {
+        match riir_refine::kat_migrate_client::status(&url, request_id_hex) {
+            Ok(body) => {
+                println!("{body}");
+                // The lazy-close hint: a pending row whose window elapsed
+                // closes on the worker at the NEXT read (this one just did).
+                let pending_elapsed = serde_json::from_str::<serde_json::Value>(&body)
+                    .ok()
+                    .filter(|v| v.get("state").and_then(|s| s.as_str()) == Some("pending"))
+                    .and_then(|v| v.get("window_close_unix").and_then(|c| c.as_u64()))
+                    .map(|close| {
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .ok()
+                            .map(|d| d.as_secs())
+                            .map_or(false, |now| now >= close)
+                    })
+                    .unwrap_or(false);
+                if pending_elapsed {
+                    println!(
+                        "status: the window has elapsed — the worker closes it lazily; \
+                         re-read `--status` for the post-close state"
+                    );
+                }
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // ── the filing ──
+    let Some(github_user) = github else {
+        unreachable!("exactly one mode was validated");
+    };
+    let Some(old_key) = old_key_path else {
+        eprintln!(
+            "migrate: filing requires --old-key <path> — the OLD key file (OpenSSH Ed25519) \
+             that signs the release. The per-invocation key source is EXPLICIT by law: \
+             the env var is never a signing source (the measured T-PREFLIGHT finding)."
+        );
+        std::process::exit(2);
+    };
+    let token = github_token
+        .or_else(|| std::env::var("GITHUB_TOKEN").ok())
+        .or_else(|| std::env::var("GH_TOKEN").ok());
+    let params = riir_refine::kat_migrate_client::FileParams {
+        github_user,
+        old_key_path: std::path::Path::new(old_key),
+        github_token: token,
+        repo_base: &repo_base,
+    };
+    match riir_refine::kat_migrate_client::file_migration(&root, &params, &url) {
+        Ok(outcome) => {
+            let ack = &outcome.ack;
+            println!(
+                "migrate: request {} — state {}{}",
+                ack.request_id_hex,
+                rmpk_state(ack.state),
+                if outcome.filed {
+                    ""
+                } else {
+                    " (replay — already filed)"
+                }
+            );
+            if let Some(u) = &outcome.objection_url {
+                println!("objection url: {u}");
+            }
+            println!(
+                "window: 24 h default-deny — nobody objects → release at close; \
+                 an objection with NO votes cancels (anti-theft first)"
+            );
+            println!(
+                "next: watch with --status {}; object with --object {}",
+                ack.request_id_hex, ack.request_id_hex
+            );
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn rmpk_state(state: riir_kat::kat_protocol_migrate::MigrateRequestState) -> &'static str {
+    match state {
+        riir_kat::kat_protocol_migrate::MigrateRequestState::Pending => "pending",
+        riir_kat::kat_protocol_migrate::MigrateRequestState::Dispute => "dispute",
+        riir_kat::kat_protocol_migrate::MigrateRequestState::Released => "released",
+        riir_kat::kat_protocol_migrate::MigrateRequestState::Cancelled => "cancelled",
+    }
+}
+
 /// The account's open checkouts, read through the SAME transport tier
 /// (the history read's transport + the purchases page parse). `None` =
 /// the read failed (the caller falls back to the bare 429 prose). The
@@ -6372,6 +6554,21 @@ struct Args {
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
     wetrun_dry_run: bool,
+    /// riir-dao Proposal 001 T4: the `account migrate` mode flags —
+    /// exactly one mode per invocation (`--github` files, `--object`
+    /// composes the objection URL, `--status` reads, `--census` reports).
+    migrate_github: Option<String>,
+    migrate_object: Option<String>,
+    migrate_status: Option<String>,
+    migrate_census: bool,
+    /// The OLD key file (the per-invocation key source — REQUIRED for a
+    /// filing; never an env var, the measured T-PREFLIGHT finding).
+    migrate_old_key: Option<String>,
+    /// Optional GitHub bearer for the PoW measure (rate limits only;
+    /// `GITHUB_TOKEN`/`GH_TOKEN` env respected as fallback).
+    migrate_github_token: Option<String>,
+    /// The objection repo base (default: the dao repo).
+    migrate_repo_base: Option<String>,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -6603,6 +6800,13 @@ fn parse_args() -> Args {
         tuna_gov: None,
         tuna_dry_run: false,
         wetrun_dry_run: false,
+        migrate_github: None,
+        migrate_object: None,
+        migrate_status: None,
+        migrate_census: false,
+        migrate_old_key: None,
+        migrate_github_token: None,
+        migrate_repo_base: None,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -7042,6 +7246,70 @@ fn parse_args() -> Args {
                     usage();
                 }));
             }
+            // riir-dao Proposal 001 T4 — the `account migrate` flags.
+            // Exactly one mode per invocation; the flags refuse outside
+            // the migrate command so they never become scan paths.
+            "--github" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--github requires the claim account's GitHub login");
+                    usage();
+                };
+                if args.migrate_github.is_some() {
+                    eprintln!("--github given twice");
+                    usage();
+                }
+                args.migrate_github = Some(value);
+            }
+            "--object" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--object requires the 64-hex request id");
+                    usage();
+                };
+                if args.migrate_object.is_some() {
+                    eprintln!("--object given twice");
+                    usage();
+                }
+                args.migrate_object = Some(value);
+            }
+            "--status" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--status requires the 64-hex request id");
+                    usage();
+                };
+                if args.migrate_status.is_some() {
+                    eprintln!("--status given twice");
+                    usage();
+                }
+                args.migrate_status = Some(value);
+            }
+            "--census" if args.command == Some(KatCommand::Migrate) => {
+                args.migrate_census = true;
+            }
+            "--old-key" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--old-key requires the OLD key file path (OpenSSH Ed25519)");
+                    usage();
+                };
+                if args.migrate_old_key.is_some() {
+                    eprintln!("--old-key given twice");
+                    usage();
+                }
+                args.migrate_old_key = Some(value);
+            }
+            "--github-token" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--github-token requires a bearer token");
+                    usage();
+                };
+                args.migrate_github_token = Some(value);
+            }
+            "--repo-base" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--repo-base requires the governance repo HTML base");
+                    usage();
+                };
+                args.migrate_repo_base = Some(value);
+            }
             "--qr" => args.pay_qr = true,
             // The topup QR's OFF switch (the --qr counterpart). A bare --qr
             // with the topup command is normalized to topup_qr post-parse
@@ -7214,7 +7482,7 @@ fn parse_args() -> Args {
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake" | "unstake"
             | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet" | "wetrun"
-            | "config" | "replay" | "corpus-pr" | "get" | "send"
+            | "config" | "replay" | "corpus-pr" | "get" | "send" | "migrate"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -7233,6 +7501,7 @@ fn parse_args() -> Args {
                     "tuna" => KatCommand::Tuna,
                     "get" => KatCommand::TunaGet,
                     "send" => KatCommand::TunaSend,
+                    "migrate" => KatCommand::Migrate,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -10871,6 +11140,18 @@ fn main() {
             #[cfg(not(feature = "admin"))]
             KatCommand::TunaSend => {
                 riir_refine::build_stamp::refuse("send", &["admin"]);
+            }
+            // riir-dao Proposal 001 T4: the account-key migration lane.
+            KatCommand::Migrate => {
+                run_kat_migrate(
+                    args.migrate_github.as_deref(),
+                    args.migrate_object.as_deref(),
+                    args.migrate_status.as_deref(),
+                    args.migrate_census,
+                    args.migrate_old_key.as_deref(),
+                    args.migrate_github_token.clone(),
+                    args.migrate_repo_base.as_deref(),
+                );
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]

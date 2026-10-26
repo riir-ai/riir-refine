@@ -558,7 +558,10 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # NO new riir dep — the lease wire format is a MIRRORED versioned
 # serialization contract pinned by cross-repo golden vectors (see
 # src/kat_lease_client.rs §golden).
-kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport"]
+# Proposal 001 T4: the migrate filing's PoW measure rides the same
+# transport tier (riir-auth's ureq source through riir-kat's dep edge;
+# dep-weight-neutral — ureq is already here).
+kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport", "riir-kat/github_pow_fetch"]
 
 # riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17):
 # `cargo refine get|send <amt> tuna` — the marketing-airdrop ADMIN hand

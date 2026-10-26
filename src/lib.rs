@@ -333,10 +333,11 @@ pub use riir_kat::kat_redact;
 pub use riir_kat::{
     kat_account, kat_account_client, kat_adoption, kat_burn_client, kat_fixstat_client,
     kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account,
-    kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_pay,
-    kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop,
-    kat_protocol_v2, kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_service_config,
-    kat_stake_client, kat_tuna_admin_client, kat_vote_client, kat_wetrun,
+    kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_migrate,
+    kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq, kat_protocol_replay,
+    kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2, kat_protocol_vote,
+    kat_protocol_wetrun, kat_replay_client, kat_service_config, kat_stake_client,
+    kat_tuna_admin_client, kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
@@ -397,6 +398,17 @@ pub mod kat_join;
 // T15's row).
 #[cfg(feature = "kat_service")]
 pub mod kat_corpus_pr;
+
+// riir-dao Proposal 001 T4 (the `account migrate` CLI plane): the census
+// preflight (report-only, E-3's gate), the dual-signed filing (the OLD
+// key via the explicit per-invocation `--old-key` path — the env var is
+// NEVER a signing source, the measured T-PREFLIGHT finding), the status
+// read, and the objection-URL compose. Signing/census halves ride
+// `kat_service`; the network half is inner-gated `kat_transport` (the
+// kat_corpus_pr law); the PoW measure reaches riir-auth through
+// riir-kat's re-export (the member carries the dep, never a direct edge).
+#[cfg(feature = "kat_service")]
+pub mod kat_migrate_client;
 
 // riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17): the
 // marketing TUNA airdrop ADMIN hand — `cargo refine get|send <amt> tuna`
