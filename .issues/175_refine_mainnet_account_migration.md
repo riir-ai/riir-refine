@@ -1,7 +1,10 @@
 # Issue 175 — teardown-and-migrate the LIVE mainnet refine account (71615e8d…) onto the dao rotation lane
 
 **Status:** OPEN — ASAP (the account is live; the 4090 identity already
-forked locally 2026-10-26). Owner-directed. Executes the refine slice of
+forked locally 2026-10-26). Owner-directed.
+**Claimed:** zed-amo-175-preflight, 1793021421, expires 2026-10-28T13:30:21Z
+(scope: the T-PREFLIGHT 4090 leg only — dual-sign + drain under the OLD
+account; T-WIRE/T4 stays the dao lane's, no code changes in this lease) Executes the refine slice of
 [riir-dao Proposal 001](../riir-dao/.proposals/001_kat_account_key_rotation_social_recovery.md)
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
