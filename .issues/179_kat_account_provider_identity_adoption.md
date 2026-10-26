@@ -105,7 +105,9 @@ collide on one lease.
    2026-10-27: dapps 139 LANDED (`eae0f05`, plan 053 T8) — the route
    host + the wire contract exist.**
 
-   **Claimed:** amo-idle-totp, 1793043273, expires 2026-10-28T20:00:00Z
+   **Lease closed:** amo-idle-totp (claimed 2026-10-27, epoch
+   1793043273) — item (6) LANDED 2026-10-27 03:36+07, before expiry;
+   reshaped zed-amo-idle epoch 1793052760 (the push stays the arbiter).
    - Scope: riir-kat `kat_protocol_totp.rs` (feature-free wire: the
      enroll/disarm message composers v1+v2, the body composers, the
      base32 seed decode from the one-time URI, the response parsers —
@@ -142,6 +144,25 @@ collide on one lease.
      dirty `kat_protocol_migrate_tally.rs` untouched (staged_set_audit
      verified the split). NOTHING COMPILED YET — the recipe above is
      the landing gate.
+   - **LANDED 2026-10-27 03:06/03:36+07** (supersedes the
+     NOTHING-COMPILED-YET note above): riir-kat `45cb2d3`
+     (`kat_protocol_totp.rs` 477 lines + `kat_totp_client.rs` 435 lines,
+     both grown through the gate recipe, + the lib rows + issue 007
+     filed) → refine `c9923d2f` (`src/bin/heal.rs` +281 — the
+     `kat totp enroll|disarm` verbs + `--totp-code`;
+     `src/kat_migrate_client.rs` +121 — `totp_code` on `FileParams`,
+     `post_json_with_totp`, the `totp_required` remedy line,
+     `fetch_ledger_id` pub; the AGENTS.md CLI row). dapps recorded the
+     pair (`93cd35c`). **RESIDUE (not landed, verified on origin
+     2026-10-27): the consent heartbeat env affordance — riir-kat
+     `kat_consent_client.rs` carries the authored edit
+     (`RIIR_KAT_TOTP_CODE` → `X-Kat-Totp` on the consent route for
+     ARMED accounts, unset = byte-path unchanged) ONLY in its dirty
+     worktree; origin has ZERO TOTP mentions in that file. The env form
+     is the residue; the `--totp-code` flag form landed. Finish = land
+     that one-file edit when the auth lane's tree clears (or descope
+     with the reason here). The dirty tree is the auth lane's WIP — not
+     this lane's to commit.**
 
 ## Gates
 
