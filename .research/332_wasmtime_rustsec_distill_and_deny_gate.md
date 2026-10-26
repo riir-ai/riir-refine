@@ -83,3 +83,23 @@ The clippy lane is a **span oracle** feeding span healing. cargo-deny is a **loc
 ## Queue slot
 
 Batch 294 / `.plans/298_batch294_rustsec_transcription_and_deny_gate_fanout.md` (plan-first; the plan owns the corpus batch, the fan-out, and the remediation-lane list). `.raw/` not used (no clone needed — advisories are web documents; the scan needs no checkout).
+
+## T2.4 fan-out slice — LANDED 2026-10-27 (zed-amo-b294-fanout, amo; cargo-deny 0.20.2 prebuilt binary)
+
+16 small-ledger repos adopted the gate (deny.toml + scripts/deny_gate.sh, named-path commits, all first scans PASS at the landed ledger):
+
+| Repo | Ledger | Commit |
+|---|---|---|
+| riir-llm · riir-shader · seal-std | EMPTY (scan CLEAN) | `324df3c` · `73542ea` · `8c8d8ee` |
+| riir-auth · riir-dao · riir-dapps · riir-instinct · riir-kat · riir-reflex · riir-reflexer · riir-rethink | 2023-0089 only | `a7cfdd8` · `4ebc76e` · `915b39e` · `31508e5` · `80b929f` · `ca2eb39` · `b24d13c` · `d41d203` |
+| riir-neuron-db | 2023-0089 only — **dropped from 3 findings to 1 since this scan** (a dep bumped; re-scan before pinning more) | `44e2ee0` |
+| riir-infer | 2023-0089 + 2024-0436 (paste, via gemm/laya) | `1f99c7e` (worktree push, see note) |
+| seal-render | 2026-0384 (yanked tokio 1.54.0 Interval race — exactly-version-affected, reach = wasm-bindgen-futures under bevy on the wasm32 edge) + 2024-0449 (unsafe-libyaml via deprecated serde_yaml, DEV-only) — both pinned with the seal-render bump lane named (plan 298 T2.2) | `d92752e` |
+| riir-chain | 0089 + 0190 (anyhow 1.0.102) + 0204 (crossbeam-epoch 0.9.18) + 0385 (ctutils 0.4.2) + 0386 (tokio 1.52.3 AsyncFd) + 0387 (crypto-bigint 0.5.5+0.7.5 via k256/ecdsa) — every bump row names its plan 298 T2.2 owning lane | `cce46874` |
+| katgpt-rs (PUBLIC) | 0089 + 0436 (paste via metal 0.33) + 0192 (ttf-parser via plotters) + 0204 (crossbeam-epoch) — the atomic-polyfill FIX lane is THIS repo (T2.3); the ledger says so explicitly | `3478518d9` |
+
+Fan-out notes:
+- **Box deltas vs this file's first scan:** katgpt-web / riir-refab / riir-viewbridge are NOT checked out on amo — their adoption waits for a box that carries them. riir-deployer likewise absent here (7 findings, stays for its lane). riir-mmorpg-examples scan ERRORed (stale-lock class — needs a re-lock read, its lane's call).
+- **Portability fix rode first:** the pilot's `--scan` hardcoded `/Users/kat/git/*/`; `be23c8dd` derives the farm root from the script location.
+- **Two push races recovered per the shared-worktree recipe:** dapps + infer had siblings push between commit and push (my success-grep false-POSITIVED on the rejection text — the grep matched "develop" in `! [rejected]`); both landed via the temp-worktree cherry-pick path (`915b39e`, `1f99c7e`), local checkouts realigned by update-ref + mixed reset, sibling WIP untouched throughout. Lesson: a push-success check must grep for the ref-update arrow, never the branch name.
+- NOT in this slice: riir-ai (T2.1 owner-gated adjudication + contended lane), riir-train (routing restriction; trainers live), the big sets (game-sdk 20 / seal-remake 14 / seal-game-editor 12 / mmorpg-examples 21 / deployer 7 / seal-online-remaster 27-deprecated) — a follow-up slice under the same claim until expiry, else re-claim.
