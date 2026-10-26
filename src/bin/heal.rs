@@ -1649,8 +1649,8 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     };
     // The LOCAL row first (persisted; idempotent refresh on the same id; a
     // conflicting id refuses as a SERVER-signed act before any dial).
-    let binding = riir_refine::kat_account::ProviderBinding::new(
-        riir_refine::kat_account::IdentityProvider::GitHub,
+    let binding = riir_kat::kat_recovery_client::ProviderBinding::new(
+        riir_kat::kat_recovery_client::IdentityProvider::GitHub,
         identity.numeric_id,
         identity.login.clone(),
     );
@@ -1740,9 +1740,9 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
                     );
                 }
                 _ => match (r.status, &r.body) {
-                    (Some(s), Some(b)) => eprintln!("kat login: HTTP {s} — {}", b.error),
+                    (Some(s), Some(b)) => eprintln!("kat login: HTTP {s} — {}", b.text),
                     (Some(s), None) => eprintln!("kat login: HTTP {s}"),
-                    (None, Some(b)) => eprintln!("kat login: {}", b.error),
+                    (None, Some(b)) => eprintln!("kat login: {}", b.text),
                     (None, None) => {
                         eprintln!("kat login: the service refused (no readable body)")
                     }
