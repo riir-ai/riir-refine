@@ -1040,8 +1040,14 @@ mod tests {
             let e = LlmRouter::arm_plan(false, false, false).expect_err("must refuse");
             assert!(e.contains("GROQ_API_KEY"), "names the fast free leg: {e}");
             assert!(e.contains("INFRON_API_KEY"), "names the slow free leg: {e}");
-            assert!(e.contains("CLOUDFLARE_OPS_API_TOKEN"), "names the paid leg: {e}");
-            assert!(e.contains("CLOUDFLARE_ACCOUNT_ID"), "names the paid leg: {e}");
+            assert!(
+                e.contains("CLOUDFLARE_OPS_API_TOKEN"),
+                "names the paid leg: {e}"
+            );
+            assert!(
+                e.contains("CLOUDFLARE_ACCOUNT_ID"),
+                "names the paid leg: {e}"
+            );
         }
 
         #[test]

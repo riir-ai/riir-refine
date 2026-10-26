@@ -290,11 +290,9 @@ fn batch2_flash_attention_concepts_covered() {
         .collect();
     // The Batch-138 streaming-license rider extended this concept with a
     // RIDER suffix — assert the prefix, not the whole string.
-    assert!(
-        concepts
-            .iter()
-            .any(|c| c.starts_with("flash-attention online softmax"))
-    );
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("flash-attention online softmax")));
     assert!(concepts.contains(&"base-2 math for faster GPU exponentiation"));
     assert!(concepts.contains(&"structured 2D block pointer loads"));
     assert!(concepts.contains(&"compile-time heuristic dispatch"));
@@ -489,34 +487,26 @@ fn batch7_burn_cubecl_concepts_covered() {
         .map(|e| e.gpu_concept.as_str())
         .collect();
     // (rider-tolerant prefix pin: Batch 267 appended the cubecl #1876 rejection-semantics face to this concept)
-    assert!(
-        concepts
-            .iter()
-            .any(|c| c.starts_with("panic-resilient autotune candidate"))
-    );
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("panic-resilient autotune candidate")));
     assert!(concepts.contains(&"shape-keyed priority-ranked autotune groups"));
     // (rider-tolerant prefix pin: Batch 280 appended the prism #380 thin-src0 widening face to this concept)
-    assert!(
-        concepts
-            .iter()
-            .any(|c| c.starts_with("matmul-kind-keyed kernel family dispatch"))
-    );
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("matmul-kind-keyed kernel family dispatch")));
     assert!(concepts.contains(&"vectorization width as an autotune dimension"));
     assert!(concepts.contains(&"1x1 convolution as direct matmul (skip im2col)"));
     // (rider-tolerant prefix pin: Batch 225 appended the vLLM #59340 processing-set face to this concept)
-    assert!(
-        concepts
-            .iter()
-            .any(|c| c.starts_with("stride-contiguity guard skips unnecessary relayout copy"))
-    );
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("stride-contiguity guard skips unnecessary relayout copy")));
     assert!(concepts.contains(&"grid-limit-aware batch packing"));
     assert!(concepts.contains(&"stride-byte-alignment determines vectorization width"));
     // (rider-tolerant prefix pin: Batch 284 appended the candidate-G derived-from-anchored + candidate-set faces to this concept, Plan 288 / Research 321)
-    assert!(
-        concepts
-            .iter()
-            .any(|c| c.starts_with("shape bucketing for autotune cache reuse"))
-    );
+    assert!(concepts
+        .iter()
+        .any(|c| c.starts_with("shape bucketing for autotune cache reuse")));
 }
 
 #[test]
@@ -637,22 +627,14 @@ fn batch11_recurrence_concepts_covered() {
         .collect();
     // Category G: linear-attention recurrence (new)
     assert!(concepts.contains(&"per-dimension diagonal decay gate on recurrent state"));
-    assert!(
-        concepts
-            .contains(&"diagonal-plus-low-rank state transition (erase, decay, replace, write)")
-    );
-    assert!(
-        concepts
-            .contains(&"Oja subtractive normalization: project out stored component before write")
-    );
-    assert!(
-        concepts
-            .contains(&"identity-plus-low-rank (I+ba^T) state rotation then outer-product write")
-    );
-    assert!(
-        concepts
-            .contains(&"convert per-step log-gate into pairwise decay matrix via cumsum + diff")
-    );
+    assert!(concepts
+        .contains(&"diagonal-plus-low-rank state transition (erase, decay, replace, write)"));
+    assert!(concepts
+        .contains(&"Oja subtractive normalization: project out stored component before write"));
+    assert!(concepts
+        .contains(&"identity-plus-low-rank (I+ba^T) state rotation then outer-product write"));
+    assert!(concepts
+        .contains(&"convert per-step log-gate into pairwise decay matrix via cumsum + diff"));
     // Category E: parallelism (new)
     assert!(concepts.contains(&"reverse-direction scan via flip → forward scan → flip"));
     assert!(concepts.contains(&"materialize N×N decay matrix from index distance and slope"));
@@ -664,9 +646,7 @@ fn batch11_recurrence_concepts_covered() {
         &"shift activation positive (elu+1) so linear-attention normalizer never crosses zero"
     ));
     // Category D: dispatch (new)
-    assert!(
-        concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)")
-    );
+    assert!(concepts.contains(&"layer-depth-dependent decay schedule (deeper layers decay slower)"));
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -752,27 +732,18 @@ fn batch12_recurrence_attention_concepts_covered() {
     assert!(
         concepts.contains(&"gated delta rule: decay state then correct against decayed subspace")
     );
-    assert!(
-        concepts.contains(&"one outer gate wrapping N inner Householder delta writes per step")
-    );
-    assert!(
-        concepts.contains(&"online ridge regression: gated Gram accumulators + per-step solve")
-    );
+    assert!(concepts.contains(&"one outer gate wrapping N inner Householder delta writes per step"));
+    assert!(concepts.contains(&"online ridge regression: gated Gram accumulators + per-step solve"));
     assert!(concepts.contains(&"two coupled recurrences: SGD momentum state + EMA memory matrix"));
-    assert!(
-        concepts
-            .contains(&"read from boosted state (transient bonus), then update with un-boosted kv")
-    );
+    assert!(concepts
+        .contains(&"read from boosted state (transient bonus), then update with un-boosted kv"));
     assert!(
         concepts.contains(&"WKV with 3-channel state (num/den/max) + logsumexp max-subtraction")
     );
     // Category B: compute (new)
     assert!(concepts.contains(&"O(log seq) hierarchical mask with per-level learned scales"));
-    assert!(
-        concepts.contains(
-            &"conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)"
-        )
-    );
+    assert!(concepts
+        .contains(&"conjugate-gradient solve over matvec with Jacobi preconditioner (no inverse)"));
     assert!(concepts.contains(&"mini-batch chunked GD with causal mask + last-step weight update"));
     // Category F: flash-attn tiling (new)
     assert!(concepts.contains(
@@ -786,11 +757,8 @@ fn batch12_recurrence_attention_concepts_covered() {
         concepts.contains(&"MoE gate: softmax → topk → renormalize → scatter sparse gate matrix")
     );
     // Category C: fusion (new)
-    assert!(
-        concepts.contains(
-            &"fuse gate transform with chunk-local cumsum (no materialized intermediate)"
-        )
-    );
+    assert!(concepts
+        .contains(&"fuse gate transform with chunk-local cumsum (no materialized intermediate)"));
     // Category D: dispatch (new)
     assert!(concepts.contains(
         &"dual-mode gate: unbounded softplus OR bounded sigmoid, dispatched by parameter"
@@ -10265,7 +10233,7 @@ fn batch118_pseudocode_parses() {
 
 #[test]
 #[allow(clippy::cast_precision_loss)] // fixture RNG draws and an n=8 reciprocal -- the detector
-// asserts spreads orders of magnitude past f32 mantissa granularity
+                                      // asserts spreads orders of magnitude past f32 mantissa granularity
 fn batch118_unguarded_store_yields_uniform_softmax() {
     // The load-bearing numeric gate for role-scoped-store-must-match-
     // compute-guard: a role-partitioned attention tile where the PV roles'
@@ -10384,8 +10352,8 @@ fn batch118_unguarded_store_yields_uniform_softmax() {
     clippy::float_cmp,
     clippy::needless_range_loop
 )] // exact f32 equality IS the tested contract here (integer-valued partials
-// keep every add exact, so no tolerance exists to hide behind) and the
-// ladders are inherently index-structured (stage j reads lane j)
+   // keep every add exact, so no tolerance exists to hide behind) and the
+   // ladders are inherently index-structured (stage j reads lane j)
 fn batch118_indexed_shuffle_ladders_must_read_unmutated_partials() {
     // The block-reduction rider's decision content, pinned executable:
     // an INDEXED shuffle ladder (partner = lane index j, not xor mask) that
@@ -10554,7 +10522,7 @@ fn batch119_pseudocode_parses() {
 
 #[test]
 #[allow(clippy::float_cmp)] // the poison compare IS a bit pattern compare;
-// exact f32 equality only ever asserts on from_bits-round-tripped values
+                            // exact f32 equality only ever asserts on from_bits-round-tripped values
 fn batch119_sentinel_never_equal_and_reset_before_reuse() {
     // The sentinel rule's decision content, pinned executable: (1) the poison
     // pattern is a NaN so no finite f32 payload can bit-match it; (2) the
@@ -10629,7 +10597,7 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     // 16-byte payload is ready only when BOTH slot flags match (the ~0u retry
     // encoding); (5) a stale flag never passes the poll within a wrap.
     const NOT_READY: u32 = !0u32; // the ~0u retry encoding (used in (4) below)
-    // (1) the source's advanceEpoch arithmetic on a uint8_t.
+                                  // (1) the source's advanceEpoch arithmetic on a uint8_t.
     let mut epoch: u8 = 2; // the constructor's initial epoch
     let mut seen_zero_or_one = false;
     for _ in 0..1000 {
@@ -10664,7 +10632,11 @@ fn batch119_epoch_band_wraps_and_split_slot_matches() {
     );
     // (4) split-slot both-flags-match with the ~0u retry encoding.
     let split_slot_ready = |f0: u32, f1: u32, _epoch: u32| {
-        if f0 == f1 { f0 } else { NOT_READY }
+        if f0 == f1 {
+            f0
+        } else {
+            NOT_READY
+        }
     };
     assert_eq!(split_slot_ready(7, 7, 7), 7, "both flags match -> ready");
     assert_eq!(
@@ -12705,10 +12677,9 @@ fn batch177_rules_present() {
             .contains("SCOPE CORRECTION (Batch 177 rider"),
         "batch-177 readout-trim scope rider missing"
     );
-    assert!(
-        trim.gpu_concept
-            .contains("becomes a rejection, not an error")
-    );
+    assert!(trim
+        .gpu_concept
+        .contains("becomes a rejection, not an error"));
 }
 
 #[test]

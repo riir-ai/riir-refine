@@ -1782,8 +1782,11 @@ fn fourteen_rules_are_not_benchable() {
     assert_eq!(without_spec.len(), 153); // Batch 288 (+1 NotBenchable bench_spec None: recursive-input-walk-explicit-stack-indices-not-copies, entries_51, Plan 293 / Research 327) on the prior state: Batch 284 (+2 NotBenchable bench_spec None: timed-zero-refuses-round-stop + tune-cache-keyed-by-spelled-variant-names, entries_50, Plan 288 / Research 321) on the prior state: Batch 283 (+1: caching, the certifying-identity-token revalidation skip, PrismML #393 63f16c408f, entries_49, Plan 287 / Research 320, ANNOTATED NotBenchable bench_spec None; +1 count-neutral rider face: the batched-async-upload face on chain-dispatches-single-sync-point [kernel_opt host], the same commit) on the prior state: Batch 282 (+3 NotBenchable bench_spec None: the PerfR classes, entries_48, Plan 286 / Research 319) on the prior state: Batch 274 (+1 annotated: the splash batch-load hard-budget admission rule, entries_47, Plan 278 / Research 312); prior: +1 NotBenchable (bench_spec None) -- was 145 at the Batch 271 landing +9 NotBenchable (slices B/C/D, all bench_spec None, Plan 275 / Research 307) on the prior state: Batch 271 slice A +3 NotBenchable (the splash-wave second-tier serving pool slice A lands bench_spec None on every rule, Plan 275 / Research 307) on the prior state: Batch 270 +12 NotBenchable (the splash-wave serving pool lands bench_spec None on every rule, Plan 274 / Research 306) on the prior state: Batch 266 +1 BENCHABLE so without_spec UNCHANGED (the uv marker-ISOP rule lands a Pareto spec, Plan 270 / Research 302); prior: Batch 257 +6 (ALL the TensorFold staged-remainder rules land bench_spec None -- the B136 decision-content class, Plan 261 / Research 293) on the prior state: Batch 256 +3 (ALL the TensorFold campaign rust_perf rules land bench_spec None -- the B136 decision-content class, Plan 260 / Research 291) on the prior state: Batch 255 +1 (the SLRU host-cache rule lands bench_spec None -- the B136 decision-content class, Plan 259 / Research 290) on the prior state: Batch 248 +1 (flat-pool-start-len-static-rows lands bench_spec None -- the design-time layout law, the nonmax-sentinel class) on the prior state: Batch 246 +1 (the prism fork seq-fork rule lands bench_spec None) ABSORBING Batch 245 +3 (canonical-set + nonmax-sentinel + match-branch-cold all None) + the STALE-PIN REPAIR (the B244 -10 arithmetic was on the wrong axis; measured truth at post-B244 was 106) on the Batch 241 +2 (BOTH the serving slot-state cache rules land bench_spec None -- the B200/B136 decision-content class, Plan 243)
     assert!(without_spec.contains(&"f16-to-f32-accumulator-lut-breaks-conversion-serialization")); // Batch 237 -- the register-dependency axis    assert!(without_spec.contains(&"work-buffer-sized-by-execution-width-not-plan-tasks")); // Batch 237 — the OOB-sizing decision-content class
     assert!(without_spec.contains(&"discretionary-cache-growth-keys-on-spare-not-available")); // Batch 237 — the host-memory behavioral class
-    assert!(without_spec.contains(&"resume-admission-sized-to-per-command-window-not-suspended-peak")); // Batch 271 slice A — resume-admission decision content
-    assert!(without_spec.contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A — two-phase residency accounting
+    assert!(
+        without_spec.contains(&"resume-admission-sized-to-per-command-window-not-suspended-peak")
+    ); // Batch 271 slice A — resume-admission decision content
+    assert!(without_spec
+        .contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A — two-phase residency accounting
     assert!(without_spec.contains(&"derived-reservation-taken-once-after-admission-settles")); // Batch 271 slice A — reservation-ordering decision content
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
@@ -1918,7 +1921,8 @@ fn forty_three_annotated_rules_carry_context_notes() {
     assert!(annotated.contains(&"work-buffer-sized-by-execution-width-not-plan-tasks")); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
     assert!(annotated.contains(&"discretionary-cache-growth-keys-on-spare-not-available")); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
     assert!(annotated.contains(&"resume-admission-sized-to-per-command-window-not-suspended-peak")); // Batch 271 slice A -- NotBenchable + the mode-keyed resume ask + the anchor-bound RIDER
-    assert!(annotated.contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A -- NotBenchable + the successor-reservation release + the max-plan waste
+    assert!(annotated
+        .contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A -- NotBenchable + the successor-reservation release + the max-plan waste
     assert!(annotated.contains(&"derived-reservation-taken-once-after-admission-settles")); // Batch 271 slice A -- NotBenchable + the settled-shape reservation ordering + the narrowing rejection
     assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
     assert!(annotated.contains(&"grammar-window-draft-prune-path-local-mask")); // Batch 196 — the exactness-law + refusal-surface annotation
@@ -8251,12 +8255,15 @@ fn batch270_rules_landed() {
         rule.name, notes, rule.buggy_code, rule.fixed_code
     );
     assert!(
-        rule.name.contains("the start that finds the last start's probation mark marks the failure"),
+        rule.name
+            .contains("the start that finds the last start's probation mark marks the failure"),
         "batch-270 name missing needle: {}",
         "the start that finds the last start's probation mark marks t"
     );
     assert!(
-        haystack.contains("the last two starts failed within their probation, or the last one's engine did"),
+        haystack.contains(
+            "the last two starts failed within their probation, or the last one's engine did"
+        ),
         "batch-270 rule text missing needle: {}",
         "the last two starts failed within their probation, or the la"
     );
@@ -8278,7 +8285,8 @@ fn batch270_rules_landed() {
         rule.name, notes, rule.buggy_code, rule.fixed_code
     );
     assert!(
-        rule.name.contains("so a claim allocates nothing; only resize() does"),
+        rule.name
+            .contains("so a claim allocates nothing; only resize() does"),
         "batch-270 name missing needle: {}",
         "so a claim allocates nothing; only resize() does"
     );
@@ -8288,7 +8296,8 @@ fn batch270_rules_landed() {
         "an entry takes 13 ns on an M5 Pro, against 22 ns with Expert"
     );
     assert!(
-        haystack.contains("A shrink now keeps the newest ghosts within ARC's bounds at the new size"),
+        haystack
+            .contains("A shrink now keeps the newest ghosts within ARC's bounds at the new size"),
         "batch-270 rule text missing needle: {}",
         "A shrink now keeps the newest ghosts within ARC's bounds at "
     );
@@ -8300,12 +8309,15 @@ fn batch270_rules_landed() {
         "the hit rates did not follow the size"
     );
     assert!(
-        rule.name.contains("holds fewer rows than a 256K prompt's estimated 2.3M, so the share stops at 512 MiB"),
+        rule.name.contains(
+            "holds fewer rows than a 256K prompt's estimated 2.3M, so the share stops at 512 MiB"
+        ),
         "batch-270 name missing needle: {}",
         "holds fewer rows than a 256K prompt's estimated 2.3M, so the"
     );
     assert!(
-        rule.name.contains("Auto's share is now 512 MiB, and the experts take the difference"),
+        rule.name
+            .contains("Auto's share is now 512 MiB, and the experts take the difference"),
         "batch-270 name missing needle: {}",
         "Auto's share is now 512 MiB, and the experts take the differ"
     );
@@ -8322,7 +8334,8 @@ fn batch270_rules_landed() {
         "a re-encode the count does not explain still fails, as does "
     );
     assert!(
-        rule.name.contains("rows == (0, 1) or (evicted and rows == (1, 0))"),
+        rule.name
+            .contains("rows == (0, 1) or (evicted and rows == (1, 0))"),
         "batch-270 name missing needle: {}",
         "rows == (0, 1) or (evicted and rows == (1, 0))"
     );
@@ -8334,7 +8347,9 @@ fn batch270_rules_landed() {
         rule.name, notes, rule.buggy_code, rule.fixed_code
     );
     assert!(
-        haystack.contains("A publication now takes the condemned entry over with whatever copies it holds"),
+        haystack.contains(
+            "A publication now takes the condemned entry over with whatever copies it holds"
+        ),
         "batch-270 rule text missing needle: {}",
         "A publication now takes the condemned entry over with whatev"
     );
@@ -8356,17 +8371,22 @@ fn batch270_rules_landed() {
         rule.name, notes, rule.buggy_code, rule.fixed_code
     );
     assert!(
-        rule.name.contains("One refused hot block cache extent or staging could so evict thousands of leaves"),
+        rule.name.contains(
+            "One refused hot block cache extent or staging could so evict thousands of leaves"
+        ),
         "batch-270 name missing needle: {}",
         "One refused hot block cache extent or staging could so evict"
     );
     assert!(
-        rule.name.contains("The allocation is tried again only after memory came back"),
+        rule.name
+            .contains("The allocation is tried again only after memory came back"),
         "batch-270 name missing needle: {}",
         "The allocation is tried again only after memory came back"
     );
     assert!(
-        haystack.contains("reclaimed.madeProgress = reclaimed.reclaimedBytes || reclaimed.evictedState;"),
+        haystack.contains(
+            "reclaimed.madeProgress = reclaimed.reclaimedBytes || reclaimed.evictedState;"
+        ),
         "batch-270 rule text missing needle: {}",
         "reclaimed.madeProgress = reclaimed.reclaimedBytes || reclaim"
     );
@@ -8400,7 +8420,9 @@ fn batch270_rules_landed() {
         "The 120 s command watchdog bounded a command's whole length"
     );
     assert!(
-        rule.name.contains("no stretch of one, its GPU work between two steps or a step, may run past the timeout"),
+        rule.name.contains(
+            "no stretch of one, its GPU work between two steps or a step, may run past the timeout"
+        ),
         "batch-270 name missing needle: {}",
         "no stretch of one, its GPU work between two steps or a step,"
     );
@@ -8422,7 +8444,9 @@ fn batch270_rules_landed() {
         "a resolve now reads each page's missed blocks of the layer i"
     );
     assert!(
-        haystack.contains("blocks the readers read twice in vain fail the lanes that list them, not the command."),
+        haystack.contains(
+            "blocks the readers read twice in vain fail the lanes that list them, not the command."
+        ),
         "batch-270 rule text missing needle: {}",
         "blocks the readers read twice in vain fail the lanes that li"
     );
@@ -8439,12 +8463,15 @@ fn batch270_rules_landed() {
         rule.name, notes, rule.buggy_code, rule.fixed_code
     );
     assert!(
-        haystack.contains("return !backing.queuedReads.load(std::memory_order_relaxed) && backing.deferWrites();"),
+        haystack.contains(
+            "return !backing.queuedReads.load(std::memory_order_relaxed) && backing.deferWrites();"
+        ),
         "batch-270 rule text missing needle: {}",
         "return !backing.queuedReads.load(std::memory_order_relaxed) "
     );
     assert!(
-        haystack.contains("up to 2 ms a MiB, 128 ms behind a 35B's 64 MiB state with streamed experts"),
+        haystack
+            .contains("up to 2 ms a MiB, 128 ms behind a 35B's 64 MiB state with streamed experts"),
         "batch-270 rule text missing needle: {}",
         "up to 2 ms a MiB, 128 ms behind a 35B's 64 MiB state with st"
     );
@@ -8488,14 +8515,29 @@ fn batch270_rules_landed() {
     // the four count-neutral rider faces (3 on this batch's own rules, 1 on
     // the Batch-237 governor host)
     for (host, sha) in [
-        ("reclaim-progress-keyed-on-refused-resource-returned", "945635d440ac0041e4dfe30262497881947d22e0"),
-        ("refusal-wait-keyed-on-shortfall-returning-transfer", "ea1683d5d05f562eaebf991b3e2b64aa145e937b"),
-        ("refusal-wait-keyed-on-shortfall-returning-transfer", "41e8c82cb8afdfd0cb0f78bd537c8591d9819b9b"),
-        ("discretionary-cache-growth-keys-on-spare-not-available", "d26ff04d55757d223b856ae82b730295a6707f9f"),
+        (
+            "reclaim-progress-keyed-on-refused-resource-returned",
+            "945635d440ac0041e4dfe30262497881947d22e0",
+        ),
+        (
+            "refusal-wait-keyed-on-shortfall-returning-transfer",
+            "ea1683d5d05f562eaebf991b3e2b64aa145e937b",
+        ),
+        (
+            "refusal-wait-keyed-on-shortfall-returning-transfer",
+            "41e8c82cb8afdfd0cb0f78bd537c8591d9819b9b",
+        ),
+        (
+            "discretionary-cache-growth-keys-on-spare-not-available",
+            "d26ff04d55757d223b856ae82b730295a6707f9f",
+        ),
     ] {
         let rule = get(host);
         let notes = rule.context_notes.as_deref().unwrap_or_default();
-        assert!(notes.contains("RIDER (Batch 270 / Plan 274"), "rider face missing on {host}");
+        assert!(
+            notes.contains("RIDER (Batch 270 / Plan 274"),
+            "rider face missing on {host}"
+        );
         assert!(notes.contains(sha), "rider sha {sha} missing on {host}");
     }
     // all 12 land NotBenchable (bench_spec None) + annotated
@@ -8514,7 +8556,10 @@ fn batch270_rules_landed() {
         "constrained-unconstrained-lanes-one-decode-command",
     ] {
         let rule = get(rid);
-        assert!(rule.context_notes.is_some(), "batch-270 rule unannotated: {rid}");
+        assert!(
+            rule.context_notes.is_some(),
+            "batch-270 rule unannotated: {rid}"
+        );
     }
 }
 
@@ -8547,9 +8592,8 @@ fn batch271_slice_a_rules_landed() {
         "batch-271 slice A rule text missing needle: which admits every missing page as a Full page"
     );
     assert!(
-        haystack.contains(
-            "takes the first work's page, as a start that waits for its restore does"
-        ),
+        haystack
+            .contains("takes the first work's page, as a start that waits for its restore does"),
         "batch-271 slice A rule text missing needle: the first work's page"
     );
     assert!(
@@ -8649,8 +8693,14 @@ fn batch271_slice_a_rules_landed() {
     ] {
         let rule = get(rid);
         let notes = rule.context_notes.as_deref().unwrap_or_default();
-        assert!(!notes.is_empty(), "batch-271 slice A rule unannotated: {rid}");
-        assert!(notes.contains("Batch 271"), "batch-271 slice A {rid} must carry the batch tag");
+        assert!(
+            !notes.is_empty(),
+            "batch-271 slice A rule unannotated: {rid}"
+        );
+        assert!(
+            notes.contains("Batch 271"),
+            "batch-271 slice A {rid} must carry the batch tag"
+        );
     }
 }
 
@@ -8677,13 +8727,17 @@ fn batch271_rules_landed() {
     };
     let hay = |rule: &crate::domains::rust_perf::PerfRule| {
         let notes = rule.context_notes.as_deref().unwrap_or_default();
-        format!("{}\n{}\n{}\n{}", rule.name, notes, rule.buggy_code, rule.fixed_code)
+        format!(
+            "{}\n{}\n{}\n{}",
+            rule.name, notes, rule.buggy_code, rule.fixed_code
+        )
     };
     // ---- slice A (entries_43, allocation x3) -- asserted in depth by
     // batch271_slice_a_rules_landed; presence + one needle here.
     let rule = get("resume-admission-sized-to-per-command-window-not-suspended-peak");
     assert_eq!(rule.category, "allocation");
-    assert!(hay(rule).contains("takes the first work's page, as a start that waits for its restore does"));
+    assert!(hay(rule)
+        .contains("takes the first work's page, as a start that waits for its restore does"));
     assert!(rule
         .context_notes
         .as_deref()
@@ -8691,7 +8745,8 @@ fn batch271_rules_landed() {
         .contains("A resume counts among them the anchor its model holds once it selected the request's first token"));
     let rule = get("phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max");
     assert_eq!(rule.category, "allocation");
-    assert!(hay(rule).contains("the floor a decoding lane takes replaces the staging once no prompt holds it"));
+    assert!(hay(rule)
+        .contains("the floor a decoding lane takes replaces the staging once no prompt holds it"));
     let rule = get("derived-reservation-taken-once-after-admission-settles");
     assert_eq!(rule.category, "allocation");
     assert!(hay(rule).contains("It is reserved once every lane has its KV"));
@@ -8752,7 +8807,7 @@ fn batch271_rules_landed() {
     assert!(h.contains("after three at most"));
     assert!(h.contains("kvCapacityPagesFor")); // companion (a)
     assert!(h.contains("a tier that only caches costs the weights nothing")); // companion (b)
-    // ---- the three host-side count-neutral rider faces
+                                                                              // ---- the three host-side count-neutral rider faces
     for (host, sha) in [
         (
             "restore-point-chain-copies-keyed-on-disk-state-count",
@@ -8794,7 +8849,10 @@ fn batch271_rules_landed() {
         let rule = get(rid);
         let notes = rule.context_notes.as_deref().unwrap_or_default();
         assert!(!notes.is_empty(), "batch-271 rule unannotated: {rid}");
-        assert!(notes.contains("Batch 271"), "batch-271 {rid} must carry the batch tag");
+        assert!(
+            notes.contains("Batch 271"),
+            "batch-271 {rid} must carry the batch tag"
+        );
     }
 }
 
@@ -8825,7 +8883,10 @@ fn batch282_rules_landed() {
     };
     let hay = |rule: &crate::domains::rust_perf::PerfRule| {
         let notes = rule.context_notes.as_deref().unwrap_or_default();
-        format!("{}\n{}\n{}\n{}", rule.name, notes, rule.buggy_code, rule.fixed_code)
+        format!(
+            "{}\n{}\n{}\n{}",
+            rule.name, notes, rule.buggy_code, rule.fixed_code
+        )
     };
 
     // ---- class 2: saturating-f2i-cast-proven-range-to-int-unchecked (arithmetic)
@@ -8917,7 +8978,10 @@ fn batch282_rules_landed() {
         let rule = get(rid);
         let notes = rule.context_notes.as_deref().unwrap_or_default();
         assert!(!notes.is_empty(), "batch-282 rule unannotated: {rid}");
-        assert!(notes.contains("Batch 282"), "batch-282 {rid} must carry the batch tag");
+        assert!(
+            notes.contains("Batch 282"),
+            "batch-282 {rid} must carry the batch tag"
+        );
     }
 
     // ---- the three count-neutral rider faces (Batch 282, Plan 286 / Research 319)
@@ -8930,7 +8994,10 @@ fn batch282_rules_landed() {
         "restore missing inlining annotations or simplify the callee",
         "16% of hot functions",
     ] {
-        assert!(notes.contains(needle), "batch-282 inline-hint rider missing: {needle}");
+        assert!(
+            notes.contains(needle),
+            "batch-282 inline-hint rider missing: {needle}"
+        );
     }
 
     let rule = get("simd-chunk");
@@ -8940,7 +9007,10 @@ fn batch282_rules_landed() {
         "could not determine the number of loop iterations",
         "24% of hot functions",
     ] {
-        assert!(hay(rule).contains(needle), "batch-282 simd-chunk rider missing: {needle}");
+        assert!(
+            hay(rule).contains(needle),
+            "batch-282 simd-chunk rider missing: {needle}"
+        );
     }
 
     let rule = get("chunks-exact");
@@ -8951,7 +9021,10 @@ fn batch282_rules_landed() {
         "Express valid iteration bounds through slices or iterators",
         "18% of hot functions",
     ] {
-        assert!(hay(rule).contains(needle), "batch-282 chunks-exact rider missing: {needle}");
+        assert!(
+            hay(rule).contains(needle),
+            "batch-282 chunks-exact rider missing: {needle}"
+        );
     }
 
     // ---- the six non-converted classes: the drops are ADJUDICATED in the
