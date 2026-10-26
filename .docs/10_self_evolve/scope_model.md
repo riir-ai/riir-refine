@@ -46,8 +46,10 @@ deliberately untouched — there is no confidence there to discount.
 Pinned from the measured D landscape over the 40-fixture clippy seed corpus
 vs 8 held-out non-Rust probes: corpus ∈ [−183.2, −7.6], probes ∈ [+24.4,
 +131.1]. **θ = 0** (decline any out-lean; neutral all-unseen docs pass —
-absence of evidence is not decline). **κ = 4.5** so the worst (shortest)
-fixture saturates f32 `sigmoid` to **exactly `1.0`** — making in-distribution
+absence of evidence is not decline). **κ = 8.5** (re-pinned from 4.5 on
+2026-10-26, riir-refine Issue 172: the worst fixture `redundant_static_lifetimes`
+drifted to D = −2.08, and the pin's min/max accumulators were swapped so it
+never saw it) so the worst (least-negative) fixture saturates f32 `sigmoid` to **exactly `1.0`** — making in-distribution
 healing bit-identical with the model installed (`to_bits`-pinned by test).
 The separation-pinning test fails loudly if the corpus grows a shorter
 fixture or a probe family drifts into the gap.

@@ -124,7 +124,14 @@ const REACHABLE: &[(&str, &str)] = &[
         "option_if_let_else",
         "pub fn f(o: Option<u32>) -> u32 { if let Some(x) = o { x + 1 } else { 0 } }",
     ),
-    ("ptr_arg", "pub fn f(v: &Vec<u8>) -> usize { v.len() }"),
+    (
+        // Re-picked 2026-10-26 (issue 172): `ptr_arg` gained a proposer
+        // (`proposers/ptr_arg.rs`) and the premise assert fired. The
+        // replacement is item-shaped like `ptr_arg` was (compiles as a lib,
+        // so the scaffold control can see it) and warn-by-default (style).
+        "inherent_to_string",
+        "pub struct S;\nimpl S { pub fn to_string(&self) -> String { String::from(\"s\") } }",
+    ),
 ];
 
 /// Matches the G1 gate's decode budget so a fix produced here is the same shape

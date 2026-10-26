@@ -44,6 +44,8 @@ The adoption adds the second axis — **input scope** — via `ScopeModel` (stri
 - The initial G1 "before" probe (un-seeded pipeline) measured **0/8 served** — the Issue 010 identity guard already catches pure-garbage. The real bug path requires seeded memory (the production state) — the test was fixed to model production, and the bug is then 100% reproducible.
 - The initial κ=0.4/θ=4.0 guesses failed the separation pin (corpus outlier at −3.9, CSS probe at +0.6 — the CSS language family was absent from the out-corpus so its tokens were neutral). Fix: 6 more out docs covering the probe families + θ=0 + κ=4.5 — both pinned from the re-measured gap.
 
+- **Re-pin 2026-10-26 (Issue 172):** κ 4.5 → **8.5**. The separation pin had its worst/min accumulators swapped since landing, so it asserted saturation at D≈−200 instead of at the binding fixture; meanwhile `redundant_static_lifetimes` drifted −7.6 → **−2.08** (corpus 40 → 112, vocab grew) and G3 bit-identity went red (`0.32000002` vs `0.31997228`). With the pin repaired, κ = 16.6/2.08 ≈ 8.0 is the floor; 8.5 keeps the original ~6% margin (arg 17.7). θ (and so the OOS decline) is unchanged.
+
 ## Run
 
 ```bash

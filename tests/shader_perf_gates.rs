@@ -25,12 +25,12 @@
 
 #![cfg(feature = "shader_perf")]
 
-use riir_refine::domains::shader_perf::proposers::{
-    collect_all_edits, DEFAULT_GUARD_BOUND, FIXABLE_SHADER,
-};
-use riir_refine::domains::shader_perf::{refuses, ShaderPerfDomain, ShaderScanner};
-use riir_refine::edit_emitter::apply_edits;
 use riir_refine::HealDomain;
+use riir_refine::domains::shader_perf::proposers::{
+    DEFAULT_GUARD_BOUND, FIXABLE_SHADER, collect_all_edits,
+};
+use riir_refine::domains::shader_perf::{ShaderPerfDomain, ShaderScanner, refuses};
+use riir_refine::edit_emitter::apply_edits;
 
 fn rule_ids(src: &str) -> Vec<&'static str> {
     ShaderScanner
@@ -174,7 +174,19 @@ fn proposer_is_idempotent_and_tier0_clean() {
 /// UNTRACKED upstream reference — excluded (the control pins what ships).
 const PORT_ROOT: &str = "../riir-shader/crates";
 
-/// ZERO findings over the shipped port corpus. A finding here is either a
+/// Adjudicated hits: (path suffix, rule id, reason). A row is a TRUE hit of
+/// the rule's definition whose suggestion was deliberately declined —
+/// membership with a reason, never a count, and a row that stops matching
+/// reds (stale adjudications must not linger).
+const ADJUDICATED: &[(&str, &str, &str)] = &[(
+    "vfx-tornado/bloom_blur.wgsl",
+    "const-fold-loop-bound",
+    "tap_count varies PER BLOOM MIP inside one pipeline (vfx_tornado.rs per-mip \
+     blur params, three.js BloomNode port) — specializing costs one pipeline \
+     permutation per mip; declined (issue 172)",
+)];
+
+/// ZERO unadjudicated findings over the shipped port corpus. A finding here is either a
 /// real anti-pattern someone should adjudicate (update this test with the
 /// adjudication note) or a FALSE POSITIVE that demotes/kills the rule —
 /// never a silent pass.
@@ -197,6 +209,7 @@ fn negative_control_zero_findings_on_vgpu_port_corpus() {
     let scanner = ShaderScanner;
     let mut offenses: Vec<String> = Vec::new();
     let mut scanned = 0usize;
+    let mut adjudicated_hit = [false; ADJUDICATED.len()];
     for path in &files {
         let Ok(src) = std::fs::read_to_string(path) else {
             continue;
@@ -206,7 +219,15 @@ fn negative_control_zero_findings_on_vgpu_port_corpus() {
             continue;
         }
         scanned += 1;
+        let shown = path.to_string_lossy().replace('\\', "/");
         for f in scanner.scan(&src) {
+            if let Some(i) = ADJUDICATED
+                .iter()
+                .position(|(suffix, rule, _)| shown.ends_with(suffix) && f.rule_id == *rule)
+            {
+                adjudicated_hit[i] = true;
+                continue;
+            }
             offenses.push(format!(
                 "{}:{} [{}] {}",
                 path.display(),
@@ -226,6 +247,13 @@ fn negative_control_zero_findings_on_vgpu_port_corpus() {
         "negative control FAILED — adjudicate or demote:\n{}",
         offenses.join("\n")
     );
+    for ((suffix, rule, reason), hit) in ADJUDICATED.iter().zip(adjudicated_hit) {
+        assert!(!reason.is_empty(), "adjudication {suffix} lost its reason");
+        assert!(
+            hit,
+            "stale adjudication: {suffix} [{rule}] no longer fires — remove the row"
+        );
+    }
 }
 
 fn walk_wgsl(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {

@@ -140,14 +140,18 @@ fn kappa_theta_separation_pins() {
     let mut scratch = Vec::new();
 
     let corpus = build_seed_corpus();
-    let mut worst_in_d = f32::INFINITY; // the LEAST-negative corpus fixture
-    let mut min_in_d = f32::NEG_INFINITY; // the most negative (saturation witness)
+    let mut worst_in_d = f32::NEG_INFINITY; // the LEAST-negative corpus fixture (binding)
+    let mut min_in_d = f32::INFINITY; // the most negative
     let mut fixtures: Vec<(f32, &str)> = Vec::new();
     for e in &corpus.entries {
         let d = m.score_str(&e.buggy_code, &mut scratch);
         fixtures.push((d, &e.lint_name));
-        worst_in_d = worst_in_d.min(d);
-        min_in_d = min_in_d.max(d);
+        // In-scope D is NEGATIVE: the least-negative fixture is the MAX, the
+        // most negative the MIN. (Issue 172: these were swapped from
+        // 6f52f25f on, so the saturation pin checked D≈−200 — trivially
+        // saturated — while the binding fixture drifted to −2.1 unseen.)
+        worst_in_d = worst_in_d.max(d);
+        min_in_d = min_in_d.min(d);
     }
     fixtures.sort_by(|a, b| a.0.total_cmp(&b.0));
     println!("[scope] per-fixture D (least-negative first, the binding tail):");

@@ -80,15 +80,17 @@ use crate::domain::HealEntry;
 /// and passes. The gate discriminates over the token space it was built on.
 pub const THETA: f32 = 0.0;
 
-/// Haircut steepness `κ`, pinned so the worst (shortest) in-distribution
-/// corpus fixture — the one-liner at D = −3.9 — saturates f32 `sigmoid` to
-/// EXACTLY `1.0` (argument 4.5·3.9 = 17.6 ≥ 16.6), making the in-distribution
+/// Haircut steepness `κ`, pinned so the worst (least-negative) in-distribution
+/// corpus fixture — `redundant_static_lifetimes`, the one-liner at D = −2.08
+/// (re-measured 2026-10-26, issue 172; it was −7.6 at Bench 040 and drifted
+/// as the vocab grew) — saturates f32 `sigmoid` to EXACTLY `1.0` (argument
+/// 8.5·2.08 = 17.7 ≥ 16.6), making the in-distribution
 /// heal path bit-identical with the model installed vs not. With `θ = 0` the
 /// haircut band is `D ≤ 0` (factor ∈ [0.5, 1.0] — weak-evidence inputs get
 /// discounted toward the neutral point, strong in-scope inputs untouched).
 /// If the corpus grows a shorter fixture, the separation-pinning test fails
 /// loudly and this constant moves.
-pub const KAPPA: f32 = 4.5;
+pub const KAPPA: f32 = 8.5;
 
 /// The canonical out-of-scope corpus (table-building half).
 ///

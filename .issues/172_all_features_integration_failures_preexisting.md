@@ -1,5 +1,5 @@
 # 172 — 16 pre-existing `cargo test --release --all-features --tests` failures across 12 integration targets
-**Status:** OPEN — 10 of 16 fixed 2026-10-26 (T1 done, see below); 6 drift/perf rows remain (T2/T3), 1 filed cross-repo (riir-dapps Issue 138)
+**Status:** OPEN — 13 of 16 fixed 2026-10-26; remaining: `rule_embed_gate` (T2), `latent_suggest_goat` G2 (T3); redact pin filed cross-repo (riir-dapps Issue 138)
 
 Surfaced while verifying `8d731fd5` (the four-file inline-test move). **Attribution
 control:** the 12 failing targets were re-run at `8d731fd5^` (`ea494f79`) in a
@@ -41,5 +41,8 @@ the guard does not actually execute — T0 answers which.
   - `p12_suppress_reverted_e2e` — NOT hermetic: none of the KAT kill switches were set, so `--fix` reached a live-service dial (refused under both pins). One `heal_cmd` builder now carries the suite convention for all three runs (the kill-switch run had its own `Command` that would have drifted again).
 - Observed, out of this issue's lanes (no lane builds them): at `net-mainnet` alone without `allow-local`, three `kat_refill_cli` loopback-mock tests refuse; at `+admin` the `tuna_airdrop_missing_key` verdict depends on whether the box has a real `~/.config/riir-auth` key (the test does not isolate `RIIR_AUTH_ACCOUNT_DIR`).
 - [-] `kat_issue088_cross_repo_pins` — filed riir-dapps Issue 138 (`37e81a2`): floor 3 vs gate 5 since riir-kat `9d31648`/`73f2b46`; the fix moves signed goldens + needs a kat-service deploy.
+- [x] T2a — `shader_perf_gates` negative control: a TRUE `const-fold-loop-bound` hit (vfx-tornado `bloom_blur.wgsl:43`, the 29th port, riir-shader `e067e1b`), deliberately declined — `tap_count` varies per bloom mip inside one pipeline, so specializing costs a permutation per mip. Recorded as an `ADJUDICATED` row (membership + reason, reds when stale); rule NOT demoted.
+- [x] T2b — `t51_l4_vs_decline`: `ptr_arg` gained a proposer → re-picked to `inherent_to_string` (item-shaped, warn-by-default, absent from corpus and src; clippy fire verified on a scratch lib).
+- [x] T2c — `scope_gate_adoption` G3: **the separation pin was BLIND since `6f52f25f`** — `worst_in_d`/`min_in_d` accumulators swapped, so κ-saturation was asserted at D≈−200 while the binding fixture (`redundant_static_lifetimes`) drifted −7.6 → −2.08. Pin repaired; κ 4.5 → 8.5 (floor 8.0, ~6% margin as originally); θ unchanged. Lib 2739/2739 at `contrastive_scope`. Bench 040 + `.docs/10_self_evolve/scope_model.md` carry the re-pin.
 - [ ] T2 — the drift rows: adjudicate each (fix the source, re-pick the fixture, or re-pin WITH a reason) — never a bare re-pin.
 - [x] T3 — re-run ALONE (`--release --all-features --test latent_suggest_goat`, quiet box, 2026-10-26): **still FAILS — 5016 µs/chunk vs 1000 µs bar** (480 chunks; G1/G4 + calibrations pass). Not load-sensitive: a ~5× latency regression (or a bar mis-calibrated for this config). Next: bisect the target's history for the first commit where G2 reds.
