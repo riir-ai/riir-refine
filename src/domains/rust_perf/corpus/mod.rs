@@ -9,7 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 273 entries across 14 categories as of Batch 284 (+2: measurement + caching, `entries_50` — the burn/cubek autotune-family laws: `timed-zero-refuses-round-stop` + `tune-cache-keyed-by-spelled-variant-names`, Research 321; +1 NEW category: measurement, the instrument-validity family) — prior: Batch 283 (+1: caching, `entries_49`
+//! 274 entries across 14 categories as of Batch 288 (+1: complexity, `entries_51`
+//! — the grammar rejection recursion-to-explicit-stack law, upstream llama.cpp
+//! #31153 @ `48c9f08b7`, Research 327) — prior: Batch 284 (+2: measurement + caching, `entries_50` — the burn/cubek autotune-family laws: `timed-zero-refuses-round-stop` + `tune-cache-keyed-by-spelled-variant-names`, Research 321; +1 NEW category: measurement, the instrument-validity family) — prior: Batch 283 (+1: caching, `entries_49`
 //! — the certifying-identity-token revalidation skip, `PrismML` #393) — prior:
 //! Batch 282 (+3: arithmetic, dispatch,
 //! iterators, `entries_48` — the `PerfR` C-to-Rust translation classes, arXiv
@@ -657,6 +659,7 @@ mod entries_47;
 mod entries_48;
 mod entries_49;
 mod entries_50;
+mod entries_51;
 
 #[cfg(test)]
 mod tests;
@@ -790,5 +793,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_48::entries());
     entries.extend(entries_49::entries());
     entries.extend(entries_50::entries());
+    entries.extend(entries_51::entries());
     Corpus::new(entries)
 }
