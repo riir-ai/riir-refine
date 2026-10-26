@@ -112,6 +112,17 @@ collide on one lease.
      stamp (§0 bin-age — the client surface IS release-set) → THEN
      the landing commit + push; the wip checkpoint stays LOCAL until
      the gates pass.
+   - AUTHORED 2026-10-27 (this session, checkpoint `6684cca` LOCAL in
+     riir-kat + the refine tree): riir-kat `kat_protocol_totp.rs` (374
+     lines, 7 tests) + `kat_totp_client.rs` (189 lines, 2 tests) + the
+     lib rows; refine `kat_migrate_client.rs` (`totp_code` on
+     `FileParams`, `post_json_with_totp`, the `totp_required` remedy
+     line, `fetch_ledger_id` pub) + `kat_consent_client.rs` (the env
+     affordance) + `src/bin/heal.rs` (`totp --enroll|--disarm --code`,
+     `--totp-code`, usage) + the lib re-export rows. The sibling's
+     dirty `kat_protocol_migrate_tally.rs` untouched (staged_set_audit
+     verified the split). NOTHING COMPILED YET — the recipe above is
+     the landing gate.
 
 ## Gates
 
