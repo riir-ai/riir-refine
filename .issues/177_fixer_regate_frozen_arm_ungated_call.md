@@ -1,7 +1,6 @@
 # Issue 177 — fixer_regate's FROZEN arm calls an escalation_manifest-gated fn ungated
 
-**Status:** OPEN — filed 2026-10-26 (shikuwa idle loop), found while compiling the
-issue-176 consumer surface at `--features cf_workers_ai,groq_first`.
+**Status:** FIXED 2026-10-26 (`dbb1494a`) — the FROZEN arm now carries the two-arm cfg pair; `cf_workers_ai,groq_first` compiles clean, the real-arm posture (`+escalation_manifest,seat_rerank`) compiles clean. NOTE recorded: `escalation_manifest` ALONE remains a non-compilable posture for this bin (run_frozen's `use riir_refine::escalation_dispatch` needs the dispatch module, which per the AGENTS feature table is compiled only at escalation_manifest + seat_rerank/hosted_expert) — pre-existing, out of this fix's scope, same file if anyone widens the posture matrix. Filed 2026-10-26 (shikuwa idle loop), found while compiling the issue-176 consumer surface.
 
 ## The defect
 
