@@ -106,6 +106,7 @@ cargo run --features latent_retrieval --bin cargo-refine -- --suggest src/
 cargo check --features ruliology_search           # L3 candidate search
 cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (attn_sub_on cfg relaxed)
 ./scripts/ci_feature_guard.sh   # full CI guard (6 layers: no-dep / default / per-feature / all-features / clippy+tests / the latent_retrieval retrieval gate — Issue 170's Layer 5b2)
+./scripts/deny_gate.sh          # cargo-deny advisories gate (plan 298): vulnerable CRATES at lockfile level — the sec corpus owns vulnerable USAGE; --scan surveys every workspace repo (report-only). Landed in 19 repos (T2.4 fan-out); CI wiring is T2.7 owner-gated
 ./scripts/standalone_dep_gate.sh # the escaping-dep pin (no cargo, no siblings needed — the bare-clone CI tier)
 # GOAT benches (measured results: .benchmarks/001_goat_consolidated.md):
 #   cargo bench --bench bench_001_l1_matvec ; cargo bench --bench bench_002_l2_pruner_syn
