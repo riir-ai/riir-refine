@@ -76,12 +76,27 @@
 //! DROPPED at authoring: thin decision content — the guard is one method
 //! call (`PoisonError::into_inner`), the regime arguable in
 //! single-purpose daemons.
+//!
+//! ## Batch 291 (2026-10-26, Plan 295) — the penthera distill joins
+//!
+//! Three detectors from the danoszz/penthera distill (Research 329, MIT
+//! @ `07421f9`), all transcriptions with ORIGINAL fixtures — the web
+//! trust classes the B258 seed did not cover (CORS/JWT/cookies):
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `cors-any-origin-with-credentials` | `cors_any_creds::detect` | legitimate origins are deployment policy; `very_permissive()` fires alone (credentials + reflected origin by construction), `any()`/`permissive()` need the `allow_credentials(true)` marker in the same fn |
+//! | `jwt-insecure-validation-flags` | `jwt_insecure_validation::detect` | some debug/tooling decodes deliberately skip validation; the signature surfaces fire on unique names (the 9.x method/field + the 10.x `dangerous::insecure_decode`), `validate_exp = false` is jwt-vocabulary-gated |
+//! | `auth-cookie-without-secure-flags` | `auth_cookie_missing_flags::detect` | JS-readable/cross-site cookies are deliberate choices; the name-vocabulary literal gate is the FP control, the fn-wide flag marker the secret-file-0600 suppression shape |
 
 use syn::File;
 
+pub mod auth_cookie_missing_flags;
+pub mod cors_any_creds;
 pub mod drop_no_panic;
 pub mod egress_url;
 pub mod ffi_catch_unwind;
+pub mod jwt_insecure_validation;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
 pub mod path_join_escape;

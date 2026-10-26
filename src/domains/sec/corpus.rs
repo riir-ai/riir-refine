@@ -29,6 +29,9 @@
 //! | `untrusted-path-join-escape` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the refusal path's error type is the fn's choice) |
 //! | `webhook-signature-over-raw-bytes` | `CryptoHygiene` | no (suggest-only) | — (no lint fires; the coverage question is per-scheme, and canonical-signature schemes are deliberate) |
 //! | `unvalidated-egress-url` | `InputValidation` | no (suggest-only) | — (no lint fires; the allowlist is deployment policy, never mechanical) |
+//! | `cors-any-origin-with-credentials` | `InputValidation` | no (suggest-only) | — (no lint fires; legitimate origins are deployment policy) |
+//! | `jwt-insecure-validation-flags` | `CryptoHygiene` | no (suggest-only) | — (no lint fires; debug/tooling decodes skip validation deliberately — review decides) |
+//! | `auth-cookie-without-secure-flags` | `InputValidation` | no (suggest-only) | — (no lint fires; JS-readable/cross-site cookies are deliberate choices) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -83,6 +86,29 @@
 //! `proposers::webhook_raw_bytes`, `proposers::egress_url`; the probe
 //! evidence (real clippy, pedantic+nursery+suspicious+correctness, zero
 //! lints on the three buggy fixtures) recorded in Plan 262 T7.
+//!
+//! Batch 291 (2026-10-26, Plan 295 / Research 329): the danoszz/penthera
+//! distill (MIT @ `07421f9` — an offline rule-based security agent,
+//! Node/TS; the corrected-transcription first: the source contributes
+//! CLASS knowledge, the fixtures are OUR original Rust). THREE suggest-only
+//! rules across the two existing families: wildcard-CORS + credentials
+//! (`cors-any-origin-with-credentials`, `InputValidation` — `very_permissive()`
+//! fires alone; `any()`/`permissive()` need the `allow_credentials(true)`
+//! marker), JWT decode configured to not verify
+//! (`jwt-insecure-validation-flags`, `CryptoHygiene` — the 9.x
+//! `insecure_disable_signature_validation` surface + its 10.x
+//! `dangerous::insecure_decode` replacement + the `validate_exp = false`
+//! skip, jwt-vocabulary-gated), and auth-named cookies without the
+//! Secure/HttpOnly hardening (`auth-cookie-without-secure-flags`,
+//! `InputValidation` — the name-vocabulary gate, the secret-file-0600
+//! fn-wide-suppression shape). Detector modules:
+//! `proposers::cors_any_creds`, `proposers::jwt_insecure_validation`,
+//! `proposers::auth_cookie_missing_flags`; probe evidence (the boundary
+//! gate protocol — the probe crate pins jsonwebtoken 9 so the 9.x fixture
+//! compiles) recorded in Plan 295. The two defers (the secrets.json AI-key
+//! vocabulary probe for the secret-scan lane; an agent-tooling audit phase
+//! for the katgpt-rs security-audit skill) stay named in Research 329,
+//! unfiled.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -437,6 +463,96 @@ provenance; the fixture is an original synthesis)."
             buggy_code: "pub fn fetch_report(base: &str, probe: &str) -> Result<String, String> {\n    let url = format!(\"https://{base}/report/{probe}\");\n    let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;\n    resp.into_string().map_err(|e| e.to_string())\n}\n"
                 .to_string(),
             fixed_code: "const ALLOWED_HOSTS: [&str; 1] = [\"reports.internal\"];\n\npub fn fetch_report(base: &str, probe: &str) -> Result<String, String> {\n    if !ALLOWED_HOSTS.contains(&base) {\n        return Err(String::from(\"host not allowed\"));\n    }\n    let url = format!(\"https://{base}/report/{probe}\");\n    let resp = ureq::get(&url).call().map_err(|e| e.to_string())?;\n    resp.into_string().map_err(|e| e.to_string())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ══ Batch 291 (2026-10-26, Plan 295 / Research 329) — the danoszz/  ══
+        // ══ penthera distill (MIT @ 07421f9): three suggest-only rules    ══
+        // ══ across the two existing families. Fixtures are ORIGINAL       ══
+        // ══ Rust syntheses; the source contributes class knowledge only.  ══
+        // ── cors-any-origin-with-credentials (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "cors-any-origin-with-credentials".to_string(),
+            sec_concept: "a permissive-origin CORS policy coupled with credentialed \
+requests: `allow_origin(Any)` / `AllowOrigin::any()` / `permissive()` chained with \
+`allow_credentials(true)` — or the one-call form `CorsLayer::very_permissive()`, \
+which is credentials PLUS the preflight origin reflected back as allowed (the \
+`origin: true` + `credentials: true` shape). The wildcard+credentials pair is \
+protocol-inert for credentialed reads (browsers refuse credentials against a \
+wildcard `Access-Control-Allow-Origin`), so the declared grant is dead \
+misconfiguration — and the common naive repair (switch to very_permissive) \
+ACTIVATES the leak: every origin's credentialed cross-origin requests pass. \
+The bounded repair is an explicit origin allowlist (`AllowOrigin::list` / the \
+docs' origins array / a predicate) beside `allow_credentials(true)`, or dropping \
+credentials. Suggest-only: the legitimate origins are deployment policy, never \
+mechanical. Honest recall limits: same-fn co-occurrence only; `allow_origin(Any)` \
+WITHOUT a credentials marker stays silent (bare wildcard CORS is a policy smell, \
+not this graded class); plain `permissive()` alone is silent (tower-http 0.7 \
+docs: it sets NO credentials); `very_permissive()` fires UNCONDITIONALLY (the \
+combo is its by-construction content); list/predicate/dynamic origin forms \
+never fire; cross-fn builder assembly undetected. Batch 291 / Plan 295 / \
+Research 329 (danoszz/penthera @ `07421f9`, MIT — cited as class provenance; \
+the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use tower_http::cors::{Any, CorsLayer};\n\npub fn permissive_cors() -> CorsLayer {\n    CorsLayer::new()\n        .allow_origin(Any)\n        .allow_credentials(true)\n}\n"
+                .to_string(),
+            fixed_code: "use tower_http::cors::{AllowOrigin, CorsLayer};\n\nconst ALLOWED_ORIGINS: [&str; 1] = [\"https://app.example.com\"];\n\npub fn allowlisted_cors() -> CorsLayer {\n    CorsLayer::new()\n        .allow_origin(AllowOrigin::list(\n            ALLOWED_ORIGINS.iter().filter_map(|o| o.parse().ok()),\n        ))\n        .allow_credentials(true)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── jwt-insecure-validation-flags (CryptoHygiene; suggest-only) ──
+        SecRule {
+            rule_id: "jwt-insecure-validation-flags".to_string(),
+            sec_concept: "a JWT decode configured to NOT verify: jsonwebtoken's \
+`insecure_disable_signature_validation()` (the 9.x Validation surface — method \
+or field form; REMOVED at 10.0 in favour of `dangerous::insecure_decode`, the \
+same class one namespace over) accepts forged unsigned tokens — the alg:none \
+bypass class — and `validate_exp = false` accepts expired tokens (expiry-skip). \
+The penthera jwt probe (alg:none forged token accepted on an authed route; \
+expired-token check) is the runtime face of exactly these decode-time flags. \
+The bounded repair is the default posture: pin the algorithm list, leave \
+signature + exp validation on. Suggest-only: some debug/tooling decodes \
+deliberately skip validation — review decides. Honest recall limits: the \
+signature surfaces fire on their unique names (any receiver); \
+`validate_exp = false` fires only inside jwt vocabulary (a \
+`jsonwebtoken`-prefixed path or a `Validation`/`DecodingKey`/`Algorithm` token \
+in the same fn — other crates' fields stay silent); explicit \
+`validate_exp = true` is silent; a helper-based decode is unconnected \
+parse-only. Batch 291 / Plan 295 / Research 329 (danoszz/penthera @ \
+`07421f9`, MIT — cited as class provenance; the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};\nuse serde::Deserialize;\n\n#[derive(Deserialize)]\npub struct Claims {\n    pub sub: String,\n    pub exp: usize,\n}\n\npub fn read_claims(token: &str, key: &DecodingKey) -> Option<Claims> {\n    let mut validation = Validation::new(Algorithm::HS256);\n    validation.validate_exp = false;\n    validation.insecure_disable_signature_validation();\n    let data = decode::<Claims>(token, key, &validation).ok()?;\n    Some(data.claims)\n}\n"
+                .to_string(),
+            fixed_code: "use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};\nuse serde::Deserialize;\n\n#[derive(Deserialize)]\npub struct Claims {\n    pub sub: String,\n    pub exp: usize,\n}\n\npub fn read_claims(token: &str, key: &DecodingKey) -> Option<Claims> {\n    let validation = Validation::new(Algorithm::HS256);\n    let data = decode::<Claims>(token, key, &validation).ok()?;\n    Some(data.claims)\n}\n"
+                .to_string(),
+            family: SecFamily::CryptoHygiene,
+        },
+        // ── auth-cookie-without-secure-flags (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "auth-cookie-without-secure-flags".to_string(),
+            sec_concept: "an auth/session-named cookie (session/sid/token/auth/jwt \
+vocabulary in the literal name) built WITHOUT the Secure/HttpOnly hardening — \
+the cookie crate's `Cookie::build(..)`/`Cookie::new(..)` with no `.secure(..)` \
+or `.http_only(..` marker anywhere in the fn: the session value ships \
+JavaScript-readable over plain http (the penthera cookie class: session cookies \
+missing Secure/HttpOnly/SameSite, severity keyed on the name vocabulary). The \
+bounded repair is the builder chain: `.http_only(true).secure(true)` (+ \
+`.same_site(SameSite::Lax)` for the CSRF half). Suggest-only: cookies that \
+must be JS-readable or cross-site are deliberate choices. Honest recall \
+limits: the name must be a string LITERAL (variable names are an honest NO); \
+non-auth names (preference/tracking/consent) never fire — the vocabulary is \
+the FP control; ANY flag marker in the fn suppresses fn-wide (one hardened \
+cookie hides a sibling — the secret-file-create conservative rule), so an \
+explicit `.secure(false)` is read as a written decision, never flagged; \
+builder-split-across-locals and set_http_only-after-construction are \
+unconnected parse-only (the fn-wide marker covers the setter forms). Batch \
+291 / Plan 295 / Research 329 (danoszz/penthera @ `07421f9`, MIT — cited as \
+class provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use cookie::Cookie;\n\npub fn session_cookie(value: &str) -> Cookie<'static> {\n    Cookie::build((\"sid\", value.to_owned()))\n        .path(\"/\")\n        .same_site(cookie::SameSite::Lax)\n        .build()\n}\n"
+                .to_string(),
+            fixed_code: "use cookie::Cookie;\n\npub fn session_cookie(value: &str) -> Cookie<'static> {\n    Cookie::build((\"sid\", value.to_owned()))\n        .path(\"/\")\n        .http_only(true)\n        .secure(true)\n        .same_site(cookie::SameSite::Lax)\n        .build()\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },

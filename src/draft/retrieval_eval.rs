@@ -24,7 +24,9 @@
 //!   gate watches — when own-variants stop ranking top-1 among 343 rules,
 //!   crowding is real.
 //! - **thin domains (Issue 134 T3 re-arm, 2026-09-24 — see Bench 101)**:
-//!   `sec` (16, `sec` only) / `docker` (31) / `dist` (6) / `shader_perf`
+//!   `sec` (22, `sec` only — repaired from a stale 16 at Batch 291; B258
+//!   took it 16 → 19 without this line) / `docker` (31) / `dist` (6) /
+//!   `shader_perf`
 //!   (8, `shader_perf` only) — hand-authored variants of the corpus
 //!   anti-patterns, one span per rule, labels verified against the corpus
 //!   and their own proposers by the committed label tests. Honest
@@ -2383,7 +2385,21 @@ mod tests {
                 // = 34.7% at B131) -- the read_to_end/TcpStream vocabulary
                 // keeps the B131 sec-centroid drift ticking (-1 span);
                 // floor = 34 - 5 = 29.
-                (false, true, true) => 85.0 / 157.0, // measured 90/157 (57.3%) — Batch 179 re-pin, 2026-09-25 (population 141 → 157; was 82/154, measured 87/154 at Issue 134)
+                // Batch 291 re-pin (2026-10-26, Plan 295): the penthera
+                // sec adds re-measured 63/163 (38.7%; population 157 → 163
+                // — the 3 web-trust spans + the 3 new). Pre-batch baseline
+                // MEASURED in a sibling worktree at the landing base
+                // (71e1cba9): 62/160 (38.8%) — the arm was ALREADY RED at
+                // its B179 pin (90/157 = 57.3% measured then) before this
+                // batch; the decay is the Issue-170 shared-vocab competition
+                // (the +68 rust_perf serving rules re-ranked the global
+                // frequency table; the docker arm took −22 spans the same
+                // way, re-pinned 85 → 80 there). This batch's delta: +1
+                // correct route (the cors span routes true), −0.1pp ratio.
+                // Re-pin per the Issue-020 contract: floor = measured − 5
+                // per the Plan-030 convention = 58. Annotation only: gating
+                // stays killed (85% bar, Bench 025).
+                (false, true, true) => 58.0 / 163.0, // measured 63/163 (38.7%) — Batch 291 re-pin, 2026-10-26 (was 85/157, measured 90 at B179; pre-batch 62/160 = 38.8%, ALREADY RED — the Issue-170 shared-vocab decay, not this batch)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.

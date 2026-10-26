@@ -159,6 +159,21 @@ the sec domain's web/multi-tenant trust classes:
 | `webhook-signature-over-raw-bytes` | `CryptoHygiene` | a verify computed over a re-serialized body (`serde_json::to_string`/`to_vec` of a just-parsed value) instead of the exact received bytes — canonicalization drift makes attacker bodies verify (envelope/payload identity mismatch). Bounded form: verify over the raw bytes before/alongside any parse. Distinct-from `constant-time-secret-compare`: compare primitive (timing) vs coverage axis. Honest limits: canonical-signature schemes fire by design (review decides); detector `webhook_raw_bytes::detect` |
 | `unvalidated-egress-url` | `InputValidation` | a URL assembled from request/tenant input reaching a `reqwest::`/`ureq::` sink with no scheme/host allowlist and no private-range refusal — the caller picks the egress target (SSRF: cloud metadata, loopback admin edges). Bounded form: policy (allowlist + private-range refusal), never mechanical. Sink-distinct from `unbounded-read-into-vec` (URL choice vs read source, the Plan 156 T2 shape). Honest limits: client-binding method sinks + framework extractors are honest NOs; detector `egress_url::detect` |
 
+## Batch 291 (2026-10-26) — the penthera distill, the CORS/JWT/cookie classes
+
+Three suggest-only rules from the danoszz/penthera distill (MIT @ `07421f9` —
+an offline rule-based security agent, Node/TS; Research 329's corrected
+transcription: the source contributes CLASS knowledge, the fixtures are
+original Rust). The first kill-gate refuted in-record: the corpus's own
+history (B258 = a pure-Markdown audit source, dial9 = a blog) already
+routed non-Rust sources.
+
+| Rule | Family | Shape |
+|---|---|---|
+| `cors-any-origin-with-credentials` | `InputValidation` | permissive origins coupled with credentialed requests: `allow_origin(Any)`/`AllowOrigin::any()`/`permissive()` + `allow_credentials(true)` in one fn — or `CorsLayer::very_permissive()` ALONE (tower-http 0.7: credentials + the preflight origin reflected back, the one-call leak). The wildcard+credentials pair is protocol-inert for credentialed reads (dead misconfiguration); the naive repair (`very_permissive`) ACTIVATES the leak. Bounded form: `AllowOrigin::list` / the origins-array form beside credentials, or drop credentials. Gates: `very_permissive` fires unconditionally; `any()`/`permissive()` need the credentials marker in the same fn; `allow_origin(Any)` WITHOUT credentials is silent (not this graded class); `allow_credentials(false)` silent; list/predicate/dynamic forms never fire. Honest limits: same-fn co-occurrence only; cross-fn builder assembly undetected; detector `cors_any_creds::detect` |
+| `jwt-insecure-validation-flags` | `CryptoHygiene` | a JWT decode configured to NOT verify: the 9.x `insecure_disable_signature_validation()` (method or field form — REMOVED at jsonwebtoken 10.0), its 10.x replacement `dangerous::insecure_decode` (the alg:none bypass class), and `validate_exp = false` (the expiry skip). Bounded form: the default posture (alg list pinned, sig + exp ON). Gates: signature surfaces fire on unique names (any receiver); `validate_exp = false` is jwt-vocabulary-gated (`jsonwebtoken::` path or a `Validation`/`DecodingKey`/`Algorithm` token in the fn) — other crates' fields silent; explicit `validate_exp = true` silent. Honest limits: statement/field-init shapes only; helper-based decodes unconnected. The probe crate pins jsonwebtoken 9 (the 9.x fixture must COMPILE — the pin is load-bearing); detector `jwt_insecure_validation::detect` |
+| `auth-cookie-without-secure-flags` | `InputValidation` | an auth/session-named cookie (session/sid/token/auth/jwt literal vocabulary — penthera's severity gate) built via `Cookie::build`/`Cookie::new` with NO `.secure(..)`/`.http_only(..` marker anywhere in the fn — the session ships JS-readable over plain http. Bounded form: `.http_only(true).secure(true).same_site(SameSite::Lax)` on the builder chain. Gates: the name must be a string literal (direct or tuple-first — variable names an honest NO); non-auth names never fire (the FP control); ANY flag marker suppresses fn-wide (the secret-file-0600 conservative rule — an explicit `.secure(false)` is a written decision, never flagged). Honest limits: framework `SET_COOKIE` writes out of scope; detector `auth_cookie_missing_flags::detect` |
+
 PLUS the count-neutral rider on `unbounded-read-into-vec`: decompression
 decoders (`GzDecoder`/`ZlibDecoder`/`BzDecoder`/`XzDecoder`/`ZstdDecoder`)
 are transparent to the taint walk (`take` stays a taint break) and the
@@ -260,6 +275,13 @@ proposer.
 - Phase 1 (corpus + 4 proposers + GOAT): DONE (Bench 046)
 - Phase 2 (unsafe + crypto hygiene): UNBLOCKED (≥6-rule gate met) but
   deferred per Plan 018 — a future batch
+- Batch 291 (2026-10-26): corpus 19 → 22 (6 fixable + 16 suggest-only;
+  the penthera distill, Plan 295) — retrieval floors re-measured at the
+  sec posture: sec self-variants 22/22 top-1, router annotation (sec arm)
+  re-pinned 85/157 → 58/163 with the PRE-BATCH ALREADY-RED attribution
+  recorded in-code (the Issue-170 shared-vocab decay, not this batch —
+  pre-batch baseline measured 62/160 = 38.8% in a sibling worktree at the
+  landing base)
 - Promotion to default: needs ≥1 workspace repo adopting sec in CI
 
 ## See also

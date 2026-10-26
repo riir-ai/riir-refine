@@ -1,7 +1,8 @@
 //! Issue 134 T3 re-arm — `sec` domain eval fixtures (hand-authored variants
-//! of the 19 corpus anti-patterns; the `eval_fixtures_perf` convention —
+//! of the corpus anti-patterns; the `eval_fixtures_perf` convention —
 //! variant names, canonical shapes, one span per rule). Batch 258 added
-//! the web-trust seed's three (Plan 262).
+//! the web-trust seed's three (Plan 262); Batch 291 the penthera
+//! distill's three (Plan 295).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -193,6 +194,32 @@ fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
     let url = format!("https://{store}/artifacts/{digest}");
     let body = ureq::get(&url).call().map_err(|e| e.to_string())?;
     body.into_string().map_err(|e| e.to_string())
+}
+"#,
+    ),
+    // Batch 291 (Plan 295) — the penthera distill, one span per new rule.
+    (
+        "cors-any-origin-with-credentials",
+        r#"pub fn public_api_cors() -> tower_http::cors::CorsLayer {
+    tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_credentials(true)
+}
+"#,
+    ),
+    (
+        "jwt-insecure-validation-flags",
+        r#"pub fn check_session_token(token: &str, key: &jsonwebtoken::DecodingKey) -> bool {
+    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::HS256);
+    validation.validate_exp = false;
+    jsonwebtoken::decode::<serde_json::Value>(token, key, &validation).is_ok()
+}
+"#,
+    ),
+    (
+        "auth-cookie-without-secure-flags",
+        r#"pub fn auth_cookie(token: &str) -> cookie::Cookie<'static> {
+    cookie::Cookie::build(("auth", token.to_owned())).build()
 }
 "#,
     ),

@@ -78,12 +78,20 @@ fn run_clippy() -> Option<Vec<Diag>> {
     // (compile errors are not clippy diagnostics; the gate reads diagnostics).
     // Batch 258: the webhook fixture re-serializes with serde_json and the
     // egress fixture dials through ureq — same compile contract.
+    // Batch 291: the CORS/JWT/cookie fixtures use tower-http (feature
+    // `cors` — the crate ships NO default features), jsonwebtoken 9 (the
+    // 9.x fixture's `insecure_disable_signature_validation` surface —
+    // REMOVED at 10.0, so the pin is load-bearing), cookie 0.18, and
+    // serde's derive feature (the Claims derive).
     std::fs::write(
         dir.join("Cargo.toml"),
         "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\
          \n[workspace]\n[dependencies]\nsha1 = \"0.10\"\nsha2 = \"0.10\"\
          \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\
-         \nserde_json = \"1\"\nureq = \"2\"\n",
+         \nserde_json = \"1\"\nureq = \"2\"\
+         \nserde = { version = \"1\", features = [\"derive\"] }\
+         \ntower-http = { version = \"0.7\", features = [\"cors\"] }\
+         \njsonwebtoken = \"9\"\ncookie = \"0.18\"\n",
     )
     .expect("write toml");
     let mut lib = String::new();

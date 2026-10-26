@@ -52,6 +52,25 @@ The corpus's auth/web surface targets Rust HTTP stacks; penthera's benchmark-win
 - NotBenchable ×3 — all suggestion-grade decision content; the batch's value axis is the sec family's public-consumer coverage, not measured numbers.
 - First-pass grade kept in-record above per the corrected-verdict discipline (Research 179 / dial9).
 
+## LANDING ADDENDUM (2026-10-26 — Batch 291 LANDED)
+
+Claimed + authoring slot re-adjudicated by this lane (no sec-domain claim was live; the deferred claims are disjoint rust_perf/kernel/serving lanes). T0 at the pin `.raw/penthera` @ `07421f9` confirmed ALL THREE classes; TWO live-API adjustments adopted honestly (the clone swept after):
+
+1. **tower-http 0.7 docs** — `CorsLayer::very_permissive()` is the ONE-CALL combo ("Credentials allowed" + the preflight origin reflected back = the `origin: true` + `credentials: true` shape verbatim); plain `permissive()` sets NO credentials; `any()+allow_credentials(true)` is NOT runtime-refused (protocol-inert for credentialed reads — dead misconfiguration whose naive fix IS very_permissive, the actual leak). Rule widened: `very_permissive()` fires unconditionally; `any()`/`permissive()` need the `allow_credentials(true)` marker in the same fn.
+2. **jsonwebtoken CHANGELOG** — `Validation::insecure_disable_signature_validation` is the 9.x-era surface (method/field), REMOVED at 10.0 → replaced by `dangerous::insecure_decode` (10.1). The rule fires all three shapes (9.x method/field + the 10.x replacement + `validate_exp = false` jwt-vocabulary-gated); the boundary-gate probe crate pins jsonwebtoken 9 so the 9.x fixture compiles (the pin is load-bearing, commented in the gate).
+
+**Landed (3 suggest-only rules, corpus 19 → 22; 6 fixable + 16 suggest-only):** `cors-any-origin-with-credentials` (InputValidation), `jwt-insecure-validation-flags` (CryptoHygiene), `auth-cookie-without-secure-flags` (InputValidation). Detectors `cors_any_creds` / `jwt_insecure_validation` / `auth_cookie_missing_flags` (27 module fire/hold tests); 3 SEC_SPANS variants (19 → 22, fixture count); boundary-gate probe deps extended (tower-http[cors] + jsonwebtoken 9 + cookie 0.18 + serde[derive]); the stale retrieval_eval labeled-set comment ("sec (16") repaired → 22.
+
+**T0.4 probe evidence (the plan-262 T7 protocol):** real clippy (pinned 1.98.1) over the probe crate, groups pedantic+nursery+suspicious+correctness: the crate COMPILES at the pins; exactly ONE lint class fires across the three buggy fixtures — `clippy::must_use_candidate` ×2 (generic style, no equivalent-fix semantics for the misconfiguration). Zero security-shaped lints on the insecure shapes: **the T0.4 boundary holds ×3**; `sec_boundary_gate` (the banned-list protocol, now compiling all 22 fixtures) 2/2 PASS.
+
+**Retrieval floors (T7):** sec self-variants **22/22 top-1** at the sec posture; the router-annotation (false,true,true) arm RE-PINNED 85/157 → 58/163 (measured 63/163 post-batch, floor = measured − 5 per the Plan-030 convention) — with the PRE-BATCH baseline MEASURED in a sibling-level worktree at the landing base `71e1cba9`: **62/160 (38.8%), ALREADY RED at the B179 pin** before this batch — the decay is the Issue-170 shared-vocab competition (the same mechanism that took the docker arm −22 spans, re-pinned there), NOT this batch (delta: +1 correct route, −0.1pp). Attribution recorded in-code at the pin site. The standing (false,false,true) arm + clippy/perf/kernel floors HELD (21/21 at the latent posture).
+
+**Gates all green:** sec-module 172/0 (27 new detector tests); default lib 2734/0; sec-posture lib 2906/0; retrieval suite 23/0 at sec+latent and 21/0 at the standing latent posture; sec_boundary_gate 2/2; clippy −D ×3 postures (default/all-features/no-default). Freeze/score-bench NOT owed (zero clippy-corpus delta, P30); binary rebuild NOT owed (sec outside the release set).
+
+**Drops at authoring:** none beyond the first pass — all three staged candidates survived T0 verification + falsification; the honest-drops rows (rate-limit/IDOR/authz/OpenAPI/IOC/URL-templates/npm-capability/secrets-scanner) stand from the verdict table above.
+
+**Defers unchanged (named, not filed):** the secrets.json AI-key vocabulary probe (secret-scan lane, own unit); the agent-tooling audit phase for the katgpt-rs security-audit skill (sibling edit, owner-directed).
+
 ## Queue slot
 
 Nominal **Batch 291** / plan **295** — authoring STAGED behind the live mining-slot claims (plan-289 bbtree to 2026-10-27T16:44+07, plan-294 resin staged behind it). Gates at authoring per the B258/plan-262 precedent: sec needle + parse gates, sec-module trigger tests (probe discipline), lib tests at default + the sec-feature posture, clippy −D ×3 postures; freeze/score-bench NOT owed (zero clippy-corpus delta, P30); binary rebuild NOT owed (sec outside the release set); retrieval floors re-measure per the corpus-delta rule.
