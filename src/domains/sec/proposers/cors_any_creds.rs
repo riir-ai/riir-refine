@@ -160,7 +160,7 @@ struct FnScan {
     credentials_span: Option<Range<usize>>,
     very_permissive_span: Option<Range<usize>>,
 }
-    fn scan_stmts(stmts: &[syn::Stmt], ctx: (&str, &mut FnScan)) {
+fn scan_stmts(stmts: &[syn::Stmt], ctx: (&str, &mut FnScan)) {
     let (source, walk) = ctx;
     for stmt in stmts {
         match stmt {
@@ -209,9 +209,7 @@ fn walk_expr(e: &Expr, source: &str, walk: &mut FnScan) {
                 if walk.credentials_span.is_none() {
                     walk.credentials_span = span_of(e, source);
                 }
-            } else if name == "allow_origin"
-                && m.args.iter().any(is_permissive_origin_arg)
-            {
+            } else if name == "allow_origin" && m.args.iter().any(is_permissive_origin_arg) {
                 walk.permissive_origin = true;
             } else if name == "permissive" {
                 // `CorsLayer::permissive()` sets NO credentials (tower-http
@@ -306,11 +304,7 @@ fn is_permissive_origin_arg(a: &Expr) -> bool {
     let Expr::Path(p) = a else {
         return false;
     };
-    p.qself.is_none()
-        && p.path
-            .segments
-            .last()
-            .is_some_and(|s| s.ident == "Any")
+    p.qself.is_none() && p.path.segments.last().is_some_and(|s| s.ident == "Any")
 }
 
 /// A literal `true` argument (`allow_credentials(true)`).

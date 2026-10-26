@@ -138,8 +138,8 @@ fn scan_fn(
     let sig_ts = quote::ToTokens::to_token_stream(sig).to_string();
     let block_ts = quote::ToTokens::to_token_stream(block).to_string();
     let fn_text = format!("{sig_ts}{block_ts}").replace(' ', "");
-    let jwt_vocab = fn_text.contains("jsonwebtoken::")
-        || JWT_TYPE_TOKENS.iter().any(|t| fn_text.contains(t));
+    let jwt_vocab =
+        fn_text.contains("jsonwebtoken::") || JWT_TYPE_TOKENS.iter().any(|t| fn_text.contains(t));
 
     scan_stmts(source, &block.stmts, jwt_vocab, findings);
 }
@@ -164,12 +164,7 @@ fn scan_stmts(
     }
 }
 
-fn scan_expr(
-    source: &str,
-    e: &Expr,
-    jwt_vocab: bool,
-    findings: &mut Vec<JwtInsecureFinding>,
-) {
+fn scan_expr(source: &str, e: &Expr, jwt_vocab: bool, findings: &mut Vec<JwtInsecureFinding>) {
     match e {
         // `v.insecure_disable_signature_validation()` — the 9.x method form.
         Expr::MethodCall(m) => {
@@ -290,12 +285,7 @@ fn is_true_expr(e: &Expr) -> bool {
     }
 }
 
-fn push(
-    source: &str,
-    e: &Expr,
-    surface: &'static str,
-    findings: &mut Vec<JwtInsecureFinding>,
-) {
+fn push(source: &str, e: &Expr, surface: &'static str, findings: &mut Vec<JwtInsecureFinding>) {
     let span = e.span().byte_range();
     if span.end > source.len() {
         return; // the parse came from another file (the egress guard)
@@ -329,7 +319,10 @@ mod tests {
              None\n}\n";
         let f = findings(src);
         assert_eq!(f.len(), 2, "both surfaces fire: {f:?}");
-        assert!(f.iter().any(|x| x.surface == "signature_validation_disabled"));
+        assert!(
+            f.iter()
+                .any(|x| x.surface == "signature_validation_disabled")
+        );
         assert!(f.iter().any(|x| x.surface == "expiry_validation_disabled"));
         assert_eq!(f[0].advice, super::ADVICE);
     }
