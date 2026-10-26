@@ -141,3 +141,19 @@ First deep pass, 13 nested locks across the farm (root-scan rows unchanged from 
 | seal-game-editor/tools/legacy-import | ERROR (stale lock) | manifest moved, lock not re-generated — the editor lane's re-lock, never a silent pass |
 
 New ID this pass: 2026-0347 (quinn). Scope note: T2.6 delivers the INSTRUMENT; adjudicating the nested FINDINGS rows belongs to the owning lanes per the T2.2 discipline — this lane records, never bumps.
+
+## T2.3 — LANDED 2026-10-27 (zed-amo-idle, amo; the katgpt-rs lane)
+
+Claim `9e0ddb38` (epoch 1793047403) → landed same cycle. **The mechanism was NOT a version bump** — postcard 1.1.3 is the latest 1.x the resolver offers (`cargo update -p postcard --dry-run`: "Locking 0 packages") and postcard has no 2.x; a direct heapless requirement cannot help (postcard pins `^0.7`, semver-incompatible with 0.8/0.9 — both versions would coexist). **The actual mechanism: postcard's `default = ["heapless-cas"]` feature was the ONLY heapless edge** (crates.io manifest verified: `heapless-cas = ["heapless", "dep:heapless", "heapless/cas"]`), and heapless 0.7 is the only version carrying atomic-polyfill (0.9.3 already in-tree via bevy_tasks, clean). Fix: all **7** workspace postcard declarations (root, katgpt-core, katgpt-attn-match, katgpt-deprecated, katgpt-pruners, katgpt-proof-cert, katgpt-speculative-optional) → `default-features = false` (alloc kept; no workspace source references heapless).
+
+Measured gates (zero-cargo until the i1117 flashmemory timing measurement verified ended; then isolated `CARGO_TARGET_DIR=/tmp/t23_check`):
+
+| Gate | Result |
+|---|---|
+| `cargo update --workspace` | lock: atomic-polyfill 0 matches; heapless unified on 0.9.3; postcard deps = cobs/embedded-io×2/serde (no heapless) |
+| `cargo tree -i atomic-polyfill` | "did not match any packages" |
+| `cargo deny check advisories` | ok — with the 0089 row REMOVED from katgpt-rs deny.toml (the discharged row leaves the consumer disclosure in its comment) |
+| clippy ×5 non-optional consumers (+ speculative `--features rt_turbo`) | ALL clean |
+| lib tests: postcard-named + closure module (the heaviest postcard user) | 66 passed / 0 failed |
+
+Scope note: the nested-lock 0089 rows recorded under T2.6 (mmorpg-examples wasm + warm-tier-do, train poc, editor tools ×2) are OUT of this lane — their owning lanes re-lock and drop their pins when they next touch those trees; the katgpt-rs deny.toml comment carries the drop-your-pin disclosure. The no-upgrade-crate pin rows (paste / ttf-parser / crossbeam-epoch classes) were already landed with T2.4's ledgers (every row reason + tracking reference) — no second pass needed.
