@@ -1,5 +1,29 @@
 # Decode re-pin bout — PRE-STAGED 2026-10-20 ~00:5x UTC (shikuwa/4090 prep session)
 
+## b10826 PRE-STAGE COMPLETE 2026-10-26 ~14:2x +07 (shikuwa/4090 idle lane — GPU held by the sibling QRR cell A until ~14:45; all prep zero-GPU)
+
+**Timeline correction (found this session):** Bench 1000 (`229007fe8`) ALREADY discharged the b10819 bout 10-25 ~13:1x (decode 92.83/90.68 = 1.0237× — the hold narrowed BELOW 1.05 first time; pp2048 4099/3400.45 = 1.2054× BEST; pp4096 3897/3380.56 = 1.1531×; G1 ×4 EXACT; one-pass). Then `9e9cd0f07` re-pinned ×3 to b10822 `bf8c069fde8c` + rebuilt (22:45) — run never scored (queued behind the sibling 22:55 cell-B window, then superseded). The prior_pin chain from that re-pin is DEFECTIVE — repaired in this window's re-pin:
+- decode manifest: the displaced 909f0cac9c row carries Bench-992 numbers (93.48/88.75 = 1.0528×) — WRONG, the b10819 pin's scored cells are Bench-1000's (92.83/90.68 = 1.0237×). Fix numbers + label.
+- pp2048 + pp4096: the 909f0cac9c row is MISSING entirely (chains jump b3ebc47@Bench-999 → the pin sits at b10822 unrecorded). Prepend it.
+
+**Done this session (zero GPU):**
+
+1. Fork fetched + checked out at b10826 `c9c34bc9c4` (tag `prism-b10826-c9c34bc`; found detached at b10822 `bf8c069fde` — the 9e9cd0f07 session's checkout). Incremental MSVC Release rebuild GREEN 14:03 (`-j 4`, 10.5 min, RC=0 — the ptxas-OOM lesson holds; log `build/bout_b10826_build.log`). `llama-bench.exe` fresh at the tag; cache posture verified (VS 17 2022, GGML_CUDA=ON/FA=ON/GRAPHS=ON, ARCH=89, NATIVE=ON).
+2. Model sha256 re-verified byte-exact `3907dc16…62ec1`.
+3. Ours-side: riir-ai `95c129250` clean == origin (the sibling's i1047 T2 staging — docs/turnkey only, not in the bench closure), riir-infer `57448f5` + katgpt-rs `75fdd8a3b` ff-merged clean (incoming 4+4 ALL docs — zero compiled-artifact change). NO wt-bout tuple needed.
+4. **b10822→b10826 delta (4 commits) adjudicated for sm_89** (goes into `commit_note_1026`):
+   - #395 `77a0affd87` — LOAD-BEARING decode: quantize-to-q8_1 INSIDE the fused norm+Hadamard kernel for PQ2_0 consumers (skips the standalone quantize launch).
+   - #397 `9f91484519` — sm_89-INERT: multi-col 1-2 cols is Hopper-only (`pq2_mc_min = HOPPER ? 1 : 3`, verified in-diff; Ada keeps the existing 3-8 kernel); bias/gate+GLU fusion rides the same gate.
+   - #401 `dc21b2cf42` — sm_89-relevant: block-diagonal Hadamard in the fused norm+transform kernel, bit-identical.
+   - #402 `c9c34bc9c4` — LOAD-BEARING decode, DEFAULT-ON: o_proj/ffn_down Hadamard ⊗ q8_1 fused for PQ2_0, bit-identical; their +5-9% decode on 2B/4B H200 — the strongest decode threat since #258; 27B datum MEASURED not assumed.
+   - Past-the-tag: origin/prism tip `c96baf4abe` (#390 head-72 vision FA MMA) NOT scored — next-bout candidate.
+   - The b10819→b10822 adjudication (from 9e9cd0f07, carried into the bf8c069fde prior_pin row): #398 GDN decode conv-chain fusion DEFAULT-ON (NVIDIA≥Turing gate FIRES at sm_89; our hybrid 27B runs GDN conv chains) + #399 verify-width opt-in inert + #396 wider FWHT blocks at decode/verify widths (n_transforms ≤ 64).
+5. No `.run_lock` at prep time. riir-refine binary bin-age rebuild (§0) deferred to post-bout — no cargo builds during the bout cells (the exclusivity watcher greps cargo).
+
+**Escalation read:** the quartet is PQ2_0-exact + DEFAULT-ON + decode-shape — the 1.0237× decode hold may go RED this window. Prefill expected near-flat (all decode-width-conditional). Measure, never assume; a red decode = honest report + the perf-rematch escalation ladder, not a forced green.
+
+**Bout-time steps (at the verified-idle window):** idle gate (nvidia-smi desktop-only baseline; no `.run_lock`; harness contender gate) → manifest re-pin ×3 `bf8c069fde8c` → `c9c34bc9c4` + prior_pin repair (above) + `commit_note_1026` → `bash scripts/perf_rematch.sh run --box 4090 --rows bonsai-4090-decode-tg128,bonsai-4090-prefill-pp2048,bonsai-4090-prefill-pp4096` (from E:/git/riir-ai) → adjudicate (decode hold ≥1.0×; prefill ours/opp ≥ 0.8333×; G1 pins MUST re-print: decode `98412dc406c4ea19` + `63496f6688c8f742`, pp2048 `0f8fddb9ef217548`, pp4096 `23a39649102714ec`) → record (highwater 1003 → next; `.benchmarks/.highwater` + `ls` + dual_allocation gate at write time) → league doc row + `.distill/001` row → push riir-ai ONE commit → THEN the riir-refine §0 bin-age rebuild.
+
 ## b10819 PRE-STAGE COMPLETE 2026-10-25 ~12:1x +07 (shikuwa/4090 idle lane — the fired `prism-b10819-909f0ca` trigger's 4090-side prep; GPU window closed mid-prep, the RUN stays queued)
 
 **Done this session (all zero-GPU at write time):**
