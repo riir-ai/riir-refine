@@ -715,6 +715,23 @@ lane, 2026-10-27 ~04:53–05:05 +07):
    anchored as branch `fmt-drain-staged` in riir-reflex; landing recipe v2
    lives in `.distill/001_mining_queue_snapshot.md` @ `d58afb51`.
 
+**DISPOSITION (addendum, same day ~05:4x +07, verified before recording):** the
+wiped WIP was a RACE-DUPLICATE of the ALREADY-LANDED TOTP client half —
+`c9923d2f` (03:36:32 +07, "feat: the TOTP client half wired into the CLI —
+kat totp enroll|disarm + the migrate --totp header", ancestor of
+origin/develop, landed ~80 min before the reset). The landed surface covers
+the wiped draft's functional spec and exceeds it in integration (heal.rs 26
+Totp/run_kat_totp hits; kat_migrate_client.rs 10 totp/X-Kat-Totp hits;
+verified this session). **~zero functional loss; RECORD-not-REBUILD.** A
+forensic capture of the wiped diffs (read-only `git diff` ~04:15–04:20 +07,
+pre-reset; +171/+50/+10) survives verbatim in the overflow-handoff lane's
+session transcript (relayed summary via the 66a7f12a lane) — the only
+surviving copy of the lost content; the re-derivation question closes to a
+diff-first check IF the claim holder returns believing they lost a lane.
+Linkage: the recipe-v2 snapshot row `d58afb51` (zed-amo-b294-fmtland) + the
+~04:53–04:55 worktree removal + the 04:55:22 reset are plausibly one event
+chain; remover still unidentified.
+
 **Durable fixes (this commit):** the step-3 rule now anchors-before-remove
 for detached worktrees (see the skill's Protocol H); and the shell
 discipline — never chain a mutating git command after a `cd` in one line
