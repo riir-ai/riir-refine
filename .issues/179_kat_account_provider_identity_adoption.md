@@ -12,12 +12,20 @@ T9's by-design split ("consumers (riir-refine `kat_account`,
 seal-editor, riir-rethink) adopt via their own follow-ups after the
 substrate lands" — the substrate IS landed: T2–T5, `87f8221`..`77259fe`).
 
-**Dependency + sequencing:** the SERVER route hosts land first — dapps
+**Dependency + sequencing:** the SERVER route hosts LAND FIRST — dapps
 [139](../../riir-dapps/.issues/139_totp_sensitive_route_enforcement.md)
-(leased: zed-m3-queue-cycle, plan 053) + dapps
-[140](../../riir-dapps/.issues/140_recovery_authority_class.md) (the
-recovery authority class; carries the provider bind/unbind route host
-per plan 053 T0.5 item 4). Until a bind route exists, a client-side
+(leased: zed-m3-queue-cycle, plan 053) LANDED (`eae0f05`, plan 053 T8) +
+dapps [140](../../riir-dapps/.issues/140_recovery_authority_class.md)
+LANDED 2026-10-27 (the recovery authority class, worker `1258eef`), and
+the LEAF CLIENT TIER is landed too — riir-kat issue 008 `9f51008`
+(`kat_recovery_client`: the seven flows, `compose_numeric_claim` behind
+riir-kat's `rebind`, `github_device_login[_with]` behind `provider_login`,
+typed refusals; the transports read the non-200 body so the typed
+vocabulary survives real HTTP). Items (4)/(5) are UNBLOCKED on the
+wire: the CLI composes device login → nonce → claim → bind through the
+leaf's flows and never names riir-auth. Until a bind route is DEPLOYED,
+real dials surface the pre-deploy 404 typed (the enroll-route
+precedent). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
