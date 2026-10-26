@@ -13,7 +13,7 @@ T7 devnet rehearsal + the real rotation stay owner-adjacent, untouched) Executes
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
 NOT a wetrun.
-**Claimed:** zed-shikuwa-4090-idle, epoch=2026-10-26T20:30:00+07:00, expires 2026-10-28T20:30:00+07:00 — T-PREFLIGHT (4090 leg) drain.
+**Lease released:** zed-shikuwa-4090-idle (claimed 2026-10-26T20:30:00+07:00, would have expired 2026-10-28T20:30:00+07:00) — T-PREFLIGHT (4090 leg) drain; reshaped per the riir-infer-1109 malformed-line precedent — the old `**Claimed:**` shape could not parse (`epoch=` + ISO instead of epoch digits), and an unparseable claim-shaped line exits claim_lease_check BLIND for every future lane.
 **YIELDED to zed-amo-175-preflight** (fc846efd landed on origin first — the live foreign claim is the yield signal; shikuwa stands down, no wire ops from this session).
 **Progress 2026-10-26 (doctor sweep):** M3 preflight leg DONE — the
 account dir was missing under the post-uid-502 HOME (`~/.config/riir-auth/
