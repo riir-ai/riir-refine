@@ -1,7 +1,11 @@
 # Issue 178: Healer Meta-Consumer — Blueprint-Level Lever Tuning (the Harness-Evolution Meta Level)
 
 **Status:** Open — P2, pointer recorded; proposal filed
-**Claimed:** zed-amo-178-phaseA, 1793038655, expires 2026-10-28T18:18:02Z (scope: Phase A only — plan + A1–A5 per proposal 024)
+**Claimed:** zed-amo-178-phaseA, 1793038655, expires 2026-10-28T18:18:02Z
+(scope: Phase A only — plan + A1–A5 per proposal 024; the parenthetical moved off the
+claim line 2026-10-27 — the lease instrument's `expires <ISO>` grammar is end-anchored,
+so a trailing scope note read the whole line MALFORMED and blinded the check, the
+riir-infer-1109 class)
 **Lease released:** zed-amo-178-meta claimed the proposal stage 2026-10-26 (epoch 1793036009) and landed it the same session — [Proposal 024](../.proposals/024_healer_meta_blueprint.md) (GO staged, reviewer AGREE round 2). The Phase A plan + implementation remain unclaimed; the implementation lease is a NEW claim on this issue (scope: Phase A only).
 **Date:** 2026-10-27
 **Origin:** riir-ai [Plan 642](../../riir-ai/.plans/642_harness_evolution_autoplay.md) T4.3 pointer + [Research 401](../../riir-ai/.research/401_Harness_Evolution_Game_Autoplay_Guide.md) §7 row 2 (arXiv:2604.21003 — "The Last Harness You'll Ever Build")
