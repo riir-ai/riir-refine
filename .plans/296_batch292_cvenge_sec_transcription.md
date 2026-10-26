@@ -1,6 +1,7 @@
 # Plan 296 — Batch 292: CVEngine sec transcription (3 rules + 1 rider)
 
 **Status:** STAGED — authoring gated behind the live mining-slot claims (per the penthera/plan-295 posture)
+**Claimed:** shikuwa-4090-b292-cvenge, 1793050367, expires 2026-10-28T21:32:47Z
 
 Source: hevnsnt/CVEngine @ `9dd9c441630eaeb15b61b173b635bb673a27bb02` (GPL-3.0, pure Python — transcription law, fixtures are OUR original Rust). Verdict: **YES B** (Research 330). Pure-Python source, so every detector is name-gated/field-literal per the penthera precedent — probe parity (plan-262 T7) is the correctness gate: detector fires on the buggy fixture, silent on the fixed form, zero-FP negative suite.
 
