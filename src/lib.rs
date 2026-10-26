@@ -545,7 +545,15 @@ pub mod rule_domains;
 pub mod frontier_miner;
 
 // Issue 107 T1: the fixseq horizon report — lead-k linear decodability of
-// attempt outcomes over the `.refine/fixseq/` ring (AUC(k) vs the base and
+// Proposal 024 Phase A (issue 178): the meta level's instrument — one
+// bounded history row per `--fix` campaign (posture in, verdicts out), the
+// demote-only env, the `--blueprint-report` renderer with the posture↔verdict
+// audit split, the necessity→demotion-suggestion join (report-only), and the
+// pre-registered volume close. Ungated (always-on with demote; the G1 law);
+// report-first, gates nothing, replaces no Level-1 surface.
+pub mod blueprint;
+
+// Attempt outcomes over the `.refine/fixseq/` ring (AUC(k) vs the base and
 // history-aggregate floors, LORO-held-out ridge readout). Pure stats over
 // the ring's jsonl wire shape, ungated so lib tests cover it at default
 // features. Report-first, gates nothing (the frontier-report law); refuses

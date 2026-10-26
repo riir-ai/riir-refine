@@ -5693,6 +5693,7 @@ USAGE:
     cargo refine --frontier-report                       (learnability band report, 089 T1+2)
     cargo refine --coverage-report                       (corpus coverage debt, 119)
     cargo refine --horizon-report [PATHS]                (fixseq lead-k AUC report, 107 T1)
+    cargo refine --blueprint-report                      (proposal 024 Phase A: campaign posture↔verdict audit + demotion suggestions + volume close, 178)
     cargo refine --fixseq-stats [PATHS]                  (cascade law + derailment index, 128)
     cargo refine --gate-calibration                      (Issue 130 T1+T3+OOD report — strata δ calibration + OOD-axis readout + corpus-stall flag; ungated, report-only)
     cargo refine --active-set                            (Issue 102 marker — print demotions + caps)
@@ -6609,6 +6610,13 @@ struct Args {
     /// (the memory-stats pattern); refuses with exit 1 on an empty
     /// population (never a green zero). Needs `latent_retrieval` (the store).
     frontier_report: bool,
+    /// Proposal 024 Phase A (`--blueprint-report`, issue 178): the meta
+    /// level's read-only report over `.refine/blueprint_history.jsonl` —
+    /// campaign posture↔verdict audit split, lever splits, the
+    /// necessity→demotion-suggestion join (report-only, never
+    /// auto-executed), and the pre-registered volume close. Ungated;
+    /// missing history exits 1 (never a green zero).
+    blueprint_report: bool,
     /// Issue 107 T1: `--horizon-report` — lead-k linear decodability of
     /// fix-compile attempt outcomes over the `.refine/fixseq/` ring jsonl:
     /// AUC(k) for a LORO-held-out closed-form ridge readout over
@@ -6816,6 +6824,7 @@ fn parse_args() -> Args {
         json: false,
         import_series: false,
         frontier_report: false,
+        blueprint_report: false,
         horizon_report: false,
         fixseq_stats: false,
         config_audit: false,
@@ -6979,6 +6988,7 @@ fn parse_args() -> Args {
             }
             "--memory-stats" => args.memory_stats = true,
             "--frontier-report" => args.frontier_report = true,
+            "--blueprint-report" => args.blueprint_report = true,
             "--horizon-report" => args.horizon_report = true,
             "--fixseq-stats" => args.fixseq_stats = true,
             "--config-audit" => args.config_audit = true,
@@ -8028,6 +8038,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.corpus_stats
         || args.import_series
         || args.frontier_report
+        || args.blueprint_report
         || args.horizon_report
         || args.fixseq_stats
         || args.config_audit
@@ -11512,6 +11523,67 @@ fn main() {
     // Read-only standalone mode (the memory-stats pattern). Report-first,
     // gate-later: nothing here admits/demotes/deletes anything — the T4
     // wiring waits on the report proving band-mass is predictive.
+    // ── Proposal 024 Phase A (`--blueprint-report`, issue 178): the meta
+    // level's read-only report. Ungated (G1: exists regardless of any
+    // feature); reads ONLY the history + the necessity history + the active
+    // set beside this root. Missing history exits 1 (never a green zero);
+    // an empty history renders the honest zero (exit 0); past the 8-week
+    // close window the volume line (or its explicit not-tripped form)
+    // prints on EVERY run.
+    if args.blueprint_report {
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        let history = root.join(riir_refine::blueprint::HISTORY_RELPATH);
+        if !history.exists() {
+            eprintln!(
+                "blueprint-report: no history at {} — run any --fix in this repo first (or the lane is demoted via RIIR_REFINE_META_BLUEPRINT=0)",
+                history.display()
+            );
+            std::process::exit(1);
+        }
+        let (rows, bad) = riir_refine::blueprint::load_rows(&history);
+        if bad > 0 {
+            eprintln!(
+                "blueprint-report: {bad} malformed line(s) skipped in {}",
+                history.display()
+            );
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let status = riir_refine::blueprint::volume_status(&rows, now);
+        let necessity_path = root.join(riir_refine::blueprint::NECESSITY_HISTORY_RELPATH);
+        let (suggestions, necessity_absent) = if necessity_path.exists() {
+            let (nec_rows, nec_bad) = riir_refine::blueprint::load_necessity_rows(&necessity_path);
+            if nec_bad > 0 {
+                eprintln!(
+                    "blueprint-report: {nec_bad} malformed necessity line(s) skipped in {}",
+                    necessity_path.display()
+                );
+            }
+            let active = riir_refine::active_set::ActiveSet::load_default(&root)
+                .unwrap_or_else(|_| riir_refine::active_set::ActiveSet::empty());
+            (
+                riir_refine::blueprint::demotion_suggestions(&nec_rows, &active),
+                false,
+            )
+        } else {
+            (Vec::new(), true)
+        };
+        print!(
+            "{}",
+            riir_refine::blueprint::render_report(
+                &rows,
+                bad,
+                &suggestions,
+                necessity_absent,
+                &status
+            )
+        );
+        return;
+    }
     if args.frontier_report {
         #[cfg(feature = "latent_retrieval")]
         {
@@ -12990,6 +13062,19 @@ fn main() {
     // "fixed".
     let mut fixstat_rules: std::collections::BTreeMap<String, u32> =
         std::collections::BTreeMap::new();
+    // ── Blueprint Phase A (proposal 024 / issue 178): the run-end history
+    // row's accumulators. Per-rule reverted counts are hoisted out of the
+    // block-scoped verify report; the verify capture rides the same lift.
+    // The append at run end is the lane's sole side-effect (G1) — silent on
+    // success, stderr-only on failure, zero writes under the demote env.
+    // unused_mut: without fix_verify the two are read-only (the row builds
+    // from their default/empty state) — the allow is unconditional because
+    // the write sites are cfg-gated, not the decls.
+    #[allow(unused_mut)]
+    let mut bp_reverted_by_rule: std::collections::BTreeMap<String, u32> =
+        std::collections::BTreeMap::new();
+    #[allow(unused_mut)]
+    let mut bp_verify: Option<riir_refine::blueprint::VerifyCapture> = None;
     // ── the clippy-fed oracle anchors (2026-09-13 retrieval-miss intake):
     // a real clippy JSON stream force-includes its diagnostic spans/rules
     // AHEAD of similarity ranking — the top-N gate must never eat a span
@@ -14486,6 +14571,19 @@ fn main() {
                 );
             }
         }
+        // Blueprint Phase A: hoist the verify verdicts for the run-end
+        // history row (the report binding dies with this block).
+        bp_verify = Some(riir_refine::blueprint::VerifyCapture {
+            ran: report.ran,
+            kept_files: report.kept_files,
+            kept_edits: report.kept_edits,
+            reverted: report.reverted.len(),
+            checks: report.n_checks,
+            skipped_checks: report.skipped_checks,
+        });
+        for r in &report.reverted {
+            *bp_reverted_by_rule.entry(r.rule_id.clone()).or_insert(0) += 1;
+        }
         // ── 037-T2: per-batch derived state (kept/reverted), computed ONCE
         // — consumed by the oracle pre-pass below + the review loop.
         let batch_state: Vec<(std::collections::HashSet<usize>, bool)> = verify_batches
@@ -15552,6 +15650,92 @@ fn main() {
              is a lost stat, not a lost commit); rebuild with: {}",
             riir_refine::build_stamp::rebuild_command()
         );
+    }
+
+    // ── Blueprint Phase A (proposal 024 / issue 178): the campaign history
+    // row. Always-on with demote-only RIIR_REFINE_META_BLUEPRINT=0; the
+    // append is the lane's sole side-effect (G1) — stdout is untouched
+    // (silent on success, stderr-only on failure). v1 appends `--fix`
+    // campaigns only (fix-compile runs carry a different outcome
+    // vocabulary — a later row mode, not a schema break: `mode` is a
+    // forward wire field).
+    if args.fix {
+        let bp_posture = riir_refine::blueprint::BlueprintPosture {
+            verify: args.verify,
+            verify_args: args.verify_args.clone(),
+            scoped_recheck: cfg!(feature = "scoped_recheck")
+                && std::env::var("RIIR_REFINE_SCOPED_RECHECK").map_or(true, |v| v != "0"),
+            repo_posture: args.repo_posture,
+            fmt: !args.no_fmt,
+            domain: args
+                .domain
+                .map_or_else(|| "auto".to_string(), |d| d.label().to_string()),
+            top_k: args.top_k,
+        };
+        let bp_declined: usize = posture_declined_by_lint
+            .values()
+            .chain(level_skipped_by_lint.values())
+            .sum();
+        let mut bp_strata: std::collections::BTreeMap<String, riir_refine::blueprint::RuleOutcome> =
+            std::collections::BTreeMap::new();
+        for (rule, n) in &fixstat_rules {
+            bp_strata.entry(rule.clone()).or_default().written = *n;
+        }
+        for (rule, n) in &bp_reverted_by_rule {
+            bp_strata.entry(rule.clone()).or_default().reverted = *n;
+        }
+        for (rule, n) in posture_declined_by_lint
+            .iter()
+            .chain(level_skipped_by_lint.iter())
+        {
+            bp_strata.entry(rule.clone()).or_default().declined =
+                u32::try_from(*n).unwrap_or(u32::MAX);
+        }
+        let bp_cap = bp_verify.unwrap_or_default();
+        let bp_now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs());
+        let bp_row = riir_refine::blueprint::BlueprintRow {
+            v: riir_refine::blueprint::ROW_VERSION,
+            ts: bp_now,
+            digest: riir_refine::blueprint::campaign_digest("fix", &bp_posture, &args.paths),
+            mode: "fix".to_string(),
+            arm: "incumbent".to_string(),
+            posture: bp_posture,
+            findings: riir_refine::blueprint::BlueprintFindings {
+                total: domain_tally.total(),
+                by_domain: domain_tally
+                    .per_domain
+                    .iter()
+                    .map(|(k, v)| ((*k).to_string(), *v))
+                    .collect(),
+                fixable_clippy: domain_tally.fixable_clippy,
+            },
+            outcomes: riir_refine::blueprint::BlueprintOutcomes {
+                files_written: n_fixed_files,
+                edits_written: fixstat_rules
+                    .values()
+                    .map(|&n| usize::try_from(n).unwrap_or(usize::MAX))
+                    .sum(),
+                verify_ran: bp_cap.ran,
+                kept_files: bp_cap.kept_files,
+                kept_edits: bp_cap.kept_edits,
+                reverted: bp_cap.reverted,
+                checks: bp_cap.checks,
+                skipped_checks: bp_cap.skipped_checks,
+                declined: bp_declined,
+            },
+            strata: riir_refine::blueprint::cap_strata(bp_strata),
+        };
+        let bp_root = resolve_heal_root(&args.paths);
+        if let Err(e) = riir_refine::blueprint::maybe_append_row(&bp_root, &bp_row) {
+            eprintln!(
+                "blueprint: could not append history row ({}): {e}",
+                bp_root
+                    .join(riir_refine::blueprint::HISTORY_RELPATH)
+                    .display()
+            );
+        }
     }
 
     // The redesigned KAT footer (2026-09-13): one glanceable block —
@@ -16799,6 +16983,10 @@ mod mode_flag_tests {
             (
                 "--active-set-cap clippy:40",
                 Box::new(|m| m.active_set_cap = Some("clippy:40".to_string())),
+            ),
+            (
+                "--blueprint-report",
+                Box::new(|m| m.blueprint_report = true),
             ),
             (
                 "--dump-trajectories",

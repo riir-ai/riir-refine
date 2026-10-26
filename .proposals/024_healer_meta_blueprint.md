@@ -95,12 +95,12 @@ The measurement reports exist (`--necessity-bench` prices a rule retirement; `--
 
 ## Phased rollout (sketch — a plan would expand this)
 
-### Phase A — instrument + report
-- [ ] A1 blueprint-history row schema + append at run end (always-on, demote-only env; G1's sole-declared-side-effect contract)
-- [ ] A2 `--blueprint-report`: strata outcomes + posture↔verdict audit split + lever splits
-- [ ] A3 necessity-bench → demotion-suggestion join (report-only) + the volume-close line (the ≤9-arm grammar and the 16-campaign / ≥6-per-arm thresholds)
-- [ ] A4 G1 tests: stdout+outcomes byte-identity with the lane active; env demoted → zero writes; negative tests
-- [ ] A5 volume-close liveness tests: the line fires on a synthetic history below both thresholds at week 8; it does NOT fire above them; and past week 8 the line (or its explicit not-tripped form) prints on EVERY report run — the cannot-silently-not-fire assertion
+### Phase A — instrument + report (LANDED 2026-10-27 — plan 299, issue 178)
+- [x] A1 blueprint-history row schema + append at run end (always-on, demote-only env; G1's sole-declared-side-effect contract)
+- [x] A2 `--blueprint-report`: strata outcomes + posture↔verdict audit split + lever splits
+- [x] A3 necessity-bench → demotion-suggestion join (report-only) + the volume-close line (the ≤9-arm grammar and the 16-campaign / ≥6-per-arm thresholds)
+- [x] A4 G1 tests: stdout+outcomes byte-identity with the lane active; env demoted → zero writes; negative tests
+- [x] A5 volume-close liveness tests: the line fires on a synthetic history below both thresholds at week 8; it does NOT fire above them; and past week 8 the line (or its explicit not-tripped form) prints on EVERY report run — the cannot-silently-not-fire assertion
 
 ### Phase B — shadow arms (gated on A's volume read)
 - [ ] B1 arm grammar over the three lever classes (ladder+clamp, seeded; ≤ 9 arms)
