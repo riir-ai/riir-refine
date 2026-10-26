@@ -188,6 +188,11 @@ fn scratch(tag: &str) -> PathBuf {
 fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
+        // HOME too: `login` adopts `$HOME/.ssh/id_ed25519` IN PLACE when one
+        // exists (riir-auth `account_key`) — the hermetic account must be a
+        // scratch key, never the box's SSH identity.
+        .env("HOME", dir)
+        .env("USERPROFILE", dir)
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
         // it too (the consent plane still rides the old var above).
@@ -206,6 +211,31 @@ fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Op
         String::from_utf8_lossy(&out.stderr)
     );
     (out.status.code(), text)
+}
+
+/// Whether this build admits a loopback service URL: unpinned, or pinned
+/// WITH `allow-local` (the wrangler-dev lane). A single-net pin without it —
+/// the shipped release posture — refuses every loopback URL at the strict
+/// seam, so the mock rows below have nothing to dial there.
+const LOOPBACK_ADMITTED: bool = cfg!(any(
+    not(any(feature = "net-mainnet", feature = "net-devnet")),
+    feature = "allow-local"
+));
+
+/// In a build that refuses loopback, assert THAT refusal (exit 2, named, the
+/// rebuild hint) and return `true` so the caller skips its mock-flow
+/// expectations — the Issue 159 conflict-posture precedent: the refusal is
+/// the correct outcome there, and it dials nothing.
+fn asserted_loopback_refusal(code: Option<i32>, text: &str) -> bool {
+    if LOOPBACK_ADMITTED {
+        return false;
+    }
+    assert_eq!(code, Some(2), "pinned, no allow-local. output:\n{text}");
+    assert!(
+        text.contains("service url refused: loopback") && text.contains("allow-local"),
+        "the pin must refuse the loopback URL by name. output:\n{text}"
+    );
+    true
 }
 
 fn login(dir: &Path) {
@@ -237,6 +267,10 @@ fn ack_of(dir: &Path) -> Option<KatBurnAck> {
 fn refill_without_an_account_refuses_before_dialing() {
     let dir = scratch("noacct");
     let (code, text) = heal(&dir, CLOSED_PORT, &[], &["--refill"]);
+    if asserted_loopback_refusal(code, &text) {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
     assert_eq!(code, Some(1), "the refill must refuse. output:\n{text}");
     assert!(
         text.contains("no account"),
@@ -287,6 +321,11 @@ fn refill_opens_settles_confirms_and_refreshes_the_gate_input() {
         &[("RIIR_REFINE_KAT_CRANK_TOKEN", token)],
         &["--refill"],
     );
+    if asserted_loopback_refusal(code, &text) {
+        assert!(mock.captured().is_empty(), "{:?}", mock.captured());
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
 
     assert_eq!(
         code,
@@ -380,6 +419,10 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     ack.save(&ack_path).expect("seed depleted ack");
 
     let (code, text) = heal(&dir, CLOSED_PORT, &[], &[]);
+    if asserted_loopback_refusal(code, &text) {
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
     assert!(
         !text.contains("cargo refine --refill"),
@@ -414,10 +457,11 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
         &[("RIIR_REFINE_KAT_CRANK_TOKEN", "ops-token")],
         &["--refill"],
     );
-    if cfg!(all(feature = "net-mainnet", feature = "net-devnet")) {
-        // Issue 159 posture (all-features carries BOTH pins): the hosted
-        // mainnet URL is refused at the strict seam (exit 2) before the
-        // posture gate is reached — still a refusal that dials nothing.
+    if cfg!(feature = "net-devnet") {
+        // Issue 159 posture (all-features carries BOTH pins), and a
+        // devnet-only pin: the hosted mainnet URL is refused at the strict
+        // seam (exit 2) before the posture gate is reached — still a
+        // refusal that dials nothing.
         assert_eq!(code, Some(2), "conflict posture. output:\n{text}");
         assert!(text.contains("service url refused"), "output:\n{text}");
         assert!(mock.captured().is_empty(), "{:?}", mock.captured());
