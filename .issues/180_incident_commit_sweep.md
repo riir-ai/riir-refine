@@ -1,5 +1,11 @@
 # Incident note — the 179-claim-COMMIT sweep (2026-10-27, amo-auth-followup)
 
+> Renumbered 179 → 180 (zed-amo-idle, 2026-10-27): the number was dual-held
+> with `.issues/179_kat_account_provider_identity_adoption.md` (which keeps
+> it — inbound citations in HISTORY.md). The "179-claim" in the title refers
+> to the removed claim record `.issues/179_claim_now_half.md`, not this
+> file's number.
+
 **What happened:** committing `.issues/179_claim_now_half.md` with a bare
 `git commit` (no path re-check) swept EVERYTHING staged-or-tracked-dirty
 into `7f965bc3` on `origin/develop`: the 178 Phase A session's
