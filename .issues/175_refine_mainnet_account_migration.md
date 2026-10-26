@@ -6,6 +6,16 @@ forked locally 2026-10-26). Owner-directed. Executes the refine slice of
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
 NOT a wetrun.
+**Progress 2026-10-26 (doctor sweep):** M3 preflight leg DONE — the
+account dir was missing under the post-uid-502 HOME (`~/.config/riir-auth/
+did not exist → every run read "not logged in"`); `cargo refine login`
+adopted the fresh rotation-target account `d54e39a8…742aaa` IN PLACE
+(machine key = account key), sync push ACCEPTED by mainnet (54 rows,
+free-tier 100-KAT grant claimed, corpus lease 2964→2970), TUNA 100
+(29 d). The 4090 leg is measured WORSE than expected — see the posture
+block below: its KAT plane is FAIL-CLOSED BROKEN today (record names a
+key path that now holds the new key), so the migration is not just ASAP,
+it is the unblock.
 
 ## The posture (2026-10-26)
 
@@ -23,10 +33,24 @@ NOT a wetrun.
 
 ## Tasks
 
-- [ ] **T-PREFLIGHT (runnable today, no wire needed):** drain local sync
-  state under the OLD account on both boxes (M3 + 4090) — `cargo refine
-  sync` + a burn-sync pass; re-check ack watermarks advance (200-accepted
-  contract). Freeze new-identity ops on the 4090.
+- [x] **T-PREFLIGHT (M3 leg — DONE 2026-10-26):** the account state never
+  moved with the 2026-10-25 uid-502 HOME switch (`/Users/kat/.config/
+  riir-auth/` absent → "not logged in", rows stacking offline). Fixed by
+  fresh login as `d54e39a8` (the census rotation target, adopted in
+  place) + sync green. The OLD home (`/Users/katopz`, permission-denied
+  to the new user) keeps the retired `c79c93b8` account state as history
+  — deliberately NOT copied (watermark-reset rule); the dao sweep covers it.
+- [ ] **T-PREFLIGHT (4090 leg):** measured 2026-10-26 —
+  `C:\Users\katop\.config\riir-auth\account.json` = `71615e8d…91303`,
+  `key_path = C:\Users\katop\.ssh\id_ed25519` — **which now holds the
+  NEW `katop@4090-20261026` key**; the old key (71615e8d's binding)
+  survives as `id_ed25519.retired-20261026` (+ the `riir-heal` legacy
+  copy). Signing as 71615e8d therefore MISMATCHES → the plane refuses
+  loud (no silent fork — inference from the record/key mismatch, not yet
+  a measured wire refusal). Remedy = the migration itself: dual-sign via
+  `KEY_OVERRIDE_ENV=C:\Users\katop\.ssh\id_ed25519.retired-20261026`.
+  The per-repo burn acks live in the repos' `.refine/` dirs (E:\git\riir-*),
+  not the home dir — drain whichever have offline rows once signing works.
 - [ ] **T-WIRE:** verify/land the dao chain this lane waits on: T3d
   (tally + snapshot verifier) → T4 (THIS repo's `account migrate` /
   `--object` / `--status` / `--census` CLI) → T6 (battery) → T7 (devnet
@@ -41,7 +65,9 @@ NOT a wetrun.
 - [ ] **T-POST:** census reads zero live old-key bindings; 4090 runs
   new-identity permanently; delete `id_ed25519.retired-20261026(.pub)`
   and the `riir-heal` legacy copy (tombstoned account = nothing to
-  recover) — closes the 2026-10-26 deferred cleanup.
+  recover) — closes the 2026-10-26 deferred cleanup. On the 4090 the
+  post state also repairs `account.json` (re-login under the new
+  identity so `key_path` names a key whose blake3 IS the account id).
 - [ ] **T-KEYS:** the API-key freshness sweep around refine + riir-chain
   (CF deploy/ops/prod tokens, GH PATs, HF tokens, wrangler OAuth,
   chain ops bearers) — inventory + steps in
