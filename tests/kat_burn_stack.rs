@@ -32,6 +32,9 @@
     feature = "clippy_lints"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -511,6 +514,7 @@ fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
         // it too (the consent plane still rides the old var above).
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", url)
@@ -533,6 +537,7 @@ fn login(dir: &Path) {
         Some(0),
         "hermetic login must succeed. output:\n{text}"
     );
+    hermetic_home::assert_minted(&text);
 }
 
 /// The settled cumulative burn, read off the charge ledger the run saved

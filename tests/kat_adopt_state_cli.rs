@@ -14,6 +14,9 @@
     feature = "kat_transport"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
@@ -40,6 +43,7 @@ fn heal(dir: &Path, url: &str, args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .current_dir(dir)
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", url)
@@ -69,6 +73,7 @@ fn login(dir: &Path) {
         Some(0),
         "hermetic login must succeed. output:\n{text}"
     );
+    hermetic_home::assert_minted(&text);
 }
 
 fn ack_body(contributed: bool, hex: Option<&str>) -> String {

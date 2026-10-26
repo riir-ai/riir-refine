@@ -35,6 +35,9 @@
     feature = "clippy_lints"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -188,11 +191,7 @@ fn scratch(tag: &str) -> PathBuf {
 fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Option<i32>, String) {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
-        // HOME too: `login` adopts `$HOME/.ssh/id_ed25519` IN PLACE when one
-        // exists (riir-auth `account_key`) — the hermetic account must be a
-        // scratch key, never the box's SSH identity.
-        .env("HOME", dir)
-        .env("USERPROFILE", dir)
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the account plane moved to the canonical dir — isolate
         // it too (the consent plane still rides the old var above).
@@ -245,6 +244,7 @@ fn login(dir: &Path) {
         Some(0),
         "hermetic login must succeed. output:\n{text}"
     );
+    hermetic_home::assert_minted(&text);
 }
 
 fn ack_path(dir: &Path) -> PathBuf {

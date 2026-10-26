@@ -33,6 +33,9 @@
     feature = "clippy_lints"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -57,6 +60,7 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         // Issue 081: the purge sweep targets the canonical account dir too —
         // isolate it (the consent plane still rides the old var above).
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         // 127.0.0.1:1 is closed: the lease pull fails fast instead of

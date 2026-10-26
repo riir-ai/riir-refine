@@ -32,6 +32,9 @@
     feature = "kat_service"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -64,6 +67,7 @@ fn run_heal(
         let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
         cmd.args(args)
             .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir.display().to_string())
+            .envs(hermetic_home::vars(dir.display().to_string()))
             .env("RIIR_AUTH_ACCOUNT_DIR", dir.display().to_string())
             // The join decision must not see an inherited service-url
             // value: any-source-is-configured would skip the prompt arm

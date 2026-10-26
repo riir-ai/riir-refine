@@ -28,6 +28,9 @@
     feature = "kat_service"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::process::Command;
 
 /// One invocation of the real binary. Nothing here reaches the network or
@@ -332,11 +335,7 @@ const TUNA_PINNED_URL: &str = riir_kat::kat_service_urls::MAINNET_SERVICE_URL;
 fn tuna(dir: &std::path::Path, args: &[&str]) -> (Option<i32>, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .current_dir(dir)
-        // HOME too: `login` adopts `$HOME/.ssh/id_ed25519` IN PLACE when one
-        // exists (riir-auth `account_key`), so without this the hermetic
-        // account would be the box's real SSH identity.
-        .env("HOME", dir)
-        .env("USERPROFILE", dir)
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
@@ -368,10 +367,7 @@ fn tuna_logged_in(tag: &str) -> std::path::PathBuf {
         Some(0),
         "hermetic login must succeed. output:\n{text}"
     );
-    assert!(
-        text.contains("account key generated") && !text.contains("adopted IN PLACE"),
-        "login must mint a scratch key, never adopt the box's SSH key. output:\n{text}"
-    );
+    hermetic_home::assert_minted(&text);
     dir
 }
 

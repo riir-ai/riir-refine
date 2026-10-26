@@ -28,6 +28,9 @@
     feature = "clippy_lints"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
@@ -51,6 +54,7 @@ fn refine(dir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_cargo-refine"))
         .current_dir(dir)
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", &acct)
+        .envs(hermetic_home::vars(&acct))
         .env("RIIR_AUTH_ACCOUNT_DIR", &acct)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:1")

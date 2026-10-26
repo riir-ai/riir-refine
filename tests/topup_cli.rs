@@ -27,6 +27,9 @@
     feature = "clippy_lints"
 ))]
 
+#[path = "support/hermetic_home.rs"]
+mod hermetic_home;
+
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -197,6 +200,7 @@ fn heal(dir: &Path, url: &str, extra_env: &[(&str, &str)], args: &[&str]) -> (Op
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_cargo-refine"));
     cmd.current_dir(dir)
         .env("RIIR_REFINE_KAT_ACCOUNT_DIR", dir)
+        .envs(hermetic_home::vars(dir))
         .env("RIIR_AUTH_ACCOUNT_DIR", dir)
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         .env("RIIR_REFINE_KAT_SERVICE_URL", url)
@@ -221,6 +225,7 @@ fn login(dir: &Path) {
         Some(0),
         "hermetic login must succeed. output:\n{text}"
     );
+    hermetic_home::assert_minted(&text);
 }
 
 fn hex_bytes(h: &str) -> Vec<u8> {
