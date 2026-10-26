@@ -1,8 +1,10 @@
 # Proposal 023 — refine mainnet account migration: the 4090 heal-network account onto the rotation lane (ASAP — the account is LIVE)
 
-**Status:** PROPOSED — owner-directed 2026-10-26 ("riir-refine is live on
+**Status:** WIRED — owner-directed 2026-10-26 ("riir-refine is live on
 mainnet, no issue to teardown current and do full migration yet, migration
-ASAP"). Executes the riir-refine slice of
+ASAP"); T-PREFLIGHT + the wire chain (T3d/T4/T5/T6) LANDED 2026-10-26
+(commits in issue 175's T-WIRE row); T7 (devnet rehearsal + the real
+rotation) is the next act, owner-adjacent. Executes the riir-refine slice of
 [riir-dao Proposal 001](../riir-dao/.proposals/001_kat_account_key_rotation_social_recovery.md)
 (ACCEPTED — the GitHub-attested key-rotation lane; T0–T3 LANDED, T3d
 claimed, T4 = this repo's CLI slice, T7 = rehearsal + real rotation).
@@ -118,10 +120,11 @@ tables so the owner act is copy-paste, then the verification is runnable.
 
 ## Honest caveats
 
-- The lane is only as done as the dao status line: T3d is CLAIMED, not
-  LANDED — this proposal cannot execute before the wire exists. The
-  preflight (step 1) is the only runnable piece today and it is also the
-  most time-critical (staleness grows daily).
+- ~~The lane is only as done as the dao status line: T3d is CLAIMED, not
+  LANDED~~ RESOLVED 2026-10-26: the wire chain (T3d tally + close, T4
+  this CLI, T5 dao artifact, T6 battery) is LANDED — the proposal can
+  execute; T7 (devnet rehearsal) is the remaining gate before the REAL
+  rotation.
 - `KEY_OVERRIDE_ENV` signing from the retired path must be proven in the
   T4 tests (a retired key file with 0600 perms is just a file — but the
   tests prove the CLI never needs it INSTALLED).

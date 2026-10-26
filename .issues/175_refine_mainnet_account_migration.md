@@ -5,10 +5,9 @@ forked locally 2026-10-26). Owner-directed.
 **Claimed:** zed-amo-175-preflight, 1793021421, expires 2026-10-28T13:30:21Z
 (scope: the T-PREFLIGHT 4090 leg only — dual-sign + drain under the OLD
 account; T-WIRE/T4 stays the dao lane's, no code changes in this lease)
-**Claimed:** zed-amo-175-twire, 1793024781, expires 2026-10-28T21:06:21Z
-(scope: T-WIRE code — T3d riir-dapps tally + close, T4 this repo's CLI,
-T6 E1–E11 battery; T5 riir-dao weight artifact rides a follow-up unit;
-T7 devnet rehearsal + the real rotation stay owner-adjacent, untouched) Executes the refine slice of
+**Lease closed:** zed-amo-175-twire (claimed 2026-10-26, epoch 1793024781) —
+T-WIRE landed same day across five repos (T3d/T4/T5/T6; the commits in
+the T-WIRE row); T7 + T-E2E/T-MIGRATE/T-POST/T-KEYS remain, owner-adjacent Executes the refine slice of
 [riir-dao Proposal 001](../riir-dao/.proposals/001_kat_account_key_rotation_social_recovery.md)
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
@@ -95,10 +94,20 @@ lands, no drain owed first.
   shows claimed-and-live). Consequence for T-MIGRATE: the account is
   CONTINUOUS (signed, synced, contributed) — file the rotation whenever
   the dao T4 CLI lands; no drain is owed first.
-- [ ] **T-WIRE:** verify/land the dao chain this lane waits on: T3d
-  (tally + snapshot verifier) → T4 (THIS repo's `account migrate` /
-  `--object` / `--status` / `--census` CLI) → T6 (battery) → T7 (devnet
-  rehearsal).
+- [x] **T-WIRE (LANDED 2026-10-26, zed-amo-175-twire):** the dao chain
+  this lane waits on is code-complete: T3d (riir-kat `8e25fa0` kernel +
+  riir-dapps `5d0a231` readers/close/lazy + `6091af5` route row) → T4
+  (THIS repo's `account migrate` CLI, `97c987d0`; riir-kat `f3a264b` +
+  riir-auth `5a24e73` carry the key loader + PoW measure) → T5 (riir-dao
+  `c7b9caa` weight artifact + quorum + snapshot audit) → T6 (the battery
+  assembled: wire cells E1–E11 across migrate_contract.rs 17 migrate
+  tests + the T3b/T3c store arms + the dao re-pins). **POLARITY FINDING
+  (product):** the T2 composer's "React with 👍 to APPROVE the migration"
+  inverted the ratified E3/E4 (katopz 👍 → cancelled; 👎 → released);
+  fixed in the composer + pinned in the kernel — the owner would have
+  flipped their own release vote at the window. **T7 (devnet rehearsal +
+  the real rotation) remains OPEN, owner-adjacent** — the only leg
+  between here and `T-MIGRATE`.
 - [ ] **T-E2E:** the Proposal-023 battery — E-1 no-objection release +
   tombstone refusal; E-2 objection-cancel + claimant-only cancel; E-3
   preflight refuses stale burn ack; E-4 watermark reset post-release; E-5
