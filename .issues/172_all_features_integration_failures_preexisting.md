@@ -27,7 +27,7 @@ the guard does not actually execute — T0 answers which.
 | load-sensitive BAR? | `latent_suggest_goat` | `g2_latency_bar_per_chunk` | 5010 µs/chunk ≥ 1000 µs (measured inside the full-suite run — re-run ALONE before adjudicating) |
 
 ## Tasks
-- [ ] T0 — does `scripts/ci_feature_guard.sh` actually EXECUTE `--all-features --tests`? If yes it is red today; if no, record that the all-features layer is compile-only.
+- [x] T0 — YES: `ci_feature_guard.sh` Layer 5c runs EVERY test target at `--all-features` (no allowlist; `#[ignore]` is the only exclusion). **The guard is RED today** on these 16 — this is a red CI gate, not a dormant configuration.
 - [ ] T1 — re-run each class at DEFAULT features (and the net-pin rows at a single pin): a failure that only exists at the overlap posture is a configuration artifact → give those targets the right `required-features`/`cfg(not(all(net-mainnet, net-devnet)))` guard rather than a pin change.
 - [ ] T2 — the drift rows: adjudicate each (fix the source, re-pick the fixture, or re-pin WITH a reason) — never a bare re-pin.
-- [ ] T3 — `latent_suggest_goat` G2: re-run alone in `--release`; if it passes alone, record it as PASSED-ALONE (load-sensitive bar), not a fix.
+- [x] T3 — re-run ALONE (`--release --all-features --test latent_suggest_goat`, quiet box, 2026-10-26): **still FAILS — 5016 µs/chunk vs 1000 µs bar** (480 chunks; G1/G4 + calibrations pass). Not load-sensitive: a ~5× latency regression (or a bar mis-calibrated for this config). Next: bisect the target's history for the first commit where G2 reds.
