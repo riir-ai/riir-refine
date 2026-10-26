@@ -69,7 +69,12 @@ if [ "$mode" = "gate" ]; then
     fi
 else
     echo "repo|verdict"
-    for d in /Users/kat/git/*/; do
+    # Derive the workspace root from THIS script's location (<repo>/scripts/) so
+    # the survey runs on any box layout (the pilot's /Users/kat literal broke on
+    # /Users/katopz). Siblings of the repo's parent dir = the git farm.
+    git_root=$(cd "$(dirname "$0")/.." && pwd)
+    farm=$(dirname "$git_root")
+    for d in "$farm"/*/; do
         [ -f "${d}Cargo.lock" ] || continue
         name=$(basename "$d")
         out=$(cd "$d" && "$deny_bin" check advisories 2>&1)
