@@ -21,6 +21,10 @@ per plan 053 T0.5 item 4). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
+**Claimed:** zed-amo-179-after, 1793061000, expires 2026-10-29T23:40:00Z
+
+Scope: item (4) `login --provider github` (device flow + local bind + the server bind route) + item (5) the `rebind_required` verbatim remedy line — the AFTER half, unblocked by dapps 140's landing (`1258eef`/`39d1343`). Items (1)–(3) + the closed item (6) untouched; 175's operational lease unaffected.
+
 **Lease closed:** zed-amo-179-residue (claimed 2026-10-27, epoch 1793055600) — the residue LANDED 2026-10-27 ~05:5x+07 (riir-kat `70c951c` + the tree reconciliation); item (6) fully landed, nothing further in this item.
 
 Context: [issue 175](175_refine_mainnet_account_migration.md)
