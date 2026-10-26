@@ -21,7 +21,9 @@ per plan 053 T0.5 item 4). Until a bind route exists, a client-side
 binding has nowhere to be honored — the adoption below is deliberately
 split into a NOW half (local-only, no wire) and an AFTER half (wire).
 
-**Claimed:** zed-amo-179-residue, 1793055600, expires 2026-10-29T22:40:00Z — scope: item (6) RESIDUE ONLY (the `kat_consent_client.rs` env affordance landing + the riir-kat stale-draft tree reconciliation); items (1)–(5) untouched; 175's operational lease unaffected (no migration ops here).
+**Claimed:** zed-amo-179-residue, 1793055600, expires 2026-10-29T22:40:00Z
+
+Scope: item (6) RESIDUE ONLY (the `kat_consent_client.rs` env affordance landing + the riir-kat stale-draft tree reconciliation); items (1)–(5) untouched; 175's operational lease unaffected (no migration ops here). (Lease-line reshaped 2026-10-26, riir-refine idle loop: trailing prose after the expiry token made the line unparseable — the riir-ai-1122 class; claim preserved verbatim.)
 
 Context: [issue 175](175_refine_mainnet_account_migration.md)
 (the live mainnet migration) is leased through 2026-10-28T13:30Z for its
