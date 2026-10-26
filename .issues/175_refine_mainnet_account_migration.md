@@ -4,7 +4,11 @@
 forked locally 2026-10-26). Owner-directed.
 **Claimed:** zed-amo-175-preflight, 1793021421, expires 2026-10-28T13:30:21Z
 (scope: the T-PREFLIGHT 4090 leg only — dual-sign + drain under the OLD
-account; T-WIRE/T4 stays the dao lane's, no code changes in this lease) Executes the refine slice of
+account; T-WIRE/T4 stays the dao lane's, no code changes in this lease)
+**Claimed:** zed-amo-175-twire, 1793024781, expires 2026-10-28T21:06:21Z
+(scope: T-WIRE code — T3d riir-dapps tally + close, T4 this repo's CLI,
+T6 E1–E11 battery; T5 riir-dao weight artifact rides a follow-up unit;
+T7 devnet rehearsal + the real rotation stay owner-adjacent, untouched) Executes the refine slice of
 [riir-dao Proposal 001](../riir-dao/.proposals/001_kat_account_key_rotation_social_recovery.md)
 (ACCEPTED, T0–T3 landed) per
 [Proposal 023](../.proposals/023_refine_mainnet_account_migration.md).
