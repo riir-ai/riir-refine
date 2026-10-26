@@ -231,6 +231,13 @@ pub struct FileParams<'a> {
     /// The objection repo base (the ack renders the URL too; this is the
     /// CLI's own compose).
     pub repo_base: &'a str,
+    /// The TOTP second factor (riir-dapps plan 053): the CURRENT
+    /// authenticator code, riding the `X-Kat-Totp` header on the filing
+    /// POST (the request route is in the worker's sensitive set — the OLD
+    /// account is the custody loser). `None` is correct for every
+    /// unenrolled account; an ARMED account files with `Some`, or the
+    /// worker refuses `403 totp_required` (surfaced verbatim).
+    pub totp_code: Option<&'a str>,
 }
 
 /// The filing outcome: the wire ack + the locally-known extras.
@@ -383,6 +390,7 @@ pub fn file_migration(
         service_url,
         riir_kat::kat_protocol_migrate::ROUTE_REQUEST,
         &serde_json::to_string(&body).map_err(|e| format!("migrate: body: {e}"))?,
+        params.totp_code,
     )?;
     let ack: MigrateAck = serde_json::from_str(&resp)
         .map_err(|e| format!("migrate: ack parse: {e} — body: {resp}"))?;
@@ -448,12 +456,22 @@ fn agent() -> ureq::Agent {
 }
 
 #[cfg(feature = "kat_transport")]
-fn post_json(base: &str, route: &str, body: &str) -> Result<String, String> {
+fn post_json(
+    base: &str,
+    route: &str,
+    body: &str,
+    totp_code: Option<&str>,
+) -> Result<String, String> {
     let url = format!("{}{}", base.trim_end_matches('/'), route);
-    match riir_kat::kat_ua::apply(agent().post(&url))
-        .set("Content-Type", "application/json")
-        .send_string(body)
-    {
+    let req = riir_kat::kat_ua::apply(agent().post(&url)).set("Content-Type", "application/json");
+    // The second factor rides the transport-level header (plan 053 —
+    // never part of a signed body; the replay-safety is the persisted
+    // step, so a leaked code is one-time).
+    let req = match totp_code {
+        Some(code) => req.set(riir_kat::kat_protocol_totp::TOTP_HEADER, code),
+        None => req,
+    };
+    match req.send_string(body) {
         Ok(r) => r.into_string().map_err(|e| format!("migrate: body: {e}")),
         Err(ureq::Error::Status(c, r)) => {
             let text = r.into_string().unwrap_or_default();
@@ -463,9 +481,16 @@ fn post_json(base: &str, route: &str, body: &str) -> Result<String, String> {
     }
 }
 
-/// The service-info read's ledger id (the sync-payload convention).
+/// The service-info read's ledger id (the sync-payload convention). `pub`
+/// for the totp runner's v2-first signing (the same read, one home).
+///
+/// # Errors
+///
+/// A transport fault or an unreadable info body as a human-readable
+/// string; an unreachable service reads as `Ok(None)` (the filing fails
+/// closed server-side when the posture demands v2).
 #[cfg(feature = "kat_transport")]
-fn fetch_ledger_id(service_url: &str) -> Result<Option<[u8; 32]>, String> {
+pub fn fetch_ledger_id(service_url: &str) -> Result<Option<[u8; 32]>, String> {
     let url = format!("{}/", service_url.trim_end_matches('/'));
     match riir_kat::kat_ua::apply(agent().get(&url)).call() {
         Ok(r) => {
@@ -556,6 +581,88 @@ fn state_name(state: MigrateRequestState) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `X-Kat-Totp` plumb (riir-dapps plan 053): `post_json` sets the
+    /// transport-level header exactly when the code is `Some`, never when
+    /// `None` — asserted over a real loopback POST. The shared `tempdir`
+    /// pattern keeps the port ephemeral; the listener answers one request
+    /// per call and echoes the header back in the body so the assertion
+    /// is data, not a race.
+    #[cfg(feature = "kat_transport")]
+    fn loopback_totp_echo(totp_code: Option<&str>) -> String {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let server = std::thread::spawn(move || {
+            use std::io::Write as _;
+            let (stream, _) = listener.accept().expect("accept");
+            let mut reader = std::io::BufReader::new(&stream);
+            let mut head = String::new();
+            let mut content_length = 0usize;
+            // Read the request head (through the blank line).
+            loop {
+                let mut line = String::new();
+                let n = std::io::BufRead::read_line(&mut reader, &mut line).expect("read");
+                if n == 0 || line == "\r\n" || line == "\n" {
+                    break;
+                }
+                if let Some(v) = line
+                    .to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .and_then(|v| v.trim().parse::<usize>().ok())
+                {
+                    content_length = v;
+                }
+                head.push_str(&line);
+            }
+            // DRAIN the body before responding — an unread body turns the
+            // stream drop into a RST that races the client's response read
+            // (the flaky first run). The body itself is "{}".
+            if content_length > 0 {
+                let mut sink = vec![0u8; content_length];
+                std::io::Read::read_exact(&mut reader, &mut sink).ok();
+            }
+            let header_present = head.to_ascii_lowercase().contains("x-kat-totp:");
+            let code_value = head
+                .lines()
+                .find_map(|l| {
+                    let low = l.to_ascii_lowercase();
+                    low.starts_with("x-kat-totp:")
+                        .then(|| l.split_once(':').map(|(_, v)| v.trim().to_owned()))
+                        .flatten()
+                })
+                .unwrap_or_default();
+            let body = format!(
+                "{{\"totp_header_present\":{header_present},\"totp_code\":\"{code_value}\"}}"
+            );
+            let mut stream = stream;
+            let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n";
+            stream.write_all(resp.as_bytes()).ok();
+            write!(stream, "Content-Length: {}\r\n\r\n", body.len()).ok();
+            stream.write_all(body.as_bytes()).ok();
+        });
+        let got = post_json(
+            &format!("http://{addr}"),
+            "/account/migrate/request",
+            "{}",
+            totp_code,
+        )
+        .expect("post");
+        server.join().expect("join");
+        got
+    }
+
+    #[cfg(feature = "kat_transport")]
+    #[test]
+    fn the_totp_header_rides_exactly_when_the_code_is_present() {
+        let with = loopback_totp_echo(Some("12345678"));
+        assert!(with.contains("\"totp_header_present\":true"), "{with}");
+        assert!(with.contains("\"totp_code\":\"12345678\""), "{with}");
+        let without = loopback_totp_echo(None);
+        assert!(
+            without.contains("\"totp_header_present\":false"),
+            "{without}"
+        );
+    }
 
     fn tempdir(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!(

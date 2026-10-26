@@ -126,8 +126,20 @@ enum KatCommand {
     /// composes the prefilled objection-issue URL, `--status <id>` reads
     /// the lifecycle, `--census` is the report-only continuity preflight
     /// (the E-3 filing gate). Needs `kat_service`; the filing + status
-    /// halves need `kat_transport`.
+    /// halves need `kat_transport`. `--totp <code>` carries the second
+    /// factor on the filing (plan 053 — an ARMED old account files with
+    /// the current code; unenrolled accounts omit it).
     Migrate,
+    /// riir-dapps plan 053 / riir-kat issue 007: `kat totp` — the
+    /// TOTP second factor's CLI (the client half of the route host's
+    /// `/auth/totp` state machine). Exactly one mode word per
+    /// invocation: `enroll [--code <c>]` (no code = mint — the one-time
+    /// otpauth URI; with code = confirm the pending factor; on an ARMED
+    /// account the CURRENT code first, then the replacement mints),
+    /// `disarm --code <c>` (a CURRENT-step code against the ARMED row).
+    ///   Needs `kat_transport` (the flows + the HTTP transport). The
+    /// mint arm's URI carries the SECRET — shown once, never persisted.
+    Totp,
     /// Proposal 011 T1.8 (Plan 066): `faucet --request` — the faucet
     /// preset. A separate command rather than a `pay` mode because it is a
     /// different *signing domain* (`kat:payreq:faucet:v1:`) with a
@@ -3450,6 +3462,7 @@ fn run_kat_migrate(
     old_key_path: Option<&str>,
     github_token: Option<String>,
     repo_base: Option<&str>,
+    totp_code: Option<&str>,
 ) {
     let modes = github.is_some() as u8
         + object.is_some() as u8
@@ -3528,7 +3541,7 @@ fn run_kat_migrate(
                             .duration_since(std::time::UNIX_EPOCH)
                             .ok()
                             .map(|d| d.as_secs())
-                            .map_or(false, |now| now >= close)
+                            .is_some_and(|now| now >= close)
                     })
                     .unwrap_or(false);
                 if pending_elapsed {
@@ -3566,6 +3579,7 @@ fn run_kat_migrate(
         old_key_path: std::path::Path::new(old_key),
         github_token: token,
         repo_base: &repo_base,
+        totp_code,
     };
     match riir_refine::kat_migrate_client::file_migration(&root, &params, &url) {
         Ok(outcome) => {
@@ -3605,6 +3619,136 @@ fn rmpk_state(state: riir_kat::kat_protocol_migrate::MigrateRequestState) -> &'s
         riir_kat::kat_protocol_migrate::MigrateRequestState::Dispute => "dispute",
         riir_kat::kat_protocol_migrate::MigrateRequestState::Released => "released",
         riir_kat::kat_protocol_migrate::MigrateRequestState::Cancelled => "cancelled",
+    }
+}
+
+/// riir-dapps plan 053 / riir-kat issue 007 (`kat totp`): the TOTP second
+/// factor's client half — the enroll state machine (mint → confirm) and
+/// the disarm, over the leaf's flows (`kat_totp_client`). The mint arm's
+/// otpauth URI carries the SECRET: rendered ONCE, never persisted (the
+/// URI-once law — a client that archives the secret has enrolled itself,
+/// not the user).
+#[cfg(feature = "kat_transport")]
+fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
+    use riir_kat::kat_totp_client::{TotpEnrollOutcome, TotpFailure};
+
+    // The parse arms validated mode ∈ {enroll, disarm} and disarm's --code
+    // already; this is the dispatch's own backstop.
+    let Some(mode) = mode else {
+        eprintln!("totp: no mode — `enroll [--code <c>]` | `disarm --code <c>`");
+        std::process::exit(2);
+    };
+    let url = command_service_url();
+    let account = match riir_refine::kat_account::KatAccount::load(
+        &riir_refine::kat_account::KatAccount::default_dir(),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("totp: no account — run `cargo refine login` first ({e})");
+            std::process::exit(1);
+        }
+    };
+    let key = match account.signing_key() {
+        Ok(k) => k,
+        Err(e) => {
+            eprintln!("totp: loading the signing key: {e}");
+            std::process::exit(1);
+        }
+    };
+    // The v2-first law: the ledger id from the service info (one home —
+    // the migrate client's read); an old server answers None and the
+    // legacy signature goes out.
+    let ledger_id = match riir_refine::kat_migrate_client::fetch_ledger_id(&url) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("totp: reading the service info: {e}");
+            std::process::exit(1);
+        }
+    };
+    let transport = riir_kat::kat_totp_client::HttpTotpTransport::new(&url, 15);
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+
+    let refused = |r: riir_kat::kat_totp_client::TotpRefused| {
+        match r.code() {
+            Some(riir_kat::kat_protocol_totp::CODE_TOTP_REQUIRED) => eprintln!(
+                "totp: the account is ARMED — the current factor verifies first. \
+                 For re-enroll: `cargo refine kat totp enroll --code <current>`; \
+                 for disarm: `cargo refine kat totp disarm --code <current>`"
+            ),
+            Some(riir_kat::kat_protocol_totp::CODE_TOTP_MISMATCH) => eprintln!(
+                "totp: the code did not verify — check the authenticator, wait for the \
+                 next step, retry with a FRESH code (mismatches count toward the \
+                 cooldown budget)"
+            ),
+            Some(riir_kat::kat_protocol_totp::CODE_TOTP_REPLAYED) => eprintln!(
+                "totp: that code's step was already consumed — wait for the next \
+                 step and press again"
+            ),
+            Some(riir_kat::kat_protocol_totp::CODE_RATE_LIMITED) => eprintln!(
+                "totp: too many failed verifies — the account is cooling down; wait \
+                 it out before retrying"
+            ),
+            Some(riir_kat::kat_protocol_totp::CODE_NOT_FOUND) => eprintln!(
+                "totp: nothing to confirm — enroll first (`cargo refine kat totp enroll`)"
+            ),
+            _ => match (r.status, &r.body) {
+                (Some(s), Some(b)) => eprintln!("totp: HTTP {s} — {}", b.error),
+                (Some(s), None) => eprintln!("totp: HTTP {s}"),
+                (None, Some(b)) => eprintln!("totp: {}", b.error),
+                (None, None) => eprintln!("totp: the service refused (no readable body)"),
+            },
+        }
+        std::process::exit(1);
+    };
+
+    match mode {
+        "enroll" => {
+            match riir_kat::kat_totp_client::enroll_flow(
+                &transport, &key, code, ledger_id, now_unix,
+            ) {
+                Ok(TotpEnrollOutcome::PendingUri { otpauth_uri }) => {
+                    println!("enroll: pending factor minted for this account.");
+                    println!();
+                    println!("  {otpauth_uri}");
+                    println!();
+                    println!(
+                        "Shown ONCE — never displayed again. Add it to your authenticator \
+                     NOW (it carries the factor's secret), then confirm:"
+                    );
+                    println!("  cargo refine kat totp enroll --code <current-code>");
+                }
+                Ok(TotpEnrollOutcome::Armed) => {
+                    println!("enroll: the factor is ARMED — sensitive routes now require the current code.");
+                }
+                Err(TotpFailure::Refused(r)) => refused(r),
+                Err(TotpFailure::Fault(e)) => {
+                    eprintln!("totp: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        "disarm" => {
+            // Validated at parse; the backstop keeps the type honest.
+            let Some(code) = code else {
+                eprintln!("totp disarm: a CURRENT-step code is required (--code <c>)");
+                std::process::exit(2);
+            };
+            match riir_kat::kat_totp_client::disarm_flow(
+                &transport, &key, code, ledger_id, now_unix,
+            ) {
+                Ok(riir_kat::kat_totp_client::TotpDisarmOutcome::Disarmed) => {
+                    println!("disarm: the factor is removed — the account is unenrolled.");
+                }
+                Err(TotpFailure::Refused(r)) => refused(r),
+                Err(TotpFailure::Fault(e)) => {
+                    eprintln!("totp: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        _ => unreachable!("the parse arms validated the mode word"),
     }
 }
 
@@ -5717,6 +5861,9 @@ USAGE:
     cargo refine topup [--pack N] [--qr|--no-qr] [--pick latest]  (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, --pick latest shows the newest without asking; kat_transport)
     cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)
     cargo refine kat                                  (the one-line KAT balance — the service ledger's authoritative number, host-labelled; kat_transport)
+    cargo refine kat totp enroll [--code <c>]          (riir-dapps plan 053: the TOTP second factor — no code mints a pending factor and shows the otpauth URI ONCE, --code confirms; on an ARMED account the CURRENT code first, then the replacement mints; kat_transport)
+    cargo refine kat totp disarm --code <c>            (remove the factor — a CURRENT-step code against the ARMED row; kat_transport)
+    cargo refine kat migrate … --totp <code>           (the second factor on the migration filing — required once the OLD account is TOTP-armed)
     cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)
     cargo refine get|send <amt> tuna [account-id]  (riir-dapps Proposal 009 §9: the marketing TUNA airdrop ADMIN hand — get targets your own account id, send takes a 32-hex account id (a base58 pubkey refuses with the hint); --gov <id> pins the Executed mandate, else unique-hash resolution via the mandates listing; --dry-run composes hash+row+body+caps with no network; secrets read from TUNA_CAN_OPENER_KEY + KAT_CRANK_TOKEN, refused pre-network, never echoed; admin feature, never in the release set)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
@@ -6570,6 +6717,15 @@ struct Args {
     migrate_github_token: Option<String>,
     /// The objection repo base (default: the dao repo).
     migrate_repo_base: Option<String>,
+    /// riir-dapps plan 053: `--totp <code>` on the migrate filing — the
+    /// second factor for an ARMED old account (the `X-Kat-Totp` header).
+    migrate_totp: Option<String>,
+    /// riir-kat issue 007: the `kat totp` mode word (`enroll` or
+    /// `disarm`) plus the authenticator code (`--code`, required for
+    /// disarm, optional for enroll — its presence selects
+    /// confirm/re-enroll over mint).
+    totp_mode: Option<String>,
+    totp_code: Option<String>,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -6815,6 +6971,9 @@ fn parse_args() -> Args {
         migrate_old_key: None,
         migrate_github_token: None,
         migrate_repo_base: None,
+        migrate_totp: None,
+        totp_mode: None,
+        totp_code: None,
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -7320,6 +7479,34 @@ fn parse_args() -> Args {
                 };
                 args.migrate_repo_base = Some(value);
             }
+            // riir-dapps plan 053: the filing's second factor (an ARMED
+            // old account files with the current code; unenrolled accounts
+            // omit it — the gate passes them by construction).
+            "--totp" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--totp requires the current authenticator code");
+                    usage();
+                };
+                if args.migrate_totp.is_some() {
+                    eprintln!("--totp given twice");
+                    usage();
+                }
+                args.migrate_totp = Some(value);
+            }
+            // riir-kat issue 007: the totp mode's authenticator code
+            // (required for disarm; enroll's presence selects
+            // confirm/re-enroll over the mint).
+            "--code" if args.command == Some(KatCommand::Totp) => {
+                let Some(value) = it.next() else {
+                    eprintln!("--code requires the current authenticator code");
+                    usage();
+                };
+                if args.totp_code.is_some() {
+                    eprintln!("--code given twice");
+                    usage();
+                }
+                args.totp_code = Some(value);
+            }
             "--qr" => args.pay_qr = true,
             // The topup QR's OFF switch (the --qr counterpart). A bare --qr
             // with the topup command is normalized to topup_qr post-parse
@@ -7492,7 +7679,7 @@ fn parse_args() -> Args {
             }
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake" | "unstake"
             | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet" | "wetrun"
-            | "config" | "replay" | "corpus-pr" | "get" | "send" | "migrate"
+            | "config" | "replay" | "corpus-pr" | "get" | "send" | "migrate" | "totp"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -7512,6 +7699,7 @@ fn parse_args() -> Args {
                     "get" => KatCommand::TunaGet,
                     "send" => KatCommand::TunaSend,
                     "migrate" => KatCommand::Migrate,
+                    "totp" => KatCommand::Totp,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
                     "config" => KatCommand::Config,
@@ -7531,6 +7719,35 @@ fn parse_args() -> Args {
             // bare `migrate` command word stays valid too.
             "migrate" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
                 args.command = Some(KatCommand::Migrate);
+            }
+            // riir-dapps plan 053 / riir-kat issue 007: the TOTP mode
+            // words — all three spellings, the migrate modifier's law:
+            // `cargo refine totp enroll|disarm …` (the bare command
+            // word), `cargo refine kat totp enroll|disarm …` and
+            // `cargo refine account totp enroll|disarm …` (the two-word
+            // shapes re-aim through the arm below).
+            "enroll" | "disarm"
+                if matches!(
+                    args.command,
+                    Some(KatCommand::Kat) | Some(KatCommand::Account) | Some(KatCommand::Totp)
+                ) =>
+            {
+                if args.paths.is_empty() && args.totp_mode.is_none() {
+                    args.totp_mode = Some(arg.to_string());
+                    args.command = Some(KatCommand::Totp);
+                } else {
+                    args.paths.push(PathBuf::from(arg));
+                }
+            }
+            // The `kat totp` / `account totp` two-word shapes — the
+            // migrate modifier's law (re-aims the command at Totp).
+            "totp"
+                if matches!(
+                    args.command,
+                    Some(KatCommand::Kat) | Some(KatCommand::Account)
+                ) && args.paths.is_empty() =>
+            {
+                args.command = Some(KatCommand::Totp);
             }
             // riir-kat Issue 003 T4: the `config adopt-state <net>` modifier —
             // the `set` precedent's shape, with its net word consumed inline.
@@ -7606,6 +7823,14 @@ fn parse_args() -> Args {
             {
                 args.tuna_target = Some(tuna_target_word.to_string());
             }
+            // riir-kat issue 007: the totp mode word — `enroll` (mint or,
+            // with --code, confirm/re-enroll) or `disarm` (--code
+            // required). The first positional under `kat totp`.
+            totp_mode_word
+                if args.command == Some(KatCommand::Totp) && args.totp_mode.is_none() =>
+            {
+                args.totp_mode = Some(totp_mode_word.to_string());
+            }
             path => args.paths.push(PathBuf::from(path)),
         }
     }
@@ -7666,6 +7891,44 @@ fn parse_args() -> Args {
     if args.command == Some(KatCommand::TunaGet) && args.tuna_target.is_some() {
         eprintln!("get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>`)");
         usage();
+    }
+    // riir-dapps plan 053 / riir-kat issue 007: the second-factor flags
+    // belong to their commands alone.
+    if args.migrate_totp.is_some() && args.command != Some(KatCommand::Migrate) {
+        eprintln!("--totp requires the `migrate` command");
+        usage();
+    }
+    if args.totp_code.is_some() && args.command != Some(KatCommand::Totp) {
+        eprintln!("--code requires the `totp` command");
+        usage();
+    }
+    if args.totp_mode.is_some() && args.command != Some(KatCommand::Totp) {
+        eprintln!("the enroll/disarm mode word requires the `totp` command");
+        usage();
+    }
+    if args.command == Some(KatCommand::Totp) {
+        match args.totp_mode.as_deref() {
+            Some("enroll") => {}
+            Some("disarm") if args.totp_code.is_some() => {}
+            Some("disarm") => {
+                eprintln!(
+                    "totp disarm: a CURRENT-step code is required — \
+                     cargo refine kat totp disarm --code <c>"
+                );
+                usage();
+            }
+            Some(other) => {
+                eprintln!("totp: unknown mode {other:?} — enroll (mint/confirm) | disarm (--code)");
+                usage();
+            }
+            None => {
+                eprintln!(
+                    "totp: exactly one mode is required — \
+                     `enroll [--code <c>]` (mint/confirm) | `disarm --code <c>`"
+                );
+                usage();
+            }
+        }
     }
     if args.command == Some(KatCommand::TunaSend) && args.tuna_target.is_none() {
         eprintln!(
@@ -11169,7 +11432,19 @@ fn main() {
                     args.migrate_old_key.as_deref(),
                     args.migrate_github_token.clone(),
                     args.migrate_repo_base.as_deref(),
+                    args.migrate_totp.as_deref(),
                 );
+            }
+            // riir-dapps plan 053 / riir-kat issue 007: the TOTP second
+            // factor's client half. The flows + the HTTP transport ride
+            // `kat_transport`; a kat_service-only build refuses by name.
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Totp => {
+                riir_refine::build_stamp::refuse("totp", &["kat_transport"]);
+            }
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Totp => {
+                run_kat_totp(args.totp_mode.as_deref(), args.totp_code.as_deref());
             }
             // The transport commands degrade honestly without kat_transport.
             #[cfg(not(feature = "kat_transport"))]
