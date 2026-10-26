@@ -1,6 +1,6 @@
 # Plan 299 — Meta-Blueprint Phase A: instrument + report (proposal 024 / issue 178)
 
-**Status:** In progress — claimed 2026-10-27 (zed-amo-178-phaseA, lease `804a75fe`); scope = Phase A ONLY (A1–A5). Phase B/C are gated on this phase's volume read + owner go — NOT this plan.
+**Status:** DONE — Phase A landed 2026-10-27 inside `7f965bc3` (the shared-index sweep; incident note `34f4df4a`, verdict leave-as-is); maintained binary rebuilt at `699b927bf284` == HEAD, `release set: complete`; scope = Phase A ONLY (A1–A5). Phase B/C are gated on this phase's volume read + owner go — NOT this plan.
 
 Implements [Proposal 024](../.proposals/024_healer_meta_blueprint.md) Phase A: the always-on-with-demote
 blueprint-history instrument + `--blueprint-report`. No actuator change; the history row append is the
@@ -41,11 +41,11 @@ sole declared side-effect (G1). No feature gate — plain fs + serde_json + blak
 - [x] A5 volume-close liveness tests: synthetic history below both thresholds at week 8 ⇒ CLOSE fires; sufficient volume ⇒ OPEN form; before the window ⇒ no line; zero rows ⇒ no line; past-window renders ALWAYS carry a `META-VOLUME` line
 - [x] E2E (beyond A4/A5 units): scratch-crate campaign — missing history exit 1; a real `--fix` campaign appends exactly one bounded row (posture/findings/strata correct); demoted run appends nothing; a `--verify` campaign records `verify_ran=true checks=2 kept=1`; the necessity join renders the DECORATIVE suggestion, excludes LOAD-BEARING, counts the malformed line loud
 - [x] Docs: AGENTS.md CLI-contract bullet + proposal 024 Phase A checkboxes + issue 178 lease closed
-- [ ] Rebuild the maintained binary at the release feature set + `cargo refine --version` build hash == HEAD (the Issue-153 law — healer source touched)
-- [x] Commit + push; reshape the issue-178 lease line to non-claim form; mark plan tasks complete in the same commit
+- [x] Rebuild the maintained binary at the release feature set + `cargo refine --version` build hash == HEAD (the Issue-153 law — healer source touched; verified `699b927bf284` after the docs-only `34f4df4a`+`699b927b` follow-ups — one rebuild landed mid-move, the second pinned)
+- [x] Commit + push; reshape the issue-178 lease line to non-claim form; mark plan tasks complete in the same commit (the sweep note: the landing rode the sibling's `7f965bc3` — my staged set was complete in the index when their claim commit consumed it; content verified byte-intact against my staged blob + the `34f4df4a` incident record)
 
 ## Notes
 
-- Sibling-collision handling: the riir-auth 175/179 lane landed heal.rs hunks (the `run_kat_account` provider-binding block + the kat_info module) mid-flight; the landing commits **this session's blob only** (HEAD + blueprint hunks, the `git hash-object`/`update-index` path) — the sibling's working-tree hunks stay unstaged and untouched.
+- Sibling-collision handling: the riir-auth 175/179 lane landed heal.rs hunks (the `run_kat_account` provider-binding block + the kat_info module) mid-flight; this session committed **its own blob only** (HEAD + blueprint hunks, the `git hash-object`/`update-index` path) — then the sibling's claim commit (`7f965bc3`) consumed the shared index carrying this session's complete staged set. The incident record (`34f4df4a`) adjudicated leave-as-is; every landed byte was verified against this session's staged blob (188 heal.rs lines + the 4 new files + the 3 doc edits + the 178 removal). ⚠ The inverse casualty: the sibling's OWN 5-line provider-binding call-site block (unstaged in the working tree at sweep time) did NOT land — `95bc8c18`'s message claims the render call but the diff carries only the renderer + tests; the call sites are the sibling lane's to re-land (this session never staged them).
 - Bin-test posture note: the bin test harness needs `kat_transport` in the feature set (the tuna `E0425`s at a non-release posture are pre-existing, not this lane's).
 - 15 blueprint lib tests at default + 16 at `score_bench` (the wire-mirror drift guard); full lib suite 2749 passed / 0 failed; `cargo clippy --all-targets -- -D warnings` green; the standalone-mode matrix pins `--blueprint-report`.
