@@ -319,10 +319,9 @@ mod tests {
              None\n}\n";
         let f = findings(src);
         assert_eq!(f.len(), 2, "both surfaces fire: {f:?}");
-        assert!(
-            f.iter()
-                .any(|x| x.surface == "signature_validation_disabled")
-        );
+        assert!(f
+            .iter()
+            .any(|x| x.surface == "signature_validation_disabled"));
         assert!(f.iter().any(|x| x.surface == "expiry_validation_disabled"));
         assert_eq!(f[0].advice, super::ADVICE);
     }

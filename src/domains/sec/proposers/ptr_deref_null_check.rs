@@ -29,7 +29,7 @@
 use syn::spanned::Spanned;
 use syn::{Block, File, Signature, Type};
 
-use super::{SourceEdit, line_indent};
+use super::{line_indent, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
