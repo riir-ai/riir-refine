@@ -162,6 +162,15 @@ jobs:
         shell: bash
         run: rustup target add ${{ matrix.target }}
 
+      # Plan 298 T2.5: embed the resolved dependency tree in the shipped
+      # binaries (the AUDITABLE_VERSION_INFO data section) so `cargo audit
+      # bin`-class scanners can attribute vulnerable deps in the DIST
+      # artifacts without the source tree. Prebuilt via install-action.
+      - name: Install cargo-auditable
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-auditable
+
       - name: Set up the musl cross toolchain (musl rows only)
         if: matrix.cross
         uses: taiki-e/setup-cross-toolchain-action@v1
@@ -206,11 +215,13 @@ jobs:
       # Dev-time builds stay on plain --release (drafter speed); the shipped
       # artifact optimizes for download size. panic=abort is safe here: the
       # only catch_unwind strings in the tree are sec-domain proposer TEXT.
+      # `cargo auditable build` (Plan 298 T2.5) is a pass-through wrapper —
+      # same flags, plus the dependency info embedded for scanners.
       - name: Build
         shell: bash
         run: |
           set -euo pipefail
-          cargo build --profile dist --target ${{ matrix.target }} \
+          cargo auditable build --profile dist --target ${{ matrix.target }} \
             --features latent_retrieval,kat_service,kat_transport,fix_verify,update_check --bin cargo-refine
 
       - uses: actions/upload-artifact@v4
