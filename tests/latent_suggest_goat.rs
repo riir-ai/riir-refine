@@ -226,17 +226,48 @@ fn g1_top1_precision_at_least_80_percent_per_domain() {
 /// i7-13700K, release) measured 1458–1493 µs/chunk across three runs at
 /// pre-batch HEAD — ~2.4% spread, same modelless path — so the other-host
 /// arm holds a 3× ceiling: ~2× headroom above the measured band keeps box
-/// noise from flipping the gate while a 2× regression still fails it. The
-/// reading always prints beside its bar so every run is self-describing.
+/// noise from flipping the gate while a 2× regression still fails it.
+///
+/// Posture-aware (Issue 173 T3): `suggest_span` retrieves from EVERY
+/// enabled domain's index, so per-chunk cost scales with the fan-out. The
+/// target's own feature set builds the crate's DEFAULT domains — clippy,
+/// perf, docker, dist — and that posture keeps the base bar bit-for-bit
+/// (the posture `ci_feature_guard`'s per-target lanes run). Each enabled
+/// domain OUTSIDE it (an
+/// `--all-features` build adds kernel_opt, sec, shader_perf) adds its own
+/// budget. Not a uniform per-domain bar: the opt-in domains are not
+/// average — measured on amo (M5 Ultra, AC, release, after riir-neuron-db
+/// `12b1af4`) 673/681 µs at the 4 default domains vs 1618/1634 µs at all 7,
+/// ≈ 320 µs per extra domain against ≈ 170 per default one. 500 µs per
+/// extra domain on macOS gives all-features a 2500 µs bar — the same ~1.5×
+/// headroom the default posture has under its 1000 — and the other-host
+/// arm keeps its 3× ratio. The reading always prints beside its bar and
+/// the domain counts, so every run is self-describing.
 #[cfg(target_os = "macos")]
 const G2_BAR_US: f64 = 1000.0;
 #[cfg(not(target_os = "macos"))]
 const G2_BAR_US: f64 = 3000.0;
+#[cfg(target_os = "macos")]
+const G2_EXTRA_DOMAIN_US: f64 = 500.0;
+#[cfg(not(target_os = "macos"))]
+const G2_EXTRA_DOMAIN_US: f64 = 1500.0;
+/// The domain set the base bar was calibrated over (the crate defaults).
+const G2_CALIBRATED_DOMAINS: [DomainId; 4] = [
+    DomainId::Clippy,
+    DomainId::Perf,
+    DomainId::Docker,
+    DomainId::Dist,
+];
 
 #[test]
 #[cfg_attr(debug_assertions, ignore = "debug timings are meaningless")]
 fn g2_latency_bar_per_chunk() {
     let mut m = LatentMatcher::from_enabled_domains().expect("build");
+    let n_extra = DomainId::ALL
+        .iter()
+        .filter(|&&d| m.has_domain(d) && !G2_CALIBRATED_DOMAINS.contains(&d))
+        .count();
+    let bar_us = G2_BAR_US + G2_EXTRA_DOMAIN_US * n_extra as f64;
     // A realistic multi-line chunk (the fixture snippets, repeated as whole
     // "files" to amortize noise).
     let corpus: Vec<&str> = PERF_FIXTURE
@@ -255,18 +286,22 @@ fn g2_latency_bar_per_chunk() {
     let mut n_queries = 0usize;
     for _ in 0..rounds {
         for snippet in &corpus {
-            let _ = m.suggest_span(snippet, 3);
+            std::hint::black_box(m.suggest_span(std::hint::black_box(snippet), 3));
             n_queries += 1;
         }
     }
     let per_chunk_us = t0.elapsed().as_micros() as f64 / n_queries as f64;
     eprintln!(
-        "G2 latency: {per_chunk_us:.0}µs per chunk ({n_queries} chunks; bar {G2_BAR_US:.0}µs on {})",
+        "G2 latency: {per_chunk_us:.0}µs per chunk ({n_queries} chunks; bar {bar_us:.0}µs = {G2_BAR_US:.0} + {G2_EXTRA_DOMAIN_US:.0} × {n_extra} extra domains on {})",
         std::env::consts::OS
     );
     assert!(
-        per_chunk_us < G2_BAR_US,
-        "G2 FAIL: {per_chunk_us:.0}µs/chunk ≥ {G2_BAR_US:.0}µs bar on {}",
+        per_chunk_us > 0.0,
+        "G2: measured 0µs — the timed loop was optimised away"
+    );
+    assert!(
+        per_chunk_us < bar_us,
+        "G2 FAIL: {per_chunk_us:.0}µs/chunk ≥ {bar_us:.0}µs bar ({n_extra} extra domains) on {}",
         std::env::consts::OS
     );
 }
@@ -387,7 +422,11 @@ fn threshold_calibration_distribution() {
         "── summary: positives [{pos_min:.3} ..= {pos_max:.3}] (n={}), negatives [{neg_min:.3} ..= {neg_max:.3}] (n={}), separation: {}",
         pos_scores.len(),
         neg_scores.len(),
-        if neg_max < pos_min { "CLEAN" } else { "OVERLAP" }
+        if neg_max < pos_min {
+            "CLEAN"
+        } else {
+            "OVERLAP"
+        }
     );
 }
 
