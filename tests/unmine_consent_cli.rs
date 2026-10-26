@@ -61,7 +61,7 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         .env("RIIR_REFINE_TRAJ_ROOT", dir)
         // 127.0.0.1:1 is closed: the lease pull fails fast instead of
         // reaching the real service from a test.
-        .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:1")
+        .env("RIIR_REFINE_KAT_SERVICE_URL", DEAD_URL)
         .args(args)
         .output()
         .expect("spawn cargo-refine");
@@ -71,6 +71,17 @@ fn heal(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     (out.status.code(), text)
+}
+
+/// The dead service URL every child is pointed at — also the key of the
+/// per-net state partition (riir-kat Issue 003 T1) the binary resolves.
+const DEAD_URL: &str = "http://127.0.0.1:1";
+
+/// `<dir>/.refine/net/<key>/` — where `sync` queues outbox batches and
+/// writes its watermark for [`DEAD_URL`], resolved through the SAME helper
+/// the binary uses, so a planted file sits exactly where `--unmine` looks.
+fn net_dir(dir: &Path) -> PathBuf {
+    riir_refine::kat_state_stamp::net_state_dir_for_url(dir, DEAD_URL)
 }
 
 fn consent_file(dir: &Path) -> PathBuf {
@@ -110,9 +121,11 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
         "--unmine must say healing is unchanged. output:\n{text}"
     );
     // The queued batches: named, and declared the user's to delete.
+    let outbox = net_dir(&dir).join("outbox");
     assert!(
-        text.contains(".refine/outbox"),
-        "--unmine must name the outbox path. output:\n{text}"
+        text.contains(&outbox.display().to_string()),
+        "--unmine must name the per-net outbox path {}. output:\n{text}",
+        outbox.display()
     );
     assert!(
         text.contains("cargo refine --mine"),
@@ -125,7 +138,7 @@ fn unmine_records_the_opt_out_and_names_what_still_works() {
 #[test]
 fn unmine_deletes_no_queued_batch() {
     let dir = scratch("nodelete");
-    let outbox = dir.join(".refine").join("outbox");
+    let outbox = net_dir(&dir).join("outbox");
     std::fs::create_dir_all(&outbox).expect("outbox");
     let queued = outbox.join("deadbeefcafe.ndjson");
     std::fs::write(&queued, "{\"row\":1}\n").expect("plant a queued batch");
@@ -148,15 +161,14 @@ fn unmine_deletes_no_queued_batch() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// `--unmine` clears the REAL sync watermark — the file `sync` writes
-/// (`SyncWatermark::FILE_NAME`). It used to delete a never-written
+/// `--unmine` clears the REAL sync watermark — the PER-NET file `sync`
+/// writes (`SyncWatermark::net_path`, riir-kat Issue 003 T1). It used to delete a never-written
 /// `kat_sync_watermark.json`, so the watermark survived every opt-out.
 #[test]
 fn unmine_clears_the_sync_watermark_sync_writes() {
     let dir = scratch("watermark");
-    let refine = dir.join(".refine");
-    std::fs::create_dir_all(&refine).expect(".refine");
-    let wm = refine.join(riir_refine::kat_pending_estimator::SyncWatermark::FILE_NAME);
+    let wm = riir_refine::kat_pending_estimator::SyncWatermark::net_path(&dir, DEAD_URL);
+    std::fs::create_dir_all(wm.parent().expect("net dir")).expect("net dir");
     std::fs::write(&wm, "{}").expect("plant a watermark");
 
     let (code, text) = heal(&dir, &["--unmine"]);

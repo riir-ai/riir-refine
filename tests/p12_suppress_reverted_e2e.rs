@@ -61,11 +61,30 @@ fn write_lib(dir: &Path, text: &str) {
     std::fs::write(dir.join("src").join("lib.rs"), text).unwrap();
 }
 
-fn run_heal(bin: &str, dir: &PathBuf) -> String {
-    let out = Command::new(bin)
-        .args(["--fix", "--write", "--no-fmt"])
+/// One hermetic `--fix --write` invocation; `suppress` is the
+/// `RIIR_REFINE_SUPPRESS_REVERTED` value ("" = default ON, "0" = the kill
+/// switch). Every run shares this builder so the env cannot drift per run.
+fn heal_cmd(bin: &str, dir: &Path, suppress: &str) -> Command {
+    let mut cmd = Command::new(bin);
+    cmd.args(["--fix", "--write", "--no-fmt"])
         .arg(dir)
-        .env("RIIR_REFINE_SUPPRESS_REVERTED", "") // default: suppression ON
+        .env("RIIR_REFINE_SUPPRESS_REVERTED", suppress)
+        // Hermetic: no lease pull, meter, soft gate, auto-oracle or update
+        // check — the suite convention. Without these the run dials the
+        // live service (and under the all-features both-pins posture the
+        // strict seam refuses that dial with exit 2 — issue 172). The
+        // trajectory memory p12 reads is LOCAL and stays on.
+        .env("RIIR_REFINE_KAT_LEASE", "0")
+        .env("RIIR_REFINE_KAT_METER", "0")
+        .env("RIIR_REFINE_KAT_GATE", "0")
+        .env("RIIR_REFINE_AUTO_ORACLE", "0")
+        .env("RIIR_REFINE_UPDATE_CHECK", "0")
+        .env("RIIR_REFINE_KAT_SERVICE_URL", "http://127.0.0.1:9/");
+    cmd
+}
+
+fn run_heal(bin: &str, dir: &Path) -> String {
+    let out = heal_cmd(bin, dir, "") // default: suppression ON
         .output()
         .expect("spawn cargo-refine");
     format!(
@@ -120,10 +139,7 @@ fn p12_suppresses_a_twice_reverted_pair_across_runs() {
     );
 
     // The escape hatch: RIIR_REFINE_SUPPRESS_REVERTED=0 forces the retry.
-    let out3 = Command::new(bin)
-        .args(["--fix", "--write", "--no-fmt"])
-        .arg(&dir)
-        .env("RIIR_REFINE_SUPPRESS_REVERTED", "0")
+    let out3 = heal_cmd(bin, &dir, "0")
         .output()
         .expect("spawn cargo-refine (kill-switch run)");
     let retried = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();

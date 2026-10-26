@@ -23,8 +23,8 @@
 //!   a conversion;
 //! - string + raw-string + char literals — the mined rule corpora embed
 //!   whole source files inside strings (`entries_gpu_37`'s `ref_shape`);
-//! - `#[cfg(test)] mod … { … }` bodies — test fixtures are µ/token values
-//!   by construction, not unit decisions.
+//! - `#[cfg(test)]` / `#[cfg(all(test, …))]` `mod … { … }` bodies — test
+//!   fixtures are µ/token values by construction, not unit decisions.
 //!
 //! Planted-fixture arms below prove the scanner FIRES (the bare, packed,
 //! float-exponent and suffixed forms) and stays quiet on the exempt
@@ -71,6 +71,25 @@ fn is_bare_million(token: &str) -> bool {
 /// Strip comments, string/char literals, and `#[cfg(test)]` module bodies
 /// from `src`, preserving line structure (skipped regions become spaces so
 /// line numbers survive and tokens cannot join across a stripped span).
+/// Length (in chars) of a test-only cfg attribute at the head of `rest`:
+/// `#[cfg(test)]`, or `#[cfg(all(test, …))]` where `test` is a REQUIRED
+/// conjunct (a feature-gated test module — `update_check.rs` carries one).
+/// `any(test, …)` / `not(test)` are NOT test-only and stay scanned.
+fn test_cfg_attr_len(rest: &[char]) -> Option<usize> {
+    const BARE: &str = "#[cfg(test)]";
+    const ALL: &str = "#[cfg(all(test";
+    let head: String = rest.iter().take(BARE.len().max(ALL.len()) + 1).collect();
+    if head.starts_with(BARE) {
+        return Some(BARE.chars().count());
+    }
+    let after = head.strip_prefix(ALL)?;
+    if !after.starts_with([',', ')']) {
+        return None; // `all(tests_x, …)` — a different identifier
+    }
+    // Close at the attribute's own `]` (cfg predicates carry no brackets).
+    rest.iter().position(|c| *c == ']').map(|p| p + 1)
+}
+
 fn strip_non_code(src: &str) -> String {
     let bytes: Vec<char> = src.chars().collect();
     let mut out = String::with_capacity(src.len());
@@ -91,9 +110,8 @@ fn strip_non_code(src: &str) -> String {
             suppression_end = None;
         }
 
-        let rest: String = bytes[i..].iter().take(400).collect();
-        if rest.starts_with("#[cfg(test)]") {
-            let mut j = i + "#[cfg(test)]".len();
+        if let Some(attr_len) = test_cfg_attr_len(&bytes[i..]) {
+            let mut j = i + attr_len;
             loop {
                 while j < bytes.len() && bytes[j].is_whitespace() {
                     j += 1;
@@ -316,6 +334,10 @@ const ALLOWED_PATHS: &[(&str, &str)] = &[
         "ms → ns duration parsing (hotpath profile units) — a TIME, not money",
     ),
     (
+        "src/validators/interp.rs",
+        "DEFAULT_FUEL = a 1M interpreter STEP budget — a count of steps, not money",
+    ),
+    (
         "src/domains/kernel_opt/corpus/tests.rs",
         "kernel-corpus probe fixtures (f32 magnitudes incl. 1e6), not money",
     ),
@@ -516,6 +538,31 @@ fn attributes_may_sit_between_cfg_test_and_the_mod() {
     let findings = scan_text(&strip_non_code(src));
     assert_eq!(findings.len(), 1, "{findings:?}");
     assert_eq!(findings[0].line, 6);
+}
+
+#[test]
+fn feature_gated_test_modules_are_elided_but_any_and_not_are_scanned() {
+    // `all(test, …)`: test is a REQUIRED conjunct — test-only, elided.
+    let gated = concat!(
+        "#[cfg(all(test, feature = \"update_check\"))]\n",
+        "mod tests {\n",
+        "    const AT: u64 = 1_000_000;\n",
+        "}\n",
+        "fn live() -> u64 { 1_000_000 }\n",
+    );
+    let findings = scan_text(&strip_non_code(gated));
+    assert_eq!(findings.len(), 1, "{findings:?}");
+    assert_eq!(findings[0].line, 5);
+    // `any(test, …)`, `not(test)` and a look-alike ident compile into
+    // non-test builds — every body stays scanned.
+    for attr in [
+        "#[cfg(any(test, feature = \"x\"))]",
+        "#[cfg(not(test))]",
+        "#[cfg(all(tests_x, feature = \"x\"))]",
+    ] {
+        let src = format!("{attr}\nmod m {{\n    const N: u64 = 1_000_000;\n}}\n");
+        assert_eq!(scan_text(&strip_non_code(&src)).len(), 1, "{attr}");
+    }
 }
 
 #[test]

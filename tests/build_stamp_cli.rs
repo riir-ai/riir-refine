@@ -270,6 +270,25 @@ fn tuna_airdrop_verbs_refuse_when_admin_is_compiled_out() {
     }
 }
 
+/// Issue 159 posture for the tuna verbs: an all-features build carries BOTH
+/// net pins, the allowed hosted set is empty, and the binary refuses the
+/// service URL (exit 2) before any verb-local check runs — that refusal is
+/// the correct outcome there, not a failure. Returns `true` when this build
+/// IS the conflict posture and the refusal was asserted, so the caller
+/// skips its single-net expectations.
+#[cfg(feature = "admin")]
+fn asserted_net_conflict_refusal(code: Option<i32>, text: &str) -> bool {
+    if !cfg!(all(feature = "net-mainnet", feature = "net-devnet")) {
+        return false;
+    }
+    assert_eq!(code, Some(2), "conflict posture: output:\n{text}");
+    assert!(
+        text.contains("service url refused") && text.contains("net-mainnet+net-devnet"),
+        "conflict posture must name the overlap refusal. output:\n{text}"
+    );
+    true
+}
+
 #[cfg(feature = "admin")]
 #[test]
 fn tuna_airdrop_missing_key_refuses_pre_network() {
@@ -288,6 +307,9 @@ fn tuna_airdrop_missing_key_refuses_pre_network() {
             String::from_utf8_lossy(&out.stdout),
             String::from_utf8_lossy(&out.stderr)
         );
+        if asserted_net_conflict_refusal(out.status.code(), &text) {
+            continue;
+        }
         assert_eq!(out.status.code(), Some(1), "output:\n{text}");
         assert!(
             text.contains("TUNA_CAN_OPENER_KEY"),
@@ -311,6 +333,9 @@ fn tuna_airdrop_below_floor_refuses_locally_at_exit_2() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
+    if asserted_net_conflict_refusal(out.status.code(), &text) {
+        return;
+    }
     assert_eq!(out.status.code(), Some(2), "output:\n{text}");
     assert!(text.contains("free-tier floor"), "output:\n{text}");
 }
@@ -332,6 +357,9 @@ fn tuna_airdrop_dry_run_is_fully_local_and_shows_the_hash() {
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr)
     );
+    if asserted_net_conflict_refusal(out.status.code(), &text) {
+        return;
+    }
     assert!(
         text.contains("DRY RUN") || text.contains("no local account"),
         "either the local preview or the honest account refusal — output:\n{text}"

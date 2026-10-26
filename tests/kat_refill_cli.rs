@@ -414,6 +414,16 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
         &[("RIIR_REFINE_KAT_CRANK_TOKEN", "ops-token")],
         &["--refill"],
     );
+    if cfg!(all(feature = "net-mainnet", feature = "net-devnet")) {
+        // Issue 159 posture (all-features carries BOTH pins): the hosted
+        // mainnet URL is refused at the strict seam (exit 2) before the
+        // posture gate is reached — still a refusal that dials nothing.
+        assert_eq!(code, Some(2), "conflict posture. output:\n{text}");
+        assert!(text.contains("service url refused"), "output:\n{text}");
+        assert!(mock.captured().is_empty(), "{:?}", mock.captured());
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
     assert_eq!(code, Some(1), "mainnet refill must refuse. output:\n{text}");
     assert!(text.contains("REFUSED"), "loudly. output:\n{text}");
     assert!(text.contains("MAINNET"), "by posture. output:\n{text}");

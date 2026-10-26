@@ -1202,7 +1202,7 @@ fn run_unmine(purge_server: bool) {
     //    not auditable; they are inert while opted out and the user
     //    decides).
     // The watermark goes (the pending-unsynced estimator reads it) — the
-    // PER-NET one first (T1), then the pre-T1 flat one if it lingers.
+    // PER-NET one (T1); the pre-T1 flat file has no reader left.
     let url = command_service_url();
     let watermark =
         riir_refine::kat_pending_estimator::SyncWatermark::net_path(&resolve_heal_root(&[]), &url);
@@ -3467,8 +3467,11 @@ fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::Pa
 /// USDC base units → the display string (the 6-dec fiat, whole amounts
 /// bare — the pay client's own rule, mirrored for the listing lines).
 fn format_usdc(base: u64) -> String {
-    let whole = base / 1_000_000;
-    let frac = base % 1_000_000;
+    // USDC's own 6-dec base unit (a third million — neither µKAT nor the
+    // token Mtok), derived from riir-kat's decimals const, never a literal.
+    let per_usdc = 10u64.pow(riir_refine::kat_stake_client::USDC_DECIMALS);
+    let whole = base / per_usdc;
+    let frac = base % per_usdc;
     if frac == 0 {
         format!("{whole}")
     } else {

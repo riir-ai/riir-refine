@@ -42,6 +42,11 @@ fn refine(dir: &Path, args: &[&str]) -> (Option<i32>, String) {
     envs.insert("RIIR_REFINE_KAT_GATE", "0".to_string());
     envs.insert("RIIR_REFINE_SELF_EVOLVE", "0".to_string());
     envs.insert("RIIR_REFINE_AUTO_ORACLE", "0".to_string());
+    // The update check writes `.refine/update_check.json` into the cwd —
+    // which IS the scan root — before the walk, so an "empty" fixture
+    // reads as 1 scanned file. `CI` disables it on the runner; pin it off
+    // here so the workstation run is the same experiment.
+    envs.insert("RIIR_REFINE_UPDATE_CHECK", "0".to_string());
     envs.insert(
         "RIIR_REFINE_KAT_SERVICE_URL",
         "http://127.0.0.1:9/".to_string(),
