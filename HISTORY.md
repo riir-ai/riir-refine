@@ -666,7 +666,7 @@ Full text in AGENTS.md: monotonic never-reused counters per directory, one count
 - riir-auth `account_key` adopts `$HOME/.ssh/id_ed25519` IN PLACE as the account key when one exists, so every CLI test that ran `login` with only the account dirs isolated signed with the developer's real SSH identity on a box that had one and a minted key elsewhere — two code paths chosen by the box. **Fix:** `tests/support/hermetic_home.rs` (not a target; `#[path]`-included) — `vars(scratch)` points HOME/USERPROFILE at the scratch dir and pins CARGO_HOME/RUSTUP_HOME to the real ones so spawned cargo/rustup children keep working; `assert_minted(login_output)` reds a regression that re-adopts. Wired into all 10 CLI targets that reach the account plane (`cargo_convention_cli`, `kat_adopt_state_cli`, `kat_burn_stack`, `kat_join_cli`, `kat_soft_gate_cli`, `sync_export_cli`, `unmine_consent_cli`, `topup_cli`, `build_stamp_cli`, `kat_refill_cli`); green at the kat_service set, the kat_transport set and `--all-features`.
 - Same session, Issue 172's two out-of-lane notes: `7f076057` — `--refill` in a build without `kat_transport` now refuses for the compiled-out feature FIRST (exit 2), not "log in" (exit 1) after an account read (`build_stamp_cli::refill_refuses_loudly_too` was red at its own feature set on any box without an account); the `tuna_airdrop` rows run against a hermetic account + the build's pinned hosted URL with each branch asserted deterministically (new row: no account → `no local account`). `b543c256` — `kat_refill_cli` asserts the strict-seam loopback refusal under a single net pin without `allow-local` (the shipped release posture; Issue 159 precedent). Both verified across unpinned / net-mainnet / net-devnet / ±allow-local / all-features. ⚠ Claim collision: `zed-m3-idle-174` claimed 174 (`3b89cba1`) while the amo session — which filed it and did not claim it — was already mid-implementation; amo landed the verified fix and closed it. Lesson: claim at filing time when you intend to implement. Issue file removed per the noise rule; this entry is the record.
 
-## 2026-10-27 — Issue 179 NOW half CLOSED: the account surfaces render the provider-binding rows; the rows survive the refine consumer byte-identically
+## 2026-10-27 — Issue 179 CLOSED: kat_account adopts the provider-identity substrate — all six items landed the same day
 
 Landed `95bc8c18` (amo-auth-followup): `kat account` + `--info` render the
 record's `providers` rows through the ONE formatter (`kat_info/provider_bindings.rs`,
@@ -675,12 +675,42 @@ byte-identical output, pinned) + the byte-preserve fixture test: a record WITH
 provider rows round-trips load→serialize→parse unchanged (the
 feature-off-rewrite hazard asserted for the refine consumer) —
 `tests/kat_account_g9.rs` g9f, 2 tests. The NOW-3 signing-session survey
-(report-only; arming owner-gated) is folded into
-`.issues/179_kat_account_provider_identity_adoption.md` item 3; the claim
-record `.issues/179_claim_now_half.md` removed per the noise rule. AFTER half
-(provider_login wiring, rebind surface, TOTP client) stays blocked on the
-dapps 139/140 route hosts — item 6's TOTP client half claimed by
-`amo-idle-totp` (expires 2026-10-28T20:00Z).
+(report-only; arming owner-gated) is in the issue record; the claim
+record `.issues/179_claim_now_half.md` removed per the noise rule.
+
+AFTER half LANDED the same day, unblocked by dapps 139 (`eae0f05`, plan 053
+T8) + 140 (`1258eef`, the recovery authority class): items (4)+(5) —
+`cargo refine login --provider github [--totp-code <c>]`, the device flow
+composed end-to-end through riir-kat's `kat_recovery_client` (the canonical
+tier after the same-hour race; the duplicate lane yielded unpushed), local row
+via `bind_provider`, nonce → SSHSIG claim → bind, typed
+`rebind_required`/`totp_required`/`github_bound` remedies — refine `c130df9c`
++ the release-posture fix `f22a5ec5`; item (6) — the TOTP wire + client + the
+`kat totp enroll|disarm` verbs + the migrate `--totp` header — riir-kat
+`45cb2d3` + refine `c9923d2f`, consent-heartbeat residue riir-kat `70c951c`.
+AGENTS.md carries the CLI rows. Issue file removed per the noise rule; this
+entry is the record (full narrative: `git log --follow --
+.issues/179_kat_account_provider_identity_adoption.md`).
+
+## 2026-10-27 — INCIDENT: a bare `git commit` in the shared worktree swept a sibling's staged work under the wrong message (`7f965bc3`)
+
+Folded from `.issues/180_incident_commit_sweep.md` (removed per the noise
+rule — it is a record, not an open issue; session: amo-auth-followup,
+2026-10-27). Committing the `.issues/179_claim_now_half.md` claim record with
+a bare `git commit` — no path re-check, after stash churn had muddied the
+index — swept EVERYTHING staged-or-tracked-dirty into `7f965bc3` on
+origin/develop: the 178 Phase A session's uncommitted work (plan 299,
+`src/blueprint.rs`, the heal.rs wiring hunks, the AGENTS.md row, the proposal
+status flip, and their deletion of the 178 issue file) landed under the wrong
+message minutes before their own landing. **Measured damage:** the sibling's
+worktree was never touched (their flow unbroken); their landing supersedes
+the swept content tree-identically; force-push (history rewrite) and a
+follow-up re-delete (re-deleting their files, worse) were both adjudicated
+and REFUSED — origin stays as-is, the non-destructive path (owner call,
+that session). **The rule re-armed:** in a shared worktree EVERY commit
+stages NAMED files and runs `scripts/staged_set_audit.py` first — a clean
+streak is not a census (the §staged_set_audit law in AGENTS.md, now with a
+second measured instance).
 
 ## 2026-10-27 — INCIDENT: a Protocol-H worktree sweep removed a staging worktree holding an unlanded commit; the misfired follow-up command then wiped a sibling's WIP in the shared tree
 
