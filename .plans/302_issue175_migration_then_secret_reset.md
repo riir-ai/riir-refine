@@ -113,7 +113,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       the raw key; its riir-auth `account.json` + riir-heal legacy copy say
       the same), NOT `c79c93b8…`. Filing with it would migrate the WRONG
       account. `c79c93b8` is the OLD M3 key, presumed at
-      `/Users/katopz/.ssh/id_ed25519` (the pre-switch macOS user; mode 700,
+      `/Users/katopz/.ssh/id_ed25519` — ⛔ MEASURED 2026-10-27: that file is `1bb4b7b5…` (the 10-25 rotation's NEW key), NOT `c79c93b8`; the original c79c93b8 private key has not been located — if it no longer exists the dual-sign lane cannot move c79c93b8 at all (T9 lost-key territory) (the pre-switch macOS user; mode 700,
       unreadable to `kat` — the OWNER copies it: `sudo install -m 600 -o kat
       /Users/katopz/.ssh/id_ed25519 /tmp/kat_old_c79c93b8`; verify
       `blake3(pubkey)` starts `c79c93b8` before use). File on the M3 (the
