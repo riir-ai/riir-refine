@@ -720,6 +720,38 @@ pub fn softmax(v: &[f32]) -> Vec<f32> {
     out
 }
 
+/// Cross-entropy loss + gradient `p − onehot(label)`, collapse-free
+/// (arXiv:2610.31642; the riir-train `math::ce` form, riir-train Issue 651).
+/// The naive `p_label − 1` rounds to exactly 0.0 past the f32 margin cliff
+/// (≈16.6) while every other `p_i` stays positive, and `−ln p_label` reads 0.
+/// Here the LSE EXCLUDES the label: `s = σ(m − z_label) = 1 − p_label`,
+/// `grad[i≠label] = s·exp(z_i − max)/Σ_{o≠label}`, `grad[label] = −s`,
+/// `loss = softplus(m − z_label)`. Returns `(loss, grad)`.
+#[must_use]
+pub fn ce_collapse_free(logits: &[f32], label: usize) -> (f32, Vec<f32>) {
+    let mut grad = vec![0.0_f32; logits.len()];
+    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let mut sum_excl = 0.0_f32;
+    for (i, (g, &z)) in grad.iter_mut().zip(logits).enumerate() {
+        if i != label {
+            *g = (z - max).exp();
+            sum_excl += *g;
+        }
+    }
+    if sum_excl <= 0.0 {
+        grad.fill(0.0);
+        return (0.0, grad);
+    }
+    let gap = sum_excl.ln() + max - logits[label]; // m − z_label
+    let s = 1.0 / (1.0 + (-gap).exp());
+    let scale = s / sum_excl;
+    for g in &mut grad {
+        *g *= scale;
+    }
+    grad[label] = -s;
+    (gap.max(0.0) + (-gap.abs()).exp().ln_1p(), grad)
+}
+
 #[inline]
 fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut s = 0.0_f32;
@@ -1247,8 +1279,7 @@ impl ChoiceScorer {
     #[must_use]
     pub fn loss(&self, ctx_bytes: &[u8], options: &[&[u8]], label: usize) -> f32 {
         let logits = self.forward_logits(ctx_bytes, options);
-        let p = softmax(&logits);
-        -p[label].ln()
+        ce_collapse_free(&logits, label).0
     }
 
     /// One training episode: forward + full backward; CE loss returned,
@@ -1265,12 +1296,8 @@ impl ChoiceScorer {
         let scale = 1.0 / (w as f32).sqrt();
         let g = &mut grads.0;
         let cache = forward_cached(self, ctx_bytes, options);
-        let probs = softmax(&cache.head.logits);
-        let loss = -probs[label].ln();
-
-        // ---- dlogits = p − onehot ----
-        let mut dlogits = probs;
-        dlogits[label] -= 1.0;
+        // ---- dlogits = p − onehot (collapse-free) ----
+        let (loss, dlogits) = ce_collapse_free(&cache.head.logits, label);
 
         let t = cache.t_ctx;
         let mut dk_mat = vec![0.0_f32; t * w];
@@ -1525,6 +1552,21 @@ impl AdamW {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Softmax Collapse regression (arXiv:2610.31642): at margin 20 the naive
+    /// `p_label − 1` is exactly 0.0; the fixed form matches f64, sums to zero.
+    #[test]
+    fn ce_collapse_free_survives_the_f32_cliff() {
+        let logits = [20.0_f32, 0.0, -1.0];
+        assert_eq!(softmax(&logits)[0] - 1.0, 0.0, "premise: naive collapses");
+        let (loss, g) = ce_collapse_free(&logits, 0);
+        let other = 0.0_f64.exp() + (-1.0_f64).exp();
+        let want = -other / (20.0_f64.exp() + other);
+        assert!(((f64::from(g[0]) - want) / want).abs() < 1e-5);
+        assert!(((f64::from(loss) + want) / want).abs() < 1e-4);
+        let sum: f64 = g.iter().map(|&v| f64::from(v)).sum();
+        assert!(sum.abs() < 1e-12, "row sums to 0: {sum}");
+    }
 
     fn tiny_cfg() -> ScorerConfig {
         ScorerConfig {
