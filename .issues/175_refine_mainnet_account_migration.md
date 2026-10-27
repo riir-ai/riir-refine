@@ -2,9 +2,13 @@
 
 **Status:** OPEN — ASAP (the account is live; the 4090 identity already
 forked locally 2026-10-26). Owner-directed.
-**Claimed:** zed-amo-175-preflight, 1793021421, expires 2026-10-28T13:30:21Z
-(scope: the T-PREFLIGHT 4090 leg only — dual-sign + drain under the OLD
-account; T-WIRE/T4 stays the dao lane's, no code changes in this lease)
+**Claimed:** zed-m3-175-t7, 1793085068, expires 2026-10-29T07:11:08Z
+(scope: T-E2E + the T7 devnet rehearsal only — the E-battery against a live
+devnet worker per `.plans/302` T1; T-MIGRATE filing stays owner-adjacent)
+**Lease closed:** zed-amo-175-preflight (claimed 2026-10-26, epoch
+1793021421) — its scoped leg (T-PREFLIGHT 4090) is DONE per the checkbox
+below; released 2026-10-27 by owner call ("sibling is done or leftover")
+to open the rehearsal lane.
 **Lease closed:** zed-amo-175-twire (claimed 2026-10-26, epoch 1793024781) —
 T-WIRE landed same day across five repos (T3d/T4/T5/T6; the commits in
 the T-WIRE row); T7 + T-E2E/T-MIGRATE/T-POST/T-KEYS remain, owner-adjacent Executes the refine slice of
