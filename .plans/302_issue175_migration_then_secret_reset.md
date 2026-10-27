@@ -121,6 +121,10 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       #2 attest-only (`--attest-cosign` on the M3 as B=d54e39a8 → bundle →
       `--attest-cosig` on the 4090), then the mainnet-shape non-fresh-claim
       cell. Both /tmp key copies shredded 15:14 UTC (see T2/T4 hygiene).**
+      ✅ **#1 RELEASED BY THE CRON, NO HUMAN** — `closed_at` 1793116803 =
+      16:00:03 UTC (the hourly tick; the 16:03 read came after), state
+      `released`, tally snapshot `cf93c978…`; devnet balances c79c93b8
+      174 866 068 → 0, d54e39a8 0 → 174 866 068 µKAT (exact conservation).
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match

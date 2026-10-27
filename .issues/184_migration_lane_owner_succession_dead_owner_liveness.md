@@ -126,7 +126,11 @@ the cron closer, Hold, the creation retry, the subrequest meter.
       `ce18306`; Amendment 3 — `61887f3`.
 - [x] CLI: rule-C text + real UTC close/hold instants — `9aa94c84`.
 - [x] Devnet deployed `687950c7` (2026-10-27).
-- [ ] Live rehearsal (plan 302 T1) on the fast timing.
+- [x] Live rehearsal on the fast timing — devnet `687950c7`, request
+      `e518f563…` (c79c93b8 → d54e39a8): worker-created proposal issue
+      gist-rs/riir-dao-proposal#1, owner 👍 (id 97060), released by the 16:00
+      cron tick with no human (`closed_at` 1793116803), 174 866 068 µKAT
+      moved exactly — the first live proof of the closer + rule C.
 - Known: devnet release lands on the first hourly tick at/after +2 h (≤ ~1 h
   late) — the cron cadence, not the law.
 
