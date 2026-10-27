@@ -1,6 +1,7 @@
 # Issue 185: `softmax-collapse` rule family — catch the f32 Softmax Collapse paste before it ships (arXiv:2610.31642)
 
 **Status:** Open — 2026-10-27.
+**Claimed:** zed-m3-i185, 1793094772, expires 2026-10-29T09:52:52Z
 
 ## Why
 
