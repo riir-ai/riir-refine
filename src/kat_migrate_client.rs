@@ -60,7 +60,7 @@ use riir_kat::kat_protocol_migrate_tally::TALLY_OWNER_LOGIN;
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
 /// worker's own `KAT_MIGRATE_REPO_BASE` is authoritative when it sends the
 /// URL itself).
-pub const DEFAULT_MIGRATE_REPO_BASE: &str = "https://github.com/gist-rs/riir-dao";
+pub const DEFAULT_MIGRATE_REPO_BASE: &str = "https://github.com/gist-rs/riir-dao-proposal";
 
 /// How stale the burn book may be before a filing refuses (the E-3 bar).
 /// The gate is the PENDING DELTA (unsynced rows), never raw age — a
