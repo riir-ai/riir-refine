@@ -2,6 +2,24 @@
 
 Compacted 2026-10-16: every `##` heading kept verbatim, one compact entry per record; the full pre-compaction text is in git history (pre-compaction HEAD cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-10-27 — Issue 185 CLOSED: the `softmax-collapse` rule family ships with a zero-unexplained-hit workspace sweep (file removed per the noise-reduction rule — this row is the durable record)
+- T1–T4 (`17965377`): `sigmoid-minus-one` (MECHANICAL, `FIXABLE_SEC`: `σ(z) − 1` → `−σ(−z)`, split one-hot form, name-allowlisted σ), `softmax-onehot-collapse` + `neg-ln-softmax-prob` (suggest-only, row evidence in walk order per innermost fn), the new APPEND-ONLY `SecFamily::Numerics`, before/after fixtures from six shipped repairs, and `examples/softmax_collapse_sweep.rs`. Domain decision: `sec`, the `nan-unsafe-sort-comparator` shape. Bug 2 (two separately computed probability vectors subtracted) stayed out of scope: it is cross-function dataflow, and riir-train 651 T3 is its instrument.
+- T4b (`ad394fc6`): the allow marker `// softmax-collapse: allow — <reason>`. It must sit on the hit's line or the line directly above, the reason is MANDATORY, and it covers all three rules (sigmoid-minus-one withholds the edit). Suppressed sites are counted, never folded into zero: `detect_all` / `collect_edits_with_allow` / the sweep's `ALLOW` rows + `allowed` column.
+- The 25 standing hits plus the one rule-unreachable site (rethink typed head) were each adjudicated by reading context:
+  - **(b) real, fixed — 14:**
+    - riir-ai `binary_kernel_poc` ×3. `ce_collapse_free_into` was hoisted to the riir-poc crate root and is shared with `set_diffusion_poc`, then the mean `1/l`; margin-40 test (`38b62684e`).
+    - riir-rethink, 2 sites:
+      - `instinct_teacher_ft` loss, via the new `ce_loss_dlogits` beside `ce_dlogits`, gradient byte-identical; margin-20 test.
+      - `instinct_typed_head_trainer`, where the gold BCE slot becomes `−σ(−z)` (`11a00d6`).
+    - riir-train, 8 test/bench training helpers via `math::ce` (asft ×2, nitp, peira ×2, tests/common, gpu plan389 + plan433) (`b07f40af`).
+    - Drive-by in the same commit: the rlvr example double-counted rollout/replay loss on the default arm (since `28f5c453`).
+  - **(a) deliberate, marked — 10:** the `RIIR_CE_COLLAPSE_FREE=0` incumbent arms: rlvr ×2, sft, arm_c, plan338, weak_probe, deltanet lm_head_lora_train, kimi_k3_gpu_backward, kimi_k3_ouro, gpu backward.
+  - **(c) not the collapse, marked with a reason — 3:**
+    - bench-algo `masked_softmax_mse_raw_v` ×2: a Brier residual. The row is zero-sum by construction and the error is O(e^-2m); the CE repair does not fit, and no principled gate separates it syntactically.
+    - `elbo_boundary_trainers::masked_ce_closed_form`: a probability-space identity pin against the DP tables, which score `−ln p`.
+- **Final sweep** (29 repos, worktree = HEAD of every repo above): sigmoid-minus-one 0 · softmax-onehot-collapse 0 · neg-ln-softmax-prob 0 · allowed 13 (all riir-train, each with its reason) · unparsed 14 (riir-rethink `bin_hunks/*.rs` include-fragments, grep-confirmed free of softmax/`.ln()`/sigmoid) · `seal-online-site` EMPTY-WALK.
+- Commits: `17965377` (T1–T4), `ad394fc6` (marker), riir-ai `38b62684e`, riir-rethink `11a00d6`, riir-train `b07f40af`, and this row (the closure commit).
+
 ## 2026-10-27 — Issue 181 CLOSED: the gitsync `:selfheal` proved itself on the first real wedge — close condition met in the scheduled 12:15:33+07 run (file removed per the noise-reduction rule — this row is the durable record)
 - The wedge (sync-repos.log, the 2026-10-27 12:15:33+07 run): riir-infer's sync died with "Your local changes to the following files would be overwritten by merge: .issues/1134_norm_pair_epilogue_fold_rung.md" — the fetch `--update-head-ok` shape: the branch ref had ALREADY moved to upstream when the fetch's own working-tree fast-forward aborted on stale worktree bytes (materialized origin content, NOT sibling WIP — the repo read dirty=0 immediately after the repair). `:selfheal` fired on its coded signature (ahead==0 AND behind==0), reset the ref, restored deleted tracked files; the next full sweep found riir-infer clean and in sync. Zero manual repair.
 - Gate-description correction (doc vs code, resolved in favor of the code, no script change): the issue's prose gate ("ahead==0 AND behind>0") matches a plain-fetch wedge where the ref never moves; this script's fetch carries `--update-head-ok`, which pre-moves the ref, so the real wedge signature is ahead==0 AND behind==0 — exactly what the shipped code gates on.
