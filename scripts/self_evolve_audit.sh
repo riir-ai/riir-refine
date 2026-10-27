@@ -210,9 +210,9 @@ if [ -n "$STORE_REPOS" ] && [ -x "$HEAL_BIN" ]; then
   for r in $STORE_REPOS; do
     d="$GIT_ROOT/$r"
     RIIR_REFINE_TRAJ_ROOT="$d" "$HEAL_BIN" --dump-trajectories > "$ELO_TMP" 2>/dev/null
-    run_py - "$r" "$ELO_TMP" <<'EOF'
+    run_py - "$r" "$ELO_TMP" "$GIT_ROOT/$r" <<'EOF'
 import json, sys
-repo, path = sys.argv[1], sys.argv[2]
+repo, path, repo_root = sys.argv[1], sys.argv[2], sys.argv[3]
 BASE = 1200.0
 rules = {}   # lint_key -> {wins, losses, elo(None|float)}
 spans = {}   # shape -> {elo(None|float)}
@@ -252,7 +252,7 @@ if draws:
     tail = " …" if len(draws) > 6 else ""
     print(f"    draws (review-only, unrated): {shown}{tail}")
 if pending:
-    print(f"    NOTE: {len(pending)} rule(s) with verdicts but no rating — run: cargo refine --recompute-elo")
+    print(f"    NOTE: {len(pending)} rule(s) with verdicts but no rating — run: RIIR_REFINE_TRAJ_ROOT={repo_root} cargo refine --recompute-elo (BARE form reads the default root — measured idempotent-0/0 while this row stayed pending, 2026-10-27)")
 if tough:
     def clip(s):
         s = s.replace("\n", " ")
