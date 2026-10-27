@@ -1,7 +1,10 @@
 # Issue 184 — the migration lane survives a dead owner: autonomous close + the owner-dormancy succession rule
 
-**Status:** OPEN — verdict REVISE (2026-10-27) → DECIDED: **B′** (below)
-supersedes B1–B5; implementation next. Owner-directed 2026-10-27 ("who
+**Status:** IMPLEMENTED 2026-10-27 — B′ landed across all four repos
+(kernel riir-kat `ceed821` · worker riir-dapps `f1bfaf2` + cron `024f80b` ·
+dao `160a9b5`/`06b8eab` · CLI `1b315f36`); OPEN only for the live half (the
+devnet redeploy + the rehearsal). Verdict REVISE → DECIDED **B′** (below)
+supersedes B1–B5. Owner-directed 2026-10-27 ("who
 will check the 👍? worker? cranker? we need to automate that — think I'm dead
 and only auto dao is running"). Follows [Issue 183](183_migration_release_requires_owner_endorsement.md)
 (owner 👍 REQUIRED). Two halves: **A** (the closer) is implementation-only
@@ -115,7 +118,7 @@ dead-man succession on `owner_login` itself, revocable).
 
 **Constants (dao artifact v3 LAW, never knobs):** `SELF_WINDOW_SECS` =
 604 800 · `BINDING_MIN_AGE_SECS` = 2 592 000 · `VOTER_MIN_ACCOUNT_AGE_SECS`
-= 31 536 000 · `SELF_ENDORSE_WEIGHT_BP` = 5100 · `QUALIFIED_OBJECTIONS_TO_CANCEL`
+= 31 536 000 · `QUALIFIED_OBJECTIONS_TO_CANCEL`
 = 2 · `MAX_QUALIFY_LOOKUPS` = 100 · snapshot domain `kat:migrate:snapshot:v3\n`
 · `TallyVerdict` gains `Hold`.
 
@@ -142,16 +145,24 @@ dead-man succession on `owner_login` itself, revocable).
       `kat_migrate` → its cron is a no-op until promotion.
 - [ ] A (live): devnet redeploy carrying the cron (after the B′ chain lands —
       riir-kat is a path dep, a mid-edit build is unsound).
-- [ ] A gap (→ the B′ worker slice): issue-less LIVE rows not yet due get a
+- [x] A gap (→ `f1bfaf2`, ≤ 4 creation-only retries/tick): issue-less LIVE rows not yet due get a
       creation-only retry per tick — today a filing whose creation failed
       gets its issue only AT close, so the owner never sees it before the
       verdict reads it.
-- [ ] B′ kernel (riir-kat): v3 snapshot, numeric ids, `Hold`, self path;
+- [x] B′ kernel (riir-kat `ceed821`, owner id 97060 pinned; 38 tests; a self
+      👍 counts ONLY with a numeric id — no login fallback; the counting rule
+      replaced the 5100 self-weight, so `SELF_ENDORSE_WEIGHT_BP` was never
+      shipped): v3 snapshot, numeric ids, `Hold`, self path;
       E-cells S1 self-👍 held@24h→released@7d · S2 binding <30 d → cancel ·
       S3 legacy/no-id binding → cancel · S4 owner 👎 → cancel (both paths) ·
       S5 one qualified 👎 → still releases · S6 two qualified 👎 → cancel ·
       S7 two unqualified (<365 d) 👎 → still releases · 183 matrix green.
-- [ ] B′ worker (riir-dapps): reaction ids + voter-age lookups (bounded,
+- [x] B′ worker (riir-dapps `f1bfaf2`: binding 24→32 B `‖ gh_id`, request
+      row v3 382 B, per-invocation GitHub meter 45 = 50 cap − 1 hop − 4,
+      voter ages only when decisive + DO-cached, held rows due at
+      `max(window, hold_until)`, dispute pair holds if either holds; 600
+      kat-service lib green; dao artifact v3 `160a9b5` + Amendment 2
+      `06b8eab`; CLI `1b315f36`): reaction ids + voter-age lookups (bounded,
       cached), binding row +gh_id, filing freezes id + bound_at, Hold
       re-judged by the cron; dao artifact v3; CLI/issue-body path text.
 
@@ -169,4 +180,10 @@ dead-man succession on `owner_login` itself, revocable).
   bindings are written only by releases (`bound_at = now`, reset per move).
   Recommended the dormancy-free alternative → **adopted as B′** (owner call
   delegated to the verdict per the standing rule).
+- **Post-landing verification (2026-10-27):** the worker slice reported a
+  red `kat_proof_spec_match` sweep test as "pre-existing, unconfirmed" —
+  MEASURED pre-existing at `024f80b`+riir-kat `86a1622` (isolated tree),
+  red only at `kat_tuna,kat_migrate` without `kat_staking`; every
+  kat-service build enables `kat_staking`, so the sweep is correct and the
+  assert was un-gated — fixed riir-dapps `c9ddd2d` (green at all three sets).
 
