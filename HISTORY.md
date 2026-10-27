@@ -6,7 +6,7 @@ Compacted 2026-10-16: every `##` heading kept verbatim, one compact entry per re
 - T1–T4 (`17965377`): `sigmoid-minus-one` (MECHANICAL, `FIXABLE_SEC`: `σ(z) − 1` → `−σ(−z)`, split one-hot form, name-allowlisted σ), `softmax-onehot-collapse` + `neg-ln-softmax-prob` (suggest-only, row evidence in walk order per innermost fn), the new APPEND-ONLY `SecFamily::Numerics`, before/after fixtures from six shipped repairs, and `examples/softmax_collapse_sweep.rs`. Domain decision: `sec`, the `nan-unsafe-sort-comparator` shape. Bug 2 (two separately computed probability vectors subtracted) stayed out of scope: it is cross-function dataflow, and riir-train 651 T3 is its instrument.
 - T4b (`ad394fc6`): the allow marker `// softmax-collapse: allow — <reason>`. It must sit on the hit's line or the line directly above, the reason is MANDATORY, and it covers all three rules (sigmoid-minus-one withholds the edit). Suppressed sites are counted, never folded into zero: `detect_all` / `collect_edits_with_allow` / the sweep's `ALLOW` rows + `allowed` column.
 - The 25 standing hits plus the one rule-unreachable site (rethink typed head) were each adjudicated by reading context:
-  - **(b) real, fixed — 14:**
+  - **(b) real, fixed — 13 (3 riir-ai + 2 riir-rethink + 8 riir-train; 13 + 10 + 3 = 26):**
     - riir-ai `binary_kernel_poc` ×3. `ce_collapse_free_into` was hoisted to the riir-poc crate root and is shared with `set_diffusion_poc`, then the mean `1/l`; margin-40 test (`38b62684e`).
     - riir-rethink, 2 sites:
       - `instinct_teacher_ft` loss, via the new `ce_loss_dlogits` beside `ce_dlogits`, gradient byte-identical; margin-20 test.
