@@ -1,6 +1,9 @@
 # Issue 183 — the migration release gate: a filing-created proposal issue + the owner's 👍 REQUIRED (default-deny flipped from objection-endorsement to release-authorization)
 
-**Status:** OPEN — owner-directed 2026-10-27 ("auto release migration is too
+**Status:** IMPLEMENTED 2026-10-27 (T1 riir-kat `a7a1c13`+`86a1622` · T2/T5
+worker riir-dapps `e968b3e` · T3 CLI `921d2739` · T4 dao `5cd6a93`+`caa7e9a`);
+OPEN only for the live half — mint `KAT_MIGRATE_ISSUES_TOKEN`, then plan 302
+T1 (the T7 devnet rehearsal) on the real rules. Owner-directed 2026-10-27 ("auto release migration is too
 scary bc owner won't notice — no proposal to subscribe via github issues").
 Amends the ratified release posture of
 [riir-dao Proposal 001](../riir-dao/.proposals/001_kat_account_key_rotation_social_recovery.md)
@@ -199,9 +202,12 @@ attempt it.
 
 ## Acceptance
 
-- [ ] Kernel: E1/E2/E3/E4/E3b/E3c/E3d/E12 green at the new polarity; the
+- [x] Kernel: E1/E2/E3/E4/E3b/E3c/E3d/E12 green at the new polarity; the
       single-issue + per-login-dedupe rule pinned; the snapshot domain v2;
-      the dao artifact re-pin green both directions.
+      the dao artifact re-pin green both directions. — riir-kat `a7a1c13`
+      (26 tests; `TallyReason` audit enum; `compose_objection_issue_url`
+      removed) + riir-dao `5cd6a93` (artifact v2, `MigrationTallyLaws` all
+      structural, `deny_unknown_fields`, 199 tests).
 - [x] Worker: idempotent creation-at-file proven (search-before-create + the
       fixture reader); fail-closed close on no-issue proven; the ack carries
       the URL; the mainnet zero-pending-rows assertion is a deploy gate.
@@ -211,7 +217,16 @@ attempt it.
       E12 close refusal, single-issue reader, R8 gate
       `cloudflare/kat-service/scripts/migrate_zero_pending_gate.sh` (wired
       into `scripts/setup.sh --mainnet`; NOT into deploy_kat_service.yml).
-- [ ] CLI: the URL + rules render on file and on `--status`.
-- [ ] The E-battery (rewritten) green in-process; THEN T7 devnet rehearsal
-      (plan 302 T1) runs the SAME battery on the live worker.
-- [ ] The amendment section lands in dao Proposal 001 citing this issue.
+- [x] CLI: the URL + rules render on file and on `--status`. — `921d2739`
+      (`--object` now prints "open <proposal url> and react 👎"; refine has
+      no E-cell tests of its own — the battery lives in migrate_contract.rs).
+- [x] The E-battery (rewritten) green in-process — `e968b3e`: 25
+      migrate_contract (was 19), 582 kat-service lib at `kat_migrate`.
+- [ ] THEN T7 devnet rehearsal (plan 302 T1) runs the SAME battery on the
+      live worker — needs the `KAT_MIGRATE_ISSUES_TOKEN` secret (fine-grained
+      PAT: one repo, Issues R/W + Metadata R, bot account recommended).
+- [-] Wire the R8 gate into `deploy_kat_service.yml` — deferred: CI deploys
+      are suspended (free-tier limit, manual `setup.sh --mainnet` is the
+      live path and already runs the gate).
+- [x] The amendment section lands in dao Proposal 001 citing this issue. —
+      riir-dao `caa7e9a` (Amendment 1; status ACCEPTED, AMENDED 2026-10-27).
