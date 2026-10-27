@@ -4,8 +4,9 @@
 dapps MIN_REDACT_VERSION 5→6 coordinated bump; the bad edits REVERTED in the
 same session, no bad state shipped).
 
-## What happened (measured)
+**Claimed:** zed-glm-idle-b303, 1793089045, expires 2026-10-29T08:17Z
 
+## What happened (measured)
 1. `cargo refine --fix src/kat/migrate_sweep.rs` (riir-dapps, invoked at
    DEFAULT features, no `--verify-args`) — the clippy surface reported
    `unnecessary_get_then_check` ×4; the healer applied
