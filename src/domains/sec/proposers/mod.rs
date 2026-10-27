@@ -134,6 +134,12 @@
 //! | `sigmoid-minus-one` | ✓ `sigmoid_minus_one::collect_edits` | `sigmoid(z) - 1.0` → `-sigmoid(-z)` is an exact logistic identity; strict-gated (name allowlist + no comparison/abs context + bare-context split form + comment guard) |
 //! | `softmax-onehot-collapse` | `softmax_collapse::detect` | the excluded-LSE repair restructures the pass; shapes vary (SIMD, temperature, weighted one-hot) |
 //! | `neg-ln-softmax-prob` | `softmax_collapse::detect` | the row no longer carries the logits the softplus loss needs |
+//!
+//! All three honour one allow marker (Issue 185 T4b):
+//! `// softmax-collapse: allow — <reason>` on the site's line or the line
+//! directly above silences it; a reason-less marker does not. Suppressed
+//! sites stay countable (`softmax_collapse::detect_all`,
+//! `sigmoid_minus_one::collect_edits_with_allow`).
 
 use syn::File;
 

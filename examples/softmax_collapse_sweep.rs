@@ -17,11 +17,16 @@
 //! A repo whose walk yields zero `.rs` files is printed as `EMPTY-WALK`,
 //! never as a clean zero; a file that does not parse is counted as
 //! `unparsed`, never folded into the clean column.
+//!
+//! Issue 185 T4b: a site carrying the family's allow marker
+//! (`// softmax-collapse: allow — <reason>`, same line or the line
+//! directly above) prints as an `ALLOW` row with its reason and counts in
+//! its own `allowed` column — suppressed, never folded into zero.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use riir_refine::domains::sec::proposers::{collect_edits, softmax_collapse};
+use riir_refine::domains::sec::proposers::{sigmoid_minus_one, softmax_collapse};
 
 const RULES: [&str; 3] = [
     "sigmoid-minus-one",
@@ -86,6 +91,7 @@ fn main() {
     repos.sort();
 
     let mut totals = [0usize; 3];
+    let mut total_allowed = 0usize;
     let mut table = Vec::new();
     for name in &repos {
         let repo = ws.join(name);
@@ -95,10 +101,11 @@ fn main() {
         };
         if files.is_empty() {
             println!("{name}: EMPTY-WALK (0 tracked .rs)");
-            table.push((name.clone(), [0; 3], 0, 0));
+            table.push((name.clone(), [0; 3], 0, 0, 0));
             continue;
         }
         let mut counts = [0usize; 3];
+        let mut allowed = 0usize;
         let mut unparsed = 0usize;
         for f in &files {
             let Ok(src) = std::fs::read_to_string(f) else {
@@ -110,53 +117,72 @@ fn main() {
                 continue;
             };
             let rel = f.strip_prefix(&ws).unwrap_or(f).display().to_string();
-            for e in collect_edits(RULES[0], &src, &file) {
-                counts[0] += 1;
-                let text = src.get(e.edit.start..e.edit.end).unwrap_or("");
-                println!(
-                    "HIT {rel}:{} [{}] {}  =>  {}",
-                    line_of(&src, e.edit.start),
-                    RULES[0],
-                    one_line(text),
-                    one_line(&e.edit.replacement)
-                );
+            for (e, allow) in sigmoid_minus_one::collect_edits_with_allow(&src, &file) {
+                let text = src.get(e.start..e.end).unwrap_or("");
+                let at = line_of(&src, e.start);
+                match allow {
+                    Some(why) => {
+                        allowed += 1;
+                        println!(
+                            "ALLOW {rel}:{at} [{}] {}  ::  {why}",
+                            RULES[0],
+                            one_line(text)
+                        );
+                    }
+                    None => {
+                        counts[0] += 1;
+                        println!(
+                            "HIT {rel}:{at} [{}] {}  =>  {}",
+                            RULES[0],
+                            one_line(text),
+                            one_line(&e.replacement)
+                        );
+                    }
+                }
             }
-            for h in softmax_collapse::detect(&src, &file) {
+            for h in softmax_collapse::detect_all(&src, &file) {
+                let at = line_of(&src, h.span.start);
+                if let Some(why) = &h.allowed {
+                    allowed += 1;
+                    println!(
+                        "ALLOW {rel}:{at} [{}] {}  ::  {why}",
+                        h.rule_id,
+                        one_line(&h.text)
+                    );
+                    continue;
+                }
                 let i = RULES.iter().position(|r| *r == h.rule_id).unwrap_or(1);
                 counts[i] += 1;
-                println!(
-                    "HIT {rel}:{} [{}] {}",
-                    line_of(&src, h.span.start),
-                    h.rule_id,
-                    one_line(&h.text)
-                );
+                println!("HIT {rel}:{at} [{}] {}", h.rule_id, one_line(&h.text));
             }
         }
         for (t, c) in totals.iter_mut().zip(counts) {
             *t += c;
         }
-        table.push((name.clone(), counts, files.len(), unparsed));
+        total_allowed += allowed;
+        table.push((name.clone(), counts, files.len(), unparsed, allowed));
     }
 
     println!();
     println!(
-        "{:<24} {:>7} {:>9} {:>17} {:>23} {:>19}",
-        "repo", "files", "unparsed", RULES[0], RULES[1], RULES[2]
+        "{:<24} {:>7} {:>9} {:>17} {:>23} {:>19} {:>8}",
+        "repo", "files", "unparsed", RULES[0], RULES[1], RULES[2], "allowed"
     );
-    for (name, c, n, u) in &table {
+    for (name, c, n, u, a) in &table {
         println!(
-            "{name:<24} {n:>7} {u:>9} {:>17} {:>23} {:>19}",
+            "{name:<24} {n:>7} {u:>9} {:>17} {:>23} {:>19} {a:>8}",
             c[0], c[1], c[2]
         );
     }
     println!(
-        "TOTAL over {} repos: {} = {}, {} = {}, {} = {}",
+        "TOTAL over {} repos: {} = {}, {} = {}, {} = {}; allowed (marker + reason, not counted above) = {}",
         table.len(),
         RULES[0],
         totals[0],
         RULES[1],
         totals[1],
         RULES[2],
-        totals[2]
+        totals[2],
+        total_allowed
     );
 }

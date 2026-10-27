@@ -44,6 +44,11 @@
 //! - **Tests are fixture habitat**: `#[test]` fns and `#[cfg(test)]` mods
 //!   are skipped — a "premise: the naive form collapses" test MUST keep the
 //!   naive form.
+//! - **Allow marker** (Issue 185 T4b): a `// softmax-collapse: allow —
+//!   <reason>` comment on the site's line or the line directly above
+//!   withholds the edit (the family's one spelling,
+//!   [`super::softmax_collapse::ALLOW_MARKER`]); [`collect_edits_with_allow`]
+//!   still reports it so a sweep can count it.
 //! - Every applied fix rides the `--fix --verify` compile gate.
 
 use std::ops::Range;
@@ -53,7 +58,7 @@ use syn::visit::Visit;
 use syn::{BinOp, Expr, File, UnOp};
 
 use super::softmax_collapse::{
-    is_float_one, is_primitive_fn, is_test_fn, is_test_mod, onehot_shape, peel_paren,
+    allow_reason, is_float_one, is_primitive_fn, is_test_fn, is_test_mod, onehot_shape, peel_paren,
 };
 use super::{src, SourceEdit};
 use crate::edit_emitter::drops_interior_comment;
@@ -82,6 +87,17 @@ pub fn is_logistic_sigmoid_name(name: &str) -> bool {
 }
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    collect_edits_with_allow(source, file)
+        .into_iter()
+        .filter_map(|(e, allowed)| allowed.is_none().then_some(e))
+        .collect()
+}
+
+/// Every candidate edit paired with its allow-marker reason (`Some` = the
+/// site is marked and [`collect_edits`] withholds it) — for sweeps that
+/// must count suppressed sites rather than fold them into zero.
+#[must_use]
+pub fn collect_edits_with_allow(source: &str, file: &File) -> Vec<(SourceEdit, Option<String>)> {
     let mut w = Walker {
         source,
         edits: Vec::new(),
@@ -91,6 +107,12 @@ pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     };
     w.visit_file(file);
     w.edits
+        .into_iter()
+        .map(|e| {
+            let allowed = allow_reason(source, e.start);
+            (e, allowed)
+        })
+        .collect()
 }
 
 struct Walker<'a> {
@@ -421,6 +443,27 @@ mod tests {
         let (out, n) = applied(src);
         assert_eq!(n, 1);
         assert!(out.contains("|&z| -sigmoid(-z)"), "{out}");
+    }
+
+    #[test]
+    fn allow_marker_withholds_the_edit_both_ways() {
+        let marked = "fn g(z: f32) -> f32 {\n    // softmax-collapse: allow — incumbent arm, kill switch\n    sigmoid(z) - 1.0\n}\n";
+        assert_eq!(applied(marked).1, 0, "marked → no edit");
+        let file = syn::parse_file(marked).expect("parses");
+        let all = collect_edits_with_allow(marked, &file);
+        assert_eq!(all.len(), 1, "still reported for the sweep");
+        assert_eq!(all[0].1.as_deref(), Some("incumbent arm, kill switch"));
+        let unmarked = marked.replace(
+            "softmax-collapse: allow — incumbent arm, kill switch",
+            "plain",
+        );
+        assert_eq!(applied(&unmarked).1, 1, "unmarked → fires");
+        let bare = marked.replace(" — incumbent arm, kill switch", "");
+        assert_eq!(
+            applied(&bare).1,
+            1,
+            "a reason-less marker does not suppress"
+        );
     }
 
     #[test]

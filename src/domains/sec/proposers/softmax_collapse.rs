@@ -42,6 +42,22 @@
 //!   (the primitive itself).
 //! - **Macro tokens are never parsed** (`assert!((p[t] - 1.0).abs() ..)`).
 //!
+//! ## The allow marker (Issue 185 T4b) — `// softmax-collapse: allow — <reason>`
+//!
+//! A line comment carrying [`ALLOW_MARKER`] **followed by a non-empty
+//! reason**, on the hit's own line (trailing) or on the line DIRECTLY
+//! above it, silences that one hit — for the deliberate incumbent arm
+//! behind a kill switch (riir-train's `RIIR_CE_COLLAPSE_FREE=0`), or a
+//! shape that is not the collapse (a squared-error residual, a
+//! probability-space identity pin). One spelling for all three rules
+//! (`sigmoid_minus_one` reads it too — a marked site gets no edit). A
+//! marker with NO reason does not suppress (the hit fires: an unexplained
+//! allow is the thing the marker exists to prevent). Suppressed hits are
+//! never dropped silently: [`detect_all`] returns them with
+//! [`CollapseFinding::allowed`] set, and the workspace sweep prints them
+//! in their own `ALLOW` rows and column. Same-line-or-line-above is the
+//! house `// SAFETY:` placement; a marker two lines up does not reach.
+//!
 //! Honest recall limits: a row normalized in a HELPER and passed in as a
 //! parameter carries no evidence (cross-fn); a WEIGHTED one-hot
 //! (`X[t] -= inv_l`, `X[t] -= w`) is out — only the literal `1.0`; a row
@@ -72,6 +88,10 @@ cliff (~16.6) — compute the loss from the logits: softplus(m - z_t) with \
 m = logsumexp_{o!=t} z_o (the `ce_collapse_free_into` loss; Issue 185, suggest-only, \
 low severity)";
 
+/// The allow marker (Issue 185 T4b): `// softmax-collapse: allow — <reason>`
+/// on the hit's line or the line directly above silences it (module doc).
+pub const ALLOW_MARKER: &str = "softmax-collapse: allow";
+
 /// One detected collapse site (T2 or T3).
 #[derive(Debug, Clone)]
 pub struct CollapseFinding {
@@ -83,11 +103,23 @@ pub struct CollapseFinding {
     pub text: String,
     /// The advice line.
     pub advice: &'static str,
+    /// `Some(reason)` when an [`ALLOW_MARKER`] comment suppresses this hit.
+    pub allowed: Option<String>,
 }
 
 /// Detect the two suggest-only shapes (no edits are produced, ever).
+/// Hits carrying an [`ALLOW_MARKER`] are excluded — see [`detect_all`].
 #[must_use]
 pub fn detect(source: &str, file: &File) -> Vec<CollapseFinding> {
+    let mut all = detect_all(source, file);
+    all.retain(|f| f.allowed.is_none());
+    all
+}
+
+/// Every hit, suppressed ones included (their [`CollapseFinding::allowed`]
+/// carries the marker's reason) — for reports that must count them.
+#[must_use]
+pub fn detect_all(source: &str, file: &File) -> Vec<CollapseFinding> {
     let mut scan = Scan {
         source,
         findings: Vec::new(),
@@ -95,6 +127,37 @@ pub fn detect(source: &str, file: &File) -> Vec<CollapseFinding> {
     };
     scan.visit_file(file);
     scan.findings
+}
+
+/// The reason of an [`ALLOW_MARKER`] comment on the line holding byte `at`
+/// or on the line directly above it; `None` when absent or reason-less.
+#[must_use]
+pub fn allow_reason(source: &str, at: usize) -> Option<String> {
+    let head = source.get(..at)?;
+    let line_start = head.rfind('\n').map_or(0, |i| i + 1);
+    let line_end = source
+        .get(at..)?
+        .find('\n')
+        .map_or(source.len(), |i| at + i);
+    let own = source.get(line_start..line_end)?;
+    let above = line_start.checked_sub(1).and_then(|prev_end| {
+        let prev_start = source.get(..prev_end)?.rfind('\n').map_or(0, |i| i + 1);
+        source.get(prev_start..prev_end)
+    });
+    [Some(own), above]
+        .into_iter()
+        .flatten()
+        .find_map(marker_reason)
+}
+
+/// The non-empty reason after [`ALLOW_MARKER`] inside a `//` comment.
+fn marker_reason(line: &str) -> Option<String> {
+    let comment = line.get(line.find("//")? + 2..)?;
+    let rest = comment.get(comment.find(ALLOW_MARKER)? + ALLOW_MARKER.len()..)?;
+    let reason = rest
+        .trim_start_matches(|c: char| c.is_whitespace() || matches!(c, '—' | '–' | '-' | ':' | ','))
+        .trim_end();
+    (!reason.is_empty()).then(|| reason.to_string())
 }
 
 // ── Shared shape helpers (also consumed by `sigmoid_minus_one`) ──────────
@@ -424,11 +487,13 @@ impl Scan<'_> {
         {
             return;
         }
+        let allowed = allow_reason(self.source, span.start);
         self.findings.push(CollapseFinding {
             rule_id,
             text: text.to_string(),
             span,
             advice,
+            allowed,
         });
     }
 
@@ -820,6 +885,60 @@ mod tests {
                 "{rule} fixed fixture must be silent"
             );
         }
+    }
+
+    // ── Issue 185 T4b: the allow marker, both ways ──
+
+    const MARKED_BODY: &str =
+        "fn g(z: &[f32], t: usize) -> Vec<f32> {\n    let mut p = softmax(z);\n";
+
+    #[test]
+    fn allow_marker_on_the_line_above_silences_and_is_counted() {
+        let src = format!(
+            "{MARKED_BODY}    // softmax-collapse: allow — incumbent arm behind the kill switch\n    p[t] -= 1.0;\n    p\n}}\n"
+        );
+        assert!(found(&src).is_empty(), "{:?}", found(&src));
+        let file = syn::parse_file(&src).expect("parses");
+        let all = detect_all(&src, &file);
+        assert_eq!(all.len(), 1, "the suppressed hit is still reported");
+        assert_eq!(
+            all[0].allowed.as_deref(),
+            Some("incumbent arm behind the kill switch")
+        );
+    }
+
+    #[test]
+    fn allow_marker_trailing_on_the_hit_line_silences() {
+        let src = format!(
+            "{MARKED_BODY}    p[t] -= 1.0; // softmax-collapse: allow: squared-error residual\n    p\n}}\n"
+        );
+        assert!(found(&src).is_empty());
+        let src_ln = "fn g(z: &[f32]) -> f32 {\n    let p = softmax(z);\n    -p[0].ln() // softmax-collapse: allow — identity pin\n}\n";
+        assert!(found(src_ln).is_empty());
+    }
+
+    #[test]
+    fn unmarked_far_marked_and_reasonless_markers_still_fire() {
+        let unmarked = format!("{MARKED_BODY}    p[t] -= 1.0;\n    p\n}}\n");
+        assert_eq!(ids(&unmarked), vec![RULE_SOFTMAX_ONEHOT]);
+        // Two lines above does not reach.
+        let far = format!(
+            "{MARKED_BODY}    // softmax-collapse: allow — too far away\n    let _x = 0;\n    p[t] -= 1.0;\n    p\n}}\n"
+        );
+        assert_eq!(ids(&far), vec![RULE_SOFTMAX_ONEHOT]);
+        // A marker with no reason does not suppress.
+        for bare in [
+            "// softmax-collapse: allow",
+            "// softmax-collapse: allow — ",
+        ] {
+            let src = format!("{MARKED_BODY}    {bare}\n    p[t] -= 1.0;\n    p\n}}\n");
+            assert_eq!(ids(&src), vec![RULE_SOFTMAX_ONEHOT], "{bare:?}");
+        }
+        // The marker text outside a `//` comment (a string) does not count.
+        assert_eq!(
+            allow_reason("let s = \"softmax-collapse: allow — x\";", 0),
+            None
+        );
     }
 
     #[test]
