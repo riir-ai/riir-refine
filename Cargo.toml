@@ -1174,6 +1174,15 @@ required-features = ["wasm_validator"]
 cubecl-runtime = { path = "../riir-infer/vendor/cubecl-runtime-0.11.0-pre.2" }
 cubecl-common = { path = "../riir-infer/vendor/cubecl-common-0.11.0-pre.2" }
 wgpu-hal = { path = "../riir-infer/vendor/wgpu-hal-30.0.0" }
+# katgpt-rs Issue 968 residue: `block` 0.1.6 is TERMINAL upstream and carries
+# the `static of uninhabited type` future-incompat (rust-lang/rust #74840,
+# hard error in a future rustc) — reached here under --all-features via
+# metal v0.31 -> riir-infer-gpu. Same one-delta fork as katgpt-rs
+# `vendor/block` @ 5e216a761 (inhabited opaque Class struct, MIT, ABI-safe
+# — its ObjC-block harness proves liveness); own copy so the patch path
+# stays in-repo (no cross-repo path dep). Remove when katgpt-backend-class
+# consumers migrate off legacy `metal`, or upstream ships a fixed release.
+block = { path = "vendor/block" }
 # The cubecl-wgpu fork row (as_raw_metal_* accessors) is GONE: it existed for
 # the old riir-gpu edge; the moved riir-infer-gpu metal_tensor family never
 # calls the fork API (measured, S6) so plain crates.io cubecl-wgpu compiles.
