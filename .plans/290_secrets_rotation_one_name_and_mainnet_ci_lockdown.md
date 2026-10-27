@@ -1,7 +1,7 @@
 # Plan 290 — Secrets rotation, one-name CF token, and mainnet CI-only lockdown
 
 **Status:** IN PROGRESS — Phase 0+1 COMPLETE, Phase 2 ~70% (deferrals named), Phases 3–5 open.
-**Claimed:** zed-amo-msllane-gate, 1793075561, expires 2026-10-29T00:00:00Z (agent-residue legs only: HF-token scope measurement, riir-auth AccountKey lineage check, TEST_WALLET_KEYPAIR moot-check; all CF/GitHub halves stay owner) Session record 2026-10-25 (2): ops token wired end-to-end (secret push + deploy `07046fa0` + backfill verify), riir-refine bearers re-minted, `GH_PAT` retired for `SIBLING_REPOS_TOKEN` (`9c66ce72`).
+**Lease closed:** agent-residue legs landed 2026-10-27 (session zed-amo-msllane-gate) — HF reconcile MEASURED (fine-grained gist-rs-artifacts-write-m3, the narrow-write M3 token), AccountKey lineage vacuous-clean (no account.json anywhere on this box), TEST_WALLET_KEYPAIR moot-verified (riir-dapps/.env still absent); CF/GitHub halves stay owner (the credential-home decision below)
 
 **⚠ Credential-home sweep measured 2026-10-26T22:3xZ (riir-refine-idle-amo, Protocol H + Helius-cleanup attempt):** the local credential picture changed since the 10-25/26 baselines — `seal-remake/.env` (the CF deploy+account pair's home, the guard --live source) MISSING; `riir-deployer/.env`, `riir-dapps/.env`, `riir-reflex/.env` MISSING; `riir-refine/.env` present but 0 lines (held READ_TOKEN/DASHBOARD_TOKEN/GROQ/INFRON/HF-read per Phase 2); `~/Library/Preferences/.wrangler/config/default.toml` (the OAuth session, seen 10-26 ~15:0xZ in the 169 baseline with a refresh token) GONE. Values never read; names only. Consequences: NO Cloudflare credential of any scope is currently reachable from this box — the Helius `HELIUS_WEBHOOK_SECRET_PREVIOUS` cleanup (due: cutover was 10-25, the ≥24 h retry horizon has passed) is BLOCKED on re-homing a credential, and every CF-surface op (guard --live, secret pushes, deploys) fails at auth. Cause unknown (deliberate rotation-lane move vs third-actor wipe); queried the active overflow lane — ANSWERED 2026-10-27 (the caps lane `a1b83d60`, no actor named, three sharpenings adopted): (a) TRUE ABSENCE — all four .env paths stat missing under the REAL user (`whoami`=katopz, HOME=/Users/katopz, no uid-502 alternate home exists), so the uid-502-home hypothesis is ruled out for THESE files; (b) the 22:32Z "zed agent probing the broken posture" lead is CLOSED — it was THIS session's own `wrangler secret list` attempts (the Helius-cleanup try recorded above; a witness, never the deleter); (c) the deletion window is 10-26 15:0xZ→22:32Z — exactly the window the owner's 169 directive was active, and the directive itself tasks this shape (item 5: the OAuth drop is "the preferred posture"; items 2–4: the CF token mints/retires) — deliberate-169-execution by owner-or-a-lane is consistent with every observation, as is an over-broad cleanup; no record names the actor, none guessed here. No landing names a new credential home anywhere (checked by both lanes) — the gap posture stands. Owner decision needed: re-home the CF deploy+account pair (and the OAuth posture — token-only per issue 169 item 5 remains the preferred end state) OR confirm the sweep was deliberate and point the lanes at the new home.
 
@@ -143,10 +143,14 @@ same-name secret — the owner deletes the old repo secret and creates
       lands as a retirement, not a rotation · CF_DEPLOY_API_TOKEN
       (riir-reflexer) still open — owner must mint a fresh deploy-scoped CF
       token for the repo secret
-- [ ] HF reconcile: owner says new HF_TOKEN is READ-ONLY, but M3 is the
-      publisher for riir-train `data_backup.sh push` (needs WRITE scoped to
-      the gist-rs dataset repos). Either the M3 token keeps a narrow write
-      scope or pushes move to CI. Owner decision; rigs stay read-only
+- [x] HF reconcile — RESOLVED BY MINT 2026-10-27 (zed-amo-msllane-gate probe):
+      `riir-train/.env` `HF_TOKEN` validates as role `fineGrained`, displayName
+      **`gist-rs-artifacts-write-m3`** (whoami-v2) — the owner minted exactly
+      the narrow-write M3 publisher token this item asked for; the earlier
+      "READ-ONLY" posture is superseded. The first real `data_backup.sh push`
+      is the end-to-end scope proof; rigs stay read-only. (Same probe cycle
+      confirmed the token VALIDATES — the 10-26 INVALID reading in the 169
+      baseline predates the mint.)
 - [x] riir-ai/.env `HF_READ_API_KEY` — line REMOVED 2026-10-25 (2); workspace
       grep confirmed zero tracked consumers
 
@@ -184,11 +188,16 @@ same-name secret — the owner deletes the old repo secret and creates
       rescue is complete); the keys live only in the obsolete copy's .env and
       fold into Phase 5's obsolete-purge (assume every credential there is
       burned; nothing live reads them)
-- [ ] TEST_WALLET_KEYPAIR (riir-dapps/.env): devnet-only — delete after
-      confirming no remaining consumer
-- [ ] AccountKey lineage: after the SSH rotation, confirm
-      riir-auth account.json `key_path` still resolves to the new
-      ~/.ssh/id_ed25519; re-adopt if the key file was replaced
+- [x] TEST_WALLET_KEYPAIR (riir-dapps/.env): devnet-only — MOOT-VERIFIED
+      2026-10-27: `riir-dapps/.env` is absent from disk (the 10-26 credential
+      sweep already removed it; re-confirmed). If the file is ever re-homed,
+      the key does NOT return — it was a devnet throwaway
+- [x] AccountKey lineage — VACUOUS-CLEAN 2026-10-27: no `account.json` exists
+      anywhere on this box (`~/.config/riir-auth/` absent entirely — no record,
+      no adopted key), so there is no stale `key_path` to re-adopt; the current
+      `~/.ssh/id_ed25519` (fingerprint SHA256:F9cz…VwZc4, mtime 10-22, the
+      rotated key) is what any FUTURE `riir-auth login` adopts fresh. Nothing
+      to migrate
 
 ## Phase 4 — mainnet deploys: CI-only (GitHub environment protection)
 
