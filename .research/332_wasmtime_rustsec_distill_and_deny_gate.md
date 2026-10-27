@@ -1,6 +1,6 @@
 # Research 332 — wasmtime RUSTSEC-2026-0379/0380 distill + the cargo-deny supply-chain gate
 
-**Status:** RECORD — the pilot gate LANDED green in riir-refine (deny.toml + scripts/deny_gate.sh); the corpus batch (T1) LANDED 2026-10-27 (sec 26 → 28, Plan 298 / claim `3dc941e9`); the T2.4 fan-out landed 19 repos; T2.5/T2.6 landed (auditable + --deep); the riir-ai wasmtime adjudication (T2.1) and T2.7 (CI lane) remain OWNER-gated; the remaining remediation lanes are the owning lanes' edits (recorded below).
+**Status:** RECORD — the pilot gate LANDED green in riir-refine (deny.toml + scripts/deny_gate.sh); the corpus batch (T1) LANDED 2026-10-27 (sec 26 → 28, Plan 298 / claim `3dc941e9`); the T2.4 fan-out landed 19 repos + the M3-box completion (4 more, §T2.4 M3-box completion); T2.5/T2.6 landed (auditable + --deep); the riir-ai wasmtime adjudication (T2.1) and T2.7 (CI lane) remain OWNER-gated; the remaining remediation lanes are the owning lanes' edits (recorded below).
 
 ## Source
 
@@ -115,6 +115,23 @@ The three remaining on-box big sets adopted with FULL per-finding pins (titles +
 | seal-game-editor | 12 rows: ttf-parser 0192 · unsafe-libyaml 0449 · quick-xml 0194/0195 · webbrowser 0257 · zbus/zvariant 0370/0371/0372 (Linux-desktop transitive, editor runs on macOS) · zstd 0391/0398/0403/0410 (0410 = the wasm32 allocator shim, browser-bundle posture) | `d636452c5` |
 
 New unmaintained IDs classified this pass: 2025-0134 rustls-pemfile (superseded by rustls-pki-types), 2025-0141 Bincode, 2026-0370/0371/0372 the zbus/zvariant family. seal-online-remaster (27 rows, deprecated) stays scan-only; riir-mmorpg-examples scan ERROR (stale-lock class) needs its lane's re-lock before adoption; the not-on-amo repos (riir-ai / katgpt-web / riir-refab / riir-viewbridge / riir-deployer) + riir-train stay with their lanes as recorded above.
+
+## T2.4 M3-box completion — LANDED 2026-10-27 ~07:1x +07 (zed-m3-t24-residue, M3; cargo-deny 0.20.2)
+
+The not-on-amo repos from the fan-out's box-delta note adopted on the M3 (each: the pilot deny_gate.sh verbatim + a per-repo deny.toml + the AGENTS.md Build-Commands line; `staged_set_audit.py` before every commit; all first scans PASS at the landed ledger):
+
+| Repo | Ledger | Commit |
+|---|---|---|
+| riir-refab | EMPTY (scan CLEAN) | `5d4c9d7` |
+| riir-viewbridge | EMPTY (scan CLEAN) | `abfe3df` |
+| katgpt-web | EMPTY (scan CLEAN) | `ae371e6` |
+| riir-deployer | 0449 only (unsafe-libyaml via serde_yaml 0.9, archived upstream — pin names the owner-scoped serializer-migration lane) + the six TLS advisories FIXED rather than pinned: rustls 0.23.43→0.23.46 (0285/0346/0348/0349), rustls-webpki 0.103.15→0.103.16 (0382), webpki-roots manifest `"0.26"`→`"1"` with lockfile 1.0.11 (0381 emSign roots — 0.26.11 was a wrapper re-exporting 1.0.9's data; `TLS_SERVER_ROOTS` drop-in, `cargo check` green) | `bd5b712` |
+
+riir-deployer was the one FINDINGS carrier: its six rustls-family advisories were all bumpable within existing semver requirements (the only manifest move is webpki-roots 0.26→1), so the deployer ledger lands at ONE pinned row — the first T2.4 ledger to prefer the fix path where the bump is in-requirement.
+
+riir-neuron-db: the M3 box's local lock was stale at anyhow 1.0.102 / crossbeam-epoch 0.9.18 (the T2.3-discharge commit `3fd7050` recorded 1.0.104/0.9.21 floors as already-met on its box); `cargo update -p anyhow -p crossbeam-epoch` aligned this box's (gitignored, untracked) lock to the recorded floors and the local gate re-reads GREEN. No commit owed — ndb does not track its lockfile; the findings were a property of the local lock, never the repo surface.
+
+Full-farm re-scan from the pilot (35 roots): every landed ledger's root row CLEAN; remaining unpinned FINDINGS rows unchanged from the recorded state (riir-ai owner-gated T2.1, riir-train routing-restricted, seal-online-remaster deprecated scan-only, zed + jup-tool + mmorpg-examples outside the contract set / off-box / stale-lock).
 
 ## T2.5 + T2.6 — LANDED 2026-10-27 (zed-amo-b294-t25t26, amo)
 
