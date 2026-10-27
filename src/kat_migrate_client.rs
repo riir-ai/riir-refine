@@ -1,6 +1,8 @@
 //! `kat_migrate_client` — the account-key migration CLI plane (riir-dao
 //! Proposal 001 T4 / riir-refine Proposal 023): the census preflight, the
-//! dual-signed filing, the status read, and the objection-URL compose.
+//! dual-signed filing, the status read, and the proposal-issue vote hint
+//! (riir-refine Issue 183: the worker files ONE proposal issue per request;
+//! reactions on it are the votes).
 //!
 //! # The lanes
 //!
@@ -17,11 +19,20 @@
 //!   `migrate_claim_message(_v2)`, the network-bound v2 armed from the
 //!   service-info `ledger_id` exactly like the sync payload (an old
 //!   server answers without the field and the legacy signature goes out
-//!   unchanged) — and POST it. The ack renders with the prefilled
-//!   objection-issue URL and the window close.
-//! - **`--object <request-id>`** (offline): compose the prefilled
-//!   objection-issue URL (the wire's own [`compose_objection_issue_url`]).
-//! - **`--status <request-id>`** (`kat_transport`): the public read.
+//!   unchanged) — and POST it. The ack renders the worker-created
+//!   proposal-issue URL (or the not-created-yet line) + the vote rules.
+//! - **`--object <request-id>`** (`kat_transport`): read the status and
+//!   point at the proposal issue — "open <url> and react 👎". There is no
+//!   objector-composed issue any more (Issue 183 removed it: a second issue
+//!   carries zero votes by construction).
+//! - **`--status <request-id>`** (`kat_transport`): the public read, plus
+//!   the proposal URL, the frozen `old_bound_login`, and the vote rules.
+//!
+//! # The vote rules (Issue 183 §B/§C — the kernel's polarity, rendered)
+//!
+//! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. Release
+//! REQUIRES the owner's 👍; the old account's bound login 👎 cancels
+//! unconditionally (the victim veto); zero votes cancel (default-deny).
 //!
 //! # The per-invocation key source (the T-PREFLIGHT product finding)
 //!
@@ -35,17 +46,21 @@
 //! is login-time-only; a per-run env read would silently sign ONE side).
 
 use crate::kat_account::KatAccount;
-use riir_kat::kat_protocol_migrate::{MigrateAck, MigrateRequestState, OBJECTION_LABEL};
 #[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
-    compose_objection_issue_url, derive_request_id, migrate_claim_message,
-    migrate_claim_message_v2, migrate_release_message, migrate_release_message_v2,
-    MigratePowAttestation, MigrateRequestBody,
+    migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
+    migrate_release_message_v2, MigratePowAttestation, MigrateRequestBody,
 };
+use riir_kat::kat_protocol_migrate::{
+    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL,
+};
+use riir_kat::kat_protocol_migrate_tally::TALLY_OWNER_LOGIN;
 
-/// The governance repo base the objection URL composes against when the
-/// deployment names none (`KAT_MIGRATE_REPO_BASE` overrides).
-pub const DEFAULT_OBJECTION_REPO_BASE: &str = "https://github.com/gist-rs/riir-dao";
+/// The migrate repo base the proposal-issue URL composes against when the
+/// status body carries only the issue NUMBER (`--repo-base` overrides; the
+/// worker's own `KAT_MIGRATE_REPO_BASE` is authoritative when it sends the
+/// URL itself).
+pub const DEFAULT_MIGRATE_REPO_BASE: &str = "https://github.com/gist-rs/riir-dao";
 
 /// How stale the burn book may be before a filing refuses (the E-3 bar).
 /// The gate is the PENDING DELTA (unsynced rows), never raw age — a
@@ -230,9 +245,6 @@ pub struct FileParams<'a> {
     pub old_key_path: &'a std::path::Path,
     /// Optional bearer for the GitHub `PoW` measure (rate limits only).
     pub github_token: Option<String>,
-    /// The objection repo base (the ack renders the URL too; this is the
-    /// CLI's own compose).
-    pub repo_base: &'a str,
     /// The TOTP second factor (riir-dapps plan 053): the CURRENT
     /// authenticator code, riding the `X-Kat-Totp` header on the filing
     /// POST (the request route is in the worker's sensitive set — the OLD
@@ -246,7 +258,6 @@ pub struct FileParams<'a> {
 pub struct FileOutcome {
     pub ack: MigrateAck,
     pub filed: bool,
-    pub objection_url: Option<String>,
     pub window_close_unix: Option<u64>,
 }
 
@@ -381,13 +392,6 @@ pub fn file_migration(
         created_at,
         service_url,
     )?;
-    let request_id = derive_request_id(
-        &old_acct,
-        &new_acct,
-        params.github_user,
-        &att_digest,
-        created_at,
-    );
     let resp = post_json(
         service_url,
         riir_kat::kat_protocol_migrate::ROUTE_REQUEST,
@@ -398,20 +402,12 @@ pub fn file_migration(
         .map_err(|e| format!("migrate: ack parse: {e} — body: {resp}"))?;
     // The additive extras ride the ack JSON beside the wire fields.
     let filed = parse_bool_field(&resp, "filed").unwrap_or(true);
-    let objection_url = parse_string_field(&resp, "objection_url").or_else(|| {
-        Some(compose_objection_issue_url(
-            params.repo_base,
-            &hex(&request_id),
-            &body.old_account_hex,
-            &body.new_account_hex,
-            params.github_user,
-        ))
-    });
+    // The proposal-issue URL rides the ack itself (`proposal_issue_url`);
+    // the CLI never composes one — only the worker-created issue votes.
     Ok(FileOutcome {
         ack,
         filed,
-        objection_url,
-        window_close_unix: None,
+        window_close_unix: parse_u64_field(&resp, "window_close_unix"),
     })
 }
 
@@ -508,6 +504,11 @@ pub fn fetch_ledger_id(service_url: &str) -> Result<Option<[u8; 32]>, String> {
     }
 }
 
+/// The off-transport arm (this build compiles the network half out).
+///
+/// # Errors
+///
+/// Always — the refusal names the missing `kat_transport` feature.
 #[cfg(not(feature = "kat_transport"))]
 pub fn file_migration(
     _root: &std::path::Path,
@@ -517,6 +518,11 @@ pub fn file_migration(
     Err(riir_refine_off_transport())
 }
 
+/// The off-transport arm (this build compiles the network half out).
+///
+/// # Errors
+///
+/// Always — the refusal names the missing `kat_transport` feature.
 #[cfg(not(feature = "kat_transport"))]
 pub fn status(_service_url: &str, _request_id_hex: &str) -> Result<String, String> {
     Err(riir_refine_off_transport())
@@ -554,10 +560,10 @@ fn read_u64_field(path: &std::path::Path, field: &str) -> u64 {
 }
 
 #[cfg(feature = "kat_transport")]
-fn parse_string_field(json: &str, field: &str) -> Option<String> {
+fn parse_u64_field(json: &str, field: &str) -> Option<u64> {
     serde_json::from_str::<serde_json::Value>(json)
         .ok()
-        .and_then(|v| v.get(field).and_then(|x| x.as_str()).map(str::to_owned))
+        .and_then(|v| v.get(field).and_then(serde_json::Value::as_u64))
 }
 
 #[cfg(feature = "kat_transport")]
@@ -567,14 +573,130 @@ fn parse_bool_field(json: &str, field: &str) -> Option<bool> {
         .and_then(|v| v.get(field).and_then(serde_json::Value::as_bool))
 }
 
-/// Keep the label vocabulary referenced (the objection label the tally
-/// filters on — the CLI prints it in the object flow's hint line).
-#[allow(dead_code)]
-fn objection_label() -> &'static str {
-    OBJECTION_LABEL
+// ── the proposal-issue renders (Issue 183 T3; pure, transport-free) ─────
+
+/// The line naming WHERE the votes go: the worker-created proposal issue,
+/// or the honest not-created-yet posture (E12 — the request cannot release
+/// until the issue exists).
+#[must_use]
+pub fn render_proposal_line(proposal_issue_url: Option<&str>) -> String {
+    match proposal_issue_url {
+        Some(u) => format!("proposal issue: {u}"),
+        None => "proposal issue: not created yet — the worker retries; \
+                 the request cannot release until it exists"
+            .to_owned(),
+    }
 }
 
-#[allow(dead_code)]
+/// The vote rules, verbatim with the kernel's polarity
+/// (`kat_protocol_migrate_tally`): 👍 endorses, 👎 objects, the owner's 👍
+/// is REQUIRED, the victim veto, default-deny. `old_bound_login` names the
+/// veto subject when the status read knows it.
+#[must_use]
+pub fn render_vote_rules(old_bound_login: Option<&str>) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "votes: react on the proposal issue (label {PROPOSAL_LABEL}; only that issue counts; \
+         one login = one vote; both ways = no vote)"
+    );
+    let _ = writeln!(out, "  👍 ENDORSES the migration (release vote)");
+    let _ = writeln!(out, "  👎 OBJECTS to it (cancel vote)");
+    let _ = writeln!(
+        out,
+        "  release REQUIRES @{TALLY_OWNER_LOGIN}'s 👍 — silence cancels (default-deny; \
+         zero votes = cancelled, re-filing is one command)"
+    );
+    let victim = match old_bound_login {
+        Some(v) => format!("@{v}"),
+        None => "the old account's bound login (if any)".to_owned(),
+    };
+    let _ = writeln!(
+        out,
+        "  victim veto: a 👎 from {victim} cancels UNCONDITIONALLY"
+    );
+    let _ = write!(
+        out,
+        "  otherwise weighted 👍 must beat weighted 👎 (@{TALLY_OWNER_LOGIN} 51%, every other login 49%)"
+    );
+    out
+}
+
+/// The proposal URL a status body names: the worker's own URL first, else
+/// composed from the issue NUMBER over `repo_base`, else `None`.
+#[must_use]
+pub fn status_proposal_url(s: &MigrateStatusBody, repo_base: &str) -> Option<String> {
+    s.proposal_issue_url.clone().or_else(|| {
+        s.proposal_issue
+            .map(|n| proposal_issue_html_url(repo_base, n))
+    })
+}
+
+/// The structured status render (appended under the raw JSON): the
+/// proposal URL, the frozen `old_bound_login`, the vote rules.
+#[must_use]
+pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(
+        out,
+        "migrate: request {} — state {}",
+        s.request_id_hex,
+        state_name(s.state)
+    );
+    let url = status_proposal_url(s, repo_base);
+    let _ = writeln!(out, "{}", render_proposal_line(url.as_deref()));
+    let _ = writeln!(
+        out,
+        "old account's bound login (frozen at filing): {}",
+        s.old_bound_login
+            .as_deref()
+            .map_or_else(|| "none".to_owned(), |l| format!("@{l}"))
+    );
+    out.push_str(&render_vote_rules(s.old_bound_login.as_deref()));
+    out.push('\n');
+    out
+}
+
+/// The `--object` hint over a status body: "open <url> and react 👎". A
+/// terminal request or a missing proposal issue refuses with the reason
+/// (there is nothing to vote on).
+///
+/// # Errors
+///
+/// The request is already terminal, or no proposal issue exists yet.
+pub fn render_object_hint(s: &MigrateStatusBody, repo_base: &str) -> Result<String, String> {
+    match s.state {
+        MigrateRequestState::Pending | MigrateRequestState::Dispute => {}
+        MigrateRequestState::Released | MigrateRequestState::Cancelled => {
+            return Err(format!(
+                "object: request {} is already {} — there is nothing left to vote on",
+                s.request_id_hex,
+                state_name(s.state)
+            ));
+        }
+    }
+    let Some(url) = status_proposal_url(s, repo_base) else {
+        return Err(format!(
+            "object: request {} has no proposal issue yet — the worker retries; \
+             the request cannot release until it exists (re-run `--object` later)",
+            s.request_id_hex
+        ));
+    };
+    Ok(format!(
+        "object: open {url} and react 👎 (only that issue counts; \
+         reacting 👍 too cancels your vote)"
+    ))
+}
+
+/// Parse a status read's body into the wire shape (`None` on a refusal
+/// JSON — the caller prints the raw body either way).
+#[must_use]
+pub fn parse_status(body: &str) -> Option<MigrateStatusBody> {
+    serde_json::from_str(body).ok()
+}
+
 fn state_name(state: MigrateRequestState) -> &'static str {
     match state {
         MigrateRequestState::Pending => "pending",
@@ -587,6 +709,121 @@ fn state_name(state: MigrateRequestState) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── Issue 183 T3: the proposal-issue renders (polarity pinned) ──
+
+    fn status_body(
+        state: MigrateRequestState,
+        issue: Option<u64>,
+        url: Option<&str>,
+        victim: Option<&str>,
+    ) -> MigrateStatusBody {
+        MigrateStatusBody {
+            request_id_hex: "ab".repeat(32),
+            state,
+            old_account_hex: "aa".repeat(32),
+            new_account_hex: "bb".repeat(32),
+            github_user: "claimant".to_owned(),
+            created_at_unix: 1_792_900_000,
+            window_close_unix: Some(1_792_986_400),
+            dispute_with_hex: None,
+            closed_at_unix: None,
+            tally_snapshot_digest_hex: None,
+            proposal_issue: issue,
+            proposal_issue_url: url.map(str::to_owned),
+            old_bound_login: victim.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn the_vote_rules_render_the_amended_polarity() {
+        let r = render_vote_rules(Some("victim"));
+        assert!(r.contains("👍 ENDORSES the migration"), "{r}");
+        assert!(r.contains("👎 OBJECTS"), "{r}");
+        assert!(
+            r.contains(&format!("REQUIRES @{TALLY_OWNER_LOGIN}'s 👍")),
+            "{r}"
+        );
+        assert!(
+            r.contains("a 👎 from @victim cancels UNCONDITIONALLY"),
+            "{r}"
+        );
+        assert!(r.contains("zero votes = cancelled"), "{r}");
+        assert!(r.contains(PROPOSAL_LABEL), "{r}");
+        // The retired objection-era vocabulary must not come back.
+        assert!(!r.contains("SUPPORT"), "{r}");
+        assert!(!r.contains("nobody objects"), "{r}");
+        let generic = render_vote_rules(None);
+        assert!(
+            generic.contains("the old account's bound login (if any)"),
+            "{generic}"
+        );
+    }
+
+    #[test]
+    fn the_proposal_line_renders_the_url_or_the_unreleasable_posture() {
+        assert_eq!(
+            render_proposal_line(Some("https://x/issues/7")),
+            "proposal issue: https://x/issues/7"
+        );
+        let none = render_proposal_line(None);
+        assert!(none.contains("not created yet"), "{none}");
+        assert!(none.contains("cannot release until it exists"), "{none}");
+    }
+
+    #[test]
+    fn status_renders_the_url_and_the_frozen_bound_login() {
+        // The worker's URL wins over the number compose.
+        let s = status_body(
+            MigrateRequestState::Pending,
+            Some(9),
+            Some("https://w/issues/9"),
+            Some("victim"),
+        );
+        let r = render_status(&s, "https://base/");
+        assert!(r.contains("proposal issue: https://w/issues/9"), "{r}");
+        assert!(r.contains("frozen at filing): @victim"), "{r}");
+        assert!(r.contains("state pending"), "{r}");
+        // Number only → composed over the repo base.
+        let s = status_body(MigrateRequestState::Pending, Some(9), None, None);
+        let r = render_status(&s, "https://base/");
+        assert!(r.contains("proposal issue: https://base/issues/9"), "{r}");
+        assert!(r.contains("frozen at filing): none"), "{r}");
+        // Neither → the not-created-yet line.
+        let s = status_body(MigrateRequestState::Pending, None, None, None);
+        assert!(render_status(&s, "https://base").contains("not created yet"));
+    }
+
+    #[test]
+    fn object_hint_points_at_the_proposal_issue_with_thumbs_down() {
+        let s = status_body(MigrateRequestState::Pending, Some(3), None, None);
+        let h = render_object_hint(&s, "https://base").expect("hint");
+        assert!(h.contains("open https://base/issues/3 and react 👎"), "{h}");
+        assert!(!h.contains("issues/new"), "no prefilled new-issue URL: {h}");
+        // A dispute row still votes.
+        let s = status_body(MigrateRequestState::Dispute, Some(3), None, None);
+        assert!(render_object_hint(&s, "https://base").is_ok());
+        // No proposal issue → refuse (nothing to vote on yet).
+        let s = status_body(MigrateRequestState::Pending, None, None, None);
+        let e = render_object_hint(&s, "https://base").expect_err("no issue");
+        assert!(e.contains("no proposal issue yet"), "{e}");
+        // Terminal → refuse.
+        for st in [
+            MigrateRequestState::Released,
+            MigrateRequestState::Cancelled,
+        ] {
+            let s = status_body(st, Some(3), None, None);
+            assert!(render_object_hint(&s, "https://base").is_err());
+        }
+    }
+
+    #[test]
+    fn parse_status_reads_the_wire_and_refuses_a_refusal_body() {
+        let s = status_body(MigrateRequestState::Pending, Some(4), None, Some("v"));
+        let json = serde_json::to_string(&s).expect("ser");
+        assert_eq!(parse_status(&json), Some(s));
+        assert_eq!(parse_status("{\"error\":\"not_found\"}"), None);
+    }
 
     /// The `X-Kat-Totp` plumb (riir-dapps plan 053): `post_json` sets the
     /// transport-level header exactly when the code is `Some`, never when

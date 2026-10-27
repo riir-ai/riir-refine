@@ -403,7 +403,7 @@ pub mod kat_corpus_pr;
 // preflight (report-only, E-3's gate), the dual-signed filing (the OLD
 // key via the explicit per-invocation `--old-key` path — the env var is
 // NEVER a signing source, the measured T-PREFLIGHT finding), the status
-// read, and the objection-URL compose. Signing/census halves ride
+// read, and the proposal-issue vote hint (Issue 183). Signing/census halves ride
 // `kat_service`; the network half is inner-gated `kat_transport` (the
 // kat_corpus_pr law); the PoW measure reaches riir-auth through
 // riir-kat's re-export (the member carries the dep, never a direct edge).

@@ -123,8 +123,8 @@ enum KatCommand {
     /// files the dual-signed request (the OLD key via the explicit
     /// `--old-key <path>` — the per-invocation key source, never the env
     /// var; the T-PREFLIGHT measured finding), `--object <request-id>`
-    /// composes the prefilled objection-issue URL, `--status <id>` reads
-    /// the lifecycle, `--census` is the report-only continuity preflight
+    /// points at the worker-created proposal issue ("react 👎"; Issue
+    /// 183), `--status <id>` reads the lifecycle, `--census` is the report-only continuity preflight
     /// (the E-3 filing gate). Needs `kat_service`; the filing + status
     /// halves need `kat_transport`. `--totp <code>` carries the second
     /// factor on the filing (plan 053 — an ARMED old account files with
@@ -3665,7 +3665,7 @@ fn run_kat_migrate(
     }
     let repo_base = repo_base
         .map(str::to_owned)
-        .unwrap_or_else(|| riir_refine::kat_migrate_client::DEFAULT_OBJECTION_REPO_BASE.to_owned());
+        .unwrap_or_else(|| riir_refine::kat_migrate_client::DEFAULT_MIGRATE_REPO_BASE.to_owned());
     let root = resolve_heal_root(&[]);
 
     // ── the census mode (report-only; kat_service, no transport) ──
@@ -3689,27 +3689,35 @@ fn run_kat_migrate(
     // The modes below resolve the net-pinned dial (the strict seam).
     let url = command_service_url();
 
-    // ── the objection URL (offline compose) ──
+    // ── the objection hint (Issue 183: the votes live on the worker-created
+    // proposal issue — `--object` reads the status and points there) ──
     if let Some(request_id_hex) = object {
-        // The compose needs the request's accounts; the CLI knows only the
-        // id, so the URL composes with the id alone (the worker's ack URL
-        // carried the accounts — an offline re-compose keeps the id, which
-        // is the part every filter matches on).
-        println!(
-            "{}",
-            riir_kat::kat_protocol_migrate::compose_objection_issue_url(
-                &repo_base,
-                request_id_hex,
-                "",
-                "",
-                "",
-            )
-        );
-        println!(
-            "objection: open the URL, state the reason, react 👍 to SUPPORT the objection \
-             (blocks) or 👎 to REJECT it (proceeds); label {LABEL} is prefilled",
-            LABEL = riir_kat::kat_protocol_migrate::OBJECTION_LABEL,
-        );
+        let body = match riir_refine::kat_migrate_client::status(&url, request_id_hex) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        };
+        let Some(s) = riir_refine::kat_migrate_client::parse_status(&body) else {
+            eprintln!("object: the status read did not return a request — body: {body}");
+            std::process::exit(1);
+        };
+        match riir_refine::kat_migrate_client::render_object_hint(&s, &repo_base) {
+            Ok(hint) => {
+                println!("{hint}");
+                println!(
+                    "{}",
+                    riir_refine::kat_migrate_client::render_vote_rules(
+                        s.old_bound_login.as_deref()
+                    )
+                );
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
         return;
     }
 
@@ -3718,6 +3726,12 @@ fn run_kat_migrate(
         match riir_refine::kat_migrate_client::status(&url, request_id_hex) {
             Ok(body) => {
                 println!("{body}");
+                if let Some(s) = riir_refine::kat_migrate_client::parse_status(&body) {
+                    print!(
+                        "{}",
+                        riir_refine::kat_migrate_client::render_status(&s, &repo_base)
+                    );
+                }
                 // The lazy-close hint: a pending row whose window elapsed
                 // closes on the worker at the NEXT read (this one just did).
                 let pending_elapsed = serde_json::from_str::<serde_json::Value>(&body)
@@ -3766,7 +3780,6 @@ fn run_kat_migrate(
         github_user,
         old_key_path: std::path::Path::new(old_key),
         github_token: token,
-        repo_base: &repo_base,
         totp_code,
     };
     match riir_refine::kat_migrate_client::file_migration(&root, &params, &url) {
@@ -3782,12 +3795,18 @@ fn run_kat_migrate(
                     " (replay — already filed)"
                 }
             );
-            if let Some(u) = &outcome.objection_url {
-                println!("objection url: {u}");
+            println!(
+                "{}",
+                riir_refine::kat_migrate_client::render_proposal_line(
+                    ack.proposal_issue_url.as_deref()
+                )
+            );
+            if let Some(close) = outcome.window_close_unix {
+                println!("window: closes at unix {close} (24 h default-deny)");
             }
             println!(
-                "window: 24 h default-deny — nobody objects → release at close; \
-                 an objection with NO votes cancels (anti-theft first)"
+                "{}",
+                riir_refine::kat_migrate_client::render_vote_rules(None)
             );
             println!(
                 "next: watch with --status {}; object with --object {}",
@@ -6901,7 +6920,7 @@ struct Args {
     wetrun_dry_run: bool,
     /// riir-dao Proposal 001 T4: the `account migrate` mode flags —
     /// exactly one mode per invocation (`--github` files, `--object`
-    /// composes the objection URL, `--status` reads, `--census` reports).
+    /// points at the proposal issue, `--status` reads, `--census` reports).
     migrate_github: Option<String>,
     migrate_object: Option<String>,
     migrate_status: Option<String>,
@@ -6912,7 +6931,8 @@ struct Args {
     /// Optional GitHub bearer for the PoW measure (rate limits only;
     /// `GITHUB_TOKEN`/`GH_TOKEN` env respected as fallback).
     migrate_github_token: Option<String>,
-    /// The objection repo base (default: the dao repo).
+    /// The migrate repo base the proposal URL composes over when the
+    /// status names only the issue number (default: the dao repo).
     migrate_repo_base: Option<String>,
     /// riir-dapps plan 053: `--totp <code>` on the migrate filing — the
     /// second factor for an ARMED old account (the `X-Kat-Totp` header).
