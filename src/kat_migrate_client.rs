@@ -28,11 +28,14 @@
 //! - **`--status <request-id>`** (`kat_transport`): the public read, plus
 //!   the proposal URL, the frozen `old_bound_login`, and the vote rules.
 //!
-//! # The vote rules (Issue 183 §B/§C — the kernel's polarity, rendered)
+//! # The vote rules (Issue 183 §B/§C + Issue 184 B′ — the kernel's polarity)
 //!
-//! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. Release
-//! REQUIRES the owner's 👍; the old account's bound login 👎 cancels
-//! unconditionally (the victim veto); zero votes cancel (default-deny).
+//! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. Releases
+//! at 24 h if the owner 👍; OR, if the old account's own bound GitHub 👍,
+//! 7 days after filing unless the owner 👎 or two ≥ 1-year-old GitHub
+//! accounts 👎 (the tally HOLDs meanwhile — `--status` renders
+//! `hold_until_unix`). The bound login's 👎 cancels unconditionally (the
+//! victim veto), the owner's 👎 cancels either path; zero votes cancel.
 //!
 //! # The per-invocation key source (the T-PREFLIGHT product finding)
 //!
@@ -589,9 +592,13 @@ pub fn render_proposal_line(proposal_issue_url: Option<&str>) -> String {
 }
 
 /// The vote rules, verbatim with the kernel's polarity
-/// (`kat_protocol_migrate_tally`): 👍 endorses, 👎 objects, the owner's 👍
-/// is REQUIRED, the victim veto, default-deny. `old_bound_login` names the
-/// veto subject when the status read knows it.
+/// (`kat_protocol_migrate_tally`, Issue 184 B′): 👍 endorses, 👎 objects;
+/// the owner path (owner 👍 → releases at 24 h), the self path (the old
+/// account's own bound GitHub 👍 → releases 7 days after filing unless the
+/// owner or two ≥ 1-year-old GitHub accounts 👎), the owner veto, the
+/// victim veto, default-deny. The self line (and the victim-veto line)
+/// render only when the status read knows `old_bound_login` — without a
+/// frozen binding there is no self path to state.
 #[must_use]
 pub fn render_vote_rules(old_bound_login: Option<&str>) -> String {
     use std::fmt::Write as _;
@@ -605,22 +612,53 @@ pub fn render_vote_rules(old_bound_login: Option<&str>) -> String {
     let _ = writeln!(out, "  👎 OBJECTS to it (cancel vote)");
     let _ = writeln!(
         out,
-        "  release REQUIRES @{TALLY_OWNER_LOGIN}'s 👍 — silence cancels (default-deny; \
-         zero votes = cancelled, re-filing is one command)"
+        "  Releases at 24 h if @{TALLY_OWNER_LOGIN} 👍 \
+         (weighted 👍 must beat weighted 👎: @{TALLY_OWNER_LOGIN} 51%, every other login 49%)."
     );
-    let victim = match old_bound_login {
-        Some(v) => format!("@{v}"),
-        None => "the old account's bound login (if any)".to_owned(),
-    };
-    let _ = writeln!(
-        out,
-        "  victim veto: a 👎 from {victim} cancels UNCONDITIONALLY"
-    );
+    if let Some(v) = old_bound_login {
+        let _ = writeln!(
+            out,
+            "  OR, if the old account's own bound GitHub (@{v}) 👍, it releases 7 days after \
+             filing unless @{TALLY_OWNER_LOGIN} 👎 or two GitHub accounts ≥ 1 year old 👎."
+        );
+        let _ = writeln!(
+            out,
+            "  A 👎 from @{v} cancels UNCONDITIONALLY (the victim veto)."
+        );
+    }
     let _ = write!(
         out,
-        "  otherwise weighted 👍 must beat weighted 👎 (@{TALLY_OWNER_LOGIN} 51%, every other login 49%)"
+        "  A 👎 from @{TALLY_OWNER_LOGIN} cancels either path. Zero votes cancel \
+         (default-deny; re-filing is one command)."
     );
     out
+}
+
+/// `YYYY-MM-DD HH:MM:SS UTC` from unix seconds (the shared Hinnant civil
+/// helper — no chrono dep for one label).
+#[must_use]
+pub fn fmt_utc(unix: u64) -> String {
+    let (y, m, d) = crate::kat_footer::ymd_from_unix(unix);
+    let sod = unix % 86_400;
+    format!(
+        "{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02} UTC",
+        sod / 3600,
+        (sod % 3600) / 60,
+        sod % 60
+    )
+}
+
+/// The self-path hold line (Issue 184 B′): `Some` while the status carries
+/// `hold_until_unix` — the tally is `Hold`, re-judged for release at that
+/// instant unless vetoed.
+#[must_use]
+pub fn render_hold_line(s: &MigrateStatusBody) -> Option<String> {
+    s.hold_until_unix.map(|t| {
+        format!(
+            "HELD — self-endorsed; releases at {} unless vetoed (unix {t})",
+            fmt_utc(t)
+        )
+    })
 }
 
 /// The proposal URL a status body names: the worker's own URL first, else
@@ -634,7 +672,8 @@ pub fn status_proposal_url(s: &MigrateStatusBody, repo_base: &str) -> Option<Str
 }
 
 /// The structured status render (appended under the raw JSON): the
-/// proposal URL, the frozen `old_bound_login`, the vote rules.
+/// proposal URL, the frozen `old_bound_login`, the self-path hold (when
+/// held), the vote rules.
 #[must_use]
 pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
     use std::fmt::Write as _;
@@ -654,6 +693,9 @@ pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
             .as_deref()
             .map_or_else(|| "none".to_owned(), |l| format!("@{l}"))
     );
+    if let Some(hold) = render_hold_line(s) {
+        let _ = writeln!(out, "{hold}");
+    }
     out.push_str(&render_vote_rules(s.old_bound_login.as_deref()));
     out.push('\n');
     out
@@ -732,31 +774,102 @@ mod tests {
             proposal_issue: issue,
             proposal_issue_url: url.map(str::to_owned),
             old_bound_login: victim.map(str::to_owned),
+            hold_until_unix: None,
         }
     }
 
     #[test]
-    fn the_vote_rules_render_the_amended_polarity() {
+    fn the_vote_rules_render_the_b_prime_polarity() {
         let r = render_vote_rules(Some("victim"));
         assert!(r.contains("👍 ENDORSES the migration"), "{r}");
         assert!(r.contains("👎 OBJECTS"), "{r}");
         assert!(
-            r.contains(&format!("REQUIRES @{TALLY_OWNER_LOGIN}'s 👍")),
+            r.contains(&format!("Releases at 24 h if @{TALLY_OWNER_LOGIN} 👍")),
             "{r}"
         );
         assert!(
-            r.contains("a 👎 from @victim cancels UNCONDITIONALLY"),
+            r.contains(
+                "OR, if the old account's own bound GitHub (@victim) 👍, it releases 7 days \
+                 after filing unless @katopz 👎 or two GitHub accounts ≥ 1 year old 👎."
+            ),
             "{r}"
         );
-        assert!(r.contains("zero votes = cancelled"), "{r}");
+        assert!(
+            r.contains("A 👎 from @victim cancels UNCONDITIONALLY"),
+            "{r}"
+        );
+        assert!(
+            r.contains(&format!(
+                "A 👎 from @{TALLY_OWNER_LOGIN} cancels either path"
+            )),
+            "{r}"
+        );
+        assert!(r.contains("Zero votes cancel"), "{r}");
         assert!(r.contains(PROPOSAL_LABEL), "{r}");
-        // The retired objection-era vocabulary must not come back.
+        // The retired vocabularies must not come back: objection-era and the
+        // pre-B′ "owner 👍 REQUIRED, silence cancels" (B′ releases on the
+        // self path through owner silence).
         assert!(!r.contains("SUPPORT"), "{r}");
         assert!(!r.contains("nobody objects"), "{r}");
+        assert!(!r.contains("silence cancels"), "{r}");
+        assert!(!r.contains("REQUIRES"), "{r}");
+        // No frozen binding → no self path line, no victim line.
         let generic = render_vote_rules(None);
-        assert!(
-            generic.contains("the old account's bound login (if any)"),
-            "{generic}"
+        assert!(!generic.contains("7 days"), "{generic}");
+        assert!(!generic.contains("bound GitHub"), "{generic}");
+        assert!(!generic.contains("UNCONDITIONALLY"), "{generic}");
+        assert!(generic.contains("Releases at 24 h"), "{generic}");
+        assert!(generic.contains("Zero votes cancel"), "{generic}");
+    }
+
+    #[test]
+    fn fmt_utc_renders_civil_time() {
+        assert_eq!(fmt_utc(0), "1970-01-01 00:00:00 UTC");
+        // 2026-10-27 12:34:56 UTC.
+        assert_eq!(fmt_utc(1_793_104_496), "2026-10-27 12:34:56 UTC");
+    }
+
+    #[test]
+    fn status_renders_the_self_endorsed_hold() {
+        let hold = 1_792_900_000 + 604_800;
+        // Held, with the bound login → hold line + the self path rule.
+        let mut s = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
+        s.hold_until_unix = Some(hold);
+        let r = render_status(&s, "https://base");
+        let want = format!(
+            "HELD — self-endorsed; releases at {} unless vetoed",
+            fmt_utc(hold)
+        );
+        assert!(r.contains(&want), "{r}");
+        assert!(r.contains("bound GitHub (@victim) 👍"), "{r}");
+        // Held, without a bound login (a legacy/odd row) → the hold still
+        // renders (the wire said so), but no self-path line is invented.
+        let mut s = status_body(MigrateRequestState::Pending, Some(9), None, None);
+        s.hold_until_unix = Some(hold);
+        let r = render_status(&s, "https://base");
+        assert!(r.contains(&want), "{r}");
+        assert!(!r.contains("7 days after filing"), "{r}");
+        // Not held → no HELD line.
+        let s = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
+        assert!(render_hold_line(&s).is_none());
+        assert!(!render_status(&s, "https://base").contains("HELD"));
+    }
+
+    #[test]
+    fn parse_status_reads_hold_until_and_tolerates_its_absence() {
+        let mut s = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
+        s.hold_until_unix = Some(1_793_504_800);
+        let wire = serde_json::to_string(&s).expect("ser");
+        assert_eq!(
+            parse_status(&wire).expect("parse").hold_until_unix,
+            Some(1_793_504_800)
+        );
+        // A pre-B′ server omits the field → None (additive wire).
+        let mut v: serde_json::Value = serde_json::from_str(&wire).expect("json");
+        v.as_object_mut().expect("obj").remove("hold_until_unix");
+        assert_eq!(
+            parse_status(&v.to_string()).expect("parse").hold_until_unix,
+            None
         );
     }
 

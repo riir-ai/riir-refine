@@ -3734,10 +3734,16 @@ fn run_kat_migrate(
                 }
                 // The lazy-close hint: a pending row whose window elapsed
                 // closes on the worker at the NEXT read (this one just did).
+                // A self-path HOLD (Issue 184 B′) re-judges at
+                // `hold_until_unix`, not at the 24 h window close.
                 let pending_elapsed = serde_json::from_str::<serde_json::Value>(&body)
                     .ok()
                     .filter(|v| v.get("state").and_then(|s| s.as_str()) == Some("pending"))
-                    .and_then(|v| v.get("window_close_unix").and_then(|c| c.as_u64()))
+                    .and_then(|v| {
+                        v.get("hold_until_unix")
+                            .and_then(|h| h.as_u64())
+                            .or_else(|| v.get("window_close_unix").and_then(|c| c.as_u64()))
+                    })
                     .map(|close| {
                         std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
