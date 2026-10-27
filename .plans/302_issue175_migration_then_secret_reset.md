@@ -125,6 +125,13 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       16:00:03 UTC (the hourly tick; the 16:03 read came after), state
       `released`, tally snapshot `cf93c978…`; devnet balances c79c93b8
       174 866 068 → 0, d54e39a8 0 → 174 866 068 µKAT (exact conservation).
+      ✅ **#2 (4090) RELEASED** — attest-only `71615e8d → 4f4623f3`
+      (riir-dapps Issue 143, B = d54e39a8 co-signed), 18:00 cron, 124 574 989
+      µKAT exact, link holder untouched; 409 github_bound + 409
+      claim_not_fresh cells green. **T1 devnet rehearsal: COMPLETE** (both
+      boxes). Mainnet prerequisites before T-MIGRATE: riir-dapps Issues 144
+      (prove the GitHub login), 142 (recovery lane), 145; a BOT issues token;
+      the owner's go to enable `kat_migrate` on the apex.
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
