@@ -154,12 +154,12 @@ riir-neuron-db = { path = "../riir-neuron-db", optional = true, default-features
 # HERE (llm_spend + the LlmRouter) — see the leaf's BOUNDARY.md.
 riir-llm = { path = "../riir-llm", optional = true, default-features = false }
 # NOTE: metal_tensor_gemm (Issue 663 T5, +1.21× prefill on M3 Metal) needs the
-# vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The fork lives
-# at `riir-ai/vendor/wgpu-hal-30.0.0/`. Per cargo's patch-inheritance rules,
+# vendored wgpu-hal fork (adds `raw_handle()` on metal::Buffer). The forks live
+# at `riir-infer/vendor/` (wgpu-hal since riir-ai Issue 1046, cubecl-wgpu since
+# riir-infer Issue 1141). Per cargo's patch-inheritance rules,
 # `[patch.crates-io]` is only honored at the workspace root cargo is invoked
 # from — so we duplicate the patch declarations below pointing at the sibling
-# riir-ai vendor paths. Same trick for cubecl-runtime + cubecl-wgpu (the
-# arithmetic-overflow fix + the raw-handle accessors).
+# riir-infer vendor paths.
 
 # Issue 126 follow-up: the topup picker's raw-mode key reader (unix
 # termios via libc — already in the lock transitively, zero new packages).
@@ -1174,6 +1174,11 @@ required-features = ["wasm_validator"]
 cubecl-runtime = { path = "../riir-infer/vendor/cubecl-runtime-0.11.0-pre.2" }
 cubecl-common = { path = "../riir-infer/vendor/cubecl-common-0.11.0-pre.2" }
 wgpu-hal = { path = "../riir-infer/vendor/wgpu-hal-30.0.0" }
+# riir-infer Issue 1141 / riir-ai issue 1132: the cubecl-wgpu fork (raw Metal
+# handles, bind-group cache, DEFAULT-ON uniform-content cache — composed with
+# params_handle_cache it is +38-82% Metal decode on M5 Ultra). Canonical home
+# riir-infer/vendor; without this row this workspace built upstream cubecl-wgpu.
+cubecl-wgpu = { path = "../riir-infer/vendor/cubecl-wgpu-0.11.0-pre.2" }
 # katgpt-rs Issue 968 residue: `block` 0.1.6 is TERMINAL upstream and carries
 # the `static of uninhabited type` future-incompat (rust-lang/rust #74840,
 # hard error in a future rustc) — reached here under --all-features via
