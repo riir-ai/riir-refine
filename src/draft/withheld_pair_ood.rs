@@ -317,9 +317,11 @@ pub fn classify_rustc_shape(code: &str) -> &'static str {
     "plain-binding"
 }
 
-// ── the atomic-memorization null ────────────────────────────────────────
+// ── the atomic-memorization null ────────────────────────────────────────────
 
-const RUST_KEYWORDS: [&str; 36] = [
+// `pub(crate)`: Issue 186's synth-rename transform reuses the same keyword
+// table (a rename that touched a keyword would change the atomic key).
+pub(crate) const RUST_KEYWORDS: [&str; 36] = [
     "as", "break", "const", "continue", "crate", "dyn", "else", "enum", "extern", "false", "fn",
     "for", "if", "impl", "in", "let", "loop", "match", "mod", "move", "mut", "pub", "ref",
     "return", "self", "Self", "static", "struct", "super", "trait", "true", "type", "unsafe",

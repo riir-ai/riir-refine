@@ -48,6 +48,10 @@ pub mod eval_fixtures_docker;
 pub mod eval_fixtures_perf;
 pub mod eval_fixtures_sec;
 pub mod eval_fixtures_shader;
+// Issue 186: the structure-grounded synth fixture family — tier-1
+// deterministic mutations of the corpus's own material (gold = the owning
+// rule), the withheld-pair population feeder + the robustness floor.
+pub mod eval_synth;
 pub mod headroom_probe;
 pub mod instantiation_rerank;
 #[cfg(feature = "clippy_verify")]
