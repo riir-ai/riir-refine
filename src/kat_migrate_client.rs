@@ -28,14 +28,18 @@
 //! - **`--status <request-id>`** (`kat_transport`): the public read, plus
 //!   the proposal URL, the frozen `old_bound_login`, and the vote rules.
 //!
-//! # The vote rules (Issue 183 §B/§C + Issue 184 B′ — the kernel's polarity)
+//! # The vote rules (Issue 183 §B/§C + Issue 184 rule C — the kernel's polarity)
 //!
-//! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. Releases
-//! at 24 h if the owner 👍; OR, if the old account's own bound GitHub 👍,
-//! 7 days after filing unless the owner 👎 or two ≥ 1-year-old GitHub
-//! accounts 👎 (the tally HOLDs meanwhile — `--status` renders
-//! `hold_until_unix`). The bound login's 👎 cancels unconditionally (the
-//! victim veto), the owner's 👎 cancels either path; zero votes cancel.
+//! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. The rule
+//! text is riir-kat's `proposal_vote_rules(timing)` VERBATIM (the same text
+//! the issue body carries): owner 51%, every other GitHub account 1%;
+//! releases if 👍 outweighs 👎, a draw or no votes cancels; with the owner
+//! silent only ≥ 1-year-old accounts count and a passing vote releases the
+//! timing's R2 span after filing (7 days LAW, 2 hours on the devnet fast
+//! build). The renders print the ACTUAL close / hold / silent-owner release
+//! instants (UTC) from the status read — never a hard-coded "24 h" where an
+//! instant exists — and `@`-mention the owner, the old account's bound
+//! login and the claimant.
 //!
 //! # The per-invocation key source (the T-PREFLIGHT product finding)
 //!
@@ -57,7 +61,8 @@ use riir_kat::kat_protocol_migrate::{
 use riir_kat::kat_protocol_migrate::{
     proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL,
 };
-use riir_kat::kat_protocol_migrate_tally::TALLY_OWNER_LOGIN;
+use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
+use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_OWNER_LOGIN};
 
 /// The migrate repo base the proposal-issue URL composes against when the
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
@@ -591,46 +596,140 @@ pub fn render_proposal_line(proposal_issue_url: Option<&str>) -> String {
     }
 }
 
-/// The vote rules, verbatim with the kernel's polarity
-/// (`kat_protocol_migrate_tally`, Issue 184 B′): 👍 endorses, 👎 objects;
-/// the owner path (owner 👍 → releases at 24 h), the self path (the old
-/// account's own bound GitHub 👍 → releases 7 days after filing unless the
-/// owner or two ≥ 1-year-old GitHub accounts 👎), the owner veto, the
-/// victim veto, default-deny. The self line (and the victim-veto line)
-/// render only when the status read knows `old_bound_login` — without a
-/// frozen binding there is no self path to state.
+/// The timing a status body says the request is judged under (riir-refine
+/// Issue 184): the worker's `tally_timing`, else [`TallyTiming::LAW`] (a
+/// worker that predates the field ran LAW).
 #[must_use]
-pub fn render_vote_rules(old_bound_login: Option<&str>) -> String {
+pub fn status_timing(s: &MigrateStatusBody) -> TallyTiming {
+    s.tally_timing.unwrap_or(TallyTiming::LAW)
+}
+
+/// The `@`-mentions a request notifies: the owner, the old account's bound
+/// login (frozen at filing), the claimant — case-insensitively deduped,
+/// in that order.
+#[must_use]
+pub fn vote_mentions(old_bound_login: Option<&str>, claimant: Option<&str>) -> String {
+    let mut seen: Vec<&str> = vec![TALLY_OWNER_LOGIN];
+    for l in [old_bound_login, claimant].into_iter().flatten() {
+        if !l.is_empty() && !seen.iter().any(|p| p.eq_ignore_ascii_case(l)) {
+            seen.push(l);
+        }
+    }
+    seen.iter()
+        .map(|l| format!("@{l}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// The vote rules (Issue 184 rule C): where to vote, the polarity, then
+/// riir-kat's `proposal_vote_rules(timing)` VERBATIM (the issue body's own
+/// text — the R2 span rendered from `timing`), then who is notified.
+#[must_use]
+pub fn render_vote_rules(timing: TallyTiming, mentions: &str) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
     let _ = writeln!(
         out,
         "votes: react on the proposal issue (label {PROPOSAL_LABEL}; only that issue counts; \
-         one login = one vote; both ways = no vote)"
+         one account = one vote; both ways = no vote)"
     );
     let _ = writeln!(out, "  👍 ENDORSES the migration (release vote)");
     let _ = writeln!(out, "  👎 OBJECTS to it (cancel vote)");
-    let _ = writeln!(
-        out,
-        "  Releases at 24 h if @{TALLY_OWNER_LOGIN} 👍 \
-         (weighted 👍 must beat weighted 👎: @{TALLY_OWNER_LOGIN} 51%, every other login 49%)."
-    );
-    if let Some(v) = old_bound_login {
+    let _ = writeln!(out, "  {}", proposal_vote_rules(timing));
+    let _ = write!(out, "  notified: {mentions}");
+    out
+}
+
+/// The request's timeline as ACTUAL UTC instants (Issue 184): the window
+/// close (where an owner vote decides), the silent-owner release instant
+/// (filing + the timing's R2 span — derived from the close, since the close
+/// IS filing + the window), or the HOLD instant when the tally already
+/// held. Terminal rows render their close instant. One line per fact.
+#[must_use]
+pub fn render_timeline(s: &MigrateStatusBody) -> Vec<String> {
+    let timing = status_timing(s);
+    let mut out = Vec::new();
+    match s.state {
+        MigrateRequestState::Released | MigrateRequestState::Cancelled => {
+            if let Some(t) = s.closed_at_unix {
+                out.push(format!("closed at {} (unix {t})", fmt_utc(t)));
+            }
+            return out;
+        }
+        MigrateRequestState::Pending | MigrateRequestState::Dispute => {}
+    }
+    if let Some(close) = s.window_close_unix {
+        out.push(format!(
+            "window closes at {} (unix {close}) — a @{TALLY_OWNER_LOGIN} vote is judged then",
+            fmt_utc(close)
+        ));
+    }
+    match (s.hold_until_unix, s.window_close_unix) {
+        (Some(t), _) => out.push(format!(
+            "HELD — @{TALLY_OWNER_LOGIN} silent, the ≥ 1-year-old accounts' vote passes; \
+             releases at {} unless @{TALLY_OWNER_LOGIN} 👎 (unix {t})",
+            fmt_utc(t)
+        )),
+        (None, Some(close)) => {
+            let filed = close.saturating_sub(timing.window_secs());
+            let t = timing.silent_owner_release_at_unix(filed);
+            out.push(format!(
+                "if @{TALLY_OWNER_LOGIN} stays silent: a passing vote releases at {} \
+                 (filing + {}; unix {t})",
+                fmt_utc(t),
+                render_span(timing.silent_owner_window_secs())
+            ));
+        }
+        (None, None) => {}
+    }
+    if !timing.is_law() {
+        out.push(format!(
+            "timing: DEVNET FAST ({} window, {} silent-owner hold) — never the mainnet law",
+            render_span(timing.window_secs()),
+            render_span(timing.silent_owner_window_secs())
+        ));
+    }
+    out
+}
+
+/// The filing's tail (after the request + proposal lines): the timeline +
+/// rules from the post-filing status read when it parsed, else the ack's
+/// close instant + the LAW rules, labelled as assumed (the ack carries no
+/// timing).
+#[must_use]
+pub fn render_filing_tail(
+    window_close_unix: Option<u64>,
+    status: Option<&MigrateStatusBody>,
+    github_user: &str,
+) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    if let Some(s) = status {
+        for line in render_timeline(s) {
+            let _ = writeln!(out, "{line}");
+        }
+        out.push_str(&render_vote_rules(
+            status_timing(s),
+            &vote_mentions(s.old_bound_login.as_deref(), Some(&s.github_user)),
+        ));
+        return out;
+    }
+    if let Some(close) = window_close_unix {
         let _ = writeln!(
             out,
-            "  OR, if the old account's own bound GitHub (@{v}) 👍, it releases 7 days after \
-             filing unless @{TALLY_OWNER_LOGIN} 👎 or two GitHub accounts ≥ 1 year old 👎."
-        );
-        let _ = writeln!(
-            out,
-            "  A 👎 from @{v} cancels UNCONDITIONALLY (the victim veto)."
+            "window closes at {} (unix {close}) — default-deny",
+            fmt_utc(close)
         );
     }
-    let _ = write!(
+    let _ = writeln!(
         out,
-        "  A 👎 from @{TALLY_OWNER_LOGIN} cancels either path. Zero votes cancel \
-         (default-deny; re-filing is one command)."
+        "(the status read failed — the rules below assume the LAW timing; \
+         `--status` shows the deployment's)"
     );
+    out.push_str(&render_vote_rules(
+        TallyTiming::LAW,
+        &vote_mentions(None, Some(github_user)),
+    ));
     out
 }
 
@@ -648,19 +747,6 @@ pub fn fmt_utc(unix: u64) -> String {
     )
 }
 
-/// The self-path hold line (Issue 184 B′): `Some` while the status carries
-/// `hold_until_unix` — the tally is `Hold`, re-judged for release at that
-/// instant unless vetoed.
-#[must_use]
-pub fn render_hold_line(s: &MigrateStatusBody) -> Option<String> {
-    s.hold_until_unix.map(|t| {
-        format!(
-            "HELD — self-endorsed; releases at {} unless vetoed (unix {t})",
-            fmt_utc(t)
-        )
-    })
-}
-
 /// The proposal URL a status body names: the worker's own URL first, else
 /// composed from the issue NUMBER over `repo_base`, else `None`.
 #[must_use]
@@ -672,8 +758,8 @@ pub fn status_proposal_url(s: &MigrateStatusBody, repo_base: &str) -> Option<Str
 }
 
 /// The structured status render (appended under the raw JSON): the
-/// proposal URL, the frozen `old_bound_login`, the self-path hold (when
-/// held), the vote rules.
+/// proposal URL, the frozen `old_bound_login`, the timeline (close / hold /
+/// silent-owner release instants in UTC), the rule-C vote rules.
 #[must_use]
 pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
     use std::fmt::Write as _;
@@ -693,10 +779,13 @@ pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
             .as_deref()
             .map_or_else(|| "none".to_owned(), |l| format!("@{l}"))
     );
-    if let Some(hold) = render_hold_line(s) {
-        let _ = writeln!(out, "{hold}");
+    for line in render_timeline(s) {
+        let _ = writeln!(out, "{line}");
     }
-    out.push_str(&render_vote_rules(s.old_bound_login.as_deref()));
+    out.push_str(&render_vote_rules(
+        status_timing(s),
+        &vote_mentions(s.old_bound_login.as_deref(), Some(&s.github_user)),
+    ));
     out.push('\n');
     out
 }
@@ -775,51 +864,62 @@ mod tests {
             proposal_issue_url: url.map(str::to_owned),
             old_bound_login: victim.map(str::to_owned),
             hold_until_unix: None,
+            tally_timing: None,
         }
     }
 
     #[test]
-    fn the_vote_rules_render_the_b_prime_polarity() {
-        let r = render_vote_rules(Some("victim"));
+    fn the_vote_rules_render_rule_c_verbatim() {
+        let r = render_vote_rules(
+            TallyTiming::LAW,
+            &vote_mentions(Some("victim"), Some("claimant")),
+        );
         assert!(r.contains("👍 ENDORSES the migration"), "{r}");
         assert!(r.contains("👎 OBJECTS"), "{r}");
-        assert!(
-            r.contains(&format!("Releases at 24 h if @{TALLY_OWNER_LOGIN} 👍")),
-            "{r}"
-        );
+        assert!(r.contains(PROPOSAL_LABEL), "{r}");
         assert!(
             r.contains(
-                "OR, if the old account's own bound GitHub (@victim) 👍, it releases 7 days \
-                 after filing unless @katopz 👎 or two GitHub accounts ≥ 1 year old 👎."
+                "Vote on THIS issue. @katopz = 51%, every other GitHub account = 1% \
+                 (one account, one vote). Releases if 👍 outweighs 👎; a draw or no votes \
+                 cancels. If @katopz does not vote, only GitHub accounts ≥ 1 year old count, \
+                 and a passing vote releases 7 days after filing (so @katopz can still 👎)."
             ),
             "{r}"
         );
-        assert!(
-            r.contains("A 👎 from @victim cancels UNCONDITIONALLY"),
-            "{r}"
+        assert!(r.contains(&proposal_vote_rules(TallyTiming::LAW)), "{r}");
+        assert!(r.contains("notified: @katopz @victim @claimant"), "{r}");
+        // The devnet fast timing renders its own span.
+        let f = render_vote_rules(TallyTiming::DEVNET_FAST, "@katopz");
+        assert!(f.contains("releases 2 hours after filing"), "{f}");
+        assert!(!f.contains("7 days"), "{f}");
+        // Retired vocabularies (objection era, Issue 183, B′) never return.
+        for gone in [
+            "SUPPORT",
+            "nobody objects",
+            "UNCONDITIONALLY",
+            "victim veto",
+            "either path",
+            "49%",
+            "Releases at 24 h",
+            "bound GitHub (@",
+        ] {
+            assert!(!r.contains(gone), "{gone}: {r}");
+        }
+    }
+
+    #[test]
+    fn mentions_name_owner_old_login_and_claimant_once() {
+        assert_eq!(vote_mentions(None, None), "@katopz");
+        assert_eq!(
+            vote_mentions(Some("victim"), Some("claimant")),
+            "@katopz @victim @claimant"
         );
-        assert!(
-            r.contains(&format!(
-                "A 👎 from @{TALLY_OWNER_LOGIN} cancels either path"
-            )),
-            "{r}"
+        assert_eq!(
+            vote_mentions(Some("KATOPZ"), Some("Victim")),
+            "@katopz @Victim"
         );
-        assert!(r.contains("Zero votes cancel"), "{r}");
-        assert!(r.contains(PROPOSAL_LABEL), "{r}");
-        // The retired vocabularies must not come back: objection-era and the
-        // pre-B′ "owner 👍 REQUIRED, silence cancels" (B′ releases on the
-        // self path through owner silence).
-        assert!(!r.contains("SUPPORT"), "{r}");
-        assert!(!r.contains("nobody objects"), "{r}");
-        assert!(!r.contains("silence cancels"), "{r}");
-        assert!(!r.contains("REQUIRES"), "{r}");
-        // No frozen binding → no self path line, no victim line.
-        let generic = render_vote_rules(None);
-        assert!(!generic.contains("7 days"), "{generic}");
-        assert!(!generic.contains("bound GitHub"), "{generic}");
-        assert!(!generic.contains("UNCONDITIONALLY"), "{generic}");
-        assert!(generic.contains("Releases at 24 h"), "{generic}");
-        assert!(generic.contains("Zero votes cancel"), "{generic}");
+        assert_eq!(vote_mentions(Some("same"), Some("SAME")), "@katopz @same");
+        assert_eq!(vote_mentions(Some(""), Some("c")), "@katopz @c");
     }
 
     #[test]
@@ -830,29 +930,116 @@ mod tests {
     }
 
     #[test]
-    fn status_renders_the_self_endorsed_hold() {
-        let hold = 1_792_900_000 + 604_800;
-        // Held, with the bound login → hold line + the self path rule.
-        let mut s = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
-        s.hold_until_unix = Some(hold);
-        let r = render_status(&s, "https://base");
-        let want = format!(
-            "HELD — self-endorsed; releases at {} unless vetoed",
-            fmt_utc(hold)
+    fn the_timeline_renders_actual_instants_never_hard_coded_spans() {
+        // LAW, live, not held: the close instant + the silent-owner release
+        // instant (filing + 7 d, filing = close − 24 h).
+        let live = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
+        let close = live.window_close_unix.expect("close");
+        let lines = render_timeline(&live);
+        assert_eq!(
+            lines[0],
+            format!(
+                "window closes at {} (unix {close}) — a @katopz vote is judged then",
+                fmt_utc(close)
+            )
         );
-        assert!(r.contains(&want), "{r}");
-        assert!(r.contains("bound GitHub (@victim) 👍"), "{r}");
-        // Held, without a bound login (a legacy/odd row) → the hold still
-        // renders (the wire said so), but no self-path line is invented.
+        let silent = close - 86_400 + 604_800;
+        assert_eq!(
+            lines[1],
+            format!(
+                "if @katopz stays silent: a passing vote releases at {} (filing + 7 days; unix {silent})",
+                fmt_utc(silent)
+            )
+        );
+        assert_eq!(lines.len(), 2, "LAW prints no timing banner: {lines:?}");
+        // Held → the hold instant replaces the projection.
+        let mut held = live.clone();
+        held.hold_until_unix = Some(silent);
+        let lines = render_timeline(&held);
+        assert!(
+            lines[1].starts_with(&format!(
+                "HELD — @katopz silent, the ≥ 1-year-old accounts' vote passes; releases at {}",
+                fmt_utc(silent)
+            )),
+            "{lines:?}"
+        );
+        // DEVNET FAST: close + 1 h → filing; silent release = filing + 2 h.
+        let mut fast_row = live.clone();
+        fast_row.tally_timing = Some(TallyTiming::DEVNET_FAST);
+        let lines = render_timeline(&fast_row);
+        let fast = close - 3_600 + 7_200;
+        assert!(
+            lines[1].contains(&format!("releases at {} (filing + 2 hours", fmt_utc(fast))),
+            "{lines:?}"
+        );
+        assert!(
+            lines[2].contains("DEVNET FAST (1 hour window, 2 hours"),
+            "{lines:?}"
+        );
+        // Terminal → the close instant only.
+        let mut done = status_body(MigrateRequestState::Released, Some(9), None, None);
+        done.closed_at_unix = Some(1_793_000_000);
+        assert_eq!(
+            render_timeline(&done),
+            vec![format!(
+                "closed at {} (unix 1793000000)",
+                fmt_utc(1_793_000_000)
+            )]
+        );
+        // No render ever falls back to a hard-coded window length.
+        let rendered = render_status(&fast_row, "https://base");
+        for gone in ["24 h", "7 days", "(24 h default-deny)"] {
+            assert!(!rendered.contains(gone), "{gone}: {rendered}");
+        }
+        assert!(
+            rendered.contains("releases 2 hours after filing"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("notified: @katopz @victim @claimant"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_filing_tail_uses_the_status_or_labels_the_law_assumption() {
         let mut s = status_body(MigrateRequestState::Pending, Some(9), None, None);
-        s.hold_until_unix = Some(hold);
-        let r = render_status(&s, "https://base");
-        assert!(r.contains(&want), "{r}");
-        assert!(!r.contains("7 days after filing"), "{r}");
-        // Not held → no HELD line.
-        let s = status_body(MigrateRequestState::Pending, Some(9), None, Some("victim"));
-        assert!(render_hold_line(&s).is_none());
-        assert!(!render_status(&s, "https://base").contains("HELD"));
+        s.tally_timing = Some(TallyTiming::DEVNET_FAST);
+        let tail = render_filing_tail(s.window_close_unix, Some(&s), "claimant");
+        assert!(tail.contains("window closes at"), "{tail}");
+        assert!(tail.contains("2 hours after filing"), "{tail}");
+        assert!(!tail.contains("assume the LAW"), "{tail}");
+        let close = 1_792_986_400;
+        let tail = render_filing_tail(Some(close), None, "claimant");
+        assert!(
+            tail.contains(&format!(
+                "window closes at {} (unix {close})",
+                fmt_utc(close)
+            )),
+            "{tail}"
+        );
+        assert!(tail.contains("assume the LAW timing"), "{tail}");
+        assert!(tail.contains("7 days after filing"), "{tail}");
+        assert!(tail.contains("notified: @katopz @claimant"), "{tail}");
+        assert!(!tail.contains("24 h"), "{tail}");
+    }
+
+    #[test]
+    fn parse_status_reads_the_tally_timing_and_tolerates_its_absence() {
+        let mut s = status_body(MigrateRequestState::Pending, Some(9), None, None);
+        s.tally_timing = Some(TallyTiming::DEVNET_FAST);
+        let wire = serde_json::to_string(&s).expect("ser");
+        let back = parse_status(&wire).expect("parse");
+        assert_eq!(back.tally_timing, Some(TallyTiming::DEVNET_FAST));
+        assert_eq!(status_timing(&back), TallyTiming::DEVNET_FAST);
+        let mut v: serde_json::Value = serde_json::from_str(&wire).expect("json");
+        v.as_object_mut().expect("obj").remove("tally_timing");
+        let old = parse_status(&v.to_string()).expect("parse");
+        assert_eq!(
+            status_timing(&old),
+            TallyTiming::LAW,
+            "pre-timing worker = LAW"
+        );
     }
 
     #[test]
@@ -864,7 +1051,7 @@ mod tests {
             parse_status(&wire).expect("parse").hold_until_unix,
             Some(1_793_504_800)
         );
-        // A pre-B′ server omits the field → None (additive wire).
+        // A pre-Issue-184 server omits the field → None (additive wire).
         let mut v: serde_json::Value = serde_json::from_str(&wire).expect("json");
         v.as_object_mut().expect("obj").remove("hold_until_unix");
         assert_eq!(

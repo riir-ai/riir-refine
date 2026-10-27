@@ -3706,10 +3706,17 @@ fn run_kat_migrate(
         match riir_refine::kat_migrate_client::render_object_hint(&s, &repo_base) {
             Ok(hint) => {
                 println!("{hint}");
+                for line in riir_refine::kat_migrate_client::render_timeline(&s) {
+                    println!("{line}");
+                }
                 println!(
                     "{}",
                     riir_refine::kat_migrate_client::render_vote_rules(
-                        s.old_bound_login.as_deref()
+                        riir_refine::kat_migrate_client::status_timing(&s),
+                        &riir_refine::kat_migrate_client::vote_mentions(
+                            s.old_bound_login.as_deref(),
+                            Some(&s.github_user),
+                        ),
                     )
                 );
             }
@@ -3734,8 +3741,8 @@ fn run_kat_migrate(
                 }
                 // The lazy-close hint: a pending row whose window elapsed
                 // closes on the worker at the NEXT read (this one just did).
-                // A self-path HOLD (Issue 184 B′) re-judges at
-                // `hold_until_unix`, not at the 24 h window close.
+                // A silent-owner HOLD (Issue 184 rule C) re-judges at
+                // `hold_until_unix`, not at the window close.
                 let pending_elapsed = serde_json::from_str::<serde_json::Value>(&body)
                     .ok()
                     .filter(|v| v.get("state").and_then(|s| s.as_str()) == Some("pending"))
@@ -3807,12 +3814,19 @@ fn run_kat_migrate(
                     ack.proposal_issue_url.as_deref()
                 )
             );
-            if let Some(close) = outcome.window_close_unix {
-                println!("window: closes at unix {close} (24 h default-deny)");
-            }
+            // The ack carries no timing (Issue 184): one public status read
+            // renders the deployment's ACTUAL close / silent-owner instants
+            // and rule text; a failed read labels the LAW assumption.
+            let status = riir_refine::kat_migrate_client::status(&url, &ack.request_id_hex)
+                .ok()
+                .and_then(|b| riir_refine::kat_migrate_client::parse_status(&b));
             println!(
                 "{}",
-                riir_refine::kat_migrate_client::render_vote_rules(None)
+                riir_refine::kat_migrate_client::render_filing_tail(
+                    outcome.window_close_unix,
+                    status.as_ref(),
+                    github_user,
+                )
             );
             println!(
                 "next: watch with --status {}; object with --object {}",
