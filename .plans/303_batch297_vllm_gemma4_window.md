@@ -1,0 +1,14 @@
+# Plan 303 — Batch 297: vLLM Gemma-4 window (lucianommartins, 2026-10-05..10)
+
+**Status:** STAGED — claim-first at the next mining slot; verdict in Research 338 (YES B; artifacts written but commit DEFERRED — the M3 checkout was held detached+dirty by a concurrent lane, see Research 338 §commit-state)
+
+- [ ] T0 coordination + claim: re-fetch; verify the checkout is back on `develop` and the sibling's snapshot WIP landed (or adjudicate the detached state per Protocol H); append the `**Claimed:**` line under this Status + push BEFORE any corpus edit (48 h expiry); run `claim_lease_check --lint` on this file first.
+- [ ] T1 clones + pins: shallow-clone vllm into `.raw/b297/` (or reuse a local checkout if present); pin MERGED PRs at `origin/main` (60289, 60643) and OPEN PRs at their PR-head shas (60317, 60445 primary; 60504 secondary); record full shas + Apache-2.0 verification BEFORE any grading work; `rm -rf .raw/b297` at close (the ephemeral law).
+- [ ] T2 diff re-read at pins: read the four target diffs (60289, 60317, 60445, 60504); machine-verify every quote claimed in Research 338 byte-for-byte; adjust grades honestly — the PR-body grade is provisional until this task.
+- [ ] T3 dedup re-verification: 3+-vocabulary greps per candidate over kernel_opt + rust_perf at the LANDING state; adjudicate (a) `swa-evicted-prefix-tile-analytic-skip` vs `mask-block-classification-skip-placement` adjacency, (b) the MoE spill/warp half vs the splash Spill-series rust_perf rules, (c) candidate 4's own family (the B268 `moe-*` rules) — candidate 4 was NOT grepped at verdict time.
+- [ ] T4 authoring: new `entries_gpu_1xx` slice (next free file) — 2–4 own kernel_opt rules, NotBenchable annotations where the domain fails criterion 1, ORIGINAL Rust fixtures (standalone compile + run before landing), verbatim quotes at the pins.
+- [ ] T5 wiring + count pins: `mod.rs` KERNEL_CATEGORIES registration; count pins via ONE shape-asserted python pass (the B265 lesson); batch297 needle gates keyed to the LANDED text (the B259 lesson).
+- [ ] T6 gates: batch297 needle + parse; kernel_opt lib; default lib; clippy −D ×3 postures; retrieval floors re-measure under an isolated CARGO_TARGET_DIR; freeze/score-bench NOT owed (kernel_opt-only, P30) unless a clippy_lints rule sneaks in; binary rebuild NOT owed (kernel_opt outside the release set).
+- [ ] T7 queue row splice: insert the verbatim row from Research 338 §queue-row into `.distill/001_mining_queue_snapshot.md` immediately after the `# Mining queue snapshot` header — byte-level script job, line-ending aware (the file is natively CRLF; the B263/B275 lessons).
+- [ ] T8 landing: stage the named paths only; commit `feat:`/`docs:` on develop; push; `.raw/b297` removed; AGENTS.md corpus counts re-pinned if the gate demands.
+- [-] T9 (deferred) the host-loop batching class as rust_perf candidates — the Python-idiom shapes have weak Rust fixtures; revisit only if a consumer lane asks.
