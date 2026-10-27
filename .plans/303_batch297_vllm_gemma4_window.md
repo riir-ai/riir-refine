@@ -1,6 +1,7 @@
 # Plan 303 — Batch 297: vLLM Gemma-4 window (lucianommartins, 2026-10-05..10)
 
 **Status:** STAGED — claim-first at the next mining slot; verdict in Research 338 (YES B; artifacts written but commit DEFERRED — the M3 checkout was held detached+dirty by a concurrent lane, see Research 338 §commit-state)
+**Claimed:** shikuwa-4090-b297, 1793086431, expires 2026-10-29T07:33Z
 
 - [ ] T0 coordination + claim: re-fetch; verify the checkout is back on `develop` and the sibling's snapshot WIP landed (or adjudicate the detached state per Protocol H); append the `**Claimed:**` line under this Status + push BEFORE any corpus edit (48 h expiry); run `claim_lease_check --lint` on this file first.
 - [ ] T1 clones + pins: shallow-clone vllm into `.raw/b297/` (or reuse a local checkout if present); pin MERGED PRs at `origin/main` (60289, 60643) and OPEN PRs at their PR-head shas (60317, 60445 primary; 60504 secondary); record full shas + Apache-2.0 verification BEFORE any grading work; `rm -rf .raw/b297` at close (the ephemeral law).
