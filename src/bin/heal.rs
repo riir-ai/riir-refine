@@ -128,7 +128,11 @@ enum KatCommand {
     /// (the E-3 filing gate). Needs `kat_service`; the filing + status
     /// halves need `kat_transport`. `--totp <code>` carries the second
     /// factor on the filing (plan 053 — an ARMED old account files with
-    /// the current code; unenrolled accounts omit it).
+    /// the current code; unenrolled accounts omit it). riir-dapps Issue
+    /// 143: `--attest-cosign <old_hex> <new_hex> --github <login>` (on the
+    /// box of the account the login is bound to) prints B's detached
+    /// co-signature bundle; the filing's `--attest-cosig <bundle>` files
+    /// ATTEST-ONLY (the GitHub link stays on B).
     Migrate,
     /// riir-dapps plan 053 / riir-kat issue 007: `kat totp` — the
     /// TOTP second factor's CLI (the client half of the route host's
@@ -3651,16 +3655,26 @@ fn run_kat_migrate(
     github_token: Option<String>,
     repo_base: Option<&str>,
     totp_code: Option<&str>,
+    attest_cosign: Option<&(String, String)>,
+    attest_cosig: Option<&str>,
 ) {
-    let modes = github.is_some() as u8
+    // `--attest-cosign` is its own mode (it NEEDS `--github`, so the
+    // filing mode counts only without it).
+    let modes = (github.is_some() && attest_cosign.is_none()) as u8
+        + attest_cosign.is_some() as u8
         + object.is_some() as u8
         + status_id.is_some() as u8
         + census_mode as u8;
     if modes != 1 {
         eprintln!(
             "migrate: exactly one mode is required — \
-             --github <user> (file) | --object <request-id> | --status <request-id> | --census"
+             --github <user> (file) | --attest-cosign <old_hex> <new_hex> --github <user> \
+             | --object <request-id> | --status <request-id> | --census"
         );
+        std::process::exit(2);
+    }
+    if attest_cosig.is_some() && (github.is_none() || attest_cosign.is_some()) {
+        eprintln!("migrate: --attest-cosig <bundle> rides a filing (--github <user>) only");
         std::process::exit(2);
     }
     let repo_base = repo_base
@@ -3718,6 +3732,39 @@ fn run_kat_migrate(
                             Some(&s.github_user),
                         ),
                     )
+                );
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // ── riir-dapps Issue 143: B's attest co-signature (run on B's box with
+    // B's own key; prints a public bundle — no private key leaves) ──
+    if let Some((old_hex, new_hex)) = attest_cosign {
+        let Some(github_user) = github else {
+            eprintln!(
+                "migrate: --attest-cosign needs --github <login> (the login bound to THIS account)"
+            );
+            std::process::exit(2);
+        };
+        let token = github_token
+            .or_else(|| std::env::var("GITHUB_TOKEN").ok())
+            .or_else(|| std::env::var("GH_TOKEN").ok());
+        match riir_refine::kat_migrate_client::attest_cosign(
+            old_hex,
+            new_hex,
+            github_user,
+            token,
+            &url,
+        ) {
+            Ok(bundle) => {
+                println!(
+                    "{}",
+                    riir_refine::kat_migrate_client::render_attest_cosig(&bundle)
                 );
             }
             Err(e) => {
@@ -3789,11 +3836,28 @@ fn run_kat_migrate(
     let token = github_token
         .or_else(|| std::env::var("GITHUB_TOKEN").ok())
         .or_else(|| std::env::var("GH_TOKEN").ok());
+    let attest_cosig = match attest_cosig
+        .map(riir_refine::kat_migrate_client::parse_attest_cosig_arg)
+        .transpose()
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+    };
+    if let Some(b) = &attest_cosig {
+        println!(
+            "migrate: {}",
+            riir_kat::kat_protocol_migrate::attest_only_line(&b.attest_by_hex)
+        );
+    }
     let params = riir_refine::kat_migrate_client::FileParams {
         github_user,
         old_key_path: std::path::Path::new(old_key),
         github_token: token,
         totp_code,
+        attest_cosig,
     };
     match riir_refine::kat_migrate_client::file_migration(&root, &params, &url) {
         Ok(outcome) => {
@@ -6091,6 +6155,8 @@ USAGE:
     cargo refine kat totp enroll [--code <c>]          (riir-dapps plan 053: the TOTP second factor — no code mints a pending factor and shows the otpauth URI ONCE, --code confirms; on an ARMED account the CURRENT code first, then the replacement mints; kat_transport)
     cargo refine kat totp disarm --code <c>            (remove the factor — a CURRENT-step code against the ARMED row; kat_transport)
     cargo refine kat migrate … --totp <code>           (the second factor on the migration filing — required once the OLD account is TOTP-armed)
+    cargo refine kat migrate --attest-cosign <old_hex> <new_hex> --github <login>  (riir-dapps Issue 143: on the box of the account the login is BOUND to — co-sign an attest-only filing with THIS account's key; prints a public bundle, no private key leaves; kat_transport)
+    cargo refine kat migrate --github <login> --old-key <path> --attest-cosig <bundle>  (file ATTEST-ONLY with that bundle — the GitHub link stays on the co-signer; file within 10 minutes of the co-sign)
     cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)
     cargo refine get|send <amt> tuna [account-id]  (riir-dapps Proposal 009 §9: the marketing TUNA airdrop ADMIN hand — get targets your own account id, send takes a 32-hex account id (a base58 pubkey refuses with the hint); --gov <id> pins the Executed mandate, else unique-hash resolution via the mandates listing; --dry-run composes hash+row+body+caps with no network; secrets read from TUNA_CAN_OPENER_KEY + KAT_CRANK_TOKEN, refused pre-network, never echoed; admin feature, never in the release set)
     cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
@@ -6957,6 +7023,12 @@ struct Args {
     /// riir-dapps plan 053: `--totp <code>` on the migrate filing — the
     /// second factor for an ARMED old account (the `X-Kat-Totp` header).
     migrate_totp: Option<String>,
+    /// riir-dapps Issue 143: `--attest-cosign <old_hex> <new_hex>` — B's
+    /// co-signature mode (run on the box of the login's binding holder).
+    migrate_attest_cosign: Option<(String, String)>,
+    /// riir-dapps Issue 143: `--attest-cosig <bundle>` — the filing's
+    /// attest-only co-signature bundle (inline JSON or a file path).
+    migrate_attest_cosig: Option<String>,
     /// riir-kat issue 007: the `kat totp` mode word (`enroll` or
     /// `disarm`) plus the authenticator code (`--code`, required for
     /// disarm, optional for enroll — its presence selects
@@ -7211,6 +7283,8 @@ fn parse_args() -> Args {
         migrate_github_token: None,
         migrate_repo_base: None,
         migrate_totp: None,
+        migrate_attest_cosign: None,
+        migrate_attest_cosig: None,
         totp_mode: None,
         totp_code: None,
         update_timeout: 4,
@@ -7748,6 +7822,30 @@ fn parse_args() -> Args {
             // riir-dapps plan 053: the filing's second factor (an ARMED
             // old account files with the current code; unenrolled accounts
             // omit it — the gate passes them by construction).
+            "--attest-cosign" if args.command == Some(KatCommand::Migrate) => {
+                let (Some(old_hex), Some(new_hex)) = (it.next(), it.next()) else {
+                    eprintln!("--attest-cosign requires <old_account_hex> <new_account_hex>");
+                    usage();
+                };
+                if args.migrate_attest_cosign.is_some() {
+                    eprintln!("--attest-cosign given twice");
+                    usage();
+                }
+                args.migrate_attest_cosign = Some((old_hex, new_hex));
+            }
+            "--attest-cosig" if args.command == Some(KatCommand::Migrate) => {
+                let Some(value) = it.next() else {
+                    eprintln!(
+                        "--attest-cosig requires the co-signature bundle (JSON or a file path)"
+                    );
+                    usage();
+                };
+                if args.migrate_attest_cosig.is_some() {
+                    eprintln!("--attest-cosig given twice");
+                    usage();
+                }
+                args.migrate_attest_cosig = Some(value);
+            }
             "--totp" if args.command == Some(KatCommand::Migrate) => {
                 let Some(value) = it.next() else {
                     eprintln!("--totp requires the current authenticator code");
@@ -11703,6 +11801,8 @@ fn main() {
                     args.migrate_github_token.clone(),
                     args.migrate_repo_base.as_deref(),
                     args.migrate_totp.as_deref(),
+                    args.migrate_attest_cosign.as_ref(),
+                    args.migrate_attest_cosig.as_deref(),
                 );
             }
             // riir-dapps plan 053 / riir-kat issue 007: the TOTP second

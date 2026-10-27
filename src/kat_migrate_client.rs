@@ -27,6 +27,20 @@
 //!   carries zero votes by construction).
 //! - **`--status <request-id>`** (`kat_transport`): the public read, plus
 //!   the proposal URL, the frozen `old_bound_login`, and the vote rules.
+//! - **`--attest-cosign <old_hex> <new_hex> --github <login>`**
+//!   (`kat_transport`, riir-dapps Issue 143): run on the box of account B —
+//!   the account the login is CURRENTLY bound to — with B's own key (the
+//!   account record). It measures the `PoW` attestation, fixes `created_at`,
+//!   signs `migrate_attest_message(_v2)` with B's key and prints an
+//!   [`AttestCosigBundle`] (B's account + public key + the detached
+//!   signature + the attestation and instant it covers). NO private key
+//!   leaves its box: the bundle carries only public data.
+//! - **filing with `--attest-cosig <bundle>`** (the box holding old + new):
+//!   the filing reuses the bundle's attestation + `created_at` (both are
+//!   inside the co-signed bytes), verifies the co-signature locally (fail
+//!   fast), and files ATTEST-ONLY — the GitHub link stays on B. The
+//!   worker's 600 s `created_at` skew bound applies: file within ten
+//!   minutes of the co-sign.
 //!
 //! # The vote rules (Issue 183 §B/§C + Issue 184 rule C — the kernel's polarity)
 //!
@@ -53,10 +67,14 @@
 //! is login-time-only; a per-run env read would silently sign ONE side).
 
 use crate::kat_account::KatAccount;
+use riir_kat::kat_protocol_migrate::{
+    attest_only_line, decode_pubkey, migrate_attest_message, migrate_attest_message_v2,
+    MigratePowAttestation,
+};
 #[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
     migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
-    migrate_release_message_v2, MigratePowAttestation, MigrateRequestBody,
+    migrate_release_message_v2, MigrateRequestBody,
 };
 use riir_kat::kat_protocol_migrate::{
     proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL,
@@ -260,6 +278,233 @@ pub struct FileParams<'a> {
     /// unenrolled account; an ARMED account files with `Some`, or the
     /// worker refuses `403 totp_required` (surfaced verbatim).
     pub totp_code: Option<&'a str>,
+    /// riir-dapps Issue 143: the ATTEST-ONLY co-signature bundle B printed
+    /// with `--attest-cosign` on its own box. `Some` → the filing reuses the
+    /// bundle's attestation + `created_at` (no fresh measure) and carries
+    /// B's co-signature; the GitHub link stays on B.
+    pub attest_cosig: Option<AttestCosigBundle>,
+}
+
+// ── the attest-only co-signature (riir-dapps Issue 143) ─────────────────
+
+/// The bundle B's box prints and the filing box consumes. Public data only:
+/// B's account + public key + the detached co-signature, plus every input
+/// the signature covers that the filing must reproduce byte-for-byte (the
+/// attestation — its digest is in the signed body — and `created_at`).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AttestCosigBundle {
+    /// The bundle shape version ([`ATTEST_COSIG_BUNDLE_VERSION`]).
+    pub bundle_version: u32,
+    pub old_account_hex: String,
+    pub new_account_hex: String,
+    pub github_user: String,
+    /// The frozen `PoW` attestation the co-signature covers (by digest).
+    pub attestation: MigratePowAttestation,
+    /// The request body's creation instant (inside the co-signed bytes).
+    pub created_at_unix: u64,
+    /// The ledger id the co-signature is bound to (`None` = the legacy v1
+    /// message — an old server without a ledger id).
+    #[serde(default)]
+    pub ledger_id_hex: Option<String>,
+    /// B — the account the login is currently bound to (the co-signer).
+    pub attest_by_hex: String,
+    pub attest_by_pubkey_hex: String,
+    pub attest_signature_hex: String,
+}
+
+/// [`AttestCosigBundle::bundle_version`] of this build.
+pub const ATTEST_COSIG_BUNDLE_VERSION: u32 = 1;
+
+/// Strict 128-hex → 64 bytes (an ed25519 signature).
+fn decode_sig64(s: &str) -> Option<[u8; 64]> {
+    let b = s.as_bytes();
+    if b.len() != 128 {
+        return None;
+    }
+    let mut out = [0u8; 64];
+    for (i, pair) in b.chunks(2).enumerate() {
+        let hi = u8::try_from((pair[0] as char).to_digit(16)?).ok()?;
+        let lo = u8::try_from((pair[1] as char).to_digit(16)?).ok()?;
+        out[i] = (hi << 4) | lo;
+    }
+    Some(out)
+}
+
+fn decode_hex32(s: &str, what: &str) -> Result<[u8; 32], String> {
+    decode_pubkey(s).ok_or_else(|| format!("attest: {what} must be 64 hex chars"))
+}
+
+/// The co-signed message for a bundle's inputs: the ledger-bound v2 form
+/// when a ledger id is known, else the legacy v1 form (the release/claim
+/// convention).
+fn attest_message(
+    ledger_id: Option<&[u8; 32]>,
+    old: &[u8; 32],
+    new: &[u8; 32],
+    github_user: &str,
+    digest: &[u8; 32],
+    created_at_unix: u64,
+    attest_by: &[u8; 32],
+) -> Vec<u8> {
+    match ledger_id {
+        Some(id) => migrate_attest_message_v2(
+            id,
+            old,
+            new,
+            github_user,
+            digest,
+            created_at_unix,
+            attest_by,
+        ),
+        None => migrate_attest_message(old, new, github_user, digest, created_at_unix, attest_by),
+    }
+}
+
+/// Compose B's co-signature bundle (pure — the transport arm measures the
+/// attestation and reads the ledger id, then calls this). `b_key` is B's
+/// OWN key; only its public half and the signature leave.
+#[must_use]
+pub fn compose_attest_cosig(
+    b_key: &ed25519_dalek::SigningKey,
+    old: &[u8; 32],
+    new: &[u8; 32],
+    github_user: &str,
+    attestation: MigratePowAttestation,
+    created_at_unix: u64,
+    ledger_id: Option<[u8; 32]>,
+) -> AttestCosigBundle {
+    use ed25519_dalek::Signer as _;
+    let b_pk = b_key.verifying_key().to_bytes();
+    let b_acct: [u8; 32] = *blake3::hash(&b_pk).as_bytes();
+    let msg = attest_message(
+        ledger_id.as_ref(),
+        old,
+        new,
+        github_user,
+        &attestation.digest,
+        created_at_unix,
+        &b_acct,
+    );
+    let sig = b_key.sign(&msg);
+    AttestCosigBundle {
+        bundle_version: ATTEST_COSIG_BUNDLE_VERSION,
+        old_account_hex: hex(old),
+        new_account_hex: hex(new),
+        github_user: github_user.to_owned(),
+        attestation,
+        created_at_unix,
+        ledger_id_hex: ledger_id.map(|id| hex(&id)),
+        attest_by_hex: hex(&b_acct),
+        attest_by_pubkey_hex: hex(&b_pk),
+        attest_signature_hex: hex(&sig.to_bytes()),
+    }
+}
+
+/// The filing box's fail-fast check of a bundle against THIS filing: the
+/// version, the old/new accounts, the login, the ledger id it is bound to,
+/// B's key deriving B (the worker's hash-check), and the signature over the
+/// exact message. Returns B's account on success.
+///
+/// # Errors
+///
+/// Any mismatch, named (the worker would refuse the same filing).
+pub fn verify_attest_cosig(
+    b: &AttestCosigBundle,
+    old: &[u8; 32],
+    new: &[u8; 32],
+    github_user: &str,
+    ledger_id: Option<[u8; 32]>,
+) -> Result<[u8; 32], String> {
+    use ed25519_dalek::Verifier as _;
+    if b.bundle_version != ATTEST_COSIG_BUNDLE_VERSION {
+        return Err(format!(
+            "attest: bundle version {} (this build reads {ATTEST_COSIG_BUNDLE_VERSION})",
+            b.bundle_version
+        ));
+    }
+    if decode_hex32(&b.old_account_hex, "old_account_hex")? != *old
+        || decode_hex32(&b.new_account_hex, "new_account_hex")? != *new
+    {
+        return Err(
+            "attest: the bundle was co-signed for a different old/new account pair".to_owned(),
+        );
+    }
+    if b.github_user != github_user || b.attestation.github_user != github_user {
+        return Err(format!(
+            "attest: the bundle is for @{}, the filing is for @{github_user}",
+            b.github_user
+        ));
+    }
+    let bundle_ledger = b
+        .ledger_id_hex
+        .as_deref()
+        .map(|h| decode_hex32(h, "ledger_id_hex"))
+        .transpose()?;
+    if bundle_ledger != ledger_id {
+        return Err(
+            "attest: the bundle was co-signed for a different ledger (re-run --attest-cosign \
+             against this service)"
+                .to_owned(),
+        );
+    }
+    let b_acct = decode_hex32(&b.attest_by_hex, "attest_by_hex")?;
+    let b_pk = decode_hex32(&b.attest_by_pubkey_hex, "attest_by_pubkey_hex")?;
+    if *blake3::hash(&b_pk).as_bytes() != b_acct {
+        return Err("attest: the co-signer's public key does not derive attest_by_hex".to_owned());
+    }
+    let sig_bytes = decode_sig64(&b.attest_signature_hex)
+        .ok_or("attest: attest_signature_hex must be 128 hex chars")?;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
+        .map_err(|e| format!("attest: the co-signer's public key is invalid: {e}"))?;
+    let msg = attest_message(
+        ledger_id.as_ref(),
+        old,
+        new,
+        github_user,
+        &b.attestation.digest,
+        b.created_at_unix,
+        &b_acct,
+    );
+    vk.verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig_bytes))
+        .map_err(|_| "attest: the co-signature does not verify over this filing".to_owned())?;
+    Ok(b_acct)
+}
+
+/// Read a bundle from `--attest-cosig <arg>`: inline JSON (starts with
+/// `{`) or a file path.
+///
+/// # Errors
+///
+/// An unreadable file or a body that is not a bundle.
+pub fn parse_attest_cosig_arg(arg: &str) -> Result<AttestCosigBundle, String> {
+    let text = if arg.trim_start().starts_with('{') {
+        arg.to_owned()
+    } else {
+        std::fs::read_to_string(arg)
+            .map_err(|e| format!("attest: reading the bundle {arg}: {e}"))?
+    };
+    serde_json::from_str(&text).map_err(|e| format!("attest: the bundle does not parse: {e}"))
+}
+
+/// The human render of a printed bundle (B's box): what was co-signed and
+/// what to carry to the filing box.
+#[must_use]
+pub fn render_attest_cosig(b: &AttestCosigBundle) -> String {
+    format!(
+        "attest-cosign: co-signed as {by} (pubkey {pk})\n\
+         \x20 old {old} -> new {new}, @{user}, created_at {created} — file within 10 minutes\n\
+         \x20 {line}\n\
+         carry this bundle to the filing box (public data only) and pass it as \
+         `--attest-cosig '<json>'` or a file path:\n{json}",
+        by = b.attest_by_hex,
+        pk = b.attest_by_pubkey_hex,
+        old = b.old_account_hex,
+        new = b.new_account_hex,
+        user = b.github_user,
+        created = b.created_at_unix,
+        line = attest_only_line(&b.attest_by_hex),
+        json = serde_json::to_string(b).unwrap_or_default(),
+    )
 }
 
 /// The filing outcome: the wire ack + the locally-known extras.
@@ -336,6 +581,18 @@ fn sign_request(
         release_signature_hex: hex(&release_sig.to_bytes()),
         claim_signature_hex: hex(&claim_sig.to_bytes()),
         created_at_unix,
+        attest_by_hex: params
+            .attest_cosig
+            .as_ref()
+            .map(|b| b.attest_by_hex.clone()),
+        attest_by_pubkey_hex: params
+            .attest_cosig
+            .as_ref()
+            .map(|b| b.attest_by_pubkey_hex.clone()),
+        attest_signature_hex: params
+            .attest_cosig
+            .as_ref()
+            .map(|b| b.attest_signature_hex.clone()),
     })
 }
 
@@ -374,21 +631,18 @@ pub fn file_migration(
     let old_acct: [u8; 32] = *blake3::hash(&old_pk).as_bytes();
     let new_acct: [u8; 32] = *blake3::hash(&new_pk).as_bytes();
 
-    // The frozen PoW claim (client-side measure — the worker never fetches).
-    let source = riir_kat::github_pow::UreqGithubUserSource::new(params.github_token.clone());
-    let att = riir_kat::github_pow::GithubPowAttestation::measure(params.github_user, &source)
-        .map_err(|e| format!("migrate: PoW measure failed: {e}"))?;
-    let att_digest = att.digest;
-    let wire_att = MigratePowAttestation {
-        github_user: att.github_user,
-        measured_at_unix: att.measured_at_unix,
-        created_at_unix: att.created_at_unix,
-        followers: att.followers,
-        stars_received: att.stars_received,
-        digest: att.digest,
+    // Issue 143 — an ATTEST-ONLY filing reuses the bundle's attestation +
+    // created_at (both are inside B's co-signed bytes) after verifying the
+    // co-signature locally against THIS filing (fail fast).
+    let (wire_att, created_at) = match &params.attest_cosig {
+        Some(b) => {
+            let ledger_id = fetch_ledger_id(service_url)?;
+            verify_attest_cosig(b, &old_acct, &new_acct, params.github_user, ledger_id)?;
+            (b.attestation.clone(), b.created_at_unix)
+        }
+        None => (measure_attestation(params)?, now_unix()),
     };
-
-    let created_at = now_unix();
+    let att_digest = wire_att.digest;
     let body = sign_request(
         &old_key,
         &claim_key,
@@ -417,6 +671,64 @@ pub fn file_migration(
         filed,
         window_close_unix: parse_u64_field(&resp, "window_close_unix"),
     })
+}
+
+/// The frozen `PoW` claim (client-side measure — the worker never fetches).
+#[cfg(feature = "kat_transport")]
+fn measure_attestation(params: &FileParams<'_>) -> Result<MigratePowAttestation, String> {
+    measure_login(params.github_user, params.github_token.clone())
+}
+
+#[cfg(feature = "kat_transport")]
+fn measure_login(
+    github_user: &str,
+    github_token: Option<String>,
+) -> Result<MigratePowAttestation, String> {
+    let source = riir_kat::github_pow::UreqGithubUserSource::new(github_token);
+    let att = riir_kat::github_pow::GithubPowAttestation::measure(github_user, &source)
+        .map_err(|e| format!("migrate: PoW measure failed: {e}"))?;
+    Ok(MigratePowAttestation {
+        github_user: att.github_user,
+        measured_at_unix: att.measured_at_unix,
+        created_at_unix: att.created_at_unix,
+        followers: att.followers,
+        stars_received: att.stars_received,
+        digest: att.digest,
+    })
+}
+
+/// `--attest-cosign <old_hex> <new_hex> --github <login>` (riir-dapps Issue
+/// 143) — run on B's box, B = THIS box's account record (the account the
+/// login is bound to): measure the attestation, fix `created_at`, co-sign
+/// with B's key, return the bundle. B's private key never leaves the box.
+///
+/// # Errors
+///
+/// Bad hex, no account record, a failed measure or ledger-id read.
+#[cfg(feature = "kat_transport")]
+pub fn attest_cosign(
+    old_account_hex: &str,
+    new_account_hex: &str,
+    github_user: &str,
+    github_token: Option<String>,
+    service_url: &str,
+) -> Result<AttestCosigBundle, String> {
+    let old = decode_hex32(old_account_hex, "the old account")?;
+    let new = decode_hex32(new_account_hex, "the new account")?;
+    let account = KatAccount::load(&KatAccount::default_dir())
+        .map_err(|e| format!("attest: loading THIS box's account record (B): {e}"))?;
+    let b_key = account.signing_key()?;
+    let attestation = measure_login(github_user, github_token)?;
+    let ledger_id = fetch_ledger_id(service_url)?;
+    Ok(compose_attest_cosig(
+        &b_key,
+        &old,
+        &new,
+        github_user,
+        attestation,
+        now_unix(),
+        ledger_id,
+    ))
 }
 
 /// The status read — `GET /account/migrate/status?request_id=`; the raw
@@ -550,7 +862,6 @@ fn now_unix() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
-#[cfg(feature = "kat_transport")]
 fn hex(bytes: &[u8]) -> String {
     riir_kat::kat_payreq_client::hex_encode(bytes)
 }
@@ -779,6 +1090,12 @@ pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
             .as_deref()
             .map_or_else(|| "none".to_owned(), |l| format!("@{l}"))
     );
+    if let Some(line) = render_binding_line(s) {
+        let _ = writeln!(out, "{line}");
+    }
+    if let Some(reason) = s.cancel_reason.as_deref() {
+        let _ = writeln!(out, "{}", render_cancel_reason(reason));
+    }
     for line in render_timeline(s) {
         let _ = writeln!(out, "{line}");
     }
@@ -819,6 +1136,33 @@ pub fn render_object_hint(s: &MigrateStatusBody, repo_base: &str) -> Result<Stri
         "object: open {url} and react 👎 (only that issue counts; \
          reacting 👍 too cancels your vote)"
     ))
+}
+
+/// The attest-only line for a status body (riir-dapps Issue 143): `Some`
+/// exactly when the filing was attest-only — the GitHub link stays on the
+/// co-signer.
+#[must_use]
+pub fn render_binding_line(s: &MigrateStatusBody) -> Option<String> {
+    s.attest_by_hex.as_deref().map(attest_only_line)
+}
+
+/// Why a release-verdict close cancelled (riir-dapps Issue 143), with the
+/// remedy.
+#[must_use]
+pub fn render_cancel_reason(reason: &str) -> String {
+    match reason {
+        riir_kat::kat_protocol_migrate::CANCEL_REASON_CLAIM_NOT_FRESH => {
+            "cancelled: the claim account stopped being fresh (it gained rows after filing) — \
+             re-file into a fresh claim account"
+                .to_owned()
+        }
+        riir_kat::kat_protocol_migrate::CANCEL_REASON_GITHUB_CONFLICT => {
+            "cancelled: the GitHub login was bound to another account mid-window — re-file \
+             attest-only with that account's co-signature (--attest-cosig)"
+                .to_owned()
+        }
+        other => format!("cancelled: {other}"),
+    }
 }
 
 /// Parse a status read's body into the wire shape (`None` on a refusal
@@ -865,6 +1209,8 @@ mod tests {
             old_bound_login: victim.map(str::to_owned),
             hold_until_unix: None,
             tally_timing: None,
+            attest_by_hex: None,
+            cancel_reason: None,
         }
     }
 
@@ -1397,5 +1743,135 @@ mod tests {
             .expect_err("a non-key file refuses");
         assert!(err.contains("parsing OpenSSH"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── riir-dapps Issue 143: the attest-only co-signature bundle ──
+
+    fn fixture_attestation(user: &str) -> MigratePowAttestation {
+        MigratePowAttestation {
+            github_user: user.to_owned(),
+            measured_at_unix: 1_800_000_000,
+            created_at_unix: 1_300_000_000,
+            followers: 150,
+            stars_received: 200,
+            digest: [0x11; 32],
+        }
+    }
+
+    fn bundle_fixture(ledger: Option<[u8; 32]>) -> (AttestCosigBundle, [u8; 32], [u8; 32]) {
+        let b_key = ed25519_dalek::SigningKey::from_bytes(&[0x42; 32]);
+        let old = [0xAA; 32];
+        let new = [0xBB; 32];
+        let b = compose_attest_cosig(
+            &b_key,
+            &old,
+            &new,
+            "katopz",
+            fixture_attestation("katopz"),
+            1_800_000_100,
+            ledger,
+        );
+        (b, old, new)
+    }
+
+    #[test]
+    fn the_cosig_bundle_verifies_over_exactly_its_filing() {
+        use ed25519_dalek::Verifier as _;
+        let ledger = Some([0x1D; 32]);
+        let (b, old, new) = bundle_fixture(ledger);
+        let b_pk = ed25519_dalek::SigningKey::from_bytes(&[0x42; 32])
+            .verifying_key()
+            .to_bytes();
+        let b_acct: [u8; 32] = *blake3::hash(&b_pk).as_bytes();
+        assert_eq!(b.attest_by_hex, hex(&b_acct));
+        assert_eq!(
+            verify_attest_cosig(&b, &old, &new, "katopz", ledger),
+            Ok(b_acct)
+        );
+        // The signature is the riir-kat message, verifiable by the worker.
+        let msg = migrate_attest_message_v2(
+            &[0x1D; 32],
+            &old,
+            &new,
+            "katopz",
+            &[0x11; 32],
+            1_800_000_100,
+            &b_acct,
+        );
+        let sig = decode_sig64(&b.attest_signature_hex).expect("128 hex");
+        assert!(ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
+            .expect("vk")
+            .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+            .is_ok());
+        // Only public data travels: no field carries the private seed.
+        let json = serde_json::to_string(&b).expect("serialize");
+        assert!(!json.contains(&hex(&[0x42; 32])), "{json}");
+    }
+
+    #[test]
+    fn the_cosig_bundle_refuses_any_other_filing() {
+        let ledger = Some([0x1D; 32]);
+        let (b, old, new) = bundle_fixture(ledger);
+        assert!(verify_attest_cosig(&b, &new, &old, "katopz", ledger).is_err());
+        assert!(verify_attest_cosig(&b, &old, &new, "someone", ledger).is_err());
+        assert!(verify_attest_cosig(&b, &old, &new, "katopz", Some([0x2E; 32])).is_err());
+        assert!(verify_attest_cosig(&b, &old, &new, "katopz", None).is_err());
+        let mut forged = b.clone();
+        forged.created_at_unix += 1;
+        assert!(verify_attest_cosig(&forged, &old, &new, "katopz", ledger).is_err());
+        let mut wrong_key = b.clone();
+        wrong_key.attest_by_pubkey_hex = hex(&ed25519_dalek::SigningKey::from_bytes(&[0x43; 32])
+            .verifying_key()
+            .to_bytes());
+        assert!(verify_attest_cosig(&wrong_key, &old, &new, "katopz", ledger).is_err());
+        let mut v9 = b;
+        v9.bundle_version = 9;
+        assert!(verify_attest_cosig(&v9, &old, &new, "katopz", ledger).is_err());
+        // The legacy (no ledger id) form round-trips on its own.
+        let (legacy, old, new) = bundle_fixture(None);
+        assert!(verify_attest_cosig(&legacy, &old, &new, "katopz", None).is_ok());
+    }
+
+    #[test]
+    fn the_cosig_arg_reads_inline_json_or_a_file() {
+        let (b, _, _) = bundle_fixture(None);
+        let json = serde_json::to_string(&b).expect("serialize");
+        assert_eq!(parse_attest_cosig_arg(&json), Ok(b.clone()));
+        let dir = std::env::temp_dir().join(format!("i143_cosig_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("tmp");
+        let path = dir.join("bundle.json");
+        std::fs::write(&path, &json).expect("write");
+        assert_eq!(
+            parse_attest_cosig_arg(path.to_str().expect("utf8")),
+            Ok(b.clone())
+        );
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(parse_attest_cosig_arg("{not json").is_err());
+        let render = render_attest_cosig(&b);
+        assert!(
+            render.contains(&attest_only_line(&b.attest_by_hex)),
+            "{render}"
+        );
+        assert!(render.contains("file within 10 minutes"), "{render}");
+    }
+
+    #[test]
+    fn status_renders_the_attest_only_line_and_the_cancel_reason() {
+        let mut s = status_body(MigrateRequestState::Pending, Some(7), None, None);
+        assert_eq!(render_binding_line(&s), None);
+        s.attest_by_hex = Some("b0".repeat(32));
+        let out = render_status(&s, DEFAULT_MIGRATE_REPO_BASE);
+        assert!(
+            out.contains(&format!(
+                "attest-only — the GitHub link stays on {b}, co-signed by {b}",
+                b = "b0".repeat(32)
+            )),
+            "{out}"
+        );
+        s.state = MigrateRequestState::Cancelled;
+        s.cancel_reason = Some("claim_not_fresh".to_owned());
+        let out = render_status(&s, DEFAULT_MIGRATE_REPO_BASE);
+        assert!(out.contains("claim account stopped being fresh"), "{out}");
+        assert!(render_cancel_reason("github_conflict").contains("--attest-cosig"));
     }
 }
