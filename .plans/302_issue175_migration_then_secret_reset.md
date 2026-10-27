@@ -107,8 +107,17 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 - [ ] **T2 — T-MIGRATE prep (agent):** the key-crossing decision — the
       dual-sign needs BOTH keys on ONE box (the CLI loads the old key via
       `--old-key <path>`; the claim side rides the record's own key).
-      File on the M3 (the claimant record `d54e39a8`'s home) with a TEMP
-      0600 copy of the 4090's `id_ed25519.retired-20261026`, shredded in
+      ⛔ **CORRECTED 2026-10-27 (measured):** the 4090's
+      `id_ed25519.retired-20261026` derives to account `71615e8d…` (the
+      4090's OWN identity — `ssh-keygen -y` on the private file, blake3 of
+      the raw key; its riir-auth `account.json` + riir-heal legacy copy say
+      the same), NOT `c79c93b8…`. Filing with it would migrate the WRONG
+      account. `c79c93b8` is the OLD M3 key, presumed at
+      `/Users/katopz/.ssh/id_ed25519` (the pre-switch macOS user; mode 700,
+      unreadable to `kat` — the OWNER copies it: `sudo install -m 600 -o kat
+      /Users/katopz/.ssh/id_ed25519 /tmp/kat_old_c79c93b8`; verify
+      `blake3(pubkey)` starts `c79c93b8` before use). File on the M3 (the
+      claimant record `d54e39a8`'s home) with that TEMP 0600 copy, shredded in
       the same session — prefer exposing the old key (it dies at tombstone
       anyway) over spreading the M3's long-lived identity key to the 4090.
       Pre-file: `account migrate --census` green on BOTH boxes.
