@@ -11,3 +11,32 @@
 - [-] **T3 (deferred 2026-10-25 ~10:0x +07 — the Plan-337 measurement window).** Standing gates: `batch279_riders_parse_and_needles_landed` (AUTHORED, in the wip) + kernel_opt lib + default lib + clippy −D ×3 postures + retrieval floors MEASURED; freeze/score-bench NOT owed (kernel_opt-only, zero clippy-corpus delta — the P30/B250/B276 precedent); binary rebuild NOT owed (kernel_opt outside the release set). **BLOCKER: the sibling session's flashmemory_decode_gate (pid 52009, /tmp/p1117, ctx-32k rho sweep — the Plan-337 lesson's literal shape: ~10 cores + 11.4 GB RSS) saturated the box 06:03→10:00+ and every build was deferred per discipline.** RESUME RECIPE: (1) `git fetch origin` + re-run `claim_lease_check --item 283` (the lease zed-glm-b279 expires 2026-10-27T23:31Z — still live means resume, expired means re-claim); (2) verify the box is quiet (`ps aux | grep -E "flashmemory|cargo" | grep -v grep`); (3) **UPSTREAM MOVES WHILE THIS LANE WAITED (2026-10-25 06:3x→10:0x): Batch 277 rider pack LANDED (`613855db`), Batch 280 prism riders LANDED (`d22d08d2`, count-neutral, popcorn riders on OTHER rules — the panic-safe host is UNTOUCHED upstream, verified at 1904cfdb), Batch 281 LANDED (`111f7f08`, +3 OWN rules — corpus 966 → **969**, entries_gpu_127, tests.rs +360 lines appended after batch278's tests), Batch 282 CLAIMED mid-flight (plan 286, rust_perf — disjoint corpus, low shared-file risk).** Consequences: the wip's G1 count witness says 966 — STALE, re-pin the assert to **969** at resume; the wip's tests.rs batch279 test was appended at the same EOF anchor B280/B281 used — a cherry-pick CONFLICTS there (expected, disjoint content: keep both, reorder after batch281's); the wip's popcorn hunk is disjoint (auto-merges); (4) cherry-pick the wip checkpoint **`1fe1c438`** (LOCAL, hangs off 78c3fa98, NOT on develop — the handoff commits were rebased around it) onto the current develop: `git cherry-pick 1fe1c438`, resolve the tests.rs EOF conflict keeping both sides (batch279 test after batch281's), re-pin 966→969 in the batch279 assert; (5) run the gates — filtered first: `cargo test --features kernel_opt --lib batch279` then the full kernel_opt lib + default lib + clippy −D ×3 + retrieval floors (re-read the pinned floor expectations — B281 moved the needle-gate floor to 3228/0, mine adds no tests beyond batch279's one); (6) at GREEN: fold into ONE `feat: batch 279 ...` landing commit (squash the cherry-picked wip via `git reset --soft HEAD~1` then commit), REMOVE `.raw/locals` (the T0 clone, quotes already verified), write the snapshot discharge row (claim → discharged), mark T4/T5, push.
 - [ ] **T4.** Docs closeout: this plan's checkboxes; Research 315 queue note (the two riders LANDED at this batch — DONE in the wip, re-verify on the rebased tree); the queue snapshot row (claim discharged); count-neutral against the LIVE count (969 post-B281 — re-pin the T3 witness; the README kernel_opt head stays 969, this batch moves nothing, the B262 precedent).
 - [ ] **T5.** Commit + push `feat:` (corpus riders) — the queue line references plan 283 + Research 315.
+
+## T3 RESUME AUDIT (2026-10-27 ~16:5x +07, zed-amo-blockfix6) — THE WIP IS GONE
+
+The resume recipe's step (4) is UNEXECUTABLE: the wip checkpoint `1fe1c438`
+no longer exists as an object on EITHER box. Measured:
+
+- This clone: `git cat-file -t 1fe1c438` fails; absent from all reflogs,
+  unreachable objects (5 loose Checkpoints only, other lanes), and packs
+  (3 packs, re-packed 10-27 06:32 / 09:47 / 12:18 — an aggressive gc between
+  10-25 and today pruned the unreachable wip).
+- The 4090 clone: same verdict — 5,957 unreachable commits scanned; every
+  10-25 Checkpoint is either EMPTY (the checkpoint bot's no-op saves) or
+  other lanes' content (B275/276/278/280 gates). No `entries_gpu_04` /
+  `entries_popcorn` rider-face commit anywhere. No blob carries the
+  "Batch 279 / Plan 283" marker string.
+- No other clone exists on either box.
+
+The only surviving b279 artifacts are the CLAIM commit `78c3fa98` (on
+develop) and plan 283 itself. The wip's rider authoring (T2's two faces)
+was never pushed and is unrecoverable — LOST WORK, ~T2's authoring pass.
+
+**Disposition: the plan's remaining value is the CLAIM EXPIRY, not the
+work.** The lease `zed-glm-b279` expires 2026-10-27T23:31Z (tonight); after
+that the two rider faces return to Research 315's deferred queue as
+UNAUTHORED (T0's quotes in this plan are the surviving evidence and remain
+valid staging for a future lane). NOT re-authoring in this cycle (the
+corpus batch protocol requires a claim-first authoring lane of its own;
+today's pools are full of other lanes' claims). Left for the next idle
+slot that opens a corpus window, or for the owner's batch prioritization.
