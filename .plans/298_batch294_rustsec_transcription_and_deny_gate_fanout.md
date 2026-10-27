@@ -1,10 +1,8 @@
 # Plan 298 — Batch 294: RustSec transcription batch + the supply-chain deny-gate fan-out
 
 **Status:** IN PROGRESS — pilot LANDED 2026-10-26 (`deny.toml` + `scripts/deny_gate.sh` green in riir-refine; the first workspace scan recorded in `.research/332`; corpus batch + fan-out open below)
-**Claimed:** zed-amo-idle, 1793047403, expires 2026-10-28T20:43:23Z
 (the claimed scope was the T2.3 slice — the katgpt-rs heapless/postcard bump lane + the no-upgrade ledger-row pass; the fix mechanism is postcard's `default = ["heapless-cas"]` feature, the ONLY heapless path — `default-features = false` drops heapless 0.7 → atomic-polyfill from the tree; verified against the crates.io manifest for 1.1.3 that session)
 **Claimed:** riir-refine-idle-plan298-cont, 1793049300, expires 2026-10-28T21:15:00Z
-**Claimed:** shikuwa-4090-b294-rustsec-t1, 1793053492, expires 2026-10-28T22:24:52Z
 (scope: T1 — the corpus batch, the 2 suggest-only sec rules T1.1–T1.5 + T3.2 record; the live leases above claim the T2.2 lanes and the T2.3 slice, both landed per the lease-closed rows)
 **Lease closed:** shikuwa-4090-b294-rustsec-t1 (claimed 2026-10-26T22:24Z, epoch 1793053492; claim commit `3dc941e9` on origin) — the claimed T1 scope LANDED same cycle: the two suggest-only rules (`packed-field-silent-overflow-wrong-key` + `capacity-exceeded-silent-fallback-not-refusal`, sec 26 → 28), all gates green, records in Research 332 §T1 + sec.md §Batch 294. Remaining open: T2.7 (owner-gated), T2.8, T3.3 (the landing push).
 **Lease closed:** zed-amo-idle (claimed 2026-10-26T20:43Z, epoch 1793047403; claim commit `9e0ddb38` on origin) — the claimed T2.3 scope LANDED same cycle: the katgpt-rs postcard `default-features = false` fix (7 declarations, heapless 0.7 + atomic-polyfill out of the lock, deny row discharged) + the no-upgrade-crate rows adjudicated as already-landed with T2.4; record in Research 332 §T2.3.
