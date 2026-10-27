@@ -143,8 +143,10 @@ dead-man succession on `owner_login` itself, revocable).
       plan cap), backlog drains over ticks; dispute rival-state report bug
       fixed in passing. 586 kat-service lib green. Apex build has no
       `kat_migrate` → its cron is a no-op until promotion.
-- [ ] A (live): devnet redeploy carrying the cron (after the B′ chain lands —
-      riir-kat is a path dep, a mid-edit build is unsound).
+- [x] A (live): devnet redeployed 2026-10-27 at riir-dapps `c9ddd2d` —
+      version `63e58ede`, `schedule: 0 * * * *` registered, migrate routes
+      live. First live proof = the rehearsal (plan 302 T1) closing with no
+      human action.
 - [x] A gap (→ `f1bfaf2`, ≤ 4 creation-only retries/tick): issue-less LIVE rows not yet due get a
       creation-only retry per tick — today a filing whose creation failed
       gets its issue only AT close, so the owner never sees it before the
