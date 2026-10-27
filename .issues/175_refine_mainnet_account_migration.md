@@ -42,6 +42,8 @@ lands, no drain owed first.
   2026-09-18 (38 d), `kat_sync_state.json` 2026-10-06 (20 d) — offline
   rows must drain UNDER THE OLD ACCOUNT first.
 
+**Sequencing verdict 2026-10-27 (`.plans/302_issue175_migration_then_secret_reset.md`):** the full secret reset (T-KEYS + the origin-vault wetrun) does NOT replace this migration — disjoint credential planes; order is MIGRATE FIRST, the owner mints land inside the 24 h window, the wetrun (the fingerprint e2e with fresh secrets) AFTER release so it doubles as the post-roll verifier. No re-genesis is required by any current plan (dao T0 item 14: no located genesis/validator binding); corpus + contribution live WORKER-side (KatLeaseDo / MiningDo / the ledger families) and survive both the sweep (one-batch re-key, per-family conservation) and any chain re-genesis. Full analysis + the data-survival table: plan 302.
+
 ## Tasks
 
 - [x] **T-PREFLIGHT (M3 leg — DONE 2026-10-26):** the account state never
@@ -113,8 +115,10 @@ lands, no drain owed first.
   preflight refuses stale burn ack; E-4 watermark reset post-release; E-5
   released-id re-file refusal.
 - [ ] **T-MIGRATE:** file the real rotation (`account migrate --github
-  katopz`, old key via `KEY_OVERRIDE_ENV`), ride the 24 h default-deny
-  window, release (sweep + tombstone + github binding move).
+  katopz --old-key <path>` — the T4 product law: the env var is NEVER a
+  signing source; the dual-sign needs BOTH keys on ONE box, see plan 302
+  T2 for the key-crossing decision), ride the 24 h default-deny window,
+  release (sweep + tombstone + github binding move).
 - [ ] **T-POST:** census reads zero live old-key bindings; 4090 runs
   new-identity permanently; delete `id_ed25519.retired-20261026(.pub)`
   and the `riir-heal` legacy copy (tombstoned account = nothing to
