@@ -1,6 +1,6 @@
 # Proposal 024 — Healer Meta-Blueprint: campaign-shape lever tuning above the Level-1 loop
 
-Status: **draft** (executes the first step of [issue 178](../.issues/178_healer_meta_consumer_blueprint.md))
+Status: **draft** (executes the first step of `issue 178`)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned
 Fusion of: [riir-ai Research 401 §7](../../riir-ai/.research/401_Harness_Evolution_Game_Autoplay_Guide.md) × [katgpt-rs Plan 631](../../katgpt-rs/.plans/631_harness_evolution_loop.md) / [Research 637](../../katgpt-rs/.research/637_Harness_Evolution_Loop_Primitive.md) × the healer's shipped Level-1 stack (evolve/elo/traj_store/score_bench/active_set/escalation_dispatch)
