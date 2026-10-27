@@ -92,6 +92,13 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 - [ ] **T1-secret (owner):** `npx wrangler secret put KAT_MIGRATE_ISSUES_TOKEN
       --env devnet` (same token) — devnet cannot file the proposal issue
       without it (filings stay E12-unreleasable).
+- [ ] **T2/T4 key hygiene (2026-10-27, `rm -P`):** both /tmp key copies
+      SHREDDED + verified gone (`kat_old_c79c93b8` — the misnamed
+      `1bb4b7b5` copy of `/Users/katopz/.ssh/id_ed25519`, and
+      `kat_old_c79c93b8_real` — the filing #1 copy). Originals remain:
+      `~/deprecated/old-ssh/id_ed25519` (c79c93b8, owner-held) + the
+      katopz ssh key itself. Re-copy per T2's recipe for the mainnet
+      filing if ever needed.
 - [ ] **T1-live (2026-10-27, rule C + DEVNET_FAST, devnet `687950c7`):** KEY
       MAP MEASURED (blake3 of the raw pubkey): `c79c93b8…192fd6` =
       `/Users/kat/deprecated/old-ssh/id_ed25519` (Dec 2023) ✅ ·
@@ -107,7 +114,13 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       is the no-human proof (no status read in between). Pre-release devnet
       balances: c79c93b8 174 866 068 µKAT, d54e39a8 0. **Filing #2 (4090):**
       `71615e8d → 4f4623f3` — after #1 releases (probes the one-GitHub-binding
-      rule, E11, with `katopz` already bound to d54e39a8).
+      rule, E11, with `katopz` already bound to d54e39a8). **143 landed
+      14:57 UTC (`ed438dc` + kat `8714be5` + dao `2661dda` + refine
+      `17d77ee8`) — its devnet deploy WAITS for #1's cron release (no worker
+      deploys mid-window, T3); then: #2 without cosig → 409 `github_bound`,
+      #2 attest-only (`--attest-cosign` on the M3 as B=d54e39a8 → bundle →
+      `--attest-cosig` on the 4090), then the mainnet-shape non-fresh-claim
+      cell. Both /tmp key copies shredded 15:14 UTC (see T2/T4 hygiene).**
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
