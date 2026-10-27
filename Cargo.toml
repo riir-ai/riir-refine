@@ -1737,3 +1737,22 @@ required-features = ["wasm_validator"]
 [[test]]
 name = "differential_anchor_ab"
 required-features = ["differential_anchor", "clippy_lints", "rust_perf"]
+
+# cfg-gated green-zero rows (katgpt-rs cfg_gated_drift_sweep, 2026-10-27): each
+# target's whole body is gated on these features, so without a row a plain
+# `cargo test` compiled it to an EMPTY binary and printed `ok. 0 passed`.
+[[test]]
+name = "generation_v8_freeze"
+required-features = ["score_bench"]
+
+[[test]]
+name = "hotpath_json_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
+[[test]]
+name = "kat_join_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+
+[[test]]
+name = "secret_scan_cli"
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
