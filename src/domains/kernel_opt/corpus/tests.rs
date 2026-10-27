@@ -22984,3 +22984,102 @@ fn batch288_riders_landed() {
         }
     }
 }
+
+#[test]
+fn batch293_riders_landed() {
+    // G1 for Batch 293 (Plan 297): the molten fused-decode conversion --
+    // FIVE count-neutral rider faces on four hosts (every needle verbatim at
+    // the pin 611e704fe9a3f77e56a459ade78e77bd560cf9a7, re-verified 2026-10-27
+    // in plan 297 T0/T1; 51/51 quote checks machine-passed). THE STAGED OWN
+    // RULES WERE BOTH FALSIFIED AT T1: gpu_20's packed-total-order rule owns
+    // the orderable-key packing core (R1) and its gumbel-descent rule owns
+    // the Gumbel-max + Philox sampling family (R5) -- Research 331's 10-26
+    // greps missed both owners; the landing is faces-only, corpus stands.
+    let corpus = build_kernel_seed_corpus();
+    let needles: [(&str, &[&str]); 4] = [
+        (
+            // faces 1+5 -- the two gpu_20 hosts (atomic-max key arm + sampling)
+            "packed-total-order-multi-field-argmax",
+            &[
+                "the DEVICE-SCOPE ATOMIC-MAX face",
+                "atomic_max_explicit(best, lfm_argmax_key(bv, bi), memory_order_relaxed);",
+                "THE TIE SEMANTICS MUST MATCH THE COMPARATOR'S EQUALITY",
+                "a larger key is a larger value, or an equal value at a lower index",
+                "Candidates are never NaN (the merge never takes one)",
+                "two-pass-partial-reduction-inter-dispatch-barrier (gpu_116, B269) owns the OVERSIZED-ROW alternative",
+                "Batch 293 / Plan 297 / Research 331",
+            ],
+        ),
+        (
+            // face 2 -- the wait-free last-finisher redesign + prologue overlap
+            "spin-barrier-needs-co-residency-capped-launch",
+            &[
+                "the WAIT-FREE LAST-FINISHER face",
+                "No threadgroup ever waits on another, so forward progress never depends on co-residency.",
+                "atomic_fetch_add_explicit(counter, 1u, memory_order_relaxed)",
+                "atomic_store_explicit(counter, 0u, memory_order_relaxed);",
+                "atomic_thread_fence needs MSL 3.2; this file is also",
+                "Issue this expert's 8 KB F32 router row and the top-k bias at kernel",
+                "Pure copies: simdgroup 0 then sums the same values in the same lane order.",
+                "Batch 293 / Plan 297 / Research 331",
+            ],
+        ),
+        (
+            // face 3 -- the token-tail reader (next-step input + read-and-clear)
+            "argmax-epilogue-replaces-output-materialization",
+            &[
+                "the TOKEN-TAIL face",
+                "also produces the next step's input: lfm_gather_rows_q6_bf16's dequantized",
+                "const uint tok = ~uint(key & 0xFFFFFFFFul);",
+                "best[0] = 0ul;",
+                "Tokens never leave the GPU between steps.",
+                "Batch 293 / Plan 297 / Research 331",
+            ],
+        ),
+        (
+            // face 4 -- the MSL-version cache-key axis
+            "pipeline-cache-key-covers-every-function-constant",
+            &[
+                "the LANGUAGE-VERSION axis face",
+                "Compiled MSL libraries keyed by source identity and language version",
+                "Keyed by function name and MSL version.",
+                "THE TWO-VERSION POSTURE IS REAL, NOT HYPOTHETICAL",
+                "Batch 293 / Plan 297 / Research 331",
+            ],
+        ),
+    ];
+    for (id, marks) in needles {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == id)
+            .unwrap_or_else(|| panic!("batch-293 host rule '{id}' missing"));
+        for mark in marks {
+            assert!(
+                entry.gpu_concept.contains(mark),
+                "batch-293 rider on '{id}' missing mark: {mark}"
+            );
+        }
+    }
+    // face 5 lives on the OTHER gpu_20 host -- the sampling family founder.
+    let sampling = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "gumbel-argmax-filtered-sampling-descent")
+        .unwrap_or_else(|| panic!("batch-293 host rule 'gumbel-argmax-filtered-sampling-descent' missing"));
+    for mark in [
+        "the SPLIT-INVARIANT POSITION-KEYED COUNTER + SMALL-E SERIES + EXACT-TAU LADDER faces",
+        "smp_philox(uint4(q, p.pos, SMP_DOMAIN, 0u), uint2(p.seed_lo, p.seed_hi))",
+        "so a seed reproduces the same tokens however a generation is split into requests.",
+        "so it keeps full relative precision down to V = 2^-33.",
+        "ties at the boundary kept, as Hugging Face and vLLM do",
+        "or a float sum in a fixed order, so the",
+        "The greedy path is unchanged (same tokens, same speed)",
+        "Batch 293 / Plan 297 / Research 331",
+    ] {
+        assert!(
+            sampling.gpu_concept.contains(mark),
+            "batch-293 rider on 'gumbel-argmax-filtered-sampling-descent' missing mark: {mark}"
+        );
+    }
+}
