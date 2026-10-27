@@ -62,39 +62,43 @@ The BUGGY predicate it replaced (the founding failure, verbatim from the diff):
       cross-cites all three. NOTE: the min-trailing-zeros derivation happens
       to be safe-by-construction (it sees all strides); the failure class is
       the planner that validates a SUBSET — the rule's teeth.
-- [ ] T2: author 1 own rule `vector-width-admission-checks-every-outer-stride`
+- [x] T2: author 1 own rule `vector-width-admission-checks-every-outer-stride`
       (category DtypeAlignment/N) in NEW slice `entries_gpu_132` (B295 took
       131): concept (the all-strides admission law + the min-proxy failure
       mode + the unfold shape + broadcast-0 + the asymmetry), ref/opt fixtures
       (the [10,4,1] unfold failure as the ref; the `.all()` predicate as the
       opt; a standalone-executable test), NotBenchable-by-domain annotation.
-- [ ] T3: registration — mod.rs `mod entries_gpu_132;` +
+- [x] T3: registration — mod.rs `mod entries_gpu_132;` +
       `entries.extend(entries_gpu_132::entries());`; batch296 gate
       (`batch296_rule_landed` needle + `batch296_pseudocode_parses` parse,
       batch295 shape).
-- [ ] T4: count pins — 35 × `981,` → `982,` value sites in corpus/tests.rs
+- [x] T4: count pins — 35 × `981,` → `982,` value sites in corpus/tests.rs
       (each message gains the "batch 296 re-pin: 982 (981 + 1: N
       vector-width-admission-checks-every-outer-stride — the cubecl #1922
       all-strides admission law, merge 5bd6d17aa, Plan 301 / Research 337)"
       prefix); router.rs:473 expert-total 981→982 + history prefix;
       tests.rs:5536 `(KernelCategory::DtypeAlignment, 85)` → 86 + comment.
-- [ ] T5: gates — `cargo test -p katgpt... ` NO: `cargo test --lib` (default
-      floor 2749→2752: +3 batch296 tests... re-derive at run), kernel_opt lib
-      (floor 3259→+), clippy `-D warnings` ×3 postures (default/all-features/
-      no-default), retrieval floors BOTH postures
-      (`--features kernel_opt,latent_retrieval` + `--lib --features
-      latent_retrieval retrieval_`) — riders/rules edit rule bodies even
-      count-neutral; re-measure, re-pin only on measured decay (floor =
-      measured − 5, Plan-030 convention).
-- [ ] T6: freeze/score-bench adjudication — NOT owed expected (kernel_opt-only
-      delta; the P30 law: generations.rs::atoms() builds from the clippy seed
-      corpus ONLY — confirm live); binary rebuild NOT owed (kernel_opt outside
-      the release set). Record both adjudications in the landing row.
-- [ ] T7: research note 337 (`.research/337_*.md`, born-complete) + count
-      bumps: AGENTS.md kernel_opt 981→982 (×2 sites), `.docs/11_domains/kernel_opt.md`
-      batch row; snapshot `.distill/001` pool row (the cubecl #1922 lead
-      DISCHARGED); plan checkboxes [x]; ONE commit `feat: batch 296: ...` +
-      push (re-fetch before staging; the push is the arbiter).
+      EN-ROUTE: two MORE inline `total, 981,` sites (tests.rs:5554/5567)
+      the line-anchored regex missed — found live by the failing category
+      gate; both bumped + prefixed; and the REAL category registration is
+      the KERNEL_CATEGORIES rule-id LIST in corpus/mod.rs (the rule_id added
+      at the N list head + the N header comment 85→86).
+- [x] T5: gates — default lib 2749/0; kernel_opt lib 3261/0 (the 2 batch296
+      tests + the rule + registration), clippy `-D warnings` ×3 postures
+      clean (3 doc-lint heals in-batch: slice-header list-indentation ×2 +
+      `into_contiguous` backticks), retrieval floors HELD both postures
+      (kernel+latent 22/0 ~222 s + default `retrieval_` 21/0 ~55 s) — no
+      re-pin.
+- [x] T6: freeze/score-bench adjudication — NOT owed, both confirmed:
+      generations.rs::atoms() builds from the clippy seed corpus only (line
+      8, P30); score-bench skipped (no rust_perf delta); binary rebuild NOT
+      owed (kernel_opt outside the release set). Recorded in the landing
+      row.
+- [x] T7: research note 337 (`.research/337_batch296_cubecl_vector_admission.md`,
+      born-complete) + count bumps: AGENTS.md kernel_opt 981→982 (×2 sites),
+      `.docs/11_domains/kernel_opt.md` batch row; snapshot `.distill/001`
+      pool row (the cubecl #1922 lead DISCHARGED); plan checkboxes [x]; ONE
+      commit `feat: batch 296: ...` + push.
 
 ## Gates owed (Protocol A §5, kernel_opt batch shape)
 
