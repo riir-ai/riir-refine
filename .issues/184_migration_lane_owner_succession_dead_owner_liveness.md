@@ -133,8 +133,19 @@ dead-man succession on `owner_login` itself, revocable).
 
 ## Acceptance
 
-- [ ] A: the cron closer lands + deployed to devnet; a due row closes with no
-      human action (proven in-process and on the devnet rehearsal).
+- [x] A (code): riir-dapps `024f80b` — `#[event(scheduled)]` hourly (apex +
+      devnet) → `/internal/migrate/tick` in the ledger DO → the SAME
+      `migrate_close_request` per due row; idle tick = no GitHub call, no
+      write (fixture call-counter proven); ≤ 8 closes/tick (CF 50-subrequest
+      plan cap), backlog drains over ticks; dispute rival-state report bug
+      fixed in passing. 586 kat-service lib green. Apex build has no
+      `kat_migrate` → its cron is a no-op until promotion.
+- [ ] A (live): devnet redeploy carrying the cron (after the B′ chain lands —
+      riir-kat is a path dep, a mid-edit build is unsound).
+- [ ] A gap (→ the B′ worker slice): issue-less LIVE rows not yet due get a
+      creation-only retry per tick — today a filing whose creation failed
+      gets its issue only AT close, so the owner never sees it before the
+      verdict reads it.
 - [ ] B′ kernel (riir-kat): v3 snapshot, numeric ids, `Hold`, self path;
       E-cells S1 self-👍 held@24h→released@7d · S2 binding <30 d → cancel ·
       S3 legacy/no-id binding → cancel · S4 owner 👎 → cancel (both paths) ·
