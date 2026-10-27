@@ -1,7 +1,8 @@
 # Issue 186: structure-grounded synthetic retrieval-eval fixtures (gold from artifact structure, questions from the teacher)
 
 **Status:** Open — poc/eval-harness task, unclaimed
-**Deferred (not claimed) 2026-10-27:** the integration surface this issue needs (`src/draft/retrieval_eval.rs`, `src/draft/eval_fixtures_sec.rs`) is dirty with the live issue-185 softmax lane (`zed-m3-i185`); implementing now would edit a sibling's in-flight files. Re-check `git status` before claiming.
+**Claimed:** zed-m3-blaze-run, 1793127153, expires 2026-10-29T18:52:33Z
+**Deferred (not claimed) 2026-10-27:** the integration surface this issue needs (`src/draft/retrieval_eval.rs`, `src/draft/eval_fixtures_sec.rs`) is dirty with the live issue-185 softmax lane (`zed-m3-i185`); implementing now would edit a sibling's in-flight files. Re-check `git status` before claiming. — re-checked 2026-10-28: tree clean, the i185 lane landed; claim opened.
 **Source:** [riir-neuron-db Research 311](../../riir-neuron-db/.research/311_STAIR_ToC_Structure_Aware_Retrieval.md) (arXiv:2609.03874 STAIR — its SearchTome recipe: teacher writes only questions, gold labels derive from the artifact's own structure, immune to teacher-hallucinated gold)
 **Date:** 2026-10-27
 
