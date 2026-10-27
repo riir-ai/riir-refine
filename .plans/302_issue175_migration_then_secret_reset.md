@@ -92,6 +92,22 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 - [ ] **T1-secret (owner):** `npx wrangler secret put KAT_MIGRATE_ISSUES_TOKEN
       --env devnet` (same token) — devnet cannot file the proposal issue
       without it (filings stay E12-unreleasable).
+- [ ] **T1-live (2026-10-27, rule C + DEVNET_FAST, devnet `687950c7`):** KEY
+      MAP MEASURED (blake3 of the raw pubkey): `c79c93b8…192fd6` =
+      `/Users/kat/deprecated/old-ssh/id_ed25519` (Dec 2023) ✅ ·
+      `1bb4b7b5` = the 10-25 rotation key (`/Users/katopz/.ssh/id_ed25519`;
+      both files NAMED `kat_old_c79c93b8` are this key — misnamed) ·
+      `71615e8d` = the 2023 key `id_ed25519.retired-20261026` (M3
+      `~/deprecated` + 4090) · `d54e39a8` = M3 now · `4f4623f3` = the 4090's
+      new key (2026-10-26). **Filing #1** `c79c93b8 → d54e39a8` = request
+      `e518f563…`, proposal issue gist-rs/riir-dao-proposal#1 (created by the
+      worker; author = katopz → the issues token is the OWNER's PAT, so GitHub
+      sends no self-mention notification — mint a BOT token before mainnet),
+      owner 👍 (id 97060) at 14:15 UTC, window 15:14 UTC, the 16:00 cron tick
+      is the no-human proof (no status read in between). Pre-release devnet
+      balances: c79c93b8 174 866 068 µKAT, d54e39a8 0. **Filing #2 (4090):**
+      `71615e8d → 4f4623f3` — after #1 releases (probes the one-GitHub-binding
+      rule, E11, with `katopz` already bound to d54e39a8).
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
