@@ -1,6 +1,6 @@
 # Issue 184 — the migration lane survives a dead owner: autonomous close + the owner-dormancy succession rule
 
-**Status:** IMPLEMENTED 2026-10-27 — B′ landed across all four repos
+**Status:** REOPENED 2026-10-27 — OWNER DIRECTIVE: **rule C** (below) supersedes B′; implementation in flight. Previously: B′ landed across all four repos
 (kernel riir-kat `ceed821` · worker riir-dapps `f1bfaf2` + cron `024f80b` ·
 dao `160a9b5`/`06b8eab` · CLI `1b315f36`); OPEN only for the live half (the
 devnet redeploy + the rehearsal). Verdict REVISE → DECIDED **B′** (below)
@@ -77,7 +77,34 @@ heirs. (Question for the verdict: include B4 now or defer it?)
 runtime knobs (183 R5). Row: `old_binding_bound_at_unix` frozen at filing
 (binding row value is already `acct16 ‖ bound_at u64` — `ledger.rs:193`).
 
-## B′ — THE DECISION (supersedes B1–B5; verdict round 1's "simpler alternative")
+## Rule C — OWNER DIRECTIVE (2026-10-27, supersedes B′)
+
+Owner, verbatim intent: *"I'm not dead, and even if I'm dead someone must 👍 —
+we do not allow auto release. Owner 51%, the old account's own GitHub 1%,
+every other account 1%. It can be a draw but katopz will win; if I die they
+will need someone as a judge."*
+
+**The rule — plain weighted voting on the proposal issue:**
+- katopz (numeric id 97060) = 5100 bp; EVERY other GitHub identity (the old
+  account's bound login included — no special status, no unconditional
+  veto) = 100 bp. One numeric identity, one vote; reacting both ways = no vote.
+- Release ⟺ weighted 👍 **>** weighted 👎 (strict). A draw or zero votes →
+  Cancel. Never a release without a 👍 (no auto-release).
+- Owner voted → the 24 h close decides on the weights (katopz wins unless
+  ≥ 51 others oppose).
+
+**Two rails kept from B′ (they change WHEN and WHOSE-COUNTS, never the
+weights — owner may strike either):** when katopz has NOT voted,
+(R1) a non-owner vote counts only if that GitHub account is ≥ 365 d old at
+filing (an unknown age counts for 👎, never for 👍 — fail-closed), so a
+thief's fresh throwaway 👍 is worth nothing; (R2) a passing tally waits until
+filing + 7 d (Hold) so a living owner who missed the 24 h window can still 👎.
+
+**Retired from B′:** the self path, the unconditional victim veto (E3d), the
+30 d binding-age floor, the 2-qualified-objections rule. Kept: numeric ids,
+the cron closer, Hold, the creation retry, the subrequest meter.
+
+## B′ — THE DECISION (SUPERSEDED by rule C) (supersedes B1–B5; verdict round 1's "simpler alternative")
 
 **No dormancy detection at all.** Two release paths through ONE kernel:
 
