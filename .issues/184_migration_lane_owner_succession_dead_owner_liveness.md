@@ -1,6 +1,12 @@
 # Issue 184 — the migration lane survives a dead owner: autonomous close + the owner-dormancy succession rule
 
-**Status:** REOPENED 2026-10-27 — OWNER DIRECTIVE: **rule C** (below) supersedes B′; implementation in flight. Previously: B′ landed across all four repos
+**Status:** IMPLEMENTED 2026-10-27 — OWNER DIRECTIVE **rule C** (below, supersedes
+B′) landed: riir-kat `ba40757`+`96a44be` · riir-dapps `c04e321`+`fdeef65` ·
+riir-dao `ce18306`+`61887f3` (artifact v4, Amendment 3) · riir-refine
+`9aa94c84`. DEVNET live `687950c7` with `TallyTiming::DEVNET_FAST` (window
+1 h, silent-owner hold 2 h; feature `migrate_fast_window`, panics unless
+`KAT_ENV_LABEL == "devnet"`; the apex build carries neither). OPEN only for
+the live rehearsal (plan 302 T1). Previously: B′ landed across all four repos
 (kernel riir-kat `ceed821` · worker riir-dapps `f1bfaf2` + cron `024f80b` ·
 dao `160a9b5`/`06b8eab` · CLI `1b315f36`); OPEN only for the live half (the
 devnet redeploy + the rehearsal). Verdict REVISE → DECIDED **B′** (below)
@@ -103,6 +109,26 @@ filing + 7 d (Hold) so a living owner who missed the 24 h window can still 👎.
 **Retired from B′:** the self path, the unconditional victim veto (E3d), the
 30 d binding-age floor, the 2-qualified-objections rule. Kept: numeric ids,
 the cron closer, Hold, the creation retry, the subrequest meter.
+
+**Rule C acceptance:**
+- [x] Kernel: weights 5100/100, one numeric identity one vote, draw/zero
+      cancel, R1 (≥365 d voters when owner silent; unknown age counts for 👎
+      only) + R2 (silent-owner hold) — `ba40757`; `TallyTiming` LAW
+      {24 h, 7 d} / DEVNET_FAST {1 h, 2 h}, private fields, serde accepts only
+      the two named pairs, snapshot records + digest binds the timing (domain
+      v5), a timing mismatch cancels — `96a44be`. 376 lib green.
+- [x] Worker: rule-C cells + the fast cell (file → 1 h tick holds → 2 h tick
+      releases) + the guard matrix (only exactly `devnet` boots the fast
+      build) — `c04e321`; 605/608 kat-service lib; CI L7 compiles the devnet
+      posture `fdeef65`.
+- [x] Dao: artifact v4 (owner_weight_dominant enforced on the table, LAW
+      timing locked both ways, verifier REFUSES a DEVNET_FAST snapshot) —
+      `ce18306`; Amendment 3 — `61887f3`.
+- [x] CLI: rule-C text + real UTC close/hold instants — `9aa94c84`.
+- [x] Devnet deployed `687950c7` (2026-10-27).
+- [ ] Live rehearsal (plan 302 T1) on the fast timing.
+- Known: devnet release lands on the first hourly tick at/after +2 h (≤ ~1 h
+  late) — the cron cadence, not the law.
 
 ## B′ — THE DECISION (SUPERSEDED by rule C) (supersedes B1–B5; verdict round 1's "simpler alternative")
 
