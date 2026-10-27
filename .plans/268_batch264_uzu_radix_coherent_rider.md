@@ -1,6 +1,7 @@
 # Plan 268: Batch 264 — the uzu #994 coherent-qualifier rider (thin-watch conversion)
 
-**Status:** IN PROGRESS — claimed 2026-10-20T03:24Z, shikuwa/4090 idle loop; **Claimed:** shikuwa-4090-idle, 1792463431, expires 2026-10-22T03:24:00+00:00
+**Status:** COMPLETE 2026-10-20 — T0–T4 all landed (the claim's own landing commit); T5 graded WATCH with rationale (no per-op weight-transform surface in our lane today; re-opens if one lands). Status line + lease line closed 2026-10-28 (zed-m3-idle hygiene pass): the checkboxes had said done since the landing while this header still read IN PROGRESS.
+**Lease closed:** shikuwa-4090-idle (claimed 2026-10-20 epoch 1792463431, expired on landing 2026-10-22) — the batch-264 rider; landed per T0–T4.
 
 Source: trymirai/uzu @ `32cd07c3f648d65e77063f3105f36c7c85bf5d81` (#994 "Radix top-k
 cross-threadgroup coherency", MIT) — ONE-line fix on
