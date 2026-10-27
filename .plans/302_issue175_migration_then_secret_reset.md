@@ -79,6 +79,19 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 
 ## Tasks
 
+- [x] **T1-pre — the live venue (2026-10-27):** proposal repo = PUBLIC
+      `gist-rs/riir-dao-proposal` (riir-dao is private; owner-created);
+      `KAT_MIGRATE_ISSUES_TOKEN` set on the APEX by the owner. riir-dapps
+      `db9e6dc` (repo-base var apex+devnet; label-free find-or-create — a
+      silently dropped label would have duplicated issues per retry; reader
+      falls back to the issues token; `[env.devnet] build` compiles
+      `kat_migrate`) + refine `e4084013` (CLI default repo). DEVNET DEPLOYED
+      version `5f77c6e0` — `/account/migrate/*` live (404 → `unknown_request`).
+      Mainnet still has NO migrate routes (apex build unchanged — promotion is
+      the post-rehearsal owner call; setup.sh --mainnet runs the R8 gate).
+- [ ] **T1-secret (owner):** `npx wrangler secret put KAT_MIGRATE_ISSUES_TOKEN
+      --env devnet` (same token) — devnet cannot file the proposal issue
+      without it (filings stay E12-unreleasable).
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
