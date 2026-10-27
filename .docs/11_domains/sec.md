@@ -355,6 +355,19 @@ proposer.
   machine fix — additive; silent-cap fully silent); wide probe clean
   (zero default/suspicious/correctness safety lints); freeze NOT owed
   (clippy-seeded corpus unmoved); binary rebuilt + installed
+- Issue 185 (2026-10-27): corpus 28 → 31 (7 fixable + 24 suggest-only;
+  the softmax-collapse family, new APPEND-ONLY `SecFamily::Numerics`,
+  arXiv:2610.31642) — `sigmoid-minus-one` (mechanical, strict-gated:
+  logistic-name allowlist, no comparison/`.abs()` context, bare-context
+  split form, comment guard; `--fix --write --verify` end-to-end on a
+  /tmp fixture crate: 2 edits kept, 0 reverted, the collapse-premise test
+  flips red → green) + `softmax-onehot-collapse` / `neg-ln-softmax-prob`
+  (suggest-only detectors, `proposers::softmax_collapse::detect`). Router
+  annotation (sec arm) re-pinned 62/169 → 64/172 (measured 69/172 =
+  40.1%; the 3 new spans routed Sec). Fixtures self-contained (σ/softmax
+  defined in-fixture) so the boundary-gate probe crate compiles. Workspace
+  sweep: `examples/softmax_collapse_sweep.rs` (read-only; hits recorded in
+  the issue).
 - Promotion to default: needs ≥1 workspace repo adopting sec in CI
 
 ## See also

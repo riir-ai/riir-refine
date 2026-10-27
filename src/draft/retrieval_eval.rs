@@ -2411,7 +2411,12 @@ mod tests {
                 // retrieval-neutral-positive. Floor = measured − 5
                 // per the Plan-030 convention = 62. Annotation only:
                 // gating stays killed (85% bar, Bench 025).
-                (false, true, true) => 62.0 / 169.0, // measured 67/169 (39.6%) — Batch 294 re-pin, 2026-10-27 (was 60/167; B292 measured 65/167)
+                // Issue 185 re-pin (2026-10-27): the softmax-collapse
+                // family's 3 spans re-measured 69/172 (40.1%; population
+                // 169 → 172 — the 3 new spans ALL routed Sec). Delta +2
+                // correct, +0.5pp. Floor = measured − 5 = 64 per the
+                // Plan-030 convention. Annotation only.
+                (false, true, true) => 64.0 / 172.0, // measured 69/172 (40.1%) — Issue 185 re-pin, 2026-10-27 (was 62/169; B294 measured 67/169)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.

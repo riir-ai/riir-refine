@@ -820,6 +820,11 @@ harness = false
 name = "heal_demo"
 required-features = ["clippy_lints"]
 
+# Issue 185 T4 — the softmax-collapse family's read-only workspace sweep.
+[[example]]
+name = "softmax_collapse_sweep"
+required-features = ["sec"]
+
 # Plan 202 R2+R3 dogfood spike (the client half): replays real corpus
 # candidate pools through SeatRerankClient against the instinct
 # ext_seat_dogfood_server; writes the R7-ledger JSONL.

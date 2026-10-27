@@ -3,7 +3,8 @@
 //! variant names, canonical shapes, one span per rule). Batch 258 added
 //! the web-trust seed's three (Plan 262); Batch 291 the penthera
 //! distill's three (Plan 295); Batch 292 the `CVEngine` distill's four
-//! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298).
+//! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298);
+//! Issue 185 the softmax-collapse family's three.
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -290,6 +291,33 @@ fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
     let mut out = Vec::new();
     out.extend_from_slice(&(owned.len() as u16).to_be_bytes());
     out
+}
+"#,
+    ),
+    // Issue 185 — the softmax-collapse family (Numerics), one span per rule.
+    (
+        "sigmoid-minus-one",
+        r#"pub fn head_grad(z: f32) -> f32 {
+    exact_sigmoid(z) - 1.0
+}
+"#,
+    ),
+    (
+        "softmax-onehot-collapse",
+        r#"pub fn backward(logits: &[f32], gold: usize) -> Vec<f32> {
+    let p = softmax32(logits);
+    p.iter()
+        .enumerate()
+        .map(|(i, pi)| pi - f32::from(i == gold))
+        .collect()
+}
+"#,
+    ),
+    (
+        "neg-ln-softmax-prob",
+        r#"pub fn nll(logits: &[f32], label: usize) -> f32 {
+    let probs = softmax(logits);
+    -probs[label].max(1e-7).ln()
 }
 "#,
     ),

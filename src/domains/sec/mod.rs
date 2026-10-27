@@ -52,6 +52,12 @@ pub enum SecFamily {
     /// into allocations, secret files created without permission hardening).
     /// Added APPEND-ONLY: no existing variant renumbered.
     InputValidation,
+    /// Float-numerics correctness (Issue 185 — the f32 Softmax Collapse
+    /// family, arXiv:2610.31642: `p_t - 1` / `sigmoid(z) - 1` / `-ln p_t`
+    /// round to exactly 0.0 past the ~16.6 margin cliff). Valid code, silent
+    /// clippy — the `PanicSafety` precedent's shape (a float defect, one
+    /// mechanical rewrite, suggest-only siblings). Added APPEND-ONLY.
+    Numerics,
 }
 
 impl SecFamily {
@@ -65,6 +71,7 @@ impl SecFamily {
             Self::CryptoHygiene => "crypto-hygiene",
             Self::PanicSafety => "panic-safety",
             Self::InputValidation => "input-validation",
+            Self::Numerics => "numerics",
         }
     }
 }

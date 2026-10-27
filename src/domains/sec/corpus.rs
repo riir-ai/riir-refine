@@ -38,6 +38,9 @@
 //! | `abuse-strike-counts-cross-site-requests` | `InputValidation` | no (suggest-only) | — (no lint fires; label-honoring policy is deployment-specific) |
 //! | `packed-field-silent-overflow-wrong-key` | `InputValidation` | no (suggest-only) | — (no lint fires; `cast_possible_truncation` is blanket `as`-cast pedantic with no key scoping and no fix; the mask site is invisible to `unchecked-wire-arithmetic` — `BitAnd` is not in its operator set) |
 //! | `capacity-exceeded-silent-fallback-not-refusal` | `InputValidation` | no (suggest-only) | — (no lint fires; the refusal path's error type is the fn's choice) |
+//! | `sigmoid-minus-one` | `Numerics` | yes (strict-gated, Issue 185 T1) | — (valid code; no lint sees a rounding cliff) |
+//! | `softmax-onehot-collapse` | `Numerics` | no (suggest-only, Issue 185 T2) | — (valid code; the repair restructures the pass) |
+//! | `neg-ln-softmax-prob` | `Numerics` | no (suggest-only, Issue 185 T3) | — (valid code; the row no longer carries the logits) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -805,6 +808,66 @@ cited as class provenance; the fixture is an original synthesis)."
             fixed_code: "const MAX_TARGETS: usize = 64;\n\npub fn encode_table(targets: &[u16]) -> Result<Vec<u8>, String> {\n    if targets.len() > MAX_TARGETS {\n        return Err(format!(\"too many targets: {}\", targets.len()));\n    }\n    let mut out = Vec::with_capacity(targets.len() * 2 + 2);\n    out.extend_from_slice(&(targets.len() as u16).to_be_bytes());\n    for t in targets {\n        out.extend_from_slice(&t.to_be_bytes());\n    }\n    Ok(out)\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
+        },
+        // ══ Issue 185 (2026-10-27) — the softmax-collapse family (Numerics). ══
+        // ══ One mechanical rewrite + two suggest-only detectors.            ══
+        // ── sigmoid-minus-one (Numerics; strict-gated proposer) ──
+        SecRule {
+            rule_id: "sigmoid-minus-one".to_string(),
+            sec_concept: "`sigmoid(z) - 1.0` (the one-vs-rest / BCE positive-slot \
+gradient) rounds to EXACTLY 0.0 in f32 once z passes ~16.6 (the Softmax Collapse \
+cliff, arXiv:2610.31642) — sigmoid(z) rounds to 1.0 and the difference is lost, so the \
+positive slot stops learning while the negatives keep pushing. Write the same quantity \
+as `-sigmoid(-z)` (full f32 range; the identity sigmoid(z) - 1 = -sigmoid(-z) is exact \
+for the logistic function); the one-hot split `sigmoid(z) - if d == label { 1.0 } else \
+{ 0.0 }` becomes `if d == label { -sigmoid(-z) } else { sigmoid(z) }`. Strict gates: \
+logistic-name ALLOWLIST (fast/hard/lut/deriv/log/repo-prefixed sigmoids refuse — an \
+approximation need not satisfy sigmoid(-z) = 1 - sigmoid(z)), single-arg free call, \
+never inside a comparison or `.abs()` (a saturation check), split form only in a bare \
+context, comment guard, macro refusal, tests skipped. Shipped repair: riir-reflex \
+6ba895d (label_heads.rs). Issue 185 T1."
+                .to_string(),
+            buggy_code: "fn sigmoid(z: f32) -> f32 {\n    1.0 / (1.0 + (-z).exp())\n}\n\npub fn positive_grad(z: f32, d: usize, label: usize) -> f32 {\n    let g = sigmoid(z) - if d == label { 1.0 } else { 0.0 };\n    g\n}\n".to_string(),
+            fixed_code: "fn sigmoid(z: f32) -> f32 {\n    1.0 / (1.0 + (-z).exp())\n}\n\npub fn positive_grad(z: f32, d: usize, label: usize) -> f32 {\n    let g = if d == label { -sigmoid(-z) } else { sigmoid(z) };\n    g\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── softmax-onehot-collapse (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "softmax-onehot-collapse".to_string(),
+            sec_concept: "the `grad = softmax - onehot` paste computes the target slot as \
+`p_t - 1`, which rounds to EXACTLY 0.0 in f32 once the logit margin passes the cliff \
+24*ln2 ~ 16.6 (Softmax Collapse, arXiv:2610.31642); every non-target p_i stays \
+positive, so the row stops summing to zero — under AdamW the Slingshot instability. \
+Exclude the target from the LSE instead: m = logsumexp over the OTHER logits, \
+grad[t] = -sigmoid(m - z_t), grad[i != t] = sigmoid(m - z_t) * exp(z_i - m) (the \
+`ce_collapse_free_into` primitive). Fires on a softmax row (a `softmax*` call result, \
+or a row normalized by `/= sum` / `* inv_sum` / a scale-by-sum call) followed in the \
+same fn by `X[t] -= 1.0`, `X[v] - if v == t { 1.0 } else { 0.0 }`, \
+`x - f32::from(i == t)` over a row element, or `X - onehot`. Suggest-only: the repair \
+restructures the pass and the shapes vary (SIMD, temperature, weighted one-hot). \
+Recall limits: rows normalized in a helper (cross-fn), weighted one-hots \
+(`X[t] -= w`), un-sum-named divisors. Shipped repairs: riir-rethink 2850291, \
+katgpt-rs 4ba82db2f, riir-ai 8981315af, riir-refine 1b426b53. Issue 185 T2."
+                .to_string(),
+            buggy_code: "fn softmax(v: &[f32]) -> Vec<f32> {\n    let m = v.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let e: Vec<f32> = v.iter().map(|x| (x - m).exp()).collect();\n    let s: f32 = e.iter().sum();\n    e.iter().map(|x| x / s).collect()\n}\n\npub fn ce_grad(logits: &[f32], target: usize) -> Vec<f32> {\n    let mut grad = softmax(logits);\n    grad[target] -= 1.0;\n    grad\n}\n".to_string(),
+            fixed_code: "pub fn ce_grad(logits: &[f32], target: usize) -> Vec<f32> {\n    let mut grad = vec![0.0_f32; logits.len()];\n    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let mut sum_excl = 0.0_f32;\n    for (i, (g, &z)) in grad.iter_mut().zip(logits).enumerate() {\n        if i != target {\n            *g = (z - max).exp();\n            sum_excl += *g;\n        }\n    }\n    if sum_excl <= 0.0 {\n        return grad;\n    }\n    let gap = sum_excl.ln() + max - logits[target];\n    let s = 1.0 / (1.0 + (-gap).exp());\n    let scale = s / sum_excl;\n    for g in &mut grad {\n        *g *= scale;\n    }\n    grad[target] = -s;\n    grad\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── neg-ln-softmax-prob (Numerics; suggest-only, low severity) ──
+        SecRule {
+            rule_id: "neg-ln-softmax-prob".to_string(),
+            sec_concept: "`-p[t].ln()` / `-(p[t].max(eps)).ln()` / `loss -= p[t].ln()` \
+over a softmax row reads 0 past the f32 margin cliff (~16.6, arXiv:2610.31642) — the \
+probability rounded to 1.0, so the reported loss is a floor, not a measurement (an \
+eps clamp hides the other tail too). Compute the loss from the logits: \
+softplus(m - z_t) with m = logsumexp over the other logits (exact both sides, no \
+clamp — the `ce_collapse_free_into` loss). Low severity: the loss is a REPORT, the \
+gradient is `softmax-onehot-collapse`'s. Suggest-only: the row no longer carries the \
+logits. Shipped repairs: riir-ai 8981315af, riir-refine 1b426b53. Issue 185 T3."
+                .to_string(),
+            buggy_code: "fn softmax(v: &[f32]) -> Vec<f32> {\n    let m = v.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let e: Vec<f32> = v.iter().map(|x| (x - m).exp()).collect();\n    let s: f32 = e.iter().sum();\n    e.iter().map(|x| x / s).collect()\n}\n\npub fn ce_loss(logits: &[f32], target: usize) -> f32 {\n    let p = softmax(logits);\n    -p[target].ln()\n}\n".to_string(),
+            fixed_code: "pub fn ce_loss(logits: &[f32], target: usize) -> f32 {\n    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum_excl: f32 = logits\n        .iter()\n        .enumerate()\n        .filter(|&(i, _)| i != target)\n        .map(|(_, &z)| (z - max).exp())\n        .sum();\n    let gap = sum_excl.ln() + max - logits[target];\n    gap.max(0.0) + (-gap.abs()).exp().ln_1p()\n}\n".to_string(),
+            family: SecFamily::Numerics,
         },
     ]
 }

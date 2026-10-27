@@ -119,6 +119,21 @@
 //! |---|---|---|
 //! | `packed-field-silent-overflow-wrong-key` | `packed_field_wrong_key::detect` | the corrupt key may be a DESIGNED alias (ring buffer, hash bucket — the vocabulary gate keeps the common spellings out, counter-named ring indices still fire and review decides); the range-assert / checked-newtype / widen-the-field choice is a protocol decision. Mask-site sink novelty: `&` is deliberately absent from `unchecked-wire-arithmetic`'s operator set; the B258 recorded drop (bare-op overflow + blanket as-narrowing) adjudicated in-rule — this rule owns neither half |
 //! | `capacity-exceeded-silent-fallback-not-refusal` | `capacity_silent_truncate::detect` | the refusal path's error type is the fn's choice (the `ffi-export-panicking-body` class); benign truncation (log limits, warned drops) inside encode-vocabulary fns fires too and review decides. Distinct-from `length-prefix-validate-before-alloc`: that rule owns the MISSING-CHECK face (no cap — alloc-DoS sink), this the LYING-CAP face (a cap that silently drops — wrong-dispatch sink) |
+//!
+//! ## Issue 185 (2026-10-27) — the softmax-collapse family (`Numerics`)
+//!
+//! The f32 Softmax Collapse paste (arXiv:2610.31642): `p_t - 1`,
+//! `sigmoid(z) - 1` and `-ln p_t` round to exactly 0.0 past the ~16.6
+//! margin cliff. A numerics-correctness defect in valid code — the
+//! `nan-unsafe-sort-comparator` shape, so it joins `sec` as one
+//! APPEND-ONLY family rather than a new domain (rationale in
+//! `softmax_collapse`'s module doc):
+//!
+//! | Rule | Proposer / detector | Why |
+//! |---|---|---|
+//! | `sigmoid-minus-one` | ✓ `sigmoid_minus_one::collect_edits` | `sigmoid(z) - 1.0` → `-sigmoid(-z)` is an exact logistic identity; strict-gated (name allowlist + no comparison/abs context + bare-context split form + comment guard) |
+//! | `softmax-onehot-collapse` | `softmax_collapse::detect` | the excluded-LSE repair restructures the pass; shapes vary (SIMD, temperature, weighted one-hot) |
+//! | `neg-ln-softmax-prob` | `softmax_collapse::detect` | the row no longer carries the logits the softplus loss needs |
 
 use syn::File;
 
@@ -139,7 +154,9 @@ pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
 pub mod shell_string_command;
+pub mod sigmoid_minus_one;
 pub mod slice_len_guard;
+pub mod softmax_collapse;
 pub mod strike_cross_site;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;
@@ -163,6 +180,7 @@ pub const FIXABLE_SEC: &[&str] = &[
     "slice-from-raw-parts-len-guard",
     "constant-time-secret-compare",
     "nan-unsafe-sort-comparator",
+    "sigmoid-minus-one",
 ];
 
 /// Collect the rule's edits for the file (empty for unknown rules).
@@ -175,6 +193,7 @@ pub fn collect_edits(rule_id: &str, source: &str, file: &File) -> Vec<RuleEdit> 
         "slice-from-raw-parts-len-guard" => slice_len_guard::collect_edits(source, file),
         "constant-time-secret-compare" => secret_ct_eq::collect_edits(source, file),
         "nan-unsafe-sort-comparator" => nan_safe_cmp::collect_edits(source, file),
+        "sigmoid-minus-one" => sigmoid_minus_one::collect_edits(source, file),
         _ => Vec::new(),
     };
     edits
