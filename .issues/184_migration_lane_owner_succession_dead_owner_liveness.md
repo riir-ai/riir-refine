@@ -1,6 +1,7 @@
 # Issue 184 — the migration lane survives a dead owner: autonomous close + the owner-dormancy succession rule
 
-**Status:** OPEN — design, awaiting verdict. Owner-directed 2026-10-27 ("who
+**Status:** OPEN — verdict REVISE (2026-10-27) → DECIDED: **B′** (below)
+supersedes B1–B5; implementation next. Owner-directed 2026-10-27 ("who
 will check the 👍? worker? cranker? we need to automate that — think I'm dead
 and only auto dao is running"). Follows [Issue 183](183_migration_release_requires_owner_endorsement.md)
 (owner 👍 REQUIRED). Two halves: **A** (the closer) is implementation-only
@@ -73,7 +74,52 @@ heirs. (Question for the verdict: include B4 now or defer it?)
 runtime knobs (183 R5). Row: `old_binding_bound_at_unix` frozen at filing
 (binding row value is already `acct16 ‖ bound_at u64` — `ledger.rs:193`).
 
-## Open questions for the verdict
+## B′ — THE DECISION (supersedes B1–B5; verdict round 1's "simpler alternative")
+
+**No dormancy detection at all.** Two release paths through ONE kernel:
+
+| Path | Releases when | Window |
+|---|---|---|
+| **Owner** (Issue 183, unchanged) | owner net-👍 ∧ no victim veto ∧ weighted 👍 > 👎 | closes at 24 h |
+| **Self** (new) | the OLD account's filing-time bound GitHub identity (NUMERIC id, release-created `kat:mgithub:` source only, binding ≥ 30 d old AT FILING) net-👍 ∧ owner did NOT net-👎 ∧ fewer than 2 *qualified* 👎 (distinct non-owner, non-self numeric ids whose GitHub account is ≥ 365 d old at filing) | releases no earlier than filing + 7 d |
+
+At the 24 h close: owner path passes → **Release**; else the self path is
+eligible-so-far → **Hold** (the request stays pending until filing + 7 d,
+then re-judged); else **Cancel**. The cron closer (A) re-judges held rows —
+no human anywhere. An owner 👎 cancels on either path at any close.
+
+**Why this over B1–B5:** the owner's own automation pushes as `katopz`
+daily, so "owner dormant" would never fire in the only-auto-DAO world (MUST 1);
+dormancy reads fail both ways (MUST 2). B′ never releases without a
+GitHub-attested human act: the owner, or the victim's own ≥30-day-bound
+GitHub identity with 7 days of owner silence. A thief needs the old key AND
+the victim's GitHub AND 7 days unvetoed. **Policy delta vs 183, stated:**
+while the owner is alive, the self path turns the owner's REQUIRED 👍 into
+a 7-day VETO for holders who self-endorse from their bound GitHub; every
+issue body says so (`@owner` mentioned — a 👎 stops it).
+
+**Folded MUST-fixes:** (3) identity is the GitHub NUMERIC id — reactions
+carry `user.id`; `TallyWeights` pins `owner_id` beside `owner_login`; the
+binding row grows `acct16 ‖ bound_at ‖ gh_id` (legacy 24 B rows → no id →
+no self path, the `NameOnlyBinding` precedent); the filing freezes
+`old_bound_id` + `old_bound_at` in the row. (4) the grief floor: the
+self-endorser weighs 5100 and only qualified (≥365 d) 👎 count on the self
+path — two needed to cancel. (5) filed separately: riir-dapps Issue 142
+(recovery lane, latent, blocks its mainnet promotion). (6) only the
+release-created `kat:mgithub:` binding is a self root; `pbind` never.
+**SHOULD-fixes folded:** issue body + ack + CLI state the active path
+("owner 👍 releases at 24 h; or the bound GitHub @x 👍 releases at 7 d
+unless the owner 👎"); dispute pairs judged on one read; v2 rows fail
+closed on the self path. **Deferred:** B4 heirs (a global root — if ever,
+dead-man succession on `owner_login` itself, revocable).
+
+**Constants (dao artifact v3 LAW, never knobs):** `SELF_WINDOW_SECS` =
+604 800 · `BINDING_MIN_AGE_SECS` = 2 592 000 · `VOTER_MIN_ACCOUNT_AGE_SECS`
+= 31 536 000 · `SELF_ENDORSE_WEIGHT_BP` = 5100 · `QUALIFIED_OBJECTIONS_TO_CANCEL`
+= 2 · `MAX_QUALIFY_LOOKUPS` = 100 · snapshot domain `kat:migrate:snapshot:v3\n`
+· `TallyVerdict` gains `Hold`.
+
+## Open questions for the verdict (round 1 — answered, see the log)
 
 1. Is owner dormancy via the public events API sound (gameable? false-dormant
    when katopz works only in private repos — acceptable since B3 is still
@@ -89,9 +135,27 @@ runtime knobs (183 R5). Row: `old_binding_bound_at_unix` frozen at filing
 
 - [ ] A: the cron closer lands + deployed to devnet; a due row closes with no
       human action (proven in-process and on the devnet rehearsal).
-- [ ] B: verdict AGREE; kernel v3 + dao artifact v3 + worker reader + row
-      field; E-cells: dormant+self-endorse released, dormant+young-binding
-      cancelled, dormant+no-binding cancelled, dormant+owner-👎 cancelled,
-      active owner unchanged (183 matrix green).
+- [ ] B′ kernel (riir-kat): v3 snapshot, numeric ids, `Hold`, self path;
+      E-cells S1 self-👍 held@24h→released@7d · S2 binding <30 d → cancel ·
+      S3 legacy/no-id binding → cancel · S4 owner 👎 → cancel (both paths) ·
+      S5 one qualified 👎 → still releases · S6 two qualified 👎 → cancel ·
+      S7 two unqualified (<365 d) 👎 → still releases · 183 matrix green.
+- [ ] B′ worker (riir-dapps): reaction ids + voter-age lookups (bounded,
+      cached), binding row +gh_id, filing freezes id + bound_at, Hold
+      re-judged by the cron; dao artifact v3; CLI/issue-body path text.
 
 ## Verdict log
+
+- **Round 1 — REVISE (Claude, 2026-10-27):** 6 MUST — (1) the owner's
+  own `katopz` automation keeps a dead owner "active" forever; (2) one-shot
+  events-API dormancy is unsound (90 d window, private activity, CF-egress
+  rate limits, suspension/404 — and empty-on-error ⇒ dormant fails open);
+  (3) login STRINGS let a recycled username inherit the self/veto/owner
+  authority → numeric ids; (4) one throwaway 👎 ties a 4900 self-endorser →
+  grief-kills the lane; (5) the recovery lane (Issue 140) already releases
+  silently → riir-dapps Issue 142; (6) only release-created bindings may be
+  a self root. Code checks: `bound_at` exists but was not frozen at filing;
+  bindings are written only by releases (`bound_at = now`, reset per move).
+  Recommended the dormancy-free alternative → **adopted as B′** (owner call
+  delegated to the verdict per the standing rule).
+
