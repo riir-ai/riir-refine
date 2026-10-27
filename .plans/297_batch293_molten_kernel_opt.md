@@ -1,6 +1,7 @@
 # Plan 297 — Batch 293: molten fused-decode kernel_opt conversion
 
-**Status:** STAGED — queued behind the live mining claims (B279 glm in flight; plan-289 bbtree slot to 2026-10-27T16:44+07; plan-294 resin staged). Claim plan-first at the next mining slot; push is the arbiter.
+**Status:** CLAIMED — zed-amo-b293-molten (amo), Batch 293 authoring. Slot adjudicated free at claim: the kernel_opt pool is EMPTY post-B295 (the b10826 leads landed `cd8579b4`), and plan-289 bbtree + plan-294 resin are both rust_perf-domain claims — cross-domain slots independent per the B295 claim precedent (`b277e98f` claimed kernel_opt while both rust_perf claims were live).
+**Claimed:** zed-amo-b293-molten, 1793062149, expires 2026-10-29T00:49:09Z
 
 Source: zhangshuibai/molten @ `611e704fe9a3f77e56a459ade78e77bd560cf9a7` (Apache-2.0; pin re-verified at clone). Verdict: YES B — Research 331. Domain: kernel_opt. Expected yield: 2 own rules (R1 argmax-key, R5 sampling seed) + 3 count-neutral rider faces (R2 spin-barrier, R3 argmax-epilogue, R4 function-constant cache-key) after ~50% falsification; honest drops allowed (D1–D6 graded in Research 331).
 
