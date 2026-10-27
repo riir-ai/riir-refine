@@ -1173,16 +1173,18 @@ mod tests {
             // `rejected` label; these fixture rows carry none, so the ROW
             // bytes — and with them the batch_commitment — are byte-identical
             // to v3: only the header's payload_version + the signature that
-            // covers it moved). redact_version tracks REDACT_VERSION (5 since
-            // the Issue-002 AI-intel pass). Rows carry `domain` (the
+            // covers it moved). redact_version tracks REDACT_VERSION (6 since
+            // the Issue-176 penthera provider-prefix pass; the v5→6 re-pin
+            // moved the header literal + the signature that covers it, the
+            // commitment byte-identical). Rows carry `domain` (the
             // fixture's EXPLICIT table — both rules → clippy), placed between
             // lint_key and shape in the serde field order; `rejected` would
             // sit right after `domain` when present (skip-serialized empty).
-            "{\"payload_version\":4,\"redact_version\":5,\"origin\":\"own-repo\",",
+            "{\"payload_version\":4,\"redact_version\":6,\"origin\":\"own-repo\",",
             "\"created_unix\":1234567,\"rows_included\":2,\"rows_blocked\":0,",
             "\"batch_commitment\":\"bab3d27b5adee7427f696b8d8e66a52eb9690660b371c989d43507ecdf1dea1f\",",
             "\"account_pubkey_hex\":\"197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61\",",
-            "\"signature_hex\":\"7c6b8030f9478dab785bfa9687b83f9af56c83c5118e5e3b713b653e6c53935970aed4080619cf6b4c0f4d4b73ee15d1b3b596268f8fa9be07f13ae957272702\"}\n",
+            "\"signature_hex\":\"ab16b57a68c64702849fe1562f54c22763893de4a3c422810742ea103385a676dab643f995ef6a3d6437dc7c805a0990800d9c287c32204bfc0ac25988b2fc04\"}\n",
             "{\"shape_id\":\"241e0429984b\",\"lint_key\":\"needless_return\",\"domain\":\"clippy\",",
             "\"shape\":\"fn g() { return 1; }\",\"fix\":\"fn g() { 1 }\",",
             "\"direction\":[0.1,-0.2,0.3,0.0,0.5,-0.5,0.7,0.9],\"success_count\":3,\"fail_count\":1,",

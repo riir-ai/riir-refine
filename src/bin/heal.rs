@@ -857,7 +857,7 @@ fn kat_gate_disabled() -> bool {
 /// test a tautology (the restatement-theorem class — a check that cannot
 /// fail proves nothing).
 const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
-  "version": 5,
+  "version": 6,
   "sync_enabled": true,
   "allow_origins": ["own-repo"],
   "allow_paths": ["src/**/*.rs", "tests/**/*.rs", "benches/**/*.rs", "examples/**/*.rs",
@@ -1565,8 +1565,16 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
             );
             std::process::exit(2);
         }
-        run_kat_login_provider(name, totp_code);
-        return;
+        #[cfg(feature = "kat_transport")]
+        {
+            run_kat_login_provider(name, totp_code);
+            return;
+        }
+        #[cfg(not(feature = "kat_transport"))]
+        {
+            let _ = (&name, &totp_code);
+            riir_refine::build_stamp::refuse("login --provider", &["kat_transport"]);
+        }
     }
     if totp_code.is_some() {
         eprintln!("kat login: --totp-code only means something with --provider github");
@@ -17995,7 +18003,7 @@ mod run_rollup_tests {
 /// and an unclaimed account read the identical wire shape (the zipped
 /// `tuna_balance_micro` pair omitted), and `granted` — the unified claim
 /// predicate the same response carries — is the only honest split.
-#[cfg(test)]
+#[cfg(all(test, feature = "kat_transport"))]
 mod tuna_none_line_tests {
     #[test]
     fn consumed_and_unclaimed_get_distinct_honest_lines() {

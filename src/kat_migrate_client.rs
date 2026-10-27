@@ -35,10 +35,12 @@
 //! is login-time-only; a per-run env read would silently sign ONE side).
 
 use crate::kat_account::KatAccount;
+use riir_kat::kat_protocol_migrate::{MigrateAck, MigrateRequestState, OBJECTION_LABEL};
+#[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
     compose_objection_issue_url, derive_request_id, migrate_claim_message,
-    migrate_claim_message_v2, migrate_release_message, migrate_release_message_v2, MigrateAck,
-    MigratePowAttestation, MigrateRequestBody, MigrateRequestState, OBJECTION_LABEL,
+    migrate_claim_message_v2, migrate_release_message, migrate_release_message_v2,
+    MigratePowAttestation, MigrateRequestBody,
 };
 
 /// The governance repo base the objection URL composes against when the
@@ -441,6 +443,7 @@ pub fn status(service_url: &str, request_id_hex: &str) -> Result<String, String>
 /// The OLD key loader — the substrate's own arbitrary-path helper
 /// (`kat_account::load_signing_key_at`, the ONE parse law). The migrate
 /// release key is deliberately NOT the record's key.
+#[cfg(feature = "kat_transport")]
 fn load_old_key(path: &std::path::Path) -> Result<ed25519_dalek::SigningKey, String> {
     crate::kat_account::KatAccount::load_signing_key_at(path)
 }
@@ -533,6 +536,7 @@ fn now_unix() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+#[cfg(feature = "kat_transport")]
 fn hex(bytes: &[u8]) -> String {
     riir_kat::kat_payreq_client::hex_encode(bytes)
 }
@@ -549,12 +553,14 @@ fn read_u64_field(path: &std::path::Path, field: &str) -> u64 {
         .unwrap_or(0)
 }
 
+#[cfg(feature = "kat_transport")]
 fn parse_string_field(json: &str, field: &str) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(json)
         .ok()
         .and_then(|v| v.get(field).and_then(|x| x.as_str()).map(str::to_owned))
 }
 
+#[cfg(feature = "kat_transport")]
 fn parse_bool_field(json: &str, field: &str) -> Option<bool> {
     serde_json::from_str::<serde_json::Value>(json)
         .ok()
