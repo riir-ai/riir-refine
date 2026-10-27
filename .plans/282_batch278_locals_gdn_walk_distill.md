@@ -1,7 +1,7 @@
 # Plan 282: Batch 278 — the Locals conversion (whole-step GDN window + device-side constraint recompute + the hybrid-feed pair)
 
 **Status:** LANDED — Batch 278 (this landing, T6's commit; session zed-m3-b278, 2026-10-25). Verdict: riir-refine Research 315 (YES B, kernel_opt, NotBenchable-annotated); source pin `32cf2feb07cd6e92cde4871347435773393f1812` (MIT); the filing lane is riir-infer Issue 1108 T3.
-**Claimed:** zed-m3-b278, 1792881263, expires 2026-10-26T22:34:23+00:00
+**Lease closed:** zed-m3-b278 (epoch 1792881263, expiry 2026-10-26T22:34:23Z) — the claimed Batch 278 scope LANDED 2026-10-25 (`de7f4008` + the collision merges, claim discharged per Status detail below); reshape 2026-10-27 zed-amo-walk18
 **Status detail:** claim discharged at the landing (`de7f4008` + the collision merges `9e0b927d`). Verdict: riir-refine Research 315 (YES B, kernel_opt, NotBenchable-annotated); source pin `32cf2feb07cd6e92cde4871347435773393f1812` (MIT); the filing lane is riir-infer Issue 1108 T3.
 
 ## Tasks

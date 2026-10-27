@@ -1,6 +1,6 @@
 # Plan 281 — Batch 277: the Humming + Chord quantized-GEMM pair (gated on Batch 276's landing)
 
-**Claimed:** shikuwa/4090 idle loop, 1792874338, expires 2026-10-26T20:38:00Z
+**Lease closed:** shikuwa/4090 idle loop (epoch 1792874338, expiry 2026-10-26T20:38:00Z) — the claimed Batch 277 scope LANDED 2026-10-25 (landing `0daa5bcb7`, claim `aa52ff31b` DISCHARGED per Status below); reshape 2026-10-27 zed-amo-walk18
 
 **Status:** LANDED 2026-10-25 ~06:0x +07 — landing `0daa5bcb7` + snapshot row `6bb4cb574`, corpus 955→962 (slice 125), Research 316 allocated (RENUMBERED from the landing's 315 — the 315 dual allocation adjudicated to the M3's `7fa36a9b7` file allocation, first-allocation keeps; renumber commit in the landing family), claim `aa52ff31b` DISCHARGED; the 6 count-neutral riders DEFERRED (T4 `- [-]`, the next session may land them as a rider pack under a fresh claim; batch gate OPEN for the next claimant) — staged pair re-targeted to Batch 277 after the Batch-276 dead-heat
 (2026-10-25T03:35+07, both boxes' claims stamped the same minute; push is the arbiter —
