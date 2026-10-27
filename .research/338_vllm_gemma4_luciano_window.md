@@ -1,6 +1,6 @@
 # Research 338 — vLLM lucianommartins Gemma-4 window (10 PRs, 2026-10-05..10) — distill verdict
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 297 / plan 303; commit DEFERRED — see §commit-state)
+**Status:** LANDED — Batch 297 (plan 303) landed 2026-10-27 by shikuwa-4090-b297; 4 rules at entries_gpu_133; the §commit-state deferral resolved (see the snapshot's LANDED row for the T2 attribution correction + gate record)
 
 ## Source
 

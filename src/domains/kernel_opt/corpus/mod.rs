@@ -1932,6 +1932,7 @@ mod entries_gpu_13;
 mod entries_gpu_130;
 mod entries_gpu_131;
 mod entries_gpu_132;
+mod entries_gpu_133;
 mod entries_gpu_14;
 mod entries_gpu_15;
 mod entries_gpu_16;
@@ -2126,6 +2127,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_130::entries());
     entries.extend(entries_gpu_131::entries());
     entries.extend(entries_gpu_132::entries());
+    entries.extend(entries_gpu_133::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2732,7 +2734,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "same-activation-mmvf-pair-channel-stride-broadcast",
         ],
     ),
-    // D: Dispatch patterns (235 rules; Batch 295 +2: gdn-conv-chain-fusion-gather-relocation-done-set (the #383/#398 backward gather-relocation + folded store + done-set — the B283 look-ahead's backward twin) + graph-replay-skips-host-node-scans (the #393 uid-memoized compat proof + posture-gated consumer map), Plan 300 / Research 333; Batch 286 +1: blueprint-minimal-compile-specialization-key (the burn/cubek remainder — the blueprint keeps only what fundamentally alters the code, Plan 291 / Research 321); Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window — #391 e75baeeb24 #391: the layer-start look-ahead fusion computes the norm+signed-transform chain AHEAD of its graph position, records the downstream nodes in a `precomputed` set the evaluation loop SKIPS, gated by the memory-overlap walk over the intervening GDN conv-state nodes + leaf-only early operands + unit use-counts + no stream concurrency; the deeper transform+quant fusion wins the shared nodes — the norm+transform fusion stands aside through the alias-aware 8-node window; bit-identity by arithmetic-order replay, Plan 287 / Research 320); Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion — the grammar mask recomputed per step ON DEVICE without the V×|Q| table, and the host-side branch speculation with the frequency-gated early build, Plan 282 / Research 315); Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316 — the note renumbered at the B278 merge, first allocation keeps); Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a
+    // D: Dispatch patterns (236 rules; Batch 297 +1: analytic-constraint-prefix-sum-arange (the vLLM #60445 pigeonhole arange, Plan 303 / Research 338); Batch 295 +2: gdn-conv-chain-fusion-gather-relocation-done-set (the #383/#398 backward gather-relocation + folded store + done-set — the B283 look-ahead's backward twin) + graph-replay-skips-host-node-scans (the #393 uid-memoized compat proof + posture-gated consumer map), Plan 300 / Research 333; Batch 286 +1: blueprint-minimal-compile-specialization-key (the burn/cubek remainder — the blueprint keeps only what fundamentally alters the code, Plan 291 / Research 321); Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window — #391 e75baeeb24 #391: the layer-start look-ahead fusion computes the norm+signed-transform chain AHEAD of its graph position, records the downstream nodes in a `precomputed` set the evaluation loop SKIPS, gated by the memory-overlap walk over the intervening GDN conv-state nodes + leaf-only early operands + unit use-counts + no stream concurrency; the deeper transform+quant fusion wins the shared nodes — the norm+transform fusion stands aside through the alias-aware 8-node window; bit-identity by arithmetic-order replay, Plan 287 / Research 320); Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion — the grammar mask recomputed per step ON DEVICE without the V×|Q| table, and the host-side branch speculation with the frequency-gated early build, Plan 282 / Research 315); Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316 — the note renumbered at the B278 merge, first allocation keeps); Batch 275 +2: phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (Plan 279 / Research 313); Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe-all-reduce window, Plan 276 / Research 308 -- a
     // pipeline-thread-capacity-declared-by-launcher (the max_total_threads contract + capacity assert + offline-compile pin) +
     // producer-launch-derived-from-actual-group-size (launch extent from the stored actual group_count, never a formula) +
     // length-keyed-dispatch-cut-invariance (length-keyed boundaries select numerics: one arithmetic at every length or an explicit contract + the straddling cut oracle) +
@@ -2763,6 +2765,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 297 +1 (Plan 303 / Research 338): the pigeonhole
+            // construction — when the constraint set (one logit per
+            // request, logits == reqs) pins query_start_loc to arange(0,
+            // n+1), CONSTRUCT it (one arange device + one host-side) and
+            // delete the six-op bucketize/scatter/cumsum pipeline + the
+            // D2H copy; the general path stays as the fallback.
+            "analytic-constraint-prefix-sum-arange",
             // Batch 283 +1 (the prism b10819 window, Plan 287 / Research
             // 320): the layer-start look-ahead fusion — compute the
             // norm+signed-transform chain ahead of its graph position,
@@ -3187,13 +3196,19 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "stream-k-grid-capped-at-useful-work-quanta",
         ],
     ),
-    // F: Flash-attention tiling (24 rules; Batch 275 +1: query-blocked-prefill-score-span-bound (Plan 279 / Research 313); Batch 257 +1: cluster-dsmem-shared-head-one-row-decode-attention (01b7f3bb — one decode head spread across a thread-block CLUSTER, scores gathered over distributed shared memory, one-CTA-order replay); Batch 256 +1: attention-softmax-state-exchange-once-per-block — the softmax-STATE exchange frequency axis (c05ce72c+80d1aba4); Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile (fattn-tile #30572 @ 5aeac37a — the oob_check=false fast arm's loop bound is INCLUSIVE of the last fully-covered tile, `<` → `<=`, the one-character silent-perf-tax repair); Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
+    // F: Flash-attention tiling (25 rules; Batch 297 +1: swa-evicted-prefix-tile-analytic-skip (the vLLM #60317 SWA start-tile clamp, Plan 303 / Research 338); Batch 275 +1: query-blocked-prefill-score-span-bound (Plan 279 / Research 313); Batch 257 +1: cluster-dsmem-shared-head-one-row-decode-attention (01b7f3bb — one decode head spread across a thread-block CLUSTER, scores gathered over distributed shared memory, one-CTA-order replay); Batch 256 +1: attention-softmax-state-exchange-once-per-block — the softmax-STATE exchange frequency axis (c05ce72c+80d1aba4); Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile (fattn-tile #30572 @ 5aeac37a — the oob_check=false fast arm's loop bound is INCLUSIVE of the last fully-covered tile, `<` → `<=`, the one-character silent-perf-tax repair); Batch 205 +1: the too-few-channels token-tile broadcast ownership (the lightning-indexer 4-head face); Batch 194 +1: the deferred-permutation bitmask; was 17; Batch 189 +1: the ancestor-mask
     // bit-visibility block-skip tree attention with its measured
     // dispatch cross-over)
     (
         KernelCategory::FlashAttnTiling,
         "F: flash-attn tiling",
         &[
+            // Batch 297 +1 (Plan 303 / Research 338): the SWA evicted-prefix
+            // analytic skip — the first in-window tile derives from the
+            // window algebra (zero mask reads, static per shape), the active
+            // count clamps at zero (totality over degenerate feeds), and the
+            // 3D->2D posture switches at num_seqs * num_kv_heads >= 128.
+            "swa-evicted-prefix-tile-analytic-skip",
             // Batch 256 +1 (the TensorFold +988 campaign, Plan 260 / Research
             // 291): the softmax-STATE exchange frequency axis — once per
             // block, not per key step (c05ce72c + 80d1aba4).
@@ -3283,11 +3298,18 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "lazy-rollback-journaled-window-replay-replaces-eager-state-snapshots",
         ],
     ),
-    // H: MoE dispatch + backward pass (41 rules; Batch 281 +1: sentinel-id-skip-shrinks-work-set-zero-unowned-rows (the #26631 sentinel-skip op contract — skip-and-zero, shrunk-set re-bound, uniform exit, the NOT_SUPPORTED adoption boundary, Plan 285 / Research 318); Batch 268 +2: moe-lone-tile-register-gemv-uniform-tile-kind (the splash wave — an expert's lone ≤2-row tile runs a lane-per-column register GEMV, all of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (the splash wave — rows past a lane's verify count route ZERO experts while every kernel keeps its dense shape, rows priced by expected committed tokens per cost); Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
+    // H: MoE dispatch + backward pass (42 rules; Batch 297 +1: moe-tokens-per-expert-block-m-cap (the vLLM #60504 routing-arithmetic tile ladder, Plan 303 / Research 338); Batch 281 +1: sentinel-id-skip-shrinks-work-set-zero-unowned-rows (the #26631 sentinel-skip op contract — skip-and-zero, shrunk-set re-bound, uniform exit, the NOT_SUPPORTED adoption boundary, Plan 285 / Research 318); Batch 268 +2: moe-lone-tile-register-gemv-uniform-tile-kind (the splash wave — an expert's lone ≤2-row tile runs a lane-per-column register GEMV, all of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (the splash wave — rows past a lane's verify count route ZERO experts while every kernel keeps its dense shape, rows priced by expected committed tokens per cost); Batch 223 +1: the MoE readiness queue without a grid barrier (lithos-metal — a bounded worker loop picks ready down-work or an unclaimed gate tile; the last producer scans ready work before retiring; the preceding grouping dispatch resets the counters before every replay); Batch 215 +1: the expert member-rows width ladder (TensorFold — member rows per pass is a MEASURABLE 2/3/4 ladder, not a constant: each lane sums in the one-row kernel's order + same simd_sum, bit-identical at every rung; the ladder 11.93→11.24 ms @32, 22.57→20.58 @64, EQUAL at 2; three recorded negatives in-rule); Batch 194 +5: the distance-K ring-overwrite gate, the empty-participant credit, the 32 MiB overlap-reduce mode, the coprime source interleave, the dependency-wave lookahead; was 31; Batch 188 +1: the\n    // sorted-gather run-scan elimination + warp-scan scheduler;\n    // Batch 186 +1: the per-expert mixed dispatch + worst-case\n    // workspace rule)
     (
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
         &[
+            // Batch 297 +1 (Plan 303 / Research 338): the routed tile
+            // derives from the routing arithmetic — tokens_per_expert =
+            // M*topk/E ladders BLOCK_M (16/32/64) clamped into the
+            // block_shape contract, GROUP_M collapses to 1 under two
+            // tiles of scattered stream; the spill-cliff boundary is
+            // owned by the regcap law (cited, not re-owned).
+            "moe-tokens-per-expert-block-m-cap",
             // Batch 281 +1 (the upstream llama.cpp trio, Plan 285 / Research 318):
             // a negative routing id skips the slot AND zeroes its result row —
             // the compact set shrinks (re-bound), unowned rows get a zero pass,
@@ -3519,7 +3541,7 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "const-generic-microkernel-format-unification",
         ],
     ),
-    // N: dtype + alignment specialization (86 rules; Batch 296 +1:
+    // N: dtype + alignment specialization (87 rules; Batch 297 +1: head-dim-smem-tile-cap (the vLLM #60289/#60317 SMEM capacity law, Plan 303 / Research 338); Batch 296 +1:
     // vector-width-admission-checks-every-outer-stride — the cubecl #1922
     // all-strides vector-admission law, merge 5bd6d17aa883, Plan 301 /
     // Research 337; Batch 277 +1: zero-exponent-float-mantissa-is-the-format-pivot (the Humming+Chord pair, Plan 281 / Research 316); Batch 275 +2: vocab-prefix-draft-head-zero-copy-views + abort-class-dtype-promotion-funnel-hoist (Plan 279 / Research 313); Batch 267 +1: partial-constant-float-fold-ieee-unsound (the cubecl fold wave, Plan 271 / Research 303 — a partial float constant fold is not IEEE-754-sound: `0.0 + x` is not `x` via signed zeros, `x - x` is not `0` via NaN/inf, `0 * x` is not `0` via -0.0/NaN, `0 / x` is NaN at x = 0 — only the both-constants case folds; FMA formation tests the scalar type, complex refuses); Batch 251 +1: the Yukon conversion, Research 284 — halfword-payload-funnelshift-aligned-word-read (2-byte-aligned packed payloads read as aligned 32-bit words + __funnelshift_r, the third word chosen so an ALIGNED payload re-reads w1 — never past the payload's own bytes, no misaligned access); Batch 249 slice 3 +4: dpas-block-scale-after-accumulate-not-in-operand (9f0d4c79 — the block scale rides the fp32 accumulator, raw codes feed as subnormals) + rank-partial-fp32-travel-round-once-at-epilogue (029bb341 — out = round(float(x) + y)) + hi-lo-split-pow2-prescale-clears-subnormal-floor (913cf15e — ASC 2^8) + cross-rank-reduce-pins-rank-order-not-ring-order (d309dad9 — ncclReduceScatter refused); Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry (test values must break block symmetry at the row pitch — mod 13 — and ship the must-fail twin) + kernel-contract-planted-gate-controls (every contract gate ships a planted broken control and must go red on it); Batch 242 +8: the mlx-serve pack — masked-in-place-field-prescale-other-operand (the GOAT: consume a packed field WITHOUT shifting it out of the word — mask in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern; portable CPU-exact, novel numerics) + decay-gate-dtype-one-point-zero-lock (a bf16 gate near one is exactly 1.0 and that head never forgets — the gate dtype follows the STATE under bf16 activations) + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor (the Issue-750-T3 lossy law's external validation #3) + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf; the stale 63 repaired at Batch 234 — the table held 65; now; Batch 215 +1: the HIP affine contraction-off row invariance (TensorFold — a quantized kernel that must bit-match a reference for EVERY row count builds with -ffp-contract=off so every row reduces the same way for any M + one fixed reduction order + one explicit RNE conversion with NaN preservation, verified by a comparator that rejects ANY single-bit mutation including signed zero; Rust spelling: the hazard inverts through explicit mul_add); Batch 201 +4: the pack-worthiness shape admission (M5 Max measured table) + the lossless 11-bit repack trial (MLXFAST_P11) + the draft-tape behavior-gated trial (PRESENT AT BASE provenance) + the per-layer verification coverage admission; Batch 199 +1: the
@@ -3536,6 +3558,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 297 +1 (Plan 303 / Research 338): the vLLM Gemma-4
+            // window — the launch-refusal capacity law: a dtype-default
+            // tile at a large head_dim refuses the launch outright; the
+            // tile derives from the capacity (head-dim cap, then a
+            // halving loop against the measured device smem).
+            "head-dim-smem-tile-cap",
             // Batch 296 +1 (Plan 301 / Research 337): the cubecl #1922
             // all-strides vector-admission law — a candidate width is
             // valid only if EVERY non-axis stride is a multiple of it.
