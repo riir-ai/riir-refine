@@ -846,6 +846,118 @@ pub fn feature_set_from_args(manifest_text: &str, verify_args: Option<&str>) -> 
     set
 }
 
+/// Issue 182: one candidate parent source for an edited file — the file
+/// whose `mod <name>;` declaration may gate the whole edited file. The
+/// CALLER owns the file I/O (the audit stays pure syn); several candidates
+/// may be supplied per edited file (see
+/// [`parent_module_decl_candidates`]), ordered by preference — the audit
+/// binds the first one that actually declares the module.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParentSource {
+    /// The parent file the declaration lives in (mark provenance).
+    pub path: PathBuf,
+    /// The parent file's full text.
+    pub content: String,
+}
+
+/// The module name an edited source file contributes to its parent's
+/// tree: the file stem, or — for a `mod.rs` file — the enclosing
+/// directory's name. Crate-root-shaped files (`lib.rs`, `main.rs`) have
+/// no parent-module declaration and return `None`.
+#[must_use]
+pub fn module_name_of(file: &Path) -> Option<String> {
+    let stem = file.file_stem()?.to_str()?;
+    if stem == "lib" || stem == "main" {
+        return None;
+    }
+    if stem == "mod" {
+        let dir = file.parent()?;
+        return dir.file_name()?.to_str().map(str::to_string);
+    }
+    Some(stem.to_string())
+}
+
+/// Candidate parent files whose `mod <name>;` declaration may gate this
+/// file (issue 182, one hop), most-specific first. Deliberately
+/// over-approximate: a candidate that does not exist is skipped by the
+/// caller (read failure) and one whose text declares no matching module
+/// is rejected by the audit — a wrong candidate is inert, never a wrong
+/// mark. Covers both layouts — `dir/foo.rs` (decl in `dir.rs`'s sibling
+/// file or `dir/mod.rs`) and `dir/foo/mod.rs` (decl in `dir.rs` or
+/// `dir/mod.rs`) — plus depth-1 files whose declaration rides the crate
+/// root (`lib.rs` / `main.rs`).
+#[must_use]
+pub fn parent_module_decl_candidates(file: &Path) -> Vec<PathBuf> {
+    if module_name_of(file).is_none() {
+        return Vec::new();
+    }
+    let Some(dir) = file.parent() else {
+        return Vec::new();
+    };
+    let is_mod_file = file.file_stem() == Some(std::ffi::OsStr::new("mod"));
+    let decl_base: &Path = if is_mod_file {
+        dir.parent().unwrap_or(dir)
+    } else {
+        dir
+    };
+    let mut out: Vec<PathBuf> = Vec::new();
+    if let Some(base_name) = decl_base.file_name() {
+        if let Some(par) = decl_base.parent() {
+            let mut sibling = std::ffi::OsString::from(base_name);
+            sibling.push(".rs");
+            out.push(par.join(sibling));
+        }
+    }
+    for tail in ["mod.rs", "lib.rs", "main.rs"] {
+        let cand = decl_base.join(tail);
+        if !out.contains(&cand) {
+            out.push(cand);
+        }
+    }
+    out
+}
+
+/// outcome of scanning one parent source for `mod <name>;` declarations.
+enum DeclScan {
+    /// No file-child declaration of this module in this source — the
+    /// caller may try the next candidate.
+    NoDecl,
+    /// Declared, with the AND-folded gate of every twin declaration
+    /// (`#[cfg(a)] mod x; #[cfg(b)] mod x;` — the file compiles when ANY
+    /// gate does). Empty = declared UNGATED (unconditionally compiled).
+    Declared(Vec<CfgExpr>),
+}
+
+/// Scan one parent source for the `mod <name>;` declaration(s) of a
+/// file-child module. Inline `mod name { … }` bodies are NOT file
+/// children and are ignored; `#[path = …]`-redirected declarations are
+/// out of scope (documented divergence — the audit cannot know the
+/// redirect target without cargo's resolution).
+fn parent_decl_gates(parent_src: &str, name: &str) -> DeclScan {
+    let Ok(parsed) = syn::parse_file(parent_src) else {
+        return DeclScan::NoDecl;
+    };
+    let mut gates: Vec<CfgExpr> = Vec::new();
+    let mut declared = false;
+    for item in &parsed.items {
+        if let syn::Item::Mod(m) = item {
+            if m.ident == name && m.content.is_none() {
+                declared = true;
+                let exprs: Vec<CfgExpr> =
+                    m.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+                if !exprs.is_empty() {
+                    gates.push(conjoin(exprs));
+                }
+            }
+        }
+    }
+    if declared {
+        DeclScan::Declared(gates)
+    } else {
+        DeclScan::NoDecl
+    }
+}
+
 /// One cfg predicate, restricted to what the audit can evaluate.
 #[derive(Debug, Clone, PartialEq)]
 enum CfgAtom {
@@ -1081,6 +1193,10 @@ struct CfgRegion {
     start_line: usize,
     end_line: usize,
     expr: CfgExpr,
+    /// Issue 182: set when the region is the WHOLE-FILE gate resolved from
+    /// the file's `mod` declaration in a parent source — provenance for the
+    /// audit mark (`None` for inline in-file regions).
+    decl_parent: Option<PathBuf>,
 }
 
 /// Fold one node's cfg attrs into a single predicate (multiple attrs AND,
@@ -1167,6 +1283,7 @@ fn item_cfg_regions(item: &syn::Item, out: &mut Vec<CfgRegion>) {
         .collect();
     if let (Some((start, end)), false) = (span_lines(item), exprs.is_empty()) {
         out.push(CfgRegion {
+decl_parent: None,
             start_line: start,
             end_line: end,
             expr: conjoin(exprs),
@@ -1189,6 +1306,7 @@ fn item_cfg_regions(item: &syn::Item, out: &mut Vec<CfgRegion>) {
                     .collect();
                 if let (Some((s, e)), false) = (span_lines(ii), inner_exprs.is_empty()) {
                     out.push(CfgRegion {
+decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(inner_exprs),
@@ -1207,6 +1325,7 @@ fn item_cfg_regions(item: &syn::Item, out: &mut Vec<CfgRegion>) {
                     .collect();
                 if let (Some((s, e)), false) = (span_lines(ti), inner_exprs.is_empty()) {
                     out.push(CfgRegion {
+decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(inner_exprs),
@@ -1239,6 +1358,7 @@ fn stmt_cfg_regions(stmts: &[syn::Stmt], out: &mut Vec<CfgRegion>) {
             .collect();
         if let (Some((s, e)), false) = (span_lines(stmt), exprs.is_empty()) {
             out.push(CfgRegion {
+decl_parent: None,
                 start_line: s,
                 end_line: e,
                 expr: conjoin(exprs),
@@ -1255,6 +1375,7 @@ fn stmt_cfg_regions(stmts: &[syn::Stmt], out: &mut Vec<CfgRegion>) {
                         be.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                     if let (Some((s, e2)), false) = (span_lines(stmt), block_exprs.is_empty()) {
                         out.push(CfgRegion {
+decl_parent: None,
                             start_line: s,
                             end_line: e2,
                             expr: conjoin(block_exprs),
@@ -1290,6 +1411,7 @@ fn expr_cfg_regions(expr: &syn::Expr, out: &mut Vec<CfgRegion>) {
                 let exprs: Vec<CfgExpr> = arm.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                 if let (Some((s, e)), false) = (span_lines(arm), exprs.is_empty()) {
                     out.push(CfgRegion {
+decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(exprs),
@@ -1447,6 +1569,9 @@ pub struct CfgUnverified {
     /// baseline did not compile (the binding-association path; `None` for
     /// direct span marks).
     pub binding: Option<String>,
+    /// Issue 182: set when the mark comes from the file's `mod` declaration
+    /// in a PARENT file (the whole-file gate class) — names that parent.
+    pub mod_decl: Option<PathBuf>,
 }
 
 /// Audit a batch of file edits against the feature set the verify gate
@@ -1457,7 +1582,10 @@ pub struct CfgUnverified {
 /// Divergences (documented, conservative direction — an unmarked edit
 /// never has mutability evidence behind a gate this baseline skipped):
 /// - `#[cfg] mod foo;` gating a whole child FILE is invisible to a
-///   per-file parse (the audit sees only files it is handed);
+///   per-file parse — THIS fn does not see parent files; pass the
+///   caller-resolved parents to [`cfg_unverified_edits_with_parents`]
+///   (issue 182), which folds the declaration gate in as a whole-file
+///   region;
 /// - same-line siblings behind different gates conjoin (over-marking);
 /// - `#[cfg_attr(...)]`, struct-field gates, and cfg on inner non-statement
 ///   expressions are out of scope;
@@ -1469,12 +1597,76 @@ pub struct CfgUnverified {
 ///   mark direction, never in the silent direction.
 #[must_use]
 pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgUnverified> {
+    cfg_unverified_edits_with_parents(files, set, &std::collections::HashMap::new())
+}
+
+/// Issue 182: fold each edited file's module-decl gate (resolved from the
+/// caller-supplied parent sources) into `regions` as a WHOLE-FILE region —
+/// every line of a file gated out at this posture sits behind the parent's
+/// `#[cfg]`, so the per-edit scan + [`region_gap`] classify it exactly like
+/// an inline cfg region. The first candidate that actually declares the
+/// module binds; twin declarations take OR semantics (any satisfied gate
+/// covers the file); an ungated declaration or no declaring candidate at
+/// all pushes nothing.
+fn push_module_decl_regions<S: std::hash::BuildHasher>(
+    f: &FileEditSet,
+    parents: &std::collections::HashMap<PathBuf, Vec<ParentSource>, S>,
+    set: &FeatureSet,
+    regions: &mut Vec<CfgRegion>,
+) {
+    let Some(cands) = parents.get(&f.path) else {
+        return;
+    };
+    let Some(name) = module_name_of(&f.path) else {
+        return;
+    };
+    for ps in cands {
+        let DeclScan::Declared(gates) = parent_decl_gates(&ps.content, &name) else {
+            continue;
+        };
+        if gates.is_empty() || gates.iter().any(|g| eval_cfg(g, set) == Tv::True) {
+            break; // ungated, or a twin arm covers this posture
+        }
+        let total = f.fixed.lines().count().max(1);
+        for g in gates {
+            regions.push(CfgRegion {
+                start_line: 1,
+                end_line: total,
+                expr: g,
+                decl_parent: Some(ps.path.clone()),
+            });
+        }
+        break; // the first declaring candidate binds
+    }
+}
+
+/// Issue 182 twin of [`cfg_unverified_edits`]: the same audit with the
+/// caller-resolved PARENT sources. An edited file whose `mod` declaration
+/// in a parent file carries a `#[cfg]` gate the verify posture does not
+/// satisfy compiles to NOTHING at that posture — every kept edit in it is
+/// behind a gate the baseline skipped, so the whole file is audited as one
+/// region. `parents` maps an edited file's path to its candidate parent
+/// sources ([`parent_module_decl_candidates`], read by the caller); the
+/// FIRST candidate that actually declares the module binds — twin
+/// declarations inside it take OR semantics (any satisfied gate covers
+/// the file), an ungated declaration is inert, and no declaring candidate
+/// at all leaves the file to the inline audit alone.
+#[must_use]
+pub fn cfg_unverified_edits_with_parents<S: std::hash::BuildHasher>(
+    files: &[FileEditSet],
+    set: &FeatureSet,
+    parents: &std::collections::HashMap<PathBuf, Vec<ParentSource>, S>,
+) -> Vec<CfgUnverified> {
     let mut marks: Vec<CfgUnverified> = Vec::new();
     for f in files {
         let Ok(parsed) = syn::parse_file(&f.fixed) else {
             continue; // the verifier already guarantees parseability
         };
         let mut regions: Vec<CfgRegion> = Vec::new();
+        // Issue 182: resolve the module-decl gate BEFORE the inline scan —
+        // a whole-file gate covers every line, so it rides the same
+        // region/`region_gap` machinery as an inline cfg.
+        push_module_decl_regions(f, parents, set, &mut regions);
         for item in &parsed.items {
             item_cfg_regions(item, &mut regions);
         }
@@ -1486,6 +1678,7 @@ pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgU
             let mut not_enabled: Vec<String> = Vec::new();
             let mut undecidable: Vec<String> = Vec::new();
             let mut binding: Option<String> = None;
+            let mut mod_decl: Option<PathBuf> = None;
             for r in &regions {
                 if e.final_line < r.start_line || e.final_line > r.end_line {
                     continue;
@@ -1500,6 +1693,9 @@ pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgU
                         if !undecidable.contains(&u) {
                             undecidable.push(u);
                         }
+                    }
+                    if r.decl_parent.is_some() && mod_decl.is_none() {
+                        mod_decl.clone_from(&r.decl_parent);
                     }
                 }
             }
@@ -1547,6 +1743,7 @@ pub fn cfg_unverified_edits(files: &[FileEditSet], set: &FeatureSet) -> Vec<CfgU
                     not_enabled,
                     undecidable,
                     binding,
+                    mod_decl,
                 });
             }
         }
@@ -1570,6 +1767,12 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
     );
     for m in marks {
         let mut reasons: Vec<String> = Vec::new();
+        if let Some(par) = &m.mod_decl {
+            reasons.push(format!(
+                "the file's `mod` declaration in `{par}` is cfg-gated and this baseline did not compile the file",
+                par = par.display()
+            ));
+        }
         if let Some(b) = &m.binding {
             reasons.push(format!(
                 "binding `{b}` is assigned/mutated inside a gate this baseline did not compile"
@@ -2842,6 +3045,160 @@ mod tests {
             rendered.contains("--verify-args \"--features score_bench\""),
             "{rendered}"
         );
+    }
+
+    // ── issue 182: the module-decl gate class ────────────────────────────
+    // `#[cfg(feature)] mod foo;` in a PARENT file gates the whole child
+    // file; a per-file parse cannot see it, so the verify's green zero read
+    // as "compile-gated" (the kat_migrate casualty, 2026-10-27). The twin
+    // audit folds the caller-resolved parent source in as a whole-file
+    // region.
+
+    fn gated_child_batch() -> FileEditSet {
+        let fixed = "pub fn keep(r: &String) -> bool { r.starts_with('v') }\npub fn drop_it(r: &String) -> bool { !r.is_empty() }\n";
+        FileEditSet {
+            path: PathBuf::from("src/kat/migrate_sweep.rs"),
+            original: fixed.to_string(),
+            fixed: fixed.to_string(),
+            edits: vec![
+                EditAtLine {
+                    rule_id: "needless_return".to_string(),
+                    final_line: 1,
+                    replacement: String::new(),
+                    restore: String::new(),
+                    rejected: Vec::new(),
+                },
+                EditAtLine {
+                    rule_id: "needless_borrow".to_string(),
+                    final_line: 2,
+                    replacement: String::new(),
+                    restore: String::new(),
+                    rejected: Vec::new(),
+                },
+            ],
+        }
+    }
+
+    fn parent_map(entries: &[(&str, &str)]) -> std::collections::HashMap<PathBuf, Vec<ParentSource>> {
+        let mut map = std::collections::HashMap::new();
+        let sources: Vec<ParentSource> = entries
+            .iter()
+            .map(|(path, content)| ParentSource {
+                path: PathBuf::from(*path),
+                content: (*content).to_string(),
+            })
+            .collect();
+        map.insert(PathBuf::from("src/kat/migrate_sweep.rs"), sources);
+        map
+    }
+
+    #[test]
+    fn module_decl_gate_marks_whole_file_when_unenabled() {
+        let parent = "#[cfg(feature = \"kat_migrate\")]\npub mod migrate_sweep;\n";
+        let files = vec![gated_child_batch()];
+        let parents = parent_map(&[("src/kat/mod.rs", parent)]);
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
+        assert_eq!(marks.len(), 2, "every edit sits behind the file gate: {marks:?}");
+        assert!(marks.iter().all(|m| m.not_enabled == vec!["kat_migrate".to_string()]));
+        assert!(marks.iter().all(|m| m.undecidable.is_empty()));
+        assert!(
+            marks.iter().all(|m| m.mod_decl.as_deref() == Some(Path::new("src/kat/mod.rs"))),
+            "{marks:?}"
+        );
+        // The render names the parent + the re-run.
+        let rendered = render_cfg_audit(&marks, None);
+        assert!(rendered.contains("`mod` declaration in `src/kat/mod.rs`"), "{rendered}");
+        assert!(rendered.contains("--verify-args \"--features kat_migrate\""), "{rendered}");
+    }
+
+    #[test]
+    fn module_decl_gate_enabled_child_is_clean() {
+        let parent = "#[cfg(feature = \"kat_migrate\")]\npub mod migrate_sweep;\n";
+        let files = vec![gated_child_batch()];
+        let parents = parent_map(&[("src/kat/mod.rs", parent)]);
+        let set = fset(&["kat_migrate"]);
+        let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
+        assert!(marks.is_empty(), "{marks:?}");
+    }
+
+    #[test]
+    fn module_decl_gate_ungated_or_missing_parent_is_inert() {
+        let files = vec![gated_child_batch()];
+        // An UNGATED declaration binds the candidate search and marks nothing.
+        let ungated = parent_map(&[("src/kat/mod.rs", "pub mod migrate_sweep;\n")]);
+        let set = fset(&[]);
+        assert!(cfg_unverified_edits_with_parents(&files, &set, &ungated).is_empty());
+        // A candidate with NO matching declaration is skipped; with no
+        // declaring candidate at all the inline audit runs alone (still nothing).
+        let no_decl = parent_map(&[("src/kat/mod.rs", "pub mod other;\n")]);
+        assert!(cfg_unverified_edits_with_parents(&files, &set, &no_decl).is_empty());
+        // The plain audit (no parents at all) stays the old behavior.
+        assert!(cfg_unverified_edits(&files, &set).is_empty());
+    }
+
+    #[test]
+    fn module_decl_gate_undecidable_atom_marks_the_file() {
+        // An opaque atom cannot be settled from the manifest + args: the
+        // file MIGHT compile to nothing, so it marks as undecidable.
+        let parent = "#[cfg(target_os = \"midnightos\")]\npub mod migrate_sweep;\n";
+        let files = vec![gated_child_batch()];
+        let parents = parent_map(&[("src/kat/mod.rs", parent)]);
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
+        assert_eq!(marks.len(), 2, "{marks:?}");
+        assert!(marks.iter().all(|m| m.not_enabled.is_empty()));
+        assert_eq!(marks.iter().filter(|m| !m.undecidable.is_empty()).count(), 2);
+    }
+
+    #[test]
+    fn module_decl_gate_twin_decls_take_or_semantics() {
+        // Twin cfg-swapped declarations: the file compiles when ANY gate is
+        // True — unix/windows twins cover every host this test runs on.
+        let parent = "#[cfg(unix)]\nmod migrate_sweep;\n\n#[cfg(windows)]\nmod migrate_sweep;\n";
+        let files = vec![gated_child_batch()];
+        let parents = parent_map(&[("src/kat/mod.rs", parent)]);
+        let set = fset(&[]);
+        let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
+        assert!(marks.is_empty(), "one twin arm is always True on-host: {marks:?}");
+        // Feature twins with BOTH off: the file compiles to nothing.
+        let parent = "#[cfg(feature = \"a\")]\nmod migrate_sweep;\n\n#[cfg(feature = \"b\")]\nmod migrate_sweep;\n";
+        let parents = parent_map(&[("src/kat/mod.rs", parent)]);
+        let marks = cfg_unverified_edits_with_parents(&files, &fset(&[]), &parents);
+        assert_eq!(marks.len(), 2, "{marks:?}");
+        let mut names: Vec<String> = marks.iter().flat_map(|m| m.not_enabled.clone()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names, vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn parent_module_decl_candidates_cover_both_layouts() {
+        use std::path::Path;
+        // dir/foo.rs: decl in the sibling dir-name file first, then dir/mod.rs.
+        let c = parent_module_decl_candidates(Path::new("src/kat/migrate_sweep.rs"));
+        assert_eq!(c[0], Path::new("src/kat.rs"));
+        assert!(c.contains(&PathBuf::from("src/kat/mod.rs")));
+        // dir/foo/mod.rs: decl in dir.rs (sibling of dir) or dir/mod.rs.
+        let c = parent_module_decl_candidates(Path::new("src/kat/migrate_sweep/mod.rs"));
+        assert_eq!(c[0], Path::new("src/kat.rs"));
+        assert!(c.contains(&PathBuf::from("src/kat/mod.rs")));
+        // Depth-1 file: crate-root candidates ride src/.
+        let c = parent_module_decl_candidates(Path::new("src/util.rs"));
+        assert!(c.contains(&PathBuf::from("src/lib.rs")));
+        assert!(c.contains(&PathBuf::from("src/main.rs")));
+        // Crate roots have no parent-module name.
+        assert!(parent_module_decl_candidates(Path::new("src/lib.rs")).is_empty());
+    }
+
+    #[test]
+    fn module_decl_gate_survives_an_unparseable_parent() {
+        // A parent that does not parse must be inert, never a panic — the
+        // audit's NoDecl path is the only honest answer.
+        let files = vec![gated_child_batch()];
+        let parents = parent_map(&[("src/kat/mod.rs", "not rust at all {{{")]);
+        let set = fset(&[]);
+        assert!(cfg_unverified_edits_with_parents(&files, &set, &parents).is_empty());
     }
 
     #[test]

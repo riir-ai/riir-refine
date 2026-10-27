@@ -13600,6 +13600,12 @@ fn main() {
         std::collections::BTreeMap::new();
     #[allow(unused_mut)]
     let mut bp_verify: Option<riir_refine::blueprint::VerifyCapture> = None;
+    // Issue 182: the cfg-audit marks (inline + module-decl classes), hoisted
+    // so the kept-edit record loop can refuse certification for edits the
+    // verify posture provably did not compile, and the run verdict can say so.
+    #[cfg(feature = "fix_verify")]
+    #[allow(unused_mut)]
+    let mut cfg_audit_marks: Vec<riir_refine::fix_verify::CfgUnverified> = Vec::new();
     // ── the clippy-fed oracle anchors (2026-09-13 retrieval-miss intake):
     // a real clippy JSON stream force-includes its diagnostic spans/rules
     // AHEAD of similarity ranking — the top-N gate must never eat a span
@@ -15141,6 +15147,12 @@ fn main() {
             let mut marks: Vec<riir_refine::fix_verify::CfgUnverified> = Vec::new();
             let mut sets: std::collections::HashMap<PathBuf, riir_refine::fix_verify::FeatureSet> =
                 std::collections::HashMap::new();
+            // Issue 182: candidate parent sources per edited file, resolved
+            // once (the caller owns file I/O; the audit stays pure syn).
+            let mut parents: std::collections::HashMap<
+                PathBuf,
+                Vec<riir_refine::fix_verify::ParentSource>,
+            > = std::collections::HashMap::new();
             for (b, (reverted_lines, whole)) in verify_batches.iter().zip(&batch_state) {
                 if *whole {
                     continue;
@@ -15160,13 +15172,32 @@ fn main() {
                         ),
                     );
                 }
+                if !parents.contains_key(&b.path) {
+                    let mut sources: Vec<riir_refine::fix_verify::ParentSource> = Vec::new();
+                    for cand in
+                        riir_refine::fix_verify::parent_module_decl_candidates(&b.path)
+                    {
+                        let Ok(text) = std::fs::read_to_string(&cand) else {
+                            continue;
+                        };
+                        sources.push(riir_refine::fix_verify::ParentSource {
+                            path: cand,
+                            content: text,
+                        });
+                    }
+                    parents.insert(b.path.clone(), sources);
+                }
                 let Some(set) = sets.get(&pkg) else {
                     continue;
                 };
                 marks.extend(
-                    riir_refine::fix_verify::cfg_unverified_edits(std::slice::from_ref(b), set)
-                        .into_iter()
-                        .filter(|m| !reverted_lines.contains(&m.line)),
+                    riir_refine::fix_verify::cfg_unverified_edits_with_parents(
+                        std::slice::from_ref(b),
+                        set,
+                        &parents,
+                    )
+                    .into_iter()
+                    .filter(|m| !reverted_lines.contains(&m.line)),
                 );
             }
             if !marks.is_empty() {
@@ -15175,6 +15206,7 @@ fn main() {
                     riir_refine::fix_verify::render_cfg_audit(&marks, args.verify_args.as_deref())
                 );
             }
+            cfg_audit_marks = marks;
         }
 
         // ── the required-features audit (P43, the bench_694 class): a
@@ -15411,12 +15443,20 @@ fn main() {
             // upgrades to Certified on confirmed resolution or records the
             // honest verified-fail on a persist. Span-level reverts stay
             // definitive fails.
+            // Issue 182 (b): edits the verify posture provably did NOT
+            // compile (behind a skipped cfg gate — inline or module-decl)
+            // keep their stats outcome but NEVER certify: `verified` vouches
+            // for a compile that did not happen.
+            let posture_compiled: std::collections::HashSet<(PathBuf, usize)> =
+                cfg_audit_marks.iter().map(|m| (m.path.clone(), m.line)).collect();
             for e in &kept {
-                let (success, verified) = riir_refine::fix_verify::kept_edit_verdict(
+                let (success, oracle_verified) = riir_refine::fix_verify::kept_edit_verdict(
                     oracle_resolved
                         .get(&(b.path.clone(), e.final_line))
                         .copied(),
                 );
+                let verified =
+                    oracle_verified && !posture_compiled.contains(&(b.path.clone(), e.final_line));
                 // Issue 047: a kept-but-unresolved edit (compile gate passed,
                 // full oracle says the lint persists) is C-class — the gate
                 // was too loose. Successes stay unattributed.
@@ -15554,7 +15594,11 @@ fn main() {
     let mode = if args.fix {
         #[cfg(feature = "fix_verify")]
         let applied_note = if args.verify {
-            " (verified — compile-gated)"
+            if cfg_audit_marks.is_empty() {
+                " (verified — compile-gated)"
+            } else {
+                " (verified — compile-gated; some kept edit(s) sit behind cfg gate(s) this posture did NOT compile — see the cfg audit above)"
+            }
         } else if args.write {
             " (written)"
         } else {
