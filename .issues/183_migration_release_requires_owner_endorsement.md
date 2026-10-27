@@ -202,9 +202,15 @@ attempt it.
 - [ ] Kernel: E1/E2/E3/E4/E3b/E3c/E3d/E12 green at the new polarity; the
       single-issue + per-login-dedupe rule pinned; the snapshot domain v2;
       the dao artifact re-pin green both directions.
-- [ ] Worker: idempotent creation-at-file proven (search-before-create + the
+- [x] Worker: idempotent creation-at-file proven (search-before-create + the
       fixture reader); fail-closed close on no-issue proven; the ack carries
       the URL; the mainnet zero-pending-rows assertion is a deploy gate.
+      — riir-dapps `e968b3e` (T2 + the worker half of T5): `IssueCreator`
+      (new secret `KAT_MIGRATE_ISSUES_TOKEN`), row +`proposal_issue`
+      +`old_bound_login` (338 B, legacy 289 B reads None), lazy retry,
+      E12 close refusal, single-issue reader, R8 gate
+      `cloudflare/kat-service/scripts/migrate_zero_pending_gate.sh` (wired
+      into `scripts/setup.sh --mainnet`; NOT into deploy_kat_service.yml).
 - [ ] CLI: the URL + rules render on file and on `--status`.
 - [ ] The E-battery (rewritten) green in-process; THEN T7 devnet rehearsal
       (plan 302 T1) runs the SAME battery on the live worker.
