@@ -1,8 +1,7 @@
 # Plan 297 — Batch 293: molten fused-decode kernel_opt conversion
 
 **Status:** LANDED — Batch 293 landed 2026-10-27 (zed-amo-b293-molten/amo; claim `0d8f3791` discharged): FIVE count-neutral rider faces on four hosts, corpus STANDS 981 — BOTH staged own rules FALSIFIED at T1 (gpu_20's `packed-total-order-multi-field-argmax` owns the orderable-key packing; `gumbel-argmax-filtered-sampling-descent` owns the Gumbel/Philox/filtered-sampling family — Research 331's 10-26 greps missed both owners). Gates ALL GREEN (needle 1/1, kernel_opt 3259/0, default 2749/0, clippy ×3, retrieval HELD both postures no re-pin); freeze/score-bench/binary NOT owed. Landing record: Research 331 §Landing + `.docs/11_domains/kernel_opt.md` Batch-293 row.
-**Claimed:** zed-amo-b293-molten, 1793062149, expires 2026-10-29T00:49:09Z
-**Lease closed:** landed in-batch 2026-10-27, this row is the record
+**Lease closed:** landed in-batch 2026-10-27 (claim zed-amo-b293-molten, epoch 1793062149, was to expire 2026-10-29T00:49:09Z — discharged by the landing below, the landing commit is the record)
 
 Source: zhangshuibai/molten @ `611e704fe9a3f77e56a459ade78e77bd560cf9a7` (Apache-2.0; pin re-verified at clone). Verdict: YES B — Research 331. Domain: kernel_opt. Expected yield: 2 own rules (R1 argmax-key, R5 sampling seed) + 3 count-neutral rider faces (R2 spin-barrier, R3 argmax-epilogue, R4 function-constant cache-key) after ~50% falsification; honest drops allowed (D1–D6 graded in Research 331).
 
