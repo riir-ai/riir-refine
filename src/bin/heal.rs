@@ -85,6 +85,10 @@ enum KatCommand {
     /// --out <bundle.json>` (offline), `genesis submit <bundle.json> --to
     /// <url>`, `genesis import-digest <carried_corpus.json>`.
     Genesis,
+    /// riir-dapps Plan 058 T7: `admin call <GET|POST> <path[?query]>
+    /// [--body <file>] [--totp <code>]` — one admin request, owner-signed +
+    /// TOTP under the gen-2 posture, the gen-1 bearer otherwise.
+    Admin,
     /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
     /// atomic swap + the visible charge line.
     Update,
@@ -1821,6 +1825,42 @@ fn run_kat_genesis(words: &[String]) {
         }
         _ => fail(USAGE.into()),
     }
+}
+
+/// Plan 058 T7: `admin call <GET|POST> <path[?query]> [--body <file>]
+/// [--totp <code>]` against the command's service URL.
+#[cfg(feature = "admin")]
+fn run_kat_admin(words: &[String]) {
+    const USAGE: &str =
+        "usage: admin call <GET|POST> </path[?query]> [--body <file>] [--totp <code>]";
+    let mut pos: Vec<&str> = Vec::new();
+    let (mut body_file, mut totp) = (None, None);
+    let mut it = words.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--body" => body_file = it.next().map(String::as_str),
+            "--totp" => totp = it.next().map(String::as_str),
+            other => pos.push(other),
+        }
+    }
+    let ["call", method, target] = pos.as_slice() else {
+        eprintln!("{USAGE}");
+        std::process::exit(2);
+    };
+    let body = match body_file {
+        Some(path) => std::fs::read(path).unwrap_or_else(|e| {
+            eprintln!("admin call: {path}: {e}");
+            std::process::exit(1);
+        }),
+        None => Vec::new(),
+    };
+    riir_refine::admin_call::run(&riir_refine::admin_call::CallArgs {
+        method,
+        target,
+        body,
+        totp,
+        url: &command_service_url(),
+    });
 }
 
 /// Plan 056 C7: `account custody [se | delete-plain]`.
@@ -7353,6 +7393,10 @@ struct Args {
     /// `--dry-run` for the airdrop verbs: hash + row + body + caps, no
     /// network, no secrets read.
     tuna_dry_run: bool,
+    /// riir-dapps Plan 058 T7: `--totp <code>` for the airdrop verbs — the
+    /// gen-2 owner posture (owner-signed + the owner account's TOTP)
+    /// instead of the retired `KAT_CRANK_TOKEN` bearer.
+    tuna_totp: Option<String>,
     /// Proposal 011 T4.2: `--dry-run` — with `wetrun` ONLY, run steps 1+6
     /// read-only (admitted on every network incl. mainnet). The heal modes
     /// have no --dry-run flag: bare `cargo refine` IS the dry run.
@@ -7629,6 +7673,7 @@ fn parse_args() -> Args {
         tuna_target: None,
         tuna_gov: None,
         tuna_dry_run: false,
+        tuna_totp: None,
         wetrun_dry_run: false,
         migrate_github: None,
         migrate_object: None,
@@ -8094,6 +8139,19 @@ fn parse_args() -> Args {
             {
                 args.tuna_dry_run = true;
             }
+            // Plan 058 T7: the gen-2 owner posture's authenticator code.
+            "--totp"
+                if matches!(
+                    args.command,
+                    Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
+                ) =>
+            {
+                let Some(value) = it.next() else {
+                    eprintln!("--totp requires the owner account's authenticator code");
+                    usage();
+                };
+                args.tuna_totp = Some(value);
+            }
             // The `--gov <id>` pin — skips the listing's unique-hash
             // mandate resolution.
             "--gov"
@@ -8463,6 +8521,11 @@ fn parse_args() -> Args {
             // (flags included) as its own arguments.
             "genesis" if args.paths.is_empty() && args.command.is_none() => {
                 args.command = Some(KatCommand::Genesis);
+                args.keys_args.extend(it.by_ref());
+            }
+            // Plan 058 T7: `admin call …` — takes every remaining word.
+            "admin" if args.paths.is_empty() && args.command.is_none() => {
+                args.command = Some(KatCommand::Admin);
                 args.keys_args.extend(it.by_ref());
             }
             // Plan 056 C4: `account keys` / `account key <verb> …` — re-aims
@@ -12027,6 +12090,10 @@ fn main() {
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Custody => riir_refine::build_stamp::refuse("account custody", &["kat_transport"]),
             KatCommand::Genesis => run_kat_genesis(&args.keys_args),
+            #[cfg(feature = "admin")]
+            KatCommand::Admin => run_kat_admin(&args.keys_args),
+            #[cfg(not(feature = "admin"))]
+            KatCommand::Admin => riir_refine::build_stamp::refuse("admin", &["admin"]),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
@@ -12163,6 +12230,7 @@ fn main() {
                     target: args.tuna_target.as_deref(),
                     gov: args.tuna_gov,
                     dry_run: args.tuna_dry_run,
+                    totp: args.tuna_totp.as_deref(),
                     url: &command_service_url(),
                 });
             }

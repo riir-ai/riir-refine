@@ -25,7 +25,12 @@
 //!   logged, never accepted on the command line (a shell-history leak is
 //!   a key disclosure).
 //! - `KAT_CRANK_TOKEN` — the ops bearer the `/admin` routes gate on. Same
-//!   pre-network refusal rule.
+//!   pre-network refusal rule. gen-1/devnet only.
+//! - `--totp <code>` — the gen-2 posture (riir-dapps Plan 058 T7): the
+//!   worker pins a genesis owner and refuses the bearer; the account key
+//!   (the owner's) signs the request and the code is the owner account's
+//!   TOTP. One code authorizes ONE request, so the owner posture needs
+//!   `--gov <id>` (the mandates listing would spend a second code).
 //! - `--dry-run` touches neither: it composes the table hash, the resolved
 //!   recipient row, the exact request body shape, and the locally
 //!   mirrorable cap arithmetic — no network, no secrets.
@@ -37,6 +42,7 @@
 
 use ed25519_dalek::{Signer as _, SigningKey};
 
+use crate::kat_admin_client::AdminAuth;
 use crate::kat_protocol_tuna_airdrop::{
     account_from_hex, account_to_hex, canonical_table_bytes, sig_message, table_hash,
     TunaAirdropRecipientWire, TunaAirdropRequestWire,
@@ -70,6 +76,10 @@ pub struct TunaAdminArgs<'a> {
     pub target: Option<&'a str>,
     pub gov: Option<u64>,
     pub dry_run: bool,
+    /// `--totp <code>`: the gen-2 owner posture (Plan 058 T7) — the owner
+    /// key signs, the code is the owner account's TOTP; `None` = the gen-1
+    /// `KAT_CRANK_TOKEN` bearer.
+    pub totp: Option<&'a str>,
     /// The resolved service URL (the dial seam: env > `--net` > the mainnet
     /// default — the CLI's one resolver passes it in; this module never
     /// re-derives the dialing law).
@@ -109,9 +119,26 @@ pub fn run(args: &TunaAdminArgs<'_>) -> ! {
     // Secrets — refused PRE-NETWORK, in dependency order (key first: it is
     // the rarer and more dangerous omission), never echoed.
     let opener = expect(args.verb, can_opener_key());
-    let bearer = expect(args.verb, ops_bearer());
     let transport = crate::kat_tuna_admin_client::HttpTunaAdminTransport::new(args.url, 10);
-    submit_and_report(args, &transport, &bearer, &opener, batch);
+    if let Some(code) = args.totp {
+        if args.gov.is_none() {
+            eprintln!(
+                "{}: --totp needs --gov <id> — one authenticator code authorizes ONE admin request, and resolving the mandate would spend it on the listing",
+                args.verb
+            );
+            std::process::exit(2);
+        }
+        let signer = expect(args.verb, crate::admin_call::owner_signer(args.url, code));
+        submit_and_report(args, &transport, &AdminAuth::Owner(&signer), &opener, batch);
+    }
+    let bearer = expect(args.verb, ops_bearer());
+    submit_and_report(
+        args,
+        &transport,
+        &AdminAuth::Bearer(&bearer),
+        &opener,
+        batch,
+    );
 }
 
 /// The amount + unit words → µ, with the glued split and the local cap
@@ -229,11 +256,11 @@ fn expect<T>(verb: &str, r: Result<T, String>) -> T {
 fn resolve_mandate(
     args: &TunaAdminArgs<'_>,
     transport: &dyn crate::kat_tuna_admin_client::TunaAdminTransport,
-    bearer: &str,
+    auth: &AdminAuth<'_>,
     batch: &Batch,
 ) -> u64 {
     let Some(gov) = args.gov else {
-        let mandates = expect(args.verb, fetch_mandates(transport, bearer));
+        let mandates = expect(args.verb, fetch_mandates(transport, auth));
         let th_hex = batch.th_hex.as_str();
         return match resolve_mandate_by_hash(&mandates, th_hex) {
             MandateMatch::Unique(id) => id,
@@ -267,11 +294,11 @@ fn resolve_mandate(
 fn submit_and_report(
     args: &TunaAdminArgs<'_>,
     transport: &dyn crate::kat_tuna_admin_client::TunaAdminTransport,
-    bearer: &str,
+    auth: &AdminAuth<'_>,
     opener: &SigningKey,
     mut batch: Batch,
 ) -> ! {
-    batch.gov_id = resolve_mandate(args, transport, bearer, &batch);
+    batch.gov_id = resolve_mandate(args, transport, auth, &batch);
     let (gov_id, th) = (batch.gov_id, batch.th);
     let signature = opener.sign(&sig_message(gov_id, th));
     let request = TunaAirdropRequestWire {
@@ -279,7 +306,7 @@ fn submit_and_report(
         recipients: batch.recipients,
         signature_hex: crate::kat_payreq_client::hex_encode(&signature.to_bytes()),
     };
-    match submit_airdrop(transport, bearer, &request) {
+    match submit_airdrop(transport, auth, &request) {
         crate::kat_tuna_admin_client::TunaAdminOutcome::Ok(receipt) => {
             if receipt.already_applied {
                 println!(
@@ -482,6 +509,10 @@ fn refusal_hints(code: Option<&str>, th_hex: &str) -> Vec<String> {
         Some("unauthorized") => vec![
             "the ops bearer (KAT_CRANK_TOKEN) was refused — wrong net or wrong token".into(),
         ],
+        // Plan 058 T7: the gen-2 owner posture's refusals.
+        c @ Some(_) if crate::admin_call::hint(c).is_some() => {
+            vec![crate::admin_call::hint(c).unwrap_or_default().to_string()]
+        }
         _ => vec!["the route's `code` names the class; the ledger refuses before any write (whole-batch-or-nothing)".into()],
     }
 }

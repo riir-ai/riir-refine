@@ -333,7 +333,7 @@ pub use riir_kat::kat_redact;
 pub use riir_kat::{
     kat_account, kat_account_client, kat_adoption, kat_burn_client, kat_fixstat_client,
     kat_genesis_client, kat_identity, kat_keyset_client, kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client,
-    kat_protocol_account, kat_protocol_genesis,
+    kat_admin_client, kat_protocol_account, kat_protocol_admin, kat_protocol_genesis,
     kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_migrate,
     kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq, kat_protocol_replay,
     kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2, kat_protocol_vote,
@@ -421,6 +421,12 @@ pub mod kat_migrate_client;
 // release set.
 #[cfg(feature = "admin")]
 pub mod tuna_admin;
+// riir-dapps Plan 058 T7: the owner's admin hand under the gen-2 posture —
+// `cargo refine admin call <GET|POST> <path> [--body f] [--totp <code>]`
+// (owner-signed + TOTP; the gen-1 bearer without --totp) and the owner
+// signer the airdrop verbs share. Gate: `admin`, NEVER in the release set.
+#[cfg(feature = "admin")]
+pub mod admin_call;
 
 // Proposal 005 Phase 0 T0.3 (Plan 027): the sync payload schema — the
 // versioned NDJSON serialization contract over TrajStore rows (header +
