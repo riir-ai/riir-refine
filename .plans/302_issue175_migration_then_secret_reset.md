@@ -1,6 +1,6 @@
 # Plan 302 — Issue 175 sequencing: migration FIRST, then the full secret reset (T-KEYS + origin-vault wetrun); no re-genesis required
 
-**Status:** ACTIVE — verdict + runbook for the owner's 2026-10-27 questions
+**Status:** FROZEN 2026-10-28 at T1 (owner decision D1: mainnet RE-GENESIS — riir-dapps Proposal 010; the owner-account mainnet migration T2+ is moot on a ledger being replaced; Issue 175 T-MIGRATE frozen with it — its file is left to its lease holder). The devnet-proven migration lane STAYS as an optional safe path (D5). Prior status: ACTIVE — verdict + runbook for the owner's 2026-10-27 questions
 (readiness, the plan recollection, corpus/contribution survival across
 "re-genesis", rotation-vs-migration order). Companions:
 `.issues/175_refine_mainnet_account_migration.md`,
