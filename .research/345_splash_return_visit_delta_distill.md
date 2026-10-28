@@ -3,7 +3,7 @@
 
 > Renumbered 344→345 2026-10-28T19:0xZ (dual-allocation fix: Batch 302's note re-allocated 344 at `11a308ee` after this note took it at `8d613a21`; the citation-weight instrument awarded 344 to the Batch 302 note 59:1 — advisory lead 58 over 60 decided sites. Historical rows citing "Research 344" for the splash verdict resolve HERE. Prior number was consumed by this note only at `8d613a21`..`11a308ee`.)
 
-**Status:** DISTILLED — pending owner decision (verdict landed with plan 308, nominal Batch 303, staged behind plan 307's live claim; no corpus edits made by this verdict)
+**Status:** RECORD — Batch 303 LANDED 2026-10-28T2x:xxZ (8 own kernel_opt rules, corpus 999 → 1007, entries_gpu_136; the landing addendum below; gates: batch303 needle+parse 2/2 FIRST-RUN, kernel_opt lib 3279/0, default lib 2759/0, clippy -D default+no-default clean, all-features clean but for the sibling tuna_admin WIP E0308 — not this lane's write-set; retrieval floors HELD both postures 28/0 + 27/0, no re-pin; freeze/score-bench/binary NOT owed — kernel_opt-only batch)
 
 ## The source
 
@@ -240,3 +240,14 @@ plan 307's inventory (verified by grep at landing). The batch's landing duties: 
 standard rust_perf/kernel_opt delta set (freeze regen only if rust_perf lands;
 retrieval floors re-measure at both postures; clippy ×3 postures; count pins — the
 B299 lesson: ~37 asserts, not 5).
+
+## Landing addendum (Batch 303, 2026-10-28T2x:xxZ, zed-m3-b303-claim)
+
+- **LANDED: 8 of the 10 lane-A candidates** (the graded table above, zero adjudication changes at T0/T1 — every quote re-verified byte-exact at the pin and again independently by both authoring slices against the `.raw/b303/splash` checkout): A `golden-ratio-decode-tile-phase-spread` (the GOAT lead) + B `fp32-pipe-mma-role-split-biased-bf16-operands` + B `conditional-pv-accumulator-rescale` + G `gdn-decode-tape-deferred-retained-row-fold` + N `metal-fma-carries-fast-math-reassociate-off-cannot-pin` + N `gdn-cross-phase-gate-bitwise-parity` (the Issue-940 Metal pair) + M `apple9-coop-tensor-destination-init-lost-runtime-format` + E `quad-lane-softmax-two-shuffle-16b-store`.
+- **DROPS (honest, 2 of 10 lane-A)**: #4 `gdn-head-threadgroup-pipeline-tg-handoff` (rider-grade — joins the deferred riders below, its 11-28% magnitude verified at the pin for the rider record) and #8 `kv-stage-reuse-overlapped-softmax` (C+ — deferred as a candidate for a next slot; no falsification, purely batch-size discipline). Second tier (5 micro): none landed — C-grade, no batch space.
+- **LANE B (the 5 ANE/host candidates) NOT LANDED**: their routing home is rust_perf (the B270/271 serving family), and any rust_perf delta owes freeze regen + score-bench + the release-set binary rebuild BEFORE push — currently pin-blocked (the 1.98.1 toolchain cannot build HEAD's dep graph; plan 306's Phase-4 rider documents the 1.99.0 workaround but the queue defers the pin bump to the post-B298 quiet touch). They stay staged in this note, unowned; the next rust_perf slot after the pin bump should take them FIRST.
+- **Riders deferred per plan 308 T-**: the 12 rider-magnitude findings (§riders) feed existing rules at their next re-pin — including the tg-handoff 11-28% onto `whole-step-gdn-decode-window-one-launch`.
+- **Authoring**: two parallel slices (A: rules 1-4, B: rules 5-8), each fixture standalone-validated before assembly (16 + 19 tests green on rustc --test); the coordinator assembled entries_gpu_136.rs and re-validated (4 needless_raw_string_hashes healed post-assembly, rustfmt clean). The slices independently re-verified the source quotes at the pin — a second full verification pass over T0.
+- **Kin slice pointers corrected at authoring** (the coordinator's era-shorthand resolved by exact rule-id grep): whole-step-gdn → entries_gpu_126, gdn-conv-chain → entries_gpu_131, lazy-rollback → entries_gpu_105, softmax-denominator → entries_gpu_06, stats-precompute → entries_gpu_46, rescale → entries_gpu_33, nibble-order → entries_gpu_125, span-epilogue → entries_gpu_20.
+- **Wiring**: 35+2+37 count-pin sites via ONE shape-asserted python pass (the B299 lesson held — the multi-site fuzzy edit was never attempted); 6 category comments + 6 expected-count rows + the Plan-003 router message + 15-bucket categorized table all re-pinned; batch303 gates (8 needles + 8 parse) FIRST-RUN GREEN.
+- Session: zed-m3-b303-claim, 1793213221; claim discharged by the landing row.
