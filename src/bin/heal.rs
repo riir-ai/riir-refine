@@ -4303,6 +4303,26 @@ fn run_kat_migrate(
     }
 }
 
+/// `YYYY-MM-DD` from unix seconds (civil-from-days; std-only — the picker's
+/// mtime column; an unreadable mtime renders as `unknown`).
+#[cfg(feature = "kat_transport")]
+fn render_key_mtime(unix_secs: u64) -> String {
+    if unix_secs == 0 {
+        return "unknown".to_owned();
+    }
+    let z = (unix_secs / 86_400) as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097);
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// Issue 188: the NORMAL-user migrate flow — `cargo refine migrate` with
 /// no expert flags. Census preflight (E-3, before anything interactive) →
 /// account load → the provider OFFER (the GitHub device flow, never
@@ -4318,10 +4338,10 @@ fn run_migrate_normal(
     totp_code: Option<&str>,
 ) {
     use riir_refine::kat_migrate_normal::{
-        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput,
-        ProviderLeg, UreqKeysBodySource, CLIENT_ID_ENV,
+        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg,
+        UreqKeysBodySource,
     };
-    use riir_kat::kat_recovery_client::HttpRecoveryTransport;
+    use riir_kat::kat_recovery_client::{ssh_picker, CLIENT_ID_ENV, HttpRecoveryTransport};
     use std::io::{BufRead as _, IsTerminal as _, Write as _};
 
     let root = resolve_heal_root(&[]);
@@ -4356,17 +4376,63 @@ fn run_migrate_normal(
         }
     };
 
-    // The OLD key: the explicit flag — the per-invocation key source is
-    // EXPLICIT by law (the env var is never a signing source). The
-    // interactive `~/.ssh` picker rides the leaf re-export (the
-    // issue-188 follow-up; the substrate exists — `riir_auth::ssh_picker`
-    // — it is just not re-exported through the one-dep-edge seam yet).
-    let Some(old_key) = old_key_flag else {
-        eprintln!(
-            "migrate: filing requires --old-key <path> — the OLD key file (OpenSSH \
-             Ed25519) that signs the release."
-        );
-        std::process::exit(2);
+    // The OLD key: the explicit flag, else the interactive `~/.ssh` picker
+    // (the issue-188 follow-up: the substrate's listing through the leaf
+    // re-export). The per-invocation key source stays EXPLICIT by law (the
+    // env var is never a signing source) — an interactive pick satisfies
+    // it; a non-terminal run without the flag still refuses loud.
+    let old_key = match old_key_flag {
+        Some(p) => p.to_string(),
+        None => {
+            if !std::io::stdin().is_terminal() {
+                eprintln!(
+                    "migrate: filing requires --old-key <path> — the OLD key file (OpenSSH \
+                     Ed25519) that signs the release (an interactive terminal gets the \
+                     ~/.ssh picker instead)."
+                );
+                std::process::exit(2);
+            }
+            let keys = ssh_picker::list_ed25519_keys_from_env();
+            if keys.is_empty() {
+                eprintln!(
+                    "migrate: no Ed25519 keys found under the home `.ssh` — pass \
+                     --old-key <path> explicitly."
+                );
+                std::process::exit(2);
+            }
+            eprintln!("Old key to retire — the Ed25519 keys under ~/.ssh, oldest first:");
+            for (i, k) in keys.iter().enumerate() {
+                let id_prefix = k.account_id.get(..10).unwrap_or(&k.account_id);
+                eprintln!(
+                    "  [{i}] {}  {}  (v1 id {id_prefix}…)",
+                    render_key_mtime(k.modified_unix),
+                    k.path.display(),
+                );
+            }
+            // The owner steer: from = the oldest (index 0 — the listing is
+            // sorted oldest first); Enter accepts the default.
+            let chosen = loop {
+                eprint!(
+                    "Which key signs the release? [0-{}, default 0 = oldest]: ",
+                    keys.len() - 1
+                );
+                let _ = std::io::stderr().flush();
+                let mut line = String::new();
+                if std::io::stdin().lock().read_line(&mut line).unwrap_or(0) == 0 {
+                    eprintln!("migrate: no answer — pass --old-key <path>.");
+                    std::process::exit(2);
+                }
+                let answer = line.trim();
+                if answer.is_empty() {
+                    break 0;
+                }
+                match answer.parse::<usize>() {
+                    Ok(i) if i < keys.len() => break i,
+                    _ => eprintln!("  not an index in 0-{} — try again.", keys.len() - 1),
+                }
+            };
+            keys[chosen].path.display().to_string()
+        }
     };
 
     // The proof: the device flow is OFFERED, never forced. Explicit
@@ -4446,7 +4512,7 @@ fn run_migrate_normal(
     let input = NormalMigrateInput {
         github_flag,
         totp_code,
-        old_key_path: std::path::Path::new(old_key),
+        old_key_path: std::path::Path::new(&old_key),
         proof,
         // The device token died at the bind; the filing's PoW measure on
         // the device leg runs unauthenticated. An EXPLICIT bearer (flag or

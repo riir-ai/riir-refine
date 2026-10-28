@@ -14,11 +14,28 @@ use riir_kat::kat_protocol_migrate::MigrateAck;
 use riir_kat::kat_recovery_client::RecoveryTransport;
 use riir_refine::kat_migrate_client::{FileOutcome, FileParams};
 use riir_refine::kat_migrate_normal::{
-    ed25519_keys_token, is_github_login, keys_body_lists, resolve_wallet_client_id,
-    run_normal_migration, KeysBodySource, LoginProof, NormalMigrateDeps, NormalMigrateInput,
-    ProviderLeg, UreqKeysBodySource, CLIENT_ID_ENV, GITHUB_WALLET_CLIENT_ID,
+    GITHUB_WALLET_CLIENT_ID, KeysBodySource, LoginProof, NormalMigrateDeps, NormalMigrateInput,
+    ProviderLeg, UreqKeysBodySource, is_github_login, resolve_wallet_client_id,
+    run_normal_migration,
 };
 use std::sync::Mutex;
+
+/// The `ssh-ed25519 <blob>` armored line for a pubkey — the TEST-fixture
+/// half of the old local parser (the parse itself retired to the leaf's
+/// `ssh_picker::keys_body_lists`, the issue-188 follow-up; only the
+/// canned-body composer stays here).
+fn ed25519_token(pubkey: &[u8; 32]) -> String {
+    use base64::Engine as _;
+    let mut blob = Vec::with_capacity(51);
+    blob.extend_from_slice(&11u32.to_be_bytes());
+    blob.extend_from_slice(b"ssh-ed25519");
+    blob.extend_from_slice(&32u32.to_be_bytes());
+    blob.extend_from_slice(pubkey);
+    format!(
+        "ssh-ed25519 {}",
+        base64::engine::general_purpose::STANDARD.encode(blob)
+    )
+}
 
 // ── the hermetic transports (the leaf's fake shapes) ─────────────────────
 
@@ -164,17 +181,22 @@ fn client_id_env_overrides_the_baked_wallet_id() {
         GITHUB_WALLET_CLIENT_ID
     );
     assert_eq!(resolve_wallet_client_id(None), GITHUB_WALLET_CLIENT_ID);
-    // The baked id names the SAME var the leaf's device call reads.
-    assert_eq!(CLIENT_ID_ENV, "RIIR_AUTH_GITHUB_CLIENT_ID");
+    // The baked id names the SAME var the leaf's device call reads — the
+    // var itself rides the leaf re-export (the issue-188 follow-up).
+    assert_eq!(
+        riir_kat::kat_recovery_client::CLIENT_ID_ENV,
+        "RIIR_AUTH_GITHUB_CLIENT_ID"
+    );
 }
 
 #[test]
 fn keys_body_lists_own_key_and_skips_the_rest() {
+    use riir_kat::kat_recovery_client::ssh_picker::keys_body_lists;
     let own = [7u8; 32];
-    let own_token = ed25519_keys_token(&own);
+    let own_token = ed25519_token(&own);
     assert!(own_token.starts_with("ssh-ed25519 AAAA"));
     let foreign = [8u8; 32];
-    let foreign_token = ed25519_keys_token(&foreign);
+    let foreign_token = ed25519_token(&foreign);
     let body = format!(
         "{foreign_token}\nssh-rsa AAAAnotourkey user@host\ngarbage line\n{own_token} me@box"
     );
@@ -186,8 +208,9 @@ fn keys_body_lists_own_key_and_skips_the_rest() {
 
 #[test]
 fn the_keys_check_reads_blobs_not_comments() {
+    use riir_kat::kat_recovery_client::ssh_picker::keys_body_lists;
     let own = [9u8; 32];
-    let token = ed25519_keys_token(&own);
+    let token = ed25519_token(&own);
     // The SAME key under a DIFFERENT comment still lists.
     let recommented = format!("{token} someone-else@host");
     assert!(keys_body_lists(&recommented, &own));
@@ -195,7 +218,7 @@ fn the_keys_check_reads_blobs_not_comments() {
     let short = &token[..token.len() - 8];
     assert!(!keys_body_lists(short, &own));
     // A foreign key's blob does not list the own key.
-    let foreign = ed25519_keys_token(&[10u8; 32]);
+    let foreign = ed25519_token(&[10u8; 32]);
     assert!(!keys_body_lists(&foreign, &own));
 }
 
@@ -258,7 +281,7 @@ fn listed_key_skips_the_bind_entirely() {
     let order = order_log();
     let recovery = FakeRecovery::answering(vec![], order.clone());
     let keys = FakeKeys {
-        body: format!("{} octocat", ed25519_keys_token(&own)),
+        body: format!("{} octocat", ed25519_token(&own)),
         log: order.clone(),
     };
     let (resolved, _) = run_normal_migration(

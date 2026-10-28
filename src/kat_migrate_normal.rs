@@ -21,29 +21,25 @@
 use crate::kat_migrate_client::{FileOutcome, FileParams};
 use riir_kat::kat_protocol_migrate::MigrateRequestState;
 use riir_kat::kat_recovery_client::{
-    bind_flow, compose_numeric_claim, nonce_flow, BindRequest, RecoveryFailure, RecoveryRefused,
-    RecoveryTransport,
+    BindRequest, RecoveryFailure, RecoveryRefused, RecoveryTransport, bind_flow,
+    compose_numeric_claim, nonce_flow,
 };
 use std::fmt::Write as _;
 use std::path::Path;
 
 /// The wallet OAuth app's public client id (issue 188 T1: baked so a normal
-/// user needs zero config; the [`CLIENT_ID_ENV`] env var still overrides).
+/// user needs zero config; the leaf's `CLIENT_ID_ENV` env var still
+/// overrides).
 /// PUBLIC by design — it identifies the app, it is not a secret. T0
 /// (owner): device flow must be ENABLED on the app for the grant to
 /// succeed; until then the flow errors at GitHub's token step and a
 /// dedicated app's id via the env var is the remedy.
 pub const GITHUB_WALLET_CLIENT_ID: &str = "Ov23liAe58wk2byrYeOv";
 
-/// The env var naming the registered GitHub OAuth app's client id — the
-/// leaf's `riir_auth::provider_login::CLIENT_ID_ENV` spelling, pinned here
-/// because the leaf const is not re-exported through the one-dep-edge seam
-/// (a leaf-side rename is caught by the leaf's own tests, which read the
-/// refusal text this var is named in).
-pub const CLIENT_ID_ENV: &str = "RIIR_AUTH_GITHUB_CLIENT_ID";
-
 /// The client id the normal flow dials with: the env override when set
-/// (non-blank), else the baked wallet id (T1).
+/// (non-blank), else the baked wallet id (T1). The env var itself is the
+/// leaf's [`riir_kat::kat_recovery_client::CLIENT_ID_ENV`] re-export (the
+/// issue-188 follow-up retired the local pin).
 #[must_use]
 pub fn resolve_wallet_client_id(from_env: Option<&str>) -> String {
     match from_env.map(str::trim).filter(|s| !s.is_empty()) {
@@ -116,47 +112,6 @@ impl KeysBodySource for UreqKeysBodySource {
 #[must_use]
 pub fn is_github_login(login: &str) -> bool {
     !login.is_empty() && login.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
-}
-
-/// The canonical OpenSSH wire blob for an Ed25519 public key:
-/// `len("ssh-ed25519") ‖ "ssh-ed25519" ‖ len(key) ‖ key` — exactly what a
-/// `ssh-ed25519 AAAA…` line carries in its second token.
-#[must_use]
-pub fn ed25519_openssh_blob(pubkey: &[u8; 32]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(51);
-    out.extend_from_slice(&11u32.to_be_bytes());
-    out.extend_from_slice(b"ssh-ed25519");
-    out.extend_from_slice(&32u32.to_be_bytes());
-    out.extend_from_slice(pubkey);
-    out
-}
-
-/// The account key's own `.keys` token: `ssh-ed25519 <blob>` — the
-/// containment twin of [`keys_body_lists`].
-#[must_use]
-pub fn ed25519_keys_token(pubkey: &[u8; 32]) -> String {
-    use base64::Engine as _;
-    format!(
-        "ssh-ed25519 {}",
-        base64::engine::general_purpose::STANDARD.encode(ed25519_openssh_blob(pubkey))
-    )
-}
-
-/// Does a `.keys` body list this Ed25519 pubkey? Each line's second token
-/// is the canonical blob; a line that does not carry one is skipped, never
-/// guessed. (The local twin of the leaf's `ssh_picker::keys_body_lists` —
-/// the re-export that retires this copy is filed in the issue follow-up.)
-#[must_use]
-pub fn keys_body_lists(body: &str, pubkey: &[u8; 32]) -> bool {
-    use base64::Engine as _;
-    let want = ed25519_openssh_blob(pubkey);
-    body.lines().any(|line| {
-        line.split_whitespace().nth(1).is_some_and(|t| {
-            base64::engine::general_purpose::STANDARD
-                .decode(t.trim())
-                .is_ok_and(|blob| blob == want)
-        })
-    })
 }
 
 /// The injected transports + dial facts the normal flow runs over.
@@ -290,7 +245,9 @@ fn resolve_device_leg(
         }
     }
     let body = deps.keys.fetch_keys_body(&login)?;
-    let listed = keys_body_lists(&body, pubkey);
+    // The listed-check reads the substrate's parse through the leaf
+    // re-export (the issue-188 follow-up: the local base64 twin retired).
+    let listed = riir_kat::kat_recovery_client::ssh_picker::keys_body_lists(&body, pubkey);
     let mut bound = false;
     if !listed {
         let bind = (|| {
@@ -368,7 +325,7 @@ pub fn run_normal_migration(
                 return Err(format!("migrate: not a GitHub login: {login:?}"));
             }
             let body = deps.keys.fetch_keys_body(login)?;
-            let listed = keys_body_lists(&body, &pubkey);
+            let listed = riir_kat::kat_recovery_client::ssh_picker::keys_body_lists(&body, &pubkey);
             if !listed && input.github_token.is_none() {
                 return Err(format!(
                     "migrate: the new key is not listed on github.com/{login}.keys and \
