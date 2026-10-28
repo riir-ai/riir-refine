@@ -3878,6 +3878,23 @@ fn run_kat_migrate(
                     ack.proposal_issue_url.as_deref()
                 )
             );
+            // riir-refine Issue 187: the FILER opens the venue — via the
+            // user's own `gh` when it is logged in as the claimant, else the
+            // printed prefilled URL (the worker holds no write credential).
+            if let Some(draft) = ack.proposal_draft.as_ref() {
+                use riir_refine::kat_migrate_client::{
+                    open_proposal_draft, render_draft_instructions, DraftOpen,
+                };
+                match open_proposal_draft(draft) {
+                    DraftOpen::Opened(issue_url) => println!(
+                        "proposal issue opened as @{}: {issue_url} — the worker pins it on the next status read",
+                        draft.author_login
+                    ),
+                    DraftOpen::Manual(reason) => {
+                        println!("{}", render_draft_instructions(draft, &reason));
+                    }
+                }
+            }
             // The ack carries no timing (Issue 184): one public status read
             // renders the deployment's ACTUAL close / silent-owner instants
             // and rule text; a failed read labels the LAW assumption.

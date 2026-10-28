@@ -77,7 +77,8 @@ use riir_kat::kat_protocol_migrate::{
     migrate_release_message_v2, MigrateRequestBody,
 };
 use riir_kat::kat_protocol_migrate::{
-    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL,
+    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, ProposalDraft,
+    PROPOSAL_LABEL,
 };
 use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
 use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_OWNER_LOGIN};
@@ -894,16 +895,118 @@ fn parse_bool_field(json: &str, field: &str) -> Option<bool> {
 
 // ── the proposal-issue renders (Issue 183 T3; pure, transport-free) ─────
 
-/// The line naming WHERE the votes go: the worker-created proposal issue,
-/// or the honest not-created-yet posture (E12 — the request cannot release
-/// until the issue exists).
+/// The line naming WHERE the votes go: the pinned proposal issue, or the
+/// honest not-opened-yet posture (riir-refine Issue 187 — YOU open it from
+/// the draft; E12: the request cannot release until it is opened + found).
 #[must_use]
 pub fn render_proposal_line(proposal_issue_url: Option<&str>) -> String {
     match proposal_issue_url {
         Some(u) => format!("proposal issue: {u}"),
-        None => "proposal issue: not created yet — the worker retries; \
-                 the request cannot release until it exists"
+        None => "proposal issue: not opened yet — open the draft below under \
+                 the claimant GitHub account; the request cannot release until \
+                 the worker finds it"
             .to_owned(),
+    }
+}
+
+// ── the filer-authored draft (riir-refine Issue 187) ─────────────────────
+
+/// How the draft got opened (or why it was not).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DraftOpen {
+    /// `gh` opened it (or it was already open) — the issue URL.
+    Opened(String),
+    /// Not opened by the CLI — the reason; the user clicks the draft URL.
+    Manual(String),
+}
+
+/// `owner/repo` out of a draft's `https://github.com/owner/repo/issues/new?…`.
+#[must_use]
+pub fn draft_repo_slug(draft: &ProposalDraft) -> Option<String> {
+    let rest = draft.new_issue_url.strip_prefix("https://github.com/")?;
+    let (repo, _) = rest.split_once("/issues/new")?;
+    let (owner, name) = repo.split_once('/')?;
+    (!owner.is_empty() && !name.is_empty() && !name.contains('/')).then(|| repo.to_owned())
+}
+
+/// The manual instructions: the claimant opens the prefilled form THEMSELF
+/// (the worker holds no GitHub write credential — riir-refine Issue 187).
+#[must_use]
+pub fn render_draft_instructions(draft: &ProposalDraft, reason: &str) -> String {
+    format!(
+        "proposal draft: open this as GitHub @{login} ({reason}) — do not edit the title or body:\n  {url}\n\
+         then re-run --status; the worker pins it once it sees @{login}'s exact issue",
+        login = draft.author_login,
+        url = draft.new_issue_url,
+    )
+}
+
+/// Run one `gh` command; stdout on success, the reason otherwise. The
+/// user's OWN `gh` credential — this process never reads or forwards it.
+fn gh(args: &[&str], stdin: Option<&str>) -> Result<String, String> {
+    use std::io::Write as _;
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(args)
+        .stdin(match stdin {
+            Some(_) => std::process::Stdio::piped(),
+            None => std::process::Stdio::null(),
+        })
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped());
+    let mut child = cmd.spawn().map_err(|_| "gh is not installed".to_owned())?;
+    if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
+        pipe.write_all(text.as_bytes())
+            .map_err(|e| format!("gh stdin: {e}"))?;
+    }
+    let out = child.wait_with_output().map_err(|e| format!("gh: {e}"))?;
+    if out.status.success() {
+        return Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned());
+    }
+    Err(format!(
+        "gh {} failed: {}",
+        args.first().copied().unwrap_or_default(),
+        String::from_utf8_lossy(&out.stderr).trim()
+    ))
+}
+
+/// Open the draft with the user's own `gh` — ONLY when `gh` is logged in as
+/// the draft's author (any other account's issue is never pinned), and
+/// never twice (an existing exact-title issue by the author is reused). Any
+/// miss falls back to [`DraftOpen::Manual`].
+#[must_use]
+pub fn open_proposal_draft(draft: &ProposalDraft) -> DraftOpen {
+    let Some(slug) = draft_repo_slug(draft) else {
+        return DraftOpen::Manual("the draft URL names no GitHub repo".to_owned());
+    };
+    let login = match gh(&["api", "user", "--jq", ".login"], None) {
+        Ok(l) => l,
+        Err(e) => return DraftOpen::Manual(e),
+    };
+    if !login.eq_ignore_ascii_case(&draft.author_login) {
+        return DraftOpen::Manual(format!(
+            "gh is logged in as @{login}, not @{}",
+            draft.author_login
+        ));
+    }
+    let list_path = format!("repos/{slug}/issues?creator={login}&state=all&per_page=100");
+    if let Ok(json) = gh(&["api", &list_path], None) {
+        let existing = serde_json::from_str::<Vec<serde_json::Value>>(&json)
+            .unwrap_or_default()
+            .into_iter()
+            .find(|i| i.get("title").and_then(|t| t.as_str()) == Some(draft.title.as_str()))
+            .and_then(|i| i.get("html_url").and_then(|u| u.as_str()).map(str::to_owned));
+        if let Some(url) = existing {
+            return DraftOpen::Opened(url);
+        }
+    }
+    match gh(
+        &[
+            "issue", "create", "--repo", &slug, "--title", &draft.title, "--body-file", "-",
+        ],
+        Some(&draft.body),
+    ) {
+        Ok(url) => DraftOpen::Opened(url),
+        Err(e) => DraftOpen::Manual(e),
     }
 }
 
@@ -1083,6 +1186,9 @@ pub fn render_status(s: &MigrateStatusBody, repo_base: &str) -> String {
     );
     let url = status_proposal_url(s, repo_base);
     let _ = writeln!(out, "{}", render_proposal_line(url.as_deref()));
+    if let (None, Some(d)) = (url.as_ref(), s.proposal_draft.as_ref()) {
+        let _ = writeln!(out, "{}", render_draft_instructions(d, "not opened yet"));
+    }
     let _ = writeln!(
         out,
         "old account's bound login (frozen at filing): {}",
@@ -1206,6 +1312,7 @@ mod tests {
             tally_snapshot_digest_hex: None,
             proposal_issue: issue,
             proposal_issue_url: url.map(str::to_owned),
+            proposal_draft: None,
             old_bound_login: victim.map(str::to_owned),
             hold_until_unix: None,
             tally_timing: None,
@@ -1413,8 +1520,8 @@ mod tests {
             "proposal issue: https://x/issues/7"
         );
         let none = render_proposal_line(None);
-        assert!(none.contains("not created yet"), "{none}");
-        assert!(none.contains("cannot release until it exists"), "{none}");
+        assert!(none.contains("not opened yet"), "{none}");
+        assert!(none.contains("cannot release until"), "{none}");
     }
 
     #[test]
@@ -1437,7 +1544,7 @@ mod tests {
         assert!(r.contains("frozen at filing): none"), "{r}");
         // Neither → the not-created-yet line.
         let s = status_body(MigrateRequestState::Pending, None, None, None);
-        assert!(render_status(&s, "https://base").contains("not created yet"));
+        assert!(render_status(&s, "https://base").contains("not opened yet"));
     }
 
     #[test]
@@ -1874,4 +1981,31 @@ mod tests {
         assert!(out.contains("claim account stopped being fresh"), "{out}");
         assert!(render_cancel_reason("github_conflict").contains("--attest-cosig"));
     }
+
+    // ── riir-refine Issue 187 — the filer-authored draft ────────────────
+
+    fn draft() -> ProposalDraft {
+        ProposalDraft::new(
+            "https://github.com/gist-rs/riir-dao-proposal",
+            "account-migration proposal: dd".to_owned(),
+            "body".to_owned(),
+            "alice",
+        )
+    }
+
+    #[test]
+    fn the_draft_names_its_repo_and_the_only_author() {
+        assert_eq!(
+            draft_repo_slug(&draft()).as_deref(),
+            Some("gist-rs/riir-dao-proposal")
+        );
+        let mut bad = draft();
+        bad.new_issue_url = "https://example.com/x/issues/new?title=t".to_owned();
+        assert_eq!(draft_repo_slug(&bad), None, "a non-GitHub URL names no repo");
+        let text = render_draft_instructions(&draft(), "gh is not installed");
+        assert!(text.contains("as GitHub @alice (gh is not installed)"), "{text}");
+        assert!(text.contains(&draft().new_issue_url), "{text}");
+        assert!(render_proposal_line(None).contains("not opened yet"));
+    }
+
 }
