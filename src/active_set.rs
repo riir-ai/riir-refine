@@ -190,13 +190,13 @@ impl ActiveSet {
         let text = match std::fs::read_to_string(path) {
             Ok(text) => text,
             Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(Self::empty())
+                return Ok(Self::empty());
             }
             Err(source) => {
                 return Err(ActiveSetError::Io {
                     path: path.to_path_buf(),
                     source,
-                })
+                });
             }
         };
         let file: ActiveSetFile =
@@ -445,9 +445,11 @@ mod tests {
         set.demote(CLIPPY_DOMAIN_KEY, "needless_return");
         let marker = dir.join(ACTIVE_SET_FILE);
         set.save(&marker).expect("save");
-        assert!(ActiveSet::load_default(&dir)
-            .expect("reload")
-            .excludes(CLIPPY_DOMAIN_KEY, "needless_return"));
+        assert!(
+            ActiveSet::load_default(&dir)
+                .expect("reload")
+                .excludes(CLIPPY_DOMAIN_KEY, "needless_return")
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -571,8 +573,11 @@ mod tests {
     fn auto_readmit_with_nothing_demoted_is_a_noop() {
         let mut set = ActiveSet::empty();
         set.demote("perf", "vec-with-capacity");
-        assert!(set.auto_readmit_lints(&["vec-with-capacity"]).is_empty());
-        assert!(set.auto_readmit_lints(&[]).is_empty());
+        assert_eq!(
+            set.auto_readmit_lints(&["vec-with-capacity"]),
+            Vec::<String>::new()
+        );
+        assert_eq!(set.auto_readmit_lints(&[]), Vec::<String>::new());
         assert_eq!(set.demoted_rules("perf"), vec![rule("vec-with-capacity")]);
     }
 
@@ -662,28 +667,31 @@ mod tests {
 
         // Absent cap: OFF.
         let mut set = ActiveSet::empty();
-        assert!(set
-            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
-            .is_empty());
+        assert_eq!(
+            set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions),
+            Vec::<String>::new()
+        );
         assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "a"));
 
         // Zero cap: OFF (the Library-Drift default posture).
         set.max_active_per_domain
             .insert(CLIPPY_DOMAIN_KEY.to_string(), 0);
-        assert!(set
-            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
-            .is_empty());
+        assert_eq!(
+            set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions),
+            Vec::<String>::new()
+        );
         assert!(!set.excludes(CLIPPY_DOMAIN_KEY, "b"));
 
         // Cap ≥ live count: nothing to do.
         set.max_active_per_domain
             .insert(CLIPPY_DOMAIN_KEY.to_string(), 2);
-        assert!(set
-            .enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions)
-            .is_empty());
+        assert_eq!(
+            set.enforce_cap(CLIPPY_DOMAIN_KEY, &active, &contributions),
+            Vec::<String>::new()
+        );
         // A noop pass demotes nothing — the CAP map may hold the armed cap,
         // but the demoted set (what the fan-out reads) stays empty.
-        assert!(set.demoted_rules(CLIPPY_DOMAIN_KEY).is_empty());
+        assert_eq!(set.demoted_rules(CLIPPY_DOMAIN_KEY), Vec::<String>::new());
     }
 
     #[test]
@@ -790,7 +798,7 @@ mod tests {
     fn clear_demoted_total_and_caps_report_the_runtime_view() {
         let mut set = ActiveSet::empty();
         assert_eq!(set.demoted_total(), 0);
-        assert!(set.caps().is_empty());
+        assert_eq!(set.caps(), Vec::<(String, u32)>::new());
         set.demote("clippy", "needless_return");
         set.demote("perf", "vec-with-capacity");
         set.max_active_per_domain.insert("perf".to_string(), 40);
@@ -803,7 +811,7 @@ mod tests {
         set.clear();
         assert!(set.is_empty());
         assert_eq!(set.demoted_total(), 0);
-        assert!(set.caps().is_empty());
+        assert_eq!(set.caps(), Vec::<(String, u32)>::new());
     }
 
     #[test]

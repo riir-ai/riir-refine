@@ -23,7 +23,7 @@
 
 use std::path::Path;
 
-use super::{cand, CompileProposer, FixCandidate};
+use super::{CompileProposer, FixCandidate, cand};
 use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 /// `*head` → `head`: delete the stale deref star at the use the diagnostic
@@ -140,7 +140,7 @@ mod tests {
         assert_eq!(out[0].strategy_id, "e0614-deref-at-use");
         assert_eq!(out[0].byte_span, (at, at + 1));
         assert_eq!(out[0].replacement, "");
-        assert!(out[0].extra_edits.is_empty());
+        assert_eq!(out[0].extra_edits, []);
         // The spliced result reads `head + v[0]`.
         let spliced = format!("{}{}{}", &SRC[..at], "", &SRC[at + 1..]);
         assert!(spliced.contains("head + v[0]"), "{spliced}");
@@ -155,23 +155,26 @@ mod tests {
         let at2 = src.find("**x").unwrap();
         let _ = at;
         let diag = e0614_diag(at2, at2 + 3, "can't be dereferenced");
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), src)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), src),
+            []
+        );
         // `*x.f` — field access under the star.
         let src = "struct S { f: i32 }\nfn g(x: S) -> i32 { *x.f }\n";
         let at3 = src.find("*x.f").unwrap();
         let diag = e0614_diag(at3, at3 + 4, "can't be dereferenced");
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), src)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), src),
+            []
+        );
         // `*f(x)` — a call operand.
         let src = "fn h() -> i32 { 1 }\nfn i() -> i32 { *h() }\n";
         let at4 = src.find("*h()").unwrap();
         let diag = e0614_diag(at4, at4 + 4, "can't be dereferenced");
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), src)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), src),
+            []
+        );
     }
 
     #[test]
@@ -180,18 +183,21 @@ mod tests {
         let at = star_at();
         let mut diag = e0614_diag(at, at + 5, "can't be dereferenced");
         diag.code = "E0502".to_string();
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), SRC)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), SRC),
+            []
+        );
         // No labeled span with the deref label → silent (miss, not a guess).
         let diag = e0614_diag(at, at + 5, "first mutable borrow occurs here");
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), SRC)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), SRC),
+            []
+        );
         // Labeled but the span does not carry bytes-identical source (drift).
         let diag = e0614_diag(at, at + 9, "can't be dereferenced");
-        assert!(E0614DerefAtUse
-            .propose(&diag, Path::new("src/lib.rs"), SRC)
-            .is_empty());
+        assert_eq!(
+            E0614DerefAtUse.propose(&diag, Path::new("src/lib.rs"), SRC),
+            []
+        );
     }
 }

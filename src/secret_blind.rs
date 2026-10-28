@@ -95,7 +95,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::kat_redact::{redact, scan_secrets, Finding, FindingKind, REDACT_VERSION};
+use crate::kat_redact::{Finding, FindingKind, REDACT_VERSION, redact, scan_secrets};
 
 /// One detection localized to a file: kind + 1-based line/col. The finding
 /// bytes and the BLAKE3 fingerprint are deliberately NOT carried — nothing
@@ -1022,8 +1022,8 @@ mod tests {
 
     #[test]
     fn clean_text_stays_quiet() {
-        assert!(scan_file("fn main() { println!(\"hello\"); }\n").is_empty());
-        assert!(scan_file("see https://example.com/docs for prose\n").is_empty());
+        assert_eq!(scan_file("fn main() { println!(\"hello\"); }\n"), []);
+        assert_eq!(scan_file("see https://example.com/docs for prose\n"), []);
     }
 
     // ── P63: digest-pin adjudication (probe-first; Batch-33 discipline) ──
@@ -1089,13 +1089,13 @@ mod tests {
         let t = "    \"api_key\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
         let out = scan_file_with_pins(t);
         assert_eq!(out.findings.len(), 1, "api_key must keep firing");
-        assert!(out.digest_pins.is_empty());
+        assert_eq!(out.digest_pins, []);
 
         let t =
             "    \"x509\": \"a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0a1b2c3d4e5f6a7b8c9d0e1f2\"\n";
         let out = scan_file_with_pins(t);
         assert_eq!(out.findings.len(), 1, "x509 must keep firing");
-        assert!(out.digest_pins.is_empty());
+        assert_eq!(out.digest_pins, []);
     }
 
     /// MUST-FIRE (the P63 probe contract): exact provider formats are
@@ -1535,7 +1535,7 @@ mod tests {
         let t = format!("const API_PIN: &str = \"{RANDOM_HEX_64}\";\n");
         let out = scan_file_with_pins(&t);
         assert_eq!(out.findings.len(), 1, "bare _pin must fire");
-        assert!(out.digest_pins.is_empty());
+        assert_eq!(out.digest_pins, []);
 
         // The colon form without the name evidence keeps firing.
         let t = format!("    secret: \"{RANDOM_HEX_64}\",\n");

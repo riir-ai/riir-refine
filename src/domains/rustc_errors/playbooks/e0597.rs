@@ -51,7 +51,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprClosure, ItemFn, Pat, PatType, Stmt};
 
-use super::{anchor, binding_name, cand, CompileProposer, FixCandidate, Playbooks};
+use super::{CompileProposer, FixCandidate, Playbooks, anchor, binding_name, cand};
 use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 // ── shared syn helpers (closure + let extraction) ────────────────────
@@ -257,15 +257,17 @@ impl CompileProposer for MoveCapture {
         if source[..cap.byte_start].trim_end().ends_with("move") {
             return Vec::new(); // already a move closure — a second `move` parses nowhere
         }
-        vec![cand(
-            diag,
-            file,
-            cap.line_start,
-            (cap.byte_start, cap.byte_start),
-            "move ".to_string(),
-            self.name(),
-        )
-        .with_note("moves the capture into the closure — ownership leaves the enclosing scope")]
+        vec![
+            cand(
+                diag,
+                file,
+                cap.line_start,
+                (cap.byte_start, cap.byte_start),
+                "move ".to_string(),
+                self.name(),
+            )
+            .with_note("moves the capture into the closure — ownership leaves the enclosing scope"),
+        ]
     }
 }
 
@@ -461,15 +463,19 @@ impl CompileProposer for SharedOwnership {
             return Vec::new();
         };
         let repl = format!("{{ let {name} = {kind}(&{name}); move {text} }}");
-        vec![cand(
-            diag,
-            file,
-            cap.line_start,
-            (range.start, range.end),
-            repl,
-            self.name(),
-        )
-        .with_note("switches to shared ownership (Rc/Arc) — access is now shared, not exclusive")]
+        vec![
+            cand(
+                diag,
+                file,
+                cap.line_start,
+                (range.start, range.end),
+                repl,
+                self.name(),
+            )
+            .with_note(
+                "switches to shared ownership (Rc/Arc) — access is now shared, not exclusive",
+            ),
+        ]
     }
 }
 
@@ -595,15 +601,17 @@ impl CompileProposer for ScopeHoist {
         // line's indentation — the replacement starts at the statement
         // itself, and only the re-opened block line carries the indent.
         let repl = format!("{stmt_trimmed}\n{indent}{{");
-        vec![cand(
-            diag,
-            file,
-            bind.line_start,
-            (b.open, stmt_range.end),
-            repl,
-            self.name(),
-        )
-        .with_note("hoists the declaration out of the block — drop order changes")]
+        vec![
+            cand(
+                diag,
+                file,
+                bind.line_start,
+                (b.open, stmt_range.end),
+                repl,
+                self.name(),
+            )
+            .with_note("hoists the declaration out of the block — drop order changes"),
+        ]
     }
 }
 
@@ -756,17 +764,17 @@ mod tests {
                 ),
             ],
         );
-        assert!(propose_all(&AnonLifetime, src, &diag).is_empty());
+        assert_eq!(propose_all(&AnonLifetime, src, &diag), []);
     }
 
     #[test]
     fn anon_lifetime_ignores_other_codes_and_missing_anchor() {
         let mut diag = e0597_diag(INCIDENT_SRC, "|| n", &[]);
         diag.code = "E0499".to_string();
-        assert!(propose_all(&AnonLifetime, INCIDENT_SRC, &diag).is_empty());
+        assert_eq!(propose_all(&AnonLifetime, INCIDENT_SRC, &diag), []);
         // E0597 but no annotation label → silent (label paths only).
         let no_ann = e0597_diag(INCIDENT_SRC, "|| n", &[("value captured here", "||")]);
-        assert!(propose_all(&AnonLifetime, INCIDENT_SRC, &no_ann).is_empty());
+        assert_eq!(propose_all(&AnonLifetime, INCIDENT_SRC, &no_ann), []);
     }
 
     // ── T2 MoveCapture / MoveCloneCapture ──────────────────────────────
@@ -811,7 +819,7 @@ mod tests {
                 ls.byte_end = at + 2;
             }
         }
-        assert!(propose_all(&MoveCapture, src, &d).is_empty());
+        assert_eq!(propose_all(&MoveCapture, src, &d), []);
     }
 
     #[test]
@@ -837,7 +845,7 @@ mod tests {
     #[test]
     fn move_clone_needs_both_anchors() {
         let only_cap = e0597_diag(CAPTURE_SRC, "name.len()", &[("value captured here", "||")]);
-        assert!(propose_all(&MoveCloneCapture, CAPTURE_SRC, &only_cap).is_empty());
+        assert_eq!(propose_all(&MoveCloneCapture, CAPTURE_SRC, &only_cap), []);
     }
 
     // ── T3 DropTheBox ──────────────────────────────────────────────────
@@ -876,7 +884,7 @@ mod tests {
                 ("value captured here", "||"),
             ],
         );
-        assert!(propose_all(&DropTheBox, src, &diag).is_empty());
+        assert_eq!(propose_all(&DropTheBox, src, &diag), []);
     }
 
     // ── T5 SharedOwnership ─────────────────────────────────────────────
@@ -915,7 +923,7 @@ mod tests {
                 ("value captured here", "||"),
             ],
         );
-        assert!(propose_all(&SharedOwnership, CAPTURE_SRC, &diag).is_empty());
+        assert_eq!(propose_all(&SharedOwnership, CAPTURE_SRC, &diag), []);
     }
 
     #[test]
@@ -1002,7 +1010,7 @@ mod tests {
                 ls.byte_end = at + 1;
             }
         }
-        assert!(propose_all(&ScopeHoist, src, &d).is_empty());
+        assert_eq!(propose_all(&ScopeHoist, src, &d), []);
     }
 
     #[test]
@@ -1025,7 +1033,7 @@ mod tests {
                 ls.byte_end = at + 1;
             }
         }
-        assert!(propose_all(&ScopeHoist, src, &d).is_empty());
+        assert_eq!(propose_all(&ScopeHoist, src, &d), []);
     }
 
     #[test]
@@ -1044,7 +1052,7 @@ mod tests {
                 ls.byte_end = at + 1;
             }
         }
-        assert!(propose_all(&ScopeHoist, src, &d).is_empty());
+        assert_eq!(propose_all(&ScopeHoist, src, &d), []);
     }
 
     // ── the exclusion pin ──────────────────────────────────────────────

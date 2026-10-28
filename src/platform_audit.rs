@@ -112,7 +112,7 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
-use crate::config_audit::{attrs_cfg_test, attrs_test_fn, read_sources_walk, WalkMode};
+use crate::config_audit::{WalkMode, attrs_cfg_test, attrs_test_fn, read_sources_walk};
 
 /// cfg predicate keys that carry platform meaning. `feature`, `test`,
 /// `debug_assertions` and friends are deliberately absent — they are not
@@ -1321,7 +1321,7 @@ unsafe fn avx2_is_interval_closed(mask: &[bool]) -> bool {
 
 fn word_is_interval_closed(mask: &[bool], width: usize) -> bool { mask.len() == width }
 "#);
-        assert!(report.findings.is_empty());
+        assert_eq!(report.findings, []);
     }
 
     /// Uses on two different platforms intersect to nothing — silent.
@@ -1430,7 +1430,7 @@ mod b { const MASK: u32 = 2; }
 #[cfg(target_os = "macos")]
 fn user() -> u32 { a::MASK + b::MASK }
 "#);
-        assert!(report.findings.is_empty());
+        assert_eq!(report.findings, []);
         assert_eq!(report.ambiguous_names, 1);
     }
 
@@ -1503,7 +1503,7 @@ fn a(m: Mutex<()>) {}
                     .to_string(),
             ),
         ]);
-        assert!(report.findings.is_empty());
+        assert_eq!(report.findings, []);
         assert_eq!(report.ambiguous_names, 1);
     }
 
@@ -1678,7 +1678,7 @@ const UNUSED_HERE: u32 = 1;
 #[cfg(target_os = "macos")]
 fn a() -> u32 { 0 }
 "#);
-        assert!(report.findings.is_empty());
+        assert_eq!(report.findings, []);
         assert_eq!(report.no_use_names, 2);
     }
 

@@ -424,7 +424,7 @@ mod tests {
         assert!(fix.is_some());
         let fix = fix.unwrap();
         assert_eq!(fix.source, DraftSource::CorpusTemplate);
-        assert!(!fix.code.is_empty());
+        assert_ne!(fix.code, "");
     }
 
     #[test]
@@ -459,7 +459,7 @@ mod tests {
         let fix = fix.unwrap();
         // Must claim TernaryMatvec (not CorpusTemplate) — it actually ran the matvec.
         assert_eq!(fix.source, DraftSource::TernaryMatvec);
-        assert!(!fix.code.is_empty());
+        assert_ne!(fix.code, "");
         // Confidence is now derived from sigmoid(mean(output)) — must be in (0, 1).
         assert!(fix.confidence > 0.0 && fix.confidence < 1.0);
     }
@@ -612,11 +612,12 @@ mod tests {
             fix.context_notes.is_some(),
             "L1 must propagate context_notes"
         );
-        assert!(fix
-            .context_notes
-            .as_ref()
-            .unwrap()
-            .contains("ParetoDominated"));
+        assert!(
+            fix.context_notes
+                .as_ref()
+                .unwrap()
+                .contains("ParetoDominated")
+        );
     }
 
     #[test]
@@ -642,11 +643,12 @@ mod tests {
             fix.context_notes.is_some(),
             "L0 must propagate context_notes"
         );
-        assert!(fix
-            .context_notes
-            .as_ref()
-            .unwrap()
-            .contains("single-threaded"));
+        assert!(
+            fix.context_notes
+                .as_ref()
+                .unwrap()
+                .contains("single-threaded")
+        );
     }
 
     #[test]

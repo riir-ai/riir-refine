@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 use katgpt_core::best_belief_score;
 use serde::{Deserialize, Serialize};
 
-use crate::dispersion::{from_counts, frontier_order, PoolEntry, Regime};
+use crate::dispersion::{PoolEntry, Regime, from_counts, frontier_order};
 
 /// The frontier LCB ε — 0.05, the 95% lower bound (katgpt-core's documented
 /// `FRONTIER_EPSILON` convention; NOT the 0.32 strategy-ordering ε).
@@ -1394,7 +1394,10 @@ impl std::fmt::Display for SnapshotOutcome {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Appended { generation } => {
-                write!(f, "appended (generation {generation}) — the boundary is recorded")
+                write!(
+                    f,
+                    "appended (generation {generation}) — the boundary is recorded"
+                )
             }
             Self::Unchanged { generation } => write!(
                 f,
@@ -2232,7 +2235,7 @@ mod tests {
             scan.candidates.is_empty(),
             "all rules healthy/thin/recovered"
         );
-        assert!(scan.never_contributed.is_empty());
+        assert_eq!(scan.never_contributed, Vec::<String>::new());
         // A genuinely all-zero rule lands in NEVER-CONTRIBUTED — printed,
         // triage-fork territory, never in the FADED table.
         for (i, row) in rows.iter_mut().enumerate() {

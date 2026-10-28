@@ -476,7 +476,7 @@ mod tests {
         // recorded; the finding-side gate is that profiles stay EMPTY when a
         // manifest only carries exotic profile headers.
         let exotic = scan("[profile.\"weird name\"]\nstrip = true\n");
-        assert!(exotic.profiles.is_empty());
+        assert_eq!(exotic.profiles, []);
     }
 
     #[test]

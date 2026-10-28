@@ -40,12 +40,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::compile_oracle::{
-    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict,
+    CheckRunner, CheckVerdict, check_verdict, owning_package_root, resolve_reported_path,
+    workspace_root,
 };
-use crate::span_embed::{span_embed as embed_shape, SPAN_EMBED_DIMS};
+use crate::span_embed::{SPAN_EMBED_DIMS, span_embed as embed_shape};
 
-use super::diag::{dedupe_by_site, parse_error_diags, RustcErrorDiag};
+use super::diag::{RustcErrorDiag, dedupe_by_site, parse_error_diags};
 use super::playbooks::{FixCandidate, Playbooks, SpanEdit};
 
 /// One attempt in the fix-compile loop's ORDERED sequence (Issue 91 T1.5 —
@@ -1193,7 +1193,10 @@ mod tests {
         assert_eq!(strategy_menu(&candidates, &chosen), vec!["s-b".to_string()]);
         // Solo candidate: the empty menu — `None` downstream, never erasing.
         let solo = vec![cand("a.rs", 3, "E0502", "s-only")];
-        assert!(strategy_menu(&solo, &cand("a.rs", 3, "E0502", "s-only")).is_empty());
+        assert_eq!(
+            strategy_menu(&solo, &cand("a.rs", 3, "E0502", "s-only")),
+            Vec::<String>::new()
+        );
         // The cap: a wide same-site menu truncates to the store's label cap
         // (`latent_retrieval` owns the constant; without it the label has no
         // consumer and the menu travels whole — playbook-bounded).

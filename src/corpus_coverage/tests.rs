@@ -243,7 +243,7 @@ fn derivation_floor_refuses_a_format_regression() {
 fn a_missing_section_is_blind_not_empty() {
     let s = parse_lint_help("Available lint options:\n  -W <foo>  Warn\n");
     assert!(s.blind.is_some());
-    assert!(s.lints.is_empty());
+    assert_eq!(s.lints, []);
 }
 
 #[test]
@@ -346,7 +346,7 @@ fn the_clean_dedup_case_says_so_explicitly() {
     let others = BTreeMap::new();
     let (corpus, fixes) = (corpus_rules(), fix_set());
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
-    assert!(r.collides_other_domain.is_empty());
+    assert_eq!(r.collides_other_domain, []);
     assert!(r.render().contains("0 uncovered lint name collides"));
 }
 
@@ -357,9 +357,10 @@ fn a_corpus_rule_the_driver_no_longer_ships_is_reported() {
     corpus.push("renamed_away_lint".into());
     let fixes = fix_set();
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
-    assert!(r
-        .corpus_rules_not_in_surface
-        .contains(&"renamed_away_lint".to_string()));
+    assert!(
+        r.corpus_rules_not_in_surface
+            .contains(&"renamed_away_lint".to_string())
+    );
     assert!(r.render().contains("renamed/removed"));
 }
 
@@ -502,7 +503,10 @@ fn a_study_only_lint_is_cited_and_ranks_below_local_evidence() {
         ],
         "study rows are cited, ordered by their published count"
     );
-    assert!(r.dual_evidence().is_empty());
+    assert_eq!(
+        r.dual_evidence(),
+        Vec::<&crate::corpus_coverage::CoverageRow>::new()
+    );
 }
 
 #[test]
@@ -616,7 +620,10 @@ fn a_covered_lint_never_enters_the_ranked_head() {
     // resurrect it as debt.
     let hist = vec![("needless_return".to_string(), 9999)];
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &hist));
-    assert!(r.freq_ranked().is_empty());
+    assert_eq!(
+        r.freq_ranked(),
+        Vec::<&crate::corpus_coverage::CoverageRow>::new()
+    );
 }
 
 #[test]
@@ -882,7 +889,7 @@ fn a_longer_identifier_mention_is_not_a_mention() {
     let mut ins = inputs(surface, &corpus, &fixes, &others, &[]);
     ins.corpus_blobs = &blobs;
     let r = coverage(&ins);
-    assert!(r.pattern_mentioned.is_empty());
+    assert_eq!(r.pattern_mentioned, Vec::<String>::new());
 }
 
 /// An empty blob set is the scan's honest zero — identical buckets, and
@@ -893,7 +900,7 @@ fn no_blobs_yield_no_mentions_and_the_lower_bound_still_discloses() {
     let others = BTreeMap::new();
     let (corpus, fixes) = (corpus_rules(), fix_set());
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
-    assert!(r.pattern_mentioned.is_empty());
+    assert_eq!(r.pattern_mentioned, Vec::<String>::new());
     assert!(!r.corpus_docs_scanned);
     let out = r.render();
     assert!(out.contains("LOWER BOUND"));
@@ -928,7 +935,7 @@ fn mentioned_names_is_word_boundary_exact() {
         &candidates,
     );
     assert_eq!(found, vec!["approx_constant", "len_zero", "len_zero_2"]);
-    assert!(mentioned_names("", &candidates).is_empty());
+    assert_eq!(mentioned_names("", &candidates), Vec::<String>::new());
 }
 
 /// The live corpus's own precedent, pinned at the source: the

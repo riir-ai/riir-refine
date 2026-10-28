@@ -387,7 +387,7 @@ mod tests {
         let diags = parse_error_diags(E0499_LINE);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].code, "E0499");
-        assert!(diags[0].suggestions.is_empty());
+        assert_eq!(diags[0].suggestions, []);
         assert!(diags[0].is_uncontested());
     }
 

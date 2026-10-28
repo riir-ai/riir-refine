@@ -463,7 +463,7 @@ mod tests {
     fn module_regions_zero_modules() {
         let src =
             "pub fn probe() -> usize {\n    let v = Vec::new();\n    v.push(1);\n    v.len()\n}\n";
-        assert!(module_regions(src).is_empty());
+        assert_eq!(module_regions(src), []);
     }
 
     #[test]
@@ -527,6 +527,6 @@ mod tests {
         let name = package_name(&"x-".repeat(80));
         assert!(name.len() <= 60);
         assert!(!name.ends_with(['-', '_']));
-        assert!(!name.is_empty());
+        assert_ne!(name, "");
     }
 }

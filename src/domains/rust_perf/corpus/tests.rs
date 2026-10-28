@@ -17,25 +17,25 @@ fn seed_corpus_round_trips() {
 fn seed_corpus_total_and_category_count_pinned() {
     let corpus = build_perf_seed_corpus();
     assert_eq!(corpus.entries.len(), 274); // Batch 288 (+1: complexity, entries_51 -- recursive-input-walk-explicit-stack-indices-not-copies, the grammar rejection recursion-to-explicit-stack law, upstream llama.cpp #31153 @ 48c9f08b7, Plan 293 / Research 327, ANNOTATED NotBenchable bench_spec None) on the prior state: Batch 284 (+2: measurement + caching, entries_50 -- the burn/cubek autotune-family laws: timed-zero-refuses-round-stop + tune-cache-keyed-by-spelled-variant-names, Plan 288 / Research 321, BOTH ANNOTATED NotBenchable bench_spec None) on the prior state: Batch 283 (+1: caching, the certifying-identity-token revalidation skip, PrismML #393 63f16c408f, entries_49, Plan 287 / Research 320, ANNOTATED NotBenchable bench_spec None; +1 count-neutral rider face: the batched-async-upload face on chain-dispatches-single-sync-point [kernel_opt host], the same commit) on the prior state: Batch 282 (+3: the PerfR C-to-Rust translation classes, arXiv 2610.23044v1, Plan 286 / Research 319 -- arithmetic +1 saturating-f2i-cast-proven-range-to-int-unchecked + dispatch +1 loop-invariant-dispatch-resolution-hoist + iterators +1 raw-pointer-traversal-slice-view-recovery-load-elimination, entries_48, ALL ANNOTATED NotBenchable bench_spec None; +3 count-neutral rider faces: the translation-drops-attributes face on inline-hint-not-through-unmarked-wrapper + the vectorization-barrier face on simd-chunk + the bounds-check-elimination face on chunks-exact; the six non-converted classes adjudicated: classes 6/7/8 corpus-covered (arena/pool, copy/byte-order, chunk families) DROPPED, class 1 + 3 + 4 landed as the rider faces) on the prior state: Batch 274 (+1: allocation, the splash batch-load hard-budget admission, entries_47, Plan 278 / Research 312); prior: Batch 271 landing; // Batch 271 landing (+9: the splash-wave second-tier serving pool slices B/C/D -- dispatch +3 size-class-keyed-reader-cap-bimodal-reads + fixed-read-command-runs-alone-sized-by-its-own-reads + reject-plan-runs-before-setup-with-outliving-side-effects (entries_44); dispatch +2 admission-tests-the-bound-the-admitted-mode-serves + in-use-state-retry-under-serving-mark-keyed-on-refusal-cause + concurrency +1 one-event-per-writer-consumer-waits-on-the-side-it-needs (entries_45); concurrency +1 finished-command-copy-leaves-at-once-slot-returns-at-last-reader + complexity +2 part-cost-measured-by-planning-ablation-not-component-sum + plan-input-precomputed-per-output-variant-bounded-convergence (entries_46); ALL ANNOTATED NotBenchable, bench_spec None; +3 count-neutral rider faces: 253506f393b17c9253e0a105f479908c7a3d15d7 + 4fc7465e85648402bbe8d2db5d8da8e2bb443841 on restore-point-chain-copies-keyed-on-disk-state-count, 4d1799564d2ff9092a7963b914b9fc86f20fd640 (the buffer half) on reuse-allocation-clear; drops at the T0 re-read: 6fcd9b1 error-copy, 25502fd DRY Effect-none, 7e51fcb error-copy) on the prior state: Batch 271 slice A (+3: the splash-wave second-tier serving pool slice A, incoai/splash Apache-2.0, Plan 275 / Research 307 -- allocation +3 resume-admission-sized-to-per-command-window-not-suspended-peak + phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max + derived-reservation-taken-once-after-admission-settles; entries_43; ALL ANNOTATED NotBenchable, bench_spec None; +1 count-neutral rider face, the anchor-bound output face on rule 1) on the prior state: Batch 270 (+12: the splash-wave serving pool, incoai/splash Apache-2.0, Plan 274 / Research 306 -- caching +6 restore-point-chain-copies-keyed-on-disk-state-count + persistent-cache-teardown-needs-second-witness + hot-slot-recycler-flat-tables-zero-alloc-claims + cache-share-capped-at-measured-distinct-working-set + cache-reuse-assertion-gated-on-eviction-counter + publication-takes-over-condemned-cache-entry; allocation +1 reclaim-progress-keyed-on-refused-resource-returned; concurrency +1 refusal-wait-keyed-on-shortfall-returning-transfer; dispatch +2 watchdog-deadline-moves-on-command-progress + constrained-unconstrained-lanes-one-decode-command (the f52d1ad LAND verdict); io +2 page-miss-blocks-one-ranged-read-scatter + tier-write-defers-to-urgent-reads-except-a-read-behind-it; entries_39-42, four authoring slices; ALL ANNOTATED NotBenchable, bench_spec None; +4 count-neutral rider faces) on the prior state: Batch 266 (+1: the uv marker-ISOP decision-diagram rule, isop-cover-from-decision-diagram-not-path-simplification (complexity, BENCHABLE, Plan 270 / Research 302 -- astral-sh/uv PR #22651 @ 551c17cbc, MIT OR Apache-2.0); on the prior state: Batch 257 (+6: the TensorFold staged remainder, Plan 261 / Research 293 -- first-message-sized-to-smallest-job (dispatch, @ 10ff8779) + draft-cost-timed-at-served-widths-not-extrapolated (dispatch, @ abb860c5) + checkpoint-reads-skip-page-cache-with-refusal-fallback (io, @ 221c2b5d+6bb9daac) + reserve-stream-caches-at-admission-warm-request-paths-at-load (allocation, @ 84c58d3f sibling) + cache-budget-first-sessions-take-remainder-never-reshrink (allocation, @ 406b2090) + kept-prompt-states-pinned-host-cache-budget (caching, @ a739444c), ALL ANNOTATED NotBenchable) on the prior state: Batch 256 (+3: the TensorFold 9ccf4727..d1018b31 +988-commit campaign, Plan 260 / Research 291 -- persistent-digest-memo-stat-identity-keyed (caching, @ 018e73c6+20bca340) + launch-cost-scales-with-allocation-count-pack-one-arena (allocation, @ 84c58d3f) + pinned-entry-tombstone-freed-at-last-unpin (concurrency, @ 8c6b40a3+3aedf373), ALL ANNOTATED NotBenchable) on the prior state: Batch 255 (+1: the llama.cpp #30637 MoE SLRU host-cache law, Plan 259 / Research 290 -- slru-probation-protected-promote-on-second-touch (caching), ANNOTATED NotBenchable, @ 33d6135c) on the prior state: Batch 250 slice 1 (+1: the llama.cpp envelope pool, Plan 254 / Research 285 -- avx2-tiled-accumulator-butterfly-epilogue (simd), ANNOTATED, @ 3dbcb7f #30296) on the prior state: Batch 249 slices 2+3 (+3 rust_perf delta riders, count-neutral on the TOTAL? no — rider faces are gpu_concept-side for kernel_opt; the rust_perf slice-3 riders landed count-neutral on 231; +1 lands HERE) and Batch 248 (+6 land; +1 DROPPED at measurement: the staged simdutf + unicode-normalization conversion, Plan 252 / Research 280 -- minimal-perfect-hash-static-lookup (caching) + flat-pool-start-len-static-rows (layout) + dense-subdomain-arithmetic-before-table-lookup (dispatch) + fanout-transform-emit-callback-not-vec (allocation) + inline-buffer-index-shift-over-drain (dispatch) + shift-mask-adjacency-check (simd), ALL annotated; the seventh candidate deferred-error-mask-block-check DROPPED at measurement (ParetoDominated 0/3/0, 0.64-0.73x -- the scalar mask build is extra work the branchy carry never pays, the negative lives in Research 280); unicode-normalization @ 0.1.25 (7ae3eb0) + simdutf-rs @ v0.7.0 + its vendored C++ amalgamation @ 0491fba) + the count-neutral BOUNDED-ARITY rider on smallvec-stack (entries_02 gained its FIRST context_notes: annotated +1, unannotated -1) on the prior state: Batch 246 (+1: the prism fork delta, Plan 250 / Research 278 -- seq-fork-carries-pending-rollback-record, caching, NotBenchable annotated) ABSORBING Batch 245 (+6: the Batch-244 DEFER LIST conversion -- Plan 248 / Research 277, self-loop-state-memchr-skip (dispatch) + pair-probe-confirm-fused (simd) + finder-hoist-reuse (caching) ALL ParetoDominant + canonical-set-guarded-rebuild (complexity) + nonmax-sentinel-option-niche (layout) + match-branch-cold-confirm (dispatch), ALL annotated + the count-neutral CHAR rider on byte-find-position-to-memchr; the FILE-COLLISION RESOLUTION: both lanes created entries_31.rs independently -- B245 keeps 31, B246 renamed to entries_32.rs) on the Batch 244 (+10: the text/unicode family's FOLLOW-UP    // Per-category standing counts (repaired to the LIVE numbers at Batch
-                                           // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
-                                           // caching 7 and dispatch 5 in the prior prose had gone stale before this
-                                           // batch: real 30/8/6 at the 165 state): allocation 29, io 26,
-                                           // concurrency 23, complexity 32 (Batch 202 +1: the dataflow min-rank
-                                           // rule), layout 14 (Batch 211 +1: the #26042 register-partition rule),
-                                           // iterators 11, simd 10 (Batch 250 slice 1 +1),
-                                           // arithmetic 8, caching 8, dispatch 9 (Batch 207 +1 the inline-hint wrapper rule +1 the
-                                           // B200-era additions past this prose's last update — the live number, disclosed here),
-                                           // bevy 2, wasm 3 (Batch 222 +2 the soroban pair -- the per-category
-                                           // prose figures are STALE-PRONE, the asserts are the ledger) — asserted via the
-                                           // distinct-category pin below plus the benchable/NotBenchable pins in
-                                           // this file. Never read a typed figure from prose: run
-                                           // `cargo refine --corpus-stats` (or this test) for the live numbers, and
-                                           // read the per-batch history in `.docs/11_domains/rust_perf.md` — the
-                                           // narrative copy here had gone stale (98 → 145 → 153 across three
-                                           // landings that updated the assert but not the prose). Batch 219 note:
-                                           // the distinct-category count moved 12 → 13 (thermal joins); the
-                                           // per-category figures above are the STANDING stale-prone prose — the
-                                           // asserts are the ledger.
+    // 196, the TensorFold pair +1 complexity +1 allocation — complexity 25,
+    // caching 7 and dispatch 5 in the prior prose had gone stale before this
+    // batch: real 30/8/6 at the 165 state): allocation 29, io 26,
+    // concurrency 23, complexity 32 (Batch 202 +1: the dataflow min-rank
+    // rule), layout 14 (Batch 211 +1: the #26042 register-partition rule),
+    // iterators 11, simd 10 (Batch 250 slice 1 +1),
+    // arithmetic 8, caching 8, dispatch 9 (Batch 207 +1 the inline-hint wrapper rule +1 the
+    // B200-era additions past this prose's last update — the live number, disclosed here),
+    // bevy 2, wasm 3 (Batch 222 +2 the soroban pair -- the per-category
+    // prose figures are STALE-PRONE, the asserts are the ledger) — asserted via the
+    // distinct-category pin below plus the benchable/NotBenchable pins in
+    // this file. Never read a typed figure from prose: run
+    // `cargo refine --corpus-stats` (or this test) for the live numbers, and
+    // read the per-batch history in `.docs/11_domains/rust_perf.md` — the
+    // narrative copy here had gone stale (98 → 145 → 153 across three
+    // landings that updated the assert but not the prose). Batch 219 note:
+    // the distinct-category count moved 12 → 13 (thermal joins); the
+    // per-category figures above are the STANDING stale-prone prose — the
+    // asserts are the ledger.
     let mut categories: Vec<&str> = corpus.entries.iter().map(|e| e.category.as_str()).collect();
     categories.sort_unstable();
     categories.dedup();
@@ -746,8 +746,8 @@ fn heal_entry_accessors_return_correct_fields() {
         .find(|e| e.rule_id == "o1-lookup")
         .expect("o1-lookup should be in seed corpus");
     assert_eq!(entry.rule_id(), "o1-lookup");
-    assert!(!entry.buggy_code().is_empty());
-    assert!(!entry.fixed_code().is_empty());
+    assert_ne!(entry.buggy_code(), "");
+    assert_ne!(entry.fixed_code(), "");
 }
 
 #[test]
@@ -1785,8 +1785,11 @@ fn fourteen_rules_are_not_benchable() {
     assert!(
         without_spec.contains(&"resume-admission-sized-to-per-command-window-not-suspended-peak")
     ); // Batch 271 slice A — resume-admission decision content
-    assert!(without_spec
-        .contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A — two-phase residency accounting
+    assert!(
+        without_spec.contains(
+            &"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max"
+        )
+    ); // Batch 271 slice A — two-phase residency accounting
     assert!(without_spec.contains(&"derived-reservation-taken-once-after-admission-settles")); // Batch 271 slice A — reservation-ordering decision content
     assert!(without_spec.contains(&"mmap-settled-size-gated-read")); // Batch 172 — page-cache state dominates (the B139/B145/B118 class)
     assert!(without_spec.contains(&"steal-batch-not-per-item")); // Batch 172 — deque-header contention under real scheduling
@@ -1921,8 +1924,11 @@ fn forty_three_annotated_rules_carry_context_notes() {
     assert!(annotated.contains(&"work-buffer-sized-by-execution-width-not-plan-tasks")); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
     assert!(annotated.contains(&"discretionary-cache-growth-keys-on-spare-not-available")); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
     assert!(annotated.contains(&"resume-admission-sized-to-per-command-window-not-suspended-peak")); // Batch 271 slice A -- NotBenchable + the mode-keyed resume ask + the anchor-bound RIDER
-    assert!(annotated
-        .contains(&"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max")); // Batch 271 slice A -- NotBenchable + the successor-reservation release + the max-plan waste
+    assert!(
+        annotated.contains(
+            &"phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max"
+        )
+    ); // Batch 271 slice A -- NotBenchable + the successor-reservation release + the max-plan waste
     assert!(annotated.contains(&"derived-reservation-taken-once-after-admission-settles")); // Batch 271 slice A -- NotBenchable + the settled-shape reservation ordering + the narrowing rejection
     assert!(annotated.contains(&"selector-lattice-beam-over-greedy-walk")); // Batch 198 — the NOT-ISOLATED caveat (the commit's e2e number is the fewrow kernel's)
     assert!(annotated.contains(&"grammar-window-draft-prune-path-local-mask")); // Batch 196 — the exactness-law + refusal-surface annotation
@@ -2023,8 +2029,8 @@ fn context_notes_backward_compatible_serde() {
     let back: Vec<PerfRule> = serde_json::from_str(&json).unwrap();
     let annotated = back.iter().filter(|e| e.context_notes.is_some()).count();
     assert_eq!(annotated, 221); // Batch 288: +1 ANNOTATED (entries_51, Plan 293 / Research 327) on the prior state: Batch 284: +2 ANNOTATED (entries_50, the burn/cubek autotune-family laws, Plan 288 / Research 321); prior: Batch 283: +1 ANNOTATED (entries_49, Plan 287 / Research 320) on the prior state: Batch 282: +3 ALL ANNOTATED (the PerfR classes, entries_48, Plan 286 / Research 319) on the prior state: Batch 274: +1 ANNOTATED (entries_47, Plan 278); prior: Batch 271 landing: +9 ALL ANNOTATED (slices B/C/D, Plan 275 / Research 307) on the prior state: Batch 271 slice A: +3 ALL ANNOTATED -- the splash-wave second-tier serving pool slice A (Plan 275 / Research 307) on the prior state: Batch 270: +12 ALL ANNOTATED -- the splash-wave serving pool (Plan 274 / Research 306); prior -- Batch 266: +1 the uv marker-ISOP rule lands annotated (Plan 270 / Research 302 -- the B266 lane's missed pin, repaired en route by Batch 269); prior -- Batch 257: +6 ALL the TensorFold staged-remainder rules land annotated (Plan 261 / Research 293); prior -- Batch 256: +3 ALL the TensorFold campaign rules land annotated (Plan 260 / Research 291); prior: Batch 255: +1 the SLRU host-cache rule lands annotated (Plan 259 / Research 290); prior: Batch 250 slice 1: +1 the hadd-butterfly epilogue rule lands annotated (Plan 254 / Research 285); prior: Batch 248: +6 landing rules annotated + the dropped candidate rode its annotation out + the count-neutral smallvec-stack rider converts that rule None->annotated (Plan 252 / Research 280) on the prior state: Batch 246: +1 the prism fork seq-fork rule lands annotated (Plan 250 / Research 278) ABSORBING Batch 245: +6 ALL the defer-list conversion rules land annotated (Plan 248 / Research 277) on the Batch 244: +10 ALL the byte-scan batch rules land annotated (Plan 247 / Research 276)
-                                // Simulate a pre-field snapshot: strip `context_notes` from JSON.
-                                // (A real old snapshot simply omits the key; serde(default) → None.)
+    // Simulate a pre-field snapshot: strip `context_notes` from JSON.
+    // (A real old snapshot simply omits the key; serde(default) → None.)
     let old_json = json.replace("\"context_notes\":", "\"__removed_context_notes\":");
     let old_back: Vec<PerfRule> = serde_json::from_str(&old_json).unwrap();
     let old_annotated = old_back
@@ -2067,24 +2073,32 @@ fn drafter_propagates_context_notes_from_perf_corpus() {
         221,
         "expected 221 annotated rules (Batch 288: +1 ANNOTATED -- the explicit-stack rejection rule carries full context_notes, entries_51, Plan 293 / Research 327; prior: Batch 284: +2 ANNOTATED -- the burn/cubek autotune-family laws both carry full context_notes, entries_50, Plan 288 / Research 321; prior: Batch 283: +1 ANNOTATED -- the certifying-identity-token revalidation skip carries full context_notes, entries_49, Plan 287 / Research 320; (Batch 282: +3 ALL ANNOTATED -- the PerfR classes, entries_48, Plan 286 / Research 319; at 214: Batch 274: +1 ANNOTATED -- entries_47, Plan 278 / Research 312; at 213: Batch 271 landing: +9 ALL ANNOTATED -- the splash-wave second-tier serving pool slices B/C/D, Plan 275 / Research 307) on the prior state (Batch 271 slice A: +3 ALL ANNOTATED -- the splash-wave second-tier serving pool slice A (full context_notes, pin-verified quotes at the splash pins fa63d97/88d0e57/81ae003 + the anchor-bound RIDER @ 593f2a6), Plan 275 / Research 307; prior -- Batch 270: +12 ALL ANNOTATED -- the splash-wave serving pool, Plan 274 / Research 306; prior -- Batch 266: +1 the uv marker-ISOP rule lands annotated, Plan 270 / Research 302; prior -- Batch 257: +6 ALL the TensorFold staged-remainder rules land annotated (full context_notes, pin-verified quotes at d1018b31), Plan 261 / Research 293; prior -- Batch 256: +3 ALL the TensorFold campaign rules land annotated, Plan 260 / Research 291; prior: Batch 255: +1 the SLRU host-cache rule lands annotated, Plan 259 / Research 290; prior: Batch 250 slice 1: +1 the hadd-butterfly epilogue rule lands annotated, Plan 254 / Research 285; Batch 248: +6 landing rules + the drop candidate rode its annotation out + the count-neutral smallvec-stack rider converts that rule None->annotated, Plan 252 / Research 280; Batch 246: +1 the prism fork seq-fork rule lands annotated, Plan 250 / Research 278; Batch 245: +6 ALL the defer-list conversion rules land annotated, Plan 248 / Research 277; Batch 244: +10 ALL the byte-scan batch rules land annotated, Plan 247 / Research 276; Batch 243: +2 BOTH the text/unicode family seed rules land annotated, Plan 245 / Research 275; Batch 241: +2 BOTH the serving slot-state cache pair land annotated, Plan 243 / Research 273; Batch 239: +2 BOTH the serving state-cache pair land annotated, Plan 241 / Research 270; Batch 237: +3 ALL the P58-P61 conversion set rules land annotated, Plan 239; Batch 222: +2 BOTH the soroban wasm size rules land annotated, Plan 216 / Research 252; Batch 221: +1 the bevy #25864 runtime-bool conditional-guard rule lands annotated, Plan 221; Batch 219: +11 the TensorFold serving/timing pack, ALL annotated, Plan 215 slot 2; Batch 211: +1 the bevy #26042 register-partition rule lands annotated, Plan 211; Batch 207: +2 the CSE scope-map crossover + the inline-hint wrapper rule, Plan 207; Batch 204: +1 the PrismML NEON PQ2_0 vec_dot rule lands annotated, Plan 204; Batch 203 en-route repair: B202's nnethercote rule landed annotated and missed these pins -- the narrow batch202 gate never ran them; Batch 200: 114 -> 125 -- the TensorFold serving-half eleven, all annotated; Batch 198: 113 -> 114 -- the PrismML selector-lattice NOT-ISOLATED annotation; Batch 196: 111 -> 113 -- the TensorFold grammar-window + startup-estimate pair; Batch 186: 109 -> 111 -- the ggml-cpu tiled measurement pair; Batch 177: 98 → 100 -- the measurement-honesty pair; Batch 179: 100 → 104 -- the rsconstmap trio + the bufwriter-batched rider; Batch 181: 104 → 106 -- the mlxfast mask-memo + seed-warm annotations; Batch 182: 106 → 109 -- the mlxfast-delta trio)"
     );
-    assert!(annotated
-        .iter()
-        .any(|r| r.rule_id == "f16-to-f32-accumulator-lut-breaks-conversion-serialization")); // Batch 237 -- NotBenchable + the vpinsrw law + the per-direction discipline
-    assert!(annotated
-        .iter()
-        .any(|r| r.rule_id == "work-buffer-sized-by-execution-width-not-plan-tasks")); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
-    assert!(annotated
-        .iter()
-        .any(|r| r.rule_id == "discretionary-cache-growth-keys-on-spare-not-available")); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "f16-to-f32-accumulator-lut-breaks-conversion-serialization")
+    ); // Batch 237 -- NotBenchable + the vpinsrw law + the per-direction discipline
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "work-buffer-sized-by-execution-width-not-plan-tasks")
+    ); // Batch 237 -- NotBenchable + the sizing-authority law + the B223 distinct-from
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "discretionary-cache-growth-keys-on-spare-not-available")
+    ); // Batch 237 -- NotBenchable + the spare-vs-available split + the warning latch
     assert!(
         annotated
             .iter()
             .any(|r| r.rule_id
                 == "partial-state-serialization-honors-rollback-contract-at-leaf-cache")
     ); // Batch 239 -- NotBenchable + the rollback-defines-partial contract
-    assert!(annotated
-        .iter()
-        .any(|r| r.rule_id == "cache-write-admission-requires-restoring-consumer")); // Batch 239 -- NotBenchable + the admission-by-reusability law
+    assert!(
+        annotated
+            .iter()
+            .any(|r| r.rule_id == "cache-write-admission-requires-restoring-consumer")
+    ); // Batch 239 -- NotBenchable + the admission-by-reusability law
 
     // The HealEntry trait override must agree with the struct field.
     for rule in &annotated {
@@ -6042,10 +6056,14 @@ fn batch219_split_adjoin_and_thermal_category(
             .unwrap_or_default()
             .to_string()
     };
-    assert!(notes_of("prompt-cache-canonical-interval-keys")
-        .contains("prompt-cache-rewind-states-min-gap-eviction"));
-    assert!(notes_of("prompt-cache-rewind-states-min-gap-eviction")
-        .contains("prompt-cache-canonical-interval-keys"));
+    assert!(
+        notes_of("prompt-cache-canonical-interval-keys")
+            .contains("prompt-cache-rewind-states-min-gap-eviction")
+    );
+    assert!(
+        notes_of("prompt-cache-rewind-states-min-gap-eviction")
+            .contains("prompt-cache-canonical-interval-keys")
+    );
     // The NEW 13th category rides this batch's thermal rule.
     assert!(corpus.entries.iter().any(|e| e.category == "thermal"));
 }
@@ -8027,12 +8045,14 @@ fn batch266_rule_landed() {
         );
     }
     // the entry code carries the two arms' test names (the oracle shape)
-    assert!(rule
-        .buggy_code
-        .contains("fn the_conflict_chain_blowup_is_visible_in_the_path_count"));
-    assert!(rule
-        .fixed_code
-        .contains("fn the_fixed_cover_is_irredundant_on_a_conflict_chain"));
+    assert!(
+        rule.buggy_code
+            .contains("fn the_conflict_chain_blowup_is_visible_in_the_path_count")
+    );
+    assert!(
+        rule.fixed_code
+            .contains("fn the_fixed_cover_is_irredundant_on_a_conflict_chain")
+    );
     // the bench harness carries the sample-parity gate
     #[cfg(feature = "rust_perf_bench")]
     {
@@ -8156,17 +8176,11 @@ fn batch257_rules_landed() {
         ),
         (
             "draft-cost-timed-at-served-widths-not-extrapolated",
-            &[
-                "THE BATCHING HALF",
-                "twice the truth",
-            ],
+            &["THE BATCHING HALF", "twice the truth"],
         ),
         (
             "checkpoint-reads-skip-page-cache-with-refusal-fallback",
-            &[
-                "FILE_FLAG_NO_BUFFERING",
-                "span(0, 1) = 4096",
-            ],
+            &["FILE_FLAG_NO_BUFFERING", "span(0, 1) = 4096"],
         ),
         (
             "reserve-stream-caches-at-admission-warm-request-paths-at-load",
@@ -8184,10 +8198,7 @@ fn batch257_rules_landed() {
         ),
         (
             "kept-prompt-states-pinned-host-cache-budget",
-            &[
-                "THE BUDGET LAW",
-                "8 GiB",
-            ],
+            &["THE BUDGET LAW", "8 GiB"],
         ),
     ] {
         for needle in needles {
@@ -8736,8 +8747,10 @@ fn batch271_rules_landed() {
     // batch271_slice_a_rules_landed; presence + one needle here.
     let rule = get("resume-admission-sized-to-per-command-window-not-suspended-peak");
     assert_eq!(rule.category, "allocation");
-    assert!(hay(rule)
-        .contains("takes the first work's page, as a start that waits for its restore does"));
+    assert!(
+        hay(rule)
+            .contains("takes the first work's page, as a start that waits for its restore does")
+    );
     assert!(rule
         .context_notes
         .as_deref()
@@ -8745,8 +8758,11 @@ fn batch271_rules_landed() {
         .contains("A resume counts among them the anchor its model holds once it selected the request's first token"));
     let rule = get("phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max");
     assert_eq!(rule.category, "allocation");
-    assert!(hay(rule)
-        .contains("the floor a decoding lane takes replaces the staging once no prompt holds it"));
+    assert!(
+        hay(rule).contains(
+            "the floor a decoding lane takes replaces the staging once no prompt holds it"
+        )
+    );
     let rule = get("derived-reservation-taken-once-after-admission-settles");
     assert_eq!(rule.category, "allocation");
     assert!(hay(rule).contains("It is reserved once every lane has its KV"));
@@ -8807,7 +8823,7 @@ fn batch271_rules_landed() {
     assert!(h.contains("after three at most"));
     assert!(h.contains("kvCapacityPagesFor")); // companion (a)
     assert!(h.contains("a tier that only caches costs the weights nothing")); // companion (b)
-                                                                              // ---- the three host-side count-neutral rider faces
+    // ---- the three host-side count-neutral rider faces
     for (host, sha) in [
         (
             "restore-point-chain-copies-keyed-on-disk-state-count",
@@ -8906,11 +8922,12 @@ fn batch282_rules_landed() {
             "batch-282 saturating-f2i missing needle: {needle}"
         );
     }
-    assert!(rule
-        .context_notes
-        .as_deref()
-        .unwrap_or_default()
-        .contains("Batch 282 / Plan 286 / Research 319"));
+    assert!(
+        rule.context_notes
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Batch 282 / Plan 286 / Research 319")
+    );
     assert!(rule.buggy_code.contains("v as i32"));
     assert!(rule.fixed_code.contains("to_int_unchecked::<i32>()"));
     assert!(rule.fixed_code.contains("SAFETY:"));
@@ -8931,11 +8948,12 @@ fn batch282_rules_landed() {
             "batch-282 invariant-dispatch missing needle: {needle}"
         );
     }
-    assert!(rule
-        .context_notes
-        .as_deref()
-        .unwrap_or_default()
-        .contains("Batch 282 / Plan 286 / Research 319"));
+    assert!(
+        rule.context_notes
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Batch 282 / Plan 286 / Research 319")
+    );
     assert!(rule.buggy_code.contains("self.handler.expect("));
     assert_eq!(
         rule.fixed_code.matches("expect(").count(),
@@ -8961,11 +8979,12 @@ fn batch282_rules_landed() {
             "batch-282 slice-view missing needle: {needle}"
         );
     }
-    assert!(rule
-        .context_notes
-        .as_deref()
-        .unwrap_or_default()
-        .contains("Batch 282 / Plan 286 / Research 319"));
+    assert!(
+        rule.context_notes
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Batch 282 / Plan 286 / Research 319")
+    );
     assert!(rule.buggy_code.contains("*dst.add(i)"));
     assert!(rule.fixed_code.contains("zip(src[off..].iter())"));
 

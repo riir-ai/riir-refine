@@ -660,6 +660,6 @@ fn plain() -> u32 {
     #[test]
     fn attribute_lines_empty_on_clean_source() {
         let src = "fn a() -> u32 { 1 }\nfn b() -> u32 { measure(2) }\n";
-        assert!(attribute_line_ranges(src).is_empty());
+        assert_eq!(attribute_line_ranges(src), Vec::<(usize, usize)>::new());
     }
 }

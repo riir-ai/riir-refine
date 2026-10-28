@@ -32,7 +32,7 @@
 use crate::adaptive_drafter::AdaptiveDrafter;
 use crate::domain::HealEntry;
 use crate::drafter::TernaryDrafter;
-use crate::embedder::{embed_into, Direction, EMBED_DIM};
+use crate::embedder::{Direction, EMBED_DIM, embed_into};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory, LatentQuery};
 use crate::pruner::RustAnalyzerPruner;
@@ -1515,7 +1515,7 @@ mod tests {
         assert!(result.is_some());
         let r = result.unwrap();
         // With memory seeded, the fix could come from either source — both are valid.
-        assert!(!r.fixed_code.is_empty());
+        assert_ne!(r.fixed_code, "");
     }
 
     #[test]
@@ -1921,8 +1921,9 @@ mod tests {
         // cover collapse); here just pin that outcomes don't panic + the
         // pipeline still heals.
         let corpus = mock_corpus();
-        assert!(p
-            .heal("needless_return", "fn a() { return 1; }", &corpus)
-            .is_some());
+        assert!(
+            p.heal("needless_return", "fn a() { return 1; }", &corpus)
+                .is_some()
+        );
     }
 }

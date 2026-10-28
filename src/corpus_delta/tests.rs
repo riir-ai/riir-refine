@@ -40,7 +40,7 @@ fn a_lint_in_the_fix_set_is_the_freshness_delta_not_a_gap() {
 fn a_lint_in_neither_lane_is_the_coverage_gap() {
     let per_span = vec![missing(&["must_use_candidate"])];
     let d = delta(spans(&per_span), &fixable(), &verify());
-    assert!(d.rows.is_empty());
+    assert_eq!(d.rows, []);
     assert_eq!(d.unfixable, 1);
     assert_eq!(d.unfixable_spans, 1);
 }
@@ -228,10 +228,10 @@ fn missing_spans_matches_the_run_summarys_own_count() {
 ))]
 #[test]
 fn a_lagging_lease_produces_a_real_freshness_delta() {
+    use crate::DomainId;
     use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
     use crate::draft::clippy_feed::ClippyDiagnostic;
     use crate::draft::latent_matcher::LatentMatcher;
-    use crate::DomainId;
 
     const SRC: &str = "pub fn area(w: f64, h: f64) -> f64 {\n    return w * h;\n}\n";
 

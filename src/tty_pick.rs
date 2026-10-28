@@ -448,6 +448,6 @@ mod tests {
         let mut out: Vec<u8> = Vec::new();
         let picked = pick(&[], &mut Script(vec![Key::Enter]), &mut out);
         assert_eq!(picked, Picked::Cancelled);
-        assert!(out.is_empty());
+        assert_eq!(out, Vec::<u8>::new());
     }
 }

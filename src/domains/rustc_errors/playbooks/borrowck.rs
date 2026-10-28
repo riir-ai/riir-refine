@@ -57,7 +57,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprReference, Local, Pat, UnOp};
 
-use super::{anchor, cand, CompileProposer, FixCandidate, Playbooks, SpanEdit};
+use super::{CompileProposer, FixCandidate, Playbooks, SpanEdit, anchor, cand};
 use crate::domains::rustc_errors::diag::{LabeledSpan, RustcErrorDiag};
 
 // ── shared syn extraction ─────────────────────────────────────────────
@@ -603,17 +603,19 @@ impl CompileProposer for E0505CloneAtMove {
         if source[end..].starts_with(".clone()") {
             return Vec::new(); // already cloned here
         }
-        vec![cand(
-            diag,
-            file,
-            moved.line_start,
-            (end, end),
-            ".clone()".to_string(),
-            self.name(),
-        )
-        .with_note(
-            "clones at the move — the destination owns a copy; the source borrow is preserved",
-        )]
+        vec![
+            cand(
+                diag,
+                file,
+                moved.line_start,
+                (end, end),
+                ".clone()".to_string(),
+                self.name(),
+            )
+            .with_note(
+                "clones at the move — the destination owns a copy; the source borrow is preserved",
+            ),
+        ]
     }
 }
 
@@ -693,15 +695,17 @@ impl CompileProposer for E0382CloneAtMove {
         if source[end..].starts_with(".clone()") {
             return Vec::new(); // already cloned here
         }
-        vec![cand(
-            diag,
-            file,
-            moved.line_start,
-            (end, end),
-            ".clone()".to_string(),
-            self.name(),
-        )
-        .with_note("clones at the move — the destination owns a copy; the source stays live")]
+        vec![
+            cand(
+                diag,
+                file,
+                moved.line_start,
+                (end, end),
+                ".clone()".to_string(),
+                self.name(),
+            )
+            .with_note("clones at the move — the destination owns a copy; the source stays live"),
+        ]
     }
 }
 
@@ -796,18 +800,20 @@ fn swap_move_with_use(
         return Vec::new();
     }
     let repl = format!("{u_text}{gap}{m_text}");
-    vec![cand(
-        diag,
-        file,
-        moved.line_start,
-        (m.start, u.end),
-        repl,
-        strategy,
-    )
-    .with_note(
-        "swaps the move with the use — evaluation order of the two statements \
+    vec![
+        cand(
+            diag,
+            file,
+            moved.line_start,
+            (m.start, u.end),
+            repl,
+            strategy,
+        )
+        .with_note(
+            "swaps the move with the use — evaluation order of the two statements \
          exchanges; legal only when neither reads the other's result",
-    )]
+        ),
+    ]
 }
 
 // ── the family registry ───────────────────────────────────────────────
@@ -960,15 +966,18 @@ mod tests {
                 ("immutable borrow later used here", "head.len()"),
             ],
         );
-        assert!(propose_all(&E0502DerefRemoval, src, &diag).is_empty());
+        assert_eq!(propose_all(&E0502DerefRemoval, src, &diag), []);
     }
 
     #[test]
     fn deref_removal_ignores_other_codes_and_missing_anchor() {
         let wrong = e0502_diag("E0499", E0502_COPY_SRC);
-        assert!(propose_all(&E0502DerefRemoval, E0502_COPY_SRC, &wrong).is_empty());
+        assert_eq!(propose_all(&E0502DerefRemoval, E0502_COPY_SRC, &wrong), []);
         let no_anchor = diag_for("E0502", E0502_COPY_SRC, "v.push(1)", &[]);
-        assert!(propose_all(&E0502DerefRemoval, E0502_COPY_SRC, &no_anchor).is_empty());
+        assert_eq!(
+            propose_all(&E0502DerefRemoval, E0502_COPY_SRC, &no_anchor),
+            []
+        );
     }
 
     // ── E0502 clone-out ───────────────────────────────────────────────
@@ -1008,7 +1017,7 @@ mod tests {
             "v.push(1)",
             &[("immutable borrow occurs here", "v")],
         );
-        assert!(propose_all(&E0502CloneOut, src, &diag).is_empty());
+        assert_eq!(propose_all(&E0502CloneOut, src, &diag), []);
     }
 
     // ── E0502 read-relocate (Issue 101 — hoist to first use) ──────────
@@ -1068,18 +1077,18 @@ mod tests {
         // No use of the binding after the decl — nothing to hoist past.
         let no_use = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    a.push(4i32);\n    v[0]\n}\n";
         let diag = relocate_diag("E0502", no_use);
-        assert!(propose_all(&E0502ReadRelocate, no_use, &diag).is_empty());
+        assert_eq!(propose_all(&E0502ReadRelocate, no_use, &diag), []);
         // Only a LONGER-IDENT mention later (`head2`) — the ident-boundary
         // scan must not treat it as a use of `head`.
         let longer_ident = "pub fn probe(v: &mut Vec<i32>) -> i32 {\n    let a = &mut *v;\n    let head = &v[0];\n    let head2 = v[1];\n    a.push(4i32);\n    head2 + v[0]\n}\n";
         let d2 = relocate_diag("E0502", longer_ident);
-        assert!(propose_all(&E0502ReadRelocate, longer_ident, &d2).is_empty());
+        assert_eq!(propose_all(&E0502ReadRelocate, longer_ident, &d2), []);
         // Wrong code.
         let d3 = relocate_diag("E0499", RELOCATE_COLD);
-        assert!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d3).is_empty());
+        assert_eq!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d3), []);
         // No `immutable borrow occurs here` anchor (the E0505 shape).
         let d4 = diag_for("E0502", RELOCATE_COLD, "&v[0]", &[]);
-        assert!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d4).is_empty());
+        assert_eq!(propose_all(&E0502ReadRelocate, RELOCATE_COLD, &d4), []);
     }
 
     // ── E0499 swap ────────────────────────────────────────────────────
@@ -1138,7 +1147,7 @@ mod tests {
                 ("first borrow later used here", "a.push"),
             ],
         );
-        assert!(propose_all(&E0499SwapSecondDecl, src, &diag).is_empty());
+        assert_eq!(propose_all(&E0499SwapSecondDecl, src, &diag), []);
     }
 
     #[test]
@@ -1156,7 +1165,7 @@ mod tests {
                 ("first borrow later used here", "a.push"),
             ],
         );
-        assert!(propose_all(&E0499SwapSecondDecl, src, &diag).is_empty());
+        assert_eq!(propose_all(&E0499SwapSecondDecl, src, &diag), []);
     }
 
     // ── E0505 clone-at-move ───────────────────────────────────────────
@@ -1164,8 +1173,7 @@ mod tests {
     /// The corpus mutant `e0505_drop_clone_under_borrow` — the case where
     /// `cargo fix` diverges (rewrites the borrow site) and this template
     /// restores the seed.
-    const E0505_SRC: &str =
-        "pub fn probe(v: Vec<u8>) -> usize {\n    let r = &v;\n    let w = v;\n    r.len() + w.len()\n}\n";
+    const E0505_SRC: &str = "pub fn probe(v: Vec<u8>) -> usize {\n    let r = &v;\n    let w = v;\n    r.len() + w.len()\n}\n";
 
     #[test]
     fn clone_at_move_inserts_after_the_move_span() {
@@ -1218,7 +1226,7 @@ mod tests {
                 ls.byte_end = w_at + 1;
             }
         }
-        assert!(propose_all(&E0505CloneAtMove, src, &d).is_empty());
+        assert_eq!(propose_all(&E0505CloneAtMove, src, &d), []);
     }
 
     // ── the no-leak pin (the family-level exclusion) ──────────────────
@@ -1256,8 +1264,7 @@ mod tests {
 
     /// The Plan-432 non-`Clone` saddle shape: the borrow's use is its own
     /// statement AFTER the move. The swap restores the seed exactly.
-    const E0505_NC_SRC: &str =
-        "pub fn probe(t: Tkn) -> u64 {\n    let r = &t;\n    let w = t;\n    let n = r.v;\n    n + w.v\n}\n";
+    const E0505_NC_SRC: &str = "pub fn probe(t: Tkn) -> u64 {\n    let r = &t;\n    let w = t;\n    let n = r.v;\n    n + w.v\n}\n";
 
     fn e0505_nc_diag() -> RustcErrorDiag {
         let mut d = diag_for(
@@ -1310,7 +1317,7 @@ mod tests {
                 ("borrow later used here", "r.len()"),
             ],
         );
-        assert!(propose_all(&E0505UseBeforeMove, E0505_SRC, &d).is_empty());
+        assert_eq!(propose_all(&E0505UseBeforeMove, E0505_SRC, &d), []);
     }
 
     #[test]
@@ -1326,7 +1333,7 @@ mod tests {
                 ("borrow later used here", "r.v"),
             ],
         );
-        assert!(propose_all(&E0505UseBeforeMove, src, &d).is_empty());
+        assert_eq!(propose_all(&E0505UseBeforeMove, src, &d), []);
     }
 
     // ── E0382 — the move ladder ───────────────────────────────────────
@@ -1383,8 +1390,7 @@ mod tests {
 
     #[test]
     fn e0382_use_before_move_refuses_foreign_stmt_between() {
-        let src =
-            "pub fn probe(t: Tkn) -> u64 {\n    let w = t;\n    let k = 5u64;\n    let n = t.v;\n    n + w.v + k\n}\n";
+        let src = "pub fn probe(t: Tkn) -> u64 {\n    let w = t;\n    let k = 5u64;\n    let n = t.v;\n    n + w.v + k\n}\n";
         let d = diag_for(
             "E0382",
             src,
@@ -1394,6 +1400,6 @@ mod tests {
                 ("value used here after move", "t.v"),
             ],
         );
-        assert!(propose_all(&E0382UseBeforeMove, src, &d).is_empty());
+        assert_eq!(propose_all(&E0382UseBeforeMove, src, &d), []);
     }
 }

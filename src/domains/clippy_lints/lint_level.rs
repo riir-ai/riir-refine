@@ -46,7 +46,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 /// The toolchain [`LINT_GROUPS`] was derived from (`rust-toolchain.toml`).
-pub const PINNED_TOOLCHAIN: &str = "1.98.1";
+pub const PINNED_TOOLCHAIN: &str = "1.99.0";
 
 /// Fix-set lints whose rows in [`LINT_GROUPS`] are AHEAD of the pinned
 /// toolchain (Batch 230, Plan 232 — the toolchain-move re-arm): the lints
@@ -58,11 +58,14 @@ pub const PINNED_TOOLCHAIN: &str = "1.98.1";
 /// list (the rows re-merge into the live driver check in the same commit
 /// it bumps `rust-toolchain.toml` to ≥1.99).
 pub const AHEAD_OF_PIN_1_99: &[&str] = &[
-    "assert_is_empty",              // pedantic, clippy 1.99 (#17149)
-    "block_scrutinee",              // suspicious, clippy 1.99 (#16855)
-    "manual_bit_width",             // pedantic, clippy 1.99 (#16902)
-    "mismatched_bit_width_type",    // suspicious, clippy 1.99 (#16902)
-    "nonnull_unchecked_on_box_ptr", // complexity, clippy 1.99 (#17336)
+    // EMPTY since the 2026-10-29 pin bump (1.98.1 -> 1.99.0, forced by the
+    // katgpt-rs issue-963 T1 floor): the five Batch-230 rows
+    // (assert_is_empty, block_scrutinee, manual_bit_width,
+    // mismatched_bit_width_type, nonnull_unchecked_on_box_ptr) are verified
+    // against the INSTALLED driver by `table_matches_installed_driver` now —
+    // the rows live in that test's history and in
+    // `git log -p -- src/domains/clippy_lints/lint_level.rs`. The const stays
+    // as the registry slot for the NEXT ahead-of-pin wave.
 ];
 
 /// The clippy groups whose lints are allow-by-default.

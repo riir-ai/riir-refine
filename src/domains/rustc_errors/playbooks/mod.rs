@@ -355,7 +355,7 @@ mod tests {
     fn empty_registry_proposes_nothing() {
         let p = Playbooks::empty();
         assert!(p.is_empty());
-        assert!(p.propose(&diag(), Path::new("src/lib.rs"), "").is_empty());
+        assert_eq!(p.propose(&diag(), Path::new("src/lib.rs"), ""), []);
     }
 
     #[test]

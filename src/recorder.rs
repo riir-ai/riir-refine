@@ -41,7 +41,7 @@
 //! fully inert — no recording, no persistence, no log lines — for consumers
 //! who want the pure heal loop.
 
-use crate::embedder::{embed_into, EMBED_DIM};
+use crate::embedder::{EMBED_DIM, embed_into};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory};
 
@@ -604,7 +604,7 @@ mod tests {
                 reviewed.push((re.rule_id.clone(), 1, re.edit.replacement.clone(), restore));
             }
         }
-        assert!(!reviewed.is_empty());
+        assert_ne!(reviewed, []);
 
         let mut rec = EvolveRecorder::new();
         rec.record_reviewed(&reviewed);

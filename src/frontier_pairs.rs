@@ -404,7 +404,7 @@ mod corpus_tests {
     fn strategy_mapping_covers_every_corpus_kind() {
         for case in generate_corpus() {
             let s = strategy_for(case.expect_code, case.kind);
-            assert!(!s.is_empty());
+            assert_ne!(s, "");
             assert!(
                 s.starts_with("e0") || s.starts_with("gen:"),
                 "unmapped strategy for {} / {:?}",
@@ -436,7 +436,10 @@ mod corpus_tests {
     #[test]
     fn fence_sample_handles_tiny_inputs() {
         let pairs = construction_pairs();
-        assert!(fence_sample(&pairs, 0).is_empty());
+        assert_eq!(
+            fence_sample(&pairs, 0),
+            Vec::<&crate::frontier_pairs::ConstructionPair>::new()
+        );
         assert_eq!(fence_sample(&[], 5).len(), 0);
         let one = fence_sample(&pairs, 1);
         assert_eq!(one.len(), 1);

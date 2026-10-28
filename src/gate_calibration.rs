@@ -207,7 +207,7 @@ pub fn stratum_runs(row: &serde_json::Value) -> Result<Vec<StratumRunView>, Stri
             return Err(format!(
                 "score-history row's `strata` is not a list (found {})",
                 json_kind(other)
-            ))
+            ));
         }
     };
     let generation = match obj.get("generation") {
@@ -225,7 +225,7 @@ pub fn stratum_runs(row: &serde_json::Value) -> Result<Vec<StratumRunView>, Stri
             return Err(
                 "score-history row has no `generation` field — strata cannot be attributed"
                     .to_string(),
-            )
+            );
         }
     };
     let ts = match obj.get("ts") {
@@ -234,12 +234,12 @@ pub fn stratum_runs(row: &serde_json::Value) -> Result<Vec<StratumRunView>, Stri
             return Err(format!(
                 "score-history row's `ts` is not a string (found {})",
                 json_kind(other)
-            ))
+            ));
         }
         None => {
             return Err(
                 "score-history row has no `ts` field — strata cannot be attributed".to_string(),
-            )
+            );
         }
     };
     let mut out = Vec::with_capacity(strata.len());
@@ -604,13 +604,13 @@ pub fn ood_runs(row: &serde_json::Value) -> Result<Vec<OodRunView>, String> {
             return Err(format!(
                 "score-history row's `ts` is not a string (found {})",
                 json_kind(other)
-            ))
+            ));
         }
         None => {
             return Err(
                 "score-history row has no `ts` field — the ood block cannot be attributed"
                     .to_string(),
-            )
+            );
         }
     };
     Ok(vec![OodRunView {
@@ -1629,9 +1629,9 @@ mod tests {
     fn ood_runs_tolerates_missing_and_null_ood() {
         let missing: serde_json::Value =
             serde_json::from_str(r#"{"generation": 1, "ts": "t"}"#).unwrap();
-        assert!(ood_runs(&missing).unwrap().is_empty());
+        assert_eq!(ood_runs(&missing).unwrap(), []);
         let null: serde_json::Value = serde_json::from_str(r#"{"ts": "t", "ood": null}"#).unwrap();
-        assert!(ood_runs(&null).unwrap().is_empty());
+        assert_eq!(ood_runs(&null).unwrap(), []);
         // The axis does NOT demand `generation` or `strata`: 13 ood-bearing
         // rows predate the strata field. A bare ts+ood row parses.
         let no_generation: serde_json::Value = serde_json::from_str(
