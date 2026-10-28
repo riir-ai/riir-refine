@@ -411,6 +411,16 @@ pub mod kat_corpus_pr;
 #[cfg(feature = "kat_service")]
 pub mod kat_migrate_client;
 
+// Issue 188 (the NORMAL-user migrate lane): the device-flow proof consumed
+// as a value, the auto provider-bind when the new key is unlisted (the
+// Issue-146 proof, automatic), the `.keys` listed-check, and the
+// browser-first venue — the orchestration injectable end to end so the
+// gate battery runs hermetic. The device transport itself is the leaf's
+// tested unit (`github_device_login`); this lane takes its OUTCOME. The
+// recovery/bind routes + the ureq `.keys` source ride `kat_transport`.
+#[cfg(feature = "kat_transport")]
+pub mod kat_migrate_normal;
+
 // riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17): the
 // marketing TUNA airdrop ADMIN hand — `cargo refine get|send <amt> tuna`
 // orchestration over the leaf's `kat_tuna_admin_client` (the listing,

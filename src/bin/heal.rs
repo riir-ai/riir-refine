@@ -4299,6 +4299,193 @@ fn run_kat_migrate(
     }
 }
 
+/// Issue 188: the NORMAL-user migrate flow — `cargo refine migrate` with
+/// no expert flags. Census preflight (E-3, before anything interactive) →
+/// account load → the provider OFFER (the GitHub device flow, never
+/// forced; the baked wallet client id, the env override respected) → the
+/// auto provider-bind when the new key is unlisted → the dual-signed
+/// filing → the browser venue. The interactive halves live here; the
+/// orchestration is the lib's injectable `run_normal_migration`.
+#[cfg(feature = "kat_transport")]
+fn run_migrate_normal(
+    github_flag: Option<&str>,
+    old_key_flag: Option<&str>,
+    github_token_flag: Option<String>,
+    totp_code: Option<&str>,
+) {
+    use riir_refine::kat_migrate_normal::{
+        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput,
+        ProviderLeg, UreqKeysBodySource, CLIENT_ID_ENV,
+    };
+    use riir_kat::kat_recovery_client::HttpRecoveryTransport;
+    use std::io::{BufRead as _, IsTerminal as _, Write as _};
+
+    let root = resolve_heal_root(&[]);
+    let url = command_service_url();
+
+    // The census gate (E-3) BEFORE anything interactive — a browser dance
+    // must not end in "sync first". The same gate the filing re-runs.
+    let c = riir_refine::kat_migrate_client::census(
+        &root,
+        &riir_refine::kat_account::KatAccount::default_dir(),
+        &url,
+    );
+    if !c.account_present {
+        eprintln!("migrate: no account — run `cargo refine login` first");
+        std::process::exit(1);
+    }
+    if !c.blockers.is_empty() {
+        print!(
+            "{}",
+            riir_refine::kat_migrate_client::render_census(&c, &url)
+        );
+        std::process::exit(1);
+    }
+
+    let account = match riir_refine::kat_account::KatAccount::load(
+        &riir_refine::kat_account::KatAccount::default_dir(),
+    ) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("migrate: loading the account record: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    // The OLD key: the explicit flag — the per-invocation key source is
+    // EXPLICIT by law (the env var is never a signing source). The
+    // interactive `~/.ssh` picker rides the leaf re-export (the
+    // issue-188 follow-up; the substrate exists — `riir_auth::ssh_picker`
+    // — it is just not re-exported through the one-dep-edge seam yet).
+    let Some(old_key) = old_key_flag else {
+        eprintln!(
+            "migrate: filing requires --old-key <path> — the OLD key file (OpenSSH \
+             Ed25519) that signs the release."
+        );
+        std::process::exit(2);
+    };
+
+    // The proof: the device flow is OFFERED, never forced. Explicit
+    // --github + an explicit token = the expert path (today's semantics);
+    // a terminal gets the offer; anything else stays expert (the flow
+    // needs a human browser anyway).
+    let token_explicit = github_token_flag
+        .clone()
+        .or_else(|| std::env::var("GITHUB_TOKEN").ok())
+        .or_else(|| std::env::var("GH_TOKEN").ok());
+    let expert_shortcut = github_flag.is_some() && token_explicit.is_some();
+    let proof = if expert_shortcut {
+        LoginProof::Expert
+    } else if std::io::stdin().is_terminal() {
+        eprint!(
+            "Prove the GitHub login with the device flow (a browser opens \
+             github.com/login/device)? [Y/n] "
+        );
+        let _ = std::io::stderr().flush();
+        let mut line = String::new();
+        let _ = std::io::stdin().lock().read_line(&mut line);
+        let answer = line.trim();
+        if answer.is_empty()
+            || answer.eq_ignore_ascii_case("y")
+            || answer.eq_ignore_ascii_case("yes")
+        {
+            // T1: the baked wallet client id, the env override respected —
+            // injected through the env (the var is PUBLIC by design); the
+            // leaf's env-resolving call reads it.
+            if std::env::var(CLIENT_ID_ENV)
+                .map_or(true, |v| v.trim().is_empty())
+            {
+                std::env::set_var(
+                    CLIENT_ID_ENV,
+                    riir_refine::kat_migrate_normal::resolve_wallet_client_id(None),
+                );
+            }
+            match riir_kat::kat_recovery_client::github_device_login() {
+                Ok((token, identity)) => LoginProof::Device {
+                    token,
+                    numeric_id: identity.numeric_id,
+                    login: identity.login,
+                },
+                Err(e) => {
+                    eprintln!("migrate: the device flow: {e}");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            LoginProof::Expert
+        }
+    } else {
+        LoginProof::Expert
+    };
+    let device_leg = matches!(proof, LoginProof::Device { .. });
+
+    // The v2-first law: the ledger id from the service info (an old server
+    // answers None and the legacy signatures go out).
+    let ledger_id = match riir_refine::kat_migrate_client::fetch_ledger_id(&url) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("migrate: reading the service info: {e}");
+            std::process::exit(1);
+        }
+    };
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let transport = HttpRecoveryTransport::new(&url, 15);
+    let keys = UreqKeysBodySource;
+    let deps = NormalMigrateDeps {
+        recovery: &transport,
+        keys: &keys,
+        ledger_id,
+        now_unix,
+    };
+    let input = NormalMigrateInput {
+        github_flag,
+        totp_code,
+        old_key_path: std::path::Path::new(old_key),
+        proof,
+        // The device token died at the bind; the filing's PoW measure on
+        // the device leg runs unauthenticated. An EXPLICIT bearer (flag or
+        // env) rides only the expert leg, where it is today's semantics.
+        github_token: if device_leg { None } else { token_explicit },
+    };
+    match run_normal_migration(&account, &deps, input, |p| {
+        riir_refine::kat_migrate_client::file_migration(&root, &p, &url)
+    }) {
+        Ok((resolved, outcome)) => {
+            match resolved.leg {
+                ProviderLeg::Device {
+                    login,
+                    listed,
+                    bound,
+                    ..
+                } => {
+                    if listed {
+                        eprintln!(
+                            "migrate: the new key is already listed on @{login}'s .keys — \
+                             no binding move needed"
+                        );
+                    } else if bound {
+                        eprintln!(
+                            "migrate: provider binding SERVER — @{login} bound (the token \
+                             was never stored)"
+                        );
+                    }
+                }
+                ProviderLeg::Expert { .. } => {}
+            }
+            print!(
+                "{}",
+                riir_refine::kat_migrate_normal::render_normal_filing_outcome(&outcome)
+            );
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn rmpk_state(state: riir_kat::kat_protocol_migrate::MigrateRequestState) -> &'static str {
     match state {
         riir_kat::kat_protocol_migrate::MigrateRequestState::Pending => "pending",
@@ -12243,19 +12430,39 @@ fn main() {
                 riir_refine::build_stamp::refuse("send", &["admin"]);
             }
             // riir-dao Proposal 001 T4: the account-key migration lane.
+            // Issue 188: with NO expert-mode flag, `migrate` IS the
+            // normal-user flow (device-flow offered, auto provider-bind,
+            // browser-filed issue); any expert flag keeps the T4 modes.
             KatCommand::Migrate => {
-                run_kat_migrate(
-                    args.migrate_github.as_deref(),
-                    args.migrate_object.as_deref(),
-                    args.migrate_status.as_deref(),
-                    args.migrate_census,
-                    args.migrate_old_key.as_deref(),
-                    args.migrate_github_token.clone(),
-                    args.migrate_repo_base.as_deref(),
-                    args.migrate_totp.as_deref(),
-                    args.migrate_attest_cosign.as_ref(),
-                    args.migrate_attest_cosig.as_deref(),
-                );
+                let expert_mode = args.migrate_object.is_some()
+                    || args.migrate_status.is_some()
+                    || args.migrate_census
+                    || args.migrate_attest_cosign.is_some()
+                    || args.migrate_attest_cosig.is_some();
+                if expert_mode {
+                    run_kat_migrate(
+                        args.migrate_github.as_deref(),
+                        args.migrate_object.as_deref(),
+                        args.migrate_status.as_deref(),
+                        args.migrate_census,
+                        args.migrate_old_key.as_deref(),
+                        args.migrate_github_token.clone(),
+                        args.migrate_repo_base.as_deref(),
+                        args.migrate_totp.as_deref(),
+                        args.migrate_attest_cosign.as_ref(),
+                        args.migrate_attest_cosig.as_deref(),
+                    );
+                } else {
+                    #[cfg(feature = "kat_transport")]
+                    run_migrate_normal(
+                        args.migrate_github.as_deref(),
+                        args.migrate_old_key.as_deref(),
+                        args.migrate_github_token.clone(),
+                        args.migrate_totp.as_deref(),
+                    );
+                    #[cfg(not(feature = "kat_transport"))]
+                    riir_refine::build_stamp::refuse("migrate", &["kat_transport"]);
+                }
             }
             // riir-dapps plan 053 / riir-kat issue 007: the TOTP second
             // factor's client half. The flows + the HTTP transport ride
