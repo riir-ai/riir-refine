@@ -7131,7 +7131,23 @@ USAGE:
                     disables; RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> re-aims
                     auto run at a feature set, for diagnostics that
                     only fire behind a non-default feature; a manual
-                    --clippy-json wins outright).
+                    --clippy-json wins outright). GAP-ARMING (owner mandate
+                    2026-10-28): after the base pass the oracle censuses
+                    every workspace target whose required-features the
+                    posture does not enable and arms up to
+                    RIIR_REFINE_AUTO_ORACLE_GAP_MAX_PASSES extra passes
+                    (default 3) over the distinct missing sets — the
+                    gated code the P43 class compiles to nothing at one
+                    posture; RIIR_REFINE_AUTO_ORACLE_GAP_ARM=0 restores the
+                    single-pass posture. `--oracle-census` prints what the
+                    current posture cannot see, without compiling.
+    --oracle-census Report the auto-oracle's blind spot for a cargo project:
+                    the per-workspace required-features census (metadata +
+                    manifest reads, NO compile) + the exact arming csv.
+                    Report-first, exit 0 on a real project; refuses exit 2
+                    on no-project / metadata failure — a blind report must
+                    never read as a confident no-gaps. Honors
+                    RIIR_REFINE_AUTO_ORACLE_FEATURES when set.
     --hotpath-json <path>  Feed a hotpath JSON report measured on the
                     target repo (Issue 146 / Proposal 020 — the
                     profile-guided-healing oracle lane). T0 validates +
@@ -7687,6 +7703,14 @@ struct Args {
     /// are given (each path = one corpus). Report-first, gates nothing;
     /// refuses exit 1 on empty / no-transition populations. Ungated.
     fixseq_stats: bool,
+    /// Owner mandate 2026-10-28: `--oracle-census` — the auto-oracle's
+    /// blind-spot report for a cargo project: the per-workspace
+    /// required-features census (metadata + manifest reads, NO compile) +
+    /// the exact arming csv. Report-first, exit 0 on a real project;
+    /// refuses exit 2 on no-project / metadata failure — a blind report
+    /// must never read as "no gaps". Ungated (the census module is always
+    /// compiled).
+    oracle_census: bool,
     /// Plan 124: `--config-audit` — the config-hygiene report (classes A+B
     /// from the post-mining intake): Default-impl fields that default to a
     /// const nobody's field-read while the const IS read elsewhere (the
@@ -7888,6 +7912,7 @@ fn parse_args() -> Args {
         horizon_report: false,
         fixseq_stats: false,
         config_audit: false,
+        oracle_census: false,
         secret_scan: false,
         blind: false,
         platform_audit: false,
@@ -8052,6 +8077,7 @@ fn parse_args() -> Args {
             "--horizon-report" => args.horizon_report = true,
             "--fixseq-stats" => args.fixseq_stats = true,
             "--config-audit" => args.config_audit = true,
+            "--oracle-census" => args.oracle_census = true,
             "--secret-scan" => args.secret_scan = true,
             "--blind" => args.blind = true,
             "--platform-audit" => args.platform_audit = true,
@@ -9294,6 +9320,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.horizon_report
         || args.fixseq_stats
         || args.config_audit
+        || args.oracle_census
         || args.secret_scan
         // Issue 151: `--blind` is the `--secret-scan` output transform and
         // is handled inside the secret-scan early-return — but it must
@@ -13215,6 +13242,42 @@ fn main() {
         return;
     }
 
+    // ── Owner mandate 2026-10-28: --oracle-census — the oracle posture
+    // report ─────────────────────────────────────────────────────────────
+    // What the auto-oracle's CURRENT posture cannot see: the per-workspace
+    // required-features census — the same parser the P43 audit and the
+    // oracle's gap-arming share, so the three surfaces cannot disagree.
+    // Report-first, exit 0 on a real project; refuses exit 2 on
+    // no-project / metadata failure — a blind report must never read as
+    // "no gaps" (the frontier-report refusal arm).
+    if args.oracle_census {
+        let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+        let Some(root) = riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd)
+        else {
+            let at = if args.paths.is_empty() {
+                ".".to_string()
+            } else {
+                format!("{:?}", args.paths)
+            };
+            eprintln!("oracle census: no cargo project found within bounds of {at} — nothing to census");
+            std::process::exit(2);
+        };
+        let features = riir_refine::clippy_oracle::auto_oracle_features();
+        let cargo_bin = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_string());
+        match riir_refine::clippy_oracle::census_report(
+            &root,
+            &cargo_bin,
+            features.as_deref().unwrap_or(&[]),
+        ) {
+            Ok(report) => print!("{report}"),
+            Err(e) => {
+                eprintln!("oracle census: {e}");
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
+
     // ── Plan 124: --config-audit — the config-hygiene report ──────────────
     // Report-first, gates nothing (the frontier-report law): classes A+B
     // from the post-mining intake. Always exit 0 — a report that reds is a
@@ -14584,49 +14647,127 @@ fn main() {
                         msg.to_owned()
                     }
                 };
-                match riir_refine::clippy_oracle::run_clippy(
+                // Owner mandate 2026-10-28 (the plan-306 Phase-2 rider's
+                // measured miss): the session runs the base pass AND (by
+                // default) the bounded gap passes over the required-features
+                // census — the gated code the P43 class compiles to nothing
+                // at one posture is linted at another. Every failure mode
+                // lands in a disclosed field; nothing here aborts the run.
+                let session = riir_refine::clippy_oracle::run_oracle_session(
                     &root,
                     &cargo_bin,
                     features.as_deref(),
                     all_targets,
-                ) {
-                    Ok(run) => {
-                        let diags = parse_clippy_feed(&run.text);
-                        match riir_refine::clippy_oracle::classify(run.exit, diags.len()) {
-                            riir_refine::clippy_oracle::OracleOutcome::Feed(n) => {
-                                eprintln!(
-                                    "clippy oracle (auto): {n} real diagnostic(s) anchored ahead of ranking"
-                                );
-                                Some(diags)
-                            }
-                            riir_refine::clippy_oracle::OracleOutcome::Clean => {
-                                // Word the arm honestly: with the knob active
-                                // this is clean at the REQUESTED features, not
-                                // at default ones.
-                                match features.as_deref() {
-                                    Some(set) => eprintln!(
-                                        "clippy oracle (auto): clean tree at features [{}] — covered spans will be marked heuristic",
-                                        set.join(",")
-                                    ),
-                                    None => eprintln!(
-                                        "clippy oracle (auto): clean tree at default features — covered spans will be marked heuristic"
-                                    ),
-                                }
-                                Some(diags)
-                            }
-                            riir_refine::clippy_oracle::OracleOutcome::Failed(msg) => {
-                                eprintln!(
-                                    "clippy oracle (auto): {} — continuing heuristic-only",
-                                    feature_hint(&msg)
-                                );
-                                None
-                            }
+                );
+                // ── the gap disclosures (stderr; the feed stays
+                // stdout-shaped). Opting out is quiet by design (the
+                // RIIR_REFINE_AUTO_ORACLE=0 law): GAP_ARM=0 prints nothing.
+                if let Some(err) = &session.base_spawn_error {
+                    eprintln!(
+                        "clippy oracle (auto): {} — continuing heuristic-only",
+                        feature_hint(err)
+                    );
+                } else if let Some(e) = &session.census_error {
+                    eprintln!(
+                        "clippy oracle (auto): required-features census unavailable ({e}) — coverage not assessed"
+                    );
+                } else if !session.census.is_empty()
+                    && riir_refine::clippy_oracle::auto_oracle_gap_arm()
+                    && riir_refine::clippy_oracle::auto_oracle_gap_max_passes() > 0
+                {
+                    let named = session.census.iter().take(8).map(|t| {
+                        format!("{}:{}←{}", t.package, t.target, t.missing.join("+"))
+                    });
+                    let mut list = named.collect::<Vec<_>>().join("; ");
+                    let more = session.census.len().saturating_sub(8);
+                    if more > 0 {
+                        list.push_str(&format!("; +{more} more"));
+                    }
+                    eprintln!(
+                        "clippy oracle (auto): {} required-features-gated target(s) invisible at this posture — {} gap pass(es) armed [{}]",
+                        session.census.len(),
+                        session.gaps.len(),
+                        list
+                    );
+                    for g in &session.gaps {
+                        let set = g.features.join(",");
+                        match (&g.spawn_error, g.exit) {
+                            (Some(e), _) => eprintln!(
+                                "clippy oracle (auto): gap pass features [{set}] failed to spawn ({e}) — covers nothing"
+                            ),
+                            (_, Some(0)) => eprintln!(
+                                "clippy oracle (auto): gap pass features [{set}] exit 0 (+{} new line(s))",
+                                g.new_lines
+                            ),
+                            (_, Some(code)) => eprintln!(
+                                "clippy oracle (auto): gap pass features [{set}] exited {code} (partial compile — its diagnostics are still real)"
+                            ),
+                            (_, None) => eprintln!(
+                                "clippy oracle (auto): gap pass features [{set}] was killed by a signal — covers nothing"
+                            ),
                         }
                     }
-                    Err(e) => {
+                    if !session.uncovered.is_empty() {
+                        let remedy = riir_refine::clippy_oracle::gap_feature_sets(&session.uncovered)
+                            .iter()
+                            .take(8)
+                            .map(|s| s.join("+"))
+                            .collect::<Vec<_>>()
+                            .join(" | ");
+                        eprintln!(
+                            "clippy oracle (auto): {} gated target(s) remain UNCOVERED — arm with RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> (distinct sets: {remedy})",
+                            session.uncovered.len()
+                        );
+                    }
+                }
+                let diags = parse_clippy_feed(&session.text);
+                let outcome = if !diags.is_empty() {
+                    riir_refine::clippy_oracle::OracleOutcome::Feed(diags.len())
+                } else if let Some(err) = &session.base_spawn_error {
+                    riir_refine::clippy_oracle::OracleOutcome::Failed(feature_hint(err))
+                } else if session.base_exit == Some(0)
+                    && session.gaps.iter().all(|g| g.exit == Some(0))
+                {
+                    riir_refine::clippy_oracle::OracleOutcome::Clean
+                } else {
+                    let code = session
+                        .base_exit
+                        .map_or_else(|| "signal".to_string(), |c| c.to_string());
+                    riir_refine::clippy_oracle::OracleOutcome::Failed(format!(
+                        "clippy exited {code} with no parseable diagnostics (compile error? — check the gap-pass lines above)"
+                    ))
+                };
+                match outcome {
+                    riir_refine::clippy_oracle::OracleOutcome::Feed(n) => {
+                        eprintln!(
+                            "clippy oracle (auto): {n} real diagnostic(s) anchored ahead of ranking"
+                        );
+                        Some(diags)
+                    }
+                    riir_refine::clippy_oracle::OracleOutcome::Clean => {
+                        // Word the arm honestly: with the knob active this is
+                        // clean at the REQUESTED features, not at default
+                        // ones; armed gap posture(s) extend the claim.
+                        let gaps_note = if session.gaps.is_empty() {
+                            String::new()
+                        } else {
+                            format!(" +{} gap posture(s)", session.gaps.len())
+                        };
+                        match features.as_deref() {
+                            Some(set) => eprintln!(
+                                "clippy oracle (auto): clean tree at features [{}]{gaps_note} — covered spans will be marked heuristic",
+                                set.join(",")
+                            ),
+                            None => eprintln!(
+                                "clippy oracle (auto): clean tree at default features{gaps_note} — covered spans will be marked heuristic"
+                            ),
+                        }
+                        Some(diags)
+                    }
+                    riir_refine::clippy_oracle::OracleOutcome::Failed(msg) => {
                         eprintln!(
                             "clippy oracle (auto): {} — continuing heuristic-only",
-                            feature_hint(&e)
+                            feature_hint(&msg)
                         );
                         None
                     }
@@ -18301,6 +18442,7 @@ mod mode_flag_tests {
             ("--fixseq-stats", Box::new(|m| m.fixseq_stats = true)),
             ("--coverage-report", Box::new(|m| m.coverage_report = true)),
             ("--config-audit", Box::new(|m| m.config_audit = true)),
+            ("--oracle-census", Box::new(|m| m.oracle_census = true)),
             ("--secret-scan", Box::new(|m| m.secret_scan = true)),
             ("--blind", Box::new(|m| m.blind = true)),
             ("--platform-audit", Box::new(|m| m.platform_audit = true)),

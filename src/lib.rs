@@ -200,6 +200,14 @@ pub mod draft;
 // required-feature set would not compile.
 pub mod clippy_oracle;
 
+// The shared manifest-gate parser substrate (feature tables + target rows +
+// the required-features census) — UNGATED for the same reason: the oracle's
+// gap-arming census consumes it at every feature posture, and `fix_verify`'s
+// P43 audit consumes the SAME parser (re-exported there) so the finding side
+// and the verify side cannot disagree. serde_json only for the oracle's
+// `cargo metadata` read (already a main dep). Zero new deps.
+pub mod manifest_gate;
+
 // Issue 146 T0.1 / Proposal 020: the hotpath report subset — parse + SHA
 // keying + hot-span derivation for the profile-guided-healing oracle lane
 // (the `--clippy-json` anchor-lane pattern over runtime profiles). Ungated:

@@ -84,8 +84,8 @@ use serde::Deserialize;
 // Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict, PackageGraph,
+    CheckRunner, CheckVerdict, PackageGraph, check_verdict, owning_package_root,
+    resolve_reported_path, workspace_root,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -700,55 +700,16 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
         .count()
 }
 
-/// The cfg-audit half of the same scan: the package's `default` feature
-/// list + every declared feature key (the feature-set constructor below
-/// consumes both; `manifest_nondefault_feature_count` is the count-shaped
-/// consumer of the same parse).
-#[must_use]
-pub fn manifest_feature_names(manifest_text: &str) -> (Vec<String>, Vec<String>) {
-    let mut in_features = false;
-    let mut default_deps: Vec<String> = Vec::new();
-    let mut keys: Vec<String> = Vec::new();
-    // `default = [\n "a",\n "b",\n]` spans lines — accumulate the value
-    // until the next key or section.
-    let mut pending_default: Option<String> = None;
-    let finalize_default = |pending: &mut Option<String>, out: &mut Vec<String>| {
-        if let Some(value) = pending.take() {
-            for part in value.trim_matches(['[', ']']).split(',') {
-                let p = part.trim().trim_matches('"');
-                if !p.is_empty() {
-                    out.push(p.to_string());
-                }
-            }
-        }
-    };
-    for line in manifest_text.lines() {
-        let t = line.trim();
-        if t.starts_with('[') {
-            in_features = t == "[features]";
-            finalize_default(&mut pending_default, &mut default_deps);
-            continue;
-        }
-        if !in_features {
-            continue;
-        }
-        if let Some(eq) = t.find('=') {
-            finalize_default(&mut pending_default, &mut default_deps);
-            let key = t[..eq].trim().trim_matches('"');
-            let value = t[eq + 1..].trim();
-            if key == "default" {
-                pending_default = Some(value.to_string());
-            } else {
-                keys.push(key.to_string());
-            }
-        } else if let Some(pd) = pending_default.as_mut() {
-            pd.push(' ');
-            pd.push_str(t);
-        }
-    }
-    finalize_default(&mut pending_default, &mut default_deps);
-    (default_deps, keys)
-}
+// The manifest-gate parser substrate (feature tables + target rows) moved to
+// the UNGATED `crate::manifest_gate` — the auto-oracle's gap-arming census
+// must share the SAME parser at every feature posture (clippy_oracle
+// compiles ungated, this module does not). Re-exported here so every
+// existing call site — the bin's P43 arm, this suite, downstream paths —
+// keeps its stable path.
+pub use crate::manifest_gate::{
+    AutoFlags, FeatureSet, TargetRow, covering_targets, feature_set_from_args,
+    manifest_feature_names, manifest_targets,
+};
 
 // ── the post-heal cfg audit (the 2026-09-10 intake) ─────────────────────
 //
@@ -778,73 +739,6 @@ pub fn manifest_feature_names(manifest_text: &str) -> (Vec<String>, Vec<String>)
 // count as mutations (syn cannot see &self vs &mut self — over-marking,
 // conservative), mutations inside macro bodies are invisible, and
 // shadowed same-name bindings may over-mark.
-
-/// The enabled-feature set the verify gate compiled with.
-#[derive(Debug, Clone, Default)]
-pub struct FeatureSet {
-    /// `--all-features` was passed — every declared feature is on.
-    pub all_on: bool,
-    /// Explicitly enabled feature names (crate defaults + parsed
-    /// `--features` entries that name THIS crate's features).
-    pub names: std::collections::HashSet<String>,
-}
-
-impl FeatureSet {
-    #[must_use]
-    pub fn contains(&self, feature: &str) -> bool {
-        self.all_on || self.names.contains(feature)
-    }
-}
-
-/// Assemble the enabled set the gate compiled with: the manifest's default
-/// features (unless `--no-default-features`) + every `--features` entry
-/// naming one of the manifest's own features (dep-prefixed `a/b` and
-/// `a?/b` forms name OTHER crates' features — ignored). `--all-features`
-/// switches `all_on`, which short-circuits every feature atom to enabled.
-#[must_use]
-pub fn feature_set_from_args(manifest_text: &str, verify_args: Option<&str>) -> FeatureSet {
-    let (defaults, keys) = manifest_feature_names(manifest_text);
-    let mut set = FeatureSet::default();
-    let Some(args) = verify_args else {
-        set.names.extend(defaults);
-        return set;
-    };
-    let tokens: Vec<&str> = args.split_whitespace().collect();
-    if tokens.contains(&"--all-features") {
-        set.all_on = true;
-        set.names.extend(defaults);
-        set.names.extend(keys);
-        return set;
-    }
-    if !tokens.contains(&"--no-default-features") {
-        set.names.extend(defaults);
-    }
-    let mut requested: Vec<String> = Vec::new();
-    let mut iter = tokens.iter().peekable();
-    while let Some(t) = iter.next() {
-        let value = if let Some(rest) = t.strip_prefix("--features=") {
-            Some(rest.to_string())
-        } else if *t == "--features" {
-            iter.next().map(|v| (*v).to_string())
-        } else {
-            None
-        };
-        if let Some(v) = value {
-            requested.extend(
-                v.split([',', ' ', '\t'])
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .map(str::to_string),
-            );
-        }
-    }
-    for r in requested {
-        if keys.contains(&r) {
-            set.names.insert(r);
-        }
-    }
-    set
-}
 
 /// Issue 182: one candidate parent source for an edited file — the file
 /// whose `mod <name>;` declaration may gate the whole edited file. The
@@ -943,8 +837,7 @@ fn parent_decl_gates(parent_src: &str, name: &str) -> DeclScan {
         if let syn::Item::Mod(m) = item {
             if m.ident == name && m.content.is_none() {
                 declared = true;
-                let exprs: Vec<CfgExpr> =
-                    m.attrs.iter().filter_map(cfg_expr_from_attr).collect();
+                let exprs: Vec<CfgExpr> = m.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                 if !exprs.is_empty() {
                     gates.push(conjoin(exprs));
                 }
@@ -1088,11 +981,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::True => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::True
-            }
+            if any_unknown { Tv::Unknown } else { Tv::True }
         }
         CfgExpr::Any(parts) => {
             let mut any_unknown = false;
@@ -1103,11 +992,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::False => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::False
-            }
+            if any_unknown { Tv::Unknown } else { Tv::False }
         }
     }
 }
@@ -1283,7 +1168,7 @@ fn item_cfg_regions(item: &syn::Item, out: &mut Vec<CfgRegion>) {
         .collect();
     if let (Some((start, end)), false) = (span_lines(item), exprs.is_empty()) {
         out.push(CfgRegion {
-decl_parent: None,
+            decl_parent: None,
             start_line: start,
             end_line: end,
             expr: conjoin(exprs),
@@ -1306,7 +1191,7 @@ decl_parent: None,
                     .collect();
                 if let (Some((s, e)), false) = (span_lines(ii), inner_exprs.is_empty()) {
                     out.push(CfgRegion {
-decl_parent: None,
+                        decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(inner_exprs),
@@ -1325,7 +1210,7 @@ decl_parent: None,
                     .collect();
                 if let (Some((s, e)), false) = (span_lines(ti), inner_exprs.is_empty()) {
                     out.push(CfgRegion {
-decl_parent: None,
+                        decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(inner_exprs),
@@ -1358,7 +1243,7 @@ fn stmt_cfg_regions(stmts: &[syn::Stmt], out: &mut Vec<CfgRegion>) {
             .collect();
         if let (Some((s, e)), false) = (span_lines(stmt), exprs.is_empty()) {
             out.push(CfgRegion {
-decl_parent: None,
+                decl_parent: None,
                 start_line: s,
                 end_line: e,
                 expr: conjoin(exprs),
@@ -1375,7 +1260,7 @@ decl_parent: None,
                         be.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                     if let (Some((s, e2)), false) = (span_lines(stmt), block_exprs.is_empty()) {
                         out.push(CfgRegion {
-decl_parent: None,
+                            decl_parent: None,
                             start_line: s,
                             end_line: e2,
                             expr: conjoin(block_exprs),
@@ -1411,7 +1296,7 @@ fn expr_cfg_regions(expr: &syn::Expr, out: &mut Vec<CfgRegion>) {
                 let exprs: Vec<CfgExpr> = arm.attrs.iter().filter_map(cfg_expr_from_attr).collect();
                 if let (Some((s, e)), false) = (span_lines(arm), exprs.is_empty()) {
                     out.push(CfgRegion {
-decl_parent: None,
+                        decl_parent: None,
                         start_line: s,
                         end_line: e,
                         expr: conjoin(exprs),
@@ -1858,231 +1743,11 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
 //   practice — a lib row WITH unsatisfied required-features marks the whole
 //   tree, correctly);
 // - glob-free: `path` match is exact, `./` prefixes normalized on both sides.
-
-/// One cargo target row, restricted to what the audit reads.
-#[derive(Debug, Clone, PartialEq)]
-struct TargetRow {
-    kind: &'static str,
-    name: Option<String>,
-    /// The package-relative path cargo compiles this row from: the explicit
-    /// `path` (`/`-separated, `./` stripped), else the kind/name default
-    /// (`src/lib.rs`, `src/main.rs` for the main bin, `src/bin/<name>.rs`,
-    /// `tests/<name>.rs`, `benches/<name>.rs`, `examples/<name>.rs`) —
-    /// resolved once at the end of [`manifest_targets`]. `None` = the row
-    /// covers nothing matchable (no path and no name).
-    path: Option<String>,
-    required_features: Vec<String>,
-}
-
-/// The `[package]` auto-discovery switches (cargo defaults: all true).
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[allow(clippy::struct_excessive_bools)] // mirrors cargo's four independent [package] switches
-struct AutoFlags {
-    bins: bool,
-    tests: bool,
-    benches: bool,
-    examples: bool,
-}
-
-impl Default for AutoFlags {
-    fn default() -> Self {
-        Self {
-            bins: true,
-            tests: true,
-            benches: true,
-            examples: true,
-        }
-    }
-}
-
-/// Parse the manifest's target rows + auto-discovery flags. Line-based, the
-/// `manifest_feature_names` style — no toml dep (the module's other manifest
-/// readers set that precedent); multiline `required-features = [ … ]` arrays
-/// accumulate until the closing bracket, like the `default = [ … ]` reader.
-fn manifest_targets(manifest_text: &str) -> (Vec<TargetRow>, AutoFlags) {
-    let mut rows: Vec<TargetRow> = Vec::new();
-    let mut auto = AutoFlags::default();
-    let mut pkg_name: Option<String> = None;
-    // `Some(kind)` while inside a `[[kind]]` row; `[lib]` maps to the same
-    // shape. Any other section header closes the current row.
-    let mut current: Option<(&'static str, TargetRow)> = None;
-    let mut pending_rf: Option<String> = None;
-    let finalize_rf = |pending: &mut Option<String>, row: &mut TargetRow| {
-        if let Some(value) = pending.take() {
-            for part in value.trim_matches(['[', ']']).split(',') {
-                let p = part.trim().trim_matches('"');
-                if !p.is_empty() {
-                    row.required_features.push(p.to_string());
-                }
-            }
-        }
-    };
-    let mut close_row = |current: &mut Option<(&'static str, TargetRow)>,
-                         pending: &mut Option<String>| {
-        if let Some((_, mut row)) = current.take() {
-            finalize_rf(pending, &mut row);
-            rows.push(row);
-        }
-    };
-    for line in manifest_text.lines() {
-        let t = line.trim();
-        if t.starts_with('[') {
-            close_row(&mut current, &mut pending_rf);
-            if let Some(kind) = target_kind_from_header(t) {
-                current = Some((
-                    kind,
-                    TargetRow {
-                        kind,
-                        name: None,
-                        path: None,
-                        required_features: Vec::new(),
-                    },
-                ));
-            }
-            continue;
-        }
-        if let Some((kind, row)) = current.as_mut() {
-            if let Some(pending) = pending_rf.as_mut() {
-                pending.push(' ');
-                pending.push_str(t);
-                if pending.contains(']') {
-                    finalize_rf(&mut pending_rf, row);
-                }
-                continue;
-            }
-            let Some(eq) = t.find('=') else {
-                continue;
-            };
-            let key = t[..eq].trim();
-            let value = t[eq + 1..].trim();
-            match key {
-                "name" => {
-                    let n = value.trim().trim_matches('"');
-                    if !n.is_empty() {
-                        row.name = Some(n.to_string());
-                    }
-                }
-                "path" => {
-                    let p = value.trim().trim_matches('"').trim_start_matches("./");
-                    if !p.is_empty() {
-                        row.path = Some(p.to_string());
-                    }
-                }
-                "required-features" => {
-                    if value.contains(']') {
-                        let mut holder = Some(value.to_string());
-                        finalize_rf(&mut holder, row);
-                    } else if value.starts_with('[') {
-                        pending_rf = Some(value.to_string());
-                    }
-                }
-                _ => {
-                    let _ = kind; // harness/test flags: not audit inputs
-                }
-            }
-        } else {
-            apply_package_line(t, &mut auto, &mut pkg_name);
-        }
-    }
-    close_row(&mut current, &mut pending_rf);
-    resolve_default_target_paths(&mut rows, pkg_name.as_deref());
-    (rows, auto)
-}
-
-/// The target-row header a section line names, if any.
-fn target_kind_from_header(t: &str) -> Option<&'static str> {
-    match t {
-        "[lib]" => Some("lib"),
-        "[[bin]]" => Some("bin"),
-        "[[test]]" => Some("test"),
-        "[[bench]]" => Some("bench"),
-        "[[example]]" => Some("example"),
-        _ => None,
-    }
-}
-
-/// The `[package]`-section lines the audit reads: the four auto-discovery
-/// switches and the crate `name` (the main bin's default-path input).
-fn apply_package_line(t: &str, auto: &mut AutoFlags, pkg_name: &mut Option<String>) {
-    if let Some((key, value)) = t.split_once('=') {
-        let on = value.trim() != "false";
-        match key.trim() {
-            "autobins" => auto.bins = on,
-            "autotests" => auto.tests = on,
-            "autobenches" => auto.benches = on,
-            "autoexamples" => auto.examples = on,
-            "name" => *pkg_name = Some(value.trim().trim_matches('"').to_string()),
-            _ => {}
-        }
-    }
-}
-
-/// Fill each row's `path` from the kind/name default when the manifest gave
-/// no explicit one (`src/lib.rs`, `src/main.rs` for the main bin,
-/// `src/bin/<n>.rs`, `tests/<n>.rs`, `benches/<n>.rs`, `examples/<n>.rs`); a
-/// row with neither path nor name covers nothing matchable.
-fn resolve_default_target_paths(rows: &mut [TargetRow], pkg_name: Option<&str>) {
-    for row in rows.iter_mut() {
-        if row.path.is_none() {
-            row.path = row.name.as_deref().and_then(|name| match row.kind {
-                "lib" => Some("src/lib.rs".to_string()),
-                "bin" if Some(name) == pkg_name => Some("src/main.rs".to_string()),
-                "bin" => Some(format!("src/bin/{name}.rs")),
-                "test" => Some(format!("tests/{name}.rs")),
-                "bench" => Some(format!("benches/{name}.rs")),
-                "example" => Some(format!("examples/{name}.rs")),
-                _ => None,
-            });
-        }
-    }
-}
-
-/// The targets covering `rel` (package-relative, `/`-separated): resolved
-/// rows matched by path first, then the auto-discovery conventions. An empty
-/// result means no target compiles the file at any posture (orphan).
-fn covering_targets(rel: &str, rows: &[TargetRow], auto: AutoFlags) -> Vec<TargetRow> {
-    let rel = rel.trim_start_matches("./");
-    let explicit: Vec<TargetRow> = rows
-        .iter()
-        .filter(|r| r.path.as_deref() == Some(rel))
-        .cloned()
-        .collect();
-    if !explicit.is_empty() {
-        return explicit;
-    }
-    let implicit = |kind: &'static str| TargetRow {
-        kind,
-        name: None,
-        path: Some(rel.to_string()),
-        required_features: Vec::new(),
-    };
-    if rel == "src/lib.rs" || (rel.starts_with("src/") && !rel.starts_with("src/bin/")) {
-        // The lib module tree — [lib] has no required-features gate in
-        // practice, and --lib compiles it unconditionally.
-        return vec![implicit("lib")];
-    }
-    if rel == "src/main.rs" || rel.starts_with("src/bin/") {
-        return auto.bins.then(|| implicit("bin")).into_iter().collect();
-    }
-    if rel.starts_with("tests/") {
-        return auto.tests.then(|| implicit("test")).into_iter().collect();
-    }
-    if rel.starts_with("benches/") {
-        return auto
-            .benches
-            .then(|| implicit("bench"))
-            .into_iter()
-            .collect();
-    }
-    if rel.starts_with("examples/") {
-        return auto
-            .examples
-            .then(|| implicit("example"))
-            .into_iter()
-            .collect();
-    }
-    Vec::new()
-}
+//
+// The target-row parser + covering resolver live in the shared ungated
+// `crate::manifest_gate` (re-exported at the top of this module) — one
+// parser, so this audit and the oracle's gap-arming census cannot disagree;
+// this module keeps only the P43 audit over them.
 
 /// One required-features/orphan mark, per kept edit.
 #[derive(Debug, Clone)]
@@ -3079,7 +2744,9 @@ mod tests {
         }
     }
 
-    fn parent_map(entries: &[(&str, &str)]) -> std::collections::HashMap<PathBuf, Vec<ParentSource>> {
+    fn parent_map(
+        entries: &[(&str, &str)],
+    ) -> std::collections::HashMap<PathBuf, Vec<ParentSource>> {
         let mut map = std::collections::HashMap::new();
         let sources: Vec<ParentSource> = entries
             .iter()
@@ -3099,17 +2766,33 @@ mod tests {
         let parents = parent_map(&[("src/kat/mod.rs", parent)]);
         let set = fset(&[]);
         let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
-        assert_eq!(marks.len(), 2, "every edit sits behind the file gate: {marks:?}");
-        assert!(marks.iter().all(|m| m.not_enabled == vec!["kat_migrate".to_string()]));
+        assert_eq!(
+            marks.len(),
+            2,
+            "every edit sits behind the file gate: {marks:?}"
+        );
+        assert!(
+            marks
+                .iter()
+                .all(|m| m.not_enabled == vec!["kat_migrate".to_string()])
+        );
         assert!(marks.iter().all(|m| m.undecidable.is_empty()));
         assert!(
-            marks.iter().all(|m| m.mod_decl.as_deref() == Some(Path::new("src/kat/mod.rs"))),
+            marks
+                .iter()
+                .all(|m| m.mod_decl.as_deref() == Some(Path::new("src/kat/mod.rs"))),
             "{marks:?}"
         );
         // The render names the parent + the re-run.
         let rendered = render_cfg_audit(&marks, None);
-        assert!(rendered.contains("`mod` declaration in `src/kat/mod.rs`"), "{rendered}");
-        assert!(rendered.contains("--verify-args \"--features kat_migrate\""), "{rendered}");
+        assert!(
+            rendered.contains("`mod` declaration in `src/kat/mod.rs`"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("--verify-args \"--features kat_migrate\""),
+            "{rendered}"
+        );
     }
 
     #[test]
@@ -3148,7 +2831,10 @@ mod tests {
         let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
         assert_eq!(marks.len(), 2, "{marks:?}");
         assert!(marks.iter().all(|m| m.not_enabled.is_empty()));
-        assert_eq!(marks.iter().filter(|m| !m.undecidable.is_empty()).count(), 2);
+        assert_eq!(
+            marks.iter().filter(|m| !m.undecidable.is_empty()).count(),
+            2
+        );
     }
 
     #[test]
@@ -3160,7 +2846,10 @@ mod tests {
         let parents = parent_map(&[("src/kat/mod.rs", parent)]);
         let set = fset(&[]);
         let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
-        assert!(marks.is_empty(), "one twin arm is always True on-host: {marks:?}");
+        assert!(
+            marks.is_empty(),
+            "one twin arm is always True on-host: {marks:?}"
+        );
         // Feature twins with BOTH off: the file compiles to nothing.
         let parent = "#[cfg(feature = \"a\")]\nmod migrate_sweep;\n\n#[cfg(feature = \"b\")]\nmod migrate_sweep;\n";
         let parents = parent_map(&[("src/kat/mod.rs", parent)]);

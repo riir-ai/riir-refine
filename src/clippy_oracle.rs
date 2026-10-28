@@ -24,7 +24,7 @@
 //! status line) and never silently changes the verdict of a run it could
 //! not anchor.
 //!
-//! Default-features scoping is honest, not complete: cfg-gated code compiles
+//! Default-features scoping was honest, not complete: cfg-gated code compiles
 //! to nothing under it (the workspace's own blindness class —
 //! `consumer_residue_sweep.sh` runs `--all-features` for exactly this
 //! reason). Issue 115 added the operator re-aim:
@@ -33,7 +33,24 @@
 //! materially slower; unknown feature names fail the clippy spawn, which
 //! degrades LOUD to heuristic-only naming the knob). `--all-features`
 //! stays a deliberate non-default (cost + sibling feature-combo explosion);
-//! the auto-run never widens its own scope that way.
+//! the auto-run never widens its own scope that far.
+//!
+//! GAP-ARMING is the default since the owner mandate of 2026-10-28 (the
+//! plan-306 Phase-2 rider's measured miss: `ptr_arg` on a gated BM25 bench
+//! never anchored until the oracle was re-aimed by hand): after the base
+//! pass, the oracle runs `cargo metadata --no-deps` (manifest data only, no
+//! compile), censuses every workspace target whose `required-features` the
+//! posture does not enable (the SAME parser the P43 post-verify audit uses —
+//! one home, the two surfaces cannot disagree), and arms bounded extra
+//! passes over the distinct missing feature sets — one pass per set,
+//! `RIIR_REFINE_AUTO_ORACLE_GAP_MAX_PASSES` (default 3), diagnostics merged
+//! and deduped line-wise. A failed gap pass is disclosed and covers NOTHING
+//! (a compile failure lints nothing — honest uncovered, never a green pass
+//! over absent work); targets no pass covered are named with the exact env
+//! csv to arm them. `RIIR_REFINE_AUTO_ORACLE_GAP_ARM=0` restores the
+//! single-pass posture (census + disclosure only). The census also ships as
+//! `cargo refine --oracle-census` — the sweep-side instrument that keeps a
+//! "clean" clippy sweep from reading green over skipped gated targets.
 //!
 //! `--all-targets` IS the default (2026-09-21, the riir-chain/riir-ai intake
 //! pair): without it the spawn lints only lib targets, so every `mod tests`
@@ -45,6 +62,7 @@
 //! (only explicit truthy spellings disable; a typo must not silently
 //! restore the blind posture).
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -80,11 +98,7 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
-    if list.is_empty() {
-        None
-    } else {
-        Some(list)
-    }
+    if list.is_empty() { None } else { Some(list) }
 }
 
 /// The live env read.
@@ -115,6 +129,364 @@ pub fn auto_oracle_all_targets() -> bool {
             .ok()
             .as_deref(),
     )
+}
+
+/// Kill-switch predicate over the raw `RIIR_REFINE_AUTO_ORACLE_GAP_ARM`
+/// value (owner mandate 2026-10-28): gap-arming is DEFAULT-ON; only explicit
+/// falsy spellings disable — the same typo-proof contract as
+/// [`enabled_from`].
+#[must_use]
+pub fn gap_arm_from(v: Option<&str>) -> bool {
+    !matches!(v.map(str::trim), Some("0" | "false" | "no" | "off"))
+}
+
+/// The live env read.
+#[must_use]
+pub fn auto_oracle_gap_arm() -> bool {
+    gap_arm_from(
+        std::env::var("RIIR_REFINE_AUTO_ORACLE_GAP_ARM")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// The gap-pass bound over the raw `RIIR_REFINE_AUTO_ORACLE_GAP_MAX_PASSES`
+/// value: default 3; `0` = off; a garbage value parses to the DEFAULT — a
+/// typo must not silently disable the coverage (the `enabled_from` law).
+#[must_use]
+pub fn gap_max_passes_from(v: Option<&str>) -> usize {
+    match v.map(str::trim) {
+        None | Some("") => 3,
+        Some(s) => s.parse::<usize>().unwrap_or(3),
+    }
+}
+
+/// The live env read.
+#[must_use]
+pub fn auto_oracle_gap_max_passes() -> usize {
+    gap_max_passes_from(
+        std::env::var("RIIR_REFINE_AUTO_ORACLE_GAP_MAX_PASSES")
+            .ok()
+            .as_deref(),
+    )
+}
+
+/// One cargo target the invocation posture does not compile (the finding-side
+/// twin of `fix_verify`'s P43 audit — see the module doc): an explicit
+/// `[[test]]`/`[[bench]]`/`[[example]]`/`[[bin]]` row whose
+/// `required-features` are not all enabled. `--all-targets` SKIPS it
+/// silently — it compiles to nothing — so every clippy finding inside it is
+/// invisible to the anchor lane (measured 2026-10-28: `ptr_arg` on a gated
+/// BM25 bench never anchored until the oracle was re-aimed by hand — the
+/// plan-306 Phase-2 rider).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedTarget {
+    pub package: String,
+    /// Target name (or its declared path when the row names neither).
+    pub target: String,
+    /// `test` / `bench` / `example` / `bin` / `lib` / `custom-build`.
+    pub kind: String,
+    /// Required-features not enabled at this posture, manifest order.
+    pub missing: Vec<String>,
+}
+
+/// One extra pass armed for a distinct missing-feature set.
+#[derive(Debug)]
+pub struct GapRun {
+    pub features: Vec<String>,
+    /// `None` = killed by signal (or never spawned — see `spawn_error`).
+    pub exit: Option<i32>,
+    /// stdout lines unique to this pass (deduped against every earlier pass).
+    pub new_lines: usize,
+    pub spawn_error: Option<String>,
+}
+
+/// The whole oracle posture: the base pass the knobs asked for, plus (by
+/// default) the bounded gap passes over the required-features census.
+pub struct OracleSession {
+    /// Merged stdout of every pass — unique lines, base-pass order first;
+    /// feeds the same parse path a manual `--clippy-json` feed uses.
+    pub text: String,
+    /// The base pass's exit (`None` = killed by signal or never spawned).
+    pub base_exit: Option<i32>,
+    pub base_spawn_error: Option<String>,
+    /// Targets the base posture skips. Empty alongside a `census_error`
+    /// means the census could not run — never a clean census.
+    pub census: Vec<SkippedTarget>,
+    pub census_error: Option<String>,
+    pub gaps: Vec<GapRun>,
+    /// Census entries no successful pass covered (arming off, the bound
+    /// exhausted, or every pass over their set failed).
+    pub uncovered: Vec<SkippedTarget>,
+}
+
+/// `(package name, manifest path)` for every workspace member: exactly the
+/// packages `cargo clippy --workspace` visits, from `cargo metadata
+/// --format-version 1 --no-deps` (no network, no compile — manifest data
+/// only).
+///
+/// # Errors
+///
+/// The spawn failure verbatim, a non-zero `cargo metadata` exit, or a body
+/// that is not the expected JSON shape — the caller discloses; a silent
+/// empty list would read as "no gaps".
+pub fn workspace_manifest_paths(
+    root: &Path,
+    cargo_bin: &str,
+) -> Result<Vec<(String, PathBuf)>, String> {
+    let output = Command::new(cargo_bin)
+        .args(["metadata", "--format-version", "1", "--no-deps"])
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("cannot spawn `{cargo_bin} metadata`: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "`cargo metadata` exited {} in {}",
+            output
+                .status
+                .code()
+                .map_or_else(|| "a signal".to_string(), |c| c.to_string()),
+            root.display()
+        ));
+    }
+    parse_metadata_manifest_paths(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Pure half of [`workspace_manifest_paths`] (testable).
+fn parse_metadata_manifest_paths(text: &str) -> Result<Vec<(String, PathBuf)>, String> {
+    let v: serde_json::Value = serde_json::from_str(text)
+        .map_err(|e| format!("`cargo metadata` output is not JSON: {e}"))?;
+    let Some(packages) = v.get("packages").and_then(serde_json::Value::as_array) else {
+        return Err("`cargo metadata` output has no packages array".to_string());
+    };
+    let mut out = Vec::new();
+    for p in packages {
+        let name = p.get("name").and_then(serde_json::Value::as_str);
+        let path = p.get("manifest_path").and_then(serde_json::Value::as_str);
+        if let (Some(name), Some(path)) = (name, path) {
+            if !name.is_empty() && !path.is_empty() {
+                out.push((name.to_string(), PathBuf::from(path)));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The skipped-target census over one workspace: for each member package,
+/// every explicit target row whose `required-features` survive the
+/// invocation's feature view — the package's defaults plus the CLI features
+/// that name it (plain, or `pkg/feat` / `pkg?/feat`-qualified; the shared
+/// [`crate::fix_verify::feature_set_from_args`] ignores qualified forms by
+/// design because they name OTHER crates' features, so the ones naming THIS
+/// package are resolved here). Manifest reads only — no cargo, no compile.
+#[must_use]
+pub fn skipped_targets(
+    packages: &[(String, PathBuf)],
+    cli_features: &[String],
+) -> Vec<SkippedTarget> {
+    let mut out = Vec::new();
+    for (pkg, manifest) in packages {
+        let Ok(text) = std::fs::read_to_string(manifest) else {
+            continue; // unreadable manifest: the clippy spawn fails loudly anyway
+        };
+        let args = if cli_features.is_empty() {
+            None
+        } else {
+            Some(format!("--features {}", cli_features.join(",")))
+        };
+        let mut set = crate::manifest_gate::feature_set_from_args(&text, args.as_deref());
+        for cli in cli_features {
+            let Some((owner, feat)) = cli.split_once('/') else {
+                continue;
+            };
+            if owner.trim_end_matches('?') == pkg {
+                set.names.insert(feat.to_string());
+            }
+        }
+        for (target, kind, missing) in
+            crate::manifest_gate::required_features_skipped_targets(&text, &set)
+        {
+            out.push(SkippedTarget {
+                package: pkg.clone(),
+                target,
+                kind,
+                missing,
+            });
+        }
+    }
+    out
+}
+
+/// Distinct missing-feature sets across the census, first-appearance order,
+/// UNQUALIFIED names — `cargo --features name` enables `name` in every
+/// workspace package that declares it, which is exactly the arming a gap
+/// pass needs (an unrelated package sharing the name gains the feature too;
+/// that only widens the lint surface, never narrows it).
+#[must_use]
+pub fn gap_feature_sets(skipped: &[SkippedTarget]) -> Vec<Vec<String>> {
+    let mut out: Vec<Vec<String>> = Vec::new();
+    for t in skipped {
+        let mut set = t.missing.clone();
+        set.sort();
+        if !out.contains(&set) {
+            out.push(set);
+        }
+    }
+    out
+}
+
+fn sorted_covers(gap_sorted: &[String], missing_sorted: &[String]) -> bool {
+    missing_sorted
+        .iter()
+        .all(|m| gap_sorted.iter().any(|g| g == m))
+}
+
+/// Run the full oracle posture in `root`: the base pass exactly as the knobs
+/// request it, then (default) the bounded gap passes. Never panics, never
+/// aborts the caller's run — every failure mode lands in a field the caller
+/// discloses.
+#[must_use]
+pub fn run_oracle_session(
+    root: &Path,
+    cargo_bin: &str,
+    features: Option<&[String]>,
+    all_targets: bool,
+) -> OracleSession {
+    let mut session = OracleSession {
+        text: String::new(),
+        base_exit: None,
+        base_spawn_error: None,
+        census: Vec::new(),
+        census_error: None,
+        gaps: Vec::new(),
+        uncovered: Vec::new(),
+    };
+    match run_clippy(root, cargo_bin, features, all_targets) {
+        Ok(run) => {
+            session.text = run.text;
+            session.base_exit = run.exit;
+        }
+        Err(e) => session.base_spawn_error = Some(e),
+    }
+    let cli: &[String] = features.unwrap_or(&[]);
+    match workspace_manifest_paths(root, cargo_bin) {
+        Ok(packages) => session.census = skipped_targets(&packages, cli),
+        Err(e) => session.census_error = Some(e),
+    }
+    let max_passes = auto_oracle_gap_max_passes();
+    let armed = session.base_spawn_error.is_none() && auto_oracle_gap_arm() && max_passes > 0;
+    if armed {
+        let mut seen: HashSet<String> = session.text.lines().map(str::to_owned).collect();
+        for set in gap_feature_sets(&session.census)
+            .into_iter()
+            .take(max_passes)
+        {
+            match run_clippy(root, cargo_bin, Some(set.as_slice()), all_targets) {
+                Ok(run) => {
+                    let mut new_lines = 0usize;
+                    for line in run.text.lines() {
+                        if seen.insert(line.to_owned()) {
+                            new_lines += 1;
+                            session.text.push_str(line);
+                            session.text.push('\n');
+                        }
+                    }
+                    session.gaps.push(GapRun {
+                        features: set,
+                        exit: run.exit,
+                        new_lines,
+                        spawn_error: None,
+                    });
+                }
+                Err(e) => session.gaps.push(GapRun {
+                    features: set,
+                    exit: None,
+                    new_lines: 0,
+                    spawn_error: Some(e),
+                }),
+            }
+        }
+    }
+    // Coverage: a census entry is covered only by a gap pass that SPAWNED,
+    // RAN, and whose feature set contains every feature it was missing — a
+    // failed pass covers nothing (a compile failure lints nothing).
+    session.uncovered = session
+        .census
+        .iter()
+        .filter(|t| {
+            let mut missing = t.missing.clone();
+            missing.sort();
+            !session.gaps.iter().any(|g| {
+                g.spawn_error.is_none() && g.exit.is_some() && {
+                    let mut gap_set = g.features.clone();
+                    gap_set.sort();
+                    sorted_covers(&gap_set, &missing)
+                }
+            })
+        })
+        .cloned()
+        .collect();
+    session
+}
+
+/// The `--oracle-census` report: what the oracle's CURRENT posture cannot
+/// see. Manifest data only (metadata + manifest reads, no compile) — the
+/// sweep-side instrument that keeps a "clean" clippy sweep from reading
+/// green over skipped gated targets.
+///
+/// # Errors
+///
+/// [`workspace_manifest_paths`] failures — the caller refuses rather than
+/// printing a blind report.
+pub fn census_report(
+    root: &Path,
+    cargo_bin: &str,
+    cli_features: &[String],
+) -> Result<String, String> {
+    use std::fmt::Write as _;
+    let packages = workspace_manifest_paths(root, cargo_bin)?;
+    let census = skipped_targets(&packages, cli_features);
+    let posture = if cli_features.is_empty() {
+        "default features".to_string()
+    } else {
+        format!("features [{}]", cli_features.join(","))
+    };
+    let mut out = String::new();
+    let _ = writeln!(out, "oracle census: {} at {}", root.display(), posture);
+    if census.is_empty() {
+        let _ = writeln!(
+            out,
+            "oracle census: 0 gated targets skipped — the posture sees every explicit target's required-features"
+        );
+        return Ok(out);
+    }
+    let _ = writeln!(
+        out,
+        "oracle census: {} gated target(s) INVISIBLE at this posture (compiled to nothing):",
+        census.len()
+    );
+    for t in &census {
+        let _ = writeln!(
+            out,
+            "  {} [{}] {} ← missing: {}",
+            t.package,
+            t.kind,
+            t.target,
+            t.missing.join(",")
+        );
+    }
+    let sets = gap_feature_sets(&census);
+    let rendered = sets
+        .iter()
+        .take(8)
+        .map(|s| s.join("+"))
+        .collect::<Vec<_>>()
+        .join(" | ");
+    let _ = writeln!(
+        out,
+        "arm with: RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> — distinct sets (first 8): {rendered}"
+    );
+    Ok(out)
 }
 
 /// Nearest cargo project root for the scan targets (v1: the FIRST target —
@@ -404,5 +776,139 @@ mod tests {
         assert!(matches!(classify(Some(0), 0), OracleOutcome::Clean));
         assert!(matches!(classify(Some(101), 0), OracleOutcome::Failed(_)));
         assert!(matches!(classify(None, 0), OracleOutcome::Failed(_)));
+    }
+
+    #[test]
+    fn gap_arm_knob_only_explicit_falsy_spellings_disable() {
+        assert!(gap_arm_from(None));
+        assert!(gap_arm_from(Some("")));
+        assert!(gap_arm_from(Some("2")), "unknown values default ON");
+        assert!(!gap_arm_from(Some("0")));
+        assert!(!gap_arm_from(Some("false")));
+        assert!(!gap_arm_from(Some(" off ")));
+    }
+
+    #[test]
+    fn gap_max_passes_defaults_on_garbage_and_zero_disables() {
+        assert_eq!(gap_max_passes_from(None), 3);
+        assert_eq!(gap_max_passes_from(Some("")), 3);
+        assert_eq!(
+            gap_max_passes_from(Some("junk")),
+            3,
+            "a typo must not disable"
+        );
+        assert_eq!(gap_max_passes_from(Some(" 2 ")), 2);
+        assert_eq!(gap_max_passes_from(Some("0")), 0);
+    }
+
+    fn metadata_fixture() -> String {
+        r#"{
+          "packages": [
+            {"name": "alpha", "manifest_path": "/w/alpha/Cargo.toml"},
+            {"name": "beta", "manifest_path": "/w/beta/Cargo.toml"}
+          ]
+        }"#
+        .to_string()
+    }
+
+    #[test]
+    fn metadata_parse_extracts_members_in_order() {
+        let parsed = parse_metadata_manifest_paths(&metadata_fixture()).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].0, "alpha");
+        assert_eq!(parsed[0].1, PathBuf::from("/w/alpha/Cargo.toml"));
+        assert_eq!(parsed[1].0, "beta");
+    }
+
+    #[test]
+    fn metadata_parse_rejects_garbage_loud_never_a_silent_empty_list() {
+        assert!(parse_metadata_manifest_paths("not json").is_err());
+        assert!(parse_metadata_manifest_paths("{}").is_err());
+    }
+
+    fn census_project(tag: &str) -> PathBuf {
+        let d = tmp_dir(tag);
+        fs::write(
+            d.join("Cargo.toml"),
+            concat!(
+                "[package]\nname = \"mycrate\"\n",
+                "[features]\ndefault = [\"base\"]\nbase = []\nbm25_facet = []\n",
+                "[[bench]]\nname = \"gated_bench\"\nrequired-features = [\"bm25_facet\"]\n",
+                "[[test]]\nname = \"dual\"\nrequired-features = [\"base\", \"bm25_facet\"]\n",
+                "[[test]]\nname = \"plain\"\n",
+            ),
+        )
+        .unwrap();
+        d
+    }
+
+    fn strs(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    #[test]
+    fn census_skips_gated_rows_honors_defaults_and_qualified_cli() {
+        let d = census_project("census-basic");
+        let manifest = d.join("Cargo.toml");
+        let packages = vec![("mycrate".to_string(), manifest.clone())];
+        // Default posture: the bench is skipped; the dual test is missing
+        // only bm25_facet (base rides the default set); the plain test never
+        // appears.
+        let skipped = skipped_targets(&packages, &[]);
+        assert_eq!(skipped.len(), 2, "bench + dual, never plain: {skipped:?}");
+        assert_eq!(skipped[0].target, "gated_bench");
+        assert_eq!(skipped[0].kind, "bench");
+        assert_eq!(skipped[0].missing, strs(&["bm25_facet"]));
+        assert_eq!(skipped[1].target, "dual");
+        assert_eq!(skipped[1].missing, strs(&["bm25_facet"]));
+        // The feature armed: nothing skipped.
+        assert_eq!(skipped_targets(&packages, &strs(&["bm25_facet"])), []);
+        // The qualified form resolving THIS package: also covered.
+        assert_eq!(
+            skipped_targets(&packages, &strs(&["mycrate/bm25_facet"])),
+            [],
+            "pkg/feat form must count for its own package"
+        );
+        // A qualified form for a DIFFERENT package never covers it.
+        assert_eq!(
+            skipped_targets(&packages, &strs(&["other/bm25_facet"])).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn gap_sets_dedupe_and_preserve_first_appearance_order() {
+        let skipped = vec![
+            SkippedTarget {
+                package: "a".into(),
+                target: "t1".into(),
+                kind: "test".into(),
+                missing: strs(&["z", "m"]),
+            },
+            SkippedTarget {
+                package: "a".into(),
+                target: "t2".into(),
+                kind: "test".into(),
+                missing: strs(&["z", "m"]),
+            },
+            SkippedTarget {
+                package: "b".into(),
+                target: "t3".into(),
+                kind: "bench".into(),
+                missing: strs(&["solo"]),
+            },
+        ];
+        let sets = gap_feature_sets(&skipped);
+        assert_eq!(sets.len(), 2);
+        assert_eq!(sets[0], strs(&["m", "z"]));
+        assert_eq!(sets[1], strs(&["solo"]));
+    }
+
+    #[test]
+    fn sorted_covers_is_subset_not_equality() {
+        let gap = strs(&["a", "b", "c"]);
+        assert!(sorted_covers(&gap, &strs(&["b"])));
+        assert!(!sorted_covers(&gap, &strs(&["b", "x"])));
+        assert!(sorted_covers(&gap, &[]));
     }
 }

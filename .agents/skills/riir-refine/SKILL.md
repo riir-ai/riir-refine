@@ -116,7 +116,7 @@ to queue item 1.
 |---|------|-----|
 | 1 | **Fix open issues — ISSUE-FIRST GATE** | Scan `.issues/` in THIS repo first, then every sibling repo (scan order below), oldest first, skip deferred. Items 5/11/12 are FORBIDDEN while any actionable issue remains anywhere. Fix → validate → doc → remove file (noise-reduction rule). |
 | 2 | **Finish in-flight plans** | `.plans/` with unchecked `- [ ]` — complete the next task group, honor `- [-]` defers. Rank plans from ORIGIN, never the working tree (Discipline: plan_read_origin). |
-| 3 | **Clippy sweep, all repos** | Heal-driven where possible (see heal protocol below), manual `cargo clippy --all-targets` otherwise. |
+| 3 | **Clippy sweep, all repos** | Heal-driven where possible (see heal protocol below), manual `cargo clippy --all-targets` otherwise. **GATE (2026-10-28, the plan-306 census finding): a clean sweep is NOT evidence over gated code — plain clippy silently skips every `required-features`-gated target. After any clean sweep of a repo, run `cargo refine --oracle-census <repo>` — non-empty output = the sweep was BLIND to those targets: either re-arm the healer there (its gap-arming now covers up to 3 distinct sets by default) or run the repo's own all-features posture (`RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv from the census>`). The oracle-census binary must be fresh (bin-age law). |
 | 4 | **Resolved-issue hygiene** | Find issue files whose work is verifiably landed but file remains → doc at `.docs`/AGENTS.md → `rm` the file. |
 | 5 | **Batch mining + heal dry-run — GATED on 1–4 exhausted across ALL repos** | The centerpiece — see the two protocols below. If issues/plans exist anywhere, mining is a mispick, not a valid unit. |
 | 6 | **boundary-guard routine check** | Run `scripts/ci_boundary_guard.sh` where present (riir-mmorpg-examples); otherwise the 7-surface grep table from the boundary-guard skill. File violations as `.issues/` — do NOT fix in the same commit as detection. Record the run in the skill's Run log. |
@@ -235,6 +235,14 @@ cargo run --features latent_retrieval --bin cargo-refine -- --fix --write <targe
 - Validate in the TARGET repo: `cargo clippy --all-targets` +
   `cargo test --lib`. Use `CARGO_TARGET_DIR=/tmp/<repo>-heal` if the
   repo's target dir is locked by a sibling build; clean it up after.
+- **The auto-oracle gap-arms by default (2026-10-28):** a heal dry-run's
+  oracle now runs up to 3 extra feature postures over the
+  required-features census — read its stderr lines: `N gated target(s)
+  invisible` = what the base posture cannot see; `M gap pass(es) armed`
+  = what ran anyway; `L remain UNCOVERED … RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv>`
+  = arm the remaining sets by hand when the findings matter. A fix-verify
+  on gated edits still needs the matching `--verify-args` (the P43 tail
+  names it).
 - **Feature-aware validation (the bevy_shared lesson, 2026-08-15):** a
   cfg-gated edit site is INVISIBLE to default `cargo check`/`--all-targets`
   when the gate is a non-test feature — an E0432 sat green in
