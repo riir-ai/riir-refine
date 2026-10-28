@@ -2,6 +2,8 @@
 
 **Status:** OPEN — filed 2026-10-28 (owner steer: "act like a normal user — `cargo refine migrate …` should provide GitHub login or other auth, only to sign/prove, not to file the issue"). Supersedes the `gh` leg of Issue 187 T4. One owner act: tick **Enable Device Flow** on the GitHub OAuth app whose public client id the CLI bakes in (T0). **T1–T4 LANDED 2026-10-28 (refine `6a319e22` + `3cd516a1`; T0 owner + T5 rehearsal remain — the gate condition "build only after that call" read SATISFIED via plan 302's D1 freeze + the D5 devnet-lane keep).**
 **Lease closed:** shikuwa-4090-i188-migrate, 1793199388, expires 2026-10-30T14:56:28+00:00 — T1–T4 landed the same session
+**Claimed:** shikuwa-4090-i188-leaf-reexport, 1793205224, expires 2026-10-30T16:33:44+00:00
+(scope: the leaf re-export follow-up — ssh_picker + provider_login + the .keys parse through the one dep edge — plus the interactive old-key picker)
 (scope was T1–T4 — the CLI lane; T0 stays owner, T5 rehearsal needs T0)
 
 ## Owner steer 2026-10-28 (round 2) — supersedes the Decision's "always device-login" shape
