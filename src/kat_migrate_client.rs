@@ -46,9 +46,9 @@
 //!
 //! 👍 on the proposal issue ENDORSES the migration, 👎 OBJECTS. The rule
 //! text is riir-kat's `proposal_vote_rules(timing)` VERBATIM (the same text
-//! the issue body carries): owner 51%, every other GitHub account 1%;
-//! releases if 👍 outweighs 👎, a draw or no votes cancels; with the owner
-//! silent only ≥ 1-year-old accounts count and a passing vote releases the
+//! the issue body carries): the three core voters 30% each (Amendment 4),
+//! every other GitHub account 1%; releases if 👍 outweighs 👎, a draw or no
+//! votes cancels; with the core silent only ≥ 1-year-old accounts count and a passing vote releases the
 //! timing's R2 span after filing (7 days LAW, 2 hours on the devnet fast
 //! build). The renders print the ACTUAL close / hold / silent-owner release
 //! instants (UTC) from the status read — never a hard-coded "24 h" where an
@@ -81,7 +81,7 @@ use riir_kat::kat_protocol_migrate::{
     PROPOSAL_LABEL,
 };
 use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
-use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_OWNER_LOGIN};
+use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_CORE};
 
 /// The migrate repo base the proposal-issue URL composes against when the
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
@@ -1018,12 +1018,12 @@ pub fn status_timing(s: &MigrateStatusBody) -> TallyTiming {
     s.tally_timing.unwrap_or(TallyTiming::LAW)
 }
 
-/// The `@`-mentions a request notifies: the owner, the old account's bound
-/// login (frozen at filing), the claimant — case-insensitively deduped,
-/// in that order.
+/// The `@`-mentions a request notifies: the core voters (Amendment 4),
+/// the old account's bound login (frozen at filing), the claimant —
+/// case-insensitively deduped, in that order.
 #[must_use]
 pub fn vote_mentions(old_bound_login: Option<&str>, claimant: Option<&str>) -> String {
-    let mut seen: Vec<&str> = vec![TALLY_OWNER_LOGIN];
+    let mut seen: Vec<&str> = TALLY_CORE.iter().map(|&(l, _)| l).collect();
     for l in [old_bound_login, claimant].into_iter().flatten() {
         if !l.is_empty() && !seen.iter().any(|p| p.eq_ignore_ascii_case(l)) {
             seen.push(l);
@@ -1033,6 +1033,15 @@ pub fn vote_mentions(old_bound_login: Option<&str>, claimant: Option<&str>) -> S
         .map(|l| format!("@{l}"))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// The core voters as `@a, @b, @c` (Amendment 4).
+fn core_mentions() -> String {
+    TALLY_CORE
+        .iter()
+        .map(|&(l, _)| format!("@{l}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// The vote rules (Issue 184 rule C): where to vote, the polarity, then
@@ -1074,22 +1083,25 @@ pub fn render_timeline(s: &MigrateStatusBody) -> Vec<String> {
     }
     if let Some(close) = s.window_close_unix {
         out.push(format!(
-            "window closes at {} (unix {close}) — a @{TALLY_OWNER_LOGIN} vote is judged then",
-            fmt_utc(close)
+            "window closes at {} (unix {close}) — a core vote ({}) is judged then",
+            fmt_utc(close),
+            core_mentions()
         ));
     }
     match (s.hold_until_unix, s.window_close_unix) {
         (Some(t), _) => out.push(format!(
-            "HELD — @{TALLY_OWNER_LOGIN} silent, the ≥ 1-year-old accounts' vote passes; \
-             releases at {} unless @{TALLY_OWNER_LOGIN} 👎 (unix {t})",
-            fmt_utc(t)
+            "HELD — the core ({core}) silent, the ≥ 1-year-old accounts' vote passes; \
+             releases at {} unless a core voter 👎s (unix {t})",
+            fmt_utc(t),
+            core = core_mentions()
         )),
         (None, Some(close)) => {
             let filed = close.saturating_sub(timing.window_secs());
             let t = timing.silent_owner_release_at_unix(filed);
             out.push(format!(
-                "if @{TALLY_OWNER_LOGIN} stays silent: a passing vote releases at {} \
+                "if the core ({}) stays silent: a passing vote releases at {} \
                  (filing + {}; unix {t})",
+                core_mentions(),
                 fmt_utc(t),
                 render_span(timing.silent_owner_window_secs())
             ));
@@ -1332,15 +1344,19 @@ mod tests {
         assert!(r.contains(PROPOSAL_LABEL), "{r}");
         assert!(
             r.contains(
-                "Vote on THIS issue. @katopz = 51%, every other GitHub account = 1% \
-                 (one account, one vote). Releases if 👍 outweighs 👎; a draw or no votes \
-                 cancels. If @katopz does not vote, only GitHub accounts ≥ 1 year old count, \
-                 and a passing vote releases 7 days after filing (so @katopz can still 👎)."
+                "Vote on THIS issue. @katopz = 30%, @niponchi = 30%, @pawsengineer = 30%, \
+                 every other GitHub account = 1% (one account, one vote). Releases if 👍 \
+                 outweighs 👎; a draw or no votes cancels. If none of @katopz, @niponchi, \
+                 @pawsengineer votes, only GitHub accounts ≥ 1 year old count, and a passing \
+                 vote releases 7 days after filing (so they can still 👎)."
             ),
             "{r}"
         );
         assert!(r.contains(&proposal_vote_rules(TallyTiming::LAW)), "{r}");
-        assert!(r.contains("notified: @katopz @victim @claimant"), "{r}");
+        assert!(
+            r.contains("notified: @katopz @niponchi @pawsengineer @victim @claimant"),
+            "{r}"
+        );
         // The devnet fast timing renders its own span.
         let f = render_vote_rules(TallyTiming::DEVNET_FAST, "@katopz");
         assert!(f.contains("releases 2 hours after filing"), "{f}");
@@ -1362,17 +1378,18 @@ mod tests {
 
     #[test]
     fn mentions_name_owner_old_login_and_claimant_once() {
-        assert_eq!(vote_mentions(None, None), "@katopz");
+        const CORE: &str = "@katopz @niponchi @pawsengineer";
+        assert_eq!(vote_mentions(None, None), CORE);
         assert_eq!(
             vote_mentions(Some("victim"), Some("claimant")),
-            "@katopz @victim @claimant"
+            format!("{CORE} @victim @claimant")
         );
         assert_eq!(
-            vote_mentions(Some("KATOPZ"), Some("Victim")),
-            "@katopz @Victim"
+            vote_mentions(Some("NIPONCHI"), Some("Victim")),
+            format!("{CORE} @Victim")
         );
-        assert_eq!(vote_mentions(Some("same"), Some("SAME")), "@katopz @same");
-        assert_eq!(vote_mentions(Some(""), Some("c")), "@katopz @c");
+        assert_eq!(vote_mentions(Some("same"), Some("SAME")), format!("{CORE} @same"));
+        assert_eq!(vote_mentions(Some(""), Some("c")), format!("{CORE} @c"));
     }
 
     #[test]
@@ -1392,7 +1409,7 @@ mod tests {
         assert_eq!(
             lines[0],
             format!(
-                "window closes at {} (unix {close}) — a @katopz vote is judged then",
+                "window closes at {} (unix {close}) — a core vote (@katopz, @niponchi, @pawsengineer) is judged then",
                 fmt_utc(close)
             )
         );
@@ -1400,7 +1417,7 @@ mod tests {
         assert_eq!(
             lines[1],
             format!(
-                "if @katopz stays silent: a passing vote releases at {} (filing + 7 days; unix {silent})",
+                "if the core (@katopz, @niponchi, @pawsengineer) stays silent: a passing vote releases at {} (filing + 7 days; unix {silent})",
                 fmt_utc(silent)
             )
         );
@@ -1411,7 +1428,7 @@ mod tests {
         let lines = render_timeline(&held);
         assert!(
             lines[1].starts_with(&format!(
-                "HELD — @katopz silent, the ≥ 1-year-old accounts' vote passes; releases at {}",
+                "HELD — the core (@katopz, @niponchi, @pawsengineer) silent, the ≥ 1-year-old accounts' vote passes; releases at {}",
                 fmt_utc(silent)
             )),
             "{lines:?}"
@@ -1449,7 +1466,7 @@ mod tests {
             "{rendered}"
         );
         assert!(
-            rendered.contains("notified: @katopz @victim @claimant"),
+            rendered.contains("notified: @katopz @niponchi @pawsengineer @victim @claimant"),
             "{rendered}"
         );
     }
@@ -1473,7 +1490,10 @@ mod tests {
         );
         assert!(tail.contains("assume the LAW timing"), "{tail}");
         assert!(tail.contains("7 days after filing"), "{tail}");
-        assert!(tail.contains("notified: @katopz @claimant"), "{tail}");
+        assert!(
+            tail.contains("notified: @katopz @niponchi @pawsengineer @claimant"),
+            "{tail}"
+        );
         assert!(!tail.contains("24 h"), "{tail}");
     }
 
