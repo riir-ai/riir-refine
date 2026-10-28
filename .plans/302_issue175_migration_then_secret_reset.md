@@ -94,7 +94,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       without it (filings stay E12-unreleasable).~~ **SUPERSEDED 2026-10-28 by
       Issue 187 — do NOT mint:** the worker's issues-token path is DELETED
       (187 T2, dapps `0b143d5` — the filer authors the issue; the worker reads
-      only). The owner act is now 187 T5: `wrangler secret delete
+      only). The owner act WAS 187 T5 (DONE 2026-10-28 — devnet + apex deleted; 187 CLOSED, HISTORY.md): `wrangler secret delete
       KAT_MIGRATE_ISSUES_TOKEN` (apex + `--env devnet`) + revoke the PAT;
 - [ ] **T2/T4 key hygiene (2026-10-27, `rm -P`):** both /tmp key copies
       SHREDDED + verified gone (`kat_old_c79c93b8` — the misnamed

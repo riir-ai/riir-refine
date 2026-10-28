@@ -797,6 +797,32 @@ without `&&`-asserting the cd, never pipe a mutating git command through a
 filter, verify `pwd` before any `reset --hard` in a shared worktree —
 recorded so the next misfire dies at step 2 instead of step 3.
 
+## 2026-10-28 — Issue 187 CLOSED: the migration proposal issue is FILER-authored; no GitHub write credential exists anywhere in the worker
+
+Folded from `.issues/187_migration_proposal_filer_authored_no_worker_write_token.md`
+(removed per the noise rule — full narrative via `git log --follow`).
+
+- **Why:** the worker's `KAT_MIGRATE_ISSUES_TOKEN` was the owner's PAT; `Issues: write`
+  also casts reactions, so a worker-secret leak could cast the owner's decisive 👍,
+  and a stranger's filing was authored by katopz (no notification).
+- **Landed:** riir-kat `c12d9cb` (`ProposalDraft` on ack/status + canonical-body
+  helpers); riir-dapps `0b143d5` (creator deleted, GET-only transport, `find_filed`
+  = oldest exact-title issue by the filing-proven login + numeric id + canonical body,
+  body re-checked at close, 409 `proposal_not_filed`, recovery lane too);
+  refine `7dec777c` (`refine kat migrate` opens the draft via the user's own `gh`,
+  else prints the prefilled URL); T3 prose kat `9d35593` + dao `11ac1c6`.
+- **Secrets (T5):** devnet `KAT_MIGRATE_ISSUES_TOKEN` deleted 2026-10-28 (secret-only
+  version `bd24fbbe`); apex deleted by the owner the same day. The `kat-migrate-issues`
+  PAT was cut to read-only (Issues read + metadata) by the owner; the worker's only
+  GitHub credential is the read token `KAT_MIGRATE_GITHUB_TOKEN` (a read-only token
+  cannot react, so it cannot vote).
+- **T4 (devnet rehearsal): MOOT** — riir-refine plan 302 frozen at T1 by riir-dapps
+  Proposal 010 D1 (gen-2 re-genesis); the T4 lease holder (zed-m3-187-t4) confirmed
+  no rehearsal is coming. The flow rides the gen-2 deploy (Proposal 010 P4 dress
+  rehearsal) instead.
+- **Correction recorded:** server-side TOTP already gates migrate request/cancel
+  (riir-dapps issue 139) — a protocol factor, not client-only.
+
 ## 2026-10-28 — Issues 183 + 184 CLOSED: the migrate release law landed (owner-👍 authorization + rule-C weighted voting + the autonomous cron closer), rehearsed live on devnet; the live half superseded by the filer-authored flow
 
 Folded from `.issues/183_migration_release_requires_owner_endorsement.md` +
