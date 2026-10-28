@@ -1,6 +1,7 @@
 # Issue 187 — the migration proposal issue is FILER-authored; the worker holds NO GitHub write token
 
 **Status:** OPEN — T1+T2+T3 LANDED 2026-10-28 (riir-kat `c12d9cb`, riir-dapps `0b143d5`, refine CLI this commit; T3 prose: kat `9d35593` + dao `11ac1c6`); T4 devnet rehearsal (needs the devnet deploy), T5 owner secret delete + PAT revoke remain. Filed 2026-10-28 (owner steer + Claude verdict AGREE). Blocks the mainnet migrate promotion (plan 302 T2). SUPERSEDES the "mint a BOT issues token" item in plan 302 (no bot needed once the worker cannot write).
+**Claimed:** zed-m3-187-t4, 1793210000, expires 2026-10-30T12:00:00Z
 **Lease closed:** zed-m3-187-filer-authored (T1+T2 landed same session: kat c12d9cb, dapps 0b143d5, refine 7dec777c; T3–T5 UNCLAIMED) (claim record: zed-m3-187-filer-authored, epoch 1793159017, was expires 2026-10-30T03:43:37Z — folded per the lease-reshape rule)
 **Lease closed:** zed-amo-i623-mtpcons-idle — T3 LANDED same session (kat `9d35593` module vote-legality block + `MigrateStatusBody.proposal_issue` doc; dao `11ac1c6` §Amendment 5 + status line) (claim record: zed-amo-i623-mtpcons-idle, epoch 1793203000, was expires 2026-10-30T05:00:00+00:00 — folded per the lease-reshape rule; T4/T5 stay unclaimed)
 
