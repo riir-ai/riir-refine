@@ -1,14 +1,14 @@
 # Plan 307 — Batch 302: the 10-28c staged kernel_opt pool (TF + cubecl + llama.cpp)
 
-**Status:** IN PROGRESS — claimed by zed-m3-b302-tfpool (epoch 1793203732, expires 2026-10-30T16:2xZ)
+**Status:** COMPLETE — Batch 302 LANDED (see the landing commit; Research 344 carries the record; the lease folds at the landing)
 
-- [ ] T0 — clone sources at pins into `.raw/b302/` (blobless/shallow, removed at close): ashhart/tensorfold (`fd058f5`, `a05d620`, `d59a895`, `15af3c0`, `c8084c4`, `0ecaf33`), tracel-ai/cubecl (`a38a125` #1949, `12c4840` #1948), ggml-org/llama.cpp (`f5222f2` #31188 tag b11962, `a7af149` #31288 tag b11953); re-verify every staged grade by reading the diffs at the pins (never grade an unread file)
-- [ ] T1 — dedup greps (3+ vocabularies) against kernel_opt 994 + rust_perf 274: the top_k sampler vs B269 two-pass/B223 radix; the multi-projection parts table vs the B299-landed stream-table rule + B293 co-residency; sector-order staging vs the staging-stride family (B259 lesson); whole-window admission vs the specialization-admission family; MoE-GLU vs Batch-287 GLU-fusion + #29181 staged lead; tune-window compile-batch + cmma-lhs fragment vs the B299-landed #1942/#1940 rules. Honest drops allowed.
-- [ ] T2 — author via 2 parallel subagents over disjoint slices (own rules + count-neutral rider faces; every quote byte-verified at the pin; fixtures standalone-compile per field)
-- [ ] T3 — coordinator wiring: mod.rs KERNEL_CATEGORIES + category comments, count pins (tests.rs + router.rs + Plan-003 category table — the B299 lesson: the pin surface is ~37 asserts, not 5), batch302 needle gates keyed to LANDED text
-- [ ] T4 — gates: batch302 needle+parse (green-zero class: run at `--features kernel_opt`); kernel_opt lib; default lib; clippy -D ×3 postures; retrieval floors RE-MEASURE (corpus delta) at both postures. Freeze/score-bench NOT owed (kernel_opt-only, P30/B293); binary rebuild NOT owed (kernel_opt outside the release set).
-- [ ] T5 — Research 344 at landing; AGENTS.md kernel_opt count bump; .docs/11_domains delta; queue snapshot landing row (same commit)
-- [ ] T6 — commit `feat: batch 302: ...` + push; `.raw/b302/` removed at close
+- [x] T0 — clone sources at pins into `.raw/b302/` (blobless/shallow, removed at close): ashhart/tensorfold (`fd058f5`, `a05d620`, `d59a895`, `15af3c0`, `c8084c4`, `0ecaf33`), tracel-ai/cubecl (`a38a125` #1949, `12c4840` #1948), ggml-org/llama.cpp (`f5222f2` #31188 tag b11962, `a7af149` #31288 tag b11953); re-verify every staged grade by reading the diffs at the pins (never grade an unread file)
+- [x] T1 — dedup greps (3+ vocabularies) against kernel_opt 994 + rust_perf 274: the top_k sampler vs B269 two-pass/B223 radix; the multi-projection parts table vs the B299-landed stream-table rule + B293 co-residency; sector-order staging vs the staging-stride family (B259 lesson); whole-window admission vs the specialization-admission family; MoE-GLU vs Batch-287 GLU-fusion + #29181 staged lead; tune-window compile-batch + cmma-lhs fragment vs the B299-landed #1942/#1940 rules. Honest drops allowed.
+- [x] T2 — author via 2 parallel subagents over disjoint slices (own rules + count-neutral rider faces; every quote byte-verified at the pin; fixtures standalone-compile per field)
+- [x] T3 — coordinator wiring: mod.rs KERNEL_CATEGORIES + category comments, count pins (tests.rs + router.rs + Plan-003 category table — the B299 lesson: the pin surface is ~37 asserts, not 5), batch302 needle gates keyed to LANDED text
+- [x] T4 — gates: batch302 needle+parse (green-zero class: run at `--features kernel_opt`); kernel_opt lib; default lib; clippy -D ×3 postures; retrieval floors RE-MEASURE (corpus delta) at both postures. Freeze/score-bench NOT owed (kernel_opt-only, P30/B293); binary rebuild NOT owed (kernel_opt outside the release set).
+- [x] T5 — Research 344 at landing; AGENTS.md kernel_opt count bump; .docs/11_domains delta; queue snapshot landing row (same commit)
+- [x] T6 — commit `feat: batch 302: ...` + push; `.raw/b302/` removed at close
 - [-] ENV NOTE — this checkout's oracle files (clippy_oracle.rs / bin/heal.rs / fix_verify.rs) carry the SIBLING auto-oracle lane's live WIP; the union tree read E0433 at claim time. Gates run at an isolated CARGO_TARGET_DIR; if their WIP is still broken at gate time, gate in a detached worktree at HEAD + my corpus files. Zero overlap with this plan's write set (src/domains/kernel_opt/* + wiring).
 
 ## Scope (from the staged rows — the snapshot's staged enumeration IS the working inventory, re-graded at T0)
