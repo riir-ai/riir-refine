@@ -129,9 +129,19 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       (riir-dapps Issue 143, B = d54e39a8 co-signed), 18:00 cron, 124 574 989
       µKAT exact, link holder untouched; 409 github_bound + 409
       claim_not_fresh cells green. **T1 devnet rehearsal: COMPLETE** (both
-      boxes). Mainnet prerequisites before T-MIGRATE: riir-dapps Issues 144
-      (prove the GitHub login), 142 (recovery lane), 145; a BOT issues token;
-      the owner's go to enable `kat_migrate` on the apex.
+      boxes). Mainnet prerequisites before T-MIGRATE: ~~riir-dapps Issues 144
+      (prove the GitHub login), 142 (recovery lane), 145~~ — ALL CLOSED
+      2026-10-28 (dapps `961e5d0`, `98a50fe`, `73b5c38`; + Issue 146 pbind
+      `6f59a72`), DEVNET-DEPLOYED as worker `fbe908a7` from dapps `5a94f76`
+      (bench 018 ledger row; live probes green). Issue 144 consequence for
+      T-MIGRATE: a BINDING-MOVE filing must prove the login — the claim key
+      listed on `github.com/katopz.keys` (checked 2026-10-28: the M3's
+      `d54e39a8` key `7dd981c9…` IS listed; the mainnet run's fresh key must
+      be listed too, or bound via `/account/provider/bind` first — Issue
+      146) — attest-only filings are exempt. STILL OPEN (owner): a BOT
+      issues token; the go to deploy the apex at ≥ `5a94f76` with
+      `kat_migrate` on (the setup.sh `--mainnet` zero-pending gate runs
+      first).
 - [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
