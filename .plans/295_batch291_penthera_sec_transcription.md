@@ -1,7 +1,7 @@
 # Plan 295 — Batch 291: penthera→sec transcription batch
 
 **Status:** LANDED 2026-10-26 — Batch 291 complete (T0–T9; landing commit `ce99cf61`)
-**Claimed:** zed-glm-penthera-b291, 1793023956, expires 2026-10-28T14:12:36Z
+**Lease closed:** zed-glm-penthera-b291, 1793023956, expires 2026-10-28T14:12:36+00:00 — discharged by this plan's own landing (`ce99cf61`, 2026-10-26); the stale `Claimed:` line folded 2026-10-28T14:2xZ by zed-amo-pentfold (the both-forms false-YIELD class, AGENTS.md lease-fold law; claim_lease_check read it LIVE ~44 h past the landing)
 
 Source: danoszz/penthera @ `07421f95ced357e0d7e184353e65821748478235` (MIT) — transcription verdict Research 329 (corrected from the first-pass NO; both grades in-record). Fixtures are OUR original Rust reproductions; the source contributes class knowledge only. Zero `.raw` clone owed; class re-verification against the pin at mine time.
 
