@@ -2,6 +2,14 @@
 
 **Status:** OPEN — filed 2026-10-28 (owner steer: "act like a normal user — `cargo refine migrate …` should provide GitHub login or other auth, only to sign/prove, not to file the issue"). Supersedes the `gh` leg of Issue 187 T4. One owner act: tick **Enable Device Flow** on the GitHub OAuth app whose public client id the CLI bakes in (T0).
 
+## Owner steer 2026-10-28 (round 2) — supersedes the Decision's "always device-login" shape
+
+- GitHub (or any provider) is OFFERED, never FORCED — no vendor login is required to migrate. A provider link is an optional extra factor + recovery path; providers are an open set (GitHub now, Google next — `IdentityProvider` is GitHub-only today, riir-auth `provider_identity.rs:37`).
+- Key picker: list `~/.ssh` Ed25519 keys with index + mtime, default `from` = oldest, `to` = newest; Enter accepts the default (an interactive pick satisfies the "explicit key source" law).
+- Issue: `gh` when logged in, else the browser URL.
+- Harmful actions pop a local fingerprint (Touch ID) + a server-verified factor (TOTP now, passkey assertion later).
+- Bigger frame: this lane may be SUPERSEDED by the auth-v2 + mainnet re-genesis decision (see the verdict recorded in plan 302) — build T1–T4 only after that call.
+
 ## Problem (measured on the CLI, 2026-10-28)
 
 Today a migration is an expert ritual: `cargo refine kat account migrate --github <login> --old-key <path> [--attest-cosign …]`, and a binding-move filing refuses `403 login_unproven` unless the NEW key is already listed on `github.com/<login>.keys` (Issue 144) — or the user ran the provider-bind lane first (Issue 146), which has NO CLI verb. The issue itself is filed through `gh` when logged in, else a printed URL (Issue 187 T1).
