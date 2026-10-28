@@ -91,7 +91,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
 
     // ── the network sections ────────────────────────────────────────────
     let acct32 =
-        riir_refine::kat_account_client::service_account_hex(&state.account_id).map(str::to_string);
+        account.service_account_hex().map(str::to_string);
     #[cfg(feature = "kat_transport")]
     network_sections(acct32.as_deref());
     #[cfg(not(feature = "kat_transport"))]

@@ -351,7 +351,7 @@ fn own_account_id() -> Result<[u8; 16], String> {
         .signing_key()
         .map_err(|e| format!("could not load the account signing key: {e}"))?;
     let pubkey = key.verifying_key().to_bytes();
-    Ok(crate::kat_protocol_account::account_for_pubkey(&pubkey))
+    Ok(crate::kat_identity::service_account_for(&pubkey))
 }
 
 /// `send`'s target: 32 hex chars, else refused with the base58 hint.

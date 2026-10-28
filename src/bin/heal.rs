@@ -1595,7 +1595,8 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
         // override → legacy adoption → env key → machine SSH key → fresh.
         None => KatAccount::login_default(&dir),
     };
-    let (account, outcome) = match result {
+    #[allow(unused_mut)]
+    let (mut account, outcome) = match result {
         Ok(pair) => pair,
         Err(e) => {
             eprintln!("kat login failed: {e}");
@@ -1605,6 +1606,20 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
     print_login_outcome(&outcome, "kat");
     for line in account.summary_lines() {
         println!("{line}");
+    }
+    #[cfg(feature = "kat_transport")]
+    learn_root(&mut account, &command_service_url());
+}
+
+/// Plan 056 C3: learn and record the auth-v2 account root this key acts for
+/// (one `GET /account/key`; writes nothing under v1). Called by `login`,
+/// `account` and `totp`, the commands a v2 account bootstraps through.
+#[cfg(feature = "kat_transport")]
+fn learn_root(account: &mut riir_refine::kat_account::KatAccount, url: &str) {
+    match riir_refine::kat_account_client::learn_service_root(url, account) {
+        Ok(Some(root)) => eprintln!("account: this key acts for auth-v2 account {root}"),
+        Ok(None) => {}
+        Err(e) => eprintln!("account: could not record the auth-v2 root ({e})"),
     }
 }
 
@@ -1794,13 +1809,16 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
-    let account = match KatAccount::load(&dir) {
+    #[allow(unused_mut)]
+    let mut account = match KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("kat account: {e}");
             std::process::exit(1);
         }
     };
+    #[cfg(feature = "kat_transport")]
+    learn_root(&mut account, &command_service_url());
     if let Err(e) = account.verify() {
         eprintln!("kat account: VERIFICATION FAILED — {e}");
         std::process::exit(1);
@@ -1883,7 +1901,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
     #[cfg(feature = "kat_transport")]
     let (served, history_acct) = {
         use riir_refine::kat_account_client as svc;
-        match svc::service_account_hex(&account.state().account_id) {
+        match account.service_account_hex() {
             // The 64-hex local id truncates to the ledger's 32-hex
             // AccountId; a malformed record cannot query the service.
             None => {
@@ -2053,6 +2071,13 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                 }
             }
         }
+    }
+    // Plan 056 C3: a v2 server may have created this account just now
+    // (the grant claim is account genesis); record the root it names.
+    #[cfg(feature = "kat_transport")]
+    {
+        let mut account = account;
+        learn_root(&mut account, &command_service_url());
     }
 }
 
@@ -2709,9 +2734,7 @@ fn push_mining_batch(
             // `cargo refine account` reports the grant, and a failure is
             // invisible at this layer by design (the push already landed).
             if let Ok(key) = account.signing_key() {
-                if let Some(acct) = riir_refine::kat_account_client::service_account_hex(
-                    &account.state().account_id,
-                ) {
+                if let Some(acct) = account.service_account_hex() {
                     let payreq = riir_refine::kat_payreq_client::HttpPayreqTransport::new(url, 10);
                     match riir_refine::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
                         Ok(Some(claim)) if !claim.already => {
@@ -3098,9 +3121,7 @@ fn adopt_oracle_facts(url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<S
                 .into(),
         );
     };
-    let Some(hex) =
-        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
-    else {
+    let Some(hex) = account.service_account_hex() else {
         return unreach("the local account id is not the 64-hex derivation".into());
     };
     // 5 s, the `account` probe's budget: adopt-state is an explicit,
@@ -3320,21 +3341,6 @@ fn run_kat_claim(sig: Option<&str>) {
 /// env-configured stake-custody payee + a fresh on-curve reference, queues
 /// the intent, and prints the honest state. Nothing client-side mints,
 /// credits, or moves principal (the G9d posture held for staking too).
-#[cfg(feature = "kat_service")]
-/// The 32-hex LEDGER account id for the stake family's service reads and
-/// writes — the `/stake/*` routes require exactly 32 hex (`account_from_hex`
-/// both sides; a 64-hex id 400s, which the pre-fix commands silently read
-/// as their "service plane not yet live" fallbacks). The same truncation
-/// `/balance` + `/history` already use (`service_account_hex`); the raw id
-/// is kept when the local record is not the 64-hex derivation (behavior
-/// preserved for malformed records).
-#[cfg(feature = "kat_service")]
-fn service_acct_or_raw(account_id: &str) -> String {
-    riir_refine::kat_account_client::service_account_hex(account_id)
-        .unwrap_or(account_id)
-        .to_string()
-}
-
 fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: bool) {
     use riir_refine::kat_stake_client as stake;
 
@@ -3346,7 +3352,10 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
             std::process::exit(1);
         }
     };
-    let account_id = service_acct_or_raw(&account.state().account_id);
+    // Plan 056 C3: the auth-v2 root when recorded, else the v1 truncation.
+    let account_id = account
+        .service_account_hex()
+        .map_or_else(|| account.state().account_id.clone(), str::to_string);
     let root = resolve_heal_root(&[]);
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3511,7 +3520,10 @@ fn run_kat_unstake() {
             std::process::exit(1);
         }
     };
-    let account_id = service_acct_or_raw(&account.state().account_id);
+    // Plan 056 C3: the auth-v2 root when recorded, else the v1 truncation.
+    let account_id = account
+        .service_account_hex()
+        .map_or_else(|| account.state().account_id.clone(), str::to_string);
     let root = resolve_heal_root(&[]);
     let now_unix = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -3568,7 +3580,11 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
             std::process::exit(1);
         }
     };
-    let account_id = account.state().account_id.clone();
+    // Plan 056 C3: the account the vote names is the auth-v2 root when
+    // recorded (the 32-hex service id), else the local id as before.
+    let account_id = account
+        .service_account_hex()
+        .map_or_else(|| account.state().account_id.clone(), str::to_string);
     let signing_key = match account.signing_key() {
         Ok(k) => k,
         Err(e) => {
@@ -3947,7 +3963,7 @@ fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
         std::process::exit(2);
     };
     let url = command_service_url();
-    let account = match riir_refine::kat_account::KatAccount::load(
+    let mut account = match riir_refine::kat_account::KatAccount::load(
         &riir_refine::kat_account::KatAccount::default_dir(),
     ) {
         Ok(a) => a,
@@ -3956,6 +3972,8 @@ fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
             std::process::exit(1);
         }
     };
+    // Plan 056 C3: the enroll/disarm messages name the account root.
+    learn_root(&mut account, &url);
     let key = match account.signing_key() {
         Ok(k) => k,
         Err(e) => {
@@ -4080,7 +4098,7 @@ fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::Pa
         // nonexistent account is the silent-zero failure the protocol
         // module's `service_account_hex` guard exists to prevent).
         let acct_hex = riir_refine::kat_payreq_client::hex_encode(
-            &riir_refine::kat_protocol_account::account_for_pubkey(&pubkey),
+            &riir_refine::kat_identity::service_account_for(&pubkey),
         );
         let transport = riir_refine::kat_account_client::HttpAccountTransport::new(url, 10);
         let body = match transport.get_history(&acct_hex, 20) {
@@ -4209,7 +4227,7 @@ fn fetch_service_history() -> riir_refine::kat_protocol_account::ServiceHistory 
     // The /history route indexes by the SERVICE account id (the house
     // derivation), never the raw pubkey hex — the topup_open_intents law.
     let acct_hex = riir_refine::kat_payreq_client::hex_encode(
-        &riir_refine::kat_protocol_account::account_for_pubkey(&pubkey),
+        &riir_refine::kat_identity::service_account_for(&pubkey),
     );
     let transport = HttpAccountTransport::new(&command_service_url(), 10);
     match transport.get_history(&acct_hex, 1) {
@@ -5101,9 +5119,7 @@ fn run_kat_refill_transport(wait_secs: u64) {
             std::process::exit(1);
         }
     };
-    let acct_hex = if let Some(h) =
-        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
-    {
+    let acct_hex = if let Some(h) = account.service_account_hex() {
         h.to_string()
     } else {
         eprintln!(
@@ -5343,9 +5359,7 @@ fn run_kat_wetrun(dry_run: bool) {
             std::process::exit(1);
         }
     };
-    let Some(acct_hex) =
-        riir_refine::kat_account_client::service_account_hex(&account.state().account_id)
-    else {
+    let Some(acct_hex) = account.service_account_hex() else {
         eprintln!(
             "wetrun: the local account id is not the ledger's 32-hex shape — refusing to \
              query an account no route can settle from"
