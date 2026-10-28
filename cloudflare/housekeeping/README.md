@@ -19,6 +19,11 @@ anchor**. Deployed at `riir-kat-housekeeping.<account>.workers.dev`.
   `already-recorded` on replay, so hourly re-posts are idempotent) —
   Issue 045 T6 / Issue 044 T5, landed 2026-09-01. Unset → inert (the
   deployed-but-inert pattern); no KAT math in the worker.
+  **gen-2 targets** (riir-dapps Plan 058 T7b): a kat-service worker that
+  pins a genesis owner refuses every bearer (`401 owner_sig_required`) and
+  attests the day from its OWN cron; this worker records
+  `mint_post.status = "skipped: gen-2 target …"` and does not warn. No
+  config switch is needed; gen-1/devnet targets are unchanged.
 - **Why a Worker, not a container:** the run is milliseconds of work.
   Worker cron is free-tier (3 triggers/worker), 24 KV writes/day ≪ the
   1k/day free cap. Any container pays the $5/mo Workers Paid gate +

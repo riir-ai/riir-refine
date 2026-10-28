@@ -1011,6 +1011,13 @@ function mintFetchStub(opts = {}) {
       const body = JSON.parse(init.body);
       posts.push({ url: String(url), init, body });
       if (postMode === "reject") throw new Error("mint post network failure");
+      if (postMode === "gen2") {
+        return { ok: false, status: 401, async json() {
+          return { error: "mint-anchor: this worker pins a genesis owner", code: "owner_sig_required" }; } };
+      }
+      if (postMode === "gen1-401") {
+        return { ok: false, status: 401, async json() { return { error: "mint-anchor unauthorized" }; } };
+      }
       if (postMode === "conflict") {
         return { ok: false, status: 409, async json() { return { recorded: false, reason: "superseded" }; } };
       }
@@ -1160,4 +1167,27 @@ test("mint window rolls over at UTC midnight: the 00:00 run posts the day that j
   assert.equal(posts[0].body.neurons_today, 88);
   assert.equal(row.mint_post.status, "recorded");
   assert.equal(row.mint_post.neurons_yesterday, 88);
+});
+
+// ---- riir-dapps Plan 058 T7b: a gen-2 target attests in-worker ------------
+test("mint gen-2 target: 401 owner_sig_required is a skip, never an error or a warn", async () => {
+  const kv = kvStub();
+  const errs = [];
+  const realWarn = console.warn;
+  console.warn = (...a) => errs.push(a.join(" "));
+  try {
+    const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z",
+      mintFetchStub({ postMode: "gen2" }), MINT);
+    assert.ok(row.mint_post.status.startsWith("skipped: gen-2 target"), row.mint_post.status);
+    assert.equal(row.ok, true);
+    assert.equal(errs.filter((l) => l.includes("mint-anchor")).length, 0,
+      `a gen-2 skip must not warn, got ${JSON.stringify(errs)}`);
+  } finally { console.warn = realWarn; }
+});
+
+test("mint gen-1 401 (wrong bearer) stays an error", async () => {
+  const kv = kvStub();
+  const row = await runHourMint(kv, "2026-08-28T12:00:06.549Z",
+    mintFetchStub({ postMode: "gen1-401" }), MINT);
+  assert.equal(row.mint_post.status, "error: http 401");
 });

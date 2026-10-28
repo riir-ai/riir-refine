@@ -581,6 +581,10 @@ async function runHousekeeping(env) {
     // an error status, never thrown (a byte-different same-day replay is a
     // real condition if the count re-derives differently; `superseded` means
     // an older non-replay date — not actionable from here).
+    // On a gen-2 target (a pinned genesis owner, riir-dapps Plan 058 T7b)
+    // the bearer is refused 401 `owner_sig_required` and the kat-service
+    // worker attests the day in-worker; this run records `skipped: gen-2
+    // target …` and logs nothing. gen-1/devnet targets are unchanged.
     if (env.KAT_SERVICE_URL && env.KAT_MINT_TOKEN) {
       const yISO = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
       row.mint_post = { date: yISO };
@@ -612,11 +616,20 @@ async function runHousekeeping(env) {
               : "recorded";
           } else {
             let detail = "";
+            let code = "";
             try {
               const b = await res.json();
               if (b && b.reason) detail = ` (${String(b.reason).slice(0, 80)})`;
+              if (b && typeof b.code === "string") code = b.code;
             } catch (_) { /* non-JSON body — status code alone */ }
-            row.mint_post.status = `error: http ${res.status}${detail}`;
+            // A gen-2 target (riir-dapps Plan 058 T7b): the worker pins a
+            // genesis owner, refuses every bearer with 401
+            // `owner_sig_required`, and attests this day ITSELF from its
+            // own cron. That is the target's posture, not a failure — skip
+            // without a warn, so a gen-2 target never fails daily.
+            row.mint_post.status = (res.status === 401 && code === "owner_sig_required")
+              ? "skipped: gen-2 target (owner_sig_required) — the kat-service cron attests in-worker"
+              : `error: http ${res.status}${detail}`;
           }
         } catch (err) {
           row.mint_post.status = `error: ${String((err && err.message) || err).slice(0, 80)}`;
