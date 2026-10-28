@@ -182,3 +182,32 @@ Claim `3dc941e9` (epoch 1793053492) → landed same cycle. The class analysis ta
 Landed surfaces: `src/domains/sec/proposers/packed_field_wrong_key.rs` (10 tests), `src/domains/sec/proposers/capacity_silent_truncate.rs` (9 tests), corpus entries + header table rows, `eval_fixtures_sec` +2 spans (both routed correctly — router annotation re-pinned 60/167 → 62/169, measured 67/169 = 39.6%), count pins 26 → 28 via one shape-asserted script pass (`.plans/298_count_pins_b294.py`), the doc tables (AGENTS ×2, README ×2, sec.md §Batch 294).
 
 Gates: sec module 215/0; sec lib 2964/0; default lib 2749/0; clippy −D ×4 postures + all-targets+sec zero; T7 wide probe (pedantic+nursery+suspicious+correctness+perf+style+complexity over both buggy fixtures): ZERO default/suspicious/correctness safety lints — `cast_possible_truncation` fires on r2's unrelated `as u16` length-encode (the B258-owned axis, not the rule's site, no fix for the degrade shape) + two nursery fixture-noise candidates (`missing_const_for_fn`, `must_use_candidate`); boundary gate 2/2 — `indexing_slicing` fires on the packed-key fixture with no machine fix (the ffi-export additive precedent), silent-cap fully silent; score-bench run 204 (gen-1 appended); freeze NOT owed (`generations.rs::atoms()` builds from the clippy seed corpus only — verified live, the P30 confirm).
+
+## Addendum 2026-10-28 — the T2.2/T2.4 residue closed from the M3 box (m3-idle-deny-sweep)
+
+The four not-on-amo repos + the two named lanes landed; the workspace
+`--scan` now reads CLEAN everywhere except the three deliberate skips
+(riir-ai = T2.1 owner-gated, riir-train = routing-restricted,
+seal-online-remaster = deprecated) + zed (dev-fork upstream, not a
+contract repo):
+
+| lane | landing | note |
+|---|---|---|
+| riir-game-sdk | `4c8e403` + `15e38ec` | the sdk lane's own T2.2 residue: quinn-proto 0.11.19 / rustls 0.23.46 / rustls-webpki 0.103.16 / webpki-roots 1.0.11 / clipboard-win 5.4.3 / chacha20 0.10.2 / webbrowser 1.2.5, all scoped; 13 rows discharged (quinn family, rustls family, emSign pair, webbrowser 0257); rustls-pemfile 0134 STAYS (its 2.2.0 ghost survives the scoped update) |
+| seal-render | `a4111eb` | the tokio 1.54.1 lane executed; 0384 discharged |
+| riir-mmorpg-examples | `abec128` + `66eecb3` + `f1b159f` | the stale-lock gap ADOPTED: deny.toml + gate + 10-row ledger, first scan PASS zero warnings; the same scoped bumps rode in (its lock was refreshed at 1739e67); webbrowser discharged after |
+| jup-tool | `cb55582` + `1484202` | ADOPTED with an EMPTY ledger: rustls 0.23.46 / rustls-webpki 0.103.16 / webpki-roots 1.0.11 scoped (the emSign family bumped away); AGENTS.md seeded |
+| riir-dapps (nested) | `d6e70ed` | the kat-service worker re-lock: the six 0285/0346/0348/0349/0381/0382 findings from the first --deep run discharged |
+| seal-game-editor (tools) | `a55992aa9` | the three nested locks take the rustls/emSign set: neuron-publish 0381/0382 + seal-e2e 0346–0349 discharged; legacy-import 0089 discharged upstream |
+| seal-online-remaster | `fae7c0d` | the ROOT CAUSE fix for the lingering 0089 class: riir-neuron-db's workspace-scoped [patch] does not travel through path deps, so this workspace resolved the pre-T2.3 katgpt-core@main — the patch table (8 rows, the riir-auth precedent) + the two postcard default-features=false declarations + the 1.99.0 toolchain pin landed; heapless 0.7 + atomic-polyfill leave every lock resolving this graph |
+
+Lesson recorded (the [patch]-does-not-travel class): a consumer workspace
+resolving a path-dep's GIT deps resolves the pinned GIT source unless IT
+owns the patch table — the advisory surface then freezes at the pinned
+branch's vintage (main@37bb9cbf predates the T2.3 fix by months). Every
+workspace that path-deps riir-neuron-db and lacks its own [patch] table
+carries the same ghost; the seal-online-remaster fix is the template.
+
+Nothing in this addendum re-pins a ledger row — every discharge names the
+bump that made the advisory stop matching, and the remaining FINDINGS
+rows above stay owned by their named lanes.
