@@ -2,6 +2,7 @@
 
 **Status:** OPEN — T1+T2 LANDED 2026-10-28 (riir-kat `c12d9cb`, riir-dapps `0b143d5`, refine CLI this commit); T3 contract prose, T4 devnet rehearsal (needs the devnet deploy), T5 owner secret delete + PAT revoke remain. Filed 2026-10-28 (owner steer + Claude verdict AGREE). Blocks the mainnet migrate promotion (plan 302 T2). SUPERSEDES the "mint a BOT issues token" item in plan 302 (no bot needed once the worker cannot write).
 **Lease closed:** zed-m3-187-filer-authored (T1+T2 landed same session: kat c12d9cb, dapps 0b143d5, refine 7dec777c; T3–T5 UNCLAIMED) (claim record: zed-m3-187-filer-authored, epoch 1793159017, was expires 2026-10-30T03:43:37Z — folded per the lease-reshape rule)
+**Claimed:** zed-amo-i623-mtpcons-idle, 1793203000, expires 2026-10-30T05:00:00+00:00 — T3 contract prose (dao Proposal 001 + kat doc comment); T4/T5 NOT claimed
 
 ## Problem (measured, 2026-10-28)
 
