@@ -1740,7 +1740,7 @@ fn run_kat_genesis(words: &[String]) {
             .nth(n)
     };
     let read = |path: &str| std::fs::read(path).unwrap_or_else(|e| fail(format!("{path}: {e}")));
-    const USAGE: &str = "usage: genesis status <url> [--save <file>] | genesis sign --status <file> --label <label> --out <bundle.json> | genesis submit <bundle.json> --to <url> | genesis import-digest <carried_corpus.json>";
+    const USAGE: &str = "usage: genesis status <url> [--save <file>] | genesis sign --status <file> --label <label> --out <bundle.json> | genesis submit <bundle.json> --to <url> [--totp <code>] | genesis import-digest <carried_corpus.json>";
     match words.first().map(String::as_str) {
         Some("import-digest") => {
             let Some(path) = positional(0) else { fail(USAGE.into()) };
@@ -1790,7 +1790,21 @@ fn run_kat_genesis(words: &[String]) {
             let (Some(path), Some(url)) = (positional(0), flag("--to")) else { fail(USAGE.into()) };
             let bundle: riir_refine::kat_protocol_genesis::GenesisBundle = serde_json::from_slice(&read(path))
                 .unwrap_or_else(|e| fail(format!("{path} is not a genesis bundle: {e}")));
-            match gc::http::submit(&url, &bundle) {
+            // Plan 058 T1: /genesis requires the server-verified factor.
+            // `--totp`, else a prompt on a terminal, else no header (the
+            // worker answers 403 totp_required).
+            let totp = flag("--totp").or_else(|| {
+                use std::io::IsTerminal as _;
+                if !std::io::stdin().is_terminal() {
+                    return None;
+                }
+                eprint!("genesis: authenticator code: ");
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line).ok()?;
+                let code = line.trim().to_string();
+                (!code.is_empty()).then_some(code)
+            });
+            match gc::http::submit(&url, &bundle, totp.as_deref()) {
                 Ok((200, body)) => println!("{body}"),
                 Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
                 Err(e) => fail(e),
