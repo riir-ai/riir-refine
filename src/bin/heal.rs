@@ -1872,7 +1872,7 @@ fn run_kat_custody(words: &[String]) {
         std::process::exit(1);
     };
     let dir = KatAccount::default_dir();
-    let mut account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
+    let account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
     let custody = account.state().key_path.clone().unwrap_or_else(|| "file (this account dir)".into());
     match words.first().map(String::as_str) {
         None | Some("status") => {
