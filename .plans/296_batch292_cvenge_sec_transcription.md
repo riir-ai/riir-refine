@@ -1,8 +1,7 @@
 # Plan 296 — Batch 292: CVEngine sec transcription (3 rules + 1 rider)
 
 **Status:** LANDED — Batch 292 (the landing commit carries the full gate table; T0–T12 all executed; the T6 honest-drop path never fired — the strike fixture carried a zero-FP negative suite).
-**Claimed:** shikuwa-4090-b292-cvenge, 1793050367, expires 2026-10-28T21:32:47Z
-**Lease closed:** shikuwa-4090-b292-cvenge — the batch LANDED same cycle (T0 quote re-verification 0 DRIFT at the pin; T1 dedup clean; T2–T6 the four rules + the egress rider; T7 gates ALL GREEN; T8 count pins 22 → 26; T9 retrieval re-pin 60/167 + binary rebuilt+installed at the B292 trigger; T10 score-bench run-to-confirm, freeze NOT owed; T11 research note + docs; T12 this commit).
+**Lease closed:** shikuwa-4090-b292-cvenge — the batch LANDED same cycle (T0 quote re-verification 0 DRIFT at the pin; T1 dedup clean; T2–T6 the four rules + the egress rider; T7 gates ALL GREEN; T8 count pins 22 → 26; T9 retrieval re-pin 60/167 + binary rebuilt+installed at the B292 trigger; T10 score-bench run-to-confirm, freeze NOT owed; T11 research note + docs; T12 this commit). (claim record: shikuwa-4090-b292-cvenge, epoch 1793050367, was expires 2026-10-28T21:32:47Z — folded per the lease-reshape rule)
 
 Source: hevnsnt/CVEngine @ `9dd9c441630eaeb15b61b173b635bb673a27bb02` (GPL-3.0, pure Python — transcription law, fixtures are OUR original Rust). Verdict: **YES B** (Research 330). Pure-Python source, so every detector is name-gated/field-literal per the penthera precedent — probe parity (plan-262 T7) is the correctness gate: detector fires on the buggy fixture, silent on the fixed form, zero-FP negative suite.
 
