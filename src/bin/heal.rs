@@ -67,6 +67,12 @@ enum KatCommand {
     /// Print the local account view (+ repo-local charge projection when a
     /// path/cwd has one).
     Account,
+    /// riir-dapps Plan 056 C4: the auth-v2 device keys — `account keys`
+    /// (list), `account key join <signer-pubkey> [label]` (on a NEW
+    /// device), `account key add <join>` and `account key revoke <pubkey>`
+    /// (on a live device; T2: the TOTP code from `RIIR_KAT_TOTP_CODE` or a
+    /// prompt).
+    Keys,
     /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
     /// atomic swap + the visible charge line.
     Update,
@@ -1609,6 +1615,111 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
     }
     #[cfg(feature = "kat_transport")]
     learn_root(&mut account, &command_service_url());
+}
+
+/// Plan 056 C4: `account keys` / `account key join|add|revoke`.
+#[cfg(feature = "kat_transport")]
+fn run_kat_keys(words: &[String]) {
+    use riir_refine::kat_account::KatAccount;
+    use riir_refine::kat_keyset_client::{self as ks, http, JoinRequest};
+
+    let fail = |msg: String| -> ! {
+        eprintln!("account keys: {msg}");
+        std::process::exit(1);
+    };
+    let url = command_service_url();
+    let mut account = KatAccount::load(&KatAccount::default_dir())
+        .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
+    learn_root(&mut account, &url);
+    let key = account.signing_key().unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
+    let my_pk = riir_refine::kat_payreq_client::hex_encode(&key.verifying_key().to_bytes());
+    let acct = account
+        .service_account_hex()
+        .map(str::to_string)
+        .unwrap_or_else(|| fail("the local account record is malformed".into()));
+    let lid = || {
+        riir_refine::kat_migrate_client::fetch_ledger_id(&url)
+            .unwrap_or_else(|e| fail(format!("cannot read the ledger id: {e}")))
+            .unwrap_or_else(|| fail("this service has no ledger id (a pre-v2 ledger) — key sets need auth v2".into()))
+    };
+    let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let report = |r: Result<(u16, String), String>| match r {
+        Ok((200, body)) => println!("{body}"),
+        Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
+        Err(e) => fail(e),
+    };
+    match words.first().map(String::as_str) {
+        Some("list") | None => {
+            println!("account {acct} — this device's key {my_pk}");
+            report(http::list(&url, &acct));
+        }
+        Some("join") => {
+            let Some(signer) = words.get(1) else {
+                fail("usage: account key join <live-device-pubkey> [label]".into());
+            };
+            let label = words.get(2).map_or("new device", String::as_str);
+            let Some(account_hex) = words.get(3).cloned().or_else(|| lookup_account_of(&url, signer)) else {
+                fail(format!("cannot find the account of key {signer} (pass it as the 4th word)"));
+            };
+            let join = ks::join_request(&key, &account_hex, signer, label, &lid(), now()).unwrap_or_else(|e| fail(e));
+            println!("{}", serde_json::to_string(&join).unwrap_or_default());
+            eprintln!(
+                "account keys: run `cargo refine account key add '<the line above>'` on the live device within 10 minutes"
+            );
+            if let Err(e) = account.set_service_root(&account_hex) {
+                eprintln!("account keys: could not record the account root ({e})");
+            }
+        }
+        Some("add") => {
+            let Some(raw) = words.get(1) else {
+                fail("usage: account key add '<join request line>' (or @file)".into());
+            };
+            let text = match raw.strip_prefix('@') {
+                Some(path) => std::fs::read_to_string(path).unwrap_or_else(|e| fail(format!("{path}: {e}"))),
+                None => raw.clone(),
+            };
+            let join: JoinRequest =
+                serde_json::from_str(text.trim()).unwrap_or_else(|e| fail(format!("not a join request: {e}")));
+            let body = ks::sign_add(&key, &acct, &join, &lid()).unwrap_or_else(|e| fail(e));
+            report(http::add(&url, &body, Some(&t2_code())));
+        }
+        Some("revoke") => {
+            let Some(target) = words.get(1) else {
+                fail("usage: account key revoke <pubkey>".into());
+            };
+            let body = ks::sign_revoke(&key, &acct, target, &lid(), now()).unwrap_or_else(|e| fail(e));
+            report(http::revoke(&url, &body, Some(&t2_code())));
+        }
+        Some(other) => fail(format!("unknown verb {other:?} — list | join | add | revoke")),
+    }
+}
+
+/// The account a key acts for, from the public `GET /account/key` (the
+/// new device's join needs the live device's account).
+#[cfg(feature = "kat_transport")]
+fn lookup_account_of(url: &str, pubkey_hex: &str) -> Option<String> {
+    let resp = ureq::get(&format!("{}/account/key?pubkey={pubkey_hex}", url.trim_end_matches('/'))).call().ok()?;
+    let v: serde_json::Value = resp.into_json().ok()?;
+    v.get("acct_hex")?.as_str().map(str::to_string)
+}
+
+/// The T2 factor for a key-set change: `RIIR_KAT_TOTP_CODE`, else a prompt
+/// on a terminal; a non-interactive run without the variable refuses.
+#[cfg(feature = "kat_transport")]
+fn t2_code() -> String {
+    use std::io::{BufRead as _, IsTerminal as _, Write as _};
+    if let Ok(code) = std::env::var("RIIR_KAT_TOTP_CODE") {
+        return code.trim().to_string();
+    }
+    if !std::io::stdin().is_terminal() {
+        eprintln!("account keys: this change needs a TOTP code — set RIIR_KAT_TOTP_CODE (no terminal to prompt on)");
+        std::process::exit(2);
+    }
+    eprint!("TOTP code: ");
+    let _ = std::io::stderr().flush();
+    let mut line = String::new();
+    let _ = std::io::stdin().lock().read_line(&mut line);
+    line.trim().to_string()
 }
 
 /// Plan 056 C3: learn and record the auth-v2 account root this key acts for
@@ -7066,6 +7177,8 @@ struct Args {
     /// confirm/re-enroll over mint).
     totp_mode: Option<String>,
     totp_code: Option<String>,
+    /// Plan 056 C4: the words after `account keys|key`.
+    keys_args: Vec<String>,
     /// T1.6: the run-start update-phase budget in seconds (`0` = skip;
     /// default 4 — the proposal's ~3–5s window).
     update_timeout: u64,
@@ -7318,6 +7431,7 @@ fn parse_args() -> Args {
         migrate_attest_cosig: None,
         totp_mode: None,
         totp_code: None,
+        keys_args: Vec::new(),
         update_timeout: 4,
         no_update: false,
         no_reheat: false,
@@ -8133,6 +8247,15 @@ fn parse_args() -> Args {
                 } else {
                     args.paths.push(PathBuf::from(arg));
                 }
+            }
+            // Plan 056 C4: `account keys` / `account key <verb> …` — re-aims
+            // at Keys and takes every remaining word as its arguments.
+            "keys" | "key" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
+                args.command = Some(KatCommand::Keys);
+                if arg == "keys" {
+                    args.keys_args.push("list".to_string());
+                }
+                args.keys_args.extend(it.by_ref());
             }
             // The `kat totp` / `account totp` two-word shapes — the
             // migrate modifier's law (re-aims the command at Totp).
@@ -11674,6 +11797,10 @@ fn main() {
                 args.login_totp.as_deref(),
             ),
             KatCommand::Account => run_kat_account(&args.paths, args.account_history),
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Keys => run_kat_keys(&args.keys_args),
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Keys => riir_refine::build_stamp::refuse("account keys", &["kat_transport"]),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
