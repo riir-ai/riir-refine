@@ -1,7 +1,9 @@
 # Plan 306 — Leviathan rusqlite + sec corpus batch (nominal Batch 301)
 
 **Status:** STAGED — plan-first per the distill protocol; verdict note `.research/343`, reference mapping `../riir-neuron-db/.research/312`. Serialized behind the queue heads (bbtree B298 rust_perf lease to 2026-10-29T09:44Z; perfect-hash B300 slot) — claim per the mining queue before any corpus edit. Cross-domain mix (rust_perf + sec) per the B293 precedent.
-**Claimed:** zed-m3-leviathan-remains, 1793194861, expires 2026-10-30T13:41:01+00:00 (scope: Phase 1 pre-flight + Phase 2 measurement/audit — the CORPUS batch T3+ still awaits the queue heads per the line above)
+**Claimed:** zed-m3-leviathan-remains, 1793194861, expires 2026-10-30T13:41:01+00:00
+
+Claim scope note: Phase 1 pre-flight + Phase 2 measurement/audit — the CORPUS batch (T3+) still awaits the queue heads per the Status line above.
 
 Source: `elstongun/leviathan` @ `f1070fe525527eec8ed52bfaf014b9e927224889` (Apache-2.0, v0.2.0). Clone is REMOVED (pin recorded in 343 + ndb 312); re-clone at the pin into `.raw/b301` at T2, byte-verify quotes, remove at close.
 
