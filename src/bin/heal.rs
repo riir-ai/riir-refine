@@ -1872,7 +1872,11 @@ fn run_kat_custody(words: &[String]) {
         std::process::exit(1);
     };
     let dir = KatAccount::default_dir();
-    let account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
+    // `mut` is load-bearing on macOS (the se arms move custody through
+    // &mut); the 3cd516a1 drop verified dev-only -- release on macOS is
+    // E0596. Restored by the oracle-landing lane to unblock the release
+    // build; converges with the custody lane's own WIP.
+    let mut account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
     let custody = account.state().key_path.clone().unwrap_or_else(|| "file (this account dir)".into());
     match words.first().map(String::as_str) {
         None | Some("status") => {
