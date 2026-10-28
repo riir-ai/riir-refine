@@ -797,6 +797,70 @@ without `&&`-asserting the cd, never pipe a mutating git command through a
 filter, verify `pwd` before any `reset --hard` in a shared worktree —
 recorded so the next misfire dies at step 2 instead of step 3.
 
+## 2026-10-28 — Issues 183 + 184 CLOSED: the migrate release law landed (owner-👍 authorization + rule-C weighted voting + the autonomous cron closer), rehearsed live on devnet; the live half superseded by the filer-authored flow
+
+Folded from `.issues/183_migration_release_requires_owner_endorsement.md` +
+`.issues/184_migration_lane_owner_succession_dead_owner_liveness.md` (both
+removed per the noise rule — the full narratives are recoverable via
+`git log --follow` on the removed paths; this entry is the record of
+record).
+
+**Issue 183 (the polarity flip):** the release gate flipped from
+nobody-objected-release to release-authorization — the filing creates ONE
+proposal issue, the owner's 👍 is a STRUCTURAL gate (no bool knob, verdict
+R5), the E-matrix rewritten (E3/E4 swapped; E3b owner+one-👎 releases,
+E3c owner+two-👎 cancels, E3d the bound-login unconditional veto, E12 no
+matched issue refuses release), single-issue tally + one-vote-per-login
+(the copycat double-count closed), snapshot domain v1→v2, filing-time
+`old_bound_login` freeze. Landed 2026-10-27: riir-kat `a7a1c13` (26 tests,
+`TallyReason`) + `86a1622`; riir-dapps `e968b3e` (`IssueCreator` + the
+`KAT_MIGRATE_ISSUES_TOKEN` secret + row v2 + the R8 zero-pending deploy
+gate `scripts/migrate_zero_pending_gate.sh`); CLI `921d2739`; riir-dao
+`5cd6a93` (artifact v2) + `caa7e9a` (Amendment 1). Verdict AGREE round 2
+(R1–R8 folded). The deferred `- [-]` row (wire the R8 gate into
+`deploy_kat_service.yml`) stands: CI deploys are suspended (free-tier
+limit); `setup.sh --mainnet` runs the gate.
+
+**Issue 184 (liveness + succession):** two holes 183 left — the lazy close
+(no cron) and the dead-owner deadlock (every migration cancels forever).
+(a) The autonomous closer: an hourly `#[event(scheduled)]` cron on
+cat-service (apex + devnet) runs the same close engine per due row
+(riir-dapps `024f80b`, live devnet version `63e58ede`; ≤8 closes/tick, the
+50-subrequest cap; idle tick = no GitHub call, no write; the issue-less
+creation-only retry ≤4/tick `f1bfaf2`). (b) Succession went through
+dormancy-detection → B′ (owner/self dual-path, verdict round 1 REVISE) →
+**rule C, the OWNER DIRECTIVE that superseded B′**: plain weighted voting
+on the proposal issue — katopz (numeric id 97060) 5100 bp, every other
+GitHub identity 100 bp, one numeric identity one vote, both-ways = no
+vote, strict 👍>👎 or draw/zero → Cancel, never auto-release; two rails
+kept: R1 a non-owner vote counts only if the account is ≥365 d old when
+the owner is silent (unknown age counts for 👎 only, fail-closed) and R2 a
+passing tally holds until filing+7 d. Retired from B′: the self path, the
+E3d unconditional veto, the 30 d binding floor, the 2-qualified-objections
+rule. Landed 2026-10-27: kernel riir-kat `ba40757` + `96a44be`
+(`TallyTiming` LAW {24 h, 7 d} / DEVNET_FAST {1 h, 2 h}, snapshot domain
+v5); worker `c04e321` + `fdeef65`; dao artifact v4 `ce18306` + Amendment 3
+`61887f3`; CLI `9aa94c84`.
+
+**The live rehearsal (plan 302 T1) ran COMPLETE 2026-10-27 on devnet
+`687950c7` under these rules** — filing #1 `e518f563…` (c79c93b8 →
+d54e39a8), proposal issue gist-rs/riir-dao-proposal#1, owner 👍 (id 97060),
+RELEASED BY THE 16:00 CRON TICK with no human (exact conservation
+174 866 068 µKAT); filing #2 (4090, `71615e8d → 4f4623f3`, attest-only
+with B co-signed) released by the 18:00 cron (124 574 989 µKAT exact);
+409 `github_bound` + `claim_not_fresh` cells green. The post-landing
+`kat_proof_spec_match` red was MEASURED pre-existing (red only without
+`kat_staking`) and fixed riir-dapps `c9ddd2d`.
+
+**Supersession (why the files closed):** 187 (2026-10-28) removed the
+worker's GitHub write credential entirely — the proposal issue is
+FILER-authored (the filer's own `gh` auth or a prefilled URL), the worker
+only reads, the issues-token fallback is deleted, and the owner act
+morphs from "mint `KAT_MIGRATE_ISSUES_TOKEN`" (plan 302 T1-secret) to
+"DELETE it + revoke the PAT" (187 T5). The live migrate state = 187
+(T4 devnet rehearsal + T5 owner acts, both unclaimed) + plan 302
+T-MIGRATE (mainnet promotion waits on 187 T5).
+
 ## Lessons
 - A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
 - `git fetch origin` BEFORE any sizing/dry-run on a repo not touched this session — the reflog can be 8 commits stale and the residue phantom.

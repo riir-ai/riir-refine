@@ -89,9 +89,13 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       version `5f77c6e0` — `/account/migrate/*` live (404 → `unknown_request`).
       Mainnet still has NO migrate routes (apex build unchanged — promotion is
       the post-rehearsal owner call; setup.sh --mainnet runs the R8 gate).
-- [ ] **T1-secret (owner):** `npx wrangler secret put KAT_MIGRATE_ISSUES_TOKEN
+- [x] ~~**T1-secret (owner):** `npx wrangler secret put KAT_MIGRATE_ISSUES_TOKEN
       --env devnet` (same token) — devnet cannot file the proposal issue
-      without it (filings stay E12-unreleasable).
+      without it (filings stay E12-unreleasable).~~ **SUPERSEDED 2026-10-28 by
+      Issue 187 — do NOT mint:** the worker's issues-token path is DELETED
+      (187 T2, dapps `0b143d5` — the filer authors the issue; the worker reads
+      only). The owner act is now 187 T5: `wrangler secret delete
+      KAT_MIGRATE_ISSUES_TOKEN` (apex + `--env devnet`) + revoke the PAT;
 - [ ] **T2/T4 key hygiene (2026-10-27, `rm -P`):** both /tmp key copies
       SHREDDED + verified gone (`kat_old_c79c93b8` — the misnamed
       `1bb4b7b5` copy of `/Users/katopz/.ssh/id_ed25519`, and
@@ -99,7 +103,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       `~/deprecated/old-ssh/id_ed25519` (c79c93b8, owner-held) + the
       katopz ssh key itself. Re-copy per T2's recipe for the mainnet
       filing if ever needed.
-- [ ] **T1-live (2026-10-27, rule C + DEVNET_FAST, devnet `687950c7`):** KEY
+- [x] **T1-live (2026-10-27, rule C + DEVNET_FAST, devnet `687950c7`):** KEY
       MAP MEASURED (blake3 of the raw pubkey): `c79c93b8…192fd6` =
       `/Users/kat/deprecated/old-ssh/id_ed25519` (Dec 2023) ✅ ·
       `1bb4b7b5` = the 10-25 rotation key (`/Users/katopz/.ssh/id_ed25519`;
