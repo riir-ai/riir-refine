@@ -1,6 +1,6 @@
 # Leviathan — agent memory + lexical retrieval over SQLite FTS5 (distill)
 
-**Status:** DISTILLED — pending owner decision (corpus batch staged as plan 306; the ndb/agents/rag reference mapping is the sibling note riir-neuron-db `.research/312_Leviathan_Agent_Memory_Lexical_Retrieval_Reference.md` @ `ced4379` — the owner-asked deliverable)
+**Status:** DISTILLED → ADJUDICATED (2026-10-28, delegated-owner sessions `974c2e79`/`6a189526`): corpus batch = plan 306 (Phase 1+2 DONE, T3+ serialized behind the queue heads); the owner-gated follow-ups all adjudicated and landed — OG-2 `bm25_facet` PROMOTED (ndb plan 336/Bench 515), OG-4 quest_search cap LANDED (sge issue 273 closed `24911ab4e`), OG-1 NO-GO + OG-3 secret-refusal policy recorded (ndb 312 addendum `9a11b10`).
 
 > **Verdict (Claude ping-pong, `request_verdict` session `103b2bad-5364-481a-bf73-33225be842c6`, rounds 1–3: REVISE → evidence round → AGREE close):**
 > **YES B− corpus** [2–3 own rules; candidate grades below] **/ league-lane N/A (stated, not skipped — no GPU/serving-perf surface) / product-coverage: EXISTING CONSUMER WITH AN FTS5 LANE — rusqlite in 12 seal-game-editor crate/tool manifests, one shipping FTS5 store / research mapping HIGH** (the owner asked for the ndb/agent/rag ref; that mapping lives in ndb 312).

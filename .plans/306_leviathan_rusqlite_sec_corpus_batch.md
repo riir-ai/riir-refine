@@ -1,9 +1,9 @@
 # Plan 306 — Leviathan rusqlite + sec corpus batch (nominal Batch 301)
 
-**Status:** STAGED — plan-first per the distill protocol; verdict note `.research/343`, reference mapping `../riir-neuron-db/.research/312`. Serialized behind the queue heads (bbtree B298 rust_perf lease to 2026-10-29T09:44Z; perfect-hash B300 slot) — claim per the mining queue before any corpus edit. Cross-domain mix (rust_perf + sec) per the B293 precedent.
+**Status:** STAGED → PHASE 1+2 DONE, Phase 3+ serialized (plan-first per the distill protocol; verdict note `.research/343`, reference mapping `../riir-neuron-db/.research/312`. The CORPUS batch (T3+) still awaits the queue heads (bbtree B298 rust_perf lease to 2026-10-29T09:44Z; perfect-hash B300 slot) — claim per the mining queue before any corpus edit. Cross-domain mix (rust_perf + sec) per the B293 precedent.
 **Claimed:** zed-m3-leviathan-remains, 1793194861, expires 2026-10-30T13:41:01+00:00
 
-Claim scope note: Phase 1 pre-flight + Phase 2 measurement/audit — the CORPUS batch (T3+) still awaits the queue heads per the Status line above.
+**Owner adjudication (2026-10-28, sessions `974c2e79`/`6a189526`):** OG-4 GO — the term-cap fix landed in seal-game-editor (dedupe-before-cap + 32-atom + 4KiB-byte budgets through one shared helper, never-silent truncation notice; issue 273 closed `24911ab4e`, HISTORY row `5d234a69b`). The ndb-side follow-ups: OG-2 GO→LANDED+PROMOTED (`bm25_facet`, plan 336/Bench 515), OG-1 NO-GO + OG-3 policy recorded (ndb 312 addendum `9a11b10`). T2.4's corpus citation now also carries the closed issue + the cap constants as the known-good delta.
 
 Source: `elstongun/leviathan` @ `f1070fe525527eec8ed52bfaf014b9e927224889` (Apache-2.0, v0.2.0). Clone is REMOVED (pin recorded in 343 + ndb 312); re-clone at the pin into `.raw/b301` at T2, byte-verify quotes, remove at close.
 
@@ -21,6 +21,13 @@ Source: `elstongun/leviathan` @ `f1070fe525527eec8ed52bfaf014b9e927224889` (Apac
 - [x] T2.4 The audit's positive fixture doubles as the corpus entry's in-repo known-good instance (cite `mod.rs:314-325` + `tests.rs:79/205`) — carried into T3.1's `context_notes` at batch time; ALSO now cites issue 273 (the cap gap, measured + filed).
 
 Probe note: the harness was TEMPORARY (untracked `tests/fts_blowup_probe.rs`, deleted after recording; the /tmp db copy + target dir removed). The issue carries the full reproduction recipe (shape generators + protocol), so the measurement is re-runnable from the issue text alone.
+
+### Phase-2 rider — the healer-posture observation (2026-10-28, from the OG-4 fix lane)
+
+While fixing the cap, two mechanical clippy findings surfaced in the ndb lane (`ptr_arg` on the new bench, `explicit_auto_deref` in bm25.rs) and were fixed MANUALLY — against the healer-first discipline — so the capture was tested empirically afterward (hunk reverted, healer dry-run):
+- `ptr_arg` IS a corpus entry (Batch 155) and the healer ANCHORS it — but only when the oracle runs at the right feature posture: `RIIR_REFINE_AUTO_ORACLE_FEATURES=bm25_facet`. At the default posture the auto-oracle SILENTLY SKIPS required-features-gated targets (the target compiles to nothing — the P43 green-zero class, one layer up in the healer's own oracle; the run's disclosure line "clippy oracle (auto): clean tree at default features" is the tell).
+- Even oracle-anchored, the fix lane DECLINES bench-target edits by design (the bench-guard — a bench file's numbers ARE its artifact; P30/Issue-118): "fixed 0 file(s) / 0 edit(s)" reported honestly. So for bench-target mechanical findings, MANUAL is the documented end-state — my original shortcut landed on the right answer without the verification round.
+- Authoring lesson for THIS plan's T3.2/T3.3 (rusqlite-dep-gated rules): when the eventual consumer fixtures live behind non-default features, the healer verification for them needs the oracle posture env named in the landing note — same class the P43 per-edit tail warns about, one layer out.
 
 ## Phase 3 — entries (fixtures are ORIGINAL minimal Rust reproductions; never paste Leviathan source)
 
