@@ -18,6 +18,7 @@ use std::path::PathBuf;
 
 /// The env pairs for `Command::envs`: HOME + USERPROFILE → `scratch`, and
 /// CARGO_HOME + RUSTUP_HOME → this process's real ones.
+#[allow(dead_code)] // not every including target drives a login-class command
 pub fn vars(scratch: impl AsRef<OsStr>) -> [(&'static str, OsString); 4] {
     let scratch = scratch.as_ref().to_os_string();
     let real_home = std::env::var_os("HOME")

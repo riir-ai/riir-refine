@@ -385,6 +385,10 @@ fn scan_src_findings() -> (usize, Vec<(String, Finding)>) {
             .unwrap_or(path)
             .to_string_lossy()
             .to_string();
+        // The allowlist keys are '/'-spelled; a Windows rel path carries '\' —
+        // canonicalize so the gate classifies identically on every host (the
+        // gate shipped macOS-only and this line is its first Windows run).
+        let rel = rel.replace('\\', "/");
         for finding in scan_text(&stripped) {
             if !line_names_its_constant(&finding.text) {
                 all.push((rel.clone(), finding));
@@ -433,9 +437,12 @@ fn allowlist_rows_stay_fresh_in_both_directions() {
     let (_, all) = scan_src_findings();
     for (prefix, reason) in ALLOWED_PATHS {
         assert!(!reason.is_empty(), "allowlist row {prefix} lost its reason");
-        // Stale-row direction: the row must still name a real file.
+        // Stale-row direction: the row must still name a real file (the same
+        // '/' canonicalization as the scan — a Windows walk carries '\\').
         assert!(
-            files.iter().any(|p| p.to_string_lossy().contains(prefix)),
+            files
+                .iter()
+                .any(|p| p.to_string_lossy().replace('\\', "/").contains(prefix)),
             "stale allowlist row: no file matches {prefix}"
         );
     }
