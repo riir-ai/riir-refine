@@ -109,7 +109,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       new key (2026-10-26). **Filing #1** `c79c93b8 → d54e39a8` = request
       `e518f563…`, proposal issue gist-rs/riir-dao-proposal#1 (created by the
       worker; author = katopz → the issues token is the OWNER's PAT, so GitHub
-      sends no self-mention notification — mint a BOT token before mainnet),
+      sends no self-mention notification — ~~mint a BOT token before mainnet~~ SUPERSEDED 2026-10-28 by Issue 187: the filer authors the issue, the worker holds NO write token; mainnet promotion waits on 187 T5),
       owner 👍 (id 97060) at 14:15 UTC, window 15:14 UTC, the 16:00 cron tick
       is the no-human proof (no status read in between). Pre-release devnet
       balances: c79c93b8 174 866 068 µKAT, d54e39a8 0. **Filing #2 (4090):**
