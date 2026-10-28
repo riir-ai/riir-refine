@@ -1,6 +1,8 @@
 # Issue 187 — the migration proposal issue is FILER-authored; the worker holds NO GitHub write token
 
 **Status:** OPEN — filed 2026-10-28 (owner steer + Claude verdict AGREE). Blocks the mainnet migrate promotion (plan 302 T2). SUPERSEDES the "mint a BOT issues token" item in plan 302 (no bot needed once the worker cannot write).
+**Claimed:** zed-m3-187-filer-authored, 1793159017, expires 2026-10-30T03:43:37Z
+(scope: T1 CLI + T2 worker)
 
 ## Problem (measured, 2026-10-28)
 
