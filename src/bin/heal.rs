@@ -78,6 +78,11 @@ enum KatCommand {
     /// delete-plain` (remove the in-dir plaintext copy once the Enclave is
     /// proven to open).
     Custody,
+    /// riir-dapps Plan 057 T3: the gen-2 genesis ceremony — `genesis status
+    /// <url> [--save <file>]`, `genesis sign --status <file> --label <l>
+    /// --out <bundle.json>` (offline), `genesis submit <bundle.json> --to
+    /// <url>`, `genesis import-digest <carried_corpus.json>`.
+    Genesis,
     /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
     /// atomic swap + the visible charge line.
     Update,
@@ -1696,6 +1701,106 @@ fn run_kat_keys(words: &[String]) {
             report(http::revoke(&url, &body, Some(&t2_code())));
         }
         Some(other) => fail(format!("unknown verb {other:?} — list | join | add | revoke")),
+    }
+}
+
+/// Plan 057 T3: `genesis status|sign|submit|import-digest`. `sign` and
+/// `import-digest` need no network; `status` and `submit` need
+/// `kat_transport`.
+#[cfg(feature = "kat_service")]
+fn run_kat_genesis(words: &[String]) {
+    use riir_refine::kat_genesis_client as gc;
+    use riir_refine::kat_protocol_genesis::{import_digest, GenesisStatus};
+    use riir_refine::kat_protocol_lease::hex32;
+
+    let fail = |msg: String| -> ! {
+        eprintln!("genesis: {msg}");
+        std::process::exit(1);
+    };
+    // `--name value` lookup over the verb's words; positionals are the rest.
+    let flag = |name: &str| -> Option<String> {
+        let i = words.iter().position(|w| w == name)?;
+        Some(words.get(i + 1).cloned().unwrap_or_else(|| fail(format!("{name} needs a value"))))
+    };
+    let positional = |n: usize| -> Option<&String> {
+        let mut skip = false;
+        words[1..]
+            .iter()
+            .filter(|w| {
+                if skip {
+                    skip = false;
+                    return false;
+                }
+                if w.starts_with("--") {
+                    skip = true;
+                    return false;
+                }
+                true
+            })
+            .nth(n)
+    };
+    let read = |path: &str| std::fs::read(path).unwrap_or_else(|e| fail(format!("{path}: {e}")));
+    const USAGE: &str = "usage: genesis status <url> [--save <file>] | genesis sign --status <file> --label <label> --out <bundle.json> | genesis submit <bundle.json> --to <url> | genesis import-digest <carried_corpus.json>";
+    match words.first().map(String::as_str) {
+        Some("import-digest") => {
+            let Some(path) = positional(0) else { fail(USAGE.into()) };
+            println!("{}", hex32(&import_digest(&read(path))));
+        }
+        Some("sign") => {
+            let (Some(status_path), Some(label), Some(out)) = (flag("--status"), flag("--label"), flag("--out")) else {
+                fail(USAGE.into());
+            };
+            let status: GenesisStatus = serde_json::from_slice(&read(&status_path))
+                .unwrap_or_else(|e| fail(format!("{status_path} is not a genesis status: {e}")));
+            let preview = gc::preview(&status, &label).unwrap_or_else(|e| fail(e));
+            println!("genesis: you are about to sign");
+            for line in preview.lines() {
+                println!("  {line}");
+            }
+            println!("  params         {:?}", status.params);
+            if std::path::Path::new(&out).exists() {
+                fail(format!("{out} already exists — refusing to overwrite a bundle"));
+            }
+            use riir_refine::kat_account::KatAccount;
+            let account = KatAccount::load(&KatAccount::default_dir())
+                .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
+            eprintln!("genesis: opening the account key (an Enclave-custody key asks for ONE Touch ID press)");
+            let key = account.signing_key().unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let bundle = gc::sign_bundle(&key, &status, &label, now).unwrap_or_else(|e| fail(e));
+            let json = serde_json::to_string_pretty(&bundle).unwrap_or_else(|e| fail(e.to_string()));
+            std::fs::write(&out, json + "\n").unwrap_or_else(|e| fail(format!("{out}: {e}")));
+            println!("genesis: signed at {now} -> {out}");
+            if let Some(id) = bundle.bundle_id() {
+                println!("  bundle_id      {}", hex32(&id));
+            }
+        }
+        #[cfg(feature = "kat_transport")]
+        Some("status") => {
+            let Some(url) = positional(0) else { fail(USAGE.into()) };
+            let (status, body) = gc::http::status(url).unwrap_or_else(|e| fail(e));
+            println!("{}", serde_json::to_string_pretty(&status).unwrap_or(body.clone()));
+            if let Some(path) = flag("--save") {
+                std::fs::write(&path, body).unwrap_or_else(|e| fail(format!("{path}: {e}")));
+                eprintln!("genesis: saved the status to {path} (sign it offline with `genesis sign --status {path} …`)");
+            }
+        }
+        #[cfg(feature = "kat_transport")]
+        Some("submit") => {
+            let (Some(path), Some(url)) = (positional(0), flag("--to")) else { fail(USAGE.into()) };
+            let bundle: riir_refine::kat_protocol_genesis::GenesisBundle = serde_json::from_slice(&read(path))
+                .unwrap_or_else(|e| fail(format!("{path} is not a genesis bundle: {e}")));
+            match gc::http::submit(&url, &bundle) {
+                Ok((200, body)) => println!("{body}"),
+                Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
+                Err(e) => fail(e),
+            }
+        }
+        #[cfg(not(feature = "kat_transport"))]
+        Some(verb @ ("status" | "submit")) => {
+            riir_refine::build_stamp::refuse(&format!("genesis {verb}"), &["kat_transport"])
+        }
+        _ => fail(USAGE.into()),
     }
 }
 
@@ -8308,6 +8413,12 @@ fn parse_args() -> Args {
                     args.paths.push(PathBuf::from(arg));
                 }
             }
+            // Plan 057 T3: `genesis <verb> …` — takes every remaining word
+            // (flags included) as its own arguments.
+            "genesis" if args.paths.is_empty() && args.command.is_none() => {
+                args.command = Some(KatCommand::Genesis);
+                args.keys_args.extend(it.by_ref());
+            }
             // Plan 056 C4: `account keys` / `account key <verb> …` — re-aims
             // at Keys and takes every remaining word as its arguments.
             "custody" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
@@ -11869,6 +11980,7 @@ fn main() {
             KatCommand::Custody => run_kat_custody(&args.keys_args),
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Custody => riir_refine::build_stamp::refuse("account custody", &["kat_transport"]),
+            KatCommand::Genesis => run_kat_genesis(&args.keys_args),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
