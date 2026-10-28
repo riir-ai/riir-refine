@@ -327,7 +327,8 @@ skill points agents there). Per sweep:
   (`**Lease closed:**` / `**Lease released:**` + the provenance in prose)
   — never leave prose after the expiry token on a `Claimed:`-shaped line,
   never put an ISO date in the epoch slot (digits only): an unparseable
-  claim-shaped line makes `claim_lease_check` exit 1 (BLIND) for the
+  claim-shaped line makes `claim_lease_check` exit 1 (BLIND) — the
+  read-time check reads no verdict for every lane in that repo.
   Repaired this date: riir-refine `.plans/225` (`f58f194b7`),
   riir-ai `.issues/971` + `.plans/638` (`6b379b3e6`); riir-ai `.issues/1122` reshaped 2026-10-25
   (`dcf0262af` — trailing prose after the expiry token; claim preserved).
