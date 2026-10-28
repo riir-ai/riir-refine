@@ -1,8 +1,8 @@
 # Plan 304 — Batch 299: the staged kernel_opt pool (TensorFold + uzu + cubecl + llama.cpp)
 
-**Status:** IN FLIGHT — claim-first (snapshot claim row landed before authoring); slot adjudicated free per the B293 cross-domain precedent (bbtree B298 = rust_perf domain, lease to 2026-10-29T09:44Z, untouched).
+**Status:** LANDED 2026-10-28 — Batch 299, corpus 986 → 994 (+8 + 1 rider face), `entries_gpu_134.rs`; gates ALL GREEN (G1 2/2, G2 3265/0 + 2749/0, G3 clippy ×3, T7 retrieval floors HELD both postures); see Research 342 + the snapshot landing row.
 
-**Claimed:** zed-m3-b299-pool, 1793180044, expires 2026-10-30T09:34:04+00:00
+**Lease closed:** zed-m3-b299-pool, 1793180044, expires 2026-10-30T09:34:04+00:00 — discharged by the Batch 299 landing (this plan, 2026-10-28).
 
 Cross-source batch (the Batch-105 combine mandate) over the ENTIRE staged kernel_opt pool — the 10-28b tfdelta rows 13–15 + the 10-28 p11 rows 1–5 + the #31146 merge-confirmed lead. Sources:
 
@@ -21,13 +21,13 @@ NOT in this batch (stay staged / other domains): TF numerics row 16 (relu2 NaN �
 
 ## Tasks
 
-- [ ] T1 — dedup re-verification (3+-vocabulary greps over `src/domains/kernel_opt/corpus/` + rust_perf): shared-round vs gpu-resident-routing (B105)/co-residency-capped-launch (B293)/launch-count families; MMA-window floor vs B296 width-validity + B297 capacity-tiles; mode-specialized merge vs fusion-admission + dispatch-count + pipeline-cache-key (B293) + the p11 #31230 kin; drain-partials vs reduction/sum families; degenerate-dim vs B296 admission-validity; rejection-persistence vs B284 autotune family; projection-fill vs staging/layout families; stale-fusion vs fusion-admission hosts (wave-efficiency, borrows-the-dispatch).
-- [ ] T2 — re-clone at pins into `.raw/b299/` {tensorfold, uzu, cubecl, llama.cpp}; re-verify EVERY quote byte-for-byte against the pinned commits (the B275 verify_quotes discipline) before any entry lands.
-- [ ] T3 — two parallel subagent proposal lanes (A: TensorFold+uzu; B: cubecl+llama.cpp), pattern + bounded fix-space + category + rationale + source quote each; coordinator re-verification of every quote.
-- [ ] T4 — authoring: new `entries_gpu_128.rs` (≤3 rules per authoring slice, fixtures standalone-compiled before landing), register in `corpus/mod.rs`, `batch299_rules_landed` + `batch299_pseudocode_parses` gates in `corpus/tests.rs` (mirroring the batch297 shape).
-- [ ] T5 — NotBenchable annotations where the mechanism is admission/dispatch policy (no claimed benchable this batch — kernel_opt house norm; any exception carries its Pareto arm at `--release` with box-state provenance).
-- [ ] T6 — GOAT: G1 parse/syn (batch299 gates), G2 lib tests (kernel_opt + default), G3 clippy `-D` ×3 postures. Freeze NOT owed (kernel_opt-only, the P30/B293 precedent); score-bench NOT owed (no rust_perf delta); binary rebuild NOT owed (kernel_opt outside the release set).
-- [ ] T7 — retrieval re-measure at BOTH postures (kernel delta): `--features kernel_opt,latent_retrieval` floors + the Layer-5b2 default-posture gate (`--features latent_retrieval retrieval_`); a decay FAILS the batch.
-- [ ] T8 — count pins via ONE shape-asserted python pass: kernel_opt total, category counts, corpus/tests totals + expected array, `mod.rs` header, `router.rs`, AGENTS.md, README, `.docs/11_domains/kernel_opt.md`.
-- [ ] T9 — research note `.research/341_batch299_*.md` (next free number, re-scan at write) + landing row prepended to `.distill/001_mining_queue_snapshot.md` (queue state: pool consumed; remaining staged = rust_perf/measurement/serving rows) + AGENTS/README/.docs count updates in the same commit; `rm -rf .raw/b299` at close (ephemeral law).
-- [ ] T10 — commit + push on `develop` (`feat: batch 299: ...`, named paths only, never `-A`).
+- [x] T1 — dedup re-verification (3+-vocabulary greps over `src/domains/kernel_opt/corpus/` + rust_perf): shared-round vs gpu-resident-routing (B105)/co-residency-capped-launch (B293)/launch-count families; MMA-window floor vs B296 width-validity + B297 capacity-tiles; mode-specialized merge vs fusion-admission + dispatch-count + pipeline-cache-key (B293) + the p11 #31230 kin; drain-partials vs reduction/sum families; degenerate-dim vs B296 admission-validity (ZERO hits — novel); rejection-persistence vs B284 autotune family; projection-fill vs staging/layout families (gpu_60 = prose only); stale-fusion vs fusion-admission hosts.
+- [x] T2 — re-clone at pins into `.raw/b299/` {tensorfold, uzu, cubecl, llamalp}; re-verify EVERY quote byte-for-byte against the pinned commits (all ~30 quotes verified: tensorfold/uzu/cubecl/llamalp worktrees + `git show` at 893c8d7b).
+- [x] T3 — two parallel subagent proposal lanes (A: TensorFold+uzu; B: cubecl+llama.cpp); coordinator re-verification caught ONE lane-B citation drift (rank-partial is gpu_102, not gpu_64) + ONE needle paraphrase (run along, not runs along).
+- [x] T4 — authoring: `entries_gpu_134.rs` (8 rules, original fixtures), registered in `corpus/mod.rs` (mod + extend + 7 category lists + 7 head-comment counts), `batch299_rules_landed` + `batch299_pseudocode_parses` gates in `corpus/tests.rs`; the R9 rider face on gpu_109.
+- [x] T5 — all 8 rules NotBenchable in-rule (launch-count / residency-liveness / admission / dispatch-count / reduction-count / layout-crash / tuner-state / staging-correctness axes — the Batch-136 domain-reason class; no claimed benchable).
+- [x] T6 — GOAT: G1 (2/2), G2 (kernel_opt lib 3265/0; default 2749/0), G3 (clippy `-D` ×3 postures clean, 4 pedantic doc-backticks fixed en route). Freeze NOT owed (kernel_opt-only, P30/B293); score-bench NOT owed; binary rebuild NOT owed (kernel_opt outside the release set). EN-ROUTE: the corpus-count pin surface proved to be 37 asserts + the Plan-003 table + router.rs total (all re-pinned, the batch-299 chain note prepended); the embedded-quote defect class fired twice (5 + 32 sites) — fix recorded in Research 342.
+- [x] T7 — retrieval re-measure BOTH postures: `kernel_opt,latent_retrieval` 28/0 (279.55s) + Layer-5b2 default posture 27/0 (66.16s) — floors HELD, no re-pin.
+- [x] T8 — count pins: 37 corpus-count asserts (tests.rs) + Plan-003 table (A 193, B 111, C 65, D 237, E 89, K 27, N 88) + router.rs total 994 + AGENTS.md ×2 sites + 7 category head comments.
+- [x] T9 — research note `.research/342_batch299_staged_pool_kernel_opt.md` (341 was taken by the perfect-hash lane mid-flight — the write-time re-scan held) + landing row prepended to `.distill/001_mining_queue_snapshot.md` + AGENTS updates; `rm -rf .raw/b299` at close.
+- [x] T10 — commit + push on `develop` (`feat: batch 299: ...`, named paths only, never `-A`).
