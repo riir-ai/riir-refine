@@ -31,6 +31,14 @@ While fixing the cap, two mechanical clippy findings surfaced in the ndb lane (`
 - Even oracle-anchored, the fix lane DECLINES bench-target edits by design (the bench-guard — a bench file's numbers ARE its artifact; P30/Issue-118): "fixed 0 file(s) / 0 edit(s)" reported honestly. So for bench-target mechanical findings, MANUAL is the documented end-state — my original shortcut landed on the right answer without the verification round.
 - Authoring lesson for THIS plan's T3.2/T3.3 (rusqlite-dep-gated rules): when the eventual consumer fixtures live behind non-default features, the healer verification for them needs the oracle posture env named in the landing note — same class the P43 per-edit tail warns about, one layer out.
 
+### Phase-4 rider — the T4.6 build posture at HEAD 15d9aa54 (2026-10-28, zed-m3-oracle-gaparm)
+
+Dry-run of T4.6's rebuild NOW (not at batch time): the maintained binary is re-stamped `15d9aa54f388` (release set complete, `--oracle-census` smoke live through the installed binary; docs-only `84695cd9` does not stale it). Two override facts are LOAD-BEARING for the real T4.6 run:
+
+- **The 1.98.1 pin is UNBUILDABLE at HEAD.** The i188 Cargo.toml change re-resolved the `katgpt-device-verify` git dep to a rev whose `rust-version = 1.99.0` (E0657 at the pinned toolchain: "1.98.1 is not supported by katgpt-device-verify@0.1.0"). The build used `RUSTUP_TOOLCHAIN=1.99.0`. The queued "1.99 pin bump rides the quiet touch after B298" is now BLOCKING, not cosmetic — T4.6 cannot run at the pin.
+- **riir-kat must resolve at `9321f28`** (the `ssh_picker` leaf surface this HEAD builds against — without it: E0433 `cannot find ssh_picker in kat_recovery_client`). The shared checkout is diverged + dirty (tally-lane WIP), so the build ran against a detached kat worktree at `9321f28` via a temporary dep-path override (`../riir-kat` → `../rr-kat-head`) in a sibling-placed build worktree; `git update-index --assume-unchanged Cargo.toml` kept the `--version` stamp clean (`-dirty` otherwise); both reverted after install.
+- Recipe: sibling-placed worktree (`/Users/kat/git/rr-refine-head` — a /tmp placement breaks the `../riir-*` path deps at manifest resolution) + kat worktree + the one-row sed + `RUSTUP_TOOLCHAIN=1.99.0 CARGO_TARGET_DIR=/tmp/… cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify,update_check`.
+
 ## Phase 3 — entries (fixtures are ORIGINAL minimal Rust reproductions; never paste Leviathan source)
 
 - [ ] T3.1 `fts-query-dsl-term-requote` (sec, suggest-only, B+): buggy = `format!` interpolation of user text into a query-DSL string (FTS5-shaped); fixed = word-tokenize → re-quote each term → cap term count; regime condition: whenever input crosses a trust boundary into a search-engine expression. NotBenchable-by-domain annotation (`bench_spec: None`).
