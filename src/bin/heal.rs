@@ -74,9 +74,11 @@ enum KatCommand {
     /// prompt).
     Keys,
     /// riir-dapps Plan 056 C7: `account custody` (status), `account custody
-    /// se` (move the key into Secure Enclave custody), `account custody
-    /// delete-plain` (remove the in-dir plaintext copy once the Enclave is
-    /// proven to open).
+    /// se [--pin]` (move the key into Secure Enclave custody; `--pin` adds a
+    /// PIN to the wrap — no-echo prompt twice, Plan 058 T2 — and on an
+    /// account already in Enclave custody re-seals under a new PIN),
+    /// `account custody delete-plain` (remove the in-dir plaintext copy once
+    /// the Enclave is proven to open).
     Custody,
     /// riir-dapps Plan 057 T3: the gen-2 genesis ceremony — `genesis status
     /// <url> [--save <file>]`, `genesis sign --status <file> --label <l>
@@ -1764,7 +1766,10 @@ fn run_kat_genesis(words: &[String]) {
             use riir_refine::kat_account::KatAccount;
             let account = KatAccount::load(&KatAccount::default_dir())
                 .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
-            eprintln!("genesis: opening the account key (an Enclave-custody key asks for ONE Touch ID press)");
+            eprintln!(
+                "genesis: opening the account key (an Enclave-custody key asks for its PIN first when it has one, \
+                 then ONE Touch ID press)"
+            );
             let key = account.signing_key().unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
             let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
             let bundle = gc::sign_bundle(&key, &status, &label, now).unwrap_or_else(|e| fail(e));
@@ -1836,14 +1841,41 @@ fn run_kat_custody(words: &[String]) {
         }
         #[cfg(target_os = "macos")]
         Some("se") => {
-            use riir_refine::kat_account::se::SeAgent as _;
-            let agent = riir_refine::kat_account::se::agent_for(&dir).unwrap_or_else(|e| fail(e));
-            if !dir.join(riir_refine::kat_account::se::BLOB_FILE).exists() {
+            use riir_refine::kat_account::se::{self, SeAgent as _};
+            let want_pin = match &words[1..] {
+                [] => false,
+                [flag] if flag == "--pin" => true,
+                rest => fail(format!("unknown arguments {rest:?} — `account custody se [--pin]`")),
+            };
+            let agent = se::agent_for(&dir).unwrap_or_else(|e| fail(e));
+            // Plan 058 T2: an account already in Enclave custody re-seals
+            // under a new PIN (open with the current one, prove the new one).
+            if account.state().key_path.as_deref() == Some(riir_refine::kat_account::SE_PROVENANCE) {
+                if !want_pin {
+                    fail("already in Secure Enclave custody — add `--pin` to set or change its PIN".into());
+                }
+                let old = account
+                    .se_pin_required()
+                    .unwrap_or_else(|e| fail(e))
+                    .then(|| se::read_pin("current PIN: ").unwrap_or_else(|e| fail(e)));
+                let new = se::read_new_pin().unwrap_or_else(|e| fail(e));
+                eprintln!("account custody: re-sealing under the new PIN; TWO Touch ID presses (open the current envelope, prove the new one)");
+                let path = account
+                    .reseal_se_with_pin(&agent, old.as_ref().map_or(&b""[..], |p| p.as_bytes()), new.as_bytes())
+                    .unwrap_or_else(|e| fail(e));
+                println!("custody: {} (PIN set)", riir_refine::kat_account::SE_PROVENANCE);
+                println!("envelope: {}", path.display());
+                return;
+            }
+            let pin = want_pin.then(|| se::read_new_pin().unwrap_or_else(|e| fail(e)));
+            if !dir.join(se::BLOB_FILE).exists() {
                 agent.create().unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
             }
             let _ = agent.public_key();
             eprintln!("account custody: sealing the key into the Secure Enclave; ONE Touch ID press verifies it");
-            let moved = account.move_custody_to_se_with(&agent).unwrap_or_else(|e| fail(e));
+            let moved = account
+                .move_custody_to_se_with_pin(&agent, pin.as_ref().map_or(&b""[..], |p| p.as_bytes()))
+                .unwrap_or_else(|e| fail(e));
             println!("custody: {}", riir_refine::kat_account::SE_PROVENANCE);
             println!("envelope: {}", moved.envelope.display());
             println!(
