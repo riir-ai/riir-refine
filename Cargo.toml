@@ -564,7 +564,7 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # provider-bind lane rides it too (`riir-kat/provider_login` — the GitHub
 # device flow + the recovery class's bind routes; the leaf's own
 # feature chain pulls github_login + rebind).
-kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport", "riir-kat/github_pow_fetch", "riir-kat/provider_login"]
+kat_transport = ["dep:ureq", "kat_service", "riir-kat/kat_transport", "riir-kat/github_pow_fetch", "riir-kat/provider_login", "riir-kat/se_custody"]
 
 # riir-dapps Proposal 009 §9 / issue 129 (owner-mandated 2026-10-17):
 # `cargo refine get|send <amt> tuna` — the marketing-airdrop ADMIN hand

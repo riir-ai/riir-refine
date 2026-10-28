@@ -73,6 +73,11 @@ enum KatCommand {
     /// (on a live device; T2: the TOTP code from `RIIR_KAT_TOTP_CODE` or a
     /// prompt).
     Keys,
+    /// riir-dapps Plan 056 C7: `account custody` (status), `account custody
+    /// se` (move the key into Secure Enclave custody), `account custody
+    /// delete-plain` (remove the in-dir plaintext copy once the Enclave is
+    /// proven to open).
+    Custody,
     /// Pull-only corpus lease refresh (T1.6): lease check + segment fetch +
     /// atomic swap + the visible charge line.
     Update,
@@ -1691,6 +1696,61 @@ fn run_kat_keys(words: &[String]) {
             report(http::revoke(&url, &body, Some(&t2_code())));
         }
         Some(other) => fail(format!("unknown verb {other:?} — list | join | add | revoke")),
+    }
+}
+
+/// Plan 056 C7: `account custody [se | delete-plain]`.
+#[cfg(feature = "kat_transport")]
+fn run_kat_custody(words: &[String]) {
+    use riir_refine::kat_account::KatAccount;
+    let fail = |msg: String| -> ! {
+        eprintln!("account custody: {msg}");
+        std::process::exit(1);
+    };
+    let dir = KatAccount::default_dir();
+    let mut account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
+    let custody = account.state().key_path.clone().unwrap_or_else(|| "file (this account dir)".into());
+    match words.first().map(String::as_str) {
+        None | Some("status") => {
+            println!("account {}", account.state().account_id);
+            println!("custody: {custody}");
+        }
+        #[cfg(target_os = "macos")]
+        Some("se") => {
+            use riir_refine::kat_account::se::SeAgent as _;
+            let agent = riir_refine::kat_account::se::agent_for(&dir).unwrap_or_else(|e| fail(e));
+            if !dir.join(riir_refine::kat_account::se::BLOB_FILE).exists() {
+                agent.create().unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
+            }
+            let _ = agent.public_key();
+            eprintln!("account custody: sealing the key into the Secure Enclave; ONE Touch ID press verifies it");
+            let moved = account.move_custody_to_se_with(&agent).unwrap_or_else(|e| fail(e));
+            println!("custody: {}", riir_refine::kat_account::SE_PROVENANCE);
+            println!("envelope: {}", moved.envelope.display());
+            println!(
+                "the plaintext key still exists at {} — every signature now goes through the Enclave; \
+                 run `cargo refine account custody delete-plain` to remove an in-dir copy",
+                moved.plaintext_key.display()
+            );
+        }
+        #[cfg(target_os = "macos")]
+        Some("delete-plain") => {
+            if account.state().key_path.as_deref() != Some(riir_refine::kat_account::SE_PROVENANCE) {
+                fail("move custody first (`account custody se`) — refusing to delete the only copy".into());
+            }
+            eprintln!("account custody: proving the Enclave opens (ONE Touch ID press) before deleting anything");
+            account.seed().unwrap_or_else(|e| fail(format!("the Enclave did not open ({e}) — nothing deleted")));
+            let in_dir = dir.join(riir_refine::kat_account::KatAccount::KEY_FILE);
+            if in_dir.exists() {
+                std::fs::remove_file(&in_dir).unwrap_or_else(|e| fail(format!("{}: {e}", in_dir.display())));
+                println!("deleted the plaintext copy {}", in_dir.display());
+            } else {
+                println!(
+                    "no in-dir plaintext copy; a key under ~/.ssh is also your ssh identity and is never deleted here"
+                );
+            }
+        }
+        Some(other) => fail(format!("unknown verb {other:?} — status | se | delete-plain")),
     }
 }
 
@@ -8250,6 +8310,10 @@ fn parse_args() -> Args {
             }
             // Plan 056 C4: `account keys` / `account key <verb> …` — re-aims
             // at Keys and takes every remaining word as its arguments.
+            "custody" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
+                args.command = Some(KatCommand::Custody);
+                args.keys_args.extend(it.by_ref());
+            }
             "keys" | "key" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
                 args.command = Some(KatCommand::Keys);
                 if arg == "keys" {
@@ -11801,6 +11865,10 @@ fn main() {
             KatCommand::Keys => run_kat_keys(&args.keys_args),
             #[cfg(not(feature = "kat_transport"))]
             KatCommand::Keys => riir_refine::build_stamp::refuse("account keys", &["kat_transport"]),
+            #[cfg(feature = "kat_transport")]
+            KatCommand::Custody => run_kat_custody(&args.keys_args),
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Custody => riir_refine::build_stamp::refuse("account custody", &["kat_transport"]),
             KatCommand::Claim => run_kat_claim(args.claim_tx.as_deref()),
             #[cfg(feature = "kat_transport")]
             KatCommand::Update => run_kat_update(),
