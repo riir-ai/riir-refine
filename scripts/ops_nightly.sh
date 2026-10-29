@@ -477,31 +477,13 @@ if [ "${OPS_NIGHTLY_NO_CORPUS_SYNC:-0}" != "1" ]; then
   fi
 fi
 
-# ── 4d. healqual days sync (riir-dapps Plan 037) — the healer's daily
-# quality series → the kat-service "Self-evolve" card. Mines THIS repo's
-# score-bench + frontier feeds (the miner runs inside this checkout) and
-# POSTs the signed series to each env's merge door. WARN-only, by design:
-# a healqual-sync failure must never stop the dashboard refresh.
-# OPS_NIGHTLY_NO_HEALQUAL_SYNC=1 skips (the run-once-by-hand escape
-# hatch). The sync's unauthorized line lands in the log above — that is
-# the 401/403-LOUD surface (key rotation or an allowlist drop must
-# surface here, never warn-and-continue into a silently stale card).
-# Companion (T4.3, riir-refine Proposal 016): the OPPORTUNISTIC push runs
-# on its own launchd interval — com.riir.healqual-sync.plist, 4h,
-# `healqual_sync.sh --if-changed` (digest-gated). THIS leg stays the
-# always-POST liveness probe; never point it at --if-changed.
-if [ "${OPS_NIGHTLY_NO_HEALQUAL_SYNC:-0}" != "1" ]; then
-  if [ -x "${REPO}/../riir-dapps/scripts/healqual_sync.sh" ]; then
-    log "healqual days sync starting"
-    if "${REPO}/../riir-dapps/scripts/healqual_sync.sh" >> "${LOG}" 2>&1; then
-      log "healqual days sync ok"
-    else
-      log "WARN healqual days sync FAILED (see above; riir-dapps Plan 037) — continuing"
-    fi
-  else
-    log "WARN healqual days sync skipped — no ../riir-dapps checkout beside this repo"
-  fi
-fi
+# ── 4d. (RETIRED 2026-10-16, riir-dapps 1d96f6c / Issue 127) The healqual
+# push lane is gone: kat-service's Self-evolve card now derives its series
+# from the git-tracked score_history.jsonl (GH_RAW_TOKEN, ETag + TTL cache),
+# so there is nothing to POST. healqual_sync.sh + its launchd plist were
+# deleted the same day; this leg only ever printed a false "no checkout"
+# WARN after that. No replacement leg is needed — pushing this repo IS the
+# sync.
 
 # ── 5. keep the log bounded (this runs unattended, forever) ──
 if [ "$(wc -l < "${LOG}")" -gt 5000 ]; then
