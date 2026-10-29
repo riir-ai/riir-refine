@@ -68,20 +68,20 @@
 
 use crate::kat_account::KatAccount;
 use riir_kat::kat_protocol_migrate::{
-    attest_only_line, decode_pubkey, migrate_attest_message, migrate_attest_message_v2,
-    MigratePowAttestation,
+    MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL, ProposalDraft,
+    proposal_issue_html_url,
+};
+use riir_kat::kat_protocol_migrate::{
+    MigratePowAttestation, attest_only_line, decode_pubkey, migrate_attest_message,
+    migrate_attest_message_v2,
 };
 #[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
-    migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
-    migrate_release_message_v2, MigrateRequestBody,
-};
-use riir_kat::kat_protocol_migrate::{
-    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, ProposalDraft,
-    PROPOSAL_LABEL,
+    MigrateRequestBody, migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
+    migrate_release_message_v2,
 };
 use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
-use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_CORE};
+use riir_kat::kat_protocol_migrate_tally::{TALLY_CORE, TallyTiming};
 
 /// The migrate repo base the proposal-issue URL composes against when the
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
@@ -102,6 +102,15 @@ pub struct CensusSurface {
     pub name: &'static str,
     pub detail: String,
     pub stale: bool,
+}
+
+/// Render a wire-KAT total honestly (the Issue-094 slip class: these values
+/// are the push's own wire-unit arithmetic, never micro — a raw `µKAT` label
+/// reads a 1 KAT delta as `1 µKAT`). One conversion, `MICRO_PER_KAT`.
+fn render_wire_kat(wire_kat: u64) -> String {
+    let micro = i64::try_from(wire_kat.saturating_mul(riir_kat::kat_units::MICRO_PER_KAT))
+        .unwrap_or(i64::MAX);
+    riir_kat::kat_units::render_units(micro, "KAT")
 }
 
 /// The local census: every account-keyed surface this repo touches, read
@@ -152,10 +161,11 @@ pub fn census(
         name: "burn ack",
         detail: if ack_present {
             format!(
-                "{} (acked {} d ago, booked {} µKAT, pending {pending} µKAT){}",
+                "{} (acked {} d ago, booked {}, pending {}){}",
                 ack_path.display(),
                 ack_age_days,
-                ack.burn_kat_total,
+                render_wire_kat(ack.burn_kat_total),
+                render_wire_kat(pending),
                 ack_warning
                     .as_ref()
                     .map(|w| format!(" — {w}"))
@@ -168,8 +178,9 @@ pub fn census(
     });
     if pending > MIGRATE_MAX_UNSYNCED {
         blockers.push(format!(
-            "the burn book holds {pending} µKAT the service never acknowledged — \
-             run `cargo refine sync` (the auto burn-sync drains it) UNDER THE OLD ACCOUNT first"
+            "the burn book holds {} the service never acknowledged — \
+             run `cargo refine sync` (the auto burn-sync drains it) UNDER THE OLD ACCOUNT first",
+            render_wire_kat(pending)
         ));
     }
     if let Some(w) = &ack_warning {
@@ -994,14 +1005,25 @@ pub fn open_proposal_draft(draft: &ProposalDraft) -> DraftOpen {
             .unwrap_or_default()
             .into_iter()
             .find(|i| i.get("title").and_then(|t| t.as_str()) == Some(draft.title.as_str()))
-            .and_then(|i| i.get("html_url").and_then(|u| u.as_str()).map(str::to_owned));
+            .and_then(|i| {
+                i.get("html_url")
+                    .and_then(|u| u.as_str())
+                    .map(str::to_owned)
+            });
         if let Some(url) = existing {
             return DraftOpen::Opened(url);
         }
     }
     match gh(
         &[
-            "issue", "create", "--repo", &slug, "--title", &draft.title, "--body-file", "-",
+            "issue",
+            "create",
+            "--repo",
+            &slug,
+            "--title",
+            &draft.title,
+            "--body-file",
+            "-",
         ],
         Some(&draft.body),
     ) {
@@ -1388,7 +1410,10 @@ mod tests {
             vote_mentions(Some("NIPONCHI"), Some("Victim")),
             format!("{CORE} @Victim")
         );
-        assert_eq!(vote_mentions(Some("same"), Some("SAME")), format!("{CORE} @same"));
+        assert_eq!(
+            vote_mentions(Some("same"), Some("SAME")),
+            format!("{CORE} @same")
+        );
         assert_eq!(vote_mentions(Some(""), Some("c")), format!("{CORE} @c"));
     }
 
@@ -1765,6 +1790,15 @@ mod tests {
         let rendered = render_census(&c, base);
         assert!(rendered.contains("STALE"), "{rendered}");
         assert!(rendered.contains("[STALE] burn ack"), "{rendered}");
+        // The wire-unit law (issue 189 follow-up): these totals are WIRE KAT
+        // (the push's own arithmetic) — the render must say KAT, never µKAT.
+        assert!(rendered.contains("booked 5.000000 KAT"), "{rendered}");
+        assert!(rendered.contains("pending 2.000000 KAT"), "{rendered}");
+        assert!(
+            rendered.contains("holds 2.000000 KAT"),
+            "the blocker renders honest units: {rendered}"
+        );
+        assert!(!rendered.contains("µKAT"), "{rendered}");
         let _ = std::fs::remove_dir_all(&root);
         let _ = std::fs::remove_dir_all(&acct);
     }
@@ -1926,10 +1960,12 @@ mod tests {
             &b_acct,
         );
         let sig = decode_sig64(&b.attest_signature_hex).expect("128 hex");
-        assert!(ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
-            .expect("vk")
-            .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
-            .is_ok());
+        assert!(
+            ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
+                .expect("vk")
+                .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+                .is_ok()
+        );
         // Only public data travels: no field carries the private seed.
         let json = serde_json::to_string(&b).expect("serialize");
         assert!(!json.contains(&hex(&[0x42; 32])), "{json}");
@@ -2021,11 +2057,17 @@ mod tests {
         );
         let mut bad = draft();
         bad.new_issue_url = "https://example.com/x/issues/new?title=t".to_owned();
-        assert_eq!(draft_repo_slug(&bad), None, "a non-GitHub URL names no repo");
+        assert_eq!(
+            draft_repo_slug(&bad),
+            None,
+            "a non-GitHub URL names no repo"
+        );
         let text = render_draft_instructions(&draft(), "gh is not installed");
-        assert!(text.contains("as GitHub @alice (gh is not installed)"), "{text}");
+        assert!(
+            text.contains("as GitHub @alice (gh is not installed)"),
+            "{text}"
+        );
         assert!(text.contains(&draft().new_issue_url), "{text}");
         assert!(render_proposal_line(None).contains("not opened yet"));
     }
-
 }

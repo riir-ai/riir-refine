@@ -96,13 +96,14 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       (187 T2, dapps `0b143d5` — the filer authors the issue; the worker reads
       only). The owner act WAS 187 T5 (DONE 2026-10-28 — devnet + apex deleted; 187 CLOSED, HISTORY.md): `wrangler secret delete
       KAT_MIGRATE_ISSUES_TOKEN` (apex + `--env devnet`) + revoke the PAT;
-- [ ] **T2/T4 key hygiene (2026-10-27, `rm -P`):** both /tmp key copies
+- [x] **T2/T4 key hygiene (2026-10-27, `rm -P`):** both /tmp key copies
       SHREDDED + verified gone (`kat_old_c79c93b8` — the misnamed
       `1bb4b7b5` copy of `/Users/katopz/.ssh/id_ed25519`, and
       `kat_old_c79c93b8_real` — the filing #1 copy). Originals remain:
       `~/deprecated/old-ssh/id_ed25519` (c79c93b8, owner-held) + the
       katopz ssh key itself. Re-copy per T2's recipe for the mainnet
-      filing if ever needed.
+      filing if ever needed. **Verified gone on the M3 2026-10-30
+      (both paths ENOENT) — ticked, zed-m3-189-tails.**
 - [x] **T1-live (2026-10-27, rule C + DEVNET_FAST, devnet `687950c7`):** KEY
       MAP MEASURED (blake3 of the raw pubkey): `c79c93b8…192fd6` =
       `/Users/kat/deprecated/old-ssh/id_ed25519` (Dec 2023) ✅ ·
@@ -146,7 +147,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       issues token; the go to deploy the apex at ≥ `5a94f76` with
       `kat_migrate` on (the setup.sh `--mainnet` zero-pending gate runs
       first).
-- [ ] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
+- [x] **T1 — T7 devnet rehearsal (agent):** run the assembled battery
       against a live devnet worker at the compressed window: dao E1–E11
       (`migrate_contract.rs` 17 tests + the sweep battery + 3 spec-match
       arms) AND the refine Proposal-023 cells (E-1 no-objection release +
@@ -158,6 +159,18 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       SURFACE the T3b owner call: the mining-plane tombstone gate gap
       (pending rows are TTL'd ephemera) — accept the ephemera or gate at
       T7. GOAT verdict → `kat_migrate` promote = owner call.
+      **DONE 2026-10-29/30 — the record is issue 189's battery (amo,
+      every reachable cell green: dao 63/63 + spec-match 3/3 + store
+      50/50; E-3 both halves; E-4 three legs) + the E-5 live tail (M3,
+      2026-10-30, zed-m3-189-tails): the re-file attempt FROM the released
+      `c79c93b8` refuses CLIENT-SIDE at the Issue-188 login-proof
+      pre-flight (`kat_migrate_normal.rs` Expert arm — "the new key is not
+      listed on github.com/katopz.keys", exit 1, no wire call) — the cell's
+      own "issue 144's proof gate may run first" prediction, in its 188-lane
+      client form; the wire-side dead-account code stays covered by the dao
+      fixtures + T1-live's 409 cells, unreachable from an agent without an
+      owner act (device flow / token / key listing). The µKAT→render_units
+      display follow-up landed with it.**
 - [ ] **T2 — T-MIGRATE prep (agent):** the key-crossing decision — the
       dual-sign needs BOTH keys on ONE box (the CLI loads the old key via
       `--old-key <path>`; the claim side rides the record's own key).

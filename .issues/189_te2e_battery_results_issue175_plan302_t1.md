@@ -111,13 +111,40 @@ path's own discipline.
 
 ## Remaining tasks
 
-- [ ] Tick plan-302's open T1 checkbox with this issue as the record (the
+- [x] Tick plan-302's open T1 checkbox with this issue as the record (the
       battery ran; the drill pair `c79c93b8 → 1bb4b7b5` is moot — the
       1bb4b7b5 copies were shredded and T1-live drilled real pairs #1/#2
-      to release instead).
-- [ ] E-5 live tail on the M3: the released-id re-file attempt, record the
-      firing refusal code.
-- [ ] Follow-up (display, riir-refine): the two census/sync render sites
+      to release instead). **Ticked 2026-10-30 (zed-m3-189-tails) with the
+      E-5 live tail below; plan-302's T2/T4 hygiene box also verified +
+      ticked (both /tmp copies ENOENT on the M3).**
+- [x] E-5 live tail on the M3: the released-id re-file attempt, record the
+      firing refusal code. **RAN 2026-10-30 (zed-m3-189-tails, isolated rig:
+      `RIIR_AUTH_ACCOUNT_DIR` + `RIIR_REFINE_TRAJ_ROOT` throwaway dirs,
+      `--net devnet`, throwaway new-side key 6d7dfc6a…): the attempt refuses
+      CLIENT-SIDE at the Issue-188 login-proof pre-flight —
+      `kat_migrate_normal.rs` Expert arm: "the new key is not listed on
+      github.com/katopz.keys and no device flow ran to bind it", exit 1,
+      BEFORE any filing POST (the census gate passed READY; no wire call, no
+      state written). This is the cell's own "issue 144's proof gate may run
+      first" prediction, in its 188-lane client form. The three paths past
+      it each need an owner act: the device flow (interactive, the owner's
+      OAuth client id + human browser auth), `--github-token` (revoked by
+      187 T5), or listing the key at github.com/settings/keys. The
+      wire-side ordering (dead-account 409 vs `login_unproven`) stays
+      covered by the dao fixtures (`a_dead_claim_account_is_unfilable_after
+      _a_release` green) + T1-live's wire 409 cells; rig keys/dirs shredded
+      + removed post-run.**
+- [x] Follow-up (display, riir-refine): the two census/sync render sites
       print wire-KAT with µKAT labels — route them through
-      `kat_units::render_units`.
-- [ ] Owner: the T3b call + the promote verdict.
+      `kat_units::render_units`. **LANDED 2026-10-30: `render_wire_kat`
+      helper (`MICRO_PER_KAT` the one conversion, saturating on both
+      sides) feeding both sites — the surface detail (`booked 5.000000
+      KAT, pending 2.000000 KAT`) and the E-3 blocker (`holds 2.000000
+      KAT …`); the E-3 refuse test now pins the honest units + a no-µKAT
+      assertion. Clippy −D green at default + `kat_service`; 21/21
+      migrate-client tests green (the census suite was INVISIBLE at
+      default features — the module is `#[cfg(feature = "kat_service")]`,
+      the green-zero trap; run at the gating posture).**
+- [ ] Owner: the T3b call + the promote verdict. (These two stay parked
+      HERE — plan 302's frozen status carries the same two calls; this
+      issue remains their surfacing record.)
