@@ -1,8 +1,6 @@
 # Plan 312 — Batch 307: the 10-29b staged kernel_opt pool (leads + riders)
 
-**Status:** IN EXECUTION — claimed 2026-10-29T18:3xZ (shikuwa-4090-b307); the 10-29b lead
-delta sweep's staged addendum (snapshot, 2026-10-29T12:1xZ) is the verdict record this
-batch converts; T0 quote re-verification at the pins + T1 dedup at the slot done pre-claim.
+**Status:** COMPLETE — Batch 307 landed 2026-10-29 (corpus 1020 → 1022, 2 own rules + 4 count-neutral rider faces; lease closed by the landing).
 
 ## Scope
 
@@ -43,21 +41,22 @@ unowned.
       family 61 hits — zero coverage-contract owners; function-constant family — cache-key +
       fusion owners cited, rank-dispatch unowned; launch-table/minifloat/singleton families —
       rider homes located, no dup
-- [ ] T2 authoring: entries_gpu_139.rs (2 own rules, each with pattern, bounded fix-space,
+- [x] T2 authoring: entries_gpu_139.rs (2 own rules, each with pattern, bounded fix-space,
       category, rationale, source quote, distinct-from kinships, grep evidence) + 4 rider
-      faces (C on gpu_17, D on gpu_33, E on gpu_137, F on gpu_134)
-- [ ] T3 wiring: mod.rs slices + category comments; router expert-total re-pin (count moves
-      +2)
-- [ ] T4 count pins: the kernel_opt total + per-category sites via ONE shape-asserted pass
-      (tests.rs sites + the Plan-003 per-category table + AGENTS.md + README rows)
-- [ ] T5 gates: G1 batch307 needle+parse (`--features kernel_opt`); G2 kernel_opt lib + default
-      lib; G3 clippy -D x3 postures; retrieval floors both postures (kernel_opt,latent_retrieval
-      + default); freeze/score-bench NOT owed (zero clippy-corpus delta, P30); binary rebuild
-      NOT owed (kernel_opt outside the release set)
-- [ ] T6 records: Research 351 (the batch note — the staged addendum is the verdict record,
-      the note carries the landing provenance); AGENTS.md kernel_opt count; .docs/11_domains/
-      kernel_opt.md; snapshot landing row; this file's tasks ticked
-- [ ] T7 commit `feat: batch 307: ...` + push; `.raw/b307/` removed at close
+      faces (C on gpu_17, D on gpu_33, E on gpu_137, F on gpu_134) — category letters
+      corrected in-rule (the corpus letter for Dispatch is D, not the sweep's "E" label)
+- [x] T3 wiring: mod.rs slices + category comments; router expert-total re-pin (1020 → 1022;
+      A slice 200→201, D slice 239→240, shape-asserted by the awk count)
+- [x] T4 count pins: 37 tests.rs sites + router + AGENTS.md ×2 + README + .docs row via
+      shape-asserted passes (the `^        1020,$` + `^        total, 1020,$` forms); EN-ROUTE:
+      the B305 missed cross-domain rust_perf witness repaired (275 → 278, the missed-pin
+      class's fifth instance)
+- [x] T5 gates: G1 batch307 needle+parse 2/2; G2 kernel_opt lib 3309/0 + default lib 2785/0;
+      G3 clippy −D ×3 postures clean; retrieval floors HELD both postures (28/0 + 27/0);
+      freeze/score-bench NOT owed (zero clippy-corpus delta, P30); binary rebuild NOT owed
+- [x] T6 records: Research 351; AGENTS.md kernel_opt count ×2; .docs/11_domains/kernel_opt.md;
+      snapshot landing row; this file's tasks ticked
+- [x] T7 commit `feat: batch 307: ...` + push; `.raw/b307/` removed at close
 
 ## Gates, criteria, risks
 
