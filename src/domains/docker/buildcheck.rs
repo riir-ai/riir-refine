@@ -348,8 +348,11 @@ WARNING: LegacyKeyValueFormat - https://docs.docker.com/go/dockerfile/rule/legac
 
     #[test]
     fn clean_report_has_no_findings() {
-        assert!(parse_checks("Check complete, no warnings found.\n").is_empty());
-        assert!(parse_checks("").is_empty());
+        assert_eq!(
+            parse_checks("Check complete, no warnings found.\n"),
+            [] as [BuildCheckFinding; 0]
+        );
+        assert_eq!(parse_checks(""), [] as [BuildCheckFinding; 0]);
     }
 
     #[test]

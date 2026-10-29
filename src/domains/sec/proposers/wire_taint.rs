@@ -1,5 +1,5 @@
 //! The shared wire-taint walker (Batch 165, Plan 156 T2) — the byte-origin
-//! taint substrate BOTH InputValidation wire detectors consume.
+//! taint substrate BOTH `InputValidation` wire detectors consume.
 //!
 //! Extracted from `length_prefix_alloc` so the
 //! `unchecked-wire-arithmetic` sink (Batch 165) reuses the shipped walk

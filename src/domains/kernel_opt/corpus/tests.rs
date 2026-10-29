@@ -143,8 +143,8 @@ fn heal_entry_accessors_return_correct_fields() {
         .find(|e| e.rule_id == "matvec-coalesce")
         .expect("matvec-coalesce should be in seed corpus");
     assert_eq!(entry.rule_id(), "matvec-coalesce");
-    assert!(!entry.buggy_code().is_empty());
-    assert!(!entry.fixed_code().is_empty());
+    assert_ne!(entry.buggy_code(), "");
+    assert_ne!(entry.fixed_code(), "");
 }
 
 #[test]
@@ -22983,7 +22983,8 @@ fn batch296_pseudocode_parses() {
     // parse as valid Rust (the L2 pruner verdict).
     use crate::domain::HealDomain;
     let corpus = build_kernel_seed_corpus();
-    for id in ["vector-width-admission-checks-every-outer-stride"] {
+    {
+        let id = "vector-width-admission-checks-every-outer-stride";
         let entry = corpus
             .entries
             .iter()
@@ -23319,6 +23320,7 @@ fn batch297_pseudocode_parses() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn batch299_rules_landed() {
     // G1 for Batch 299 (Plan 304 / Research 342): the staged kernel_opt
     // pool -- EIGHT own rules across four sources (TensorFold 893c8d7b +
@@ -23781,6 +23783,7 @@ fn batch303_pseudocode_parses() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)]
 fn batch304_rules_landed() {
     // G1 for Batch 304 (Plan 309 / Research 348): the kernel_opt delta
     // pool -- THIRTEEN own rules from the 10-27 leadstage remainder + the

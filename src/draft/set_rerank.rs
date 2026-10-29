@@ -60,10 +60,10 @@
 //! `RIIR_CLIPPY_NO_TWO_STAGE` precedent).
 
 use katgpt_core::set_admission::{
-    admit_with_recovery_into, certify_set, AdmissionScratch, CertificateReport, FanScratch,
-    RecoveryOutcome, SetAdmissionConfig, DIM,
+    AdmissionScratch, CertificateReport, DIM, FanScratch, RecoveryOutcome, SetAdmissionConfig,
+    admit_with_recovery_into, certify_set,
 };
-use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+use riir_rag::{Embedder, ModellessEmbedder, query::LATENT_DIM};
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;
@@ -521,7 +521,7 @@ mod tests {
         let b =
             counter_anchored_slate(&cfg, &pool, matcher_latents(&c), &c, q, 4, &mut s2, &mut f2);
         assert_eq!(a, b, "same inputs must produce a bit-identical slate");
-        assert!(!a.admitted.is_empty());
+        assert_ne!(a.admitted, [] as [AdmittedRule; 0]);
         assert!(!a.baseline_fallback);
     }
 
@@ -571,10 +571,10 @@ mod tests {
         let empty: Vec<(DomainId, Vec<ScoredRule>)> = Vec::new();
         let out =
             counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 5, &mut s, &mut f);
-        assert!(out.admitted.is_empty());
+        assert_eq!(out.admitted, [] as [AdmittedRule; 0]);
         let out =
             counter_anchored_slate(&cfg, &empty, matcher_latents(&c), &c, q, 0, &mut s, &mut f);
-        assert!(out.admitted.is_empty());
+        assert_eq!(out.admitted, [] as [AdmittedRule; 0]);
     }
 
     #[test]

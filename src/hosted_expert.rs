@@ -52,7 +52,7 @@ use std::time::Instant;
 // one definition, the `llm_spend` ANY-of-consumers gate shape). The
 // re-export preserves every historical path (`hosted_expert::EgressConsent`...
 // — the R2 tests and any external caller compile unchanged).
-pub use crate::code_egress::{EgressConsent, EgressRefusal, EGRESS_ALLOW, EGRESS_ENV};
+pub use crate::code_egress::{EGRESS_ALLOW, EGRESS_ENV, EgressConsent, EgressRefusal};
 
 /// The hosted endpoint's bearer token env (optional — a local/loopback
 /// expert may skip auth; a real hosted tier will not).
@@ -424,9 +424,8 @@ mod tests {
         assert!(msg.contains("scope of its own"), "{msg}");
         // A junk value refuses LOUD (naming the accepted spelling), never
         // silently.
-        let junk = match EgressConsent::parse(Some("snipnet")) {
-            EgressConsent::Refused(r) => r,
-            EgressConsent::Allowed => panic!("junk must refuse"),
+        let EgressConsent::Refused(junk) = EgressConsent::parse(Some("snipnet")) else {
+            panic!("junk must refuse")
         };
         assert!(junk.to_string().contains(EGRESS_ALLOW));
         assert!(EgressConsent::parse(Some(EGRESS_ALLOW)).is_allowed());

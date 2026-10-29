@@ -27,7 +27,7 @@
 //! `--clippy-json` fed lane (clippy's typeck is the authority) remain the
 //! consumers.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::punctuated::Punctuated;
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprCall, ExprMethodCall, File, Local, Stmt, Token};
@@ -58,7 +58,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             return;
         };
         if mc.method == "into" && mc.args.is_empty() && mc.turbofish.is_none() {
-            if let Some(text) = src(self.source, &*mc.receiver) {
+            if let Some(text) = src(self.source, &mc.receiver) {
                 self.edits.push(edit(mc, text));
             }
         }
@@ -77,7 +77,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         // init.expr must be a `.into()` method call.
         if let Expr::MethodCall(mc) = init.expr.as_ref() {
             if mc.method == "into" && mc.args.is_empty() {
-                if let Some(text) = src(self.source, &*mc.receiver) {
+                if let Some(text) = src(self.source, &mc.receiver) {
                     self.edits.push(edit(&init.expr, text));
                 }
             }
@@ -108,7 +108,7 @@ impl Collector<'_> {
                 let plain_call =
                     mc.method == "into_iter" && mc.args.is_empty() && mc.turbofish.is_none();
                 if plain_call {
-                    if let Some(text) = src(self.source, &*mc.receiver) {
+                    if let Some(text) = src(self.source, &mc.receiver) {
                         self.edits.push(edit(arg, text));
                     }
                 }
@@ -169,8 +169,7 @@ fn caller(v: Vec<u32>) { sink(v.into_iter()); }";
     #[test]
     fn drops_into_iter_method_arg_specimen() {
         // The live specimen's exact shape: method-call receiver + method arg.
-        let input =
-            "fn run(hook: &mut Hook, projections: Vec<Layer>) { hook.preupload_all(projections.into_iter()); }";
+        let input = "fn run(hook: &mut Hook, projections: Vec<Layer>) { hook.preupload_all(projections.into_iter()); }";
         let out = propose_fix("useless_conversion", input).expect("matched");
         assert!(
             out.contains("hook.preupload_all(projections)"),

@@ -370,9 +370,9 @@ pub fn saturation_line(verdict: &SaturationVerdict, generation: u8) -> String {
         SaturationVerdict::Saturated { marginal } => format!(
             "saturation: gen-{generation} SATURATED (marginal {marginal:+.4} < {SATURATION_EPSILON} over {SATURATION_WINDOW} runs) — consider `--generation 2` (v1 floors stay pinned)"
         ),
-        SaturationVerdict::InsufficientHistory { have, need } => format!(
-            "saturation: gen-{generation} no verdict ({have}/{need} runs)"
-        ),
+        SaturationVerdict::InsufficientHistory { have, need } => {
+            format!("saturation: gen-{generation} no verdict ({have}/{need} runs)")
+        }
     }
 }
 
@@ -480,7 +480,9 @@ pub fn print_strata(strata: &[super::ProvenanceStratum]) {
         println!("provenance strata: (none — no ran fixtures attributed)");
         return;
     }
-    println!("provenance strata (Issue 089 T6 — heal rate by fixture class; repo=real-mined, authored=composites, construction=generated ladders):");
+    println!(
+        "provenance strata (Issue 089 T6 — heal rate by fixture class; repo=real-mined, authored=composites, construction=generated ladders):"
+    );
     println!(
         "  {:<13} {:>4} {:>8} {:>9} {:>8} {:>6} {:>7}",
         "class", "ran", "vocab", "resolved", "created", "clean", "heal%"
@@ -807,7 +809,7 @@ mod tests {
         // A shaped row round-trips through the jsonl encoding.
         let shaped = ShapedRecord {
             n_shaped: 5,
-            shaped_rate: 0.4375,
+            shaped_rate: 0.437_5,
             half_counts: vec![("manual_map".to_string(), 5)],
         };
         let with = HistoryRecord {

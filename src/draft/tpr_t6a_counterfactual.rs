@@ -59,17 +59,17 @@
 //! [`T4A_MARGIN_PP`] and katgpt-rs Issue 707 G8, so this gate is not a
 //! softer version of its family.
 //!
-//! [`LatentFixMemory`]: crate::self_evolve::LatentFixMemory
-//! [`T4A_MARGIN_PP`]: super::tpr_t4a_withheld::T4A_MARGIN_PP
-//! [`unbind_state_into`]: katgpt_core::tpr::unbind_state_into
+//! [`LatentFixMemory`]: `crate::self_evolve::LatentFixMemory`
+//! [`T4A_MARGIN_PP`]: `super::tpr_t4a_withheld::T4A_MARGIN_PP`
+//! [`unbind_state_into`]: `katgpt_core::tpr::unbind_state_into`
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use katgpt_core::tpr::{als_fit, unbind_state_into, AlsConfig, ObservedPairs, TprScratch};
+use katgpt_core::tpr::{AlsConfig, ObservedPairs, TprScratch, als_fit, unbind_state_into};
 
-use super::tpr_fit::{build_corpus, coalesce_for, run, StateSpace, OTHER_ROLE};
-use super::tpr_t4a_withheld::{T4aVerdict, COALESCE_T, DS, T4A_MARGIN_PP};
-use super::withheld_pair_ood::{classify_shape, Binding};
+use super::tpr_fit::{OTHER_ROLE, StateSpace, build_corpus, coalesce_for, run};
+use super::tpr_t4a_withheld::{COALESCE_T, DS, T4A_MARGIN_PP, T4aVerdict};
+use super::withheld_pair_ood::{Binding, classify_shape};
 
 /// The bar, in percentage points, the counterfactual readout must beat the
 /// frequency prior by. Aliased to T4a's constant — one family, one bar.

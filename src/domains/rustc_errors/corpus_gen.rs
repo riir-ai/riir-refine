@@ -116,7 +116,7 @@ pub fn compose_multi(cases: &[GeneratedCase], k: usize) -> Vec<GeneratedCase> {
                 for (i, c) in chunk.iter().enumerate() {
                     let body = pick(c).replace('\n', "\n    ");
                     // Infallible: writing into a String never errors.
-                    let _ = write!(out, "pub mod c{i} {{\n    {body}\n}}\n");
+                    let _ = writeln!(out, "pub mod c{i} {{\n    {body}\n}}");
                 }
                 out
             };
@@ -157,7 +157,7 @@ pub fn compose_multi_strided(cases: &[GeneratedCase], k: usize) -> Vec<Generated
                 let mut out = String::new();
                 for (i, c) in members.iter().enumerate() {
                     let body = pick(c).replace('\n', "\n    ");
-                    let _ = write!(out, "pub mod c{i} {{\n    {body}\n}}\n");
+                    let _ = writeln!(out, "pub mod c{i} {{\n    {body}\n}}");
                 }
                 out
             };

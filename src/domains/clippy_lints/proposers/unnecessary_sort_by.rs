@@ -71,7 +71,7 @@
 //! - `r#raw` ident params (not modeled)
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Pat};
 
@@ -211,7 +211,7 @@ fn key_holds_borrow(source: &str, e: &Expr, binding: &str, deref: bool) -> bool 
             .any(|x| key_holds_borrow(source, x, binding, deref)),
         Expr::Paren(p) => key_holds_borrow(source, &p.expr, binding, deref),
         Expr::Group(g) => key_holds_borrow(source, &g.expr, binding, deref),
-        Expr::Reference(r) => src(source, &*r.expr).is_some_and(|t| contains_word(&t, binding)),
+        Expr::Reference(r) => src(source, &r.expr).is_some_and(|t| contains_word(&t, binding)),
         // `(a.0, a)` — the whole binding as an element: the key copies the
         // reference VALUE into K (probe: oracle-silent, same class). Deref
         // bindings own their binding — the bare ident is the MA key form.
@@ -289,7 +289,7 @@ impl Collector<'_> {
         if cmp.args.len() != 1 {
             return None;
         }
-        let recv_src = src(self.source, &*m.receiver)?;
+        let recv_src = src(self.source, &m.receiver)?;
         let recv_src = if is_postfix_safe(&m.receiver) {
             recv_src
         } else {
@@ -331,8 +331,8 @@ impl Collector<'_> {
         if matches!(&*cmp.receiver, Expr::Paren(_)) {
             return None;
         }
-        let recv_text = src(self.source, &*cmp.receiver)?;
-        let inner_text = src(self.source, &*argref.expr)?;
+        let recv_text = src(self.source, &cmp.receiver)?;
+        let inner_text = src(self.source, &argref.expr)?;
         let a_s = pa.to_string();
         let b_s = pb.to_string();
         // Borrow-in-key: a bare reference into the binding as a tuple/array
@@ -610,8 +610,7 @@ mod tests {
     fn field_method_external_ident_refused() {
         // `a.k.max(w.len() as i32)` — field read, refused (the external-ident
         // swap check itself still stands; the field guard fires first).
-        let input =
-            "fn f(v: &mut Vec<K>, w: &Vec<K>) { v.sort_by(|a, b| a.k.max(w.len() as i32).cmp(&b.k.max(w.len() as i32))); }";
+        let input = "fn f(v: &mut Vec<K>, w: &Vec<K>) { v.sort_by(|a, b| a.k.max(w.len() as i32).cmp(&b.k.max(w.len() as i32))); }";
         let out = propose_fix("unnecessary_sort_by", input);
         assert!(
             out.is_none(),

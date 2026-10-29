@@ -33,7 +33,7 @@
 //! (`retrieval_eval::clean_spans_fire_no_lint`).
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, ExprReference, File};
 
@@ -83,7 +83,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
         for arg in &call.args {
             if let Expr::Reference(r) = arg {
                 if r.mutability.is_none() && matches!(&*r.expr, Expr::Path(..)) {
-                    if let Some(text) = src(self.source, &*r.expr) {
+                    if let Some(text) = src(self.source, &r.expr) {
                         self.edits.push(edit(arg, text));
                     }
                 }

@@ -51,7 +51,7 @@ use syn::visit::Visit;
 use syn::{Expr, File};
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -105,11 +105,11 @@ impl Collector<'_> {
         }
         let arg = inner.args.first()?;
         // Kept verbatim: the get-receiver and the single key argument.
-        let kept = [byte_range(&*inner.receiver), byte_range(arg)];
+        let kept = [byte_range(&inner.receiver), byte_range(arg)];
         if drops_interior_comment(self.source, byte_range(outer), &kept) {
             return None;
         }
-        let recv = src(self.source, &*inner.receiver)?;
+        let recv = src(self.source, &inner.receiver)?;
         let arg_text = src(self.source, arg)?;
         let neg = if negated { "!" } else { "" };
         Some(edit(outer, format!("{neg}{recv}.contains_key({arg_text})")))
@@ -160,8 +160,7 @@ mod tests {
 
     #[test]
     fn turbofish_get_refused() {
-        let input =
-            "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get::<u8>(&k).is_none() }";
+        let input = "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get::<u8>(&k).is_none() }";
         let out = propose_fix("unnecessary_get_then_check", input);
         assert!(out.is_none(), "turbofish get refuses: {out:?}");
     }
@@ -176,15 +175,13 @@ mod tests {
 
     #[test]
     fn wrong_outer_method_refused() {
-        let input =
-            "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> Option<&u8> { m.get(&k).copied() }";
+        let input = "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> Option<&u8> { m.get(&k).copied() }";
         assert!(propose_fix("unnecessary_get_then_check", input).is_none());
     }
 
     #[test]
     fn interior_comment_refused() {
-        let input =
-            "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get( /* key */ &k).is_none() }";
+        let input = "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get( /* key */ &k).is_none() }";
         let out = propose_fix("unnecessary_get_then_check", input);
         assert!(
             out.is_none(),

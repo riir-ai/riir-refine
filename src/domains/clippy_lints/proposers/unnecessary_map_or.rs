@@ -44,8 +44,8 @@
 use std::collections::HashMap;
 
 use super::helpers::{bool_lit, is_postfix_safe, macro_expr_args};
-use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
-use super::{edit, src, SourceEdit};
+use super::receiver_kind::{ReceiverKind, ScopeKinds, classify_receiver, collect_fn_rets};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
@@ -183,7 +183,7 @@ fn try_unnecessary_map_or(
         return None;
     }
     let default_true = bool_lit(&m.args[0])?;
-    let recv_text = src(source, &*m.receiver)?;
+    let recv_text = src(source, &m.receiver)?;
     let mapper = src(source, &m.args[1])?;
     // Classify on the RAW receiver text (pre-paren-wrap; a bare ident is
     // always postfix-safe, so wrapping never changes classification).

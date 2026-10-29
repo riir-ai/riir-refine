@@ -23,13 +23,13 @@
 //!   (or knew null was impossible). That is the point — the UB becomes a
 //!   typed miss — but it is a semantic change in the null case.
 //! - The shadowed `p: &T` keeps `(*p)` working, but code reading `p as
-//!  *const _` after the prologue now sees a reference — the compile gate
+//!   *const _` after the prologue now sees a reference — the compile gate
 //!   catches those.
 
 use syn::spanned::Spanned;
 use syn::{Block, File, Signature, Type};
 
-use super::{line_indent, SourceEdit};
+use super::{SourceEdit, line_indent};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
@@ -144,21 +144,30 @@ mod tests {
     fn skips_safe_fn() {
         let src = "pub fn f(p: *const u32) -> Option<u32> { Some(*p) }";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
     fn skips_non_option_return() {
         let src = "pub unsafe fn f(p: *const u32) -> u32 { *p }";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
     fn skips_already_guarded() {
         let src = "pub unsafe fn f(p: *const u32) -> Option<u32> {\n    if p.is_null() { return None }\n    Some(*p)\n}";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
@@ -167,6 +176,9 @@ mod tests {
         // multi-param gate, not the shape gate.
         let src = "pub unsafe fn f(a: *const u32, b: *const u32) -> Option<u32> { Some((*a)) }";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 }

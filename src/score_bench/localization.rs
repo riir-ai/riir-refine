@@ -1082,6 +1082,7 @@ fn item_reads_for_fixture<'a>(
             score,
         });
     }
+    reads.shrink_to_fit();
     reads
 }
 
@@ -1241,7 +1242,7 @@ mod tests {
         let text = "let x = a + b;\n";
         assert_eq!(tokens.len(), 7, "let x = a + b ; = 7 leaves");
         for token in &tokens {
-            assert!(!text[token.start..token.end].is_empty());
+            assert_ne!(text[token.start..token.end].to_string(), "");
             assert!(text.is_char_boundary(token.start));
             assert!(text.is_char_boundary(token.end));
         }
@@ -1562,12 +1563,16 @@ mod tests {
     #[test]
     fn loop_harm_refuses_unfixed_and_broken_positions() {
         assert!(loop_harm_verdict(4, 4, 0, 0.05).is_ok());
-        assert!(loop_harm_verdict(4, 3, 0, 0.05)
-            .unwrap_err()
-            .contains("unfixed"));
-        assert!(loop_harm_verdict(4, 4, 1, 0.05)
-            .unwrap_err()
-            .contains("broke 1"));
+        assert!(
+            loop_harm_verdict(4, 3, 0, 0.05)
+                .unwrap_err()
+                .contains("unfixed")
+        );
+        assert!(
+            loop_harm_verdict(4, 4, 1, 0.05)
+                .unwrap_err()
+                .contains("broke 1")
+        );
         assert!(loop_harm_verdict(0, 0, 0, 0.05).is_err());
     }
 

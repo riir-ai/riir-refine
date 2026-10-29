@@ -167,7 +167,7 @@ impl ClippyVerifier {
         let (crate_dir, source_changed) = match self.prepare_crate(code) {
             Ok(pair) => pair,
             Err(e) => {
-                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
+                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"));
             }
         };
 
@@ -219,7 +219,7 @@ impl ClippyVerifier {
         let (crate_dir, source_changed) = match self.prepare_crate(code) {
             Ok(pair) => pair,
             Err(e) => {
-                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
+                return ClippyVerifyResult::did_not_run(format!("temp crate setup failed: {e}"));
             }
         };
         let output = match self.run_clippy(&crate_dir, None) {
@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn parse_handles_empty_output() {
         let lints = parse_clippy_lints("");
-        assert!(lints.is_empty());
+        assert_eq!(lints, [] as [String; 0]);
     }
 
     #[test]
@@ -438,7 +438,7 @@ mod tests {
         assert!(!r.compiled);
         assert!(!r.ran);
         assert_eq!(r.error.as_deref(), Some("cargo not found"));
-        assert!(r.present_lints.is_empty());
+        assert_eq!(r.present_lints, [] as [String; 0]);
     }
 
     #[test]

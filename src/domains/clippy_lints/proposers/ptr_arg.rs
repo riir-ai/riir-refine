@@ -24,7 +24,7 @@
 //! `&mut` forms refused (the family fixture is the shared-ref shape and the
 //! mut twin interacts with reborrow analysis).
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src};
 use syn::{File, Signature, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -65,7 +65,7 @@ fn ptr_replacement(source: &str, ty: &Type) -> Option<String> {
         return None;
     }
     let seg = &p.path.segments[0];
-    let elem_text = src(source, &*r.elem)?;
+    let elem_text = src(source, &r.elem)?;
     match seg.ident.to_string().as_str() {
         "String" => Some("&str".to_string()),
         "Vec" => {

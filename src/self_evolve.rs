@@ -807,7 +807,7 @@ impl HealPipeline {
     /// rule (e.g., via `report_outcome` after checking with real validation).
     /// For POC / testing, the caller can simulate outcomes.
     ///
-    /// [`tune_against_fixture`]: Self::tune_against_fixture
+    /// [`tune_against_fixture`]: `Self::tune_against_fixture`
     ///
     /// # Panics
     ///

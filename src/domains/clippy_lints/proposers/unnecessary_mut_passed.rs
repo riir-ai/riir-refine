@@ -11,7 +11,7 @@
 //! either. The `self_evolve` loop (real `cargo clippy` verify) remains the
 //! consumer.
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src};
 use syn::visit::Visit;
 use syn::{Expr, File, Pat};
 
@@ -52,7 +52,7 @@ impl<'ast> Visit<'ast> for CallScan<'_> {
         for arg in &call.args {
             if let Expr::Reference(r) = arg {
                 if r.mutability.is_some() && matches!(&*r.expr, Expr::Path(..)) {
-                    if let Some(text) = src(self.source, &*r.expr) {
+                    if let Some(text) = src(self.source, &r.expr) {
                         self.edits.push(edit(arg, format!("&{text}")));
                     }
                 }

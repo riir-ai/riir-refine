@@ -1341,7 +1341,7 @@ fn bt8_grade(
     use riir_refine::cf_workers_ai::ident_mentioned;
 
     let text = cf_workers_ai::extract_code_block(gen);
-    let call = Bt8Call {
+    Bt8Call {
         follows: ident_mentioned(text, &p.renamed),
         prior: ident_mentioned(text, &p.original),
         keep_strict: p
@@ -1351,8 +1351,7 @@ fn bt8_grade(
         latency_ms: 0,
         prompt_tokens: 0,
         completion_tokens: 0,
-    };
-    call
+    }
 }
 
 #[cfg(feature = "score_bench")]

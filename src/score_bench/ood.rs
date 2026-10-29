@@ -59,7 +59,7 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use katgpt_core::regime_probe::{conditional_entropy_nats, entropy_gap_into, EntropyGapReport};
+use katgpt_core::regime_probe::{EntropyGapReport, conditional_entropy_nats, entropy_gap_into};
 use serde::{Deserialize, Serialize};
 
 use super::BenchFixture;
@@ -540,18 +540,19 @@ mod tests {
     #[test]
     fn ood_axis_row_carries_provenance_families() {
         let axis = ood_axis();
-        assert!(!axis.ref_provenance_families.is_empty());
-        assert!(!axis.ood_provenance_families.is_empty());
+        assert_ne!(axis.ref_provenance_families, [] as [String; 0]);
+        assert_ne!(axis.ood_provenance_families, [] as [String; 0]);
         // Sorted + distinct by construction.
         let mut sorted = axis.ref_provenance_families.clone();
         sorted.sort();
         sorted.dedup();
         assert_eq!(sorted, axis.ref_provenance_families);
         // v1: the composite era + exactly one real mining state family.
-        assert!(axis
-            .ref_provenance_families
-            .iter()
-            .any(|f| f == "authored-composite"));
+        assert!(
+            axis.ref_provenance_families
+                .iter()
+                .any(|f| f == "authored-composite")
+        );
         assert_eq!(
             axis.ref_provenance_families
                 .iter()

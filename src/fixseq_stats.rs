@@ -619,23 +619,22 @@ pub fn transfer_verdict(corpora: &[CorpusStats], ind: Badness) -> TransferVerdic
         .filter(|c| c.cascade.get(&ind).is_some_and(|cs| cs.transitions() > 0))
         .map(|c| c.cascade[&ind].verdict())
         .collect();
-    match with_support.len() {
-        0 | 1 => TransferVerdict::Unmeasured,
-        _ => {
-            let all_sep = with_support.iter().all(|v| *v == CascadeVerdict::Separated);
-            let all_pos = with_support
-                .iter()
-                .all(|v| matches!(v, CascadeVerdict::Separated | CascadeVerdict::Weak));
-            let all_null = with_support.iter().all(|v| *v == CascadeVerdict::Null);
-            if all_sep {
-                TransferVerdict::AllSeparated
-            } else if all_pos {
-                TransferVerdict::AllPositive
-            } else if all_null {
-                TransferVerdict::AllNull
-            } else {
-                TransferVerdict::Disagrees
-            }
+    if let 0 | 1 = with_support.len() {
+        TransferVerdict::Unmeasured
+    } else {
+        let all_sep = with_support.iter().all(|v| *v == CascadeVerdict::Separated);
+        let all_pos = with_support
+            .iter()
+            .all(|v| matches!(v, CascadeVerdict::Separated | CascadeVerdict::Weak));
+        let all_null = with_support.iter().all(|v| *v == CascadeVerdict::Null);
+        if all_sep {
+            TransferVerdict::AllSeparated
+        } else if all_pos {
+            TransferVerdict::AllPositive
+        } else if all_null {
+            TransferVerdict::AllNull
+        } else {
+            TransferVerdict::Disagrees
         }
     }
 }

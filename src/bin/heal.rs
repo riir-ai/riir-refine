@@ -37,17 +37,17 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
+use riir_refine::EvolveRecorder;
 use riir_refine::domains::clippy_lints::lint_level::{
-    gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
+    ALLOW_BY_DEFAULT_GROUPS, LevelResolver, gated_lints,
 };
 use riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_refine::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_refine::draft::span_source::collect_source_files;
 use riir_refine::draft::{
-    parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
+    ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion, parse_clippy_feed, paths_ref_match,
 };
 use riir_refine::edit_emitter::RuleEdit;
-use riir_refine::EvolveRecorder;
 
 /// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
@@ -305,7 +305,9 @@ fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_refine::traj
             Some(store)
         }
         Err(e) => {
-            eprintln!("self-evolve: neuron store unavailable ({e}) — falling back to the legacy memory.json envelope (038-T3)");
+            eprintln!(
+                "self-evolve: neuron store unavailable ({e}) — falling back to the legacy memory.json envelope (038-T3)"
+            );
             None
         }
     }
@@ -544,7 +546,9 @@ fn enforce_kat_soft_gate(args: &Args) {
             riir_refine::kat_soft_gate::SoftGateVerdict::Refuse { .. }
         ) && depleted_mine_offer()
         {
-            eprintln!("cargo refine: out of KAT — contributing now (`cargo refine sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)");
+            eprintln!(
+                "cargo refine: out of KAT — contributing now (`cargo refine sync`); one accepted push lifts this gate for good (payouts land at each epoch settle)"
+            );
             run_kat_sync();
             let (reloaded, w) = riir_refine::kat_burn_client::KatBurnAck::load_at(&ack_path);
             if let Some(w) = w {
@@ -584,13 +588,17 @@ fn enforce_kat_soft_gate(args: &Args) {
     // is gone (Some ≤ 0 is a fact). `None` (a pre-v4 ack / pre-TUNA
     // server) prints nothing — the pre-006 refusal, byte for byte.
     if final_tuna.is_some_and(|tuna| tuna <= 0) {
-        eprintln!("Trial credit (TUNA) is exhausted too — the network draws it before KAT (refine, rethink, everything).");
+        eprintln!(
+            "Trial credit (TUNA) is exhausted too — the network draws it before KAT (refine, rethink, everything)."
+        );
     }
     // riir-dapps Issue 094 D4: the free daily faucet/drip tier is RETIRED
     // and `--refill` retired with it (devnet-ops only). The refuel paths a
     // user is offered are exactly two — contribute or pay.
     eprintln!("Refuel with exactly one of:");
-    eprintln!("  * contribute:  cargo refine --mine   (what mining is)  →  cargo refine sync   (one accepted push lifts the gate; payouts land at each epoch settle)");
+    eprintln!(
+        "  * contribute:  cargo refine --mine   (what mining is)  →  cargo refine sync   (one accepted push lifts the gate; payouts land at each epoch settle)"
+    );
     eprintln!("  * top up:      {top_up}");
     eprintln!("      (or open the checkout right here: cargo refine topup --pack 1)");
     // The owner's 2026-09-18 amendment: the refusal also SHOWS what the
@@ -977,9 +985,13 @@ fn run_mine_intro() {
     println!();
     println!("START (3 steps):");
     println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
-    println!("  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo refine login)");
+    println!(
+        "  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo refine login)"
+    );
     println!("  3. heal:       cargo refine --fix        <- real fixes, metered locally");
-    println!("  sync:          --mine just ran it; re-run --mine or `cargo refine sync` to push newer batches");
+    println!(
+        "  sync:          --mine just ran it; re-run --mine or `cargo refine sync` to push newer batches"
+    );
     println!();
     println!("WATCH: cargo refine account              <- burn, balance, grant, network state");
     println!();
@@ -1234,8 +1246,7 @@ fn run_unmine(purge_server: bool) {
                 }
                 Ok(o) => println!(
                     "server purge: {} unproven row(s) deleted, {} proven row(s) unpublished at {trimmed}",
-                    o.deleted_unproven,
-                    o.quarantined_proven,
+                    o.deleted_unproven, o.quarantined_proven,
                 ),
                 Err(reason) => println!(
                     "server purge: skipped — {reason} (re-run `cargo refine --unmine --purge-server` while logged in)"
@@ -1656,7 +1667,7 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
 #[cfg(feature = "kat_transport")]
 fn run_kat_keys(words: &[String]) {
     use riir_refine::kat_account::KatAccount;
-    use riir_refine::kat_keyset_client::{self as ks, http, JoinRequest};
+    use riir_refine::kat_keyset_client::{self as ks, JoinRequest, http};
 
     let fail = |msg: String| -> ! {
         eprintln!("account keys: {msg}");
@@ -1666,7 +1677,9 @@ fn run_kat_keys(words: &[String]) {
     let mut account = KatAccount::load(&KatAccount::default_dir())
         .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
     learn_root(&mut account, &url);
-    let key = account.signing_key().unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
+    let key = account
+        .signing_key()
+        .unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
     let my_pk = riir_refine::kat_payreq_client::hex_encode(&key.verifying_key().to_bytes());
     let acct = account
         .service_account_hex()
@@ -1675,9 +1688,18 @@ fn run_kat_keys(words: &[String]) {
     let lid = || {
         riir_refine::kat_migrate_client::fetch_ledger_id(&url)
             .unwrap_or_else(|e| fail(format!("cannot read the ledger id: {e}")))
-            .unwrap_or_else(|| fail("this service has no ledger id (a pre-v2 ledger) — key sets need auth v2".into()))
+            .unwrap_or_else(|| {
+                fail(
+                    "this service has no ledger id (a pre-v2 ledger) — key sets need auth v2"
+                        .into(),
+                )
+            })
     };
-    let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs())
+    };
     let report = |r: Result<(u16, String), String>| match r {
         Ok((200, body)) => println!("{body}"),
         Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
@@ -1693,10 +1715,17 @@ fn run_kat_keys(words: &[String]) {
                 fail("usage: account key join <live-device-pubkey> [label]".into());
             };
             let label = words.get(2).map_or("new device", String::as_str);
-            let Some(account_hex) = words.get(3).cloned().or_else(|| lookup_account_of(&url, signer)) else {
-                fail(format!("cannot find the account of key {signer} (pass it as the 4th word)"));
+            let Some(account_hex) = words
+                .get(3)
+                .cloned()
+                .or_else(|| lookup_account_of(&url, signer))
+            else {
+                fail(format!(
+                    "cannot find the account of key {signer} (pass it as the 4th word)"
+                ));
             };
-            let join = ks::join_request(&key, &account_hex, signer, label, &lid(), now()).unwrap_or_else(|e| fail(e));
+            let join = ks::join_request(&key, &account_hex, signer, label, &lid(), now())
+                .unwrap_or_else(|e| fail(e));
             println!("{}", serde_json::to_string(&join).unwrap_or_default());
             eprintln!(
                 "account keys: run `cargo refine account key add '<the line above>'` on the live device within 10 minutes"
@@ -1710,11 +1739,13 @@ fn run_kat_keys(words: &[String]) {
                 fail("usage: account key add '<join request line>' (or @file)".into());
             };
             let text = match raw.strip_prefix('@') {
-                Some(path) => std::fs::read_to_string(path).unwrap_or_else(|e| fail(format!("{path}: {e}"))),
+                Some(path) => {
+                    std::fs::read_to_string(path).unwrap_or_else(|e| fail(format!("{path}: {e}")))
+                }
                 None => raw.clone(),
             };
-            let join: JoinRequest =
-                serde_json::from_str(text.trim()).unwrap_or_else(|e| fail(format!("not a join request: {e}")));
+            let join: JoinRequest = serde_json::from_str(text.trim())
+                .unwrap_or_else(|e| fail(format!("not a join request: {e}")));
             let body = ks::sign_add(&key, &acct, &join, &lid()).unwrap_or_else(|e| fail(e));
             report(http::add(&url, &body, Some(&t2_code())));
         }
@@ -1722,10 +1753,13 @@ fn run_kat_keys(words: &[String]) {
             let Some(target) = words.get(1) else {
                 fail("usage: account key revoke <pubkey>".into());
             };
-            let body = ks::sign_revoke(&key, &acct, target, &lid(), now()).unwrap_or_else(|e| fail(e));
+            let body =
+                ks::sign_revoke(&key, &acct, target, &lid(), now()).unwrap_or_else(|e| fail(e));
             report(http::revoke(&url, &body, Some(&t2_code())));
         }
-        Some(other) => fail(format!("unknown verb {other:?} — list | join | add | revoke")),
+        Some(other) => fail(format!(
+            "unknown verb {other:?} — list | join | add | revoke"
+        )),
     }
 }
 
@@ -1735,7 +1769,7 @@ fn run_kat_keys(words: &[String]) {
 #[cfg(feature = "kat_service")]
 fn run_kat_genesis(words: &[String]) {
     use riir_refine::kat_genesis_client as gc;
-    use riir_refine::kat_protocol_genesis::{import_digest, GenesisStatus};
+    use riir_refine::kat_protocol_genesis::{GenesisStatus, import_digest};
     use riir_refine::kat_protocol_lease::hex32;
 
     let fail = |msg: String| -> ! {
@@ -1745,7 +1779,12 @@ fn run_kat_genesis(words: &[String]) {
     // `--name value` lookup over the verb's words; positionals are the rest.
     let flag = |name: &str| -> Option<String> {
         let i = words.iter().position(|w| w == name)?;
-        Some(words.get(i + 1).cloned().unwrap_or_else(|| fail(format!("{name} needs a value"))))
+        Some(
+            words
+                .get(i + 1)
+                .cloned()
+                .unwrap_or_else(|| fail(format!("{name} needs a value"))),
+        )
     };
     let positional = |n: usize| -> Option<&String> {
         let mut skip = false;
@@ -1768,11 +1807,15 @@ fn run_kat_genesis(words: &[String]) {
     const USAGE: &str = "usage: genesis status <url> [--save <file>] | genesis sign --status <file> --label <label> --out <bundle.json> | genesis submit <bundle.json> --to <url> [--totp <code>] | genesis import-digest <carried_corpus.json>";
     match words.first().map(String::as_str) {
         Some("import-digest") => {
-            let Some(path) = positional(0) else { fail(USAGE.into()) };
+            let Some(path) = positional(0) else {
+                fail(USAGE.into())
+            };
             println!("{}", hex32(&import_digest(&read(path))));
         }
         Some("sign") => {
-            let (Some(status_path), Some(label), Some(out)) = (flag("--status"), flag("--label"), flag("--out")) else {
+            let (Some(status_path), Some(label), Some(out)) =
+                (flag("--status"), flag("--label"), flag("--out"))
+            else {
                 fail(USAGE.into());
             };
             let status: GenesisStatus = serde_json::from_slice(&read(&status_path))
@@ -1784,19 +1827,27 @@ fn run_kat_genesis(words: &[String]) {
             }
             println!("  params         {:?}", status.params);
             if std::path::Path::new(&out).exists() {
-                fail(format!("{out} already exists — refusing to overwrite a bundle"));
+                fail(format!(
+                    "{out} already exists — refusing to overwrite a bundle"
+                ));
             }
             use riir_refine::kat_account::KatAccount;
-            let account = KatAccount::load(&KatAccount::default_dir())
-                .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
+            let account = KatAccount::load(&KatAccount::default_dir()).unwrap_or_else(|e| {
+                fail(format!("no account — run `cargo refine login` first ({e})"))
+            });
             eprintln!(
                 "genesis: opening the account key (an Enclave-custody key asks for its PIN first when it has one, \
                  then ONE Touch ID press)"
             );
-            let key = account.signing_key().unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
-            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+            let key = account
+                .signing_key()
+                .unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
             let bundle = gc::sign_bundle(&key, &status, &label, now).unwrap_or_else(|e| fail(e));
-            let json = serde_json::to_string_pretty(&bundle).unwrap_or_else(|e| fail(e.to_string()));
+            let json =
+                serde_json::to_string_pretty(&bundle).unwrap_or_else(|e| fail(e.to_string()));
             std::fs::write(&out, json + "\n").unwrap_or_else(|e| fail(format!("{out}: {e}")));
             println!("genesis: signed at {now} -> {out}");
             if let Some(id) = bundle.bundle_id() {
@@ -1805,25 +1856,36 @@ fn run_kat_genesis(words: &[String]) {
         }
         #[cfg(feature = "kat_transport")]
         Some("status") => {
-            let Some(url) = positional(0) else { fail(USAGE.into()) };
+            let Some(url) = positional(0) else {
+                fail(USAGE.into())
+            };
             let (status, body) = gc::http::status(url).unwrap_or_else(|e| fail(e));
-            println!("{}", serde_json::to_string_pretty(&status).unwrap_or(body.clone()));
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&status).unwrap_or(body.clone())
+            );
             if let Some(path) = flag("--save") {
                 std::fs::write(&path, body).unwrap_or_else(|e| fail(format!("{path}: {e}")));
-                eprintln!("genesis: saved the status to {path} (sign it offline with `genesis sign --status {path} …`)");
+                eprintln!(
+                    "genesis: saved the status to {path} (sign it offline with `genesis sign --status {path} …`)"
+                );
             }
         }
         #[cfg(feature = "kat_transport")]
         Some("submit") => {
-            let (Some(path), Some(url)) = (positional(0), flag("--to")) else { fail(USAGE.into()) };
-            let bundle: riir_refine::kat_protocol_genesis::GenesisBundle = serde_json::from_slice(&read(path))
-                .unwrap_or_else(|e| fail(format!("{path} is not a genesis bundle: {e}")));
+            let (Some(path), Some(url)) = (positional(0), flag("--to")) else {
+                fail(USAGE.into())
+            };
+            let bundle: riir_refine::kat_protocol_genesis::GenesisBundle =
+                serde_json::from_slice(&read(path))
+                    .unwrap_or_else(|e| fail(format!("{path} is not a genesis bundle: {e}")));
             // Plan 058 T1: /genesis requires the server-verified factor.
             // `--totp`, else a prompt on a terminal, else no header (the
             // worker answers 403 totp_required).
             // No echo on macOS (the owner's live ceremony 2026-10-29
             // printed the code on screen) — the shared late prompt.
-            let totp = flag("--totp").or_else(|| prompt_factor("genesis: authenticator code (hidden): "));
+            let totp =
+                flag("--totp").or_else(|| prompt_factor("genesis: authenticator code (hidden): "));
             match gc::http::submit(&url, &bundle, totp.as_deref()) {
                 Ok((200, body)) => println!("{body}"),
                 Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
@@ -1890,7 +1952,10 @@ fn run_kat_custody(words: &[String]) {
     if words.first().map(String::as_str) == Some("new-se") {
         use riir_refine::kat_account::se;
         if words.len() > 1 {
-            fail(format!("unknown arguments {:?} — `account custody new-se`", &words[1..]));
+            fail(format!(
+                "unknown arguments {:?} — `account custody new-se`",
+                &words[1..]
+            ));
         }
         std::fs::create_dir_all(&dir).unwrap_or_else(|e| fail(format!("{}: {e}", dir.display())));
         {
@@ -1900,14 +1965,27 @@ fn run_kat_custody(words: &[String]) {
         }
         let agent = se::agent_for(&dir).unwrap_or_else(|e| fail(e));
         if !dir.join(se::BLOB_FILE).exists() {
-            agent.create().unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
+            agent
+                .create()
+                .unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
         }
-        eprintln!("account custody: a new key is born in memory and sealed into the Secure Enclave; ONE Touch ID press proves it");
+        eprintln!(
+            "account custody: a new key is born in memory and sealed into the Secure Enclave; ONE Touch ID press proves it"
+        );
         let key = KatAccount::create_in_se_with(&dir, &agent, &[]).unwrap_or_else(|e| fail(e));
         let pubkey = key.public_key_bytes().unwrap_or_else(|e| fail(e));
         println!("account {}", key.state().account_id);
-        println!("custody: {} (born in the Enclave — no plaintext key exists)", riir_refine::kat_account::SE_PROVENANCE);
-        println!("pubkey_hex: {}", pubkey.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        println!(
+            "custody: {} (born in the Enclave — no plaintext key exists)",
+            riir_refine::kat_account::SE_PROVENANCE
+        );
+        println!(
+            "pubkey_hex: {}",
+            pubkey
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
         return;
     }
     // `mut` is load-bearing on macOS (the se arms move custody through
@@ -1915,7 +1993,11 @@ fn run_kat_custody(words: &[String]) {
     // E0596. Restored by the oracle-landing lane to unblock the release
     // build; converges with the custody lane's own WIP.
     let mut account = KatAccount::load(&dir).unwrap_or_else(|e| fail(format!("no account ({e})")));
-    let custody = account.state().key_path.clone().unwrap_or_else(|| "file (this account dir)".into());
+    let custody = account
+        .state()
+        .key_path
+        .clone()
+        .unwrap_or_else(|| "file (this account dir)".into());
     match words.first().map(String::as_str) {
         None | Some("status") => {
             println!("account {}", account.state().account_id);
@@ -1927,36 +2009,58 @@ fn run_kat_custody(words: &[String]) {
             let want_pin = match &words[1..] {
                 [] => false,
                 [flag] if flag == "--pin" => true,
-                rest => fail(format!("unknown arguments {rest:?} — `account custody se [--pin]`")),
+                rest => fail(format!(
+                    "unknown arguments {rest:?} — `account custody se [--pin]`"
+                )),
             };
             let agent = se::agent_for(&dir).unwrap_or_else(|e| fail(e));
             // Plan 058 T2: an account already in Enclave custody re-seals
             // under a new PIN (open with the current one, prove the new one).
-            if account.state().key_path.as_deref() == Some(riir_refine::kat_account::SE_PROVENANCE) {
+            if account.state().key_path.as_deref() == Some(riir_refine::kat_account::SE_PROVENANCE)
+            {
                 if !want_pin {
-                    fail("already in Secure Enclave custody — add `--pin` to set or change its PIN".into());
+                    fail(
+                        "already in Secure Enclave custody — add `--pin` to set or change its PIN"
+                            .into(),
+                    );
                 }
                 let old = account
                     .se_pin_required()
                     .unwrap_or_else(|e| fail(e))
                     .then(|| se::read_pin("current PIN: ").unwrap_or_else(|e| fail(e)));
                 let new = se::read_new_pin().unwrap_or_else(|e| fail(e));
-                eprintln!("account custody: re-sealing under the new PIN; TWO Touch ID presses (open the current envelope, prove the new one)");
+                eprintln!(
+                    "account custody: re-sealing under the new PIN; TWO Touch ID presses (open the current envelope, prove the new one)"
+                );
                 let path = account
-                    .reseal_se_with_pin(&agent, old.as_ref().map_or(&b""[..], |p| p.as_bytes()), new.as_bytes())
+                    .reseal_se_with_pin(
+                        &agent,
+                        old.as_ref().map_or(&b""[..], |p| p.as_bytes()),
+                        new.as_bytes(),
+                    )
                     .unwrap_or_else(|e| fail(e));
-                println!("custody: {} (PIN set)", riir_refine::kat_account::SE_PROVENANCE);
+                println!(
+                    "custody: {} (PIN set)",
+                    riir_refine::kat_account::SE_PROVENANCE
+                );
                 println!("envelope: {}", path.display());
                 return;
             }
             let pin = want_pin.then(|| se::read_new_pin().unwrap_or_else(|e| fail(e)));
             if !dir.join(se::BLOB_FILE).exists() {
-                agent.create().unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
+                agent
+                    .create()
+                    .unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
             }
             let _ = agent.public_key();
-            eprintln!("account custody: sealing the key into the Secure Enclave; ONE Touch ID press verifies it");
+            eprintln!(
+                "account custody: sealing the key into the Secure Enclave; ONE Touch ID press verifies it"
+            );
             let moved = account
-                .move_custody_to_se_with_pin(&agent, pin.as_ref().map_or(&b""[..], |p| p.as_bytes()))
+                .move_custody_to_se_with_pin(
+                    &agent,
+                    pin.as_ref().map_or(&b""[..], |p| p.as_bytes()),
+                )
                 .unwrap_or_else(|e| fail(e));
             println!("custody: {}", riir_refine::kat_account::SE_PROVENANCE);
             println!("envelope: {}", moved.envelope.display());
@@ -1968,14 +2072,23 @@ fn run_kat_custody(words: &[String]) {
         }
         #[cfg(target_os = "macos")]
         Some("delete-plain") => {
-            if account.state().key_path.as_deref() != Some(riir_refine::kat_account::SE_PROVENANCE) {
-                fail("move custody first (`account custody se`) — refusing to delete the only copy".into());
+            if account.state().key_path.as_deref() != Some(riir_refine::kat_account::SE_PROVENANCE)
+            {
+                fail(
+                    "move custody first (`account custody se`) — refusing to delete the only copy"
+                        .into(),
+                );
             }
-            eprintln!("account custody: proving the Enclave opens (ONE Touch ID press) before deleting anything");
-            account.seed().unwrap_or_else(|e| fail(format!("the Enclave did not open ({e}) — nothing deleted")));
+            eprintln!(
+                "account custody: proving the Enclave opens (ONE Touch ID press) before deleting anything"
+            );
+            account.seed().unwrap_or_else(|e| {
+                fail(format!("the Enclave did not open ({e}) — nothing deleted"))
+            });
             let in_dir = dir.join(riir_refine::kat_account::KatAccount::KEY_FILE);
             if in_dir.exists() {
-                std::fs::remove_file(&in_dir).unwrap_or_else(|e| fail(format!("{}: {e}", in_dir.display())));
+                std::fs::remove_file(&in_dir)
+                    .unwrap_or_else(|e| fail(format!("{}: {e}", in_dir.display())));
                 println!("deleted the plaintext copy {}", in_dir.display());
             } else {
                 println!(
@@ -1983,7 +2096,9 @@ fn run_kat_custody(words: &[String]) {
                 );
             }
         }
-        Some(other) => fail(format!("unknown verb {other:?} — status | se | delete-plain")),
+        Some(other) => fail(format!(
+            "unknown verb {other:?} — status | se | delete-plain"
+        )),
     }
 }
 
@@ -1991,7 +2106,12 @@ fn run_kat_custody(words: &[String]) {
 /// new device's join needs the live device's account).
 #[cfg(feature = "kat_transport")]
 fn lookup_account_of(url: &str, pubkey_hex: &str) -> Option<String> {
-    let resp = ureq::get(&format!("{}/account/key?pubkey={pubkey_hex}", url.trim_end_matches('/'))).call().ok()?;
+    let resp = ureq::get(&format!(
+        "{}/account/key?pubkey={pubkey_hex}",
+        url.trim_end_matches('/')
+    ))
+    .call()
+    .ok()?;
     let v: serde_json::Value = resp.into_json().ok()?;
     v.get("acct_hex")?.as_str().map(str::to_string)
 }
@@ -2005,7 +2125,9 @@ fn t2_code() -> String {
         return code.trim().to_string();
     }
     if !std::io::stdin().is_terminal() {
-        eprintln!("account keys: this change needs a TOTP code — set RIIR_KAT_TOTP_CODE (no terminal to prompt on)");
+        eprintln!(
+            "account keys: this change needs a TOTP code — set RIIR_KAT_TOTP_CODE (no terminal to prompt on)"
+        );
         std::process::exit(2);
     }
     eprint!("TOTP code: ");
@@ -2039,7 +2161,10 @@ fn prompt_factor(prompt: &str) -> Option<String> {
         return None;
     }
     #[cfg(target_os = "macos")]
-    let code = riir_refine::kat_account::se::read_pin(prompt).ok()?.trim().to_string();
+    let code = riir_refine::kat_account::se::read_pin(prompt)
+        .ok()?
+        .trim()
+        .to_string();
     #[cfg(not(target_os = "macos"))]
     let code = {
         eprint!("{prompt}");
@@ -2064,8 +2189,8 @@ fn prompt_factor(prompt: &str) -> Option<String> {
 #[cfg(feature = "kat_transport")]
 fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     use riir_kat::kat_recovery_client::{
-        bind_flow, compose_numeric_claim, github_device_login, nonce_flow, BindRequest,
-        HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure,
+        BindRequest, HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure, bind_flow,
+        compose_numeric_claim, github_device_login, nonce_flow,
     };
 
     debug_assert_eq!(provider, "github", "the parse arm gates the vocabulary");
@@ -2127,7 +2252,9 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     // non-interactive form (scripts, CI).
     let late_code = prompt_factor("kat login: authenticator code for the bind (hidden): ");
     if late_code.is_some() && totp_code.is_some() {
-        eprintln!("kat login: using the code typed now; the --totp-code given at the start is likely stale");
+        eprintln!(
+            "kat login: using the code typed now; the --totp-code given at the start is likely stale"
+        );
     }
     let totp_code = late_code.as_deref().or(totp_code);
     // A fresh created_at: the device step can outlast the server's skew bound.
@@ -2251,7 +2378,7 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
 /// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_refine::kat_account::{history_lines, KatAccount};
+    use riir_refine::kat_account::{KatAccount, history_lines};
     use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
@@ -2415,7 +2542,10 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                                             // 2026-10-29 printed "KAT claimed").
                                             format!(
                                                 "{} trial credit claimed — the free tier is live (KAT balance {})",
-                                                riir_refine::kat_units::render_units(claim.claimed_micro, "TUNA"),
+                                                riir_refine::kat_units::render_units(
+                                                    claim.claimed_micro,
+                                                    "TUNA"
+                                                ),
                                                 kat(claim.balance_micro)
                                             ),
                                         )
@@ -2548,7 +2678,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
 #[cfg(feature = "kat_transport")]
 fn run_kat_update() {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
     };
 
     let root = resolve_heal_root(&[]);
@@ -2794,7 +2924,7 @@ fn maybe_auto_corpus() {
     // The same legs run_kat_update runs — a startup-capped budget (the
     // explicit command's 30s generous budget would stall every run start).
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
     };
     let url = command_service_url();
     let store = LeaseStore::open_net(&root, &url);
@@ -2992,7 +3122,7 @@ fn print_no_policy_remedy(
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 fn run_kat_sync_export(target: &Path) {
     use riir_refine::kat_redact::SpanOrigin;
-    use riir_refine::kat_sync_payload::{ephemeral_signer, SyncPayloadBuilder};
+    use riir_refine::kat_sync_payload::{SyncPayloadBuilder, ephemeral_signer};
 
     let root = resolve_heal_root(&[]);
     let Some((rows, loaded)) = load_mining_rows(&root, true, "export") else {
@@ -3060,7 +3190,7 @@ fn push_mining_batch(
     url: &str,
     transport: &riir_refine::kat_lease_client::HttpLeaseTransport,
 ) -> MinePush {
-    use riir_refine::kat_lease_client::{queue_outbox, LeaseTransport};
+    use riir_refine::kat_lease_client::{LeaseTransport, queue_outbox};
     use riir_refine::kat_redact::SpanOrigin;
     use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
@@ -3151,7 +3281,9 @@ fn push_mining_batch(
                             |p| p.display().to_string(),
                         );
                     println!("sync: refused by the service — {err}");
-                    println!("sync: payload queued at {queued} (upgrade the client, then it submits with the next run)");
+                    println!(
+                        "sync: payload queued at {queued} (upgrade the client, then it submits with the next run)"
+                    );
                     return MinePush::QueuedOffline;
                 }
             }
@@ -3172,10 +3304,18 @@ fn push_mining_batch(
                 if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&body) {
                     println!(
                         "sync: server ingest — rows_new {} refreshed {} terminal_skipped {} recorded {}",
-                        v.get("rows_new").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                        v.get("rows_refreshed").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                        v.get("rows_terminal_skipped").and_then(serde_json::Value::as_u64).unwrap_or(0),
-                        v.get("recorded").and_then(serde_json::Value::as_u64).unwrap_or(0),
+                        v.get("rows_new")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                        v.get("rows_refreshed")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                        v.get("rows_terminal_skipped")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
+                        v.get("recorded")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or(0),
                     );
                 }
             }
@@ -3629,7 +3769,7 @@ fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
     };
 
     let root = resolve_heal_root(&[]);
@@ -3671,7 +3811,9 @@ fn run_kat_sync() {
             "sync: consent record {} says opted out; nothing was built, signed or sent",
             riir_refine::kat_mining_consent::consent_path(&consent_dir).display()
         );
-        println!("sync: re-enable with `cargo refine --mine` (the lease pull below still runs — a read is not a contribution)");
+        println!(
+            "sync: re-enable with `cargo refine --mine` (the lease pull below still runs — a read is not a contribution)"
+        );
     } else {
         let _ = push_mining_batch(false, &url, &transport);
     }
@@ -3737,7 +3879,7 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_refine::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
+    use riir_refine::kat_lease_client::{CLAIM_VERSION, ClaimRequest, queue_claim};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
@@ -3776,7 +3918,9 @@ fn run_kat_claim(sig: Option<&str>) {
         let url = command_service_url();
         let transport = riir_refine::kat_lease_client::HttpLeaseTransport::new(&url, 10);
         if let riir_refine::kat_lease_client::HttpResponse::Ok(_) = transport.post_claim(&json) {
-            println!("claim: submitted to {url} — the service verifies the five checks + mints at settlement");
+            println!(
+                "claim: submitted to {url} — the service verifies the five checks + mints at settlement"
+            );
             return;
         }
     }
@@ -3880,11 +4024,15 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
     }
 
     let Some(usd) = usd else {
-        eprintln!("stake: --usd <N> is required (the stake amount in dollars), or --info for the position, or --restake off|buffered / --redeem for the posture ops");
+        eprintln!(
+            "stake: --usd <N> is required (the stake amount in dollars), or --info for the position, or --restake off|buffered / --redeem for the posture ops"
+        );
         std::process::exit(2);
     };
     let Some(amount_base) = stake::parse_usd_to_base(usd) else {
-        eprintln!("stake: --usd expects a dollar amount with at most 6 fractional digits (e.g. 100 or 100.5)");
+        eprintln!(
+            "stake: --usd expects a dollar amount with at most 6 fractional digits (e.g. 100 or 100.5)"
+        );
         std::process::exit(2);
     };
 
@@ -3970,10 +4118,14 @@ fn run_stake_info(account_id: &str, root: &std::path::Path, now_unix: u64) {
         println!(
             "Staked:          — (service plane not yet live; {queued} stake intent(s) queued locally)"
         );
-        println!("stake --info: tranches, incentives, and the pool split render once the service plane is live");
+        println!(
+            "stake --info: tranches, incentives, and the pool split render once the service plane is live"
+        );
     } else {
         println!("Staked:          — (no position; the service plane is not yet live)");
-        println!("stake --info: tranches, incentives, and the pool split render once the service plane is live");
+        println!(
+            "stake --info: tranches, incentives, and the pool split render once the service plane is live"
+        );
     }
 }
 
@@ -4113,7 +4265,9 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
                             "vote: service plane not yet live — the SIGNED intent queued at {}",
                             queued_at.display()
                         );
-                        println!("vote: it submits at the next sync; the weight renders when the service answers");
+                        println!(
+                            "vote: it submits at the next sync; the weight renders when the service answers"
+                        );
                     }
                 }
             }
@@ -4373,7 +4527,7 @@ fn run_kat_migrate(
             // printed prefilled URL (the worker holds no write credential).
             if let Some(draft) = ack.proposal_draft.as_ref() {
                 use riir_refine::kat_migrate_client::{
-                    open_proposal_draft, render_draft_instructions, DraftOpen,
+                    DraftOpen, open_proposal_draft, render_draft_instructions,
                 };
                 match open_proposal_draft(draft) {
                     DraftOpen::Opened(issue_url) => println!(
@@ -4445,11 +4599,11 @@ fn run_migrate_normal(
     github_token_flag: Option<String>,
     totp_code: Option<&str>,
 ) {
+    use riir_kat::kat_recovery_client::{CLIENT_ID_ENV, HttpRecoveryTransport, ssh_picker};
     use riir_refine::kat_migrate_normal::{
-        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg,
-        UreqKeysBodySource,
+        LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg, UreqKeysBodySource,
+        run_normal_migration,
     };
-    use riir_kat::kat_recovery_client::{ssh_picker, CLIENT_ID_ENV, HttpRecoveryTransport};
     use std::io::{BufRead as _, IsTerminal as _, Write as _};
 
     let root = resolve_heal_root(&[]);
@@ -4570,9 +4724,7 @@ fn run_migrate_normal(
             // T1: the baked wallet client id, the env override respected —
             // injected through the env (the var is PUBLIC by design); the
             // leaf's env-resolving call reads it.
-            if std::env::var(CLIENT_ID_ENV)
-                .map_or(true, |v| v.trim().is_empty())
-            {
+            if std::env::var(CLIENT_ID_ENV).map_or(true, |v| v.trim().is_empty()) {
                 std::env::set_var(
                     CLIENT_ID_ENV,
                     riir_refine::kat_migrate_normal::resolve_wallet_client_id(None),
@@ -4773,7 +4925,9 @@ fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
                     println!("  cargo refine kat totp enroll --code <current-code>");
                 }
                 Ok(TotpEnrollOutcome::Armed) => {
-                    println!("enroll: the factor is ARMED — sensitive routes now require the current code.");
+                    println!(
+                        "enroll: the factor is ARMED — sensitive routes now require the current code."
+                    );
                 }
                 Err(TotpFailure::Refused(r)) => refused(r),
                 Err(TotpFailure::Fault(e)) => {
@@ -5126,7 +5280,10 @@ fn run_kat_topup_void(seq: u64) {
         match topup::void_intent(&transport, &signing_key, seq, kat_ledger_id(&url)) {
             topup::TopupOutcome::Ok(v) => {
                 assert_eq!(v.status.as_str(), "voided");
-                println!("checkout seq {} voided — the slot is free; a payment already scanned still lands on your account until its TTL", v.seq);
+                println!(
+                    "checkout seq {} voided — the slot is free; a payment already scanned still lands on your account until its TTL",
+                    v.seq
+                );
             }
             topup::TopupOutcome::Refused {
                 status,
@@ -5202,7 +5359,9 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
                         println!("{rendered}");
-                        println!("  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above");
+                        println!(
+                            "  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above"
+                        );
                     }
                 }
             }
@@ -5410,7 +5569,9 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                         eprintln!("topup: the QR could not be rendered — open the URL above");
                     } else {
                         println!("{rendered}");
-                        println!("  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above");
+                        println!(
+                            "  scan with any Solana Pay wallet (Phantom / Solflare) — the QR is the URL above"
+                        );
                     }
                 }
             }
@@ -5429,7 +5590,9 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
                             match intents.len() {
                                 0 => {
                                     eprintln!("topup: a cap is full ({status}) — {detail}");
-                                    eprintln!("topup: no open checkout of yours shows on this net — the lane-wide cap or another account holds it; retry later");
+                                    eprintln!(
+                                        "topup: no open checkout of yours shows on this net — the lane-wide cap or another account holds it; retry later"
+                                    );
                                 }
                                 1 => {
                                     let seq = intents[0].seq;
@@ -5965,7 +6128,7 @@ pub fn show(p: &P) -> String {
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
     fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
-        use riir_refine::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
+        use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, collect_edits};
         use riir_refine::edit_emitter::apply_edits;
         use riir_refine::kat_meter::{KatCharge, KatMeter};
 
@@ -6197,7 +6360,7 @@ fn run_kat_corpus_pr(
     submit: bool,
     root: &std::path::Path,
 ) {
-    use riir_refine::kat_corpus_pr::{run_corpus_pr, CorpusPrArgs, HttpCorpusPrWire};
+    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
 
     let args = CorpusPrArgs {
         src: src.unwrap_or_default().to_string(),
@@ -6233,10 +6396,10 @@ fn run_kat_corpus_pr(
 fn run_kat_replay() {
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
     use riir_refine::kat_replay::{
-        judge_item, toolchain_display, toolchain_fingerprint, ReplayVerdict,
+        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
     };
     use riir_refine::kat_replay_client::{
-        accept_line, request_lease, submit_verdict, unhex32, HttpReplayTransport,
+        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
     };
 
     // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
@@ -8224,7 +8387,9 @@ fn parse_args() -> Args {
             "--active-set" => args.active_set_list = true,
             "--active-set-demote" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--active-set-demote requires a value (domain:rule, e.g. clippy:manual_div_ceil)");
+                    eprintln!(
+                        "--active-set-demote requires a value (domain:rule, e.g. clippy:manual_div_ceil)"
+                    );
                     usage();
                 };
                 args.active_set_demote = Some(value);
@@ -8446,7 +8611,9 @@ fn parse_args() -> Args {
                     usage();
                 };
                 if value != "github" {
-                    eprintln!("--provider: unknown provider {value:?} — the closed vocabulary is `github`");
+                    eprintln!(
+                        "--provider: unknown provider {value:?} — the closed vocabulary is `github`"
+                    );
                     usage();
                 }
                 args.login_provider = Some(value);
@@ -8512,7 +8679,9 @@ fn parse_args() -> Args {
             "--no" => args.vote_no = true,
             "--amount" => {
                 let Some(value) = it.next() else {
-                    eprintln!("--amount requires a value (the request amount in KAT, e.g. 2 or 1.5; omit for ANY amount)");
+                    eprintln!(
+                        "--amount requires a value (the request amount in KAT, e.g. 2 or 1.5; omit for ANY amount)"
+                    );
                     usage();
                 };
                 args.pay_amount = Some(value);
@@ -8940,7 +9109,9 @@ fn parse_args() -> Args {
                 args.command = Some(KatCommand::Custody);
                 args.keys_args.extend(it.by_ref());
             }
-            "keys" | "key" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
+            "keys" | "key"
+                if args.command == Some(KatCommand::Account) && args.paths.is_empty() =>
+            {
                 args.command = Some(KatCommand::Keys);
                 if arg == "keys" {
                     args.keys_args.push("list".to_string());
@@ -9097,7 +9268,9 @@ fn parse_args() -> Args {
         usage();
     }
     if args.command == Some(KatCommand::TunaGet) && args.tuna_target.is_some() {
-        eprintln!("get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>`)");
+        eprintln!(
+            "get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>`)"
+        );
         usage();
     }
     // riir-dapps plan 053 / riir-kat issue 007: the second-factor flags
@@ -9451,7 +9624,9 @@ fn parse_args() -> Args {
         usage();
     }
     if args.necessity_rule.is_some() && !args.necessity_bench {
-        eprintln!("--necessity-rule requires --necessity-bench (the per-decision paired lane runs inside it)");
+        eprintln!(
+            "--necessity-rule requires --necessity-bench (the per-decision paired lane runs inside it)"
+        );
         usage();
     }
     let active_set_cmds = u8::from(args.active_set_list)
@@ -10875,7 +11050,7 @@ fn finish_score_bench(
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
 fn run_score_bench_compile() {
     use riir_refine::domains::rustc_errors::composite;
-    use riir_refine::domains::rustc_errors::corpus_gen::{territory_of, Territory};
+    use riir_refine::domains::rustc_errors::corpus_gen::{Territory, territory_of};
     use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
@@ -12129,8 +12304,9 @@ fn run_corpus_stats(with_stats: bool, as_json: bool, do_import: bool) {
                 say(&format!(
                     "demonstrability column (134 T1, standing — last bench row {ts}):"
                 ));
-                for line in
-                    riir_refine::demonstrability::render_column(&rows).lines().skip(1)
+                for line in riir_refine::demonstrability::render_column(&rows)
+                    .lines()
+                    .skip(1)
                 {
                     say(line);
                 }
@@ -12491,11 +12667,15 @@ fn main() {
             #[cfg(feature = "kat_transport")]
             KatCommand::Keys => run_kat_keys(&args.keys_args),
             #[cfg(not(feature = "kat_transport"))]
-            KatCommand::Keys => riir_refine::build_stamp::refuse("account keys", &["kat_transport"]),
+            KatCommand::Keys => {
+                riir_refine::build_stamp::refuse("account keys", &["kat_transport"])
+            }
             #[cfg(feature = "kat_transport")]
             KatCommand::Custody => run_kat_custody(&args.keys_args),
             #[cfg(not(feature = "kat_transport"))]
-            KatCommand::Custody => riir_refine::build_stamp::refuse("account custody", &["kat_transport"]),
+            KatCommand::Custody => {
+                riir_refine::build_stamp::refuse("account custody", &["kat_transport"])
+            }
             KatCommand::Genesis => run_kat_genesis(&args.keys_args),
             #[cfg(feature = "admin")]
             KatCommand::Admin => run_kat_admin(&args.keys_args),
@@ -13321,7 +13501,11 @@ fn main() {
                         Ok(true) => println!(
                             "frontier snapshot: appended (generation {}, store {}, band-mass {:.1}%) → {}",
                             snap.generation,
-                            if snap.store.is_empty() { "?" } else { &snap.store },
+                            if snap.store.is_empty() {
+                                "?"
+                            } else {
+                                &snap.store
+                            },
                             snap.band_mass * 100.0,
                             riir_refine::frontier_report::SNAPSHOTS_JSONL
                         ),
@@ -13445,14 +13629,15 @@ fn main() {
     // "no gaps" (the frontier-report refusal arm).
     if args.oracle_census {
         let cwd = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-        let Some(root) = riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd)
-        else {
+        let Some(root) = riir_refine::clippy_oracle::detect_project_root(&args.paths, &cwd) else {
             let at = if args.paths.is_empty() {
                 ".".to_string()
             } else {
                 format!("{:?}", args.paths)
             };
-            eprintln!("oracle census: no cargo project found within bounds of {at} — nothing to census");
+            eprintln!(
+                "oracle census: no cargo project found within bounds of {at} — nothing to census"
+            );
             std::process::exit(2);
         };
         let features = riir_refine::clippy_oracle::auto_oracle_features();
@@ -13696,7 +13881,11 @@ fn main() {
                             s.spans_rated,
                             s.rows_written,
                             s.rows_seen,
-                            if s.rows_written == 0 { " (already rated — idempotent)" } else { "" }
+                            if s.rows_written == 0 {
+                                " (already rated — idempotent)"
+                            } else {
+                                ""
+                            }
                         ),
                         Err(e) => {
                             eprintln!("recompute-elo: {e}");
@@ -13712,7 +13901,9 @@ fn main() {
         }
         #[cfg(not(feature = "latent_retrieval"))]
         {
-            eprintln!("--recompute-elo requires a build with --features latent_retrieval (the neuron-db store)");
+            eprintln!(
+                "--recompute-elo requires a build with --features latent_retrieval (the neuron-db store)"
+            );
             std::process::exit(2);
         }
         return;
@@ -13800,7 +13991,9 @@ fn main() {
         }
         #[cfg(not(feature = "latent_retrieval"))]
         {
-            eprintln!("--collapse-report requires a build with --features latent_retrieval (the fixture set + store bridge)");
+            eprintln!(
+                "--collapse-report requires a build with --features latent_retrieval (the fixture set + store bridge)"
+            );
             std::process::exit(2);
         }
     }
@@ -13845,7 +14038,9 @@ fn main() {
     // Issue 031 H3 trap the flag exists to prevent).
     #[cfg(not(any(feature = "fix_verify", feature = "rustc_errors")))]
     if args.verify_args.is_some() {
-        eprintln!("--verify-args requires --verify or --fix-compile (build with --features fix_verify or rustc_errors)");
+        eprintln!(
+            "--verify-args requires --verify or --fix-compile (build with --features fix_verify or rustc_errors)"
+        );
         std::process::exit(2);
     }
     // A fix_verify-less build CANNOT serve --verify's own --verify-args
@@ -14699,39 +14894,39 @@ fn main() {
                 {
                     Some(riir_refine::hotpath_report::KeyVerdict::Matched { sha }) => {
                         eprintln!(
-                                "hotpath feed: keyed MATCHED at repo HEAD {sha} — {n_entries} timed entr(ies), {} located hot span(s)",
-                                spans.len()
-                            );
+                            "hotpath feed: keyed MATCHED at repo HEAD {sha} — {n_entries} timed entr(ies), {} located hot span(s)",
+                            spans.len()
+                        );
                     }
                     Some(riir_refine::hotpath_report::KeyVerdict::Mismatched {
                         report_sha,
                         repo_sha,
                     }) => {
                         eprintln!(
-                                "hotpath feed: STALE PROFILE REFUSED — report was taken at {report_sha} but the repo is at {repo_sha}; re-profile at the current HEAD or checkout that SHA"
-                            );
+                            "hotpath feed: STALE PROFILE REFUSED — report was taken at {report_sha} but the repo is at {repo_sha}; re-profile at the current HEAD or checkout that SHA"
+                        );
                         std::process::exit(2);
                     }
                     _ => {
                         if report_keyed {
                             eprintln!(
-                                    "hotpath feed: the report carries meta.git but the project root's git HEAD could not be read (not a git checkout / git failed) — CANNOT VERIFY the key; {} located hot span(s) shown best-effort",
-                                    spans.len()
-                                );
+                                "hotpath feed: the report carries meta.git but the project root's git HEAD could not be read (not a git checkout / git failed) — CANNOT VERIFY the key; {} located hot span(s) shown best-effort",
+                                spans.len()
+                            );
                         } else {
                             eprintln!(
-                                    "hotpath feed: report is UNKEYED (no meta.git — plain hotpath without hotpath-cloud); proceeding with a loud disclosure: span lines are best-effort against the current tree — {} located hot span(s)",
-                                    spans.len()
-                                );
+                                "hotpath feed: report is UNKEYED (no meta.git — plain hotpath without hotpath-cloud); proceeding with a loud disclosure: span lines are best-effort against the current tree — {} located hot span(s)",
+                                spans.len()
+                            );
                         }
                     }
                 }
             }
             None => {
                 eprintln!(
-                        "hotpath feed: no project root detected — cannot key the report; {} located hot span(s) shown best-effort",
-                        spans.len()
-                    );
+                    "hotpath feed: no project root detected — cannot key the report; {} located hot span(s) shown best-effort",
+                    spans.len()
+                );
             }
         }
         Some(spans)
@@ -14868,9 +15063,11 @@ fn main() {
                     && riir_refine::clippy_oracle::auto_oracle_gap_arm()
                     && riir_refine::clippy_oracle::auto_oracle_gap_max_passes() > 0
                 {
-                    let named = session.census.iter().take(8).map(|t| {
-                        format!("{}:{}←{}", t.package, t.target, t.missing.join("+"))
-                    });
+                    let named = session
+                        .census
+                        .iter()
+                        .take(8)
+                        .map(|t| format!("{}:{}←{}", t.package, t.target, t.missing.join("+")));
                     let mut list = named.collect::<Vec<_>>().join("; ");
                     let more = session.census.len().saturating_sub(8);
                     if more > 0 {
@@ -14901,12 +15098,13 @@ fn main() {
                         }
                     }
                     if !session.uncovered.is_empty() {
-                        let remedy = riir_refine::clippy_oracle::gap_feature_sets(&session.uncovered)
-                            .iter()
-                            .take(8)
-                            .map(|s| s.join("+"))
-                            .collect::<Vec<_>>()
-                            .join(" | ");
+                        let remedy =
+                            riir_refine::clippy_oracle::gap_feature_sets(&session.uncovered)
+                                .iter()
+                                .take(8)
+                                .map(|s| s.join("+"))
+                                .collect::<Vec<_>>()
+                                .join(" | ");
                         eprintln!(
                             "clippy oracle (auto): {} gated target(s) remain UNCOVERED — arm with RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv> (distinct sets: {remedy})",
                             session.uncovered.len()
@@ -15066,7 +15264,9 @@ fn main() {
     let fmt_enabled = args.fix && !args.no_fmt;
     let fmt_active = fmt_enabled && riir_refine::fmt::rustfmt_available();
     if fmt_enabled && !fmt_active {
-        eprintln!("fmt: rustfmt not found on PATH — automatic formatting disabled (--no-fmt silences this)");
+        eprintln!(
+            "fmt: rustfmt not found on PATH — automatic formatting disabled (--no-fmt silences this)"
+        );
     }
     let mut fmt_summary = riir_refine::fmt::FmtSummary::default();
 
@@ -15151,11 +15351,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-                             // The bench-target guard (2026-09-16 intake, P30): applying a
-                             // perf rule to a bench target changes WHAT the bench measures —
-                             // `--verify` proves compilation, never measurement validity,
-                             // and a bench file's numbers ARE its artifact. Decline loudly,
-                             // never silently; the operator can still apply manually.
+            // The bench-target guard (2026-09-16 intake, P30): applying a
+            // perf rule to a bench target changes WHAT the bench measures —
+            // `--verify` proves compilation, never measurement validity,
+            // and a bench file's numbers ARE its artifact. Decline loudly,
+            // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
             // P39 (post-mining intake, 2026-09-25): under --repo-posture the
             // rust_perf lane is exempt from the posture MECHANISM (the
@@ -16287,9 +16487,7 @@ fn main() {
                 }
                 if !parents.contains_key(&b.path) {
                     let mut sources: Vec<riir_refine::fix_verify::ParentSource> = Vec::new();
-                    for cand in
-                        riir_refine::fix_verify::parent_module_decl_candidates(&b.path)
-                    {
+                    for cand in riir_refine::fix_verify::parent_module_decl_candidates(&b.path) {
                         let Ok(text) = std::fs::read_to_string(&cand) else {
                             continue;
                         };
@@ -16560,8 +16758,10 @@ fn main() {
             // compile (behind a skipped cfg gate — inline or module-decl)
             // keep their stats outcome but NEVER certify: `verified` vouches
             // for a compile that did not happen.
-            let posture_compiled: std::collections::HashSet<(PathBuf, usize)> =
-                cfg_audit_marks.iter().map(|m| (m.path.clone(), m.line)).collect();
+            let posture_compiled: std::collections::HashSet<(PathBuf, usize)> = cfg_audit_marks
+                .iter()
+                .map(|m| (m.path.clone(), m.line))
+                .collect();
             for e in &kept {
                 let (success, oracle_verified) = riir_refine::fix_verify::kept_edit_verdict(
                     oracle_resolved
@@ -17601,7 +17801,7 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
 #[cfg(feature = "docker")]
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
     use riir_refine::domains::docker::proposers::fix_all;
-    use riir_refine::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
+    use riir_refine::domains::docker::rules::{FIXABLE_DOCKER, scan_source_with};
 
     let mut printed = 0usize;
     for path in paths {
@@ -17660,8 +17860,8 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 /// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
 #[cfg(feature = "shader_perf")]
 fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
-    use riir_refine::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
     use riir_refine::domains::shader_perf::ShaderScanner;
+    use riir_refine::domains::shader_perf::proposers::{FIXABLE_SHADER, collect_all_edits};
 
     let mut printed = 0usize;
     for path in paths {
@@ -17809,7 +18009,7 @@ fn run_overlay_with_promotion(
     pin: Option<u64>,
     heal_root: &std::path::Path,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_refine::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
+    use riir_refine::kat_promotion::{PromotionRegistry, REGISTRY_FILE, promotion_run_overlay};
 
     let leased = lease_overlay_for_run(store, pin);
     let registry_path = heal_root.join(REGISTRY_FILE);
@@ -17870,8 +18070,8 @@ fn lease_overlay_for_run(
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_refine::kat_lease_client::{
-        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
-        PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
+        PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER, PACK_DOMAIN_KERNEL,
+        PACK_DOMAIN_PERF, PACK_DOMAIN_SEC, overlay_from_epoch,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -17983,6 +18183,7 @@ fn dedup_respliced_edits(
         }
     }
     *edits = kept;
+    dropped.shrink_to_fit();
     dropped
 }
 
@@ -18179,7 +18380,7 @@ fn run_reheat_pass(
     active_set: &riir_refine::active_set::ActiveSet,
 ) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans,
+        HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans, run_update_phase,
     };
 
     // One bounded lease check: did a new epoch land?
@@ -18545,7 +18746,7 @@ mod fix_domain_tests {
 #[cfg(test)]
 mod corpus_stats_needle_tests {
     use super::{
-        count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE,
+        CORPUS_DOMAIN_TABLE, count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count,
     };
 
     #[test]
@@ -18602,7 +18803,7 @@ mod corpus_stats_needle_tests {
 /// this task closed) fails here instead of in a user's shell.
 #[cfg(test)]
 mod mode_flag_tests {
-    use super::{validate_mode_flags as v, Args};
+    use super::{Args, validate_mode_flags as v};
 
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were

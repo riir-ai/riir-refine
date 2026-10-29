@@ -1089,7 +1089,7 @@ mod tests {
     fn extract_deps_no_markers_returns_empty() {
         let harness = "pub fn foo() {}";
         let deps = PerfBenchValidator::extract_deps(harness);
-        assert!(deps.is_empty());
+        assert_eq!(deps, [] as [std::string::String; 0]);
     }
 
     #[test]

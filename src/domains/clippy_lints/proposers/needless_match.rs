@@ -13,7 +13,7 @@
 //! not become `*r` in expression position where `r` would read as the value).
 
 use super::helpers::{bool_lit, is_none_pat, is_postfix_safe};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Arm, Expr, ExprMatch, File, Lit, Pat};
 
@@ -52,7 +52,7 @@ impl Collector<'_> {
         {
             return None; // guards/arm-attrs would be lost by the splice
         }
-        let scrutinee = src(self.source, &*m.expr)?;
+        let scrutinee = src(self.source, &m.expr)?;
         let scrutinee = if is_postfix_safe(&m.expr) {
             scrutinee
         } else {
@@ -132,8 +132,7 @@ mod tests {
 
     #[test]
     fn result_identity_collapses() {
-        let input =
-            "fn g(r: Result<u8, u16>) -> Result<u8, u16> { match r { Ok(v) => Ok(v), Err(e) => Err(e) } }";
+        let input = "fn g(r: Result<u8, u16>) -> Result<u8, u16> { match r { Ok(v) => Ok(v), Err(e) => Err(e) } }";
         let out = propose_fix("needless_match", input).expect("matched");
         assert!(out.contains("{ r }"), "{out}");
         syn::parse_file(&out).expect("re-parses");
@@ -169,8 +168,7 @@ mod tests {
 
     #[test]
     fn transformed_ctor_body_untouched() {
-        let input =
-            "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v + 1), None => None } }";
+        let input = "fn f(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v + 1), None => None } }";
         let out = propose_fix("needless_match", input);
         assert!(
             out.is_none(),

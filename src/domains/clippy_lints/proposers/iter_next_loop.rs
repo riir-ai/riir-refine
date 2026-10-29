@@ -8,7 +8,7 @@
 //! as untouched bytes.
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprForLoop, File};
 
@@ -31,7 +31,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_for_loop(&mut self, f: &'ast ExprForLoop) {
         syn::visit::visit_expr_for_loop(self, f);
         if let Some(replacement) = self.try_drop_next(f) {
-            self.edits.push(edit(&*f.expr, replacement));
+            self.edits.push(edit(&f.expr, replacement));
         }
     }
 }
@@ -47,7 +47,7 @@ impl Collector<'_> {
         if !next.args.is_empty() {
             return None;
         }
-        let recv = src(self.source, &*next.receiver)?;
+        let recv = src(self.source, &next.receiver)?;
         Some(if is_postfix_safe(&next.receiver) {
             recv
         } else {
@@ -62,8 +62,7 @@ mod tests {
 
     #[test]
     fn drops_next_from_for_iter() {
-        let input =
-            "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0u8; for x in it.next() { s += x; } s }";
+        let input = "fn f(mut it: std::vec::IntoIter<u8>) -> u8 { let mut s = 0u8; for x in it.next() { s += x; } s }";
         let out = propose_fix("iter_next_loop", input).expect("matched");
         assert!(
             out.contains("for x in it { s += x; }"),

@@ -1167,7 +1167,7 @@ mod tests {
                 assert!(start < end);
                 assert!(*end <= candidate.code.len());
             }
-            assert!(!candidate.classes.is_empty());
+            assert_ne!(candidate.classes, [] as [CorruptionClass; 0]);
         }
     }
 

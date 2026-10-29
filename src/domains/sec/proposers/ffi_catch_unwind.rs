@@ -28,7 +28,7 @@
 use syn::spanned::Spanned;
 use syn::{Block, File, ReturnType, Signature};
 
-use super::{line_indent, src, SourceEdit};
+use super::{SourceEdit, line_indent, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
@@ -121,21 +121,30 @@ mod tests {
     fn skips_non_extern_fn() {
         let src = "pub fn plain(n: u32) { println!(\"{n}\"); }";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
     fn skips_non_unit_return() {
         let src = "pub extern \"C\" fn f(n: u32) -> u32 { n + 1 }";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
     fn skips_already_contained() {
         let src = "pub extern \"C\" fn f() {\n    let _ = std::panic::catch_unwind(|| t());\n}";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]

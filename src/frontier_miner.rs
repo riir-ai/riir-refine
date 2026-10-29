@@ -86,7 +86,7 @@ use std::collections::BTreeSet;
 use crate::draft::clippy_oracle::OracleVerdict;
 use crate::frontier_pairs::PROVENANCE;
 use crate::frontier_report;
-use crate::score_bench::{heal_fixpoint_cfg, ComponentOverride};
+use crate::score_bench::{ComponentOverride, heal_fixpoint_cfg};
 
 /// Where committed miner rows live (append-only; BLAKE3-deduped on load).
 pub const MINER_ROWS_JSONL: &str = ".benchmarks/frontier_miner_rows.jsonl";
@@ -367,15 +367,33 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // (nursery) fires on every trivially-const seed, which would be a
         // dirty seed under the full oracle (measured, the first e2e run).
         "needless_return-heldout" => vec![
-            ("fn joined(v: &[i32]) -> String { format!(\"{v:?}\") }", "fn joined(v: &[i32]) -> String { return format!(\"{v:?}\"); }"),
-            ("fn label(id: u32) -> String { format!(\"item-{id}\") }", "fn label(id: u32) -> String { return format!(\"item-{id}\"); }"),
-            ("fn has_neg(v: &[i32]) -> bool { v.iter().any(|x| *x < 0) }", "fn has_neg(v: &[i32]) -> bool { return v.iter().any(|x| *x < 0); }"),
+            (
+                "fn joined(v: &[i32]) -> String { format!(\"{v:?}\") }",
+                "fn joined(v: &[i32]) -> String { return format!(\"{v:?}\"); }",
+            ),
+            (
+                "fn label(id: u32) -> String { format!(\"item-{id}\") }",
+                "fn label(id: u32) -> String { return format!(\"item-{id}\"); }",
+            ),
+            (
+                "fn has_neg(v: &[i32]) -> bool { v.iter().any(|x| *x < 0) }",
+                "fn has_neg(v: &[i32]) -> bool { return v.iter().any(|x| *x < 0); }",
+            ),
         ],
         // 1-op: bind the tail expression to a trailing let and return the name.
         "let_and_return" => vec![
-            ("fn shout(s: &str) -> String { s.to_uppercase() }", "fn shout(s: &str) -> String { let out = s.to_uppercase(); out }"),
-            ("fn total(v: &[i32]) -> i32 { v.iter().sum() }", "fn total(v: &[i32]) -> i32 { let sum = v.iter().sum(); sum }"),
-            ("fn slug(s: &str) -> usize { s.trim().len() }", "fn slug(s: &str) -> usize { let made = s.trim().len(); made }"),
+            (
+                "fn shout(s: &str) -> String { s.to_uppercase() }",
+                "fn shout(s: &str) -> String { let out = s.to_uppercase(); out }",
+            ),
+            (
+                "fn total(v: &[i32]) -> i32 { v.iter().sum() }",
+                "fn total(v: &[i32]) -> i32 { let sum = v.iter().sum(); sum }",
+            ),
+            (
+                "fn slug(s: &str) -> usize { s.trim().len() }",
+                "fn slug(s: &str) -> usize { let made = s.trim().len(); made }",
+            ),
         ],
         // (ptr_arg + needless_borrow RETIRED at Batch 155 — their frontier
         // leads are consumed by the landed proposers; their case tables
@@ -383,14 +401,26 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // homes for tiers the fixpoint dispatch cannot loop-verify.)
         // 1-op: pass a redundant full-slice `&s[..]` to a `&str` param.
         "redundant_slicing" => vec![
-            ("fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(s) }", "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }"),
-            ("fn tail(s: &str) -> &str { &s[1..] }\nfn clip(s: &str) -> &str { tail(s) }", "fn tail(s: &str) -> &str { &s[1..] }\nfn clip(s: &str) -> &str { tail(&s[..]) }"),
+            (
+                "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(s) }",
+                "fn first_char(s: &str) -> char { s.chars().next().unwrap_or(' ') }\nfn pick(s: &str) -> char { first_char(&s[..]) }",
+            ),
+            (
+                "fn tail(s: &str) -> &str { &s[1..] }\nfn clip(s: &str) -> &str { tail(s) }",
+                "fn tail(s: &str) -> &str { &s[1..] }\nfn clip(s: &str) -> &str { tail(&s[..]) }",
+            ),
         ],
         // 1-op: `.map(f).flatten()` → the broken form is the un-fused pair
         // (seed carries the fused `flat_map`).
         "map_flatten" => vec![
-            ("fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().flat_map(|x| x.split(' ')).collect() }", "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }"),
-            ("fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().flat_map(|r| r.split(',')).collect() }", "fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().map(|r| r.split(',')).flatten().collect() }"),
+            (
+                "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().flat_map(|x| x.split(' ')).collect() }",
+                "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }",
+            ),
+            (
+                "fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().flat_map(|r| r.split(',')).collect() }",
+                "fn chunks(rows: &[String]) -> Vec<&str> { rows.iter().map(|r| r.split(',')).flatten().collect() }",
+            ),
         ],
         // ── Batch 156 graduation (Plan 147): `io_other_error` graduated to
         // the heldout loop (FIXABLE — `Error::other` splice,
@@ -401,8 +431,14 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // 1-op: `io::Error::other(e)` → the legacy `new(ErrorKind::Other, e)`
         // (both compile on the workspace toolchain; the broken form fires).
         "io_other_error" => vec![
-            ("fn mk(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
-            ("fn bad(e: String) -> std::io::Error { std::io::Error::other(e) }", "fn bad(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }"),
+            (
+                "fn mk(e: String) -> std::io::Error { std::io::Error::other(e) }",
+                "fn mk(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }",
+            ),
+            (
+                "fn bad(e: String) -> std::io::Error { std::io::Error::other(e) }",
+                "fn bad(e: String) -> std::io::Error { std::io::Error::new(std::io::ErrorKind::Other, e) }",
+            ),
         ],
         // ── Batch 157 graduation (Plan 148): BOTH pack III leads graduated
         // — `redundant_closure_for_method_calls` + `iter_skip_next` (both
@@ -412,15 +448,27 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // seed is the fn-path form — clean; the broken fires the pedantic
         // method-forwarding lint).
         "redundant_closure_for_method_calls" => vec![
-            ("fn lens(v: &[String]) -> Vec<usize> { v.iter().map(String::len).collect() }", "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(|s| s.len()).collect() }"),
-            ("fn sizes(rows: &[String]) -> Vec<usize> { rows.iter().map(String::len).collect() }", "fn sizes(rows: &[String]) -> Vec<usize> { rows.iter().map(|r| r.len()).collect() }"),
+            (
+                "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(String::len).collect() }",
+                "fn lens(v: &[String]) -> Vec<usize> { v.iter().map(|s| s.len()).collect() }",
+            ),
+            (
+                "fn sizes(rows: &[String]) -> Vec<usize> { rows.iter().map(String::len).collect() }",
+                "fn sizes(rows: &[String]) -> Vec<usize> { rows.iter().map(|r| r.len()).collect() }",
+            ),
         ],
         // 1-op: `v.get(n)` (the oracle-CLEAN form — `.nth(n)` itself fires
         // `iter_nth` on slice iters, measured round 3) → `.skip(n).next()`
         // (fires iter_skip_next).
         "iter_skip_next" => vec![
-            ("fn at(v: &[u8], n: usize) -> Option<&u8> { v.get(n) }", "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }"),
-            ("fn pick(v: &[u8], k: usize) -> Option<&u8> { v.get(k) }", "fn pick(v: &[u8], k: usize) -> Option<&u8> { v.iter().skip(k).next() }"),
+            (
+                "fn at(v: &[u8], n: usize) -> Option<&u8> { v.get(n) }",
+                "fn at(v: &[u8], n: usize) -> Option<&u8> { v.iter().skip(n).next() }",
+            ),
+            (
+                "fn pick(v: &[u8], k: usize) -> Option<&u8> { v.get(k) }",
+                "fn pick(v: &[u8], k: usize) -> Option<&u8> { v.iter().skip(k).next() }",
+            ),
         ],
         // ── Batch 157 re-arm (probe-verified 2026-09-18,
         // `scripts/plan148_frontier_probe.py`) — GRADUATED at Batch 158
@@ -430,16 +478,28 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // to_string-in-format-args lint; the inlined seed dodges
         // uninlined_format_args, the literal prefix dodges useless_format).
         "to_string_in_format_args" => vec![
-            ("fn show(x: u32) -> String { format!(\"n={x}\") }", "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }"),
-            ("fn tag(y: u32) -> String { format!(\"t={y}\") }", "fn tag(y: u32) -> String { format!(\"t={}\", y.to_string()) }"),
+            (
+                "fn show(x: u32) -> String { format!(\"n={x}\") }",
+                "fn show(x: u32) -> String { format!(\"n={}\", x.to_string()) }",
+            ),
+            (
+                "fn tag(y: u32) -> String { format!(\"t={y}\") }",
+                "fn tag(y: u32) -> String { format!(\"t={}\", y.to_string()) }",
+            ),
         ],
         // 1-op: `(3..=5).contains(&x)` → the spelled-out `x >= 3 && x <= 5`
         // (fires manual_range_contains; `hits.push(x)` keeps the fn
         // non-const-able — the wave-2-evidenced default-level lint,
         // 121 warnings / 5 crates on Bench 094).
         "manual_range_contains" => vec![
-            ("fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); (3..=5).contains(&x) }", "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }"),
-            ("fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); (7..=9).contains(&n) }", "fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); n >= 7 && n <= 9 }"),
+            (
+                "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); (3..=5).contains(&x) }",
+                "fn in_band(x: u8, hits: &mut Vec<u8>) -> bool { hits.push(x); x >= 3 && x <= 5 }",
+            ),
+            (
+                "fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); (7..=9).contains(&n) }",
+                "fn wide(n: u8, hits: &mut Vec<u8>) -> bool { hits.push(n); n >= 7 && n <= 9 }",
+            ),
         ],
         // ── Batch 158 re-arm (probe-verified 2026-09-18,
         // `scripts/plan149_frontier_probe.py`) — GRADUATED at Batch 159
@@ -449,15 +509,27 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // style lint single_char_add_str — the Batch 156/157 verified
         // spare, armed on the third turn).
         "single_char_add_str" => vec![
-            ("fn mark(s: &mut String) { s.push('!'); }", "fn mark(s: &mut String) { s.push_str(\"!\"); }"),
-            ("fn note(t: &mut String) { t.push('?'); }", "fn note(t: &mut String) { t.push_str(\"?\"); }"),
+            (
+                "fn mark(s: &mut String) { s.push('!'); }",
+                "fn mark(s: &mut String) { s.push_str(\"!\"); }",
+            ),
+            (
+                "fn note(t: &mut String) { t.push('?'); }",
+                "fn note(t: &mut String) { t.push_str(\"?\"); }",
+            ),
         ],
         // 1-op: `x.clamp(3, 5)` → the spelled-out `x.max(3).min(5)` (fires
         // the default-level style lint manual_clamp; `hits.push(x)` keeps
         // the fn non-const-able).
         "manual_clamp" => vec![
-            ("fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.clamp(3, 5) }", "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }"),
-            ("fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.clamp(7, 9) }", "fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.max(7).min(9) }"),
+            (
+                "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.clamp(3, 5) }",
+                "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(3).min(5) }",
+            ),
+            (
+                "fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.clamp(7, 9) }",
+                "fn roof(n: i32, hits: &mut Vec<i32>) -> i32 { hits.push(n); n.max(7).min(9) }",
+            ),
         ],
         // ── Batch 159 re-arm (probe-verified 2026-09-18,
         // `scripts/plan150_frontier_probe.py`; seeds are non-const-able
@@ -468,14 +540,26 @@ fn family_cases(fam: Family) -> Vec<(&'static str, &'static str)> {
         // the default-level style lint from_str_radix_10 — the plan149
         // recorded spare, armed with the const-dodge on the second turn).
         "from_str_radix_10" => vec![
-            ("fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); s.parse::<u32>() }", "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(s, 10) }"),
-            ("fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); t.parse::<u32>() }", "fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(t, 10) }"),
+            (
+                "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); s.parse::<u32>() }",
+                "fn num(s: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(s, 10) }",
+            ),
+            (
+                "fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); t.parse::<u32>() }",
+                "fn val(t: &str, hits: &mut Vec<u32>) -> Result<u32, std::num::ParseIntError> { hits.push(0); u32::from_str_radix(t, 10) }",
+            ),
         ],
         // 1-op: `y += 1` → `y = y + 1` (fires the default-level style lint
         // assign_op_pattern; `hits.push(x)` keeps the fn non-const-able).
         "assign_op_pattern" => vec![
-            ("fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }", "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }"),
-            ("fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w += 2; w }", "fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w = w + 2; w }"),
+            (
+                "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y += 1; y }",
+                "fn bump(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut y = x; y = y + 1; y }",
+            ),
+            (
+                "fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w += 2; w }",
+                "fn step(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); let mut w = x; w = w + 2; w }",
+            ),
         ],
         // ── Batch 160 re-arm — GRADUATED at Batch 161 (Plan 152; both
         // probe fixtures unchanged, groups re-pinned by the plan152
@@ -1388,7 +1472,7 @@ mod tests {
             &known,
             &heldout_probe,
         );
-        assert!(second.admitted.is_empty());
+        assert_eq!(second.admitted, [] as [AdmittedRow; 0]);
         assert!(
             second.rejections.is_empty(),
             "family-done is a skip, not a rejection"
@@ -1409,10 +1493,12 @@ mod tests {
             1,
             "the family's NEXT candidate admits"
         );
-        assert!(third
-            .rejections
-            .iter()
-            .any(|r| matches!(r, Rejection::Duplicate { .. })));
+        assert!(
+            third
+                .rejections
+                .iter()
+                .any(|r| matches!(r, Rejection::Duplicate { .. }))
+        );
     }
 
     #[test]
@@ -1437,10 +1523,11 @@ mod tests {
             out.admitted.is_empty(),
             "the adversarial solution must not commit"
         );
-        assert!(out
-            .rejections
-            .iter()
-            .any(|r| matches!(r, Rejection::RegressionRefused { .. })));
+        assert!(
+            out.rejections
+                .iter()
+                .any(|r| matches!(r, Rejection::RegressionRefused { .. }))
+        );
         // Directly: the perturbation names the stock row it re-broke.
         let perturbed = regression_perturbations(&broad).expect("must refuse");
         assert!(perturbed.contains(&"needless_return".to_string()));
@@ -1477,11 +1564,12 @@ mod tests {
             &KnownSet::new(),
             &dirty,
         );
-        assert!(out.admitted.is_empty());
-        assert!(out
-            .rejections
-            .iter()
-            .all(|r| matches!(r, Rejection::SeedNotClean { .. })));
+        assert_eq!(out.admitted, [] as [AdmittedRow; 0]);
+        assert!(
+            out.rejections
+                .iter()
+                .all(|r| matches!(r, Rejection::SeedNotClean { .. }))
+        );
     }
 
     #[test]
@@ -1503,11 +1591,12 @@ mod tests {
             &KnownSet::new(),
             &blind,
         );
-        assert!(out.admitted.is_empty());
-        assert!(out
-            .rejections
-            .iter()
-            .all(|r| matches!(r, Rejection::TargetLintNotFired { .. })));
+        assert_eq!(out.admitted, [] as [AdmittedRow; 0]);
+        assert!(
+            out.rejections
+                .iter()
+                .all(|r| matches!(r, Rejection::TargetLintNotFired { .. }))
+        );
     }
 
     #[test]
@@ -1530,8 +1619,11 @@ mod tests {
             &KnownSet::new(),
             &frontier_probe,
         );
-        assert!(out.admitted.is_empty());
-        assert!(band_rows(&out.admitted).is_empty());
+        assert_eq!(out.admitted, [] as [AdmittedRow; 0]);
+        assert_eq!(
+            band_rows(&out.admitted),
+            [] as [(std::string::String, u32, u32); 0]
+        );
         let summary = band_summary(&out.admitted);
         assert_eq!(
             summary.population, 0,
@@ -1597,7 +1689,7 @@ mod tests {
             &known,
             &heldout_probe,
         );
-        assert!(second.admitted.is_empty());
+        assert_eq!(second.admitted, [] as [AdmittedRow; 0]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1607,7 +1699,7 @@ mod tests {
         // entries, same BLAKE3 commitment, before and after any miner use.
         let a = crate::build_seed_corpus();
         let cands = generate(&[Mode::HeldOut, Mode::Frontier]);
-        assert!(!cands.is_empty());
+        assert_ne!(cands, [] as [Candidate; 0]);
         let b = crate::build_seed_corpus();
         assert_eq!(a.commitment, b.commitment);
         assert_eq!(a.entries.len(), b.entries.len());

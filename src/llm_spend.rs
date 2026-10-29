@@ -645,7 +645,7 @@ mod tests {
     #[test]
     fn cap_reached_declines_and_counts() {
         let file = tmp_file("cap");
-        let mut l = SpendLedger::open_at_with_cap(file, 0.0005);
+        let mut l = SpendLedger::open_at_with_cap(file, 0.000_5);
         // A prompt big enough that the worst case exceeds the tiny cap.
         let big = "x".repeat(3_000);
         let err = l.reserve("@cf/qwen/qwen3.8-27b", &big, 512).unwrap_err();

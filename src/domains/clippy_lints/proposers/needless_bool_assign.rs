@@ -16,7 +16,7 @@
 //! sits inside the statement span and is swallowed with it).
 
 use super::helpers::{bool_lit, contains_let, needs_logic_parens};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprAssign, ExprIf, File, Stmt};
 
@@ -55,10 +55,10 @@ impl Collector<'_> {
         let Some((else_assign, else_value)) = single_bool_assign(&eb.block.stmts) else {
             return;
         };
-        let Some(then_lhs) = src(self.source, &*then_assign.left) else {
+        let Some(then_lhs) = src(self.source, &then_assign.left) else {
             return;
         };
-        let Some(else_lhs) = src(self.source, &*else_assign.left) else {
+        let Some(else_lhs) = src(self.source, &else_assign.left) else {
             return;
         };
         // Same LHS, differing literals — otherwise this is not the lint.
@@ -178,8 +178,7 @@ mod tests {
     fn let_cond_stays_silent() {
         // A `let` condition has no expression-position form (`!(let a = b)`
         // does not parse). Edition-blind guard class (helpers::contains_let).
-        let input =
-            "fn f(x: &mut bool, o: Option<i32>) { if let Some(v) = o { *x = true; } else { *x = false; } }";
+        let input = "fn f(x: &mut bool, o: Option<i32>) { if let Some(v) = o { *x = true; } else { *x = false; } }";
         let out = propose_fix("needless_bool_assign", input);
         assert!(out.is_none(), "let condition must not fire: {out:?}");
     }

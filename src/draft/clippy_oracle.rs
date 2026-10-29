@@ -758,7 +758,7 @@ mod tests {
     #[test]
     fn an_empty_batch_runs_nothing_and_returns_nothing() {
         let oracle = ClippyOracle::default();
-        assert!(oracle.lints_for_batch(&[]).is_empty());
+        assert_eq!(oracle.lints_for_batch(&[]), [] as [OracleVerdict; 0]);
     }
 
     // ── batch vs single (real cargo; a clippy_verify build has cargo) ──
@@ -867,7 +867,7 @@ mod tests {
         );
 
         // Empty input stays a no-op (the offline contract).
-        assert!(oracle.compiles_batch(&[]).is_empty());
+        assert_eq!(oracle.compiles_batch(&[]), [] as [bool; 0]);
     }
 
     #[test]

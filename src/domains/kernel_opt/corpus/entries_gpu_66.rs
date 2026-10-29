@@ -32,7 +32,7 @@
 //! brief): rule 2 carried lead-grade B in staging; category set to A
 //! (memory access) because the corpus A family owns the
 //! amortize-decode-over-reuse shape (`dequant-once-per-k-tile-into-
-//! shared-memory` `gpu_01`, `dequant-once-macrotile-stage-reuse-across-
+//! shared-memory` ``gpu_01``, `dequant-once-macrotile-stage-reuse-across-
 //! microtiles` B186) and the axis here is read-once-reuse-across-columns
 //! in registers. Rule 4 set to N (dtype + alignment specialization) over
 //! D — the fold is a STORED-REPRESENTATION decision with a metadata

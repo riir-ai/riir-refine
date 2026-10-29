@@ -51,7 +51,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{HealDomain, HealEntry};
 use crate::draft::clippy_oracle::ClippyOracle;
 use crate::memory::EvidenceTier;
-use crate::score_bench::{run_bench, run_bench_with, BenchFixture, BenchScore};
+use crate::score_bench::{BenchFixture, BenchScore, run_bench, run_bench_with};
 
 /// The candidates-file schema version this build defines (strict match).
 pub const CANDIDATE_SCHEMA_VERSION: u32 = 1;
@@ -315,7 +315,7 @@ impl PromotionRegistry {
             return false;
         };
         let _ = entry.tier; // (the tier travels with history only — the
-                            // blacklists below are what enforce absorbing)
+        // blacklists below are what enforce absorbing)
         self.withdrawn_hashes.insert(entry.row.content_hash_hex());
         self.withdrawn_ids.insert(rule_id.to_string());
         true
@@ -906,11 +906,7 @@ pub fn promotion_run_overlay(
         let base = compiled_in_triples(&domain);
         out.push((domain, merge_triples(&base, &extra)));
     }
-    if out.is_empty() {
-        None
-    } else {
-        Some(out)
-    }
+    if out.is_empty() { None } else { Some(out) }
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────
@@ -941,7 +937,7 @@ mod tests {
         let bad = r#"{"schema_version":2,"rule_id":"r1","domain":"clippy","buggy_code":"a","fixed_code":"b"}"#;
         assert!(parse_candidates(bad.as_bytes()).is_err());
         // empty file is fine
-        assert!(parse_candidates(b"\n\n").unwrap().is_empty());
+        assert_eq!(parse_candidates(b"\n\n").unwrap(), [] as [CandidateRow; 0]);
         // duplicate id
         let dup = format!("{good}\n{good}");
         let err = parse_candidates(dup.as_bytes()).unwrap_err();
@@ -992,7 +988,14 @@ mod tests {
         let r = row("r1", "return 1;", "1");
         reg.promote(r.clone()).unwrap();
         assert!(reg.withdraw("r1"));
-        assert!(reg.overlay_triples().is_empty());
+        assert_eq!(
+            reg.overlay_triples(),
+            [] as [(
+                std::string::String,
+                std::string::String,
+                std::string::String
+            ); 0]
+        );
 
         // same content, same id
         assert_eq!(
@@ -1088,7 +1091,7 @@ mod tests {
         assert_eq!(merged[1].1, "bb"); // base's version
         assert_eq!(merged[2].0, "c");
         assert_eq!(merge_triples(&base, &promoted), merged); // deterministic
-                                                             // base untouched
+        // base untouched
         assert_eq!(base.len(), 2);
     }
 
@@ -1125,7 +1128,14 @@ mod tests {
             let r = row(&format!("net-{i}"), "return 1;", "1");
             reg.promote(r).unwrap();
         }
-        assert!(!reg.overlay_triples().is_empty());
+        assert_ne!(
+            reg.overlay_triples(),
+            [] as [(
+                std::string::String,
+                std::string::String,
+                std::string::String
+            ); 0]
+        );
         reg.withdraw("net-1");
         assert_eq!(reg.overlay_triples().len(), 2);
 

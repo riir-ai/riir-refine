@@ -156,7 +156,7 @@ mod tests {
         ids.dedup();
         assert_eq!(ids.len(), spans.len(), "fixture ids must be unique");
         assert!(spans.iter().all(|s| s.source == SpanSource::Fixture));
-        assert!(!spans[0].code.is_empty());
+        assert_ne!(spans[0].code, "");
     }
 
     #[test]

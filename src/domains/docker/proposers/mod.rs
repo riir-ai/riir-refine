@@ -26,7 +26,7 @@
 use super::rules::{self, ScanContext};
 
 // Shared emitter substrate (re-exported like the other domains' proposers).
-pub use crate::edit_emitter::{apply_edits, RuleEdit, SourceEdit};
+pub use crate::edit_emitter::{RuleEdit, SourceEdit, apply_edits};
 
 pub use super::rules::FIXABLE_DOCKER;
 
@@ -162,6 +162,9 @@ mod tests {
 
     #[test]
     fn unknown_rule_yields_no_edits() {
-        assert!(collect_edits("not-a-rule", "FROM scratch\n").is_empty());
+        assert_eq!(
+            collect_edits("not-a-rule", "FROM scratch\n"),
+            [] as [crate::edit_emitter::RuleEdit; 0]
+        );
     }
 }

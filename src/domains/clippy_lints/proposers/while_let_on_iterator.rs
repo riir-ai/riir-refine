@@ -12,7 +12,7 @@
 //! Span-preserving (T6.4): the whole `while` expr's byte range is replaced
 //! by `for <binding> in <IT> <body>` (body = the block's own source text).
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprLet, ExprMethodCall, ExprWhile, File, Ident, Pat, PatIdent};
 
@@ -60,7 +60,7 @@ impl Collector<'_> {
             return None;
         }
         let binding = src(self.source, binding)?;
-        let iter = src(self.source, &*next.receiver)?;
+        let iter = src(self.source, &next.receiver)?;
         let body = src(self.source, &w.body)?;
         Some(format!("for {binding} in {iter} {body}"))
     }
@@ -135,8 +135,7 @@ mod tests {
 
     #[test]
     fn mut_binding_modifier_preserved() {
-        let input =
-            "fn f(mut it: std::vec::IntoIter<u8>) { while let Some(mut x) = it.next() { x += 1; } }";
+        let input = "fn f(mut it: std::vec::IntoIter<u8>) { while let Some(mut x) = it.next() { x += 1; } }";
         let out = propose_fix("while_let_on_iterator", input).expect("matched");
         assert!(
             out.contains("for mut x in it"),
@@ -146,8 +145,7 @@ mod tests {
 
     #[test]
     fn body_mentioning_iterator_unchanged() {
-        let input =
-            "fn f(mut it: std::vec::IntoIter<u8>) { while let Some(x) = it.next() { it.reset(); } }";
+        let input = "fn f(mut it: std::vec::IntoIter<u8>) { while let Some(x) = it.next() { it.reset(); } }";
         let out = propose_fix("while_let_on_iterator", input);
         assert!(
             out.is_none(),

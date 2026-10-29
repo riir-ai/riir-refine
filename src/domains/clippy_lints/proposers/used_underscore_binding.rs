@@ -77,6 +77,7 @@ pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
             });
         }
     }
+    edits.shrink_to_fit();
     edits
 }
 
@@ -115,7 +116,7 @@ impl Census {
     fn record_binding(&mut self, name: &str, range: std::ops::Range<usize>) {
         let Some(scope) = self.scopes.last_mut() else {
             return; // a pattern outside any fn (const closures, trait
-                    // default bodies) — not our shape, silently skipped
+            // default bodies) — not our shape, silently skipped
         };
         match scope.iter_mut().find(|c| c.name == name) {
             Some(c) => c.bindings.push(range),
@@ -249,8 +250,7 @@ mod tests {
         // The P51a production specimen shape (clone_on_copy.rs, cycle 71):
         // `_mod_name` bound and used → `mod_name`; the UNUSED `_root`
         // sibling keeps its underscore.
-        let input =
-            "fn f(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }";
+        let input = "fn f(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }";
         let out = propose_fix("used_underscore_binding", input).expect("matched");
         assert!(
             out.contains("mod_name == \"clone\""),

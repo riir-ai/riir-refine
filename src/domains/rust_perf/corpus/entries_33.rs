@@ -31,15 +31,15 @@
 //! transcoder already computes, a premise the portable spelling cannot
 //! express). The full negative + the candidate quotes live in Research
 //! 280. LANDS: caching +1 (minimal-perfect-hash), layout +1 (flat-pool),
-//! dispatch +2 (hangul-arithmetic, shift-over-drain), allocation +1
-//! (emit-callback), simd +1 (shift-mask-adjacency). HONEST RISKS carried
-//! at authoring and retired by measurement: the shift-over-drain
-//! magnitude worry (measured 1.80-2.16x Dominant) and the mph fixture
-//! convergence (the restart-on-collision construction failed to converge
-//! and was rewritten to the classic per-bucket salt sweep before any
-//! timing — the sample-parity instrument caught a shift-direction bug in
-//! the drop candidate's fixture, 1-vs-25 counts, before it could produce
-//! a false measurement).
+//!      dispatch +2 (hangul-arithmetic, shift-over-drain), allocation +1
+//!      (emit-callback), simd +1 (shift-mask-adjacency). HONEST RISKS carried
+//!      at authoring and retired by measurement: the shift-over-drain
+//!      magnitude worry (measured 1.80-2.16x Dominant) and the mph fixture
+//!      convergence (the restart-on-collision construction failed to converge
+//!      and was rewritten to the classic per-bucket salt sweep before any
+//!      timing — the sample-parity instrument caught a shift-direction bug in
+//!      the drop candidate's fixture, 1-vs-25 counts, before it could produce
+//!      a false measurement).
 
 use crate::domains::rust_perf::PerfRule;
 

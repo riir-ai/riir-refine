@@ -405,8 +405,9 @@ fn is_algo_component_pin_name(lower: &str) -> bool {
 
 /// Guard (k) (P80): an opening string literal whose COLON-SEPARATED name —
 /// a Rust struct-literal field or a YAML-style key, `blake3_pin:
-/// "77a3…"`, in the raw or the JSON-quoted form (`"fixture_corpus_blake3":
-/// "f2a0…"`, the live reflex parity-fixture sites) — carries the full
+/// "77a3…"`, in the raw or the JSON-quoted form
+/// (`"fixture_corpus_blake3": "f2a0…"`, the live reflex parity-fixture
+/// sites) — carries the full
 /// [`pin_named_declaration_lower`] evidence (the P63 suffixes, the golden
 /// convention, and the P80 algo-component `_pin` name). The
 /// P63 LHS helper derives `=`-declarations only (and the single

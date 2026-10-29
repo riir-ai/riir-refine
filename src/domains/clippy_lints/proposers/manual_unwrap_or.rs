@@ -14,7 +14,7 @@
 //! tighter than `.`.
 
 use super::helpers::{is_none_pat, is_postfix_safe, is_pure_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Arm, Expr, ExprMatch, File, Pat};
 
@@ -53,7 +53,7 @@ impl Collector<'_> {
         {
             return None; // guards/arm-attrs would be lost by the splice
         }
-        let scrutinee = src(self.source, &*m.expr)?;
+        let scrutinee = src(self.source, &m.expr)?;
         let scrutinee = if is_postfix_safe(&m.expr) {
             scrutinee
         } else {

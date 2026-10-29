@@ -21,7 +21,7 @@
 //! the method call binds tighter.
 
 use super::helpers::{int_lit, is_postfix_safe};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprMethodCall, File};
 
@@ -110,7 +110,7 @@ impl Collector<'_> {
     }
 
     fn is_empty_text(&self, len: &ExprMethodCall, negated: bool) -> Option<String> {
-        let recv = src(self.source, &*len.receiver)?;
+        let recv = src(self.source, &len.receiver)?;
         if self.would_self_recurse(&recv) {
             return None;
         }
@@ -288,8 +288,7 @@ mod tests {
     fn other_receiver_inside_is_empty_still_fires() {
         // Positive control: non-`self` receiver inside `fn is_empty` is a
         // different object — no recursion — and must still fire.
-        let input =
-            "struct S;\nimpl S {\n    fn is_empty(&self, other: &Vec<u8>) -> bool {\n        other.len() == 0\n    }\n}";
+        let input = "struct S;\nimpl S {\n    fn is_empty(&self, other: &Vec<u8>) -> bool {\n        other.len() == 0\n    }\n}";
         let out = propose_fix("comparison_to_empty", input).expect("matched");
         assert!(
             out.contains("other.is_empty()"),

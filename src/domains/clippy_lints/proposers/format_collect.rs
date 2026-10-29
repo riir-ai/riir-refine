@@ -55,7 +55,7 @@
 //! insertion restore = "").
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::visit::Visit;
@@ -210,10 +210,10 @@ impl Collector<'_> {
             return None;
         }
         let pat_text = src(self.source, &c.inputs[0])?;
-        let body_text = src(self.source, &*c.body)?;
+        let body_text = src(self.source, &c.body)?;
         let inner_fmt = strip_format_call(&body_text)?;
         let acc = accumulator_name(&pat_text)?;
-        let recv = src(self.source, &*map.receiver)?;
+        let recv = src(self.source, &map.receiver)?;
         let recv = if is_postfix_safe(&map.receiver) {
             recv
         } else {

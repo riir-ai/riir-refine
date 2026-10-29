@@ -1795,11 +1795,17 @@ mod tests {
                 &format!("t{i:02}"),
                 "anomalous_negative",
                 17,
-                -0.7292,
+                -0.729_2,
                 "plateau",
             )
         }));
-        runs.push(ood_run("t29", "anomalous_negative", 17, -0.9765, "drifted"));
+        runs.push(ood_run(
+            "t29",
+            "anomalous_negative",
+            17,
+            -0.976_5,
+            "drifted",
+        ));
         let groups = calibrate_ood(&runs);
         assert_eq!(groups.len(), 1);
         let group = &groups[0];

@@ -45,7 +45,7 @@ pub struct SourceEdit {
 }
 
 /// The rule the edit came from (for `--fix` reporting).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuleEdit {
     pub rule_id: String,
     pub edit: SourceEdit,

@@ -243,7 +243,7 @@ mod tests {
         // fxhashmap E0432 class — the rewrite cannot resolve without the dep).
         let src = "pub fn check_token(provided: &[u8], expected: &[u8]) -> bool {\n    \
              provided == expected\n}\n";
-        assert!(edits(src).is_empty());
+        assert_eq!(edits(src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]
@@ -251,7 +251,7 @@ mod tests {
         // The vocabulary gate: a generic a == b (or a lookup-key pair with
         // no secret segment) never fires.
         let src = format!("{IMPORT}\npub fn same(a: &[u8], b: &[u8]) -> bool {{\n    a == b\n}}\n");
-        assert!(edits(&src).is_empty());
+        assert_eq!(edits(&src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
             "{IMPORT}\nstruct Pair {{ tok: Vec<u8> }}\npub fn f(p: &Pair, e: &[u8]) -> \
              bool {{\n    p.tok == e\n}}\n"
         );
-        assert!(edits(&src).is_empty());
+        assert_eq!(edits(&src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]
@@ -273,7 +273,7 @@ mod tests {
             "{IMPORT}\npub fn check_token(provided: &[u8], expected: &[u8]) -> bool {{\n    \
              provided != expected\n}}\n"
         );
-        assert!(edits(&src).is_empty());
+        assert_eq!(edits(&src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]
@@ -284,7 +284,7 @@ mod tests {
             "{IMPORT}\n#[cfg(test)]\nmod tests {{\n    #[test]\n    fn t() {{\n        \
              let token = b\"x\";\n        assert!(token == b\"x\");\n    }}\n}}\n"
         );
-        assert!(edits(&src).is_empty());
+        assert_eq!(edits(&src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]
@@ -295,7 +295,7 @@ mod tests {
             "{IMPORT}\npub fn f(monkey: &[u8], other: &[u8]) -> bool {{\n    monkey == \
              other\n}}\n"
         );
-        assert!(edits(&src).is_empty());
+        assert_eq!(edits(&src), [] as [crate::edit_emitter::SourceEdit; 0]);
     }
 
     #[test]

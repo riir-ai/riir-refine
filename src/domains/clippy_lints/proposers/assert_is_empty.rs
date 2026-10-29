@@ -98,7 +98,7 @@ use syn::{Expr, ExprMacro, File, ImplItemFn, ItemFn, Macro, StmtMacro};
 
 use super::helpers::{body_rebinds, byte_range, drops_interior_comment};
 use super::uninlined_format_args::all_expr_args;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -417,10 +417,10 @@ impl Collector<'_> {
         let family = self.resolve_family(&m.receiver)?;
         // The whole macro span is re-spelled; only the receiver's own
         // bytes survive verbatim — a comment anywhere else would drop.
-        if drops_interior_comment(self.source, byte_range(mac), &[byte_range(&*m.receiver)]) {
+        if drops_interior_comment(self.source, byte_range(mac), &[byte_range(&m.receiver)]) {
             return None;
         }
-        let recv = src(self.source, &*m.receiver)?;
+        let recv = src(self.source, &m.receiver)?;
         Some(family.rewrite(debug, negated, &recv))
     }
 
@@ -526,7 +526,7 @@ impl<'ast> Visit<'ast> for LocalScanner<'_> {
         let (pi, ty) = match &l.pat {
             syn::Pat::Ident(pi) => (pi, None),
             syn::Pat::Type(pt) => match &*pt.pat {
-                syn::Pat::Ident(pi) => (pi, Some(&*pt.ty)),
+                syn::Pat::Ident(pi) => (pi, Some(&pt.ty)),
                 _ => return,
             },
             _ => return,
@@ -1036,11 +1036,13 @@ mod tests {
     #[test]
     fn custom_message_refuses() {
         // Upstream silence: 2+ macro args carry a message — never ours.
-        assert!(propose_fix(
-            RULE,
-            "fn f(v: Vec<u32>) { assert!(v.is_empty(), \"not empty: {v:?}\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(v: Vec<u32>) { assert!(v.is_empty(), \"not empty: {v:?}\"); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -1311,33 +1313,39 @@ mod tests {
     #[test]
     fn infer_element_refuses() {
         // `Vec<_>` has no spellable element — the cast would not compile.
-        assert!(propose_fix(
-            RULE,
-            "fn f() { let v: Vec<_> = Vec::new(); assert!(v.is_empty()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f() { let v: Vec<_> = Vec::new(); assert!(v.is_empty()); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn vec_new_bare_refuses() {
         // `Vec::new()` without the turbofish: the element is unknown — the
         // exact under-inference clippy's own MaybeIncorrect form trips on.
-        assert!(propose_fix(
-            RULE,
-            "fn f() { let v = Vec::new(); assert!(v.is_empty()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f() { let v = Vec::new(); assert!(v.is_empty()); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn generic_free_fn_refuses() {
         // A return type mentioning the fn's generic is not a concrete
         // fact.
-        assert!(propose_fix(
-            RULE,
-            "fn g<T>() -> Vec<T> { todo!() } fn f() { let v = g(); assert!(v.is_empty()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn g<T>() -> Vec<T> { todo!() } fn f() { let v = g(); assert!(v.is_empty()); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -1356,11 +1364,13 @@ mod tests {
     fn cross_file_method_refuses() {
         // No inherent impl in the file — the return type is unknowable
         // (cross-file defs are never guessed).
-        assert!(propose_fix(
-            RULE,
-            "struct S; fn f(s: S) { assert!(s.caps().is_empty()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "struct S; fn f(s: S) { assert!(s.caps().is_empty()); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //! each fragment being the ORIGINAL source text of the matched node.
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
@@ -51,7 +51,7 @@ impl Collector<'_> {
         if filter.args.len() != 1 {
             return None;
         }
-        let recv = src(self.source, &*filter.receiver)?;
+        let recv = src(self.source, &filter.receiver)?;
         let pred = src(self.source, &filter.args[0])?;
         let recv = if is_postfix_safe(&filter.receiver) {
             recv

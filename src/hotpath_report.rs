@@ -383,6 +383,7 @@ pub fn attribute_line_ranges(src: &str) -> Vec<(usize, usize)> {
             out.push((start, end));
         }
     }
+    out.shrink_to_fit();
     out
 }
 

@@ -2,7 +2,7 @@
 //!
 //! Builds the **(prefix, MC-Q) dataset** that Phase A's edit-scorer trains
 //! on (arXiv:2410.08146 / katgpt-rs Research 509): for every span, drive
-//! n_cov coverage rollouts + n_mc top-up continuations through the
+//! `n_cov` coverage rollouts + `n_mc` top-up continuations through the
 //! [`EditGenerator`] seam, estimate each visited prefix's success
 //! probability from the shared-suffix samples, cut hopeless tails with
 //! first-pit curation, and emit JSONL pairs plus a manifest.
@@ -16,11 +16,11 @@
 //!
 //! ## The low-budget law, structurally
 //!
-//! Research 509: *n_cov > n_mc at low budget*. The prefix tree makes that
+//! Research 509: *`n_cov` > `n_mc` at low budget*. The prefix tree makes that
 //! the default economy: one rollout donates one Bernoulli sample to EVERY
-//! prefix it visits, so n_cov root rollouts leave every on-path prefix with
-//! n_cov samples; the n_mc top-ups only fill under-sampled prefixes and stop
-//! at n_mc. Defaults (n_cov 8 > n_mc 5) satisfy the law; the stats report
+//! prefix it visits, so `n_cov` root rollouts leave every on-path prefix with
+//! `n_cov` samples; the `n_mc` top-ups only fill under-sampled prefixes and stop
+//! at `n_mc`. Defaults (`n_cov` 8 > `n_mc` 5) satisfy the law; the stats report
 //! records the regime line when a config inverts it.
 //!
 //! ## First-pit curation
@@ -40,10 +40,10 @@ mod rollout;
 mod spans;
 
 pub use rollout::{
-    state_hash, DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, PrefixNode, RolloutCtx,
-    SpanTree, TerminalJudge, VocabularyJudge,
+    DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, PrefixNode, RolloutCtx, SpanTree,
+    TerminalJudge, VocabularyJudge, state_hash,
 };
-pub use spans::{extra_spans, fixture_spans, store_spans, PavSpan, SpanSource};
+pub use spans::{PavSpan, SpanSource, extra_spans, fixture_spans, store_spans};
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -810,10 +810,11 @@ mod tests {
         assert!(ds.pairs.iter().any(|p| p.depth == 0));
         assert!(ds.pairs.iter().any(|p| p.state.contains("CLEAN")));
         // The DIAGNOSTIC column is still the plug-in of q_hat...
-        assert!(ds
-            .pairs
-            .iter()
-            .all(|p| (p.q_bo4_plugin - bok4(p.q_hat)).abs() < 1e-6));
+        assert!(
+            ds.pairs
+                .iter()
+                .all(|p| (p.q_bo4_plugin - bok4(p.q_hat)).abs() < 1e-6)
+        );
         // ...while the LABEL column is the unbiased U-statistic over the
         // raw counts (the clean-root anchor is definitional, n_mc == 0).
         assert!(ds.pairs.iter().all(|p| {

@@ -30,7 +30,7 @@
 
 use super::helpers::is_postfix_safe;
 use super::uninlined_format_args::all_expr_args;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use proc_macro2::TokenStream;
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, ExprMatch, File, Lit, Macro, Pat, StmtMacro};
@@ -121,7 +121,7 @@ impl Collector<'_> {
         if m.arms.iter().any(|a| !a.attrs.is_empty()) {
             return None; // arm-attrs would be lost by the splice
         }
-        let scrutinee = src(self.source, &*m.expr)?;
+        let scrutinee = src(self.source, &m.expr)?;
         let scrut_postfix = is_postfix_safe(&m.expr);
         // `!s && g` / `if !s` — unary `!` binds tighter than `&&`, so a
         // postfix scrutinee takes no parens; binary/macro forms need them
@@ -145,7 +145,7 @@ impl Collector<'_> {
                 (p, Pat::Wild(_)) if pat_is_bool(p, false) => true,
                 _ => return None,
             };
-            let guard_text = src(self.source, &*guard.1)?;
+            let guard_text = src(self.source, &guard.1)?;
             let lit_body = braced_body(self.source, &lit.body)?;
             let other_body = braced_body(self.source, &other.body)?;
             let cond = if negated {
@@ -211,8 +211,8 @@ impl Collector<'_> {
         if !body_is_empty(&last.body) {
             return None;
         }
-        let scrutinee = src(self.source, &*m.expr)?;
-        let guard = src(self.source, &*mid.guard.as_ref().unwrap().1)?;
+        let scrutinee = src(self.source, &m.expr)?;
+        let guard = src(self.source, &mid.guard.as_ref().unwrap().1)?;
         let first_body = braced_body(self.source, &first.body)?;
         let mid_body = braced_body(self.source, &mid.body)?;
         let cond = if first_is_true {

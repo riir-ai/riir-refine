@@ -64,7 +64,7 @@ use std::io::IsTerminal as _;
 // carries, the ONE µ↔KAT conversion (re-exported so the token-million
 // sites can name BOTH millions beside each other), and the token million
 // defined below (riir-dapps Plan 035 T3 + T10).
-pub use riir_kat::kat_units::{MicroKat, MICRO_PER_KAT};
+pub use riir_kat::kat_units::{MICRO_PER_KAT, MicroKat};
 
 /// Tokens per **million tokens (Mtok)** — the pricing axis's million, NOT
 /// the money one. Per-Mtok $ rates and µ-per-Mtok KAT billing
@@ -661,7 +661,7 @@ mod tests {
 
     #[test]
     fn plain_bar_is_width_cells_with_dotted_track() {
-        let bar = braille_bar(0.8492, 24, false);
+        let bar = braille_bar(0.849_2, 24, false);
         assert_eq!(bar.chars().count(), 24);
         // 163/192 dots: 20 full cells + a 3-dot partial + 3 track cells.
         assert_eq!(bar.matches('\u{28FF}').count(), 20);
@@ -681,7 +681,7 @@ mod tests {
 
     #[test]
     fn colored_bar_carries_dim_track_and_tone() {
-        let bar = braille_bar(0.8492, 24, true);
+        let bar = braille_bar(0.849_2, 24, true);
         assert!(bar.contains(GREEN), "green tone missing: {bar:?}");
         assert!(
             bar.contains(TRACK_DIM),

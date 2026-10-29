@@ -236,9 +236,15 @@ mod tests {
 
     #[test]
     fn malformed_output_degrades_to_empty_not_panic() {
-        assert!(parse_json("").is_empty());
-        assert!(parse_json("not json at all {oops").is_empty());
-        assert!(parse_json("[{\"code\":\"DL1\"}]").is_empty()); // no line field
+        assert_eq!(parse_json(""), [] as [HadolintFinding; 0]);
+        assert_eq!(
+            parse_json("not json at all {oops"),
+            [] as [HadolintFinding; 0]
+        );
+        assert_eq!(
+            parse_json("[{\"code\":\"DL1\"}]"),
+            [] as [HadolintFinding; 0]
+        ); // no line field
     }
 
     #[test]

@@ -988,7 +988,7 @@ mod tests {
         // The lane-set gate is the point: the SAME feed is refused when
         // the lint is not in the lane (the corpus-gap signal).
         let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"]);
-        assert!(refused.edits.is_empty());
+        assert_eq!(refused.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
     }
 
     #[test]
@@ -1020,7 +1020,7 @@ mod tests {
     fn oracle_edits_refuse_lints_outside_the_lane() {
         let src = probe_src();
         let lane = oracle_edits(&mapor_feed(&src), "src/lib.rs", &src, &["collapsible_if"]);
-        assert!(lane.edits.is_empty());
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 0, "out-of-lane is not a drop, it is a skip");
     }
 
@@ -1033,7 +1033,7 @@ mod tests {
             &src,
             &["unnecessary_map_or"],
         );
-        assert!(lane.edits.is_empty());
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
     }
 
     // ── P34: the needless_range_loop length proof (riir-ai Issue 981) ──
@@ -1201,7 +1201,7 @@ mod tests {
             }
         }
         let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"]);
-        assert!(lane.edits.is_empty());
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 1);
     }
 
@@ -1214,7 +1214,7 @@ mod tests {
             parts[0].2 = "1is_some_and".to_string();
         }
         let lane = oracle_edits(&feed, "src/lib.rs", &src, &["unnecessary_map_or"]);
-        assert!(lane.edits.is_empty());
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
         assert_eq!(lane.dropped, 1, "gate refusal counts the candidate");
     }
 
@@ -1250,7 +1250,7 @@ mod tests {
         let src = "fn f() -> String {\n    format!(\"{{x}}\")\n}\n".to_string();
         let off = src.find("format!").expect("fixture has the site");
         let covered = "format!(\"{{x}}\")"; // 17 bytes, brace-carrying
-                                            // clippy's own (wrong) suggestion: the escaped literal verbatim.
+        // clippy's own (wrong) suggestion: the escaped literal verbatim.
         let feed = vec![ClippyDiagnostic {
             span: None,
             file: "src/lib.rs".to_string(),

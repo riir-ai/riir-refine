@@ -30,7 +30,7 @@
 //! position (clippy `MachineApplicable` on this shape).
 
 use super::helpers::count_binding_occurrences;
-use super::{delete_stmt_edit, edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, delete_stmt_edit, edit, for_each_fn, src};
 use syn::{Expr, File, Ident, Pat, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -107,9 +107,7 @@ fn tail_let_binding(block: &syn::Block) -> Option<(&syn::Local, &Ident, &Expr, &
     // annotation is already refused by requiring top-level `Pat::Ident`
     // (a typed let is `Pat::Type(..)` in syn 2 — the annotation can drive
     // inference the tail position cannot re-derive).
-    let Some(init) = &local.init else {
-        return None;
-    };
+    let init = local.init.as_ref()?;
     if init.diverge.is_some() {
         return None;
     }
@@ -153,8 +151,7 @@ mod tests {
     fn earlier_let_stays_adjacent_let_folds() {
         // `let a` is two statements back — only the ADJACENT `let s` folds
         // (clippy's own shape); `a` stays bound for the init that reads it.
-        let input =
-            "fn f(v: &[i32]) -> i32 { let a = v.len(); let s = v.iter().sum::<i32>() + a as i32; s }";
+        let input = "fn f(v: &[i32]) -> i32 { let a = v.len(); let s = v.iter().sum::<i32>() + a as i32; s }";
         let out = propose_fix("let_and_return", input).expect("matched");
         assert!(out.contains("let a = v.len();"), "earlier let lost: {out}");
         assert!(!out.contains("let s"), "adjacent let not folded: {out}");

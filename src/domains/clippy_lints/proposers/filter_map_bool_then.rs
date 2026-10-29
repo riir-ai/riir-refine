@@ -26,7 +26,7 @@
 //! did. Identical by construction, independent of types.
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprClosure, ExprMethodCall, File, Pat};
 
@@ -92,11 +92,11 @@ impl Collector<'_> {
         if !inner.inputs.is_empty() {
             return None;
         }
-        let pred_text = src(self.source, &*then.receiver)?;
+        let pred_text = src(self.source, &then.receiver)?;
         // The inner body may be an expression OR a block (probe shape N) —
         // either way it is re-emitted as the ORIGINAL source text.
-        let body_text = src(self.source, &*inner.body)?;
-        let recv = src(self.source, &*m.receiver)?;
+        let body_text = src(self.source, &inner.body)?;
+        let recv = src(self.source, &m.receiver)?;
         let recv = if is_postfix_safe(&m.receiver) {
             recv
         } else {
@@ -129,8 +129,7 @@ mod tests {
 
     #[test]
     fn splits_filter_map_bool_then() {
-        let input =
-            "fn kept(xs: Vec<i32>) -> Vec<i32> { xs.into_iter().filter_map(|x| (x > 0).then(|| x * 2)).collect() }";
+        let input = "fn kept(xs: Vec<i32>) -> Vec<i32> { xs.into_iter().filter_map(|x| (x > 0).then(|| x * 2)).collect() }";
         let out = propose_fix("filter_map_bool_then", input).expect("matched");
         assert!(
             out.contains("filter(|&x| (x > 0)).map(|x| x * 2)"),

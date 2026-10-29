@@ -320,9 +320,11 @@ mod tests {
         assert_eq!(names(&items), ["gelu"]);
         assert!(items[0].launch);
         assert!(items[0].text.starts_with("#[cube(launch_unchecked)]"));
-        assert!(items[0]
-            .text
-            .contains("#[cfg(all(feature = \"cubecl_runtime\", test))]"));
+        assert!(
+            items[0]
+                .text
+                .contains("#[cfg(all(feature = \"cubecl_runtime\", test))]")
+        );
         assert!(items[0].text.ends_with('}'));
     }
 
@@ -382,11 +384,17 @@ fn good(x: f32) -> f32 {
     /// is a no-op, and repeated extraction is deterministic.
     #[test]
     fn non_cube_and_degenerate_inputs() {
-        assert!(extract_cube_items("#[inline]\nfn a() {\n}\n").is_empty());
-        assert!(extract_cube_items("fn a() {\n}\n").is_empty());
-        assert!(extract_cube_items("").is_empty());
+        assert_eq!(
+            extract_cube_items("#[inline]\nfn a() {\n}\n"),
+            [] as [CubeItem; 0]
+        );
+        assert_eq!(extract_cube_items("fn a() {\n}\n"), [] as [CubeItem; 0]);
+        assert_eq!(extract_cube_items(""), [] as [CubeItem; 0]);
         // Unbalanced delimiters: lexer error → no items (documented limit).
-        assert!(extract_cube_items("#[cube]\nfn a() {\n").is_empty());
+        assert_eq!(
+            extract_cube_items("#[cube]\nfn a() {\n"),
+            [] as [CubeItem; 0]
+        );
         let src = "#[cube]\nfn a() {\n}\n";
         assert_eq!(extract_cube_items(src), extract_cube_items(src));
     }

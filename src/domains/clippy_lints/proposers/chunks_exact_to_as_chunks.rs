@@ -43,7 +43,7 @@
 //! compiling form for both mutating and read-only bodies.
 
 use super::helpers::drops_interior_comment;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprForLoop, ExprLit, ExprMethodCall, ExprParen, File, Lit};
@@ -103,7 +103,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
     fn visit_expr_for_loop(&mut self, f: &'ast ExprForLoop) {
         syn::visit::visit_expr_for_loop(self, f);
         if let Some(replacement) = self.try_as_chunks(f) {
-            self.edits.push(edit(&*f.expr, replacement));
+            self.edits.push(edit(&f.expr, replacement));
         }
     }
 
@@ -189,7 +189,7 @@ impl Collector<'_> {
         if drops_interior_comment(self.source, m.span().byte_range(), &[]) {
             return None;
         }
-        let recv = src(self.source, &*m.receiver)?;
+        let recv = src(self.source, &m.receiver)?;
         let arg_text = src(self.source, arg)?;
         Some(format!("{recv}.{as_method}::<{arg_text}>().0"))
     }

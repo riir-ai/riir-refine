@@ -1003,7 +1003,7 @@ mod tests {
             .collect();
         buckets.sort_unstable();
         buckets.dedup();
-        assert!(!buckets.is_empty());
+        assert_ne!(buckets, [] as [usize; 0]);
         let eps = 1e-2_f32;
         for k in 0..12_usize {
             let b = buckets[(k * 7) % buckets.len()];

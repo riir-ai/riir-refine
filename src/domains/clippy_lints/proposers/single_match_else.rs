@@ -39,7 +39,7 @@
 //! non-block bodies are braced.
 
 use super::helpers::{byte_range, drops_interior_comment, is_postfix_safe, is_unit_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Lit, Pat, Stmt};
@@ -111,15 +111,15 @@ impl Collector<'_> {
         // deleted outright. Refuse those matches (real clippy stays silent
         // on comment-displacing rewrites).
         let kept = [
-            byte_range(&*m.expr),
+            byte_range(&m.expr),
             byte_range(&m.arms[0].pat),
-            byte_range(&*m.arms[0].body),
-            byte_range(&*m.arms[1].body),
+            byte_range(&m.arms[0].body),
+            byte_range(&m.arms[1].body),
         ];
         if drops_interior_comment(self.source, m.span().byte_range(), &kept) {
             return None;
         }
-        let scrutinee = src(self.source, &*m.expr)?;
+        let scrutinee = src(self.source, &m.expr)?;
         let then = braced_body(self.source, &m.arms[0].body)?;
         let else_ = braced_body(self.source, &m.arms[1].body)?;
         match &m.arms[0].pat {
@@ -180,7 +180,7 @@ fn is_nonnegative_int_lit(l: &Lit) -> bool {
 /// requiring the FIRST arm to be a std-shaped Some/Ok/Err/None pattern that
 /// pins the scrutinee type. Probe matrix (Issue 029 T3, clippy 1.97
 /// pedantic): fires on Some(v)+None, Ok(v)+Err(_), None+Some(_),
-/// `Err(_)`+`Ok(_)`, Ok(v)+Err(..), Some(_)+None, `Option::None`; silent on
+/// `Err(_)`+`Ok(_)`, Ok(v)+Err(..), `Some(_)+None`, `Option::None`; silent on
 /// binding arm2s, user-enum arms (`R2::Ok(_)`, `E3::None`), and expression
 /// arm2 bodies.
 fn is_wildcard_second_arm(first: &Pat, second: &Pat) -> bool {

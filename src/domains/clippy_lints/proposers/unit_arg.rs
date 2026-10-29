@@ -48,7 +48,7 @@ use syn::visit::Visit;
 use syn::{Block, Expr, ExprCall, File, Stmt};
 
 use super::helpers::byte_range;
-use crate::edit_emitter::{drops_interior_comment, line_indent, SourceEdit};
+use crate::edit_emitter::{SourceEdit, drops_interior_comment, line_indent};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -130,10 +130,7 @@ impl<'ast> Visit<'ast> for Collector<'ast> {
     /// contexts (let inits, method chains) never reach a block-stmt match.
     fn visit_block(&mut self, b: &'ast Block) {
         for stmt in &b.stmts {
-            let expr = match stmt {
-                Stmt::Expr(e, _) => e,
-                Stmt::Local(_) | Stmt::Item(_) | Stmt::Macro(_) => continue,
-            };
+            let Stmt::Expr(expr, _) = stmt else { continue };
             // Method calls are the lint's other firing shape, but the hoist
             // was probed on plain calls only — refuse (future work, the
             // shape arm list in Plan 152 T1).
@@ -241,11 +238,13 @@ mod tests {
 
     #[test]
     fn labeled_block_refuses() {
-        assert!(propose_fix(
-            "unit_arg",
-            &format!("{TOUCH_SEED}\n{GO} touch('a: {{ hits.push(1); }}, hits) }}"),
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "unit_arg",
+                &format!("{TOUCH_SEED}\n{GO} touch('a: {{ hits.push(1); }}, hits) }}"),
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -273,20 +272,24 @@ mod tests {
 
     #[test]
     fn method_call_refuses() {
-        assert!(propose_fix(
-            "unit_arg",
-            "fn go(hits: &mut Vec<u8>) { hits.push({ hits.push(1); }) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "unit_arg",
+                "fn go(hits: &mut Vec<u8>) { hits.push({ hits.push(1); }) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn comment_in_glue_refuses() {
-        assert!(propose_fix(
-            "unit_arg",
-            &format!("{TOUCH_SEED}\n{GO} touch(/* unit */ {{ hits.push(1); }}, hits) }}"),
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "unit_arg",
+                &format!("{TOUCH_SEED}\n{GO} touch(/* unit */ {{ hits.push(1); }}, hits) }}"),
+            )
+            .is_none()
+        );
     }
 
     #[test]

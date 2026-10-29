@@ -458,8 +458,8 @@ mod tests {
 
     #[test]
     fn rules_for_expert_out_of_range_returns_empty() {
-        assert!(KernelExpertRouter::rules_for_expert(15).is_empty());
-        assert!(KernelExpertRouter::rules_for_expert(99).is_empty());
+        assert_eq!(KernelExpertRouter::rules_for_expert(15), [] as [&str; 0]);
+        assert_eq!(KernelExpertRouter::rules_for_expert(99), [] as [&str; 0]);
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
         assert_eq!(expert_idx, 0, "large-M-only routes to A (idx 0)");
         let category = KernelExpertRouter::category_for_expert(expert_idx).unwrap();
         let rules = KernelExpertRouter::rules_for_expert(expert_idx);
-        assert!(!rules.is_empty());
+        assert_ne!(rules, [] as [&str; 0]);
         // Reverse lookup of the first rule in the routed category should return
         // the same expert index.
         let first_rule = rules[0];

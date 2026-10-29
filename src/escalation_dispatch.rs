@@ -39,7 +39,7 @@
 use std::time::{Duration, Instant};
 
 use crate::code_egress::EgressConsent;
-use crate::escalation_manifest::{EscalationManifest, EscalationRow, TargetKind, DEMOTE_ENV};
+use crate::escalation_manifest::{DEMOTE_ENV, EscalationManifest, EscalationRow, TargetKind};
 
 /// The suite every healing rerank rides (the R7 freeze: ONE suite for v1 —
 /// one seat lane hosts the healing rerank expert; per-domain lanes wait
@@ -607,7 +607,7 @@ mod tests {
         use super::*;
         use std::io::{Read, Write};
         use std::net::TcpListener;
-        use std::sync::mpsc::{channel, Receiver};
+        use std::sync::mpsc::{Receiver, channel};
 
         const SNIPPET: &str = "fn foo() -> i32 { return 42; }";
         const BASE: &str = "http://127.0.0.1:9";
@@ -689,6 +689,7 @@ mod tests {
             while let Ok(req) = rx.try_recv() {
                 out.push(req);
             }
+            out.shrink_to_fit();
             out
         }
 
@@ -846,7 +847,7 @@ mod tests {
                     assert_eq!(source, "seat_pick");
                 }
                 other @ EscalatedFix::StoodByModelless { .. } => {
-                    panic!("expected the seat's pick, got {other:?}")
+                    panic!("expected the seat's pick, got {other:?}");
                 }
             }
             assert_eq!(drain(&rx).len(), 3, "two loading retries + the pick");

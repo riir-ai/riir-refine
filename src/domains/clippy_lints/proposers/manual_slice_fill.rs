@@ -27,7 +27,7 @@
 //! Vec/slice/array all deref to `[T]::fill`.
 
 use super::helpers::{drops_interior_comment, is_postfix_safe, is_pure_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprAssign, ExprForLoop, ExprPath, File, Pat, Stmt, UnOp};
@@ -87,7 +87,7 @@ impl Collector<'_> {
         if drops_interior_comment(self.source, f.span().byte_range(), &[]) {
             return None;
         }
-        let place_text = src(self.source, &*r.expr)?;
+        let place_text = src(self.source, &r.expr)?;
         let val_text = src(self.source, val)?;
         let place = if is_postfix_safe(&r.expr) {
             place_text

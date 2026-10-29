@@ -10,7 +10,7 @@
 //! body moves nothing, so `.unwrap_or(x)` uses it identically.
 
 use super::helpers::{is_postfix_safe, is_pure_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
@@ -70,8 +70,8 @@ impl Collector<'_> {
         if !is_pure_expr(&c.body) {
             return None; // side effects must stay lazily evaluated
         }
-        let recv = src(self.source, &*m.receiver)?;
-        let body = src(self.source, &*c.body)?;
+        let recv = src(self.source, &m.receiver)?;
+        let body = src(self.source, &c.body)?;
         let recv = if is_postfix_safe(&m.receiver) {
             recv
         } else {
@@ -118,8 +118,7 @@ mod tests {
 
     #[test]
     fn impure_body_unchanged() {
-        let input =
-            "fn compute() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| compute()) }";
+        let input = "fn compute() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| compute()) }";
         let out = propose_fix("unnecessary_lazy_evaluations", input);
         assert!(out.is_none(), "impure closure body must not fire: {out:?}");
     }
@@ -177,8 +176,7 @@ mod tests {
     fn impure_struct_field_and_arbitrary_call_unchanged() {
         // An impure FIELD VALUE taints the whole literal (real clippy
         // agrees — probed 2026-09-09).
-        let input =
-            "fn side() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| E { a: side(), b: 2 }) }";
+        let input = "fn side() -> u8 { 1 }\nfn f(x: Option<u8>) -> u8 { x.unwrap_or_else(|| E { a: side(), b: 2 }) }";
         let out = propose_fix("unnecessary_lazy_evaluations", input);
         assert!(out.is_none(), "impure struct field must not fire: {out:?}");
 

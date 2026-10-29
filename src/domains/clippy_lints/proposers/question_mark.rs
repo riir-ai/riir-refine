@@ -41,7 +41,7 @@
 //! diagnosis; the rare mis-fire surfaces as E0277 in the compile gate.
 
 use super::helpers::{byte_range, drops_interior_comment, is_none_pat, is_postfix_safe};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Arm, Expr, ExprIf, ExprMatch, ExprReturn, File, Local, Pat, Stmt};
 
@@ -156,7 +156,7 @@ impl Collector<'_> {
             }
         }
         // Comment guard: only the binding and the init survive verbatim.
-        let kept = [byte_range(binding_pat), byte_range(&*init.expr)];
+        let kept = [byte_range(binding_pat), byte_range(&init.expr)];
         if drops_interior_comment(self.source, byte_range(l), &kept) {
             return None;
         }
@@ -176,7 +176,7 @@ impl Collector<'_> {
             inner = &p.expr;
         }
         if let Expr::Reference(r) = inner {
-            let text = src(self.source, &*r.expr)?;
+            let text = src(self.source, &r.expr)?;
             let text = if is_postfix_safe(&r.expr) {
                 text
             } else {
@@ -253,8 +253,7 @@ mod tests {
 
     #[test]
     fn if_is_none_return_none_becomes_try() {
-        let input =
-            "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } Some(x.unwrap() + 1) }";
+        let input = "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } Some(x.unwrap() + 1) }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("x?;"), "try operator not produced: {out}");
         assert!(
@@ -285,8 +284,7 @@ mod tests {
 
     #[test]
     fn deref_scrutinee_gets_parens() {
-        let input =
-            "fn g(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => v, None => return None, } }";
+        let input = "fn g(r: &Option<u8>) -> Option<u8> { match *r { Some(v) => v, None => return None, } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(out.contains("(*r)?"), "deref must be parenthesized: {out}");
         syn::parse_file(&out).expect("re-parses");
@@ -310,8 +308,7 @@ mod tests {
 
     #[test]
     fn ref_scrutinee_deref_inner_gets_parens() {
-        let input =
-            "fn g(r: &Option<u8>) -> Option<u8> { match &*r { Some(v) => v, None => return None, } }";
+        let input = "fn g(r: &Option<u8>) -> Option<u8> { match &*r { Some(v) => v, None => return None, } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(
             out.contains("(*r).as_ref()?"),
@@ -326,8 +323,7 @@ mod tests {
         // probe): `let Some(arg) = c.args.first() else { return None };` →
         // `let arg = c.args.first()?;` — clippy 1.98.1 fires "this `let...else`
         // may be rewritten with the `?` operator" on it (probe-verified).
-        let input =
-            "fn f(c: Vec<u8>) -> Option<u8> { let Some(arg) = c.first() else { return None }; Some(arg + 1) }";
+        let input = "fn f(c: Vec<u8>) -> Option<u8> { let Some(arg) = c.first() else { return None }; Some(arg + 1) }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(
             out.contains("let arg = c.first()?;"),
@@ -338,8 +334,7 @@ mod tests {
 
     #[test]
     fn let_else_mut_binding_moves_mut_to_let() {
-        let input =
-            "fn f(x: Option<Vec<u8>>) -> Option<()> { let Some(mut v) = x else { return None }; v.push(1); Some(()) }";
+        let input = "fn f(x: Option<Vec<u8>>) -> Option<()> { let Some(mut v) = x else { return None }; v.push(1); Some(()) }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(
             out.contains("let mut v = x?;"),
@@ -352,8 +347,7 @@ mod tests {
     fn let_else_ref_init_becomes_as_ref_try() {
         // Match-ergonomics parity: `let Some(s) = &self.opt` binds s: &T;
         // `self.opt.as_ref()?` re-produces the &T binding.
-        let input =
-            "impl S { fn f(&self) -> Option<u8> { let Some(s) = &self.opt else { return None }; Some(*s) } }";
+        let input = "impl S { fn f(&self) -> Option<u8> { let Some(s) = &self.opt else { return None }; Some(*s) } }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(
             out.contains("let s = self.opt.as_ref()?;"),
@@ -364,8 +358,7 @@ mod tests {
 
     #[test]
     fn let_else_ref_mut_init_refused() {
-        let input =
-            "fn f(o: &mut Option<Vec<u8>>) -> Option<()> { let Some(v) = &mut *o else { return None }; v.push(1); Some(()) }";
+        let input = "fn f(o: &mut Option<Vec<u8>>) -> Option<()> { let Some(v) = &mut *o else { return None }; v.push(1); Some(()) }";
         let out = propose_fix("question_mark", input);
         assert!(
             out.is_none(),
@@ -389,8 +382,7 @@ mod tests {
 
     #[test]
     fn let_else_nested_pattern_untouched() {
-        let input =
-            "fn f(p: Option<(u8, u8)>) -> Option<u8> { let Some((a, b)) = p else { return None }; Some(a + b) }";
+        let input = "fn f(p: Option<(u8, u8)>) -> Option<u8> { let Some((a, b)) = p else { return None }; Some(a + b) }";
         let out = propose_fix("question_mark", input);
         assert!(
             out.is_none(),
@@ -400,8 +392,7 @@ mod tests {
 
     #[test]
     fn let_else_interior_comment_refused() {
-        let input =
-            "fn f(x: Option<u8>) -> Option<u8> { let Some(v) = /* why */ x else { return None }; Some(v + 1) }";
+        let input = "fn f(x: Option<u8>) -> Option<u8> { let Some(v) = /* why */ x else { return None }; Some(v + 1) }";
         let out = propose_fix("question_mark", input);
         assert!(
             out.is_none(),
@@ -415,8 +406,7 @@ mod tests {
         // and rustc both refuse the bare form — probed 2026-10-14), so the
         // non-postfix-safe class arrives as `(match ..)`; the operand law
         // strips the Paren wrapper and re-parenthesizes the inner match.
-        let input =
-            "fn f(c: bool, x: Option<u8>, o: Option<u8>) -> Option<u8> { let Some(v) = (match c { true => x, false => o }) else { return None }; Some(v + 1) }";
+        let input = "fn f(c: bool, x: Option<u8>, o: Option<u8>) -> Option<u8> { let Some(v) = (match c { true => x, false => o }) else { return None }; Some(v + 1) }";
         let out = propose_fix("question_mark", input).expect("matched");
         assert!(
             out.contains("let v = (match c") && out.contains(")?;"),
@@ -427,16 +417,14 @@ mod tests {
 
     #[test]
     fn if_with_else_untouched() {
-        let input =
-            "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } else { return Some(1); } }";
+        let input = "fn f(x: Option<u8>) -> Option<u8> { if x.is_none() { return None; } else { return Some(1); } }";
         let out = propose_fix("question_mark", input);
         assert!(out.is_none(), "else branch must block the rewrite: {out:?}");
     }
 
     #[test]
     fn transformed_some_body_untouched() {
-        let input =
-            "fn g(x: Option<u8>) -> Option<u8> { match x { Some(v) => v + 1, None => return None, } }";
+        let input = "fn g(x: Option<u8>) -> Option<u8> { match x { Some(v) => v + 1, None => return None, } }";
         let out = propose_fix("question_mark", input);
         assert!(
             out.is_none(),

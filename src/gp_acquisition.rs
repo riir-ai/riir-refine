@@ -347,7 +347,7 @@ mod tests {
 
         #[test]
         fn duplicate_observation_is_safe() {
-            let x = [0.5, -0.5, 0.25, -0.25, 0.125, -0.125, 0.0625, -0.0625];
+            let x = [0.5, -0.5, 0.25, -0.25, 0.125, -0.125, 0.062_5, -0.062_5];
             let mut gp = GpAcquisition::new();
             gp.observe(&x);
             gp.observe(&x);

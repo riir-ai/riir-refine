@@ -26,7 +26,7 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, ExprMethodCall, File};
 
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
@@ -193,7 +193,10 @@ mod tests {
     fn leaves_unwrap_outside_drop_alone() {
         let src = "pub struct S { pub h: Option<u32> }\nimpl S {\n    pub fn get(&self) -> u32 { self.h.unwrap() }\n}\n";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
@@ -201,7 +204,10 @@ mod tests {
         // A method named `drop` on a NON-Drop impl is not drop glue.
         let src = "pub struct S;\nimpl S {\n    pub fn drop(&mut self) { let _ = self.helper().unwrap(); }\n    fn helper(&self) -> Option<u32> { None }\n}\n";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]

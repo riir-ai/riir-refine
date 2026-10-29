@@ -46,7 +46,7 @@
 //! Refused like `comparison_to_empty`'s `is_empty` twin.
 
 use super::helpers::{int_lit, is_postfix_safe};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, ExprLit, File, Lit};
 
@@ -129,7 +129,7 @@ fn collect_unsigned_lets(stmts: &[syn::Stmt], set: &mut std::collections::HashSe
             }
             syn::Stmt::Item(syn::Item::Fn(inner)) => {
                 // Nested fns carry their own scopes; merge is conservative.
-                let nested = collect_unsigned_idents(&inner.sig, Some(&*inner.block));
+                let nested = collect_unsigned_idents(&inner.sig, Some(&inner.block));
                 set.extend(nested);
             }
             _ => {}
@@ -227,8 +227,8 @@ fn multiple_of_text(
     negated: bool,
     fn_top: Option<&str>,
 ) -> Option<String> {
-    let dividend = src(source, &*rem.left)?;
-    let divisor = src(source, &*rem.right)?;
+    let dividend = src(source, &rem.left)?;
+    let divisor = src(source, &rem.right)?;
     // Issue 031 H1: `self % d == 0` inside `fn is_multiple_of` rewrites to
     // an infinite self-call — refuse (different receivers still fire).
     if dividend == "self" && fn_top == Some("is_multiple_of") {

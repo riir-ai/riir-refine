@@ -11,7 +11,7 @@
 //!
 //! ## The per-token object
 //!
-//! [`hash_embed`]::<D>(token): BLAKE3 XOF over the token's UTF-8 bytes → D
+//! [`hash_embed`]`::<D>(token)`: BLAKE3 XOF over the token's UTF-8 bytes → D
 //! little-endian u32 words → f32 in [-1, 1] → L2-normalized. Deterministic,
 //! allocation-light, BLAKE3-committable (a corpus digest rides every build).
 //! The tokenizer is the shipped [`RustOpTokenizer`] (identifiers + maximal
@@ -52,9 +52,9 @@ use blake3::Hasher;
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{mark_instantiation_with_file, rerank, RerankMode, RERANK_POOL};
+use super::instantiation_rerank::{RERANK_POOL, RerankMode, mark_instantiation_with_file, rerank};
 use super::op_tokenizer::RustOpTokenizer;
-use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, CLEAN_SPANS};
+use super::retrieval_eval::{CLEAN_SPANS, canonical_rank, domain_index, labeled_eval_spans};
 use riir_neuron_db::bm25::Tokenizer;
 
 /// Probe depth — mirrors `retrieval_eval::PROBE_TOP_K` (private there;

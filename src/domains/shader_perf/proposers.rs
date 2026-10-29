@@ -305,7 +305,10 @@ mod tests {
         assert!(healed.contains("var shader_heal_guard: u32 = 0u;"));
         assert!(healed.contains("if (shader_heal_guard >= 256u) { break; }"));
         // Idempotence: the healed source refuses a second guard.
-        assert!(propose_loop_guard(&healed, DEFAULT_GUARD_BOUND).is_empty());
+        assert_eq!(
+            propose_loop_guard(&healed, DEFAULT_GUARD_BOUND),
+            [] as [SourceEdit; 0]
+        );
         // And the scanner agrees the loop is now bounded.
         assert!(!finding_lines(&healed).contains(&3));
     }

@@ -33,7 +33,9 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     let account = match KatAccount::load(&dir) {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("info: no account ({e}) — run `cargo refine --mine` (or `cargo refine login`) first");
+            eprintln!(
+                "info: no account ({e}) — run `cargo refine --mine` (or `cargo refine login`) first"
+            );
             std::process::exit(1);
         }
     };
@@ -90,8 +92,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     );
 
     // ── the network sections ────────────────────────────────────────────
-    let acct32 =
-        account.service_account_hex().map(str::to_string);
+    let acct32 = account.service_account_hex().map(str::to_string);
     #[cfg(feature = "kat_transport")]
     network_sections(acct32.as_deref());
     #[cfg(not(feature = "kat_transport"))]

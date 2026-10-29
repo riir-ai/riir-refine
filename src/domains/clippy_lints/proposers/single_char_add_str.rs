@@ -42,7 +42,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, mut_string_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -123,7 +123,7 @@ impl Collector<'_> {
         };
         // Comments inside the deleted glue (method name + literal) refuse;
         // the receiver text rides verbatim — its span is the keep-list.
-        let recv_range = byte_range(&*c.receiver);
+        let recv_range = byte_range(&c.receiver);
         if drops_interior_comment(self.source, byte_range(c), &[recv_range]) {
             return None;
         }
@@ -250,11 +250,13 @@ mod tests {
 
     #[test]
     fn multi_char_and_empty_refuse() {
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn two(s: &mut String) { s.push_str(\"ab\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn two(s: &mut String) { s.push_str(\"ab\"); }",
+            )
+            .is_none()
+        );
         assert!(
             propose_fix(
                 "single_char_add_str",
@@ -274,11 +276,13 @@ mod tests {
         )
         .is_none());
         // A local binding (String::new) — the documented divergence.
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn go() { let mut s = String::new(); s.push_str(\"!\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn go() { let mut s = String::new(); s.push_str(\"!\"); }",
+            )
+            .is_none()
+        );
         // A field receiver.
         assert!(propose_fix(
             "single_char_add_str",
@@ -290,39 +294,49 @@ mod tests {
     #[test]
     fn shared_ref_and_rebound_refuse() {
         // Shared &String is not a mutable view — refused by the derivation.
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn peek(s: &String) { println!(\"{s}\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn peek(s: &String) { println!(\"{s}\"); }",
+            )
+            .is_none()
+        );
         // Rebound param — the derivation's soundness leg.
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn go(s: &mut String) { let s = String::new(); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn go(s: &mut String) { let s = String::new(); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn paren_receiver_and_two_args_refuse() {
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn go(s: &mut String) { (s).push_str(\"!\"); }",
-        )
-        .is_none());
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn go(s: &mut String, t: &str) { s.push_str(t); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn go(s: &mut String) { (s).push_str(\"!\"); }",
+            )
+            .is_none()
+        );
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn go(s: &mut String, t: &str) { s.push_str(t); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn comment_in_glue_refuses() {
-        assert!(propose_fix(
-            "single_char_add_str",
-            "fn go(s: &mut String) { s.push_str /* keep */ (\"!\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "single_char_add_str",
+                "fn go(s: &mut String) { s.push_str /* keep */ (\"!\"); }",
+            )
+            .is_none()
+        );
     }
 }

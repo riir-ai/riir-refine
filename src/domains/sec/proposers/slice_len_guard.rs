@@ -30,7 +30,7 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, File};
 
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut walker = Walker {
@@ -214,14 +214,20 @@ mod tests {
     fn skips_literal_len() {
         let src = "pub unsafe fn f(b: *const u8) -> &'static [u8] {\n    std::slice::from_raw_parts(b, 8)\n}\n";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]
     fn skips_existing_guard() {
         let src = "pub unsafe fn f(b: *const u8, n: usize) -> &'static [u8] {\n    if n == 0 { return &[]; }\n    std::slice::from_raw_parts(b, n)\n}\n";
         let file = syn::parse_file(src).unwrap();
-        assert!(collect_edits(src, &file).is_empty());
+        assert_eq!(
+            collect_edits(src, &file),
+            [] as [crate::edit_emitter::SourceEdit; 0]
+        );
     }
 
     #[test]

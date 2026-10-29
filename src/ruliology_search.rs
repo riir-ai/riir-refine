@@ -514,8 +514,8 @@ pub fn pareto_front(payoffs: &[bool], complexities: &[usize]) -> Vec<usize> {
 #[cfg(all(test, feature = "clippy_lints"))]
 mod tests {
     use super::*;
-    use crate::domains::clippy_lints::corpus::build_seed_corpus;
     use crate::domains::clippy_lints::ClippyFixEntry;
+    use crate::domains::clippy_lints::corpus::build_seed_corpus;
     use crate::elo::default_elo;
 
     fn mock_entry(lint: &str, buggy: &str, fixed: &str) -> ClippyFixEntry {
@@ -532,7 +532,7 @@ mod tests {
     #[test]
     fn pareto_front_empty() {
         let front = pareto_front(&[], &[]);
-        assert!(front.is_empty());
+        assert_eq!(front, [] as [usize; 0]);
     }
 
     #[test]

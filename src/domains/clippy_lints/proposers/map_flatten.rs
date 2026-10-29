@@ -19,7 +19,7 @@
 //! method entirely).
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
@@ -64,7 +64,7 @@ impl Collector<'_> {
         if map.args.len() != 1 {
             return None;
         }
-        let recv = src(self.source, &*map.receiver)?;
+        let recv = src(self.source, &map.receiver)?;
         let f = src(self.source, &map.args[0])?;
         let recv = if is_postfix_safe(&map.receiver) {
             recv
@@ -81,8 +81,7 @@ mod tests {
 
     #[test]
     fn fuses_map_flatten_into_flat_map() {
-        let input =
-            "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }";
+        let input = "fn word_lines(xs: &[String]) -> Vec<&str> { xs.iter().map(|x| x.split(' ')).flatten().collect() }";
         let out = propose_fix("map_flatten", input).expect("matched");
         assert!(
             out.contains("xs.iter().flat_map(|x| x.split(' ')).collect()"),
@@ -111,8 +110,7 @@ mod tests {
 
     #[test]
     fn turbofished_flatten_refused() {
-        let input =
-            "fn go(xs: &[u8]) -> Vec<u8> { xs.iter().map(|x| vec![x]).flatten::<Vec<u8>>().flatten().collect() }";
+        let input = "fn go(xs: &[u8]) -> Vec<u8> { xs.iter().map(|x| vec![x]).flatten::<Vec<u8>>().flatten().collect() }";
         let out = propose_fix("map_flatten", input);
         assert!(out.is_none(), "turbofished flatten must refuse: {out:?}");
     }
@@ -132,8 +130,7 @@ mod tests {
 
     #[test]
     fn map_path_fn_arg_fuses() {
-        let input =
-            "fn go(xs: &[String]) -> Vec<&str> { xs.iter().map(String::as_str).flatten().collect() }";
+        let input = "fn go(xs: &[String]) -> Vec<&str> { xs.iter().map(String::as_str).flatten().collect() }";
         let out = propose_fix("map_flatten", input).expect("matched");
         assert!(
             out.contains("xs.iter().flat_map(String::as_str).collect()"),

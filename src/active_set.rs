@@ -382,6 +382,7 @@ impl ActiveSet {
             self.demote(domain_key, rule);
             demoted_now.push((*rule).clone());
         }
+        demoted_now.shrink_to_fit();
         demoted_now
     }
 
@@ -477,7 +478,7 @@ mod tests {
         match ActiveSet::load(&dir.join(ACTIVE_SET_FILE)) {
             Err(ActiveSetError::Io { .. }) => {}
             other => {
-                panic!("a present-but-unreadable marker must be a loud Io error, got {other:?}")
+                panic!("a present-but-unreadable marker must be a loud Io error, got {other:?}");
             }
         }
         let _ = std::fs::remove_dir_all(&dir);

@@ -13,9 +13,9 @@
 //! stale-sidecar defense is dispatch-granularity producer/consumer coupling,
 //! NOT in-kernel detection; the pre-PR narrow-matvec geometry was `NR0=4` (not
 //! 2) for `out_dim in {512,1024} && in_dim >= 4096` quality-off; the merge
-//! 16-split prefetch is commit `44fb985` (not `f27d9b0`); `DS4_QWEN4_GDN_PREFILL_NSG`
-//! predates `bc61011` (it shipped with the `858b524` lab commit); the +2.6%
-//! expert-major figure is over the drift-free half of an interleaved 64K run.
+//!    16-split prefetch is commit `44fb985` (not `f27d9b0`); `DS4_QWEN4_GDN_PREFILL_NSG`
+//!    predates `bc61011` (it shipped with the `858b524` lab commit); the +2.6%
+//!    expert-major figure is over the drift-free half of an interleaved 64K run.
 
 use crate::domains::kernel_opt::corpus::KernelRule;
 

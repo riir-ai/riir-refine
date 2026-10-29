@@ -41,8 +41,8 @@
 //! guard class, second member).
 
 use super::helpers::{bool_lit, byte_range, is_postfix_safe, macro_expr_args};
-use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
-use super::{edit, src, SourceEdit};
+use super::receiver_kind::{ReceiverKind, ScopeKinds, classify_receiver, collect_fn_rets};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{
     Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type,
@@ -125,7 +125,7 @@ impl<'ast> Visit<'ast> for Collector<'_> {
             if ty_is_slice_ref(&pt.ty) {
                 if let Expr::MethodCall(m) = &*init.expr {
                     if is_unwrap_or_call(m) {
-                        self.pinned.insert(two(byte_range(&*init.expr)));
+                        self.pinned.insert(two(byte_range(&init.expr)));
                     }
                 }
             }
@@ -294,7 +294,7 @@ fn try_map_or(
     if map.args.len() != 1 {
         return None;
     }
-    let recv = src(source, &*map.receiver)?;
+    let recv = src(source, &map.receiver)?;
     let default = src(source, &m.args[0])?;
     let mapper = src(source, &map.args[0])?;
     // Array-literal defaults (`&[...]`, incl. `&[]`) must stay on the
@@ -565,16 +565,14 @@ mod tests {
     // katgpt-forward/src/step.rs:196 (`map_or(&[], |m| m.as_slice())`).
     #[test]
     fn empty_array_lit_default_skipped() {
-        let input =
-            "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or(&[]).len() }";
+        let input = "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or(&[]).len() }";
         let out = propose_fix("map_unwrap_or", input);
         assert!(out.is_none(), "empty `&[]` default must not fire: {out:?}");
     }
 
     #[test]
     fn nonempty_array_lit_default_skipped() {
-        let input =
-            "fn f(m: Vec<Vec<f32>>) -> usize { m.first().map(|s| s.as_slice()).unwrap_or(&[1.0]).len() }";
+        let input = "fn f(m: Vec<Vec<f32>>) -> usize { m.first().map(|s| s.as_slice()).unwrap_or(&[1.0]).len() }";
         let out = propose_fix("map_unwrap_or", input);
         assert!(
             out.is_none(),
@@ -584,8 +582,7 @@ mod tests {
 
     #[test]
     fn or_else_array_lit_body_skipped() {
-        let input =
-            "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
+        let input = "fn f(m: Vec<Vec<f32>>) -> usize { m.get(1).map(|s| s.as_slice()).unwrap_or_else(|| &[]).len() }";
         let out = propose_fix("map_unwrap_or", input);
         assert!(
             out.is_none(),
@@ -621,8 +618,7 @@ mod tests {
 
     #[test]
     fn annotated_let_slice_pinned_fires() {
-        let input =
-            "fn f(m: std::collections::HashMap<usize, Vec<f32>>, k: usize) -> usize { let q: &[f32] = m.get(&k).map(|v| v.as_slice()).unwrap_or(&[]); q.len() }";
+        let input = "fn f(m: std::collections::HashMap<usize, Vec<f32>>, k: usize) -> usize { let q: &[f32] = m.get(&k).map(|v| v.as_slice()).unwrap_or(&[]); q.len() }";
         let out = propose_fix("map_unwrap_or", input).expect("pinned let must fire");
         assert!(
             out.contains("let q: &[f32] = m.get(&k).map_or(&[], |v| v.as_slice());"),

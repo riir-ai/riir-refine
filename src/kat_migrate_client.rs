@@ -711,8 +711,8 @@ fn measure_login(
 
 /// `--attest-cosign <old_hex> <new_hex> --github <login>` (riir-dapps Issue
 /// 143) — run on B's box, B = THIS box's account record (the account the
-/// login is bound to): measure the attestation, fix `created_at`, co-sign
-/// with B's key, return the bundle. B's private key never leaves the box.
+///      login is bound to): measure the attestation, fix `created_at`, co-sign
+///      with B's key, return the bundle. B's private key never leaves the box.
 ///
 /// # Errors
 ///
@@ -1678,7 +1678,7 @@ mod tests {
             let mut stream = stream;
             let resp = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n";
             stream.write_all(resp.as_bytes()).ok();
-            write!(stream, "Content-Length: {}\r\n\r\n", body.len()).ok();
+            writeln!(stream, "Content-Length: {}\r\n\r", body.len()).ok();
             stream.write_all(body.as_bytes()).ok();
         });
         let got = post_json(
