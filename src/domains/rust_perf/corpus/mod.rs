@@ -9,7 +9,25 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 275 entries across 14 categories as of Batch 298 (+1: caching,
+//! 278 entries across 14 categories as of Batch 305 (+3: concurrency +2,
+//! allocation +1, `entries_53` — the bbtree ordered-structure-internals
+//! distill COMPLETION, Plan 289 / Research 322: `batch-miss-interleave-tiny-executor`
+//! (concurrency, BENCHABLE latency bar — N independent dependent-chain
+//! lookups interleaved through a no-alloc bit-mask round-robin executor,
+//! one chain's miss overlaps the other lanes' work; 10.7-11.3x measured on
+//! the landing box) + `seqlock-copy-read-unlatched` (concurrency, ANNOTATED
+//! `NotBenchable` — a `Copy` value under optimistic concurrency is read by
+//! copy-then-version-check, never by taking the shared latch; sound ONLY
+//! for Copy values) + `page-self-aligned-hot-node` (allocation, ANNOTATED
+//! `NotBenchable` — hot >=512 B nodes (`>=512 B` hot floor) sized to
+//! power-of-two page multiples,
+//! self-aligned: one TLB entry, the prefetcher streams the node; the
+//! source's own 1 KB sweep is the measured basis, bigger is not better);
+//! Plus the two rider faces the partial landing promised: the compile-time
+//! hand-specialization face (dtolnay typeid trick) folded as a citation on
+//! the `entries_52` window rule, the D28 kinship cite on
+//! `loop-invariant-dispatch-resolution-hoist` (`entries_48`) — upstream
+//! XiangpengHao/bbtree @ `8adae97a`) — prior: Batch 298 (+1: caching,
 //! `entries_52` — the bbtree ordered-structure-internals distill, Plan 289 /
 //! Research 322: `order-preserving-inline-key-encoding` (the fences-route,
 //! windows-rank law); the batch's SECOND candidate
@@ -669,6 +687,7 @@ mod entries_49;
 mod entries_50;
 mod entries_51;
 mod entries_52;
+mod entries_53;
 
 #[cfg(test)]
 mod tests;
@@ -810,5 +829,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_50::entries());
     entries.extend(entries_51::entries());
     entries.extend(entries_52::entries());
+    entries.extend(entries_53::entries());
     Corpus::new(entries)
 }
