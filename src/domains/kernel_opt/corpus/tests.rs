@@ -19005,8 +19005,8 @@ fn batch249_slice3_rust_perf_riders() {
     let corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
     assert_eq!(
         corpus.entries.len(),
-        278,
-        "batch 304 EN-ROUTE REPAIR: 274 -> 275 (Batch 298's bbtree partial landing moved the rust_perf corpus to 275 and missed this kernel-side witness -- the batch-266/271 missed-pin class this gate's own message documents; this batch lands it, count-neutral for kernel_opt, Plan 309); prior: batch 288 re-pin: 273 -> 274 (entries_51, Plan 293 / Research 327); prior: batch 284 re-pin: 271 -> 273 (entries_50, Plan 288 / Research 321); prior: batch 283 re-pin: 270 -> 271 (entries_49, Plan 287 / Research 320) -- EN-ROUTE REPAIR: this cross-domain pin also missed Batch 282 (+3, entries_48, Plan 286 / Research 319), the B266-missed-pin class its own message documents; prior: batch-274 re-pin: 266 -> 267 (the splash batch-load hard-budget admission rule, entries_47, Plan 278 / Research 312); prior: batch-249 slice-3 riders are count-neutral on their own landing; re-pinned at Batch 272 (+12 EN-ROUTE REPAIR of the batch-271 missed cross-domain pin: the splash-wave rust_perf serving pool moved this corpus 254->266, entries_43-46, Plan 275 / Research 307 -- this kernel-side pin still read 254 until now, the batch-266-missed-pin precedent); re-pinned at Batch 270 (+12: the splash-wave rust_perf serving pool, Plan 274 / Research 306); prior re-pinned at Batch 266 (+1: the uv marker-ISOP rule, Plan 270 / Research 302 -- the B266 lane's missed pin, repaired en route by Batch 269); (230 at Batch 248); Batch 250 slice 1 +1'd the corpus to 231 (the llama.cpp #30296 hadd-butterfly epilogue, Plan 254 / Research 285); Batch 255 +1 (the SLRU host-cache rule, Plan 259); Batch 256 +3 (the TensorFold 9ccf4727..d1018b31 campaign, Plan 260 / Research 291) — the riders' count-neutrality is unchanged"
+        280,
+        "batch 308 re-pin: 278 -> 280 (entries_54, the 10-29b serving pool + rust_perf row, Plan 313 / Research 352); prior: batch 305/304 EN-ROUTE REPAIR: 274 -> 275 (Batch 298's bbtree partial landing moved the rust_perf corpus to 275 and missed this kernel-side witness -- the batch-266/271 missed-pin class this gate's own message documents; this batch lands it, count-neutral for kernel_opt, Plan 309); prior: batch 288 re-pin: 273 -> 274 (entries_51, Plan 293 / Research 327); prior: batch 284 re-pin: 271 -> 273 (entries_50, Plan 288 / Research 321); prior: batch 283 re-pin: 270 -> 271 (entries_49, Plan 287 / Research 320) -- EN-ROUTE REPAIR: this cross-domain pin also missed Batch 282 (+3, entries_48, Plan 286 / Research 319), the B266-missed-pin class its own message documents; prior: batch-274 re-pin: 266 -> 267 (the splash batch-load hard-budget admission rule, entries_47, Plan 278 / Research 312); prior: batch-249 slice-3 riders are count-neutral on their own landing; re-pinned at Batch 272 (+12 EN-ROUTE REPAIR of the batch-271 missed cross-domain pin: the splash-wave rust_perf serving pool moved this corpus 254->266, entries_43-46, Plan 275 / Research 307 -- this kernel-side pin still read 254 until now, the batch-266-missed-pin precedent); re-pinned at Batch 270 (+12: the splash-wave rust_perf serving pool, Plan 274 / Research 306); prior re-pinned at Batch 266 (+1: the uv marker-ISOP rule, Plan 270 / Research 302 -- the B266 lane's missed pin, repaired en route by Batch 269); (230 at Batch 248); Batch 250 slice 1 +1'd the corpus to 231 (the llama.cpp #30296 hadd-butterfly epilogue, Plan 254 / Research 285); Batch 255 +1 (the SLRU host-cache rule, Plan 259); Batch 256 +3 (the TensorFold 9ccf4727..d1018b31 campaign, Plan 260 / Research 291) — the riders' count-neutrality is unchanged"
     );
     let riders: [(&str, &[&str]); 3] = [
         (
@@ -24086,6 +24086,33 @@ fn batch307_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-307 opt_pattern for '{id}' must parse"
+        );
+    }
+}
+
+#[test]
+fn batch308_rider_gpu111_remote_writer_ack_landed() {
+    // Count-neutral rider face (Batch 308 / Plan 313): the REMOTE-writer
+    // ack arm on drain-device-work-before-free -- a timed-out load fails
+    // at once but its chunks stay out of the free pool until the peer's
+    // AbortAck; a missed ack faults the session sticky.
+    let corpus = build_kernel_seed_corpus();
+    let entry = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "drain-device-work-before-free")
+        .unwrap_or_else(|| panic!("drain-device-work-before-free missing"));
+    let concept = entry.gpu_concept.as_str();
+    for needle in [
+        "RIDER (Batch 308 / Plan 313 -- vllm-project/vllm @ 16777da3475084eda04813c98cfef4365d5dcb58",
+        "the REMOTE-writer arm of this completion law",
+        "the timeout is a failure signal, never a completion proof",
+        "the peer may still be writing it. The AbortAck frees it.",
+        "so the session faults it",
+    ] {
+        assert!(
+            concept.contains(needle),
+            "batch-308 gpu_111 rider missing needle: {needle}"
         );
     }
 }

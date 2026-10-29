@@ -1,6 +1,6 @@
 # Plan 313 — Batch 308: the 10-29b staged serving pool + rust_perf row
 
-**Status:** IN PROGRESS — claimed 2026-10-30 (~02:1x +07, shikuwa-4090-b308); claim expires 2026-11-01T02:1xZ per the 48h law.
+**Status:** COMPLETE — Batch 308 landed 2026-10-30 (corpus 278 -> 280, 2 own rules + 2 count-neutral rider faces; lease closed by the landing row; Research 352).
 
 ## Scope
 
@@ -24,14 +24,14 @@ Pre-adjudicated kinship (staged addendum + slot re-verified at T1):
 
 ## Tasks
 
-- [ ] T0 quote re-verification at the pins: the four sources fetched as per-commit .patch into `.raw/b308/` (vllm #62444 `c1b7dffa1457`, vllm #64256 `16777da3475`, llama.cpp #31350 `7df8b876b91`, TensorFold `d1fcb9d93458`); every staged quote byte-verified against the diff text (02:0x +07, pre-claim)
-- [ ] T1 dedup greps at 3+ vocabularies vs the corpus at origin HEAD `93bfdbf0` (per-atom above; the slug ledger + the category-family reads)
-- [ ] T2 author `entries_54.rs`: 2 own rules (A caching, D caching), ALL ANNOTATED NotBenchable bench_spec None, fixtures ORIGINAL machinery (never source code), each with regime/anti-regime + distinct-from sets + pin-verified quotes
-- [ ] T3 rider faces (count-neutral): B on `drain-device-work-before-free` (entries_gpu_111 gpu_concept extension), C on `admission-tests-the-bound-the-admitted-mode-serves` (entries_45 context_notes extension)
-- [ ] T4 standing gates: batch308 needle + parse gate; default lib; rust_perf_bench lib; clippy -D x3 postures (default / rust_perf / no-default)
-- [ ] T5 retrieval-precision re-measure BOTH postures (Issue 017/170 T3): default+latent (the Layer 5b2 command) + rust_perf+latent; floors held or re-pin with the delta recorded; freeze/score-bench NOT owed (P30 — the freeze corpus builder is the clippy_lints seed, a rust_perf-only delta moves nothing)
-- [ ] T6 count pins to measured truth: tests.rs len-form (278-280), annotated (222-224 x2 sites), unannotated (53 UNCHANGED), benchable (122 UNCHANGED), the category ledger line (caching +2), AGENTS.md x2 (274-276), README, .docs/11_domains/rust_perf.md
-- [ ] T7 Research note 352 + snapshot landing row (same commit)
+- [x] T0 quote re-verification at the pins: the four sources fetched as per-commit .patch into `.raw/b308/` (vllm #62444 `c1b7dffa1457`, vllm #64256 `16777da3475`, llama.cpp #31350 `7df8b876b91`, TensorFold `d1fcb9d93458`); every staged quote byte-verified against the diff text (02:0x +07, pre-claim)
+- [x] T1 dedup greps at 3+ vocabularies vs the corpus at origin HEAD `93bfdbf0` (per-atom above; the slug ledger + the category-family reads)
+- [x] T2 author `entries_54.rs`: 2 own rules (A caching, D caching), ALL ANNOTATED NotBenchable bench_spec None, fixtures ORIGINAL machinery (never source code), each with regime/anti-regime + distinct-from sets + pin-verified quotes
+- [x] T3 rider faces (count-neutral): B on `drain-device-work-before-free` (entries_gpu_111 gpu_concept extension), C on `admission-tests-the-bound-the-admitted-mode-serves` (entries_45 context_notes extension)
+- [x] T4 standing gates: batch308 needle + parse gate; default lib; rust_perf_bench lib; clippy -D x3 postures (default / rust_perf / no-default)
+- [x] T5 retrieval-precision re-measure BOTH postures (Issue 017/170 T3): default+latent (the Layer 5b2 command) + rust_perf+latent; floors held or re-pin with the delta recorded; freeze/score-bench NOT owed (P30 — the freeze corpus builder is the clippy_lints seed, a rust_perf-only delta moves nothing)
+- [x] T6 count pins to measured truth: tests.rs len-form (278-280), annotated (222-224 x2 sites), unannotated (53 UNCHANGED), benchable (122 UNCHANGED), the category ledger line (caching +2), AGENTS.md x2 (274-276), README, .docs/11_domains/rust_perf.md
+- [x] T7 Research note 352 + snapshot landing row (same commit)
 - [ ] T8 release-set binary rebuild + install at the landing HEAD BEFORE push (rust_perf is IN the release set — corpus compiles into the bin; verify the `--version` build hash == HEAD), then commit `feat: batch 308: ...` + push; worktree + `.raw/b308/` removed at close
 
 ## Notes

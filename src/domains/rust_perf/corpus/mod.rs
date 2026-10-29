@@ -688,14 +688,25 @@ mod entries_50;
 mod entries_51;
 mod entries_52;
 mod entries_53;
+mod entries_54;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 275 entries
-/// (Batch 298, 2026-10-29, Plan 289 / Research 322: +1 — the bbtree
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 280 entries
+/// (Batch 308, 2026-10-30, Plan 313 / Research 352: +2 caching — the
+/// 10-29b staged serving pool + `rust_perf` row, `entries_54`: the
+/// cross-tier LRU-recency law + the refusal-quarantine verdict law,
+/// both ANNOTATED `NotBenchable`; +2 count-neutral rider faces — the
+/// REMOTE-writer arm on `kernel_opt` `drain-device-work-before-free`
+/// (vllm #64256) + the CONSUMING-SIZE face on `admission-tests-the-
+/// bound-the-admitted-mode-serves` (`entries_45`, llama.cpp #31350);
+/// prior — Batch 305, Plan 289 / Research 322: +3, `entries_53`, the
+/// bbtree completion (THIS doc's re-pin was MISSED by that lane —
+/// repaired en-route here, the missed-pin class); prior — Batch 298,
+/// 2026-10-29, Plan 289 / Research 322: +1 — the bbtree
 /// ordered-structure-internals distill, `entries_52`; the batch's simd
 /// candidate dropped at Pareto measurement — the negative lives in the
 /// `entries_52` header; prior — Batch 288,
@@ -830,5 +841,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_51::entries());
     entries.extend(entries_52::entries());
     entries.extend(entries_53::entries());
+    entries.extend(entries_54::entries());
     Corpus::new(entries)
 }
