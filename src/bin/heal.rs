@@ -1807,10 +1807,20 @@ fn run_kat_genesis(words: &[String]) {
                 if !std::io::stdin().is_terminal() {
                     return None;
                 }
-                eprint!("genesis: authenticator code: ");
-                let mut line = String::new();
-                std::io::stdin().read_line(&mut line).ok()?;
-                let code = line.trim().to_string();
+                // No echo on macOS (the /dev/tty prompt): the owner's
+                // live ceremony 2026-10-29 printed the code on screen.
+                #[cfg(target_os = "macos")]
+                let code = riir_refine::kat_account::se::read_pin("genesis: authenticator code (hidden): ")
+                    .ok()?
+                    .trim()
+                    .to_string();
+                #[cfg(not(target_os = "macos"))]
+                let code = {
+                    eprint!("genesis: authenticator code: ");
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line).ok()?;
+                    line.trim().to_string()
+                };
                 (!code.is_empty()).then_some(code)
             });
             match gc::http::submit(&url, &bundle, totp.as_deref()) {
