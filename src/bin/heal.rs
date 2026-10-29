@@ -1872,6 +1872,33 @@ fn run_kat_custody(words: &[String]) {
         std::process::exit(1);
     };
     let dir = KatAccount::default_dir();
+    // riir-dapps Plan 058 T6c: a NEW account born in the Enclave — the seed
+    // exists only in memory and inside the sealed envelope, never in a file
+    // (the gen-2 owner key: point RIIR_AUTH_ACCOUNT_DIR at its own dir).
+    #[cfg(target_os = "macos")]
+    if words.first().map(String::as_str) == Some("new-se") {
+        use riir_refine::kat_account::se;
+        if words.len() > 1 {
+            fail(format!("unknown arguments {:?} — `account custody new-se`", &words[1..]));
+        }
+        std::fs::create_dir_all(&dir).unwrap_or_else(|e| fail(format!("{}: {e}", dir.display())));
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))
+                .unwrap_or_else(|e| fail(format!("{}: {e}", dir.display())));
+        }
+        let agent = se::agent_for(&dir).unwrap_or_else(|e| fail(e));
+        if !dir.join(se::BLOB_FILE).exists() {
+            agent.create().unwrap_or_else(|e| fail(format!("creating the Enclave key: {e}")));
+        }
+        eprintln!("account custody: a new key is born in memory and sealed into the Secure Enclave; ONE Touch ID press proves it");
+        let key = KatAccount::create_in_se_with(&dir, &agent, &[]).unwrap_or_else(|e| fail(e));
+        let pubkey = key.public_key_bytes().unwrap_or_else(|e| fail(e));
+        println!("account {}", key.state().account_id);
+        println!("custody: {} (born in the Enclave — no plaintext key exists)", riir_refine::kat_account::SE_PROVENANCE);
+        println!("pubkey_hex: {}", pubkey.iter().map(|b| format!("{b:02x}")).collect::<String>());
+        return;
+    }
     // `mut` is load-bearing on macOS (the se arms move custody through
     // &mut); the 3cd516a1 drop verified dev-only -- release on macOS is
     // E0596. Restored by the oracle-landing lane to unblock the release
