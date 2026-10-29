@@ -1821,27 +1821,9 @@ fn run_kat_genesis(words: &[String]) {
             // Plan 058 T1: /genesis requires the server-verified factor.
             // `--totp`, else a prompt on a terminal, else no header (the
             // worker answers 403 totp_required).
-            let totp = flag("--totp").or_else(|| {
-                use std::io::IsTerminal as _;
-                if !std::io::stdin().is_terminal() {
-                    return None;
-                }
-                // No echo on macOS (the /dev/tty prompt): the owner's
-                // live ceremony 2026-10-29 printed the code on screen.
-                #[cfg(target_os = "macos")]
-                let code = riir_refine::kat_account::se::read_pin("genesis: authenticator code (hidden): ")
-                    .ok()?
-                    .trim()
-                    .to_string();
-                #[cfg(not(target_os = "macos"))]
-                let code = {
-                    eprint!("genesis: authenticator code: ");
-                    let mut line = String::new();
-                    std::io::stdin().read_line(&mut line).ok()?;
-                    line.trim().to_string()
-                };
-                (!code.is_empty()).then_some(code)
-            });
+            // No echo on macOS (the owner's live ceremony 2026-10-29
+            // printed the code on screen) — the shared late prompt.
+            let totp = flag("--totp").or_else(|| prompt_factor("genesis: authenticator code (hidden): "));
             match gc::http::submit(&url, &bundle, totp.as_deref()) {
                 Ok((200, body)) => println!("{body}"),
                 Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
@@ -2045,6 +2027,29 @@ fn learn_root(account: &mut riir_refine::kat_account::KatAccount, url: &str) {
     }
 }
 
+/// The authenticator code, asked at the moment it is used: no echo on
+/// macOS (riir-auth's `/dev/tty` prompt — a TOTP code on screen is a
+/// shoulder-surf, single-use or not), a plain line elsewhere. `None` when
+/// stdin is not a terminal or the answer is empty. One prompt for every
+/// T2 command that asks late (genesis submit, the provider bind).
+#[cfg(feature = "kat_transport")]
+fn prompt_factor(prompt: &str) -> Option<String> {
+    use std::io::IsTerminal as _;
+    if !std::io::stdin().is_terminal() {
+        return None;
+    }
+    #[cfg(target_os = "macos")]
+    let code = riir_refine::kat_account::se::read_pin(prompt).ok()?.trim().to_string();
+    #[cfg(not(target_os = "macos"))]
+    let code = {
+        eprint!("{prompt}");
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).ok()?;
+        line.trim().to_string()
+    };
+    (!code.is_empty()).then_some(code)
+}
+
 /// refine 179 item 4 (the AFTER half, unblocked by dapps issue 140):
 /// `login --provider github` — the GitHub device flow composed END TO END
 /// through the leaf's [`riir_kat::kat_recovery_client`] (the recovery
@@ -2076,9 +2081,6 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
             std::process::exit(1);
         }
     };
-    let now_unix = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
     // The device flow FIRST (the token exists only inside this frame —
     // the client-id refusal surfaces from the leaf, naming the env var).
     let (token, identity) = match github_device_login() {
@@ -2117,6 +2119,21 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
             std::process::exit(1);
         }
     };
+    // riir-dapps Plan 059 (found live 2026-10-29): the factor is asked
+    // HERE — after the GitHub device approval and the Touch ID — because a
+    // 30 s code typed before the device step is stale by the time the bind
+    // verifies it (the server accepts the current + previous step only). On
+    // a terminal the late prompt always wins; `--totp-code` is the
+    // non-interactive form (scripts, CI).
+    let late_code = prompt_factor("kat login: authenticator code for the bind (hidden): ");
+    if late_code.is_some() && totp_code.is_some() {
+        eprintln!("kat login: using the code typed now; the --totp-code given at the start is likely stale");
+    }
+    let totp_code = late_code.as_deref().or(totp_code);
+    // A fresh created_at: the device step can outlast the server's skew bound.
+    let now_unix = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let transport = HttpRecoveryTransport::new(&url, 15);
     // nonce → claim (the nonce rides INSIDE the claim) → bind. The bind
     // refusal branches on the typed class (the vocabulary re-exported
@@ -2176,9 +2193,16 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
                     );
                 }
                 Some(riir_kat::kat_protocol_totp::CODE_TOTP_REQUIRED) => {
+                    // The server's own reason first: `totp_required` covers
+                    // both "no/malformed code" and "this account has no armed
+                    // factor", and only the text tells them apart.
                     eprintln!(
-                        "kat login: the account is ARMED — pass the current factor: \
-                         `cargo refine login --provider {provider} --totp-code <code>`"
+                        "kat login: the server refused the factor: {}",
+                        r.body.as_ref().map_or("(no body)", |b| b.text.as_str())
+                    );
+                    eprintln!(
+                        "kat login: rerun on a terminal and type the CURRENT code when asked \
+                         (or `--totp-code <code>` non-interactively)"
                     );
                 }
                 Some(riir_kat::kat_protocol_recovery::CODE_GITHUB_BOUND) => {
