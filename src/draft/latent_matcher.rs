@@ -1158,7 +1158,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     fn span_suggestion_routes_and_retrieves() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let (routed, by_domain) = m.suggest_span("fn f() -> u8 { return 7; }", 3);
-        assert!(!by_domain.is_empty());
+        assert_ne!(by_domain, [] as [(DomainId, std::vec::Vec<ScoredRule>); 0]);
         // Fan-out: the clippy domain's list must exist + top-1 needless_return
         // (empirically the routed annotation may differ — see the mis-routing
         // finding in suggest_span's doc).
@@ -1166,7 +1166,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .iter()
             .find(|(d, _)| *d == DomainId::Clippy)
             .expect("clippy index enabled by default");
-        assert!(!clippy.1.is_empty());
+        assert_ne!(clippy.1, [] as [ScoredRule; 0]);
         // Top-3 membership, not top-1: corpus growth shifts rankings (the
         // Issue 016 expansion 10→40 entries made `manual_unwrap_or`'s fixture
         // — `fn f(x: Option<u8>) -> u8 { match .. 7 }` — a stronger BM25
@@ -1242,7 +1242,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         for s in &sugg {
             assert_eq!(s.path, "sample.rs");
             assert!(s.start_line >= 1 && s.end_line >= s.start_line);
-            assert!(!s.by_domain.is_empty());
+            assert_ne!(
+                s.by_domain,
+                [] as [(DomainId, std::vec::Vec<ScoredRule>); 0]
+            );
             assert!(
                 !s.all_rules().is_empty(),
                 "chunk {} suggested no rules",
@@ -1323,7 +1326,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             span.anchored_missing,
             vec!["definitely_not_a_corpus_rule".to_string()]
         );
-        assert!(span.anchored_rules.is_empty());
+        assert_eq!(
+            span.anchored_rules,
+            [] as [(DomainId, std::string::String); 0]
+        );
         assert!(!span.heuristic_only, "a gap signal is still an oracle hit");
     }
 
@@ -1331,10 +1337,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
     fn plain_suggest_file_leaves_anchor_fields_default() {
         let mut m = LatentMatcher::from_enabled_domains().expect("build");
         let sugg = m.suggest_file(SAMPLE, "sample.rs", 3);
-        assert!(!sugg.is_empty());
+        assert_ne!(sugg, [] as [SpanSuggestion; 0]);
         for s in &sugg {
-            assert!(s.anchored_rules.is_empty());
-            assert!(s.anchored_missing.is_empty());
+            assert_eq!(s.anchored_rules, [] as [(DomainId, std::string::String); 0]);
+            assert_eq!(s.anchored_missing, [] as [std::string::String; 0]);
             assert!(!s.heuristic_only, "the plain path claims nothing");
         }
     }
@@ -1514,7 +1520,7 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         // there fails HERE, not silently at the operator CLI.
         for domain in DomainId::ALL {
             let key = active_set_domain_key(domain);
-            assert!(!key.is_empty());
+            assert_ne!(key, "");
             assert!(
                 crate::active_set::KNOWN_DOMAIN_KEYS.contains(&key),
                 "router label {key:?} missing from active_set::KNOWN_DOMAIN_KEYS — add it there (same commit)"

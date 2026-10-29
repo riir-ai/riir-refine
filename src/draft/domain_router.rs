@@ -814,7 +814,7 @@ mod tests {
         let b = SpectralVocab::build(&fixture_domains(), SpectralOrder::GlobalFreq);
         assert_eq!(a.tokens(), b.tokens());
         assert!(a.tokens().len() <= SPECTRAL_VOCAB_N);
-        assert!(!a.tokens().is_empty());
+        assert_ne!(a.tokens(), []);
         // Single-char tokens never enter the vocab.
         assert!(a.tokens().iter().all(|t| t.len() >= 2));
     }

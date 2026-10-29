@@ -1,6 +1,6 @@
 //! `clippy::assert_is_empty` — `assert!(s.is_empty())` → `assert_eq!(s, "")`
 //! (negated → `assert_ne!`, `debug_assert!` twins map to the `_eq`/`_ne`
-//! debug forms) on a signature-proven receiver (Batch 230 / Plan 232 — NEW
+//! debug forms) on a proven receiver (Batch 230 / Plan 232 — NEW
 //! in clippy 1.99 / PR #17149, pedantic group; probe-verified 2026-10-13
 //! against clippy 1.99.0 (isolated toolchain); the fixed forms compile at
 //! 1.98.1 too).
@@ -16,15 +16,44 @@
 //! message; printing the asserted value on failure is the improvement the
 //! lint exists to make, not a behavior regression.
 //!
-//! The type-blindness leg (no type checker here): the receiver's family is
-//! proven from the fn SIGNATURE — a plain never-rebound param whose
-//! annotation is the CONSTRUCTION fact (`body_rebinds` soundness leg, the
-//! `scalar_param_heads_over`/`slice_param_heads_over` posture) — so the
-//! right-hand side is exactly that family's empty value: `""` for the
-//! str/String family, `[]` for slices and slice views, `[] as [T; 0]` for
-//! owned `Vec<T>` (the cast spells `T`, the one shape where a bare `[]`
-//! under-infers). Every fixed form below was compile-verified at 1.99.0
-//! and 1.98.1 (probe, 2026-10-13).
+//! ## Provenance (the P98 extension, 2026-10-29 — the 93-site wave class)
+//!
+//! The type-blindness leg: the receiver's family is proven from
+//! FILE-LOCAL construction facts — no type checker here. The original law
+//! proved params from the fn signature alone; the pin-bump wave (commit
+//! ff91fb5f) proved the demand was 93/93 locals and method/field
+//! receivers (`set.caps().is_empty()`, `s.lints.is_empty()`), every one
+//! of which the signature-only gate refused. Four construction-fact legs
+//! now feed one proven-binding map:
+//!
+//! 1. ANNOTATED LETS — `let v: Vec<String> = …;` (the annotation is the
+//!    construction fact, exactly like a param's).
+//! 2. SAME-FILE DEFINITIONS — `let v = g();` resolves `g` through the
+//!    file's own fn table; `s.caps()` / `s.lints` resolve through the
+//!    file's inherent-impl and struct tables; `NAMES` (a const/static)
+//!    resolves through its declared type. A type the file does not
+//!    define is absent, and absence refuses — cross-file types are never
+//!    guessed.
+//! 3. STD CONSTRUCTORS — `String::new|from|with_capacity` (the Str
+//!    family) and the turbofish `Vec::<T>::new()` (`VecOwned`). Bare
+//!    `Vec::new()` refuses: the element is unknown, the exact
+//!    under-inference clippy's own `MaybeIncorrect` suggestion trips on.
+//! 4. PROPAGATION — `let w = v;` copies the proven fact one hop (types
+//!    do not change on a move or a copy).
+//!
+//! Receiver shapes: a bare binding (or const/static) ident, a ONE-HOP
+//! field, or a ONE-HOP inherent method call — deeper chains refuse.
+//!
+//! Soundness legs: a local is a fact only when its name is bound EXACTLY
+//! once in the fn (no shadow, no re-`=` — the census leg, closure bodies
+//! counted) and the resolution chain carries no generics (a return type
+//! mentioning a generic id is not a fact — there is no substitution
+//! machinery here); `Self` in an inherent impl's return substitutes to
+//! the self type's name; two same-named definitions with different types
+//! poison the name (`Ambiguous`); trait methods (`collect`, `trim`,
+//! `clone`…) are in no inherent table and refuse — their return types
+//! are unknowable file-locally. Every refusal is the honest answer, and
+//! the compile gate behind `--fix --verify` is the backstop.
 //!
 //! ## Guards (the bounded fix-space — narrower than clippy, by design)
 //!
@@ -34,14 +63,10 @@
 //! - EXACTLY ONE macro argument — a custom message (`assert!(v, "msg")`,
 //!   2+ args) never fires, matching the verified upstream silence.
 //! - The single argument is `x.is_empty()` or `!x.is_empty()`: method
-//!   exactly `is_empty`, ZERO args, no turbofish, receiver a BARE path
-//!   ident. Method chains (`s.trim().is_empty()`), fields, indexes,
-//!   calls, and macro-expanded receivers (`m!().is_empty()`) refuse.
-//! - The receiver ident is PROVEN from the enclosing fn signature
-//!   (`ItemFn` + `ImplItemFn`): plain `Pat::Ident`, no `ref`/subpattern,
-//!   never rebound/assigned anywhere in the body (`body_rebinds` — the
-//!   signature annotation is then a construction fact, not an inference).
-//!   Locals (`let` bindings) and closure params are never proven.
+//!   exactly `is_empty`, ZERO args, no turbofish, receiver a PROVEN
+//!   shape (see Provenance). Method chains beyond one resolvable hop,
+//!   fields through unproven bases, indexes, calls, and macro-expanded
+//!   receivers (`m!().is_empty()`) refuse.
 //! - Proven families and their fixed forms: `&str` / `String` /
 //!   `&String` → `assert_eq!(s, "")`; `&[T]` → `assert_eq!(s, [])`;
 //!   `&Vec<T>` → `assert_eq!(s.as_slice(), [])`; owned `Vec<T>` →
@@ -77,17 +102,20 @@ use super::{edit, src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
+    let tables = FileTables::build(file);
     let mut v = Collector {
         source,
         edits: Vec::new(),
         proven: BTreeMap::new(),
+        tables: &tables,
     };
     v.visit_file(file);
     v.edits
 }
 
-/// The signature-proven family of a param's type — decides the right-hand
+/// The signature-proven family of a type — decides the right-hand
 /// side of the rewrite and whether the receiver is re-spelled.
+#[derive(Clone)]
 enum ParamType {
     /// `&str` / `String` / `&String` — compare against `""`.
     Str,
@@ -125,27 +153,223 @@ impl ParamType {
     }
 }
 
+/// Everything proven about one binding: a direct rewrite family when the
+/// type classifies, and/or the bare type name the field/method tables
+/// resolve through. A default (empty) `Proven` refuses every lookup.
+#[derive(Clone, Default)]
+struct Proven {
+    family: Option<ParamType>,
+    type_name: Option<String>,
+}
+
+/// A name-resolution outcome across the file's own definitions.
+enum Table<V> {
+    /// One definition (or several agreeing byte-for-byte).
+    Known(V),
+    /// Two same-named definitions with different types — no honest fact.
+    Ambiguous,
+}
+
+impl<V> Table<V> {
+    fn known(&self) -> Option<&V> {
+        match self {
+            Table::Known(v) => Some(v),
+            Table::Ambiguous => None,
+        }
+    }
+}
+
+/// File-local name tables for the construction-fact legs: free fns,
+/// inherent-impl methods per self type, struct fields per type, and
+/// consts/statics by name. Built once per `collect_edits` from the parsed
+/// file; a type the file does not define is simply absent, and absence
+/// refuses.
+#[derive(Default)]
+struct FileTables {
+    fns: BTreeMap<String, Table<syn::Type>>,
+    methods: BTreeMap<String, BTreeMap<String, Table<syn::Type>>>,
+    structs: BTreeMap<String, Table<BTreeMap<String, syn::Type>>>,
+    consts: BTreeMap<String, Table<syn::Type>>,
+}
+
+impl FileTables {
+    fn build(file: &File) -> Self {
+        let mut b = TableBuilder {
+            tables: Self::default(),
+        };
+        b.visit_file(file);
+        b.tables
+    }
+
+    fn get_fn(&self, name: &str) -> Option<&syn::Type> {
+        self.fns.get(name)?.known()
+    }
+
+    fn get_method(&self, ty: &str, m: &str) -> Option<&syn::Type> {
+        self.methods.get(ty)?.get(m)?.known()
+    }
+
+    fn get_field(&self, ty: &str, f: &str) -> Option<&syn::Type> {
+        self.structs.get(ty)?.known()?.get(f)
+    }
+
+    fn get_const(&self, name: &str) -> Option<&syn::Type> {
+        self.consts.get(name)?.known()
+    }
+}
+
+/// Whether two tabled types agree byte-for-byte (identical re-definitions
+/// keep the name; any disagreement poisons it).
+fn type_same(a: &syn::Type, b: &syn::Type) -> bool {
+    a.to_token_stream().to_string() == b.to_token_stream().to_string()
+}
+
+/// Registers a name, poisoning on disagreement: the first definition
+/// wins as `Known`; a second that agrees byte-for-byte keeps it; a
+/// second that disagrees marks the name `Ambiguous` (refused forever).
+fn insert<V: Clone>(
+    map: &mut BTreeMap<String, Table<V>>,
+    name: &str,
+    value: V,
+    same: impl Fn(&V, &V) -> bool,
+) {
+    let bump = match map.get(name) {
+        None => Some(Table::Known(value.clone())),
+        Some(Table::Known(prev)) if same(prev, &value) => None,
+        Some(_) => Some(Table::Ambiguous),
+    };
+    if let Some(t) = bump {
+        map.insert(name.to_string(), t);
+    }
+}
+
+/// One pass over the file building the resolution tables. Generic
+/// definitions are excluded (a return mentioning a generic id is not a
+/// concrete fact — there is no substitution machinery); trait impls are
+/// excluded (they are not inherent facts); `Self` in an inherent impl's
+/// return substitutes to the self type's name.
+struct TableBuilder {
+    tables: FileTables,
+}
+
+impl<'ast> Visit<'ast> for TableBuilder {
+    fn visit_item_fn(&mut self, f: &'ast ItemFn) {
+        if let syn::ReturnType::Type(_, ty) = &f.sig.output {
+            if !mentions_param(&f.sig.generics, ty) {
+                insert(
+                    &mut self.tables.fns,
+                    &f.sig.ident.to_string(),
+                    (**ty).clone(),
+                    type_same,
+                );
+            }
+        }
+        syn::visit::visit_item_fn(self, f);
+    }
+
+    fn visit_item_struct(&mut self, s: &'ast syn::ItemStruct) {
+        if let syn::Fields::Named(named) = &s.fields {
+            let mut fields = BTreeMap::new();
+            for field in &named.named {
+                let Some(ident) = &field.ident else { continue };
+                if mentions_param(&s.generics, &field.ty) {
+                    continue;
+                }
+                fields.insert(ident.to_string(), field.ty.clone());
+            }
+            if !fields.is_empty() {
+                // A second definition of the same struct name is a genuine
+                // ambiguity (mod-scoped names collide at this table's
+                // granularity) — any collision poisons the name.
+                insert(
+                    &mut self.tables.structs,
+                    &s.ident.to_string(),
+                    fields,
+                    |_, _| false,
+                );
+            }
+        }
+        syn::visit::visit_item_struct(self, s);
+    }
+
+    fn visit_item_impl(&mut self, imp: &'ast syn::ItemImpl) {
+        if imp.trait_.is_some() || !imp.generics.params.is_empty() {
+            // Trait impls are not inherent facts; a generic impl's methods
+            // would not resolve for a concrete instance name.
+            return;
+        }
+        let syn::Type::Path(tp) = &*imp.self_ty else {
+            return;
+        };
+        let Some(seg) = sole_segment(tp) else {
+            return;
+        };
+        if !seg.arguments.is_none() {
+            return;
+        }
+        let self_name = seg.ident.to_string();
+        let entry = self.tables.methods.entry(self_name.clone()).or_default();
+        for item in &imp.items {
+            let syn::ImplItem::Fn(m) = item else { continue };
+            let syn::ReturnType::Type(_, ty) = &m.sig.output else {
+                continue;
+            };
+            if mentions_param(&m.sig.generics, ty) {
+                continue;
+            }
+            let resolved = substitute_self(ty, &self_name);
+            insert(entry, &m.sig.ident.to_string(), resolved, type_same);
+        }
+        // Descend: free fns nested in method bodies are file-local facts too.
+        syn::visit::visit_item_impl(self, imp);
+    }
+
+    fn visit_item_const(&mut self, c: &'ast syn::ItemConst) {
+        if !mentions_param(&c.generics, &c.ty) {
+            insert(
+                &mut self.tables.consts,
+                &c.ident.to_string(),
+                (*c.ty).clone(),
+                type_same,
+            );
+        }
+        syn::visit::visit_item_const(self, c);
+    }
+
+    fn visit_item_static(&mut self, s: &'ast syn::ItemStatic) {
+        insert(
+            &mut self.tables.consts,
+            &s.ident.to_string(),
+            (*s.ty).clone(),
+            type_same,
+        );
+        syn::visit::visit_item_static(self, s);
+    }
+}
+
 struct Collector<'a> {
     source: &'a str,
     edits: Vec<SourceEdit>,
-    /// Signature-proven bindings of the enclosing fn (type family).
-    proven: BTreeMap<String, ParamType>,
+    /// Proven bindings of the enclosing fn — params plus the stable
+    /// locals' file-local construction facts.
+    proven: BTreeMap<String, Proven>,
+    tables: &'a FileTables,
 }
 
 impl<'ast> Visit<'ast> for Collector<'ast> {
     fn visit_item_fn(&mut self, f: &'ast ItemFn) {
         // Save/restore via a plain local — correct under arbitrary
-        // nesting (an inner fn's params replace the outer map for the
+        // nesting (an inner fn's bindings replace the outer map for the
         // inner body only).
         let saved = std::mem::take(&mut self.proven);
-        self.proven = proven_params(f.sig.inputs.iter(), &f.block);
+        self.proven = proven_bindings(f.sig.inputs.iter(), &f.block, self.tables);
         syn::visit::visit_item_fn(self, f);
         self.proven = saved;
     }
 
     fn visit_impl_item_fn(&mut self, f: &'ast ImplItemFn) {
         let saved = std::mem::take(&mut self.proven);
-        self.proven = proven_params(f.sig.inputs.iter(), &f.block);
+        self.proven = proven_bindings(f.sig.inputs.iter(), &f.block, self.tables);
         syn::visit::visit_impl_item_fn(self, f);
         self.proven = saved;
     }
@@ -190,8 +414,7 @@ impl Collector<'_> {
         if m.method != "is_empty" || !m.args.is_empty() || m.turbofish.is_some() {
             return None;
         }
-        let ident = bare_ident(&m.receiver)?;
-        let family = self.proven.get(ident.as_str())?;
+        let family = self.resolve_family(&m.receiver)?;
         // The whole macro span is re-spelled; only the receiver's own
         // bytes survive verbatim — a comment anywhere else would drop.
         if drops_interior_comment(self.source, byte_range(mac), &[byte_range(&*m.receiver)]) {
@@ -200,19 +423,57 @@ impl Collector<'_> {
         let recv = src(self.source, &*m.receiver)?;
         Some(family.rewrite(debug, negated, &recv))
     }
+
+    /// The family of the asserted value, proven from the receiver shape:
+    /// a bare binding (or const/static) path, a ONE-HOP field (`s.lints`),
+    /// or a ONE-HOP inherent method call (`set.caps()`) — the base must be
+    /// a binding whose type name is a construction fact. Deeper chains,
+    /// trait methods (absent from the inherent table), macro receivers,
+    /// and every type the file does not define refuse.
+    fn resolve_family(&self, expr: &Expr) -> Option<ParamType> {
+        match expr {
+            Expr::Path(_) => {
+                let name = bare_ident(expr)?;
+                if let Some(p) = self.proven.get(name.as_str()) {
+                    return p.family.clone();
+                }
+                let ty = self.tables.get_const(name.as_str())?;
+                classify_family(ty)
+            }
+            Expr::Field(f) => {
+                let syn::Member::Named(member) = &f.member else {
+                    return None;
+                };
+                let base = bare_ident(&f.base)?;
+                let tn = self.proven.get(base.as_str())?.type_name.as_ref()?;
+                let ty = self.tables.get_field(tn, &member.to_string())?;
+                classify_family(ty)
+            }
+            Expr::MethodCall(m) => {
+                if m.turbofish.is_some() {
+                    return None;
+                }
+                let base = bare_ident(&m.receiver)?;
+                let tn = self.proven.get(base.as_str())?.type_name.as_ref()?;
+                let ty = self.tables.get_method(tn, &m.method.to_string())?;
+                classify_family(ty)
+            }
+            _ => None,
+        }
+    }
 }
 
-/// The signature-proven bindings of one fn: `{ident → type family}` for
-/// every PLAIN `Pat::Ident` param whose annotation classifies (the
-/// `slice_param_heads_over` loop shape) — with the shared `body_rebinds`
-/// soundness leg: a never-rebound param keeps exactly the signature's
-/// type at every use, which makes the family a CONSTRUCTION fact rather
-/// than an inference. The `self` receiver is a `Receiver` arg, skipped by
-/// the Typed-only scan.
-fn proven_params<'i>(
+/// The proven bindings of one fn: params first (the signature law — a
+/// plain never-rebound `Pat::Ident` param whose annotation classifies;
+/// the shared `body_rebinds` soundness leg), then every stable `let`
+/// local's file-local construction fact. The map is complete before the
+/// body is visited: each name is bound at most once (the census leg
+/// refuses shadows), so traversal order cannot change any verdict.
+fn proven_bindings<'i>(
     inputs: impl Iterator<Item = &'i syn::FnArg>,
     block: &syn::Block,
-) -> BTreeMap<String, ParamType> {
+    tables: &FileTables,
+) -> BTreeMap<String, Proven> {
     let mut out = BTreeMap::new();
     for arg in inputs {
         let syn::FnArg::Typed(p) = arg else { continue };
@@ -222,22 +483,225 @@ fn proven_params<'i>(
         if pi.by_ref.is_some() || pi.subpat.is_some() {
             continue;
         }
-        let Some(family) = classify_param_type(&p.ty) else {
-            continue;
-        };
         if body_rebinds(block, &pi.ident.to_string()) {
             continue;
         }
-        out.insert(pi.ident.to_string(), family);
+        out.insert(
+            pi.ident.to_string(),
+            Proven {
+                family: classify_family(&p.ty),
+                type_name: named_type_name(&p.ty),
+            },
+        );
     }
+    let census = binding_census(block);
+    let mut scan = LocalScanner {
+        out: &mut out,
+        tables,
+        census: &census,
+    };
+    scan.visit_block(block);
     out
 }
 
-/// Structural classification of a provable annotation into its rewrite
+/// Walks the fn body's `let` statements in source order, inserting each
+/// stable local's proven fact (or poisoning an existing entry for the
+/// name).
+struct LocalScanner<'a> {
+    out: &'a mut BTreeMap<String, Proven>,
+    tables: &'a FileTables,
+    census: &'a BTreeMap<String, (usize, bool)>,
+}
+
+impl<'ast> Visit<'ast> for LocalScanner<'_> {
+    /// Nested fn bodies are their own scopes — their locals are never
+    /// this fn's facts. Closures are NOT skipped: a closure rebinding the
+    /// name breaks the one-binding census for the outer binding
+    /// (conservative).
+    fn visit_item_fn(&mut self, _f: &'ast ItemFn) {}
+
+    fn visit_local(&mut self, l: &'ast syn::Local) {
+        // syn 2 folds the annotation into the pattern: `let v: T = …`
+        // parses as Pat::Type { pat: Ident, ty }.
+        let (pi, ty) = match &l.pat {
+            syn::Pat::Ident(pi) => (pi, None),
+            syn::Pat::Type(pt) => match &*pt.pat {
+                syn::Pat::Ident(pi) => (pi, Some(&*pt.ty)),
+                _ => return,
+            },
+            _ => return,
+        };
+        if pi.by_ref.is_some() || pi.subpat.is_some() {
+            return;
+        }
+        let name = pi.ident.to_string();
+        let fact = match ty {
+            Some(t) => Proven {
+                family: classify_family(t),
+                type_name: named_type_name(t),
+            },
+            None => match &l.init {
+                Some(init) => init_fact(&init.expr, self.tables, self.out),
+                None => Proven::default(),
+            },
+        };
+        // The construction-fact leg: exactly ONE binding pattern for the
+        // name (its own) and zero assignments — a shadow or a re-`= `
+        // poisons the name (an empty `Proven` refuses every lookup).
+        let entry = match self.census.get(&name) {
+            Some((1, false)) => fact,
+            _ => Proven::default(),
+        };
+        self.out.insert(name, entry);
+    }
+}
+
+fn init_fact(expr: &Expr, tables: &FileTables, proven: &BTreeMap<String, Proven>) -> Proven {
+    match expr {
+        Expr::Call(c) => call_fact(&c.func, tables),
+        Expr::Struct(s) => Proven {
+            family: None,
+            type_name: sole_ident_path(&s.path),
+        },
+        Expr::Path(p) => {
+            let Some(name) = sole_ident_path(&p.path) else {
+                return Proven::default();
+            };
+            // `let w = v;` — the binding-to-binding propagation (one hop;
+            // types do not change on a move or a copy). Read from the map
+            // BEFORE inserting: `let x = x;` copies the shadowed binding's
+            // fact, then poisons the name.
+            if let Some(prev) = proven.get(name.as_str()) {
+                return prev.clone();
+            }
+            // A bare unit-struct path names its type — a fact for
+            // field/method resolution.
+            if matches!(tables.structs.get(name.as_str()), Some(Table::Known(_))) {
+                return Proven {
+                    family: None,
+                    type_name: Some(name),
+                };
+            }
+            Proven::default()
+        }
+        _ => Proven::default(),
+    }
+}
+
+/// The fact carried by a call-shaped initializer: the hardcoded std
+/// constructor carve-outs (the same families the signature law names),
+/// else the file's own fn / inherent-method tables.
+fn call_fact(func: &Expr, tables: &FileTables) -> Proven {
+    let Expr::Path(p) = func else {
+        return Proven::default();
+    };
+    if p.qself.is_some() || p.path.leading_colon.is_some() {
+        return Proven::default();
+    }
+    let segs: Vec<&syn::PathSegment> = p.path.segments.iter().collect();
+    match segs.len() {
+        1 => {
+            // A free fn call — a turbofish here is generic flow, refused.
+            if !segs[0].arguments.is_none() {
+                return Proven::default();
+            }
+            let name = segs[0].ident.to_string();
+            tables.get_fn(&name).map(type_fact).unwrap_or_default()
+        }
+        2 => {
+            let head = segs[0].ident.to_string();
+            let tail = segs[1].ident.to_string();
+            if !segs[1].arguments.is_none() {
+                return Proven::default(); // `Type::f::<T>()` — generic flow
+            }
+            if head == "String" && matches!(tail.as_str(), "new" | "from" | "with_capacity") {
+                return Proven {
+                    family: Some(ParamType::Str),
+                    type_name: None,
+                };
+            }
+            if head == "Vec" && tail == "new" {
+                // `Vec::<T>::new()` spells T — the one sound turbofish.
+                if let Some(elem) = sole_type_argument(segs[0]) {
+                    if !contains_infer(elem) {
+                        return Proven {
+                            family: Some(ParamType::VecOwned(type_text(elem))),
+                            type_name: None,
+                        };
+                    }
+                }
+                return Proven::default(); // `Vec::new()` — element unknown
+            }
+            // `Type::assoc_fn` — resolved through the inherent-method table.
+            tables
+                .get_method(&head, &tail)
+                .map(type_fact)
+                .unwrap_or_default()
+        }
+        _ => Proven::default(),
+    }
+}
+
+fn type_fact(ty: &syn::Type) -> Proven {
+    Proven {
+        family: classify_family(ty),
+        type_name: named_type_name(ty),
+    }
+}
+
+/// Per-name binding facts across one fn body: how many times the name is
+/// bound by a pattern (its own `let`, a shadow, an `if let`…) and
+/// whether any assignment targets it. Nested fn bodies are other scopes
+/// (skipped); closure bodies are NOT (a closure rebinding the name
+/// poisons it).
+fn binding_census(block: &syn::Block) -> BTreeMap<String, (usize, bool)> {
+    struct Census {
+        m: BTreeMap<String, (usize, bool)>,
+    }
+    impl<'ast> Visit<'ast> for Census {
+        fn visit_item_fn(&mut self, _f: &'ast ItemFn) {}
+        fn visit_pat_ident(&mut self, p: &'ast syn::PatIdent) {
+            self.m.entry(p.ident.to_string()).or_insert((0, false)).0 += 1;
+            syn::visit::visit_pat_ident(self, p);
+        }
+        fn visit_expr_assign(&mut self, a: &'ast syn::ExprAssign) {
+            if let Some(id) = expr_path_ident(&a.left) {
+                self.m.entry(id).or_insert((0, false)).1 = true;
+            }
+            syn::visit::visit_expr_assign(self, a);
+        }
+        fn visit_expr_binary(&mut self, b: &'ast syn::ExprBinary) {
+            use syn::BinOp;
+            if matches!(
+                b.op,
+                BinOp::AddAssign(_)
+                    | BinOp::SubAssign(_)
+                    | BinOp::MulAssign(_)
+                    | BinOp::DivAssign(_)
+                    | BinOp::RemAssign(_)
+                    | BinOp::BitXorAssign(_)
+                    | BinOp::BitAndAssign(_)
+                    | BinOp::BitOrAssign(_)
+                    | BinOp::ShlAssign(_)
+                    | BinOp::ShrAssign(_)
+            ) {
+                if let Some(id) = expr_path_ident(&b.left) {
+                    self.m.entry(id).or_insert((0, false)).1 = true;
+                }
+            }
+            syn::visit::visit_expr_binary(self, b);
+        }
+    }
+    let mut c = Census { m: BTreeMap::new() };
+    c.visit_block(block);
+    c.m
+}
+
+/// Structural classification of a provable type into its rewrite
 /// family — the conservative posture of `scalar_head_of`/`elem_head_of`:
 /// every unusual shape (mut refs, arrays, multi-segment/qualified paths,
-/// non-container types) refuses.
-fn classify_param_type(ty: &syn::Type) -> Option<ParamType> {
+/// non-container types, `_` elements) refuses.
+fn classify_family(ty: &syn::Type) -> Option<ParamType> {
     match ty {
         syn::Type::Reference(r) => {
             if r.mutability.is_some() {
@@ -265,12 +729,32 @@ fn classify_param_type(ty: &syn::Type) -> Option<ParamType> {
             let seg = sole_segment(p)?;
             match seg.ident.to_string().as_str() {
                 "String" => Some(ParamType::Str),
-                "Vec" => Some(ParamType::VecOwned(type_text(sole_type_argument(seg)?))),
+                "Vec" => {
+                    let elem = sole_type_argument(seg)?;
+                    if contains_infer(elem) {
+                        return None;
+                    }
+                    Some(ParamType::VecOwned(type_text(elem)))
+                }
                 _ => None,
             }
         }
         _ => None,
     }
+}
+
+/// Whether a type contains a `_` inference placeholder — `Vec<_>` has no
+/// spellable element, and the as-cast form would not compile.
+fn contains_infer(ty: &syn::Type) -> bool {
+    struct InferHit(bool);
+    impl<'ast> Visit<'ast> for InferHit {
+        fn visit_type_infer(&mut self, _: &'ast syn::TypeInfer) {
+            self.0 = true;
+        }
+    }
+    let mut h = InferHit(false);
+    h.visit_type(ty);
+    h.0
 }
 
 /// The sole path segment of a plain path type — no qself, no leading
@@ -306,17 +790,95 @@ fn type_text(t: &syn::Type) -> String {
     t.to_token_stream().to_string()
 }
 
+/// The bare single-word name of a type, for field/method resolution:
+/// `CoverageReport`, through one non-mut reference (`&CoverageReport` —
+/// auto-deref/auto-ref make the type's fields and inherent methods
+/// reachable). Generic instances (`Vec<String>`) and every other shape
+/// refuse.
+fn named_type_name(ty: &syn::Type) -> Option<String> {
+    match ty {
+        syn::Type::Path(p) => {
+            let seg = sole_segment(p)?;
+            if !seg.arguments.is_none() {
+                return None;
+            }
+            Some(seg.ident.to_string())
+        }
+        syn::Type::Reference(r) if r.mutability.is_none() => named_type_name(&r.elem),
+        _ => None,
+    }
+}
+
+/// Whether a type mentions any generic parameter (type or lifetime) of
+/// its definition — such a return is not a concrete fact, and no
+/// substitution machinery exists here. Lifetime ids are checked because
+/// they leak into the emitted cast text (`[] as [&'a str; 0]`).
+fn mentions_param(generics: &syn::Generics, ty: &syn::Type) -> bool {
+    let ids: Vec<String> = generics
+        .params
+        .iter()
+        .filter_map(|p| match p {
+            syn::GenericParam::Type(tp) => Some(tp.ident.to_string()),
+            syn::GenericParam::Lifetime(lt) => Some(lt.lifetime.ident.to_string()),
+            syn::GenericParam::Const(_) => None,
+        })
+        .collect();
+    if ids.is_empty() {
+        return false;
+    }
+    ty.to_token_stream().into_iter().any(|t| {
+        matches!(&t, proc_macro2::TokenTree::Ident(i) if ids.iter().any(|id| id == &i.to_string()))
+    })
+}
+
+/// Rewrite every `Self` token in a return type to the impl's self-type
+/// name (token-level — no substring hazards). A parse failure keeps the
+/// original, which classification will then refuse.
+fn substitute_self(ty: &syn::Type, self_name: &str) -> syn::Type {
+    let ts: TokenStream = ty
+        .to_token_stream()
+        .into_iter()
+        .map(|t| match t {
+            proc_macro2::TokenTree::Ident(ref i) if i == "Self" => {
+                proc_macro2::TokenTree::Ident(proc_macro2::Ident::new(self_name, i.span()))
+            }
+            other => other,
+        })
+        .collect();
+    syn::parse2(ts).unwrap_or_else(|_| ty.clone())
+}
+
+/// The single segment name of a plain path (no leading `::`, no generic
+/// args) — the caller owns the qself check where its type carries one.
+fn sole_ident_path(p: &syn::Path) -> Option<String> {
+    if p.leading_colon.is_some() || p.segments.len() != 1 {
+        return None;
+    }
+    let seg = p.segments.first()?;
+    if !seg.arguments.is_none() {
+        return None;
+    }
+    Some(seg.ident.to_string())
+}
+
 /// The bare path ident of a receiver expression — `None` for every other
 /// shape (chain, field, index, call, macro, multi-segment path).
 fn bare_ident(e: &Expr) -> Option<String> {
     let Expr::Path(p) = e else { return None };
-    if p.qself.is_some() || p.path.leading_colon.is_some() || p.path.segments.len() != 1 {
+    if p.qself.is_some() {
         return None;
     }
-    if !p.path.segments[0].arguments.is_none() {
+    sole_ident_path(&p.path)
+}
+
+/// The bare ident of a plain path expression — assignment/op-assign
+/// targets.
+fn expr_path_ident(e: &Expr) -> Option<String> {
+    let Expr::Path(p) = e else { return None };
+    if p.qself.is_some() {
         return None;
     }
-    Some(p.path.segments[0].ident.to_string())
+    sole_ident_path(&p.path)
 }
 
 /// `Some(debug)` when the macro path is exactly `assert` / `debug_assert`
@@ -483,16 +1045,348 @@ mod tests {
 
     #[test]
     fn method_chain_receiver_refuses() {
-        // `s.trim().is_empty()` — the receiver is not a bare ident.
+        // `s.trim().is_empty()` — `trim` is in no inherent table of this
+        // file (a primitive's trait method — its return is unknowable).
         assert!(propose_fix(RULE, "fn f(s: &str) { assert!(s.trim().is_empty()); }",).is_none());
     }
 
     #[test]
-    fn unproven_local_refuses() {
-        // A `let` local is never in the signature-proven map.
-        assert!(propose_fix(
+    fn let_annotated_vec_fires() {
+        // P98: an annotated local is a construction fact, exactly like a
+        // param — the pin-bump wave (ff91fb5f) proved the demand (93 real
+        // sites were locals, not params; this shape was the refusal that
+        // caused the 93/93 proposer miss).
+        let out = propose_fix(
             RULE,
             "fn f() { let v: Vec<u32> = Vec::new(); assert!(v.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(v, [] as [u32; 0])"),
+            "annotated local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_call_free_fn_fires() {
+        // `let v = g();` resolves through the file's own fn table.
+        let out = propose_fix(
+            RULE,
+            "fn g() -> Vec<String> { todo!() } fn f() { let v = g(); assert!(v.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(v, [] as [String; 0])"),
+            "fn-return local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_string_new_fires() {
+        // The hardcoded std constructor: `String::new()` is the Str family.
+        let out = propose_fix(
+            RULE,
+            "fn f() { let s = String::new(); assert!(s.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s, \"\")"),
+            "String::new local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_string_from_fires() {
+        // `String::from(..)` — the same hardcoded Str family.
+        let out = propose_fix(
+            RULE,
+            "fn f() { let s = String::from(\"x\"); assert!(s.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s, \"\")"),
+            "String::from local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_turbofish_vec_new_fires() {
+        // `Vec::<T>::new()` spells T — the one sound turbofish.
+        let out = propose_fix(
+            RULE,
+            "fn f() { let v = Vec::<u32>::new(); assert!(v.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(v, [] as [u32; 0])"),
+            "turbofish local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn let_constructor_assoc_fires() {
+        // The wave's dominant shape: `let set = ActiveSet::empty();` then
+        // `set.caps().is_empty()` — the assoc call resolves the binding's
+        // type name, the method call resolves the asserted type.
+        let out = propose_fix(
+            RULE,
+            "struct S; impl S { fn new() -> S { todo!() } fn caps(&self) -> Vec<(String, u32)> { todo!() } } \
+             fn f() { let s = S::new(); assert!(s.caps().is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s.caps(), [] as ["),
+            "method receiver not rewritten: {out}"
+        );
+        assert!(out.contains("; 0])"), "cast missing: {out}");
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn self_return_substitutes_fires() {
+        // `-> Self` in an inherent impl substitutes to the self type name.
+        let out = propose_fix(
+            RULE,
+            "struct S; impl S { fn make() -> Self { todo!() } fn caps(&self) -> Vec<String> { todo!() } } \
+             fn f() { let s = S::make(); assert!(s.caps().is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s.caps(), [] as [String; 0])"),
+            "Self substitution failed: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn method_receiver_param_fires() {
+        // A param's named type resolves the method's return through the
+        // file's inherent table.
+        let out = propose_fix(
+            RULE,
+            "struct S; impl S { fn caps(&self) -> Vec<(String, u32)> { todo!() } } \
+             fn f(s: S) { assert!(s.caps().is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s.caps(), [] as ["),
+            "param method receiver not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn field_receiver_fires() {
+        // `r.lints` — a one-hop field through the file's struct table.
+        let out = propose_fix(
+            RULE,
+            "struct R { lints: Vec<String> } fn f(r: R) { assert!(r.lints.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(r.lints, [] as [String; 0])"),
+            "field receiver not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn struct_literal_let_fires() {
+        // `let r = R { … };` — the struct literal names the binding's type.
+        let out = propose_fix(
+            RULE,
+            "struct R { lints: Vec<String> } fn f() { let r = R { lints: Vec::new() }; assert!(r.lints.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(r.lints, [] as [String; 0])"),
+            "struct-literal local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn vecref_method_receiver_fires() {
+        // A method returning `&Vec<T>` takes the re-spelled slice view.
+        let out = propose_fix(
+            RULE,
+            "struct S; impl S { fn pairs(&self) -> &Vec<u32> { todo!() } } \
+             fn f(s: S) { assert!(s.pairs().is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(s.pairs().as_slice(), [])"),
+            "vec-ref method receiver not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn propagation_let_fires() {
+        // `let w = v;` copies the proven fact one hop.
+        let out = propose_fix(
+            RULE,
+            "fn g() -> Vec<String> { todo!() } fn f() { let v = g(); let w = v; assert!(w.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(w, [] as [String; 0])"),
+            "propagated binding not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn negated_local_fires() {
+        // Negation flips `_eq` to `_ne` on the new legs exactly as on
+        // params.
+        let out = propose_fix(
+            RULE,
+            "fn f() { let v: Vec<u32> = Vec::new(); assert!(!v.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_ne!(v, [] as [u32; 0])"),
+            "negated local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn mut_binding_method_calls_still_fire() {
+        // `v.reserve(10)` is a method call, NOT a rebind — the census
+        // stays at one binding and the assert still fires.
+        let out = propose_fix(
+            RULE,
+            "fn f() { let mut v: Vec<u32> = Vec::new(); v.reserve(10); assert!(v.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(v, [] as [u32; 0])"),
+            "mut local not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn const_item_receiver_fires() {
+        // A const resolves through its declared type.
+        let out = propose_fix(
+            RULE,
+            "const NAMES: Vec<String> = Vec::new(); fn f() { assert!(NAMES.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(
+            out.contains("assert_eq!(NAMES, [] as [String; 0])"),
+            "const receiver not rewritten: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn shadowed_local_refuses() {
+        // Two bindings of one name — no honest fact about either.
+        assert!(propose_fix(
+            RULE,
+            "fn f() { let v: Vec<u32> = Vec::new(); let v: Vec<String> = Vec::new(); assert!(v.is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn reassigned_local_refuses() {
+        // A re-`=` breaks the construction fact.
+        assert!(propose_fix(
+            RULE,
+            "fn f() { let mut v: Vec<u32> = Vec::new(); v = Vec::new(); assert!(v.is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn infer_element_refuses() {
+        // `Vec<_>` has no spellable element — the cast would not compile.
+        assert!(propose_fix(
+            RULE,
+            "fn f() { let v: Vec<_> = Vec::new(); assert!(v.is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn vec_new_bare_refuses() {
+        // `Vec::new()` without the turbofish: the element is unknown — the
+        // exact under-inference clippy's own MaybeIncorrect form trips on.
+        assert!(propose_fix(
+            RULE,
+            "fn f() { let v = Vec::new(); assert!(v.is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn generic_free_fn_refuses() {
+        // A return type mentioning the fn's generic is not a concrete
+        // fact.
+        assert!(propose_fix(
+            RULE,
+            "fn g<T>() -> Vec<T> { todo!() } fn f() { let v = g(); assert!(v.is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn generic_impl_refuses() {
+        // A generic impl's methods are not inherent facts for a name
+        // lookup (and `S<u32>` is not a bare named type).
+        assert!(propose_fix(
+            RULE,
+            "struct S<T> { x: Vec<u32> } impl<T> S<T> { fn caps(&self) -> Vec<u32> { todo!() } } \
+             fn f(s: S<u32>) { assert!(s.caps().is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn cross_file_method_refuses() {
+        // No inherent impl in the file — the return type is unknowable
+        // (cross-file defs are never guessed).
+        assert!(propose_fix(
+            RULE,
+            "struct S; fn f(s: S) { assert!(s.caps().is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn trait_method_receiver_refuses() {
+        // `String::clone` is not in any inherent table of this file.
+        assert!(propose_fix(RULE, "fn f(s: String) { assert!(s.clone().is_empty()); }",).is_none());
+    }
+
+    #[test]
+    fn two_hop_chain_refuses() {
+        // Exactly one hop is proven; `s.a().a()` is a chain the receiver
+        // law refuses (the outer method's receiver is not a bare binding).
+        assert!(propose_fix(
+            RULE,
+            "struct S; impl S { fn a(&self) -> S { todo!() } } fn f(s: S) { assert!(s.a().a().is_empty()); }",
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn ambiguous_names_refuses() {
+        // Two same-named fns with different returns poison the name.
+        assert!(propose_fix(
+            RULE,
+            "mod a { fn g() -> Vec<u32> { todo!() } } mod b { fn g() -> Vec<String> { todo!() } } \
+             fn f() { let v = g(); assert!(v.is_empty()); }",
         )
         .is_none());
     }

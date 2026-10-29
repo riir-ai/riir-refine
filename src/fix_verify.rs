@@ -84,8 +84,8 @@ use serde::Deserialize;
 // Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    CheckRunner, CheckVerdict, PackageGraph, check_verdict, owning_package_root,
-    resolve_reported_path, workspace_root,
+    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    CheckVerdict, PackageGraph,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -707,8 +707,8 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
 // existing call site — the bin's P43 arm, this suite, downstream paths —
 // keeps its stable path.
 pub use crate::manifest_gate::{
-    AutoFlags, FeatureSet, TargetRow, covering_targets, feature_set_from_args,
-    manifest_feature_names, manifest_targets,
+    covering_targets, feature_set_from_args, manifest_feature_names, manifest_targets, AutoFlags,
+    FeatureSet, TargetRow,
 };
 
 // ── the post-heal cfg audit (the 2026-09-10 intake) ─────────────────────
@@ -808,6 +808,7 @@ pub fn parent_module_decl_candidates(file: &Path) -> Vec<PathBuf> {
             out.push(cand);
         }
     }
+    out.shrink_to_fit();
     out
 }
 
@@ -981,7 +982,11 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::True => {}
                 }
             }
-            if any_unknown { Tv::Unknown } else { Tv::True }
+            if any_unknown {
+                Tv::Unknown
+            } else {
+                Tv::True
+            }
         }
         CfgExpr::Any(parts) => {
             let mut any_unknown = false;
@@ -992,7 +997,11 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::False => {}
                 }
             }
-            if any_unknown { Tv::Unknown } else { Tv::False }
+            if any_unknown {
+                Tv::Unknown
+            } else {
+                Tv::False
+            }
         }
     }
 }
@@ -2701,7 +2710,7 @@ mod tests {
         assert_eq!(marks.len(), 1, "{marks:?}");
         assert_eq!(marks[0].line, 5);
         assert_eq!(marks[0].not_enabled, vec!["score_bench".to_string()]);
-        assert!(marks[0].undecidable.is_empty());
+        assert_eq!(marks[0].undecidable, [] as [String; 0]);
         // The render names the edit + the exact re-run.
         let rendered = render_cfg_audit(&marks, None);
         assert!(rendered.contains("src/probe.rs:5 [needless_return]"));
@@ -2771,11 +2780,9 @@ mod tests {
             2,
             "every edit sits behind the file gate: {marks:?}"
         );
-        assert!(
-            marks
-                .iter()
-                .all(|m| m.not_enabled == vec!["kat_migrate".to_string()])
-        );
+        assert!(marks
+            .iter()
+            .all(|m| m.not_enabled == vec!["kat_migrate".to_string()]));
         assert!(marks.iter().all(|m| m.undecidable.is_empty()));
         assert!(
             marks
@@ -2811,13 +2818,19 @@ mod tests {
         // An UNGATED declaration binds the candidate search and marks nothing.
         let ungated = parent_map(&[("src/kat/mod.rs", "pub mod migrate_sweep;\n")]);
         let set = fset(&[]);
-        assert!(cfg_unverified_edits_with_parents(&files, &set, &ungated).is_empty());
+        assert_eq!(
+            cfg_unverified_edits_with_parents(&files, &set, &ungated),
+            [] as [CfgUnverified; 0]
+        );
         // A candidate with NO matching declaration is skipped; with no
         // declaring candidate at all the inline audit runs alone (still nothing).
         let no_decl = parent_map(&[("src/kat/mod.rs", "pub mod other;\n")]);
-        assert!(cfg_unverified_edits_with_parents(&files, &set, &no_decl).is_empty());
+        assert_eq!(
+            cfg_unverified_edits_with_parents(&files, &set, &no_decl),
+            [] as [CfgUnverified; 0]
+        );
         // The plain audit (no parents at all) stays the old behavior.
-        assert!(cfg_unverified_edits(&files, &set).is_empty());
+        assert_eq!(cfg_unverified_edits(&files, &set), [] as [CfgUnverified; 0]);
     }
 
     #[test]
@@ -2877,7 +2890,10 @@ mod tests {
         assert!(c.contains(&PathBuf::from("src/lib.rs")));
         assert!(c.contains(&PathBuf::from("src/main.rs")));
         // Crate roots have no parent-module name.
-        assert!(parent_module_decl_candidates(Path::new("src/lib.rs")).is_empty());
+        assert_eq!(
+            parent_module_decl_candidates(Path::new("src/lib.rs")),
+            [] as [std::path::PathBuf; 0]
+        );
     }
 
     #[test]
@@ -2887,7 +2903,10 @@ mod tests {
         let files = vec![gated_child_batch()];
         let parents = parent_map(&[("src/kat/mod.rs", "not rust at all {{{")]);
         let set = fset(&[]);
-        assert!(cfg_unverified_edits_with_parents(&files, &set, &parents).is_empty());
+        assert_eq!(
+            cfg_unverified_edits_with_parents(&files, &set, &parents),
+            [] as [CfgUnverified; 0]
+        );
     }
 
     #[test]
@@ -3013,7 +3032,7 @@ mod tests {
         let set = fset(&["a"]);
         let marks = cfg_unverified_edits(&[batch(fixed, &[("needless_return", 2)])], &set);
         assert_eq!(marks.len(), 1, "{marks:?}");
-        assert!(marks[0].not_enabled.is_empty());
+        assert_eq!(marks[0].not_enabled, [] as [String; 0]);
         assert_eq!(
             marks[0].undecidable,
             vec!["not(feature = \"a\")".to_string()]
@@ -3189,7 +3208,7 @@ mod tests {
         );
         assert_eq!(marks.len(), 1, "{marks:?}");
         assert!(marks[0].orphan);
-        assert!(marks[0].missing.is_empty());
+        assert_eq!(marks[0].missing, [] as [String; 0]);
         let rendered = render_required_features_audit(&marks, None);
         assert!(
             rendered.contains("NO cargo target compiles this file"),

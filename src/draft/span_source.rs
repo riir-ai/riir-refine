@@ -158,7 +158,7 @@ mod tests {
         // A FILE root NOT matching pushes nothing.
         let mut none = Vec::new();
         collect_source_files(&root.join("e.txt"), ".rs", &mut none);
-        assert!(none.is_empty());
+        assert_eq!(none, [] as [std::path::PathBuf; 0]);
         std::fs::remove_dir_all(&root).ok();
     }
 

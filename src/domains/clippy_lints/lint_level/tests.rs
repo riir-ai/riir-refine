@@ -345,10 +345,9 @@ fn manifest_dotted_keys_workspace_flag_and_workspace_table() {
         vec![directive("nursery", Level::Warn)]
     );
     // Other sections never leak in.
-    assert!(
-        parse_manifest_lints("[dependencies]\npedantic = \"warn\"\n", false)
-            .0
-            .is_empty()
+    assert_eq!(
+        parse_manifest_lints("[dependencies]\npedantic = \"warn\"\n", false).0,
+        Vec::<Directive>::new()
     );
 }
 
@@ -491,7 +490,7 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
 
     let ped = gated_lints(&none, &["pedantic".to_string()]);
     assert!(!ped.contains(&"doc_markdown") && ped.contains(&"use_self"));
-    assert!(gated_lints(&none, &["all".to_string()]).is_empty());
+    assert_eq!(gated_lints(&none, &["all".to_string()]), Vec::<&str>::new());
 
     let crate_ped = levels(&[("pedantic", Level::Warn), ("doc_markdown", Level::Allow)]);
     let g = gated_lints(&crate_ped, &[]);

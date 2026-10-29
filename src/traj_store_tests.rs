@@ -201,7 +201,10 @@ fn record_then_reopen_then_retrieve() {
         assert_eq!(top.success_count, 1);
         assert!((top.outcome_rate() - 1.0).abs() < 1e-6);
         // Family filter excludes other codes.
-        assert!(store.retrieve("&v[0]", "E0597:", 5).is_empty());
+        assert_eq!(
+            store.retrieve("&v[0]", "E0597:", 5),
+            [] as [TrajNeighbor; 0]
+        );
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -215,7 +218,10 @@ fn three_consecutive_failures_withdraw_and_are_excluded() {
             .record("E0499:x", "&mut *v", "swap", false, false, "run-f")
             .unwrap();
     }
-    assert!(store.retrieve("&mut *v", "E0499:", 5).is_empty());
+    assert_eq!(
+        store.retrieve("&mut *v", "E0499:", 5),
+        [] as [TrajNeighbor; 0]
+    );
     assert_eq!(store.dump().len(), 1, "still dumped (failure analysis)");
     let row = &store.dump()[0];
     assert_eq!(row.tier, EvidenceTier::Withdrawn.as_u8());
@@ -960,7 +966,7 @@ fn first_fail_is_a_learn_direction_noop() {
     assert_eq!(l.fails, 1, "the verdict is still counted");
     assert_eq!(l.updates, 0, "but never establishes a direction");
     assert_eq!(l.last_delta, 0.0);
-    assert!(l.direction.is_empty());
+    assert_eq!(l.direction, [] as [f32; 0]);
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -979,7 +985,7 @@ fn record_applied_does_not_touch_learn_rows() {
             None,
         )
         .unwrap();
-    assert!(store.learn_rows().is_empty());
+    assert_eq!(store.learn_rows(), [] as [LearnRowDoc; 0]);
     let _ = std::fs::remove_dir_all(&root);
 }
 

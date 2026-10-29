@@ -738,7 +738,7 @@ mod tests {
             "fn get_item(items: &[Item], key: u64) -> Option<&Item> {\n    for it in items {\n        if it.key == key { return Some(it); }\n    }\n    None\n}",
             3,
         );
-        assert!(!hits.is_empty());
+        assert_ne!(hits, [] as [ScoredRule; 0]);
         assert_eq!(
             hits[0].rule_id, "o1-lookup",
             "top-1 must be the linear-scan rule, got {hits:?}"

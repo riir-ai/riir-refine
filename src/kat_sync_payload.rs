@@ -901,7 +901,7 @@ mod tests {
         assert_eq!(parsed[0].tier, 0);
         assert_eq!(parsed[0].elo, 1215.5);
         assert_eq!(parsed[0].gate.decision, "allow");
-        assert!(parsed[0].gate.findings.is_empty());
+        assert_eq!(parsed[0].gate.findings, [] as [FindingMeta; 0]);
         assert_eq!(parsed[0].shape_id, shape_hash("fn g() { return 1; }"));
     }
 
@@ -1046,7 +1046,7 @@ mod tests {
         // Header-only payload still verifies (commitment over empty rows).
         let h = verify_payload(&p.ndjson).unwrap();
         assert_eq!(h.rows_blocked, 1);
-        assert!(parse_rows(&p.ndjson).unwrap().is_empty());
+        assert_eq!(parse_rows(&p.ndjson).unwrap(), [] as [PayloadRow; 0]);
     }
 
     #[test]
