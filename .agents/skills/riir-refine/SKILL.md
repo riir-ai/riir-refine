@@ -228,9 +228,20 @@ until the claims clear.
 ```bash
 cd /Users/katopz/git/riir-refine
 cargo run --features latent_retrieval --bin cargo-refine -- --suggest <target-repo>/src/
-cargo run --features latent_retrieval --bin cargo-refine -- --fix <target-repo>/src/          # preview
-cargo run --features latent_retrieval --bin cargo-refine -- --fix --write <target-repo>/src/  # apply
+cargo run --features latent_retrieval --bin cargo-refine -- --fix <target-repo>/src/          # ⚠ WRITES — --fix implies --write (the just-works UX, 2026-09-08)
+cargo run --features latent_retrieval --bin cargo-refine -- <target-repo>/src/                # the DRY RUN (bare default, zero edits)
 ```
+
+⛔ **`--fix` is a REAL fix — the "preview" reading cost a measured incident
+(2026-10-30, amo idle lane):** a heal run at the all-features posture
+believed the old preview text and invoked `--fix --verify`; the fix phase
+WROTE 83 files before any gate, and the verify's baseline guard (the
+tree was broken at that posture) then refused to classify or revert
+anything — unverified edits in the tree until the gates were run by hand
+(they were green; landed `aec6c9a9`). The bare command is the dry run;
+`--suggest` is the explicit review; `--fix` commits to writing. The
+cargo-refine skill's Usage block has said this since 2026-09-08 — this
+protocol was the stale copy.
 
 - Validate in the TARGET repo: `cargo clippy --all-targets` +
   `cargo test --lib`. Use `CARGO_TARGET_DIR=/tmp/<repo>-heal` if the
