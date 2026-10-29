@@ -1,6 +1,7 @@
 # Plan 310 — Batch 306: infinity tokio-family batch (rust_perf)
 
 **Status:** STAGED — claim plan-first at the next mining slot (nominal Batch 306; Research 349 is the working inventory; source hydro-project/infinity @ `1abc6fcff1f186124f924b56aa92c3a3684c90c5`, Apache-2.0)
+**Claimed:** zed-glm-b306, 1793283695, expires 2026-10-31T14:21:35+00:00
 
 - [ ] T0 — re-clone at the pin into `.raw/b306/` (shallow; removed at close); re-verify every Research-349 quote at the pin; read the note's unread files BEFORE grading anything citing them (`infinity-agent-cli/src/{terminal,acp_server,inline_viewport}.rs`, `slack_bot/slack_io.rs`, `slack-dataflow/flow.rs`, `sandbox-local/backend.rs`, provider converts, `infinity-mcp-bridge/lib.rs`)
 - [ ] T1 — dedup re-verification (3+ vocabularies per candidate) against rust_perf 278 + the B304/B305 landings; adjudicate each grade: closed-channel-arm-gate vs the select-family hits; the coalesce GOAT lead vs `coalesce-nearby-reads` span-merge kinship (own-rule-vs-rider — the batch's main falsification risk, demote honestly if the kind-gate grades ambient); inline-actor-pool vs the ryhl actor family; recv-drain vs steal-batch/channel-send distinct-froms; defer-queue vs deferred-command-flush-hoist; honest drops allowed
