@@ -1,6 +1,6 @@
 # Research 322 — bbtree: cache-conscious ordered map (blog + repo distill)
 
-**Status:** DISTILLED — pending owner decision (batch plan 289 staged behind the rust_perf slot gate, behind R134 per the standing queue law). RENUMBERED 321→322 at birth: a dual allocation with the burn-cubecl lane's verdict (their `.research/321_burn_cubek_distill_verdict.md` / `.plans/288_burn_cubek_*`, commit `795f2e38`, landed on origin first — pushed numbers never reused; my local dual_allocation gate ran BEFORE their push, the collision surfaced at my push).
+**Status:** RECORD (batch landed PARTIAL 2026-10-29, plan 289: rule 1 `order-preserving-inline-key-encoding` landed; rule 2 `count-based-simd-sorted-slot-search` DROPPED AT MEASUREMENT — ParetoDominated 0/4/1 on the PerfBenchValidator + a standalone large-n probe (n=1024 16× → n=2097152 4363× worse); the negative lives in the entries_52 header; the remaining three candidates + rider faces stay staged in plan 289 for the next rust_perf slot). Batch plan: `.plans/289_bbtree_ordered_structure_internals_batch.md`. RENUMBERED 321→322 at birth: a dual allocation with the burn-cubecl lane's verdict (their `.research/321_burn_cubek_distill_verdict.md` / `.plans/288_burn_cubek_*`, commit `795f2e38`, landed on origin first — pushed numbers never reused; my local dual_allocation gate ran BEFORE their push, the collision surfaced at my push).
 
 ## Source
 
