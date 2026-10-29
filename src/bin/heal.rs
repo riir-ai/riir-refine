@@ -370,6 +370,25 @@ fn command_service_url() -> String {
     }
 }
 
+/// riir-dapps Plan 059 C0: the ledger instance id every network-bound (v2)
+/// signer binds — read from the service attestation (`GET /`), cached per
+/// process per host inside riir-kat (shared with every transport's money
+/// pre-flight, so one fetch serves the whole command). `None` = a gen-1
+/// ledger without an id (or the loopback dev rig / a build without the
+/// transport): the composers then sign today's v1 bytes, byte-identical.
+#[cfg(feature = "kat_service")]
+fn kat_ledger_id(url: &str) -> Option<[u8; 32]> {
+    #[cfg(feature = "kat_transport")]
+    {
+        riir_kat::kat_net_intent::service_ledger_id(url)
+    }
+    #[cfg(not(feature = "kat_transport"))]
+    {
+        let _ = url;
+        None
+    }
+}
+
 /// The URL a LOCAL state partition names (the lease store's per-net dir, the
 /// mining outbox read) — issue 159: the both-pins CONFLICT posture must not
 /// kill a run that never dials. The pin contract refuses HOSTED dials at
@@ -1093,7 +1112,7 @@ fn run_mine_intro() {
                 );
             }
         }
-        match riir_refine::kat_consent_client::send_heartbeat(&base) {
+        match riir_refine::kat_consent_client::send_heartbeat(&base, kat_ledger_id(&base)) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted IN) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted IN)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
@@ -1198,7 +1217,7 @@ fn run_unmine(purge_server: bool) {
                 );
             }
         }
-        match riir_refine::kat_consent_client::send_heartbeat(&base) {
+        match riir_refine::kat_consent_client::send_heartbeat(&base, kat_ledger_id(&base)) {
             Ok("recorded") => println!("consent heartbeat: recorded (opted OUT) at {trimmed}"),
             Ok("unchanged") => println!("consent heartbeat: already recorded (opted OUT)"),
             Ok(other) => println!("consent heartbeat: skipped — the service answered \"{other}\""),
@@ -1209,7 +1228,7 @@ fn run_unmine(purge_server: bool) {
         // (the `--purge` half below removes it). Best-effort by the same
         // contract: a failure is one skipped line, never an exit code.
         if purge_server {
-            match riir_refine::kat_consent_client::send_purge(&base) {
+            match riir_refine::kat_consent_client::send_purge(&base, kat_ledger_id(&base)) {
                 Ok(o) if o.deleted_unproven == 0 && o.quarantined_proven == 0 => {
                     println!("server purge: nothing to purge at {trimmed}");
                 }
@@ -2341,8 +2360,12 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                     Ok(key) => {
                         let payreq =
                             riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 5);
-                        match riir_refine::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct)
-                        {
+                        match riir_refine::kat_payreq_client::ensure_grant_flow(
+                            &payreq,
+                            &key,
+                            acct,
+                            kat_ledger_id(&url),
+                        ) {
                             Ok(Some(claim)) => {
                                 let kat =
                                     |micro: i64| riir_refine::kat_payreq_client::render_kat(micro);
@@ -3139,7 +3162,12 @@ fn push_mining_batch(
             if let Ok(key) = account.signing_key() {
                 if let Some(acct) = account.service_account_hex() {
                     let payreq = riir_refine::kat_payreq_client::HttpPayreqTransport::new(url, 10);
-                    match riir_refine::kat_payreq_client::ensure_grant_flow(&payreq, &key, acct) {
+                    match riir_refine::kat_payreq_client::ensure_grant_flow(
+                        &payreq,
+                        &key,
+                        acct,
+                        kat_ledger_id(url),
+                    ) {
                         Ok(Some(claim)) if !claim.already => {
                             if sv {
                                 println!(
@@ -3788,9 +3816,15 @@ fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: b
                             &key,
                             posture,
                             &account_id,
+                            kat_ledger_id(&url),
                         )
                     } else {
-                        riir_refine::kat_stake_client::redeem_flow(&transport, &key, &account_id)
+                        riir_refine::kat_stake_client::redeem_flow(
+                            &transport,
+                            &key,
+                            &account_id,
+                            kat_ledger_id(&url),
+                        )
                     }
                 }
                 Err(e) => Err(format!(
@@ -3945,6 +3979,7 @@ fn run_kat_unstake() {
                 &account_id,
                 &root,
                 now_unix,
+                kat_ledger_id(&url),
             ),
             Err(e) => Err(format!(
                 "unstake: account key unreadable ({e}) — run `cargo refine login`"
@@ -4027,6 +4062,7 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
             &signing_key,
             &root,
             now_unix,
+            kat_ledger_id(&url),
         ) {
             Ok((view, outcome)) => {
                 if let Some(v) = view {
@@ -5052,7 +5088,7 @@ fn run_kat_topup_void(seq: u64) {
     #[cfg(feature = "kat_transport")]
     {
         let transport = topup::HttpTopupTransport::new(&url, 10);
-        match topup::void_intent(&transport, &signing_key, seq) {
+        match topup::void_intent(&transport, &signing_key, seq, kat_ledger_id(&url)) {
             topup::TopupOutcome::Ok(v) => {
                 assert_eq!(v.status.as_str(), "voided");
                 println!("checkout seq {} voided — the slot is free; a payment already scanned still lands on your account until its TTL", v.seq);
@@ -5113,7 +5149,7 @@ fn run_kat_topup_show(seq: u64, qr: Option<bool>) {
         let now_unix = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
-        match topup::show_intent(&transport, &signing_key, seq) {
+        match topup::show_intent(&transport, &signing_key, seq, kat_ledger_id(&url)) {
             topup::TopupOutcome::Ok(intent) => {
                 for l in topup::intent_lines(&intent, now_unix) {
                     println!("{l}");
@@ -5314,7 +5350,7 @@ fn run_kat_topup(ask: BuyAsk, qr: Option<bool>, pick_latest: bool) {
             topup::pack_line(chosen).trim_start()
         );
 
-        match topup::create_intent(&transport, &signing_key, pack_id) {
+        match topup::create_intent(&transport, &signing_key, pack_id, kat_ledger_id(&url)) {
             topup::TopupOutcome::Ok(intent) => {
                 let now_unix = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -5586,6 +5622,7 @@ fn run_kat_pay(amount: Option<&str>, label: Option<&str>, qr: bool, wait: u64) {
             label,
             wait,
             std::time::Duration::from_secs(5),
+            kat_ledger_id(&url),
         ) {
             Ok(outcome) => {
                 // LINK FIRST (ask 13) — the URL was always the primitive.
@@ -5668,7 +5705,12 @@ fn run_kat_faucet(qr: bool) {
     {
         let url = command_service_url();
         let transport = riir_refine::kat_payreq_client::HttpPayreqTransport::new(&url, 10);
-        match riir_refine::kat_payreq_client::faucet_request_flow(&transport, &url, &signing_key) {
+        match riir_refine::kat_payreq_client::faucet_request_flow(
+            &transport,
+            &url,
+            &signing_key,
+            kat_ledger_id(&url),
+        ) {
             Ok(outcome) => {
                 for line in riir_refine::kat_payreq_client::faucet_display_lines(&outcome) {
                     println!("{line}");
@@ -5809,6 +5851,7 @@ fn run_kat_refill_transport(wait_secs: u64) {
             trigger_crank,
             wait_secs,
             std::time::Duration::from_secs(riir_refine::kat_refill::REFILL_POLL_INTERVAL_SECS),
+            kat_ledger_id(&url),
         );
         for line in riir_refine::kat_refill::refill_display_lines(&outcome, &url) {
             println!("{line}");
@@ -6222,7 +6265,8 @@ fn run_kat_replay() {
 
     let url = command_service_url();
     let transport = HttpReplayTransport::new(&url, 60);
-    let ack = match request_lease(&transport, &signing_key, REPLAY_LEASE_LIMIT) {
+    let ledger_id = kat_ledger_id(&url);
+    let ack = match request_lease(&transport, &signing_key, REPLAY_LEASE_LIMIT, ledger_id) {
         Ok(a) => a,
         Err(e) => {
             eprintln!("replay: {e}");
@@ -6315,7 +6359,14 @@ fn run_kat_replay() {
                 continue;
             }
         };
-        match submit_verdict(&transport, &signing_key, &span, &local_fp, &outcome) {
+        match submit_verdict(
+            &transport,
+            &signing_key,
+            &span,
+            &local_fp,
+            &outcome,
+            ledger_id,
+        ) {
             Ok(ack) => {
                 submitted += 1;
                 println!("replay:   {span_short}… verdict {}", accept_line(&ack));
@@ -17211,7 +17262,12 @@ fn main() {
                     rules,
                     domains,
                 };
-                riir_refine::kat_fixstat_client::push_fixstat(&transport, &key, &row)
+                riir_refine::kat_fixstat_client::push_fixstat(
+                    &transport,
+                    &key,
+                    &row,
+                    kat_ledger_id(&url),
+                )
             }
             None => Err("no logged-in account (run `cargo refine --stats on`)".to_string()),
         };

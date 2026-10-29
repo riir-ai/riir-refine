@@ -290,20 +290,30 @@ fn topup_happy_path_signs_the_canonical_message_and_renders_the_server_numbers()
     // `GET /` service-info read — riir-kat 23d551b landed it 2026-10-08,
     // two days after this suite; the mock answers 404 and the
     // local-intent dev-rig allowance proceeds), then the intent POST.
+    // riir-dapps Plan 059 C0 adds the signer's ledger-id resolution before
+    // the pre-flight: `GET /` (the attestation) then, finding no id there,
+    // `GET /genesis` (a gen-2 consumer-web host publishes it there). The
+    // attestation cache holds SUCCESSES only, so against this 404 mock the
+    // two `/` reads are two dials (an attesting service answers once and
+    // both share the cache, and the genesis read never happens).
     let caps = mock.captured();
-    assert_eq!(caps.len(), 3, "{caps:?}");
+    assert_eq!(caps.len(), 5, "{caps:?}");
     assert_eq!(caps[0].method, "GET");
     assert!(caps[0].path.starts_with("/pay/catalog"));
-    assert_eq!(caps[1].method, "GET", "the T10 pre-flight: {caps:?}");
-    assert_eq!(
-        caps[1].path, "/",
-        "the service-info attestation read: {caps:?}"
-    );
-    assert_eq!(caps[2].method, "POST");
-    assert!(caps[2].path.starts_with("/pay/intent"));
+    for (i, path, what) in [
+        (1, "/", "the signer's attestation read"),
+        (2, "/genesis", "the signer's genesis fallback"),
+        (3, "/", "the T10 pre-flight"),
+    ] {
+        assert_eq!(caps[i].method, "GET", "{what}: {caps:?}");
+        assert_eq!(caps[i].path, path, "{what}: {caps:?}");
+    }
+    assert_eq!(caps[4].method, "POST");
+    assert!(caps[4].path.starts_with("/pay/intent"));
     // THE WIRE PIN: the body parses, and the signature verifies against
-    // the CANONICAL composer for the pack the CLI was asked for.
-    let v: serde_json::Value = serde_json::from_str(&caps[2].body).expect("the signed body");
+    // the CANONICAL composer for the pack the CLI was asked for (v1 — the
+    // mock attests no ledger id, so nothing binds).
+    let v: serde_json::Value = serde_json::from_str(&caps[4].body).expect("the signed body");
     assert_eq!(v["pack_id"], 1);
     let pk: [u8; 32] = hex_bytes(v["pubkey_hex"].as_str().unwrap())
         .try_into()

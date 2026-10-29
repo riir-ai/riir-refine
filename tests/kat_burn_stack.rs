@@ -683,7 +683,10 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
         .expect("meter_watermark_tokens");
     assert!(watermark > 0, "the meter watermark rides along");
 
-    // The signature verifies over the documented message for the claimed key.
+    // The signature verifies over the documented message for the claimed
+    // key — the NETWORK-BOUND v2 form, since the mock attests a ledger id
+    // (riir-dapps Plan 059 C0: an attested id is always bound), and never
+    // the v1 bytes.
     let pubkey_hex = v
         .get("account_pubkey_hex")
         .and_then(serde_json::Value::as_str)
@@ -697,12 +700,22 @@ fn the_next_run_pushes_the_full_stacked_total_and_advances_the_ack() {
     let pubkey: [u8; 32] = hex_decode(pubkey_hex).try_into().expect("pubkey bytes");
     let sig: [u8; 64] = hex_decode(sig_hex).try_into().expect("signature bytes");
     let verifying = ed25519_dalek::VerifyingKey::from_bytes(&pubkey).expect("verifying key");
+    let mock_ledger_id = [0xABu8; 32];
     verifying
         .verify(
-            &kat_burn_client::burn_report_message(&pubkey, sent),
+            &riir_kat::kat_protocol_burn::burn_report_message_v2(&mock_ledger_id, &pubkey, sent),
             &Signature::from_slice(&sig).expect("signature bytes"),
         )
-        .expect("the burn report signature must verify over the documented message");
+        .expect("the burn report signature must verify over the network-bound v2 message");
+    assert!(
+        verifying
+            .verify(
+                &kat_burn_client::burn_report_message(&pubkey, sent),
+                &Signature::from_slice(&sig).expect("signature bytes"),
+            )
+            .is_err(),
+        "an attested ledger id must never sign the v1 bytes"
+    );
 
     // The ack advanced to exactly what the server confirmed.
     let ack = ack_of(&dir).expect("the ack must exist after an accepted push");

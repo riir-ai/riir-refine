@@ -241,6 +241,7 @@ fn service_first_flow_submits_the_signed_vote() {
         &key,
         &root,
         1_234_567_890,
+        None,
     )
     .expect("flow");
 
@@ -314,6 +315,7 @@ fn not_live_flow_queues_the_signed_intent() {
         &key,
         &root,
         1_234_567_890,
+        None,
     )
     .expect("flow");
 
@@ -358,7 +360,17 @@ fn service_refusal_is_an_error_not_a_queue() {
     }
     let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
     let root = temp_root("refused");
-    let err = vote_flow(&Refusing, "a1b2c3d4", 7, VoteChoice::Yes, &key, &root, 1).unwrap_err();
+    let err = vote_flow(
+        &Refusing,
+        "a1b2c3d4",
+        7,
+        VoteChoice::Yes,
+        &key,
+        &root,
+        1,
+        None,
+    )
+    .unwrap_err();
     assert!(err.contains("vote window closed"), "{err}");
     assert!(
         !root.join(".refine/vote/pending.jsonl").exists(),
@@ -389,7 +401,7 @@ fn renders_and_copy_gates() {
     // returned pubkey — a real signature check, not just length pins.
     use ed25519_dalek::Verifier as _;
     let key = ed25519_dalek::SigningKey::from_bytes(&[7u8; 32]);
-    let (sig, pubkey) = sign_vote(&key, 9, VoteChoice::No);
+    let (sig, pubkey) = sign_vote(&key, 9, VoteChoice::No, None);
     assert_eq!(sig.len(), 64);
     assert_eq!(pubkey.len(), 32);
     let msg = vote_message(9, &pubkey, VoteChoice::No);

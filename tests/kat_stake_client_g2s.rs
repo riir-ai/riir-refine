@@ -402,6 +402,7 @@ fn unstake_posts_the_drain_request_and_renders_the_disclosure() {
         "acct42",
         &root,
         1,
+        None,
     )
     .expect("live unstake");
     // The service-queued arm: the amount + the full disclosure.
@@ -434,6 +435,7 @@ fn unstake_not_live_queues_and_still_discloses() {
         "acct42",
         &root,
         1,
+        None,
     )
     .expect("not-live unstake queues");
     assert!(
@@ -496,6 +498,7 @@ fn unstake_refusal_shape_renders_remaining_time() {
         "acct42",
         &root,
         1,
+        None,
     )
     .expect("refusal renders, not errors");
     assert!(out.contains("refused — lockup not expired"), "{out}");
