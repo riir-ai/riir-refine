@@ -1,6 +1,6 @@
 # Plan 314 — Batch 309: the 10-30 staged web-watch intake (kernel_opt)
 
-**Status:** IN PROGRESS — claim posted 2026-10-30 (shikuwa-4090-b309; expires 2026-11-01T03:1xZ)
+**Status:** COMPLETE — Batch 309 landed 2026-10-30 (corpus 1022 → 1023, 1 own rule + 1 count-neutral rider face; P106/P108 consumed pre-existing; lease closed by the landing).
 
 ## Scope
 
@@ -32,18 +32,18 @@ no contention for the gates.
       scheduling hint — all cited as kinship, none owns the law); per-type crossover —
       gpu_13's B116 rider owns instance 1, P105 is instance 2; stream-k cap — B253 owns it
       (P108 consumed pre-existing)
-- [ ] T2 authoring: entries_gpu_140.rs (1 own rule: pattern, bounded fix-space, category B,
+- [x] T2 authoring: entries_gpu_140.rs (1 own rule: pattern, bounded fix-space, category B,
       rationale, source quotes, distinct-from kinships, grep evidence) + 1 rider face (B on
       gpu_13, entries_gpu_13.rs)
-- [ ] T3 wiring: mod.rs mod-decl + extend + B-slice count comment (B slice +1)
-- [ ] T4 count pins: tests.rs count-pin sites (1022 -> 1023) + router expert-total + AGENTS.md
+- [x] T3 wiring: mod.rs mod-decl + extend + B-slice count comment (B slice +1)
+- [x] T4 count pins: tests.rs count-pin sites (1022 -> 1023) + router expert-total + AGENTS.md
       + README + .docs/11_domains/kernel_opt.md
-- [ ] T5 gates: G1 batch309 needle+parse; G2 kernel_opt lib + default lib; G3 clippy -D x3
+- [x] T5 gates: G1 batch309 needle+parse; G2 kernel_opt lib + default lib; G3 clippy -D x3
       postures; retrieval floors both postures; freeze/score-bench NOT owed (zero
       clippy-corpus delta, P30); binary rebuild NOT owed (kernel_opt outside the release set)
-- [ ] T6 records: Research note (next .research number); AGENTS.md; snapshot landing row +
+- [x] T6 records: Research note (next .research number); AGENTS.md; snapshot landing row +
       P106/P108 consumed-pre-existing + watch-only rows recorded; this file's tasks ticked
-- [ ] T7 commit `feat: batch 309: ...` + push; `.raw/b309/` + the worktree removed at close
+- [x] T7 commit `feat: batch 309: ...` + push; `.raw/b309/` + the worktree removed at close
 
 ## Gates, criteria, risks
 
