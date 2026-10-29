@@ -43,7 +43,21 @@ set -u
 # 198→230, clippy 100→112); windows-gnu 8,806,400 → 9,468,928 (same
 # +7.5%). Ceiling 10.5 MiB = the v0.3.2 max + ~10% headroom for the next
 # release of corpus growth, still far under the dist-loss signature.
-limit="${MAX_BINARY_BYTES:-11010048}"
+# v0.3.4 re-measure (2026-10-29, the gen-2 mainnet client): the 10.5 MiB
+# ceiling RED on musl x86_64 at 11,574,072 B (11.04 MiB, +15.5% vs v0.3.3's
+# 10,024,168 B) — measured BEFORE raising, per the rule above: the release
+# feature set's dependency closure is IDENTICAL (151 crates at v0.3.3, 151
+# here, zero added — `cargo tree -e normal --target x86_64-unknown-linux-musl`),
+# and every target grew evenly (+15–18%), the shape of code growth, not of a
+# lost dist profile (that is ~2.5x). The growth is riir-refine's own code +
+# the three riir-kat features kat_transport now enables for the gen-2 client
+# (github_pow_fetch, provider_login, se_custody — network-bound v2 signing,
+# the account/custody surfaces). Basis: aarch64-apple-darwin 9,625,664 ·
+# x86_64-apple-darwin 10,826,224 · x86_64-unknown-linux-musl 11,574,072 (max)
+# · aarch64-unknown-linux-musl 10,276,856 · x86_64-pc-windows-gnu 10,974,208.
+# Ceiling 12.0 MiB = the v0.3.4 max + ~9% headroom. The dist-loss signature
+# is now ~2.5x the dist size (>20 MiB), far above it.
+limit="${MAX_BINARY_BYTES:-12582912}"
 
 file_size() {
     # BSD stat (macOS) first, GNU stat (Linux/CI) second; empty on failure —
