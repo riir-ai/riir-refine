@@ -2385,9 +2385,14 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                                         "{}",
                                         riir_refine::kat_account_client::account_line(
                                             "grant:",
+                                            // The free tier is TUNA trial credit
+                                            // since the Proposal 006 flip — the
+                                            // claim mints no KAT (gen-2 smoke
+                                            // 2026-10-29 printed "KAT claimed").
                                             format!(
-                                                "{} claimed — the free-tier grant is live (balance {})",
-                                                kat(claim.claimed_micro), kat(claim.balance_micro)
+                                                "{} trial credit claimed — the free tier is live (KAT balance {})",
+                                                riir_refine::kat_units::render_units(claim.claimed_micro, "TUNA"),
+                                                kat(claim.balance_micro)
                                             ),
                                         )
                                     );
@@ -2395,7 +2400,13 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
                                 // Re-read through the service view so the
                                 // gate below reflects the claim, not a
                                 // pre-claim snapshot.
-                                let view2 = svc::account_service_view(&transport, acct);
+                                // Under auth v2 the claim IS account genesis and
+                                // answers the new account's ROOT id; the pre-claim
+                                // `acct` (the v1 key-derived id) has no ledger row,
+                                // so re-reading under it withheld the welcome
+                                // forever (gen-2 smoke 2026-10-29).
+                                let view2 =
+                                    svc::account_service_view(&transport, &claim.account_id_hex);
                                 for line in svc::welcome_gate_lines(&view2.gate) {
                                     println!("{line}");
                                 }
