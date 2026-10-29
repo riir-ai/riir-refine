@@ -32,7 +32,7 @@ Pre-adjudicated kinship (staged addendum + slot re-verified at T1):
 - [x] T5 retrieval-precision re-measure BOTH postures (Issue 017/170 T3): default+latent (the Layer 5b2 command) + rust_perf+latent; floors held or re-pin with the delta recorded; freeze/score-bench NOT owed (P30 — the freeze corpus builder is the clippy_lints seed, a rust_perf-only delta moves nothing)
 - [x] T6 count pins to measured truth: tests.rs len-form (278-280), annotated (222-224 x2 sites), unannotated (53 UNCHANGED), benchable (122 UNCHANGED), the category ledger line (caching +2), AGENTS.md x2 (274-276), README, .docs/11_domains/rust_perf.md
 - [x] T7 Research note 352 + snapshot landing row (same commit)
-- [ ] T8 release-set binary rebuild + install at the landing HEAD BEFORE push (rust_perf is IN the release set — corpus compiles into the bin; verify the `--version` build hash == HEAD), then commit `feat: batch 308: ...` + push; worktree + `.raw/b308/` removed at close
+- [x] T8 release-set binary rebuild + install at the landing HEAD BEFORE push (rust_perf is IN the release set — corpus compiles into the bin; verify the `--version` build hash == HEAD), then commit `feat: batch 308: ...` + push; worktree + `.raw/b308/` removed at close
 
 ## Notes
 
