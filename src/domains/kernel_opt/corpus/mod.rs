@@ -1936,6 +1936,8 @@ mod entries_gpu_133;
 mod entries_gpu_134;
 mod entries_gpu_135;
 mod entries_gpu_136;
+mod entries_gpu_137;
+mod entries_gpu_138;
 mod entries_gpu_14;
 mod entries_gpu_15;
 mod entries_gpu_16;
@@ -2134,6 +2136,8 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_134::entries());
     entries.extend(entries_gpu_135::entries());
     entries.extend(entries_gpu_136::entries());
+    entries.extend(entries_gpu_137::entries());
+    entries.extend(entries_gpu_138::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2249,12 +2253,19 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::MemoryAccess,
         "A: memory access",
         &[
-// Batch 303 +1 (Plan 308 / Research 345): the splash golden-ratio
+            // Batch 304 +4 (Plan 309 / Research 348): the kernel_opt delta pool —
+            // the transposed-source row-tile walk + the merge-tile bounded
+            // write domain (llama.cpp), the page-reuse fence behind reader
+            // completion (vllm), the dual-bank scratch retention (TensorFold).
+            "strided-source-row-tile-element-outer-walk",
+            "merge-tile-whole-iteration-bounded-write-domain",
+            "page-reuse-fenced-behind-reader-completion",
+            "dual-bank-scratch-retention-per-round-class",
+            // Batch 303 +1 (Plan 308 / Research 345): the splash golden-ratio
             // walk — decode tiles stagger their start steps so first-touch
             // DRAM latency hides across tiles (the lockstep anti-regime
             // named in the source itself).
             "golden-ratio-decode-tile-phase-spread",
-
             // Batch 299 +2 (Plan 304 / Research 342): the staged pool's
             // memory-access pair — the Metal residency declaration for
             // table-indirect buffers (TensorFold 893c8d7b) + the
@@ -2516,14 +2527,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Compute,
         "B: compute",
         &[
-// Batch 303 +2 (Plan 308 / Research 345): the splash role split —
+            // Batch 304 +1 (Plan 309 / Research 348): the codebook midpoint rank —
+            // a fixed monotone table is a branch-free rank with the binary
+            // search's tie rule (llama.cpp #31201).
+            "codebook-nearest-midpoint-rank-branch-free",
+            // Batch 303 +2 (Plan 308 / Research 345): the splash role split —
             // the MMA owns Apple9's FP32 pipe, weights enter as exact bf16
             // via one add, seeded span sums close the chains; the PV
             // accumulator's rescale multiply gated on the shared flag only a
             // grown running maximum sets.
             "fp32-pipe-mma-role-split-biased-bf16-operands",
             "conditional-pv-accumulator-rescale",
-
             // Batch 299 +1 (Plan 304 / Research 342): the drain partials —
             // a register block contracting a K-lined rhs holds each run as
             // per-lane partials, summed ONCE at the drain (cubecl a5e81431
@@ -2685,6 +2699,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Fusion,
         "C: fusion",
         &[
+            // Batch 304 +1 (Plan 309 / Research 348): the fused-pair
+            // replacement writes EVERY legacy output on every admitted path
+            // (vllm #63382 — the write-side complement of B302's read-side
+            // poison rule).
+            "fused-pair-replacement-writes-every-legacy-output-every-path",
             // Batch 299 +1 (Plan 304 / Research 342): the adjacent per-step
             // fusion under a mode SPECIALIZE function-constant (uzu
             // 13b138eb #1022; one-threadgroup-fits + fuse_next host gates).
@@ -2818,6 +2837,10 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 304 +1 (Plan 309 / Research 348): the parsed-artifact index is
+            // untrusted input — range-check at the load boundary + address-width
+            // offsets (llama.cpp #31336a).
+            "parsed-artifact-index-range-check-wide-offsets-load-boundary",
             // Batch 299 +1 (Plan 304 / Research 342): the shared-round
             // stream-table consolidation — launches/forward 960 -> 60 at
             // 16 one-row streams (TensorFold 893c8d7b; bit-equal by the
@@ -3143,11 +3166,18 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
-// Batch 303 +1 (Plan 308 / Research 345): the splash fused-row
+            // Batch 304 +4 (Plan 309 / Research 348): the delta pool's parallelism
+            // set — concat row-space split + the Metal grid-ceiling slice
+            // (llama.cpp), the CUDA gridDim.z silent-zero chunk (vllm), the
+            // statistic-producer single-threadgroup row split (lithos).
+            "concat-row-space-thread-split-not-singleton-outer-dim",
+            "grid-ceiling-sliced-dispatch-per-slice-buffer-rebind",
+            "silent-zero-launch-row-chunked-past-grid-z-ceiling",
+            "statistic-producer-row-split-single-threadgroup",
+            // Batch 303 +1 (Plan 308 / Research 345): the splash fused-row
             // quad — four lanes per row, two xor shuffles for max+sum, one
             // 16-byte bf16 store per lane.
             "quad-lane-softmax-two-shuffle-16b-store",
-
             // Batch 299 +1 (Plan 304 / Research 342): the MMA-window
             // output-width occupancy floor — rows >= 8 AND n >= 4096 per
             // matrix (TensorFold 85571acb; the admission family's
@@ -3322,12 +3352,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
         &[
-// Batch 303 +1 (Plan 308 / Research 345): the splash tape — a step
+            // Batch 303 +1 (Plan 308 / Research 345): the splash tape — a step
             // leaves its rows on the lane's tape and the NEXT step folds
             // the retained ones in before its own rows (one state RMW per
             // step).
             "gdn-decode-tape-deferred-retained-row-fold",
-
             // Batch 256 +1 (the TensorFold +988 campaign, Plan 260 / Research
             // 291): the ring rebase floor covers the speculative rewind
             // window (89aa09a7).
@@ -3487,6 +3516,9 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::AutotuneDispatch,
         "K: autotune dispatch",
         &[
+            // Batch 304 +1 (Plan 309 / Research 348): the bit-exact-constrained
+            // geometry search (lithos) — determinism is the admission predicate.
+            "bit-exact-constrained-geometry-search",
             // Batch 299 +1 (Plan 304 / Research 342): the compile-run
             // rejection persistence + patient-batch lazy compile window
             // (cubecl 2774afa #1942 — the round's state-consistency law).
@@ -3600,11 +3632,14 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::KernelPolymorphism,
         "M: kernel polymorphism",
         &[
-// Batch 303 +1 (Plan 308 / Research 345): the splash init-loss
+            // Batch 304 +1 (Plan 309 / Research 348): device-primitive dedup lands
+            // ONLY under per-function SASS identity, carried by an instrument
+            // with planted controls (TensorFold).
+            "device-primitive-dedup-under-sass-identity",
+            // Batch 303 +1 (Plan 308 / Research 345): the splash init-loss
             // hazard — constructor init does not survive runtime-format
             // coop-tensor destinations on Apple9; zero element-wise.
             "apple9-coop-tensor-destination-init-lost-runtime-format",
-
             "rewrite-decline-names-refusing-predicate",
             "op-family-type-dispatch",
             "inplace-output-alias",
@@ -3645,14 +3680,13 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
-// Batch 303 +2 (Plan 308 / Research 345): the Issue-940 Metal pair —
+            // Batch 303 +2 (Plan 308 / Research 345): the Issue-940 Metal pair —
             // fma() carries the fast-math set reassociate(off) cannot clear
             // (order pins are a WRITING discipline) + decode reproduces the
             // prefill gate bitwise (channel-order partial fold, ~1-in-10^5
             // desync without it).
             "metal-fma-carries-fast-math-reassociate-off-cannot-pin",
             "gdn-cross-phase-gate-bitwise-parity",
-
             // Batch 299 +1 (Plan 304 / Research 342): the degenerate-dim
             // layout law — a size-1 dim contributes NO layout fact, every
             // checker skips it symmetrically (cubecl f4055ea + 01ae331,

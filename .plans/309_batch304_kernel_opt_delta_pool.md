@@ -1,6 +1,6 @@
 # Plan 309 — Batch 304: the kernel_opt delta pool (leadstage remainder + 10-28d/e/10-29a)
 
-**Status:** ACTIVE — claimed 2026-10-29 (amo-idle-b304; 48 h expiry per protocol; push is the arbiter).
+**Status:** COMPLETE — Batch 304 landed 2026-10-29 (corpus 1007 → 1020, 13 own rules + 2 count-neutral riders + the cross-file gpu_02 rider pair; lease closed by the landing).
 
 ## Scope
 
@@ -39,16 +39,16 @@ B299), #31230/#1941 (rider faces / record-only per B299).
 
 ## Tasks
 
-- [ ] T0a clone sources at pins into `.raw/b304/` (blobless shallow: ggml-org/llama.cpp, ml-explore/mlx, ashhart/tensorfold, lithos-ai/lithos-metal, vllm-project/vllm); licence re-verify per repo at clone
-- [ ] T0b discover the unstaged shas (#4717, #30795) + re-verify EVERY staged quote at its pin; full diff reads on the Tier-1 leads
-- [ ] T0c cross-pass dedup adjudication recorded (the pre-mined rows above)
-- [ ] T1 dedup greps at 3+ vocabularies vs the kernel_opt corpus at HEAD (dedup-at-mining binds)
-- [ ] T2 authoring: 2 subagents over disjoint slices; entries_gpu_137.rs (+138 if needed); every rule carries pattern, bounded fix-space, category, rationale, source quote, distinct-from kinships
-- [ ] T3 wiring: mod.rs KERNEL_CATEGORIES slices + category comments; router expert-total untouched unless counts move (they will)
-- [ ] T4 count pins via ONE shape-asserted python pass (tests.rs sites + the Plan-003 per-category table + category headers + AGENTS.md + README rows)
-- [ ] T5 gates: G1 batch304 needle+parse (`--features kernel_opt`); G2 kernel_opt lib + default lib; G3 clippy -D ×3 postures (native 1.99.0 pin); T7 retrieval floors both postures (kernel_opt,latent_retrieval + default); freeze/score-bench NOT owed (P30); binary rebuild NOT owed (kernel_opt outside the release set)
-- [ ] T6 records: Research 348; AGENTS.md kernel_opt count; .docs/11_domains/kernel_opt.md; snapshot landing row (this file's tasks ticked)
-- [ ] T7 commit `feat: batch 304: ...` + push; `.raw/b304/` removed at close
+- [x] T0a clone sources at pins into `.raw/b304/` (blobless shallow: ggml-org/llama.cpp, ml-explore/mlx, ashhart/tensorfold, lithos-ai/lithos-metal, vllm-project/vllm); licence re-verify per repo at clone
+- [x] T0b discover the unstaged shas (#4717, #30795) + re-verify EVERY staged quote at its pin; full diff reads on the Tier-1 leads
+- [x] T0c cross-pass dedup adjudication recorded (the pre-mined rows above)
+- [x] T1 dedup greps at 3+ vocabularies vs the kernel_opt corpus at HEAD (dedup-at-mining binds)
+- [x] T2 authoring: 2 subagents over disjoint slices; entries_gpu_137.rs (+138 if needed); every rule carries pattern, bounded fix-space, category, rationale, source quote, distinct-from kinships
+- [x] T3 wiring: mod.rs KERNEL_CATEGORIES slices + category comments; router expert-total untouched unless counts move (they will)
+- [x] T4 count pins via ONE shape-asserted python pass (tests.rs sites + the Plan-003 per-category table + category headers + AGENTS.md + README rows)
+- [x] T5 gates: G1 batch304 needle+parse (`--features kernel_opt`); G2 kernel_opt lib + default lib; G3 clippy -D ×3 postures (native 1.99.0 pin); T7 retrieval floors both postures (kernel_opt,latent_retrieval + default); freeze/score-bench NOT owed (P30); binary rebuild NOT owed (kernel_opt outside the release set)
+- [x] T6 records: Research 348; AGENTS.md kernel_opt count; .docs/11_domains/kernel_opt.md; snapshot landing row (this file's tasks ticked)
+- [x] T7 commit `feat: batch 304: ...` + push; `.raw/b304/` removed at close
 
 ## Gates, criteria, risks
 
@@ -61,3 +61,12 @@ B299), #31230/#1941 (rider faces / record-only per B299).
   AFTER the entries are written (the Batch-259 lesson).
 - Count pins surface wider than the corpus grep: the lib-test failing list is the only
   reliable enumerator (the B274 lesson).
+
+## Landing record (2026-10-29)
+
+- 13 own rules landed: entries_gpu_137 (6, slice A) + entries_gpu_138 (7, slice B); corpus 1007 → 1020.
+- Riders: gpu_02 widen-index-multiply-to-64bit += silent-narrow-index + sweep-every-store-path faces; rule 12 carries the lithos posture-scope face in-rule; cross-kin both ways on the grid-ceiling pair.
+- Honest drops: #30553/#30573 (B253), mlx #4712 (B273), #30804 (B274/B280), #30795 (the gpu_109 founding source), #29882 (NO-GO stands), #31255 (B299), the rust_perf `measurement` rows (domain out of scope).
+- En-route: the B298 missed cross-domain rust_perf witness repaired (274 → 275); the embedded-quote class caught once by compile; 26 raw-string-hash + 27 doc mechanicals healed.
+- Gates: batch304 needles+parse 2/2; kernel_opt lib 3282/0; default lib 2760/0; clippy −D ×3; retrieval floors HELD both postures; freeze/score-bench + binary NOT owed (P30).
+- Research 348; AGENTS.md ×2 rows; README row; .docs/11_domains/kernel_opt.md paragraph; snapshot landing row — all in the landing commit.
