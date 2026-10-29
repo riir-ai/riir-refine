@@ -186,7 +186,7 @@ fn join_env_forces_mainnet_and_names_every_unarmed_plane() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://mainnet.gist.rs"),
+        Some(riir_refine::kat_service_urls::MAINNET_SERVICE_URL),
         "mainnet records the mainnet API host (riir-dapps Plan 047)"
     );
     for needle in [
@@ -216,7 +216,7 @@ fn yes_answers_the_mainnet_default_without_a_tty() {
     assert_eq!(code, Some(0), "stdout: {stdout}\nstderr: {stderr}");
     assert_eq!(
         record_url(&dir).as_deref(),
-        Some("https://mainnet.gist.rs"),
+        Some(riir_refine::kat_service_urls::MAINNET_SERVICE_URL),
         "--yes takes the mainnet default (the 2026-10-12 flip + the dialing law)"
     );
     let _ = std::fs::remove_dir_all(&dir);
