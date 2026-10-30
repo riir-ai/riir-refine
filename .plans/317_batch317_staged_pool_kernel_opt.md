@@ -70,7 +70,24 @@ override). freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NO
       parse never wobbles). The R5 rider TEXT is drafted in the session record (the
       per-row-table face on B182 gpu_52, compose-never-merge with the B199 instance);
       REMAINING T2 WORK: transcribe the draft into the tree + apply the rider to
-      entries_gpu_52.rs at the window
+      entries_gpu_52.rs at the window. THE R5 RIDER TEXT (append to the
+      verify-fold-gqa-repeats-into-row-axis-tile-fill gpu_concept, after the Batch-199
+      rider, before ".to_string()"): "RIDER (Batch 317 / Plan 317 — ashhart/tensorfold @
+      4f8135e8, Apache-2.0 — the PER-ROW TABLE face, this family's third member): the
+      Qwen3.6 MTP drafter launched tf_q36m_attn once per stream, one ring each, so a
+      shared round ran its streams' attention in series; `tf_q36m_attn_rows` 'reads each
+      row's ring, slots and segment from a table and repeats the original's arithmetic,
+      so the contract holds it byte-equal to one tf_q36m_attn launch per segment on
+      mixed rings, with exact fp32 sums, an FP64 check and nvcc 13.0 launch records.' —
+      the fold-into-the-row-axis move now takes its parameters (ring pointer, slot
+      count, segment) PER ROW from a table, one launch over mixed rings, and the
+      legality stays the byte-equality per segment with exact fp32 sums, checked at
+      fp64. Compose-never-merge: the fold-to-reuse-tiles decision stays the family
+      trigger (rows too few → fold to rows; rows fine + a free batch axis → stride-0
+      per gpu_65; streams-across-rounds per the B199 instance), the per-row table is
+      the parameterization this rider owns — the rows kernel is the mechanism commit,
+      its contract test (contract_qwen_mtp_rows.zig, 344 insertions) the fixture.
+      Verified verbatim at the pin. Batch 317 rider."
 - [ ] T3 wiring: mod.rs mod-decl + extend + the slice rule_id lists; slice headers repaired to
       measured truth while touched (the B309 stale-header class)
 - [ ] T4 count pins: tests.rs count-pin sites (1026 -> 1029 at the era-witness sites; the
