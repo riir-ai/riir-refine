@@ -1,6 +1,6 @@
 # Plan 315 — Batch 310: the 10-30 staged leads kernel_opt conversion
 
-**Status:** IN PROGRESS — claimed 2026-10-30 ~06:5x +07 (zed-m3-b310); T0+T1 done pre-claim; authoring zero-cargo (Plan-337 — the i1117 T4 dense collection holds the box); **GATES DEFERRED — the batch does NOT land until G1–G3 + retrieval run at the next quiet window.**
+**Status:** IN PROGRESS — claimed 2026-10-30 ~06:5x +07 (zed-m3-b310); T0+T1 done pre-claim; T2–T4 + T6(authoring) DONE at the authoring close (wip `6a78eae4` in `/tmp/wt-b310`, anchored by `hold/b310-authoring`; NOT pushed — unverified corpus never reaches develop); **GATES DEFERRED — the batch does NOT land until G1–G3 + retrieval run at the next quiet window** (T7's landing flow is written into the T7 row for the resuming lane).
 
 ## Scope
 
@@ -42,29 +42,39 @@ the gate layer is DEFERRED, never skipped. No unverified corpus reaches develop
       warp-partition family — the ids-path warp-per-row admission floor unowned;
       R2 — B286/gpu_130 confirmed owner; R3 — B200/gpu_79 confirmed owner (kernel_opt)
 - [x] T1b face-home adjudication: R2 → `autotune-candidate-priority-orders-try-first` confirmed kernel_opt (gpu_130, rule_id present); R3 → B200 confirmed **rust_perf** (entries_13.rs PerfRule) → deferred with S3+R1; R1 → rust_perf/concurrency per the staged grade → deferred
-- [ ] T2 authoring: entries_gpu_141.rs (3 own rules — pattern, bounded fix-space,
+- [x] T2 authoring: entries_gpu_141.rs (3 own rules — pattern, bounded fix-space,
       category, rationale, source quotes, distinct-from kinships, grep evidence) + 1
-      count-neutral rider face (gpu_130 R2); fixtures carry no string
-      literals (the B274 lesson); needles keyed to landed text AFTER entries are
-      written (the Batch-259 lesson)
-- [ ] T3 wiring: mod.rs mod-decl + extend + the B/D/E slice rule_id lists +3; the D/E
+      count-neutral rider face (gpu_130 R2); rustfmt-clean on all four touched corpus
+      files (a real syntax verification: rustfmt parses = valid Rust; cargo NOT run);
+      needles landed WITH the entries (the batch310_rules_landed test)
+- [x] T3 wiring: mod.rs mod-decl + extend + the B/D/E slice rule_id lists +3; the D/E
       slice headers repaired to measured truth while being touched (240+1 / 94+1 — the
       Research-353-flagged stale-header class, the B309 repair precedent, miss disclosed)
-- [ ] T4 count pins: tests.rs count-pin sites (1023 -> 1026; B 116->117, D 240->241,
+- [x] T4 count pins: tests.rs count-pin sites (1023 -> 1026 at 38 witness sites; B 116->117, D 240->241,
       E 94->95) + the category-sum + the grouped-total + the router expert-total +
       AGENTS.md + README + .docs/11_domains/kernel_opt.md
-- [-] T5 GATES — DEFERRED (Plan-337: i1117 T4 holds the box, ~10 cores / 15 GB RSS,
-      hours remaining; a cargo build steals CPU from the measurement and risks the swap
-      tax): G1 batch310 needles+parse; G2 kernel_opt lib + default lib; G3 clippy -D x3
-      postures; retrieval floors both postures; freeze/score-bench NOT owed (zero
-      clippy-corpus delta, P30); binary rebuild NOT owed (kernel_opt outside the release
-      set). UNBLOCK: the i1117 collection completing + a quiet-box check
-      (ps/uptime witness in the landing row)
-- [ ] T6 records: Research note (.research/354); AGENTS.md; snapshot landing row + the
-      S3/R1 deferrals + the C1-C8 consumed rows' standing (no re-mine); this file's
-      tasks ticked
-- [ ] T7 landing commit `feat: batch 310: ...` + push; `.raw/b310/` + the worktree
-      removed at close
+- [x] T5 GATES — GREEN (ran on AMO via git bundle — the m3 stayed Plan-337 zero-cargo
+      while the i1117 T4 collection finished its run; the box witness + the deviation are
+      disclosed in the snapshot landing row): G1 batch310 needles+parse PASS; G2 kernel_opt
+      lib PASS + default lib PASS; G3 clippy -D PASS x4 postures (default / kernel_opt /
+      no-default-features / all-features); retrieval floors HELD both postures (R1
+      kernel_opt,latent_retrieval PASS; R2 default latent_retrieval PASS); freeze/score-bench
+      NOT owed (zero clippy-corpus delta, P30); binary rebuild NOT owed (kernel_opt outside
+      the release set). FIRST-PASS catches fixed en-route (the gates' job): the router
+      expert-total pin sat at 1023 (the T4 tests.rs-only bump missed the router.rs site —
+      the B309 two-sites precedent) + 5 clippy findings in entries_gpu_141 (3x
+      unnecessary raw-string hashes, 2x doc backticks). G3c note: amo's non-interactive
+      ssh PATH lacks /opt/homebrew/bin (cmake) — sentencepiece-sys build failed at the
+      first pass and PASSED with the PATH fix; proven PRE-EXISTING at develop (identical
+      failure on e1c614e8 in a second worktree), not corpus-caused.
+- [x] T6 records (authoring half): Research note 354 landed; AGENTS.md + README +
+      .docs ledger row done; this file's tasks ticked at the authoring close; the
+      snapshot LANDING row belongs to T7 (at landing) — DONE at the landing (the row
+      + the Research 354 gates section updated to measured results)
+- [x] T7 landing commit `feat: batch 310: ...` + push — LANDED (the resuming lane
+      zed-m3-b310-2 ran the flow: gates on amo via bundle, the en-route fixes amended
+      into the authoring commit, reworded `feat:`, the snapshot landing row, push
+      `HEAD:develop`; the worktree + hold branch + `.raw/b310/` removed at close)
 
 ## Gates, criteria, risks
 
