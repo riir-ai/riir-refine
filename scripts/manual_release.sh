@@ -90,7 +90,10 @@ done
 ./scripts/binary_size_gate.sh $BINS
 cp /tmp/manual_release_licenses.md "$DIST/THIRD_PARTY_LICENSES.md"
 cp "$ROOT_EULA" "$DIST/LICENSE.md"
-(cd "$DIST" && { if command -v sha256sum > /dev/null; then sha256sum -- *; else shasum -a 256 -- *; fi; } > SHA256SUMS)
+# Explicit file list — `*` here would include SHA256SUMS itself on any
+# manual re-hash of the dir (redirect truncates it first → empty-string
+# self-entry → `sha256sum -c` fails on the release page).
+(cd "$DIST" && { if command -v sha256sum > /dev/null; then sha256sum -- "cargo-refine-${TAG}"-*.tar.gz "cargo-refine-${TAG}"-*.zip LICENSE.md THIRD_PARTY_LICENSES.md; else shasum -a 256 -- "cargo-refine-${TAG}"-*.tar.gz "cargo-refine-${TAG}"-*.zip LICENSE.md THIRD_PARTY_LICENSES.md; fi; } > SHA256SUMS)
 
 echo "== publish (body from $NOTES)"
 # The update alert displays the release TITLE (falling back to the body's
