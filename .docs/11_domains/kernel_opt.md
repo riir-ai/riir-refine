@@ -199,7 +199,20 @@ Batch 82 (Research 096, Plan 043): 3 rules — **the TreeWY + Launch-Bound arXiv
 
 Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the corpus is COMPLETE at 347** (kimi_k3_gpu_backward_batched.rs + attention_q8kv_cubecl.rs). Batched-read-slot-membership-decided-at-launch (D — a batched readback's push site guarding on a local Option pair while extraction guards on the implying config flag drifts one slot when flag=true + handle absent: every result mislabeled + guaranteed OOB at the tail; unlike the B40 write-plan family, a READ list is consumed by the read — nothing to derive from — so the fix is decide-once-at-launch or a recorded tag vec; the file's dead sync2_layout is the unwired fix, its t6_meta the wired positive). Unpack-loop-indexed-by-container-word (A — a byte-packed unpack loop indexed by the logical element re-loads the same u32 4× with runtime div/mod + runtime shifts; index by the CONTAINER word: one load serves 4 bytes, shifts become immediates; honest scope = L1-hit loads. Distinct from B44's width-dispatch bit-cursor + invariant-hoist family + the popcorn pack-side cousin). Dequant-placement-by-component-traffic-share (N — a quantized persistent operand splits placement per component by traffic share: values packed + inline register dequant (reuse 1 → B14 tile-staging doesn't apply), scales pre-decoded f16→f32 at upload; the rule encodes the tension with B31 dtype-normalize-once-at-upload — correct for the sidecar, WRONG for the payload). Coordinator verification refuted the lane-B orphaned-module claim (production-wired at 3 launch sites — subagent grep failed silently on the multi-root workspace; standing rule: every CRITICAL reachability claim gets a coordinator grep). Issue 693 closeout verified (H1/H2 fixes present in both twins, LCG fixed, stale B40 corpus note refreshed). Hazards → Issue 710. GOAT: 577 kernel_opt + 415 default, retrieval floors held (kernel 100/100/100, blended 77.8/87.3/92.9), clippy 0 both states. Full narrative: Research 057.
 
-### Category A: Memory access patterns (29 rules)
+> **Scope of the tables in this section (docs-hygiene adjudication, 2026-10-30):**
+> these seven founding tables were the Plan-003-era reference and are FROZEN —
+> maintained while the early file-mining batches landed, then superseded by the
+> per-batch Corpus lines above as the maintained layer. A heading count here
+> describes the TABLE as frozen, never the live corpus — at the 2026-10-30
+> read every founding category had grown 2–8× past its heading count (D the
+> widest, G the narrowest). Live per-category counts are
+> pinned GATE-SIDE — the `KERNEL_CATEGORIES` header comments in
+> `src/domains/kernel_opt/corpus/mod.rs` (measured truth, repaired + disclosed
+> at B309/B310) and the `expected` array in the same module's `tests.rs`
+> (gate-verified every batch); the standing total lives in AGENTS.md
+> (1026 at Batch 310). No live count is hand-typed into this file.
+
+### Category A: Memory access patterns (29 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -233,7 +246,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `defer-readback-gated-by-live-output-size` | footprint gate on readback deferral | Deferring all sibling readbacks to one final drain is NOT unconditional — Bench 437 kept 5 concurrent ~70 KB FFN buffers alive and measured 16% SLOWER via Metal memory pressure, while 4 input projections (~8 KB total) chain freely with ONE sync instead of 4 → gate the deferral on total simultaneously-live output bytes; large footprints sync per stage and release each buffer (riir-gpu deltanet_input_proj_fused.rs L17-32 — the failure boundary the existing deferral rules lacked) |
 | `weight-handle-cache-keyed-by-allocation-identity` | pointer-keyed device-handle cache | A GPU offload hook whose API must accept plain CPU weight refs keys a lock-free cache of pre-uploaded device handles by the CPU allocation's POINTER IDENTITY (pos_bits/neg_bits ptr pair, unique per layer): O(1) hot-path lookup, on-the-fly upload + insert on miss — the cache is invisible to the API surface and works with or without a preupload warm-up (riir-gpu deltanet_input_proj_fused.rs L279-281 + L301-327 + L361-372) |
 
-### Category B: Compute patterns (34 rules)
+### Category B: Compute patterns (34 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -272,7 +285,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `softplus-piecewise-saturation-clamp` | far-tail softplus saturation | `ln(1+e^x)` evaluated directly overflows for large x (exp → inf) and wastes precision for very negative x → piecewise: x for x > 20 (softplus == x to f32 precision), 0 for x < -20, transcendental only in the safe band; thresholds pinned to the CPU reference so GPU/CPU stay bit-comparable — when the result feeds exp() decay on a PERSISTENT recurrent state, one inf poisons the state permanently (riir-gpu deltanet_cubecl.rs L863-874 + L970-980) |
 | `fast-math-contraction-behind-feature-flag` | opt-in compiler-contraction gating | A numerics-affecting compiler flag is neither global (changes rounding everywhere, breaks bit-comparisons/tolerance gates) nor absent forever (the hot dot loop stays uncontracted mul+add on every build) → attach fast_math AllowContraction to the KERNEL ATTRIBUTE via a cfg_attr pair on a dedicated Cargo feature: strict-FP stays the byte-identical default, correctness gates run strict, perf builds opt in — the same source contracts to FMA only on the opt-in compilation (riir-gpu epilogue/gemv_residual_cubecl.rs L67-75 + L94-101 + L131-139) |
 
-### Category C: Fusion patterns (22 rules)
+### Category C: Fusion patterns (22 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -299,7 +312,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `delay-rms-scale-past-gemv-epilogue` | norm-scalar commutation past a GEMV | RMSNorm runs as its own kernel BEFORE the GEMV (write the normed vector, GEMV reads it back) → the per-row scalar r = 1/sqrt(mean(x²)+eps) COMMUTES with the matmul: extract r (partial norm), apply only γ elementwise, land r in the downstream GEMV's row-scale epilogue (composable with residual); the honest accounting: pure reparam saves ZERO dispatches (3→3) — the win is last-GEMV fusion + the eliminated normed-vector write, and the dominant benefit is dispatch/command-buffer overhead, NOT bandwidth (riir-gpu epilogue/mod.rs L118-133 + L227-262, coda_primitives_cubecl.rs L20-24) |
 | `fuse-count-into-mutation-pass` | count fused into its producing mutation | A mutation pass writes a predicate-derived output (a mask), then a SECOND pass scans the output to count affected elements → accumulate the count INSIDE the mutation loop — increments ride already-hot cache lines, the second O(n) scan (or second reduction kernel) disappears; the count feeds loss normalization + the empty-workset gate (in kernel form the predicate write and its reduction share one launch; riir-gpu dllm/mod.rs L828-847 + L585-596) |
 
-### Category D: Dispatch patterns (31 rules)
+### Category D: Dispatch patterns (31 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -335,7 +348,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `predicate-gated-skip-empty-workset-step` | whole-step elision on empty workset | A stochastic sampler can draw zero masked positions — the naive path runs the full forward/loss/backward/optimizer sequence anyway and the count-based loss normalizer divides by zero unless a LATE guard inside the loss fn catches it → one host-side integer check at the TOP of the step elides the entire dispatch batch AND guarantees n_masked >= 1 at the normalization site (div-by-zero guarded by construction; composes with fuse-count-into-mutation-pass whose fused count IS the predicate; riir-gpu dllm/mod.rs L851-853 + L1243-1245 + L1546-1548, the late-guard-only contrast at L485-490) |
 | `share-pipeline-set-across-subsystems` | Arc-shared pipeline set | Each subsystem (loss, backward, optimizer) builds its own pipeline set — every create_*_pipeline re-validates + re-compiles the same WGSL, once per consumer → build ONE set at orchestrator setup, Arc-share clones into every constructor + dispatch site: compile paid once per training run, per-step cost a ref-count bump (the cross-subsystem analog of prebuilt-bind-groups which pre-builds per dispatch site; riir-gpu dllm/mod.rs L1092 + L1134-1148 + L1278 + L1433/L1459-1475) |
 
-### Category E: Parallelism patterns (13 rules)
+### Category E: Parallelism patterns (13 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -353,7 +366,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `epilogue-must-be-workgroup-local` | ownership-scoped fusion legality | An epilogue may only consume data at the granularity the executing workgroup OWNS — no cross-workgroup sync exists to order it after a foreign write: plane-per-row GEMV epilogues may read per-row scalars (residual[row], scale[row]); a norm fusion requires the whole row reduction inside ONE workgroup; ops needing cross-row/cross-workgroup data (attention over KV) cannot be epilogued — attention stays 9 dispatches while post-attn drops to 1 and MLP to 4 (fusion legality is an ownership question, not just dependency; riir-gpu epilogue/mod.rs L49 + L371-375, gemv_residual_cubecl.rs L50-55, norm_residual_cubecl.rs L57-59) |
 | `counter-derived-seed-stateless-noise` | stateless per-iteration RNG seeding | One shared RNG stream threaded through the training loop — replaying step k requires replaying 0..k, skipped steps perturb later streams → derive each iteration's seed from its loop counters packed into disjoint bit fields (((step as u64) << 32) | epoch): every iteration's noise is a pure function of its indices (standalone replay, skip-independence) and the same seed crosses to the GPU as ONE uniform with the thread index mixed in-kernel — bit-identical to the noise_corrupt.wgsl kernel; inline wrapping-mul/add LCG with >> 33 high-bit extraction (the statistically good half; riir-gpu dllm/mod.rs L828-842 + L1526-1537 + L39) |
 
-### Category F: Flash-attention tiling (10 rules)
+### Category F: Flash-attention tiling (10 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -368,7 +381,7 @@ Batch 51 (Research 057): 3 rules — **the FINAL riir-gpu file-mining batch; the
 | `block-local-reference-frame-for-overflow` | overflow-safe decay | Global prefix diff (overflows fp32) → per-block reference frame (bounded) |
 | `two-stage-mask-softmax-then-conv` | two-stage mask | Mask after conv only → -inf before softmax + 0 after conv |
 
-### Category G: Linear-attention recurrence (19 rules)
+### Category G: Linear-attention recurrence (19 rules at founding)
 
 | Rule ID | GPU concept | Pattern |
 |---|---|---|
@@ -489,6 +502,11 @@ deferred (Proposal 012 §Phase 0). `is_full_validator_available()` returns
   projected to a scalar expert index via `pick_domain`). NOT synced — only
   the resulting expert index crosses the sync boundary.
 - Thermal tier = raw categorical (1 byte, `#[repr(u8)]`).
+
+> The per-batch append tables below are HISTORICAL (maintained through
+> ~Batch 31, frozen since) — the scope note at the founding tables above owns
+> the adjudication; their counts are batch PROVENANCE, never live totals.
+> Live counts: `corpus/mod.rs` + AGENTS.md, never this file.
 
 ### Category F: Flash-attention tiling (Batch 2, 8 rules)
 
