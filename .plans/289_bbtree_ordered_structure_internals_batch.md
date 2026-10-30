@@ -21,8 +21,8 @@ Research: `.research/322_bbtree_cache_conscious_ordered_map.md` (source pin `Xia
 - [x] Score-bench + frontier snapshot appended; freeze-table regeneration ONLY if the corpus generation moves (gen2/gen3 e2e verdict decides, plan-137 T7.5 law) — run #207 appended; freeze statuses green, no regen owed
 - [x] Docs: AGENTS.md rust_perf count bump (x2 sites, 275 -> 278) + the mod.rs header chain + landing row in `.distill/001_mining_queue_snapshot.md` — ONE commit; research note status updated to RECORD (batch landed) in `.distill/001_mining_queue_snapshot.md` — ONE commit; research note gets a one-line status update to RECORD (batch landed) pointing at the batch commit
 - [x] Maintained release-set binary rebuilt + installed BEFORE push (rust_perf is release-set surface — §0 law) — DONE 2026-10-29 at the landing commit (the release feature set, `cp` to `~/.cargo/bin/cargo-refine.exe` per the Windows plain-copy law; the stale pre-bump binary 4246ace2 discharged) (rust_perf is release-set surface — §0 law; `cargo refine --version` prints the new stamp)
-- [ ] Commit `feat:` on develop, push; `rm -rf .raw/bbtree` in the same unit (the ephemeral-clone law)
-- [ ] Post-batch: consumer-residue screen NOT owed (these are additive patterns, no guard landed); report yield vs the 4–5 estimate in the landing row (honest miss ok)
+- [x] Commit `feat:` on develop, push; `rm -rf .raw/bbtree` in the same unit (the ephemeral-clone law) — DONE in the Batch-305 landing `71b44b2cb` (pushed; verified in git log 2026-10-30) + `.raw/bbtree` confirmed REMOVED on the M3 checkout (the 4090 landing session's own checkout E:\git cleaned per its lane record)
+- [x] Post-batch: consumer-residue screen NOT owed (these are additive patterns, no guard landed); report yield vs the 4–5 estimate in the landing row (honest miss ok) — DONE: the landing row reports the yield verbatim ("4-5 rules estimated, 4 landed (1+3) + 1 dropped at measurement + 2 rider faces — on estimate")
 
 ## Notes
 

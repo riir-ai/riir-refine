@@ -149,14 +149,16 @@ grammar-not-answers law), and every claim carries its n beside it.
       digest-checked sidecar the server requires at boot.
 
 ### T3 — candidate A2: the Rethink encoder head (riir-train HOSTED-ONLY mint lane)
-⛔ Gated on T1.6 (the feasibility gate) + owner mint approval.
-- [ ] T3.1 Train the encoder decision head (the laya encoder + a pick/abstain head) on the SAME
+⛔ Gated on T1.6 (the feasibility gate — PASSED via Issue 161/Bench 114) + owner mint approval — T3.1–T3.3 defer-marked 2026-10-30 hygiene sweep per the status line above ("A2/T3 stays open, owner-gated as scoped").
+- [-] T3.1 Train the encoder decision head (the laya encoder + a pick/abstain head) on the SAME
       T1 training corpus — the distill-teacher lanes are available but NOT required; the compile
-      gate is the label source, not a teacher.
-- [ ] T3.2 Mint HOSTED-ONLY (vessel per R4), serve as a `LaneBackend` behind `heal` via the same
+      gate is the label source, not a teacher. UNBLOCK: owner mint approval (HOSTED-ONLY lane in
+      riir-train; weights never enter any repo).
+- [-] T3.2 Mint HOSTED-ONLY (vessel per R4), serve as a `LaneBackend` behind `heal` via the same
       seat rig. This is the actual Refine↔Rethink fusion point: refine's rerank traffic hardening
-      the rethink-served expert (Plan 202's own words).
-- [ ] T3.3 GPU box state recorded beside every number (bench_preflight / PROVENANCE law).
+      the rethink-served expert (Plan 202's own words). UNBLOCK: T3.1 + owner mint approval.
+- [-] T3.3 GPU box state recorded beside every number (bench_preflight / PROVENANCE law). RIDES
+      T3.1/T3.2 — no standalone unblock.
 
 ### T4 — the bench: one frozen arm-H paired read (refine + instinct seat)
 - [x] T4.1 Arms: **A0** modelless chain + the DETERMINISTIC verify-in-order control — try each
@@ -206,13 +208,15 @@ grammar-not-answers law), and every claim carries its n beside it.
       **Recorded: `.benchmarks/119_heal_seat_frozen_read.md`.**
 
 ### T5 — arm + telemetry (OWNER GATED)
-- [ ] T5.1 Owner go → the winner's manifest row ARMED for real heal traffic (the first armed
+- [-] T5.1 Owner go → the winner's manifest row ARMED for real heal traffic (the first armed
       `heal` row — ALL-EMPTY remains the shipped default until this checkbox). **Bench 119's
       verdict is the input: the A1 specialist cleared the NI-cost route 660/660 at 0.13 ms p50.**
-- [ ] T5.2 The armed run is the consumption trigger already recorded: `rescue_probe`'s arm-H
+      UNBLOCK: the owner's arm/stand-down call on the Bench-119 verdict.
+- [-] T5.2 The armed run is the consumption trigger already recorded: `rescue_probe`'s arm-H
       escalation-ordering consumption + the katgpt-rs Plan 621 T5.4 real-telemetry re-gate route.
-- [ ] T5.3 Decision telemetry consent-gated (`RIIR_INSTINCT_STATS` unset never pushes); decstat
-      arming stays its own owner gate.
+      RIDES T5.1 — the trigger cannot consume an un-armed row.
+- [-] T5.3 Decision telemetry consent-gated (`RIIR_INSTINCT_STATS` unset never pushes); decstat
+      arming stays its own owner gate. RIDES T5.1; its consent gate stays its own owner call.
 
 ## Laws this plan binds itself to
 - Never train or score on the frozen test rows; synthesis NEVER touches them.
