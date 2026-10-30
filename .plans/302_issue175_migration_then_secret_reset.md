@@ -203,7 +203,11 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       `administrators_authorized_keys`; delete
       `id_ed25519.retired-20261026(.pub)` + the `riir-heal` legacy copy;
       shred the T2 temp copy (verify gone).
-- [ ] **T5 — T-KEYS finish (agent):** install the minted set into the
+- [x] **T5 — T-KEYS finish (agent):** CLOSED 2026-10-30 — owner confirmed
+      the rotation; riir-chain Issue 169 removed (riir-chain `e78e6545`, the
+      verification record is in its commit body). Residue: the
+      riir-train/.env HF_TOKEN is stale (revoked); the guard --static reds
+      are riir-deployer drift. Original scope below: install the minted set into the
       stores (`.env` rows, `wrangler secret put` via stdin for worker
       bindings, `gh secret set`, HF `.env` — 169's store list); land
       riir-deployer `.issues/016` so the post-roll re-baseline is clean;
