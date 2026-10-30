@@ -7,6 +7,18 @@ SHA256SUMS (`homebrew-tap a2902e4`, `scoop-bucket 3205185`, verified by fresh cl
 `cargo refine upgrade` now reports v0.3.5 latest; local HEAD builds self-report newer — upgrade
 refuses to downgrade, correct.
 
+**ADDENDUM (2026-10-30 ~23:0x +07) — the live SHA256SUMS still carried the poisoned self-entry; fixed.**
+The clobber upload shipped the e3b0c44 empty-hash `SHA256SUMS` row back: the tag-worktree
+rebuild ran the script **at the tag**, and `e448c147` (the explicit-glob fix) lives on
+develop, not in `0542da6c` — the pre-stage's clean 7-row manifest was overwritten by the
+worktree rerun's output. Caught by post-publish verification (payload rows matched 7/7;
+only the self-entry was poisoned), fixed via `kat-secret exec gh-release-pat --
+gh release upload v0.3.5 --clobber SHA256SUMS` (7 rows, no self-entry), re-verified:
+`shasum -a 256 --check` now passes 7/7 OK against freshly downloaded assets.
+**The second-order lesson: a tag-worktree rerun runs the TAG's version of every script —
+a script fix must be tagged (or cherry-picked into the release commit) before any
+worktree-at-tag rebuild; a develop-side fix does not reach it.**
+
 **THE LESSON THIS ATTEMPT PAID FOR — `manual_release.sh` builds the WORKING TREE, not the tag.**
 The first publish shipped HEAD+dirty binaries (`build: 9a93dbc2d8a7-dirty` — batches 310–319
 inside, rust_perf 287 compiled vs the title's 278, a different rust-toolchain pin than the tag).
