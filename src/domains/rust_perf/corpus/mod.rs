@@ -9,7 +9,14 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 285 entries across 14 categories as of Batch 316 (+5: io +4,
+//! 287 entries across 14 categories as of Batch 318 (+2: concurrency
+//! +1 `generation-counter-stale-timer-invalidation` + io +1
+//! `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
+//! impeccable io stretch-tier remainder (plan 316's `- [-]` rows),
+//! Plan 318 / Research 356, upstream pbakaus/impeccable @
+//! `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, both ANNOTATED
+//! `NotBenchable` `bench_spec` `None`) on the prior state: Batch 316
+//! (+5: io +4,
 //! concurrency +1, `entries_55` -- the impeccable io/process robustness
 //! pool, Plan 316 / Research 356, upstream pbakaus/impeccable @
 //! `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, all ANNOTATED
@@ -700,14 +707,22 @@ mod entries_52;
 mod entries_53;
 mod entries_54;
 mod entries_55;
+mod entries_56;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 280 entries
-/// (Batch 308, 2026-10-30, Plan 313 / Research 352: +2 caching — the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 287 entries
+/// (Batch 318, 2026-10-30, Plan 318 / Research 356: +2 -- the impeccable
+/// io stretch-tier remainder, `entries_56` (plan 316's `- [-]` rows):
+/// the generation-counter timer law + the exclusive-mkdir reservation
+/// law, both ANNOTATED `NotBenchable`; PRIOR-STATE NOTE: this fn doc's
+/// re-pin was MISSED by the Batch 316 lane -- that landing repaired the
+/// module header 278->285 but left this doc at its B308-era 280 --
+/// repaired en-route here, the missed-pin class) on the prior state:
+/// Batch 308, 2026-10-30, Plan 313 / Research 352: +2 caching — the
 /// 10-29b staged serving pool + `rust_perf` row, `entries_54`: the
 /// cross-tier LRU-recency law + the refusal-quarantine verdict law,
 /// both ANNOTATED `NotBenchable`; +2 count-neutral rider faces — the
@@ -854,5 +869,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_53::entries());
     entries.extend(entries_54::entries());
     entries.extend(entries_55::entries());
+    entries.extend(entries_56::entries());
     Corpus::new(entries)
 }
