@@ -9,8 +9,18 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 278 entries across 14 categories as of Batch 305 (+3: concurrency +2,
-//! allocation +1, `entries_53` — the bbtree ordered-structure-internals
+//! 285 entries across 14 categories as of Batch 316 (+5: io +4,
+//! concurrency +1, `entries_55` -- the impeccable io/process robustness
+//! pool, Plan 316 / Research 356, upstream pbakaus/impeccable @
+//! `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, all ANNOTATED
+//! `NotBenchable` `bench_spec` `None` + ONE count-neutral rider face: the
+//! box-filter area-average face on `prefix-sum-2d` (`entries_01`, the
+//! same 2D-window-sum family -- the source's resize is area-averaging
+//! down, bilinear up)) -- prior: Batch 308 (+2: caching +2, `entries_54`
+//! -- the 10-29b staged serving pool + `rust_perf` row: the cross-tier
+//! LRU-recency law + the refusal-quarantine verdict law, Plan 313 /
+//! Research 352) -- prior: Batch 305 (+3: concurrency +2,
+//! allocation +1, `entries_53` -- the bbtree ordered-structure-internals
 //! distill COMPLETION, Plan 289 / Research 322: `batch-miss-interleave-tiny-executor`
 //! (concurrency, BENCHABLE latency bar — N independent dependent-chain
 //! lookups interleaved through a no-alloc bit-mask round-robin executor,
@@ -689,6 +699,7 @@ mod entries_51;
 mod entries_52;
 mod entries_53;
 mod entries_54;
+mod entries_55;
 
 #[cfg(test)]
 mod tests;
@@ -842,5 +853,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_52::entries());
     entries.extend(entries_53::entries());
     entries.extend(entries_54::entries());
+    entries.extend(entries_55::entries());
     Corpus::new(entries)
 }

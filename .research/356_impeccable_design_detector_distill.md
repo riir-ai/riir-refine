@@ -1,6 +1,6 @@
 # 356 — Impeccable Design-Detector Distill
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — Batch 316 LANDED (5 rust_perf io/process rules + 1 rider on prefix-sum-2d; the landing commit carries the verdict's full disposition; the design-taxonomy half stays owner-gated below)
 **Date:** 2026-10-30 (zed-m3-impeccable-distill/M3, user-directed dual @research+@distill)
 **Queue slot:** nominal Batch 316 / Plan 316 — staged behind the live queue
 
