@@ -108,7 +108,12 @@ impl DaemonL4 {
             line.clear();
             let n = stdout.read_line(&mut line)?;
             if n == 0 {
+                // Batch 316's kill-without-wait-zombie rule (this file's
+                // own firing datum): the kill pairs with a wait — an
+                // unwaited killed child haunts the process table as a
+                // zombie until we exit.
                 let _ = child.kill();
+                let _ = child.wait();
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::UnexpectedEof,
                     "L4 daemon exited during load without signalling READY \
