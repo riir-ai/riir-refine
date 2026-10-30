@@ -512,7 +512,7 @@ worker, the ops dashboard, and the nightly generator. State as of
 |---|---|---|
 | Housekeeping worker | `https://riir-kat-housekeeping.foxfox.workers.dev` | **LIVE** — hourly cron, T9 code deployed, `READ_TOKEN` gate on (`/hours` `/days` `/backfill` anon → 401), `CLOUDFLARE_OPS_API_TOKEN` set (`/status` → `token_set:true`, neurons + containers collecting, 14-day backfill run) |
 | Ops dashboard | `https://riir-ops-dashboard.foxfox.workers.dev` | LIVE — serves the self-contained HTML; fetches `/latest` from the housekeeping worker. **Auth gate ships OPEN** (owner decision 2026-08-28; one `wrangler secret put DASHBOARD_TOKEN` closes it) |
-| Nightly generator | `scripts/ops_nightly.sh` + `scripts/com.riir.ops-nightly.plist` | **Shipped, NOT bootstrapped** — two commands: `cp scripts/com.riir.ops-nightly.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.riir.ops-nightly.plist` |
+| Nightly generator | `scripts/ops_nightly.sh` | **ON-DEMAND ONLY** — the `com.riir.ops-nightly` launchd schedule was RETIRED 2026-10-16 (riir-dapps Issue 127; the plist file is deleted from the tree — the bootstrap command below no longer applies). Run the script by hand when a dashboard refresh is wanted; it sources `.env` itself. The one cheap sub-step that had to KEEP a schedule — the corpus-days display push — lives in riir-dapps as its own job (`riir-dapps/scripts/launchd/com.gist.rs.corpus-days-sync.plist`, daily 04:17 on the M3; the gen-2 display-loss incident, plan 060 5th pass, is why it exists) |
 
 **Credentials live in `.env` (gitignored — never commit, never print).**
 [`.env.example`](.env.example) is the documented template: what each var is
