@@ -1,6 +1,6 @@
 # Plan 315 — Batch 310: the 10-30 staged leads kernel_opt conversion
 
-**Status:** IN PROGRESS — claimed 2026-10-30 ~06:5x +07 (zed-m3-b310); T0+T1 done pre-claim; T2–T4 + T6(authoring) DONE at the authoring close (wip `6a78eae4` in `/tmp/wt-b310`, anchored by `hold/b310-authoring`; NOT pushed — unverified corpus never reaches develop); **GATES DEFERRED — the batch does NOT land until G1–G3 + retrieval run at the next quiet window** (T7's landing flow is written into the T7 row for the resuming lane).
+**Status:** COMPLETE — LANDED `5d6012f4` 2026-10-30 (the resuming lane zed-m3-b310-2 ran the T7 flow: gates ALL GREEN on amo via git bundle — batch310 needles+parse, kernel_opt lib, default lib, clippy −D ×4 postures, retrieval floors HELD both postures, no re-pin; count pins 1023→1026 at 38 sites; S3+R1+R3 remain deferred behind B301/plan-306 to 10-31T13:41Z, recorded in the landing row). Claimed→closed: zed-m3-b310 (claim, authoring) + zed-m3-b310-2 (landing). Status line updated at close 2026-10-30 ~09:5x +07 (zed-m3-ackm — the stale IN PROGRESS/GATES-DEFERRED text predated the landing; found by the idle re-scan).
 
 ## Scope
 
