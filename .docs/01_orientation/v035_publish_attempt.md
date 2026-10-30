@@ -77,3 +77,43 @@ states is not pinned).
 appeared: the Actions billing block (the same 2026-09-08 block the manual
 script's header names) refused the run. `workflow_dispatch` would cost the
 same blocked budget — not retried.
+
+## Pre-staged same evening — the finishing run is now 4 commands
+
+1. **SHA256SUMS regenerated** (`/tmp/manual_release_dist/SHA256SUMS`):
+   the staged manifest carried a self-referential entry (`SHA256SUMS` →
+   `e3b0c44…`, the empty-string hash — a manual re-hash of the dir after
+   the failed publish truncated the file before `sha256sum` read it).
+   Every PAYLOAD hash was already correct; only the self-entry was
+   poisoned. Regenerated with an explicit file list and now
+   `shasum -a 256 --check` passes clean. Root cause fixed at source:
+   `scripts/manual_release.sh` `e448c147` (explicit glob, no self-entry
+   possible).
+2. **Tap/scoop bumps PRE-COMMITTED, NOT PUSHED** (pushing would point the
+   manifests at 404 assets — the exact mistake reverted earlier today):
+   - gist-rs/homebrew-tap `9d457be` (fresh clone at `/tmp/homebrew-tap-stage`, 1 ahead of `origin/main`)
+   - gist-rs/scoop-bucket `96482af` (fresh clone at `/tmp/scoop-bucket-stage`, 1 ahead of `origin/main`)
+   - All 5 recorded hashes verified against the staged archives
+     (`OK` × 5) — these are the hashes of THE BINARIES AT `0542da6c`
+     uploaded as-is; no rebuild planned, so the table above stays true.
+3. **Token**: owner seals `gh-release-pat` (fine-grained PAT, repo
+   `gist-rs/cargo-refine`, Contents: Read and write) via
+   `kat-secret seal gh-release-pat` in their own terminal.
+
+Finishing run once sealed (agent runs; Touch ID prompt for the owner):
+
+```sh
+~/.kat/bin/kat-secret exec gh-release-pat --env GH_TOKEN \
+  --why "publish cargo-refine v0.3.5 release (tag 0542da6c)" -- \
+  gh release create v0.3.5 -R gist-rs/cargo-refine \
+    --title "cargo-refine v0.3.5 — corpus: kernel_opt 1022 (+2 since the v0.3.4 build) — rust_perf 278 (=) · sec 31 (=) · clippy_lints 112 (=) · dist 7 (=)" \
+    --notes-file release/notes-v0.3.5.md \
+    /tmp/manual_release_dist/*
+git -C /tmp/homebrew-tap-stage push origin main
+git -C /tmp/scoop-bucket-stage push origin main
+```
+
+Then: verify the asset URL returns 200 + the release API `latest` =
+v0.3.5; smoke-test the shipped aarch64 binary (`cargo refine --version`);
+flip this doc BLOCKED → PUBLISHED; commit + push riir-refine; add the
+`gh-release-pat` row to the touch-deploy skill's Known-tokens table.
