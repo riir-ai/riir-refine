@@ -470,7 +470,7 @@ mod tests {
             .map(<[&str]>::len)
             .sum();
         assert_eq!(
-            total, 1037,
+            total, 1041,
             "Batch 320 +4: the post-B319 staged remainder, Plan 320 (A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion + B block-scaled-operand-declared-form-refusal-ladder + D plane-storage-barrier-scope-covers-global-exchange, all cubecl 07cd07a)",
         );
     }

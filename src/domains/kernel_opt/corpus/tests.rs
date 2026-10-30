@@ -112,8 +112,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 320 (4): the post-B319 staged remainder (Plan 320) — immutable-operand-device-resident-per-buffer-type (A +1: ggml-org/llama.cpp @ fb59972 #31073 — B319's host-side verdict REFUTED at T0; the H2D-immutable placement quadrant completes the transfer-direction x lifecycle matrix beside host-cache-immutable-device-weights + kv-window-device-resident-ring-append) + word-native-byte-pair-minifloat-conversion (N +1) + block-scaled-operand-declared-form-refusal-ladder (B +1) + plane-storage-barrier-scope-covers-global-exchange (D +1) — the last three tracel-ai/cubecl @ 07cd07a (#1975 squash; the #1976/#1977/#1986 constituents; NOT the CI-only c1d0125 whose message carries the narrative) + 2 count-neutral rider faces (gpu_111 pdl-admission += the vllm 8b10bda #64494 size-gated admission face; gpu_133 moe-block-m-cap += the vllm 2bfb8f1 #64467 prepare-kernel tile-ladder face); #64553 = the I6 watch row CONFIRMED; #1967 read_lazy thin/watch confirmed; ab3768c host-side confirmed; fixtures 4 rules standalone-compiled AND executed BEFORE entry (15 tests green).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))",
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))",
     );
 }
 
@@ -5554,8 +5554,8 @@ fn kernel_categories_counts_match_plan_003_table() {
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
         (KernelCategory::MemoryAccess, 203), // Batch 320 +1: immutable-operand-device-resident-per-buffer-type (the llama.cpp fb59972 H2D-immutable placement quadrant) // Batch 317 +1: ring-scan-grouped-load-ahead-wrap-step-same-fold-order (the TensorFold 6428050c MTP ring-scan law: grouped scalar load-ahead + the wrap-step modulo replacement + the same-terms-same-order bit-identity contract, Plan 317) // Batch 307 +1: write-coverage-proven-uninitialized-alloc (vllm fa1cf1d #64419 + 9c7e8ff #64345, Plan 312) // Batch 276 +1: host-context-mirror-fenced-drain-avoidance (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 274 +1: trellis-reversed-lsb-tape-aligned-word-state-decode, // Batch 273 +1: fewrow-mma-fragment-matvec-silicon-tiered-dispatch (the mlx few-row mma-fragment lead, Plan 277 / Research 310) // Batch 268 +1: mma-lane-map-whole-run-vector-loads-split-accumulator-chains (the splash wave — whole-run lane reindex + split fp32 chains, Plan 273) // Batch 261 +1: prefill-batch-pool-f16-conversion-sized-by-actual-length (PrismML 25f68a4 #330, Plan 265); Batch 259 +1: tile-history-packed-in-place-register-window-conv-scan (uzu e744e7c, Plan 263); Batch 257 +1: verify-row-tiles-share-loaded-weight-panel (4d1a3f15 -- the GB10 verify-row weight-panel share); Batch 256 +1: expert-prompt-row-batch-amortizes-weight-pool-stream (7bcab59f — the weight-stream amortization over ROW BATCH, the first owner of the dropped weight-streaming axis, Plan 260) // Batch 251 +5: the Yukon conversion (Research 284) — lane-permuted butterfly + dirty-range clear + verify-ubatch full-prestage + j16 no-smem fragment + mbarrier-in-padding // Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: free + reclaimable, bounded wait, loud refusal, pool fail-fast) // Batch 249 slice 2 +3: slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set (TensorFold @ 9ccf4727 window) // Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring (ddalcu/mlx-serve @ 1015f785, MIT) // Batch 240 +1: pad-row-classification-interior-memcpy (llama.cpp #30526 @ 23f83e05) // Batch 234 +1: lifecycle-disjoint-intermediates-union-smem-scratch (llama.cpp #29353 @ 62df1815) // Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 @ b9f3599f)
-        (KernelCategory::Compute, 118), // Batch 320 +1: block-scaled-operand-declared-form-refusal-ladder (the cubecl 07cd07a #1977 declared-form law) // Batch 310 +1: mma-accumulator-run-as-one-operand-depth-matches-instruction (cubecl 4549408 + 07cd07a, the #1966 series — the A-operand run-depth law, Plan 315) // Batch 309 +1: runtime-trip-count-defeats-unroll-template-the-bound (mlx #4596 + llama.cpp #29298, Plan 314); Batch 295 +1: in-flight-transform-count-admits-block-thread-width (the #396 FWHT rows->threads admission, Plan 300 / Research 333) // Batch 276 +1: kahan-endpoint-peel-dead-flops-exact (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 275 +1: B int8-screen-error-bound-certifies-exact-rescore (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 269 +1: two-pass-partial-reduction-inter-dispatch-barrier (llama.cpp df1170213 #30862, Plan 272); Batch 261 +1: one-warp-ordered-reduce-row-batched-no-smem-barrier (PrismML 483bdab #368, Plan 265); Batch 259 +1: per-row-transcendental-hoist-not-per-element (uzu e744e7c, Plan 263); Batch 251 +3: the Yukon conversion (Research 284) — magic-anchor FFMA epilogue + gate precompute + SGN trit remap // Batch 250 slice 2 +6: the envelope-pool slice-2 set (SoA Q8_0 MoE pair, rms_norm register carry, K-quant wide-store geometry, MMVQ low-bit VDR rework, MoE group-selection fusion, uzu row-mask bitmap) // Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652) + tokenizer-segment-memo-between-mutations (2d2930d8b) // Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (TensorFold @ 9ccf4727 window) // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
-        (KernelCategory::Fusion, 67), // Batch 295 +1: same-activation-mmvf-pair-channel-stride-broadcast (the #383 mmvf pair launch — the layout-free member, Plan 300 / Research 333) // Batch 284 +1: fusion-unfusable-head-settles-prefix-to-next-search (the burn fusion-search settle law, Plan 288 / Research 321) // Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the whole recurrent decode step as one launch, S <= 16 register window, Plan 282 / Research 315) // Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave, Plan 273); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c, Plan 263); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337) // Batch 251 +2: the Yukon conversion (Research 284) — dead-destination scale elision + stacked gate|up single launch
+        (KernelCategory::Compute, 121), // Batch 321 +3: the 10-30f staged leads (Plan 321 — the cast-routing law + the scale-register ownership law + the span-view planning-boundary law) // Batch 320 +1: block-scaled-operand-declared-form-refusal-ladder (the cubecl 07cd07a #1977 declared-form law) // Batch 310 +1: mma-accumulator-run-as-one-operand-depth-matches-instruction (cubecl 4549408 + 07cd07a, the #1966 series — the A-operand run-depth law, Plan 315) // Batch 309 +1: runtime-trip-count-defeats-unroll-template-the-bound (mlx #4596 + llama.cpp #29298, Plan 314); Batch 295 +1: in-flight-transform-count-admits-block-thread-width (the #396 FWHT rows->threads admission, Plan 300 / Research 333) // Batch 276 +1: kahan-endpoint-peel-dead-flops-exact (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 275 +1: B int8-screen-error-bound-certifies-exact-rescore (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 269 +1: two-pass-partial-reduction-inter-dispatch-barrier (llama.cpp df1170213 #30862, Plan 272); Batch 261 +1: one-warp-ordered-reduce-row-batched-no-smem-barrier (PrismML 483bdab #368, Plan 265); Batch 259 +1: per-row-transcendental-hoist-not-per-element (uzu e744e7c, Plan 263); Batch 251 +3: the Yukon conversion (Research 284) — magic-anchor FFMA epilogue + gate precompute + SGN trit remap // Batch 250 slice 2 +6: the envelope-pool slice-2 set (SoA Q8_0 MoE pair, rms_norm register carry, K-quant wide-store geometry, MMVQ low-bit VDR rework, MoE group-selection fusion, uzu row-mask bitmap) // Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652) + tokenizer-segment-memo-between-mutations (2d2930d8b) // Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (TensorFold @ 9ccf4727 window) // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
+        (KernelCategory::Fusion, 68), // Batch 321 +1: comms-boundary-consumer-chain-fuses-into-gather (the vllm becbaea9f #64638 comms-boundary fusion law, Plan 321) // Batch 295 +1: same-activation-mmvf-pair-channel-stride-broadcast (the #383 mmvf pair launch — the layout-free member, Plan 300 / Research 333) // Batch 284 +1: fusion-unfusable-head-settles-prefix-to-next-search (the burn fusion-search settle law, Plan 288 / Research 321) // Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the whole recurrent decode step as one launch, S <= 16 register window, Plan 282 / Research 315) // Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave, Plan 273); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c, Plan 263); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337) // Batch 251 +2: the Yukon conversion (Research 284) — dead-destination scale elision + stacked gate|up single launch
         (KernelCategory::Dispatch, 247), // Batch 320 +1: plane-storage-barrier-scope-covers-global-exchange (the cubecl 07cd07a #1986 barrier memory-class law) // Batch 319 +4: metal-icb-replay-rewrite-private-copy (the cubecl c1d0125 Metal-native ICB degradation + private-copy rewrite law) + profile-window-nests-committed-since-open (same tip — the committed-log + open-index nesting model) + glm-top1-chance-rides-pick-word (tensorfold 2dffc954 — the chance rides the pick word, the f64 oracle contract) + tiny-proj-aux-stream-overlap-size-gated (vllm 914d61fc5 #64425 — the tiny GEMM on the aux stream, size-gated + capture-only + event-fenced), Plan 319 // Batch 317 +1: routed-density-pairs-per-item-keys-tile-admission (the TensorFold gfx1201 routed-prompt law: pairs-per-item density keys the tile admission, the f32 bound compared exactly in f64, the coupled search with per-cell veto + both-sides timing, Plan 317) // Batch 310 +1: warp-per-row-small-blocks-cta-under-load-law (prism 9d9efeadbdd1 #415, the b10831 tip — the warp-per-row re-map behind the blocks_per_row <= warp_size floor, Plan 315) // Batch 307 +1: gate-rank-dispatch-function-constant-variant (mlx 9e2e8e2 #4791, Plan 312) // Batch 295 +2: gdn-conv-chain-fusion-gather-relocation-done-set (the #383/#398 backward gather-relocation + folded store + done-set, the B283 look-ahead's backward twin) + graph-replay-skips-host-node-scans (the #393 uid-memoized compat proof + posture-gated consumer map), Plan 300 / Research 333 // Batch 286 +1: blueprint-minimal-compile-specialization-key (the burn/cubek remainder — the blueprint keeps only what alters the code, Plan 291 / Research 321) // Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window #391, Plan 287 / Research 320) // Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion, Plan 282 / Research 315) // Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +2: D phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 274 +1: hadamard-transform-runtime-specialize-bounded-max-layout (uzu 034294c #1002, Plan 278); // Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe window, Plan 276 / Research 308) // Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave, Plan 273); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307, Plan 265); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb) + prefill-batch-atomic-fallback-individual (c4995966) + teardown-takes-list-whole (30f05c6d) + drain-device-work-before-free (98571a84) + copy-source-quarantine-unproven-free-pinned (2ba81a06); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead, the selected-prefix relocation before eviction, Plan 260) // Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the loop-reused scratch's back-edge needs its own trailing warp barrier) // Batch 251 +1: the Yukon conversion (Research 284) — topk chunk-partial-lists head-only k-way merge // Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 law); prior: Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a) // Batch 249 slice 2 +8: pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain (TensorFold @ 9ccf4727 window) // Batch 242 +9: the mlx-serve pack — split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count (mlx-serve @ 1015f785) // Batch 236 +1: mid-prefill-recurrent-state-capture-boundary-unsplit (incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 convergence face) // Batch 234 +1: occupancy-keyed-value-split-register-budget-ladder (llama.cpp #29353 @ 62df1815)
         (KernelCategory::Parallelism, 96), // Batch 317 +1: row-owns-output-k-full-reduce-exchange-carries-no-arithmetic (the TensorFold e06a6eef+fccb46ac rank-partition law: output-row partition, the no-arithmetic exchange, the fault reified into the shared id word, keepIfAll; the 'distributed' next-category candidate recorded in-rule, Plan 317) // Batch 310 +1: barriers-declared-before-slots-one-free-run (cubecl 4549408 + 07cd07a — SMEM declaration order as fragmentation control, Plan 315) // Batch 281 +1: all-threads-reach-workgroup-barrier-no-pre-barrier-return (the #26631 patch-4 face, Plan 285 / Research 318; prior: Batch 277 +1: stream-k-tail-sequenced-deterministic-lockword-reuse (the Humming+Chord pair, Plan 281 / Research 316) // Batch 272 +2: ipc-peer-mapping-collective-teardown-pin-on-failure + relaxed-spin-acquire-confirm-metadata-flag-wait (the sonar paired-PCIe window, Plan 276 / Research 308) // Batch 268 +1: splitk-tier-ladder-per-tier-ceiling-min-partition-inputs (the splash wave, Plan 273); Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork)) // Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bounded-bypass-later-fitting-goes-first (1eaa2c53) // Batch 242 +2: spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge (mlx-serve @ 1015f785) // Batch 240 +1: subgroup-tail-lane-clamp-live-loads-gate-stores (llama.cpp #30421 @ 9166ceaf) // Batch 234 +1: warp-role-split-phase-overlap-cross-chunk-prefetch (llama.cpp #29353 @ 62df1815)
         (KernelCategory::FlashAttnTiling, 25), // Batch 275 +1: F query-blocked-prefill-score-span-bound (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 257 +1: cluster-dsmem-shared-head-one-row-decode-attention (01b7f3bb -- the CTA-cluster decode head); Batch 256 +1: attention-softmax-state-exchange-once-per-block (c05ce72c+80d1aba4 — the softmax-state exchange frequency axis, Plan 260) // Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile (fattn-tile #30572 @ 5aeac37a) // Batch 249 slice 3 +1: chain-rows-attend-own-keys-in-prefix-per-row-key-bound (64cc7b01)
@@ -5581,11 +5581,11 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 1037 (Batch 320 +4: the post-B319 staged remainder, Plan 320 — A immutable-operand-device-resident-per-buffer-type + N word-native-byte-pair-minifloat-conversion + B block-scaled-operand-declared-form-refusal-ladder + D plane-storage-barrier-scope-covers-global-exchange) -- D metal-icb-replay-rewrite-private-copy + D profile-window-nests-committed-since-open + D glm-top1-chance-rides-pick-word + D tiny-proj-aux-stream-overlap-size-gated + the count-neutral SMEM loop-reuse rider face gpu_94; prior: Batch 317 +3: the 10-30d staged kernel_opt pool, Plan 317 -- A ring-scan-grouped-load-ahead-wrap-step-same-fold-order + E row-owns-output-k-full-reduce-exchange-carries-no-arithmetic + D routed-density-pairs-per-item-keys-tile-admission + the R5 count-neutral rider face gpu_52; prior: Batch 310 +3: the 10-30 staged leads, Plan 315 -- B mma-accumulator-run-as-one-operand-depth-matches-instruction + E barriers-declared-before-slots-one-free-run + D warp-per-row-small-blocks-cta-under-load-law + 1 count-neutral rider face gpu_130; prior: Batch 309 +1: the 10-30 staged web-watch intake, Plan 314 -- B runtime-trip-count-defeats-unroll-template-the-bound; prior: Batch 307 +2: the 10-29b staged kernel_opt pool, Plan 312 -- A write-coverage-proven-uninitialized-alloc (vllm #64419+#64345) + D gate-rank-dispatch-function-constant-variant (mlx #4791); +4 count-neutral rider faces gpu_17/gpu_33/gpu_137/gpu_134; prior Batch 304 +13: the kernel_opt delta pool, Plan 309 / Research 348; prior Batch 303 +8: the splash return-visit delta, Plan 308 / Research 345 -- A +1 golden-ratio-decode-tile-phase-spread + B +2 fp32-pipe-mma-role-split-biased-bf16-operands + conditional-pv-accumulator-rescale + E +1 quad-lane-softmax-two-shuffle-16b-store + G +1 gdn-decode-tape-deferred-retained-row-fold + M +1 apple9-coop-tensor-destination-init-lost-runtime-format + N +2 metal-fma-carries-fast-math-reassociate-off-cannot-pin + gdn-cross-phase-gate-bitwise-parity; prior: Batch 302 +5: the 10-28c staged pool, Plan 307 / Research 344 -- B+C+A x2+D own rules + 4 count-neutral faces; prior: Batch 299 +8: the staged kernel_opt pool, Plan 304 / Research 342 -- A x2 + B + C + D + E + K + N, one count-neutral rider; prior: Batch 297 +4: the b10826 open leads — the #383+#398 GDN conv-chain pair + #396 the FWHT rows->threads admission + #393 face b the replay-time host-scan skip, Plan 300 / Research 333; prior: Batch 288 +0: five count-neutral riders, the b10826 fork decode quartet + #31153 grammar lead, Plan 293 / Research 327; prior: Batch 287 +0: five count-neutral riders, the llama.cpp fusion trio P81/P82/P83, Plan 292 / Research 325; Batch 286 +3: the burn/cubek remainder H/I/J, Plan 291 / Research 321; prior: Batch 284 +4, Plan 288; before that, Batch 281 +3: the upstream llama.cpp trio — L physical-warp-size-keys-tile-legality-and-dispatch + H sentinel-id-skip-shrinks-work-set-zero-unowned-rows + E all-threads-reach-workgroup-barrier-no-pre-barrier-return, Plan 285 / Research 318; was 966 at Batch 278 +4 the Locals conversion, Plan 282; was 953 at Batch 275 +9: the mlxfast-bonsai2-9b conversion, Plan 279; was 944 at Batch 274 +3: the uzu trellis seed; was 941 at Batch 273 +1: A fewrow-mma-fragment-matvec-silicon-tiered-dispatch, Plan 277 / Research 310; +2 count-neutral riders gpu_117 + gpu_01; at 940: Batch 272 +3: the sonar paired-PCIe window, Plan 276 / Research 308 -- D +1 fail-stop collective, E +2 IPC teardown + two-tier wait; at 937: Batch 268 +11: the splash release wave, incoai/splash be3b083c..origin/main, Plan 273 / Research 305 — A mma-lane-map-whole-run-vector-loads-split-accumulator-chains + C same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows + D apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane + E splitk-tier-ladder-per-tier-ceiling-min-partition-inputs + H moe-lone-tile-register-gemv-uniform-tile-kind + moe-unverified-rows-route-zero-experts-dense-shape + I block-sparse-union-lists-packed-entry-token-major-values + O constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers; entries_gpu_117; the wave's rust_perf serving leads STAGED, not landed); Batch 269 +1: the llama.cpp #30862 Metal argmax two-pass B lead, Plan 272 / Research 304; prior re-pinned at Batch 265 +1: the vllm #61497 K lead, Plan 269 / Research 301; prior re-pinned at Batch 261 (+3: the PrismML fork prism-b10787 window -- A prefill-batch-pool-f16-conversion + B one-warp-ordered-reduce + D dtype-branch-dispatch-parity, Plan 265 / Research 297); prior re-pinned at Batch 259 (+3: the uzu pack, Plan 263 / Research 295); prior re-pinned at Batch 256 — +4: F attention-softmax-state-exchange-once-per-block + A expert-prompt-row-batch-amortizes-weight-pool-stream + D glm-selected-prefix-move-before-evict (the NAMED lead) + G mtp-ring-rebase-covers-rollback-window — the TensorFold 9ccf4727..d1018b31 +988-commit campaign kernel half, Plan 260 / Research 291; was 906 at Batch 254 — +1: D fused-read-write-dst-input-overlap-refusal, the #30795 moe_reduce dst-input aliasing refusal; was 905 at Batch 253; was 903 at Batch 252, +2 — the #369 L8V + upstream leads: C +1 sigmoid-gate-chain-folded-into-consumer-template-arm, F +1 oob-free-loop-inclusive-of-last-full-tile; was 901 at Batch 251, the Yukon conversion +16; was 885 at Batch 250 slice 2, 879 at slice 1, 878 at Batch 249 slice 3).
+    // Sum must equal 1041 (Batch 321 +4: the 10-30f staged leads conversion, Plan 321 — B minifloat-cast-routing-native-vs-software-by-target-direction + B block-scaled-mma-scale-register-owns-its-rows + B exl3-span-view-plans-at-planning-granularity + C comms-boundary-consumer-chain-fuses-into-gather; +2 count-neutral rider faces gpu_141 + gpu_144) -- D metal-icb-replay-rewrite-private-copy + D profile-window-nests-committed-since-open + D glm-top1-chance-rides-pick-word + D tiny-proj-aux-stream-overlap-size-gated + the count-neutral SMEM loop-reuse rider face gpu_94; prior: Batch 317 +3: the 10-30d staged kernel_opt pool, Plan 317 -- A ring-scan-grouped-load-ahead-wrap-step-same-fold-order + E row-owns-output-k-full-reduce-exchange-carries-no-arithmetic + D routed-density-pairs-per-item-keys-tile-admission + the R5 count-neutral rider face gpu_52; prior: Batch 310 +3: the 10-30 staged leads, Plan 315 -- B mma-accumulator-run-as-one-operand-depth-matches-instruction + E barriers-declared-before-slots-one-free-run + D warp-per-row-small-blocks-cta-under-load-law + 1 count-neutral rider face gpu_130; prior: Batch 309 +1: the 10-30 staged web-watch intake, Plan 314 -- B runtime-trip-count-defeats-unroll-template-the-bound; prior: Batch 307 +2: the 10-29b staged kernel_opt pool, Plan 312 -- A write-coverage-proven-uninitialized-alloc (vllm #64419+#64345) + D gate-rank-dispatch-function-constant-variant (mlx #4791); +4 count-neutral rider faces gpu_17/gpu_33/gpu_137/gpu_134; prior Batch 304 +13: the kernel_opt delta pool, Plan 309 / Research 348; prior Batch 303 +8: the splash return-visit delta, Plan 308 / Research 345 -- A +1 golden-ratio-decode-tile-phase-spread + B +2 fp32-pipe-mma-role-split-biased-bf16-operands + conditional-pv-accumulator-rescale + E +1 quad-lane-softmax-two-shuffle-16b-store + G +1 gdn-decode-tape-deferred-retained-row-fold + M +1 apple9-coop-tensor-destination-init-lost-runtime-format + N +2 metal-fma-carries-fast-math-reassociate-off-cannot-pin + gdn-cross-phase-gate-bitwise-parity; prior: Batch 302 +5: the 10-28c staged pool, Plan 307 / Research 344 -- B+C+A x2+D own rules + 4 count-neutral faces; prior: Batch 299 +8: the staged kernel_opt pool, Plan 304 / Research 342 -- A x2 + B + C + D + E + K + N, one count-neutral rider; prior: Batch 297 +4: the b10826 open leads — the #383+#398 GDN conv-chain pair + #396 the FWHT rows->threads admission + #393 face b the replay-time host-scan skip, Plan 300 / Research 333; prior: Batch 288 +0: five count-neutral riders, the b10826 fork decode quartet + #31153 grammar lead, Plan 293 / Research 327; prior: Batch 287 +0: five count-neutral riders, the llama.cpp fusion trio P81/P82/P83, Plan 292 / Research 325; Batch 286 +3: the burn/cubek remainder H/I/J, Plan 291 / Research 321; prior: Batch 284 +4, Plan 288; before that, Batch 281 +3: the upstream llama.cpp trio — L physical-warp-size-keys-tile-legality-and-dispatch + H sentinel-id-skip-shrinks-work-set-zero-unowned-rows + E all-threads-reach-workgroup-barrier-no-pre-barrier-return, Plan 285 / Research 318; was 966 at Batch 278 +4 the Locals conversion, Plan 282; was 953 at Batch 275 +9: the mlxfast-bonsai2-9b conversion, Plan 279; was 944 at Batch 274 +3: the uzu trellis seed; was 941 at Batch 273 +1: A fewrow-mma-fragment-matvec-silicon-tiered-dispatch, Plan 277 / Research 310; +2 count-neutral riders gpu_117 + gpu_01; at 940: Batch 272 +3: the sonar paired-PCIe window, Plan 276 / Research 308 -- D +1 fail-stop collective, E +2 IPC teardown + two-tier wait; at 937: Batch 268 +11: the splash release wave, incoai/splash be3b083c..origin/main, Plan 273 / Research 305 — A mma-lane-map-whole-run-vector-loads-split-accumulator-chains + C same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows + D apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane + E splitk-tier-ladder-per-tier-ceiling-min-partition-inputs + H moe-lone-tile-register-gemv-uniform-tile-kind + moe-unverified-rows-route-zero-experts-dense-shape + I block-sparse-union-lists-packed-entry-token-major-values + O constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers; entries_gpu_117; the wave's rust_perf serving leads STAGED, not landed); Batch 269 +1: the llama.cpp #30862 Metal argmax two-pass B lead, Plan 272 / Research 304; prior re-pinned at Batch 265 +1: the vllm #61497 K lead, Plan 269 / Research 301; prior re-pinned at Batch 261 (+3: the PrismML fork prism-b10787 window -- A prefill-batch-pool-f16-conversion + B one-warp-ordered-reduce + D dtype-branch-dispatch-parity, Plan 265 / Research 297); prior re-pinned at Batch 259 (+3: the uzu pack, Plan 263 / Research 295); prior re-pinned at Batch 256 — +4: F attention-softmax-state-exchange-once-per-block + A expert-prompt-row-batch-amortizes-weight-pool-stream + D glm-selected-prefix-move-before-evict (the NAMED lead) + G mtp-ring-rebase-covers-rollback-window — the TensorFold 9ccf4727..d1018b31 +988-commit campaign kernel half, Plan 260 / Research 291; was 906 at Batch 254 — +1: D fused-read-write-dst-input-overlap-refusal, the #30795 moe_reduce dst-input aliasing refusal; was 905 at Batch 253; was 903 at Batch 252, +2 — the #369 L8V + upstream leads: C +1 sigmoid-gate-chain-folded-into-consumer-template-arm, F +1 oob-free-loop-inclusive-of-last-full-tile; was 901 at Batch 251, the Yukon conversion +16; was 885 at Batch 250 slice 2, 879 at slice 1, 878 at Batch 249 slice 3).
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
     assert_eq!(
-        total, 1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        total, 1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -5597,8 +5597,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        total, 1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9705,8 +9705,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))",
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -17188,8 +17188,8 @@ fn batch233_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let e = corpus
@@ -17273,8 +17273,8 @@ fn batch234_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // Rule 1 (G): the register-resident scan state.
@@ -17420,8 +17420,8 @@ fn batch236_rule_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let e = corpus
@@ -17487,8 +17487,8 @@ fn batch235_riders_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // Rider (a): the width-matched loader face.
@@ -17551,8 +17551,8 @@ fn batch232_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let e = corpus
@@ -17614,8 +17614,8 @@ fn batch231_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let e = corpus
@@ -17693,8 +17693,8 @@ fn batch237_rider_landed_on_autotune_host() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let host = corpus
@@ -17734,8 +17734,8 @@ fn batch240_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // P67 -- the subgroup tail-lane law (E).
@@ -17847,8 +17847,8 @@ fn batch227_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let cases: [(&str, &[&str]); 2] = [
@@ -17968,8 +17968,8 @@ fn batch242_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let slice_a = [
@@ -18264,8 +18264,8 @@ fn batch246_rule_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let entry = corpus
@@ -18340,8 +18340,8 @@ fn batch247_oracle_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     let entry = corpus
@@ -18415,8 +18415,8 @@ fn batch249_slice1_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // rider 1 (A-10): the 2-bit in-place mask + compound prescale face
@@ -18524,8 +18524,8 @@ fn batch249_slice2_rules_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // (rule_id, needles that must appear in its gpu_concept)
@@ -18723,8 +18723,8 @@ fn batch249_slice3_rules_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // (rule_id, needles that must appear in its gpu_concept)
@@ -20085,8 +20085,8 @@ fn batch263_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20124,8 +20124,8 @@ fn batch262_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20161,8 +20161,8 @@ fn batch260_rider_landed() {
     // (923 rules since Batch 261 +3 -- the pin rides the count sites).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20279,8 +20279,8 @@ fn batch267_rules_and_riders_landed() {
     // Batch-269 B lead + this batch's N lead) over the 924 corpus -> 926.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20360,8 +20360,8 @@ fn batch265_rules_and_riders_landed() {
     // Count witness: +1 own rule over the 923 corpus (the riders neutral).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20423,8 +20423,8 @@ fn batch269_rule_and_rider_landed() {
     // Count witness: +1 own rule over the Batch 267-era corpus (the rider neutral).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20550,8 +20550,8 @@ fn batch268_rules_landed() {
     // Count witness: +11 over the Batch 269-era corpus (926 -> 937).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20586,8 +20586,8 @@ fn batch264_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -20835,8 +20835,8 @@ fn batch272_rules_and_riders_landed() {
     // Batch 268-era corpus (937 -> 940; the four riders are count-neutral).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -21000,8 +21000,8 @@ fn batch273_rules_and_riders_landed() {
     // Batch 268-era corpus (937 -> 940; the four riders are count-neutral).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -21194,8 +21194,8 @@ fn batch274_rules_and_riders_landed() {
     // total pin above (953) is the batch-274 witness (re-pinned at Batch 275: +9, Plan 279).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -21502,8 +21502,8 @@ fn batch275_rules_and_riders_landed() {
     // the mlxfast-bonsai2-9b trio of trios, Plan 279 / Research 313).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -21814,8 +21814,8 @@ fn batch276_rules_and_riders_landed() {
     // the mlxfast-qwen38-125b-a6b B- pair, Plan 280 / Research 314).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -21973,8 +21973,8 @@ fn batch277_rules_landed() {
     // the Humming+Chord quantized-GEMM pair, Plan 281 / Research 316).
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // The WATCH-ROW negative asserts: the humming support-matrix rows are
@@ -22209,8 +22209,8 @@ fn batch280_rules_and_riders_landed() {
     // Count witness: the batch is count-neutral -- corpus stays 966.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 
     // Provenance: every Batch-280 rider names the fork pin.
@@ -22337,8 +22337,8 @@ fn batch281_rules_and_riders_landed() {
     // Count witness: 966 + 3 own rules.
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -22446,8 +22446,8 @@ fn batch283_rules_and_riders_landed() {
     }
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -22599,8 +22599,8 @@ fn batch284_rules_and_rider_landed() {
     }
     assert_eq!(
         corpus.entries.len(),
-        1037,
-        "batch 320 re-pin: 1037 (1033 + 4: Plan 320, the post-B319 staged remainder — A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion (cubecl 07cd07a #1976) + B block-scaled-operand-declared-form-refusal-ladder (cubecl 07cd07a #1977) + D plane-storage-barrier-scope-covers-global-exchange (cubecl 07cd07a #1986))"
+        1041,
+        "batch 321 re-pin: 1041 (1037 + 4: Plan 321, the 10-30f staged leads conversion — B minifloat-cast-routing-native-vs-software-by-target-direction (cubecl 6bff8ad4 #2008) + B block-scaled-mma-scale-register-owns-its-rows (cubecl a4616247 #1995) + B exl3-span-view-plans-at-planning-granularity (tensorfold cef784e2+6a8dfec0 #1507) + C comms-boundary-consumer-chain-fuses-into-gather (vllm becbaea9f #64638); +2 count-neutral rider faces gpu_141 (cubecl f48e9f53 #2006 side-invariance) + gpu_144 (a4616247 ScaledMmaUnsupported admission))"
     );
 }
 
@@ -24751,6 +24751,135 @@ fn batch320_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-320 {rid} opt_pattern must parse"
+        );
+    }
+}
+
+// ── Batch 321 (Plan 321): the 10-30f staged leads conversion. Fixtures
+// standalone-compiled AND executed BEFORE entry (rustc --edition 2021
+// --test; fx1 11 arms, fx2 selector/refusal arms, fx3 plan-equality +
+// the assert_ne defect trap, fx4 fusion dispatch + parity). The S-f9
+// staged rows (llama.cpp #29353 dispatch faces) DROPPED — already owned
+// by occupancy-keyed-value-split-register-budget-ladder (gpu_94, Batch
+// 234) at the same source PR. ──
+#[test]
+fn batch321_rules_landed() {
+    let corpus = build_kernel_seed_corpus();
+
+    let r1 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "minifloat-cast-routing-native-vs-software-by-target-direction")
+        .unwrap_or_else(|| panic!("batch-321 r1 missing"));
+    for mark in [
+        "A cast to a `bool` or an integer, or between minifloats, is the software codec",
+        "100..130 => &[E2M1x2, E4M3, E5M2], 89.. => &[E4M3, E5M2], _ => &[]",
+        "Adds the passes lowering the minifloat casts a target decoding `native` itself does not",
+        "(fp8(input) && !decoded) || fp8(result)",
+        "advertise no fp6 format, which no cast lowers",
+    ] {
+        assert!(r1.gpu_concept.contains(mark), "batch-321 r1 needle missing: {mark}");
+    }
+
+    let r2 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "block-scaled-mma-scale-register-owns-its-rows")
+        .unwrap_or_else(|| panic!("batch-321 r2 missing"));
+    for mark in [
+        "a unit's register holds the scales of the rows it owns",
+        "as the C++ backend's `{0, 0}`",
+        "two `ue8m0` scales, and for NVFP4, four `ue4m3` ones",
+        "ScaledMmaUnsupported",
+        "insert_int_const(ctx, rw, 16, 0)",
+    ] {
+        assert!(r2.gpu_concept.contains(mark), "batch-321 r2 needle missing: {mark}");
+    }
+
+    let r3 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "exl3-span-view-plans-at-planning-granularity")
+        .unwrap_or_else(|| panic!("batch-321 r3 missing"));
+    for mark in [
+        "From this many 128-column blocks a shape plans one K split",
+        "pub const wide_blocks = 64",
+        "so it plans as the whole head does",
+        "planned eight K splits where the full head plans one",
+        "try std.testing.expectEqual(whole, x3.plan(v.tail.k, v.tail.n, 192, 8))",
+    ] {
+        assert!(r3.gpu_concept.contains(mark), "batch-321 r3 needle missing: {mark}");
+    }
+
+    let r4 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "comms-boundary-consumer-chain-fuses-into-gather")
+        .unwrap_or_else(|| panic!("batch-321 r4 missing"));
+    for mark in [
+        "if fused := self._all_gather_norm_quant",
+        "norm_fuses_into_nvfp4_quant",
+        "(None, fused)",
+    ] {
+        assert!(r4.gpu_concept.contains(mark), "batch-321 r4 needle missing: {mark}");
+    }
+
+    // face 1: the side-invariance rider on the run-as-one-A host
+    let host1 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "mma-accumulator-run-as-one-operand-depth-matches-instruction")
+        .unwrap_or_else(|| panic!("batch-321 face-1 host missing"));
+    for mark in [
+        "RIDER (Batch 321 / Plan 321 — tracel-ai/cubecl @ f48e9f53 #2006",
+        "so the first factor fills the instruction's `A` whichever of the product's operands it is",
+        "comptime!(rows_along(&self.place, &lhs.place.space, &rhs.place.space))",
+        "this family's third instance",
+    ] {
+        assert!(host1.gpu_concept.contains(mark), "batch-321 gpu_141 rider needle missing: {mark}");
+    }
+
+    // face 2: the supported-form admission rider on the declared-form ladder
+    let host2 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "block-scaled-operand-declared-form-refusal-ladder")
+        .unwrap_or_else(|| panic!("batch-321 face-2 host missing"));
+    for mark in [
+        "RIDER (Batch 321 / Plan 321 — tracel-ai/cubecl @ a4616247 #1995",
+        "ScaledMmaUnsupported",
+        "refuses what the backend does not LOWER at all",
+    ] {
+        assert!(host2.gpu_concept.contains(mark), "batch-321 gpu_144 rider needle missing: {mark}");
+    }
+}
+
+#[test]
+fn batch321_pseudocode_parses() {
+    // G1 for Batch 321: all four rules' ref_shape AND opt_pattern must
+    // parse as valid Rust (the L2 pruner verdict).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    for rid in [
+        "minifloat-cast-routing-native-vs-software-by-target-direction",
+        "block-scaled-mma-scale-register-owns-its-rows",
+        "exl3-span-view-plans-at-planning-granularity",
+        "comms-boundary-consumer-chain-fuses-into-gather",
+    ] {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-321 rule missing: {rid}"));
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-321 {rid} ref_shape must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-321 {rid} opt_pattern must parse"
         );
     }
 }
