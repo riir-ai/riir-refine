@@ -137,7 +137,7 @@ lands, no drain owed first.
   via the deployer sibling guard `--live` after the roll.
   - [x] **T-KEYS pre-roll baseline MEASURED 2026-10-26 ~15:0xZ**
     (zed-m3-tkeys-preroll; full record: riir-chain
-    [169 addendum](../../riir-chain/.issues/169_api_key_rotation_sweep.md)
+    `169 addendum`
     @ `4f433d35`). Guard `--static` 0 red / 6 advisory + `--live` 0 red
     / 0 advisory (all refusal legs hold with TODAY's tokens — any
     post-roll red is attributable). Resolved from "unknown": wrangler
