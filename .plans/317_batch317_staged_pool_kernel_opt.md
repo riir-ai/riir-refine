@@ -1,6 +1,6 @@
 # Plan 317 — Batch 317: the 10-30d staged leads kernel_opt pool (S7 + S5 + S6 + R5)
 
-**Status:** IN PROGRESS — claimed 2026-10-30 ~05:5xZ (zed-m3-b317, M3; T0/T1 DONE PRE-CLAIM — all ten TensorFold pins resolved in `.raw/b317/tf`, every staged quote byte-verified, dedup greps ruled in-row; authoring T2–T4 STAGED behind the batch-316 sibling lane + the gate window; the claim row is the queue snapshot's head).
+**Status:** LANDED 2026-10-30 ~07:1xZ (zed-m3-b317, M3; T0–T6 COMPLETE — 3 own rules + 1 count-neutral rider face; corpus 1026 → 1029; gates all green at the native 1.99.0 pin under the i1117 collection, isolated CARGO_TARGET_DIR; the batch-316 sibling landed first at `4d1fdb2e` clearing the shared-file conflict surface; push is the arbiter).
 
 ## Scope
 
@@ -50,7 +50,7 @@ override). freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NO
       different senses); S6: ZERO hits on all four vocabularies (gpu_13 rows_min + gpu_133
       moe-cap confirmed the kin set); R5: B182 gpu_52 owner confirmed (named first-member in
       the gpu_61/65/97/99 kinship notes)
-- [ ] T2 authoring: `entries_gpu_142.rs` (3 own rules — pattern, bounded fix-space, category,
+- [x] T2 authoring: `entries_gpu_142.rs` (3 own rules — pattern, bounded fix-space, category,
       rationale, source quotes, distinct-from kinships, grep evidence) + the R5 count-neutral
       rider face (gpu_52); category letters adjudicated against the mod.rs table; rustfmt-clean
       (rustfmt parse = valid Rust; cargo NOT run under Plan-337)
@@ -88,14 +88,50 @@ override). freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NO
       the parameterization this rider owns — the rows kernel is the mechanism commit,
       its contract test (contract_qwen_mtp_rows.zig, 344 insertions) the fixture.
       Verified verbatim at the pin. Batch 317 rider."
-- [ ] T3 wiring: mod.rs mod-decl + extend + the slice rule_id lists; slice headers repaired to
+- [x] T3 wiring: mod.rs mod-decl + extend + the slice rule_id lists; slice headers repaired to
       measured truth while touched (the B309 stale-header class)
-- [ ] T4 count pins: tests.rs count-pin sites (1026 -> 1029 at the era-witness sites; the
+- [x] T4 count pins: tests.rs count-pin sites (1026 -> 1029 at the era-witness sites; the
       category table + the router expert-total if categories move) + AGENTS.md + README +
       .docs/11_domains/kernel_opt.md
-- [ ] T5 GATES (deferred, never skipped): G1 batch317 needles+parse; G2 kernel_opt lib +
+- [x] T5 GATES (deferred, never skipped): G1 batch317 needles+parse; G2 kernel_opt lib +
       default lib; G3 clippy -D ×4 postures (default / kernel_opt / no-default-features /
       all-features); retrieval floors HELD both postures. Native isolated CARGO_TARGET_DIR
       under the i1117 collection, or the amo git-bundle fallback (plan 315 precedent)
-- [ ] T6 landing row + commit/push (the push is the arbiter) + `.raw/b317` removal + this
+- [x] T6 landing row + commit/push (the push is the arbiter) + `.raw/b317` removal + this
       status line flipped COMPLETE with the corpus delta
+
+## Landing record (2026-10-30 ~07:1xZ)
+
+- **Landed:** 3 own rules (A +1, E +1, D +1) + the R5 count-neutral rider face on gpu_52;
+  corpus 1026 → 1029. Category counts now A 202 / D 242 / E 96.
+- **Fixture execution** (the batch-316 precedent, BEFORE entry): 11 tests green standalone
+  (`/tmp/b317_fixtures`, rustc 1.99.0) — 10 planned + rule 3's ref_shape demonstrator. ONE
+  fixture defect found + fixed en route: r2's `row_owned_round` multiplied by 0-indexed `o`
+  while asserting 1-indexed values — the multiplier now `((o + 1) as f32)` so the expected
+  vector `[8.0, 16.0]` stays a meaningful distinguisher. Assembly notes (disclosed, zero
+  fixture edits): rule 3's flat ref+opt concat collides on `struct Plan` (E0428) — compiled
+  as adjacent nested modules for execution; the corpus pipeline is parse-only per arm, so
+  this is an execution-harness concern only. r1/r2 drop the opt half's mid-file
+  `#![allow(dead_code)]` (illegal there; the ref head attribute covers the module).
+- **Clippy healing:** the healer (compile-gated `--fix --write --verify`) fixed the
+  doc-backticks class; the 6 `unnecessary_hashes` raw-string findings are the documented
+  manual divergence class — repaired manually to the plain `r"..."` corpus convention
+  (fixtures verified to contain no `"#` sequences; content byte-identical; rustfmt +
+  the L2 parse gate green after).
+- **S6 needle repair en route:** one batch-317 needle paraphrased its corpus text
+  ("moving" vs the verbatim "that moves"); corrected to the verbatim substring — the
+  needle class asserts verbatim marks, never paraphrase.
+- **Sibling stale-pin repair en route (the B266/B271/B305 missed-pin class):** the
+  kernel_opt-side cross-domain rust_perf witness (`batch249_slice3_rust_perf_riders`)
+  still read 280 through the batch-316 landing's 280 → 285 — found + repaired by this
+  batch's first kernel_opt suite run (the batch-316 provenance chained, miss disclosed
+  in the pin message).
+- **Router expert-total re-pin:** `rules_for_expert_total_matches_corpus` 1026 → 1029
+  (the plan's "router expert-total if categories move" line — the total moved even though
+  categories did not).
+- **Gates (isolated `CARGO_TARGET_DIR=/tmp/b317_gate`, native 1.99.0, under the i1117
+  collection per the batch-316 precedent):** G1 needles+parse 2/2; G2 kernel_opt lib
+  531/0 (incl. the batch-310 needle regression) + default lib 2790/0; G3 clippy `-D
+  warnings` ×4 postures (default / kernel_opt / no-default-features / all-features) all
+  exit 0; retrieval floors 27/0 (latent_retrieval posture). freeze/score-bench NOT owed
+  (kernel_opt-only, P30); binary rebuild NOT owed (kernel_opt outside the release set).

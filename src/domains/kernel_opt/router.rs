@@ -470,8 +470,8 @@ mod tests {
             .map(<[&str]>::len)
             .sum();
         assert_eq!(
-            total, 1026,
-            "Batch 310 +3: the 10-30 staged leads kernel_opt conversion, Plan 315 (B mma-accumulator-run-as-one-operand-depth-matches-instruction + D warp-per-row-small-blocks-cta-under-load-law + E barriers-declared-before-slots-one-free-run; the D/E slice headers repaired to measured truth)",
+            total, 1029,
+            "Batch 317 +3: the 10-30d staged leads kernel_opt pool, Plan 317 (A ring-scan-grouped-load-ahead-wrap-step-same-fold-order + E row-owns-output-k-full-reduce-exchange-carries-no-arithmetic + D routed-density-pairs-per-item-keys-tile-admission; the R5 rider face count-neutral); prior: Batch 310 +3: the 10-30 staged leads kernel_opt conversion, Plan 315 (B mma-accumulator-run-as-one-operand-depth-matches-instruction + D warp-per-row-small-blocks-cta-under-load-law + E barriers-declared-before-slots-one-free-run; the D/E slice headers repaired to measured truth)",
         );
     }
 
