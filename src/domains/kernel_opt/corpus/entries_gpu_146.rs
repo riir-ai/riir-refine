@@ -1,20 +1,20 @@
 //! Entries slice 146 — Batch 322 (Plan 322): the 10-30g + 10-30h staged
 //! leads conversion (zed-m3-b322). Sources: ashhart/`TensorFold` @ 7fce15ce
 //! (#1643, the checkpoint boot staged-upload lane, Apache-2.0 — NOTE:
-//! TensorFold is Apache-2.0, NOT MIT) + ashhart/`TensorFold` @ 618625fd
+//! `TensorFold` is Apache-2.0, NOT MIT) + ashhart/`TensorFold` @ 618625fd
 //! (the pack-identity digest-thread lane, Apache-2.0) + ggml-org/llama.cpp
 //! @ 792fcf4e (#31341 "opencl: add initial iq1 support", MIT, author
 //! shaoqi@qti.qualcomm.com — Qualcomm). STAGED-POOL ADJUDICATIONS carried:
 //! S-g1 watch-only (home runtime-bound loops, G1-refused under the
 //! Issue-940 determinism law); S-g4 watch (record-only diff); S-g6 → the
-//! serving/spec-dec tier (the B319 adjudication lane); the DSpark
+//! serving/spec-dec tier (the B319 adjudication lane); the `DSpark`
 //! buffer-economy lead (5423fb8b #63886) graded HOST/SCHEDULER-shaped
 //! (collective orchestration, no kernel arithmetic, no measured numbers)
 //! → the `rust_perf` tier behind plan-310 (to 2026-10-31T14:21Z); S-h2
-//! split-vocab argmax = the float_order corroboration (`rust_perf`-side
+//! split-vocab argmax = the `float_order` corroboration (`rust_perf`-side
 //! home); S-h3 HIP FFI-bytes yields to the sec tier behind plan-310
-//! (B293); S-h1 landed as the fixed-pointer face on gpu_02; S-g5 e4
-//! landed as the evidence-qualified-defaults face on gpu_17 (e1/e2/e3
+//! (B293); S-h1 landed as the fixed-pointer face on `gpu_02`; `S-g5` e4
+//! landed as the evidence-qualified-defaults face on `gpu_17` (e1/e2/e3
 //! watch rows — no in-corpus host).
 
 use super::KernelRule;

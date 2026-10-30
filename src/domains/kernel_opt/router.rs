@@ -470,8 +470,8 @@ mod tests {
             .map(<[&str]>::len)
             .sum();
         assert_eq!(
-            total, 1041,
-            "Batch 320 +4: the post-B319 staged remainder, Plan 320 (A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion + B block-scaled-operand-declared-form-refusal-ladder + D plane-storage-barrier-scope-covers-global-exchange, all cubecl 07cd07a)",
+            total, 1044,
+            "Batch 322 +3: the 10-30g + 10-30h staged leads conversion, Plan 322 (A checkpoint-boot-staged-upload-bounded-bytes + B boot-identity-hash-read-once, tensorfold 7fce15ce/618625fd; D vendor-intrinsic-staged-operands-by-value-scheduling-attribute, llama.cpp 792fcf4e #31341); prior: Batch 320 +4: the post-B319 staged remainder, Plan 320 (A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion + B block-scaled-operand-declared-form-refusal-ladder + D plane-storage-barrier-scope-covers-global-exchange, all cubecl 07cd07a)",
         );
     }
 
