@@ -2,6 +2,7 @@
 
 **Status:** STAGED — verdict landed 2026-10-28 (Research 341, YES B−); conversion claims plan-first at the next free mining slot (B298 bbtree lease to 2026-10-29T09:44Z, B299 pool claim to 2026-10-30T09:34Z — re-run `claim_lease_check` before appending any Claimed line).
 
+**Claimed:** shikuwa-4090-b300, 1793443300, expires 2026-11-02T05:55:00+07
 Source: ConstexprCore/perfect_hash **@ `4fdf1b7fff40838c8a43080bac066429c9452327`** (Release v0.3.0, MIT). C++ source — transcription law applies, fixtures are our own original Rust. Expected yield: **2-3 own rust_perf rules + 1-2 rider faces** after falsification (Research 341 §the-mine).
 
 - [ ] T0 — re-clone at the pin (`git clone --depth 1` into `.raw/perfect_hash300/`, `rev-parse` == `4fdf1b7…` EXACT) + license re-verify (root LICENSE MIT). **The verdict's clone is already removed — every quote in Research 341 §the-mine re-verified byte-for-byte at the pin before any corpus edit** (the B275 leads-only law). Read the UNREAD files at T0 while the clone is live: `detail/gperf_generator.h`, `detail/wide_generator.h`, `detail/neon_compare.h`, `detail/lsx_compare.h`, `benchmarks/bench_protocol.cpp`, `tests/test_wide.cpp` — upgrade or drop candidates 4/5 on what they show.
@@ -17,3 +18,5 @@ Source: ConstexprCore/perfect_hash **@ `4fdf1b7fff40838c8a43080bac066429c9452327
 - [ ] T6 — GOAT on the lead rule(s): `rust_perf_bench` Pareto validator at `--release` with box-state provenance (bench_preflight posture; M3 Mac15,8 AC power / load disclosed); G1 equivalence asserted in-fixture (folded compare == slice compare over an exhaustive ≤4-byte domain + LCG probes — the Batch-59 boundary law: floor-vs-ceil magic class); G4 alloc-count axis (both arms alloc-free, counting canary).
 - [ ] T7 — records: Research 341 gains the landing addendum (T0b lowering evidence + final grades + drift disclosures); AGENTS.md rust_perf rule-count bullet re-pinned; `.docs/11_domains/rust_perf.md` if the domain doc carries counts; this plan all-[x] (defers as `- [-]` with reasons).
 - [ ] T8 — queue-snapshot landing row + `rm -rf .raw/perfect_hash300/` (cleanup is part of the batch — a landed batch with a live `.raw/` entry is unfinished). ONE commit, `feat:` prefix (corpus delta), push on develop.
+
+**Claimed:** shikuwa-4090-b300, 1793443300, expires 2026-11-02T05:55:00+07
