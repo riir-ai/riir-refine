@@ -1,936 +1,917 @@
 ## HISTORY.md — riir-refine
 
-Compacted 2026-10-16: every `##` heading kept verbatim, one compact entry per record; the full pre-compaction text is in git history (pre-compaction HEAD cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
+Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
+
+## 2026-10-30 — AGENTS.md compaction: the Role-bullet per-batch rule arcs (Batches 282–319) moved out of AGENTS.md
+
+rust_perf: B282 Plan 286 · B283 Plan 287 · B284 Plan 288 · B288 Plan 293 · B298+B305 Plan 289 (entries_52) · B308 Plan 313 (entries_54) · B316 Plan 316 (entries_55) · B318 Plan 318 (entries_56) → 287 rules. kernel_opt: B283 Plan 287 · B284 Plan 288 · B286 Plan 291 · B288 Plan 293 · B295 Plan 300 · B296 Plan 301 (gpu_132) · B297 Plan 303 (gpu_133) · B299 Plan 304 (gpu_134) · B302 Plan 307 (gpu_135) · B303 Plan 308 (gpu_136) · B304 Plan 309 (gpu_137+138) · B307 Plan 312 (gpu_139) · B309 Plan 314 (gpu_140) · B310 Plan 315 (gpu_141) · B317 Plan 317 (gpu_142) · B319 Plan 319 (gpu_143) → 1033 rules.
+Rule-by-rule arcs: the batch plans + the pre-compaction AGENTS.md at `403d72bbb703`.
 
 ## 2026-10-30 — Issue 189 tails DONE: the wire-KAT census render + the E-5 live refusal + plan-302 T1 ticked (file removed per the noise-reduction rule — plan 302 + this row are the durable record; T3b + promote stay owner-parked in plan 302)
 
-Three tails of the Issue-175/plan-302 T-E2E battery, landed `1efc918d` (session zed-m3-189-tails): (1) the two census render sites (`kat_migrate_client.rs` — surface detail + the E-3 blocker) printed WIRE-KAT totals under µKAT labels (the Issue-094 slip class: the E-3 live cell read a 1 KAT pending delta as "holds 1 µKAT"); new `render_wire_kat` helper routes both through `kat_units::render_units` (`MICRO_PER_KAT` the one conversion, saturating both sides) — "holds 2.000000 KAT …"; the E-3 refuse test pins the honest units + a no-µKAT assertion, 21/21 migrate-client tests green at `--features kat_service` (the module is kat_service-gated — a plain `cargo test` runs it as a green zero). (2) The E-5 released-id re-file attempt RAN on the M3 (isolated rig: throwaway account dir + traj root + new-side key, `--net devnet`): refuses CLIENT-side at the Issue-188 login-proof pre-flight (`kat_migrate_normal.rs` Expert arm — the new throwaway key not listed on `github.com/katopz.keys`), exit 1, BEFORE any filing POST (census READY, no wire call, no state written) — the cell's own "issue 144's proof gate may run first" prediction, in its 188-lane client form; the three paths past it (interactive device flow / `--github-token` / key listing) each need an owner act, so the wire-side dead-account-vs-login_unproven ordering stays covered by the dao fixtures + T1-live's wire 409 cells; rig key shredded + dirs removed post-run. (3) Plan-302 T1 ticked with the battery record (the amo battery: dao 63/63 + spec-match 3/3 + store 50/50; E-3 both halves; E-4 three legs) + the E-5 tail; the T2/T4 key-hygiene box verified + ticked (both `/tmp/kat_old_c79c93b8*` copies ENOENT on the M3). REMAINING (owner, parked in plan 302's frozen status): the T3b mining-ephemera call + the `kat_migrate` apex/mainnet promote verdict.
+Three tails of the Issue-175/plan-302 T-E2E battery, landed `1efc918d` (session zed-m3-189-tails): (1) the two census render sites (`kat_migrate_client.rs` …)
 
 ## 2026-10-28 — Issue 186 CLOSED: structure-grounded synthetic retrieval-eval fixtures land as `draft::eval_synth` (file removed per the noise-reduction rule — Research 339 is the durable record)
 
-The STAIR recipe (arXiv:2609.03874 via ndb Research 311) landed tier-1: gold derives from the corpus's own structure (every span from rule R's `buggy_code` carries gold = R, zero teacher opinion), questions are three deterministic mutations (`ident-rename` / `comment-strip` / `reindent`, identity-skipped). Consumers: `clippy_synth_population()` feeds the withheld-pair protocol — landing read 341 bindings · **15 eligible cells (30 paired queries, vs 0 on the corpus-only population)** · ID 100% → OOD 6.7% top-1 (+93.3pp paired drop, NOROLE 0.0 ✓, chance 0.9%) — and `run_synth_floor()` measures the robustness floor: **1005 spans, blended 97.7/99.9/100.0** (ident 96.9 / comment 97.9 / reindent 98.4 top-1; floor pinned at 0.50 collapse-bar). Six always-on `retrieval_synth_*` tests ride Layer 5b2's lane at zero added wall (the two matcher-priced arms are `#[ignore]`d per the freeze-table convention, run at corpus landings). `withheld_pair_ood::RUST_KEYWORDS` → `pub(crate)` (the rename reuses the keyword table — the atomic-key invariant test pins it). Tier 2 (teacher paraphrase, echo-gated) deliberately not here — owner-gated separate lane. Full record: `.research/339_issue186_structure_grounded_synth_fixtures.md`. Session: zed-m3-blaze-run, 2026-10-28.
+The STAIR recipe (arXiv:2609.03874 via ndb Research 311) landed tier-1: gold derives from the corpus's own structure (every span from rule R's `buggy_code` carries gold = R, zero teacher opinion), questions are three deterministic mutations (`ident-rename` / `comment-strip` / `reindent`, identity-skipped).
 
 ## 2026-10-27 — Issue 185 CLOSED: the `softmax-collapse` rule family ships with a zero-unexplained-hit workspace sweep (file removed per the noise-reduction rule — this row is the durable record)
-- T1–T4 (`17965377`): `sigmoid-minus-one` (MECHANICAL, `FIXABLE_SEC`: `σ(z) − 1` → `−σ(−z)`, split one-hot form, name-allowlisted σ), `softmax-onehot-collapse` + `neg-ln-softmax-prob` (suggest-only, row evidence in walk order per innermost fn), the new APPEND-ONLY `SecFamily::Numerics`, before/after fixtures from six shipped repairs, and `examples/softmax_collapse_sweep.rs`. Domain decision: `sec`, the `nan-unsafe-sort-comparator` shape. Bug 2 (two separately computed probability vectors subtracted) stayed out of scope: it is cross-function dataflow, and riir-train 651 T3 is its instrument.
-- T4b (`ad394fc6`): the allow marker `// softmax-collapse: allow — <reason>`. It must sit on the hit's line or the line directly above, the reason is MANDATORY, and it covers all three rules (sigmoid-minus-one withholds the edit). Suppressed sites are counted, never folded into zero: `detect_all` / `collect_edits_with_allow` / the sweep's `ALLOW` rows + `allowed` column.
-- The 25 standing hits plus the one rule-unreachable site (rethink typed head) were each adjudicated by reading context:
-  - **(b) real, fixed — 13 (3 riir-ai + 2 riir-rethink + 8 riir-train; 13 + 10 + 3 = 26):**
-    - riir-ai `binary_kernel_poc` ×3. `ce_collapse_free_into` was hoisted to the riir-poc crate root and is shared with `set_diffusion_poc`, then the mean `1/l`; margin-40 test (`38b62684e`).
-    - riir-rethink, 2 sites:
-      - `instinct_teacher_ft` loss, via the new `ce_loss_dlogits` beside `ce_dlogits`, gradient byte-identical; margin-20 test.
-      - `instinct_typed_head_trainer`, where the gold BCE slot becomes `−σ(−z)` (`11a00d6`).
-    - riir-train, 8 test/bench training helpers via `math::ce` (asft ×2, nitp, peira ×2, tests/common, gpu plan389 + plan433) (`b07f40af`).
-    - Drive-by in the same commit: the rlvr example double-counted rollout/replay loss on the default arm (since `28f5c453`).
-  - **(a) deliberate, marked — 10:** the `RIIR_CE_COLLAPSE_FREE=0` incumbent arms: rlvr ×2, sft, arm_c, plan338, weak_probe, deltanet lm_head_lora_train, kimi_k3_gpu_backward, kimi_k3_ouro, gpu backward.
-  - **(c) not the collapse, marked with a reason — 3:**
-    - bench-algo `masked_softmax_mse_raw_v` ×2: a Brier residual. The row is zero-sum by construction and the error is O(e^-2m); the CE repair does not fit, and no principled gate separates it syntactically.
-    - `elbo_boundary_trainers::masked_ce_closed_form`: a probability-space identity pin against the DP tables, which score `−ln p`.
-- **Final sweep** (29 repos, worktree = HEAD of every repo above): sigmoid-minus-one 0 · softmax-onehot-collapse 0 · neg-ln-softmax-prob 0 · allowed 13 (all riir-train, each with its reason) · unparsed 14 (riir-rethink `bin_hunks/*.rs` include-fragments, grep-confirmed free of softmax/`.ln()`/sigmoid) · `seal-online-site` EMPTY-WALK.
-- Commits: `17965377` (T1–T4), `ad394fc6` (marker), riir-ai `38b62684e`, riir-rethink `11a00d6`, riir-train `b07f40af`, and this row (the closure commit).
+
+T1–T4 (`17965377`): `sigmoid-minus-one` (MECHANICAL, `FIXABLE_SEC`: `σ(z) − 1` → `−σ(−z)`, split one-hot form, name-allowlisted σ), `softmax-onehot-collapse` + `neg-ln-softmax-prob` (suggest-only, row evidence in walk order per innermost fn), the new APPEND-ONLY `SecFamily::Numerics`, before/after fixtures from six …
+Commits: `ad394fc6`, `38b62684e`, `11a00d6`, `b07f40af`.
 
 ## 2026-10-27 — Issue 181 CLOSED: the gitsync `:selfheal` proved itself on the first real wedge — close condition met in the scheduled 12:15:33+07 run (file removed per the noise-reduction rule — this row is the durable record)
-- The wedge (sync-repos.log, the 2026-10-27 12:15:33+07 run): riir-infer's sync died with "Your local changes to the following files would be overwritten by merge: .issues/1134_norm_pair_epilogue_fold_rung.md" — the fetch `--update-head-ok` shape: the branch ref had ALREADY moved to upstream when the fetch's own working-tree fast-forward aborted on stale worktree bytes (materialized origin content, NOT sibling WIP — the repo read dirty=0 immediately after the repair). `:selfheal` fired on its coded signature (ahead==0 AND behind==0), reset the ref, restored deleted tracked files; the next full sweep found riir-infer clean and in sync. Zero manual repair.
-- Gate-description correction (doc vs code, resolved in favor of the code, no script change): the issue's prose gate ("ahead==0 AND behind>0") matches a plain-fetch wedge where the ref never moves; this script's fetch carries `--update-head-ok`, which pre-moves the ref, so the real wedge signature is ahead==0 AND behind==0 — exactly what the shipped code gates on.
-- Standing: `E:\git\sync-repos.cmd` stays unversioned with backup `sync-repos.cmd.bak-20261027` (the revert recipe was in the removed issue file; git history carries it). Residual hardening (lock-window reduction, a second-pass retry ~60 s after any self-heal) stays owner-side, deliberately unfiled.
-- Commits: this row (the closure commit).
+
+The wedge (sync-repos.log, the 2026-10-27 12:15:33+07 run): riir-infer's sync died with "Your local changes to the following files would be overwritten by merge: .issues/1134_norm_pair_epilogue_fold_rung.md" …
 
 ## 2026-10-24 — Issue 169 CLOSED: FLINT multi-vector T0 kill-test measured KILL — full-token MaxSim ≤ the shipped matcher at EVERY width (file removed per the noise-reduction rule — this row is the durable record)
-- The pre-registered kill-test ran FIRST (T0 before any pooling code): hashed `op_tokenizer` op-token embeddings (BLAKE3-XOF → D u32 → f32 [-1,1] → L2, scheme pin `3466d6ed36f96a0c`, document-side dedup EXACT under MaxSim) scored by the shipped `maxsim_score`, vs the shipped `LatentMatcher`, ONE binary at default features (416 rules / 141 spans / 4 domains). **Best (e) arm 85/141 (60.3%) blended top-1 at the widest D=64 vs (a) 124/141 (87.9%); paired +3 wins / −44 losses / 94 ties; per-domain clippy −7, perf −27, docker −6, dist +0; the negative holds at every D** (G4's widest-D condition satisfied). Width trend 44.7 → 56.0 → 60.3 is monotone but mechanism-bound: hashed random directions carry no token similarity and no IDF, so MaxSim degenerates to unweighted token-overlap counting — the tiny-token-crowding defect re-created inside the scorer; FLINT's per-token vectors are trained-encoder outputs. The instantiation rerank channel carries a large share of the Full posture (D=64: 84 vs Raw 60) — the symbolic channel was rescuing a weak similarity ranking, not the reverse.
-- Consequences: T1 pooling never built; riir-train Issue 647 (trained-pooler control) stays closed — its gate needed BOTH (b)>(a) AND (e)>(a). Honest residuals in the record: MaxSim-as-ensemble-channel untested (a different claim; no observed headroom at +3/−44), a trained per-token code embedder is a different lane. En-route standing observation: arm (a) measured 124/141 = exactly AT `BLENDED_TOP1` (zero margin after the 245–271 corpus growth) — the next corpus landing owes the Issue-063 one-span repair per the floor's own convention.
-- Determinism: two full runs byte-agree on every count and digest (corpus digests D=8 `c22b6cee284cc1f3` / D=32 `4783e8af18b3591f` / D=64 `453020710ff90287`); the harness validates its arm-(a) paired loop EXACTLY against `run_eval` (blended + per-domain asserts).
-- Commits: harness `794771c3`; record + note-309 §7 `9a7399c6`; removal (this row) — the full record is `.benchmarks/120_flint_t0_fulltoken_maxsim_killtest.md`.
+
+The pre-registered kill-test ran FIRST (T0 before any pooling code): hashed `op_tokenizer` op-token embeddings (BLAKE3-XOF → D u32 → f32 [-1,1] → L2, scheme pin `3466d6ed36f96a0c`, document-side dedup EXACT under MaxSim) scored by the shipped `maxsim_score`, vs the shipped `LatentMatcher`, ONE binary at default …
+Commits: `794771c3`, `9a7399c6`.
 
 ## 2026-10-19 — Issue 168 CLOSED: the "5 stale lint keys" were NOT renamed/removed — all five are Batch-230 AHEAD-OF-PIN; the coverage report partitions them by the registry (file removed per the noise-reduction rule — this row is the durable record)
-- The issue's premise refuted by probe at both drivers (2026-10-19, `clippy-driver -W help`, checks sections only — the `-W help` lint names are kebab-case, the underscore greps silently read zero): at the pinned 1.98.1 none of the five names exist; at the isolated +1.99.0 ALL FIVE exist (`assert-is-empty` allow/pedantic, `manual-bit-width` allow/pedantic, `block-scrutinee` warn, `mismatched-bit-width-type` warn, `nonnull-unchecked-on-box-ptr` warn). The issue's claimed successor `manual_bits` is a DIFFERENT pre-existing lint (`size_of::<T>() * 8`, warn-by-default at BOTH versions) — the table's re-key would have been exactly the wrong-rename class its own constraints warned against.
-- Root cause was never the corpus: the coverage report's `corpus_rules_not_in_surface` derivation diffs corpus keys against the INSTALLED driver without consulting `lint_level::AHEAD_OF_PIN_1_99`, so the Batch-230 wave mislabeled as renamed/removed. Fix (the house input-parameter shape, arithmetic stays unit-testable): `CoverageInputs` gains `ahead_of_pin: &[&str]` (the CLI supplies the registry under `cfg(feature = "clippy_lints")`, mirroring the same-fn `clippy_corpus_ids_and_bodies` pattern), `coverage()` partitions absent keys by it, and the render discloses registered keys on their own `ℹ … keyed AHEAD-OF-PIN` line — the ⚠ renamed/removed line stays for genuinely-absent keys only. Live report post-fix: ℹ 5 keys, ⚠ line gone. The existing `ahead_of_pin_rows_match_the_1_99_driver` lint-level gate remains the +1.99.0 verification half.
-- NOT owed: freeze-table regen + score-bench (zero `build_seed_corpus()` delta — no corpus content moved); rust_perf/kernel retrieval floors (no corpus moved). heal.rs edited surgically — the first `rustfmt <file>` pass reformatted 1099 lines of the file's pre-existing drift (and kat_info/mod.rs via mod resolution, 163 lines); both reverted, the B250-T6 whole-file-format lesson re-confirmed: heal.rs is deliberately not rustfmt-canonical.
-- Commits: claim `dfd4dd11`; the fix is the adjacent code commit in git history (this file moved in it).
+
+The issue's premise refuted by probe at both drivers (2026-10-19, `clippy-driver -W help`, checks sections only — the `-W help` lint names are kebab-case, the underscore greps silently read zero): at the pinned 1.98.1 none of the five names exist …
+Commits: `dfd4dd11`.
 
 ## 2026-10-18 — Issue 166 record CORRECTED: the T1 inventory's `evolve.rs` row was false — `score_candidate` has a production weighted-sum consumer; the capacity-law ABSENT verdict survives on corrected grounds
-- Found by the closure-verification pass (a read-only re-audit of `cdb53f81`/`5012782d` against the code at `origin/develop`). The T1 row "`evolve.rs` `score_candidate` has zero production consumers (test-only API)" and the verdict sentence "no serve-path weighted-sum/absolute-threshold consumer of any scored sigmoid gate exists" are BOTH false: `src/self_evolve.rs::select_best_candidate` — Step 4 of `HealPipeline::heal`, UNGATED, called unconditionally from the production heal path (`:1015`) — consumes the `src/evolve.rs:197` sigmoid gate (`sigmoid(simd_dot_f32(evolved, cand) / temperature)`, neutral 0.5 unseen) as a weighted sum: `W_EVO(0.6)·evo_score + W_RATE(0.4)·reliability` (tether arm `(1−ρ)·evo + ρ·rel`). That is exactly the issue's own pre-registered class (a) for the blend arm — T3's close condition as WRITTEN ("no weighted-sum consumer beyond margin_weight") was not met; per the 154/155 precedent this row corrects, and the closure row above stands unedited.
-- The HEADLINE verdict SURVIVES on corrected grounds: the gate's only inputs are the per-lint evolved direction (the EMA of recorded fix outcomes in `LatentSkillEvolution`) dot the candidate's own direction — neither scales with corpus N, no max-of-M tail, no nearest-neighbour — so the capacity law's axis (store size) has no handle on this score BY CONSTRUCTION and no corpus-size sweep is reachable to run (nothing to vary). The blend's open question is the issue's own pre-registered relative-scale class ("Issue-013-style, not capacity"), out of this issue's scope; T4 stays moot — a corpus-calibrated gate shape has nothing corpus-mediated to calibrate here.
-- `.plans/005` Risk-5 pointer reworded in the same commit to name the blend instead of the false blanket negative. Inventory lesson: T1 was one call-frame short — `score_candidate`'s consumer lives in `self_evolve`, the single-vocabulary-grep class the workspace keeps paying for.
+
+Found by the closure-verification pass (a read-only re-audit of `cdb53f81`/`5012782d` against the code at `origin/develop`). The T1 row "`evolve.rs` `score_candidate` has zero production consumers (test-only API)" and the verdict sentence "no serve-path weighted-sum/absolute-threshold consumer of any scored sigmoid …
 
 ## 2026-10-18 — Issue 166 CLOSED: the capacity-law lever class is ABSENT in the healer (file removed per the noise-reduction rule — this row is the durable record)
 
-- T1 inventory OVERTURNED two of the issue's own table rows: (1) `traj_store` `sigmoid_dot_8` is NOT pure ranking — its one consumer fuses it into a weighted sum (`sort_by(bm25/max + latent)` before the top-k truncate), and the serving consumer (`cf_workers_ai::growing_exemplars`) re-sorts the fused pool by (tier, bm25), so the gate's entire influence is k-boundary membership; (2) `margin_weight` has NO serve-path consumer — its blend is mining/measurement-side only (`examples/margin_spectrum.rs`, `examples/score_bench_mine_v6.rs` `mass +=`, `retrieval_eval.rs` test harness); `evolve.rs` `score_candidate` has zero production consumers (test-only API). Verdict: no serve-path weighted-sum/absolute-threshold consumer of any scored sigmoid gate exists — the Research-624 capacity-law lever class is absent in this repo.
-- T2 fixed-gate null confirmed: the traj fused lane's top-1 recall + top-5 pool are IDENTICAL across 1×→2×→4× rows (64/128/256, 8 families, churn 0). Instrument: `tests/issue166_gate_null.rs` (whole-file `latent_retrieval`-gated + its `[[test]]` required-features row; run release at `/tmp/i166`). Pointer on `.plans/005_real_file_span_healing.md` Risk 5 (the liability law is RULE-corpus-lane-scoped). Work commit `cdb53f81`; T4 moot (no consumer to lever); the SIGMOID_TAU + capacity-estimator deferrals stand.
-- ⚠ NUMBERING DEFECT (disclosed, not renumbered): "166" is doubly held LOCALLY — the tuna-verb issue (filed + closed + removed 2026-10-17, `78d20871`) and this capacity-law triage (filed `272995d4`, tagged v0.3.2, AFTER the removal) are two different local issues wearing one number; the allocator read the post-removal disk instead of git history. Both records are live in HISTORY.md and v0.3.2 is cut, so the number stays doubly held; disambiguate citations by their `##` heading, never by the bare number. Logged per the collision-record rule (rename-collapse declined: distinct topics, distinct days).
+T1 inventory OVERTURNED two of the issue's own table rows: (1) `traj_store` `sigmoid_dot_8` is NOT pure ranking — its one consumer fuses it into a weighted sum (`sort_by(bm25/max + latent)` before the top-k truncate), and the serving consumer (`cf_workers_ai::growing_exemplars`) re-sorts the fused pool by (tier …)
+Commits: `cdb53f81`, `78d20871`, `272995d4`.
 
 ## 2026-10-17 — Issue 166 CLOSED: the `tuna` verb names the account state, not the deployment, on the absent pair (file removed per the noise-reduction rule — this row is the durable record)
-- The `/history` wire omits the zipped `tuna_balance_micro` pair when the account holds no SPENDABLE trial credit — a consumed free tier (the KAT-grandfathered fleet account `c79c…5345` on mainnet) and a genuinely pre-TUNA worker read identically, and the None-arm blamed the deployment ("pre-TUNA deployment") for the common case. Fix: `tuna_none_line(granted)` splits on the response's unified claim predicate — consumed names the once-per-account law; unclaimed names the automatic claim path (`cargo refine account` / `--mine` sync). Test `tuna_none_line_tests`; clippy clean at `latent_retrieval,kat_service,kat_transport`. Family: riir-dapps `9582bf8` (the grant-badge surfaces — same raw-flag-vs-claim-predicate defect class; live posture + deploy note in dapps HISTORY.md 2026-10-17).
+
+The `/history` wire omits the zipped `tuna_balance_micro` pair when the account holds no SPENDABLE trial credit — a consumed free tier (the KAT-grandfathered fleet account `c79c…5345` on mainnet) and a genuinely pre-TUNA worker read identically, and the None-arm blamed the deployment ("pre-TUNA deployment") for the …
+Commits: `9582bf8`.
 
 ## 2026-10-16 — Issue 164 CLOSED: the install-probe plain-copy hazard — installers now symlink-aware (file removed per the noise-reduction rule — this row is the durable record)
-- Hazard: `install.sh`/`install.ps1` (gist-rs/cargo-refine) replaced a developer's `~/.cargo/bin/cargo-refine` symlink with a plain release-cut copy; later local rebuilds propagated nothing (measured both boxes 2026-10-13). Four arms: (1) `cargo refine upgrade` swap path VERIFIED non-clobbering (rename moves the link into `.bak-<version>`); (2) dev-box re-link/re-copy convention on `.plans/223` §R6 + `.plans/105` Notes (`26e935e5`); (3) upgrade-path courtesy notice `UpgradeReport.replaced_symlink_target` + `symlink_notice()` (`59bbcd0f`); (4) the dist-repo fix gist-rs/cargo-refine `d9a75b3` — a symlinked destination is moved aside as `cargo-refine.symlink.bak` with a restore-command notice, plain files unchanged. Probed against v0.3.1: install.sh on macOS and install.ps1 on the 4090 (sandboxed USERPROFILE), symlink + plain arms each. AGENTS.md §Production adoption UNLANDED line replaced.
+
+Hazard: `install.sh`/`install.ps1` (gist-rs/cargo-refine) replaced a developer's `~/.cargo/bin/cargo-refine` symlink with a plain release-cut copy; later local rebuilds propagated nothing (measured both boxes 2026-10-13).
+Commits: `26e935e5`, `59bbcd0f`, `d9a75b3`.
 
 ## 2026-10-12 — Issue 160 CLOSED: CRLF line-ending contamination — all 7 legs normalized, workspace doc-surface census reads 0/7 (file removed per the noise-reduction rule — this row is the durable record)
-- Six legs landed 2026-10-11 (refine `7fbca3a7b` 82 · reflex `9e517d2` 2 · reflexer `68cdaae` 1 · ai `ff56c5e113` 26 · katgpt-rs `f2a4fd5a7` 23 · infer `e7b0e49` 6 — all batch-verified endings-only, census-at-HEAD 0) + final leg 2026-10-12 riir-train `afc0a249` (28 files, `git diff --ignore-cr-at-eol` EMPTY, census-at-HEAD 0; sibling's out-of-scope dirty bench WIP (297) untouched). TOTAL: 166 doc-surface files normalized workspace-wide, 0 content bytes moved — the repaired set is the protected baseline (the cycle-13 re-scan verdict extends). Owner-gated OPEN: whether to arm the standing ratchet gate (doc-surface CRLF count must not increase; armable at 0 — normalize-first-then-ratchet was why a hard ceiling was wrong day one). Advisory: the trainer's 3 untracked CRLF-at-birth .rs files in katgpt-rs Plan-621 WIP — normalize before commit.
+
+Six legs landed 2026-10-11 (refine `7fbca3a7b` 82 · reflex `9e517d2` 2 · reflexer `68cdaae` 1 · ai `ff56c5e113` 26 · katgpt-rs `f2a4fd5a7` 23 · infer `e7b0e49` 6 …)
+Commits: `afc0a249`.
 
 ## 2026-10-12 — Issue 162 CLOSED: formatting-invariant dense retrieval — T2 measured, T3 decided NOT ARMED (no transferable formatting subspace) (file removed per the noise-reduction rule — this row is the durable record)
-- T1 `cea4d679` (cycle-22): frozen pair dataset `assets/format_pairs_v1.jsonl` — 4,213 pairs / 37 families / 1.48 MB / sha256 `85dea25b…46e79e` (mined via the existing `--dump-trajectories` export; uninlined_format_args 72% dominance); T2 `e6c02dae`: report-only `examples/formatting_flip.rs` (feature `basis_cert` = katgpt-core `basis_split`); record `.benchmarks/115_issue162_format_flip_t2.md`. Headline (certified 1,935 / verified-lived 281 / all 4,213): fused pair flip 44.1%/68.0%/35.3% vs the 0–1.4% whitespace floor; population A channels fused 44.1% / full8 99.3% / struct4 79.1% — BM25 already carries formatting invariance, churn rides TOKEN changes. The k=1 basis is a giant-Δ outlier axis (λ₁ share 0.994–0.999, calibration ≈ holdout leakage 0.975–0.9967) — NO transferable formatting subspace. T3 NOT ARMED (a projected dense-KNN lane over this basis would be theater); T5 rider in Bench 115 DECLINED until a triage consumer asks; T4's gate list written if the lane re-opens (lane closed, gates not armed). Standing declines (owner gate G4/G5, 2026-10-12): `basis_split` promotion VACUOUS — both consumers (reflex, refine) opt-in, no default-path consumer; re-open when a hot-path consumer arms.
+
+T1 `cea4d679` (cycle-22): frozen pair dataset `assets/format_pairs_v1.jsonl` — 4,213 pairs / 37 families / 1.48 MB / sha256 `85dea25b…46e79e` (mined via the existing `--dump-trajectories` export; uninlined_format_args 72% dominance) …
+Commits: `e6c02dae`.
 
 ## 2026-10-12 — Issue 161 CLOSED: module-applicable pool candidates — pool birth point 3 (the proposer member) + the `rewrite` merge strategy + the behav driver repairs; T1.6 re-computed PASS (file removed per the noise-reduction rule — this row is the durable record)
-- Landed `1afd5d15`: pool widened with proposer members (POOL-ONLY, `heal_with_pool.result` bit-identical to `heal` — the R6 seam contract; plain `heal` pays one branch, G4 untouched) + the `rewrite` whole-module merge (a file-preserving response merges WHOLE) + the behavioural driver's float/int-slice extension; `tests/t40_fixer_regate_harness.rs` repaired (broken since the 09-18 REACHABLE re-pick, controls repointed at `manual_strip`). Bench 114 (`.benchmarks/114_issue161_pool_widened_harvest.md`): pool≥2 643→1446, deciding 3 → 1416 vs T1.6's ≥ 621 — the Plan-225 bench lane UNBLOCKED behind owner-gated T2/T3. Follow-up snapshot P-item P48: the `useless_conversion` proposer gap (76 cases at 0 deciding). Plan 225 T2–T5 tails live in the plan, not the issue.
+
+Landed `1afd5d15`: pool widened with proposer members (POOL-ONLY, `heal_with_pool.result` bit-identical to `heal` — the R6 seam contract; plain `heal` pays one branch, G4 untouched) + the `rewrite` whole-module merge (a file-preserving response merges WHOLE) + the behavioural driver's float/int-slice extension …
 
 ## 2026-10-11 — the 089–158 close-out audit: one missing record BACKFILLED (Issue 112), two index gaps named (137 → bench 103; 142 a legal burned number) — file:record agreement now total over every removed 089–158 file
-- Issue 112 BACKFILLED (false-claim repair, the Issue-798 class): removal `fcb4a15b` (2026-09-16) claimed a HISTORY row that was never written; 112 = the probe-identity WITNESS — primary records are its removal message + the 235-line `.issues/112_probe_identity_witness.md` in git history (this row is the index); found by the 089–158 close-out's file↔record sweep. Issue 137's record home is bench 103 by design (`.benchmarks/103_generation_v9_crb_corruption_localization.md`, removal `8e67ee16` names it) — no backfill. Issue 142 is a legal burned number: no file ever existed (`.highwater` bumped by filing 141 `2839c361` and by batch196 `d25bb830`) — do not hunt for a missing 142. 095/096 deliberate git-history-only records (operative ceilings in katgpt-rs `citation_drift_floors`); 091 unpadded ("Issue 91"); 111 inside the "Issues 110 + 111" heading. En route: journey.rs rustdoc link to the removed `.issues/105` repointed to HISTORY.md (`941e049e`).
+
+Issue 112 BACKFILLED (false-claim repair, the Issue-798 class): removal `fcb4a15b` (2026-09-16) claimed a HISTORY row that was never written; 112 = the probe-identity WITNESS — primary records are its removal message + the 235-line `.issues/112_probe_identity_witness.md` in git history (this row is the index) …
+Commits: `8e67ee16`, `2839c361`, `d25bb830`, `941e049e`.
 
 ## 2026-10-09 — Issue 156 CLOSED: the FlyBy state-level rescue mining filter (b0=0 ∧ bd≥3) — T1–T6 all landed, yield honest-EMPTY locally, live-fire owner-gated (file removed per the noise-reduction rule — this row is the durable record)
-- Code half 2026-10-08 `cf34f6c8` (T1/T2/T3/T5): ungated `src/rescue_mine.rs` (`rescue_keep`, `RescueTally`, BLAKE3 `keep_set_hash`) + arm-H per-state `b0`/`bd` tallies (`FLYBY_CONTINUATIONS_PER_ARM=4` documents the paper denominator) + five serde-default `TrajRowDoc` rescue fields (wire-safe) + the `--misses` rescue-band section; T5 truth table unit-pinned (6 tests). T4 at riir-reflex `86fe38a` (OPT-IN `--synth-rescue-prefilter`, default OFF byte-identical): the local modelless b0 leg rejects solved candidates WITHOUT a teacher forward; the openthai agreement VETO stays the acceptance authority — the filter only NARROWS. T6 honest EMPTY locally (manifest absent → arm-H SKIPs loud; sandbox smoke 9 states, keep-set EMPTY, never faked). Yield vs FlyBy's 95/800 awaits the first ARMED arm-H run (owner-gated spend + `RIIR_REFINE_CODE_EGRESS`). katgpt-rs `.research/609` §2.6 carries the landed hashes.
+
+Code half 2026-10-08 `cf34f6c8` (T1/T2/T3/T5): ungated `src/rescue_mine.rs` (`rescue_keep`, `RescueTally`, BLAKE3 `keep_set_hash`) + arm-H per-state `b0`/`bd` tallies (`FLYBY_CONTINUATIONS_PER_ARM=4` documents the paper denominator) + five serde-default `TrajRowDoc` rescue fields (wire-safe) + the `--misses` …
+Commits: `86fe38a`.
 
 ## 2026-10-08 — Issue 150 RESOLVED: the Homebrew cargo-refine shadow — option 3 (build-commit stamp) landed, option 2 (brew unlink, verdict-REVISEd to reversible) applied, the standing check fired twice in one day (file removed per the noise-reduction rule — this row is the durable record)
-- Found 2026-10-06 (dapps plan-045 verdict round 2, M3): the tap Cellar 0.2.1 binary shadowed `~/.cargo/bin` on PATH — bare `cargo refine` silently ran the RELEASED build. Option 3 landed 2026-10-07 (`0a4c010c`, re-landed `3a9d1e96` after verdict rounds 1–3, final AGREE): `--version` prints `build: <12-hex>[-dirty]|unknown`; standing check = strip `-dirty`, compare vs `git rev-parse --short=12 HEAD`; existence-filtered rerun watches (a missing watched path is cargo-perpetual-dirty); gates `build_commit_logic` 11/11 · `build_stamp_cli` 6/6. The check FIRED twice 2026-10-08: M3 shadow + stale maintained binary (`6ee548ca` ≠ HEAD `32d0ac34`) → rebuilt at the pinned release set; 4090 stale `.exe` copy → pull `c3cf1865`, rebuild, re-copy. RESOLVED same day: option 2 `brew unlink cargo-refine` (verdict session `fc0f0611` REVISE — reversible, undo `brew link`; a future `brew upgrade` re-creates the link silently, the stamp check is the backstop). Standing rule: rebuild at the pinned release set when the stamp trails HEAD. Durable doc: AGENTS.md §Production adoption.
+
+Found 2026-10-06 (dapps plan-045 verdict round 2, M3): the tap Cellar 0.2.1 binary shadowed `~/.cargo/bin` on PATH — bare `cargo refine` silently ran the RELEASED build.
+Commits: `0a4c010c`, `3a9d1e96`, `6ee548ca`, `32d0ac34`.
 
 ## 2026-10-08 — Issue 133 CLOSED-NEGATIVE: Matryoshka-k supervision for `rule_embed` — the shipped fixed objective wins at every measurable depth (file removed per the noise-reduction rule — this row is the durable record)
-- Reopen fired on the count bar 2026-10-08 (1095 in-vocab span↔rule pairs = 4.1× the Bench 099 bar, tier 800 = 3.0×; doc_markdown 47% of pairs); Claude arbitration `9537e7f3` took B1 with three binding conditions. T1 randomized-k matrix (five arms × k ∈ {1,3,5,10,20} × both BLAKE3 splits): NEGATIVE (bench 109) — rig 134 (control) vs ≤130 every randomized-k arm; the only arm beating the shipped asset is the control itself, rejected by G1/G2-OOD exactly as designed; deep-k corpus-limited (1.16 in-vocab labels/span; withheld tower top-1 ≈ 0% vs BM25's 29.6%); the withheld-width NESTING effect is REAL (29.3→49.6 @k=20) — a reusable mechanism observation, not a promotion win. Landed: the `mattr_k_poc` replication harness (default-off, `007435e5`), record `.benchmarks/109_mattr_k_t1_negative.md`, re-pin of the stale `rule_embed_gate` population pin 138→141 (`3ca8ac4d`, floors held). No T2 re-freeze; nothing wired; shipped lane unchanged.
+
+Reopen fired on the count bar 2026-10-08 (1095 in-vocab span↔rule pairs = 4.1× the Bench 099 bar, tier 800 = 3.0×; doc_markdown 47% of pairs); Claude arbitration `9537e7f3` took B1 with three binding conditions. T1 randomized-k matrix (five arms × k ∈ {1,3,5,10,20} × both BLAKE3 splits): NEGATIVE (bench 109) …
+Commits: `007435e5`, `3ca8ac4d`.
 
 ## 2026-10-08 — Issue 148 CLOSED: the traj-mining lane named + labeled + deployed — T-a/T-b/T-c all landed, no healer-side work remains (file removed per the noise-reduction rule — this row is the durable record)
-- T-a the training-source designation paragraph in `src/kat_sync_payload.rs` (landed 2026-10-05; katgpt-rs joined the lane same day via the T-c lever-1 verdict: 385 rows / 353 new). T-b payload v4 (landed 2026-10-07 `34d32063` era: heal-time rejected-candidate capture, `TrajRowDoc.rejected`, `PAYLOAD_VERSION` 4, the dapps receiver RANGE `(2..=4)` + monotone merge; gates: refine lib 2718/0 + dapps kat_mining 20/20); the v4-ingesting devnet worker DEPLOYED 2026-10-08 (`18cb3f44…`), the maintained binary's sync tail drains. T-c analysis recorded 2026-10-05: all three growth levers route through EXISTING consent mechanisms (per-repo `.refine-sync-policy` + `--mine`; batch queue; fleet ops) — no healer-side code to write. Owner-gated remainders (tracked in riir-dapps AGENTS.md status, not lost by this closure): apex/mainnet v4 ingest (one-command deploy each); per-repo mining consent for the never-pushed local stores. Tier re-open bar (10³–10⁴ clean contexts) lives in the Issue-147 record, git history.
+
+T-a the training-source designation paragraph in `src/kat_sync_payload.rs` (landed 2026-10-05; katgpt-rs joined the lane same day via the T-c lever-1 verdict: 385 rows / 353 new).
+Commits: `34d32063`.
 
 ## 2026-10-08 — Issue 153 CLOSED: CLI version alert + binary self-update + the stale/new corpus surface — T1–T5 all LANDED, zero open code items (file removed per the noise-reduction rule — this row is the durable record)
-- Owner ask 2026-10-08, verdict GO/GO/GO/GO + one deferred. T1 the alert (`src/update_check.rs`, `RIIR_REFINE_UPDATE_CHECK=0` opts out, `CI` skips); T2 `cargo refine upgrade` (verified download → SHA256SUMS → backup-swap, refuses dev builds + unknown triples; `RIIR_REFINE_AUTO_UPGRADE=1` opt-in); T3 the `--info` CORPUS section (compiled rule counts per domain + lease-corpus epoch + bin staleness, cache only); T4 `RIIR_REFINE_AUTO_CORPUS=1` auto lease refresh once per 12 h, charge-gated (the lease charge IS the tier gate); T5 the AGENTS.md docs tail `bdc2bad0` + the RELEASE_FEATURES re-land `fcd3f2db` (the `release_set_matches_workflow` gate caught its own pairing break). 15 lib tests in update_check.rs; non-vacuity via `--features update_check --lib`. Feature IN the release set (paired with release.yml in one commit). T6 DEFERRED (per-tier corpus-pack lane: dapps service contract + freeze/thaw overlay seam + committed-artifact manifest) — the lease charge covers the need today; rides this row, no separate issue.
+
+Owner ask 2026-10-08, verdict GO/GO/GO/GO + one deferred. T1 the alert (`src/update_check.rs`, `RIIR_REFINE_UPDATE_CHECK=0` opts out, `CI` skips); T2 `cargo refine upgrade` (verified download → SHA256SUMS → backup-swap, refuses dev builds + unknown triples; `RIIR_REFINE_AUTO_UPGRADE=1` opt-in) …
+Commits: `bdc2bad0`, `fcd3f2db`.
 
 ## 2026-10-08 — Issue 155 FIXED: the 154 fix commit never backticked the allowlist cell — prose-green residue caught by the 172nd scoped boundary run (file removed per the noise-reduction rule — this row is the durable record)
-- `6135b0f3`'s message claimed "backtick the cell; C3 green" but its diff touched ONLY the drift-ledger prose — the `May depend on` row kept its bare column-1 cell, so `allowlist()` (family-regex or backticked tokens only) still read `reflexer-vessel` as UNDECLARED; the scoped run stayed exit 0 only because C3 greps the raw ledger section for the name and `6135b0f3`'s own prose mentions it there — green by accident of the fix commit's narrative; the moment that prose aged out, this flips to a hard C3 violation. Found by the 172nd run (the 170th landing session gone — the 149th residue-repair precedent). Fix (this commit): column 1 backticked (`| `reflexer-vessel` |`, the script's own prescribed form for non-family deps) + the ledger prose corrected to name the false-fix honestly; scoped re-run exit 0 with ZERO known-drift lines — 15 edges, all declared. Filing commit = fix commit (issue existed on disk before the edit; this row is the record). The 154 row below carries the original false claim — corrected by this row, not rewritten.
+
+`6135b0f3`'s message claimed "backtick the cell; C3 green" but its diff touched ONLY the drift-ledger prose — the `May depend on` row kept its bare column-1 cell, so `allowlist()` (family-regex or backticked tokens only) still read `reflexer-vessel` as UNDECLARED …
 
 ## 2026-10-08 — Issue 154 FIXED: the reflexer-vessel BOUNDARY.md allowlist cell backticked — the 170th boundary run's C3 shape finding (file removed per the noise-reduction rule — this row is the durable record)
-- The Plan-202-R4 row spelled column 1 bare (`| reflexer-vessel |`), and `ci_boundary_contract.sh`'s `allowlist()` recognises only family-regex names or BACKTICKED cells — the committed edge read as an undeclared C3 violation, workspace gate exit 1. Filing commit `7fdd7b08` (issue + drift row D1 per the issue-before-fix law); fix commit (this one) backticks the cell, removes the drift row + issue at close. No code, no dep change — a one-cell contract-shape repair (the 145th class; the R4 landing session is gone, repaired in-run per the 149th class). Gate re-run green in the 170th row of the boundary-guard skill log.
+
+The Plan-202-R4 row spelled column 1 bare (`| reflexer-vessel |`), and `ci_boundary_contract.sh`'s `allowlist()` recognises only family-regex names or BACKTICKED cells — the committed edge read as an undeclared C3 violation, workspace gate exit 1.
+Commits: `7fdd7b08`.
 
 ## 2026-10-08 — Issue 152 FIXED: sync_export_cli green again — the seeded rows carry their src_path now, and the fail-closed law is pinned at the process boundary (file removed per the noise-reduction rule — this row is the durable record)
-- Root cause (as filed): `21f76593` (2026-10-03, riir-dapps 119 T2 — empty-path fail-closed) landed after the test file; the suite seeded legacy rows via `TrajStore::record` (no `src_path`), so the DEFAULT policy's non-empty `allow_paths` blocked them at `gate_row` → 2/4 red since then (pre-existing; the branding pass's detached-worktree baseline proved it, then this session fixed it). Fix `1759fd41`: `seed_store` records through `TrajStore::sourced("src/lib.rs")` — what a real `--fix` run leaves behind; the default policy's `src/**/*.rs` glob admits it; the two red assertions (rows_included 1 / stderr count line) hold unchanged. NEW `export_fails_closed_on_a_pathless_row_and_says_so` pins Issue 119 T2's law at the process boundary: exit 0, a verifiable EMPTY batch (commitment over zero row lines is symmetric builder/verifier), `export: 0 row(s) included, 1 blocked` loud on stderr, the row's snippet never leaves the machine. Suite 5/5 (was 2/4); clippy `-D` clean at the 5-feature set. Note: the export's no-policy remedy line (`print_no_policy_remedy`) fires on `NoPolicy` only — a fail-closed BLOCKED row is `PathNotAllowed("")`, so the count line is the disclosure; the blocked-variant test pins exactly that line.
+
+Root cause (as filed): `21f76593` (2026-10-03, riir-dapps 119 T2 — empty-path fail-closed) landed after the test file; the suite seeded legacy rows via `TrajStore::record` (no `src_path`), so the DEFAULT policy's non-empty `allow_paths` blocked them at `gate_row` → 2/4 red since then (pre-existing …)
+Commits: `1759fd41`.
 
 ## 2026-10-08 — the RIIR_HEAL_* compat shim RETIRED + the live .heal path residue closed (owner call: "heal is retire for refine branding")
-- The owner adjudicated plan 192 P3.1's legacy-name honoring lazy: `install_env_rename_compat()` deleted from lib.rs + all three bin mains (`5aa91f82`) — legacy `RIIR_HEAL_*` no longer honored anywhere in this repo; AGENTS.md kill-switch rows → the `RIIR_REFINE_*` spellings the code reads; 6 stale `.heal dir` expect messages → `.refine`; plan 192 P3.1 dated amendment. Internal vocabulary (heal()/healqual wire domain/resolve_heal_root) unchanged. Cross-repo tail: riir-kat Issue 004 dual-read fallbacks (~14 sites across kat_service_config/kat_stake_client/kat_lease_client/kat_redact/kat_mining_consent/kat_account) LANDED same day (`f71bf4a`, only `RIIR_REFINE_*` read there now). En-route: `sync_export_cli` 2/4 red since `21f76593` (2026-10-03) — PRE-EXISTING (detached-worktree baseline reproduced), filed as Issue 152. Gates: clippy `-D` clean at `kat_transport,latent_retrieval,rust_perf,clippy_lints,kat_service`; kat_join 8/8 · kat_refill 5/5 · kat_soft_gate 17/17.
+
+The owner adjudicated plan 192 P3.1's legacy-name honoring lazy: `install_env_rename_compat()` deleted from lib.rs + all three bin mains (`5aa91f82`) — legacy `RIIR_HEAL_*` no longer honored anywhere in this repo; AGENTS.md kill-switch rows → the `RIIR_REFINE_*` spellings the code reads …
+Commits: `f71bf4a`, `21f76593`.
 
 ## 2026-10-08 — Issue 102 CLOSED: corpus lifecycle management (Library Drift adoption) — T1–T5 all LANDED, zero open items (file removed per the noise-reduction rule — this row is the durable record)
-- Landed: Research 167 `1cb35cce` (2026-09-16) · T1 the `--frontier-report` fade section `56f0b0fd` (report-first, live REFUSAL under the population floor; FADED-vs-NEVER-CONTRIBUTED split `d0457204`) · T5 the authoring-discipline guide `8e0d52f6` (`.docs/02_corpus/authoring_discipline.md`) · T2/T3/T4 the active-set lifecycle `d9d69cfc` (`.heal/active_set.json` marker + fan-out/fix-dispatch consumers + `--necessity-bench --necessity-rule`; gate-CLOSED: the mechanism, not the wiring). Standing: the T2–T4 WIRING gate (fade proven predictive on ≥3 future generations from 2026-09-21) stays CLOSED; nothing demotes automatically (law on the `--active-set` line in AGENTS.md). Accumulation `4233f7b9` (sweep row #168) + `0768a4ad` (row #174): ZERO FADED candidates over 6 sweep rows (36→47→66→66→67→71 rules). Split of record: 089 owns ADMISSION, 102 owned the LIFECYCLE half. Cross-file links to the removed issue re-pointed to the durable records.
+
+Landed: Research 167 `1cb35cce` (2026-09-16) · T1 the `--frontier-report` fade section `56f0b0fd` (report-first, live REFUSAL under the population floor …)
+Commits: `d0457204`, `8e0d52f6`, `d9d69cfc`, `4233f7b9`.
 
 ## 2026-10-08 — Issue 148 T-b follow-up LANDED: the rustc_errors driver-lane strategy-menu capture (the second lane on the v4 label path)
-- Capture (`34d32063`): the `--fix-compile` driver computes the strategy menu at each apply decision — chosen-site candidate strategy ids MINUS the chosen one, sorted + deduped, capped at `REJECTED_CAP` — on `AppliedRecord.rejected`/`RevertedRecord.rejected` for every attempt outcome (revive-suppressed and bench-declined candidates were not considered, so not in the menu). Join key (by design): the per-error-code decision (site identity), compile-oracle-driven, not span-driven; same cap/stamp/None-keep semantics; ZERO store/wire changes (v4 already carries the label). `rejected_opt` cfg widened to `latent_retrieval` (the driver lane compiles without fix_verify; `rustc_errors` stays off the retrieval dep tree — the T0.3 law; without it the playbook-bounded menu travels whole and the store clamps on read). Tests: `strategy_menu_is_menu_minus_chosen_at_the_chosen_site` (driver.rs) + `driver_lane_record_shape_keeps_label_on_none` (traj_store.rs). Gates: lib 2721/0 at `kat_service,latent_retrieval,kat_transport,fix_verify` (floor 2718); clippy clean at default/heavy/all-features + both latent combos. Issue file updated in-place (`.issues/148` scope note).
+
+Capture (`34d32063`): the `--fix-compile` driver computes the strategy menu at each apply decision — chosen-site candidate strategy ids MINUS the chosen one, sorted + deduped, capped at `REJECTED_CAP` …
 
 ## 2026-10-07 — Issue 148 T-b: payload v4 — the rejected-candidate label (the suite-mint training source rides the traj lane)
-- Capture: ONE `matcher.suggest_file` per edited file at `--fix --write`; each edit joins its OWN-PASS line (chunk-neighborhood, exact at pass 0) and carries span rules minus the applied rule (cap 16) into `record_applied` + the post-verify `record_traj`/`record_traj_fail` via `EditAtLine.rejected`; `rejected_opt(empty)=None` never erases (the `src_path` law); the rustc_errors driver lane records `None`. Store: `TrajRowDoc.rejected` (serde-default, skip-when-empty; `stamp_rejected` sorts+dedups+clamps; Some refreshes / None keeps). Wire: PAYLOAD_VERSION 3→4; `PayloadRow.rejected` UNGATED (the `domain` vocabulary-id class) → no-label rows byte-identical to v3 (golden commitment did not move; only payload_version + covering signature re-pinned). Receiver (riir-dapps): {2,3,4} range acceptance, `QueueRow` second codec tail, monotone refresh merge — full record in that repo's HISTORY. Deploy: live worker {2,3} until the owner deploys; v4 clients stack offline, drain post-deploy (the Issue-103 law). En-route (pre-existing reds fixed same landing): 4 doc_markdown backticks (batch-206 `entries_gpu_76.rs` ×3 + escalation_manifest) + 3 stale corpus-count pins the batch-204/206 sessions left (kernel 769→771 at `batch116_rules_present`, Dispatch 171→173, rust_perf NotBenchable 81→82).
+
+Capture: ONE `matcher.suggest_file` per edited file at `--fix --write`; each edit joins its OWN-PASS line (chunk-neighborhood, exact at pass 0) and carries span rules minus the applied rule (cap 16) into `record_applied` + the post-verify `record_traj`/`record_traj_fail` via `EditAtLine.rejected` …
 
 ## 2026-10-07 — Issue 151 CLOSED: the secret-blind surface shipped end to end — scan/warn/blind live, marketing card deployed, the --blind red-window closed (file removed per the noise-reduction rule — this row is the durable record)
-- Surface (this repo): `56d73162` (`src/secret_blind.rs` — `--secret-scan` report with blinded contexts + the quiet `[sec]` in-run warn + `--secret-scan --blind` shareable text; fingerprint never on stdout) · `675b2acf` (record) · `3d2c6208` (reef fixture) · `fd414fc9` (docs). Scanner half = riir-kat Issue 002, closed AGREE (`eed88c6`/`e8ab39f`/`47057d3`/`4b4125a`); consumed via the ungated `redact` tier. T10 egress census pinned the three chokepoints (`push_mining_batch`/`fixer_regate`/`kat_drain`); the refine.gist.rs card worded to exactly that census + the three honest limits (entropy-only unknown formats, PII out per Bench 052, terminal redacted payloads). Marketing LIVE: riir-dapps `79f3673` deployed apex `fdde59ce` / devnet `e9848ad3` (record `ae49c13`). Follow-up `be31512a`: the `--blind` standalone guard + the v3 policy literals migrated to redact v5; all-features blocker fixed at riir-infer `d09d1ec`. Known gaps (disclosed, not owed): facebook `app_id|secret` digits-joined shape; PII out of scope per Bench 052; unknown formats entropy-rule only.
+
+Surface (this repo): `56d73162` (`src/secret_blind.rs` — `--secret-scan` report with blinded contexts + the quiet `[sec]` in-run warn + `--secret-scan --blind` shareable text; fingerprint never on stdout) · `675b2acf` (record) · `3d2c6208` (reef fixture) · `fd414fc9` (docs).
+Commits: `eed88c6`, `e8ab39f`, `47057d3`, `4b4125a`.
 
 ## 2026-10-07 — the 9cfd0c33 corpus expansion's red window closed: the ncswap fixture E0422 + the gen4 re-freeze + the all-features lane unblocked
-- Three compounding pre-existing reds behind the recorded riir-infer-gpu E0308 (which blocked every all-features lane): (1) the sibling E0308 (riir-infer `d09d1ec`, the metal upload arm's `attn_wo` missed the `q4_refuse` wrapper); (2) ncswap ground-truth `Tkn` unqualified from the child `mod ground_truth` — E0422 alongside the gold, every ncswap spec interference-class (fixed `super::Tkn` in corpus_gen.rs); (3) `FROZEN_LABELS_V4` stale vs the stride-40 slice — re-frozen 76/76 verified (40 k1 + 16 k2 + 12 k3 + 8 k4). The freeze gates compile only at `score_bench` + `rustc_errors` — a posture nobody's documented lane runs; the freeze e2e caught the fixture defect on its first post-expansion run (the label fence working). Gates: `generation_v4_freeze --ignored` 76/76 ×3; generations lib 35/35 at all-features; all-features lib 3600/0; `--tests` 29 targets green after the g4_l4_composition tripwire swap (`ptr_arg` was mined into the corpus by Batch 155 `fac3dc36`; `module_inception` the new out-of-corpus pick); shipping lib 2674/0; score-bench not re-run (clippy seed untouched).
+
+Three compounding pre-existing reds behind the recorded riir-infer-gpu E0308 (which blocked every all-features lane): (1) the sibling E0308 (riir-infer `d09d1ec`, the metal upload arm's `attn_wo` missed the `q4_refuse` wrapper); (2) ncswap ground-truth `Tkn` unqualified from the child `mod ground_truth` …
+Commits: `fac3dc36`.
 
 ## 2026-10-06 — dapps plan 045 (issue 117): the refine-side lanes recorded (E1 sweep half) — A1/A2/A3, A8, the verdict follow-ups, B7
+
 - A1/A2/A3 first-join env choice `8c4e67b0` (ships v0.2.1) via the existing config-set writer; A8 stranger drill `8b08ed43` PASS live on devnet; verdict follow-ups `e5a24918`. B7 `cargo refine topup [--pack N]` `c80a5794` — USDC→KAT checkout, composer canonical in riir-kat `26ea7f4` (the Issue-082 one-definition law); LIVE SMOKE PASS (dapps `.benchmarks/018` B7 addendum); global binary rebuilt v0.2.1.
 
 ## 2026-10-06 — Issue 149 RESOLVED: the v0.2.1 capture QA findings — pre-scan disclosure, cross-pass resplice dedup, and the measured 0.1.98 firing-surface correction
+
 - T1 `scan root:` disclosure line before the first read; T2 `dedup_respliced_edits` with authority-follows-replacement + one loud `accounting:` line (file text + revert machinery unchanged); T3 probe on clippy 0.1.98: both disputed lints still EXIST — the coverage report's declared-lint axis cannot see firing-surface narrowing; both rules carry context_notes.
 
 ## 2026-10-05 — Issue 146 CLOSED (T0.6 executed): the profile-guided-healing REAL-workload arm — rethink ESC loop profiled end-to-end, alloc gate flat, the G4 pin held, the heal landed at rethink `4cd8dcf`
+
 - First REAL-repo `[hot]` feed (rethink ESC decide loop, sst5, 1205 decides, pinned SHA `d01a8e5`): measured-path allocs are ownership-driven exact clones — no corpus surface; structural surface filed as leads to riir-instinct/riir-infer. 3 verified edits landed at rethink `4cd8dcf`; alloc gate +0.0% everywhere, `esc_g4_alloc` pin 190 held. En-route: `~/.cargo/bin/cargo-refine` was a plain FILE COPY, now the documented symlink → rebuilds propagate.
 
 ## 2026-10-05 — Issue 146 T0.2+T0.3+T0.4: the profile-guided-healing oracle lane LANDED end-to-end — the T0 POC gate PASSED on a real hotpath run (alloc −51.1%)
+
 - hotpath JSON = second oracle beside `--clippy-json` (`src/hotpath_report.rs`); `[hot]` spans hoist first by time share (ranking-only), marker precedence `[oracle] > [hot] > [heuristic]`; fix lane declines edits overlapping hotpath's own instrumentation lines. E2e gate `scripts/hotpath_e2e_poc.sh` PASSED: alloc bytes −51.1% (4.7 GB → 2.3 GB, N=3), timing 2.1×, instrumentation survived byte-identical.
 
 ## 2026-10-05 — Issue 147 CLOSED (T0′ executed): the Decision-CPI escalation tier killed on the corpus axis — headroom GO, corpus 19× off + converged
+
 - Headroom GO: 141 spans, θ=0.05 subset top-1 0.750, max recoverable +2.8pp banked. Corpus KILL: fleet contributed 7,513 / credited 533 = 19× off the 10⁴ target — the tier CLOSES, never-per-span law stands; re-open at the 10³–10⁴ clean-context class (riir-dapps Issue 148 T-c levers).
 
 ## 2026-10-05 — Issue 138 CLOSED (owner-gate pickup): E7 ruled free-tier-only — operative DENY until a cap lands; E8 C8/C9 draft ADOPTED (master riir-ai `.issues/1016`; plan 181 / issue 138)
+
 - E7: the standing CF sign-off loop is free-tier-only; metered use DENIED until an enforced daily cap with auto-stop lands. E8 ADOPTED (delegated verdict): C8 audits each git-rev pin individually; a multi-rev split on one owner is C9; same-branch lag-pin splits read as C9 NOTES, branch-mixed splits stay loud C9.
 
 ## 2026-10-03 — Issue 145 CLOSED: first-run output reads like hand-written Rust (`d40f7b5e`)
+
 - `needless_range_loop` binding = collection's singular else `item`; `DomainId::applies_to_path` display filter (a span lists only domains that can touch its file kind; `--fix` unchanged). T2 deferred as optional polish.
 
 ## 2026-10-02 — Issue 143 LANDED: the retrieval GOAT's G2 bar dual-pinned per host (the Issue-filed platform gap closed at root cause)
+
 - `tests/latent_suggest_goat.rs` carries `G2_BAR_US`: `1000.0` under `#[cfg(target_os = "macos")]` (historical bar unchanged), `3000.0` elsewhere; reading always prints beside its bar + OS. G2 1505 µs/chunk PASS on this box; 5/5.
 
 ## 2026-10-02 — Issue 141 CLOSED: the four pre-existing integration-red classes (A fixture-era floor, B the two-consumer fixture, C a REAL v2 client regression in riir-kat, D the level-gate fixture)
+
 - Full integration repro green: 69 targets / 3086 passed. A: wetrun fixture attests at the floor (3). B: eval-span spelling `b.count_ones()` — a fixture feeding BOTH the clippy oracle AND labeled eval spans must be verified against both in one landing. C: REAL riir-kat client regression — `seen_live` flag pins fully-down→queued vs live-then-quiet→bail. D: the e2e fixture now DECLARES the lint it teaches (`[lints.clippy] match_bool = "warn"`).
 
 ## 2026-10-01 — Issue 141: the `cargo refine` cargo-convention argv leak (the rename's one real regression, found from the owner's brew question)
+
 - cargo passes the binary's own name as argv[1]; the strip now removes BOTH `refine` and `heal` spellings; `tests/cargo_convention_cli.rs` 4 arms at the process boundary. Brew answer (owner-gated T1.2f): the tap still serves `cargo-heal` until the owner-side dist rename flips.
 
 ## 2026-10-01 — `repo_posture_cli` red CLOSED + the mid-posture clippy red + three owed `[[test]]` rows (the rename's flagged remainder)
-- Root cause: the 3 applying arms ran `--fix` without `--no-verify` — red only under `--all-features` where `fix_verify` compiles in; fixed with `--no-verify`. Plus: `heal.rs` unreachable-`return` at the mid posture moved inside the `kat_transport` block; three `[[test]] required-features` rows added (`repo_posture_cli`, `auto_oracle_features_cli`, `coverage_report_cli`). 4090 exe refreshed; 4090 git-over-SSH root-caused (IPv6 black-hole fixed via `C:\Users\katop\.ssh\config` AddressFamily inet; sshd-session hang mitigated by the `gitsync` Task Scheduler task).
+
+Root cause: the 3 applying arms ran `--fix` without `--no-verify` — red only under `--all-features` where `fix_verify` compiles in; fixed with `--no-verify`. Plus: `heal.rs` unreachable-`return` at the mid posture moved inside the `kat_transport` block …
 
 ## 2026-10-01 — The refine rename, Phase 1 landed (`ac4b3d16` + docs; Proposal 018 / Plan 192): binary `cargo heal` → `cargo refine`
+
 - `[[bin]] cargo-refine`, all display strings + test pins in lockstep; riir-kat leaf swept too (18 files / 71 replacements). Internal vocabulary unchanged (`heal.rs`, `HealDomain`, `RIIR_HEAL_*`); dist URLs stay `cargo-heal` until the owner-side flip.
 
 ## 2026-09-28 — Owner-gate pickup E3/E4/E5/C7/E8 (master riir-ai `.issues/1016`; plan 181 / issue 138)
+
 - E3 dead `gist-rs/riir-unity` checkout gone from `ops_dashboard.yml`; E4 stale-no-op (the 4 never-defined-feature targets never existed — verified); E5 one-line disambiguator in `.research/083_omlx_external_distill_batch71.md`; C7 `structural_admission` stays INERT until a priced first consumer; E8 draft recorded (ADOPTED 2026-10-05, see above).
 
 ## 2026-09-26 — Issue 135 CLOSED (`c1c6cf21`): `cargo heal --fix` gates allow-by-default lints on the target crate's effective level
+
 - `LINT_GROUPS` from the pinned `clippy-driver -W help` (20 allow-by-default lints, not 13); `LevelResolver` over `[lints.clippy]`/workspace lints/crate+file attrs; `--groups pedantic,nursery,restriction,cargo|all` (requires `--fix`); `doc_markdown` skips shell-command doc lines. Measured 0 live instances of the undocumented skip-direction forms workspace-wide.
 
 ## 2026-09-25 — Batch 179 LANDED (Plan 172 / Research 210): the rsconstmap distill — the std-map-probe family's layout + MLP + map-selection cells
+
 - lemire/rsconstmap @ `bf7b3341`: `paired-probe-layout-present-vs-absent` (1.68×/1.45×/1.80×), `block-hash-before-gather-mlp` (1.68×/1.30×/1.02×), `immutable-static-map-filter-selection` (2.09×/4.27×, `[dep: constmap]`) — all ParetoDominant; fixture lesson: derive index arithmetic from the source (`h * m` multiply-high), not habit. rust_perf 153→156.
 
 ## 2026-09-24 — Issue 134 CLOSED (T3 re-arm executed): seven-domain sweep, the ρ=0.536 artifact, and the degenerate-axis guard
+
 - The sweep refused on a degenerate gain axis (Spearman against a constant vector renders a pseudo-value); final verdict REFUSED — `demonstrability_gate` stays default-off BY VERDICT; T1 standing instrumentation survives. Latent `HeadroomReport.per_domain` `[_; 3]` OOB fixed.
 
 ## 2026-09-24 — Issue 134 T4: the fanout controls — best-single-domain + homogeneous-at-budget
+
 - `EvalReport.homogeneous` (equalized-budget pass) + best-single-domain ceiling row. First live read: homogeneous@budget = blended EXACTLY — blended top-1 is entirely per-domain selection, ZERO fan-out contribution. Rider: `print_report`'s `names` had 6 entries vs 7 — fixed.
 
 ## 2026-09-24 — Issue 134 T3: the ρ-prediction depth sweep — instrument landed, verdict REFUSED at the power floor
+
 - `examples/demonstrability_t3_sweep.rs` (pool ladder 28→56→112, hand-rolled Spearman): every depth curve FLAT; n=3 qualifying domains < the ≥5 power floor — honest refusal, re-run after the T4 fixture re-arm. Kernel fixtures are corpus-derived (de-bias note).
 
 ## 2026-09-24 — Issue 134 T2: the pool-depth allocation gate (`demonstrability_gate`)
+
 - `src/demonstrability_gate.rs` (ungated policy) + `cfg(demonstrability_gate)` matcher wiring scaling pool AND truncation K; kill-switch `RIIR_HEAL_DEMONSTRABILITY=0` guards the auto-arm loader only. Standing constants round INERT at pool 28/K 3 — correct at two nearly-equal constants. Landing's own `bool::then_some` inversion caught by its tests pre-commit.
 
 ## 2026-09-24 — Issue 134 T1: the standing demonstrability column (SAT / katgpt-rs Research 585)
+
 - Per-domain demonstrability constant (formula corrected to `resolved / (resolved + persist)`); `src/rule_domains.rs` moved UNGATED from `kat_sync_payload` (re-exported at its historical path — goldens unchanged). First readings: clippy 0.935, rust_perf 0.962.
 
 ## 2026-09-24 — Batch 174: the cubecl/bevy merged-fix distill (host-lock + flush-hoist + the B56 rider)
+
 - `host-lock-across-reentrant-blocking-call` (NotBenchable) + `deferred-command-flush-hoist-out-of-batch-loop` (ParetoDominant 21.3×/13.3×/16.5×, alloc flat; the bench-honesty arc took 3 iterations to an honest toy). rust_perf 151→153 + kernel_opt B56 rider (cubecl #1686 double-checked-lookup).
 
 ## 2026-09-23 — Issue 132: the role-perspective e2e flows — doc + four per-tab SVGs + the front-page embed (file removed per the noise-reduction rule — this row is the durable record)
+
 - Four role e2e SVGs (`e884f0f5` here) + the riir-dapps front-page embed (`eefd8cd`, mermaid id-suffixing for 5 inline SVGs sharing one document, `svg_contract.rs` extracted). Deploy live-verified devnet `323d4ff6` + apex `375f95f2`.
 
 ## 2026-09-23 — Issue 131: the e2e self-evolve flywheel as a doc diagram + the KAT-pages static SVG hero (file removed per the noise-reduction rule — this row is the durable record)
+
 - `.docs/10_self_evolve/self_evolve_flow.md` + static SVG (`ed7bf3aa` here) + riir-dapps mirror `82933de`; hero LIVE on devnet verified same day.
 
 ## 2026-09-23 — Batch 173 / Plan 167: the serde zero-copy family distill, rust_perf 149 → 151 — the corpus's first dedicated serde rules
+
 - `serde-borrow-deserialize` (ParetoDominant 4/0/0; alloc axis EXACT 300016 → 16 at n=100k; escaped-payload regime witness printed in-bench) + `rawvalue-passthrough-defer-parse` (3/0/0; alloc 950000 → 100000 at n=50k). Both suggest-only → freeze tables structurally unmoved.
 
 ## 2026-09-23 — Issues 089+102+130 batch: active-set lifecycle (T2/T3/T4), the admission-gate REPORT half (T1+T3), the owed gen-3 sweep #161, and the switch_cost cross-fire adjudication
+
 - `src/active_set.rs` landed gate-CLOSED (`--active-set-demote/readmit/clear/cap`; nothing demotes automatically); `src/gate_calibration.rs` report-only (δ=0 prints UNCALIBRATED, both stores STALLED); gen-3 sweep row #161 in a detached worktree; switch_cost cross-fire adjudicated TRUE_POSITIVE (clippy `map_clone` on the perf fixture idiom).
 
 ## 2026-09-23 — CI sibling provisioning: riir-infer joins every checkout (the carve's T2.3 riir-clippy half) + release.yml's pre-existing kat-plane gap fixed
+
 - cargo resolves path deps even behind `optional = true` — `riir-infer` joined rust.yml's sibling loop; release.yml was BROADER and PRE-EXISTING broken since 2026-09-10 (riir-kat spin-out): both loops now clone `riir-ai riir-neuron-db riir-kat riir-auth riir-llm riir-infer`.
 
 ## 2026-09-23 — P36: the `[C2·documented-write-only]` downgrade (config-audit; the seal-remake `FeatureFlags`/`SessionMeta`/`WasmLimits` idle-pass intake)
+
 - `classify_self_referential` takes `field_docs` (one marker vocabulary home); the EVERY-field rule is load-bearing (one unmarked field keeps the strong verdict — negative arm pinned). seal-remake re-audit live-verifies all three C2s render weak.
 
 ## 2026-09-23 — Batch 172 / Plan 166: the mezura rust_perf distill, rust_perf 145 → 149 — the dual-mask GOAT lead at 43×/18×
+
 - `.raw/mezura` @ `2dbacb7`: `dual-mask-fused-block-scan` (ParetoDominant 4/0/0: 43.11×/43.95×/23.10×/18.29×; AVX2+NEON arms; exhaustive G1 caught the `\n`-in-needle-set contract subtlety), `mmap-settled-size-gated-read`, `steal-batch-not-per-item`, `nonblocking-open-for-head-probes` + 2 riders.
 
 ## 2026-09-21 — Issue 128 EXECUTED (T1-T7): the fixseq cascade-law + derailment-index report shipped, two mint corpora measured — the law is GENERATOR-CONDITIONAL, G4 fired live, HORIZON(prev) does not raise
+
 - `src/fixseq_stats.rs` + `--fixseq-stats` + T6 transition arm in `horizon_report`; two mint configs committed (`.benchmarks/data/128_t5/`). Cascade law GENERATOR-CONDITIONAL; G4 fired live (first-wrong is a point mass at position 0); silent failure 100% on minted corpora; HORIZON(prev)=1 honest null. Reopen: organic multi-revert rings.
 
 ## 2026-09-21 — P35: the `format_collect` import goes to the INNERMOST enclosing mod — the cfg(test) unused-import class closed (queue item 14, Protocol C)
+
 - Probe reproduced the incident live (import at file scope + usage under `#[cfg(test)]` → unused_imports warning; `--verify` blind by construction). Repair: mod-stack tracking lands the import at each innermost mod; any top-level site keeps one file-level import. 5 fixtures, module 19/19.
 
 ## 2026-09-21 — Plan 165: `--repo-posture` — the repo-lint-posture fix mode (the intake's OPEN product suggestion, closed)
+
 - Clippy-lane edits apply only where the target repo's own clippy feed carries a same-lint diagnostic whose primary span overlaps (215 proposed vs 16 real in the motivating intake); `map_span_through_splices` + `posture_spans`/`posture_allows`. No feed → REFUSE exit 2; `tests/repo_posture_cli.rs` hermetic.
 
 ## 2026-09-21 — Plan 164 (queue item 14, Protocol C): the three 09-21 post-mining intake classes repaired at root cause (`eb4827ea`)
+
 - Class 1: const-generic-arg-for-runtime-size refused via a file-wide binding pre-pass. Class 2: `unreadable_literal` consumes `excessive_precision::shortest_round_trip` (one decision, two consumers); the real shape was unsuffixed literals in `[f32; N]` fixtures — refusal CORRECT. Class 2b: `--all-targets` is the auto-oracle DEFAULT (`RIIR_HEAL_AUTO_ORACLE_NO_ALL_TARGETS=1` restores). Class 3: `[wire-const]` runs on non-test sites only (`in_test` bit).
 
 ## 2026-09-21 — Issue 089/102 verdict session: the frontier snapshot store discriminator (the x-axis was non-monotone on two unnamed stores) + Issue 102 T1's fade report (report-first, live state REFUSES)
+
 - Every snapshot row now carries `store` = blake3(store root)[..8]; the 09-20 per-store readings were WITHDRAWN as unrecoverable. Issue 102 T1: fade keyed on DISTINCT FULL-CORPUS SWEEPS (≥25 rules attributed); FADED ≠ NEVER-CONTRIBUTED split; live state is a loud REFUSAL until 3 sweeps exist; the ≥3-future-generations clock started.
 
 ## 2026-09-20 — Batch 165 LANDED (Plan 156 / Research 193 → RECORD): `unchecked-wire-arithmetic` — the overflow sink beside the alloc sink, on the SHARED wire-taint walker; sec 15 → 16, InputValidation 3 → 4; the Kani property axis closes the loop (g2c/g2d run on the WSL2 lane, the pre-validation block returns to EMPTY)
+
 - `proposers/wire_taint.rs` extracts the Batch-131 walk as a `WireSink`-parameterized substrate; arithmetic sink `7ab7c628`; sink-DISTINCT adjudication (no composition gate). Kani g2c FAILED as desired / g2d SUCCESSFUL on the 4090 WSL2 lane; probe found `arithmetic_side_effects` SILENT on literal/const operands — strengthens the rule's premise.
 
 ## 2026-09-20 — the auto-oracle's empty-project-root spawn failure FIXED (idle-sweep find): `detect_project_root` cwd-anchored — the documented `cargo heal --suggest src/` form works on every platform again
+
 - Relative 1-component targets walked to the EMPTY path (os error 123 on Windows / ENOENT on Unix); cwd-anchored before the parent climb (`0f053d0a`), 3 regression tests. The never-generalised-repair shape: `compile_oracle::owning_package_root` fixed this exact class and the repair was never ported. The 9-repo sweep then ran clean.
 
 ## 2026-09-20 — Issue 126 COMPLETE (both lanes): the Lemma-4.2 likelihood-ratio tier guard gates trajectory certification — wrong-goal credit and lucky-keep overcertification are now excluded with a priced bound (`src/tier_guard.rs`)
+
 - `success && verified` certifies only when the goal-side Elo model and the row's Laplace history agree within ε=0.5 (γ=0.9 prices the 2γε/(1−γ)=9 slack); counters always record, only the promotion gates; cold start behavior-identical; non-finite ratings fail closed at the input. Store arms in `tests/tier_guard_store_gates.rs`. T0 hindsight-label corpus committed at `.benchmarks/data/126_t0/` (172 runs / 242 rows, BLAKE3 manifest).
 
 ## 2026-09-20 — Issue 127 POC EXECUTED, verdict POSITIVE: Kani machine-checks the sec rules' property claims — witnesses exhibited both directions, cost floor sub-second per harness (WSL2 lane)
+
 - Kani 0.68.0 (pinned nightly, WSL2-only — Windows-native unsupported): G1 NaN-unsafe comparator witness exhibited (`-inf, +NaN, +inf`); G2 wire-arithmetic two-sided verified. Harnesses at `.proofs/kani_sec_poc/` — never built by the workspace's stable rustc, never in CI. Owner pulled the staged lead → Batch 165.
 
 ## 2026-09-20 — Issue 123 RESOLVED: the TUNA client surfaces are complete + live on devnet — ack v4, the soft gate's second plane, the fuel-gauge tank, the plane-split tail, the depleted-run survey; only the owner's apex/mainnet light-up remains
+
 - ack v4 (`tuna_balance_micro`), soft gate lifts on a positive TUNA balance (`None` never an invented zero), footer `TunaLine`, `plane_split_note()`, depleted-run survey (count-only), `--info` TUNA line. Sole remainder is the owner's apex/mainnet deploy + `/tuna/genesis`.
 
 ## 2026-09-20 — P34 CLOSED: the `needless_range_loop` LENGTH-MISMATCH class guarded at all three lanes (oracle door + proposer fixture-pins + the manual-conversion divergence row) — the riir-ai Issue 981 healer lesson
+
 - The 981 rewrite was NOT healer output (hand-applied); all three lanes guarded: oracle door requires a LOCAL SYNTACTIC length proof (receiver-identity correction: the `.len()` must name the collection it indexes); proposer fixture-pins; SKILL divergence row. Residue: all 18 conversions in the known emitter commit audited — 17 sound, 1 already fixed.
 
 ## 2026-09-20 — Issue 125 RESOLVED (REFUTED): the CUA-S1 specialist option-scorer PoC loses to the modelless baseline at our corpus scale — harness + 719k tinyx land as the re-run lane ([Bench 098](.benchmarks/098_choice_scorer_poc.md))
+
 - G1 27.7% vs baseline 88.0% in-dist, G1-OOD 5.6% vs 100%, G2 8868 µs/span; shuffled-context control PASSED, frozen control 7.2% — genuinely learned, genuinely starves on 101 gold contexts. `RerankMode::Structural` default stands; nothing wired into any heal path. Reopen: ~10⁴–10⁵ labeled contexts.
 
 ## 2026-09-20 — Issue 125's metric-taxonomy half: the CUA-S1 decision-outcome rows land in `retrieval_eval` (wrong-rule/wrong-span, acceptable-alternative gold, the three-way decline axis)
+
 - `ChoiceTaxonomy` on `EvalReport` + `OwnedEvalSpan.acceptable` (zero sets authored by design — an acceptable set is a corpus claim) + covered/declined/proposer-blind axis. First live: coverage 50.5%, selective-accuracy 100% — every error lives in the declined half.
 
 ## 2026-09-19 — the two cross-repo hardening fixes (katgpt-rs Issues 832 T5 + 841): scratch-root read-before-write + verify's incomplete-check refusal
+
 - `651728c0`: a killed/truncated recheck is now a REFUSAL, never a VERIFIED keep. `83f4cd89`: scratch-crate work roots get the read-before-write mtime guard (the riir-clippy 9 re-offers = deliberate scratch roots).
 
 ## 2026-09-19 — Batch 164 / Plan 155: the coverage-report re-arm — the frontier-lead mining pack X (the EIGHTH consecutive all-FIXABLE pack; corpus 84 → 86, clippy 65/16 → 67/16; TWO freeze bad-atom joins — a first for one batch)
+
 - `f84037c2`: `match_like_matches_macro` + `excessive_precision` (record: `.research/191_batch164_coverage_report_rearm.md`). Bad sets 6→8 (v2) / 7→9 (v3); ladder 86 labeled. Score-bench #140/#141 96.36% FLAT; global binary rebuilt (was 6 batches stale).
 
 ## 2026-09-19 — Batch 163 / Plan 154: the frontier-lead mining pack IX (the SEVENTH consecutive all-FIXABLE pack; corpus 82 → 84, clippy 63/16 → 65/16; the recorded-spare queue EMPTIES)
+
 - `6408ea44`: `manual_string_new` + `needless_late_init`; the syn finding: statement attributes fold into the statement span and syn RESPANS inner exprs over it. Freeze regen v2 90/11 + v3 89/16; score-bench #139 96.36% FLAT.
 
 ## 2026-09-19 — Batch 162 / Plan 153: the frontier-lead mining pack VIII (the SIXTH consecutive all-FIXABLE pack; corpus 80 → 82, clippy 61/16 → 63/16; THE FRONTIER IS EMPTY — all 17 leads graduated)
+
 - `bytes_count_to_len` + `bool_comparison`; the e2e now records the `all_graduated` state explicitly. `pool_depth_rescue_guard` re-fired third time — RERANK_POOL 24 → 28 + the 32/40 rungs. Freeze regen refusal guard: non-id rows under an EXCLUDED header refused.
 
 ## 2026-09-18 — Batch 161 / Plan 152: the frontier-lead mining pack VII (the FIFTH consecutive all-FIXABLE pack; corpus 78 → 80, clippy 59/16 → 61/16)
+
 - `unit_arg` (hoist the side-effect block, re-spell the arg as `()`; the heldout marker must be the in-parens BROKEN-only shape) + `string_lit_as_bytes` (`b"abc"`; refuses the `\u{` escape — clippy's own suggestion there is INVALID RUST). Freeze v2 84/13 + v3 85/16, both e2es PASS.
 
 ## 2026-09-18 — Batch 160 / Plan 151: the frontier-lead mining pack VI (the FOURTH consecutive all-FIXABLE pack; corpus 76 → 78, clippy 57/16 → 59/16)
+
 - `from_str_radix_10` (construction identity: std's `FromStr` IS radix-10; no shadow guard) + `assign_op_pattern` (exactly-once binding derivation; swapped-operand arm commutative-only). RERANK_POOL 20 → 24 (the rescue guard re-fired); Batch 158's missing freeze record paragraph + stale `.research/.highwater` repaired.
 
 ## 2026-09-18 — Issue 103: sync payload v3 — the per-row `domain` (the corpus-view Phase-2 axis)
+
 - `PayloadRow.domain` (v2→3) from the compiled `RuleDomains` table; receiver `verify_sync_payload` accepts {2,3}, monotone refresh merge; cap hardening — `other` can never be evicted; golden dual-pinned to v3 bytes (v2 preserved as `GOLDEN_PAYLOAD_V2`). En-route: the all-features lane had been red since `8fc52d22` (import at groq.rs top level, module lives in `mod router`); the Issue-088 redact pin was keying on a coincidence (now asserts floor == `REDACT_VERSION`).
 
 ## 2026-09-18 — Batch 159 / Plan 150: the frontier-lead mining pack V (the THIRD consecutive all-FIXABLE pack; corpus 74 → 76, clippy 55/16 → 57/16)
+
 - `single_char_add_str` (mut_string_param_heads_over twin; `escape_default` emit) + `manual_clamp` (lattice-absorption; FLOATS refuse on NaN max/min-vs-clamp divergence, inverted bounds refuse on the release-mode assert — both in-rule). Archive step is LOAD-BEARING (archiving consumed rows breaks the family-done deadlock). Freeze v2 78/15 + v3 80/17.
 
 ## 2026-09-18 — Batch 158 / Plan 149: the frontier-lead mining pack IV (the second all-FIXABLE pack; corpus 72 → 74, clippy 53/16 → 55/16)
+
 - `to_string_in_format_args` (perf/default-on, scalar-derivation provenance; bare-`{}` placeholder guard; composes with `uninlined_format_args` by design) + `manual_range_contains` (contains IS the two leg comparisons; literal-only bounds). Freeze v2 77/17 + v3 78/18; score-bench #133 96.36% byte-identical.
 
 ## 2026-09-18 — Batch 157 / Plan 148: the frontier-lead mining pack III (the first all-FIXABLE pack; corpus 70 → 72, clippy 51/16 → 53/16)
+
 - `redundant_closure_for_method_calls` (construction-identity whitelist: String/Vec/HashMap/HashSet × len/is_empty/capacity; `helpers::slice_param_heads_over` substrate) + `iter_skip_next` (slice containers heal to `v.get(n)` — one step better than clippy's `.nth()`). `unnecessary_sort_by` joined the bad-atom set; 12 orphaned EXCLUDED rows pruned.
 
 ## 2026-09-18 — Batch 156 / Plan 147: the frontier-lead mining pack II (the re-armed 2 leads consumed; corpus 68 → 70, clippy 50/15 → 51/16)
+
 - `io_other_error` (FIXABLE; identical payload bound) + `wrong_self_convention` (VERIFY; `into_*(&self)` → `into_*(self)`, NO-vis inherent only). Re-arm probe: `redundant_closure_for_method_calls` + `iter_skip_next`. Score-bench #131 96.36% FLAT.
 
 ## 2026-09-18 — Batch 155 / Plan 146: the frontier-lead mining pack (the miner's first 5 leads consumed; corpus 64 → 68, clippy 47/14 → 50/15)
+
 - `let_and_return`, `redundant_slicing`, `map_flatten` (FIXABLE) + `ptr_arg` (VERIFY); `needless_borrow` receiver whitelist extended (str-inherent). `let_and_return` measured BROAD — 3 pre-existing atoms' fixtures fire it too (bad set 2→5). The e2e runs one loop per covered family.
 
 ## 2026-09-18 — Issue 122 / Plan 145: the PowerPlay frontier miner PoC (G1–G4 PASS, opt-in)
+
 - `src/frontier_miner.rs` + `examples/frontier_miner.rs`: modelless, deterministic, zero-LLM generator; full invariant loop (unsolved-before / solved-after / regression-green / exactly-once BLAKE3) + per-family K-minimality; 16/16 seeds clean, 6 rows committed. Promotion NOT claimed — rides the Issue-089 band-predictivity clock.
 
 ## 2026-09-18 — Batch 154 / Plan 144: the tokio upstream-surface refresh (CHANGELOG 1.47–1.52.3 + "Actors with Tokio"), rust_perf 142 → 145
+
 - `write-vectored-capability-flag`, `oneshot-response-send-unwrap-panics`, `actor-bounded-channel-cycle-deadlock` (all NotBenchable, domain reasons) + 4 annotation folds (spawn_blocking sharded-queue REVERT, LIFO-steal REVERT, coop public API, socket-option family). Process note: build corpus entries with the Python path for multi-line fixtures.
 
 ## 2026-09-18 — Plan 141: the devnet burn-process e2e, both machines live (Bench 097)
+
 - `scripts/burn_e2e.sh` 9/9 hard assertions green twice (refuses off-devnet configs + fleet account ids). Headline server-read: 100 KAT grant burned to exactly 0 by 90 metered scans; depleted+never-contributed refused at run start; clamp held; contributed-lift ran clean; conservation held. Findings recorded in Bench 097 §4.
 
 ## 2026-09-18 — Plan 035 wave 2 (T3/T10/T6-client/T12): the client becomes a typed µ consumer + the ×1_000_000 grep gate
+
 - `MicroKat` adoption (kat_footer is the unit-vocabulary module; `MICRO_PER_KAT as f64`, never bare 1e6); L4 value-level display pin; `tests/micro_literal_gate.rs` bans the ANONYMOUS million (TOKENS_PER_MTOK beside MICRO_PER_KAT — same value, different dimension). Latent: dead `wallet_lines`/`receipts_line` at kat sets without `kat_transport`.
 
 ## 2026-09-17 — Bench 094 wave 4: the third default-eco extension (501 → 663 clean crates, flip 110/442 → 129/442) + the dead cross-wave base-dedup found by audit
+
 - The cross-wave base-dedup in `cmd_sample` was DEAD CODE (bare name vs versioned keys — never matched); fixed with the constructed-key law + a merge-time hard-refusal. Fresh multi-crate head: `io_other_error` 57/8, `unit_arg` 46/2, `wrong_self_convention` 19/6.
 
 ## 2026-09-17 — Bench 094 wave 3: the second default-eco extension (342 → 501 clean crates, flip 94/442 → 110/442) + the resume prefix-collision fix
+
 - Resume prefix-match over-matched (`gsk4-sys-0.11.4` startswith `gsk4-`); caught by the reconstruction diff before any number was used; fixed to the exact constructed key. Head: `needless_borrow` 92/30, `redundant_field_names` 58/9.
 
 ## 2026-09-17 — the fresh-pass pedantic residue closes (34 + 6 findings, the stale-cache bite confirmed on the Batch-150 close-out itself)
+
 - A fresh-target `cargo clippy --all-targets` at HEAD reported 34 findings the stale-cache close-out had read as 0 — a fresh worktree + empty target dir is the only clippy reading that means "0". The landed doc_markdown rule healed 38 edits (dogfood closing the loop). Fixed the one fresh lib-test failure (worktree cwd artifact in `downstream_hint::relative_target_fires`).
 
 ## 2026-09-17 — Issue 121 RESOLVED: the set_rerank consumer landed, promotion REFUTED, the all_rules canonical-order fix is the GOAT (`2aa53e1d5`, Bench 096)
+
 - Bench 096: the canonical-merge control beat both admission arms (85.2% vs 70.4/74.1% top-1); every α-ablation lost to shipped on the OOD rig. The real yield: `all_rules` discarded the T3.5.4 instantiation re-rank across domains — canonical key restored on the DEFAULT path (+55.6pp top-1), regression test landed. Re-open trigger: `pool_depth_rescue_guard` firing again.
 
 ## 2026-09-17 — Plan 134 T2.1 COMPLETE: the frame-time budget tier ships (Bench 095)
+
 - `src/frame_time_report.rs` (ungated) + `--frame-time-report` (`--frame-budget`/`--vs`/`--frame-delta-pct`); warmup-parity + pairing-uniqueness evidence guards; refuses exit 1 on empty/unparsable/zero-pairs. Walker matched `Path::extension()` (= `json`) — every real sweep dir read EMPTY; fixed to full suffix match.
 
 ## 2026-09-17 — Bench 094 wave 2: the default-eco histogram extension (184 → 342 clean crates, flip 74/448 → 94/442) + the T7.5 fold
+
 - Sampler is tracked instrumentation (`scripts/sample_default_fired_histogram.py`). Two incidents caught before any number was used: cargo's JSON carries diagnostics under `message` not `msg` (the known-dirty control caught it); resume skip compared bare names against versioned keys (merge dedups keep-first). T7.5 fold: corpus-touching landings require the freeze-table regeneration in the SAME batch.
 
 ## 2026-09-18 — Batch 153: the async-blocking distill lands (rust_perf 139 → 142)
+
 - `blocking-sleep-in-async`, `rayon-bridge-oneshot`, `tcp-nodelay-request-response-accepted-socket` (NotBenchable, domain reasons) + 5 annotation folds. All source quotes re-verified live at mine time. The stale "Not benchable 36/127" ledger line repaired to 50/142.
 
 ## 2026-09-18 — Batch 152: the dial9 tokio-principles distill lands (rust_perf 136 → 139)
+
 - `batch-blocking-pool-segment`, `adaptive-yield-consecutive-ready`, `bounded-fanout-semaphore`. Honest corrections: the mini-redis p50/p99 figures are NOT on the live page — the rule carries only the verifiable ≈10× and the K=4.
 
 ## 2026-09-17 — Batch 151: the doc-line state-machine port lands (corpus 62 → 64, FIXABLE 45 → 47)
+
 - `doc_lazy_continuation` + `doc_overindented_list_items` in ONE proposer module; measured: clippy's zero-width insert span sits at the CONTENT start (after the conventional space); +4-over still fires (pulldown reads it as paragraph text); `helpers::doc_lines` substrate extracted.
 
 ## 2026-09-17 — Batch 150: the staged default-level + pedantic probe pack lands (corpus 56 → 62)
+
 - FIXABLE +4 (`print_with_newline`/`write_with_newline` one module two names; `unreadable_literal` digit-count ≥6; `legacy_numeric_constants` with a shadow guard); VERIFY +2 (`partialeq_to_none`, `cast_lossless` safe-let gate). DECLINED with evidence: `redundant_closure_for_method_calls` (typeck-resolved path). Rider: the Bench 094 dead test (missing `#[test]` attr — an uninvoked assertion is unknown, not passing).
 
 ## 2026-09-17 — the default-level fired histogram lands (Bench 094, Issue 119's T4 successor)
+
 - Sibling-git-history REFUTED as the population (CI `-D warnings` since before the healer); Li et al. transcription REFUTED (Figure 2 carries no printed value labels); measured first-party: 184 clean crates / 761 warnings / 105 distinct default-firing lints. The join flips the cross-tab 0 → 74 of 448; the CONCENTRATION LAW: the nominal top-1 came from ONE crate — read the spread column.
 
 ## 2026-09-17 — the manual_range_patterns corpus rule lands (the intake MISS folded, P31)
+
 - VERBATIM port of clippy's own coverage-walk algorithm (`53269d3a`) after probes refuted two naive models; order-free, duplicates absorb, range alternatives join the walk, boundary texts splice verbatim. `manual_is_multiple_of` adjudicated by-design-silence-plus-oracle-lane (E0689 class is check-INVISIBLE).
 
 ## 2026-09-17 — the doc_markdown bare-URL arm lands (the staged follow-up lead)
+
 - Real clippy's URL branch is `Url::parse` + `!cannot_be_a_base` — any RFC scheme angle-wraps; `is_absolute_url` re-derived bounded (no new dep); autolink guard on the RAW token. Follow-up: the link-target guard moved to the raw token (`](` stripping made the trimmed word miss it) — `broken_intra_doc_links` is a rustdoc not rustc diagnostic.
 
 ## 2026-09-16 — Issue 120, the parallel session's side: the yield + the rust_perf debt closes (the allow lifted, 157 edits healed by the landed rule)
+
 - The rust_perf module-level `#![allow(clippy::doc_markdown)]` LIFTED — 157 edits healed by the landed rule itself; 3 feature-gated residues fixed by hand. Score-bench rows #123/#124 independent derivations agreed.
 
 ## 2026-09-16 — Issue 120: `doc_markdown` lands — the every-landing manual backtick pass is the healer's now
+
 - Clippy's word predicates ported VERBATIM; located as REAL `#[doc]` attributes (string literals unreachable by construction — the load-bearing FIXABLE property). Freeze tables regenerated + re-verified; router floor re-pinned 78→72 (−6 from the rule's PRESENCE, proven by a reword control); the rust_perf wholesale allow deliberately NOT lifted that day (paid 09-17).
 
 ## 2026-09-16 — Issue 114 resolved: the refusal-code client half (landed in riir-kat `a117163`)
+
 - `kat_refusal.rs` (13-code table + `RetryVerdict`) + the code-aware burn stack; absent/unknown code = the prose-era default, never a guessed retry; monotone watermark makes replay-retention always safe.
 
 ## 2026-09-16 — Issue 116: the corpus-truth delta surface — `[no corpus rule]` carries TWO opposite messages
+
 - `src/corpus_delta.rs` + `--corpus-delta`: "not leased YET" (the fix lane writes it today) vs "unsupported" (mining intake); the partition is asserted; FIXABLE/VERIFY tiers stay split (a VERIFY row only applies under `--fix --verify`). Freshness bucket is 0 BY CONSTRUCTION on a lease-less build — the exercise arm drives the REAL producer.
 
 ## 2026-09-16 — Issue 119: the corpus coverage-debt sweep — and the blind spot its first run found
+
 - `cargo heal --coverage-report` (`300411ed`): population DERIVED from the installed driver; first measurement 822 derived / 54 covered / 768 UNCOVERED / 449 default-firing. The finding: 0 of the 449 carried ANY frequency evidence (the local histogram was captured pedantic-enabled — structurally blind to default-level debt). Fix-set-only = 0 (corpus-lockstep holds from the converse side); 0 cross-domain collisions.
 
 ## 2026-09-16 — Issue 119, the parallel session's side: the yield + the process-boundary delta (e2e arms + the never-bare row)
+
 - Parallel implementation measured the identical first numbers (822/54/768/449 — a two-way cross-check); yielded; deltas re-landed: `tests/coverage_report_cli.rs` (exit contracts at the process boundary) + the `standalone_modes_are_never_bare` row.
 
 ## 2026-09-16 — Issue 118: the bench-target guard extended to the compile-repair surfaces (`--fix-compile` writes + the oracle lane)
+
 - A compile repair can hoist a loop or delete the timed "dead" result — P30's "compile-shaped is safe" superseded. `bench_guard` promoted to crate top level (ungated); driver writes filtered before the pick; `user_path_forces` explicit override; P21 oracle lane rides the same door; `tests/fix_compile_bench_guard.rs` (real cargo).
 
 ## 2026-09-16 — Issue 117 completed (the delta half): the six remaining stubs + the three silent tails — and the dual-implementation yield behind it
+
 - The staleness guard landed TWICE in one window; this session's duplicate YIELDED, additive delta re-landed: six stubs (`stake`/`unstake`/`vote`/`pay`/`faucet`/`wetrun`) route through `build_stamp::refuse`; the three auto-push tails print loud SKIPPED lines naming the rebuild.
 
 ## 2026-09-16 — Issue 115 resolved: the auto-oracle feature knob (`RIIR_HEAL_AUTO_ORACLE_FEATURES`) — gated diagnostics leave the `[heuristic]` blind spot
+
 - `features_from` → `--features <csv>` injection, loud knob-active line, both failure arms name the knob; `RIIR_HEAL_AUTO_ORACLE=0` still wins; manual `--clippy-json` wins over both. E2E proven on a gated scratch crate (with the knob: `[oracle] needless_return` anchored).
 
 ## 2026-09-16 — Issue 113: the auto-oracle — `cargo heal` now runs the clippy oracle for you (the "agave 6951 rows → +1 credit" session)
+
 - With no manual feed and a rust lane, a scan over a cargo project spawns `cargo clippy --workspace --no-deps --message-format=json --quiet` at DEFAULT features in the detected root; loud heuristic-only fallback; kill-switch `RIIR_HEAL_AUTO_ORACLE=0`. A gain path behind a discoverability wall is not a gain path.
 
 ## 2026-09-16 — Issues 110 + 111: two silent-wrong-verdict defects, both found by running this crate somewhere it had never been run
-- 110: all three scratch-crate oracles BLAKE3-key the directory but wrote a FIXED package name — under a shared `CARGO_TARGET_DIR` two crates are one cargo unit and the second gets the first's cached answer (the more carefully somebody isolates, the more reliably the oracles lied); fixed: package/bin name carries the BLAKE3 stem + pinned `CARGO_TARGET_DIR`. Found via riir-train Issue 555 (the child shed it first). 111: `ModRowLattice` `Path::join` emits `\` on Windows against `/` keys — unresolved mod rows degrade the lattice to empty and INVENT platform-dead findings; separator-insensitive index. Exposure adjudicated from artifacts: Bench 013's 31/31 distinct profiles prove no shipped perf row was contaminated; `ClippyVerifier` `control_fires` shows the n−1 signature in fixer_quality_history.
+
+110: all three scratch-crate oracles BLAKE3-key the directory but wrote a FIXED package name — under a shared `CARGO_TARGET_DIR` two crates are one cargo unit and the second gets the first's cached answer (the more carefully somebody isolates, the more reliably the oracles lied) …
 
 ## 2026-09-16 — P30: the bench-target guard (rust_perf edits declined-and-flagged on measurement targets)
+
 - `is_bench_target(path, src)` (path axis + harness-signature axis; `black_box` NOT a marker); `--fix` declines perf edits on bench targets with loud lines; `--suggest` stamps `⚠ bench-guard`. Residue counted: 0 measurement-altering heal edits landed in consumer bench files. Collision note: the wiring rode a sibling's commit; the module + docs commit completed the landing.
 
 ## 2026-09-16 — P33: use-row lexical scoping (platform-audit; the riir-chain `BrowserNodeState` intake)
+
 - A module-PRIVATE use row reads only same-file mentions at its scope or descendants; pub re-exports keep name-global evidence. Measured: riir-chain CLEAN; the two `use anyhow::Context` rows mechanized away; full workspace re-sweep zero new rows.
 
 ## 2026-09-16 — P32: the `[C2·test-rig]` downgrade (config-audit; the riir-ai `Outcome`/`ProbeConfig` intake)
+
 - A [C2] row renders `[C2·test-rig]` when the decl is tests-tree AND every read is under tests-path files (path axis kept separate from cfg(test) confinement; name-in-both-trees not eligible). riir-ai converts exactly the two predicted rows.
 
 ## 2026-09-16 — P29: the `[A·documented-write-only]` class-A extension (closes the P28 handoff)
+
 - Class-A rows take the same marker arm class B uses (`is_deliberate_write_only_marker`); gpu-uniform keeps precedence. riir-ai `HlaKarcConfig.delay_k` renders weak; riir-engine field docs carry the marker wording (their repo).
 
 ## 2026-09-16 — P28: the `[gpu-uniform]` downgrade (config-audit × shader uniform blocks)
+
 - `collect_gpu_uniform_structs` closes `#[uniform(…)]` blocks transitively; rows render `[gpu-uniform]` (downgrade-not-suppress — WGSL consumes the bytes, the detector cannot see it). seal-game-editor 2 [A] → 0 [A] + 2 gpu-uniform; canaries hold.
 
 ## 2026-09-16 — Issue 102 T5: the corpus authoring meta-rule guide (Library Drift's meta-skill, formalized)
+
 - `.docs/02_corpus/authoring_discipline.md`: route-before-propose, vocabulary-translation dedup, probe-first, decision-content, bounded fix-space, honest tiering, fixpoint safety, GOAT + count-pin walks, provenance/`.raw` discipline, distinct-from rows, meta-recursion. Nothing new is policy — every rule cites the practice it formalizes.
 
 ## Issue 107 CLOSED 2026-09-15 — NEGATIVE on evidence; T3–T6 closed UNBUILT (record; file removed per the noise-reduction rule)
+
 - T1: horizon 1 < 2 on every corpus; where a readout AUC is 1.000 the history floor MATCHES it (sufficient-statistic verdict). T2: the span-embed column did NOT revive the lane on synthetic corpora either. No corpus on which outcomes are NOT strategy-determined → T3–T6 closed UNBUILT. Reopen: organic fixseq rings with ≥2-revert runs + the embed column; store densification; any corpus where the resolved rate moves between orderings.
 
 ## 2026-09-15 — Intake class P23: the `useless_format` escape guard on the oracle lane (clippy's own suggestion, refused where it is wrong)
+
 - The oracle lane drops any `useless_format` diagnostic whose covered call text contains ANY brace (a brace in a compiling no-args `format!` literal is an escape; clippy's `.to_string()` suggestion reuses the ESCAPED literal and would freeze the doubled form).
 
 ## Issue 107 T2 — the span-shape embedding column lands (write-time capture) + the embed arm (`src/span_embed.rs`)
+
 - Write-time capture at the one `push_attempt` chokepoint (span bytes DRIFT as fixes land); hashed unigram+bigram bag, signed feature-hashing, L2-normalized, ×127 i8. Measured: auc(embed) = 1.000 WITH floor 1.000 at k=1 — BELOW-FLOOR, the same sufficient-statistic verdict.
 
 ## Issue 107 T1 — the fixseq horizon report + the lane-viability verdict (`src/horizon_report.rs`)
+
 - Strict-lead features at i-k, LORO-held-out ridge readout, base + history-aggregate floors, three refusal classes. Measured: horizon = 1 on every corpus; the unblock was riir-kat `4bc8672` (ungated transport-tier imports E0432 at default features).
 
 ## Plan 127 — P015 Phase 2: the `cargo heal replay` client landed (`4e1983ee`, byte movers riir-kat `a80ec7a`)
+
 - Lease → local clippy-oracle replay → signed verdict; `blake3(rustc -vV)` fingerprint, step-0 canary hash check, the pinned single-item rate rule (determinism law making K=2 agreement possible); the measured rule change: REMOVED-set evidence (ambient lints cancel in the diff BY CONSTRUCTION). Kill-switch `RIIR_HEAL_REPLAY=0`; lane inert until Phase 3.
 
 ## Issue 106 — the infron free leg (groq → infron → CF ladder) landed (`859dc6de`)
+
 - `GroqClient` → generic `OaiClient` over static `EndpointConf`; 3-leg `LlmRouter` with windowed disable; live probes: the free pool is account-gated (429 "requires Team balance > $4.99") — activation = top up; degradation is exactly right (first 429 disables infron for the window).
 
 ## Issue 105 — the journey-credit third axis (PC-ALM dual accumulator) landed (`e58ff9b9`)
+
 - The strand-keep poison (a KEEP ending at a typeck-masked E0614 scored as full success): `JourneyCredit` over the fixseq ring + `journey_factor` discounts success evidence in tainted journeys; EXACTLY 1.0 with no journey data (pre-105 stores bit-identical). Gate `tests/journey_credit_gate` 3/3.
 
 ## The 09-14 evening queue-4 hygiene sweep — eleven more seal-game-editor issues closed on code evidence, the numbering-collision defect measured and filed as issue 151 (2026-09-14)
+
 - 11 issue files removed on landed-at-HEAD evidence (seal-game-editor `2415427b`); issue 125 deliberately left OPEN (verified not fixed); issue 151 filed (TWELVE dual-allocated plan numbers measured).
 
 ## The 09-14 evening queue-1 unit — seal-game-editor issues 088/099/100 closed on verified HEAD evidence, the 088 sqlite_store half fixed (2026-09-14)
+
 - 099/100 verified fixed at HEAD (carrier FilterDropdown + relation-driven options); 088's remaining half (two orphaned doc blocks) deleted. seal-game-editor `bbbeac56`.
 
 ## P21 post-mining intake — the oracle-suggestion-children consumption: the `--clippy-json` fix lane applies clippy's own MachineApplicable suggestions verbatim (the P15 Unknown-receiver residue closed) (2026-09-14)
+
 - `FeedSuggestion` capture (MachineApplicable-only, single-child, primary file) + `oracle_edits` merge (gap text preserved; whole-file parse gate, all-or-nothing) + pass-0 wiring (proposer edits win on overlap). E2E: three Unknown receivers healed verbatim; stale-feed re-run drops loud, file byte-identical.
 
 ## P15 post-mining intake — `unnecessary_map_or` lands: the born-lint closure, the `receiver_kind` substrate extraction + the SAFE-LET extension, and the gen2/gen3 re-freeze (2026-09-14)
+
 - Probe-first: the full firing envelope (Option+false→`is_some_and`, Option+true→`is_none_or`, Result+false→`is_ok_and`; Result+true SILENT — no `is_err_or` in std). `receiver_kind` substrate + SAFE-LET extension (exactly-once binding, never assigned, not a param) + the proposer (Unknown REFUSES). P-numbering note: the P-series is per-session and has dual-allocated before.
 
 ## The 09-14 production re-heal of seal-game-editor — the P13 "owning lane's move" discharged same-day (2026-09-14)
+
 - Oracle-fed `--fix --write --verify` at `d310c030`: 25 verified edits / 9 files, findings 49 → 19 (the remainder is exactly the documented divergence classes). The fresh feed caught 3 `unused_must_use` in the same session's own new tests (cfg(test) code needs `--all-targets`).
 
 ## The 09-14 morning re-arm pass — sweep blockers narrowed to ONE (riir-ai's stale checkout), healer HEAD binary staged clean-of-sibling-WIP, seal-game-editor #147 closed as the queue-1 unit (2026-09-14)
+
 - riir-viewbridge CLONED (16/20); every sweep re-arm gated on riir-ai advancing. Issue 104 RETRACTED (false alarm; lesson: `git ls-remote` lists ref TIPS not ancestry; `git merge-base --is-ancestor <sha> origin/<branch>` settles any "history loss" allegation). Junction farm at `C:\git2` (E: is exFAT — no junctions). seal-game-editor #147 closed at `d310c030`.
 
 ## The 2026-09-14 Protocol B sweep — 10 repos screened, seal-game-editor healed oracle-fed (the queue-3 unit; first large multi-crate `--clippy-json --fix --write --verify` run) (2026-09-14)
-- Dev-sweep network discipline: `RIIR_HEAL_KAT_METER=0 RIIR_HEAL_KAT_GATE=0 RIIR_HEAL_KAT_SERVICE_URL=http://127.0.0.1:9` neutralizes the lease context. Screen: 4 CLEAN, seal-game-editor healed (`e2112bce`, 61→49), 4 blocked with named re-arm conditions, riir-shader recorded-not-touched. Lessons: `RUSTUP_TOOLCHAIN=1.98.1` when the target has no pin file; single-file checkout beats stash for HEAD-vs-heal adjudication; branch `e2e_item` healed (52 × future-incompatible `float_literal_f32_fallback`).
+
+Dev-sweep network discipline: `RIIR_HEAL_KAT_METER=0 RIIR_HEAL_KAT_GATE=0 RIIR_HEAL_KAT_SERVICE_URL=http://127.0.0.1:9` neutralizes the lease context. Screen: 4 CLEAN, seal-game-editor healed (`e2112bce`, 61→49), 4 blocked with named re-arm conditions, riir-shader recorded-not-touched.
 
 ## P13 post-mining intake — the `chunks_exact_to_as_chunks` CHAIN-ROOT extension lands (the sweep's own product consumed same-day) (2026-09-14)
+
 - Real clippy fires on iterator-CHAIN roots; the ROOT is rewritten, downstream adapters compose unchanged; the `_mut` twin inserts `.0.iter_mut()` — a MEASURED safer-than-clippy divergence. LIVE-FIRE: 37 proposed / 24 kept, all oracle-Certified; new divergence class: MACRO-ARGUMENT chains (syn's visitor does not descend into macro token streams).
 
 ## P12 post-mining intake — `needless_pass_by_ref_mut` lands: the 2026-09-09 nursery-gap row closes, probe-corrected twice (2026-09-14)
+
 - Probe corrections: `pub` methods SILENT, `pub(crate)` FIRES, trait-impls SILENT; the "must emit both halves" premise wrong (the gate is errors-only; clippy's own suggestion is definition-site-ONLY — the cascade emits as a narrow provable shape). VERIFY tier; the corpus LEASE gap signal was honest for that config (the rule reaches leased users at the next sync).
 
 ## P14 post-mining intake — the cross-repo consumer-surface hint landed: the FP-class #3 open candidate closes (2026-09-14)
+
 - `src/downstream_hint.rs`: after `--config-audit`/`--orphan-report`, names every sibling repo ON DISK whose manifests path-dep into the scanned repo (measured-graph discovery from manifests, NOT BOUNDARY.md tables — prose drifts, manifests don't); root + member manifests only, ~50 ms.
 
 ## P13 post-mining intake — the FP-class #3 refinement (a) landed: trait-impl reads are external, and the probe surfaced the payload-Result class (2026-09-14)
+
 - katgpt-rs 772 trio reproduced exactly; fix 1 trait-impl externality (3→0); the probe then corrected the intake's own attribution — `SchurSolver` is INHERENT payload-`Result` (fix 2: `Result<Payload, E>` = flow-out, `Result<(), E>` = confining). riir-train 1→0.
 
 ## P12 post-mining intake — `useless_conversion` shape 2 (the `.into_iter()` call-arg drop): the probe re-keyed the lint, the extension rode the existing type-blind tier (2026-09-14, `115a9185`)
+
 - The probe inverted the intake's key: the fn-arg shape fires as `useless_conversion` (`useless_into_iter` is the for-loop shape, pedantic); direct call argument `<expr>.into_iter()` replaced by its receiver. Windows red fixed portable in `bbea191e`.
 
 ## The physician-heal-thyself self-audit — config-audit + orphan-report over riir-clippy itself at FULL scope (2026-09-14)
+
 - config-audit clean both scopes; orphan-report 14 stillborn, ALL adjudicated benign (0 actionable TPs). The scope lesson: the src-only invocation's 15th row was a SCAN-SCOPE FP — shipped as `src/scope_hint.rs` (`d4e87f54`).
 
 ## `cargo heal --version` exit-2 regression — found by the global-binary rebuild, closed by merging the two hand-mirrored flag lists (2026-09-13, `ad31a04a`)
+
 - The 09-12 fix completed `is_bare_posture` but the SECOND hand-mirrored paths-guard list kept its missing row; both now consume ONE shared `standalone_mode()` predicate — the mirror-drift class structurally closed.
 
 ## The `--corpus-json` lane retired (2026-09-13, riir-dapps Plan 026)
+
 - `gen_dashboard.py`'s `--corpus-json` + `write_corpus_growth_json` deleted (the front-page corpus card went chain-native); only the consumer-facing export lane is gone. Phase-2 follow-up = Issue 103.
 
 ## P11 post-mining intake — `format_collect` (the first two-span clippy rule) + the `needless_borrow` receiver-shape extension (2026-09-13)
+
 - `format_collect` two-span capability resolved BY MEASUREMENT (anonymous `as _` cannot collide; io::Write ambiguity impossible). `needless_borrow` receiver extension `(&x).m()` → `x.m()` for the whitelist. RERANK_POOL 16→20 (the rescue guard's first designed fire).
 
 ## P10 post-mining intake — the 089-T3 corpus-gap pair landed, and the probe inverted the intake's own description (2026-09-13)
+
 - `filter_map_bool_then` fires on `bool::then` INSIDE `filter_map` (the split is the FIX), `vec_init_then_push` help-only in real clippy; both VERIFY-tier, corpus 49→51; attributed pushes refuse (a `vec![]` literal cannot carry cfg'd elements).
 
 ## Issue 101 resolved — the E0502 read-relocate: F3 cleared, interacting corpus 100%, the first ordering IMPROVEMENT (2026-09-13, `32b19a1b`+ / Bench 091; hashes post-rebase on `5042af31`)
+
 - Design 1 (relocate-after-last-use) MEASURED DEAD before landing; the shipped hoist-to-first-use template cleared F3: interacting corpus 100%, driver 66.7% (unfixed 12→0), G1 172/172. T4 A/B: every arm 46/46, learned arms at 10 reverts vs static's 24 — the gain is WASTED ATTEMPTS, not resolved rate; Issue 093's negative verdict STANDS.
 
 ## Issue 089 T4 hardening — the bench-tail frontier snapshot: generation boundaries record themselves (2026-09-13, `11c1799d`; the 7 lane runs + snapshot row #2 recorded the pre-rebase build sha `b17c2dd8` — identical diff, the rebase only moved the base)
+
 - `finish_score_bench` (the ONE tail every generation lane runs) appends the snapshot — a boundary nobody reports at is one the correlation never samples. T8 accumulation rode along (8 rows carry `rule_outcomes`).
 
 ## Issue 093 resolved — per-run strategy posterior: PoC win real, wired policy NO GAIN anywhere, ordering closed NEGATIVE on evidence (2026-09-13, `0fec5257`+`8993ec51`+`27e8ffcf`+`b08ef85d` / Benches 084+085+088+089+090)
+
 - PoC WON on the toy (41.7% vs 35.2/36.7); wired green with honest gain-NULL (no real surface with revert dynamics); on the interacting corpus every learned ordering REGRESSED (10/34) — the keep signal was the defect. Final: static min-delta stays shipped; opt-in, out of the release set; never ship a long-lived `NonergodicOrdering` handle. Reopen triggers: store densification, organic rings, any corpus where the resolved rate moves.
 
 ## Issue 100 resolved — the unmasking trade: E0614 playbook + lexicographic keep rule, the T4 regression REPAIRED (2026-09-13, `65b9ff11`+ / Bench 090; hashes post-rebase on `ae9da3d6`)
+
 - The playbook alone was inert; the load-bearing half is the lexicographic keep `(masking, count)` with `MASKING_STAGE_CODES = ["E0614"]`; F4 = the first legal equal-count keep; regression repaired to 34/46 parity for every arm. Floor: N 246→258, G1 160/160.
 
 ## Issue 099 resolved — the interacting-error corpus: gate 34/34, first non-zero reverts, learned orderings REGRESS clean 22→10 (2026-09-13, `a384acc1`+ / Bench 089)
+
 - 34 shared-binding E0502×E0499 pairs in 3 families; first non-zero revert rate on the stock driver; the per-attempt keep signal is NOT a run-outcome signal on interacting corpora (clone-out strand-keeps score well in counters but strand the run at a masked E0614).
 
 ## Issue 91 resolved — fix-loop trap detector: T2 measured NEGATIVE (structural), T3 recorded, detector NOT built (2026-09-12, `e44e885f` / Bench 087)
+
 - 0 flips on all three keys over 230 attempts — the shipped `--fix-compile` loop carries a well-founded measure making a within-run state revisit IMPOSSIBLE; a detector with no phenomenon is not built. Reopen triggers in Bench 087 §6.
 
 ## Issue 097 — linking↔confusion PoC: NO-GO, the fusion idea retired as measured-refuted; RESOLVED (2026-09-12)
+
 - Both config classes refute (k=8 degenerates to 99.9% linked; k=3 shows ANTI-enrichment); the Spearman trap named (ρ moved with tie structure, not the confused-pair set). Mechanism: rename ORBITS, 1 exemplar/rule — the manifold assumption fails on this corpus. Reopen: a real-repo mined span set.
 
 ## Orphan-report serde boundary — the riir-ai Issue 934 follow-on repair (2026-09-12, `d2e39d1f`)
+
 - The boundary is the ATTR, not the derive pair: `skip_serializing_if` fields excluded (conditionally-emitted OUTPUT schema), plain `#[serde(default)]` fields stay candidates (the canonical `BehaviorConfig` Ser+De case); `#[serde(skip)]` stays a candidate.
 
 ## Plan 126 — orphan-report: intake class C1, the config knob orphaned by optimization (2026-09-12)
+
 - `--orphan-report`: two-leg report (zero-external-read + git-history pickaxe evidence of vanished readers); serde-literal candidate extension forced by the canonical case (no `impl Default`); the intake's "reader that vanished" narrative was syntactically FALSE — the knob was BORN unwired, fired honestly as `[stillborn]`. En-route: canonicalize scan paths before `strip_prefix` on macOS.
 
 ## Plan 125 — config-audit class C2: the self-referential config struct detector (2026-09-12)
+
 - Whole struct whose every Default-impl field has zero EXTERNAL reads; the landing's own bug: syn 2 impl methods are `ImplItem::Fn` — `visit_item_fn` never fires inside impls (need `visit_impl_item_fn`). First-contact yield: 1 verified TP / 0 FP (riir-games `PetAiConfig`).
 
 ## Issue 91 T1.5 — the per-attempt ring: `--fix-compile` attempt sequences to `.heal/fixseq/` (2026-09-12)
+
 - `AttemptRecord { seq, code, span_hash, strategy_id, outcome, errors }` at ALL five loop outcome sites; `span_hash` = blake3(`file:line`) 16-hex; one `run-<ts>.jsonl` per write-mode run. The instrumentation prerequisite for T2 (oscillation) + Issue 093 (per-run posterior).
 
 ## Issue 089 T4+T8 — the evidence-emission halves: band-mass snapshots + per-rule bench rows (2026-09-12)
+
 - T4: `--frontier-report` appends band-mass snapshots to the committed `.benchmarks/frontier_snapshots.jsonl` (state-change dedup; `generation` = the FRONTIER, lanes interleave). T8: every bench row carries per-rule `rule_outcomes` (single-target attribution only). Both stay open on ACCUMULATION, emission now live.
 
 ## Issue 089 T7 — the shaped 0.5 verdict: generation 8 + the Elo-tie / Beta-half-count feeds (2026-09-12)
+
 - "Target cleared ∧ new diags" = first-class: priced 0.5 in the bench, TIE in Elo, HALF-COUNT (+0.5/+0.5) in Beta; gen-8 admission is SHAPE non-vacuity (n_shaped ≥ 1), deliberately not the M5 heal_rate comparison. Freeze fences: INNOCENCE + SHAPE gates.
 
 ## Issue 089 T6 — the stratified score-bench read + the D-formula decline (2026-09-12)
+
 - Every clippy-lane bench run splits heal rate by fixture provenance (repo/authored/construction/other) via the `ood` mining join; v1's 96.2% aggregate is authored-dominated (authored 98.0% vs repo 50.0%). D declined on the record. En-route: the score_bench BIN lane had been E0631-broken (a lane nobody compiles).
 
 ## Issue 089 T5 — provenance weighting: the priced pair namespace + the enforced rating fence (2026-09-12)
+
 - `PROVENANCE_ORGANIC` / `SYNTHETIC_PAIR_WEIGHT = 0.05` / unknown fail-closed 0.0; `rate_pairs` ENFORCES the non-circularity fence (only construction rows feed the BT fit — observed wins are never rating evidence); the outcome-feed split measures band-mass PER FEED.
 
 ## Issue 088 resolved — the kat service-plane spin-out: every task + fleet follow-up landed, file removed at close (2026-09-10 → 2026-09-12)
+
 - The KAT service plane (25 modules) → the private sibling `gist-rs/riir-kat`; riir-clippy is a consumer via non-optional path dep, root re-exports at historical paths; three healer-coupled keepers stayed root. Full guard GREEN after 8 latent rot classes fixed; fleet follow-ups closed 09-11 (katgpt-rs repo count 17→18; dapps/dao protocol-tier adoption).
 
 ## Issue 090 resolved — latent-only test lane: 17 domain-panic tests gated on the calibration state (2026-09-11, 23e051bc)
+
 - The three draft test modules gate on `all(test, latent_retrieval, clippy_lints, rust_perf)` — the state the fixture set + floors are calibrated on; the issue's sketched `any(single-domain)` gate would have been WRONG (the tests assert Clippy rows).
 
 ## Issue 085 — the `dist` domain: the promotion-evidence narrative (2026-09-09 → 2026-09-10)
+
 - Phase 1 `79dcf9b` (6th retrieval domain, no-syn Cargo.toml scanner, suggest-only); Bench 082: score-bench FLAT by construction, consumer scans true-positive on game-sdk/deployer; B1 (autodiscovered bin) + B2 (root profile knobs) closed `759e209d`; PROMOTED DEFAULT-ON 2026-09-13 (owner pull; all four GOAT conditions PASS; `--no-default-features` is the tested flag-OFF path).
 
 ## The domain swap — the client half + the config surface, post-flip state (2026-09-10, riir-dapps Plans 023+024)
+
 - The apex IS mainnet now; `devnet.ai.gist.rs` hosts the MOVED fleet ledger; the fallback pair (default→devnet ONLY) is load-bearing in the other direction; `cargo heal config set --url <alias|url>` / `config get` (`cf236f1a`).
 
 ## Issue 081 resolved — burn wire unit mismatch: end-to-end closed, rescale STOOD DOWN (2026-09-10)
+
 - Client sent micro book value in the whole-KAT wire field (clamp-wiped the grant, poisoned the watermark); fix `e9eca71d` + the cross-repo unit golden; the rescale STOOD DOWN — the watermark row was already WHOLE-SCALE (the CAS guard refused without touching it). Lesson: a money unit has ONE name per side.
 
 ## Issue 087 resolved — kat_burn_stack e2e: stale harness units, not the account plane (2026-09-10)
+
 - The harness bills 11 µKAT/run; `wire_kat_total(11) = 0 ≤ ack 0` is a legitimate Skipped — the harness was the stale side; fixture now bills exactly 1 whole KAT with a self-assert. Lesson generalizes Issue 081's: a contract change must re-pin its e2e the same day.
 
 ## Issue 080 resolved — the sticky-grace marker retired, server truth only (2026-09-10)
+
 - `kat_contribution.rs` deleted (the forgeable `contributed_once.json` is gone entirely); gate predicate `ack.contributed == Some(true)` (server truth ONLY); tests re-pinned both directions; dated removal landed once the fleet was v3 (`143c5a8`).
 
 ## Issues 077 + 082 resolved — margin-weighted mining + the OOD axis (2026-09-09)
+
 - Issue 077: the e^{−2M} margin law, OOD axis always-on; T3 verdict DEMOTE (retrieval-similarity margins do not select lint-bearing spans). Issue 082: R1 CONVERGENT VALIDITY DEMONSTRATED (gap −0.7608 on BOTH fresh families — the composition attribution held); `regime_probe` stays opt-in.
 
 ## Issues 083 + 084 resolved — the green-zero class and the telemetry-key consumer (2026-09-09)
+
 - Issue 083: all 16 `#![cfg]`-gated test targets got their `[[test]]` rows, verified in BOTH directions (13 exact feature-set builds; SILENT-NOW 16 → 0). Issue 084: filed as 082, RENUMBERED 084 before removal (the OOD issue had consumed 082 — the standing fix is renumber + citation rewrite); `parse_supply` reads `*_micro` first, falls back to `*_kat`.
 
 ## Plan 117 — `cargo heal --refill`, the dev/test faucet refill (2026-09-09)
+
 - Composes shipped wire surfaces (`HttpPayreqTransport` + `HttpWetrunTransport`); the client adds no host gate deliberately (prod never distributes a crank token); server truth wins on the gate input; exit 0 iff the final synced balance is positive; crank leg fail-soft.
 
 ## Both shell gates could have reported a PASS on an abort (fixed 2026-09-07)
+
 - macOS `/bin/bash` 3.2.57 enters the EXIT trap with `$?` already 0 on an unbound-expansion/eval abort — a trap whose last command succeeds makes the abort exit 0; only a completion sentinel catches it. Both `scripts/ci_feature_guard.sh` + `scripts/ops_nightly.sh` repaired and verified against their real preambles. shellcheck does NOT find this.
 
 ## Batch-mining batch records + Role/domain/pipeline full record (was AGENTS.md lines 23–3043)
+
 - Compacted out of AGENTS.md 2026-09-06; the Role/domain records + corpus-build batch narratives live below and in git history. NOTHING was deleted.
 
 ## Role
-Multi-domain modelless code healer behind the `HealDomain` trait (Plan 001) — developer tooling, NOT game/training/chain. L0 rule distillation → L1 ternary SIMD drafter → L2 syn validator (+ opt-in domain oracles) → L3 Pareto search (opt-in) → L4 LoRA seam (inert unless installed; NOT promoted — riir-train Plan 336 measured FAIL 0/60; `decline` is a correct answer).
-- **clippy_lints** (default-on): 49 corpus lints (Batch 91) — 38 FIXABLE + 8 VERIFY + 3 self_evolve-only (Batches 89–91; `option_if_let_else` REFUTED fixpoint ping-pong, `missing_const_for_fn` KILLED).
-- **rust_perf** (default-on since 2026-08-13): 101 rules (Batches 48→112: 48→58, 53→62, 59→63, 61→65, 62→67, 64→69, 65→76, 66→71, 67→72, 68→73, 69→74, 73→78, 74→80, 75→83, 77→88, 78→88, 83→89, 85→91, 86→94, 91→96, 92→97, 94→97, 99→98, 101→99, 109→100, 112→101) — Pareto validator the promotion gate; 34+ rules carry `context_notes`.
-- **kernel_opt** (opt-in): 552 rules (Batches 1→119: popcorn 1–13, riir-gpu production kernels 14–51 incl. Mining CONFIRMED production bugs filed as riir-ai Issues 674–710, measured-GOAT distills 49/52/54–71, paper distills 70/79/80/82/83/87/92, external engine distills 71/77/84/92/95–118); 15 category experts + thermal router (Warm/Cold/Freeze = 4090 LoRA, deferred).
-- **`rustc_errors`** (6th domain, driver-based): `--fix-compile` oracle-driven compile-error repair (see the dated records).
-- Plan 005 history: T3.5 op-tokenizer (top-1 54.2→70.8%); T3.5.4 instantiation re-rank (CONTAMINATED deltas — `RerankMode::default()` stays Off); T3.5.5 uncontaminated oracle (Structural promoted default, Phase 3 CLOSED at 96.0%); Issue 024 pool crowding (RERANK_POOL 8→12); Issue 016 structural expansion 6→33 + VERIFY tier; Issue 017 retrieval eval at scale (58.3% top-1 — the 12-fixture claim dead at scale); Issue 018 `self_evolve` DEFAULT-ON (`RIIR_HEAL_SELF_EVOLVE=0`); Issue 022 corpus real-clippy drift (5 entries fixed); Issue 020 router spectral POC KILLED (lexical ~70% ceiling); Issue 021 EvidenceTier (Certified/Heuristic/Withdrawn, absorbing-Withdrawn); Issue 015 `--fix --verify` compile gate (2 real reverts in the GOAT run); Issue 040 fixer re-gate (strict-keep 6/9 vs decline 0/9; qwen3.8 unusable on free tier).
-- Issue 031: 3 healer defects from the katgpt-pruners heal (H1 CRITICAL `comparison_to_empty` self-recursion → stack overflow, invisible to the compile gate; H2 `--domain` never scoped the fix path; H3 verify baseline default-features). Plan 014/Issue 032: frozen score bench + run #1 caught a real proposer bug (`needless_range_loop` non-atomic rewrite; heal 84.6% → 90.4% → 98.1% at run #3). Native rustfmt: fmt-clean-at-HEAD gate, CRLF skip, edition from Cargo.toml.
-- Cross-repo heal-sweep campaign (katgpt-rs / riir-train / riir-neuron-db / riir-chain / riir-ai slices, 2026-08-18/19): katgpt-rs 30 member surfaces + riir-train engine tests/examples/gpu + ndb + riir-chain terminal; riir-ai engine 174/979 + games-civ 142/1552 + examples 28/278. Gate-scan lessons: the baseline run is the reliable detector ("0 passed" ⇒ exclude); whole-file `#![cfg]` grep mandatory; feature-gated heals MUST pass `--verify-args`; `--fix --verify` WITHOUT `--write` writes; residue scans filter by warning TEXT; `git fetch origin` BEFORE sizing; `git add` commits the whole index (shared checkouts); exFAT has no junctions — worktrees under C:\git2; /tmp worktrees break sibling path deps.
-- Issues 044+045 (CF ops) / 050 (Warm-tier corpus+score series) / 059+060+061+068 (KAT product loop: D1–D9 recorded; devnet advisory soak EXECUTED riir-dao `e7b1f89`; D9 create `gist-rs/cargo-heal` was the blocking owner act) / 062 (TPR fusion CLOSED-NEGATIVE — OOD at chance; `tpr` stays opt-in) / 065 (cost model: alert reconciles the account-wide CF bill, `CF_BILLING_ANNIVERSARY_DAY` pin) / 066 (docker corpus counts wrong since landing — repaired via the sanctioned dated writer) / 067 (Trace-as-State arm G2 PASS; growing-input class REOPENED) / 069 (four duplicate doc numbers resolved by citation-weight arbitration; one counter per directory ENFORCED) / 070 (ThoughtComm α-fusion dead — cross-domain rule-id overlap 0/129; T3 collapse detector landed) / 071 (docker tier-2 misread as Docker drift — registry round-trip per `FROM alpine` fixture; fixtures ride `FROM scratch`, 399 s red → 2.7 s green) / 072 (Frontier-evidence Challenger: k-ladder generations 2–7 built — the Bench-069 difficulty-axis list FULLY EXECUTED) / 073 (XBridge anchor-primacy A/B FAIL — instrument-structural; zero identity-collapse events in 48 calls) / 074 (trust channels: `rule_context_note` per-domain tables; T4 DEFERRED) / 076 (burn fast-settle e2e + the 075 soft gate) / 078 (QR goldens encoded the RETIRED host — re-derived + a tie test failing AT THE URL LINE).
+
+Multi-domain modelless code healer behind the `HealDomain` trait (Plan 001) — developer tooling, NOT game/training/chain. L0 rule distillation → L1 ternary SIMD drafter → L2 syn validator (+ opt-in domain oracles) → L3 Pareto search (opt-in) → L4 LoRA seam (inert unless installed; NOT promoted …)
+Commits: `e7b1f89`.
 
 ## CF ops surface + the `.env` contract — full record (was AGENTS.md lines 3044–3177; Issues 044/045/051/062/065 resolutions + dashboard-auth state + deploy hazard)
 
 ## CF ops surface + the `.env` contract (Issues 044/045 — read before touching ops)
-LLM ops plane: `riir-kat-housekeeping` worker, `riir-ops-dashboard` worker, nightly generator (`scripts/ops_nightly.sh`); credentials in `.env` (gitignored; pipe into `wrangler secret put` via stdin, never echo). Issue 051 T8 defer preserved: `fixer_regate` arms stay CF-pinned BY DESIGN (model comparisons). Issues 044+045 all landed + live-verified; residual owner-gated items: dashboard FLIPPED PUBLIC 2026-09-04 (`AUTH_MODE="public"`; the token gate DORMANT, deleting the var re-arms it), push paging owner-gated (`ALERT_WEBHOOK_URL`/`MONTHLY_BUDGET_USD` absent; the budget alert now reconciles the account-wide CF bill, period rides `CF_BILLING_ANNIVERSARY_DAY`), KAT mint armed-but-INERT until the owner pushes `KAT_SERVICE_URL` + `KAT_MINT_TOKEN`.
+
+LLM ops plane: `riir-kat-housekeeping` worker, `riir-ops-dashboard` worker, nightly generator (`scripts/ops_nightly.sh`); credentials in `.env` (gitignored; pipe into `wrangler secret put` via stdin, never echo). Issue 051 T8 defer preserved: `fixer_regate` arms stay CF-pinned BY DESIGN (model comparisons).
 
 ## The `riir-clippy` auto-continue skill — full description (was AGENTS.md lines 3178–3212)
 
 ## The `riir-clippy` skill (auto-continue idle loop)
-`.agents/skills/riir-clippy/SKILL.md` (canonical home THIS repo, global is a symlink) encodes the idle-time workflow — 13 queue items (fix issues → finish plans → clippy sweeps → resolved-issue hygiene → batch mining + dry-run → boundary check → substrate-first → benchmark sweep → online unblock → defer-marking → online perf → paper research → doc-sync), one unit per cycle, commit + push each. Resume state: `.distill/001_mining_queue_snapshot.md` (moved out of the skill file after it grew to 104KB and broke Zed's loader). Issue 019 T6 closed: all 13 items exercised ≥1×.
+
+`.agents/skills/riir-clippy/SKILL.md` (canonical home THIS repo, global is a symlink) encodes the idle-time workflow — 13 queue items (fix issues → finish plans → clippy sweeps → resolved-issue hygiene → batch mining + dry-run → boundary check → substrate-first → benchmark sweep → online unblock → defer-marking → …)
 
 ## Production adoption — full record (was AGENTS.md lines 3213–3525; verdict evidence + resolved issues 037/038/050/059/060/061/066/067/068/069/070/071)
 
 ## Production adoption — `cargo heal` as the dev-time default (2026-08-24)
-Verdict GO (live trial): 12/12 planted fixes landed, 2/2 divergence classes correctly refused, compile gate 2 checks / 0 reverts, idempotent. Global binary + post-mining intake (mining improvement candidates from the healer's OWN usage artifacts; seed inventory 8 ranked classes; the 8,235-trajectory zero-outcome-verdict gap closed by Issue 037 T2). Issue 038: self-evolve memory onto the neuron-db Warm-tier store under `latent_retrieval` (one-time envelope migration, once-only fence; DAG/AST storage DEFERRED with a named consumer). Issue 037 CLOSED 2026-08-26 — ALL GATES GREEN, A1 cadence MET day 3, T7 discharged (Proposals 003/004 UNBLOCKED).
+
+Verdict GO (live trial): 12/12 planted fixes landed, 2/2 divergence classes correctly refused, compile gate 2 checks / 0 reverts, idempotent. Global binary + post-mining intake (mining improvement candidates from the healer's OWN usage artifacts; seed inventory 8 ranked classes …)
 
 ## Guard-landing protocol — full record incl. the measured story (was AGENTS.md lines 3526–3583)
 
 ## Guard-landing protocol — a guard is not landed until the residue is counted
-Measured, not hypothetical: the `227637e` guards were correct yet 32 pre-guard residue sites landed the next day. The screen is the claim: `cargo clippy --workspace --all-features --all-targets --keep-going` (not `check` — the guarded classes are accepted by check's typeck and rejected by clippy's; not default features — all 32 sites sat behind non-default ones). Traps handled: an up-to-date build emits nothing (→ `cargo clean -p` per member in a sweep-local `CARGO_TARGET_DIR`); the JSON shape is `"code":{"code":"clippy::<lint>"}`.
 
-```bash
-scripts/consumer_residue_sweep.sh <lint> [<lint> ...]        # the screen
-scripts/consumer_residue_sweep.sh --grep '<regex>' <lint>    # narrow first
-```
+Measured, not hypothetical: the `227637e` guards were correct yet 32 pre-guard residue sites landed the next day. The screen is the claim: `cargo clippy --workspace --all-features --all-targets --keep-going` (not `check` — the guarded classes are accepted by check's typeck and rejected by clippy's; not default features …)
 
 ## Plan 001 multi-domain architecture — full record (was AGENTS.md lines 3639–3665)
-### Plan 001 multi-domain architecture (2026-08-13)
+
 Plan 001 generalized the clippy-only healer into the multi-domain `HealDomain` framework; Proposal 012's GPU kernel optimizer absorbed as `kernel_opt` (user correction overrode the "new repo" recommendation); cross-domain `--domain auto` fans out with the router verdict as a per-span ANNOTATION, never a gate (the 8-D centroids mis-routed fixtures).
 
 ## `kernel_opt`-specific layers — full record (was AGENTS.md lines 3666–3685)
-### `kernel_opt`-specific layers (Phase 3)
+
 1. `KernelExpertRouter` wraps katgpt-core `pick_domain<15, 8>` (8-dim activity vector, 15 per-category centroids, 15/15 reachable; `build_activity()` the consumer constructor; modelless argmax, zero alloc).
 2. `KernelThermalRouter` — Plasma→Hot→Warm→Cold→Freeze (`ThermalTier` `#[repr(u8)]`); the scaffold returns Plasma (modelless-first); Warm/Cold/Freeze require 4090 CUDA + LoRA (deferred to riir-train).
 
 ## Feature Flag Discipline — full record (was AGENTS.md lines 3760–3809; per-feature batch narratives + corpus-growth history)
 
 ## Feature Flag Discipline
-`default` = `["clippy_lints"]`. Per-feature records: rust_perf promotion (Bench 013/015/016/017/020 GOAT; 37/40 benchable rules Pareto-dominant incl. `regex-hoist-lazylock` 5443–5675×; 2 honestly dominated, 1 Mixed), latent_retrieval (Bench 018 G1–G4), rustc_errors default-on (Bench 045 N=212, uncontested 105/105 where cargo fix is 0/105), docker default-on (Bench 056 + riir-chain adoption; the T1.6 falsification: `cargo-locked-flag` broke the build → demoted suggest-only, 14 bounded not 15; tier-2 oracle `docker_buildcheck` opt-in by dependency class), sec (Bench 046 + Batch 88 + P8 `nan-unsafe-sort-comparator`), self_evolve (Bench 023/024, G6 40/40 truthfulness), l4_lora seam (NOT promoted; three-condition reachability contract incl. Issue 030 relevance gate — a parsing AND relevant modelless fix is never replaced), `clippy_lora` DEAD PLACEHOLDER, contrastive_scope (Bench 040), ternary_inference (Bench 010; the riir-ai cfg-gate fix `4bfe3b30`), kernel_verify STUB, ruliology_search, wasm_pruner deferred. The modelless path (L0–L3) is PRIMARY; **a syntactic check (`parses`) is not a relevance check** (Issue 030).
+
+`default` = `["clippy_lints"]`. Per-feature records: rust_perf promotion (Bench 013/015/016/017/020 GOAT; 37/40 benchable rules Pareto-dominant incl. `regex-hoist-lazylock` 5443–5675× …)
+Commits: `4bfe3b30`.
 
 ## Full text of remaining sections compacted in AGENTS.md (operative boilerplate — archived so nothing removed is unpreserved)
 
 ## Boundary contract — read `BOUNDARY.md` first
+
 Full text preserved in AGENTS.md (canonical). Domain test: developer tool, zero game-domain coupling in the default build; enforcement via `../riir-ai/scripts/ci_boundary_contract.sh`; violations file the issue FIRST, add the drift row, then fix.
 
 ## Why this is a separate repo (not in riir-ai)
+
 Full text in AGENTS.md. Borrows the drafter+pruner+corpus pattern from `riir-games-quest/quest_grammar` with zero game-domain coupling; default build's only public dep is katgpt-core; opt-in arms consume `../riir-infer` (ternary) + riir-rag (latent_retrieval).
 
 ## Documentation Shape
+
 Full text in AGENTS.md: 11-folder numbered `.docs/` book; files inside numbered folders have no number prefix; `README.md` is the build surface.
 
 ## Numbering Discipline
+
 Full text in AGENTS.md: monotonic never-reused counters per directory, one counter per directory ENFORCED (Issue 069 T3); katgpt-rs `scripts/numbering_drift_sweep.py` covers this repo. Research-note shape: born-complete records with a `**Status:**` line (RECORD / DISTILLED / NEGATIVE).
 
 ## 2026-09-11 — Plan 124: `--config-audit` (post-mining intake classes A+B consumed)
+
 - Class A (default-is-a-named-const-nobody-field-reads) + Class B (assert-only-against-own-Default); probe-verified clippy fires ZERO on the inert shape; riir-chain 1 verified TP / 0 FP. Class C stays an intake row (needs git history).
 
 ## 2026-09-12 — Issue 089 T3: `--misses` generalized to every domain + the 09-08 bare-default regression fixed
+
 - Per-domain frontier-ordered authoring queues; en-route: `--misses` had been exit-2 broken since 09-08 (bare default under every standalone mode); the first loader was an undercounting `collect()`; two "clean" clippy `--bins` lanes were INERT (required-features silently skip the target).
 
 ## 2026-09-12 — Issue 092 T1: the GW corpus-alignment PoC, measured and closed (defend-wrong NEGATIVE)
+
 - GW precision@60 = base rate 0.017; name/keyword 0.083 = 5× base. Mechanism: surface-trigram distance is not fix-shape structure. Reopen: a semantic fix-shape embedding or a disjoint-vocabulary corpus pair.
 
 ## 2026-09-12 — Issue 093 T1: the per-run strategy-posterior PoC, measured WIN (defend-wrong)
+
 - `NonergodicFilter` 41.7% vs 35.2/36.7 (McNemar p<1e-4), misspec-robust, store-independent. Harness lesson: revive-on-posterior-flip fired 356 times, 0 helped (frozen-context retry is the same bytes); revive requires the suppression CONTEXT to have moved.
 
 ## 2026-09-12 — Issue 094: trajectory covariability-class mining PoC, measured and closed (defend-wrong NEGATIVE)
+
 - AUC 0.497 = chance; the failure is the STORE SCHEMA's (cumulative counters, last-verdict timestamp — no session axis). Reopen: per-event trajectory rows or balanced per-rule labels.
 
 ## 2026-09-12 — Issue 093 T2: the nonergodic driver wiring LANDED (gain-null on no-surface) + the orphan-report Windows blind-leg fix
+
 - Driver `with_observer`/`with_revive` seams + the policy; both arms first-try-perfect on every real scaffold; the family-error test moves to the reopen trigger. Windows fix: canonicalize the git root before pathspec comparison (`\\?\` verbatim form).
 
 ## 2026-09-12 — Issue 098: the rule-corpus cross-OOO axis, measured PASS + wired (absorption candidates found)
+
 - TF-IDF cosine (plain TF-cosine REJECTED — generic scaffold swamped rare op signatures); 3 absorption candidates found incl. clippy's own split of one lint detected unprompted (the calibration anchor); `score_history.jsonl` rows gain `cross_ooo`.
 
 ## 2026-09-14 — Plan 195 executed (seal-game-editor issue 150): the UNIQUE carrier index, its reconcile twin, and the clash report that opens the file
+
 - Landed on seal-game-editor develop `e25f98a4`: UNIQUE index + `working_schema::reconcile_indexes` + the clash row; five plan amendments recorded (EDITOR_SCHEMA mirror + version bump; `drift_split`; duplicates counted before drop). editor-data 876/876 + 10/10.
 
 ## 2026-09-15 — Issue 108 T1+T2: the component-necessity flip-rate harness (CVRR at the dispatch seam)
-- `ComponentOverride` + `heal_fixpoint_cfg` (empty = byte-identical, PINNED) + `--necessity-bench`; smoke e2e's first real finding: `needless_return` solo_resolved=1 but Δdisabled=−17 — solo rate massively understates composed importance.
 
-### 2026-09-15 addendum — Issue 108 T3+T4: the full measurement, the schedule amendment, and the honest negative
-- T3 ran in ~3 minutes (the "measurement-heavy" deferral evaporated). Amendments: presence-ranked schedule (top-20-by-heal-rate schedules 4 rules and misses exactly where composed necessity lives) + Δ-first verdict ladder (13 of 18 rows would have been mislabeled). Verdict: 18/18 LOAD-BEARING, zero decoratives; Δswap ≈ Δdis everywhere — donors are shape-disjoint.
+`ComponentOverride` + `heal_fixpoint_cfg` (empty = byte-identical, PINNED) + `--necessity-bench`; smoke e2e's first real finding: `needless_return` solo_resolved=1 but Δdisabled=−17 — solo rate massively understates composed importance.
 
 ## 2026-09-15 — Intake class P22: `--platform-audit`, the platform-dead_code decl-vs-use cfg lattice
-- Items declared ungated whose every use sits inside a platform-gated context — invisible to any single-platform CI matrix. Validated against katgpt-pruners @ `ea4c2873^` (exactly NEON_U8; 1 TP / 0 FP over 5950 decls). First workspace sweep 14 rows → 3 TP / 11 FP; the method finding: a second-target `cargo check --target x86_64-apple-darwin` (~40 s, never links) is the cheap oracle complement.
 
-### v2, same day — P24 (a)+(c) consumed (the fold + the prune)
-- The file-level `#![cfg]` fold seeds each file's root ctx — fixes BOTH blindness directions by construction; 6 reverse-direction rows surfaced and fixed in riir-ai. Walk prune: skip symlinked + `.git`-file children.
-
-### v3, same day — P24 (b)+(d) consumed (the mod-row lattice + the macro arg scan) — P24 COMPLETE
-- `ModRowLattice` resolves every external `mod x;` row by rustc's path rules and folds atoms transitively; the format/assert macro-arg scan counts inline captures + ident tokens (overcounting is the safe direction). Re-sweep: 6 target FPs gone; 4 TRUE rows surfaced and fixed in riir-mmorpg-examples; 9 standing rows / 6 documented classes.
-
-### P25, same day — the tracked-only walk for the `read_sources` family (intake P25 consumed)
-- `read_sources_walk` derives the file set from `git ls-files -z --cached --others --exclude-standard` (tracked + untracked-NON-IGNORED — a fresh WIP file stays, a tracked-but-later-ignored file stays); every report prints a `walk:` line. riir-train 4119 → 1131 (the 2988-file gitignored corpus out; the 3 masquerade rows GONE); riir-chain 812 → 482. Orphan sweeps: 1 TP fixed in riir-train (`TripleFusionConfig.asft_lambda`), 1 TP fixed in katgpt-rs (`ParallaxConfig.zero_init`), the DumpEntity `Serialize`-wire-contract class recorded NO-ACTION.
+Items declared ungated whose every use sits inside a platform-gated context — invisible to any single-platform CI matrix. Validated against katgpt-pruners @ `ea4c2873^` (exactly NEON_U8; 1 TP / 0 FP over 5950 decls). First workspace sweep 14 rows → 3 TP / 11 FP …
 
 ## 2026-09-15 — Issue 109: the orphan-report FP specimens repaired (foreign-literal attribution + generic serde bridges)
+
 - (a) per-file foreign-literal attribution with the workspace-sibling rescue (`scan_local_crate_roots`); (b) generic serde bridges harvested at turbofish call sites (stillborn → `bridge-cleared`, orphaned → `wire-dto` weak). Lesson: raw-string terminators `}"#` swallow following tests silently — when tests vanish from `--list`, suspect the terminators first.
 
 ## 2026-09-16 — the Issue-109 re-sight closed: scan-global struct field sets (the foreign-glob + local-glob shape)
+
 - The bevy migration re-entered 4 rows through the documented undecidable shape; closed by the compile argument (`literal_is_field_mismatch` — a literal naming a field no local same-named decl has provably cannot be any of them); canaries byte-identical.
 
 ## 2026-09-16 — P31: the fn-A/fn-B inter-procedural wire-clearance (orphan-report; the riir-kat queue-writer intake)
+
 - `serialized_concrete_param_types` (a fn serde-serializing its own concrete param contributes that type) + macro token-stream scanning (serde calls inside `writeln!`); riir-kat 16 stillborn → 4; remaining conservative gaps on record (turbofish `to_string::<T>`, method-shaped serializers, Deserialize-side classes).
 
 ## 2026-09-18 — Issue 124: the ops-plane ladder re-pointed at the riir-llm leaf
+
 - The leaf owns WIRE MECHANICS (URLs, body builders, parsers, `OaiError` = alias of `riir_llm::LlmFailure`, timeouts, bearer hygiene); riir-clippy keeps POLICY (windowed-disable router, stats, pricing, cap). Behavior changes: free-leg 401/403 is STOP-class (was silently shifting the window onto the PAID leg); empty-content falls through; `groq_first` no longer names `dep:ureq`.
 
 ## 2026-09-22 — Issue 129: the cargo-heal scoop-bucket 0.1.4 manifest 404 (URL pointed at the v0.1.3 tag)
+
 - One-line URL tag fix, verified end-to-end (sha256 byte-identical). Prevention: prefer the release.yml bucket-PR lane; when hand-editing, copy BOTH `url` and `hash` from the fresh release and curl once before pushing.
 
 ## 2026-09-26 — Issue 130: RRSI admission-generalization gate — closed report-only, both unblock paths measured shut
+
 - T1: repo stratum δ = 0.000 (the oracle axis is deterministic per pinned toolchain — a zero-δ floor admits everything). T2 repeats: refuted BY CONSTRUCTION (no timeout/parallelism in the bench path). T2-OOD: the δ=0.247 window spread is corpus-state drift, NOT repeat noise (within-state repeats bit-identical). Live verdict wired into `--gate-calibration`.
 
 ## 2026-09-27 — Issue 136: the structural self-mutation lane landed (reef P1+P3+P5, Plan 175)
+
 - `src/structural_admission.rs` (ungated pure: per-kind shape gates, kind-keyed review classes — 4 of 5 `AlwaysReviewed`, the reef P2 secret-shape scan, the `ChainState` CAS machine) + the gated content-addressed store (`.heal/structural/`; every touch re-verifies the hash; `CasRace` on moved state). NOTHING auto-mutates — activation is a separate owner call.
 
 ## 2026-10-06 — Issue 144: the dist README + CLI-help audit — T1–T5 landed; T6 dispositioned on the owner's re-arm posture
+
 - T1 dist README rewrite + CHANGELOG (incl. three corrections beyond the audit's evidence table); T2 repo rename; T3 `--help`/`--help-all` split with internal plan/issue ids banned from the user page; T4 `--domain` choices derived from the compiled feature set; T5 EULA/LICENSE + the private-crate leak fixed at the `about.toml` level. T6 dispositioned NOT done: the testnet alias stays pinned (the recorded re-arm posture wins over a cosmetic help-text win).
 
 ## 2026-10-10 — Issue 159 CLOSED: the net-pin conflict posture refuses every run at startup — fixed `2e54d205`, verified
-- Found during the kat_ua (riir-kat 003 T15) landing's guard run; pre-existing and reproducible since `492381b2`. Root cause: under `--all-features` both net pins are on, so the `command_service_url()` conflict refusal fired at STARTUP (via the Issue-153 update check's URL resolution) — before any dial, killing every local-only scan an all-features-built binary tried to run, including the guard's own Layer 5c e2e (`auto_oracle_features_cli`). Fix (`2e54d205`): `net_partition_url()` downgrades the both-pins conflict to one advisory line for LOCAL state partitions (LeaseStore open_net + mining outbox read — state partitions under the default net); every DIAL still exits 2 through the strict seam (the pin contract unchanged); `build_stamp_cli`'s 'multi' pin assertion is posture-aware. Ride-along: `run_docker_lane` gained the `#[cfg(feature = "docker")]` its caller already carried (E0433 on docker-less builds). Verified 2026-10-10: `cargo test --all-features --test auto_oracle_features_cli` → 1 passed. Issue file removed per the noise-reduction rule; this entry is the record.
+
+Found during the kat_ua (riir-kat 003 T15) landing's guard run; pre-existing and reproducible since `492381b2`. Root cause: under `--all-features` both net pins are on, so the `command_service_url()` conflict refusal fired at STARTUP (via the Issue-153 update check's URL resolution) …
 
 ## 2026-10-11 — Issue 089 CLOSED: the frontier-band curriculum delivered report-first; the admission gate stays declined on the record
-- Landed 2026-09-11→09-12 (`11c1799d` the self-winding tail): T1 `--frontier-report` (per-rule `r/f/n/p̂/LCB₅` + band-mass; snapshots append to `.benchmarks/frontier_snapshots.jsonl` with the `store` discriminator), T2 saturation candidates (report-only), T3 `--misses` generalized to all domains, T5 provenance weighting + the score-bench provenance strata, T6 split verdict — the D formula DECLINED on the record (data-blocked at mining time; exposure-volume-shaped at heal time), the stratified read LANDED, T7 the gen-8 shaped-verdict ladder, T8's emission half (per-rule `rule_outcomes` on every bench row). T4 (admission wiring) + T8's α grid-fit close ON ACCUMULATION ONLY; both clocks self-wind. Final re-verify 2026-10-11: NO clippy-corpus generation since B191 — batches 213–223 are all rust_perf/kernel_opt/dist landings, so no sweep was owed; the gate was never wired BY DESIGN (the report-first law; R135/Bench 047: at pool sparsity, selection sophistication ≤ 0.04pp — evidence volume is the bottleneck). Reopen (as a FRESH issue) only if the accumulated snapshots show band-mass PREDICTIVE — per-store band-mass at ≥3 distinct generation boundaries correlating with the next generation's in-band yield, sample size named; until then `--frontier-report` is the shipped, sufficient surface. Issue file removed per the noise-reduction rule; this entry is the record (research 167's direct link de-linked in the same commit).
+
+Landed 2026-09-11→09-12 (`11c1799d` the self-winding tail): T1 `--frontier-report` (per-rule `r/f/n/p̂/LCB₅` + band-mass; snapshots append to `.benchmarks/frontier_snapshots.jsonl` with the `store` discriminator), T2 saturation candidates (report-only), T3 `--misses` generalized to all domains, T5 provenance weighting …
 
 ## 2026-10-11 — Issue 139 CLOSED: noise-weighted evidence consumed report-only (T3); T1/T2/T4 terminal-deferred behind the qualified tripwire
-- T3 LANDED 2026-10-01 behind `noise_weighted_evidence` (report-only `--frontier-report` censoring decomposition; live store 28 rules / 0 unseen — armed but vacuous on this data). T1/T2/T4 DEFERRED 2026-10-01 as measured VACUOUS (10 of 657 n≥2 groups mixed = 1.5%; prior-epoch σ̂ is 0 for 99.75% of groups); the 2026-10-08 re-measure (20 stores) read the pooled population UNCHANGED, the only letter-fire (riir-chain 3/5 = 60%) a pooling artifact. Owner arbitration 2026-10-08 (verdict session `9537e7f3`, arm A2) QUALIFIED the trigger, carried VERBATIM — reopen T1/T2/T4 ONLY on: "mixed groups ≥ 10% of n ≥ 2 groups on any live store WHERE that store carries ≥ 30 n≥2 groups AND each counted mixed group has n ≥ 3; OR the first compile-lane (E-code) rows plus a real-use miss family." No grandfathering; the trigger also rides the AGENTS.md row. katgpt-rs side unchanged: Issue 913 landed `9ad5e21ce` (Bench 905, GOAT (b) PASS — the readout is a RANKING score, coverage 0.883 at nominal 0.95, never a calibrated interval). Natural grouped consumer of record: `traj_store::shape_conditional_score`, not `select_best_candidate`. Issue file removed per the noise-reduction rule; this entry is the record.
+
+T3 LANDED 2026-10-01 behind `noise_weighted_evidence` (report-only `--frontier-report` censoring decomposition; live store 28 rules / 0 unseen — armed but vacuous on this data). T1/T2/T4 DEFERRED 2026-10-01 as measured VACUOUS (10 of 657 n≥2 groups mixed = 1.5%; prior-epoch σ̂ is 0 for 99.75% of groups) …
+Commits: `9537e7f3`, `9ad5e21ce`.
 
 ## 2026-10-11 — Issue 140 CLOSED: insight-conditioned retry landed with its measured verdict; T4/T5 have an empty input population
-- T1 (distiller `src/insight.rs`), T2 (admission predicate), T3 (`InsightConditioning` at the `with_ordering`+`with_observer` seams; eval lane `--only insight`) LANDED 2026-10-01; verdict in `.benchmarks/104_insight_conditioned_retry_ab.md`: reverts 24→10 (−58%), +0.128 attempts/case LB95>0 vs static AND vs the raw negative control; the CONTROL ARM collapsed (insight == control byte-identically, refused-admission 0) — the deterministic arm IS ordering on this domain. T4/T5 DEFERRED-TERMINAL: the admission filter never refuses on rustc diagnostics — the "admitted insight" population is empty; internalizing the control arm's statistics would duplicate the shipped `(code, strategy)` trajectory→Beta substrate. Re-checked 2026-10-08 at HEAD `977ff1e4651c` on the v2 corpus (3 corpora × 4 arms): trigger did NOT fire, both conjuncts fail (`cd756252`). Reopen ONLY on the CONJUNCTION: a verifier domain refusing admission at a nontrivial rate AND `refused-admission > 0` with a paired insight-vs-control difference; the internalization lane is riir-train plan 432's frozen-generator reader (cross-refs `9cfd0c33` + `b72bb62f`). Issue file removed per the noise-reduction rule; this entry is the record (research 228's pointer survives by number).
+
+T1 (distiller `src/insight.rs`), T2 (admission predicate), T3 (`InsightConditioning` at the `with_ordering`+`with_observer` seams; eval lane `--only insight`) LANDED 2026-10-01 …
+Commits: `977ff1e4651c`, `cd756252`, `9cfd0c33`, `b72bb62f`.
 
 ## 2026-10-11 — Issue 157 CLOSED: span-conditional contrastive negatives DECLINED-for-now on volume; the tripwire lives in bench 111
-- Owner triage RESOLVED 2026-10-10 (verdict session `2b8a1316`, rounds 1–3 AGREE): the retrieval-negative consumer is NOT wanted today — ~12 negative pairs over ONE span (the v4 `rejected` label landed 2026-10-08), kill criterion 1 (volume-vacuous); NOT a mechanism negative — the census found the flip target exists (4 of 15 miss spans have gold at rank 1; 2–5 near-tie at the pre-registered margins; miss-set n = 15). Full record: `.benchmarks/111_issue157_negative_channel_p0.md` (landed `b41e1403`). Standing re-open trigger (in bench 111): ≥ 60 negative pairs across ≥ 10 distinct spans in any live store → certification FIRST (needs the two data-model fixes: pre-fix span text persistence + authored acceptable sets), census re-run, only then the P1 A/B (paired LB95 top-1 delta + zero regressions + per-family retention + pre-registered λ/threshold). The mint consumer untouched; fleet rows out of scope pending a consent decision. Issue file removed per the noise-reduction rule; bench 111 is the record.
+
+Owner triage RESOLVED 2026-10-10 (verdict session `2b8a1316`, rounds 1–3 AGREE): the retrieval-negative consumer is NOT wanted today — ~12 negative pairs over ONE span (the v4 `rejected` label landed 2026-10-08), kill criterion 1 (volume-vacuous); NOT a mechanism negative …
+Commits: `b41e1403`.
 
 ## 2026-10-11 — Issue 158 CLOSED: the Matryoshka-k re-test tripwire absorbed into its record (bench 109 + AGENTS.md)
-- The file was a tripwire by its own text; none of T-A/T-B/T-C has fired (corpus still at the Bench-109 generation; no k-subvector consumer shipped). The 133 negative's boundary stands: the shipped FIXED objective wins shallow-k everywhere (rig 134 vs ≤ 130); deep-k corpus-limited at 1.16 labels/span; the withheld-width nesting effect is REAL (29.3 → 49.6 @ k=20 vs 92.0% full). Re-test triggers, carried verbatim — ANY ONE fires a re-test: **T-A** a clippy-corpus generation whose mined spans carry mean label-support ≥ 3 labels/span at the deep-k widths (today 1.16); **T-B** the corpus doubling in rules-per-domain such that per-domain shallow-k retrieval measurably saturates; **T-C** a downstream lane consuming k-subvectors at serve time. On fire: re-run the T1 harness (arms + seeds + gates = `.benchmarks/109_mattr_k_t1_negative.md`, harness `007435e5`); G1 + G2-OOD bind as before; **the control is the shipped fixed objective AT THE SAME corpus generation — never the old 134 number across corpus boundaries**; record under a NEW bench number. Issue file removed per the noise-reduction rule; this entry + the AGENTS.md `mattr_k_poc` row are the record.
+
+The file was a tripwire by its own text; none of T-A/T-B/T-C has fired (corpus still at the Bench-109 generation; no k-subvector consumer shipped). The 133 negative's boundary stands: the shipped FIXED objective wins shallow-k everywhere (rig 134 vs ≤ 130); deep-k corpus-limited at 1.16 labels/span …
+Commits: `007435e5`.
 
 ## 2026-10-14 — Issue 163 CLOSED: the conflict posture keeps its loopback lane (the --all-features hermetic tier green again)
-- Verdict AGREE (reviewer session `6bb9b19a`, 2026-10-14): option 1 — reorder the seam in riir-kat — landed `riir-kat 9a36759`: `ensure_net_allowed` checks the loopback/`allow-local` branch BEFORE the empty-overlap refusal (EMPTY check stays ahead of the allowed-set match; parse-rule failures carry the "at most one pin" hint; conflict label now "conflict: net-mainnet+net-devnet (every hosted host refuses; loopback follows allow-local)", the `conflict:` prefix unchanged). Option 2 (pin the suites off `--all-features`) declined — the guard owns that posture and the money-CLI lanes must be exercised there. riir-refine half (this commit): `build_stamp_cli.rs` NET_PIN expectation posture-correct for all four postures; `heal.rs` conflict advisory says HOSTED dials refuse; `net_flag_selects_the_invocation_net` three-armed; `tests/topup_cli.rs` pre-existing `useless_format` (from `2682d7a0`) healed; AGENTS.md `--net` row amended. **STALE-RESULT MARK:** the batch-228 Layer-5c "3920/0" record (2026-10-13, `.distill/001_mining_queue_snapshot.md`) is STALE from `492381b2` (2026-10-09) — a fresh `cargo test --all-features --tests` on any post-pin tree red's deterministically on the three hermetic suites; the number stands only for the pre-pin tree. Validation: kat_net_pin 7/7 at five postures; riir-kat 294/294 at four; clippy `-D warnings` clean; riir-refine `--all-features` topup_cli 12/12 (was 8/12), kat_adopt_state_cli 6/6, kat_burn_stack 7/7 (was 0/7), build_stamp_cli 5/5; required-features posture 30/30. Issue file removed per the noise-reduction rule; this entry + the AGENTS.md `--net` row + `riir-kat/src/kat_net_pin.rs`'s module doc are the record.
+
+Verdict AGREE (reviewer session `6bb9b19a`, 2026-10-14): option 1 — reorder the seam in riir-kat — landed `riir-kat 9a36759`: `ensure_net_allowed` checks the loopback/`allow-local` branch BEFORE the empty-overlap refusal (EMPTY check stays ahead of the allowed-set match …)
+Commits: `2682d7a0`, `492381b2`.
 
 ## 2026-10-24 — Issue 170 CLOSED: the retrieval gate was RED at every latent_retrieval posture (router 60.3% < 72.3%) and no standing lane could see it
-- Found by Issue 169 T0's paired-baseline cross-check (Bench 120), verified pre-existing at plain `latent_retrieval`. **T1 attributed, NOT a defect:** growth competition at the SHARED 128-slot GlobalFreq vocab — the +68 rust_perf serving-wave rules (entries_39–46, B248–B271) + 4 clippy rows re-ranked the global frequency table; docker in-vocab coverage collapsed 40.2% → 3.4% (13 → 4 distinct tokens: cache,from,no,path), so 19/31 docker + 4/6 dist fixtures misroute to clippy while perf's own routing IMPROVED (28 → 25 misses). Measured both states with the T1 instrument `tests/router_per_span_dump.rs` (`4c02b8f8`) + the vocab probe: 34 → 56 misrouting spans; router-code diff B230→HEAD verified formatting-only (`80fb8920`). **T2 re-pinned (never silent, `013d5c04`):** router floor 102 → 80/141 (measured 85, −5 headroom per Plan-030), BLENDED_TOP1 124 → 123/141 (restores the Issue-063 one-span margin), CLIPPY_TOP1 42 → 41/48, CLIPPY_TOP3 43 → 42/48, PERF_TOP3 54 → 53/56 (the latter three at ZERO margin since B243 — the B243 note flagged them); blended top-3/top-5 HELD. **T3 (`746421f5`):** `ci_feature_guard.sh` Layer 5b2 — the named retrieval suite at the latent posture with its PASS line asserted by name (the green-zero shape refused); Protocol A step 5 gains the default-posture step. T4 (router re-architecture) DEFERRED — the lexical branch stays an annotation (Bench 025's 85% gating bar; the vocab displacement is the structural cause if it ever re-arms). Issue file removed per the noise rule; the floor comments + this entry are the record.
+
+Found by Issue 169 T0's paired-baseline cross-check (Bench 120), verified pre-existing at plain `latent_retrieval`. **T1 attributed, NOT a defect:** growth competition at the SHARED 128-slot GlobalFreq vocab …
+Commits: `4c02b8f8`, `80fb8920`, `013d5c04`, `746421f5`.
 
 ## 2026-10-26 — Issue 171 CLOSED: T0b package-scoped re-checks promoted (the RA pre-filter deferred on measurement, verdict AGREE)
-- Landed `1f77c585`: `fix_verify` implies `scoped_recheck` (GOAT PASS) — every verify round re-checks only packages the round's writes/reverts (own or dependency) actually touched; clean untouched packages skip the subprocess spawn + JSON parse. Kill-switch `RIIR_REFINE_SCOPED_RECHECK=0`; GOAT `tests/scoped_recheck_goat.rs`. T0a + T1 measured → **T2–T5 DEFERRED** ([Bench 121](.benchmarks/121_issue171_t0_scoped_recheck_and_ra_prefilter_load.md)): rust-analyzer load is 8.5× an incremental cargo round on this repo (11.7 s vs 1.38 s; 3.17 s floor on a 1-file crate) and RA false-reds on clean code (113 file/code pairs, incl. E0308 — the healer's own top error class), so a pre-filter cannot pay below ~10 rounds/run and the census tops out at 2. Verdict AGREE on all five adjudication questions (2026-10-25; the M3 lane ran the ping-pong after the 4090's auth-unavailable release — the verdict record rides the issue's git history). **Re-open trigger:** RA's per-run cost falls below one incremental cargo round on a real package (e.g. a future in-process API that skips the sysroot reload), OR a recorded corpus shows runs of ≥ 10 rounds. Issue file removed per the noise rule; this entry + the Cargo.toml feature comment + Bench 121 are the record.
+
+Landed `1f77c585`: `fix_verify` implies `scoped_recheck` (GOAT PASS) — every verify round re-checks only packages the round's writes/reverts (own or dependency) actually touched; clean untouched packages skip the subprocess spawn + JSON parse. Kill-switch `RIIR_REFINE_SCOPED_RECHECK=0` …
 
 ## 2026-10-26 — Issue 172 CLOSED: all 16 pre-existing all-features failures accounted (14 fixed, one filed as 173, one closed via riir-dapps 138)
-- T0 verdict: `ci_feature_guard.sh` Layer 5c runs every test target at `--all-features`, so the 16 reds were a live red CI lane, not a dormant configuration — all 16 re-verified pre-existing at `8d731fd5^` (comm of FAILED sets empty both ways). **Fixed (10 net-pin/copy rows, `fd4be603` lineage):** `unmine_consent_cli` ×3 (tests planted the flat `.refine/outbox` the per-net T1 move stopped reading — repointed at `net_state_dir_for_url` + `SyncWatermark::net_path`); `build_stamp_cli` tuna ×3 + `kat_refill_cli` mainnet ×1 (the both-pins OVERLAP posture after all — admin-gated rows never compiled at T1's minimal set; issue-159 precedent: the conflict posture is a legal build, the tests now assert the strict-seam refusal); `micro_literal_gate` (scanner elided only literal `#[cfg(test)]` — `test_cfg_attr_len` now elides `all(test, …)` and keeps `any`/`not`/look-alikes; `format_usdc` derives from `USDC_DECIMALS`; `DEFAULT_FUEL` allowlisted); `secret_scan_cli` (the update check wrote `.refine/update_check.json` into the scan root — `RIIR_REFINE_UPDATE_CHECK=0` pinned in the test env); `p12_suppress_reverted_e2e` (not hermetic — the KAT kill-switch suite convention moved into the shared `heal_cmd` builder). **Drift rows adjudicated, never bare re-pinned:** `shader_perf_gates` negative control = a TRUE `const-fold-loop-bound` hit (vfx-tornado `bloom_blur.wgsl:43`, riir-shader `e067e1b`) deliberately declined with an ADJUDICATED row; `t51_l4_vs_decline` re-picked to `inherent_to_string`; `scope_gate_adoption` — the separation pin was BLIND since `6f52f25f` (worst/min accumulators swapped) — repaired, κ 4.5 → 8.5 (Bench 040); `rule_embed_gate` — corpus growth moved the UNTRAINED baseline (bisected to batch 239 `4085aa24`), re-pinned 88/29, G3 made the same-run "trained ≤ baseline". **The remaining two:** `latent_suggest_goat` G2 = a real latency regression, filed as Issue 173 (OPEN there — T1 profiled, foldhash fix landed in riir-neuron-db `ef8599a`, amo lane continues); `kat_issue088_cross_repo_pins` redact-floor row = riir-dapps Issue 138, **CLOSED 2026-10-26 by the idle loop** (floor 3→5 raised `f87f546` + riir-kat mirror `5c58030`, devnet deployed `34a6f581` and live-probed both directions, issue closed `231a18f`) — the pin re-verified GREEN on the M3 this session (`the_redact_floor_matches_the_service_gate_version ... ok` at `kat_service,latent_retrieval`). Issue file removed per the noise rule; this entry + Issue 173 are the record.
+
+T0 verdict: `ci_feature_guard.sh` Layer 5c runs every test target at `--all-features`, so the 16 reds were a live red CI lane, not a dormant configuration — all 16 re-verified pre-existing at `8d731fd5^` (comm of FAILED sets empty both ways).
+Commits: `fd4be603`, `e067e1b`, `6f52f25f`, `4085aa24`.
 
 ## 2026-10-26 — Issue 173 CLOSED: `latent_suggest_goat` G2 latency regression fixed at the source (1587 → ~680 µs/chunk), bar made posture-aware
-- T1 profile (macOS `sample`, line-tables release): the per-query hot path was riir-neuron-db's `Bm25Index::search` score accumulator, not riir-refine — std SipHash on a `HashMap<&[u8], f32>` outweighed the search body. **T2, two bit-identical source fixes in riir-neuron-db:** `ef8599a` foldhash accumulator (1.45–1.48×/search) → `12b1af4` dense per-doc ordinal slot table, no hashing and no key-byte dereference per posting (2.69–2.76×/search over foldhash at 9569 scored postings; G1 `g1_dense_accumulator_bit_identical_to_hashed` incl. re-index/remove/re-add churn + repeated query terms). End to end at the target's own feature set: **1587 → 1062 → 632/625 µs/chunk** (reverted-fix control on the same build: 1053, FAIL) against the unchanged 1000 µs macOS bar — the bar was never re-pinned. Negatives recorded: D=8 `wedge_l1_norm_8` specialization 1.00× (LLVM already folds it); query-term dedup not pursued (not bit-identical — reorders per-doc float adds — and no longer needed). **T3:** the all-features build (Layer 5c) fans out to 3 more domains (kernel_opt, sec, shader_perf) at ≈320 µs each vs ≈170 per default domain, so a uniform per-domain bar is wrong; the bar is now `G2_BAR_US` over the default 4-domain fan-out (bit-for-bit the old bar) **+ 500 µs per enabled domain outside it** (1500 on non-macOS, same 3× ratio): all-features 4830 → 1618–1675 µs against 2500. Timed loop now `black_box`es its result + a 0 µs loud-zero assert. Box: amo M5 Ultra, AC, release, load 3.4–6 on 30 cores. Issue file removed per the noise rule; this entry is the record.
+
+T1 profile (macOS `sample`, line-tables release): the per-query hot path was riir-neuron-db's `Bm25Index::search` score accumulator, not riir-refine — std SipHash on a `HashMap<&[u8], f32>` outweighed the search body.
+Commits: `ef8599a`, `12b1af4`.
 
 ## 2026-10-26 — Issue 174 CLOSED: CLI tests no longer adopt the box's real `~/.ssh/id_ed25519`; Issue 172's out-of-lane rows green
-- riir-auth `account_key` adopts `$HOME/.ssh/id_ed25519` IN PLACE as the account key when one exists, so every CLI test that ran `login` with only the account dirs isolated signed with the developer's real SSH identity on a box that had one and a minted key elsewhere — two code paths chosen by the box. **Fix:** `tests/support/hermetic_home.rs` (not a target; `#[path]`-included) — `vars(scratch)` points HOME/USERPROFILE at the scratch dir and pins CARGO_HOME/RUSTUP_HOME to the real ones so spawned cargo/rustup children keep working; `assert_minted(login_output)` reds a regression that re-adopts. Wired into all 10 CLI targets that reach the account plane (`cargo_convention_cli`, `kat_adopt_state_cli`, `kat_burn_stack`, `kat_join_cli`, `kat_soft_gate_cli`, `sync_export_cli`, `unmine_consent_cli`, `topup_cli`, `build_stamp_cli`, `kat_refill_cli`); green at the kat_service set, the kat_transport set and `--all-features`.
-- Same session, Issue 172's two out-of-lane notes: `7f076057` — `--refill` in a build without `kat_transport` now refuses for the compiled-out feature FIRST (exit 2), not "log in" (exit 1) after an account read (`build_stamp_cli::refill_refuses_loudly_too` was red at its own feature set on any box without an account); the `tuna_airdrop` rows run against a hermetic account + the build's pinned hosted URL with each branch asserted deterministically (new row: no account → `no local account`). `b543c256` — `kat_refill_cli` asserts the strict-seam loopback refusal under a single net pin without `allow-local` (the shipped release posture; Issue 159 precedent). Both verified across unpinned / net-mainnet / net-devnet / ±allow-local / all-features. ⚠ Claim collision: `zed-m3-idle-174` claimed 174 (`3b89cba1`) while the amo session — which filed it and did not claim it — was already mid-implementation; amo landed the verified fix and closed it. Lesson: claim at filing time when you intend to implement. Issue file removed per the noise rule; this entry is the record.
+
+riir-auth `account_key` adopts `$HOME/.ssh/id_ed25519` IN PLACE as the account key when one exists, so every CLI test that ran `login` with only the account dirs isolated signed with the developer's real SSH identity on a box that had one and a minted key elsewhere — two code paths chosen by the box.
+Commits: `7f076057`, `b543c256`, `3b89cba1`.
 
 ## 2026-10-27 — Issue 179 CLOSED: kat_account adopts the provider-identity substrate — all six items landed the same day
 
 Landed `95bc8c18` (amo-auth-followup): `kat account` + `--info` render the
-record's `providers` rows through the ONE formatter (`kat_info/provider_bindings.rs`,
-bin-local — the substrate render lives in riir-auth/riir-kat; empty record =
-byte-identical output, pinned) + the byte-preserve fixture test: a record WITH
-provider rows round-trips load→serialize→parse unchanged (the
-feature-off-rewrite hazard asserted for the refine consumer) —
-`tests/kat_account_g9.rs` g9f, 2 tests. The NOW-3 signing-session survey
-(report-only; arming owner-gated) is in the issue record; the claim
-record `.issues/179_claim_now_half.md` removed per the noise rule.
-
-AFTER half LANDED the same day, unblocked by dapps 139 (`eae0f05`, plan 053
-T8) + 140 (`1258eef`, the recovery authority class): items (4)+(5) —
-`cargo refine login --provider github [--totp-code <c>]`, the device flow
-composed end-to-end through riir-kat's `kat_recovery_client` (the canonical
-tier after the same-hour race; the duplicate lane yielded unpushed), local row
-via `bind_provider`, nonce → SSHSIG claim → bind, typed
-`rebind_required`/`totp_required`/`github_bound` remedies — refine `c130df9c`
-+ the release-posture fix `f22a5ec5`; item (6) — the TOTP wire + client + the
-`kat totp enroll|disarm` verbs + the migrate `--totp` header — riir-kat
-`45cb2d3` + refine `c9923d2f`, consent-heartbeat residue riir-kat `70c951c`.
-AGENTS.md carries the CLI rows. Issue file removed per the noise rule; this
-entry is the record (full narrative: `git log --follow --
-.issues/179_kat_account_provider_identity_adoption.md`).
+Commits: `eae0f05`, `1258eef`, `c130df9c`, `f22a5ec5`.
 
 ## 2026-10-27 — INCIDENT: a bare `git commit` in the shared worktree swept a sibling's staged work under the wrong message (`7f965bc3`)
 
 Folded from `.issues/180_incident_commit_sweep.md` (removed per the noise
-rule — it is a record, not an open issue; session: amo-auth-followup,
-2026-10-27). Committing the `.issues/179_claim_now_half.md` claim record with
-a bare `git commit` — no path re-check, after stash churn had muddied the
-index — swept EVERYTHING staged-or-tracked-dirty into `7f965bc3` on
-origin/develop: the 178 Phase A session's uncommitted work (plan 299,
-`src/blueprint.rs`, the heal.rs wiring hunks, the AGENTS.md row, the proposal
-status flip, and their deletion of the 178 issue file) landed under the wrong
-message minutes before their own landing. **Measured damage:** the sibling's
-worktree was never touched (their flow unbroken); their landing supersedes
-the swept content tree-identically; force-push (history rewrite) and a
-follow-up re-delete (re-deleting their files, worse) were both adjudicated
-and REFUSED — origin stays as-is, the non-destructive path (owner call,
-that session). **The rule re-armed:** in a shared worktree EVERY commit
-stages NAMED files and runs `scripts/staged_set_audit.py` first — a clean
-streak is not a census (the §staged_set_audit law in AGENTS.md, now with a
-second measured instance).
 
 ## 2026-10-27 — INCIDENT: a Protocol-H worktree sweep removed a staging worktree holding an unlanded commit; the misfired follow-up command then wiped a sibling's WIP in the shared tree
 
 Three-fault chain, all measured in the reflogs (session: zed-amo fmt-census
-lane, 2026-10-27 ~04:53–05:05 +07):
-
-1. **The sweep blind spot (root cause; rule fixed this commit):** Protocol H
-   step 3's temp-path sweep removed `/tmp/reflex-fmt` (riir-reflex, detached
-   HEAD @ `a2389e6` — the issue-099 fmt drain staged for the census-gated
-   landing) under the letter of "CLEAN + detached → `git worktree remove
-   --force`". The KEEP clause protects *branch-holding* worktrees with
-   unmerged commits; a *detached* worktree whose HEAD commit is reachable
-   from NO branch and NO origin holds exactly the same class of unlanded
-   work and fell through the gap. The remover lane is unidentified (three
-   live lanes ruled themselves out by reflog evidence) — the Issue-840
-   lesson repeating: nothing in git attributes a sweep action. Remover:
-   unknown; class: the rule, not the actor.
-2. **The misfire (my fault):** the next one-liner began `cd /tmp/reflex-fmt
-   && git fetch … cherry-pick … reset …`; with the worktree gone the `cd`
-   failed and the REST of the chain executed in the shell's cwd —
-   riir-refine, the shared tree. The cherry-pick failed (foreign SHA) but
-   its output was piped through `tail`, whose exit masked the failure — the
-   documented pipefail class firing in my own command — so the chain
-   continued into `git reset --hard origin/develop`.
-3. **The damage:** the reset discarded the TOTP lane's uncommitted WIP
-   (`heal.rs`, `kat_migrate_client.rs`, `lib.rs`; owner session
-   `amo-idle-totp`, issue 179 item 6 — notified with recovery paths;
-   `git fsck --lost-found`: 0 dangling blobs, never staged, object-level
-   recovery exhausted; buffer re-save or re-derivation from the landed
-   riir-kat half `3a5acfc` + the AGENTS.md CLI spec are the remaining
-   paths). `a2389e6` survived in the shared object store (no gc ran) and is
-   anchored as branch `fmt-drain-staged` in riir-reflex; landing recipe v2
-   lives in `.distill/001_mining_queue_snapshot.md` @ `d58afb51`.
-
-**DISPOSITION (addendum, same day ~05:4x +07, verified before recording):** the
-wiped WIP was a RACE-DUPLICATE of the ALREADY-LANDED TOTP client half —
-`c9923d2f` (03:36:32 +07, "feat: the TOTP client half wired into the CLI —
-kat totp enroll|disarm + the migrate --totp header", ancestor of
-origin/develop, landed ~80 min before the reset). The landed surface covers
-the wiped draft's functional spec and exceeds it in integration (heal.rs 26
-Totp/run_kat_totp hits; kat_migrate_client.rs 10 totp/X-Kat-Totp hits;
-verified this session). **~zero functional loss; RECORD-not-REBUILD.** A
-forensic capture of the wiped diffs (read-only `git diff` ~04:15–04:20 +07,
-pre-reset; +171/+50/+10) survives verbatim in the overflow-handoff lane's
-session transcript (relayed summary via the 66a7f12a lane) — the only
-surviving copy of the lost content; the re-derivation question closes to a
-diff-first check IF the claim holder returns believing they lost a lane.
-Linkage: the recipe-v2 snapshot row `d58afb51` (zed-amo-b294-fmtland) + the
-~04:53–04:55 worktree removal + the 04:55:22 reset are plausibly one event
-chain; remover still unidentified.
-
-**Durable fixes (this commit):** the step-3 rule now anchors-before-remove
-for detached worktrees (see the skill's Protocol H); and the shell
-discipline — never chain a mutating git command after a `cd` in one line
-without `&&`-asserting the cd, never pipe a mutating git command through a
-filter, verify `pwd` before any `reset --hard` in a shared worktree —
-recorded so the next misfire dies at step 2 instead of step 3.
+Commits: `a2389e6`, `3a5acfc`, `d58afb51`, `c9923d2f`.
 
 ## 2026-10-28 — Issue 187 CLOSED: the migration proposal issue is FILER-authored; no GitHub write credential exists anywhere in the worker
 
 Folded from `.issues/187_migration_proposal_filer_authored_no_worker_write_token.md`
-(removed per the noise rule — full narrative via `git log --follow`).
-
-- **Why:** the worker's `KAT_MIGRATE_ISSUES_TOKEN` was the owner's PAT; `Issues: write`
-  also casts reactions, so a worker-secret leak could cast the owner's decisive 👍,
-  and a stranger's filing was authored by katopz (no notification).
-- **Landed:** riir-kat `c12d9cb` (`ProposalDraft` on ack/status + canonical-body
-  helpers); riir-dapps `0b143d5` (creator deleted, GET-only transport, `find_filed`
-  = oldest exact-title issue by the filing-proven login + numeric id + canonical body,
-  body re-checked at close, 409 `proposal_not_filed`, recovery lane too);
-  refine `7dec777c` (`refine kat migrate` opens the draft via the user's own `gh`,
-  else prints the prefilled URL); T3 prose kat `9d35593` + dao `11ac1c6`.
-- **Secrets (T5):** devnet `KAT_MIGRATE_ISSUES_TOKEN` deleted 2026-10-28 (secret-only
-  version `bd24fbbe`); apex deleted by the owner the same day. The `kat-migrate-issues`
-  PAT was cut to read-only (Issues read + metadata) by the owner; the worker's only
-  GitHub credential is the read token `KAT_MIGRATE_GITHUB_TOKEN` (a read-only token
-  cannot react, so it cannot vote).
-- **T4 (devnet rehearsal): MOOT** — riir-refine plan 302 frozen at T1 by riir-dapps
-  Proposal 010 D1 (gen-2 re-genesis); the T4 lease holder (zed-m3-187-t4) confirmed
-  no rehearsal is coming. The flow rides the gen-2 deploy (Proposal 010 P4 dress
-  rehearsal) instead.
-- **Correction recorded:** server-side TOTP already gates migrate request/cancel
-  (riir-dapps issue 139) — a protocol factor, not client-only.
+Commits: `c12d9cb`, `0b143d5`, `7dec777c`, `9d35593`.
 
 ## 2026-10-28 — Issues 183 + 184 CLOSED: the migrate release law landed (owner-👍 authorization + rule-C weighted voting + the autonomous cron closer), rehearsed live on devnet; the live half superseded by the filer-authored flow
 
 Folded from `.issues/183_migration_release_requires_owner_endorsement.md` +
-`.issues/184_migration_lane_owner_succession_dead_owner_liveness.md` (both
-removed per the noise rule — the full narratives are recoverable via
-`git log --follow` on the removed paths; this entry is the record of
-record).
-
-**Issue 183 (the polarity flip):** the release gate flipped from
-nobody-objected-release to release-authorization — the filing creates ONE
-proposal issue, the owner's 👍 is a STRUCTURAL gate (no bool knob, verdict
-R5), the E-matrix rewritten (E3/E4 swapped; E3b owner+one-👎 releases,
-E3c owner+two-👎 cancels, E3d the bound-login unconditional veto, E12 no
-matched issue refuses release), single-issue tally + one-vote-per-login
-(the copycat double-count closed), snapshot domain v1→v2, filing-time
-`old_bound_login` freeze. Landed 2026-10-27: riir-kat `a7a1c13` (26 tests,
-`TallyReason`) + `86a1622`; riir-dapps `e968b3e` (`IssueCreator` + the
-`KAT_MIGRATE_ISSUES_TOKEN` secret + row v2 + the R8 zero-pending deploy
-gate `scripts/migrate_zero_pending_gate.sh`); CLI `921d2739`; riir-dao
-`5cd6a93` (artifact v2) + `caa7e9a` (Amendment 1). Verdict AGREE round 2
-(R1–R8 folded). The deferred `- [-]` row (wire the R8 gate into
-`deploy_kat_service.yml`) stands: CI deploys are suspended (free-tier
-limit); `setup.sh --mainnet` runs the gate.
-
-**Issue 184 (liveness + succession):** two holes 183 left — the lazy close
-(no cron) and the dead-owner deadlock (every migration cancels forever).
-(a) The autonomous closer: an hourly `#[event(scheduled)]` cron on
-cat-service (apex + devnet) runs the same close engine per due row
-(riir-dapps `024f80b`, live devnet version `63e58ede`; ≤8 closes/tick, the
-50-subrequest cap; idle tick = no GitHub call, no write; the issue-less
-creation-only retry ≤4/tick `f1bfaf2`). (b) Succession went through
-dormancy-detection → B′ (owner/self dual-path, verdict round 1 REVISE) →
-**rule C, the OWNER DIRECTIVE that superseded B′**: plain weighted voting
-on the proposal issue — katopz (numeric id 97060) 5100 bp, every other
-GitHub identity 100 bp, one numeric identity one vote, both-ways = no
-vote, strict 👍>👎 or draw/zero → Cancel, never auto-release; two rails
-kept: R1 a non-owner vote counts only if the account is ≥365 d old when
-the owner is silent (unknown age counts for 👎 only, fail-closed) and R2 a
-passing tally holds until filing+7 d. Retired from B′: the self path, the
-E3d unconditional veto, the 30 d binding floor, the 2-qualified-objections
-rule. Landed 2026-10-27: kernel riir-kat `ba40757` + `96a44be`
-(`TallyTiming` LAW {24 h, 7 d} / DEVNET_FAST {1 h, 2 h}, snapshot domain
-v5); worker `c04e321` + `fdeef65`; dao artifact v4 `ce18306` + Amendment 3
-`61887f3`; CLI `9aa94c84`.
-
-**The live rehearsal (plan 302 T1) ran COMPLETE 2026-10-27 on devnet
-`687950c7` under these rules** — filing #1 `e518f563…` (c79c93b8 →
-d54e39a8), proposal issue gist-rs/riir-dao-proposal#1, owner 👍 (id 97060),
-RELEASED BY THE 16:00 CRON TICK with no human (exact conservation
-174 866 068 µKAT); filing #2 (4090, `71615e8d → 4f4623f3`, attest-only
-with B co-signed) released by the 18:00 cron (124 574 989 µKAT exact);
-409 `github_bound` + `claim_not_fresh` cells green. The post-landing
-`kat_proof_spec_match` red was MEASURED pre-existing (red only without
-`kat_staking`) and fixed riir-dapps `c9ddd2d`.
-
-**Supersession (why the files closed):** 187 (2026-10-28) removed the
-worker's GitHub write credential entirely — the proposal issue is
-FILER-authored (the filer's own `gh` auth or a prefilled URL), the worker
-only reads, the issues-token fallback is deleted, and the owner act
-morphs from "mint `KAT_MIGRATE_ISSUES_TOKEN`" (plan 302 T1-secret) to
-"DELETE it + revoke the PAT" (187 T5). The live migrate state = 187
-(T4 devnet rehearsal + T5 owner acts, both unclaimed) + plan 302
-T-MIGRATE (mainnet promotion waits on 187 T5).
+Commits: `a7a1c13`, `86a1622`, `e968b3e`, `921d2739`.
 
 ## Lessons
-- A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
-- `git fetch origin` BEFORE any sizing/dry-run on a repo not touched this session — the reflog can be 8 commits stale and the residue phantom.
-- A fixture feeding BOTH the real-clippy oracle AND labeled eval spans must be verified against both consumers in the same landing (disjoint feature sets; neither sees the other's red).
-- A contract change must re-pin its e2e the same day, not just its unit goldens (Issues 081/087).
-- "0 passed" on a default run is the only reliable gate detector; greps on attribute forms lie.
-- Feature-gated heals MUST pass `--verify-args "--features F"` — a default-features check compiles gated files EMPTY and proves nothing.
-- `--fix --verify` without `--write` is NOT a dry run — it writes edits unconditionally.
-- Residue scans must filter by warning TEXT, not `--> path` alone.
-- Multi-line rewrites evade same-line grep scans — the per-gate compile check is the only trustworthy detector.
-- Probe-first: the probe corrects the intake's own description (P10/P12/P13 pattern) — never land on an unprobed premise.
-- Never put a stash call in a check script; /tmp is unreliable on the Windows box and background nohup jobs die with shell teardown.
-- Raw-string terminators (`}"#`) and let-chains/edition gates are load-bearing — re-read file state after edits near them.
-- Line-initial `+ `/`- ` in doc comments parses as markdown list items; `ensure_ascii=False` is non-optional in Python corpus generators; `.goat.rs` files map to underscored cargo target names via the `[[test]]` name field.
-- Unpinned binaries need PRE-heal baseline runs; a mismatch on a perf-gated test needs a re-run before it counts as a regression (load/thermal class).
-- Cargo's `Running benches/...-<hash>` filename is crate+features identity, NOT source content; criterion noise annotations differ between ANY two runs — verdict lines are the load-bearing comparison.
-- A static manifest read is not the tool's verdict; a committed lockfile is necessary but not sufficient evidence (docker `cargo-locked-flag` falsification).
-- Text is the only interface for `docker build --check`; a resolve failure silently TRUNCATES the finding set while exiting 1.
-- Sharing a scratch target dir with a fixed package name returns cached answers — one cargo unit per name (Issue 110); the more carefully somebody isolates, the more reliably the oracles lied.
-- `cargo tree --bench` is a false-negative probe; `cargo build --benches --features F` silently skips unsatisfied targets — cross-check built-vs-expected.
-- Archive consumed frontier rows or the family-done guard deadlocks (Batch 159); the harness's own G1 fixture can refute a draft fix-pattern (Batch 109).
-- cfg-promotion: parse-time discarded ≠ cfg-time discarded — a mid-block `#[cfg]` statement recurses only when the enclosing tail is already discarded.
-- Deterministic rows must not carry wall-clock fields; `elo_table()` reads PERSISTED ratings (explicit `recompute_elo()` first).
-- An uninvoked assertion is unknown, not passing (the Bench 094 dead test); a freeze label fence cannot see a scoring-semantics defect — the first live bench run is itself a gate.
-- BARE TOP-LEVEL `let` IS NOT A RUST FILE (fn-wrap fixtures); command-line-requested lints render HYPHENATED in human output — grep JSON.
-- A "remaining queued" line that outlives its batch breeds stale re-mining — disposition or delete at landing time.
-- extract: per-record landing + hash + verdict discipline; this section is the one-liner index for the long lesson paragraphs the compact entries replaced.
+
+A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
 
 ## 2026-10-24 — AGENTS.md compaction: per-batch corpus histories moved verbatim
 
 The batch-by-batch narratives below (rust_perf + kernel_opt Role bullets, their Feature-Flag
-twins, and the sec benign-class dated log) moved out of AGENTS.md VERBATIM; the compacted
-current-state lines (standing counts + pointers) replaced them there.
-
-- **`rust_perf`** (default-on) — heals Rust perf issues; **266 rules** (Batch 271, 2026-10-21 — +12 the splash-wave SECOND-TIER serving pool, Plan 275 / Research 307: the B268/B270 staged second tier converted — allocation +3 `resume-admission-sized-to-per-command-window-not-suspended-peak` @ `fa63d97` (+ the 593f2a6 anchor-bound rider face folded) + `phase-scoped-staging-released-at-successor-reservation-when-plan-budgets-max` @ `88d0e57` + `derived-reservation-taken-once-after-admission-settles` @ `81ae003` (entries_43); dispatch +3 `size-class-keyed-reader-cap-bimodal-reads` @ `4d17995` + `fixed-read-command-runs-alone-sized-by-its-own-reads` @ `68b9e70` + `reject-plan-runs-before-setup-with-outliving-side-effects` @ `dab8841` (entries_44); dispatch +2 `admission-tests-the-bound-the-admitted-mode-serves` @ `5ea4043`+`82b93c5` + `in-use-state-retry-under-serving-mark-keyed-on-refusal-cause` @ `b7844dc` + concurrency +1 `one-event-per-writer-consumer-waits-on-the-side-it-needs` @ `e2c0af2` (entries_45); concurrency +1 `finished-command-copy-leaves-at-once-slot-returns-at-last-reader` @ `91d4ddb` + complexity +2 `part-cost-measured-by-planning-ablation-not-component-sum` @ `ed1092f` + `plan-input-precomputed-per-output-variant-bounded-convergence` @ `2f5fe8d` (entries_46); ALL ANNOTATED NotBenchable; +4 count-neutral rider faces: 253506f spill-tier victim-exclusion + 4fc7465 durable-label-at-reclassification on `restore-point-chain-copies-keyed-on-disk-state-count`, 4d17995 task-scoped-read-buffer (the FOURTH retention policy) on `reuse-allocation-clear`, 593f2a6 anchor-bound on slice A's own rule 1; drops at the T0 re-read: 6fcd9b1 error-copy, 25502fd DRY 'Effect: none', 7e51fcb error-copy; retrieval floors HELD 22/22, freeze e2es PASS no movement, score-bench #198 flat) · prior state: 254 rules at Batch 270, 2026-10-21 — +12 the splash-wave serving pool, Plan 274 / Research 306 (see the Feature-Flag bullet below for its chain) · prior state: 242 rules at Batch 266, 2026-10-21 — +1 the uv marker-ISOP decision-diagram rule, Plan 270 / Research 302: `isop-cover-from-decision-diagram-not-path-simplification` (complexity, astral-sh/uv PR #22651 @ `551c17cbc`, MIT OR Apache-2.0 — extract a marker DNF cover from a hash-consed decision diagram with the memoized Minato–Morreale ISOP recurrence ((lower, upper) don't-care interval memo + the shared Rc-Cover intermediate expanded only at the leaf), never enumerate paths then quadratic-simplify the clause set; GOAT 19.02x/12.93x/5.61x at 1K/4K/16K ParetoDominant 3/0/0 on the M3 (--release; the fixture's fixed heavy slice is 8 deep conflict chains + n light conversions), upstream source-reported 1.5x-11,900x with the -5.5% tiny-marker anti-regime disclosed; +2 count-neutral rider faces in context_notes; the decision-diagram FAMILY SEED — zero prior owners; retrieval floors HELD, self-variant top-1 pinned; score-bench #196 flat; freeze not owed) · prior state: 241 rules at Batch 257, 2026-10-20 — +6 the TensorFold staged remainder (the B256 read agents' B+ pool at the same pin `d1018b31`), Plan 261 / Research 293: `first-message-sized-to-smallest-job` (dispatch, `10ff8779` — a decode step sends one message, not 16 rows of padding; 165,440 → 10,560 B/step) + `draft-cost-timed-at-served-widths-not-extrapolated` (dispatch, `abb860c5` — "twice the truth": measure the served widths, interpolate, never extrapolate) + `checkpoint-reads-skip-page-cache-with-refusal-fallback` (io, `221c2b5d`+`6bb9daac` — O_DIRECT/NO_BUFFERING + the EINVAL flag-clear fallback) + `reserve-stream-caches-at-admission-warm-request-paths-at-load` (allocation, `84c58d3f` sibling — the 20 s launch stall gone; warm each stream's caches at load) + `cache-budget-first-sessions-take-remainder-never-reshrink` (allocation, `406b2090`) + `kept-prompt-states-pinned-host-cache-budget` (caching, `a739444c` — 8 GiB unasked, ≤ half MemAvailable, coldCut), ALL ANNOTATED NotBenchable; Batch 256, 2026-10-19 — +3 the TensorFold `9ccf4727..d1018b31` +988-commit campaign (the 1.1.0/1.1.1 Zig waves), Plan 260 / Research 291: `persistent-digest-memo-stat-identity-keyed` (caching, `018e73c6`+`20bca340` — the on-disk file-digest memo keyed by full stat identity device/inode/size/mtime/ctime-ns, ≤1,024 records, atomic publication, corrupt index refuses loud — the NAMED lead) + `launch-cost-scales-with-allocation-count-pack-one-arena` (allocation, `84c58d3f` — 1.2 ms/launch over 1,900 buffers, load 25 s vs 200 s, RTX 4090 source-reported) + `pinned-entry-tombstone-freed-at-last-unpin` (concurrency, `8c6b40a3`+`3aedf373` — the 4-face pin lifecycle) — ALL ANNOTATED NotBenchable; the kernel half (4 rules: F softmax-state-exchange + A expert-row-batch + D glm-prefix-move (the NAMED lead) + G mtp-ring-rebase) in kernel_opt) · Batch 255, 2026-10-19 — +1 the llama.cpp MoE SLRU host-cache law, Plan 259 / Research 290: `slru-probation-protected-promote-on-second-touch` (caching 17→18, #30637 @ `33d6135c`, ANNOTATED NotBenchable — a recency cache of EXPENSIVE entries runs a 50/50 SLRU, not one plain LRU list: first touch = probation, second touch promotes (protected capped n_slots/2, overflow demotes the protected-LRU head), victims scan probation-head-first then protected under the request-scoped seen-pin, hits promote BEFORE victims are chosen, no-victim aborts loud; the with_spec pin repaired 119→120 — B250 slice 1's +1 benchable was never re-pinned, the pin-hiding class, PROVEN at HEAD); retrieval floors HELD; freeze NOT owed; score-bench #190 flat) · Batch 250 slice 1, 2026-10-18 — +1 the llama.cpp envelope pool's hadd butterfly, Plan 254 / Research 285: `avx2-tiled-accumulator-butterfly-epilogue` (simd 12→13, #30296 @ `3dbcb7f`, ANNOTATED — the register-bank `_mm256_hadd_epi32` butterfly epilogue vs 8× scalar-hsum-through-stack; **x86 Pareto CLOSED 2026-10-19: PARETO-DOMINANT ×3 on the 4090, 1.02–1.35×, allocs 0→0 (plan 254 T6; the first run caught the fixture's row-vs-bank parity defect pre-timing, fixed `435d853c`)**); retrieval floors HELD; freeze NOT owed; score-bench #189 FLAT) · Batch 248, 2026-10-16 — +6 the staged simdutf + unicode-normalization conversion, Research 275's follow-up pool items 3+4, Plan 252 / Research 280; sources unicode-rs/unicode-normalization @ release 0.1.25 `7ae3eb0` + Nugine/simdutf-rs @ v0.7.0 `e9338a7`): `minimal-perfect-hash-static-lookup` (caching — the two-level salted MPH, packed 24-bit key + 8-bit value in ONE u32, one exact key compare; the FOURTH rung of the static-lookup ladder; GOAT 5.26-12.99x verdict-stable ×4, alloc 0/0) + `flat-pool-start-len-static-rows` (layout, NotBenchable) + `dense-subdomain-arithmetic-before-table-lookup` (dispatch — GOAT 1.93-3.58x) + `fanout-transform-emit-callback-not-vec` (allocation — GOAT 4.06-15.82x, allocs →1) + `inline-buffer-index-shift-over-drain` (dispatch — GOAT 1.27-2.16x, tie-risk RETIRED by measurement) + `shift-mask-adjacency-check` (simd — GOAT 1.27-2.68x) — ALL annotated; + the count-neutral BOUNDED-ARITY rider on smallvec-stack; DROPPED at measurement: deferred-error-mask-block-check (ParetoDominated 0/3/0 0.64-0.73x — the B245 lesson: the sample-parity instrument caught a shift-direction fixture bug 1-vs-25 before it could false-measure); DEFERRED with reasons in Research 280 (simdutf signature-ladder / pack-plan-table / popcount-lane / pair-key / extremum / margin); caching 16→17, layout 16→17, dispatch 15→17, allocation 29→30, simd 11→12; retrieval floors HELD no re-pin (20/0/1i); gen2+gen3(+gen4) freeze e2e ok; score-bench #186. Prior batches: 246 (10-16, +1 the serving state-cache FORK face `seq-fork-carries-pending-rollback-record`, PrismML-Eng/llama.cpp #354 @ `5ae2e169e` — a fork copies the pending-rollback record rs_idx, and for snapshot-plane state copies the SNAPSHOT plane the rollback points to (never the live plane); plane-count sizing n_stream*(1+n_rs_seq) in size_t; bitwise fork-vs-rollback oracle; NotBenchable; caching 15→16; score #185) · 245 (10-16, +6 the Batch-244 defer-list conversion, ZERO dropped — Plan 248 / Research 277: self-loop-state-memchr-skip + pair-probe-confirm-fused (a standalone PARITY ORACLE caught the bit-8j+7 SWAR extraction bug pre-measure) + finder-hoist-reuse (the MERGED memmem+bstr Finder law) + canonical-set-guarded-rebuild + nonmax-sentinel-option-niche + match-branch-cold-confirm + the CHAR rider; floors 21/0/1i; score #185; STALE-PIN REPAIR: with_spec had read 101 through B244 and without_spec re-pinned on the wrong axis — both re-pinned to measured truth) · 244 (10-16, +10 the byte-scan/search mechanism batch — Plan 247 / Research 276, from regex-automata @ 0.4.18 + memchr @ 2.8.3 + bstr @ 1.13.1 read at release pins: byte-class-equivalence-table-shrink (GOAT 1.39x/1.08x/tie — the table must exceed L1, disclosed) + prefilter-choice-shape-ladder (GOAT 44-47x) + alternation-prefix-collapse-at-build (GOAT 335-640x) + byte-rank-select-rarest-probe (the MERGED law — regex-syntax rank() + memchr packedpair, same 250 threshold in both repos; GOAT 23-38x) + prefilter-skip-density-demotion (the corpus's FIRST feedback-control rule; GOAT 3.8-5.4x) + iter-count-bulk-specialization (GOAT ~9.2x) + mod64-byte-membership-skip (GOAT 5.3-5.8x) + byteset-cardinality-dispatch (GOAT 1.3-1.6x) + utf8-fast-lane-cold-diagnostics (GOAT 8.6-10.3x) + bufread-scan-in-buffer-scratch-fragment (GOAT 2.8-3.6x, alloc → 0/0) — all benchable + annotated; the memchr-3.x suspects NOT PRESENT at the 2.8.3 pin; score #184) · 243 (10-16, +2 the text/unicode processing FAMILY SEED — Plan 245 / Research 275, HF tokenizers @ `5b5a3fcc18335eed616ae89adb714a048fed1a31` branch perf/faster-unicode-normalizers (Apache-2.0, still the branch tip, PR-stage): `ascii-run-swar-block-skip` (GOAT 6.41-7.78x) + `range-table-page-memoization` (GOAT 9.82-10.01x), both benchable + annotated; the THIRD lead transform-borrow-until-first-change DROPPED HONESTLY — ParetoDominated 0/3/0 twice, negative in Research 275; retrieval re-pin 126→124/141 + 132→130/141 with attribution; freeze tables REGENERATED) · 241 (10-15, +2 + 1 rider from the llama.cpp envelope delta `47f5a64ae→620d2225`, Plan 243 / Research 273: `reuse-admission-threshold-must-equal-window-semantics` (#30580 @ `61ad80bf` — a threshold below the exact SWA-window bound made the slot state-cache never hit, a silent perf cliff) + `empty-slot-first-victim-order-save-before-overwrite` (#30567 @ `b0d23916`) + the count-neutral P73 draft-state slot-file rider on P65 (#30574 @ `ea736c1d`); caching 10→12, both NotBenchable) · 239 (10-15, +2 from the envelope delta `843e7dcc→e467e5b5e5ba`, Plan 241 / Research 270: `partial-state-serialization-honors-rollback-contract-at-leaf-cache` (#30514 @ `e467e5b5e5ba` — the gate is the size-monotonicity invariant, honored AT THE LEAF cache, wrappers never gate) + `cache-write-admission-requires-restoring-consumer` (#30498 @ `2639a3b4` — is_stateless kinds never write; cache_ram_explicit default-off for decision models); caching 8→10, both NotBenchable; #30522 WATCH-ONLY) · 237 (10-15, +3 the P58–P61 conversion set, Plan 239, all NotBenchable: `f16-to-f32-accumulator-lut-breaks-conversion-serialization` (llama.cpp #30342+#30343 @ `685f7089` — F16C vpinsrw serialises the accumulator loop, PER-DIRECTION table-vs-intrinsic; its x86 F16C GOAT lane LANDED 2026-10-16, Bench 118 / bench_009 / plan 249, 4090-box PARETO-PASS, dot intr/lut 5.00-6.16x) + `work-buffer-sized-by-execution-width-not-plan-tasks` (#30454 @ `5cdadfc3`) + `discretionary-cache-growth-keys-on-spare-not-available` (splash #418 @ `ffc2d4be`) + the count-neutral autotune-cache HARDWARE-PATH rider (cubecl #1811 @ `5a4f5882`)) · count-neutral rider batches: 232 (the TensorFold HEADROOM-ADMISSION face on degrade-not-fail-load-qualification-probe, Plan 234), 231 (the madvise macOS WILLNEED-PREFETCH NO-OP face, llama.cpp #30405 @ `b9f3599f` — `+defined(__APPLE__)`, one constant; ~2× cold-cache pp source-reported), 226 (the bevy #26090 DEVICE-CONTRACT face on the B211 repr-align rule — stride from the consumer `T::SHADER_SIZE`), 224 (the cubecl #1806 consumer-side park-vs-fixed-sleep half on channel-send-batching-unpark; our vendored 0.11.0-pre.2 pin-bump carries the fix) · 222 (10-10, +2 the soroban wasm size pair `wasm-unwrap-panic-machinery-elimination` + `linker-dce-custom-section-volatile-marker`, stellar/rs-soroban-sdk @ `0d72c4c9`, Apache-2.0; wasm family 1→3, both NotBenchable) · 221 (10-10, +1 the bevy #25864 `runtime-bool-duplicates-inlinable-body`, NotBenchable) · 219 (10-10, +11 the TensorFold serving/timing pack, Plan 215 slot 2 / Research 251 (ashhart/TensorFold @ f1aef9c3, Apache-2.0): the cost-table hygiene pair + the prompt-cache pair + prompt-state-fingerprint-probe-bits-keyed-persistence + bounded-peer-handoff-wait + spin-lock-one-message-per-exchange + thermal-hysteresis-band-pacing-chunk-placement (the NEW 13th category thermal) + degrade-not-fail-load-qualification-probe + metal-keepalive-residency-unwire + display-carveout-all-or-nothing-admission, ALL NotBenchable; T18 dispositions DEFERRED; pin drift f1aef9c3 → 2f8284e (72 commits) disclosed) · 211 (10-08, +1 the bevy #26042 `repr-align-register-partition-store-forwarding` + the rust #163916 alignment-drop face, NotBenchable) · 207 (10-07, +2 the cubecl CSE `per-scope-map-scan-hash-crossover` + the bevy `inline-hint-not-through-unmarked-wrapper`, both NotBenchable) · 204 (10-07, +1 the PrismML NEON PQ2_0 vec_dot rule #265 @ `6bfcd79a` — NotBenchable on the x86_64 box, M3-Max GOAT PASS bench 106) · 202 (+1 the nnethercote min-rank worklist rule, rust-lang/rust #160193) · 200 (10-03, +11 from the TensorFold staged pool's serving half) — promoted via the `rust_perf_bench` Pareto + alloc-count validator.
-
-- **`kernel_opt`** (opt-in) — GPU kernel optimization domain; 941 rules (Batch 273, Plan 277 / Research 310, 2026-10-24 — +1 the mlx few-row mma-fragment lead (ml-explore/mlx @ c6abf0db #4712, MIT): A `fewrow-mma-fragment-matvec-silicon-tiered-dispatch` (6..16-row quantized matvec rides plain simdgroup-mma fragments — NO tensor API, runs on every Apple generation; weight block READ ONCE + dequant in registers + applied to all rows, x_rows[TM][2] partial-row masking M=5/13 legal, WK−1 cross-simdgroup smem partial exchange folded by simd 0; the PER-SILICON THREE-TIER admission table — NAX N,K≥2048 N%32 / M3-class N,K≥4096 N%16 / older N,K≥512 + N·K≥2^22 + N%16 (the four-conjunct form, the slice-A drift correction) — with test-covered alignment refusals; NotBenchable-here, NAX does not fire on our boxes; measured M5 Max batch 8/16 nvfp4 1.66×/2.00× SOURCE-REPORTED; kin B98 ladder + B66 tensor-API twin both directions) + 2 count-neutral rider faces from the companion merge bff10220 #4682 (the NAX split-K capacity-ladder second instance on B268 — ≤4 cap + tiles·split_k·2≤256 + K/(split_k·2)≥256 + K%(split_k·2·k_align)==0 admission fork vs gpu_18's decrement search + biases-gate refusal + fp32-partials single rounding + bit-identity-at-unchanged-split; the staged fetch/store block-loader face on B16 — fetch/store-split software pipeline, register prefetch k+1, double-buffered Ws one-barrier cadence, the DTYPE-keyed 32KB smem-budget exclusion, distinct-from opens gpu_12+gpu_102+gpu_09; the 16-row/flat-dispatch face DROPPED thin, the B251 precedent); corpus 940→941, gates all green (needle+parse FIRST-RUN, kernel_opt lib 3215/0, default 2729/0, clippy −D ×3 postures, freeze/score-bench NOT owed P30, binary NOT owed kernel_opt outside the release set); prior: 940 at Batch 272, Plan 276 / Research 308, 2026-10-24 — +3 the sonar paired-PCIe-all-reduce window (dphnAI/sonar @ 927f3262, Apache-2.0, PR-stage OPEN; PR head f653ba4e at mine time, the pinned commit its parent): D `faulted-collective-fail-stop-no-numerics-fallback` (a custom collective whose rounding contract differs from the stock backend's is FAIL-STOP — bit-exact selector agreement at init, faults terminal + pinned to process exit, per-step output gate) + E `ipc-peer-mapping-collective-teardown-pin-on-failure` (importer-close → barrier → owner-dispose pinned order, ANY failure pins to process exit, destructors never join) + E `relaxed-spin-acquire-confirm-metadata-flag-wait` (two-tier relaxed spin → same-word acquire confirm → ordered companion verify, three-way fault classification + deadline + backoff + fault-poll every 64 misses) — ALL NotBenchable (multi-GPU domain reason) + 4 count-neutral riders (the parity-bank face on B119 ll-flag-in-data-packed-poll, the mirror-fence face on B137 setmaxnreg host, the policy-agreement face on B249 tp-checkpoint host, the round-twice provenance face on cross-rank-reduce); EN-ROUTE REPAIR: the batch-271-missed cross-domain rust_perf pin (254→266) in batch249_slice3_rust_perf_riders; corpus 937→940, gates all green; prior: 937 at Batch 268, Plan 273 / Research 305, 2026-10-21 — the splash release wave, incoai/splash be3b083c..origin/main, 205 non-merge commits, Apache-2.0; +11 own rules in entries_gpu_117, authored by three disjoint-slice subagents, every fixture compile+test verified STANDALONE, quotes needle-gated verbatim: A +1 mma-lane-map-whole-run-vector-loads-split-accumulator-chains (d601971 — the MMA lane map re-indexed so each lane's operands are whole contiguous 8-input runs, 16 B/lane bf16, weights a step ahead, even/odd split fp32 chains; a lane-map change moves the split optimum 16→8 — re-measure) + C +2 same-input-consecutive-projections-one-dispatch-concatenated-tiles (4944799 — N projections of ONE input share a dispatch via concatenated column-tile ranges, each keeps its own tile, bit-identical) + consumer-prepares-consumed-table-producer-writes-plain-rows (55b0071 — a table built by a row-serialized producer (one core per row) moves into the consumer's existing covering prepare phase, byte-identical) + D +3 apple10-narrow-grid-register-tile-threadgroups-per-core (97c55fa — decode kernel-variant selection by a threadgroups-per-core occupancy bound <1.5, HALVED for sub-4-bit formats) + prefix-active-split-axis-linearized-one-dimensional-grid (ee91716 — a data-dependent-prefix split axis linearizes into x, bit-identical by order preservation, up to 1.7× faster past ~32 splits) + wide-row-tile-under-bits-per-weight-floor-one-lane (b701328 — one-lane decode under 4.5 bpw takes the 16-row tile over two storage lanes, rows independent so bit-for-bit) + E +1 splitk-tier-ladder-per-tier-ceiling-min-partition-inputs (6198321 — split-K depth from a tier ladder (tg/core trigger, inputs floor, per-tier ceiling), ceiling 16 tier-keyed, 32-input alignment, reassociation disclosed) + H +2 moe-lone-tile-register-gemv-uniform-tile-kind (ed63ffb — an expert's lone ≤2-row tile runs a lane-per-column register GEMV; ALL of one expert's tiles one tile kind, per-row independence the precondition) + moe-unverified-rows-route-zero-experts-dense-shape (a8c10ad — rows past a lane's verify count route ZERO experts while kernels keep the dense shape; online expected-tokens-per-cost pricing, 2×/½× clamp, every 32nd cycle full) + I +1 block-sparse-union-lists-packed-entry-token-major-values (4a16aaa — per-tile union block lists, packed (block<<ROW_BITS)|row_bitmask entries, token-major values, closed-form split sizing) + O +1 constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers (694243c — the compile-time capacity bound under #pragma unroll with a zero guard keeps a runtime-bounded local array in registers); the wave's HOST-SIDE serving leads (11 rust_perf proposals + 4 riders + 13 second-tier: governor progress, shortfall-keyed waits, disk-state-keyed redundancy, second-witness teardown, flat-table recycler, hit-flatness cache sizing, eviction-counter oracle, publication takeover, progress-keyed watchdog, ranged reads, tier write deference) are STAGED as Batch 270's pool — freeze regen + binary rebuild is a lane of its own; prior: the 2026-10-21 dual landing, two parallel idle-loop lanes one morning -- push-order kept BOTH batches, corpus 924->926; Batch 269 (this lane, Plan 272 / Research 304) +1 the llama.cpp Metal reduction lead: B `two-pass-partial-reduction-inter-dispatch-barrier` (ggml-org/llama.cpp `df1170213` #30862 -- the oversized-row argmax reduction split ACROSS DISPATCHES: a part kernel (grid npart x nrows, npart = min(256, ceil(ne00/4096)), N_ARGMAX_CHUNK 4096 / N_ARGMAX_NPART_MAX 256) reduces bounded chunks to per-(row, part) (max, arg) partial pairs in graph-allocator scratch riding past the output (bid_tmp.offs += ggml_nbytes(op), sized by the ggml_metal_op_argmax_extra hook), the ENCODER MEMORY BARRIER between the two dispatches sharing one command buffer is LOAD-BEARING (concurrency_reset = encoder_memory_barrier -- the stale-partials law, PR body: 'A memory barrier is inserted between the part and final argmax dispatches to avoid reading stale partials.'), the final kernel (one threadgroup per row, nth = next-pow2(npart) capped 256) reduces the partials, small rows keep the single pass (measured flat 3.01->3.00 us); the (value, index) pair reduces value by simd_max + index by simd_max(select(-1, larg, lmax == max_val)) -- the select-mask index reduction, the tie-rule surface disclosed in-rule; MEASURED (PR body, M2 Ultra + M5 Max -- OUR SILICON FAMILY): ARGMAX 32000,512 453.17->78.87 us (5.7x), POOL_1D 247.51->6.35 (~39x) through 9613.05->368.94 (~26x) and 110.52->2.79 (~40x) through 440.14->5.37 (~82x); + 1 count-neutral rider (the Metal pool_1d THREADGROUP-RADIUS face on row-dot-split-inner-axis-block-reduce beside the B209 CUDA pool2d face -- thread-per-output -> one threadgroup per output (nth = min(256, max(1, k0))), the two-level simd/shared tree, the AVG dual-partial count form); collision provenance: renumbered from this lane's first B267 claim after the 4090 lane's ac1ae01a landed first (push is the arbiter) -- this commit fell into their llama.cpp "rest NULL" bucket; the commit's other half + the full window record: Research 304) · +1 at Batch 267 (the same-morning parallel lane, Plan 271 / Research 303): N `partial-constant-float-fold-ieee-unsound` (cubecl `1ad5040f` #1816 -- a partial float constant fold is not IEEE-754-sound, only the both-constants case folds; FMA formation refuses complex) + 4 count-neutral riders (the HARDWARE-SHARING axis on the B223 autotune-fidelity host, cubecl `c8a4728c` #1848; the STORAGE-CLASS-EXISTENCE barrier face on the B223 bounded-cross-worker host, cubecl `aad86f45` #1871; the REJECTION-SEMANTICS face on the B199 panic-safe host, cubecl `1b4099b2` #1876; the HOST-DISPATCHED EAGER-PREP-CHAIN face on the B259-C host, vllm `09fd02721` #59634); prior Batch 265, 2026-10-20 -- +1 the vllm #61497 Mamba2 SSD prefill host-overhead lead, Plan 269 / Research 301: K `autotuner-key-memoized-per-launch-not-rebuilt` (vllm `e4a676cd` -- the Triton Autotuner.run per-launch cache-key rebuild memoized away: build the equivalent key from call-frame values (kernel + key-arg values + every arg's dtype), cache `best_config` on first launch per key, launch the raw fn on hit; the PRE-HOOK REFUSAL (hook-bearing configs never cached) + the `@cache` arch-query companion; source-reported 263->179 us/layer, 43 of 84 us from the memoization, up to 1.08x OTPS B200) + 3 count-neutral riders (the vllm OUTPUT-SIDE SLOT-WRITE face on B220 never-materialize -- the SSD state-passing kernel writes final states straight into index-named cache slots, the materialized intermediate + host scatter both vanish, '4 fewer launches per Mamba layer'; the llama.cpp `13786fbb` #26771 POOL-FREE GRAPH-SET INVALIDATION face on B251 graph-sticky -- BOTH free paths invalidate the captured-graph set, VMM exempt; the llama.cpp `119f68d7` #30505 DEFINED-BUT-NOT-SELECTED face on B237's own rust_perf rule -- the NEON f32->fp16 fcvt defined and never selected, the #error pair asserts defined-implies-selected per direction, upstream cites issue 30342); gates: needle 2/2 FIRST-RUN, kernel_opt lib 3203/0, default 2724/0, retrieval 21/21 HELD no re-pin, clippy -D x3 clean; freeze NOT owed; binary rebuild OWED (rust_perf rider in the release set); the router.rs total pin -- OUTSIDE corpus, the B259 lesson re-confirmed -- caught by the lib; the adjacent-literal splice defect (the B261 class, 2nd occurrence) repaired by the restore+one-script-pass discipline); prior Batch 261, 2026-10-20 -- +3 the PrismML fork prism-b10787 window, Plan 265 / Research 297: A `prefill-batch-pool-f16-conversion-sized-by-actual-length` (25f68a4 #330 -- the FA prefill f16 pool-conversion route: amortization-keyed, pool-not-reserve, the in-place predicate refuses when armed) + D `dtype-branch-dispatch-parity-in-place-precondition` (ec1ee3a #307 -- the quantized branch lacked the F16 branch's GQA>4 ratio rule, 1.21-2.95x on the league model, the widening carries kv_native_supported) + B `one-warp-ordered-reduce-row-batched-no-smem-barrier` (483bdab #368 -- bit-identical to the generic mmvq by reduction-order preservation; the identity/tail/alignment atoms consumed by B180/B217, disclosed); **the scored tag `prism-b10787-73bfe6c` FIRES the decode re-pin re-cut trigger -- bout gated on a verified-idle 4090**; prior Batch 259, 2026-10-20 -- +3 the uzu e744e7c chunked-GDN prefill pack, Plan 263 / Research 295: A `tile-history-packed-in-place-register-window-conv-scan` + B `per-row-transcendental-hoist-not-per-element` + C `precompute-chain-fused-intermediates-never-materialized` (league model Qwen3.8-27B-M; M5 Max e2e prefill -2.6% @30k / -3.5% @102k SOURCE-REPORTED, never our bench claim) + 3 count-neutral riders (cubecl #1853 the smem-interleave legality predicate on the B234 union-smem-scratch rule; cubecl #1858 the Metal simdgroup_matrix lane-layout formula + the per-operand layout oracle on `mma-fragment-layout-m16n8k16`; llama.cpp #30666 the SWA-checkpoint shared-prefix validity conjunct on the prompt-cache stale-invalidation rule); prior Batch 257, 2026-10-20 -- +7 the TensorFold staged remainder, Plan 261 / Research 293: F `cluster-dsmem-shared-head-one-row-decode-attention` (`01b7f3bb` — one decode head spread across a CTA cluster, scores gathered over dsmem) + D `pdl-admission-by-image-set-marker` (`bef432bb` — the DEPLOYMENT-level PDL admission: both embedded images must carry the pdl_marker contract, fail-closed probe) + D `copy-source-quarantine-unproven-free-pinned` (`2ba81a06` — freeing async GPU memory requires WAIT PROOF; unprovable drops enter a charged quarantine) + D `prefill-batch-atomic-fallback-individual` (`c4995966`) + D `teardown-takes-list-whole` (`30f05c6d`) + D `drain-device-work-before-free` (`98571a84`) + A `verify-row-tiles-share-loaded-weight-panel` (`4d1a3f15` — 32 GB10 verify rows share one affine-4 weight panel); + 2 count-neutral riders on gpu_102 hosts (the row-keyed CHUNK-WIDTH face on chain-rows-attend-own-keys `79bdb93d`+`02d3e2ed`; the starvation aging bound `preference_rounds = 8`, bound 8+n, on fill-foreground-then-fewest `48277078`); Batch 254, 2026-10-19 — +1 own D rule, the #30795 moe_reduce dst-input aliasing refusal, Plan 258 / Research 289, the upstream window past the B253 pin: the graph allocator computes liveness on the UNFUSED graph and may legally recycle input memory as dst; per-node-legal becomes a threadgroup-vs-threadgroup race in the fused dispatch; the guard set is per-fusion, never family-inherited; solo thin-watch-day batch, the B209/B210 precedent; prior 905 at Batch 253 — +2 own rules + 1 count-neutral rider + 3 WATCH rows, Plan 257 / Research 288ast the B252 pin (F:/llama.cpp fetched past `ff5a2337`; fork tip UNCHANGED at `1180918489`, decode re-pin trigger NOT fired): `99db719b` #30573 → D `loop-back-edge-scratch-war-trailing-warp-barrier` (the fattn-vec KQ scratch WAR — the write-side barrier covers only the RAW edge; a loop-reused scratch's back-edge needs its OWN trailing warp barrier, scoped by slice ownership; the latent-race class — correct today, undefines under Volta+ ITS; hazard-DETECTOR oracle, correctness tests cannot pin this face) + `4c1004c4` #30553 → E `stream-k-grid-capped-at-useful-work-quanta` (the MMQ Stream-K grid cap — `min(nsm, nwork)` with `nwork = ntiles_dst * ceil(ncols_x/K_vram)` ceil-rounded to full iterations, never below the SM default, never an empty-range block; fixup sizing rides the capped grid; the ceiling side stays the B58 measured null; FP32-summation-grouping determinism caveat disclosed in-rule, NotBenchable-here no upstream figures) + `42b70032` #30791 → count-neutral RIDER on `fused-vector-site-transcendental-form-nonportable` (the VALIDATED-POLYNOMIAL TRANSCRIPTION face — the s390x VXE arm transcribes the ARM-optimized-routines expf verbatim, same constants + same error-bound contract comment, re-expressed in vecintrin builtins; the COVERAGE face: a lane-switch #elif chain missing a platform arm is a SILENT scalar fallback) + WATCH rows: `31288c9c` #30731 hexagon FA mask-skip (portable face already owned) + `fe8841a7` #30218 hexagon multistream (support-matrix widening) + `412a363c` #30607 qwen3 bidirectional+dense_2 (ARCH-WATCH, no league relevance); D 212→213, E 82→83 (the E header comment's stale 79 repaired with the note); gates: batch253 needle gates 2/2 FIRST-RUN PASS (en-route: the raw-quote class re-fired — escaped; the watch needle re-keyed to a unique anchor), 17 corpus-total pins + D/E table rows + the two totals + the router experts pin re-pinned 903→905, kernel_opt lib 3165/0, default lib 2696/0, clippy −D ×3 postures clean, retrieval floors HELD (kernel 100%, blended floors above pin), freeze/score-bench NOT owed (P30). Prior: Batch 252, 2026-10-19 — +2 own rules + 5 count-neutral rider/second-instance faces, Plan 256 / Research 287: the prism fork's #369 L8V staged-GDN verification kernel (PrismML-Eng/llama.cpp @ `1180918489` — B251's OWN Yukon source commit `36c9536` on a second stack: the lane-permuted butterfly-fold + the host-dispatch arch-mirror rules gain SECOND-INSTANCE annotations; NEW faces → riders: the 4-byte cp.async element-granular swizzle-stage (stage narrow, read float4 wide, no transpose pass) on gpu_41 + the fixed-token-window SMEM-sized-by-MAX (window in the types, dispatch-gated 8–16, pad lanes staged-skip) + the template-arm gate specialization (`if constexpr (RAW)`, `G_PRECOMPUTED ? g0 : expf(g0)`) on gpu_105) + upstream llama.cpp leads (F:/llama.cpp origin/master): `ff5a2337` #30602 → C `sigmoid-gate-chain-folded-into-consumer-template-arm` (the qwen4exp hc_post gate chain 2*sigmoid(inject/hc) folded into the consumer as a `gated` template arm reading RAW weights via src[0], scalars as op params, graph-pattern admission + zero-bias guard, four instantiations from two flags) + `5aeac37a` #30572 → F `oob-free-loop-inclusive-of-last-full-tile` (the fattn fast arm's `<` → `<=` — the last fully-covered tile belongs on the unchecked path; the silent one-tile-per-row-block perf tax invisible to correctness tests, coverage-partition oracle) + `0878f7c3` #28851 non-contiguous SUM = WATCH-only (op-generality, negative-assert pinned); C 57→58, F 20→21; gates: batch252 needle gates 2/2 FIRST-RUN PASS, kernel_opt lib 3163/0, default lib 2696/0, clippy −D ×3 postures clean, retrieval kernel 100% / blended 90.6 ≥ floor HELD no re-pin; freeze/score-bench NOT owed (kernel_opt-only corpus, the P30/B250 precedent)). Prior: Batch 251, 2026-10-19 — 901 rules (+16 own rules + 21 count-neutral rider faces, THE YUKON CONVERSION — Plan 255 / Research 284, Layr-Labs/cudafast-bonsai2-9b-engine @ `36c9536` MIT (the Bonsai 2 9B DGX-Spark competition harness on OUR LEAGUE MODEL FAMILY — prism Ternary-Bonsai-2-9B-PQ2_0-MTP-Q8_0), 4 authoring subagents + coordinator spot-checks 12/12, clone `.raw/yukon-engine` removed at close): slices 105/106 — A +5 `lane-permuted-column-reduce-same-butterfly-tree-bit-identity` (the L8 arm permutes the lane→row map so the same fold tree runs 40→6 shuffles/token BIT-IDENTICAL — the lazy-rollback checksum depends on it; `GDN_L8_MIN_TOKENS 17`) + `per-request-dirty-range-clear-graph-capture-sticky-marks` (row-granularity dirty-prefix clear + the stream-capture STICKY set no clear resets) + `verify-ubatch-full-prestage-lane-token-gate-broadcast` (verify-band 8–16 tokens: stage ALL inputs once, gate activation distributed lane-t + `__shfl_sync` broadcast — each transcendental exactly once) + `j16-warp-fragment-direct-no-smem-tile` (at J=16 an smem tile buys no reuse a register fragment lacks — the anti-pole of the dequant-once staging family, max-L1 carveout) + `mbarrier-staged-in-structural-padding` (the stream-K arm's two mbarriers in stride-alignment padding at zero smem cost); B +3 `magic-anchor-mma-exact-int-float-ffma-epilogue` (the batch's strongest portable candidate: the int8-mma accumulator anchored at `0x4B400000` = 1.5·2²³ makes the I2F vanish; j128's two-FFMA epilogue bit-identical over an exhaustively tested domain; PORTABLE to riir-gpu/cudarc int8 lanes) + `gate-activation-precompute-pass-token-threshold-gated` (exp(g) at n_tokens ≥ 32, raw-gate activation at ≥ 64, `static_assert(!(RAW && G_PRECOMPUTED))`) + `signed-trit-remap-single-mma-bias-fold` (trits {0,1,2} → signed bytes {−1,0,1} via one carry-free `(t + 0x7F) ^ 0x80` per byte, ONE s8.s8 mma per sub-block — half the mma count; LEAGUE-RELEVANT ternary mma paths); C +2 `dead-destination-scale-elided-consumer-applies-on-load` (a deferred zeroing scale whose destination row the GDN kernel is about to overwrite is DEAD WORK — pointer+byte-size+n_seqs==1 guard, expression identity) + `stacked-gate-up-single-launch-split-store` (TM tile-contiguity makes the stacked gate|up copy the concatenation — ONE pure-tiling launch, store split at nrows_lo); D +1 `topk-chunk-partial-lists-head-only-kway-merge` (two-pass exact top-k: only a list HEAD can win, only the winner's list advances); G +1 `lazy-rollback-journaled-window-replay-replaces-eager-state-snapshots` (K eager 2-MiB snapshots where the next ubatch reads ≤ 1 → journal final state + window base + RAW inputs, replay W−r tokens bit-identically, per-warp checksum + eager-slot fallback, magic LAST as the commit point); L +3 `decode-layout-weight-permute-copy-registry` (load-time PURE-PERMUTED weight copies TM/WM, originals stay in place, prefix-view legality from the layout) + `ptq1-value-exact-transcode-roundtrip-fallback` (code-3-free PQ2_0 → 28-byte PTQ1_0, ≈18% fewer weight bytes, DECODE-BACK verified per block, whole-tensor fallback) + `host-dispatch-predicate-mirrors-kernel-compiled-arch` (one host+device constexpr fed `highest_compiled_arch(cc)` on the host and `__CUDA_ARCH__` on device); N +1 `halfword-payload-funnelshift-aligned-word-read` (2-byte-aligned payloads as aligned words + `__funnelshift_r`, never past the payload's own bytes); the staged 17th thin candidate DROPPED (the M `restrict-local-alias` toolchain-hazard — no perf axis, negative-assert pinned in the gate); riders ×21 on 17 hosts (weight-stream ×3 incl. the DMA-transport evict-first + the measured prefetch table, grid-dep ×2, fuse-gate-up ×2, radix/tile-max/fwht/swar/cpasync/warp-shuffle/bit-equal/batch-invariance/rht/device-argmax/reduction-restructure/fuse-residual/stage-operand/tma); A 178→183, B 100→103, C 55→57, D 211→212, G 38→39, L 23→26, N 80→81; en-route repairs (pre-existing lane debris the batch's clippy gate swept): 10 doc_markdown residues in B250's entries_gpu_103/104 healed, the `batch250_slice1_riders_landed` items_after_statements use moved to fn top, the batch19/batch22 full-string concept asserts converted to the Batch-199 prefix-assert convention, slice-A's multi-line literals normalized to the house single-line convention; gates: batch251 needle gates 2/2 FIRST-RUN PASS, kernel_opt lib 3161/0, default lib 2696/0, clippy −D ×3 postures clean, retrieval kernel 100% / blended 90.6 ≥ floor HELD no re-pin; freeze/score-bench NOT owed (kernel_opt-only corpus, the P30/B250 precedent)) · Batch 250 SLICE 2, 2026-10-18 — +6 B the envelope-pool slice-2 set, Plan 254 / Research 286: moe-weights-load-time-soa-accumulation-order-pinned (e707790c+f74e2fa6, the SoA + the hazard face) + rms-norm-registers-carry-x-between-passes (623c1639) + kquant-dequant-work-item-geometry-wide-stores (13de11e7) + mmvq-low-bit-vdr-two-rows-share-q8-loads (2744e48d) + moe-group-selection-fused-into-topk (f2f667b0) + attention-row-mask-bitmap-per-row-not-per-block (597e5e50 uzu); B 94→100; +4 platform watches disclosed (9d1878a HIP perm / 797de63b hexagon / 2f2763d MxFP4 Adreno / 27c7a76 hexagon softplus); floors HELD, freeze NOT owed; T6 x86 Pareto pending (4090 leg); Batch 250 COMPLETE) · Batch 250 SLICE 1, 2026-10-18 — +1 D the uzu envelope pool's route-retirement law, Plan 254 / Research 285: `attention-route-retirement-by-measurement` (uzu `2c16e967` #973 — the route table is maintained by the same evidence standard that built it; the M5 measurement "route short kv to grouped, 2-3x faster" retired `GEMM_GROUPED_MIN_KV_LENGTH 1024` + the D256 `150_000` and D128 `2_048` exceptions and the two-pass suffix windows, the predicate collapsed to the axes that still discriminate; the corpus owns route ADDITION (B18/B33/B10) — this is the same standard run backwards) + 2 count-neutral riders (B233 += the k-pool shared-view hoist `6afa9a3`; B166 += the graph-level signed-FWHT fusion + fallback-fix `ad2328151`); D 210→211; retrieval floors HELD no re-pin; score-bench #189 FLAT; the staged wip's gpu_103 byte-copy defect + 2 stale pins caught by the T8 combo gate and repaired pre-gate (the lesson in Research 285)) · Batch 249 SLICE 3, 2026-10-18 — +15 B+ REMAINDER rules + 9 count-neutral delta riders, the TensorFold drift-pool B+ remainder (Plan 253 / Research 283; window `f1aef9c3..9ccf4727`, 9 originals from the read agents + 6 re-derived from the +770 delta; one honest NO-FACE: row-independent-pass-block-bounded-scratch); was 863 at Batch 249 SLICE 2 — +15 OWN rules, the TensorFold drift-pool own-rule set (Plan 253 / Research 282; window `f1aef9c3..9ccf4727`, 9 rules from the original 1023-commit read agents + 6 from the +770 delta re-enumeration; 3 folds applied — A-4+D-A-3 the max_total_threads contract, B-20+D-B-9 the parser monotone-cursor, D-A-1+D-B-10 the cut-invariance oracle): D +8 pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain · A +3 slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set · N +2 layout-check-values-mod-13-break-block-symmetry + kernel-contract-planted-gate-controls · K +1 calibrate-verify-window-on-text-not-proposer-chain · B +1 parser-backtrack-bounded-by-monotone-cursor; every quote re-verified at the pin by the coordinator). SLICE 1, 2026-10-18 — +3 COUNT-NEUTRAL riders, the TensorFold 1.0.x drift pool's rider set (Plan 253 / Research 281; the pool re-measured +770 mid-claim — window 1023 → 1793 @ origin/main `9ccf4727`, slice 2 re-enumerates): `masked-in-place-field-prescale-other-operand` += the 2-bit in-place-mask + compound `2^-(2s+16h)` prescale face (TensorFold `c9673eaf`+`badfc9d6` #784 — the B242 GOAT's law at simdgroup-tile width, 1,516,773,088 bit-equal pairs; the tile-window face owned by shape-only-plan-row-invariant-kernel, declared) · `splitk-reduce-one-launch-slice-order-pinned` += the training-ACCEPTANCE consequence face (TensorFold `4315bc2d` #632 — atomicAdd slice adds flipped a lesson's keep/remove checks run-to-run, the Lisbon witness; parts buffer + slice-order sum; katgpt-rs Issue-940 kin) · `zero-anchored-prompt-grid-chunk-identity` += the ANY-ROW successor era (TensorFold `cc692e6f6` #670 — 17-cut-pattern byte-equal dumps dissolved the grid-only contract, the grid fell back to a chunk-length convention; cite the era before claiming grid-only resumability); `batch249_slice1_riders_landed` first-run PASS, lib 3145 ✓, retrieval kernel 100% / blended 90.6 ≥ floor — floors HELD no re-pin. Batch 247, 2026-10-16 — +2 COUNT-NEUTRAL oracle riders on `entries_gpu_95`, the splash runtime-oracle pair, Plan 251 / Research 279, incoai/splash @ `4919202` (PR #428) + `3903390`, read at the vendor clone fetched `be3b083c5`: (a) the KV-ALIKE oracle gate — an oracle comparing across differently-row-counted commands gates on bit-for-bit KV equality of the rows both computed (kv_alike replaces ffns_alike; GGUF tile/simdgroup selection is row-count-keyed, so like-arithmetic is a CHECKED PREDICATE, never an assumption); (b) the RETAINED-ROWS CONTENT oracle (Research-268 deferral discharged) — compare cells AND retained rows byte-for-byte via `model::Runtime::pendingGdnRows` — count-equality is NOT state-equality; the pair = the oracle's two failure directions (UNDER-compared / OVER-compared); corpus STANDS 848, retrieval floors HELD no re-pin, freeze/score-bench NOT owed P30. Prior batches: 246 (10-16, +1 + 1 rider, the prism fork delta: `shard-granularity-lcm-never-cut-rotation-block` (L) from PrismML-Eng/llama.cpp @ `71c14732` (#363) — a shard boundary respects EVERY block constraint on the axis (lcm of the quant-type and rotation blocks), the rotation's reshape keeps axis boundaries (4D, never the 2D fold), grouped-GDN views inherit the parent's split scaled by their geometry, feature-sharded elementwise ops slice full-width mirrored operands per shard; measured on OUR league model Bonsai 2 27B PQ2_0/Q2_0 under 2× H200 split, KLD 2.5e-4, top-1 99.3% — the fork now serves our league model multi-GPU; + the count-neutral PLATFORM-KEYED verify-cost rider on cost-aware-verify-length-survival-cost-table (#354 MTP half: CUDA verify cost grows faster with draft depth than Metal — depth-2 default when draft-mtp + CUDA offload + flag unset); L 21→22) · 242 (10-15, +31 + 6 riders, the mlx-serve GDN/QSA pack — Plan 244 / Research 274, ddalcu/mlx-serve @ `1015f785` MIT: 31 own rules across `entries_gpu_97/98/99`, the corpus's largest single-source batch (A +7, B +3, D +9, E +2, K +1, L +1, N +8); the GOAT `masked-in-place-field-prescale-other-operand` (mask a packed field in place, pre-scale the OTHER operand by 2^-shift via the f32 bit pattern — portable CPU-exact; GOAT bench bench_008/Bench-117 LANDED plan 246: G1 988 bit-identical, byte-aligned faces 1.28-1.34× WIN, the 4-bit half-lane face the CPU anti-case 0.87-0.94×, op-count 512:1) + `decay-gate-dtype-one-point-zero-lock` (league-relevant, our GDN state-dtype lane) + `row-count-invariant-bits-split-keyed-on-weight-shape` + `finiteness-before-diff-nan-blind-comparison-hole` + `lossy-route-physical-error-bar-from-noise-floor` (Issue-750-T3 external validation #3) + `prompt-form-refused-toolchain-format-gap-reopen-trigger` (the negative-row exemplar: "Re-test if uint2b_format ever appears") + `per-generation-plan-table-unmeasured-generation-fallback` (measured on OUR Bonsai 27B shapes) + 19 more; + 6 count-neutral riders (lop3 the 2-bit per-j magic ladder; mid-prefill StT decode twin; exact-bf16 sigtab fusion-enabler; moe-router-fold T-ladder; packed-KV views-in-place; minifloat composed 2^22 lift); 1 rider SKIPPED honestly; landed ABOVE the 12-16 estimate (2 killed/folded of 33), disclosed per the lithos precedent; LANE INTEL HIGH: the league family's GDN decode/verify/tree protocol + QSA 128-bit K/V staging) · 240 (10-15, +3 the P67–P70 conversion, Plan 242 / Research 271, all llama.cpp MIT: `subgroup-tail-lane-clamp-live-loads-gate-stores` (#30421 @ 9166ceaf — every lane of a collective stays LIVE, loads CLAMP, only stores gate; 225 sites across 13 adreno gemv kernels) + `pad-row-classification-interior-memcpy` (#30526 @ 23f83e05) + `f16-upcast-at-foreign-graph-translation` (#29200 @ 5a638aed); P70 memory-channel-spread WATCH-ONLY — no Rust-side host; corpus 813→816 (A 167, B 88, E 77)) · 238 (COUNT-NEUTRAL rider: the P64 conversion, llama.cpp #30215 @ `3e390af18` — the L2-BUDGET-DERIVED group-size face on `l2-grouped-tile-schedule`: `group_m = clamp(GROUP_A_BUDGET / max(a_panel_bytes, 1), 1, min(blocks_m, 32))` with GROUP_A_BUDGET 8 MiB, per-operand-datatype a_panel_bytes + the merged-axis linearization + the MUL_MAT_ID carve-out; the BANDWIDTH-STARVED REGIME law (GB10 +18-32% op-level, pp2048 +21.3%; fat-bandwidth anti-regime on 3090/5090); Plan 240 / Research 269; corpus STANDS 813) · 236 (10-15, +1: D `mid-prefill-recurrent-state-capture-boundary-unsplit` — incoai/splash @ 711f8e5+c3dcf53+985463c+79a4329, Apache-2.0: capture the recurrent state INSIDE the command at planned rows, buffers RESERVED before, a checkpoint retires only once its successor is PUBLISHED (8/8 cancelled prompts retried from the last published checkpoint vs 4/8); the vLLM #60050 FlashInfer convergence face folded in-rule @ merge badfcdbf9 (TTFT −20/−12/−10% GB200; Mamba2 #57329 + Kimi-K3 FlashKDA the same mechanism); Plan 238 / Research 268; corpus 812→813, D 190→191) · 234 (10-14, THE MERGE-MOMENT BATCH +6: ggml-org/llama.cpp PR #29353 "cuda, hip: GDN chunked kernel" MERGED @ `62df1815` (head `dde6a4d93`), Plan 236 / Research 266 — G +2 `register-resident-scan-state-one-kernel-layer-pass` + `in-register-unit-triangular-inverse-warp-substitution`, N +1 `bf16-residual-pair-three-mma-near-f32` (KL 4.63e-4, top-1 98.82% — the numerics that bought reviewer sign-off), D +1 `occupancy-keyed-value-split-register-budget-ladder` (admission is a runtime predicate, never a build flag), A +1 `lifecycle-disjoint-intermediates-union-smem-scratch`, E +1 `warp-role-split-phase-overlap-cross-chunk-prefetch`) · 235 (10-14, COUNT-NEUTRAL riders ×2, Plan 237 / Research 267 — the two Batch-234 deferrals DISCHARGED: the mma.cuh width-matched loader face on `ldmatrix-pair-x2-to-x4-adjacency` (width first per-loader, then fuse pairable x2s) + the ggml.h state-slot API-contract face on the B224 UB family (the remove-vs-disable DISPOSITION SPLIT: contract-supersedes-tests, disposition follows intent)) · 233 (10-14, +1 + 1 count-neutral rider, Plan 235 / Research 264: L `reshape-relabel-axis-scramble-content-oracle` (llama.cpp @ `6868a52` #28738 + `e7268bf` #30480 — the shape-preserving-wrongness genus over TWO faces: the conv_1d batch-fold axis-order + the DSA k-pool mask-fold; THE ORACLE: content comparison vs the per-axis decomposition, never shape equality; the assert is the SEAM guard) + the B224 moe-duplicate-id UB-CONTRACT face (#30501 @ `8c2134a`: contract at the API, tests disabled-behind-literal, the disable comment carries the re-enable link); corpus 805→806, L 20) · 232 (10-14, +1 + 1 count-neutral rust_perf rider, Plan 234 / Research 263: D `warm-background-pass-quiet-hold-yield-chunking-cut-invariance` (TensorFold @ `c724dd9d` — a next-turn background prefill waits `warm_quiet`, is DROPPED never queued on arrival, cuts into `yield_rows`=256 chunks, bit-legal by cut-invariance; the warm mode splits `.on` vs `.waits`) + the ANE-share HEADROOM-ADMISSION rider (@ `b264f534` — `fitsLoadLimit` fail-closed on unknown RAM, 70% load limit + 2 GiB margin); corpus 804→805, D 189) · 231 (10-14, +1 + 2 count-neutral riders, Plan 233 / Research 262: A `host-pointer-buffer-foreign-range-subtraction` (llama.cpp #30405 @ `b9f3599f` — merge own ranges minus foreign ranges, ONE buffer_from_host_ptr per disjoint owned range, the shared-weight carve-out; 27 GiB pinned for IQ4_NL before) + #30447 @ `0a731cce` riders; corpus 803→804, A 165, D 188) · 229 (10-13, COUNT-NEUTRAL rider ×1, Plan 231 / Research 260: `ragged-chunk-pad` += the STAGING-SIDE SYMMETRY face (llama.cpp @ `411d5485` #29533 — every operand stager feeding one consumer writes the FULL staged tile, zero-filled past the bound; the stale .dm was the NaN carrier; + the dispatch-split half: not-VK_WHOLE_SIZE assert + per-buffer-KIND col-stride); corpus 803 stands) · 227 (10-13, +2 + 2 count-neutral riders, the lithos-metal wave-2 pack (Plan 229 / Research 257, repo pin `5485ad6`): `coop-tensor-layout-measured-per-chip-family` (#35 @ `7781e93` — the register layout is a per-chip-family contract; 8.80x→2.50x a T=1 pass, prefill 11.8→0.65 s M3 Ultra) + `exact-pass-rows-take-their-sub-pass-chunking` (#36 @ `087db24`+`182d016`+`4effa4a`) + the ARENA-ADMISSION rider (#37 @ `5842639`: a slot ≤ 2× the value's size → 18.7 GB → 5.8/9.1 GB) + the LANE-PAIRING rider (#38 @ `258ef6e`); #39/#48 WATCH; corpus 801→803, A 164, D 188; the pin-repair lesson (unique-anchor replaces) in Research 257) · 226 (10-13, COUNT-NEUTRAL riders ×2, Plan 228 / Research 256: the B208 `fa-fast-path-validated-exact-shape-admission-v-as-strided-view` rule += the PROBE-SHAPE-CLASS + PAD-AT-THE-PRODUCER faces (llama.cpp @ `358a420e` #30416 — the -fa auto probe measured a degenerate one-token shape and disabled flash-attn globally; admission, reachability, and probe agreement are ONE contract)) · 225 (10-13, +5 + 5 count-neutral riders, the Q1_0 trio distill (Plan 227 / Research 255): PrismML-Eng/llama.cpp @ `59f2b8485` (founding) + `43e67bda3` — `mmq-tile-loader-thread-map-derives-from-block-geometry` + `subbyte-preexpand-int8-tile-reuses-validated-mma-consumer` + `superblock-scale-replication-to-subblock-scale-slots` + `sign-expand-one-bit-dp4a-symmetric-epilogue` + `sign-codec-shared-magnitude-mean-abs` (the L2-optimal shared magnitude IS the mean abs; binary budget rungs 0.025/0.40 vs ternary 0.01/0.15) + riders on gpu_16 (NO_DEVICE_CODE stub) / gpu_33 ×2 (x86 shuffle-cmpeq face; mismatched-block face) / gpu_02 (vendor-view face) / entries_popcorn (processing-set predicate); #30164 WATCH-ONLY) · 224 (10-12, +1 + 2 count-neutral riders, Plan 226 / Research 254: D `moe-duplicate-id-compact-prepass-static-bound-tile-dispatch` (metal #30373 @ `073b74034` + vulkan #29998 @ `966baae76` — the two-pass compact prepass + per-tile descriptors + the host-computable static bound; the unconditional-store law; grid ~8-16× shrink) + the cubecl #1806 rider `6bba5fdf` + the llama.cpp #30299 C++-twin rider `ccdbe2905` (test helpers gain a LINK keyword; the helper must OWN what it propagated); the walk conversion-set audit found #29435 + the B208-F16 rider ALREADY LANDED (stale walk phrasings)) · 223 (10-10, +11 + 3 count-neutral riders, the lithos-metal pack (Research 249/248, lithos-ai/lithos-metal @ `236475fa`, 15 commits): A +3 coherence-scope-by-write-set-ordinary-loads-on-immutable + attention-partition-two-knob-shared-partial-workspace (sequential layers share ONE workspace sized for the largest consumer — 16 copies × 96 KB/token = 12 GB at 128K) + derived-pack-immutable-original-content-addressed-atomic; C +1 fusion-scope-by-barrier-cost-not-dispatch-count; D +3 barrier-on-reader-open-group-conflict-swap-overlap + gpu-resident-control-loop-static-icb-replay + cost-aware-verify-length-survival-cost-table; E +2 bounded-cross-worker-barrier-protocol-polling-fan-in-ladder + own-slice-coprime-stride-steal-claimant-invariant; H +1 moe-readiness-queue-no-grid-barrier-producer-scans-before-retire; K +1 autotune-fidelity-synthetic-carries-producer-params (NOISE_MARGIN 0.03); riders: gdn parity-slot commit-by-recompute, STAT_OUT prefold + honesty pair, fp8-subnormal density-split; retrieval floor re-pinned 102→96 with measured attribution (−1 span, the B137 mechanism)) · 221 (10-10, COUNT-NEUTRAL riders ×2, pins held: #30209 the Metal FA set-mirror + consent-TRIPLE face on the B208 admission rule (the (dk,dv) allowlist EQUALS the compiled template set, both directions; three surfaces move in ONE commit) + cubecl #1802 the k=8-MMA accumulator-as-A-fragment face on the mma-fragment-layout rule) · 220 (10-10, +1: the prism #107 MoE weighted-reduce fusion as an own D rule `moe-router-weight-fold-into-reduce-never-materialize` (patch `930ddba3` — never-materialize consumer-fold + the bit-identity-intrinsics FMA-contraction refusal + the dying-operand staging rescue)) · 215 (10-10, +5 + 1 count-neutral rider, the TensorFold native-engine delta pack slot 1 (Research 251 / Plan 215, ashhart/TensorFold @ f1aef9c3): `expert-member-rows-width-ladder-bit-identical` (H — the 2/3/4 ladder, bit-identical at every rung; 11.93→11.24 ms @32) + `zero-anchored-prompt-grid-chunk-identity` (D — resumed ≡ cache-off BY CONSTRUCTION) + `verified-logits-derived-outputs-path-independence` (D — float64 oracle within 2e-6) + `hip-affine-contract-off-row-invariance` (N — -ffp-contract=off + the single-bit-mutation comparator) + `staggered-segments-two-queue-fences` (E — MTLFence + MTLEvent, the 4096-row gate) + the prefill-head-final-chunk rider (@ 96c0b0e4 — 8k 142→1,008 tok/s)) · 214 (10-10, +1 + 4 riders, the conversion set's TAIL: #29453 the componentwise version guard rollover (D — a MAJOR >= N && MINOR >= M guard silently un-defines the fast path on major rollover) + riders: #1779 lost-device election stop → the B207 rule, #225 per-dispatch-path row-tile axis → the B198 fewrow rule, #312 evict-to-reuse pole → rust_perf one-shot-staging, #313 host-chain k>1 top-k → the B189 argmax-epilogue rule) · 213 (10-10, FOUR riders, count held: #30087 the CUDA GDN four-columns-per-warp face → gpu_09, #29608 the pinned upload staging ring → gpu_61, P45 the cached-zero-pad MIDDLE rung → the B176 pad facet, #28713 the GPU shape-keyed top-k regime face → gpu_64) · 212 (10-08, rider only, count held: `lut-free-bit-spread-vadd4-unpack` += the CPU face (arm quants.c @ `4fbda129` — the scalar byte-indexed b2b u64 LUT; the anti-LUT verdict is `__constant__`-divergent-lane-specific; Research-239 follow-up pool now EMPTY, disposition Research 247)) · 210 (+1: llama.cpp #29887 the MoE expert GPU-cache write-path regime gate, D +1) · 208/209 (the 10-07 staged leads: #30100 the fusion residual selected by identity not negation + #29171 the FA fast-path validated exact-shape admission + #29928 the headless draft forward cropped + the #29425 pool2d warp-window-crossover rider on row-dot-split); 15 category experts + thermal router). NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending.
-
-- `rust_perf` (default-on): rust performance healing domain (266 rules standing at Batch 271, 2026-10-21, Plan 275 / Research 307 -- +12 the splash-wave SECOND-TIER serving pool (the B268/B270 staged second tier converted, incoai/splash author Jian Chen, Apache-2.0; entries_43-46, four authoring slices; ALL NotBenchable annotated; +4 count-neutral rider faces: 253506f + 4fc7465 on restore-point-chain-copies-keyed-on-disk-state-count, 4d17995's task-scoped-read-buffer half on reuse-allocation-clear, 593f2a6 on slice A's own rule; drops 6fcd9b1 + 25502fd + 7e51fcb with reasons in Research 307; retrieval floors HELD 22/22 no re-pin; freeze e2es PASS no movement; score-bench #198 FLAT; release binary rebuilt + installed; prior 254 at Batch 270, 2026-10-21, Plan 274 / Research 306 -- +12 the splash-wave serving pool (incoai/splash @ the staged window, Apache-2.0; the B268 Slice-B staged pool converted; entries_39-42, four authoring slices; ALL NotBenchable annotated; +4 count-neutral rider faces): caching +6 restore-point-chain-copies-keyed-on-disk-state-count + persistent-cache-teardown-needs-second-witness + hot-slot-recycler-flat-tables-zero-alloc-claims + cache-share-capped-at-measured-distinct-working-set + cache-reuse-assertion-gated-on-eviction-counter + publication-takes-over-condemned-cache-entry; allocation +1 reclaim-progress-keyed-on-refused-resource-returned; concurrency +1 refusal-wait-keyed-on-shortfall-returning-transfer; dispatch +2 watchdog-deadline-moves-on-command-progress + constrained-unconstrained-lanes-one-decode-command (the f52d1ad LAND verdict, -23.7%/-34.0% time/token source-reported); io +2 page-miss-blocks-one-ranged-read-scatter + tier-write-defers-to-urgent-reads-except-a-read-behind-it; prior 242 at Batch 266, 2026-10-21; promoted via the `rust_perf_bench` Pareto + alloc-count validator — the older 207-rule feature-list count was stale, corrected)). The per-batch corpus history (Batches 200–270) is recorded ONCE in the `rust_perf` Role bullet above — no duplicated restatement here.
-
-- `kernel_opt` (opt-in): GPU kernel optimization domain (923 rules standing at Batch 261, 2026-10-20 -- +3 the PrismML fork prism-b10787 window (A prefill-batch-pool-f16-conversion-sized-by-actual-length 25f68a4 #330 / D dtype-branch-dispatch-parity-in-place-precondition ec1ee3a #307 / B one-warp-ordered-reduce-row-batched-no-smem-barrier 483bdab #368, Plan 265 / Research 297); the scored tag `prism-b10787-73bfe6c` FIRES the decode re-pin re-cut trigger (bout owner-gated on a verified-idle 4090); prior +3 the uzu e744e7c chunked-GDN prefill pack (A/B/C, Plan 263 / Research 295) + 3 count-neutral riders (cubecl #1853/#1858 + llama.cpp #30666); count-neutral rider batches: 262 (the uzu window residue — the per-queue residency-set scope face on the B249s2 host, Plan 266 / Research 298) + 263 (the vllm #59737 PDL source-level admission face on the B257 pdl-admission host, Plan 267 / Research 299) + 264 (the uzu #994 cross-threadgroup coherent-qualifier face on gpu_85, Plan 268 / Research 300), corpus STANDS 923 through all three; prior +7 the TensorFold staged remainder + 2 count-neutral riders at Batch 257 (Plan 261 / Research 293); prior +4 the TensorFold `9ccf4727..d1018b31` +988-commit campaign kernel half (the 1.1.0/1.1.1 Zig waves), Plan 260 / Research 291: F `attention-softmax-state-exchange-once-per-block` (c05ce72c+80d1aba4 — the softmax-state exchange frequency axis: once per block not per key step; fp32-probs tie refusal + the icache rolled-loop law + the anti-prefetch negative in-rule) + A `expert-prompt-row-batch-amortizes-weight-pool-stream` (7bcab59f — the weight-STREAM amortization over ROW BATCH, the first owner of the axis the corpus explicitly dropped as not-a-rule; bit-preservation precondition + disclosed 34.6→554 MB scratch) + D `glm-selected-prefix-move-before-evict` (3c0d6d3c+df4289c7, the NAMED lead — relocate the turn's selected prefix before evicting it, overlap-safe move order, one counted restore report, fixes #966) + G `mtp-ring-rebase-covers-rollback-window` (89aa09a7 — the rebase floor covers the speculative rewind window); the rust_perf half (+3) recorded in the rust_perf bullet); prior +1 the #30795 moe_reduce dst-input aliasing refusal, Plan 258 / Research 289; prior 905 at Batch 253 — the B+ remainder + 9 delta riders, Research 283; 15 category experts + thermal router; NOT promoted to default — its GOAT gate (real corpus + full numeric validator) is pending). The per-batch corpus history (Batches 200–249: the #29353 GDN-MMA merge-moment pack, the mlx-serve GDN/QSA pack, lithos-metal, TensorFold, the prism-fork deltas and the count-neutral rider streams) is recorded ONCE in the `kernel_opt` Role bullet above — no duplicated restatement here.
-
-- **`sec`** (opt-in) — security-pattern healing domain (19 rules — 6 fixable + 13 suggest-only; Batch 258 added the web-trust seed: `untrusted-path-join-escape` (path traversal, the components() refusal), `webhook-signature-over-raw-bytes` (verify-coverage axis, distinct-from the compare primitive), `unvalidated-egress-url` (SSRF URL choice, sink-distinct from unbounded-read), plus the decoder see-through rider on `unbounded-read-into-vec`; source cloudflare/security-audit-skill @ `c1c8a8c`, MIT). **Secret detection is NOT a corpus rule — it is the scan-based secret-blind surface (Issue 151, 2026-10-06):** `--secret-scan` (report; kind + path:line:col + blinded context — never the value), `--secret-scan --blind <path>` (safe-to-share text), and the quiet `[sec]` warn line in suggest/fix runs; suggest-only, never auto-fixed. **Digest-pin adjudication (P63, 2026-10-15)**: high-entropy-hex runs carrying a digest-scheme tag (blake3:/sha256:/…, glued or the `blake3: "<hex>"` field shape) or the value of a pin-named declaration (_SHA/_DIGEST/_BASELINE/_COMMITMENT + algo spellings, rustfmt-wrap carried) are adjudicated benign IN THE REPORT COUNT ONLY — disclosed, never silently dropped; exact provider formats (aws/sk-/AQ./…) are never adjudicated, and the egress gate + --blind stay fail-closed (REDACT_VERSION untouched). **Benign-class extension (P74, 2026-10-17)**: four more guards on the same disclosed-suppression lane — `GUID:` identifier tags (Unity asmdef refs), bodyless PEM delimiter pairs (shape evidence: no ≥32-char base64 run between the markers — a block WITH a body stays structural), the canonical RFC 4648 base64 alphabet constant, kebab-slug values on `*_CREDENTIAL` bindings (the systemd `LoadCredential=` FILENAME shape; both evidences AND-ed), plus `GOLDEN_*`/`*_GOLDEN` pin names and `pub(super)`-visibility LHS parsing (a pre-existing P63 gap); the generic kinds widen hex→hex+b64; DEFERRED with reasons: named real-body fixtures (`THROWAWAY_OPENSSH_KEY` — real PEM bytes stay visible) and RFC assert vectors (no conservative shape guard). Live re-measure 10-17: chain src 96→16, game-sdk 1→0, viewbridge xtask 3→0, neuron-db e2e_login 1→0, ledger_key 2→0; dapps 68→66 (the residue = the deferred real-body classes, correct). **Benign-class extension (P75, 2026-10-20, the item-3 reflex sweep)**: five more shape guards on the same disclosed-suppression lane — env-NAME values on `*_ENV` bindings (`TOKEN_ENV: &str = "PPLX_API_KEY"`; SCREAMING_SNAKE + underscore + `_env` binding, both AND-ed — the underscore alone keeps `AKIA…`-shaped literals out), degenerate hex runs (all-identical or the strict `0123456789abcdef` successor cycle — ≈0 bits/char, the scanner's unconditional ≥32-hex rule flags them by design), exactly-40-hex revision pins under `rev_`-named consts (the commit-identity length; 64-hex under `rev_` stays firing), exactly-40-hex git/HF SHAs on COMMENT lines (prose citation; 64-hex in comments stays), and dot-containing HighEntropyB64 tokens (a dot is impossible in any base64 alphabet — doc-comment repo paths). LHS derivation refactored to one helper (`declaration_lhs_of_opening_literal`) shared by the pin/revision guards. Live re-measure 10-20: reflex src 15→3 (the residue = the same revision SHAs inside `assert_eq!` test bodies — nameless shape, disclosed, a future probe may key the `revision` ident); negatives all held (27/27 module tests; heal 0.9636/parse 1.0 FLAT at #195, floors held). **Benign-class extension (P76, 2026-10-20, the P75-residue probe)**: one more HighEntropyHex guard on the same lane — exactly-40-hex whose own line carries the whole-word `revision` ident (the `assert_eq!(revision, "<40-hex>")` golden-pin shape in test bodies; the tuple-destructured local the (h) declaration-LHS helper cannot see — the non-const twin of the `rev_` guard). Whole-word matching keeps compound names (`revision_token`) firing; 64-hex beside the ident stays (sha256-class material). Live re-measure: reflex src 3→0, the three sites adjudicated disclosed-benign (18 total); negatives held (29/29 module tests; heal 0.9636/parse 1.0 FLAT at #196). **Benign-class extension (P79, 2026-10-20, the reflex sweep's follow-up)**: the JSON quoted-key shape joins the tag guard — `"sha256": "<hex>"` (both tag and value quoted, e.g. inside a `json!{}` fixture; the value's opening quote consumed the one-quote budget so the tag's OWN closing quote blocked the scheme scan). Live re-measure: reflex 5→4 sec findings (the cua_s1 `:669` specimen now adjudicates beside its `blake3` sibling row, 32 disclosed pins); negatives held (api_key/x509 quoted keys keep firing; 30/30 module tests). **Scanner-walk prune (P78, same session)**: the shared directory-name prune convention (`src/scan_prune.rs`, one definition for the suggest/fix walk + the Dockerfile walk + the config-audit walk) now prunes the `CARGO_TARGET_DIR`-renamed build-tree convention `target-*` + `node_modules` (found live: the reflex sweep walked `target-cuda-w2/` and scanned serde/thiserror/pulp build-script OUTPUT as first-party source — 5 phantom files, heuristic noise + a bogus auto-fix CTA). Re-measure: reflex scan root 110→105 source files, target-cuda-w2 citations 4+→0; deliberately NAME-based, not gitignore-aware (a gitignored dir whose name escapes the convention still walks — disclosed residual). **Benign-class extension (P80, 2026-10-20, the katgpt-extract fixture census — the 4090 idle loop)**: three surfaces on the same disclosed-suppression lane, all found by the fresh binary's first katgpt-rs walk — (k) the COLON-INITIALIZER form (a Rust struct-literal field / YAML-style key `blake3_pin: "77a3…"`, raw or JSON-quoted `"fixture_corpus_blake3": "…"`) under the FULL pin-name evidence (the P63 suffixes, golden, and the new algo-component `_pin` name — algo as a PREFIX component `blake3`/`sha256` + `_pin`; bare `*_pin` is the CREDENTIAL sense and never qualifies), the gap being that the P63 LHS helper derives `=`-declarations only; (l) the MARKDOWN CODE-SPAN citation (a closed backtick span whose 3-line window carries a boundary-checked scheme word, hyphen-folded so `SHA-256` matches `sha256`; `resha256`/`sha256x` reject) — the provenance doc's bold-label pin, its wrapped twin, the `- test:`/`- train:` list continuations, and the exactly-40-hex `**Commit:**` twin of guards (g)/(h)/(j); the window is LINES, not content (a blank line consumes a slot). Live re-measure: katgpt-extract walk 20→0 findings (5 .rs sites via (k), 15 .md via (l); 25 disclosed pins), reflex parity fixture 3→1 (the residue = the JSON-string `reference_code` 40-hex commit citation — unprobed shape, stays loud), reflex src 0 standing; negatives held (35/35 module tests: bare `_pin`, non-pin fields, quoted `api_key`, boundary words, non-40 commit, 3+ line gaps all stay firing); the unprobed residue disclosed (`_ANCHOR`-named digests, tuple-member values, wrapped `name:` values, JSON-string commit citations).
+Commits: `fa63d97`, `88d0e57`, `81ae003`, `4d17995`.
