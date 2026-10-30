@@ -54,6 +54,23 @@ override). freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NO
       rationale, source quotes, distinct-from kinships, grep evidence) + the R5 count-neutral
       rider face (gpu_52); category letters adjudicated against the mod.rs table; rustfmt-clean
       (rustfmt parse = valid Rust; cargo NOT run under Plan-337)
+      **→ DRAFTED 2026-10-30 ~06:1xZ (this lane): the FULL T2 text exists at
+      `.raw/b317/draft_entries_gpu_142.rs` (gitignored scratch — the shared-tree discipline:
+      nothing dirty lands beside the batch-316 WIP). S7 → category A (memory/load pipelining,
+      the register-held load-ahead + wrap advance); S5 → category E (parallelism/collectives,
+      the "distributed" next-category candidate recorded in-rule per the 15-expert ontology
+      law); S6 → category D (dispatch/admission) — all three checked against the
+      `KernelCategory` table in kernel_opt/mod.rs (15 variants, the gpu_09 header law:
+      membership lives ONLY in KERNEL_CATEGORIES). Fixtures: original minimal Rust
+      reproductions with #[test] arms per rule (S7: bits-equality + wrap==modulo + the
+      look-ahead guard; S5: no-arithmetic exchange + the NaN-bits reification + keepIfAll;
+      S6: the density conjunction + the fractional-bound discrimination + the coupled-move
+      + the noisy-retake veto). rustfmt parse-clean standalone (an in-tree rustfmt pass
+      rides the landing — the standalone formatting oscillates on the vec![] macro, the
+      parse never wobbles). The R5 rider TEXT is drafted in the session record (the
+      per-row-table face on B182 gpu_52, compose-never-merge with the B199 instance);
+      REMAINING T2 WORK: transcribe the draft into the tree + apply the rider to
+      entries_gpu_52.rs at the window
 - [ ] T3 wiring: mod.rs mod-decl + extend + the slice rule_id lists; slice headers repaired to
       measured truth while touched (the B309 stale-header class)
 - [ ] T4 count pins: tests.rs count-pin sites (1026 -> 1029 at the era-witness sites; the
