@@ -1,6 +1,6 @@
 # Plan 319 — Batch 319: the 10-30 staged kernel_opt pool conversion
 
-**Status:** IN FLIGHT — claimed by zed-m3-b319 (see the snapshot claim row); kernel_opt-only per the B293 cross-domain precedent (the live claims are B301/plan-306 + B306/plan-310, rust_perf/sec — their rule counts stay ZERO in this batch).
+**Status:** LANDED 2026-10-30 (23/23 → all tasks complete; the landing commit is the arbiter). kernel_opt-only per the B293 precedent — rust_perf/sec counts ZERO (the live claims B301/plan-306 + B306/plan-310 own those slots). En-route disclosures: three fixture defects fixed pre-entry (a struct field placed after its impl, a vacuous `.all()` on an empty slice electing the empty candidate, a slice-range clamp on ragged lane spans) — the fixtures are the record; 6 of 8 fixture raw strings de-hashed per clippy unnecessary_hashes (the two rule-4 fixtures keep hashes — bare string literals); the batch319 test comment moved above the fn (too_many_lines) + 6 needle lines trimmed; the Splash #621 dedup verdict = OVERLAP (Research-345 lane + B303 family) → stays in the splash staged pool; the TF lanes-depth law (c300d440) = serving/spec-dec tier, untouched; gates: batch319 needles+parse 2/2, kernel_opt lib 3325/0, default lib 2792/0, rust_perf_bench lib 2823/0, clippy −D ×4 postures 0, retrieval floors 27/0 (no re-pin), dual_allocation 0/0/0; freeze/score-bench NOT owed (P30 kernel_opt-only); binary rebuild NOT owed (kernel_opt outside the release set).
 
 Executes the watch1030b staged pool (`.distill/001_mining_queue_snapshot.md`, WATCH PASS 2026-10-30 ~08:31Z) — the leads staged at 08:31Z, dedup + byte-verify at the pin is this lane's T0–T1. Scope: 3–6 kernel_opt rules + count-neutral rider faces, mirroring the b317 shape. NOTHING INVENTED — every lead re-verified at its commit before entry.
 
@@ -19,15 +19,15 @@ Executes the watch1030b staged pool (`.distill/001_mining_queue_snapshot.md`, WA
 
 ## Tasks
 
-- [ ] T0 — pins + clones: fresh blobless clones under `.raw/b319/` (cubecl, TensorFold, splash, vllm, llama.cpp as needed); resolve every staged commit to its sha; the squash-body quotes re-anchored to the PR refs where the squash is the only surface (fetch `refs/pull/N/head`).
-- [ ] T1 — dedup at origin HEAD (grep the corpus for each candidate concept, 3+ vocabulary variants; entries_gpu_142 is the newest owner file; S3/R1/R3 stay behind B301 to 10-31T13:41Z) + the C-vs-Research-345-lane-B/S10 dedup verdict + home-firing checks where the watch named a home class.
-- [ ] T2 — selection: admit 3–6 B-tier rules (B STRONG/DISTINCT preferred: A(a) Metal ICB replay, A(b) loop-reuse freed SMEM, B `tf_glm_top1_sums` f64-sum contract, C staged-prefill-split if the dedup clears, D #64425 GDN aux-stream overlap if distinct); annotate bench_spec (BENCHABLE vs NotBenchable) honestly; count-neutral rider faces folded compose-never-merge.
-- [ ] T3 — byte-verify every staged quote at the resolved shas (the b317 standard: verbatim body + guard + comment lines); corrections ride the entry, never the memory.
-- [ ] T4 — fixtures: standalone-compiled AND executed (rustc --edition 2021 --test) BEFORE entry; one fixture file per rule-family, arms bounded both directions; fix fixture defects en route (disclose).
-- [ ] T5 — entries: `entries_gpu_143.rs` (+ mod/tests/router wires; router expert-total bump); syn-parse gate extension `batch319_pseudocode_parses`.
-- [ ] T6 — gates at the native 1.99.0 pin, isolated `CARGO_TARGET_DIR=/tmp/b319_target`, `CARGO_BUILD_JOBS` capped (the i1117 128k leg holds the box — b316/b317/b318 posture): G1 needles+parse; kernel_opt lib + default lib counts; clippy −D ×4 postures; retrieval floors (suggest-class delta, no re-pin expected); freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NOT owed (kernel_opt outside the release set).
-- [ ] T7 — docs: AGENTS kernel_opt bullet + README + `.docs/11_domains/kernel_opt.md` batch line + this plan's checkboxes + the snapshot landing row (claim discharged) in the SAME commit.
-- [ ] T8 — commit `feat: batch 319: ...` + push (the push is the arbiter); `.raw/b319` + `/tmp/b319_target` removed at close.
+- [x] T0 — pins + clones: fresh blobless clones under `.raw/b319/` (cubecl, TensorFold, splash, vllm, llama.cpp as needed); resolve every staged commit to its sha; the squash-body quotes re-anchored to the PR refs where the squash is the only surface (fetch `refs/pull/N/head`).
+- [x] T1 — dedup at origin HEAD (grep the corpus for each candidate concept, 3+ vocabulary variants; entries_gpu_142 is the newest owner file; S3/R1/R3 stay behind B301 to 10-31T13:41Z) + the C-vs-Research-345-lane-B/S10 dedup verdict + home-firing checks where the watch named a home class.
+- [x] T2 — selection: admit 3–6 B-tier rules (B STRONG/DISTINCT preferred: A(a) Metal ICB replay, A(b) loop-reuse freed SMEM, B `tf_glm_top1_sums` f64-sum contract, C staged-prefill-split if the dedup clears, D #64425 GDN aux-stream overlap if distinct); annotate bench_spec (BENCHABLE vs NotBenchable) honestly; count-neutral rider faces folded compose-never-merge.
+- [x] T3 — byte-verify every staged quote at the resolved shas (the b317 standard: verbatim body + guard + comment lines); corrections ride the entry, never the memory.
+- [x] T4 — fixtures: standalone-compiled AND executed (rustc --edition 2021 --test) BEFORE entry; one fixture file per rule-family, arms bounded both directions; fix fixture defects en route (disclose).
+- [x] T5 — entries: `entries_gpu_143.rs` (+ mod/tests/router wires; router expert-total bump); syn-parse gate extension `batch319_pseudocode_parses`.
+- [x] T6 — gates at the native 1.99.0 pin, isolated `CARGO_TARGET_DIR=/tmp/b319_target`, `CARGO_BUILD_JOBS` capped (the i1117 128k leg holds the box — b316/b317/b318 posture): G1 needles+parse; kernel_opt lib + default lib counts; clippy −D ×4 postures; retrieval floors (suggest-class delta, no re-pin expected); freeze/score-bench NOT owed (kernel_opt-only, P30); binary rebuild NOT owed (kernel_opt outside the release set).
+- [x] T7 — docs: AGENTS kernel_opt bullet + README + `.docs/11_domains/kernel_opt.md` batch line + this plan's checkboxes + the snapshot landing row (claim discharged) in the SAME commit.
+- [x] T8 — commit `feat: batch 319: ...` + push (the push is the arbiter); `.raw/b319` + `/tmp/b319_target` removed at close.
 
 ## Non-goals
 
