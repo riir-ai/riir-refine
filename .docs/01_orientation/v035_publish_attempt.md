@@ -1,4 +1,25 @@
-# v0.3.5 publish attempt — 2026-10-30 (BLOCKED, one step left)
+# v0.3.5 PUBLISHED — 2026-10-30 (the attempt record below is superseded; kept for the build-from-TAG lesson)
+
+**PUBLISHED 2026-10-30 ~22:3x +07:** <https://github.com/gist-rs/cargo-refine/releases/tag/v0.3.5>
+via `kat-secret exec gh-release-pat --env GH_TOKEN -- gh release create` (the sealed-token
+lane; Touch ID, token never in context). Tap + scoop bumped to 0.3.5 from the release
+SHA256SUMS (`homebrew-tap a2902e4`, `scoop-bucket 3205185`, verified by fresh clone + asset 200).
+`cargo refine upgrade` now reports v0.3.5 latest; local HEAD builds self-report newer — upgrade
+refuses to downgrade, correct.
+
+**THE LESSON THIS ATTEMPT PAID FOR — `manual_release.sh` builds the WORKING TREE, not the tag.**
+The first publish shipped HEAD+dirty binaries (`build: 9a93dbc2d8a7-dirty` — batches 310–319
+inside, rust_perf 287 compiled vs the title's 278, a different rust-toolchain pin than the tag).
+Caught by the post-publish smoke test (`--version` showed `-dirty`). FIX: rebuild in a worktree
+at the tag (`git worktree add /Users/kat/git/wt-v035 0542da6c` — adjacent to the siblings so the
+path deps resolve), rerun the script there, `gh release upload --clobber` the 8 assets
+(verified: served tarball sha256 == the new SHA256SUMS row, extracted binary `build: 0542da6c2f08`
+clean, `--info` corpus = clippy 112 / rust_perf 278 == the title). A SHA256SUMS-pinned public
+release must be built from its tagged commit; check the smoke test BEFORE uploading next time.
+
+---
+
+# The original attempt record (2026-10-30, earlier) — BLOCKED, then finished
 
 ## What happened
 
@@ -40,17 +61,16 @@ gh release create v0.3.5 -R gist-rs/cargo-refine \
 The title carries the corpus line per the Issue-153 T5 convention (the
 update alert renders the title).
 
-## REVERTED — the tap/scoop bumps were pushed and pulled back (VERIFIED clean)
+## REVERTED — the tap/scoop bumps were pushed and pulled back (then re-applied at PUBLICATION, see the header)
 
 The formula + scoop manifest bumps were generated from the release
 SHA256SUMS and pushed to BOTH public repos — then **reverted (reset + force
 push back to the 0.3.4 commits)** when the release itself could not be
 created: a formula/manifest pointing at a 404 asset would break every brew
 install / scoop update. **Verified clean by fresh clone** (raw.githubusercontent
-served a stale cache for ~2 min; the git truth is authoritative):
-
-- gist-rs/homebrew-tap `Formula/cargo-refine.rb` → **0.3.4** (`6ab4a3f`, `main = origin/main`)
-- gist-rs/scoop-bucket `bucket/cargo-refine.json` → **0.3.4** (`b9cdfcb`, `main = origin/main`)
+served a stale cache for ~2 min; the git truth is authoritative). Both bumps
+were RE-APPLIED from the final tag-built SHA256SUMS once the release landed
+(see the header).
 
 When the release lands, re-apply: same edits (version 0.3.5, the five
 URLs → `download/v0.3.5/`, hashes from the release's SHA256SUMS — the exact
