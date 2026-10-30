@@ -15641,6 +15641,21 @@ fn main() {
                                 lane.doc_command_declined
                             );
                         }
+                        // P104: the scope guard — the suggestion spelled a
+                        // crate-root-relative path (clippy's own resolution
+                        // session) the destination file cannot resolve. The
+                        // corpus proposer's file-local spelling is the
+                        // fallback; else the manual path.
+                        if lane.path_scope_declined > 0 {
+                            eprintln!(
+                                "oracle lane: declined {} suggestion(s) for {display} \
+                                 (P104 scope proof — the replacement spells a crate-root \
+                                 path (module::Type) not resolvable at this file's scope; \
+                                 the 11-E0433 P98 class. The corpus proposer spells \
+                                 in-scope names; else fix manually)",
+                                lane.path_scope_declined
+                            );
+                        }
                         // Issue 118 T2: the oracle lane rides the same bench-guard
                         // door as rust_perf (P30) — a MachineApplicable
                         // suggestion consumed verbatim can be structural (the
@@ -16417,6 +16432,7 @@ fn main() {
         }
         // Blueprint Phase A: hoist the verify verdicts for the run-end
         // history row (the report binding dies with this block).
+        let verify_ended_clean = report.ended_clean;
         bp_verify = Some(riir_refine::blueprint::VerifyCapture {
             ran: report.ran,
             kept_files: report.kept_files,
@@ -16446,6 +16462,38 @@ fn main() {
                 (reverted_lines, whole)
             })
             .collect();
+
+        // ── P104: the verdict-based disclosure — kept edits under a
+        // FAILED final check (the revert loop exhausted with compile
+        // errors outstanding) were never proven to compile. Same honesty
+        // law as the two posture audits below, keyed on the loop's exit
+        // verdict instead of the posture's target coverage.
+        if !report.ended_clean && report.kept_edits > 0 {
+            let kept_by_file: Vec<(PathBuf, usize)> = verify_batches
+                .iter()
+                .zip(&batch_state)
+                .map(|(b, (reverted_lines, whole))| {
+                    (
+                        b.path.clone(),
+                        if *whole {
+                            0
+                        } else {
+                            b.edits
+                                .iter()
+                                .filter(|e| !reverted_lines.contains(&e.final_line))
+                                .count()
+                        },
+                    )
+                })
+                .filter(|(_, n)| *n > 0)
+                .collect();
+            if !kept_by_file.is_empty() {
+                eprint!(
+                    "{}",
+                    riir_refine::fix_verify::render_unverified_kept_tail(&kept_by_file)
+                );
+            }
+        }
 
         // ── the post-heal cfg audit (2026-09-10 intake, two recorded
         // casualties: the E0631 point-free closure behind `score_bench`
@@ -16768,8 +16816,9 @@ fn main() {
                         .get(&(b.path.clone(), e.final_line))
                         .copied(),
                 );
-                let verified =
-                    oracle_verified && !posture_compiled.contains(&(b.path.clone(), e.final_line));
+                let verified = oracle_verified
+                    && verify_ended_clean
+                    && !posture_compiled.contains(&(b.path.clone(), e.final_line));
                 // Issue 047: a kept-but-unresolved edit (compile gate passed,
                 // full oracle says the lint persists) is C-class — the gate
                 // was too loose. Successes stay unattributed.
@@ -16825,9 +16874,14 @@ fn main() {
                 );
             }
             println!(
-                "fix {} ({} edit(s) verified):",
+                "fix {} ({} edit(s) {}):",
                 b.path.display(),
-                kept.len()
+                kept.len(),
+                if verify_ended_clean {
+                    "verified"
+                } else {
+                    "kept, UNVERIFIED — the verify loop ended non-clean (P104)"
+                }
             );
             for e in &kept {
                 println!("  [{:<24}] line {}", e.rule_id, e.final_line);

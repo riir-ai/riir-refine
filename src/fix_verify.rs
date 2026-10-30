@@ -84,8 +84,8 @@ use serde::Deserialize;
 // Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict, PackageGraph,
+    CheckRunner, CheckVerdict, PackageGraph, check_verdict, owning_package_root,
+    resolve_reported_path, workspace_root,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -153,6 +153,15 @@ pub struct VerifyReport {
     pub skipped_checks: usize,
     /// Why verification could not run (cargo missing, spawn failure...).
     pub error: Option<String>,
+    /// Whether the verify loop exited through a CLEAN check (`true`), or
+    /// exhausted its rounds with compile errors still outstanding
+    /// (`false`) — P104. Kept edits under a `false` verdict were never
+    /// proven to compile: the fix lane stamps them `verified = false`
+    /// and prints the UNVERIFIED-KEPT tail
+    /// ([`render_unverified_kept_tail`]). A run that restored everything
+    /// reports `false` with `kept_edits == 0` (nothing kept, nothing to
+    /// disclose).
+    pub ended_clean: bool,
 }
 
 /// One cargo check result: the JSON-lines stdout + the exit status.
@@ -290,6 +299,9 @@ impl FixVerifier {
 
         // 3-6. The loop.
         let max_rounds: usize = touched.iter().map(|f| f.edits.len()).sum::<usize>() + 2;
+        // P104: set only by the loop's clean-break arm — an exhaustion
+        // (or a restore-all) leaves it false.
+        let mut ended_clean = false;
         let mut state = LoopState {
             current: touched.iter().map(|f| f.fixed.clone()).collect(),
             applied: touched.iter().map(|f| vec![true; f.edits.len()]).collect(),
@@ -312,6 +324,7 @@ impl FixVerifier {
             };
 
             if error_lines.is_empty() {
+                ended_clean = true;
                 break; // clean everywhere — everything still applied survives
             }
             state.modified.fill(false);
@@ -338,6 +351,7 @@ impl FixVerifier {
             }
         }
 
+        report.ended_clean = ended_clean;
         // Tally.
         for (idx, _f) in touched.iter().enumerate() {
             if state.applied[idx].iter().any(|a| *a) {
@@ -707,8 +721,8 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
 // existing call site — the bin's P43 arm, this suite, downstream paths —
 // keeps its stable path.
 pub use crate::manifest_gate::{
-    covering_targets, feature_set_from_args, manifest_feature_names, manifest_targets, AutoFlags,
-    FeatureSet, TargetRow,
+    AutoFlags, FeatureSet, TargetRow, covering_targets, feature_set_from_args,
+    manifest_feature_names, manifest_targets,
 };
 
 // ── the post-heal cfg audit (the 2026-09-10 intake) ─────────────────────
@@ -982,11 +996,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::True => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::True
-            }
+            if any_unknown { Tv::Unknown } else { Tv::True }
         }
         CfgExpr::Any(parts) => {
             let mut any_unknown = false;
@@ -997,11 +1007,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::False => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::False
-            }
+            if any_unknown { Tv::Unknown } else { Tv::False }
         }
     }
 }
@@ -1827,6 +1833,38 @@ pub fn required_features_unverified_edits(
     marks
 }
 
+/// The P104 disclosure: the verify loop ended NON-clean (rounds
+/// exhausted with compile errors still outstanding), so the edits
+/// tallied as kept were never proven to compile — the same "verified"
+/// honesty law as the cfg and required-features audits, verdict-based
+/// rather than posture-based. Report-only tail in the audit shape; the
+/// fix lane stamps the same edits `verified = false` and the recorder
+/// never certifies them.
+#[must_use]
+pub fn render_unverified_kept_tail(files: &[(std::path::PathBuf, usize)]) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    if files.is_empty() {
+        return out;
+    }
+    let total: usize = files.iter().map(|(_, n)| *n).sum();
+    let _ = writeln!(
+        out,
+        "verify: UNVERIFIED-KEPT audit — {total} kept edit(s) under a FAILED final \
+         check (the revert loop exhausted with compile errors outstanding); \
+         these carry verified=false:"
+    );
+    for (path, n) in files {
+        let _ = writeln!(out, "  {} — {n} kept edit(s)", path.display());
+    }
+    let _ = writeln!(
+        out,
+        "  re-run: cargo refine --fix --write --verify <the same paths> to certify \
+         or revert them"
+    );
+    out
+}
+
 /// Render the required-features audit tail (one line per mark + the re-run
 /// suggestion). Testable render: the bin prints this verbatim.
 #[must_use]
@@ -2458,6 +2496,114 @@ mod tests {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    /// P104 kill-path sibling: the loop-EXHAUSTION shape — errors persist
+    /// in a TOUCHED file but never attribute to an applied edit (the
+    /// ripple-misattribution class: the real culprit is another file's
+    /// edit), so every round whole-file reverts the same file (a no-op
+    /// after the first) and the rounds run out with the OTHER file's edit
+    /// still applied. Before the fix those kept edits read "verified"
+    /// although no clean check ever covered them; now `ended_clean` is
+    /// false and the fix lane discloses them unverified. Fake cargo:
+    /// baseline exit 0; every later check one error diagnostic at lib.rs
+    /// line 5 (no edit lives there) + exit 1 — a real Errors verdict, not
+    /// the Incomplete shape the kill-path test drives.
+    #[test]
+    #[cfg(unix)]
+    fn fix_verify_loop_exhaustion_keeps_unverified() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = std::env::temp_dir().join(format!("fv_exhaust_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let src_dir = tmp.join("src");
+        std::fs::create_dir_all(&src_dir).unwrap();
+        std::fs::write(
+            tmp.join("Cargo.toml"),
+            "[package]\nname = \"fv_exhaust_fixture\"\nversion = \"0.0.0\"\nedition = \"2021\"\n\
+             [lib]\npath = \"src/lib.rs\"\n",
+        )
+        .unwrap();
+
+        let lib_original = "pub fn existing() -> usize {\n    1\n}\n\npub fn tail() {}\n";
+        std::fs::write(src_dir.join("lib.rs"), lib_original).unwrap();
+        let other_original = "pub fn other() -> usize {\n    7\n}\n";
+        std::fs::write(src_dir.join("other.rs"), other_original).unwrap();
+
+        let marker = tmp.join("baseline_done");
+        let script = tmp.join("fake_cargo.sh");
+        std::fs::write(
+            &script,
+            format!(
+                "#!/bin/sh\n\
+                 if [ -f \"{}\" ]; then\n\
+                  echo '{{\"reason\":\"compiler-message\",\"message\":{{\"level\":\"error\",\"message\":\"boom\",\"spans\":[{{\"file_name\":\"src/lib.rs\",\"line_start\":5,\"line_end\":5}}]}}}}'\n\
+                  exit 1\n\
+                 fi\n\
+                 touch \"{}\"\n\
+                 exit 0\n",
+                marker.display(),
+                marker.display(),
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let lib_fixed = lib_original.replace("    1\n", "    2\n");
+        let other_fixed = other_original.replace("    7\n", "    8\n");
+        let report = FixVerifier::with_cargo_bin(script.display().to_string()).verify(&[
+            FileEditSet {
+                path: src_dir.join("lib.rs"),
+                original: lib_original.to_string(),
+                fixed: lib_fixed,
+                edits: vec![edit("lib-rule", 2, "2", "1")],
+            },
+            FileEditSet {
+                path: src_dir.join("other.rs"),
+                original: other_original.to_string(),
+                fixed: other_fixed.clone(),
+                edits: vec![edit("other-rule", 2, "8", "7")],
+            },
+        ]);
+
+        assert!(report.ran);
+        assert!(report.baseline_clean, "{report:?}");
+        assert!(
+            !report.ended_clean,
+            "rounds exhausted with errors outstanding: {report:?}"
+        );
+        assert_eq!(
+            report.kept_edits, 1,
+            "other.rs's edit survives every round: {report:?}"
+        );
+        assert_eq!(report.kept_files, 1);
+        assert!(
+            report.reverted.iter().all(|r| r.whole_file),
+            "lib.rs whole-file reverts, one per round: {report:?}"
+        );
+        // Disk: lib.rs restored, other.rs still fixed — the unverified
+        // kept state the disclosure names.
+        let on_disk = std::fs::read_to_string(src_dir.join("lib.rs")).unwrap();
+        assert_eq!(on_disk, lib_original, "lib.rs restored");
+        let on_disk = std::fs::read_to_string(src_dir.join("other.rs")).unwrap();
+        assert_eq!(on_disk, other_fixed, "other.rs kept");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn unverified_kept_tail_renders_the_audit_shape() {
+        let out = render_unverified_kept_tail(&[
+            (PathBuf::from("src/a.rs"), 2),
+            (PathBuf::from("src/b.rs"), 1),
+        ]);
+        assert!(
+            out.contains("UNVERIFIED-KEPT audit — 3 kept edit(s)"),
+            "{out}"
+        );
+        assert!(out.contains("src/a.rs — 2 kept edit(s)"), "{out}");
+        assert!(out.contains("verified=false"), "{out}");
+        assert!(out.contains("re-run:"), "{out}");
+        assert_eq!(render_unverified_kept_tail(&[]), "");
+    }
+
     /// The workspace-belief e2e (the container-tick-test incident, 09-04):
     /// a nested crate WITHOUT a [workspace] table under a parent workspace
     /// that does not list it. The baseline `cargo check` must fail-closed
@@ -2780,9 +2926,11 @@ mod tests {
             2,
             "every edit sits behind the file gate: {marks:?}"
         );
-        assert!(marks
-            .iter()
-            .all(|m| m.not_enabled == vec!["kat_migrate".to_string()]));
+        assert!(
+            marks
+                .iter()
+                .all(|m| m.not_enabled == vec!["kat_migrate".to_string()])
+        );
         assert!(marks.iter().all(|m| m.undecidable.is_empty()));
         assert!(
             marks

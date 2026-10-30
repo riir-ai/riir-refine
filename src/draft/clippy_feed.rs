@@ -367,6 +367,13 @@ pub struct OracleLane {
     /// (Issue 135 T4 — backticking one argv token breaks copy-paste; the
     /// repair is to fence/indent the command, by hand).
     pub doc_command_declined: usize,
+    /// P104 (the P98 dogfood's E0433 class): suggestions declined because
+    /// the replacement spells a CRATE-ROOT-relative path (`module::Type` —
+    /// clippy renders element types from its own resolution session) that
+    /// does not resolve at the destination file's scope. The corpus
+    /// proposer's file-local spelling is the fallback; else the manual
+    /// path.
+    pub path_scope_declined: usize,
 }
 
 /// Compute the oracle-anchored edits for ONE scanned file (P21).
@@ -402,6 +409,18 @@ pub struct OracleLane {
 ///   path keeps the range visible: `&mut buf[base..][..n]` or `.take(n)`;
 /// - merged range out of bounds / off a char boundary (a stale feed);
 /// - oracle-vs-oracle overlap (leftmost wins);
+/// - the P104 scope guard ([`FileScopeIndex`]) — clippy's suggestion may
+///   spell a type as a CRATE-ROOT-relative path from its own resolution
+///   session (`draft::corpus_index::ScoredRule`); at the destination file
+///   that path resolves only where the root module name happens to be in
+///   scope (the P98 dogfood measured 11 E0433s). The guard reads the
+///   file's use-tree + top-level items and refuses the verbatim apply
+///   when the replacement introduces a multi-segment path whose root is
+///   unexplained — a lowercase root declines even under a glob import
+///   (`use super::*` covers bare type names, not crate-root module
+///   paths). Doc-markdown suggestions are exempt (they rewrite comments,
+///   where no path must resolve). The corpus proposer's file-local
+///   spelling is the fallback;
 /// - the parse-gate refusal (drops the file's whole oracle set).
 #[must_use]
 pub fn oracle_edits(
@@ -413,6 +432,11 @@ pub fn oracle_edits(
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
     let mut range_declined = 0usize;
+    let mut path_scope_declined = 0usize;
+    // P104: the scope index is built lazily — only when a candidate
+    // replacement actually carries a `::` path (the common suggestions —
+    // method-call rewrites, doc backticks — never pay for the parse).
+    let mut scope: Option<FileScopeIndex> = None;
     // the skip arm is cfg'd out under thin feature sets; the counter stays
     // for the OracleLane shape
     #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
@@ -476,31 +500,29 @@ pub fn oracle_edits(
                     doc_command_declined += 1;
                     continue;
                 }
+                // P104: the replacement spells a crate-root path this file
+                // cannot resolve (the P98 E0433 class) — decline; details on
+                // scope_guard_declines. Doc-markdown exempt (comments).
+                if d.lint != "doc_markdown"
+                    && scope_guard_declines(&mut scope, src, &edit.replacement)
+                {
+                    path_scope_declined += 1;
+                    continue;
+                }
                 candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone()));
             }
             None => dropped += 1, // stale offsets / misaligned boundaries
         }
     }
-    // Oracle-vs-oracle overlap: leftmost wins (sorted by start; a wide
-    // early span covers later ones via the running end).
-    candidates.sort_by_key(|(start, _, _, _)| *start);
-    let mut covered_until = 0usize;
-    let mut kept: Vec<(usize, usize, String, String)> = Vec::new();
-    for cand in candidates {
-        let (start, end, _, _) = &cand;
-        if *start < covered_until {
-            dropped += 1;
-            continue;
-        }
-        covered_until = (*end).max(covered_until);
-        kept.push(cand);
-    }
+    // Oracle-vs-oracle overlap: leftmost wins.
+    let kept = leftmost_wins(candidates, &mut dropped);
     if kept.is_empty() {
         return OracleLane {
             edits: Vec::new(),
             dropped,
             range_declined,
             doc_command_declined,
+            path_scope_declined,
         };
     }
     // The whole-file syntax gate: the oracle edits ALONE must leave the
@@ -520,6 +542,7 @@ pub fn oracle_edits(
             dropped: dropped + kept.len(),
             range_declined,
             doc_command_declined,
+            path_scope_declined,
         };
     }
     let edits = edits
@@ -535,6 +558,255 @@ pub fn oracle_edits(
         dropped,
         range_declined,
         doc_command_declined,
+        path_scope_declined,
+    }
+}
+
+/// P104 arm body: does the SCOPE GUARD decline this replacement — i.e.
+/// does it spell a crate-root-relative path the destination file cannot
+/// resolve? Lazily builds the file's [`FileScopeIndex`] on the first
+/// `::`-carrying replacement (the common suggestions never pay for the
+/// parse).
+fn scope_guard_declines(scope: &mut Option<FileScopeIndex>, src: &str, replacement: &str) -> bool {
+    if !replacement.contains("::") {
+        return false;
+    }
+    let index = scope.get_or_insert_with(|| FileScopeIndex::build(src));
+    !index.replacement_in_scope(replacement)
+}
+
+/// Oracle-vs-oracle overlap: LEFTMOST WINS — sorted by start; a wide
+/// early span covers later ones via the running end. Each covered-over
+/// candidate counts as a drop.
+fn leftmost_wins(
+    mut candidates: Vec<(usize, usize, String, String)>,
+    dropped: &mut usize,
+) -> Vec<(usize, usize, String, String)> {
+    candidates.sort_by_key(|(start, _, _, _)| *start);
+    let mut covered_until = 0usize;
+    let mut kept: Vec<(usize, usize, String, String)> = Vec::new();
+    for cand in candidates {
+        let (start, end, _, _) = &cand;
+        if *start < covered_until {
+            *dropped += 1;
+            continue;
+        }
+        covered_until = (*end).max(covered_until);
+        kept.push(cand);
+    }
+    kept
+}
+
+/// P104: a file-level scope index for the oracle lane's import-existence
+/// guard — the names the FILE can resolve at a path position, plus
+/// whether any glob import (a `use x::*`) is present.
+///
+/// Soundness posture: the guard only PASSes a path root it can explain
+/// (a keyword, the extern prelude, a use-tree name, a file-local item) or
+/// a glob-plausible TYPE root; everything else declines. A false decline
+/// loses one mechanical fix to the manual path; a false pass reintroduces
+/// the E0433 class the guard exists for. The verify compile gate remains
+/// the backstop for the guard's residual classes.
+struct FileScopeIndex {
+    /// Every name any `use` item brings into scope: path prefixes
+    /// (`use a::b::{c}` makes both `a` and `b` usable as `x::...` roots
+    /// AND `c` usable bare), leaf names, and rename targets.
+    /// Over-collecting bare coverage is the safe direction here: the
+    /// guard's consumers are PATH roots (`a::...`), and a prefix covers
+    /// exactly that shape.
+    imported: std::collections::HashSet<String>,
+    /// Top-level item names of the file (mods, fns, types, consts — any
+    /// visibility, any nesting depth).
+    local_items: std::collections::HashSet<String>,
+    /// Any glob import anywhere in the file (the P98 shape: a tests mod's
+    /// `use super::*` covers bare type names but NOT crate-root module
+    /// paths).
+    has_glob: bool,
+}
+
+/// Path roots whose multi-segment forms always resolve: the keywords with
+/// path semantics, the extern-prelude crates, and the prelude's own types
+/// (`Vec::<T>::new()`, `String::from`, `std::mem::take` — the common
+/// suggestion vocabularies must not pay the decline). A name missing from
+/// this list that resolves anyway costs one decline, never a wrong edit.
+const PATH_SCOPE_ALWAYS_OK: &[&str] = &[
+    "crate", "self", "super", "std", "core", "alloc", "bool", "char", "str", "u8", "u16", "u32",
+    "u64", "u128", "usize", "i8", "i16", "i32", "i64", "i128", "isize", "f32", "f64", "String",
+    "Vec", "Box", "Option", "Result", "Some", "None", "Ok", "Err",
+];
+
+fn p104_is_ident_start(b: u8) -> bool {
+    b == b'_' || b.is_ascii_alphabetic()
+}
+
+fn p104_is_ident_continue(b: u8) -> bool {
+    b == b'_' || b.is_ascii_alphanumeric()
+}
+
+impl FileScopeIndex {
+    /// Build from the file's source. An unparseable source yields an EMPTY
+    /// index (every checked path declines) — conservative, and the
+    /// whole-file parse gate drops those edits anyway.
+    fn build(src: &str) -> Self {
+        use syn::visit::Visit as _;
+        let Ok(file) = syn::parse_file(src) else {
+            return Self {
+                imported: std::collections::HashSet::new(),
+                local_items: std::collections::HashSet::new(),
+                has_glob: false,
+            };
+        };
+        let mut c = Collector::default();
+        c.visit_file(&file);
+        Self {
+            imported: c.imported,
+            local_items: c.local_items,
+            has_glob: c.has_glob,
+        }
+    }
+
+    /// Does `replacement` introduce any multi-segment path whose root the
+    /// file cannot resolve? String-literal contents and line comments are
+    /// skipped (a `"a::b"` is text, not a path); tokens are maximal
+    /// `ident(::ident)+` sequences (a `::<` turbofish, a `!` macro, or a
+    /// non-ident continuation ends the token).
+    fn replacement_in_scope(&self, replacement: &str) -> bool {
+        let bytes = replacement.as_bytes();
+        let mut i = 0usize;
+        let mut in_string = false;
+        let mut in_line_comment = false;
+        while i < bytes.len() {
+            let b = bytes[i];
+            if in_line_comment {
+                if b == 0x0A {
+                    in_line_comment = false;
+                }
+                i += 1;
+                continue;
+            }
+            if in_string {
+                match b {
+                    0x5C => i += 2, // backslash: the escaped byte is text
+                    0x22 => {
+                        in_string = false;
+                        i += 1;
+                    }
+                    _ => i += 1,
+                }
+                continue;
+            }
+            match b {
+                b'/' if i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                    in_line_comment = true;
+                    i += 2;
+                }
+                0x22 => {
+                    in_string = true;
+                    i += 1;
+                }
+                _ if p104_is_ident_start(b) => {
+                    let start = i;
+                    while i < bytes.len() && p104_is_ident_continue(bytes[i]) {
+                        i += 1;
+                    }
+                    let first = &replacement[start..i];
+                    let mut segments = 1usize;
+                    while i + 2 < bytes.len()
+                        && bytes[i] == b':'
+                        && bytes[i + 1] == b':'
+                        && p104_is_ident_start(bytes[i + 2])
+                    {
+                        i += 2;
+                        while i < bytes.len() && p104_is_ident_continue(bytes[i]) {
+                            i += 1;
+                        }
+                        segments += 1;
+                    }
+                    if segments >= 2 && !self.path_root_in_scope(first) {
+                        return false;
+                    }
+                }
+                _ => i += 1,
+            }
+        }
+        true
+    }
+
+    fn path_root_in_scope(&self, root: &str) -> bool {
+        if PATH_SCOPE_ALWAYS_OK.contains(&root) {
+            return true;
+        }
+        if self.imported.contains(root) || self.local_items.contains(root) {
+            return true;
+        }
+        // A glob import covers bare TYPE roots (the P98 shape: the tests
+        // mod's `use super::*` sees the names bare), but a lowercase root
+        // is a crate-root MODULE path shape — the measured E0433 class —
+        // and globs do not carry those.
+        if self.has_glob && root.chars().next().is_some_and(char::is_uppercase) {
+            return true;
+        }
+        false
+    }
+}
+
+/// P104 collector: use-tree names (prefixes + leaves + renames), item
+/// names, and the glob flag, in one AST walk.
+#[derive(Default)]
+struct Collector {
+    imported: std::collections::HashSet<String>,
+    local_items: std::collections::HashSet<String>,
+    has_glob: bool,
+}
+
+impl<'ast> syn::visit::Visit<'ast> for Collector {
+    fn visit_item_use(&mut self, u: &'ast syn::ItemUse) {
+        self.walk_use_tree(&u.tree);
+        syn::visit::visit_item_use(self, u);
+    }
+
+    fn visit_item(&mut self, i: &'ast syn::Item) {
+        let name = match i {
+            syn::Item::Fn(x) => Some(&x.sig.ident),
+            syn::Item::Struct(x) => Some(&x.ident),
+            syn::Item::Enum(x) => Some(&x.ident),
+            syn::Item::Union(x) => Some(&x.ident),
+            syn::Item::Trait(x) => Some(&x.ident),
+            syn::Item::Type(x) => Some(&x.ident),
+            syn::Item::Const(x) => Some(&x.ident),
+            syn::Item::Static(x) => Some(&x.ident),
+            syn::Item::Mod(x) => Some(&x.ident),
+            _ => None,
+        };
+        if let Some(id) = name {
+            self.local_items.insert(id.to_string());
+        }
+        syn::visit::visit_item(self, i);
+    }
+}
+
+impl Collector {
+    fn walk_use_tree(&mut self, tree: &syn::UseTree) {
+        match tree {
+            syn::UseTree::Path(p) => {
+                // `use a::rest` — `a` is a usable path root.
+                self.imported.insert(p.ident.to_string());
+                self.walk_use_tree(&p.tree);
+            }
+            syn::UseTree::Name(n) => {
+                self.imported.insert(n.ident.to_string());
+            }
+            syn::UseTree::Rename(r) => {
+                // `use a as b` — `b` is the in-scope spelling.
+                self.imported.insert(r.rename.to_string());
+            }
+            syn::UseTree::Glob(_) => self.has_glob = true,
+            syn::UseTree::Group(g) => {
+                for t in &g.items {
+                    self.walk_use_tree(t);
+                }
+            }
+        }
     }
 }
 
@@ -1034,6 +1306,113 @@ mod tests {
             &["unnecessary_map_or"],
         );
         assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
+    }
+
+    // ── P104: the oracle door's scope guard (the E0433 class) ──────────
+
+    /// One diagnostic whose suggestion replaces `old` with `new` (both
+    /// located by substring in `src`), under a lane lint the other
+    /// guards do not key on.
+    fn scope_feed(src: &str, old: &str, new: &str) -> Vec<ClippyDiagnostic> {
+        let off = src.find(old).expect("marker");
+        vec![ClippyDiagnostic {
+            span: None,
+            file: "src/lib.rs".to_string(),
+            line: 1,
+            lint: "unnecessary_map_or".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(off, off + old.len(), new.to_string())],
+            }),
+        }]
+    }
+
+    #[test]
+    fn p104_scope_index_direct() {
+        let src = "use a::b::{c};\nmod inner {\n    use super::*;\n}\nstruct Local;\n";
+        let idx = FileScopeIndex::build(src);
+        assert!(idx.has_glob, "the glob must be seen");
+        for ok in [
+            "a::x",
+            "b::c::d",
+            "c::new",
+            "Local::new",
+            "std::mem::take",
+            "crate::x::y",
+            "super::x",
+            "Vec::<u8>::new()",
+        ] {
+            assert!(idx.replacement_in_scope(ok), "{ok} must pass");
+        }
+        for bad in [
+            "draft::corpus_index::ScoredRule",
+            "traj_store::TrajNeighbor",
+        ] {
+            assert!(!idx.replacement_in_scope(bad), "{bad} must decline");
+        }
+        // String contents are text, not paths.
+        assert!(idx.replacement_in_scope("let s = \"a::b::c\";"));
+        // Line comments are skipped too.
+        assert!(idx.replacement_in_scope("// draft::corpus_index::ScoredRule\nlet x = 1;"));
+    }
+
+    #[test]
+    fn oracle_edits_decline_crate_root_path_under_glob() {
+        // The P98 dogfood's E0433 shape: the suggestion spells the type
+        // as a crate-root-relative path; the file's tests mod sees names
+        // bare via `use super::*` — which covers the bare type, never the
+        // module path. The patched file still PARSES (the whole-file gate
+        // is syntax-only), so only the scope guard can catch it.
+        let src = "mod inner {\n    use super::*;\n\n    fn check(\n        items: &[DraftPair],\n    ) -> bool {\n        items.iter().min().map_or(false, |x| *x > 1)\n    }\n}\n";
+        let feed = scope_feed(
+            src,
+            "map_or(false, |x| *x > 1)",
+            "is_some_and(|x: &draft::corpus_index::ScoredRule| *x > 1)",
+        );
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
+        assert_eq!(lane.path_scope_declined, 1, "the scope guard declines");
+        assert_eq!(lane.dropped, 0, "a decline is not a drop");
+    }
+
+    #[test]
+    fn oracle_edits_decline_unimported_root_without_glob() {
+        // No glob in the file: an unexplained root declines regardless of
+        // leading case.
+        let src = "fn check(x: u32) -> bool {\n    x.map_or(false, |v| v > 1)\n}\n";
+        let feed = scope_feed(
+            src,
+            "map_or(false, |v| v > 1)",
+            "is_some_and(|v: &SomeType::Assoc| v > 1)",
+        );
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        assert_eq!(lane.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
+        assert_eq!(lane.path_scope_declined, 1);
+    }
+
+    #[test]
+    fn oracle_edits_pass_imported_and_glob_plausible_roots() {
+        // An imported prefix root passes...
+        let src = "use draft::corpus_index;\n\nfn check(x: u32) -> bool {\n    x.map_or(false, |v| v > 1)\n}\n";
+        let feed = scope_feed(
+            src,
+            "map_or(false, |v| v > 1)",
+            "is_some_and(|v: &corpus_index::ScoredRule| v > 1)",
+        );
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        assert_eq!(lane.edits.len(), 1, "imported root passes");
+        assert_eq!(lane.path_scope_declined, 0);
+
+        // ...and a glob-file UPPERCASE root passes (the P98 bare-name
+        // lesson: `use super::*` covers type names).
+        let src = "mod inner {\n    use super::*;\n\n    fn check(x: u32) -> bool {\n        x.map_or(false, |v| v > 1)\n    }\n}\n";
+        let feed = scope_feed(
+            src,
+            "map_or(false, |v| v > 1)",
+            "is_some_and(|v: &ScoredRule::Assoc| v > 1)",
+        );
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["unnecessary_map_or"]);
+        assert_eq!(lane.edits.len(), 1, "glob-plausible type root passes");
+        assert_eq!(lane.path_scope_declined, 0);
     }
 
     // ── P34: the needless_range_loop length proof (riir-ai Issue 981) ──
