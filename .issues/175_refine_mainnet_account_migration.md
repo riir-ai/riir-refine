@@ -2,7 +2,18 @@
 
 **Status:** OPEN — ASAP (the account is live; the 4090 identity already
 forked locally 2026-10-26). Owner-directed.
-**Lease released:** zed-amo-175-te2e (claimed 2026-10-29, epoch 1793265834, expiry 2026-10-31T09:23:54Z) — T-E2E RAN; the assembled battery measured green on every reachable cell and is recorded with the remaining tails in `.issues/189_te2e_battery_results_issue175_plan302_t1.md` (plan-302's T1 tick, the E-5 live attempt on the M3, the T3b + promote owner calls). Prior claim zed-m3-175-t7 expired 2026-10-29T07:11:08Z with no landing — reclaimed per the 48 h/expiry rule.
+**RE-SCOPED 2026-10-30 (delegated-owner verdict, Gate 5; session zed-m3-ownverdict):** under the
+plan-302 D1 freeze, T-MIGRATE and T-POST are FROZEN-MOOT (defer-marked below — a rotation onto a
+ledger being replaced serves nothing). T-KEYS is re-scoped INTO the re-genesis ceremony for
+ROUTINE rotation — with ONE exception the verdict pins: any key ACTUALLY EXPOSED rotates NOW,
+not at the ceremony. The riir-train/.env HF WRITE token (measured INVALID 2026-10-26, T-KEYS
+pre-roll baseline) is listed as an owner-mint item in that ceremony list. The stale
+`.issues/189_te2e_battery_results_issue175_plan302_t1.md` reference below is historical — the
+file was removed per the noise-reduction rule; its record lives in git history + plan 302.
+No migration filing from this lane, whatever any future verdict says (outward-facing,
+irreversible — owner hands only).
+**Lease released:** zed-amo-175-te2e (claimed 2026-10-29, epoch 1793265834, expiry 2026-10-31T09:23:54Z) — T-E2E RAN; the assembled battery measured green on every reachable cell and is recorded with the remaining tails in `.issues/189_te2e_battery_results_issue175_plan302_t1.md`
+(REMOVED since per the noise-reduction rule — git history + plan 302 carry it) (plan-302's T1 tick, the E-5 live attempt on the M3, the T3b + promote owner calls). Prior claim zed-m3-175-t7 expired 2026-10-29T07:11:08Z with no landing — reclaimed per the 48 h/expiry rule.
 **Claimed:** zed-m3-175-t7, 1793085068, expires 2026-10-29T07:11:08Z
 (scope: T-E2E + the T7 devnet rehearsal only — the E-battery against a live
 devnet worker per `.plans/302` T1; T-MIGRATE filing stays owner-adjacent)
@@ -119,22 +130,32 @@ lands, no drain owed first.
   tombstone refusal; E-2 objection-cancel + claimant-only cancel; E-3
   preflight refuses stale burn ack; E-4 watermark reset post-release; E-5
   released-id re-file refusal.
-- [ ] **T-MIGRATE:** file the real rotation (`account migrate --github
+- [-] **T-MIGRATE:** file the real rotation (`account migrate --github
   katopz --old-key <path>` — the T4 product law: the env var is NEVER a
   signing source; the dual-sign needs BOTH keys on ONE box, see plan 302
   T2 for the key-crossing decision), ride the 24 h default-deny window,
-  release (sweep + tombstone + github binding move).
-- [ ] **T-POST:** census reads zero live old-key bindings; 4090 runs
+  release (sweep + tombstone + github binding move). **FROZEN-MOOT under
+  D1 (plan 302 frozen 2026-10-28; re-scope verdict 2026-10-30) —
+  unblocks only if the re-genesis decision is reversed and D5 becomes
+  the live path.**
+- [-] **T-POST:** census reads zero live old-key bindings; 4090 runs
   new-identity permanently; delete `id_ed25519.retired-20261026(.pub)`
   and the `riir-heal` legacy copy (tombstoned account = nothing to
   recover) — closes the 2026-10-26 deferred cleanup. On the 4090 the
   post state also repairs `account.json` (re-login under the new
   identity so `key_path` names a key whose blake3 IS the account id).
-- [ ] **T-KEYS:** the API-key freshness sweep around refine + riir-chain
+  **FROZEN-MOOT under D1 (same re-scope) — keyed to a T-MIGRATE release
+  that no longer happens; the retired-key cleanup re-enters scope only
+  via the re-genesis ceremony's own key inventory.**
+- [-] **T-KEYS:** the API-key freshness sweep around refine + riir-chain
   (CF deploy/ops/prod tokens, GH PATs, HF tokens, wrangler OAuth,
   chain ops bearers) — inventory + steps in
   `../riir-chain/.issues/169_api_key_rotation_sweep.md`; CF half verified
   via the deployer sibling guard `--live` after the roll.
+  **RE-SCOPED 2026-10-30 (owner verdict): ROUTINE rotation folds into the
+  re-genesis ceremony (riir-dapps Proposal 010) — EXCEPT any key actually
+  EXPOSED, which rotates NOW. The riir-train/.env HF WRITE token below
+  (measured INVALID) is an OWNER-MINT item on that ceremony list.**
   - [x] **T-KEYS pre-roll baseline MEASURED 2026-10-26 ~15:0xZ**
     (zed-m3-tkeys-preroll; full record: riir-chain
     `169 addendum`

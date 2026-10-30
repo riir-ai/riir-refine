@@ -149,7 +149,7 @@ grammar-not-answers law), and every claim carries its n beside it.
       digest-checked sidecar the server requires at boot.
 
 ### T3 — candidate A2: the Rethink encoder head (riir-train HOSTED-ONLY mint lane)
-⛔ Gated on T1.6 (the feasibility gate — PASSED via Issue 161/Bench 114) + owner mint approval — T3.1–T3.3 defer-marked 2026-10-30 hygiene sweep per the status line above ("A2/T3 stays open, owner-gated as scoped").
+⛔ Gated on T1.6 (the feasibility gate — PASSED via Issue 161/Bench 114) + owner mint approval — T3.1–T3.3 defer-marked 2026-10-30 hygiene sweep per the status line above ("A2/T3 stays open, owner-gated as scoped"). **DEFERRED 2026-10-30 via delegated-owner verdict (Gate 2): dominated on the Bench-119 population — A1 was already bit-identical to perfect, so A2 cannot win quality here, and cost is 0.13 ms vs the 50 ms budget. Reopen triggers (any one): (1) a new T1-refresh population where the seat's picks diverge from A0; (2) a second domain lane needing a trained head; (3) a refreshed population where the never-decline τ=(0,0) setting makes measurable mistakes on no-correct-candidate cases — that would favor A2 or a retuned τ.**
 - [-] T3.1 Train the encoder decision head (the laya encoder + a pick/abstain head) on the SAME
       T1 training corpus — the distill-teacher lanes are available but NOT required; the compile
       gate is the label source, not a teacher. UNBLOCK: owner mint approval (HOSTED-ONLY lane in
@@ -208,13 +208,31 @@ grammar-not-answers law), and every claim carries its n beside it.
       **Recorded: `.benchmarks/119_heal_seat_frozen_read.md`.**
 
 ### T5 — arm + telemetry (OWNER GATED)
-- [-] T5.1 Owner go → the winner's manifest row ARMED for real heal traffic (the first armed
+- [x] T5.1 Owner go → the winner's manifest row ARMED for real heal traffic (the first armed
       `heal` row — ALL-EMPTY remains the shipped default until this checkbox). **Bench 119's
       verdict is the input: the A1 specialist cleared the NI-cost route 660/660 at 0.13 ms p50.**
-      UNBLOCK: the owner's arm/stand-down call on the Bench-119 verdict.
+      **ARMED 2026-10-30 via delegated-owner verdict (session zed-m3-ownverdict, claude-sub-agent
+      round 1; claim `959a29548`): RATIFY, not write — the row was ALREADY on this box since
+      2026-10-19 21:18 (`.refine/escalation_manifest.json`, the Bench-119 FROZEN-run leftover:
+      clippy / seat_rerank / cap 1.0 / max_rate 0.99 / min_pool 2 / demoted:false); this act
+      ratifies it for real heal traffic. Truth-in-record: today the row affects ONLY
+      `fixer_regate` (a measurement binary) — no CLI fix path reads the manifest, and
+      `seat_rerank`/`escalation_manifest` are non-default features; arming is safe and
+      reversible (demoted:true / RIIR_REFINE_ESC=0). Endpoint canonicalized to
+      `http://127.0.0.1:8092` (the Bench-108/tests spelling). RE-GATE conditions: a refreshed
+      population (a T1 re-run), or test-side drift past the 5% pre-registered wall on the scored
+      set. T5.3 (decstat consent) stays parked as its own gate.**
+      UNBLOCK: satisfied — the owner's arm call landed via the delegated verdict.
 - [-] T5.2 The armed run is the consumption trigger already recorded: `rescue_probe`'s arm-H
       escalation-ordering consumption + the katgpt-rs Plan 621 T5.4 real-telemetry re-gate route.
-      RIDES T5.1 — the trigger cannot consume an un-armed row.
+      **OWNER CONDITION (same 2026-10-30 verdict): the seat may be wired into the REAL fix path
+      only if the seat's answer still passes the compile check (`--verify`) before it is served,
+      WITH a test showing a wrong seat pick is rejected and the modelless answer stands in.
+      Grounds: the shipped τ=(0,0) is rank-only — the seat NEVER declines (always picks
+      something); Bench 119's no-correct-candidate stratum had n=1, and the seat has never seen
+      fixes from outside the healer's own pool — matching a perfect A0 on 660 pool cases is not
+      a reason to skip the compile check at the serve boundary.** RIDES T5.1 (armed) + the
+      test above; the trigger cannot consume an un-armed row.
 - [-] T5.3 Decision telemetry consent-gated (`RIIR_INSTINCT_STATS` unset never pushes); decstat
       arming stays its own owner gate. RIDES T5.1; its consent gate stays its own owner call.
 
