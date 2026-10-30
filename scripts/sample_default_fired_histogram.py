@@ -41,7 +41,7 @@ from datetime import datetime, timezone
 
 API = "https://crates.io/api/v1/crates"
 STATIC = "https://static.crates.io/crates/{name}/{name}-{ver}.crate"
-UA = "riir-refine-bench094-extend (gist.rs workspace instrumentation)"
+UA = "riir-refine-bench094-extend (riir.ai workspace instrumentation)"
 PFX = "clippy::"
 
 

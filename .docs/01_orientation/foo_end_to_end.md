@@ -41,7 +41,7 @@ The URL above IS canonical — [Proposal 003](../../.proposals/003_binary_only_d
 §The canonical install one-liners owns it, and
 `tests/install_copy_parity.rs` fails on any document that invents a
 different one. It used to: Proposal 005 served both installers from
-`cargo-refine.gist.rs`, a vanity host that does not exist, while Proposal 011
+`cargo-refine.riir.ai`, a vanity host that does not exist, while Proposal 011
 §8.1 used the `raw.githubusercontent.com` form. Two documents, two
 one-liners, one unrunnable.
 

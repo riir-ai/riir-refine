@@ -984,7 +984,7 @@ fn run_mine_intro() {
     println!("    stays the manual push.");
     println!();
     println!("START (3 steps):");
-    println!("  1. learn:      https://ai.gist.rs        <- the network front (policy + ledger)");
+    println!("  1. learn:      https://riir.ai        <- the network front (policy + ledger)");
     println!(
         "  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo refine login)"
     );
@@ -7002,7 +7002,7 @@ fn user_help() -> String {
         ""
     };
     format!(
-        "cargo-refine {version} — Refine, the code fixer that learns (https://refine.gist.rs)
+        "cargo-refine {version} — Refine, the code fixer that learns (https://refine.riir.ai)
 
 USAGE:
     cargo refine [<path>...]           Dry run: show what would be fixed, no edits (default path: .)
@@ -7575,7 +7575,7 @@ struct Args {
     /// `RIIR_REFINE_JOIN_ENV=mainnet|devnet` forces instead).
     yes: bool,
     /// `--unmine` — the opt-OUT counterpart to `--mine` (owner mandate
-    /// 2026-09-08, the ai.gist.rs three-tier engagement story). Records
+    /// 2026-09-08, the riir.ai three-tier engagement story). Records
     /// machine-global consent = OPTED OUT, which makes `cargo refine sync`
     /// refuse its PUSH half (the lease pull still runs). Standalone — early
     /// return, works in every feature build. Mutually exclusive with

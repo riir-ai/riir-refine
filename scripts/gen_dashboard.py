@@ -2168,7 +2168,7 @@ def build_data(sweep: bool) -> dict:
 def main() -> int:
     sweep = "--sweep" in sys.argv
     # (The `--corpus-json` front-page snapshot lane was REMOVED 2026-09-13 —
-    # riir-dapps Plan 026 made the ai.gist.rs corpus card chain-native: the
+    # riir-dapps Plan 026 made the riir.ai corpus card chain-native: the
     # mining DO's own rows aggregated by the crank's corpus-view leg. The
     # committed-JSON refresh step died with the consumer; the dashboard's
     # LOCAL corpus card still uses load_corpus_history below.)

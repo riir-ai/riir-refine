@@ -273,7 +273,7 @@ cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet --writ
 
 The service plane (Cloudflare Worker in the private `riir-dapps` repo) hosts
 the KAT ledger, the corpus lease, and the mining queue. The client talks to
-`https://heal.gist.rs` by default; point it anywhere else with:
+`https://mainnet.riir.ai` by default (the gen-2 host — the old heal.gist.rs name canonicalizes on read); point it anywhere else with:
 
 ```sh
 export RIIR_REFINE_KAT_SERVICE_URL=http://127.0.0.1:8811   # a localnet from riir-dapps

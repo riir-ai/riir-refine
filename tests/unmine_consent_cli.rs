@@ -231,7 +231,7 @@ fn mine_keeps_the_explainer_and_records_the_opt_in() {
         "the CODE SNIPPET",
         "a snippet",
         "START (3 steps):",
-        "https://ai.gist.rs",
+        "https://riir.ai",
         "cargo refine login",
         "cargo refine --fix",
         "cargo refine sync",

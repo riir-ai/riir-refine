@@ -1,6 +1,6 @@
 # Role flows — what each Get-started role does, gets, and pays
 
-> **Purpose:** the four "Get started" roles on ai.gist.rs (coder / miner /
+> **Purpose:** the four "Get started" roles on riir.ai (coder / miner /
 > fixer / trainer), each as one end-to-end flow: what you DO, what you GET,
 > and what it COSTS. Issue 132. Each role renders TWICE: the ` ```gfflow `
 > block in its section is the render source for the per-role web figures
@@ -400,7 +400,7 @@ is the full spec):
 ### The economy render source (renders `kat_economy_flow.svg`)
 
 The money loop as one figure — the trust section's companion on
-`refine.gist.rs/#trust`. The meter branches on which tank pays (TUNA
+`refine.riir.ai/#trust`. The meter branches on which tank pays (TUNA
 trial credit is terminal: trial burns fund nothing and expire); every
 KAT burn funds the next epoch's pool, the settle pays the fleet, and
 the corpus leases back to close the loop. The split itself is NOT drawn
@@ -487,7 +487,7 @@ out   = { lang = "json", src = "data/flows/kat_economy/01_corpus.json", label = 
 ## What mining sends (the data path, request to public corpus)
 
 The trust section's answer to "what leaves my machine when I mine, and
-who sees it" (riir-dapps Plan 046, `refine.gist.rs/#mining-data`). Three
+who sees it" (riir-dapps Plan 046, `refine.riir.ai/#mining-data`). Three
 lanes by WHO can read the data at that step: your machine, the network
 (the operator), and everyone (the public corpus every machine downloads).
 Every claim is code-backed — the batch fields are

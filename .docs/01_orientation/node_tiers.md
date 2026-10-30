@@ -13,7 +13,7 @@
 > **Why this exists (owner ask, 2026-09-12):** a dev or investor asking "what
 > can I run on MY rig, and what does it get me?" had to assemble the answer
 > from Proposal 005, the l4_fallback serving-lane decision, three benches, and
-> two sibling-repo docs. ai.gist.rs needs a chooser; the game launch will need
+> two sibling-repo docs. riir.ai needs a chooser; the game launch will need
 > the same artifact shape. This is that one place.
 
 ## The rule: a tier is an install preset, not a new chain tier
@@ -98,7 +98,7 @@ vessel/stake/endorsement machinery maturing. Say "our trainers" until then.
 | "consensus nolimit / lite consensus 100%" | Consensus participation is staked + all-or-nothing per record; a lite node **witnesses/verifies roots** (vote 0), it never confirms | riir-ai `node_tiers.md` System 2/3 |
 | "fix nolimit" | Meter + USD cap + rate limits bind every tier; the never-wrong verify contract holds everywhere | P005 window gates; `llm_spend.rs` |
 
-## Consumer mirror (ai.gist.rs) — SHIPPED on devnet 2026-09-14 (worker `c3c792b1`); on the FRONT page since 2026-09-15 (riir-dapps `0553a7f`, live on all three envs)
+## Consumer mirror (riir.ai) — SHIPPED on devnet 2026-09-14 (worker `c3c792b1`); on the FRONT page since 2026-09-15 (riir-dapps `0553a7f`, live on all three envs)
 
 The mirror began as a leaderboard-page chooser (radio-CSS, no JS, per-tier
 install + incentive + honest status, a **tier chip on every contributor

@@ -10,7 +10,7 @@ Two renders exist:
 
 - **The hero SVG** — `self_evolve_flow.svg` (+ the 390 px card list
   `self_evolve_flow_m.svg`), rendered from the ` ```gfflow ` block below
-  (short labels: it must read at front-page scale on `refine.gist.rs`).
+  (short labels: it must read at front-page scale on `refine.riir.ai`).
   This is the pinned mirror the KAT network pages embed — the family
   flow-figure shape (numbered steps in path order, grouped into
   swimlanes; design guide §8, riir-ai Plan 620).
@@ -158,7 +158,7 @@ flowchart TB
 
     REC -->|"opt-in consent --mine"| OUT["mining batch<br/>.refine/outbox"]
 
-    subgraph NET["network — the KAT fleet (ai.gist.rs)"]
+    subgraph NET["network — the KAT fleet (riir.ai)"]
         direction LR
         OUT -->|"auto-sync push"| PROOF["proof queue<br/>verified at real clippy"]
         PROOF --> SETTLE["epoch settle<br/>pays KAT to miners"]

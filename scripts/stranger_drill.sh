@@ -78,11 +78,11 @@ fi
 echo "stranger-drill: preflight OK — $URL/health answered 200"
 # The MAINNET legs (stranger B, the A3 refusal arms) preflight separately:
 # an unreachable apex DEFERS them loud — it is not a pass and not a fail.
-apex_health="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "https://mainnet.gist.rs/health" 2>/dev/null || true)"
+apex_health="$(curl -fsS -o /dev/null -w '%{http_code}' --max-time 15 "https://mainnet.riir.ai/health" 2>/dev/null || true)"
 MAINNET_OK=0
 if [ "$apex_health" = "200" ]; then
   MAINNET_OK=1
-  echo "stranger-drill: preflight OK — https://mainnet.gist.rs/health answered 200 (mainnet legs armed)"
+  echo "stranger-drill: preflight OK — https://mainnet.riir.ai/health answered 200 (mainnet legs armed)"
 else
   echo "stranger-drill: mainnet unreachable ('${apex_health:-nothing}') — the A3 legs DEFER loud"
 fi
