@@ -2,6 +2,7 @@
 
 **Date:** 2026-10-31
 **Status:** open — blocks [Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md) submission; pairs with the private readiness playbook ([../.docs/01_orientation/mozilla_grant_readiness.md](../.docs/01_orientation/mozilla_grant_readiness.md)); program digest: [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md). T3 LANDED 2026-10-31 → [`.docs/01_orientation/mozilla_evidence_pack.md`](../.docs/01_orientation/mozilla_evidence_pack.md)
+**Claimed:** zed-m3-t14-bar, 1793484917, expires 2026-11-03T07:35:17+00:00
 **Lease closed:** zed-m3-idle-ev190, 1793459837, expires 2026-11-02T15:17:17Z — T3 evidence pack landed in the lease window
 **Lease closed:** zed-m3-i190-t14b, 1793477157, was expires 2026-11-02T20:05:57Z — T14b (`a96a293f`) + T14a-min (`e7cf72ea`) landed in the window; the strict bar + T14's bar-run adjudications are recorded owner-gated above (no agent lane left to lease).
 **Owner gates:** T1, T2, T5 are owner decisions — **T1/T2/T5 decide by 2026-11-07** (T8 needs the slack); the rest are executable prep.
