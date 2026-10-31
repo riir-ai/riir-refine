@@ -108,6 +108,7 @@ cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (a
 ./scripts/ci_feature_guard.sh   # full CI guard (6 layers: no-dep / default / per-feature / all-features / clippy+tests / the latent_retrieval retrieval gate — Issue 170's Layer 5b2)
 ./scripts/deny_gate.sh          # cargo-deny advisories gate (plan 298): vulnerable CRATES at lockfile level (the sec corpus owns vulnerable USAGE); --scan / --scan --deep = report-only workspace + nested-lockfile surveys; CI wiring owner-gated
 ./scripts/standalone_dep_gate.sh # the escaping-dep pin (no cargo, no siblings needed — the bare-clone CI tier)
+./scripts/charitable_gate.sh   # the charitable (Posture A) posture sweep — issue 190 T14's named second build: bar 1 CLI output / bar 2 dep graph / bar 3 binary strings + the --mine refusal + the leak-scan; isolated target dir, never the release set (bench 123)
 # GOAT benches (measured results: .benchmarks/001_goat_consolidated.md):
 #   cargo bench --bench bench_001_l1_matvec ; cargo bench --bench bench_002_l2_pruner_syn
 #   cargo run --example ruliology_search_demo --features ruliology_search --release
