@@ -112,8 +112,8 @@ fn seed_corpus_has_expected_entry_count() {
     // Batch 320 (4): the post-B319 staged remainder (Plan 320) — immutable-operand-device-resident-per-buffer-type (A +1: ggml-org/llama.cpp @ fb59972 #31073 — B319's host-side verdict REFUTED at T0; the H2D-immutable placement quadrant completes the transfer-direction x lifecycle matrix beside host-cache-immutable-device-weights + kv-window-device-resident-ring-append) + word-native-byte-pair-minifloat-conversion (N +1) + block-scaled-operand-declared-form-refusal-ladder (B +1) + plane-storage-barrier-scope-covers-global-exchange (D +1) — the last three tracel-ai/cubecl @ 07cd07a (#1975 squash; the #1976/#1977/#1986 constituents; NOT the CI-only c1d0125 whose message carries the narrative) + 2 count-neutral rider faces (gpu_111 pdl-admission += the vllm 8b10bda #64494 size-gated admission face; gpu_133 moe-block-m-cap += the vllm 2bfb8f1 #64467 prepare-kernel tile-ladder face); #64553 = the I6 watch row CONFIRMED; #1967 read_lazy thin/watch confirmed; ab3768c host-side confirmed; fixtures 4 rules standalone-compiled AND executed BEFORE entry (15 tests green).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))",
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)",
     );
 }
 
@@ -5553,10 +5553,10 @@ fn kernel_categories_counts_match_plan_003_table() {
     // I +1 the visibility-bounded scan, N +1 the quantized stored-bytes
     // rule; the TensorFold kernel half (Plan 197).
     let expected = [
-        (KernelCategory::MemoryAccess, 204), // Batch 322 +1: checkpoint-boot-staged-upload-bounded-bytes (the TensorFold 7fce15ce #1643 boot-upload host-stage law, Plan 322) // Batch 320 +1: immutable-operand-device-resident-per-buffer-type (the llama.cpp fb59972 H2D-immutable placement quadrant) // Batch 317 +1: ring-scan-grouped-load-ahead-wrap-step-same-fold-order (the TensorFold 6428050c MTP ring-scan law: grouped scalar load-ahead + the wrap-step modulo replacement + the same-terms-same-order bit-identity contract, Plan 317) // Batch 307 +1: write-coverage-proven-uninitialized-alloc (vllm fa1cf1d #64419 + 9c7e8ff #64345, Plan 312) // Batch 276 +1: host-context-mirror-fenced-drain-avoidance (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 274 +1: trellis-reversed-lsb-tape-aligned-word-state-decode, // Batch 273 +1: fewrow-mma-fragment-matvec-silicon-tiered-dispatch (the mlx few-row mma-fragment lead, Plan 277 / Research 310) // Batch 268 +1: mma-lane-map-whole-run-vector-loads-split-accumulator-chains (the splash wave — whole-run lane reindex + split fp32 chains, Plan 273) // Batch 261 +1: prefill-batch-pool-f16-conversion-sized-by-actual-length (PrismML 25f68a4 #330, Plan 265); Batch 259 +1: tile-history-packed-in-place-register-window-conv-scan (uzu e744e7c, Plan 263); Batch 257 +1: verify-row-tiles-share-loaded-weight-panel (4d1a3f15 -- the GB10 verify-row weight-panel share); Batch 256 +1: expert-prompt-row-batch-amortizes-weight-pool-stream (7bcab59f — the weight-stream amortization over ROW BATCH, the first owner of the dropped weight-streaming axis, Plan 260) // Batch 251 +5: the Yukon conversion (Research 284) — lane-permuted butterfly + dirty-range clear + verify-ubatch full-prestage + j16 no-smem fragment + mbarrier-in-padding // Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: free + reclaimable, bounded wait, loud refusal, pool fail-fast) // Batch 249 slice 2 +3: slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set (TensorFold @ 9ccf4727 window) // Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring (ddalcu/mlx-serve @ 1015f785, MIT) // Batch 240 +1: pad-row-classification-interior-memcpy (llama.cpp #30526 @ 23f83e05) // Batch 234 +1: lifecycle-disjoint-intermediates-union-smem-scratch (llama.cpp #29353 @ 62df1815) // Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 @ b9f3599f)
-        (KernelCategory::Compute, 122), // Batch 322 +1: boot-identity-hash-read-once (the TensorFold 618625fd digest-threading law, Plan 322) // Batch 321 +3: the 10-30f staged leads (Plan 321 — the cast-routing law + the scale-register ownership law + the span-view planning-boundary law) // Batch 320 +1: block-scaled-operand-declared-form-refusal-ladder (the cubecl 07cd07a #1977 declared-form law) // Batch 310 +1: mma-accumulator-run-as-one-operand-depth-matches-instruction (cubecl 4549408 + 07cd07a, the #1966 series — the A-operand run-depth law, Plan 315) // Batch 309 +1: runtime-trip-count-defeats-unroll-template-the-bound (mlx #4596 + llama.cpp #29298, Plan 314); Batch 295 +1: in-flight-transform-count-admits-block-thread-width (the #396 FWHT rows->threads admission, Plan 300 / Research 333) // Batch 276 +1: kahan-endpoint-peel-dead-flops-exact (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 275 +1: B int8-screen-error-bound-certifies-exact-rescore (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 269 +1: two-pass-partial-reduction-inter-dispatch-barrier (llama.cpp df1170213 #30862, Plan 272); Batch 261 +1: one-warp-ordered-reduce-row-batched-no-smem-barrier (PrismML 483bdab #368, Plan 265); Batch 259 +1: per-row-transcendental-hoist-not-per-element (uzu e744e7c, Plan 263); Batch 251 +3: the Yukon conversion (Research 284) — magic-anchor FFMA epilogue + gate precompute + SGN trit remap // Batch 250 slice 2 +6: the envelope-pool slice-2 set (SoA Q8_0 MoE pair, rms_norm register carry, K-quant wide-store geometry, MMVQ low-bit VDR rework, MoE group-selection fusion, uzu row-mask bitmap) // Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652) + tokenizer-segment-memo-between-mutations (2d2930d8b) // Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (TensorFold @ 9ccf4727 window) // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
+        (KernelCategory::MemoryAccess, 206), // Batch 323 +2: simdgroup-fragment-whole-store-generation-keyed + stream-through-load-no-l1-allocate-once-read (Plan 323) // Batch 322 +1: checkpoint-boot-staged-upload-bounded-bytes (the TensorFold 7fce15ce #1643 boot-upload host-stage law, Plan 322) // Batch 320 +1: immutable-operand-device-resident-per-buffer-type (the llama.cpp fb59972 H2D-immutable placement quadrant) // Batch 317 +1: ring-scan-grouped-load-ahead-wrap-step-same-fold-order (the TensorFold 6428050c MTP ring-scan law: grouped scalar load-ahead + the wrap-step modulo replacement + the same-terms-same-order bit-identity contract, Plan 317) // Batch 307 +1: write-coverage-proven-uninitialized-alloc (vllm fa1cf1d #64419 + 9c7e8ff #64345, Plan 312) // Batch 276 +1: host-context-mirror-fenced-drain-avoidance (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 274 +1: trellis-reversed-lsb-tape-aligned-word-state-decode, // Batch 273 +1: fewrow-mma-fragment-matvec-silicon-tiered-dispatch (the mlx few-row mma-fragment lead, Plan 277 / Research 310) // Batch 268 +1: mma-lane-map-whole-run-vector-loads-split-accumulator-chains (the splash wave — whole-run lane reindex + split fp32 chains, Plan 273) // Batch 261 +1: prefill-batch-pool-f16-conversion-sized-by-actual-length (PrismML 25f68a4 #330, Plan 265); Batch 259 +1: tile-history-packed-in-place-register-window-conv-scan (uzu e744e7c, Plan 263); Batch 257 +1: verify-row-tiles-share-loaded-weight-panel (4d1a3f15 -- the GB10 verify-row weight-panel share); Batch 256 +1: expert-prompt-row-batch-amortizes-weight-pool-stream (7bcab59f — the weight-stream amortization over ROW BATCH, the first owner of the dropped weight-streaming axis, Plan 260) // Batch 251 +5: the Yukon conversion (Research 284) — lane-permuted butterfly + dirty-range clear + verify-ubatch full-prestage + j16 no-smem fragment + mbarrier-in-padding // Batch 249 slice 3 +1: paced-load-room-counts-free-plus-reclaimable (779c38cc — the intake gauge: free + reclaimable, bounded wait, loud refusal, pool fail-fast) // Batch 249 slice 2 +3: slot-keeping-scan-runs-in-place-publish-only-what-moved + kept-state-copies-what-prompt-needs-not-window + residency-hold-gated-ram-fraction-not-working-set (TensorFold @ 9ccf4727 window) // Batch 242 +7: the mlx-serve pack — resource-limit-first-dispatch-probe-decline-latch + read-amplify-vs-sync-row-ceiling-admission + gqa-shared-channel-block-write-once-owner + joined-projection-in-place-stride-consumption + gqa-reshape-q-down-never-expand-packed-kv + row-bucket-threadgroup-staging-budget-decline + quad-lane-line-load-shuffle-word-exchange-ring (ddalcu/mlx-serve @ 1015f785, MIT) // Batch 240 +1: pad-row-classification-interior-memcpy (llama.cpp #30526 @ 23f83e05) // Batch 234 +1: lifecycle-disjoint-intermediates-union-smem-scratch (llama.cpp #29353 @ 62df1815) // Batch 231 +1: the host-pointer-buffer foreign-range pinning law (llama.cpp #30405 @ b9f3599f)
+        (KernelCategory::Compute, 123), // Batch 323 +1: inner-loop-select-division-shift-mask-vgpr-pressure (Plan 323) // Batch 322 +1: boot-identity-hash-read-once (the TensorFold 618625fd digest-threading law, Plan 322) // Batch 321 +3: the 10-30f staged leads (Plan 321 — the cast-routing law + the scale-register ownership law + the span-view planning-boundary law) // Batch 320 +1: block-scaled-operand-declared-form-refusal-ladder (the cubecl 07cd07a #1977 declared-form law) // Batch 310 +1: mma-accumulator-run-as-one-operand-depth-matches-instruction (cubecl 4549408 + 07cd07a, the #1966 series — the A-operand run-depth law, Plan 315) // Batch 309 +1: runtime-trip-count-defeats-unroll-template-the-bound (mlx #4596 + llama.cpp #29298, Plan 314); Batch 295 +1: in-flight-transform-count-admits-block-thread-width (the #396 FWHT rows->threads admission, Plan 300 / Research 333) // Batch 276 +1: kahan-endpoint-peel-dead-flops-exact (the mlxfast-qwen38-125b-a6b-engine @ 59160bd pair, Plan 280 / Research 314) // Batch 275 +1: B int8-screen-error-bound-certifies-exact-rescore (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 269 +1: two-pass-partial-reduction-inter-dispatch-barrier (llama.cpp df1170213 #30862, Plan 272); Batch 261 +1: one-warp-ordered-reduce-row-batched-no-smem-barrier (PrismML 483bdab #368, Plan 265); Batch 259 +1: per-row-transcendental-hoist-not-per-element (uzu e744e7c, Plan 263); Batch 251 +3: the Yukon conversion (Research 284) — magic-anchor FFMA epilogue + gate precompute + SGN trit remap // Batch 250 slice 2 +6: the envelope-pool slice-2 set (SoA Q8_0 MoE pair, rms_norm register carry, K-quant wide-store geometry, MMVQ low-bit VDR rework, MoE group-selection fusion, uzu row-mask bitmap) // Batch 249 slice 3 +2: nvfp4-row-tile-count-compile-time-switch-dispatch (4e63c652) + tokenizer-segment-memo-between-mutations (2d2930d8b) // Batch 249 slice 2 +1: parser-backtrack-bounded-by-monotone-cursor (TensorFold @ 9ccf4727 window) // Batch 242 +3: row-count-invariant-bits-split-keyed-on-weight-shape + strided-interleave-split-ordered-merge-serial-reference + gqa-head-position-row-packing-keys-read-once (mlx-serve @ 1015f785) // Batch 240 +1: f16-upcast-at-foreign-graph-translation (llama.cpp #29200 @ 5a638aed)
         (KernelCategory::Fusion, 68), // Batch 321 +1: comms-boundary-consumer-chain-fuses-into-gather (the vllm becbaea9f #64638 comms-boundary fusion law, Plan 321) // Batch 295 +1: same-activation-mmvf-pair-channel-stride-broadcast (the #383 mmvf pair launch — the layout-free member, Plan 300 / Research 333) // Batch 284 +1: fusion-unfusable-head-settles-prefix-to-next-search (the burn fusion-search settle law, Plan 288 / Research 321) // Batch 278 +1: whole-step-gdn-decode-window-one-launch (the Locals conversion — the whole recurrent decode step as one launch, S <= 16 register window, Plan 282 / Research 315) // Batch 268 +2: same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows (the splash wave, Plan 273); Batch 259 +1: precompute-chain-fused-intermediates-never-materialized (uzu e744e7c, Plan 263); Batch 252 +1: sigmoid-gate-chain-folded-into-consumer-template-arm (the qwen4exp hc_post gate chain, #30602 @ ff5a2337) // Batch 251 +2: the Yukon conversion (Research 284) — dead-destination scale elision + stacked gate|up single launch
-        (KernelCategory::Dispatch, 248), // Batch 322 +1: vendor-intrinsic-staged-operands-by-value-scheduling-attribute (the llama.cpp 792fcf4e #31341 Adreno X2 law, Plan 322) // Batch 320 +1: plane-storage-barrier-scope-covers-global-exchange (the cubecl 07cd07a #1986 barrier memory-class law) // Batch 319 +4: metal-icb-replay-rewrite-private-copy (the cubecl c1d0125 Metal-native ICB degradation + private-copy rewrite law) + profile-window-nests-committed-since-open (same tip — the committed-log + open-index nesting model) + glm-top1-chance-rides-pick-word (tensorfold 2dffc954 — the chance rides the pick word, the f64 oracle contract) + tiny-proj-aux-stream-overlap-size-gated (vllm 914d61fc5 #64425 — the tiny GEMM on the aux stream, size-gated + capture-only + event-fenced), Plan 319 // Batch 317 +1: routed-density-pairs-per-item-keys-tile-admission (the TensorFold gfx1201 routed-prompt law: pairs-per-item density keys the tile admission, the f32 bound compared exactly in f64, the coupled search with per-cell veto + both-sides timing, Plan 317) // Batch 310 +1: warp-per-row-small-blocks-cta-under-load-law (prism 9d9efeadbdd1 #415, the b10831 tip — the warp-per-row re-map behind the blocks_per_row <= warp_size floor, Plan 315) // Batch 307 +1: gate-rank-dispatch-function-constant-variant (mlx 9e2e8e2 #4791, Plan 312) // Batch 295 +2: gdn-conv-chain-fusion-gather-relocation-done-set (the #383/#398 backward gather-relocation + folded store + done-set, the B283 look-ahead's backward twin) + graph-replay-skips-host-node-scans (the #393 uid-memoized compat proof + posture-gated consumer map), Plan 300 / Research 333 // Batch 286 +1: blueprint-minimal-compile-specialization-key (the burn/cubek remainder — the blueprint keeps only what alters the code, Plan 291 / Research 321) // Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window #391, Plan 287 / Research 320) // Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion, Plan 282 / Research 315) // Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +2: D phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 274 +1: hadamard-transform-runtime-specialize-bounded-max-layout (uzu 034294c #1002, Plan 278); // Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe window, Plan 276 / Research 308) // Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave, Plan 273); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307, Plan 265); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb) + prefill-batch-atomic-fallback-individual (c4995966) + teardown-takes-list-whole (30f05c6d) + drain-device-work-before-free (98571a84) + copy-source-quarantine-unproven-free-pinned (2ba81a06); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead, the selected-prefix relocation before eviction, Plan 260) // Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the loop-reused scratch's back-edge needs its own trailing warp barrier) // Batch 251 +1: the Yukon conversion (Research 284) — topk chunk-partial-lists head-only k-way merge // Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 law); prior: Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a) // Batch 249 slice 2 +8: pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain (TensorFold @ 9ccf4727 window) // Batch 242 +9: the mlx-serve pack — split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count (mlx-serve @ 1015f785) // Batch 236 +1: mid-prefill-recurrent-state-capture-boundary-unsplit (incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 convergence face) // Batch 234 +1: occupancy-keyed-value-split-register-budget-ladder (llama.cpp #29353 @ 62df1815)
+        (KernelCategory::Dispatch, 249), // Batch 323 +1: banded-launch-order-shares-weight-tiles (Plan 323) // Batch 322 +1: vendor-intrinsic-staged-operands-by-value-scheduling-attribute (the llama.cpp 792fcf4e #31341 Adreno X2 law, Plan 322) // Batch 320 +1: plane-storage-barrier-scope-covers-global-exchange (the cubecl 07cd07a #1986 barrier memory-class law) // Batch 319 +4: metal-icb-replay-rewrite-private-copy (the cubecl c1d0125 Metal-native ICB degradation + private-copy rewrite law) + profile-window-nests-committed-since-open (same tip — the committed-log + open-index nesting model) + glm-top1-chance-rides-pick-word (tensorfold 2dffc954 — the chance rides the pick word, the f64 oracle contract) + tiny-proj-aux-stream-overlap-size-gated (vllm 914d61fc5 #64425 — the tiny GEMM on the aux stream, size-gated + capture-only + event-fenced), Plan 319 // Batch 317 +1: routed-density-pairs-per-item-keys-tile-admission (the TensorFold gfx1201 routed-prompt law: pairs-per-item density keys the tile admission, the f32 bound compared exactly in f64, the coupled search with per-cell veto + both-sides timing, Plan 317) // Batch 310 +1: warp-per-row-small-blocks-cta-under-load-law (prism 9d9efeadbdd1 #415, the b10831 tip — the warp-per-row re-map behind the blocks_per_row <= warp_size floor, Plan 315) // Batch 307 +1: gate-rank-dispatch-function-constant-variant (mlx 9e2e8e2 #4791, Plan 312) // Batch 295 +2: gdn-conv-chain-fusion-gather-relocation-done-set (the #383/#398 backward gather-relocation + folded store + done-set, the B283 look-ahead's backward twin) + graph-replay-skips-host-node-scans (the #393 uid-memoized compat proof + posture-gated consumer map), Plan 300 / Research 333 // Batch 286 +1: blueprint-minimal-compile-specialization-key (the burn/cubek remainder — the blueprint keeps only what alters the code, Plan 291 / Research 321) // Batch 283 +1: look-ahead-fusion-precomputed-skip-overlap-walk (the prism b10819 window #391, Plan 287 / Research 320) // Batch 278 +2: constraint-row-recompute-on-device-not-table + overlapped-branch-speculation-commit-or-discard (the Locals conversion, Plan 282 / Research 315) // Batch 277 +1: semi-static-token-tiles-populated-count-guard (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +2: D phase-scoped-command-buffer-commit-cap-raise + host-scalar-kernel-input-intern-table (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 274 +1: hadamard-transform-runtime-specialize-bounded-max-layout (uzu 034294c #1002, Plan 278); // Batch 272 +1: faulted-collective-fail-stop-no-numerics-fallback (the sonar paired-PCIe window, Plan 276 / Research 308) // Batch 268 +3: apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane (the splash wave, Plan 273); Batch 261 +1: dtype-branch-dispatch-parity-in-place-precondition (PrismML ec1ee3a #307, Plan 265); Batch 257 +5: pdl-admission-by-image-set-marker (bef432bb) + prefill-batch-atomic-fallback-individual (c4995966) + teardown-takes-list-whole (30f05c6d) + drain-device-work-before-free (98571a84) + copy-source-quarantine-unproven-free-pinned (2ba81a06); Batch 256 +1: glm-selected-prefix-move-before-evict (3c0d6d3c+df4289c7 — the NAMED lead, the selected-prefix relocation before eviction, Plan 260) // Batch 254 +1: fused-read-write-dst-input-overlap-refusal (the #30795 moe_reduce dst-input aliasing refusal); Batch 253 +1: loop-back-edge-scratch-war-trailing-warp-barrier (the fattn-vec #30573 WAR repair — the loop-reused scratch's back-edge needs its own trailing warp barrier) // Batch 251 +1: the Yukon conversion (Research 284) — topk chunk-partial-lists head-only k-way merge // Batch 250 slice 1 +1: attention-route-retirement-by-measurement (the uzu #973 law); prior: Batch 249 slice 3 +2: per-sequence-lazy-graph-capture-on-own-buffers (3878785) + one-barrier-a-tile-prefetch-occupancy-pair (f7336e8a) // Batch 249 slice 2 +8: pipeline-thread-capacity-declared-by-launcher + producer-launch-derived-from-actual-group-size + length-keyed-dispatch-cut-invariance + tp-checkpoint-byte-agreement-hash-while-loading + prompt-cache-branch-point-never-superseded + kept-state-born-supersede-attribution + prompt-cache-stale-invalidation-push-borrower-boundary + device-divergence-fail-closed-queue-drain (TensorFold @ 9ccf4727 window) // Batch 242 +9: the mlx-serve pack — split-prework-recompute-beats-inter-kernel-barrier + op-chain-collapse-membership-binary-search-mask + device-keyed-threadgroup-size-row-independence + admission-clones-upstream-dispatch-for-bit-order + threadgroup-cap-halving-with-order-preserving-sum + canary-admission-per-config-bit-equal-stock + prompt-form-refused-toolchain-format-gap-reopen-trigger + shared-transform-memo-on-underlying-descriptor-identity + config-cache-keyed-full-layout-not-row-count (mlx-serve @ 1015f785) // Batch 236 +1: mid-prefill-recurrent-state-capture-boundary-unsplit (incoai/splash 711f8e5+c3dcf53+985463c+79a4329 Apache-2.0 + the vLLM #60050 convergence face) // Batch 234 +1: occupancy-keyed-value-split-register-budget-ladder (llama.cpp #29353 @ 62df1815)
         (KernelCategory::Parallelism, 96), // Batch 317 +1: row-owns-output-k-full-reduce-exchange-carries-no-arithmetic (the TensorFold e06a6eef+fccb46ac rank-partition law: output-row partition, the no-arithmetic exchange, the fault reified into the shared id word, keepIfAll; the 'distributed' next-category candidate recorded in-rule, Plan 317) // Batch 310 +1: barriers-declared-before-slots-one-free-run (cubecl 4549408 + 07cd07a — SMEM declaration order as fragmentation control, Plan 315) // Batch 281 +1: all-threads-reach-workgroup-barrier-no-pre-barrier-return (the #26631 patch-4 face, Plan 285 / Research 318; prior: Batch 277 +1: stream-k-tail-sequenced-deterministic-lockword-reuse (the Humming+Chord pair, Plan 281 / Research 316) // Batch 272 +2: ipc-peer-mapping-collective-teardown-pin-on-failure + relaxed-spin-acquire-confirm-metadata-flag-wait (the sonar paired-PCIe window, Plan 276 / Research 308) // Batch 268 +1: splitk-tier-ladder-per-tier-ceiling-min-partition-inputs (the splash wave, Plan 273); Batch 253 +1: stream-k-grid-capped-at-useful-work-quanta (the MMQ Stream-K #30553 grid cap — min(nsm, nwork)) // Batch 249 slice 3 +3: per-stream-buffers-by-value-seg-kernel-copies (da676b0d) + fill-foreground-then-fewest-remaining-tokens (c4d07a54) + pool-wait-bounded-bypass-later-fitting-goes-first (1eaa2c53) // Batch 242 +2: spec-tree-parents-first-walk-register-restart-states + tree-attention-partial-share-tail-walk-ordered-merge (mlx-serve @ 1015f785) // Batch 240 +1: subgroup-tail-lane-clamp-live-loads-gate-stores (llama.cpp #30421 @ 9166ceaf) // Batch 234 +1: warp-role-split-phase-overlap-cross-chunk-prefetch (llama.cpp #29353 @ 62df1815)
         (KernelCategory::FlashAttnTiling, 25), // Batch 275 +1: F query-blocked-prefill-score-span-bound (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 257 +1: cluster-dsmem-shared-head-one-row-decode-attention (01b7f3bb -- the CTA-cluster decode head); Batch 256 +1: attention-softmax-state-exchange-once-per-block (c05ce72c+80d1aba4 — the softmax-state exchange frequency axis, Plan 260) // Batch 252 +1: oob-free-loop-inclusive-of-last-full-tile (fattn-tile #30572 @ 5aeac37a) // Batch 249 slice 3 +1: chain-rows-attend-own-keys-in-prefix-per-row-key-bound (64cc7b01)
         (KernelCategory::LinearAttnRecurrence, 43), // Batch 275 +2: G verify-redecide-licenses-drafter-approximation + pre-sampled-verify-extends-speculative-eligibility (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 256 +1: mtp-ring-rebase-covers-rollback-window (89aa09a7 — the rebase floor covers the speculative rewind window, Plan 260) // Batch 251 +1: the Yukon conversion (Research 284) — lazy-rollback journaled window replay // Batch 234 +2: register-resident-scan-state-one-kernel-layer-pass + in-register-unit-triangular-inverse-warp-substitution (llama.cpp #29353 @ 62df1815)
@@ -5564,9 +5564,9 @@ fn kernel_categories_counts_match_plan_003_table() {
         (KernelCategory::NsaBlockSparse, 9), // Batch 268 +1: block-sparse-union-lists-packed-entry-token-major-values (the splash wave, Plan 273)
         (KernelCategory::VarlenChunkedReduction, 6), // Batch 278 +1: ragged-batch-hybrid-feed-two-contracts (the Locals conversion — per-layer-kind feed contracts over ragged hybrid batches, Plan 282 / Research 315)
         (KernelCategory::AutotuneDispatch, 28), // Batch 286 +1: autotune-candidate-priority-orders-try-first (the burn/cubek remainder — the cutoff/order/proof/fallback law, Plan 291 / Research 321) // Batch 284 +3: autotune-round-bounded-by-roofline-ceiling + autotune-sample-read-cold-not-cache-fill + cost-model-counts-work-the-kernel-skips (the burn/cubek autotune laws, Plan 288 / Research 321) // Batch 277 +2: undocumented-fp-dtype-cubin-patch-per-sm-verified + expected-load-headroom-kdepth-split-spill-asymmetry (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +1: K bit-parity-geometry-adoption-no-boot-timing (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 265 +1: autotuner-key-memoized-per-launch-not-rebuilt (vllm #61497, Plan 269 / Research 301) // Batch 249 slice 3 +1: triton-aot-variant-assume-less-fallback (25690c3e + 462f1a15) // Batch 249 slice 2 +1: calibrate-verify-window-on-text-not-proposer-chain (TensorFold @ 9ccf4727 window) // Batch 242 +1: per-generation-plan-table-unmeasured-generation-fallback (mlx-serve @ 1015f785 — measured on the Bonsai 27B shapes, OUR league model)
-        (KernelCategory::ConvGemmLayout, 30), // Batch 286 +1: elementwise-operands-presented-in-memory-order (the burn/cubek remainder — permutation changes metadata, not data, Plan 291 / Research 321) // Batch 281 +1: physical-warp-size-keys-tile-legality-and-dispatch (the warp-size pair, Plan 285 / Research 318; prior: Batch 277 +2: swap-ab-decode-operand-roles-tile-legality + one-pack-serves-all-schedules-nibble-order-contract (the Humming+Chord pair, Plan 281 / Research 316) // Batch 251 +3: the Yukon conversion (Research 284) — DL registry + PTQ1 transcode + host/device arch mirror // Batch 249 slice 3 +1: canonical-module-key-any-spelling-disagree-refused (b27726a4) // Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (PrismML-Eng #363 — the lcm split law); Batch 242 +1: tp-rank-inferred-from-scale-grid-ambiguity-refused (mlx-serve @ 1015f785)
+        (KernelCategory::ConvGemmLayout, 32), // Batch 323 +2: quant-block-keyed-index-space + activation-layout-mirrors-weight-bit-serialism (Plan 323) // Batch 286 +1: elementwise-operands-presented-in-memory-order (the burn/cubek remainder — permutation changes metadata, not data, Plan 291 / Research 321) // Batch 281 +1: physical-warp-size-keys-tile-legality-and-dispatch (the warp-size pair, Plan 285 / Research 318; prior: Batch 277 +2: swap-ab-decode-operand-roles-tile-legality + one-pack-serves-all-schedules-nibble-order-contract (the Humming+Chord pair, Plan 281 / Research 316) // Batch 251 +3: the Yukon conversion (Research 284) — DL registry + PTQ1 transcode + host/device arch mirror // Batch 249 slice 3 +1: canonical-module-key-any-spelling-disagree-refused (b27726a4) // Batch 246 +1: shard-granularity-lcm-never-cut-rotation-block (PrismML-Eng #363 — the lcm split law); Batch 242 +1: tp-rank-inferred-from-scale-grid-ambiguity-refused (mlx-serve @ 1015f785)
         (KernelCategory::KernelPolymorphism, 23),
-        (KernelCategory::DtypeAlignment, 91), // Batch 320 +1: word-native-byte-pair-minifloat-conversion (the cubecl 07cd07a #1976 native-conversion law) // Batch 296 +1: vector-width-admission-checks-every-outer-stride (the cubecl #1922 all-strides admission law, Plan 301 / Research 337) // Batch 277 +1: zero-exponent-float-mantissa-is-the-format-pivot (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +2: N vocab-prefix-draft-head-zero-copy-views + abort-class-dtype-promotion-funnel-hoist (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 251 +1: the Yukon conversion (Research 284) — funnelshift aligned word read // Batch 249 slice 3 +4: dpas-block-scale-after-accumulate-not-in-operand (9f0d4c79) + rank-partial-fp32-travel-round-once-at-epilogue (029bb341) + hi-lo-split-pow2-prescale-clears-subnormal-floor (913cf15e) + cross-rank-reduce-pins-rank-order-not-ring-order (d309dad9) // Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry + kernel-contract-planted-gate-controls (TensorFold @ 9ccf4727 window) // Batch 242 +8: masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics) + decay-gate-dtype-one-point-zero-lock + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf (mlx-serve @ 1015f785) // Batch 234 +1: bf16-residual-pair-three-mma-near-f32 (llama.cpp #29353 @ 62df1815)
+        (KernelCategory::DtypeAlignment, 92), // Batch 323 +1: nan-preserving-select-over-fmaxf-in-scale-reductions (Plan 323) // Batch 320 +1: word-native-byte-pair-minifloat-conversion (the cubecl 07cd07a #1976 native-conversion law) // Batch 296 +1: vector-width-admission-checks-every-outer-stride (the cubecl #1922 all-strides admission law, Plan 301 / Research 337) // Batch 277 +1: zero-exponent-float-mantissa-is-the-format-pivot (the Humming+Chord pair, Plan 281 / Research 316) // Batch 275 +2: N vocab-prefix-draft-head-zero-copy-views + abort-class-dtype-promotion-funnel-hoist (the mlxfast-bonsai2-9b conversion, Plan 279 / Research 313) // Batch 251 +1: the Yukon conversion (Research 284) — funnelshift aligned word read // Batch 249 slice 3 +4: dpas-block-scale-after-accumulate-not-in-operand (9f0d4c79) + rank-partial-fp32-travel-round-once-at-epilogue (029bb341) + hi-lo-split-pow2-prescale-clears-subnormal-floor (913cf15e) + cross-rank-reduce-pins-rank-order-not-ring-order (d309dad9) // Batch 249 slice 2 +2: layout-check-values-mod-13-break-block-symmetry + kernel-contract-planted-gate-controls (TensorFold @ 9ccf4727 window) // Batch 242 +8: masked-in-place-field-prescale-other-operand (the GOAT — portable CPU-exact novel numerics) + decay-gate-dtype-one-point-zero-lock + partial-softmax-l-zero-empty-split-skip-flag + lossy-route-physical-error-bar-from-noise-floor + finiteness-before-diff-nan-blind-comparison-hole + bit-equality-oracle-keyed-on-reference-dispatch + bit-equal-fusion-mirrors-reference-reduction-regime + where-not-multiply-additive-mask-inf (mlx-serve @ 1015f785) // Batch 234 +1: bf16-residual-pair-three-mma-near-f32 (llama.cpp #29353 @ 62df1815)
         (KernelCategory::IrStrengthReduction, 9), // Batch 268 +1: constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers (the splash wave, Plan 273)
     ];
     for (cat, count) in expected {
@@ -5581,11 +5581,11 @@ fn kernel_categories_counts_match_plan_003_table() {
             entry.2.len()
         );
     }
-    // Sum must equal 1044 (Batch 322 +3: the 10-30g + 10-30h staged leads conversion + the DSpark adjudication, Plan 322 — A checkpoint-boot-staged-upload-bounded-bytes + B boot-identity-hash-read-once + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute; +2 count-neutral rider faces gpu_02 + gpu_17; prior: Batch 321 +4: the 10-30f staged leads conversion, Plan 321 — B minifloat-cast-routing-native-vs-software-by-target-direction + B block-scaled-mma-scale-register-owns-its-rows + B exl3-span-view-plans-at-planning-granularity + C comms-boundary-consumer-chain-fuses-into-gather; +2 count-neutral rider faces gpu_141 + gpu_144) -- D metal-icb-replay-rewrite-private-copy + D profile-window-nests-committed-since-open + D glm-top1-chance-rides-pick-word + D tiny-proj-aux-stream-overlap-size-gated + the count-neutral SMEM loop-reuse rider face gpu_94; prior: Batch 317 +3: the 10-30d staged kernel_opt pool, Plan 317 -- A ring-scan-grouped-load-ahead-wrap-step-same-fold-order + E row-owns-output-k-full-reduce-exchange-carries-no-arithmetic + D routed-density-pairs-per-item-keys-tile-admission + the R5 count-neutral rider face gpu_52; prior: Batch 310 +3: the 10-30 staged leads, Plan 315 -- B mma-accumulator-run-as-one-operand-depth-matches-instruction + E barriers-declared-before-slots-one-free-run + D warp-per-row-small-blocks-cta-under-load-law + 1 count-neutral rider face gpu_130; prior: Batch 309 +1: the 10-30 staged web-watch intake, Plan 314 -- B runtime-trip-count-defeats-unroll-template-the-bound; prior: Batch 307 +2: the 10-29b staged kernel_opt pool, Plan 312 -- A write-coverage-proven-uninitialized-alloc (vllm #64419+#64345) + D gate-rank-dispatch-function-constant-variant (mlx #4791); +4 count-neutral rider faces gpu_17/gpu_33/gpu_137/gpu_134; prior Batch 304 +13: the kernel_opt delta pool, Plan 309 / Research 348; prior Batch 303 +8: the splash return-visit delta, Plan 308 / Research 345 -- A +1 golden-ratio-decode-tile-phase-spread + B +2 fp32-pipe-mma-role-split-biased-bf16-operands + conditional-pv-accumulator-rescale + E +1 quad-lane-softmax-two-shuffle-16b-store + G +1 gdn-decode-tape-deferred-retained-row-fold + M +1 apple9-coop-tensor-destination-init-lost-runtime-format + N +2 metal-fma-carries-fast-math-reassociate-off-cannot-pin + gdn-cross-phase-gate-bitwise-parity; prior: Batch 302 +5: the 10-28c staged pool, Plan 307 / Research 344 -- B+C+A x2+D own rules + 4 count-neutral faces; prior: Batch 299 +8: the staged kernel_opt pool, Plan 304 / Research 342 -- A x2 + B + C + D + E + K + N, one count-neutral rider; prior: Batch 297 +4: the b10826 open leads — the #383+#398 GDN conv-chain pair + #396 the FWHT rows->threads admission + #393 face b the replay-time host-scan skip, Plan 300 / Research 333; prior: Batch 288 +0: five count-neutral riders, the b10826 fork decode quartet + #31153 grammar lead, Plan 293 / Research 327; prior: Batch 287 +0: five count-neutral riders, the llama.cpp fusion trio P81/P82/P83, Plan 292 / Research 325; Batch 286 +3: the burn/cubek remainder H/I/J, Plan 291 / Research 321; prior: Batch 284 +4, Plan 288; before that, Batch 281 +3: the upstream llama.cpp trio — L physical-warp-size-keys-tile-legality-and-dispatch + H sentinel-id-skip-shrinks-work-set-zero-unowned-rows + E all-threads-reach-workgroup-barrier-no-pre-barrier-return, Plan 285 / Research 318; was 966 at Batch 278 +4 the Locals conversion, Plan 282; was 953 at Batch 275 +9: the mlxfast-bonsai2-9b conversion, Plan 279; was 944 at Batch 274 +3: the uzu trellis seed; was 941 at Batch 273 +1: A fewrow-mma-fragment-matvec-silicon-tiered-dispatch, Plan 277 / Research 310; +2 count-neutral riders gpu_117 + gpu_01; at 940: Batch 272 +3: the sonar paired-PCIe window, Plan 276 / Research 308 -- D +1 fail-stop collective, E +2 IPC teardown + two-tier wait; at 937: Batch 268 +11: the splash release wave, incoai/splash be3b083c..origin/main, Plan 273 / Research 305 — A mma-lane-map-whole-run-vector-loads-split-accumulator-chains + C same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows + D apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane + E splitk-tier-ladder-per-tier-ceiling-min-partition-inputs + H moe-lone-tile-register-gemv-uniform-tile-kind + moe-unverified-rows-route-zero-experts-dense-shape + I block-sparse-union-lists-packed-entry-token-major-values + O constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers; entries_gpu_117; the wave's rust_perf serving leads STAGED, not landed); Batch 269 +1: the llama.cpp #30862 Metal argmax two-pass B lead, Plan 272 / Research 304; prior re-pinned at Batch 265 +1: the vllm #61497 K lead, Plan 269 / Research 301; prior re-pinned at Batch 261 (+3: the PrismML fork prism-b10787 window -- A prefill-batch-pool-f16-conversion + B one-warp-ordered-reduce + D dtype-branch-dispatch-parity, Plan 265 / Research 297); prior re-pinned at Batch 259 (+3: the uzu pack, Plan 263 / Research 295); prior re-pinned at Batch 256 — +4: F attention-softmax-state-exchange-once-per-block + A expert-prompt-row-batch-amortizes-weight-pool-stream + D glm-selected-prefix-move-before-evict (the NAMED lead) + G mtp-ring-rebase-covers-rollback-window — the TensorFold 9ccf4727..d1018b31 +988-commit campaign kernel half, Plan 260 / Research 291; was 906 at Batch 254 — +1: D fused-read-write-dst-input-overlap-refusal, the #30795 moe_reduce dst-input aliasing refusal; was 905 at Batch 253; was 903 at Batch 252, +2 — the #369 L8V + upstream leads: C +1 sigmoid-gate-chain-folded-into-consumer-template-arm, F +1 oob-free-loop-inclusive-of-last-full-tile; was 901 at Batch 251, the Yukon conversion +16; was 885 at Batch 250 slice 2, 879 at slice 1, 878 at Batch 249 slice 3).
+    // Sum must equal 1051 (Batch 323 +7: the 10-30i + 10-30j staged leads conversion, Plan 323 — N nan-preserving-select-over-fmaxf-in-scale-reductions + D banded-launch-order-shares-weight-tiles + L quant-block-keyed-index-space + A simdgroup-fragment-whole-store-generation-keyed + A stream-through-load-no-l1-allocate-once-read + B inner-loop-select-division-shift-mask-vgpr-pressure + L activation-layout-mirrors-weight-bit-serialism; +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified; prior: Batch 322 +3: the 10-30g + 10-30h staged leads conversion + the DSpark adjudication, Plan 322 — A checkpoint-boot-staged-upload-bounded-bytes + B boot-identity-hash-read-once + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute; +2 count-neutral rider faces gpu_02 + gpu_17; prior: Batch 321 +4: the 10-30f staged leads conversion, Plan 321 — B minifloat-cast-routing-native-vs-software-by-target-direction + B block-scaled-mma-scale-register-owns-its-rows + B exl3-span-view-plans-at-planning-granularity + C comms-boundary-consumer-chain-fuses-into-gather; +2 count-neutral rider faces gpu_141 + gpu_144) -- D metal-icb-replay-rewrite-private-copy + D profile-window-nests-committed-since-open + D glm-top1-chance-rides-pick-word + D tiny-proj-aux-stream-overlap-size-gated + the count-neutral SMEM loop-reuse rider face gpu_94; prior: Batch 317 +3: the 10-30d staged kernel_opt pool, Plan 317 -- A ring-scan-grouped-load-ahead-wrap-step-same-fold-order + E row-owns-output-k-full-reduce-exchange-carries-no-arithmetic + D routed-density-pairs-per-item-keys-tile-admission + the R5 count-neutral rider face gpu_52; prior: Batch 310 +3: the 10-30 staged leads, Plan 315 -- B mma-accumulator-run-as-one-operand-depth-matches-instruction + E barriers-declared-before-slots-one-free-run + D warp-per-row-small-blocks-cta-under-load-law + 1 count-neutral rider face gpu_130; prior: Batch 309 +1: the 10-30 staged web-watch intake, Plan 314 -- B runtime-trip-count-defeats-unroll-template-the-bound; prior: Batch 307 +2: the 10-29b staged kernel_opt pool, Plan 312 -- A write-coverage-proven-uninitialized-alloc (vllm #64419+#64345) + D gate-rank-dispatch-function-constant-variant (mlx #4791); +4 count-neutral rider faces gpu_17/gpu_33/gpu_137/gpu_134; prior Batch 304 +13: the kernel_opt delta pool, Plan 309 / Research 348; prior Batch 303 +8: the splash return-visit delta, Plan 308 / Research 345 -- A +1 golden-ratio-decode-tile-phase-spread + B +2 fp32-pipe-mma-role-split-biased-bf16-operands + conditional-pv-accumulator-rescale + E +1 quad-lane-softmax-two-shuffle-16b-store + G +1 gdn-decode-tape-deferred-retained-row-fold + M +1 apple9-coop-tensor-destination-init-lost-runtime-format + N +2 metal-fma-carries-fast-math-reassociate-off-cannot-pin + gdn-cross-phase-gate-bitwise-parity; prior: Batch 302 +5: the 10-28c staged pool, Plan 307 / Research 344 -- B+C+A x2+D own rules + 4 count-neutral faces; prior: Batch 299 +8: the staged kernel_opt pool, Plan 304 / Research 342 -- A x2 + B + C + D + E + K + N, one count-neutral rider; prior: Batch 297 +4: the b10826 open leads — the #383+#398 GDN conv-chain pair + #396 the FWHT rows->threads admission + #393 face b the replay-time host-scan skip, Plan 300 / Research 333; prior: Batch 288 +0: five count-neutral riders, the b10826 fork decode quartet + #31153 grammar lead, Plan 293 / Research 327; prior: Batch 287 +0: five count-neutral riders, the llama.cpp fusion trio P81/P82/P83, Plan 292 / Research 325; Batch 286 +3: the burn/cubek remainder H/I/J, Plan 291 / Research 321; prior: Batch 284 +4, Plan 288; before that, Batch 281 +3: the upstream llama.cpp trio — L physical-warp-size-keys-tile-legality-and-dispatch + H sentinel-id-skip-shrinks-work-set-zero-unowned-rows + E all-threads-reach-workgroup-barrier-no-pre-barrier-return, Plan 285 / Research 318; was 966 at Batch 278 +4 the Locals conversion, Plan 282; was 953 at Batch 275 +9: the mlxfast-bonsai2-9b conversion, Plan 279; was 944 at Batch 274 +3: the uzu trellis seed; was 941 at Batch 273 +1: A fewrow-mma-fragment-matvec-silicon-tiered-dispatch, Plan 277 / Research 310; +2 count-neutral riders gpu_117 + gpu_01; at 940: Batch 272 +3: the sonar paired-PCIe window, Plan 276 / Research 308 -- D +1 fail-stop collective, E +2 IPC teardown + two-tier wait; at 937: Batch 268 +11: the splash release wave, incoai/splash be3b083c..origin/main, Plan 273 / Research 305 — A mma-lane-map-whole-run-vector-loads-split-accumulator-chains + C same-input-consecutive-projections-one-dispatch-concatenated-tiles + consumer-prepares-consumed-table-producer-writes-plain-rows + D apple10-narrow-grid-register-tile-threadgroups-per-core + prefix-active-split-axis-linearized-one-dimensional-grid + wide-row-tile-under-bits-per-weight-floor-one-lane + E splitk-tier-ladder-per-tier-ceiling-min-partition-inputs + H moe-lone-tile-register-gemv-uniform-tile-kind + moe-unverified-rows-route-zero-experts-dense-shape + I block-sparse-union-lists-packed-entry-token-major-values + O constexpr-unroll-capacity-bound-zero-guard-holds-array-in-registers; entries_gpu_117; the wave's rust_perf serving leads STAGED, not landed); Batch 269 +1: the llama.cpp #30862 Metal argmax two-pass B lead, Plan 272 / Research 304; prior re-pinned at Batch 265 +1: the vllm #61497 K lead, Plan 269 / Research 301; prior re-pinned at Batch 261 (+3: the PrismML fork prism-b10787 window -- A prefill-batch-pool-f16-conversion + B one-warp-ordered-reduce + D dtype-branch-dispatch-parity, Plan 265 / Research 297); prior re-pinned at Batch 259 (+3: the uzu pack, Plan 263 / Research 295); prior re-pinned at Batch 256 — +4: F attention-softmax-state-exchange-once-per-block + A expert-prompt-row-batch-amortizes-weight-pool-stream + D glm-selected-prefix-move-before-evict (the NAMED lead) + G mtp-ring-rebase-covers-rollback-window — the TensorFold 9ccf4727..d1018b31 +988-commit campaign kernel half, Plan 260 / Research 291; was 906 at Batch 254 — +1: D fused-read-write-dst-input-overlap-refusal, the #30795 moe_reduce dst-input aliasing refusal; was 905 at Batch 253; was 903 at Batch 252, +2 — the #369 L8V + upstream leads: C +1 sigmoid-gate-chain-folded-into-consumer-template-arm, F +1 oob-free-loop-inclusive-of-last-full-tile; was 901 at Batch 251, the Yukon conversion +16; was 885 at Batch 250 slice 2, 879 at slice 1, 878 at Batch 249 slice 3).
     let total: usize = KERNEL_CATEGORIES.iter().map(|(_, _, r)| r.len()).sum();
     assert_eq!(
-        total, 1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        total, 1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -5597,8 +5597,8 @@ fn build_corpus_categorized_round_trips_all_rules() {
     assert_eq!(grouped.len(), 15, "Plan 003: 15 category buckets");
     let total: usize = grouped.iter().map(|(_, rules)| rules.len()).sum();
     assert_eq!(
-        total, 1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        total, 1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
     // No empty buckets.
     for (cat, rules) in &grouped {
@@ -9705,8 +9705,8 @@ fn batch116_rules_present() {
     ];
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))",
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)",
     );
     let present: Vec<&str> = corpus.entries.iter().map(|e| e.rule_id.as_str()).collect();
     for expected in ids {
@@ -17188,8 +17188,8 @@ fn batch233_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let e = corpus
@@ -17273,8 +17273,8 @@ fn batch234_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // Rule 1 (G): the register-resident scan state.
@@ -17420,8 +17420,8 @@ fn batch236_rule_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let e = corpus
@@ -17487,8 +17487,8 @@ fn batch235_riders_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // Rider (a): the width-matched loader face.
@@ -17551,8 +17551,8 @@ fn batch232_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let e = corpus
@@ -17614,8 +17614,8 @@ fn batch231_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let e = corpus
@@ -17693,8 +17693,8 @@ fn batch237_rider_landed_on_autotune_host() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let host = corpus
@@ -17734,8 +17734,8 @@ fn batch240_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // P67 -- the subgroup tail-lane law (E).
@@ -17847,8 +17847,8 @@ fn batch227_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let cases: [(&str, &[&str]); 2] = [
@@ -17968,8 +17968,8 @@ fn batch242_rules_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let slice_a = [
@@ -18264,8 +18264,8 @@ fn batch246_rule_parse_and_needles_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let entry = corpus
@@ -18340,8 +18340,8 @@ fn batch247_oracle_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     let entry = corpus
@@ -18415,8 +18415,8 @@ fn batch249_slice1_riders_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // rider 1 (A-10): the 2-bit in-place mask + compound prescale face
@@ -18524,8 +18524,8 @@ fn batch249_slice2_rules_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // (rule_id, needles that must appear in its gpu_concept)
@@ -18723,8 +18723,8 @@ fn batch249_slice3_rules_landed() {
 
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // (rule_id, needles that must appear in its gpu_concept)
@@ -20085,8 +20085,8 @@ fn batch263_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20124,8 +20124,8 @@ fn batch262_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20161,8 +20161,8 @@ fn batch260_rider_landed() {
     // (923 rules since Batch 261 +3 -- the pin rides the count sites).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20279,8 +20279,8 @@ fn batch267_rules_and_riders_landed() {
     // Batch-269 B lead + this batch's N lead) over the 924 corpus -> 926.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20360,8 +20360,8 @@ fn batch265_rules_and_riders_landed() {
     // Count witness: +1 own rule over the 923 corpus (the riders neutral).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20423,8 +20423,8 @@ fn batch269_rule_and_rider_landed() {
     // Count witness: +1 own rule over the Batch 267-era corpus (the rider neutral).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20550,8 +20550,8 @@ fn batch268_rules_landed() {
     // Count witness: +11 over the Batch 269-era corpus (926 -> 937).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20586,8 +20586,8 @@ fn batch264_rider_landed() {
     // Count-neutral witness: the corpus total is unchanged from Batch 261.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -20835,8 +20835,8 @@ fn batch272_rules_and_riders_landed() {
     // Batch 268-era corpus (937 -> 940; the four riders are count-neutral).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -21000,8 +21000,8 @@ fn batch273_rules_and_riders_landed() {
     // Batch 268-era corpus (937 -> 940; the four riders are count-neutral).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -21194,8 +21194,8 @@ fn batch274_rules_and_riders_landed() {
     // total pin above (953) is the batch-274 witness (re-pinned at Batch 275: +9, Plan 279).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -21502,8 +21502,8 @@ fn batch275_rules_and_riders_landed() {
     // the mlxfast-bonsai2-9b trio of trios, Plan 279 / Research 313).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -21814,8 +21814,8 @@ fn batch276_rules_and_riders_landed() {
     // the mlxfast-qwen38-125b-a6b B- pair, Plan 280 / Research 314).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -21973,8 +21973,8 @@ fn batch277_rules_landed() {
     // the Humming+Chord quantized-GEMM pair, Plan 281 / Research 316).
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // The WATCH-ROW negative asserts: the humming support-matrix rows are
@@ -22209,8 +22209,8 @@ fn batch280_rules_and_riders_landed() {
     // Count witness: the batch is count-neutral -- corpus stays 966.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 
     // Provenance: every Batch-280 rider names the fork pin.
@@ -22337,8 +22337,8 @@ fn batch281_rules_and_riders_landed() {
     // Count witness: 966 + 3 own rules.
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -22446,8 +22446,8 @@ fn batch283_rules_and_riders_landed() {
     }
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -22599,8 +22599,8 @@ fn batch284_rules_and_rider_landed() {
     }
     assert_eq!(
         corpus.entries.len(),
-        1044,
-        "batch 322 re-pin: 1044 (1041 + 3: Plan 322, the 10-30g + 10-30h staged leads conversion + the DSpark adjudication — A checkpoint-boot-staged-upload-bounded-bytes (tensorfold 7fce15ce #1643) + B boot-identity-hash-read-once (tensorfold 618625fd) + D vendor-intrinsic-staged-operands-by-value-scheduling-attribute (llama.cpp 792fcf4e #31341); +2 count-neutral rider faces gpu_02 (vllm 2f6f7861b #63761 cast-after-multiply/fixed-pointer) + gpu_17 (tensorfold 297a182d evidence-qualified defaults))"
+        1051,
+        "batch 323 re-pin: 1051 (1044 + 7: Plan 323, the 10-30i + 10-30j staged leads conversion — N nan-preserving-select-over-fmaxf-in-scale-reductions (tensorfold cef366c9+2b587959) + D banded-launch-order-shares-weight-tiles (tensorfold 19c491ce) + L quant-block-keyed-index-space (vllm 6c19299fc #64509) + A simdgroup-fragment-whole-store-generation-keyed (tensorfold 0afc366c+bfb0f5a2 #1590) + A stream-through-load-no-l1-allocate-once-read (tensorfold acb21860+839778d4+5e151065 #1534) + B inner-loop-select-division-shift-mask-vgpr-pressure (tensorfold 33b443da #1663) + L activation-layout-mirrors-weight-bit-serialism (PrismML-Eng/llama.cpp 01ea7fcf #420); +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; T0 14/14 byte-verified)"
     );
 }
 
@@ -24986,6 +24986,237 @@ fn batch322_pseudocode_parses() {
         assert!(
             verdict_passes(&opt_verdict),
             "batch-322 {rid} opt_pattern must parse"
+        );
+    }
+}
+
+#[test]
+fn batch323_rules_landed() {
+    let corpus = build_kernel_seed_corpus();
+
+    let r1 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "nan-preserving-select-over-fmaxf-in-scale-reductions")
+        .unwrap_or_else(|| panic!("batch-323 r1 missing"));
+    for mark in [
+        "not fmaxf, which would make a NaN 0",
+        "The larger, or a NaN when either is (fmaxf drops it)",
+        "max_nan(a,b) = (a > b || a != a) ? a : b",
+        "propagates/poisons",
+        "train.cu:549",
+    ] {
+        assert!(
+            r1.gpu_concept.contains(mark),
+            "batch-323 r1 needle missing: {mark}"
+        );
+    }
+
+    let r2 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "banded-launch-order-shares-weight-tiles")
+        .unwrap_or_else(|| panic!("batch-323 r2 missing"));
+    for mark in [
+        "kGemmBand = 4",
+        "first + in_band % height",
+        "in_band / height",
+        "its bytes equal the dot2 GEMM tile's on served shapes",
+        "8.56 -> 7.48 s",
+    ] {
+        assert!(
+            r2.gpu_concept.contains(mark),
+            "batch-323 r2 needle missing: {mark}"
+        );
+    }
+
+    let r3 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "quant-block-keyed-index-space")
+        .unwrap_or_else(|| panic!("batch-323 r3 missing"));
+    for mark in [
+        "Index the row as [G, 8, 2]",
+        "so block reductions and fp4 packing need no reshapes",
+        "cvt.rn.satfinite.e2m1x2",
+        "next_power_of_2(H) // 16",
+    ] {
+        assert!(
+            r3.gpu_concept.contains(mark),
+            "batch-323 r3 needle missing: {mark}"
+        );
+    }
+
+    let r4 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "simdgroup-fragment-whole-store-generation-keyed")
+        .unwrap_or_else(|| panic!("batch-323 r4 missing"));
+    for mark in [
+        "On an M1 Pro that ran every prompt tile at 0.04 TFLOPS: a 2,048-row LFM2 chunk took 243 s",
+        "M1 and M2 (13, 14) store MMA fragments whole, later GPUs by element",
+        "M1 and M2 take whole-fragment tiles, later GPUs and unknown ones the shipped source",
+        "reinterpret_cast<thread vec<bfloat, 2>&>",
+        "the M2 takes the M1's path on its evidence and was not measured",
+        "M3 Ultra decode REGRESSED 1.8–2.3%",
+    ] {
+        assert!(
+            r4.gpu_concept.contains(mark),
+            "batch-323 r4 needle missing: {mark}"
+        );
+    }
+
+    let r5 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "stream-through-load-no-l1-allocate-once-read")
+        .unwrap_or_else(|| panic!("batch-323 r5 missing"));
+    for mark in [
+        "on a 163 GiB stream that fills L1 with lines nothing will ask for again",
+        "ld.global.nc.L1::no_allocate",
+        "Not the whole difference, and measured before claiming",
+        "proven by reply digest",
+        "same value as __ldg, cache policy only",
+    ] {
+        assert!(
+            r5.gpu_concept.contains(mark),
+            "batch-323 r5 needle missing: {mark}"
+        );
+    }
+
+    let r6 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "inner-loop-select-division-shift-mask-vgpr-pressure")
+        .unwrap_or_else(|| panic!("batch-323 r6 missing"));
+    for mark in [
+        "Every sum is the same in the same order, so the bytes are unchanged; the kernel no longer spills",
+        "__builtin_ctz(per)",
+        "st >> per_log2",
+        "(st & (per - 1)) == per - 1",
+        "A group's first product starts from zero on a uniform branch, not a select per accumulator.",
+        "groups are 32, 64 or 128 codes: one, two or four stages",
+        "63.7 ms instead of 105.8 ms",
+    ] {
+        assert!(
+            r6.gpu_concept.contains(mark),
+            "batch-323 r6 needle missing: {mark}"
+        );
+    }
+
+    let r7 = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == "activation-layout-mirrors-weight-bit-serialism")
+        .unwrap_or_else(|| panic!("batch-323 r7 missing"));
+    for mark in [
+        "word j = elements j, 8+j, 16+j, 24+j (byte i = element 8*i + j)",
+        "(q >> j) & 0x01010101",
+        "all in int32, so the result equals vec_dot_q1_0_q8_1 exactly",
+        "2*s - (int) __half_as_short(__high2half(ds))",
+        "GGML_CUDA_Q1_BITSERIAL",
+        "same row stride as block_q8_1",
+        "PrismML-Eng",
+    ] {
+        assert!(
+            r7.gpu_concept.contains(mark),
+            "batch-323 r7 needle missing: {mark}"
+        );
+    }
+
+    // the six faces carry their provenance
+    let faces = [
+        (
+            "bit-equal-fusion-mirrors-reference-reduction-regime",
+            vec![
+                "The quantized values are computed from the bf16-rounded normed activation",
+                "Matches reciprocal_approximate_ftz in csrc/quantization/fp4/nvfp4_utils.cuh.",
+                "a fixed rounding order (no fast-math contraction choice)",
+                "the fused kernel reproduces either reduction order of the unfused norms, not a mix of them",
+                "n_fused = 9",
+            ],
+        ),
+        (
+            "runtime-trip-count-defeats-unroll-template-the-bound",
+            vec![
+                "every slice's and the bias's load issued before the sums",
+                "the same chain as the combine's fma(1, p, acc)",
+                "__fdiv_rn(xk, __fadd_rn(sum, 1e-20f))",
+            ],
+        ),
+        (
+            "pdl-admission-by-image-set-marker",
+            vec![
+                "Launch dependents before the loads: the consumer (e.g. the weight-loading GEMM) overlaps with this kernel",
+                "ggml_cuda_pdl_lc()",
+            ],
+        ),
+        (
+            "checkpoint-boot-staged-upload-bounded-bytes",
+            vec![
+                "pub const staging_bytes: usize = 192 << 20;",
+                "copied into the loader's host bytes and then uploaded from pageable memory through the copy source's staging",
+                "61 s -> 51 s at TP=2",
+            ],
+        ),
+        (
+            "dtype-native-source-read-with-shared-admission-predicate",
+            vec![
+                "__uint_as_float(raw.x << 16)",
+                "takes_bf16_logits()",
+                "convert_to_uint32_v2(topk_histogram_4096::to_float(x))",
+            ],
+        ),
+        (
+            "warp-per-row-small-blocks-cta-under-load-law",
+            vec![
+                "smaller Hopper projections need more CTAs; keep four-row reuse for the vocabulary head",
+                "there 8 rows per CTA ran slower",
+                "fusion.gate == nullptr",
+            ],
+        ),
+    ];
+    for (rid, marks) in faces {
+        let e = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-323 face host missing: {rid}"));
+        for mark in marks {
+            assert!(e.gpu_concept.contains(mark), "batch-323 face {rid} needle missing: {mark}");
+        }
+    }
+}
+
+#[test]
+fn batch323_pseudocode_parses() {
+    // G1 for Batch 323: all seven rules' ref_shape AND opt_pattern must
+    // parse as valid Rust (the L2 pruner verdict).
+    use crate::domain::HealDomain;
+    let corpus = build_kernel_seed_corpus();
+    for rid in [
+        "nan-preserving-select-over-fmaxf-in-scale-reductions",
+        "banded-launch-order-shares-weight-tiles",
+        "quant-block-keyed-index-space",
+        "simdgroup-fragment-whole-store-generation-keyed",
+        "stream-through-load-no-l1-allocate-once-read",
+        "inner-loop-select-division-shift-mask-vgpr-pressure",
+        "activation-layout-mirrors-weight-bit-serialism",
+    ] {
+        let entry = corpus
+            .entries
+            .iter()
+            .find(|e| e.rule_id == rid)
+            .unwrap_or_else(|| panic!("batch-323 rule missing: {rid}"));
+        let ref_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.buggy_code());
+        assert!(
+            verdict_passes(&ref_verdict),
+            "batch-323 {rid} ref_shape must parse"
+        );
+        let opt_verdict = KernelOptDomain::validate(entry.rule_id.as_str(), entry.fixed_code());
+        assert!(
+            verdict_passes(&opt_verdict),
+            "batch-323 {rid} opt_pattern must parse"
         );
     }
 }
