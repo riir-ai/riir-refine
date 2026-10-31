@@ -1,6 +1,7 @@
 # Issue 190: `elo_k_eff` — evidence-damped K + thrash/stuck readout on the score-bench line
 
-**Status:** Open — consumer lane filed (source: katgpt-rs Issue 975 T5(c); PoC G1–G4 PASS at katgpt-rs `48fd0be4d`, 2026-10-31)
+**Status:** Open — consumer lane filed (source: katgpt-rs Issue 975 T5(c); PoC G1–G4 PASS at katgpt-rs `48fd0be4d`, 2026-10-31)  
+**Claimed:** zed-m3-i190, 1793427339, expires 2026-11-02T06:15:39+00:00
 
 ## What
 
