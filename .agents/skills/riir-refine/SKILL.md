@@ -106,12 +106,11 @@ after the safety checks named per step.
    target) and every repo's `target/release`.
 5. **Build-hygiene quick pass (report-only).** Invoke the `build-hygiene`
    skill's §6 quick pass: per repo `du -sh target` (report the number; the
-   step-4 LOAD-BEARING rule applies), the profile-discipline spot-check
-   (`grep -c '^\[profile' Cargo.toml` — seal-remake expects 5 rows; a missing
-   or drifted profile is a finding), binary sizes vs the last recorded, and a
-   `cargo refine` DRY RUN on dirty files (mechanical findings before any perf
-   claim). A finding files an `.issues/` row — this step NEVER fixes inline
-   and never deletes.
+   step-4 LOAD-BEARING rule applies), the profile spot-check (`grep -c
+   '^\[profile' Cargo.toml` vs the repo's own documented set — drift is a
+   finding), binary sizes vs the last recorded, and a `cargo refine` DRY RUN
+   on dirty files (mechanical findings before any perf claim). A finding
+   files an `.issues/` row — this step NEVER fixes inline and never deletes.
 
 Housekeeping findings (hung processes killed, worktrees removed, repos
 ff'd) are reportable work — name them in the cycle summary — but they are
@@ -136,7 +135,7 @@ to queue item 1.
 | 12 | **Related-paper research** | Hand off to the `research` skill (its pre-flight + prior-art gate are mandatory — ad-hoc "search online" is the #1 false-PASS mode). |
 | 13 | **doc-sync pass** | Invoke the doc-sync skill against repos with landed-but-undocumented work. |
 | 14 | **Post-mining sweep** | Mine improvement candidates from the healer's OWN usage artifacts (Protocol C below) — misses, created-warnings, verify reverts, memory.json tier stats, score-bench delta. Contrast with items 5/11/12 which are PRE-mining (external sources). |
-| 15 | **Build-hygiene gate** | Invoke the `build-hygiene` skill (canonical home `seal-remake/.agents/skills/build-hygiene/`): the five-profile discipline (dev line-tables-only + opt-3 deps, gate opt-0 shared cache, dist fat-LTO strip), target-dir size, binary size, the dev-loop driver posture (plain cargo vs pilot_dylib vs blaze), and the cargo refine --fix-before-perf law. Quick pass rides Protocol H step 5; THIS item is the FULL pass — quarterly, or after any profile/feature-set/crate-count change. Run BEFORE item 8's benchmarks — a bloated target tree or a stale profile invalidates every timing row; re-run the dev-loop A/B (`seal-remake/scripts/blaze_pilot_ab.sh`) vs Bench 043 and re-time the guard quick layers vs bench 030. |
+| 15 | **Build-hygiene gate** | Invoke the `build-hygiene` skill (canonical home `katgpt-rs/.agents/skills/build-hygiene/`, the PUBLIC shareable copy): the five-profile discipline (dev line-tables-only + opt-3 deps, gate opt-0 shared cache, dist fat-LTO strip), target-dir size, binary size, the dev-loop driver posture (plain cargo vs framework dynamic-linking vs blaze), and the heal-before-perf law (`cargo refine --fix` where installed, else `cargo clippy --fix`). Quick pass rides Protocol H step 5; THIS item is the FULL pass — quarterly, or after any profile/feature-set/crate-count change. Run BEFORE item 8's benchmarks — a bloated target tree or a stale profile invalidates every timing row; re-run the workspace's dev-loop A/B harness (create one before adopting any driver) and re-time the quick gate layers vs the last recorded baseline. |
 
 Items 6 + 7 run BEFORE item 8 (benchmarks) by design — boundary/DRY
 findings are cheaper to fix before you benchmark around them. Item 15's
@@ -420,8 +419,9 @@ skill points agents there). Per sweep:
 | `riir-refine` (this) | `riir-refine/.agents/skills/riir-refine/` | symlink ✓ |
 | `boundary-guard` | `katgpt-rs/.agents/skills/boundary-guard/` | symlink ✓ |
 | `substrate-first` | `katgpt-rs/.agents/skills/substrate-first/` | symlink ✓ |
-| `doc-sync`, `rust-optimize` | global-only real dirs (no repo home yet — pending) | — |
-| `build-hygiene` | `seal-remake/.agents/skills/build-hygiene/` | symlink ✓ |
+| `doc-sync` | global-only real dir (no repo home yet — pending) | — |
+| `build-hygiene` | `katgpt-rs/.agents/skills/build-hygiene/` | symlink ✓ |
+| `rust-optimize` | `katgpt-rs/.agents/skills/rust-optimize/` | no symlink (manual `/optimize` invocation only) |
 | `feature-gate-audit`, `goat-audit`, `proposal`, `research` | `katgpt-rs/.agents/skills/` (tracked) | no symlink yet |
 
 Copies drift — the substrate-first global duplicate (identical today,
