@@ -14,7 +14,7 @@ No migration filing from this lane, whatever any future verdict says (outward-fa
 irreversible — owner hands only).
 **Lease released:** zed-amo-175-te2e (claimed 2026-10-29, epoch 1793265834, expiry 2026-10-31T09:23:54Z) — T-E2E RAN; the assembled battery measured green on every reachable cell and is recorded with the remaining tails in `.issues/189_te2e_battery_results_issue175_plan302_t1.md`
 (REMOVED since per the noise-reduction rule — git history + plan 302 carry it) (plan-302's T1 tick, the E-5 live attempt on the M3, the T3b + promote owner calls). Prior claim zed-m3-175-t7 expired 2026-10-29T07:11:08Z with no landing — reclaimed per the 48 h/expiry rule.
-**Claimed:** zed-m3-175-t7, 1793085068, expires 2026-10-29T07:11:08Z
+**Lease closed:** zed-m3-175-t7, epoch 1793085068, was expires 2026-10-29T07:11:08Z (staleness fold — the owner-directed migration stays OPEN; re-claim before executing any leg)
 (scope: T-E2E + the T7 devnet rehearsal only — the E-battery against a live
 devnet worker per `.plans/302` T1; T-MIGRATE filing stays owner-adjacent)
 **Lease closed:** zed-amo-175-preflight (claimed 2026-10-26, epoch
