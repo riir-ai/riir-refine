@@ -1461,6 +1461,14 @@ impl TrajStore {
     /// every row of each player. Deterministic + idempotent: a second pass
     /// re-derives bit-identical ratings and writes 0 rows.
     ///
+    /// Issue 190 (`elo_k_eff` feature): each match is scheduled by the
+    /// rule's cumulative evidence — `elo_k_eff(ELO_K, n, ELO_K_EFF_FLOOR)`
+    /// dampens a young rule's first outcomes (thin evidence ⇒ small
+    /// movement); from the floor on the match moves at exactly [`ELO_K`].
+    /// The feature-off build schedules every match at [`ELO_K`] verbatim
+    /// (the same primitive, the same args — byte-identical rows). Zero-sum
+    /// per match: the span opponent shares the rule's scheduled K.
+    ///
     /// The ONLY rating writer (the issue's non-goal: no online ELO updates
     /// in the hot fix loop — [`record`](Self::record) never touches these
     /// fields; G4's heal-path promise).
@@ -1470,6 +1478,7 @@ impl TrajStore {
     /// KV put or JSON encode failure on a changed row.
     #[allow(clippy::float_cmp)] // bit-identity IS the idempotency gate (deterministic replay)
     pub fn recompute_elo(&self) -> Result<EloRecomputeSummary, String> {
+        use crate::elo::{elo_k_eff, ELO_K, ELO_K_EFF_FLOOR};
         let rows = self.dump();
         let mut summary = EloRecomputeSummary {
             rows_seen: rows.len(),
@@ -1478,6 +1487,8 @@ impl TrajStore {
         let mut table = EloTable::new();
         let mut rules = std::collections::BTreeSet::new();
         let mut spans = std::collections::BTreeSet::new();
+        // Issue 190 — per-rule evidence counts, in canonical replay order.
+        let mut evidence: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
         for row in &rows {
             if row.success_count.saturating_add(row.fail_count) == 0 {
                 continue; // apply-only sighting: not a match
@@ -1486,11 +1497,25 @@ impl TrajStore {
             rules.insert(row.lint_key.clone());
             spans.insert(span_id.clone());
             for _ in 0..row.fail_count {
-                table.play(&row.lint_key, &span_id, false);
+                let n = evidence.entry(row.lint_key.clone()).or_default();
+                *n += 1;
+                let k = if cfg!(feature = "elo_k_eff") {
+                    elo_k_eff(ELO_K, *n, ELO_K_EFF_FLOOR)
+                } else {
+                    ELO_K
+                };
+                table.play_with_k(&row.lint_key, &span_id, false, k);
                 summary.matches += 1;
             }
             for _ in 0..row.success_count {
-                table.play(&row.lint_key, &span_id, true);
+                let n = evidence.entry(row.lint_key.clone()).or_default();
+                *n += 1;
+                let k = if cfg!(feature = "elo_k_eff") {
+                    elo_k_eff(ELO_K, *n, ELO_K_EFF_FLOOR)
+                } else {
+                    ELO_K
+                };
+                table.play_with_k(&row.lint_key, &span_id, true, k);
                 summary.matches += 1;
             }
         }

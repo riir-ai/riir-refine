@@ -10795,6 +10795,13 @@ fn run_score_bench(generation: u8) {
     // generation-tagged; the outcome-feed per-batch blocker does not apply).
     let strata = sb::stratify(&fixture_list, &score);
     sb::report::print_strata(&strata);
+    // Issue 190 (`elo_k_eff`) — the REPORT-ONLY regime readout: one line
+    // classifying the run's (selection-state, score) series. No exit-code
+    // change, no auto-demotion; the feature-off build prints nothing.
+    #[cfg(feature = "elo_k_eff")]
+    if let Some(line) = sb::regime::regime_line(&score) {
+        println!("{line}");
+    }
     // The k-ladder axis is gens 2–7 (composition width / depth rungs);
     // gen-8's axis is the SHAPE — its per-atom table replaces this.
     if (2..=7).contains(&generation) {

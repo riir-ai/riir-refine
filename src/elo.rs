@@ -49,6 +49,34 @@ use std::collections::HashMap;
 #[allow(clippy::cast_possible_truncation)] // 32.0 is exactly representable in f32
 pub const ELO_K: f32 = katgpt_core::rating::STANDARD_K as f32;
 
+/// Issue 190 — the evidence floor where a rule's rating moves at FULL K:
+/// `elo_k_eff` is damped (`K·n/n_floor`) for the first `n_floor` outcomes
+/// of a rule's replay, then exactly `K`. Calibrated to the regime
+/// monitor's own warmup ([`katgpt_core::step_noise::StepNoiseConfig::DEFAULT`]`::warmup`
+/// = 16) — one evidence notion across the lane: a rule the readout calls
+/// "warming" is the same rule whose rating still moves damped.
+pub const ELO_K_EFF_FLOOR: u32 = 16;
+
+/// Issue 190 — the evidence-damped effective K for one rule's match:
+/// `elo_k_eff = K · min(1, n / n_floor)` (katgpt-rs Issue 975 T5(c)'s
+/// DDR law, arXiv:2603.06009 — evidence per unit divergence — applied to
+/// selection churn: a young rule with thin evidence moves at a damped
+/// rate, so early noisy verdicts cannot fling a rating the batch cannot
+/// take back). Monotone non-decreasing in `n`; exactly `k` at
+/// `n >= n_floor`; `n_floor == 0` degenerates to `k` (no floor, no damp).
+/// The schedule-shape reference is `katgpt_core::step_noise::min_ddr_at`
+/// (evidence floor rising with budget) — the linear ramp here is the
+/// issue's pinned formula, not a sigmoid.
+#[must_use]
+pub fn elo_k_eff(k: f32, n: u32, n_floor: u32) -> f32 {
+    if n_floor == 0 || n >= n_floor {
+        return k;
+    }
+    #[allow(clippy::cast_precision_loss)] // counts < 2^23 by contract
+    let ratio = n as f32 / n_floor as f32;
+    k * ratio
+}
+
 /// Elo per log10 unit — the standard-chess scale both katgpt-rs paths use
 /// (`PlackettLuceConfig::elo_scale`, from `katgpt_core::rating`).
 #[allow(clippy::cast_possible_truncation)] // 400.0 is exactly representable in f32
@@ -78,6 +106,17 @@ pub fn expected_score(a: f32, b: f32) -> f32 {
 #[must_use]
 pub fn update_pair(a: f32, b: f32, a_won: bool) -> (f32, f32) {
     katgpt_core::rating::update_f32(a, b, a_won, ELO_K, ELO_SCALE)
+}
+
+/// [`update_pair`] at an EXPLICIT K — the Issue-190 damp seam: the batch
+/// replay passes `elo_k_eff(ELO_K, n, ELO_K_EFF_FLOOR)` so a young rule's
+/// match moves both sides at the damped rate. Zero-sum by construction
+/// (one K per match — the rule's evidence schedules the WHOLE match, so
+/// the span opponent still gains exactly what the rule loses; per-side
+/// damping would break conservation).
+#[must_use]
+pub fn update_pair_k(a: f32, b: f32, a_won: bool, k: f32) -> (f32, f32) {
+    katgpt_core::rating::update_f32(a, b, a_won, k, ELO_SCALE)
 }
 
 /// One zero-sum SCORED match update — the half-win representation (Issue
@@ -148,6 +187,16 @@ impl EloTable {
     /// Play one match `a` vs `b`, updating both sides.
     pub fn play(&mut self, a: &str, b: &str, a_won: bool) {
         let (ra, rb) = update_pair(self.rating(a), self.rating(b), a_won);
+        self.ratings.insert(a.to_string(), ra);
+        self.ratings.insert(b.to_string(), rb);
+    }
+
+    /// [`EloTable::play`] at an explicit K — the Issue-190 replay seam
+    /// (`traj_store::recompute_elo` schedules each match by the rule's
+    /// evidence count). `k == ELO_K` reproduces [`EloTable::play`]
+    /// bit-for-bit (the same primitive underneath).
+    pub fn play_with_k(&mut self, a: &str, b: &str, a_won: bool, k: f32) {
+        let (ra, rb) = update_pair_k(self.rating(a), self.rating(b), a_won, k);
         self.ratings.insert(a.to_string(), ra);
         self.ratings.insert(b.to_string(), rb);
     }
@@ -617,5 +666,56 @@ mod tests {
         // And the expected score at equilibrium is the win rate itself.
         let e = expected_score(t.rating("r"), t.rating("s"));
         assert!((e - 0.75).abs() < 0.05, "expected {e} vs win rate 0.75");
+    }
+
+    // ── Issue 190: the evidence-damped K ─────────────────────────
+
+    #[test]
+    fn elo_k_eff_is_monotone_in_n_and_k_at_the_floor() {
+        // Monotone non-decreasing in n, exactly k at the floor and above.
+        let mut prev = 0.0f32;
+        for n in 0..=64u32 {
+            let k = elo_k_eff(ELO_K, n, ELO_K_EFF_FLOOR);
+            assert!(k >= prev, "k regressed at n={n}: {k} < {prev}");
+            if n >= ELO_K_EFF_FLOOR {
+                assert_eq!(k, ELO_K, "n={n} past the floor must be full K");
+            }
+            prev = k;
+        }
+        // First outcome is the deepest damp.
+        assert_eq!(elo_k_eff(ELO_K, 1, ELO_K_EFF_FLOOR), ELO_K / 16.0);
+        assert_eq!(elo_k_eff(ELO_K, 0, ELO_K_EFF_FLOOR), 0.0);
+    }
+
+    #[test]
+    fn elo_k_eff_floor_zero_is_full_k_and_damp_reproduces_elo_k_off_path() {
+        // n_floor == 0 degenerates to k (no floor, no damp).
+        assert_eq!(elo_k_eff(ELO_K, 0, 0), ELO_K);
+        assert_eq!(elo_k_eff(ELO_K, 3, 0), ELO_K);
+        // The feature-OFF identity the byte-identity gate leans on: the
+        // replay's off-branch k is ELO_K verbatim, so play_with_k at that
+        // k IS play (same primitive, same args).
+        let mut a = EloTable::new();
+        let mut b = EloTable::new();
+        for won in [true, false, true, true, false] {
+            a.play("r", "s", won);
+            b.play_with_k("r", "s", won, ELO_K);
+        }
+        assert_eq!(a.rating("r"), b.rating("r"));
+        assert_eq!(a.rating("s"), b.rating("s"));
+    }
+
+    #[test]
+    fn damped_replay_moves_young_rules_less_and_stays_zero_sum() {
+        // The damp law: the SAME 4-match evidence produces a smaller
+        // rating swing when every match is damped (thin evidence), and
+        // the zero-sum invariant survives (both sides move one K).
+        let k_damped = elo_k_eff(ELO_K, 4, ELO_K_EFF_FLOOR);
+        assert!(k_damped < ELO_K);
+        let (ra, rb) = update_pair_k(1200.0, 1200.0, true, k_damped);
+        assert!((ra - 1200.0 + (rb - 1200.0)).abs() < 1e-4, "zero-sum");
+        let (ra_full, rb_full) = update_pair_k(1200.0, 1200.0, true, ELO_K);
+        assert!(ra < ra_full, "damped win moves less");
+        assert!(rb > rb_full, "damped loss costs less");
     }
 }

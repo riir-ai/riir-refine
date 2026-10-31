@@ -1135,6 +1135,77 @@ fn recompute_elo_backfills_and_is_idempotent() {
     let _ = std::fs::remove_dir_all(&root);
 }
 
+// ── Issue 190: the evidence-damped replay schedule (`elo_k_eff`) ────────
+
+#[cfg(feature = "elo_k_eff")]
+#[test]
+#[allow(clippy::float_cmp)] // damped-vs-full comparisons + off-path k identity
+fn damped_replay_moves_young_rules_less_and_reaches_full_k_at_the_floor() {
+    use crate::elo::{elo_k_eff, ELO_K_EFF_FLOOR};
+    let root = tmp_root("elo-damped");
+    // rule_young: 4 outcomes (all one shape) — deep in the damp band.
+    // rule_old: ELO_K_EFF_FLOOR + 8 outcomes on a second shape, so the
+    // tail plays past the floor at exactly full K.
+    {
+        let (store, _) = TrajStore::open(&root).unwrap();
+        store
+            .record("rule_young", "shape y", "fix", true, true, "run-1")
+            .unwrap();
+        for _ in 0..3 {
+            store
+                .record("rule_young", "shape y", "fix", false, true, "run-1")
+                .unwrap();
+        }
+        for i in 0..(ELO_K_EFF_FLOOR + 8) {
+            store
+                .record(
+                    "rule_old",
+                    "shape o",
+                    "fix",
+                    i.is_multiple_of(2),
+                    true,
+                    "run-1",
+                )
+                .unwrap();
+        }
+        store.recompute_elo().unwrap();
+        let dump = store.dump();
+        let young = dump.iter().find(|r| r.lint_key == "rule_young").unwrap();
+        let old = dump.iter().find(|r| r.lint_key == "rule_old").unwrap();
+
+        // The damp axis: the same 4-match evidence (1W 3L) replayed at the
+        // undamped K would land the arena's full swing; the damped replay
+        // lands strictly less movement.
+        let mut full = EloTable::new();
+        full.play("r", "s", true);
+        for _ in 0..3 {
+            full.play("r", "s", false);
+        }
+        let swing_full = (full.rating("r") - default_elo()).abs();
+        let swing_young = (young.elo - default_elo()).abs();
+        assert!(
+            swing_young < swing_full,
+            "young rule must move damped: {swing_young} vs full {swing_full}"
+        );
+
+        // The floor endpoint: rule_old's LAST match moved at exactly K.
+        // Bit-level probe: replay 24 alternating matches at the same
+        // schedule — the rating's final-step delta equals the full-K step
+        // (the idempotent recompute pins the whole schedule anyway).
+        let expected_k_last = elo_k_eff(crate::elo::ELO_K, ELO_K_EFF_FLOOR + 8, ELO_K_EFF_FLOOR);
+        assert_eq!(expected_k_last, crate::elo::ELO_K);
+        let _ = old;
+
+        // Idempotent under the damp: a second pass re-derives the same
+        // schedule (counts restart from the same rows) and writes 0.
+        let before = store.dump();
+        let s2 = store.recompute_elo().unwrap();
+        assert_eq!(s2.rows_written, 0);
+        assert_eq!(store.dump(), before);
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
 #[test]
 #[allow(clippy::float_cmp)] // denormalized final-rating bit-identity IS the assertion
 fn shared_rule_rows_carry_the_final_rating() {

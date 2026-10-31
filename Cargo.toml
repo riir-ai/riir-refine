@@ -298,6 +298,20 @@ basis_cert = ["katgpt-core/basis_split"]
 # precedent).
 set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 
+# katgpt-rs Issue 975 T5(c) consumer (Issue 190): the evidence-damped Elo
+# schedule on the batch rating replay — `elo_k_eff = K·min(1, n/n_floor)`,
+# n the per-rule outcome count in canonical order, n_floor the regime
+# monitor's own warmup (one evidence notion across the lane) — plus the
+# REPORT-ONLY `regime:` readout on the score-bench line (a
+# katgpt-core/step_noise StepNoiseMonitor fed the (selection-state, score)
+# series across the run; the `--frontier-report` precedent: no exit-code
+# change, no auto-demotion). Feature-off is byte-identical (the off branch
+# schedules every match at ELO_K verbatim). The damp rides the
+# latent_retrieval store's recompute (--recompute-elo); the readout rides
+# score_bench. Consume, never fork: katgpt-core/step_noise is the
+# primitive (PoC G1–G4 PASS at katgpt-rs 48fd0be4d).
+elo_k_eff = ["katgpt-core/step_noise"]
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D

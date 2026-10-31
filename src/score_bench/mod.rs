@@ -52,6 +52,10 @@ pub mod localization;
 pub mod necessity;
 pub mod ood;
 pub mod report;
+// Issue 190 — the REPORT-ONLY regime readout (the katgpt-core step_noise
+// monitor is feature-forwarded by `elo_k_eff`).
+#[cfg(feature = "elo_k_eff")]
+pub mod regime;
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
