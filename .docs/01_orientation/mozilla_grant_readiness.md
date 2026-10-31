@@ -87,7 +87,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 - [ ] Owner: openness amendment decided (T1) — **by 2026-11-07**
 - [ ] Owner: event posture confirmed (T2) — **by 2026-11-07**
 - [x] Evidence pack collected (T3) — landed 2026-10-31 by zed-m3-idle-ev190 → [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md)
-- [ ] Charitable-build sweep passes (T14) — **before pilot installers ship**
+- [ ] Charitable-build sweep passes (T14) — **requires T14a + T14b landed by 2026-11-14; blocks pilot installers**
 - [ ] Pilot soft launch published (T4), announcing the T11 public-repo-free policy
 - [ ] Owner: entity / fiscal sponsor path known (T5) — **by 2026-11-07**
 - [ ] Public-copy audit done (T6)
@@ -99,7 +99,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 
 ## 9. Sustainability postures + license strategy (v3 2026-10-31, owner direction)
 
-**POSTURE A — EVENT POSTURE (PRIMARY).** All KAT/credit functionality feature-gated OFF in the public artifact before the application: public installers ship the charitable feature set (no `kat_service`/`kat_transport`); internal dev builds unchanged; the heal path carries no credit/ledger/payment functionality in any command. **Precision (bound by T14):** the inert `riir-kat` accounting-types crate remains linked (non-optional dep, feature-free tier: mining_consent/service_config/soft_gate/units/service_urls compile ungated) — claims use the precise form ("no credit/ledger/payment functionality"), never "fully compiled out"; **T14a** (make `riir-kat` optional behind the features) is the dated engineering upgrade — until it lands and T14 re-passes, the strict zero-graph/zero-strings bar does NOT apply. The application carries **zero credit/ledger/tokenomics claims** — nothing to disclose, nothing to pin, T13 does not apply to the funded scope. Sustainability = open source:
+**POSTURE A — EVENT POSTURE (PRIMARY; CONTINGENT).** All KAT/credit functionality feature-gated OFF in the public artifact — **contingent on T14a + T14b landing (by 2026-11-14) and the T14 sweep passing**: public installers ship the charitable feature set (no `kat_service`/`kat_transport`) only then; internal dev builds unchanged (enabling `kat_service` restores the full flows). **Known blockers the sweep depends on:** the inert `riir-kat` accounting-types crate remains linked until T14a (non-optional dep, feature-free tier: mining_consent/service_config/soft_gate/units/service_urls compile ungated), and the mining/join/consent CLI surface is ungated until T14b (`--mine`/`--unmine`, the "how to earn KAT" usage lines, the join/config service-URL surface, `run_mine_intro`/`ensure_join_env_recorded`). Until both land and T14 passes: no charitable installer ships, and Posture A's sentences are targets, not claims — the T10 no-submit gate holds regardless. The application carries **zero credit/ledger/tokenomics claims** — nothing to disclose, nothing to pin, T13 does not apply to the funded scope. Sustainability = open source:
 
 | Layer | License | Moat status |
 |---|---|---|
@@ -125,7 +125,8 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 | Nov 3–7 | Owner decisions on 190 T1/T2/T5 (+ rethink 048 T4); entity/fiscal-sponsor facts gathered |
 | Nov 7 | Send consult email v3 to `incubator@mozillafoundation.org` (answers reshape the application before final prose) |
 | Nov 12 | Attend info session (17:00 UTC); register when posted |
-| Nov 12–17 | Charitable-build sweep (T14) passes → pilot installers; external-pilot soft launch announcing the public-repo-free policy (T11); capture download/issue evidence |
+| **Nov 14** | **T14a + T14b code deadline** (optional `riir-kat` + CLI mining/join/consent gating), then T14 sweep |
+| Nov 14–17 | Sweep passes → pilot installers; external-pilot soft launch announcing the public-repo-free policy (T11); capture download/issue evidence |
 | **Nov 17** | **No-submit gate check (T10)** — decide submit / hold on the evidence |
 | Nov 17–19 | Final application prose owner-voiced (only if the gate passes); owner review; submit |
 | **Nov 20, 11:59 PM PST** | **Deadline** |
@@ -139,7 +140,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 >
 > We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first, modelless code-healing tool for Rust, which embeds our open decision-serving components for its escalation decisions.)
 >
-> 1. **Open-core sustainability.** Our tool is free for open-source repositories. We sustain it as a fully open-source project: the healing core AND the fleet/corpus-production tooling are MIT, and the community-contributed repair corpus stays open (MIT) forever. Revenue comes from enterprise licensing of the repair corpus our own GPU infrastructure produces, and from hosted/support services. One plain disclosure: a separate credit/ledger commercial lane exists in our workspace — no part of it is present in the public build, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
+> 1. **Open-core sustainability.** Our tool is free for open-source repositories. We sustain it as a fully open-source project: the healing core AND the fleet/corpus-production tooling are MIT, and the community-contributed repair corpus stays open (MIT) forever. Revenue comes from enterprise licensing of the repair corpus our own GPU infrastructure produces, and from hosted/support services. One plain disclosure: a separate credit/ledger commercial lane exists in our workspace — we are removing it from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
 > 3. **"Work in the open."** The tool currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
 >
