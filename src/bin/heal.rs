@@ -189,9 +189,11 @@ enum KatCommand {
     /// divergence gauge. Needs `kat_transport` (the lease reads).
     CorpusPr,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
-    /// the persisted service-url surface (env > config > default). Ungated:
-    /// local-only (the consent-record precedent); the money commands it
-    /// re-points are the gated ones.
+    /// the persisted service-url surface (env > config > default). Issue
+    /// 190 T14b: now GATED `kat_service` with the rest of the service-URL
+    /// surface (a charitable build has no service to point at; the command
+    /// refuses via the build stamp). Was "ungated, local-only" — the
+    /// Posture-A grant posture supersedes that.
     Config,
 }
 
@@ -378,7 +380,7 @@ fn command_service_url() -> String {
 /// pre-flight, so one fetch serves the whole command). `None` = a gen-1
 /// ledger without an id (or the loopback dev rig / a build without the
 /// transport): the composers then sign today's v1 bytes, byte-identical.
-#[cfg(feature = "kat_service")]
+#[cfg(feature = "kat_transport")]
 fn kat_ledger_id(url: &str) -> Option<[u8; 32]> {
     #[cfg(feature = "kat_transport")]
     {
@@ -940,6 +942,10 @@ fn default_sync_policy_gate() -> riir_refine::kat_redact::RedactionGate {
 /// `service_url_for_command` resolves it. A refusal prints loud and exits
 /// 2 with the remedy named — a fresh non-TTY join never silently rides the
 /// old default, and never hangs.
+///
+/// Issue 190 T14b: the join surface rides the credit plane — gated
+/// `kat_service`; the charitable build has no service to join.
+#[cfg(feature = "kat_service")]
 fn ensure_join_env_recorded() {
     if let Err(msg) =
         riir_refine::kat_join::run(PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed))
@@ -949,13 +955,14 @@ fn ensure_join_env_recorded() {
     }
 }
 
+/// territory — use `cargo refine --unmine --purge`.)
+///
+/// Issue 190 T14b: the mining onboarding rides the credit plane — gated
+/// `kat_service`; a build without it refuses at the dispatch arm naming
+/// the rebuild (the old ungated consent-write behavior is the thing the
+/// Posture-A grant posture removes).
+#[cfg(feature = "kat_service")]
 fn run_mine_intro() {
-    // Plan 045 A1: the first-join choice runs before the explainer so a
-    // fresh machine's join output opens with its network decision (and a
-    // mainnet joiner's posture copy sits up-front, never after the first
-    // 503). A configured machine: no prompt, no output — the explainer
-    // below is byte-identical to the pre-A1 shape.
-    ensure_join_env_recorded();
     println!("KAT mining — turn your healing work into network credit");
     println!();
     println!("WHAT: every cargo refine run records HOW the healer behaved (which rules");
@@ -996,8 +1003,9 @@ fn run_mine_intro() {
     println!("WATCH: cargo refine account              <- burn, balance, grant, network state");
     println!();
 
-    // Feature halves: the status the build can actually see.
-    #[cfg(feature = "kat_service")]
+    // Feature halves: the status the build can actually see. (The whole
+    // fn is `kat_service`-gated since Issue 190 T14b — only the transport
+    // split below remains a real posture fork.)
     {
         // Owner mandate 2026-09-10: --mine IS the join command — a missing
         // account is a dead-end the explainer had to apologize for ("step 2
@@ -1019,10 +1027,6 @@ fn run_mine_intro() {
             "web wallet (same account): {}/wallet   <- GitHub SSH-key match",
             wallet_base.trim_end_matches('/')
         );
-    }
-    #[cfg(not(feature = "kat_service"))]
-    {
-        println!("status: account/status halves need a build with --features kat_service");
     }
     #[cfg(feature = "kat_transport")]
     {
@@ -1175,8 +1179,13 @@ fn run_mine_intro() {
 ///   half stays refused either way; a skipped or failed note never changes
 ///   the exit code and the outbox is still never touched.
 ///
-/// Standalone early-return mode (before `validate_mode_flags`), works in
-/// EVERY feature build, exits 0, and is idempotent.
+/// Standalone early-return mode (before `validate_mode_flags`), exits 0,
+/// and is idempotent.
+///
+/// Issue 190 T14b: gated `kat_service` with the dispatch arm — the
+/// opt-out of a plane the build does not carry is a rebuild refusal, not
+/// a local consent write.
+#[cfg(feature = "kat_service")]
 fn run_unmine(purge_server: bool) {
     let dir = riir_refine::kat_mining_consent::default_dir();
     let (before, warning) = riir_refine::kat_mining_consent::read_with_warning(&dir);
@@ -1450,6 +1459,10 @@ fn run_stats_consent(on: bool, off: bool) {
 ///    exactly the grant-farm shape the daily-activity sybil tax exists to
 ///    tax, and this flag must not be the easy one-command path into it.
 ///    Hence: explicit `--purge`, never the default.
+///
+/// Issue 190 T14b: gated `kat_service` behind the dispatch arm with
+/// `--unmine` (a purge without the credit plane is meaningless).
+#[cfg(feature = "kat_service")]
 fn run_unmine_purge() {
     let account_dir = riir_refine::kat_account::KatAccount::default_dir();
     match riir_refine::kat_account::KatAccount::load(&account_dir) {
@@ -1531,11 +1544,11 @@ fn run_unmine_purge() {
 /// can only drain to X), resolved the SAME way the queue resolves it
 /// (`resolve_heal_root` + the resolved service URL →
 /// `.refine/net/<key>/outbox`) so the path `--unmine` names is the path a
-/// queued batch actually sits at. No cfg
-/// fallback: `resolve_heal_root` compiles behind
-/// `latent_retrieval`/`kat_service` and this binary's `required-features`
-/// include BOTH, so a build of `cargo-refine` without it cannot exist — an
-/// unreachable cfg arm would be an untested claim, not extra safety.
+/// queued batch actually sits at. Gated `kat_service` (Issue 190 T14b —
+/// the resolved service URL is a `kat_service` fn): with the credit plane
+/// compiled out there is no outbox and no caller (the `--unmine` dispatch
+/// refuses).
+#[cfg(feature = "kat_service")]
 fn unmine_outbox_dir() -> PathBuf {
     riir_refine::kat_state_stamp::net_state_dir_for_url(
         &resolve_heal_root(&[]),
@@ -3398,6 +3411,12 @@ fn push_mining_batch(
 /// trap, and (for a custom/loopback host) the local-artifact caveat for
 /// payment links/QRs (g5). The get is the g3 diagnosis: the ACTIVE url AND
 /// its source. Local-only and ungated — works in every feature build.
+/// other dial.
+///
+/// Issue 190 T14b: both `config` halves are `kat_service`-gated — the
+/// service-URL bookkeeping has no consumer in a charitable build (every
+/// dial is behind the same gate).
+#[cfg(feature = "kat_service")]
 fn run_kat_config(
     set: bool,
     url: Option<&str>,
@@ -3545,6 +3564,7 @@ fn run_kat_config(
 /// the declared net's alias resolves canonically in production, and a mock
 /// ledger stands in for it under test. The pin gates the override like any
 /// other dial.
+#[cfg(feature = "kat_service")]
 fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, paths: &[PathBuf]) {
     use riir_refine::kat_adopt::{self as adopt, AdoptVerdict, FileClass, HostFacts, Placement};
     use riir_refine::kat_service_config as svc;
@@ -4388,6 +4408,12 @@ fn run_kat_migrate(
 
     // ── riir-dapps Issue 143: B's attest co-signature (run on B's box with
     // B's own key; prints a public bundle — no private key leaves) ──
+    // The lib half is `kat_transport`-gated (it dials GitHub + the
+    // service) — issue 190 T14b: a no-transport build refuses with the
+    // rebuild instead of failing to compile (the posture was BROKEN on
+    // develop before this split — the bin's own required-features row
+    // admits kat_service WITHOUT kat_transport).
+    #[cfg(feature = "kat_transport")]
     if let Some((old_hex, new_hex)) = attest_cosign {
         let Some(github_user) = github else {
             eprintln!(
@@ -4417,6 +4443,10 @@ fn run_kat_migrate(
             }
         }
         return;
+    }
+    #[cfg(all(feature = "kat_service", not(feature = "kat_transport")))]
+    if attest_cosign.is_some() {
+        riir_refine::build_stamp::refuse("migrate --attest-cosign", &["kat_transport"]);
     }
 
     // ── the status read ──
@@ -4964,6 +4994,10 @@ fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
 /// the read failed (the caller falls back to the bare 429 prose). The
 /// account signing key is required because the seq actions are signed —
 /// fetched here once, reused by show/void.
+///
+/// Issue 190 T14b: transport-gated — every caller sits in a kat_transport
+/// arm (the no-transport topup arms refuse before reaching this).
+#[cfg(feature = "kat_transport")]
 fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::PayPurchaseRow>> {
     #[cfg(feature = "kat_transport")]
     {
@@ -4999,6 +5033,10 @@ fn topup_open_intents(url: &str) -> Option<Vec<riir_refine::kat_protocol_pay::Pa
 
 /// USDC base units → the display string (the 6-dec fiat, whole amounts
 /// bare — the pay client's own rule, mirrored for the listing lines).
+///
+/// Issue 190 T14b: transport-gated — the readers are the catalog/listing
+/// lines behind the kat_transport arms.
+#[cfg(feature = "kat_transport")]
 fn format_usdc(base: u64) -> String {
     // USDC's own 6-dec base unit (a third million — neither µKAT nor the
     // token Mtok), derived from riir-kat's decimals const, never a literal.
@@ -5203,7 +5241,13 @@ fn run_kat_tuna() {
 /// What `topup --pack` / `buy <amount> <unit>` asked for (the buy
 /// friction-cut): an exact pack id, or an amount the CATALOG must match
 /// exactly — nobody guesses a price (the --pack refusal law).
+///
+/// The variant payloads are read by the catalog exact-match arms, which
+/// are `kat_transport` — hence the posture allow (issue 190 T14b: the
+/// kat_service-without-transport posture constructs the enum in the
+/// dispatch and refuses in run_kat_topup without ever matching it).
 #[cfg(feature = "kat_service")]
+#[cfg_attr(not(feature = "kat_transport"), allow(dead_code))]
 enum BuyAsk {
     Pack(Option<u8>),
     /// micro-KAT (the parse's unit).
@@ -6995,9 +7039,15 @@ fn user_help() -> String {
         ""
     };
     let account = if cfg!(feature = "kat_service") {
+        // Issue 190 T14b: the credit-plane verbs live in this gated
+        // fragment — a charitable build's --help prints no KAT lines at
+        // all (the T14 output bar).
         "    cargo refine login                 Sign in to your KAT account (or create one)\n\
          \x20   cargo refine account               Your balance, spend and earnings\n\
-         \x20   cargo refine --info                Account, contribution and local work in one view\n"
+         \x20   cargo refine --info                Account, contribution and local work in one view\n\
+         \x20   cargo refine --mine                What contributing is, the policy, and how to earn KAT\n\
+         \x20   cargo refine --unmine              Stop contributing (fixing keeps working)\n\
+         \x20   cargo refine config get            Show which service this install talks to\n"
     } else {
         ""
     };
@@ -7009,10 +7059,7 @@ USAGE:
     cargo refine --fix <path>...       Apply the fixes; edits that break the build are reverted
     cargo refine --suggest [--domain <{domains}>] <path>...
                                        Show the matching rules per code span, no edits
-{compile}{account}    cargo refine --mine                What contributing is, the policy, and how to earn KAT
-    cargo refine --unmine              Stop contributing (fixing keeps working)
-    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
-    cargo refine config get            Show which service this install talks to
+{compile}{account}    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
     cargo refine --version             Version and the features this build carries
     cargo refine --help-all            Every flag, including maintainer reports
 
@@ -7042,6 +7089,46 @@ fn usage_text() -> String {
     let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8|9>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold); 9 = the CRB corruption ladder (Issue 137: compile-clean/test-failing known-position localization + the DLM remask arming gate — own runner, no clippy oracle, never appended to the heal score history). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
+    // Issue 190 T14b: the credit-plane flags (--mine/--unmine/--purge/
+    // --purge-server + their descriptive blocks) are one gated fragment —
+    // a charitable build's --help-all carries none of them.
+    #[cfg(feature = "kat_service")]
+    let credit_help = "    cargo refine --mine                                 <- what mining is + policy + how to earn KAT
+    cargo refine --unmine                               <- opt OUT of contributing (healing keeps working)
+";
+    #[cfg(not(feature = "kat_service"))]
+    let credit_help = "";
+    #[cfg(feature = "kat_service")]
+    let credit_flags_help =
+        "    --mine          What KAT mining is, the policy warning, the web link, and
+                    the login → heal → sync loop (Proposal 008); LOGS YOU IN
+                    when no account exists and RUNS THE SYNC at the end (owner
+                    mandate 2026-09-10 — the join completes in one command;
+                    re-run --mine, or use `cargo refine sync`, to push newer
+                    batches). The status halves need their features.
+    --unmine        Opt OUT of contributing (keeps your account): records
+                    machine-global consent = opted out, so `cargo refine sync`
+                    refuses its PUSH half (the lease pull still runs), and
+                    clears the local sync bookkeeping (watermark; the queued
+                    .refine/outbox/ batches are named, never deleted). Your key,
+                    balance and rewards are UNTOUCHED — fully reversible with
+                    --mine. Healing (--fix / --suggest / the bare dry run) is
+                    UNCHANGED and was always local.
+    --purge         With --unmine ONLY: additionally remove the local account
+                    identity (key + record + outbox + watermark). DESTRUCTIVE:
+                    the identity IS the key — the server-side balance and
+                    rewards become permanently unclaimable (no recovery path),
+                    and a purge + re-login cycle is the fresh-grant farm shape
+                    (each new key gets a fresh once-per-key welcome grant).
+    --purge-server  With --unmine ONLY: also ask the SERVICE to purge this
+                    account's server-side mining rows — unproven rows are
+                    deleted, proven rows stop publishing in every future
+                    corpus (the audit record and earned credit stay; pairs
+                    already published cannot be recalled). Signed with your
+                    account key, so it runs BEFORE any --purge key removal.
+";
+    #[cfg(not(feature = "kat_service"))]
+    let credit_flags_help = "";
     let domains = domain_choices();
     format!(
         "cargo-refine (Plan 005) — modelless code healing via latent corpus retrieval
@@ -7051,9 +7138,7 @@ USAGE:
     cargo refine --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
     cargo refine --suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
-    cargo refine --mine                                 <- what mining is + policy + how to earn KAT
-    cargo refine --unmine                               <- opt OUT of contributing (healing keeps working)
-    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
+{credit_help}    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
     cargo refine --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
     cargo refine --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
     cargo refine --dump-trajectories > trajectories.jsonl
@@ -7363,22 +7448,7 @@ USAGE:
                     is signed with a throwaway key, so it verifies like a push
                     but belongs to no account. With no .refine-sync-policy in
                     the repo it previews the default policy --mine would write.
-    --mine          What KAT mining is, the policy warning, the web link, and
-                    the login → heal → sync loop (Proposal 008); LOGS YOU IN
-                    when no account exists and RUNS THE SYNC at the end (owner
-                    mandate 2026-09-10 — the join completes in one command;
-                    re-run --mine, or use `cargo refine sync`, to push newer
-                    batches). Works in every build; the status halves need
-                    their features.
-    --unmine        Opt OUT of contributing (keeps your account): records
-                    machine-global consent = opted out, so `cargo refine sync`
-                    refuses its PUSH half (the lease pull still runs), and
-                    clears the local sync bookkeeping (watermark; the queued
-                    .refine/outbox/ batches are named, never deleted). Your key,
-                    balance and rewards are UNTOUCHED — fully reversible with
-                    --mine. Healing (--fix / --suggest / the bare dry run) is
-                    UNCHANGED and was always local.
-    --stats [on|off]
+{credit_flags_help}    --stats [on|off]
                     The work-stats sharing consent (riir-dapps Proposal 004;
                     a THIRD consent state beside mining). `on` records OptedIn:
                     future --fix runs may push one tiny signed {{lane, rule,
@@ -7397,12 +7467,6 @@ USAGE:
                     rewards become permanently unclaimable (no recovery path),
                     and a purge + re-login cycle is the fresh-grant farm shape
                     (each new key gets a fresh once-per-key welcome grant).
-    --purge-server  With --unmine ONLY: also ask the SERVICE to purge this
-                    account's server-side mining rows — unproven rows are
-                    deleted, proven rows stop publishing in every future
-                    corpus (the audit record and earned credit stay; pairs
-                    already published cannot be recalled). Signed with your
-                    account key, so it runs BEFORE any --purge key removal.
     --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4): credit a TEST
                     account on devnet — open a faucet request, force a crank
                     settle pass when RIIR_REFINE_KAT_CRANK_TOKEN is set, then
@@ -12571,6 +12635,9 @@ fn main() {
         env!("CARGO_PKG_VERSION"),
         BUILD_COMMIT = riir_refine::build_stamp::BUILD_COMMIT,
     ));
+    // Issue 190 T14b: at the kat_service-off posture every args mutation
+    // site (the `--net`/Buy blocks) is gated out — the mut is kat-only.
+    #[cfg_attr(not(feature = "kat_service"), allow(unused_mut))]
     let mut args = parse_args();
 
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
@@ -12595,10 +12662,7 @@ fn main() {
         run_update_surface_hooks(&args.paths);
     }
 
-    // ── riir-dapps Plan 023: `config` — the LOCAL service-url surface ────
-    // Ungated (the kat_mining_consent precedent): a local record must be
-    // writable/readable in EVERY feature build, including before `login`.
-    // The money commands it re-points are the gated ones.
+    // ── riir-dapps Plan 023: `config` — the service-url surface ─────
     // riir-kat Issue 003 T11: `--net <alias>` — sugar over the env var for
     // ONE invocation. Applied HERE, before every dispatch, so every later
     // resolution (money flows, lease opens, config get) sees it; the alias
@@ -12609,6 +12673,11 @@ fn main() {
     // explicit operator/wrapper intent, e.g. a hermetic test rig) still
     // wins, but a stale persisted CONFIG default does not. `--net devnet`
     // overrides explicitly.
+    // Issue 190 T14b: both blocks are the service-URL surface — gated
+    // `kat_service`; on a charitable build an explicit `--net` names the
+    // rebuild (every consumer of the selection is behind the same gate),
+    // and no alias is invented for a `buy` that would refuse anyway.
+    #[cfg(feature = "kat_service")]
     if args.command == Some(KatCommand::Buy) && args.net_alias.is_none() {
         use riir_refine::kat_service_config as svc;
         let env_preset = std::env::var(svc::SERVICE_URL_ENV_VAR)
@@ -12623,6 +12692,10 @@ fn main() {
             args.net_alias = Some("mainnet".to_string());
         }
     }
+    if args.net_alias.is_some() && !cfg!(feature = "kat_service") {
+        riir_refine::build_stamp::refuse("--net", &["kat_service"]);
+    }
+    #[cfg(feature = "kat_service")]
     if let Some(alias) = &args.net_alias {
         use riir_refine::kat_service_config as svc;
         let url = svc::validate_service_url(alias).unwrap_or_else(|e| {
@@ -12637,14 +12710,21 @@ fn main() {
         println!("net: this invocation targets {alias} ({url})");
     }
     if args.command == Some(KatCommand::Config) {
-        run_kat_config(
-            args.config_set,
-            args.config_url.as_deref(),
-            args.config_adopt_state.as_deref(),
-            args.config_adopt_discard,
-            &args.paths,
-        );
-        return;
+        // Issue 190 T14b: the service-URL surface rides `kat_service` (see
+        // the run_kat_config note) — same split as the `upgrade` arm below.
+        #[cfg(feature = "kat_service")]
+        {
+            run_kat_config(
+                args.config_set,
+                args.config_url.as_deref(),
+                args.config_adopt_state.as_deref(),
+                args.config_adopt_discard,
+                &args.paths,
+            );
+            return;
+        }
+        #[cfg(not(feature = "kat_service"))]
+        riir_refine::build_stamp::refuse("config", &["kat_service"]);
     }
 
     // ── Issue 153 T2: `upgrade` — the verified binary self-update ────
@@ -13074,24 +13154,35 @@ fn main() {
     }
     // `--yes` was armed at the top of main (before every dispatch — the
     // `login` path and the Plan 045 A1 first-join prompt read it).
+    // Issue 190 T14b: the mining onboarding + opt-out ride the credit
+    // plane — gated `kat_service`; a build without it refuses at the
+    // dispatch arm naming the rebuild (the flags stay parsed per the
+    // KatCommand precedent so the refusal is typed, never a misroute).
+    #[cfg(feature = "kat_service")]
     if riir_refine::kat_mining_consent::flags_conflict(args.mine, args.unmine) {
         eprintln!("{}", riir_refine::kat_mining_consent::CONFLICT_MESSAGE);
         std::process::exit(2);
     }
+    #[cfg(feature = "kat_service")]
     if args.mine {
         run_mine_intro();
         return;
     }
     // ── Owner mandate 2026-09-08: --unmine — the opt-OUT counterpart. ────
     // Standalone, same shape as --mine (early return before
-    // validate_mode_flags), works in EVERY build. Records consent = opted
-    // out so `cargo refine sync` refuses its push half; deletes nothing.
+    // validate_mode_flags). Records consent = opted out so `cargo refine
+    // sync` refuses its push half; deletes nothing.
+    #[cfg(feature = "kat_service")]
     if args.unmine {
         run_unmine(args.purge_server);
         if args.purge {
             run_unmine_purge();
         }
         return;
+    }
+    #[cfg(not(feature = "kat_service"))]
+    if args.mine || args.unmine {
+        riir_refine::build_stamp::refuse("--mine / --unmine", &["kat_service", "kat_transport"]);
     }
 
     // ── riir-dapps Proposal 004 Half 1: --stats — the work-stats consent ──
@@ -13124,14 +13215,16 @@ fn main() {
     // doc). Early return before validate_mode_flags AND before the 075
     // soft gate — a read must never be refused by the gate it reports
     // on. The stake position flag (`stake --info`) is unaffected.
+    // Issue 190 T14b posture split: the upgrade-arm shape (cfg block +
+    // diverging refuse) — no unreachable `return` at the kat-off posture.
     if args.info {
         #[cfg(feature = "kat_service")]
-        kat_info::run_kat_info(&args.paths);
-        #[cfg(not(feature = "kat_service"))]
         {
-            riir_refine::build_stamp::refuse("--info", &["kat_service"]);
+            kat_info::run_kat_info(&args.paths);
+            return;
         }
-        return;
+        #[cfg(not(feature = "kat_service"))]
+        riir_refine::build_stamp::refuse("--info", &["kat_service"]);
     }
 
     // ── Issue 037 observability: --memory-stats — the loop debug query ────
@@ -17467,8 +17560,12 @@ fn main() {
     }
     // Issue 117 (the delta half) — the loud companion: the git-style
     // stacking promise is honest only if the skip is audible — a stale
-    // binary's burn delta stacks locally instead of reporting.
-    #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+    // binary's burn delta stacks locally instead of reporting. Issue 190
+    // T14b posture split: the SKIP line names a charge state, so it exists
+    // only where a charge does — `kat_service` WITHOUT `kat_transport`.
+    // A build without `kat_service` has no billing plane at all and prints
+    // nothing (the charitable output bar).
+    #[cfg(all(feature = "kat_service", not(feature = "kat_transport")))]
     if kat_charge.is_some() {
         eprintln!(
             "kat: burn report SKIPPED — this binary lacks the network features (the un-pushed \
