@@ -25,13 +25,13 @@
 | Evaluation | Human-Scale expression · technical viability · problem-community clarity · product-community fit · impact/values · sustainability |
 | AI policy | Submitted content must be the owner's original voice |
 
-## 2. Eligibility verdict (decide here, act in issue 190)
+## 2. Eligibility verdict (decided 2026-10-31)
 
-**Both candidates conditionally eligible — prepare both, consult Mozilla, decide scope after their answer.**
+**ONE proposal: cargo refine. The decision-serving family folds in as the decision layer (§3 of Proposal 025). Rethink's application (005) PARKED; its community work continues as product follow-up.**
 
-- **cargo refine — PRIMARY.** Strongest Small+Intentional story in the workspace; openness and token frictions are decidable before the deadline; community evidence is the real risk and partially mitigable in the time left. One-line reason: zero-parameter hot path + consent-first data flows + per-repo tailored healing is a near-textbook Human-Scale AI expression, *if* the openness amendment lands.
-- **Decision stack (reflex + instinct) — SECONDARY.** Public code + abstention-first honesty is a strong Intentional story; the missing named community is the decisive gap and cannot be fully closed before Nov 20. One-line reason: strongest existing open-source surface, weakest community narrative.
-- **Not eligible as-is:** either under its current private-forever + commercial posture — the frictions below exist to fix exactly that.
+- **cargo refine — THE application.** Strongest Small+Intentional story in the workspace; openness and credit-plane frictions are decidable before the deadline; community evidence is the real risk, gated by the no-submit check (190 T10). One-line reason: zero-parameter hot path + consent-first data flows + per-repo tailored healing + free-for-the-commons policy is a near-textbook Human-Scale AI expression, *if* the openness amendment lands.
+- **Decision stack — folded in as the decision layer.** Honest scoping: the application names the OPEN components the healer consumes (reflex decision envelope + instinct escalation grammar); the private rung, weights, and economy planes are out of scope by name.
+- **Not eligible as-is** (historical, pre-adjustments): private-forever + commercial posture — the frictions below exist to fix exactly that.
 
 ## 3. Eligibility matrix — cargo refine (§ marks the proposal sections)
 
@@ -44,7 +44,7 @@
 **Frictions:**
 
 - **F1 — Openness.** Research 003 law: "anything riir-* is internal… prebuilt binaries only." Mozilla expects work in the open + open code left behind. Dist surface (installer repo, Homebrew tap, Scoop bucket) is already public; the consented corpus is already MIT data. **Proposed amendment: open the modelless core (corpus format + embedder + drafter + pruner + self-evolve) under MIT/Apache-2.0, months 1–3 of the term.** Owner decision — issue 190 T1. (This amendment language lives here and in issue 190 — private repo only.)
-- **F2 — KAT/token posture.** A token-mediated pay plane on a devnet ledger reads commercial/crypto against the charitable framing. **Freeze all pay/lease/purchase lanes out of the funded scope** (code stays; no tokens marketed; no soft-gate refusals in the charitable build). Owner decision — issue 190 T2.
+- **F2 — Credit-plane posture.** A token-mediated pay plane on a devnet ledger reads commercial/crypto against the charitable framing. **v2 resolution (owner direction): the credit system is reframed as mechanism design — free for open-source repos, contribution-earned credits or cost-recovery payment, operational bonds, expiring pilot vouchers; pay lanes stay out of grant materials (code untouched); vocabulary discipline applies.** Owner decision — issue 190 T2; the balanced story is §9 below; verify items in 190 T12.
 - **F3 — Product-community evidence.** Nothing external yet. Mitigations: installer download counts (releases API), dist-repo issues/stars, honest internal-deployment-at-scale story. Pre-application pilot: recruit 10–20 external users via Rust community channels. Issue 190 T3/T4 + the **no-submit gate (T10)**.
 - **F4 — Receiving entity.** gist-rs registration status + fiscal-sponsor path. Issue 190 T5.
 
@@ -64,12 +64,13 @@
 
 External-landscape searches (2026-10-31): open local coding tools (Continue, localpilot, DeepCoder-14B) all ride 7B–14B LLMs — **no shipped modelless/corpus-is-the-model healer found**; abstention/selective prediction is rich academic literature (El-Yaniv 2010 → NeurIPS 2025) but **no deployed abstention-first serving stack for communities found**. Supports the novelty criterion without overclaiming (landscape searches, not systematic reviews).
 
-## 6. Cross-cutting consult questions (the email below asks exactly these)
+## 6. Cross-cutting consult questions (the email below asks exactly these, v2)
 
-1. **Two proposals, one team.** The FAQ's "apply to both" answer covers Fellowship-vs-Incubator, not two Incubator proposals from one organization — ask.
+1. **Contribution-credit sustainability.** Free for OSS repos; contribution-earned credits or cost-recovery payment; operational bonds; expiring pilot vouchers; nothing traded or speculative — acceptable within a funded project?
 2. **Entity/fiscal sponsor.** Self-funded team, no clients — is fiscal sponsorship acceptable, and what documentation is required?
 3. **Openness timing.** Is a committed, dated open-sourcing plan (core open by month 3) acceptable evidence of "work in the open", or is open source required at application time?
-4. **Token-adjacent history.** One project carries an opt-in contribution-credit plane on a devnet ledger (nothing sold, nothing marketed). Must the charitable scope be fully crypto-free, or is a frozen/out-of-scope posture acceptable?
+
+(Superseded questions: two-proposals-one-team — decided single-proposal 2026-10-31; crypto-free-or-frozen — folded into question 1's framing.)
 
 ## 7. Evidence inventory (what we can honestly show today)
 
@@ -86,40 +87,61 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 ## 8. Pre-deadline checklist
 
 - [ ] Owner: openness amendment decided (T1) — **by 2026-11-07**
-- [ ] Owner: KAT freeze mechanics decided (T2) — **by 2026-11-07**
-- [ ] Evidence pack collected (T3)
-- [ ] Pilot soft launch published (T4)
+- [ ] Owner: credit-plane posture decided (T2) — **by 2026-11-07**
+- [x] Evidence pack collected (T3) — landed 2026-10-31 by zed-m3-idle-ev190 → [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md)
+- [ ] Pilot soft launch published (T4), announcing the T11 public-repo-free policy
 - [ ] Owner: entity / fiscal sponsor path known (T5) — **by 2026-11-07**
 - [ ] Public-copy audit done (T6)
 - [ ] Consult email sent (~Nov 7) + info session attended (T7)
+- [ ] T11 public-repo-free policy shipped (code + README) — **by 2026-11-17**
+- [ ] T12 verify-before-claim pinning (chain fees, bond parameters, voucher mechanics) — **by 2026-11-17**
 - [ ] No-submit gate check (T10) — **by 2026-11-17**
 - [ ] Final prose owner-voiced, submitted before Nov 20 11:59 PM PST (T8)
 
-## 9. Timeline to deadline (from 2026-10-31)
+## 9. The credit plane — the balanced tokenomics story (v2 2026-10-31, owner direction)
+
+The owner's direction: the credit system is **not for profit — it is laws** (mechanism design for a shared compute service). Mozilla can be approached as a **sponsor of the free tier**. The balanced story, element by element:
+
+| Element | Design truth | Charitable framing | Verify before claiming (T12) |
+|---|---|---|---|
+| Free for open-source repos | Product policy to ship pre-application (190 T11) | The commons is subsidized by design | Repo-origin/licence heuristic design |
+| Contribution-earned credits | Contribute redacted fix-pairs (MIT) → earn service credit; the primary earn path | The commons grows as it is used; an individual never must pay | Consent + MIT licence already shipped |
+| Cost-recovery payment | Packs priced to recover running cost; self-funded entity, no investors, no return | The alternative for orgs that prefer money to contribution | Pricing = cost study, pre-application |
+| Operational bonds (fixer/trainer) | Service rigs post stake covering penalties (bad fixes, oracle cheating, downtime) — integrity by accountability | Not investment: no yield, no appreciation, no trading | Pin real bond/slashing parameters from riir-refine/riir-chain docs |
+| Expiring pilot vouchers (TUNA-class) | Onboarding credit for cohorts; expiring, non-transferable; allocated by operator batch (never an agent lever — riir-dapps Proposal 006 B6) | The grant funds pilot cohorts as service capacity + vouchers | Confirm a grant-pilot allocation fits the operator-batch shape |
+| Offline-first accounting | Work and credit accumulate locally; settle opportunistically when online (shipped offline arc) | Built for intermittent-connectivity regions | Already shipped — cite the offline arc docs |
+| No-fee coordination ledger | The ledger records; it does not tax (owner design intent: "no fee for our chain so it's non-profit") | The ledger is infrastructure, not a revenue line | ⚠ NOT YET VERIFIED — pin against riir-chain's shipped economics or DROP the claim |
+
+**Why reviewers should accept this:** sybil resistance + cost recovery for shared compute is standard distributed-systems practice (seed ratios, storage vouchers, and the p2p patterns in Mozilla's own anchor projects — Iroh inference sharing, shared compute). The economy exists **to keep the free tier alive**, not to extract.
+
+**Vocabulary discipline (binding):** never token/airdrop/mint/staking/crypto in grant materials — say contribution credits, expiring pilot vouchers, operational bonds, coordination ledger.
+
+**Mozilla-as-sponsor lane (two postures):** (a) during the grant — the community budget funds pilot service capacity + expiring vouchers (primary; grant money never buys speculative supply); (b) after the grant — Mozilla and peer funders engaged as ongoing sponsors of the free tier's voucher/capacity allocation (a sustainability-plan line for criterion 6 and future cohorts).
+
+## 10. Timeline to deadline (from 2026-10-31)
 
 | Date | Action |
 |---|---|
-| Nov 3–7 | Owner decisions on 190 T1/T2 (+ rethink 048 T1/T2/T4); entity/fiscal-sponsor facts gathered |
-| Nov 7 | Send consult email to `incubator@mozillafoundation.org` (answers reshape scope before final prose) |
+| Nov 3–7 | Owner decisions on 190 T1/T2/T5 (+ rethink 048 T4); entity/fiscal-sponsor facts gathered |
+| Nov 7 | Send consult email v2 to `incubator@mozillafoundation.org` (answers reshape the application before final prose) |
 | Nov 12 | Attend info session (17:00 UTC); register when posted |
-| Nov 12–17 | External-pilot soft launch: call for pilot users in Rust community channels; capture download/issue evidence pack |
-| **Nov 17** | **No-submit gate check (T10)** — decide submit / hold on the evidence |
-| Nov 17–19 | Final application prose owner-voiced (only if the gate passes); owner review; submit both (or one, per consult answer) |
+| Nov 12–17 | External-pilot soft launch: call for pilot users in Rust community channels, announcing the public-repo-free policy (T11); capture download/issue evidence |
+| **Nov 17** | **T11/T12 ship-and-pin deadline + no-submit gate check (T10)** — decide submit / hold on the evidence |
+| Nov 17–19 | Final application prose owner-voiced (only if the gate passes); owner review; submit |
 | **Nov 20, 11:59 PM PST** | **Deadline** |
 
-## 10. Consult email draft (send by ~Nov 7; owner sends from owner address)
+## 11. Consult email draft v2 (send by ~Nov 7; owner sends from owner address)
 
 > **To:** incubator@mozillafoundation.org
 > **Subject:** Human-Scale AI Incubator — eligibility questions before we apply
 >
 > Dear Incubator team,
 >
-> We are preparing applications for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on four eligibility points:
+> We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first, modelless code-healing tool for Rust, which embeds our open decision-serving components for its escalation decisions.)
 >
-> 1. **Two projects, one team.** We build two working, related technologies: (a) a local-first, modelless code-healing tool for Rust — its repair "model" is a distilled, inspectable corpus of rules searched with zero neural parameters, running offline on hardware people already own, with the developer's fix memory on their own disk and nothing leaving the machine without explicit, redacted consent; and (b) an abstention-first decision-serving stack (open-source engine that classifies and routes with calibrated confidence, refuses to answer when unsure, and runs sub-millisecond on a laptop CPU with no large-model dependency). May one team submit two separate proposals to this cohort, or should we select one? We are happy to consolidate if two applications from one team would disadvantage either.
+> 1. **Contribution-credit sustainability.** Our tool is free for open-source repositories. For private/commercial use beyond a free grant, service costs are recovered through contribution-earned credits (contribute repair knowledge under an open licence → earn credit) or cost-recovery payment; service operators post operational bonds covering penalties for bad service; pilot cohorts are funded through the grant as service capacity and expiring, non-transferable vouchers. Nothing is traded or speculative — the mechanism exists to keep the free tier alive. Is a sustainability mechanism of this kind acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
-> 3. **"Work in the open."** Project (a) currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
-> 4. **Token-adjacent history.** One project carries an opt-in contribution-credit plane currently on a test-network ledger (nothing sold, nothing marketed). Will the funded scope need to be fully crypto-free, or is a frozen/out-of-scope posture acceptable?
+> 3. **"Work in the open."** The tool currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
 >
 > We plan to attend the November 12 info session. Thank you for your time — and for funding this alternative trajectory.
 >
