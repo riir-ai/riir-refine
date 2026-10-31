@@ -20,6 +20,7 @@
 | [`v035_publish_attempt.md`](v035_publish_attempt.md) | v0.3.5 — PUBLISHED 2026-10-30 (sealed-token `gh-release-pat` lane) + the build-from-TAG lesson: the first upload shipped HEAD+dirty binaries (caught by the post-publish smoke test); rebuilt in a worktree at `0542da6c`, `--clobber`ed, verified |
 | [`kat_billing.md`](kat_billing.md) | The KAT billing + TUNA trial-credit surfaces: the two tanks and the fixed-rate draw order, the run footer spec, the offline arc (stacking, report-time plane decision), why no debt exists, and the depleted posture (the 075 gate, the two refuel doors, the count-only survey, the 7-day payout clock) |
 | [`mozilla_grant_readiness.md`](mozilla_grant_readiness.md) | Mozilla Human-Scale AI grant playbook (PRIVATE strategy — deadline 2026-11-20): program facts, per-repo eligibility matrices + verdicts, frictions, evidence inventory, consult-email draft, timeline |
+| [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md) | Issue 190 T3 evidence pack (2026-10-31): public-surface counters (13 releases, 201 downloads, stars/forks) + internal-usage ledger (209 score-bench runs, 96.4% heal rate, corpus counts) + the honest T10 reading |
 | [`role_flows.md`](role_flows.md) | The four Get-started roles (coder / miner / fixer / trainer) as DO → GET → COST flow diagrams + the shared cost plane + the role × tier grid; the per-tab SVG renders the front page embeds (Issue 132) |
 
 ## See also
