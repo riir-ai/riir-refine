@@ -419,7 +419,7 @@ skill points agents there). Per sweep:
 | `riir-refine` (this) | `riir-refine/.agents/skills/riir-refine/` | symlink ✓ |
 | `boundary-guard` | `katgpt-rs/.agents/skills/boundary-guard/` | symlink ✓ |
 | `substrate-first` | `katgpt-rs/.agents/skills/substrate-first/` | symlink ✓ |
-| `doc-sync` | global-only real dir (no repo home yet — pending) | — |
+| `doc-sync` | `katgpt-rs/.agents/skills/doc-sync/` | symlink ✓ |
 | `build-hygiene` | `katgpt-rs/.agents/skills/build-hygiene/` | symlink ✓ |
 | `rust-optimize` | `katgpt-rs/.agents/skills/rust-optimize/` | no symlink (manual `/optimize` invocation only) |
 | `feature-gate-audit`, `goat-audit`, `proposal`, `research` | `katgpt-rs/.agents/skills/` (tracked) | no symlink yet |
