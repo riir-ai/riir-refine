@@ -1,7 +1,7 @@
 # Plan 283: Batch 279 — the Locals rider faces (crash-quarantine tune + lazy-row prefetch B36)
 
 **Status:** HANDOFF — T0–T2 + docs done (wip `1fe1c438`, LOCAL); T3 gates were BLOCKED at authoring time by the sibling's saturating measurement (Plan-337 deferral — that blocker is LIFTED, the m3 box verified quiet 2026-10-28T01:0xZ); the face is now PARKED behind the B298 bbtree corpus window per the standing idle-loop adjudication (snapshot rows b307/b310/boundary293 — landing mid-window moves lib-test counts + floor pins inside the serialized authoring window; b305 claim to 2026-10-29T09:44Z; resume converts at the window's clear). The zed-glm-b279 claim EXPIRED 2026-10-27T23:31Z unclaimed — re-claim at resume per the T3 recipe step (1). ⚠ The recipe's upstream pins are STALE — read the T3 ADDENDUM (2026-10-28) before resuming. The two riders Research 315's queue deferred at the Batch 278 landing ("Riders DEFERRED (crash-quarantine tune face + lazy-row prefetch B36 face — recorded in Research 315's queue)"): count-neutral (corpus stood 966 at authoring — the live count has moved with batches 282–297, see the T3 ADDENDUM), both faces land as RIDER paragraphs on EXISTING rules — no new slice, no count move.
-**Claimed:** zed-glm-b279, 1792884704, expires 2026-10-27T23:31:44+00:00
+**Lease closed:** zed-glm-b279, epoch 1792884704, was expires 2026-10-27T23:31:44+00:00 (staleness fold — T0-T2 stand; T3 stays parked behind the B298 bbtree corpus window per the Status line; re-claim at the next mining slot)
 
 ## Tasks
 

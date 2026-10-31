@@ -1,7 +1,7 @@
 # Plan 306 — Leviathan rusqlite + sec corpus batch (nominal Batch 301)
 
 **Status:** STAGED → PHASE 1+2 DONE, Phase 3+ serialized (plan-first per the distill protocol; verdict note `.research/343`, reference mapping `../riir-neuron-db/.research/312`. The CORPUS batch (T3+) still awaits the queue heads (bbtree B298 rust_perf lease to 2026-10-29T09:44Z; perfect-hash B300 slot) — claim per the mining queue before any corpus edit. Cross-domain mix (rust_perf + sec) per the B293 precedent.
-**Claimed:** zed-m3-leviathan-remains, 1793194861, expires 2026-10-30T13:41:01+00:00
+**Lease closed:** zed-m3-leviathan-remains, epoch 1793194861, was expires 2026-10-30T13:41:01+00:00 (staleness fold — Phases 1+2 stand; Phase 3+ stays serialized behind the queue heads per the Status line; re-claim at the next slot)
 
 **Owner adjudication (2026-10-28, sessions `974c2e79`/`6a189526`):** OG-4 GO — the term-cap fix landed in seal-game-editor (dedupe-before-cap + 32-atom + 4KiB-byte budgets through one shared helper, never-silent truncation notice; issue 273 closed `24911ab4e`, HISTORY row `5d234a69b`). The ndb-side follow-ups: OG-2 GO→LANDED+PROMOTED (`bm25_facet`, plan 336/Bench 515), OG-1 NO-GO + OG-3 policy recorded (ndb 312 addendum `9a11b10`). T2.4's corpus citation now also carries the closed issue + the cap constants as the known-good delta.
 
