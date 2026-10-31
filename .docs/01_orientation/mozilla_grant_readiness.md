@@ -95,6 +95,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 - [ ] Consult email sent (~Nov 7) + info session attended (T7)
 - [ ] T11 public-repo-free policy shipped (code + README) — **by 2026-11-17**
 - [ ] T12 verify-before-claim pinning (chain fees, bond parameters, voucher mechanics) — **by 2026-11-17**
+- [ ] T13 credit-scope integrity checks (transferability, bond rewards, payee entity) — **by 2026-11-17**
 - [ ] No-submit gate check (T10) — **by 2026-11-17**
 - [ ] Final prose owner-voiced, submitted before Nov 20 11:59 PM PST (T8)
 
@@ -129,7 +130,7 @@ Reading note (mirrors Proposal 025 §4): cost-recovery payment for private use i
 | Nov 7 | Send consult email v2 to `incubator@mozillafoundation.org` (answers reshape the application before final prose) |
 | Nov 12 | Attend info session (17:00 UTC); register when posted |
 | Nov 12–17 | External-pilot soft launch: call for pilot users in Rust community channels, announcing the public-repo-free policy (T11); capture download/issue evidence |
-| **Nov 17** | **T11/T12 ship-and-pin deadline + no-submit gate check (T10)** — decide submit / hold on the evidence |
+| **Nov 17** | **T11/T12/T13 ship-and-pin deadline + no-submit gate check (T10)** — decide submit / hold on the evidence |
 | Nov 17–19 | Final application prose owner-voiced (only if the gate passes); owner review; submit |
 | **Nov 20, 11:59 PM PST** | **Deadline** |
 

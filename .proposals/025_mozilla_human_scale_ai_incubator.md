@@ -103,13 +103,13 @@ Budget shape (indicative): ~60% people (2–3 contributors), ~15% pilot + commun
 
 - **Mozilla AI-use policy:** this draft is internal preparation material. Submitted answers must be written by the owner in their own voice; agent text is source material, never paste-ready prose.
 - **Vocabulary discipline:** §4's binding word list applies to every grant-facing document.
-- **Verify-before-claim (blocking external use):** chain-fee posture ("no fees" must be pinned against riir-chain's shipped economics before it appears anywhere); fixer/trainer bond + penalty parameters pinned from riir-refine/riir-chain docs; pilot-voucher allocation mechanics confirmed as a lawful operator batch. Issue 190 T12.
+- **Verify-before-claim (blocking external use):** chain-fee posture ("no fees" must be pinned against riir-chain's shipped economics before it appears anywhere); fixer/trainer bond + penalty parameters pinned from riir-refine/riir-chain docs; pilot-voucher allocation mechanics confirmed as a lawful operator batch. Plus the credit-scope integrity checks (transferability, bond rewards, payee entity). All unpinnable items get dropped from the application, not hedged. Issue 190 T12/T13.
 - **No fabrication:** the pilot (W3) and partner names are TODOs, not achievements; the application says "recruiting now" honestly.
 
 ## Related
 
 - [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) — public program digest; full strategy in the private readiness playbook
-- [refine issue 190](../.issues/190_mozilla_grant_readiness_gaps.md) — the readiness task list (v2: T11 public-repo-free policy, T12 credit-plane verify)
+- [refine issue 190](../.issues/190_mozilla_grant_readiness_gaps.md) — the readiness task list (v2: T11 public-repo-free policy, T12 verify-before-claim, T13 credit-scope integrity)
 - [refine .docs/01_orientation/mozilla_grant_readiness.md](../.docs/01_orientation/mozilla_grant_readiness.md) — the private playbook (v2: §9 the credit-plane story, §11 the consult email)
 - [riir-rethink Proposal 005](../../riir-rethink/.proposals/005_mozilla_human_scale_ai_incubator.md) — PARKED (superseded by the one-proposal decision); its community-candidate work lives on as product follow-up
 - [Research 003](../../katgpt-rs/.research/003_Commercial_Open_Source_Strategy_Verdict.md) — the openness law this application proposes to amend for the charitable core
