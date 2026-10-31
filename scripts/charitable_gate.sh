@@ -1,0 +1,290 @@
+#!/bin/sh
+# ─────────────────────────────────────────────────────────────────────────────
+# Issue 190 T14 — the charitable (Posture A) build sweep, as a NAMED posture.
+#
+# Builds cargo-refine with the charitable feature set EXACTLY as verified by
+# T14a-min (`e7cf72ea`): default + latent_retrieval,rust_perf,clippy_lints.
+# The release set is NEVER touched here — `release_set_matches_workflow` pins
+# it; this is the second posture, built BY NAME, never a silent change.
+#
+# Bars (issue 190 T14; runnable since T14a-min + T14b landed 2026-10-31):
+#   (1) CLI output grep — `--help` / `--version` / a bare dry-run / a scan
+#       run, case-insensitive WORD-BOUNDARIED
+#       mine|KAT|earn|payout|epoch|settle|lease|credit|join|service
+#       (word boundaries per the T14a record: a naive substring trips the
+#       tagline's "learns"). grep rc is adjudicated: 1 = clean PASS,
+#       0 = hits FAIL, >=2 = grep error FAIL — a broken grep is never a pass.
+#       DISCLOSURE-CLASS EXEMPTION (T14a's recorded carve-out): the build
+#       stamp's release-set STALE disclosure + rebuild hint name the missing
+#       features BY DESIGN (posture honesty). Exempt lines are printed
+#       verbatim, counted, and CAPPED — the class growing is a loud FAIL,
+#       never a silent pass.
+#   (2) `cargo tree -e features` — riir-kat resolves at its feature-free tier
+#       + `redact` ONLY; no client/transport/service feature resolved.
+#   (3) binary strings scan — hard-zero classes (X-Kat- headers, KAT host
+#       literals, /mining/ wire, soft-gate/burn/meter machinery tokens) plus
+#       two disclosed classes:
+#         R1  help/reference/refusal text carrying kat_service|kat_transport
+#             (the --help-all maintenance listings + typed-refusal texts —
+#             none reachable from the bar-1 surfaces); disclosed + CAPPED.
+#         R2  RIIR_REFINE_KAT_* env-name strings, pinned BY NAME (census:
+#             any name outside the pin fails — a new name never rides in).
+#   (+) `--mine` refuses typed at this posture (non-zero exit naming the
+#       missing features) — the strongest single behavioral check.
+#   (+) scripts/binary_leak_scan.sh on the artifact (the shipping gate).
+#
+# ⛔ The STRICT bar (zero kat_* crates in the resolved graph) is OWNER-GATED
+# residue (the kat_redact decision, T14a row) — deliberately NOT asserted
+# here. Check (2)'s feature-free+redact shape is the blessed regular bar.
+#
+# Usage: scripts/charitable_gate.sh
+# Env:
+#   CHARITABLE_TARGET_DIR  build dir. Default: a fresh mktemp -d per run
+#                          (hermetic; the repo target/ is deliberately NOT
+#                          shared — a charitable build must never pollute or
+#                          contend with the release-set cache). Override for
+#                          iteration; rm it when done.
+#   CHARITABLE_KEEP=1      keep the build dir even on success.
+# Exit: 0 all bars pass · 1 any bar fails · 2 usage/environment
+# ─────────────────────────────────────────────────────────────────────────────
+set -u
+
+repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$repo_root" || exit 2
+
+FEATURES="latent_retrieval,rust_perf,clippy_lints"
+PATTERN='(^|[^A-Za-z])(mine|kat|earn|payout|epoch|settle|lease|credit|join|service)([^A-Za-z]|$)'
+# Bar-1 disclosure class (T14a's recorded carve-out): the build stamp's
+# release-set STALE disclosure + its rebuild hint. Anchored to the exact line
+# prefixes; anything else matching the wide pattern still fails.
+VERSION_EXEMPT='^release set: STALE|^rebuild: cargo build'
+VERSION_EXEMPT_CAP=2
+# Bar-3 hard-zero classes: transport wire · KAT hosts · mining path ·
+# soft-gate/burn/meter machinery. Token-shaped (never a bare `kat`) so the
+# katgpt-core dep tree cannot false-positive. Zero hits expected — any hit
+# fails with no exemption path.
+SYMBOL_HARD='X-Kat-|mainnet\.riir\.ai|devnet\.riir\.ai|/mining/|soft_gate|kat_burn|burn_ack|burn_client|mining_consent|kat_meter|kat_charge|kat_protocol|kat_recovery|kat_admin|tuna_admin|KAT_SERVICE|KAT_TRANSPORT'
+# R1 — the disclosed help/reference class (reason per row class):
+#   --help-all maintenance listings + long-form command help fragments +
+#   typed-refusal texts naming the missing features (the same honest-detector
+#   class the --mine check blesses) + the build-stamp release-set const blob.
+# Disclosed (printed verbatim) + capped; the class growing past the cap is a
+# loud FAIL — re-adjudicate before raising it.
+R1_PATTERN='kat_service|kat_transport'
+R1_CAP=40
+# R2 — RIIR_REFINE_KAT_* env-name strings, pinned BY NAME with reasons:
+#   RIIR_REFINE_KAT_ACCOUNT_DIR  local config/account path const (no network)
+#   RIIR_REFINE_KAT_CRANK_TOKEN  doc fragment from the crank/mine reference
+# The census extracts EVERY RIIR_REFINE_KAT_* name in the binary; a name
+# outside this pin fails even when its carrying line looks inert.
+R2_PINS='RIIR_REFINE_KAT_ACCOUNT_DIR
+RIIR_REFINE_KAT_CRANK_TOKEN'
+
+fail=0
+note() { printf '%s\n' "$*"; }
+bar_fail() { fail=1; note "  FAIL: $*"; }
+
+# ── adjudicated surface grep with a capped disclosure-class exemption ────────
+scan_surface() {
+    label=$1
+    outfile=$2
+    exempt_regex=$3
+    exempt_cap=$4
+    hits_file=$(mktemp) || { bar_fail "$label: mktemp failed"; return; }
+    grep -i -E "$PATTERN" "$outfile" >"$hits_file"
+    rc=$?
+    if [ "$rc" -eq 1 ]; then
+        note "  ok: $label — zero pattern hits"
+        rm -f "$hits_file"
+        return
+    fi
+    if [ "$rc" -gt 1 ]; then
+        bar_fail "$label — grep itself failed (rc=$rc); never a silent pass"
+        rm -f "$hits_file"
+        return
+    fi
+    # rc 0 — hits present; apply the disclosure class.
+    exempt_file=$(mktemp) || { bar_fail "$label: mktemp failed"; return; }
+    net_file=$(mktemp) || { bar_fail "$label: mktemp failed"; return; }
+    grep -i -E "$exempt_regex" "$hits_file" >"$exempt_file"
+    grep -i -v -E "$exempt_regex" "$hits_file" >"$net_file"
+    exempt_n=$(wc -l <"$exempt_file" | tr -d ' ')
+    if [ -s "$net_file" ]; then
+        bar_fail "$label — pattern hits outside the disclosure class:"
+        sed 's/^/       /' "$net_file" | sed -n '1,8p'
+    elif [ "$exempt_n" -gt "$exempt_cap" ]; then
+        bar_fail "$label — disclosure class grew to $exempt_n lines (cap $exempt_cap); re-adjudicate"
+    else
+        note "  ok: $label — $exempt_n disclosure-class line(s) exempt (disclosed below)"
+        sed 's/^/       EXEMPT: /' "$exempt_file"
+    fi
+    rm -f "$hits_file" "$exempt_file" "$net_file"
+}
+
+# ── build dir ────────────────────────────────────────────────────────────────
+if [ "${CHARITABLE_TARGET_DIR:-}" = "" ]; then
+    CHARITABLE_TARGET_DIR=$(mktemp -d) || exit 2
+    built_fresh=1
+else
+    built_fresh=0
+fi
+cleanup() {
+    if [ "$built_fresh" -eq 1 ] && [ "$fail" -eq 0 ] && [ "${CHARITABLE_KEEP:-}" != "1" ]; then
+        rm -rf "$CHARITABLE_TARGET_DIR"
+    fi
+}
+
+note "== charitable_gate: building posture default+$FEATURES"
+note "   target dir: $CHARITABLE_TARGET_DIR"
+RUSTFLAGS="--remap-path-prefix $HOME=/build" \
+    CARGO_TARGET_DIR="$CHARITABLE_TARGET_DIR" \
+    cargo build --profile dist --features "$FEATURES" --bin cargo-refine || {
+        note "charitable_gate: FAIL — charitable build does not compile (build dir kept: $CHARITABLE_TARGET_DIR)"
+        exit 1
+    }
+BIN="$CHARITABLE_TARGET_DIR/dist/cargo-refine"
+[ -f "$BIN" ] || { note "charitable_gate: FAIL — binary missing at $BIN"; exit 1; }
+
+work=$(mktemp -d) || exit 2
+
+# ── bar 1: the four CLI output surfaces ─────────────────────────────────────
+note "== bar 1: CLI output grep (word-boundaried, case-insensitive)"
+"$BIN" --help >"$work/help.out" 2>&1
+scan_surface "--help" "$work/help.out" '__never_matches__' 0
+"$BIN" --version >"$work/version.out" 2>&1
+scan_surface "--version" "$work/version.out" "$VERSION_EXEMPT" "$VERSION_EXEMPT_CAP"
+printf 'fn main() { println!("hello"); }\n' >"$work/sample.rs"
+( cd "$work" && RIIR_REFINE_AUTO_ORACLE=0 "$BIN" ) >"$work/dryrun.out" 2>&1
+scan_surface "bare dry-run" "$work/dryrun.out" '__never_matches__' 0
+( cd "$work" && RIIR_REFINE_AUTO_ORACLE=0 "$BIN" --fix --no-verify sample.rs ) >"$work/scan.out" 2>&1
+scan_surface "--fix scan" "$work/scan.out" '__never_matches__' 0
+
+# ── bar 2: cargo tree — riir-kat feature-free tier + redact ONLY ────────────
+note "== bar 2: cargo tree -e features (charitable set)"
+CARGO_TARGET_DIR="$CHARITABLE_TARGET_DIR" \
+    cargo tree -e features -i riir-kat --features "$FEATURES" >"$work/tree_inv.out" 2>&1
+inv_rc=$?
+if [ "$inv_rc" -ne 0 ]; then
+    bar_fail "cargo tree -i riir-kat failed (rc=$inv_rc):"
+    sed 's/^/       /' "$work/tree_inv.out" | sed -n '1,8p'
+else
+    kat_features=$(grep -o 'riir-kat feature "[A-Za-z_]*"' "$work/tree_inv.out" | sort -u)
+    if [ "$kat_features" = 'riir-kat feature "redact"' ]; then
+        note "  ok: riir-kat resolves at redact ONLY"
+    elif [ -z "$kat_features" ]; then
+        bar_fail "inverse tree names no riir-kat feature — unreadable, never clean"
+    else
+        bar_fail "riir-kat resolves features beyond redact:"
+        printf '%s\n' "$kat_features" | sed 's/^/       /'
+    fi
+fi
+CARGO_TARGET_DIR="$CHARITABLE_TARGET_DIR" \
+    cargo tree -e features --features "$FEATURES" >"$work/tree_fwd.out" 2>&1
+fwd_rc=$?
+if [ "$fwd_rc" -ne 0 ]; then
+    bar_fail "cargo tree -e features failed (rc=$fwd_rc):"
+    sed 's/^/       /' "$work/tree_fwd.out" | sed -n '1,8p'
+else
+    forbidden=$(grep -E 'riir-kat feature "(client|kat_transport|kat_service|account_key|siwr|rebind|provider_login|se_custody|github_pow|admin|totp)"' "$work/tree_fwd.out")
+    if [ -z "$forbidden" ]; then
+        note "  ok: no client/transport/service feature resolved"
+    else
+        bar_fail "forbidden riir-kat features in the resolved graph:"
+        printf '%s\n' "$forbidden" | sed 's/^/       /' | sed -n '1,8p'
+    fi
+fi
+
+# ── bar 3: binary strings scan ───────────────────────────────────────────────
+note "== bar 3: binary strings scan"
+strings "$BIN" >"$work/strings.txt"
+# Hard-zero classes first — no exemption path.
+hard_hits=$(grep -E "$SYMBOL_HARD" "$work/strings.txt" || true)
+if [ -n "$hard_hits" ]; then
+    bar_fail "hard-zero class strings in the binary (wire/host/machinery):"
+    printf '%s\n' "$hard_hits" | sort -u | sed 's/^/       /' | sed -n '1,12p'
+else
+    note "  ok: zero hard-zero-class strings (X-Kat- / hosts / /mining/ / machinery)"
+fi
+# R2 census: every RIIR_REFINE_KAT_* occurrence classified against the pin.
+# ⛔ .rodata byte-adjacency merges consts (strings sees
+# `RIIR_REFINE_KAT_ACCOUNT_DIRXDG_CONFIG_HOME` — no NUL between them), so a
+# row is in-pin when it EQUALS a pin, or begins with a pin and the remainder
+# carries no second KAT token (any other RIIR_REFINE_KAT_ name contains one).
+# Everything else is extra and fails; every pin must also be PRESENT.
+r2_names=$(grep -o 'RIIR_REFINE_KAT_[A-Z_]*' "$work/strings.txt" | sort -u)
+r2_pin_file="$work/r2_pins.txt"
+printf '%s\n' "$R2_PINS" | grep -v '^$' >"$r2_pin_file"
+pins_found=0
+pins_expected=0
+while IFS= read -r pin; do
+    [ -z "$pin" ] && continue
+    pins_expected=$((pins_expected + 1))
+    if printf '%s\n' "$r2_names" | grep -q -F "$pin"; then
+        pins_found=$((pins_found + 1))
+    else
+        bar_fail "R2 pin missing from the binary: $pin (the binary shape changed, re-adjudicate)"
+    fi
+done <<R2PINS
+$R2_PINS
+R2PINS
+r2_exact=$(printf '%s\n' "$r2_names" | grep -F -x -f "$r2_pin_file" || true)
+printf '%s\n' "$r2_exact" | grep -v '^$' >"$work/r2_exact.txt" || true
+r2_merged=$(printf '%s\n' "$r2_names" | grep -E '^RIIR_REFINE_KAT_(ACCOUNT_DIR|CRANK_TOKEN)[A-Z_]*$' || true)
+r2_merged=$(printf '%s\n' "$r2_merged" | grep -v -E '^RIIR_REFINE_KAT_[A-Z_]*KAT' || true)
+# a merged-candidate row that is ALSO an exact pin is an exact match, not an artifact
+if [ -s "$work/r2_exact.txt" ]; then
+    r2_merged=$(printf '%s\n' "$r2_merged" | grep -F -v -x -f "$work/r2_exact.txt" || true)
+fi
+{ [ -n "$r2_exact" ] && printf '%s\n' "$r2_exact"; [ -n "$r2_merged" ] && printf '%s\n' "$r2_merged"; } >"$work/r2_in.txt" 2>/dev/null || true
+if [ -s "$work/r2_in.txt" ]; then
+    r2_extra=$(printf '%s\n' "$r2_names" | grep -F -v -x -f "$work/r2_in.txt" || true)
+else
+    r2_extra="$r2_names"
+fi
+if [ -n "$r2_extra" ]; then
+    bar_fail "RIIR_REFINE_KAT_* names outside the R2 pin:"
+    printf '%s\n' "$r2_extra" | sed 's/^/       /'
+else
+    if [ -n "$r2_merged" ]; then
+        note "  ok: R2 census — $pins_found/$pins_expected pin(s) present; merged-const artifact(s) disclosed:"
+        printf '%s\n' "$r2_merged" | sed 's/^/       MERGED: /'
+    else
+        note "  ok: R2 census — $pins_found/$pins_expected pin(s) present, exact matches only"
+    fi
+fi
+# R1 disclosed class: what remains after hard-zero + R2 removal.
+r1_hits=$(grep -E "$R1_PATTERN" "$work/strings.txt" || true)
+r1_n=$(printf '%s\n' "$r1_hits" | grep -c . || true)
+if [ "$r1_n" -gt "$R1_CAP" ]; then
+    bar_fail "R1 disclosure class grew to $r1_n strings (cap $R1_CAP); re-adjudicate"
+else
+    note "  ok: R1 disclosure class at $r1_n string(s) (cap $R1_CAP), samples disclosed:"
+    printf '%s\n' "$r1_hits" | sort -u | sed 's/^/       R1: /' | sed -n '1,8p'
+fi
+
+# ── +: --mine refuses typed ──────────────────────────────────────────────────
+note "== +: --mine typed refusal"
+( cd "$work" && "$BIN" --mine ) >"$work/mine.out" 2>&1
+mine_rc=$?
+if [ "$mine_rc" -eq 0 ]; then
+    bar_fail "--mine exited 0 at the charitable posture — the credit plane is NOT compiled out"
+else
+    if grep -q 'kat_service\|kat_transport' "$work/mine.out"; then
+        note "  ok: --mine refuses (rc=$mine_rc) naming the missing features"
+    else
+        bar_fail "--mine refused (rc=$mine_rc) but the refusal does not name the missing features:"
+        sed 's/^/       /' "$work/mine.out" | sed -n '1,6p'
+    fi
+fi
+
+# ── +: the shipping leak-scan on the same artifact ───────────────────────────
+note "== +: binary_leak_scan on the charitable artifact"
+sh "$repo_root/scripts/binary_leak_scan.sh" "$BIN" || bar_fail "binary_leak_scan failed on the charitable artifact"
+
+rm -rf "$work"
+cleanup
+if [ "$fail" -ne 0 ]; then
+    note "CHARITABLE_GATE: FAIL — issue 190 T14 bar not met (build dir kept: $CHARITABLE_TARGET_DIR)"
+    exit 1
+fi
+note "CHARITABLE_GATE: PASS — issue 190 T14 regular bar met (Posture A shape verified)"
