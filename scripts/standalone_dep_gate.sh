@@ -87,7 +87,9 @@ cd "$(dirname "$0")/.."
 # is pinned once; the scan dedupes the same way.
 EXPECTED=$(
     cat <<'EOF'
+Cargo.toml cubecl-common
 Cargo.toml cubecl-runtime
+Cargo.toml cubecl-wgpu
 Cargo.toml katgpt-core
 Cargo.toml katgpt-device-verify
 Cargo.toml katgpt-micro-belief
