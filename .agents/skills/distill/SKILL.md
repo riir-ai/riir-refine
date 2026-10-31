@@ -36,6 +36,7 @@ Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug 
 ## Pre-flight — MANDATORY before any verdict
 
 1. Read the mining queue snapshot in `riir-refine/.distill/001_mining_queue_snapshot.md` (corpus counts, sibling-blocked files, active frontier).
+   ⛔ **Snapshot counts are claims, not facts (2026-10-31):** sibling sessions land batches continuously — re-derive the live rule count from the domain `corpus.rs` at verdict time and check `git log --oneline -5 .distill/` for commits since the snapshot's last update. The same LIVE-STATE check applies to every sibling citation: before calling another repo's issue/plan OPEN or blocked (lane-intel step 2), `git log --follow` it for a close commit and confirm the file is on disk — the Research-485 arc filed three wait-gates on an issue a sibling session had already implemented and closed, and one full verdict round paid for it.
 2. Grep the target domain's corpus file (`src/domains/<domain>/corpus.rs`) to know the category taxonomy + current rule count.
 3. Internalize the falsification history: coordinator verification kills ~50% of seeds (ambient structure, dedup, wrong regime, unreachable code). Recent batches land 1-3 rules. Yield claims above ~5 rules need extraordinary evidence.
 
@@ -86,6 +87,7 @@ Every candidate must be a **named pattern with a bounded fix-space + regime cond
 - KEEP: placement decisions (fold-at-gather vs fold-at-upload; branchful vs branchfree).
 - KILL: ambient structure — type boilerplate, import organization, macro plumbing, "uses const fn", API surface area.
 - KILL: positive instances of existing rules (the file IS rule N) — that is not a new rule; it may be a hazard filing instead.
+- KILL/ANNOTATE: monitor-shaped candidates whose regime conditions presuppose a STATEFUL host (drifting rates, sloping values, oscillating selection) when the target surface is feed-forward/exact — a fixture must reproduce the REAL host posture; no mutated host state ⇒ unreachable-in-regime (the stationary-surface category error, rethink Issue 047 round 1, 2026-10-31).
 
 ## GOAT candidate identification
 
@@ -136,6 +138,8 @@ The lane-intel axis greps OUR workspace issue ledger — it answers "does this m
 **When the product-coverage axis fires, the research note MUST also name the family's follow-up pool** — the canonical upstream sources for that lib (tokio → Alice Ryhl "What is Blocking?" + the official blocking docs + tokio-rs/mini-redis; rayon → the Lattimore posts; ...) — with an accumulation clause: pool sources read before the batch window folds into the same batch (the Batch-145/146 staged-charter precedent).
 
 Do not let a lane-intel zero suppress a product-coverage YES; do not let product coverage inflate a weak corpus grade — the grade still counts rules, the axis sets the family's priority and continuation.
+
+**The self-evolve product aim + ungoat law (owner directive 2026-10-31):** the product is the SELF-EVOLVE stack — this healer's corpus + self-evolve loop, and the Rethink (Reflex+Instinct) decision family it shares machinery with. Batches feeding the self-evolve surfaces (`self_evolve.rs`, `tier_guard.rs`, the escalation chain `seat_rerank`/`hosted_expert`/`escalation_dispatch`, `score_bench/generations.rs` freeze tables) tier FIRST when a source feeds several domains equally. **Ungoat:** a candidate that FAILS its gate at landing is DEMOTED in the landing commit — grade struck, evidence tier → Withdrawn, queue line updated; stale grades and zombie candidates are noise, and demotion is a same-commit act, never a deferred note. Every batch plan carries its proof path (fixture + falsification arm + pre-registered gate) BEFORE the first corpus edit — no runnable proof path ⇒ the candidate stays an annotation, not a graded rule.
 
 ## Verdict format — exact output shape, in conversation
 
