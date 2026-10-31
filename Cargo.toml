@@ -1159,7 +1159,12 @@ required-features = ["ternary_inference"]
 [[bin]]
 name = "cargo-refine"
 path = "src/bin/heal.rs"
-required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_service"]
+# Issue 190 T14a: `kat_service` LEFT the row — the charitable posture
+# (default features + latent_retrieval) builds the bin with the credit
+# plane compiled out; the kat verbs gate at the dispatch/build-stamp
+# layer. T14's strict bar (riir-kat fully optional) stays owner-gated on
+# the kat_redact decision (gate-vs-inline for the secret scanner).
+required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
 
 # Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
 # the local Bonsai daemon; --dry-run = offline harness validation on planted

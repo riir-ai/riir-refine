@@ -911,6 +911,11 @@ fn kat_gate_disabled() -> bool {
 /// stays hand-typed ON PURPOSE: a struct-derived default would make that
 /// test a tautology (the restatement-theorem class — a check that cannot
 /// fail proves nothing).
+///
+/// Issue 190 T14a: `kat_service`-gated — its readers are the mine-written
+/// default (run_mine_intro), the sync-policy gate, and the kat-gated test
+/// module; the charitable build carries none of them.
+#[cfg(feature = "kat_service")]
 const DEFAULT_SYNC_POLICY_JSON: &str = r#"{
   "version": 6,
   "sync_enabled": true,
@@ -3774,7 +3779,11 @@ fn adopt_oracle_facts(url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<S
 /// The compiled-out posture: the oracle cannot run, so every oracle-able
 /// file reads discard-only with the rebuild named (the honest degradation
 /// — never a silent pretend-match).
-#[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+///
+/// Issue 190 T14a: the caller (run_kat_adopt_state) is `kat_service`-gated
+/// (T14b) — the stub rides the same service gate beside its kat_transport
+/// split.
+#[cfg(all(feature = "kat_service", not(feature = "kat_transport")))]
 fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<String>) {
     (
         riir_refine::kat_adopt::HostFacts::unreachable(),
@@ -3971,6 +3980,10 @@ fn run_kat_claim(sig: Option<&str>) {
 /// env-configured stake-custody payee + a fresh on-curve reference, queues
 /// the intent, and prints the honest state. Nothing client-side mints,
 /// credits, or moves principal (the G9d posture held for staking too).
+///
+/// Issue 190 T14a: gated `kat_service` like its siblings — the charitable
+/// build has no staking plane (the dispatch match is gated with it).
+#[cfg(feature = "kat_service")]
 fn run_kat_stake(usd: Option<&str>, info: bool, restake: Option<&str>, redeem: bool) {
     use riir_refine::kat_stake_client as stake;
 
@@ -4309,7 +4322,11 @@ fn run_kat_vote(proposal: Option<u64>, yes: bool, no: bool) {
 /// filing's E-3 gate. The OLD key comes ONLY from the explicit
 /// `--old-key <path>` (the per-invocation key source — the env var is
 /// NEVER consulted, the measured T-PREFLIGHT finding).
+///
+/// Issue 190 T14a: gated `kat_service` (the dispatch match is gated with
+/// it; the transport-needing halves inside split as they already did).
 #[allow(clippy::too_many_arguments)]
+#[cfg(feature = "kat_service")]
 fn run_kat_migrate(
     github: Option<&str>,
     object: Option<&str>,
@@ -4846,6 +4863,7 @@ fn run_migrate_normal(
     }
 }
 
+#[cfg(feature = "kat_service")]
 fn rmpk_state(state: riir_kat::kat_protocol_migrate::MigrateRequestState) -> &'static str {
     match state {
         riir_kat::kat_protocol_migrate::MigrateRequestState::Pending => "pending",
@@ -17521,11 +17539,14 @@ fn main() {
     // auto-contribute tail DID NOT RUN (the 00:21 class was silent exactly
     // here). One line, never an exit-code change — healing itself is
     // unaffected.
-    #[cfg(not(all(
+    // Issue 190 T14a posture split: the SKIP notice names a queued batch,
+    // which only exists where the record-reading + queue-writing machinery
+    // compiled — `kat_service`. A build without the plane never queued a
+    // batch and prints nothing (the charitable output bar).
+    #[cfg(all(
         feature = "kat_service",
-        feature = "kat_transport",
-        feature = "latent_retrieval"
-    )))]
+        not(all(feature = "kat_transport", feature = "latent_retrieval"))
+    ))]
     if matches!(
         riir_refine::kat_mining_consent::read_with_warning(
             &riir_refine::kat_mining_consent::default_dir()
