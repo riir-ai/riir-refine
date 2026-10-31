@@ -3,6 +3,7 @@
 **Date:** 2026-10-31
 **Status:** open — blocks [Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md) submission; pairs with the private readiness playbook ([../.docs/01_orientation/mozilla_grant_readiness.md](../.docs/01_orientation/mozilla_grant_readiness.md)); program digest: [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md). T3 LANDED 2026-10-31 → [`.docs/01_orientation/mozilla_evidence_pack.md`](../.docs/01_orientation/mozilla_evidence_pack.md)
 **Lease closed:** zed-m3-idle-ev190, 1793459837, expires 2026-11-02T15:17:17Z — T3 evidence pack landed in the lease window
+**Claimed:** zed-m3-i190-t14b, 1793477157, expires 2026-11-02T20:05:57Z — T14b first (the Posture-A blocker), T14a next if the window holds
 **Owner gates:** T1, T2, T5 are owner decisions — **T1/T2/T5 decide by 2026-11-07** (T8 needs the slack); the rest are executable prep.
 
 Mozilla's Human-Scale AI Incubator ($300K/12mo → $500K/3yr, non-dilutive) fits cargo refine's modelless, consent-first, local-first design — but the application fails eligibility today on three axes: private source vs "work in the open", token-plane posture vs charitable purpose, and zero external product-community evidence. This issue lists every adjustment, in deadline order. Post-consult items (after Mozilla answers, expected before Nov 12 info session / by email) are marked.
