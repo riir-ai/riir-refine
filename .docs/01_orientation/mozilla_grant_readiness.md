@@ -64,13 +64,11 @@
 
 External-landscape searches (2026-10-31): open local coding tools (Continue, localpilot, DeepCoder-14B) all ride 7B–14B LLMs — **no shipped modelless/corpus-is-the-model healer found**; abstention/selective prediction is rich academic literature (El-Yaniv 2010 → NeurIPS 2025) but **no deployed abstention-first serving stack for communities found**. Supports the novelty criterion without overclaiming (landscape searches, not systematic reviews).
 
-## 6. Cross-cutting consult questions (the email below asks exactly these, v2)
+## 6. Cross-cutting consult questions (the email below asks exactly these, v3)
 
-1. **Contribution-credit sustainability.** Free for OSS repos; contribution-earned credits or cost-recovery payment; operational bonds; expiring pilot vouchers; nothing traded or speculative — acceptable within a funded project?
+1. **Open-core sustainability.** MIT modelless core + MIT community corpus; fleet/corpus-production tooling dual-licensed (AGPL-3.0 or commercial — free for non-commercial operators, licensed for for-profit fleets); our own GPU-mined corpus enterprise-licensed. The credit/ledger plane is compiled out of the public artifact (a separate commercial lane exists — disclosed here in one sentence — and is out of the funded scope entirely). Acceptable within a funded project?
 2. **Entity/fiscal sponsor.** Self-funded team, no clients — is fiscal sponsorship acceptable, and what documentation is required?
 3. **Openness timing.** Is a committed, dated open-sourcing plan (core open by month 3) acceptable evidence of "work in the open", or is open source required at application time?
-
-(Superseded questions: two-proposals-one-team — decided single-proposal 2026-10-31; crypto-free-or-frozen — folded into question 1's framing.)
 
 ## 7. Evidence inventory (what we can honestly show today)
 
@@ -87,50 +85,48 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 ## 8. Pre-deadline checklist
 
 - [ ] Owner: openness amendment decided (T1) — **by 2026-11-07**
-- [ ] Owner: credit-plane posture decided (T2) — **by 2026-11-07**
+- [ ] Owner: event posture confirmed (T2) — **by 2026-11-07**
 - [x] Evidence pack collected (T3) — landed 2026-10-31 by zed-m3-idle-ev190 → [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md)
+- [ ] Charitable-build sweep passes (T14) — **before pilot installers ship**
 - [ ] Pilot soft launch published (T4), announcing the T11 public-repo-free policy
 - [ ] Owner: entity / fiscal sponsor path known (T5) — **by 2026-11-07**
 - [ ] Public-copy audit done (T6)
-- [ ] Consult email sent (~Nov 7) + info session attended (T7)
+- [ ] Consult email v3 sent (~Nov 7) + info session attended (T7)
 - [ ] T11 public-repo-free policy shipped (code + README) — **by 2026-11-17**
-- [ ] T12 verify-before-claim pinning (chain fees, bond parameters, voucher mechanics) — **by 2026-11-17**
-- [ ] T13 credit-scope integrity checks (transferability, bond rewards, payee entity) — **by 2026-11-17**
 - [ ] No-submit gate check (T10) — **by 2026-11-17**
 - [ ] Final prose owner-voiced, submitted before Nov 20 11:59 PM PST (T8)
+- [-] T12/T13 pinning — Posture B only; off the submission path under Posture A unless the consult answer triggers the owner switch
 
-## 9. The credit plane — the balanced tokenomics story (v2 2026-10-31, owner direction)
+## 9. Sustainability postures + license strategy (v3 2026-10-31, owner direction)
 
-The owner's direction: the credit system is **not for profit — it is laws** (mechanism design for a shared compute service). Mozilla can be approached as a **sponsor of the free tier**. The balanced story, element by element:
+**POSTURE A — EVENT POSTURE (PRIMARY).** All KAT/credit surfaces feature-gated and compiled out of the public artifact before the application: public installers ship the charitable feature set (no `kat_service`/`kat_transport`); internal dev builds unchanged. The application carries **zero credit/ledger/tokenomics claims** — nothing to disclose, nothing to pin, T13 does not apply to the funded scope. Sustainability = open-core:
 
-| Element | Design truth | Charitable framing | Verify before claiming (T12) |
-|---|---|---|---|
-| Free for open-source repos | Product policy to ship pre-application (190 T11) | The commons is subsidized by design | Repo-origin/licence heuristic design |
-| Contribution-earned credits | Contribute redacted fix-pairs (MIT) → earn service credit; the primary earn path | The commons grows as it is used; an individual never must pay | Consent + MIT licence already shipped |
-| Cost-recovery payment | Packs priced to recover running cost; self-funded entity, no investors, no return | The alternative for orgs that prefer money to contribution | Pricing = cost study, pre-application |
-| Operational bonds (fixer/trainer) | Service rigs post a bond covering penalties (bad fixes, oracle cheating, downtime) — integrity by accountability; in the funded scope bonds carry **no reward attached** | Not investment: within the funded scope, no yield, no appreciation, no trading | Pin a no-reward bond variant from riir-refine/riir-chain docs — today's kat_staking PAYS rewards (USDC share), so the claim fails without it (T13) |
-| Expiring pilot vouchers (TUNA-class) | Onboarding credit for cohorts; expiring, non-transferable; allocated by operator batch (never an agent lever — riir-dapps Proposal 006 B6) | The grant funds pilot cohorts as service capacity + vouchers | Confirm a grant-pilot allocation fits the operator-batch shape |
-| Offline-first accounting | Work and credit accumulate locally; settle opportunistically when online (shipped offline arc) | Built for intermittent-connectivity regions | Already shipped — cite the offline arc docs |
-| No-fee coordination ledger | The ledger records; it does not tax (owner design intent: "no fee for our chain so it's non-profit") | The ledger is infrastructure, not a revenue line | ⚠ NOT YET VERIFIED — pin against riir-chain's shipped economics or DROP the claim |
-| Scope boundary — EXCLUDED from funded scope | The codebase today also ships a mainnet settlement lane (kat_solana), staking-reward lanes, a KAT↔SEAL swap, and payment rails (KAT_PAYEE currently = owner's personal wallet). **None of these are the funded project**: charitable scope = non-transferable credits + expiring vouchers only; payment, staking-reward, and exchange lanes excluded | Disclosed to the funder up front (consult email Q1), never concealed | Payee must move to the fiscal sponsor/entity before any not-for-profit posture appears, or drop the posture (T13) |
+| Layer | License | Moat status |
+|---|---|---|
+| Modelless core (corpus format + embedder + drafter + pruner + self-evolve) | MIT/Apache-2.0 (OSI) | Deliberately open — the commons |
+| Community-contributed fix-pairs (data) | MIT forever (consent screen pins it) | Commons — never sellable |
+| Fixer/trainer fleet + corpus-production tooling | **Dual license: AGPL-3.0 OR commercial** | THE last moat |
+| Our own GPU-mined corpus (own repos/rigs) | Proprietary; enterprise-licensable | The commercial asset if the grant fails |
 
-Reading note (mirrors Proposal 025 §4): cost-recovery payment for private use is a **post-grant product lane — outside the funded scope**; the grant funds only the free tier, the pilot, and the open releases.
+**License-strategy note (why NOT a "non-profit-restricted" license):** a non-profit-only restriction is NOT open source — the application's open-source claims must stay literally true, so the fleet lane uses dual licensing instead: identical economics (for-profit fleets either share-alike under AGPL or buy the commercial license), a standard instrument, and every "open source" claim in the application is checkable-true. If the owner later insists on a fair-source/non-commercial-only license, the wording in ALL materials must say "source-available", never "open source".
 
-**Why reviewers should accept this:** sybil resistance + cost recovery for shared compute is standard distributed-systems practice (mutual-credit / time-bank systems, storage-provider collateral, and the p2p patterns in Mozilla's own anchor projects — Iroh inference sharing, shared compute). The economy exists **to keep the free tier alive**, not to extract. The boundary row above is the honesty mechanism: shipped lanes that don't fit the charitable posture are excluded AND disclosed, never rebranded.
+**Why opening fixer/trainer loses nothing:** the moat is (a) the GPU-produced corpus, (b) the GPU operation itself (real cost/barrier), (c) the AGPL/commercial boundary — not the code. Opening invites contributors; license + corpus keep the business.
 
-**Vocabulary discipline (binding):** never token/airdrop/mint/staking/crypto in grant materials — say contribution credits, expiring pilot vouchers, operational bonds, coordination ledger.
+**If the grant fails:** enterprise licensing of our own mined corpus + paid commercial fleet licenses fund continued work; every community promise (MIT core + MIT data + AGPL fleet) stays intact. Same plan either way; only who pays changes.
 
-**Mozilla-as-sponsor lane (two postures):** (a) during the grant — the community budget funds pilot service capacity + expiring vouchers (primary; grant money never buys speculative supply); (b) after the grant — Mozilla and peer funders engaged as ongoing sponsors of the free tier's voucher/capacity allocation (a sustainability-plan line for criterion 6 and future cohorts).
+**POSTURE B — CREDIT POSTURE (ALTERNATE; owner gate after a positive consult answer only).** The v2 metering-plane design: free for OSS repos; contribution-earned credits or post-grant cost-recovery payment; operational bonds with no reward attached in the funded scope; expiring pilot vouchers; offline-first accounting. **Scope boundary (disclosed, never concealed):** the codebase ships a mainnet settlement lane (kat_solana), staking-reward lanes (kat_staking pays a USDC share, `usdc_kat_sub_split_bp` 70%), a KAT↔SEAL swap, and payment rails (KAT_PAYEE_B58 = owner's personal wallet, riir-dapps HISTORY 2026-10-13) — none in the funded scope; the consult email carries the one-sentence disclosure. All Posture-B claims gated by T12/T13 pinning (drop-not-hedge).
+
+**Decision rule:** Posture A ships unless the consult answer explicitly welcomes the credit mechanism; the switch is an owner gate, never a default.
 
 ## 10. Timeline to deadline (from 2026-10-31)
 
 | Date | Action |
 |---|---|
 | Nov 3–7 | Owner decisions on 190 T1/T2/T5 (+ rethink 048 T4); entity/fiscal-sponsor facts gathered |
-| Nov 7 | Send consult email v2 to `incubator@mozillafoundation.org` (answers reshape the application before final prose) |
+| Nov 7 | Send consult email v3 to `incubator@mozillafoundation.org` (answers reshape the application before final prose) |
 | Nov 12 | Attend info session (17:00 UTC); register when posted |
-| Nov 12–17 | External-pilot soft launch: call for pilot users in Rust community channels, announcing the public-repo-free policy (T11); capture download/issue evidence |
-| **Nov 17** | **T11/T12/T13 ship-and-pin deadline + no-submit gate check (T10)** — decide submit / hold on the evidence |
+| Nov 12–17 | Charitable-build sweep (T14) passes → pilot installers; external-pilot soft launch announcing the public-repo-free policy (T11); capture download/issue evidence |
+| **Nov 17** | **No-submit gate check (T10)** — decide submit / hold on the evidence |
 | Nov 17–19 | Final application prose owner-voiced (only if the gate passes); owner review; submit |
 | **Nov 20, 11:59 PM PST** | **Deadline** |
 
@@ -143,7 +139,7 @@ Reading note (mirrors Proposal 025 §4): cost-recovery payment for private use i
 >
 > We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first, modelless code-healing tool for Rust, which embeds our open decision-serving components for its escalation decisions.)
 >
-> 1. **Contribution-credit sustainability.** Our tool is free for open-source repositories. For private/commercial use beyond a free grant, service costs are recovered through contribution-earned credits (contribute repair knowledge under an open licence → earn credit) or cost-recovery payment; service operators post bonds covering penalties for bad service; pilot cohorts are funded through the grant as service capacity and expiring, non-transferable vouchers. One plain disclosure: the credit ledger runs on our own chain with a Solana settlement lane — the grant scope would use only non-transferable credits and vouchers, and would exclude our payment, staking-reward, and exchange lanes. Within that scope nothing is traded or speculative — the mechanism exists to keep the free tier alive. Is a sustainability mechanism of this kind acceptable within a funded project?
+> 1. **Open-core sustainability.** Our tool is free for open-source repositories. We plan to sustain it as an open-core project: the modelless healing core and the community-contributed repair corpus are genuinely open source (MIT); the fleet/corpus-production tooling is dual-licensed (AGPL-3.0 for everyone non-commercial, or a commercial license for for-profit fleet/corpus operations); and our own GPU-produced corpus is enterprise-licensed. One plain disclosure: a separate credit/ledger commercial lane exists in our workspace — it is compiled out of the public artifact and entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
 > 3. **"Work in the open."** The tool currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
 >
