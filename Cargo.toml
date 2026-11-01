@@ -1023,6 +1023,14 @@ required-features = ["kernel_opt"]
 name = "kernel_goat_g1"
 required-features = ["kernel_opt"]
 
+# Issue 191 T5 — the G2 per-rule interleaved A/B microbench over the
+# deterministic tranche. --tranche = the selector disclosure only; --full =
+# the whole tranche (rig exclusivity MANDATORY for published numbers).
+#   cargo run --release --example kernel_goat_g2 --features kernel_opt -- --full
+[[example]]
+name = "kernel_goat_g2"
+required-features = ["kernel_opt"]
+
 # Issue 035 T2: the G-floor measurement — every arm scored against
 # `cargo fix --broken-code` on the known-inverse mutation corpus.
 # SLOW — scaffolds a temp crate and spawns cargo check/fix per mutant.

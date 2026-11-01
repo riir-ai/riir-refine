@@ -723,13 +723,27 @@ pub fn work_dir() -> std::path::PathBuf {
     std::env::temp_dir().join(format!("riir_refine_kgoat_g1_{}", std::process::id()))
 }
 
+/// The per-file extraction, exposed for the G2 tranche selector (the SAME
+/// extraction the census reconciles — never a second parser).
+#[must_use]
+pub fn per_file_entries_for_tranche() -> Vec<(String, Vec<KernelRule>)> {
+    per_file_entries()
+}
+
 fn rustc_version() -> String {
     std::process::Command::new("rustc")
         .arg("--version")
         .output().map_or_else(|_| "rustc unavailable".to_string(), |o| String::from_utf8_lossy(&o.stdout).trim().to_string())
 }
 
-fn run_with_timeout(mut cmd: std::process::Command, timeout: std::time::Duration,
+/// Spawn + poll with output to FILES (the G1 law: a large child stderr
+/// through a pipe would fill the 64 KiB buffer, block the child, and read as
+/// a false TIMEOUT).
+///
+/// # Errors
+/// A spawn/`try_wait` failure, a `File::create` failure, or the timeout
+/// firing — named in the `String`.
+pub fn run_with_timeout(mut cmd: std::process::Command, timeout: std::time::Duration,
     out_path: &std::path::Path, err_path: &std::path::Path,
 ) -> Result<std::process::ExitStatus, String>
 {
@@ -767,8 +781,8 @@ fn read_file(p: &std::path::Path) -> String {
     std::fs::read_to_string(p).unwrap_or_default()
 }
 
-const COMPILE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
-const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
+pub const COMPILE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(180);
+pub const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
 
 fn tail(s: &str, max: usize) -> String {
     let s = s.trim();

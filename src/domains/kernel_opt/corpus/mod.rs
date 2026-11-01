@@ -2036,6 +2036,7 @@ mod entries_gpu_99;
 mod entries_popcorn;
 
 pub mod goat_g1;
+pub mod goat_g2;
 
 #[cfg(test)]
 mod tests;
