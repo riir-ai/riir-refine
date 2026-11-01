@@ -138,7 +138,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 >
 > Dear Incubator team,
 >
-> We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first, modelless code-healing tool for Rust, which embeds our open decision-serving components for its escalation decisions.)
+> We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first code-healing tool — a modelless core paired with an optional ≈0.4B-parameter encoder — that starts with Rust and expands to further languages, Python, JavaScript and Go included, by community demand, embedding our open decision-serving components for its escalation decisions.)
 >
 > 1. **Open-source sustainability + contribution points.** Our tool is free for open-source repositories, and the healing core AND the fleet/corpus-production tooling are MIT. We sustain it as a public good: contributors earn non-transferable, expiring reputation points (no payment, no token, no speculation — the point balance only meters hosted lanes as fair use); a public leaderboard ranks joined contributors; revenue later comes from enterprise corpus licensing, hosted/support services, and additional language domains. One plain disclosure: we are removing the old credit/token lane from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
@@ -182,35 +182,51 @@ Mirrors copy from here verbatim; never re-word per site. Laws that bind every se
 
 ### 13.2 The three-principles answers (each verifiable on-page in one click)
 
-**Small — zero-parameter and local.** The healer ships with no model weights at all: it learns
-from a community corpus of small, human-reviewed repair rules (L0–L3, modelless by design), and
-its drafting core is a ternary-SIMD lookup, not a neural net. It runs on a laptop, offline, on
-CPU — no GPU, no API key, no account. The decision engine behind its escalation lane answers in
-under a millisecond per decision on consumer hardware.
+**Small — adaptive by design, capable at every size.** The stack sizes itself to its deployment.
+The always-on floor is the modelless engine: zero weights, offline, sub-millisecond, fully
+private — it answers the common case on any machine. Where a decision needs more, a
+≈0.4B-parameter encoder arm escalates, and the rungs are measured, not aspirational:
+
+- **Modelless floor** — zero weights, always on (the privacy story, not the size headline).
+- **One int8 (Q8) checkpoint** — ≈450 MB measured per checkpoint (447.7 MB), over a
+  7.5 MB engine binary (dist build, measured 2026-11-01).
+- **Board subset → full board** — load only the suites you serve; the full served board
+  (english + typed) is ≈0.9 GB at Q8 (2 × 447.7 MB; the ≈1.7 GB F16 posture is the reference
+  build; Q8 is the adopted serving tier at 0.956–1.000 retention).
+- **Hosted think leg** — the server-adaptive seam: a light box keeps only the modelless
+  material local and escalates the encoder to a hosted machine — ≈0 GB of local encoder.
+
+The whole ladder tops out ≈17× below Mozilla's own small-model calibration (7B), parameters
+to parameters — and it never shrinks below the quality floor: lighter quantization is a
+recorded negative and is never offered.
 
 **Intentional — consent-first, inspectable, yours.** Local healing never touches the network.
 Sharing data is opt-in, one-time consented, and secret-blind by policy: the redaction layer
 never lets credentials or secrets leave the machine, and the default is anonymous. You can
 `leave` at any time — joined or not, the tool is identical locally. The repair corpus is MIT
 open data forever; the bench history is public; every rule in the corpus is reviewed, not
-scraped.
+scraped. And the mix is honest about itself: the modelless floor does not win every suite, so
+the ladder escalates instead of pretending — the published bench tables show which arm serves
+each suite and why.
 
-**Tailored — built with (not just for) Rust developers without cloud-AI budgets.** The
-community is specific: Rust developers — solo maintainers, students, contributors in
-resource-constrained regions — who cannot justify per-token cloud AI for mechanical fixes.
-The tool is free for open-source repositories, one command to install, zero ongoing cost.
-The dialogue is structural: contributors' repairs become the corpus, the corpus makes the
-tool better for the next contributor, and the public leaderboard (roadmap) ranks the people
-who built it.
+**Tailored — adaptive, flexible, self-evolving with its community.** The healer is
+domain-pluggable by architecture: the alpha targets Rust — the most requested, hardest-linted
+community — and the same framework already ships non-Rust domains (Dockerfiles, WGSL shaders),
+with Python, JavaScript/TypeScript, Go and more on the roadmap, added when the community asks.
+The dialogue is structural, not consultative: every contributed repair joins a reviewed,
+MIT-licensed corpus; the public bench history scores every batch (200+ runs published); and
+healing improves by corpus, never by retraining — the tool literally gets better at what its
+community fixes most. Free for open-source repositories, one command to install, zero ongoing
+cost: built for developers without cloud-AI budgets, anywhere.
 
 ### 13.3 The six-criteria one-liners
 
 | Criterion | On-page answer |
 |---|---|
-| Human-Scale AI expression | Zero-parameter: a community corpus of reviewed repair rules does the work a frontier model would — locally, offline, on the machine you own. |
+| Human-Scale AI expression | The mix is the intelligence: a zero-weight modelless floor answers when it can; a ≈0.4B encoder escalates only where it can't — ≈17× below the funder's own small-model bar, sized from a zero-weight floor on a 7.5 MB engine to a hosted think leg. |
 | Technical viability | Shipped and used: 13 releases, 200+ installer downloads, 5 OS targets, 200+ scored benchmark runs at a 96%+ heal rate, deployed as the default dev-loop tool across a 32-repo production workspace (evidence pack). |
-| Problem-community clarity | Rust developers lose hours every week to compiler and lint friction; the healer fixes the mechanical share of it in-loop, in seconds, for free. |
-| Product-community fit | One command, offline, no account; free for open-source repositories forever; the people it serves build it — contributions become the corpus. |
+| Problem-community clarity | Software teams lose hours every week to compiler, linter and review friction; the healer fixes the mechanical share of it in-loop, in seconds, for free — alpha targets Rust, the domain set expands by community demand. |
+| Product-community fit | One command, offline, no account; free for open-source repositories forever; pluggable domains (Rust alpha, Docker and shader domains shipped, Python/JS/Go roadmap); the people it serves build it — their contributions become the corpus. |
 | Impact and values | Open core (MIT), community corpus (MIT forever), consent-first, no token, no payment, no speculation; works without cloud AI; keeps small hardware useful. |
 | Sustainability potential | Free for OSS forever; contribution points — non-transferable, expiring reputation, never payment — meter hosted lanes as fair use; later revenue from enterprise corpus licensing, hosted/support services, and additional language domains (Python/Go planned). |
 
@@ -222,6 +238,9 @@ who built it.
 > never be bought, sold, or traded. The public leaderboard (roadmap) ranks contributors by
 > reputation; the corpus they build stays open for everyone, including competitors. Governance
 > is the licence plus the public record: open core, reviewed corpus, published bench history.
+> New domains — Python, JavaScript, Go and beyond — are roadmap, added when the community
+> asks; every contribution is reviewed, bench-scored in public, and improves healing for
+> everyone without retraining anything.
 
 **(Roadmap framing when the points plane is named at all):** "coming next: join the
 contribution network, earn contribution points, appear on the public leaderboard" — future
@@ -234,4 +253,6 @@ sense only, no sign-up UI, no beta list until W0 ships.
 - No game business, no seal, no separate-brand content.
 - No mining vocabulary ("mine/mining/miner" — see the vocabulary law above).
 - No live-feature claims for the points plane (roadmap law).
+- No unqualified "as small as you like" size claims — the ladder names its measured rungs;
+  lighter quantization below Q8 is a recorded quality negative and is never offered.
 - No user counts, testimonials, or metrics that the evidence pack cannot pin.
