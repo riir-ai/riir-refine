@@ -5,24 +5,21 @@
 //! carry **executable `#[test]` fixtures** embedded in their `ref_shape` /
 //! `opt_pattern` strings — std-only Rust reproductions with deterministic
 //! inputs and ref-vs-opt asserts (many `to_bits()` bit-identity, some
-//! documented tolerance classes). Two fixture shapes exist, and BOTH compile
-//! as ONE PAIRED UNIT (measured at first full run: the opt arm's test freely
-//! references the ref arm's naive forms — the arms were written as one
-//! compilation unit, the equivalence test needing both forms in scope):
+//! documented tolerance classes). The entry discipline validated each fixture
+//! ONCE manually at landing (`rustc --test --edition 2021`, the file headers);
+//! this harness makes that discipline **standing**: extraction, ONE compile +
+//! run per fixture-bearing rule under a two-posture CASCADE, and the
+//! census/floor/reconciliation assertions of the ratified T1 bars.
 //!
-//! 1. **Cross-arm tests** — the test-bearing arm calls symbols defined in the
-//!    sibling arm. Compiled as `mod __ref { ref }` + `mod __opt {
-//!    use super::__ref::*; opt }`: the glob bridge resolves cross-arm
-//!    references, and the opt arm's own redefinitions (deliberate — each arm
-//!    stays self-READING) legally shadow the glob import.
-//! 2. **Self-contained tests** — the fixture lives entirely in one arm.
-//!    Module wrapping changes nothing for these.
+//! ## The standing verdict store (Issue 191 T3)
 //!
-//! The entry discipline validated each fixture ONCE manually at landing
-//! (`rustc --test --edition 2021`, the file headers); this harness makes that
-//! discipline **standing**: extraction, ONE compile + run per fixture-bearing
-//! rule under a two-posture CASCADE, and the census/floor/reconciliation
-//! assertions of the ratified T1 bars.
+//! `--emit-status <path>` writes the digest-keyed verdict table committed at
+//! [`G1_STATUS_TABLE`] (`g1_status.tsv`): one row per rule — status,
+//! `rule_id`, blake3 of `ref‖opt`, blake3 of `opt`. The [`g1_record_for`]
+//! lookup (the `context_notes` annotation channel) matches the `rule_id` then
+//! FAILS CLOSED to [`G1Record::Unverified`] on a digest mismatch — a corpus
+//! edit that moves a rule's strings past the last G1 run reads as unverified,
+//! never as green. Digests key CONTENT, not position.
 //!
 //! ## The compile cascade (measured at the first full runs)
 //!
@@ -408,6 +405,198 @@ pub fn compare(raw: &G1Census, extracted: &G1Census) -> Result<(), String> {
     }
 }
 
+/// A rule's standing G1 validation record — the annotation vocabulary of the
+/// digest-keyed verdict store (Issue 191 T3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum G1Record {
+    /// The cascade compiled AND ran the rule's fixture; every embedded test
+    /// passed.
+    Green,
+    /// The fixture failed to compile or its own asserts failed (Issue 193).
+    Fail,
+    /// No executable fixture (the parse-only disclosed class).
+    ParseOnly,
+    /// No store row matches this rule's CURRENT strings — the corpus moved
+    /// past the last committed G1 run. Fail-closed: never reads as green.
+    Unverified,
+}
+
+impl G1Record {
+    /// The `validated:` annotation text (the `context_notes` channel —
+    /// propagated end-to-end via `DraftedFix::context_notes`).
+    #[must_use]
+    pub fn annotation(self) -> &'static str {
+        match self {
+            Self::Green => {
+                "validated: fixture-green — the G1 harness compiled AND executed \
+                 this rule's embedded fixture; the ref-vs-opt claim is \
+                 machine-checked on the fixture's own inputs (Issue 191 T2)"
+            }
+            Self::Fail => {
+                "validated: fixture-defect — the G1 harness caught this rule's \
+                 fixture failing compile or its own asserts (Issue 193); the \
+                 suggestion is parse-valid, its fixture claim UNVERIFIED"
+            }
+            Self::ParseOnly => {
+                "validated: parse-only — this rule carries no executable fixture; \
+                 the suggestion is syntax-validated only"
+            }
+            Self::Unverified => {
+                "validated: unverified — the corpus strings moved past the \
+                 committed G1 record (digest mismatch); re-run `cargo run \
+                 --release --example kernel_goat_g1 --features kernel_opt -- \
+                 --full --emit-status <path>`"
+            }
+        }
+    }
+}
+
+/// The committed, generated verdict store (never hand-edited — regenerate via
+/// `kernel_goat_g1 --full --emit-status`). Rows: `status\trule_id\tpair\topt`;
+/// digests are blake3 hex over `ref\u{1f}opt` and `opt` respectively.
+const G1_STATUS_TABLE: &str = include_str!("g1_status.tsv");
+
+/// blake3 over `ref_src \u{1f} opt_src` — the pair-content key.
+#[must_use]
+pub fn pair_digest(ref_src: &str, opt_src: &str) -> String {
+    let mut h = blake3::Hasher::new();
+    h.update(ref_src.as_bytes());
+    h.update(&[0x1F]);
+    h.update(opt_src.as_bytes());
+    h.finalize().to_string()
+}
+
+/// blake3 over `opt_src` — the draft-content key (a draft byte-identical to a
+/// rule's opt side inherits that rule's standing record).
+#[must_use]
+pub fn opt_digest(opt_src: &str) -> String {
+    blake3::Hasher::new().update(opt_src.as_bytes()).finalize().to_string()
+}
+
+/// One row of the committed verdict store.
+#[derive(Debug, Clone, Serialize)]
+pub struct G1StatusRow {
+    #[serde(serialize_with = "serialize_record")] // serde hands &T; the enum is Copy
+    pub status: G1Record,
+    pub rule_id: String,
+    /// blake3(`ref\u{1f}opt`) — the corpus-drift key.
+    pub pair: String,
+    /// blake3(`opt`) — the draft-inheritance key.
+    pub opt: String,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's serialize_with hands &T
+fn serialize_record<S: serde::Serializer>(
+    r: &G1Record,
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    let name = match r {
+        G1Record::Green => "green",
+        G1Record::Fail => "fail",
+        G1Record::ParseOnly => "parse-only",
+        G1Record::Unverified => "unverified",
+    };
+    s.serialize_str(name)
+}
+
+/// Build the status rows for a FULL report (a sampled run covers a subset —
+/// the emitter refuses anything but the whole population).
+#[must_use]
+pub fn status_rows(report: &G1Report) -> Vec<G1StatusRow> {
+    let verdict_of: std::collections::HashMap<&str, G1Record> = report
+        .rules
+        .iter()
+        .map(|r| (r.rule_id.as_str(), r.outcome().into()))
+        .collect();
+    let mut rows = Vec::new();
+    for (file, entries) in per_file_entries() {
+        let _ = file;
+        for rule in entries {
+            let Some(&status) = verdict_of.get(rule.rule_id.as_str()) else {
+                continue; // not covered by this report (sampled run)
+            };
+            rows.push(G1StatusRow {
+                status,
+                rule_id: rule.rule_id.clone(),
+                pair: pair_digest(&rule.ref_shape, &rule.opt_pattern),
+                opt: opt_digest(&rule.opt_pattern),
+            });
+        }
+    }
+    rows
+}
+
+/// Emit the committed-store TSV. Deterministic: corpus build order.
+///
+/// # Errors
+/// A write failure is the caller's loud error.
+pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::Result<()> {
+    use std::fmt::Write as _;
+    let mut out = String::from("# g1_status v1 — generated by kernel_goat_g1 --emit-status; do not hand-edit\n");
+    for row in status_rows(report) {
+        let status = match row.status {
+            G1Record::Green => "green",
+            G1Record::Fail => "fail",
+            G1Record::ParseOnly => "parse-only",
+            G1Record::Unverified => unreachable!("store rows are measured, never unverified"),
+        };
+        let _ = writeln!(out, "{status}\t{}\t{}\t{}", row.rule_id, row.pair, row.opt);
+    }
+    std::fs::write(path, out)
+}
+
+/// The parsed store, keyed by `rule_id` (digests live in the value). Built
+/// once per process; keys borrow the committed static text.
+fn status_table() -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
+    static TABLE: std::sync::OnceLock<std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>> =
+        std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        let mut map = std::collections::HashMap::new();
+        for line in G1_STATUS_TABLE.lines() {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let mut f = line.split('\t');
+            let (Some(status), Some(rule_id), Some(pair), Some(opt)) =
+                (f.next(), f.next(), f.next(), f.next())
+            else {
+                continue; // a malformed row reads as absent, never as green
+            };
+            let status = match status {
+                "green" => G1Record::Green,
+                "fail" => G1Record::Fail,
+                "parse-only" => G1Record::ParseOnly,
+                _ => continue,
+            };
+            map.insert(rule_id, (status, pair, opt));
+        }
+        map
+    })
+}
+
+/// The standing record for one corpus rule: match by `rule_id`, then FAIL
+/// CLOSED on a pair-digest mismatch (the corpus moved past the store).
+#[must_use]
+pub fn g1_record_for(rule_id: &str, ref_src: &str, opt_src: &str) -> G1Record {
+    match status_table().get(rule_id) {
+        Some((status, pair, _)) if *pair == pair_digest(ref_src, opt_src) => *status,
+        _ => G1Record::Unverified,
+    }
+}
+
+/// Whether a DRAFT (byte-identical to some rule's opt side) inherits a GREEN
+/// standing record — the `g1_backed` disclosure of the `kernel_verify`
+/// verdict. The pair-green law applies: the RULE's fixture compiled and ran;
+/// the draft alone may still reference its ref arm's symbols (cross-arm
+/// fixture shape) and is not proven to compile standalone.
+#[must_use]
+pub fn g1_opt_backed(opt_src: &str) -> bool {
+    let digest = opt_digest(opt_src);
+    status_table()
+        .values()
+        .any(|(status, _, opt)| *status == G1Record::Green && *opt == digest)
+}
+
 /// One fixture rule's execution verdict (the PAIRED compile unit).
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct ArmVerdict {
@@ -458,6 +647,16 @@ pub enum G1Outcome {
     Green,
     Fail,
     ParseOnly,
+}
+
+impl From<G1Outcome> for G1Record {
+    fn from(o: G1Outcome) -> Self {
+        match o {
+            G1Outcome::Green => Self::Green,
+            G1Outcome::Fail => Self::Fail,
+            G1Outcome::ParseOnly => Self::ParseOnly,
+        }
+    }
 }
 
 /// The full G1 report.

@@ -153,6 +153,21 @@ impl HealEntry for KernelRule {
     fn fixed_code(&self) -> &str {
         &self.opt_pattern
     }
+
+    /// The `validated:` disclosure (Issue 191 T3, the AMENDED bar): every
+    /// kernel rule carries its standing G1 record via the digest-keyed verdict
+    /// store — `fixture-green` / `fixture-defect` / `parse-only`, failing
+    /// CLOSED to `unverified` when the rule's strings moved past the committed
+    /// store. A parse-only suggestion must not look identical downstream to a
+    /// fixture-green one; the drafter propagates the note through
+    /// `DraftedFix::context_notes` and the consumer decides.
+    #[inline]
+    fn context_notes(&self) -> Option<&str> {
+        Some(
+            corpus::goat_g1::g1_record_for(&self.rule_id, &self.ref_shape, &self.opt_pattern)
+                .annotation(),
+        )
+    }
 }
 
 /// The GPU kernel optimization healing domain — `HealDomain` impl.

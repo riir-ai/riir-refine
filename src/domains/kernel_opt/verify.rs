@@ -24,8 +24,13 @@
 
 /// The result of a kernel rule verification.
 ///
-/// **Stub**: `compiles` currently reflects only the syntax parse check.
-/// Full numeric compare vs reference is deferred (Proposal 012 §Phase 0).
+/// **Stub-plus** (Issue 191 T3): `compiles` reflects the syntax parse check;
+/// `g1_backed` discloses whether the draft inherits a GREEN standing G1
+/// record — byte-identical to the opt side of a rule whose paired fixture the
+/// harness compiled AND executed (the record, not this draft, was validated;
+/// the draft alone may still reference its ref arm's symbols — the cross-arm
+/// fixture shape). Full numeric compare vs reference remains deferred
+/// (Proposal 012 §Phase 0).
 #[derive(Debug, Clone)]
 pub struct KernelVerifyResult {
     /// Whether the optimized pattern compiled (stub: parsed as valid Rust).
@@ -42,6 +47,11 @@ pub struct KernelVerifyResult {
     pub ran: bool,
     /// Error message if `ran` is false or `compiles` is false.
     pub error: Option<String>,
+    /// The draft is byte-identical to the opt side of a G1-green paired
+    /// fixture — the RULE's fixture is machine-validated (Issue 191 T3).
+    /// `false` = parse-only backing; the rule's `context_notes` carries the
+    /// full `validated:` disclosure either way.
+    pub g1_backed: bool,
 }
 
 impl KernelVerifyResult {
@@ -52,6 +62,7 @@ impl KernelVerifyResult {
             compiles: false,
             ran: false,
             error: Some(error.into()),
+            g1_backed: false,
         }
     }
 
@@ -61,6 +72,7 @@ impl KernelVerifyResult {
             compiles,
             ran: true,
             error: None,
+            g1_backed: false,
         }
     }
 }
@@ -97,17 +109,20 @@ impl KernelVerifier {
         Self {}
     }
 
-    /// Verify that `code` compiles (stub: parses as valid Rust).
+    /// Verify that `code` parses as valid Rust, PLUS the T3 store consult: a
+    /// draft byte-identical to the opt side of a G1-green paired fixture sets
+    /// `g1_backed = true` (the promoted set — the record, not the draft, was
+    /// compile+run validated).
     ///
     /// # Returns
     ///
     /// - `compiles = true` → the pattern parses (stub) / compiles (full)
     /// - `compiles = false` → parse error (stub) / compile error (full)
     /// - `ran = false` → validator couldn't run (check `error`)
+    /// - `g1_backed = true` → the draft inherits a GREEN standing G1 record
     ///
-    /// The `rule_id` parameter is accepted for trait conformance but ignored
-    /// in the stub — the full validator may use it to look up the reference
-    /// kernel for numeric compare.
+    /// The `rule_id` parameter is accepted for trait conformance; the G1
+    /// backing is keyed on the draft's CONTENT digest, never the id.
     #[must_use]
     pub fn verify(&self, code: &str, rule_id: &str) -> KernelVerifyResult {
         // Stub: delegate to the shared RustAnalyzerPruner for syntax check.
@@ -116,7 +131,14 @@ impl KernelVerifier {
         if !result.parses {
             return KernelVerifyResult::ran_with(false);
         }
-        KernelVerifyResult::ran_with(true)
+        let g1_backed =
+            crate::domains::kernel_opt::corpus::goat_g1::g1_opt_backed(code);
+        KernelVerifyResult {
+            compiles: true,
+            ran: true,
+            error: None,
+            g1_backed,
+        }
     }
 
     /// Check if the full validator toolchain is available.
@@ -156,6 +178,7 @@ mod tests {
         let r = KernelVerifyResult::ran_with(false);
         assert!(!r.compiles);
         assert!(r.ran);
+        assert!(!r.g1_backed);
     }
 
     #[test]
@@ -174,6 +197,37 @@ mod tests {
         let result = v.verify("fn foo() -> i32 { 42 }", "matvec-coalesce");
         assert!(result.ran);
         assert!(result.compiles);
+        assert!(!result.g1_backed, "ad-hoc code carries no G1 record");
+    }
+
+    #[test]
+    fn verify_a_green_rule_draft_inherits_the_g1_record() {
+        use crate::domain::HealEntry;
+        // A draft byte-identical to a G1-green rule's opt side is g1_backed;
+        // the same draft perturbed by one byte loses the backing (the digest
+        // law, fail-closed) but stays parse-valid.
+        let corpus =
+            crate::domains::kernel_opt::corpus::build_kernel_seed_corpus();
+        let v = KernelVerifier::new();
+        let backed = corpus
+            .entries
+            .iter()
+            .find(|e| {
+                crate::domains::kernel_opt::corpus::goat_g1::g1_record_for(
+                    &e.rule_id,
+                    &e.ref_shape,
+                    &e.opt_pattern,
+                ) == crate::domains::kernel_opt::corpus::goat_g1::G1Record::Green
+            })
+            .expect("the store carries green rows (the floors guarantee it)");
+        let r = v.verify(backed.fixed_code(), &backed.rule_id);
+        assert!(r.compiles);
+        assert!(r.g1_backed, "rule {} must be g1_backed", backed.rule_id);
+        let mut perturbed = backed.fixed_code().to_string();
+        perturbed.push(' ');
+        let r2 = v.verify(&perturbed, &backed.rule_id);
+        assert!(r2.compiles, "a whitespace perturbation still parses");
+        assert!(!r2.g1_backed, "the digest law is fail-closed");
     }
 
     #[test]
@@ -182,6 +236,7 @@ mod tests {
         let result = v.verify("not valid rust {", "matvec-coalesce");
         assert!(result.ran);
         assert!(!result.compiles);
+        assert!(!result.g1_backed);
     }
 
     #[test]
