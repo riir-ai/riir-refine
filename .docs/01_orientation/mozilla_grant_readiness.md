@@ -146,11 +146,92 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 >
 > We plan to attend the November 12 info session. Thank you for your time — and for funding this alternative trajectory.
 >
-> [Owner name + contact]
+> — The cargo refine & riir.ai team · grants@riir.ai
+>
+> *(From/Reply-To: grants@riir.ai — the domain mail is catch-all (Cloudflare Email Routing), so this address receives every reply; agents may send from it per owner decision 2026-11-01.)*
 
-## 11. Links
+## 12. Links
 
 - Overview: <https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/>
 - Call for proposals: <https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/call-for-proposals/>
 - Anchor projects: <https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/cohort/>
 - FAQs: <https://www.mozillafoundation.org/en/what-we-do/grantmaking/incubator/human-scale-ai/call-for-proposals/faqs/>
+
+## 13. Canonical copy block (Plan 324 T1.4 — written ONCE, mirrored everywhere)
+
+**The one source for every front** (reflex.riir.ai, refine.riir.ai, rethink.riir.ai, riir.ai).
+Mirrors copy from here verbatim; never re-word per site. Laws that bind every sentence:
+
+- **Vocabulary law (issue 192 GAP 10):** "contribute / contribution / contributor / contribution
+  points" ONLY. Never "mining / mine / miner" anywhere public.
+- **Roadmap law (Plan 324 G-B):** the points plane is described as **roadmap, never live** —
+  no leaderboard/beta/join copy as a shipped feature until W0 ships.
+- **Truth law (Plan 324):** every claim on-page must be true on the date it ships. Numbers come
+  from the evidence pack (`mozilla_evidence_pack.md`) with provenance, never hand-typed.
+- **Scope law (issue 192 GAP 9):** the riir family is open; the game business is a separate
+  brand — never mentioned, never in scope, on any front.
+
+### 13.1 Positioning one-liners (family bar, T1.3's source)
+
+| Front | One-liner |
+|---|---|
+| riir.ai | The riir.ai family — local-first, modelless AI tools that run on the machine you own. |
+| reflex | The modelless decision engine — zero-parameter, sub-millisecond decisions, and public arenas where anyone can watch it compete. |
+| refine | The local-first code healer for Rust — fixes compiler and lint findings in-loop, offline, free for open-source repositories. |
+| rethink | The open research lane — generic decision benchmarks, beaten in the open, one lane at a time. |
+
+### 13.2 The three-principles answers (each verifiable on-page in one click)
+
+**Small — zero-parameter and local.** The healer ships with no model weights at all: it learns
+from a community corpus of small, human-reviewed repair rules (L0–L3, modelless by design), and
+its drafting core is a ternary-SIMD lookup, not a neural net. It runs on a laptop, offline, on
+CPU — no GPU, no API key, no account. The decision engine behind its escalation lane answers in
+under a millisecond per decision on consumer hardware.
+
+**Intentional — consent-first, inspectable, yours.** Local healing never touches the network.
+Sharing data is opt-in, one-time consented, and secret-blind by policy: the redaction layer
+never lets credentials or secrets leave the machine, and the default is anonymous. You can
+`leave` at any time — joined or not, the tool is identical locally. The repair corpus is MIT
+open data forever; the bench history is public; every rule in the corpus is reviewed, not
+scraped.
+
+**Tailored — built with (not just for) Rust developers without cloud-AI budgets.** The
+community is specific: Rust developers — solo maintainers, students, contributors in
+resource-constrained regions — who cannot justify per-token cloud AI for mechanical fixes.
+The tool is free for open-source repositories, one command to install, zero ongoing cost.
+The dialogue is structural: contributors' repairs become the corpus, the corpus makes the
+tool better for the next contributor, and the public leaderboard (roadmap) ranks the people
+who built it.
+
+### 13.3 The six-criteria one-liners
+
+| Criterion | On-page answer |
+|---|---|
+| Human-Scale AI expression | Zero-parameter: a community corpus of reviewed repair rules does the work a frontier model would — locally, offline, on the machine you own. |
+| Technical viability | Shipped and used: 13 releases, 200+ installer downloads, 5 OS targets, 200+ scored benchmark runs at a 96%+ heal rate, deployed as the default dev-loop tool across a 32-repo production workspace (evidence pack). |
+| Problem-community clarity | Rust developers lose hours every week to compiler and lint friction; the healer fixes the mechanical share of it in-loop, in seconds, for free. |
+| Product-community fit | One command, offline, no account; free for open-source repositories forever; the people it serves build it — contributions become the corpus. |
+| Impact and values | Open core (MIT), community corpus (MIT forever), consent-first, no token, no payment, no speculation; works without cloud AI; keeps small hardware useful. |
+| Sustainability potential | Free for OSS forever; contribution points — non-transferable, expiring reputation, never payment — meter hosted lanes as fair use; later revenue from enterprise corpus licensing, hosted/support services, and additional language domains (Python/Go planned). |
+
+### 13.4 The corpus / points / governance story (the sustainability paragraph, one form)
+
+> cargo refine is open source (MIT) and its repair corpus is MIT open data, forever. Anyone can
+> contribute repairs; contributions earn contribution points — non-transferable, expiring
+> reputation that meters hosted lanes as fair use. There is no payment and no token: points can
+> never be bought, sold, or traded. The public leaderboard (roadmap) ranks contributors by
+> reputation; the corpus they build stays open for everyone, including competitors. Governance
+> is the licence plus the public record: open core, reviewed corpus, published bench history.
+
+**(Roadmap framing when the points plane is named at all):** "coming next: join the
+contribution network, earn contribution points, appear on the public leaderboard" — future
+sense only, no sign-up UI, no beta list until W0 ships.
+
+### 13.5 What is deliberately absent from every front
+
+- No pricing, no packs, no tiers, no store, no checkout — the storefront copy is gone.
+- No KAT, no wallet, no mainnet — the credit plane is out of the story entirely.
+- No game business, no seal, no separate-brand content.
+- No mining vocabulary ("mine/mining/miner" — see the vocabulary law above).
+- No live-feature claims for the points plane (roadmap law).
+- No user counts, testimonials, or metrics that the evidence pack cannot pin.

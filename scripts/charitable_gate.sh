@@ -9,11 +9,24 @@
 #
 # Bars (issue 190 T14; runnable since T14a-min + T14b landed 2026-10-31):
 #   (1) CLI output grep — `--help` / `--version` / a bare dry-run / a scan
-#       run, case-insensitive WORD-BOUNDARIED
-#       mine|KAT|earn|payout|epoch|settle|lease|credit|join|service
-#       (word boundaries per the T14a record: a naive substring trips the
-#       tagline's "learns"). grep rc is adjudicated: 1 = clean PASS,
-#       0 = hits FAIL, >=2 = grep error FAIL — a broken grep is never a pass.
+#       run, case-insensitive, PAYMENT/TOKEN TERMS ONLY (issue 192 GAP 2
+#       re-scope, 2026-11-01):
+#       kat|payout|epoch settle|lease|pack|usdc|wallet|topup
+#       The earlier wide pattern (mine|earn|epoch|settle|credit|join|service)
+#       collided with the PRODUCT surfaces the charitable story now OWNS —
+#       join / contribution / corpus / rank copy is the public good, not the
+#       credit plane; it left the bar. "mine" specifically is still covered:
+#       bar 3 hard-zeroes the mining machinery (/mining/ wire,
+#       mining_consent, kat_meter, …) and the --mine typed-refusal check
+#       below stays. Word boundaries on single terms (the T14a record: a
+#       naive substring trips the tagline's "learns"); "epoch settle" is a
+#       PHRASE (optional space/punct between). grep rc is adjudicated:
+#       1 = clean PASS, 0 = hits FAIL, >=2 = grep error FAIL — a broken
+#       grep is never a pass.
+#       ⛔ POSITIVE ASSERTIONS (join/points/corpus surfaces PRESENT and
+#       consent-gated) are DEFERRED to T16.5's implementation task row — the
+#       surfaces do not exist in this build yet; asserting them today would
+#       red on the correct posture.
 #       DISCLOSURE-CLASS EXEMPTION (T14a's recorded carve-out): the build
 #       stamp's release-set STALE disclosure + rebuild hint name the missing
 #       features BY DESIGN (posture honesty). Exempt lines are printed
@@ -53,7 +66,12 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root" || exit 2
 
 FEATURES="latent_retrieval,rust_perf,clippy_lints"
-PATTERN='(^|[^A-Za-z])(mine|kat|earn|payout|epoch|settle|lease|credit|join|service)([^A-Za-z]|$)'
+# Bar-1 output pattern — payment/token terms ONLY (issue 192 GAP 2 re-scope,
+# 2026-11-01): the wide pattern's product-collision half (mine/earn/epoch/
+# settle/credit/join/service) left with the v4 pivot; the mining machinery
+# stays hard-zeroed at bar 3 + the --mine typed refusal stays. Single terms
+# word-boundaried; "epoch settle" a phrase with optional separator.
+PATTERN='(^|[^A-Za-z])(kat|payout|lease|pack|usdc|wallet|topup)([^A-Za-z]|$)|epoch[^A-Za-z]?settle'
 # Bar-1 disclosure class (T14a's recorded carve-out): the build stamp's
 # release-set STALE disclosure + its rebuild hint. Anchored to the exact line
 # prefixes; anything else matching the wide pattern still fails.
