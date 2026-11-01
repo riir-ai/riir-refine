@@ -15,7 +15,7 @@ space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
 | **sec** (opt-in) | `sec` | ✅ Phase 0+1+2 + Batch 131 + Batch 140 + Batch 165 + Batch 258 + Batch 291 + Batch 292 + Batch 294 + Issue 185 (Bench 046; Phase 2 Batch 88; P8 intake Plan 057; InputValidation pair Plan 112; advisory-db distill Plan 120; wire-arithmetic overflow sink Plan 156; web-trust seed Plan 262; penthera distill Plan 295; CVEngine distill Plan 296; RustSec transcription Plan 298; softmax-collapse family Issue 185) | 31 rules — FFI panic containment, Drop-glue panic safety, ptr-null hygiene, `from_raw_parts` len-zero, Rc backedges + the Phase-2 unsafe-impl/ffi-export/crypto trio + `nan-unsafe-sort-comparator` (PanicSafety) + the Batch-131 `InputValidation` pair (`length-prefix-validate-before-alloc` + `secret-file-create-without-0600`, Girder distill) + the Batch-140 `unbounded-read-into-vec` (rustsec/advisory-db distill, RUSTSEC-2024-0003 / CVE-2019-9514 class; + the Batch-258 decoder see-through rider) + the Batch-165 `unchecked-wire-arithmetic` (the overflow sink on the shared `wire_taint` walker; Kani g2c/g2d property pair) + the Batch-258 web-trust seed (`untrusted-path-join-escape` path traversal + `webhook-signature-over-raw-bytes` signature coverage + `unvalidated-egress-url` SSRF URL choice + the Batch-292 use-time rider — cloudflare/security-audit-skill distill) + the Batch-291 penthera distill (`cors-any-origin-with-credentials` + `jwt-insecure-validation-flags` + `auth-cookie-without-secure-flags` — the CORS/JWT/cookie classes) + the Batch-292 CVEngine distill (`client-ip-from-untrusted-forwarded-header` + `shell-string-command-interpolation` + `ipv4-mapped-range-check-unwrap` + `abuse-strike-counts-cross-site-requests` — the std `IpAddr`/`Command` + identity/strike classes) + the Batch-294 RustSec transcription (`packed-field-silent-overflow-wrong-key` masked-key packing + `capacity-exceeded-silent-fallback-not-refusal` silent-cap degrade — the RUSTSEC-2026-0380/0379 classes) + the Issue-185 softmax-collapse family (`Numerics`, arXiv:2610.31642 — `sigmoid-minus-one` mechanical + `softmax-onehot-collapse` / `neg-ln-softmax-prob` suggest-only) — ALL InputValidation/crypto-web rules suggest-only; 7 fixable proposers + 18 suggest-only detectors + the real-clippy boundary gate (Plan 018 / Proposal 004) |
 | **docker** (default since 2026-08-28) | `docker` | ✅ Phase 0+1+2 (Plan 030) | 31 rules (14 Class-A hadolint overlays + 17 novel cache/PID1/platform/base detections), 14 with bounded fixes; the first non-`syn` domain (stanza scanner) and the first with an external-binary oracle (`docker_verify` → hadolint, plus the Tier-2 `docker_buildcheck` → `docker build --check`). Zero-fixable-finding negative controls on two in-tree production Dockerfiles; G5-real `docker build` green |
 | **dist** (default since 2026-09-13) | `dist` | ✅ Phase 1 + B1/B2 (Issue 085; Bench 082 + §6 addendum) | 7 suggest-only rules over name-matched `Cargo.toml` manifests — release-profile size knobs (strip / `[profile.dist]` size profile / panic-abort) for crates that ship a binary + the workspace-member profile trap + the Batch-143 `-Zhint-mostly-unused` large-API-dependency hint + the Batch-146 PGO training-set hint + the Batch-221 `bench-targets-shared-dependency-cluster-hint` (bevy #25321: ≥3 ungated `[[bench]]` targets compile every target's heavy deps for any one; the split = default-on per-crate bench features + optional bench deps + per-bench required-features — the green-zero caveat rides the advice). Measured provenance: 11,903,168 → 4,546,448 bytes (−61%) on this tool itself. Second no-`syn` scanner (zero new deps); never edits `[profile.release]` (the `refuses()` table pins it). The row previously read 5 — stale through B146's sixth rule, repaired here with the honest label |
-| **shader_perf** (opt-in) | `shader_perf` | ✅ Phase 0+1 (Plan 134 / Proposal 014) | 8 WGSL render-pipeline rules (`@vertex`/`@fragment`; `@compute` stays `kernel_opt`) — 1 bounded (the `unbounded-render-loop-guard` proposer, Tier-0-invariant-checked) + explicit-LOD two-regime + branch-divergent decision + const-fold + 3 Class B annotations + 1 corpus-only. Third no-`syn` scanner (no regex); `shader_verify` = in-process naga (already in the lock — zero new packages); negative control pins ZERO findings on the 190-file riir-shader vgpu port corpus. Consumers: the upcoming shader-toy editor's submit/save gate + the riir-dapps Proposal 002 Stage-2 mint gate |
+| **shader_perf** (opt-in) | `shader_perf` | ✅ Phase 0+1 (Plan 134 / Proposal 014) | 8 WGSL render-pipeline rules (`@vertex`/`@fragment`; `@compute` stays `kernel_opt`) — 1 bounded (the `unbounded-render-loop-guard` proposer, Tier-0-invariant-checked) + explicit-LOD two-regime + branch-divergent decision + const-fold + 3 Class B annotations + 1 corpus-only. Third no-`syn` scanner (no regex); `shader_verify` = in-process naga (already in the lock — zero new packages); negative control pins ZERO findings on the 190-file riir-shader vgpu port corpus. Consumers: the upcoming shader-toy editor's submit/save gate + the riir-dapps Proposal 002 consumer gate |
 
 Heavyweight LoRA is the last-resort fallback, not the co-equal path. Plan 005
 (2026-08-14) added the **latent suggest layer** — `cargo refine --suggest`
@@ -23,12 +23,13 @@ retrieves ranked corpus rules for real code spans (GOAT G1–G4 PASS, Bench 018;
 `--fix` CLI wiring is Phase 6 — the Phase 4 rust_perf proposers landed as
 library code).
 
-> **Distribution (binding, [Proposal 003](.proposals/003_binary_only_distribution.md)):**
-> this source is **private forever** (Research 003: anything `riir-*` is
-> internal). The public gets prebuilt `cargo-refine` binaries only, via GitHub
-> Releases on a small source-free dist repo (`brew tap`, `curl | sh`,
-> `install.ps1`, scoop). No crates.io, no source mirrors — `publish = false`
-> is enforced in `Cargo.toml`.
+> **Distribution & open posture:** today `cargo refine` ships as
+> checksum-verified prebuilt binaries via GitHub Releases on a small
+> source-free dist repo (macOS/Linux `install.sh` + `curl | sh` + Homebrew
+> tap; Windows `install.ps1` + scoop). The community repair corpus is
+> **MIT open data today**; the core source has a **committed, dated plan to
+> open during the grant term (months 1–3)** — until then the binaries are
+> the supported surface.
 
 ## Status
 
@@ -147,12 +148,12 @@ code; `--fix` CLI wiring is Phase 6.
 | `compile_oracle` | off | — | Plan 019 T0.3: the real-`cargo` error-JSON capture plumbing for the `rustc_errors` domain (deliberately NOT implying `latent_retrieval` — a compile fixer must not grow a retrieval dep) |
 | `fix_verify` | off | `compile_oracle`, `latent_retrieval` | Issue 015: `--fix --verify` — the compile gate as tooling (apply → cargo-check → revert only offending edits; real-repo GOAT Bench 031) |
 | `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo refine --score-bench` — the frozen real-code healing bench + the committed score curve (`.benchmarks/score_history.jsonl`) |
-| `margin_mining` | off | `score_bench`, `latent_retrieval` | Issue 077 T3: `e^{−2M}` margin-weighted carve-mining order (`score_bench_mine_v6 --order margin` / `--ab`) — RECORDED DEMOTE (Bench 080: tie at every budget; retrieval-similarity margins don't select lint-bearing raw spans), stays opt-in, miner default stays count-desc |
+| `margin_mining` | off | `score_bench`, `latent_retrieval` | Issue 077 T3: `e^{−2M}` margin-weighted carve order (`score_bench_mine_v6 --order margin` / `--ab`) — RECORDED DEMOTE (Bench 080: tie at every budget; retrieval-similarity margins don't select lint-bearing raw spans), stays opt-in, the carve default stays count-desc |
 | `l4_lora` | off | — | Plan 336 T4.4/T5.3: the L4 generative-fallback SEAM (`L4Fallback` trait + `DaemonL4` transport) — inert unless a fallback is installed; Plan 336 G1 measured 0/60, stays UNARMED (see [`.docs/10_self_evolve/l4_fallback.md`](.docs/10_self_evolve/l4_fallback.md)) |
 | `pav_data` | off | `l4_lora`, `score_bench` | Plan 356 A1: PAV (process-advantage) dataset curation for the L4 fixer campaign (real-daemon or seeded-mock source; opt-in — the campaign is a deliberate 30-40h exclusive-4090 budget) |
 | `contrastive_scope` | off | `katgpt-core/contrastive_scope` | Bench 040 / Plan 016: the input-scope gate at the heal seam — non-Rust garbage is declined whole before it can burn an LLM call (G1 8/8 OOS declined, bit-identical in-distribution) |
-| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the KAT service client substrate — meter/charge/account/store + `kat_redact` (the leak-posture gate) + the `cargo refine vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders the local earned/spent view; `--corpus-stats` counts at runtime with provenance stamps) |
-| `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease HTTP transport + the out-of-KAT top-up QR |
+| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the service client substrate — account + local usage accounting + `kat_redact` (the secret-blind redaction gate) + the `cargo refine vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders your local activity view; `--corpus-stats` counts at runtime with provenance stamps) |
+| `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease HTTP transport (+ QR rendering + the dev/test refill client) |
 | `cf_workers_ai` | off | `dep:ureq`, `latent_retrieval`, `clippy_verify`, `l4_lora`, `kat_service` | Issue 040/046: the CF Workers AI REST client (`src/cf_workers_ai.rs`) — the fixer arms, the USD daily-cap ledger (reserve-then-reconcile), and the fixer model: DEFAULT `@cf/zai-org/glm-5.3-flash` (owner pivot 2026-08-28, second call — the prior default 4.7 FAILED the Issue 043 re-designation gate 3/9 and stays priced + selectable via `RIIR_CF_MODEL`; [Bench 057](.benchmarks/057_glm53_flash_fixer_regate.md) re-gated 5.3 at 7/9 strict-keep on BOTH arms, beating the earlier CF bar of [Bench 049](.benchmarks/049_fixer_regate_poc.md)) |
 | `wasm_pruner` | off | — | WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity) |
 
@@ -200,7 +201,7 @@ Kernel signature (M, N, K, dtype, hw)
 Router — KERNEL EXPERT ROUTER (pick_domain<15,5>, Plan 558)
   Activity vector · category_centroids → expert index → category → rule_ids
   Plan 003: 15 category experts wired to 68-rule corpus (hand-crafted centroids;
-  mining via CommittedFieldBlend deferred; 13/15 reachable)
+  corpus distillation via CommittedFieldBlend deferred; 13/15 reachable)
          │
          ▼
 Thermal — KERNEL THERMAL ROUTER (5-tier escalation)
@@ -269,109 +270,39 @@ cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet src/
 cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet --write src/
 ```
 
-## KAT network — the KAT service (mining + balance)
+## Contributing fixes (opt-in)
 
-The service plane (Cloudflare Worker in the private `riir-dapps` repo) hosts
-the KAT ledger, the corpus lease, and the mining queue. The client talks to
-`https://mainnet.riir.ai` by default (the gen-2 host — the old heal.gist.rs name canonicalizes on read); point it anywhere else with:
-
-```sh
-export RIIR_REFINE_KAT_SERVICE_URL=http://127.0.0.1:8811   # a localnet from riir-dapps
-```
-
-The loop (every step is honest about what is local vs server):
+Healing is local: it runs offline and needs no account. Sharing fix data is
+a separate, explicit opt-in. Contributions are anonymized and secret-blind —
+the redaction layer never lets credentials or secrets leave the machine —
+and they build the MIT-licensed community corpus: every contributed repair
+is reviewed, never scraped, and improves healing for everyone.
 
 ```sh
-cargo refine login      # account key (Ed25519, OpenSSH format) + once-per-key welcome grant
-cargo refine --fix      # heal — metered locally (accounting-only projection)
-cargo refine sync       # PUSH the redacted signed batch (mining) + PULL the corpus lease
-cargo refine sync --export batch.ndjson  # WRITE that batch locally, send nothing (no login; throwaway key)
-cargo refine account    # burn / balance / grant / network state
-cargo refine --refill   # out of KAT? dev/test faucet refill (see below)
-```
-
-### `cargo refine --refill` — the dev/test faucet refill (Plan 117)
-
-When the balance runs dry, one command refuels from the service's faucet:
-
-```sh
-cargo refine --refill                   # faucet request → balance read → gate input refreshed
-cargo refine --refill --refill-wait 120 # + a bounded settle poll (default: one read, no poll)
-```
-
-It composes three shipped surfaces — the faucet request (`faucet --request`'s
-wire, amount pinned by the deployment's daily cap), an authorized crank
-trigger (`POST /admin/crank/daily`, ONLY when `RIIR_REFINE_KAT_CRANK_TOKEN` is
-set — the bearer IS the authorization, and prod never distributes one; without
-it the row settles at the next hourly alarm), and the public balance read.
-The result is written into the soft gate's input (the burn ack's server
-balance), so the gate lifts the moment fuel lands instead of waiting for the
-next burn push. Exit 0 iff the final synced balance is positive. The credit
-is treasury-funded and capped — on a deployment whose treasury is at/below
-its grant floor the crank report SAYS so (`skipped_treasury`) and nothing
-credits until it is funded (riir-dapps Issues 010/025).
-
-Leave at any time:
-
-```sh
-cargo refine --unmine          # opt OUT of contributing — key + balance UNTOUCHED, reversible
-cargo refine --unmine --purge  # DESTRUCTIVE: also remove the local identity (orphans the
-                             # server-side balance forever — no recovery path)
+cargo refine login      # your account (Ed25519 key, OpenSSH format)
+cargo refine --mine     # opt in to contributing fixes (one-time consent screen)
+cargo refine sync       # push the redacted, signed contribution batch + pull the corpus lease
+cargo refine sync --export batch.ndjson  # write that batch locally, send nothing
+cargo refine account    # your account — contribution history and service state
+cargo refine --unmine   # opt out — key and history untouched, reversible
 ```
 
 `--unmine` stops the push half of `sync` (the lease pull — a read — still
-runs) and clears the sync bookkeeping; your key, balance and rewards stay
-exactly as they are, so `--mine` re-enables contributing with the SAME
-account. `--purge` is the explicit destructive opt-out: the identity IS the
-key, so the server-side balance becomes permanently unclaimable, and a
-purge + re-login cycle is the fresh-grant farm shape (each new key gets a
-fresh once-per-key welcome grant) — which is exactly why it is never the
-default.
+runs); `--unmine --purge` additionally removes the local identity, which is
+destructive and is never the default. A logged-in account reports usage
+totals for accounting only; fix content is shared solely through the
+explicit `sync` push after you opt in.
 
-## Fuel model — burn, auto-report, hourly settle
+**Advanced/service configuration.** The client talks to the hosted service
+by default; point it anywhere else with `RIIR_REFINE_KAT_SERVICE_URL` (e.g.
+a local test service). `--net <devnet|mainnet>` steers a single invocation
+and `config set --url <alias|url>` stores a bookkeeping row — dialing
+follows the env or the default. `cargo refine --refill [--refill-wait <s>]`
+requests a dev/test service refill with a bounded settle poll. None of this
+is required for local healing.
 
-Healing burns **1 KAT per code word token**, metered locally
-(accounting-only projection). After every run that settles a charge, the
-client AUTO-REPORTS the cumulative burn to the service (`POST /burn`,
-account-key signed) and prints one line with the fresh server balance —
-account billing, a ~5 s budget, never blocks the run and never changes its
-exit code. It rides the login, so `--unmine` does not stop it (billing ≠
-contribution).
-
-Offline runs **stack like local commits**: the ack watermark
-(`.refine/kat_burn_ack.json`) advances only on a 200-accepted response, so a
-push that fails is a local commit — the next run (or `cargo refine sync`)
-reports the FULL stacked total in one signed report, and the server's
-monotone watermark makes a replayed report a no-op. The service debits the
-100M KAT free grant **warn-and-pay** and commits burn to the mining pool on
-its hourly settle bucket (Issue 076 — the 7-day epoch stays the staking
-cadence). The push rides the same network build as `sync`; a build without
-the transport compiles it to nothing.
-
-### The soft gate (Issue 075 — depleted accounts, owner decision 2026-09-08)
-
-Prepaid fuel, not an interactive gate: when the account's **last synced
-server balance** is ≤ 0 and the machine has never contributed-and-synced,
-scanning runs REFUSE at start (exit 1) until the user refuels by any of
-three paths: `cargo refine --refill` (the dev/test faucet refill — Plan 117),
-contributing (`cargo refine --mine`, then one accepted `cargo refine sync` — the
-burn-push ack records the server's `contributed` truth, which lifts the gate
-for good), or paying (the web payment page). Since Issue 080 the sticky
-grace is **server truth only** (dated removal 2026-09-10,
-fleet v3 live): the burn-ack v3 `contributed` field decides — `Some(true)`
-lifts the gate; `false` refuses; `None` (a pre-v3 ack/server) is simply not
-contributed. The former machine-local `contributed_once.json` marker is
-RETIRED — the `kat_contribution` module is deleted, nothing reads or writes
-the file, and a copy left on disk by a pre-removal install has zero effect.
-Logged-out, offline, and never-synced machines stay warn-only —
-no server authority, no honest gate. The refusal names all three refuel
-paths. `RIIR_REFINE_KAT_GATE=0` (or the
-shared `RIIR_REFINE_KAT_METER=0` billing switch) disarms the gate; the burn
-push itself keeps its never-blocks contract. Contributed accounts are
-never re-gated while depleted — mining payouts land at the closing settle
-of the claim's own epoch (≤7 days after that epoch closes; dapps issue 035),
-and bricking a contributor mid-epoch is the exact failure the gate
-exists to avoid.
+> Coming next: join the contribution network, earn contribution points,
+> appear on the public leaderboard.
 
 ## Automatic rustfmt (`--fix --write`)
 
@@ -414,7 +345,7 @@ after the compile gate, to files with kept edits only.
 
 The bench that answers "are we getting better?" with a number that can
 only move by healing better — **the denominator is frozen** (34 fixtures:
-real pre-sweep mined spans + the T3.5.5 realistic multi-lint composite set,
+real pre-sweep extracted spans + the T3.5.5 realistic multi-lint composite set,
 provenance recorded per fixture), and the ground truth is real
 `cargo clippy` before/after, not our own proposers.
 

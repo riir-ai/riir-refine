@@ -1,0 +1,70 @@
+# Plan 325 — the public-goods CLI surface (`join`/`leave`/`rank`/`info`/`corpus`/`version` + consent + offline)
+
+**Status:** Active — T16.5 of issue 192; executes the CLI half of [Proposal 026](../.proposals/026_points_plane_riir_ledger.md); privacy law: [`points_privacy_id_design.md`](../.docs/01_orientation/points_privacy_id_design.md) (T16.1). Owner approved execution 2026-11-01 ("lgtm let's do it" on Proposal 025) — local-first, deploys later via the touch-deploy lane.
+**Claimed:** zed-riir-docs, 1793552193, expires 2026-11-03T16:57:16+00:00
+
+## Goal
+
+The owner's verbs table (issue 192) as running code: local healing stays free and
+offline; the contribution surface speaks contribution vocabulary; the points verbs
+ride a std-only client in the PUBLIC build; the KAT lanes stay internal. G-C law:
+the sweep re-scope lands in the same arc as the network code joining the public
+build — never after.
+
+## The feature-gate map (the load-bearing decision)
+
+| Feature / surface | Public (charitable) build | Internal build | Notes |
+|---|---|---|---|
+| local healing (`fix`/`suggest`/domains) | ✅ always | ✅ | never gated, never networked |
+| `points` (new; std-only HTTP client + riir-ledger DTOs) | ✅ DEFAULT | ✅ | the public network half — NOT `kat_transport`; loopback-shaped HTTP client like `seat_rerank`; TLS only via the join path below |
+| `join` transport (GitHub device flow) | ✅ via the existing `provider_login` edge (riir-kat `provider_login`, implies `rebind`) | ✅ | the one TLS-bearing dep the public build gains (ureq/rustls via riir-auth) — GAP 5's "works out of the box" decision; build-hygiene note: watch the binary-size delta |
+| `rank`/`info`/`balance` reads | ✅ via `points` | ✅ | anonymous callers get local stats + public top-ten only |
+| first-run consent + `RIIR_REFINE_OFFLINE=1` | ✅ | ✅ | T16.1 §5 text; offline kills every network lane incl. update check |
+| `kat_service` (meter/billing/wallet/refill/net lanes) | ❌ stays OUT | ✅ | Posture A unchanged for the KAT surface; the charitable sweep keeps its hard-zero KAT classes |
+| `kat_transport` (ureq service transports: lease/topup/totp/decstat push) | ❌ stays OUT | ✅ | KAT-era plane, frozen |
+| crates.io publication (GAP 11) | n/a | n/a | extraction-scope, owner-gated names + token |
+
+⛔ The charitable feature set is a NAMED set (the release posture): `default + points
++ provider_login(edge) + update_check + fix_verify + latent_retrieval` minus
+`kat_service`/`kat_transport`. The T14 charitable gate asserts the boundary both
+directions (KAT classes hard-zero in the public set; points verbs PRESENT).
+
+## The verbs → implementation table
+
+| Verb | Current substrate | Work | Phase |
+|---|---|---|---|
+| `cargo refine` (bare) | dry-run scan | unchanged | — |
+| `fix` | heal path; burn-sync tail when logged in; stats push tail under consent | **first-run consent ONCE** (T16.1 §5 text; one prompt, three answers: join / share anonymously under the client UUID / never send); `RIIR_REFINE_OFFLINE=1` documented + honored on EVERY network lane; the join-or-anonymous ask rides the consent screen, never a second prompt | P1 |
+| `join` | `login --provider github` (device flow, `read:user`) + mining-consent screen + sync-policy redaction | thin verb composing the three existing steps + the `/points/join` binding call; client id compiled as the public default (GAP 5 residue) | P2 |
+| `leave` (+ hidden `left`) | `--unmine`/`--purge` exist | log off = clear local account binding + consent + stop every send; server unbind via `/points/leave` best-effort; **zero data sent afterwards**, no goodbye dependency; `left` parses as a hidden alias printing "leave" | P2 |
+| `rank` | none | GET `/points/rank` (public top-ten; +own rank when joined); anonymous → local stats + the named reason (anti-Sybil sentence from Proposal 026 §5.1); renders from cache when offline with the epoch stamped | P3 |
+| `info` | local stats exist | local aggregated view + GET `/points/info`; counts + domains only (sync-policy-scoped); no repo content | P3 |
+| `corpus` | `update` exists | subcommand: corpus info (epoch, rows, last sync) + the update offer — **points-free, no KAT charge line** in any posture | P3 |
+| `version` | `--version` | subcommand alias; `--version` keeps working | P1 |
+| `update` | corpus lease refresh | drops the KAT charge line in the public posture (points-free public good) | P3 |
+| `upgrade` | binary self-update | unchanged | — |
+
+## Tasks
+
+- [ ] **T1 — privacy substrate (P1):** `client_id` in the machine-local config (T16.1 §1: CSPRNG, UUID-v4 shape — the documented v7 deviation — 0600); `config reset-client-id`; the client UUID rides the consented payloads only.
+- [ ] **T2 — first-run consent + offline (P1):** the T16.1 §5 consent screen (once, machine-local state); `RIIR_REFINE_OFFLINE=1` honored by burn-sync, stats tail, update check, hosted expert, and the points client; `version` subcommand.
+- [ ] **T3 — `points` client module (P2):** `src/points_client.rs` — std-only HTTP + `riir-ledger` DTOs; the feature; the charitable release-set line + `release_set_matches_workflow`-style pin updated in the same commit.
+- [ ] **T4 — `join` + `leave` (P2):** the verb composition (device flow + policy accept + binding call); the compiled-default client id; `leave`/`left`; consent text lands verbatim; the anti-Sybil refusal on rank for anonymous callers.
+- [ ] **T5 — `rank` + `info` + `corpus` + `update` (P3):** the reads; cache-from-offline with epoch stamp; corpus subcommand; the KAT charge line dropped from `update` in the public posture.
+- [ ] **T6 — sweep re-scope, positive half (P3, G-C law):** charitable-gate arms asserting the points verbs PRESENT + the T16.1 §5 consent text VERBATIM + `leave`/`left` + offline honored; KAT hard-zero classes unchanged; `--mine` typed refusal unchanged (bar 3 coverage).
+- [ ] **T7 — vocabulary sweep (P3):** every help string, consent screen, error message, README line: contribute/contribution vocabulary; grep arm added to the charitable gate for the public strings.
+- [ ] **T8 — crates.io publication (GAP 11, owner-gated):** crate names (owner), publish pipeline + crates.io token secret (owner-gated setup), docs.rs metadata (license files, description, repository links); README born-compliant (T1.6 rewrite already landed 2026-11-01).
+- [ ] **T9 — gates:** `cargo refine --score-bench` after any proposer-adjacent change; charitable gate at both feature extremes; the offline posture byte-compared (offline on = zero network syscalls in the fix path — a gate, not a claim).
+
+## Owner gates
+
+- The numeric earn table + rank half-life (Proposal 026 §3/§5) before any public mint.
+- The drain follow-up proposal before any drain ships (binding law 1).
+- crates.io names + the publish secret (T8).
+- Any deployment act: devnet first; prod via the touch-deploy lane only.
+
+## Sequencing laws (restated from Plan 324)
+
+- **G-B:** no front describes the points plane as live until this plan ships (W0).
+- **G-C:** T6 (sweep positive half) lands WITH T3/T4 — never after.
+- Vocabulary law everywhere user-facing; internal identifiers rename only when touched.
