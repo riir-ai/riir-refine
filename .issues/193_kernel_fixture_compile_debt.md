@@ -3,6 +3,7 @@
 **Status:** OPEN — the G1 harness (Issue 191 T2) landed and its first full run surfaced the
 fixture-compile debt; repairs land per corpus file with the G1 gate re-run as the acceptance
 test. Claimed by no one yet.
+**Claimed:** zed-4090-193, 1793554051, expires 2026-11-03T17:27:38Z
 
 ## What happened
 
