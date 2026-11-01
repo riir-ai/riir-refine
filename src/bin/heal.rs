@@ -8155,6 +8155,9 @@ struct Args {
     /// riir-dapps Plan 023: the `config set` subcommand modifier (bare
     /// `config` / `config get` is the pure read).
     config_set: bool,
+    /// Plan 325 T1: `config reset-client-id` — mint a fresh client UUID
+    /// (the old token is dead the moment this returns; never printed).
+    config_reset_client_id: bool,
     /// riir-kat Issue 003 T4: the `config adopt-state <devnet|mainnet>
     /// subcommand modifier — the explicit, per-file migration for pre-split
     /// network-blind state (the remedy the stamp judge's refusal names).
@@ -8525,6 +8528,7 @@ fn parse_args() -> Args {
         claim_tx: None,
         config_url: None,
         config_set: false,
+        config_reset_client_id: false,
         config_adopt_state: None,
         config_adopt_discard: false,
         net_alias: None,
@@ -9413,6 +9417,15 @@ fn parse_args() -> Args {
             // `config` subcommand, before any path arm can eat it.
             "set" if args.command == Some(KatCommand::Config) && args.paths.is_empty() => {
                 args.config_set = true;
+            }
+            // Plan 325 T1: the `config reset-client-id` modifier — the
+            // client UUID's user reset (the public posture's config
+            // surface; dispatched points-gated BEFORE the kat_service
+            // refusal, the points-verb precedent).
+            "reset-client-id"
+                if args.command == Some(KatCommand::Config) && args.paths.is_empty() =>
+            {
+                args.config_reset_client_id = true;
             }
             // riir-dao Proposal 001 T4: the `account migrate` two-word
             // shape (the dao flow's own spelling) — the same modifier
@@ -13057,6 +13070,29 @@ fn main() {
         }
         #[cfg(not(feature = "update_check"))]
         riir_refine::build_stamp::refuse("upgrade", &["update_check"]);
+    }
+
+    // ── Plan 325 T1: `config reset-client-id` — the public posture's
+    // config surface (the client UUID is the points plane's; the reset is
+    // its user remedy). Dispatched BEFORE the kat_service config arm, the
+    // points-verb precedent.
+    #[cfg(feature = "points")]
+    if args.command == Some(KatCommand::Config) && args.config_reset_client_id {
+        let dir = riir_kat::kat_account::KatAccount::default_dir();
+        match riir_refine::client_id::reset(&dir) {
+            Ok(_) => println!(
+                "client id: reset — a fresh random ID was minted; nothing new links to the old one (aggregate counts are unaffected)"
+            ),
+            Err(e) => {
+                eprintln!("client id: {e}");
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
+    #[cfg(not(feature = "points"))]
+    if args.command == Some(KatCommand::Config) && args.config_reset_client_id {
+        riir_refine::build_stamp::refuse("config reset-client-id", &["points"]);
     }
 
     // ── Plan 325 T4/T5: the points verbs — dispatched BEFORE the
