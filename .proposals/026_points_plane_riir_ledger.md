@@ -1,6 +1,7 @@
 # Proposal 026 — `riir-ledger` v1: the contribution-points plane (wire, schedules, leaderboard rules)
 
 **Status:** Proposed — T16.2 of issue 192; the model canon is [Proposal 025 §"The points plane in full"](025_mozilla_human_scale_ai_incubator.md) (units, three binding laws, ledger shape); implementation plan is [Plan 325](../.plans/325_public_goods_cli_surface.md); the privacy law is [`points_privacy_id_design.md`](../.docs/01_orientation/points_privacy_id_design.md) (T16.1). This proposal is the HOW: wire shapes, schedules, rank rules, substrate reuse, gates.
+**Claimed:** zed-m3-p2, 1793562411, expires 2026-11-04T19:46:51+00:00
 
 ## TL;DR
 
