@@ -1,6 +1,7 @@
 # Issue 191 — scope the `kernel_opt` GOAT gate: real corpus + full numeric validator + promotion bars (the pending default-promotion precondition)
 
 **Status:** OPEN — scoping only; no campaign runs until the bars here are ratified and a session claims the campaign. Delegated-owner verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the 4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would leave a 1051-rule domain with a permanently unactionable promotion path.
+**Claimed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1 ratify + T2 harness build; 4090 box (shikuwa), the prefill league is between bouts with defenses banked
 
 ## The question
 
