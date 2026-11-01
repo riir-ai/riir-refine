@@ -96,6 +96,31 @@ needs a new proposal only if anchoring proves insufficient.
 flows keep working, and the website FAQ carries the one-paragraph "what happens to existing
 balances" note — honesty beats silence.
 
+### Perf/sec posture (design bars for W0's GOAT gate — targets, not measurements)
+
+**Substrate reuse — no parallel system.** The dapps `kat_ledger` arm already IS the
+durability-tier store (`local_kv::{LocalKvStore, WalBackend}` + `MerkleTree`), and the
+per-batch `kat:statehash:v1` LtHash fold under `kat_tuna` (Proposal 006 B1) is the existing
+per-batch tamper trail, with the shipped invariant `Σ balances + healed + expired ==
+TUNA_RESERVOIR + topups` pinned per-op (live today: `conservation_holds: true`). riir-ledger
+v1 adds rows + a rank table + an epoch anchor on THIS substrate — new storage is refused
+unless T16.2 proves one necessary.
+
+| Path | Bar |
+|---|---|
+| Earn | batched per-machine syncs in the shipped burn-sync posture (README: ~5 s budget, never blocks the run, monotone-watermark idempotent replay); even 10K contributors syncing hourly ≈ 3 QPS average — trivial for the service plane; mints ride the existing TUNA operator batch at epoch settle |
+| Drain | **NOT a v1 path** (binding law 1 keeps the drain out of v1 copy and code). The bar below applies WHEN T16.2 defines the drain: a cached-balance O(1) pre-check adding ≤ 1 ms p99, or fully post-hoc accounting — never a synchronous remote-permission check on the decision path (the hosted decision is µs–ms class; the public bench board records the hosted cells at ~7.73 ms p50) |
+| Rank | GitHub-joined identities only (anonymous = local-only stats, the anti-Sybil rule). The rank table is computed ONCE per epoch — expiry-as-rank-decay is the natural recompute tick — and served from cache; O(1) queries; never a per-query scan. The rank weight is a DERIVED, decaying quantity over PERMANENT contribution history; the ledger's shipped tranche-expiry mechanics (the bounded sweep burning expired tranches to `expired_micro`, Proposal 006 B4) are unchanged substrate behavior — T16.2 pins how the derived rank weight relates to the ledger balance |
+| Anchor | the per-batch LtHash fold (shipped, O(1)-class per mutation) + per-epoch `anchor_root` / `chunked_root` (Bench 488). ⛔ `chunked_root` REQUIRED: plain `MerkleTree` hard-asserts at `MAX_LEAVES = 2²⁰` (~1.05M) leaves, so a million-mutation epoch sits at the panic edge by construction. Roots publish via the public status/explorer JSON (the hourly pass machinery exists). **OFF-CHAIN by decision 6** — no Refine chain consumer; a chain-anchored variant is an explicit decision-6 amendment (owner gate), never a default. No Cold-tier mirror in v1: the statehash trail + public roots + per-op conservation are the tamper-evidence story, and the dapps BOUNDARY admits `local_kv` + `MerkleTree` from neuron-db only — a points mirror would need a new BOUNDARY row (declined for v1) |
+| Cost | the plane runs on the kat-service worker — Cloudflare read/write is a standing billing hazard. Bars: earn-sync writes batch per machine; rank recompute once per epoch; stats/rank reads served from cache; no per-query row scans; T16.2 names the per-epoch read/write budget |
+| Privacy | published anchors carry ROOTS only; leaf keys salted; no client UUIDs, no GitHub IDs in any published anchor or stat (the client-UUID privacy law + T16.1 gate the implementation) |
+
+**Boundary.** Contribution points fail the three-test rule's value test and rate test by
+construction (non-transferable, expiring, written at service rates) — a service-plane
+product, never a chain program. The money lane stays Glacial/quorum on riir-chain for the
+game economy's settlement (outcome → dapps composer → escrow → chain), outside the funded
+scope; the two lanes never share a write path.
+
 **Open-core sustainability (the criterion-6 answer):**
 
 | Layer | License | Moat status |
