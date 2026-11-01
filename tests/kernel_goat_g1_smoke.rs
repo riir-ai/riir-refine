@@ -8,7 +8,7 @@
 //!    an unpinned in-tree corpus change FAILS here, never shrinks the
 //!    population).
 //! 2. **Floors** — fixture-bearing rules ≥ 248, files ≥ 72 (downward-only,
-//!    pinned to the exact first census; the T1 estimate was 290/74).
+//!    pinned to the exact first census; the T1 estimate was 290/70).
 //! 3. **One end-to-end execution** — the first fixture-bearing rule in
 //!    name-ascending module order (deterministic, pre-registered pick)
 //!    compiles standalone and its embedded tests pass. This exercises the

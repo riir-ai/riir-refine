@@ -1,7 +1,14 @@
 # Bench 124 — the kernel_opt GOAT-gate campaign (Issue 191 T5): G1–G4 measured, G2+G1 FAIL, promotion REFUSED (the domain stays opt-in)
 
-**Status:** CAMPAIGN COMPLETE — the pre-registered verdict is determined by the gates; the
-promotion decision rides the bars, not a judgment call. Claimed + executed by
+**Status:** CAMPAIGN COMPLETE — VERDICT RATIFIED: the delegated owner-verdict review (native
+fallback sub-agent, session 04ae2ccf, 2026-11-01 — the request_verdict claude_code channel
+auth-unavailable on this box, the Issue-1115 arc) returned **#Verdict: AGREE** on all five
+checks (numbers reconcile across Bench 124 ↔ Issue 191 ↔ Issue 193 ↔ harness code incl.
+248+803=1051; the G2 FAIL honestly attributed; the G5 deferral disclosed in both surfaces;
+no silent bar weakening — the floor correction documented pre-measurement in issue+code;
+nothing owner-gated decided without the owner). Two non-blocking nits: the ≥290/≥74→≥70
+historical reference (fixed same session) and exact per-class counts pinned at Issue-193 R6.
+Claimed + executed by
 zed-shikuwa-i191gate (epoch 1793523566) on the 4090 box (shikuwa), 2026-11-01.
 
 ## The verdict table

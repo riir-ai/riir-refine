@@ -1,14 +1,7 @@
 # Issue 191 — scope the `kernel_opt` GOAT gate: real corpus + full numeric validator + promotion bars (the pending default-promotion precondition)
 
-**Status:** OPEN — T1–T5 ALL EXECUTED; the campaign verdict is IN (Bench 124): promotion
-REFUSED, `kernel_opt` stays opt-in (G1: 65 fixture defects → Issue 193; G2: tranche median
-1.0000 < 1.06 on the CPU-portable surface). The issue remains open for the RE-CAMPAIGN path:
-Issue-193 repairs → the owner-gated G2-convention decision → re-run G1+G2+G5. Delegated-owner
-verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel
-auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the
-4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would
-leave a 1051-rule domain with a permanently unactionable promotion path.
-**Claimed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1 ratify + T2 harness build; 4090 box (shikuwa), the prefill league is between bouts with defenses banked
+**Status:** OPEN — T1–T5 ALL EXECUTED; the campaign verdict is IN and RATIFIED (Bench 124 + the delegated AGREE verdict, session 04ae2ccf, native fallback reviewer 2026-11-01): promotion REFUSED, `kernel_opt` stays opt-in (G1: 65 fixture defects → Issue 193; G2: tranche median 1.0000 < 1.06 on the CPU-portable surface). The issue remains open for the RE-CAMPAIGN path: Issue-193 repairs → the owner-gated G2-convention decision → re-run G1+G2+G5. Delegated-owner verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the 4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would leave a 1051-rule domain with a permanently unactionable promotion path.
+**Lease closed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1–T5 executed and pushed (T2 `a9703c00a`, T3 `82b77f88b`, T4 `2ff3c0a61`, T5 `96f3733ee`, record `a0a751d25`); the delegated ratification verdict (AGREE, all five checks, two non-blocking nits fixed/deferred) closed the campaign.
 
 ## The question
 

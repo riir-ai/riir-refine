@@ -101,7 +101,7 @@ pub fn expected_corpus_files() -> Vec<String> {
 
 /// G1 floors — fire DOWNWARD only (Issue 191 bar 1, census-pinned). Pinned to
 /// the harness's own EXACT per-rule census at first measurement: 248
-/// fixture-bearing rules across 72 files. (T1's ≥290/≥74 were the pre-harness
+/// fixture-bearing rules across 72 files. (T1's ≥290/≥70 were the pre-harness
 /// per-file-density ESTIMATE; the ratified bar pins the census — any fixture
 /// rule or fixture file lost from the standing population reds.)
 pub const MIN_FIXTURE_RULES: usize = 248;
