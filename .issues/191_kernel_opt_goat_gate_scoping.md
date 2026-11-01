@@ -23,44 +23,92 @@ precedent shape).
   mandatory), G3 no-regression, G4 alloc-free or equivalent; promotion to default ALSO requires
   the gain to be modelless (deterministic construction — kernel rewrites are; no training).
 
-## Pre-registered bars (ratify or amend BEFORE any campaign — never after a measurement)
+## Pre-registered bars (T1 RATIFIED 2026-11-01 — amended pre-measurement, never after)
 
-1. **G1 — the full numeric validator.** Today's fixtures prove their transforms run; a promoted
-   rule must prove its transforms are EQUIVALENT on real inputs. Definition of "full":
-   - a REAL-GPU-CORPUS harness: ≥ N real kernel-shaped inputs per rule family (N ≥ 32 per
-     family; sources: the vendor trees already mined — TensorFold / vllm / PrismML-Eng /
-     llama.cpp fixture kernels, and our own riir-infer/riir-ai GPU kernel test inputs),
-   - bit-identity where the corpus law demands it (Issue-940-style reductions: sequential fold
-     order pinned; the NaN-visibility law — author "propagates", never "refuses"), and
-   - a documented tolerance class ONLY where the mined source itself is approximate (the source
-     PR names the class; the fixture carries it; never a post-hoc band).
-2. **G2 — the perf bar.** Per-rule microbench median improvement ≥ 5% on the rule's own shape
-   family at `--release`, measured per GPU generation the rule admits (the
-   simdgroup-fragment law's per-generation admission is the precedent — an M3-class regression
-   is a deliberate else-branch, not a pass).
+**T1 verdict record:** delegated owner-verdict 2026-11-01, reviewer = native fallback sub-agent
+(the `request_verdict` claude_code channel auth-unavailable on this box, the Issue-1115 arc),
+session `544472de-ed7f-4f9b-a5c2-864d1fd4e509`: **REVISE (narrow)** — gate architecture +
+pre-registration ordering RATIFIED SOUND; the four amendments below landed verbatim; proceed to
+T2 without re-review. Grounded census at ratification: 151 corpus files / 1051 rules; 74 files
+(~299 rules' files, ~700 embedded `#[test]` fns) carry executable std-only fixtures validated
+ONCE manually at entry ("rustc --test --edition 2021, 0 failures" headers) — validated today
+by NOTHING standing; only Batch 322 landed its fixtures in-tree.
+
+1. **G1 — the full numeric validator (AMENDED surface, ratified honest).** A STANDING harness:
+   extraction of every fixture-bearing rule's `ref_shape`/`opt_pattern` strings + per-rule
+   standalone `rustc --edition 2021 --test` compile + run (pid-suffixed temp dirs; a compile or
+   test failure = the rule's G1 verdict FAIL). Floors pinned against an INDEPENDENT structural
+   census (a text-level count of fixture-bearing rules/files in the corpus source, never the
+   extraction path), and the harness asserts `extracted == census` — an extraction failure
+   counts as FAIL, never as absent-from-population (the green-zero law). Floors fire downward
+   only: `min_fixture_rules ≥ 290`, `min_fixture_files ≥ 70` (at ratification: 299/74).
+   Bit-identity/tolerance per each fixture's own asserts (the corpus's own test-design laws:
+   mod-13 symmetry-breaking values, must-fail twins, comparators). Parse-only rules stay on the
+   parse stub, disclosed per-rule, never counted as validated. **Epistemic caveat (recorded):**
+   G1 proves opt preserves ref on the fixture's own input distribution; ref correctness is
+   inherited from vendored provenance and is disclosed per-rule — ref and opt can share a blind
+   spot the fixture author never probed.
+2. **G2 — the perf bar (bar RAISED, axis disclosed, both pre-pinned NOW).** Per-rule microbench,
+   interleaved A/B (the sequential-AB law: a ratio of two sequential arms measures the box),
+   **median improvement ≥ 6%** at `--release` (the measured flake band is < 6 pts — a 5% floor
+   sits inside it), measured on the CPU-portable surface where the fixture exposes a ref-vs-opt
+   pair (the healer never runs GPU code; a GPU-shaped rule's win is not CPU-measurable).
+   **Rig exclusivity is MANDATORY, not advisory**: the campaign runs via
+   `agent-mail rig run 4090 --exclusive` (or a verified-quiet box) and the bench record carries
+   the `PROVENANCE:` line — a latency number without its BOX STATE is not a measurement.
+   **Tranche selector is deterministic, pinned before measurement:** the largest clean
+   CPU-portable ref-vs-opt families by embedded-`#[test]` count per file, tie-break by file name
+   ascending, truncated at 15 files; the rest recorded `G2=NOT-MEASURED` per-rule with the
+   disclosure. A GPU-host (riir-gpu/cubecl) microbench stays the named Tier-B re-gate trigger
+   (the grandfathered re-gate precedent). A measured per-rule regression (median < 1.0×) exits
+   the rule from the benchable set — the exit reason recorded PER-RULE, not just the demotion.
 3. **G3 — no-regression.** The clippy_lints + rust_perf default surfaces' score-bench verdicts
    are byte-stable with kernel_opt enabled (the domain only ADDS a fan-out lane; the router
-   must not perturb the existing domains' selections).
+   must not perturb the existing domains' selections). **Disclosure boundary:** the CLI surface
+   is inherently additive (findings-by-domain gains a `kernel_opt` term) — byte-stability is
+   claimed for the EXISTING domains' verdicts, never for whole stdout.
 4. **G4 — alloc-free.** The default build (kernel_opt OFF) stays byte-identical — the gate is
    compile-time-only cost; the ON-posture alloc axis rides the per-case fix path's existing
    counters (the rust_perf_bench deterministic alloc-count validator, reused).
-5. **Promotion shape.** If G1–G4 pass: promote `kernel_opt` to `default` in ONE commit with the
-   bench record + the GOAT table; if any gate fails, the domain stays opt-in with the failing
-   axis named in the record (the G2-negative precedent: `RIIR_GDN_CORE_FUSED` — direction-
-   positive without a passing gate stays opt-in).
+5. **G5 — the utility + ON-posture cost leg (ADDED — the gain half for a suggestion domain).**
+   On a PINNED real corpus (this repo's `src/**/*.rs` at the campaign commit + the `.raw`
+   vendor clones at pinned SHAs named in the record): record the match census — suggestions
+   emitted per category expert, the zero-match rule census (disclosed, never auto-demoted —
+   retirement stays the `--necessity-bench` lane), and the added ON-posture scan latency per
+   file (p50/p95) against the PRE-REGISTERED ceiling: **p50 ≤ 1.0 ms/file, p95 ≤ 5.0 ms/file**
+   (pinned 2026-11-01, before any measurement). Utility floor: the domain must fire on ≥ 1 span
+   through ≥ 3 distinct category experts in the pinned corpus — a domain that never fires (or
+   fires through one expert only) fails the utility leg regardless of G1–G4.
+6. **Promotion shape.** If G1–G5 pass: promote `kernel_opt` to `default` in ONE commit with the
+   bench record + the GOAT table. Promotion promotes the SUGGESTION domain; kernel rewrites are
+   never auto-applied without the per-rule validator verdict (the suggest-first discipline
+   unchanged). If any gate fails, the domain stays opt-in with the failing axis named in the
+   record (the G2-negative precedent: `RIIR_GDN_CORE_FUSED` — direction-positive without a
+   passing gate stays opt-in).
 
 ## Tasks
 
-- [ ] T1 — ratify/amend the bars above (owner-verdict ping-pong; the numbers are the contract).
+- [x] T1 — ratify/amend the bars above (owner-verdict ping-pong; the numbers are the contract).
+      DONE 2026-11-01: delegated verdict REVISE (narrow) → four amendments landed verbatim (G1
+      census-pinned floors + epistemic caveat; G2 ≥6% + mandatory exclusivity + deterministic
+      tranche; G5 utility/cost leg added; G3 disclosure boundary), no re-review required by the
+      verdict.
 - [ ] T2 — build the real-corpus harness (T1.1's source list → fixture kernels per family;
       blake3-pinned inputs; the harness runs per GPU generation with the box-state PROVENANCE
-      line — the Issue-021 law).
+      line — the Issue-021 law). AMENDED by the T1 verdict: the harness = the G1 standing
+      fixture executor (extraction == independent structural census; per-rule rustc --test
+      compile+run; floors fire downward only) + the smoke gate with floors.
 - [ ] T3 — wire the full numeric validator into `kernel_verify` (replace the STUB delegation
-      path for the promoted set only; the stub stays for the long tail).
+      path for the promoted set only; the stub stays for the long tail). AMENDED: propagate a
+      `validated: fixture-green | parse-only` annotation end-to-end via the `context_notes`
+      channel — a suggestion from a parse-only rule must not look identical downstream to one
+      from a fixture-green rule.
 - [ ] T4 — the G3 score-bench byte-stability arm (reuse the existing score-bench freeze-table
       machinery; plan 137 T7.5's regeneration law applies to any corpus-touching landing).
 - [ ] T5 — run the campaign on a claimed slot (claim-lease discipline), record under a fresh
       `.benchmarks/` number, and take the promotion verdict to the owner with the full table.
+      AMENDED: rig exclusivity MANDATORY (`agent-mail rig run 4090 --exclusive` or verified
+      quiet) + the PROVENANCE line; G5 match census on the pinned corpus in the same campaign.
 
 ## Refs
 
