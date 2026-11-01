@@ -89,7 +89,16 @@ the extracted opt arm) and reproduce — fixture bugs, not harness artifacts.
 
 ## Tasks
 
-- [ ] R1 — the gpu_33/34 cluster (14 rules; the oldest batches — likely systematic shapes).
+- [-] R1 — the gpu_33/34 cluster (14 rules; the oldest batches — likely systematic shapes).
+  LANDED 2026-11-01 (zed-4090-193): all 14 repaired to standalone compiling units — the
+  oldest-batch hypothesis held: every failure was a pseudo-code body calling helpers named
+  in NO arm (the entries predating any compile enforcement), plus 2 mid-function fragment
+  arms. Repairs keep the decision content (per-arm `#![allow(dead_code)]` units, defined
+  types, deterministic xorshift/mod-13 data, ref-vs-opt equality or exactness asserts,
+  must-fail twins, work-counter pins); per-file `#[test]` token counts preserved exactly
+  (3/2/6/5 — the census reconciliation stays green). Commits: gpu_26 `183e241dd2f`,
+  gpu_32 `ad848608168`, gpu_33 `91063e74124`, gpu_34 `ba17e3077bf` (rebased to `65ac1845`+
+  after a sibling push); G1 `--filter` 14/14 green, smoke gate 3/3.
 - [ ] R2 — the RUN-failure class (~23; each needs its assert re-derived from the cited source).
 - [ ] R3 — the unresolved-symbol class (~10; the helper was probably lost in a corpus edit —
       check the git history of the entry before re-inventing it).
