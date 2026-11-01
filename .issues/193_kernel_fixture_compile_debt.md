@@ -99,7 +99,18 @@ the extracted opt arm) and reproduce — fixture bugs, not harness artifacts.
   (3/2/6/5 — the census reconciliation stays green). Commits: gpu_26 `183e241dd2f`,
   gpu_32 `ad848608168`, gpu_33 `91063e74124`, gpu_34 `ba17e3077bf` (rebased to `65ac1845`+
   after a sibling push); G1 `--filter` 14/14 green, smoke gate 3/3.
-- [ ] R2 — the RUN-failure class (~23; each needs its assert re-derived from the cited source).
+- [-] R2 — the RUN-failure class (~23; each needs its assert re-derived from the cited source).
+  LANDED 2026-11-01 (zed-4090-193): 25 rules across 15 files (the issue's class-1 list + the
+  gpu_120/126 opt-COMPILE stragglers), three parallel repair lanes; every expectation
+  re-derived from the rule's gpu_concept law — no assert weakened, no #[test] removed, no
+  demotion. Two green-zero classes found en route: cfg-gated asserts the harness never
+  compiles (gpu_80), and a NaN in a golden compared by a NaN-rejecting comparator (gpu_83).
+  Lane A gpu_65/75/80/82/83: 2bd4c2c4^5..; lane B gpu_104/108/120/126/129; lane C
+  gpu_131/132/133/134/139; the R1 one-time-dense regression the post-R2 full G1 caught
+  (Key Hash over-match) is `2bd4c2c4`. Combined validation: full G1 222 green / 26 FAIL
+  (215.3 s), smoke gate 3/3. One transient rustc STATUS_ACCESS_VIOLATION on rebuild
+  (retry clean; the first "full" run after it was a STALE-BINARY read — rebuild exit
+  status must be checked across pipes, the pipefail-discard class live).
 - [ ] R3 — the unresolved-symbol class (~10; the helper was probably lost in a corpus edit —
       check the git history of the entry before re-inventing it).
 - [ ] R4 — the misc-compile class (~29, the gpu_85/86/100/101/103/104/118/120/126/129/131/132/
