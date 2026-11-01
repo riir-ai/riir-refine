@@ -27,6 +27,7 @@ Owner pivot v4 (issue 192) supplies the narrative:
 - [ ] **T1.3** `riir.ai` + `reflex.riir.ai`: family-bar copy pass — align descriptions with v4 positioning (reflex = the modelless engine + arenas; refine = the healer; rethink = the research lane); remove any KAT/token copy.
 - [ ] **T1.4** Write the canonical copy block ONCE (in this repo's grant playbook §13) and mirror it everywhere: the three-principles answers (Small = zero-parameter modelless + local; Intentional = consent-first + community points + open governance; Tailored = Rust devs without cloud-AI budgets + closed beta), the six-criteria one-liners, the corpus/points/governance story.
 - [ ] **T1.5** Cross-site conformance gate after chrome/copy changes (web-family skill) on all touched fronts.
+- [ ] **T1.6** **riir-refine `README.md` rewrite (verdict r3 find — GAP 10 applies to it TODAY):** the README is user-facing and becomes the crates.io landing page (GAP 11); it currently carries a "KAT network — the KAT service (mining + balance)" section (line ~272) and mining/KAT-grant copy (~275/287/346/371). Rewrite to the v4 story (open core, contribute/contribution-points vocabulary per GAP 10, install paths, no KAT), and fold the README shape into the extraction (T16.5) so the crates.io landing page is born compliant.
 
 ## Phase 2 — Answer-the-criteria pages (application-supporting)
 
