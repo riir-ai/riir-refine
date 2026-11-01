@@ -45,7 +45,7 @@ Owner pivot v4 (issue 192) supplies the narrative:
 ### Tasks
 
 - [ ] **T3.1** Owner review of all four fronts against the six criteria (checklist in the grant playbook §13).
-- [ ] **T3.2** Deploy + verify; the deploy-ledger audit rows for any worker touched.
+- [ ] **T3.2** Deploy + verify; the deploy-ledger audit rows for any worker touched. **⛔ Required at the hosted-lane launch (delegated verdict, session `25f9319a`): the umbrella sentence "nothing is charged today" becomes FALSE the day the hosted lane bills — rewording it is a REQUIRED launch step (the launch checklist owns it), never a silent expiry.**
 - [ ] **T3.3** Freeze until submission (no content churn Nov 17–20).
 
 ## Constraints
