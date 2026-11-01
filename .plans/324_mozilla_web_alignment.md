@@ -34,7 +34,7 @@ Owner pivot v4 (issue 192) supplies the narrative:
 
 - [ ] **T2.1** `refine.riir.ai` gains a "How it sustains" section: open core (MIT), community corpus (MIT forever), contribution points (TUNA — earn by contributing, spend on hosted lanes, expiring, non-transferable), future coding domains (Python/Go), enterprise services — the sustainability answer in public.
 - [ ] **T2.2** `rethink.riir.ai` gains a "Research status" block: the lanes on the board, what's beaten, what's open — the "PoC until every decision lane is beaten" line, verbatim from issue 192.
-- [ ] **T2.3** Evidence surfaces on-page: installer counts, pilot call link, corpus stats, leaderboard (once the points plane ships — link, don't wait).
+- [ ] **T2.3** Evidence surfaces on-page: installer counts + crates.io downloads (once published — issue 192 GAP 11), pilot call link, corpus stats, leaderboard (once the points plane ships — link, don't wait).
 - [ ] **T2.4** Privacy answers on-page (the consent model: first-run consent, secret-blind redaction, anonymous vs joined, `leave`), so the Intentional principle is verifiable by a reviewer in one click.
 
 ## Phase 3 — Launch readiness
@@ -48,9 +48,10 @@ Owner pivot v4 (issue 192) supplies the narrative:
 ## Constraints
 
 - **Sequencing gates (verdict r1 — the Nov 20 risk made explicit):**
-  - **G-A (owner gate):** Phase 1 copy is BLOCKED on the GAP-9 moat reading (issue 192) — one owner line before any site rewrite.
+  - **G-A (RESOLVED 2026-10-31, owner — issue 192 GAP 9):** seal-*/riir-ai MUST STAY PRIVATE — Phase 1 copy is UNBLOCKED with the standing constraint: zero game-business content on any front (the seal business is a separate brand, never mentioned).
   - **G-B (copy law):** the points plane is described as **roadmap (W0), never live**, on all fronts until W0 ships; no leaderboard/beta copy before the T14 sweep re-scope lands.
   - **G-C (build law):** the T14 sweep re-scope (issue 192 GAP 2) lands BEFORE any network code joins the public build — the charitable-sweep evidence must never go stale.
+- **Vocabulary law (issue 192 GAP 10):** never "mining/mine/miner" on any front — "contribute / contribution / contributor / contribution points" only.
 - Web-family design system holds (family bar, tokens); no token/brand forks.
 - No game-business content anywhere (seal-* is a separate brand and out of scope).
 - Every claim on-page must be true on the date it ships (the grant lane's no-fabrication law).
