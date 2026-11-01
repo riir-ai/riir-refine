@@ -47,6 +47,10 @@ Owner pivot v4 (issue 192) supplies the narrative:
 
 ## Constraints
 
+- **Sequencing gates (verdict r1 — the Nov 20 risk made explicit):**
+  - **G-A (owner gate):** Phase 1 copy is BLOCKED on the GAP-9 moat reading (issue 192) — one owner line before any site rewrite.
+  - **G-B (copy law):** the points plane is described as **roadmap (W0), never live**, on all fronts until W0 ships; no leaderboard/beta copy before the T14 sweep re-scope lands.
+  - **G-C (build law):** the T14 sweep re-scope (issue 192 GAP 2) lands BEFORE any network code joins the public build — the charitable-sweep evidence must never go stale.
 - Web-family design system holds (family bar, tokens); no token/brand forks.
 - No game-business content anywhere (seal-* is a separate brand and out of scope).
 - Every claim on-page must be true on the date it ships (the grant lane's no-fabrication law).
