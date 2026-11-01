@@ -1,6 +1,13 @@
 # Issue 191 — scope the `kernel_opt` GOAT gate: real corpus + full numeric validator + promotion bars (the pending default-promotion precondition)
 
-**Status:** OPEN — scoping only; no campaign runs until the bars here are ratified and a session claims the campaign. Delegated-owner verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the 4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would leave a 1051-rule domain with a permanently unactionable promotion path.
+**Status:** OPEN — T1–T5 ALL EXECUTED; the campaign verdict is IN (Bench 124): promotion
+REFUSED, `kernel_opt` stays opt-in (G1: 65 fixture defects → Issue 193; G2: tranche median
+1.0000 < 1.06 on the CPU-portable surface). The issue remains open for the RE-CAMPAIGN path:
+Issue-193 repairs → the owner-gated G2-convention decision → re-run G1+G2+G5. Delegated-owner
+verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel
+auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the
+4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would
+leave a 1051-rule domain with a permanently unactionable promotion path.
 **Claimed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1 ratify + T2 harness build; 4090 box (shikuwa), the prefill league is between bouts with defenses banked
 
 ## The question
@@ -139,12 +146,36 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       `validated: fixture-green | parse-only` annotation end-to-end via the `context_notes`
       channel — a suggestion from a parse-only rule must not look identical downstream to one
       from a fixture-green rule.
-- [ ] T4 — the G3 score-bench byte-stability arm (reuse the existing score-bench freeze-table
-      machinery; plan 137 T7.5's regeneration law applies to any corpus-touching landing).
-- [ ] T5 — run the campaign on a claimed slot (claim-lease discipline), record under a fresh
-      `.benchmarks/` number, and take the promotion verdict to the owner with the full table.
-      AMENDED: rig exclusivity MANDATORY (`agent-mail rig run 4090 --exclusive` or verified
-      quiet) + the PROVENANCE line; G5 match census on the pinned corpus in the same campaign.
+- [x] T4 — the G3 score-bench byte-stability arm. DONE 2026-11-01
+      (`scripts/g3_scorebench_stability.sh`, commit `2ff3c0a61`): the OFF posture
+      (`--features score_bench`) vs ON (`+kernel_opt`), isolated target dirs, both lanes
+      diffed after filtering the three documented volatile tail lines (history run-count,
+      saturation verdict, frontier-snapshot state — run-order dependent, posture-independent).
+      MEASURED: clippy lane 40 verdict lines byte-identical, perf lane 67 — **G3 PASS**. The
+      score_history rows from the arm rides are appended (the standing record).
+- [x] T5 — run the campaign on a claimed slot and take the promotion verdict. DONE 2026-11-01
+      (**Bench 124**, this repo): claimed slot (lease `zed-shikuwa-i191gate`), 4090 verified
+      QUIET via `agent-mail rig status`, rustc 1.99.0 repo pin.
+      - G1 full: 248/72 floors hold; **183 green / 65 FAIL / 803 parse-only** — FAIL (the
+        Issue-193 ledger).
+      - G2 full: tranche 15 files / 74 green rules; 21 measured / 1 passing (2.05×) / 7
+        regressing / 53 not-measured (no mirrored fn pair); **tranche median 1.0000 < 1.06 —
+        FAIL** (the GPU-shape wins do not transfer to the CPU-portable surface — bar 2's own
+        caveat). The G2 harness is STANDING (`goat_g2.rs` + the `kernel_goat_g2` example:
+        interleaved 15-pair median, loud-zero, per-rule NOT-MEASURED disclosure, `--tranche`
+        selector disclosure, file-borne PAIR rows under `--test` because a corpus arm may
+        define its own `fn main`).
+      - G3: PASS (T4 above). G4: PASS (structural — the domain compiles to nothing at
+        default).
+      - G5: NOT RUN this campaign (disclosed in the record — the verdict was determined by
+        G1+G2; the census runs at the re-campaign on the repaired corpus).
+      - **PROMOTION VERDICT: REFUSED — `kernel_opt` stays opt-in** (failing axes: G1, G2),
+        per bar 6. The re-campaign path is in Bench 124: Issue-193 repairs → the G2
+        convention decision (owner-gated: corpus bench-entry convention vs GPU-host benches
+        vs closing the CPU-G2 axis with the disclosure) → re-run.
+      - AMENDED execution note: the original T5 text named the lease + fresh `.benchmarks/`
+        number + rig exclusivity + PROVENANCE — all satisfied (Bench 124 §Provenance); the
+        "G5 match census in the same campaign" clause is the one disclosed deferral.
 
 ## Refs
 
