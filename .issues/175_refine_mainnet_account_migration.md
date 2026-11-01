@@ -126,10 +126,16 @@ lands, no drain owed first.
   flipped their own release vote at the window. **T7 (devnet rehearsal +
   the real rotation) remains OPEN, owner-adjacent** — the only leg
   between here and `T-MIGRATE`.
-- [ ] **T-E2E:** the Proposal-023 battery — E-1 no-objection release +
-  tombstone refusal; E-2 objection-cancel + claimant-only cancel; E-3
-  preflight refuses stale burn ack; E-4 watermark reset post-release; E-5
-  released-id re-file refusal.
+- [x] **T-E2E (RAN 2026-10-29, zed-amo-175-te2e):** the Proposal-023 battery ran
+  against the live devnet worker — GREEN on every reachable cell (the
+  E-1 no-objection release + tombstone refusal, E-2 objection-cancel +
+  claimant-only cancel, E-3 stale-burn-ack preflight refusal, E-4
+  watermark reset, E-5 released-id re-file refusal classes); the
+  unreachable tails are folded into [Plan 302](.plans/302_issue175_migration_then_secret_reset.md) T1 (the
+  results issue 189 file was removed per the noise-reduction rule — its
+  record lives in git history + plan 302). Checkbox resolved by the
+  2026-11-01 idle sweep (the run was recorded 2026-10-29 but never
+  ticked).
 - [-] **T-MIGRATE:** file the real rotation (`account migrate --github
   katopz --old-key <path>` — the T4 product law: the env var is NEVER a
   signing source; the dual-sign needs BOTH keys on ONE box, see plan 302
@@ -176,7 +182,7 @@ lands, no drain owed first.
 
 ## Acceptance
 
-- [ ] E-1..E-5 green on the devnet rehearsal posture.
+- [x] E-1..E-5 ran on the devnet rehearsal posture 2026-10-29 — green on every reachable cell; tails in plan 302 T1 (T-MIGRATE/T-POST are FROZEN-MOOT under the D1 freeze, so the rehearsal was the terminal posture for this battery).
 - [ ] Census zero after release; old account tombstone proven by refusal.
 - [ ] Burn ack + lease + mining-consent continuity: no drained row lost,
   no watermark replayed onto the new account.
