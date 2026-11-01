@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-31
 **Note:** allocated 192 after a same-day collision on 191 (191 = kernel_opt goat-gate scoping, first allocation wins; dual_allocation_gate + first-allocation rule; this file was never committed at 191).
-**Status:** open — owner directives 2026-10-31; supersedes the KAT-era posture for the public product; feeds [Proposal 025 v4](../.proposals/025_mozilla_human_scale_ai_incubator.md) + [Plan 324](../.plans/324_mozilla_web_alignment.md) (websites)
+**Status:** open — owner directives 2026-10-31; supersedes the KAT-era posture for the public product; feeds [Proposal 025 v4](../.proposals/025_mozilla_human_scale_ai_incubator.md) + [Plan 324](../.plans/324_mozilla_web_alignment.md) (websites). **Durable record:** the points-plane model (units, CLI flow, the three laws, ledger, freeze inventory) is canon in [Proposal 025 §"The points plane in full"](../.proposals/025_mozilla_human_scale_ai_incubator.md) — this issue is the TASK TRACKER and will be removed on completion per the noise-reduction rule; the model does not die with it.
 **Owner decisions recorded:** Refine open-src (decided); moat moved to Rethink (open later after running); sites drop pricing (PoC phase); seal-*/riir-ai = the real moat (separate business/brand, PRs not accepted, nothing leaks back/forth); release = main+tag; KAT requirement ripped out; TUNA = contribution points; no more mainnet for refine (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY); seal-* mainnet/devnet on hold until localnet multi-authority resolves (chain issue 174).
 
 ## Decisions (owner, verbatim-intent)

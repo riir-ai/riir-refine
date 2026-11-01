@@ -48,6 +48,54 @@ The private serving-research lane that matured these patterns stays out of chari
 
 The application makes **no payment/token claims** — the points model is disclosed as reputation design (the Intentional principle made concrete), never as value. Payee/staking/transferability questions (T13) stay dead: points are non-transferable and expiring by construction. Sustainability is the **open-source** story below, with Rethink as the commercial research sibling post-trust (pricing removed from all sites — [Plan 324](../.plans/324_mozilla_web_alignment.md)).
 
+### The points plane in full (Posture C mechanics — the durable record of the v4 model)
+
+*This section is the canonical description of how the points plane works. Issue 192 is the
+task tracker and will be removed on completion; this proposal is where the model lives.*
+
+**Units.** One user-facing unit: **TUNA contribution points** — non-transferable, expiring,
+no cash value, never purchasable. The substrate already exists and runs: the riir-dapps TUNA
+plane ships fast operator mint (no quorum wait), expiry, and non-transferability — exactly
+points semantics (riir-dapps [Proposal 006](../../riir-dapps/.proposals/006_tuna_trial_credit_and_token_conditions.md)).
+**KAT is ripped out of the user story** — "no purchase, no KAT for users" — and the KAT lanes
+are FROZEN, not deleted: proposal 023 DEFERRED-FROZEN, KAT billing/orientation docs get a
+"frozen lane" banner on next touch, no Refine chain consumer, chaind promotion continues for
+seal-* only. The points tier mints at the TUNA operator batch's fast shape — no 2/3 quorum wait.
+
+**The user flow (the new CLI surface):**
+
+| Verb | Behavior |
+|---|---|
+| `cargo refine fix` | free, local, no join needed; first-run consent ONCE for the secret-blind send (spans/results, `allow_redacted: false`); asks join-or-anonymous; fully-offline mode (`RIIR_REFINE_OFFLINE=1`) documented for air-gapped users |
+| `cargo refine join` | contribution policy accept + GitHub login — the EXISTING device-flow OAuth app, minimal `read:user` scope (proves identity, never write; the client id is public by design and compiles as the default in the public posture) |
+| `cargo refine left` / `leave` | leave contribution: log off, zero data sent (`leave` ships; `left` kept as hidden alias) |
+| `cargo refine rank` | top-ten leaderboard + own rank — **rank requires GitHub-joined identity** (anti-Sybil: a rotating derived ID could farm the board; anonymous users get local-only stats) |
+| `cargo refine info` | top fixed repos by domain — aggregated, redaction-policy-scoped, counts + domains only, never repo content |
+| `corpus` / `update` / `upgrade` / `version` | corpus info + update offer (points-free — corpus freshness is a public good); lease refresh without the KAT charge line; binary self-update; subcommand alias |
+
+**The three binding laws (verdict r1, 2026-10-31):**
+
+1. **Drain.** Local `fix` is ALWAYS free and never blocked; points never go negative-locked.
+   v1 public copy leaves the drain OUT entirely; the numeric fair-use policy (drain rate,
+   balance cap, refill paths) is defined in the points-plane proposal (T16.2) BEFORE any
+   drain ships — until then the only public sentence is "points meter hosted lanes as fair use".
+2. **Expiry = rank-decay, never erasure.** The *balance* (rank-eligible weight) decays for
+   leaderboard ranking only; contribution history and corpus contributions are PERMANENT
+   (the corpus is MIT data forever). Expiry-that-erases was refused as an engagement trap.
+3. **Vocabulary.** "mining / mine / miner" is banned from all public copy and user-facing
+   docs — contribute / contribution / contributor / contribution points only (internal code
+   identifiers rename only when touched; the T14 sweep's detector patterns keep the old
+   words by design — they exist to catch the retired surface).
+
+**The ledger.** `riir-ledger` v1 = points service + optional anchoring, NOT a chain:
+balances in the riir-dapps service DB; Merkle-anchored epochs via the existing `anchor_root`
+substrate for tamper-evidence; chaind deferred to seal-*; a full chain/ssh-custody revisit
+needs a new proposal only if anchoring proves insufficient.
+
+**Existing accounts.** Live KAT accounts: marketing frozen (the posture), internal devnet
+flows keep working, and the website FAQ carries the one-paragraph "what happens to existing
+balances" note — honesty beats silence.
+
 **Open-core sustainability (the criterion-6 answer):**
 
 | Layer | License | Moat status |
@@ -81,7 +129,7 @@ Keep software development affordable, private, and accessible for developers exc
 
 | # | Work | Quarter | Output |
 |---|---|---|---|
-| W0 | **Pivot implementation (issue 192)**: points plane (`riir-ledger` v1 — service + anchoring), the new CLI surface (`join`/`leave`/`rank`/`info`/`corpus` + first-run consent + client-UUID privacy law), T14 sweep re-scope, websites ([Plan 324](../.plans/324_mozilla_web_alignment.md)) | Q1 | The public-goods story is running code, not prose |
+| W0 | **Pivot implementation** — model: §"The points plane in full" above (the durable record); task tracker: issue 192 while it lives. Points plane (`riir-ledger` v1 — service + anchoring), the new CLI surface (`join`/`leave`/`rank`/`info`/`corpus` + first-run consent + client-UUID privacy law), T14 sweep re-scope, websites ([Plan 324](../.plans/324_mozilla_web_alignment.md)) | Q1 | The public-goods story is running code, not prose |
 | W1 | **Open-source the core**: extract the modelless pipeline into a public repo (MIT/Apache-2.0), public CI + benchmarks, contribution guide — DECIDED (G1) — **and publish to crates.io** (issue 192 GAP 11: crate names + publish pipeline + token secret are owner-gated; supersedes the no-publish law for the extraction only) | Q1 | Public repo + published crates + docs; T15 pre-open gate |
 | W1b | **Open the fleet tooling (MIT)**: fixer/trainer service + corpus-production tooling published under the same permissive license as the core; license-and-boundaries table in the public README (the corpus split: community-contributed = MIT forever; own-GPU-mined = proprietary) | Q2 | One clean license story — the business is corpus + services, not code restriction |
 | W2 | **Public-repo-free policy shipped**: the free-for-open-source gate implemented, documented, and announced as product policy | Q1 | The charitable commitment is code, not prose |
