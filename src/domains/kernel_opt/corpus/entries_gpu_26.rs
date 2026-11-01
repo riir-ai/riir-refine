@@ -145,59 +145,8 @@ fn forward(plan: &IslandPlan, x: &[f32]) -> Vec<f32> {
         KernelRule {
             rule_id: "exhaustive-domain-input-patch-bit-identity".to_string(),
             gpu_concept: "When a fused kernel's transcendental must be bit-identical to a reference implementation and the INPUT DOMAIN is exhaustively sweepable (16-bit inputs: 2^16 words total, 65,280 finite values -- an offline enumeration is cheap), do NOT tune the expression toward tolerance: enumerate the WHOLE domain offline against the reference, find the divergent inputs (typically 1-3 of 65,280), and patch exactly those inputs via a direct output-word mapping applied before the lossless widening expansion -- every other input retains the inherited expression unchanged. The patch is bit-level: map the input's raw bit pattern to the reference's raw output word, so the fused single-launch form is bit-exact over the entire finite domain and the fusion survives without a tolerance gate. f32 domains are NOT sweepable (2^32) -- fall back to tolerance gates there; the sweepability boundary is the rule's precondition. Two mandatory gate legs: (1) an exhaustive post-patch comparison (every finite input, zero mismatches -- 65,280-point oracle, not a sample); (2) a boundary negative control (perturb the geometry -- e.g. one extra window row -- and require EXACTLY the outputs reading that geometry to fail, proving the gate is live rather than vacuously green). Validation scale precedent: 12.98M element comparisons zero-mismatch when the sweep feeds a full forward equivalence. Distinct from half-domain-exact-band-dequant-with-raw-bit-oracle (B97 -- an ALGEBRAIC band condition proving a narrowed-arithmetic form exact on a band, with the exhaustive oracle as the PROMOTION gate; this patches the residual divergences of an otherwise-correct fused expression), from fused-vector-site-transcendental-form-nonportable (B98 -- transcendental form choice is per-site and must be re-validated; this says WHAT to do when that validation finds exactly a handful of divergent inputs on a sweepable domain), and from sign-branch-stable-sigmoid (B32a -- forward overflow hygiene by algebraic argument; orthogonal). Source: Layr-Labs/qwen-3.8-mtp-challenge @ 0863b06 (Apache-2.0), the bf16 sigmoid 1-ulp divergence found by the all-65,280-input sweep (input 0xC0DB mapped to the reference's output word 0x3A8B before the fp32 expansion); Batch 115 / Research 139 / Plan 088. ADDENDUM RIDER (Batch 115 collision salvage -- the per-OUTPUT exclusion half this rule's closure presupposes): before any sweep can license a fusion, the ADMISSION decision is per-output and fidelity-driven -- an output feeding an ABSOLUTE-FIDELITY consumer (a verify recurrence, a commitment) stays EXCLUDED from the fused kernel while any op on its path lacks a bit-exactness proof, even at a priced dispatch cost: 'beta feeds the VERIFY recurrence where fidelity is absolute, so it stays a plain graph sigmoid(b) -- one [1,S,48] elementwise launch, ~0.06 ms of the ~0.7 ms saving, in exchange for removing an unquantifiable knife-edge' (diff e3b4531d9:27). The exclusion is the conservative state; the exhaustive sweep + singleton patch is what LIFTS it per-output, and until the sweep exists the priced launch is the correct answer, not a tolerance gate.".to_string(),
-            ref_shape: "// naive: a fused kernel's hand-written activation diverges from the
-// reference by 1 ulp somewhere; shipped under a tolerance gate.
-fn fused_gate_tol(x_bits: u16) -> f32 {
-    let x = f16_from_bits(x_bits);
-    let s = sigmoid_f32(x);          // diverges 1 ulp vs reference
-    let e = widen_lossless(s);
-    e * gate_from(x)
-}
-
-#[test]
-fn matches_reference_within_tolerance() {
-    for w in 0..u16::MAX {
-        let got = fused_gate_tol(w);
-        let want = reference(w);
-        assert!((got - want).abs() < 1e-2, \"sample {w}\");
-    }
-}
-".to_string(),
-            opt_pattern: "// optimized: enumerate the whole 16-bit domain offline, patch ONLY the
-// divergent inputs at the bit level, keep the inherited expression
-// everywhere else; exhaustive zero-mismatch gate + boundary negative.
-fn fused_gate_exact(x_bits: u16) -> f32 {
-    // 3 of 65,280 finite inputs diverged; map them to the reference's
-    // raw output words before the lossless expansion.
-    if let Some(patched) = patch_table(x_bits) {
-        return f32_from_bits(patched);
-    }
-    let x = f16_from_bits(x_bits);
-    let e = widen_lossless(sigmoid_f32(x));
-    e * gate_from(x)
-}
-
-// generated offline by the sweep; committed as data.
-fn patch_table(x_bits: u16) -> Option<u32> {
-    match x_bits {
-        0xC0DB => Some(0x3A8B),
-        _ => None,
-    }
-}
-
-#[test]
-fn exhaustive_zero_mismatch_vs_reference() {
-    for w in 0..=u16::MAX {
-        assert_eq!(fused_gate_exact(w).to_bits(), reference(w).to_bits());
-    }
-}
-
-#[test]
-fn boundary_perturbation_fails_exactly_the_window_consumers() {
-    // +1 window row: exactly the outputs reading that row must diverge.
-    assert!(window_consumers_diverge_by(1) == EXPECTED_CONSUMER_COUNT);
-}
-".to_string(),
+            ref_shape: "// naive: a fused kernel's hand-written activation diverges from the\n// reference on a few inputs; shipped under a tolerance gate that cannot\n// see 1-ulp drift. (std-only fixture: the fp16 lane is a u16-keyed model.)\n#![allow(dead_code)]\n\n// the 3 of 65,280 inputs where the hand-written lane drifts 1 ulp\nconst DIVERGENT: [u16; 3] = [0x00DB, 0x40DB, 0xC0DB];\n\nfn reference(x: u16) -> f32 {\n    (x & 0x0FFF) as f32 * 0.5\n}\n\nfn inherited_expression(x: u16) -> f32 {\n    let base = reference(x);\n    if DIVERGENT.contains(&x) {\n        f32::from_bits(base.to_bits() + 1) // the hand-written lane's 1-ulp drift\n    } else {\n        base\n    }\n}\n\n#[test]\nfn matches_reference_within_tolerance() {\n    for w in 0..u16::MAX {\n        let (got, want) = (inherited_expression(w), reference(w));\n        assert!((got - want).abs() < 1e-2, \"sample {w}\"); // tolerance PASSES on real drift\n    }\n}\n".to_string(),
+            opt_pattern: "// optimized: enumerate the whole 16-bit domain offline, patch ONLY the\n// divergent inputs at the bit level, keep the inherited expression\n// everywhere else; exhaustive zero-mismatch gate + boundary consumer count.\n#![allow(dead_code)]\n\nconst DIVERGENT: [u16; 3] = [0x00DB, 0x40DB, 0xC0DB];\n\nfn reference(x: u16) -> f32 {\n    (x & 0x0FFF) as f32 * 0.5\n}\n\nfn inherited_expression(x: u16) -> f32 {\n    let base = reference(x);\n    if DIVERGENT.contains(&x) {\n        f32::from_bits(base.to_bits() + 1)\n    } else {\n        base\n    }\n}\n\n// generated offline by the exhaustive sweep; committed as data.\nfn patch_table(x_bits: u16) -> Option<u32> {\n    match x_bits {\n        0x00DB => Some(reference(0x00DB).to_bits()),\n        0x40DB => Some(reference(0x40DB).to_bits()),\n        0xC0DB => Some(reference(0xC0DB).to_bits()),\n        _ => None,\n    }\n}\n\nfn fused_gate_exact(x_bits: u16) -> f32 {\n    if let Some(patched) = patch_table(x_bits) {\n        return f32::from_bits(patched);\n    }\n    inherited_expression(x_bits)\n}\n\n// the fused tile's window: output j reads window row j % 2, so a\n// perturbation of row 0 moves exactly the row-0 consumers.\nfn tile_outputs(w: u16, row0_delta: i32) -> [f32; 4] {\n    let base = fused_gate_exact(w);\n    [\n        base + row0_delta as f32,\n        base,\n        base + row0_delta as f32,\n        base,\n    ]\n}\n\nfn window_consumers_diverge_by(delta: i32) -> usize {\n    let (before, after) = (tile_outputs(7, 0), tile_outputs(7, delta));\n    before\n        .iter()\n        .zip(after.iter())\n        .filter(|(b, a)| b.to_bits() != a.to_bits())\n        .count()\n}\n\nconst EXPECTED_CONSUMER_COUNT: usize = 2;\n\n#[test]\nfn exhaustive_zero_mismatch_vs_reference() {\n    for w in 0..=u16::MAX {\n        assert_eq!(\n            fused_gate_exact(w).to_bits(),\n            reference(w).to_bits(),\n            \"sample {w}\"\n        );\n    }\n}\n\n#[test]\nfn boundary_perturbation_fails_exactly_the_window_consumers() {\n    // +1 window row: exactly the outputs reading that row must diverge.\n    assert_eq!(window_consumers_diverge_by(1), EXPECTED_CONSUMER_COUNT);\n    assert_eq!(window_consumers_diverge_by(0), 0); // no perturbation, no divergence\n}\n".to_string(),
         },
 
 // ============================================================
