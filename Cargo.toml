@@ -963,6 +963,14 @@ required-features = ["latent_retrieval"]
 name = "nonergodic_driver_ab"
 required-features = ["nonergodic_driver"]
 
+# Plan 225 T5.2 (2026-11-01): the serve-boundary owner-condition gate — a
+# wrong seat pick is rejected at the boundary and the modelless answer
+# stands. The whole-file `#![cfg]` protects the COUNT; this row protects
+# the READER (the T1.1e repo-birth law, same commit).
+[[test]]
+name = "escalation_serve_gates"
+required-features = ["escalation_manifest", "seat_rerank"]
+
 [[example]]
 name = "clippy_verify_demo"
 required-features = ["clippy_verify"]

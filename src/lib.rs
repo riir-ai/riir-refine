@@ -149,6 +149,16 @@ pub mod escalation_manifest;
     any(feature = "seat_rerank", feature = "hosted_expert")
 ))]
 pub mod escalation_dispatch;
+// Plan 225 T5.2: the production SERVE boundary for an armed escalation row
+// — the seat's answer passes the caller's compile gate (`fix_verify` in
+// the fix lane) BEFORE it is served; a wrong pick is rejected and the
+// modelless answer stands (the 2026-10-30 owner condition). Same compile
+// posture as `escalation_dispatch`.
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+pub mod escalation_serve;
 // Plan 202 R4: the vessel verify path — ONE artifact protocol across the
 // decision stack (A1/A8), via the public format repo's crate. Verify-only
 // seam: refine never mints (A8), never embeds vessel bytes (A10). Opt-in

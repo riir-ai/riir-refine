@@ -15399,6 +15399,41 @@ fn main() {
     // egress gate keeps the raw fail-closed verdicts).
     let mut secret_pinned: usize = 0;
 
+    // ── Plan 225 T5.2: the armed seat's dispatch, ONCE per run (the rate
+    // latch is per-dispatch). Fires only behind the full boundary posture:
+    // the escalation manifest must ARM the clippy row (ALL-EMPTY at ship —
+    // absent manifest ⇒ `None` ⇒ byte-identical to the pre-T5.2 lane), the
+    // build must carry seat_rerank (the rerank arm only), and fix_verify
+    // must exist to judge picks (an unchecked serve is forbidden by the
+    // 2026-10-30 owner condition). An armed row whose transport cannot
+    // construct refuses LOUD once, then runs unescalated — an armed row
+    // must never look armed while doing nothing.
+    #[cfg(all(
+        feature = "escalation_manifest",
+        feature = "seat_rerank",
+        feature = "fix_verify"
+    ))]
+    let mut escalation_dispatch: Option<riir_refine::escalation_dispatch::EscalationDispatch> = {
+        let manifest_path = std::path::Path::new(".refine/escalation_manifest.json");
+        let loaded = std::fs::read_to_string(manifest_path).ok().and_then(|t| {
+            let m: Result<riir_refine::escalation_manifest::EscalationManifest, _> =
+                serde_json::from_str(&t);
+            m.ok().and_then(|m| m.validate().ok().map(|_| m))
+        });
+        match loaded {
+            Some(m) => {
+                match riir_refine::escalation_dispatch::EscalationDispatch::arm(&m, "clippy") {
+                    Ok(armed) => armed,
+                    Err(e) => {
+                        eprintln!("escalation: {e} — running unescalated");
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
+    };
+
     for file in &files {
         let Ok(src) = read_source(file) else {
             eprintln!("skip (unreadable): {}", file.display());
@@ -16054,6 +16089,143 @@ fn main() {
             };
         #[cfg(not(feature = "latent_retrieval"))]
         let span_candidates: Vec<(usize, usize, Vec<String>)> = Vec::new();
+        // ── Plan 225 T5.2: the armed seat's serve boundary (the 2026-10-30
+        // owner condition). Fires ONLY on a modelless MISS (no proposer
+        // edit survived, no pass moved the file) in --write mode, ONLY when
+        // the manifest armed the clippy row (the dispatch above), and the
+        // pick passes the SAME fix_verify compile gate the modelless lane
+        // is held to — applied to a one-edit batch BEFORE anything is
+        // served. A wrong pick is rejected (the verifier reverts it) and
+        // the modelless answer (the miss — nothing) stands. A kept pick is
+        // applied to the in-memory state and joins the standard accounting
+        // (all_edits → review/fixstats/verify_batches/fmt), so the
+        // end-of-run gate re-verifies it with the file like any edit.
+        // v1 conservatism: ONE seat consult per file, the top eligible
+        // span (matched rules ≥ the row's min_pool).
+        #[cfg(all(
+            feature = "escalation_manifest",
+            feature = "seat_rerank",
+            feature = "fix_verify"
+        ))]
+        if args.write && all_edits.is_empty() && current == src {
+            const SEAT_RULE: &str = "escalation_seat_pick";
+            let Some(disp) = escalation_dispatch.as_mut() else {
+                continue;
+            };
+            // The 1-based inclusive line range's byte span (lines beyond
+            // EOF close at the last byte; an out-of-range start → None).
+            fn line_span_bytes(
+                src: &str,
+                start_line: usize,
+                end_line: usize,
+            ) -> Option<(usize, usize)> {
+                let mut start_byte: Option<usize> = None;
+                let mut end_byte: usize = src.len();
+                let mut line_no = 0usize;
+                let mut offset = 0usize;
+                for line_text in src.split_inclusive('\n') {
+                    line_no += 1;
+                    if line_no == start_line {
+                        start_byte = Some(offset);
+                    }
+                    if line_no == end_line {
+                        end_byte = offset + line_text.len();
+                        break;
+                    }
+                    offset += line_text.len();
+                }
+                let start = start_byte?;
+                Some((start, end_byte.max(start)))
+            }
+
+            let spans = matcher.suggest_file(&src, &display, args.top_k);
+            'seat_spans: for s in &spans {
+                let mut pool: Vec<String> = Vec::new();
+                for (_, rules) in &s.by_domain {
+                    for r in rules {
+                        if let Some(info) = matcher.rule_book(&r.rule_id) {
+                            if !info.fixed_code.trim().is_empty()
+                                && !pool.contains(&info.fixed_code)
+                            {
+                                pool.push(info.fixed_code.clone());
+                            }
+                        }
+                    }
+                }
+                if pool.len() < disp.row().target.min_pool_or_default() {
+                    continue;
+                }
+                let Some((b, e)) = line_span_bytes(&src, s.start_line, s.end_line) else {
+                    continue;
+                };
+                if e <= b || e > src.len() {
+                    continue;
+                }
+                let snippet = src[b..e].to_string();
+                let deadline = std::time::Instant::now() + std::time::Duration::from_millis(2_000);
+                let restore = snippet.clone();
+                let path = file.clone();
+                let line_no = s.start_line;
+                let extra: Vec<String> = args
+                    .verify_args
+                    .as_deref()
+                    .unwrap_or_default()
+                    .split_whitespace()
+                    .map(str::to_string)
+                    .collect();
+                let mut check = |fix: &str| -> bool {
+                    let mut fixed = src.clone();
+                    fixed.replace_range(b..e, fix);
+                    let batch = riir_refine::fix_verify::FileEditSet {
+                        path: path.clone(),
+                        original: src.clone(),
+                        fixed,
+                        edits: vec![riir_refine::fix_verify::EditAtLine {
+                            rule_id: SEAT_RULE.to_string(),
+                            final_line: line_no,
+                            replacement: fix.to_string(),
+                            restore: restore.clone(),
+                            rejected: Vec::new(),
+                        }],
+                    };
+                    let report = riir_refine::fix_verify::FixVerifier::new()
+                        .with_extra_args(extra.clone())
+                        .verify(&[batch]);
+                    report.ran && report.baseline_clean && report.kept_edits >= 1
+                };
+                let decision = riir_refine::escalation_serve::serve_seat_rerank(
+                    disp,
+                    false, // the modelless path missed — the seat's one case
+                    &snippet,
+                    &pool,
+                    deadline,
+                    riir_refine::escalation_dispatch::ReadinessPolicy::default(),
+                    &mut check,
+                );
+                match decision {
+                    riir_refine::escalation_dispatch::EscalatedFix::Answer {
+                        fix, source, ..
+                    } => {
+                        current.replace_range(b..e, &fix);
+                        all_edits.push((0, SEAT_RULE.to_string(), b, e, fix.clone()));
+                        eprintln!(
+                            "escalation: seat pick served on {display} (span {}-{}, \
+                             source {source}) — kept by the serve-boundary compile \
+                             check; the end-of-run gate re-verifies",
+                            s.start_line, s.end_line
+                        );
+                    }
+                    riir_refine::escalation_dispatch::EscalatedFix::StoodByModelless { reason } => {
+                        eprintln!(
+                            "escalation: seat stood down on {display} — {reason:?}; \
+                             the modelless answer stands"
+                        );
+                    }
+                }
+                break 'seat_spans;
+            }
+        }
+
         let all_edits: Vec<FixEdit> = all_edits
             .into_iter()
             .map(|(pass, rule_id, start, end, replacement)| {
