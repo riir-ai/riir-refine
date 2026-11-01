@@ -2,7 +2,7 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
-## 2026-10-31 — Issue 175 REMOVED (mainnet frozen for refine): owner directive "no more mainnet" — the migration defers to this record + plan 302's re-genesis posture; proposal 023 status now DEFERRED-FROZEN. STANDING DIRECTIVE carried out of the file: any key ACTUALLY EXPOSED rotates NOW regardless of the freeze; routine rotation belongs to the re-genesis ceremony. Full file life: `git log --follow -- .issues/175_refine_mainnet_account_migration.md`. Part of the public-goods pivot (issue 191).
+## 2026-10-31 — Issue 175 REMOVED (mainnet frozen for refine): owner directive "no more mainnet" — the migration defers to this record + plan 302's re-genesis posture; proposal 023 status now DEFERRED-FROZEN. STANDING DIRECTIVE carried out of the file: any key ACTUALLY EXPOSED rotates NOW regardless of the freeze; routine rotation belongs to the re-genesis ceremony. Full file life: `git log --follow -- .issues/175_refine_mainnet_account_migration.md`. Part of the public-goods pivot (issue 192).
 
 ## 2026-10-30 — AGENTS.md compaction: the Role-bullet per-batch rule arcs (Batches 282–319) moved out of AGENTS.md
 

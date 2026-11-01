@@ -1,7 +1,7 @@
 # Plan 324 — Mozilla web alignment: the four fronts answer the six criteria
 
 **Date:** 2026-10-31
-**Status:** Active — Phase 1 pending; owner pivot v4 (issue 191) is the copy source
+**Status:** Active — Phase 1 pending; owner pivot v4 (issue 192) is the copy source
 **Research:** [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) (public program digest)
 **Target:** `reflex-site` (reflex.riir.ai), `riir-refine` site lane (refine.riir.ai), `riir-rethink` site lane (rethink.riir.ai), `riir-dapps`/root (riir.ai) — per the web-family skill
 **Deadline driver:** consult email ~Nov 7; application Nov 17–19 (grant lane: issue 190)
@@ -12,7 +12,7 @@
 
 Make the four public fronts state, consistently, exactly what the Mozilla application claims — Human-Scale AI's three principles answered on-page — and strip everything that contradicts the charitable posture (pricing, token/KAT marketing, storefront copy). After this plan, a reviewer who reads only the websites can answer all six evaluation criteria without the PDF.
 
-Owner pivot v4 (issue 191) supplies the narrative:
+Owner pivot v4 (issue 192) supplies the narrative:
 - **Refine** = real-life use in the coding domain — open source, closed beta for the contribution network, corpus stacking, other coding domains (Python/Go) planned. **Public good.**
 - **Rethink** = ongoing PoC — generic decision lanes, beating every decision lane we can — **no pricing anywhere**; commercial later only after trust (post-grant decision, not site copy).
 - **The credit plane is gone from the story**: contribution points (TUNA, non-transferable, expiring) replace KAT/payment; no more mainnet for refine.
@@ -33,7 +33,7 @@ Owner pivot v4 (issue 191) supplies the narrative:
 ### Tasks
 
 - [ ] **T2.1** `refine.riir.ai` gains a "How it sustains" section: open core (MIT), community corpus (MIT forever), contribution points (TUNA — earn by contributing, spend on hosted lanes, expiring, non-transferable), future coding domains (Python/Go), enterprise services — the sustainability answer in public.
-- [ ] **T2.2** `rethink.riir.ai` gains a "Research status" block: the lanes on the board, what's beaten, what's open — the "PoC until every decision lane is beaten" line, verbatim from issue 191.
+- [ ] **T2.2** `rethink.riir.ai` gains a "Research status" block: the lanes on the board, what's beaten, what's open — the "PoC until every decision lane is beaten" line, verbatim from issue 192.
 - [ ] **T2.3** Evidence surfaces on-page: installer counts, pilot call link, corpus stats, leaderboard (once the points plane ships — link, don't wait).
 - [ ] **T2.4** Privacy answers on-page (the consent model: first-run consent, secret-blind redaction, anonymous vs joined, `leave`), so the Intentional principle is verifiable by a reviewer in one click.
 
