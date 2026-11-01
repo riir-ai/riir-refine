@@ -190,11 +190,30 @@ enum KatCommand {
     CorpusPr,
     /// riir-dapps Plan 023: `config get` / `config set --url <alias|url>` —
     /// the persisted service-url surface (env > config > default). Issue
-    /// 190 T14b: now GATED `kat_service` with the rest of the service-URL
+    // Issue 190 T14b: now GATED `kat_service` with the rest of the service-URL
     /// surface (a charitable build has no service to point at; the command
     /// refuses via the build stamp). Was "ungated, local-only" — the
     /// Posture-A grant posture supersedes that.
     Config,
+    /// Plan 325 T4 (issue 192): `join` — the contribution policy accept +
+    /// the GitHub device flow (the EXISTING app, minimal `read:user`) +
+    /// the `/points/join` binding call. Dispatched on the `points`
+    /// feature (the public build's surface), NEVER kat_service.
+    Join,
+    /// Plan 325 T4: `leave` (+ the hidden `left` alias — the owner's word,
+    /// the ship verb is leave): log off, zero data sent afterwards. Same
+    /// feature gate as Join.
+    Leave,
+    /// Plan 325 T5: `rank` — the public top-ten + own rank (joined
+    /// identities only; anonymous callers get local stats + the named
+    /// anti-Sybil reason).
+    Rank,
+    /// Plan 325 T5: `info` — the contribution network's aggregate (top
+    /// domains, counts only — never repo content).
+    PointsInfo,
+    /// Plan 325 T5: `corpus` — corpus info + the update offer (points-free
+    /// — corpus freshness is a public good; no KAT charge line anywhere).
+    Corpus,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -2848,6 +2867,222 @@ fn print_mine_encouragement(
 /// Every leg fail-soft — a network-less run must never turn into a nonzero
 /// exit here. A feature-less build compiles the whole fn to nothing (the
 /// caller skips it anyway on the same gates).
+// ── Plan 325 T4/T5 (issue 192): the points verbs' runners ────────────────
+// The public-goods surface: thin fetch + render over
+// `riir_refine::points_client` (the pure logic lives in the lib; these
+// handle the machine-local halves — account key, client UUID, consent —
+// and the honest W0 posture when the service has not shipped).
+
+#[cfg(feature = "points")]
+fn points_account_signing() -> Option<ed25519_dalek::SigningKey> {
+    riir_kat::kat_account::KatAccount::load(&riir_kat::kat_account::KatAccount::default_dir())
+        .ok()
+        .and_then(|a| a.signing_key().ok())
+}
+
+/// `cargo refine join` — policy accept + GitHub device flow + the binding
+/// call. The device flow and the account key are LOCAL halves that work
+/// today; the binding call answers honestly until the points service
+/// ships (Proposal 026 P2), and the consent record keeps `Joined` so the
+/// local posture survives the service gap.
+#[cfg(feature = "points")]
+fn run_points_join() {
+    if riir_refine::offline::offline() {
+        eprintln!("{}", riir_refine::offline::refusal_line("join"));
+        std::process::exit(2);
+    }
+    // The account key: the same substrate `login` uses (legacy adoption
+    // included) — generating one IS the keygen the kat plane would do.
+    let dir = riir_kat::kat_account::KatAccount::default_dir();
+    let account = match riir_kat::kat_account::KatAccount::login_default(&dir) {
+        Ok((account, outcome)) => {
+            if let riir_kat::kat_account::LoginOutcome::Generated { account_id, .. } = outcome {
+                println!("account: new key generated ({account_id})");
+            }
+            account
+        }
+        Err(e) => {
+            eprintln!("join: the account key could not be loaded or created: {e}");
+            std::process::exit(2);
+        }
+    };
+    let Ok(signing) = account.signing_key() else {
+        eprintln!("join: the account key is present but not Ed25519-signable (custody/key-shape error)");
+        std::process::exit(2);
+    };
+    // GitHub identity: the EXISTING device-flow app (GAP 5) — the client
+    // id compiles as the default in the public posture; the env overrides.
+    let client_id = std::env::var(riir_refine::points_client::GITHUB_CLIENT_ID_ENV)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| riir_refine::points_client::DEFAULT_GITHUB_CLIENT_ID.to_string());
+    println!("join: GitHub device login (read:user only — the flow proves who you are, it never takes write scope)");
+    let (_token, identity) = {
+        let transport = riir_kat::kat_recovery_client::UreqProviderTransport;
+        match riir_kat::kat_recovery_client::github_device_login_with(&transport, &client_id) {
+            Ok(pair) => {
+                // The token is in-memory only, never persisted, never
+                // logged (the provider-login law) — dropped at scope end.
+                pair
+            }
+            Err(e) => {
+                eprintln!("join: the GitHub device flow failed: {e}");
+                std::process::exit(2);
+            }
+        }
+    };
+    // The client UUID (T16.1): mint-or-load, resettable.
+    let client_uuid = match riir_refine::client_id::load_or_create(&dir) {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("join: {e}");
+            std::process::exit(2);
+        }
+    };
+    // The consent record: joining IS the explicit consent act.
+    if let Err(e) = riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Joined) {
+        eprintln!("join: {e}");
+        std::process::exit(2);
+    }
+    // The binding call — the P2 service. Until it answers, the local
+    // halves stand and the sentence says exactly that.
+    let transport = riir_refine::points_client::UreqPointsTransport::new(
+        riir_refine::points_client::POINTS_TIMEOUT_SECS,
+    );
+    let client = riir_refine::points_client::PointsClient::new(&transport);
+    match client.join(&signing, &client_uuid, &identity.login, identity.numeric_id) {
+        Ok(response) => {
+            println!(
+                "joined: contribution credit on (epoch {}) — thank you for contributing",
+                response.epoch
+            );
+        }
+        Err(e) => {
+            println!("{}", e.line());
+            println!(
+                "join: your GitHub identity ({}) and consent are recorded locally; the binding completes when the contribution service ships",
+                identity.login
+            );
+        }
+    }
+}
+
+/// `cargo refine leave` (alias `left`) — log off, zero data sent
+/// afterwards. The unbind call is best-effort; the LOCAL state clears
+/// regardless (the account key file stays — `--unmine`/`--purge` own
+/// deletion), and no retry ever stacks.
+#[cfg(feature = "points")]
+fn run_points_leave(left_alias: bool) {
+    if left_alias {
+        println!("left — (the verb is `leave`; it does the same thing)");
+    }
+    let dir = riir_kat::kat_account::KatAccount::default_dir();
+    if riir_refine::offline::offline() {
+        // Offline: zero data sent means ZERO — skip the unbind call, clear
+        // locally, say so.
+        let _ = riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Never);
+        println!("leave: local state cleared; the server unbind was not called (offline) — it deactivates on your next online `leave` or ages out");
+        return;
+    }
+    let signing = points_account_signing();
+    if let Some(signing) = signing {
+        let client_uuid = riir_refine::client_id::load_or_create(&dir).ok();
+        if let Some(client_uuid) = client_uuid {
+            let transport = riir_refine::points_client::UreqPointsTransport::new(
+                riir_refine::points_client::POINTS_TIMEOUT_SECS,
+            );
+            let client = riir_refine::points_client::PointsClient::new(&transport);
+            match client.leave(&signing, &client_uuid) {
+                Ok(response) => println!("leave: unbound server-side (epoch {})", response.epoch),
+                Err(e) => {
+                    println!("{}", e.line());
+                    println!("leave: the server unbind is pending — nothing will be sent in the meantime (local state is cleared now)");
+                }
+            }
+        }
+    } else {
+        println!("leave: no account here — nothing was bound; clearing local state");
+    }
+    match riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Never) {
+        Ok(()) => println!("leave: contribution ended — zero data is sent from here on; local healing is identical"),
+        Err(e) => eprintln!("leave: {e}"),
+    }
+}
+
+/// `cargo refine rank` — the public top-ten; own rank joined-only (the
+/// anti-Sybil rule). Offline / service-not-live renders the local pointer
+/// with the named reason.
+#[cfg(feature = "points")]
+fn run_points_rank() {
+    if riir_refine::offline::offline() {
+        println!("{}", riir_refine::offline::refusal_line("rank"));
+        println!("local: run `cargo refine --info` for this machine's own stats");
+        return;
+    }
+    let signing = points_account_signing();
+    let transport = riir_refine::points_client::UreqPointsTransport::new(
+        riir_refine::points_client::POINTS_TIMEOUT_SECS,
+    );
+    let client = riir_refine::points_client::PointsClient::new(&transport);
+    match client.rank(signing.as_ref()) {
+        Ok(response) => {
+            let own_note = if signing.is_none() && response.own_rank.is_none() {
+                Some(
+                    "  your rank: joined identities only — an anonymous ID could farm the board. Run `cargo refine join`.".to_string(),
+                )
+            } else if response.own_rank.is_none() {
+                Some(
+                    "  your rank: not ranked this epoch yet — contributions land at the epoch settle".to_string(),
+                )
+            } else {
+                None
+            };
+            print!("{}", riir_refine::points_client::render_rank(&response, own_note.as_deref()));
+        }
+        Err(e) => {
+            println!("{}", e.line());
+            println!("local: run `cargo refine --info` for this machine's own stats");
+        }
+    }
+}
+
+/// `cargo refine info` — the contribution network's aggregate.
+#[cfg(feature = "points")]
+fn run_points_info() {
+    if riir_refine::offline::offline() {
+        println!("{}", riir_refine::offline::refusal_line("info"));
+        return;
+    }
+    let transport = riir_refine::points_client::UreqPointsTransport::new(
+        riir_refine::points_client::POINTS_TIMEOUT_SECS,
+    );
+    let client = riir_refine::points_client::PointsClient::new(&transport);
+    match client.info() {
+        Ok(response) => print!("{}", riir_refine::points_client::render_info(&response)),
+        Err(e) => println!("{}", e.line()),
+    }
+}
+
+/// `cargo refine corpus` — corpus info + the update offer (points-free:
+/// corpus freshness is a public good). The KAT charge line NEVER appears —
+/// this verb does not touch the lease/charge machinery at all.
+#[cfg(feature = "points")]
+fn run_points_corpus() {
+    for line in riir_refine::build_stamp::version_lines() {
+        if line.starts_with("corpus") || line.contains("rules") {
+            println!("{line}");
+        }
+    }
+    println!("corpus freshness is a public good — points are never charged for it");
+    #[cfg(feature = "kat_transport")]
+    println!("update: run `cargo refine update` to refresh the corpus lease");
+    #[cfg(not(feature = "kat_transport"))]
+    println!(
+        "update: this build has no corpus-lease transport — {}",
+        riir_refine::build_stamp::rebuild_command()
+    );
+}
+
 fn run_update_surface_hooks(paths: &[PathBuf]) {
     #[cfg(feature = "update_check")]
     {
@@ -7931,6 +8166,9 @@ struct Args {
     /// riir-kat Issue 003 T11: `--net <devnet|mainnet>` — sugar over the env
     /// var for ONE invocation (validated against the build's pin).
     net_alias: Option<String>,
+    /// Plan 325 T4: `left` was the spelling used (the hidden alias) — the
+    /// runner prints the one alias note, then runs leave.
+    points_left_alias: bool,
     /// riir-dapps Issue 112 T4: `--export <file|->` — with `sync` ONLY: write
     /// the redacted batch locally instead of pushing it.
     sync_export: Option<PathBuf>,
@@ -8290,6 +8528,7 @@ fn parse_args() -> Args {
         config_adopt_state: None,
         config_adopt_discard: false,
         net_alias: None,
+        points_left_alias: false,
         sync_export: None,
         corpus_pr_src: None,
         corpus_pr_dst: None,
@@ -9142,6 +9381,33 @@ fn parse_args() -> Args {
                     "corpus-pr" => KatCommand::CorpusPr,
                     _ => KatCommand::Claim,
                 });
+            }
+            // Plan 325 T4/T5 (issue 192): the public-goods points verbs —
+            // the PUBLIC build's surface, dispatched on their own feature
+            // (never kat_service). `left` parses as the hidden alias of
+            // `leave` (the owner's word kept, the ship verb is leave);
+            // `version` is an alias of --version (set here, no variant).
+            "join" | "leave" | "left" | "rank" | "info" | "corpus"
+                if args.paths.is_empty() && args.command.is_none() =>
+            {
+                args.command = Some(match arg.as_str() {
+                    "join" => KatCommand::Join,
+                    "leave" | "left" => KatCommand::Leave,
+                    "rank" => KatCommand::Rank,
+                    "info" => KatCommand::PointsInfo,
+                    "corpus" => KatCommand::Corpus,
+                    _ => unreachable!("the guard arm names exactly these words"),
+                });
+                if arg == "left" {
+                    args.points_left_alias = true;
+                }
+            }
+            // Plan 325 T2: `version` — the subcommand alias of --version
+            // (the flag stays; the alias makes the noun-form work like
+            // every other subcommand). No variant needed: the version arm
+            // below dispatches on args.version.
+            "version" if args.paths.is_empty() && args.command.is_none() => {
+                args.version = true;
             }
             // Plan 023: the `config set` modifier — a bare word after the
             // `config` subcommand, before any path arm can eat it.
@@ -12676,8 +12942,42 @@ fn main() {
     // always to stderr, every leg fail-soft — a network-less run must never
     // turn into a nonzero exit here. `upgrade` (the explicit command) and
     // `--version` (which alerts post-output in its own arm) skip this hook.
+    // Plan 325 T2: the OFFLINE gate — the whole surface dials; the env cuts
+    // it in one place (the lane's own legs stay fail-soft regardless).
     if args.command != Some(KatCommand::Upgrade) && !args.version {
-        run_update_surface_hooks(&args.paths);
+        if riir_refine::offline::offline() {
+            eprintln!("{}", riir_refine::offline::refusal_line("update checks"));
+        } else {
+            run_update_surface_hooks(&args.paths);
+        }
+    }
+
+    // ── Plan 325 T2: the first-run consent — the first `--fix` that could
+    // ever send asks ONCE (the T16.1 §5 words). Every answer is safe to
+    // proceed on: local healing is unconditional, the answer only gates
+    // the SEND lanes (which consult `first_run_consent::read` before any
+    // dial). Non-interactive runs never nag (Unset stays, sends stay off);
+    // the offline env speaks for the user already.
+    #[cfg(feature = "points")]
+    if args.fix {
+        let consent_dir = riir_kat::kat_account::KatAccount::default_dir();
+        let stored = riir_refine::first_run_consent::read(&consent_dir);
+        if stored == riir_refine::first_run_consent::Answer::Unset {
+            let asked = riir_refine::first_run_consent::ask_once(PROMPT_YES.load(
+                std::sync::atomic::Ordering::Relaxed,
+            ));
+            if let Err(e) = riir_refine::first_run_consent::write(&consent_dir, asked) {
+                eprintln!("consent: {e}");
+            }
+            let shown = if asked == riir_refine::first_run_consent::Answer::Unset {
+                stored
+            } else {
+                asked
+            };
+            eprintln!("{}", riir_refine::first_run_consent::status_line(shown));
+        } else {
+            eprintln!("{}", riir_refine::first_run_consent::status_line(stored));
+        }
     }
 
     // ── riir-dapps Plan 023: `config` — the service-url surface ─────
@@ -12757,6 +13057,48 @@ fn main() {
         }
         #[cfg(not(feature = "update_check"))]
         riir_refine::build_stamp::refuse("upgrade", &["update_check"]);
+    }
+
+    // ── Plan 325 T4/T5: the points verbs — dispatched BEFORE the
+    // kat_service match, on their OWN feature (the public build's surface;
+    // the KAT plane's gate set is never implicated). Same dispatch shape
+    // as `upgrade`: the feature that owns the lane owns its refusal.
+    #[cfg(feature = "points")]
+    if let Some(cmd) = args.command {
+        match cmd {
+            KatCommand::Join => {
+                run_points_join();
+                return;
+            }
+            KatCommand::Leave => {
+                run_points_leave(args.points_left_alias);
+                return;
+            }
+            KatCommand::Rank => {
+                run_points_rank();
+                return;
+            }
+            KatCommand::PointsInfo => {
+                run_points_info();
+                return;
+            }
+            KatCommand::Corpus => {
+                run_points_corpus();
+                return;
+            }
+            _ => {}
+        }
+    }
+    #[cfg(not(feature = "points"))]
+    if matches!(
+        args.command,
+        Some(KatCommand::Join)
+            | Some(KatCommand::Leave)
+            | Some(KatCommand::Rank)
+            | Some(KatCommand::PointsInfo)
+            | Some(KatCommand::Corpus)
+    ) {
+        riir_refine::build_stamp::refuse("join/leave/rank/info/corpus", &["points"]);
     }
 
     // ── Proposal 005 T0.1 + T1.6: KAT subcommands (standalone — no paths) ─
@@ -17740,16 +18082,21 @@ fn main() {
     // GIT-STYLE STACKING: a failed push leaves the ack untouched, so the
     // un-pushed delta is a local commit — it reports (cumulative) with the
     // next run or `cargo refine sync`. One status line, ~5 s budget, never an
-    // exit-code change.
+    // exit-code change. Plan 325 T2: the offline env cuts it (the delta
+    // stacks git-style; nothing dials).
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     if let Some(c) = kat_charge.as_ref() {
-        let root = resolve_heal_root(&args.paths);
-        let outcome = riir_refine::kat_burn_client::run_burn_sync(
-            &root,
-            c.state().charged_kat,
-            c.state().meter_watermark_tokens,
-        );
-        print_burn_sync(&outcome);
+        if riir_refine::offline::offline() {
+            eprintln!("{}", riir_refine::offline::refusal_line("the burn report"));
+        } else {
+            let root = resolve_heal_root(&args.paths);
+            let outcome = riir_refine::kat_burn_client::run_burn_sync(
+                &root,
+                c.state().charged_kat,
+                c.state().meter_watermark_tokens,
+            );
+            print_burn_sync(&outcome);
+        }
     }
     // Issue 117 (the delta half) — the loud companion: the git-style
     // stacking promise is honest only if the skip is audible — a stale
@@ -17781,6 +18128,7 @@ fn main() {
     #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
     if args.fix
         && !fixstat_rules.is_empty()
+        && !riir_refine::offline::offline()
         && riir_refine::kat_stats_consent::read(&riir_refine::kat_stats_consent::default_dir())
             .push_allowed()
     {

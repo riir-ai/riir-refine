@@ -38,6 +38,13 @@
 #                             riir-auth left the set the same day: the row
 #                             swapped, not grown — the account substrate is
 #                             now riir-kat's dep, resolved transitively)
+#   riir-ledger    (private)  riir-ledger (Plan 325 T3 / Proposal 026 P1 — the
+#                             points-plane WIRE leaf, opt-in `points`; serde +
+#                             serde_json only. Local repo 2026-11-02; the
+#                             GitHub remote creation is OWNER-PENDING — CI's
+#                             standalone job fails on the bare clone until
+#                             the repo exists and this gate's CI step
+#                             provisions it.)
 #   riir-llm       (private)  riir-llm (issue 124 — the LLM-transport leaf;
 #                             optional, `groq_first`/`cf_workers_ai` enable
 #                             `riir-llm/transport`)
@@ -98,6 +105,7 @@ Cargo.toml reflexer-vessel
 Cargo.toml riir-infer-core
 Cargo.toml riir-infer-gpu
 Cargo.toml riir-kat
+Cargo.toml riir-ledger
 Cargo.toml riir-llm
 Cargo.toml riir-neuron-db
 Cargo.toml riir-rag

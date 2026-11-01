@@ -155,7 +155,7 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for repo in riir-ai riir-neuron-db riir-auth riir-kat riir-llm riir-infer; do
+          for repo in riir-ai riir-neuron-db riir-auth riir-kat riir-llm riir-infer riir-ledger; do
             git clone --depth 1 \
               "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
               "sibling/${repo}"
@@ -208,7 +208,10 @@ jobs:
           gist-rs/riir-auth (riir-kat's transitive), gist-rs/riir-kat \
           (issue 088), gist-rs/riir-llm (issue 124, the LLM-transport \
           leaf), gist-rs/riir-infer (the 09-22 carve — riir-ai Issue 998; \
-          riir-ai's riir-engine/riir-gpu escape to it transitively). \
+          riir-ai's riir-engine/riir-gpu escape to it transitively), \
+          gist-rs/riir-ledger (Plan 325 T3 / Proposal 026 P1 — the points \
+          wire; ⛔ OWNER-PENDING: the remote repo must exist before CI can \
+          provision it — the local repo landed 2026-11-02). \
           Set/renew SIBLING_REPOS_TOKEN (a fine-grained PAT expires \
           ~90 days)."
           if [ "${{ github.event_name }}" = "pull_request" ]; then

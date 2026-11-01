@@ -65,7 +65,13 @@ set -u
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root" || exit 2
 
-FEATURES="latent_retrieval,rust_perf,clippy_lints"
+FEATURES="latent_retrieval,rust_perf,clippy_lints,points"
+# ^ Plan 325 T3/T6 (issue 192): the charitable set gains `points` — the
+# public-goods plane IS the public build's network surface (the owner's v4
+# pivot). The KAT features stay out (bar 2 keeps kat_transport/kat_service
+# hard-zero); the JOIN identity chain (riir-kat provider_login → rebind →
+# client → account_key) is now BLESSED — the GAP 5 decision (the existing
+# OAuth app compiles as the default so join works out of the box).
 # Bar-1 output pattern — payment/token terms ONLY (issue 192 GAP 2 re-scope,
 # 2026-11-01): the wide pattern's product-collision half (mine/earn/epoch/
 # settle/credit/join/service) left with the v4 pivot; the mining machinery
@@ -93,10 +99,14 @@ R1_CAP=40
 # R2 — RIIR_REFINE_KAT_* env-name strings, pinned BY NAME with reasons:
 #   RIIR_REFINE_KAT_ACCOUNT_DIR  local config/account path const (no network)
 #   RIIR_REFINE_KAT_CRANK_TOKEN  doc fragment from the crank/mine reference
+#   RIIR_REFINE_KAT_KEY          the account-key PATH override the join/login
+#                                substrate reads (kat_account login_default_in;
+#                                a local file path, never a network dial)
 # The census extracts EVERY RIIR_REFINE_KAT_* name in the binary; a name
 # outside this pin fails even when its carrying line looks inert.
 R2_PINS='RIIR_REFINE_KAT_ACCOUNT_DIR
-RIIR_REFINE_KAT_CRANK_TOKEN'
+RIIR_REFINE_KAT_CRANK_TOKEN
+RIIR_REFINE_KAT_KEY'
 
 fail=0
 note() { printf '%s\n' "$*"; }
@@ -177,7 +187,7 @@ scan_surface "bare dry-run" "$work/dryrun.out" '__never_matches__' 0
 ( cd "$work" && RIIR_REFINE_AUTO_ORACLE=0 "$BIN" --fix --no-verify sample.rs ) >"$work/scan.out" 2>&1
 scan_surface "--fix scan" "$work/scan.out" '__never_matches__' 0
 
-# ── bar 2: cargo tree — riir-kat feature-free tier + redact ONLY ────────────
+# ── bar 2: cargo tree — riir-kat at redact + the JOIN identity chain ONLY ───
 note "== bar 2: cargo tree -e features (charitable set)"
 CARGO_TARGET_DIR="$CHARITABLE_TARGET_DIR" \
     cargo tree -e features -i riir-kat --features "$FEATURES" >"$work/tree_inv.out" 2>&1
@@ -187,13 +197,34 @@ if [ "$inv_rc" -ne 0 ]; then
     sed 's/^/       /' "$work/tree_inv.out" | sed -n '1,8p'
 else
     kat_features=$(grep -o 'riir-kat feature "[A-Za-z_]*"' "$work/tree_inv.out" | sort -u)
-    if [ "$kat_features" = 'riir-kat feature "redact"' ]; then
-        note "  ok: riir-kat resolves at redact ONLY"
-    elif [ -z "$kat_features" ]; then
-        bar_fail "inverse tree names no riir-kat feature — unreadable, never clean"
+    # Plan 325 T6 re-scope (issue 192 GAP 5): redact + the join identity
+    # chain are the blessed tier — the points plane's identity surface. The
+    # KAT wire/billing features (transport/service) stay hard-zero below.
+    blessed=$(printf '%s\n' "$kat_features" | grep -oE '"[a-z_]+"' | tr -d '"' | sort | tr '\n' ' ')
+    case " $blessed " in
+        *" redact "*) ;;
+        *) bar_fail "riir-kat resolves without redact (got: $blessed)" ;;
+    esac
+    for f in client account_key rebind provider_login; do
+        case " $blessed " in
+            *" $f "*) ;;
+            *) bar_fail "the join identity chain is INCOMPLETE — riir-kat feature '$f' missing (got: $blessed)" ;;
+        esac
+    done
+    # The forbidden tier: anything the KAT wire/billing plane owns. Pinned
+    # BY NAME (a new kat feature lands here only by an explicit edit).
+    forbidden_tier=""
+    for f in $blessed; do
+        case "$f" in
+            redact|client|account_key|rebind|provider_login|github_login) ;;
+            *) forbidden_tier="$forbidden_tier $f" ;;
+        esac
+    done
+    if [ -n "$forbidden_tier" ]; then
+        bar_fail "riir-kat resolves features beyond redact + the identity chain:"
+        printf '%s\n' $forbidden_tier | sed 's/^/       /'
     else
-        bar_fail "riir-kat resolves features beyond redact:"
-        printf '%s\n' "$kat_features" | sed 's/^/       /'
+        note "  ok: riir-kat resolves at redact + the join identity chain only"
     fi
 fi
 CARGO_TARGET_DIR="$CHARITABLE_TARGET_DIR" \
@@ -203,9 +234,9 @@ if [ "$fwd_rc" -ne 0 ]; then
     bar_fail "cargo tree -e features failed (rc=$fwd_rc):"
     sed 's/^/       /' "$work/tree_fwd.out" | sed -n '1,8p'
 else
-    forbidden=$(grep -E 'riir-kat feature "(client|kat_transport|kat_service|account_key|siwr|rebind|provider_login|se_custody|github_pow|admin|totp)"' "$work/tree_fwd.out")
+    forbidden=$(grep -E 'riir-kat feature "(kat_transport|kat_service|siwr|se_custody|github_pow|admin|totp|genesis|decstat|purge|pay|migrate|recovery|github_login_pow)"' "$work/tree_fwd.out")
     if [ -z "$forbidden" ]; then
-        note "  ok: no client/transport/service feature resolved"
+        note "  ok: no KAT wire/billing feature resolved"
     else
         bar_fail "forbidden riir-kat features in the resolved graph:"
         printf '%s\n' "$forbidden" | sed 's/^/       /' | sed -n '1,8p'
@@ -294,6 +325,72 @@ else
         sed 's/^/       /' "$work/mine.out" | sed -n '1,6p'
     fi
 fi
+
+# ── +: the points-plane POSITIVE assertions (Plan 325 T6, issue 192 GAP 2's
+# deferred half) — the public-goods surface PRESENT and consent/offline-
+# gated. Every arm runs OFFLINE (the env speaks for the user; nothing
+# dials) with the account dir pointed INSIDE $work (no machine state is
+# touched). Presence + gating asserted; network behavior is P2's.
+note "== +: points surfaces present + gated (offline arms)"
+export RIIR_REFINE_OFFLINE=1
+export RIIR_REFINE_KAT_ACCOUNT_DIR="$work/points-account"
+( cd "$work" && "$BIN" join ) >"$work/join.out" 2>&1
+join_rc=$?
+if [ "$join_rc" -eq 2 ] && grep -q 'offline: join skipped' "$work/join.out"; then
+    note "  ok: join present, offline-refused typed (rc=2, names the env)"
+else
+    bar_fail "join: expected the typed offline refusal (rc=2 + 'offline: join skipped'), got rc=$join_rc:"
+    sed 's/^/       /' "$work/join.out" | sed -n '1,6p'
+fi
+for verb in rank info; do
+    ( cd "$work" && "$BIN" "$verb" ) >"$work/$verb.out" 2>&1
+    verb_rc=$?
+    if [ "$verb_rc" -eq 0 ] && grep -q "offline: $verb skipped" "$work/$verb.out"; then
+        note "  ok: $verb present, offline-degraded (rc=0, names the env)"
+    else
+        bar_fail "$verb: expected the offline degradation (rc=0 + 'offline: $verb skipped'), got rc=$verb_rc:"
+        sed 's/^/       /' "$work/$verb.out" | sed -n '1,6p'
+    fi
+done
+( cd "$work" && "$BIN" leave ) >"$work/leave.out" 2>&1
+leave_rc=$?
+if [ "$leave_rc" -eq 0 ] && grep -q 'local state cleared' "$work/leave.out"; then
+    note "  ok: leave present, offline-safe (local state cleared, nothing dialed)"
+else
+    bar_fail "leave: expected the offline-safe local clear (rc=0), got rc=$leave_rc:"
+    sed 's/^/       /' "$work/leave.out" | sed -n '1,6p'
+fi
+( cd "$work" && "$BIN" version ) >"$work/version_cmd.out" 2>&1
+if grep -q 'cargo-refine' "$work/version_cmd.out"; then
+    note "  ok: version subcommand present (aliases --version)"
+else
+    bar_fail "version subcommand produced no version block:"
+    sed 's/^/       /' "$work/version_cmd.out" | sed -n '1,6p'
+fi
+( cd "$work" && "$BIN" corpus ) >"$work/corpus.out" 2>&1
+corpus_rc=$?
+if [ "$corpus_rc" -eq 0 ] && grep -q 'public good' "$work/corpus.out"; then
+    note "  ok: corpus present (points-free framing)"
+else
+    bar_fail "corpus: expected the points-free info block (rc=0), got rc=$corpus_rc:"
+    sed 's/^/       /' "$work/corpus.out" | sed -n '1,6p'
+fi
+# The consent text (T16.1 §5) — the load-bearing sentences VERBATIM in the
+# binary (the fix-path ask is the consent surface; the words are law).
+for phrase in 'a random ID we generate on your' 'we never read your hardware'; do
+    if grep -q -F "$phrase" "$work/strings.txt"; then
+        note "  ok: consent text pinned verbatim ('${phrase}…')"
+    else
+        bar_fail "consent sentence missing from the binary: '$phrase' (the T16.1 §5 words are law)"
+    fi
+done
+# The anti-Sybil rank sentence (Proposal 026 §5.1).
+if grep -q -F 'joined identities only' "$work/strings.txt"; then
+    note "  ok: anti-Sybil rank sentence pinned"
+else
+    bar_fail "anti-Sybil sentence missing ('joined identities only')"
+fi
+unset RIIR_REFINE_OFFLINE RIIR_REFINE_KAT_ACCOUNT_DIR
 
 # ── +: the shipping leak-scan on the same artifact ───────────────────────────
 note "== +: binary_leak_scan on the charitable artifact"

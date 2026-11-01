@@ -88,6 +88,17 @@ quote = "1"
 # cf_workers_ai + groq_first live here and name ureq directly.
 ureq = { version = "2.9", optional = true, features = ["json"] }
 
+# Plan 325 T1: the client UUID's randomness (issue 192 GAP 1 — a locally
+# generated, resettable token; T16.1 §1). 0.2 matches the graph's existing
+# copy (ed25519-dalek's rand_core); no new version introduced.
+getrandom = { version = "0.2", optional = true }
+
+# Proposal 026 P1: the points-plane WIRE (DTOs + the privacy validators).
+# Load-bearing for every cargo command once the `points` feature exists —
+# cargo reads every dep manifest at workspace load; the sibling checkout
+# is required like katgpt-rs. Local repo (remote creation owner-pending).
+riir-ledger = { path = "../riir-ledger", optional = true }
+
 # Issue 153 T2: the self-update verifies the downloaded archive against the
 # release's SHA256SUMS (the dist format is sha256 — the house blake3 rule
 # applies to OUR storage, not to verifying a third-party-format manifest).
@@ -573,6 +584,19 @@ contrastive_scope = ["katgpt-core/contrastive_scope"]
 # substrate (ssh-key/blake3/serde_json were already in this feature's tree —
 # net-new weight ≈ zero); `github_login` deliberately NOT enabled.
 kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
+
+# Plan 325 T3 (issue 192 T16.5): the public-goods POINTS plane's client
+# surface — the PUBLIC build's network half. Deliberately NOT kat_service /
+# kat_transport (the KAT lanes stay out of the charitable set; Posture A
+# unchanged for the credit plane): points carries its own std-shaped
+# transport (ureq direct — the one TLS dep, shared with the join path), the
+# riir-ledger wire (Proposal 026 P1), the client UUID (T16.1), the first-run
+# consent, and the join identity edge (riir-kat's provider_login chain —
+# the EXISTING device-flow app, GAP 5: the client id compiles as the
+# default so join works out of the box). Charitable-gate note: bar 2's
+# "feature-free + redact only" riir-kat tier re-scopes to "+ the join
+# identity chain" — kat_transport/kat_service stay hard-zero (T6).
+points = ["dep:riir-ledger", "dep:ureq", "dep:getrandom", "dep:ed25519-dalek", "riir-kat/client", "riir-kat/provider_login"]
 
 # Issue 188: the normal-user migrate lane — the device flow + the recovery
 # bind routes + the `.keys` listed-check (base64 rides the same lock-neutral

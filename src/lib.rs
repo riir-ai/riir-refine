@@ -54,7 +54,18 @@
 
 #![warn(clippy::all, clippy::pedantic)]
 
-// ── Domain-agnostic core (always compiled) ─────────────────────────────────
+// ── The offline gate (Plan 325 T2 — ungated: every build honors the env)
+pub mod offline;
+
+// ── The public-goods points plane (Plan 325 / Proposal 026 — `points`)
+#[cfg(feature = "points")]
+pub mod client_id;
+#[cfg(feature = "points")]
+pub mod first_run_consent;
+#[cfg(feature = "points")]
+pub mod points_client;
+
+// ── Domain-agnostic core (always compiled) ─────────────────────────────
 pub mod adaptive_drafter;
 // Issue 117: the compiled-feature stamp (`--version`) + the loud refusal a
 // compiled-out gated command prints before exit 2. Ungated on purpose — a
