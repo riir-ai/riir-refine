@@ -188,8 +188,9 @@ private — it answers the common case on any machine. Where a decision needs mo
 ≈0.4B-parameter encoder arm escalates, and the rungs are measured, not aspirational:
 
 - **Modelless floor** — zero weights, always on (the privacy story, not the size headline).
-- **One int8 (Q8) checkpoint** — ≈450 MB measured per checkpoint (447.7 MB), over a
-  7.5 MB engine binary (dist build, measured 2026-11-01).
+- **One int8 (Q8) checkpoint, deployed** — 484 MB measured end to end (the published
+  reflex.riir.ai breakdown: a 7.9 MB GPU-host serve binary + 20.8 MB dataset seats +
+  the 447.7 MB Q8 checkpoint + three ≈8 MB locked per-suite heads).
 - **Board subset → full board** — load only the suites you serve; the full served board
   (english + typed) is ≈0.9 GB at Q8 (2 × 447.7 MB; the ≈1.7 GB F16 posture is the reference
   build; Q8 is the adopted serving tier at 0.956–1.000 retention).
@@ -223,7 +224,7 @@ cost: built for developers without cloud-AI budgets, anywhere.
 
 | Criterion | On-page answer |
 |---|---|
-| Human-Scale AI expression | The mix is the intelligence: a zero-weight modelless floor answers when it can; a ≈0.4B encoder escalates only where it can't — ≈17× below the funder's own small-model bar, sized from a zero-weight floor on a 7.5 MB engine to a hosted think leg. |
+| Human-Scale AI expression | The mix is the intelligence: a zero-weight modelless floor answers when it can; a ≈0.4B encoder escalates only where it can't — ≈17× below the funder's own small-model bar, sized from a zero-weight floor to a 484 MB full encoder-arm deployment (published measurement) to a hosted think leg. |
 | Technical viability | Shipped and used: 13 releases, 200+ installer downloads, 5 OS targets, 200+ scored benchmark runs at a 96%+ heal rate, deployed as the default dev-loop tool across a 32-repo production workspace (evidence pack). |
 | Problem-community clarity | Software teams lose hours every week to compiler, linter and review friction; the healer fixes the mechanical share of it in-loop, in seconds, for free — alpha targets Rust, the domain set expands by community demand. |
 | Product-community fit | One command, offline, no account; free for open-source repositories forever; pluggable domains (Rust alpha, Docker and shader domains shipped, Python/JS/Go roadmap); the people it serves build it — their contributions become the corpus. |
