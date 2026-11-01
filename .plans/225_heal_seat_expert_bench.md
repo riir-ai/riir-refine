@@ -3,9 +3,9 @@
 **Status:** T1 EXECUTED 2026-10-11 (Bench 113, BLOCKED) → **ISSUE 161 LANDED SAME DAY (Bench 114): T1.6 PASSES** — deciding 3 → **1416** vs N(p_d=0.20)=621 (2.3×; also clears N(0.35)=1092); clause-(b) pilot 22 ok / 0 divergent / 18 unresolved → P(behav-ok | a∧c-ok) = 0.55, full-oracle projection ≈ 779 ≥ 621. δ₀ never lowered. The unblock was three changes (Issue 161): the proposer pool birth point (pool-only, R6 seam contract intact), the `rewrite` merge strategy (the instrument was mangling faithful whole-module rewrites — the FIRST widened census read 455 deciding with the proposer member `not_compiled` 91/91 on single_match while a direct probe showed the fixes compile+resolve ≈100%; the merge, not the proposers, was wrong), and the behav driver's real-module blockers (floats/int-slices/Option<float> + PRIVATE-FN E0603 — real modules declare private fns; the driver publicizes both sides). T2/T3 re-enter scope, owner-gated as before. Earlier: verdict round 1 REVISE folded (`1d410fd5`); round 2 **AGREE** (`bf1bb501`).
 **T2+T4 EXECUTED 2026-10-19 (Bench 119): SEAT WINS — non-inferiority at lower cost** (A1 660/660 = bit-identical to A0 on the deciding stratum, LB95 +0.000; seat p50 0.13 ms vs A0 verify-in-order p50 403 ms). Arming (T5) stays owner-gated. A2/T3 (the Rethink encoder head) stays open, owner-gated as scoped. Population disclosure: the frozen pool texts were regenerated + blake3-pinned per candidate (test-side drift 9/666 = 1.4% < the 5% wall → the read ran on 657 pin-verified rows; 296/1494 rows drift overall — environment moved since the harvest). First read execution INVALID-WIRING (server τ default ≠ trainer selection) disclosed in Bench 119; τ now travel in a digest-checked sidecar.
 
-**Claimed:** zed-shikuwa-t52-seatwire, 1793494183, expires 2026-11-03T01:00Z — T5.2 (the production serve-boundary wiring + the owner-condition test) under the 2026-10-30 owner condition, delegated-owner GO via the fallback reviewer sub-agent (the request_verdict claude_code channel auth-unavailable on this box, the Issue-1115-arc fallback).
+**Claimed:** zed-shikuwa-t52-seatwire, 1793494183, expires 2026-11-03T01:00Z — T5.2 (the production serve-boundary wiring + the owner-condition test) under the 2026-10-30 owner condition, delegated-owner GO via the fallback reviewer sub-agent (the request_verdict claude_code channel auth-unavailable on this box, the Issue-1115-arc fallback). **EXECUTED same day — lease folded:**
 
-**Lease closed:** zed-225-seat-bench, claimed 2026-10-19T12:45Z, retired at execution the same day — T2 (A1) + T4 (the frozen read) landed as Bench 119; T3 (A2/Rethink encoder) and T5 (arming) remain owner-gated, no lease needed. (Reshaped 2026-10-20 from a malformed `**Claimed:**` line — ISO date in the epoch slot + trailing prose broke `claim_lease_check`, which exits BLIND on any unparseable claim-shaped line.)
+**Lease closed:** zed-shikuwa-t52-seatwire, claimed 2026-11-01T00:49Z (epoch 1793494183), retired at execution the same day — T5.2 landed as riir-refine `2623f4d09` (the T5.2 checkbox below). Prior lease: zed-225-seat-bench, claimed 2026-10-19T12:45Z, retired at execution the same day — T2 (A1) + T4 (the frozen read) landed as Bench 119. (Reshaped 2026-10-20 from a malformed `**Claimed:**` line — ISO date in the epoch slot + trailing prose broke `claim_lease_check`, which exits BLIND on any unparseable claim-shaped line.)
 
 ## Why now
 
@@ -225,7 +225,7 @@ grammar-not-answers law), and every claim carries its n beside it.
       population (a T1 re-run), or test-side drift past the 5% pre-registered wall on the scored
       set. T5.3 (decstat consent) stays parked as its own gate.**
       UNBLOCK: satisfied — the owner's arm call landed via the delegated verdict.
-- [-] T5.2 The armed run is the consumption trigger already recorded: `rescue_probe`'s arm-H
+- [x] T5.2 The armed run is the consumption trigger already recorded: `rescue_probe`'s arm-H
       escalation-ordering consumption + the katgpt-rs Plan 621 T5.4 real-telemetry re-gate route.
       **OWNER CONDITION (same 2026-10-30 verdict): the seat may be wired into the REAL fix path
       only if the seat's answer still passes the compile check (`--verify`) before it is served,
@@ -235,6 +235,31 @@ grammar-not-answers law), and every claim carries its n beside it.
       fixes from outside the healer's own pool — matching a perfect A0 on 660 pool cases is not
       a reason to skip the compile check at the serve boundary.** RIDES T5.1 (armed) + the
       test above; the trigger cannot consume an un-armed row.
+      **EXECUTED 2026-11-01 (riir-refine `2623f4d09`, delegated-owner GO via the fallback
+      reviewer sub-agent — the request_verdict claude_code channel auth-unavailable on this box,
+      the Issue-1115-arc fallback):**
+      - `src/escalation_serve.rs` (cfg'd identically to `escalation_dispatch`): the serve
+        boundary in ONE place — the dispatch stays the only decider (worthiness mapping: served
+        modelless fix → 1.0 Worthy stand; miss → 0.0 Proceed), and an `Answer` that fails the
+        caller's compile check is demoted to `Declined("seat pick failed the serve-boundary
+        compile check …")`. No parallel checker: production passes the `fix_verify` gate.
+      - The cargo-refine bin's REAL fix path hook (same cfg triple + `fix_verify`): armed-row
+        only (`.refine/escalation_manifest.json`, ALL-EMPTY at ship — absent manifest ⇒
+        byte-identical to the pre-T5.2 lane), `--write` only, modelless-MISS only (no proposer
+        edit survived AND no pass moved the file), ONE consult per file over the top eligible
+        span (matched rules ≥ the row's `min_pool`), the pick compile-checked on a one-edit
+        `FileEditSet` through `FixVerifier::verify` BEFORE serving; a kept pick joins the
+        standard accounting (`all_edits` → review/fixstats/verify_batches/fmt — the end-of-run
+        gate re-verifies it); a rejected pick reverts (the modelless answer — the miss —
+        stands) with a loud one-line disclosure.
+      - `tests/escalation_serve_gates.rs` + the `required-features` row (SAME commit, the
+        T1.1e law): 4 gates through the REAL `heal_with_pool` seam — wrong pick rejected
+        naming the boundary; passing pick served verbatim; served-modelless Worthy stand with
+        zero seat traffic; zero-cap rows never escalate. 4 passed / 0 failed.
+      - Postures verified: default (no features), `escalation_manifest,seat_rerank,fix_verify`,
+        `escalation_manifest,hosted_expert,fix_verify` (the `cfg(not(seat_rerank))` arm) — all
+        clippy-clean `-D warnings`. The release set is UNCHANGED (no seat feature joined it —
+        the flip stays its own owner verdict, per the GO's conditions).
 - [-] T5.3 Decision telemetry consent-gated (`RIIR_INSTINCT_STATS` unset never pushes); decstat
       arming stays its own owner gate. RIDES T5.1; its consent gate stays its own owner call.
 
