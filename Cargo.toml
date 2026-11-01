@@ -937,6 +937,16 @@ required-features = ["nonergodic_poc"]
 name = "journey_credit_gate"
 required-features = ["rustc_errors", "latent_retrieval"]
 
+# Issue 191 T2: the G1 harness's standing smoke gate — census equality
+# (extracted == independent structural census), the downward-only floors
+# (290 rules / 70 files), and ONE fixture-bearing rule executed end-to-end
+# (deterministic pick: name-ascending first). Whole-file `#![cfg(feature =
+# "kernel_opt")]` + this row = the required-features discipline (the
+# repo-birth gate law). Run: cargo test --test kernel_goat_g1_smoke --features kernel_opt
+[[test]]
+name = "kernel_goat_g1_smoke"
+required-features = ["kernel_opt"]
+
 # Issue 126 lane (b) — the Lemma-4.2 likelihood-ratio tier guard's
 # store-level G1/G3 arms (poisoned wrong-goal credit excluded / clean
 # consistent credit certifies / refusal never demotes / replay
@@ -1001,6 +1011,16 @@ required-features = ["kernel_opt"]
 #   cargo run --example wgsl_scan_smoke --features kernel_opt -- [dir]
 [[example]]
 name = "wgsl_scan_smoke"
+required-features = ["kernel_opt"]
+
+# Issue 191 T2: the kernel_opt GOAT gate G1 harness — the standing fixture
+# validator (extraction == independent structural census + floors; per-rule
+# standalone rustc --test compile+run of every fixture-bearing rule's
+# ref_shape/opt_pattern). --full = the whole population (~5 min);
+# --smoke = census + floors + one sampled rule. Run with:
+#   cargo run --release --example kernel_goat_g1 --features kernel_opt -- --full
+[[example]]
+name = "kernel_goat_g1"
 required-features = ["kernel_opt"]
 
 # Issue 035 T2: the G-floor measurement — every arm scored against

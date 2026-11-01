@@ -36,18 +36,24 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
 
 1. **G1 — the full numeric validator (AMENDED surface, ratified honest).** A STANDING harness:
    extraction of every fixture-bearing rule's `ref_shape`/`opt_pattern` strings + per-rule
-   standalone `rustc --edition 2021 --test` compile + run (pid-suffixed temp dirs; a compile or
-   test failure = the rule's G1 verdict FAIL). Floors pinned against an INDEPENDENT structural
-   census (a text-level count of fixture-bearing rules/files in the corpus source, never the
-   extraction path), and the harness asserts `extracted == census` — an extraction failure
+   compile + run under a two-posture CASCADE (`rustc --edition 2021 --test`; pid-suffixed temp
+   dirs; a compile or test failure = the rule's G1 verdict FAIL). Floors pinned against an
+   INDEPENDENT structural census (a text-level count of `#[test]` tokens per corpus source
+   file, never the extraction path), and the harness asserts per-file RECONCILIATION —
+   `raw_tokens − extracted_tokens` equals a membership pin (zero unless pinned; the
+   gpu_63/64 in-tree `#[cfg(test)]` mods are the pinned rows) — an extraction failure
    counts as FAIL, never as absent-from-population (the green-zero law). Floors fire downward
-   only: `min_fixture_rules ≥ 290`, `min_fixture_files ≥ 70` (at ratification: 299/74).
-   Bit-identity/tolerance per each fixture's own asserts (the corpus's own test-design laws:
-   mod-13 symmetry-breaking values, must-fail twins, comparators). Parse-only rules stay on the
-   parse stub, disclosed per-rule, never counted as validated. **Epistemic caveat (recorded):**
-   G1 proves opt preserves ref on the fixture's own input distribution; ref correctness is
-   inherited from vendored provenance and is disclosed per-rule — ref and opt can share a blind
-   spot the fixture author never probed.
+   only: `min_fixture_rules ≥ 248`, `min_fixture_files ≥ 72`. **FLOOR CORRECTION (T2 first
+   census, 2026-11-01):** T1's ≥290/≥70 came from the pre-harness per-file-density ESTIMATE
+   (~299 rules / 74 files); the harness's own exact per-rule census measured **248
+   fixture-bearing rules across 72 files**, and the ratified bar — floors PINNED TO THE
+   CENSUS — pins those exact numbers. Any fixture rule or fixture file lost from the standing
+   population reds. Bit-identity/tolerance per each fixture's own asserts (the corpus's own
+   test-design laws: mod-13 symmetry-breaking values, must-fail twins, comparators).
+   Parse-only rules stay on the parse stub, disclosed per-rule, never counted as validated.
+   **Epistemic caveat (recorded):** G1 proves opt preserves ref on the fixture's own input
+   distribution; ref correctness is inherited from vendored provenance and is disclosed
+   per-rule — ref and opt can share a blind spot the fixture author never probed.
 2. **G2 — the perf bar (bar RAISED, axis disclosed, both pre-pinned NOW).** Per-rule microbench,
    interleaved A/B (the sequential-AB law: a ratio of two sequential arms measures the box),
    **median improvement ≥ 6%** at `--release` (the measured flake band is < 6 pts — a 5% floor
@@ -93,11 +99,41 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       census-pinned floors + epistemic caveat; G2 ≥6% + mandatory exclusivity + deterministic
       tranche; G5 utility/cost leg added; G3 disclosure boundary), no re-review required by the
       verdict.
-- [ ] T2 — build the real-corpus harness (T1.1's source list → fixture kernels per family;
-      blake3-pinned inputs; the harness runs per GPU generation with the box-state PROVENANCE
-      line — the Issue-021 law). AMENDED by the T1 verdict: the harness = the G1 standing
-      fixture executor (extraction == independent structural census; per-rule rustc --test
-      compile+run; floors fire downward only) + the smoke gate with floors.
+- [x] T2 — the G1 standing fixture harness. DONE 2026-11-01 (`src/domains/kernel_opt/corpus/
+      goat_g1.rs` + `examples/kernel_goat_g1.rs` + `tests/kernel_goat_g1_smoke.rs`, the
+      `[[example]]`/`[[test]]` rows carry `required-features = ["kernel_opt"]`; clippy -D
+      warnings clean at the gated posture; smoke PASS — census reconciled, floors hold, sampled
+      execution green).
+      - **Census reconciliation (the anti-circularity law, as measured):** raw-token equality
+        was the wrong predicate — `entries_gpu_63/64` carry file-level `#[cfg(test)]` mods
+        (1 in-tree `#[test]` each, OUTSIDE every rule string) and `gpu_concept` prose freely
+        mentions `#[test]`. Extraction counts ALL THREE string fields (ref + opt + gpu_concept);
+        per-file `raw − extracted` must equal a `CENSUS_DELTA_PINS` membership row (default 0,
+        red both directions; orphan pins fail). gpu_63/64 pinned at 1 each with reasons; the
+        in-tree mods stand under `cargo test --lib` and are recorded, never re-run.
+      - **The compile cascade (measured, not assumed):** the corpus carries BOTH fixture shapes
+        — cross-arm tests (the opt side calls the ref side's naive forms; 18 rules fixed by the
+        PAIR posture: ref at the crate root + opt in a module with `use super::*;` — sibling
+        modules + `use super::__ref::*` imports NOTHING, private items are not visible across
+        siblings) and self-contained tests validated per-arm at entry (the older batches' ref
+        arms are illustrative fragments). Pair tried first; on a pair COMPILE failure the
+        test-bearing arms run standalone; a pair RUN failure does not fall back (a failing test
+        fails everywhere). The failed pair attempt is disclosed in `RuleVerdict::discarded`.
+      - **FIRST FULL RUN — the gate's first real catch (65/248 FAIL, 183 green, 803
+        parse-only, 209.9 s, rustc 1.99.0):** the entry discipline was PARSE validation
+        (`KernelOptDomain::validate`), not compile validation — 65 fixture rules do not
+        compile or their own asserts fail: ~23 RUN failures (wrong asserts — verified
+        standalone on segmented-checkpoint-cheap-replay-backward,
+        componentwise-version-guard-rollover-silences-fast-path, head-dim-smem-tile-cap: each
+        reproduces OUTSIDE the harness, so these are fixture bugs, not harness artifacts),
+        ~10 unresolved-symbol fixtures (helpers named in no arm: real_tokens, run_once, Gate,
+        text_following_tokens, find, process_tile, fold_one_slot_at_a_time, Device, Family,
+        Finish), 2 fragment arms (per-block-int32-chunk-rescale-fp32-accum,
+        moe-broadcast-quantize-once-scatter — mid-function snippets), 1 timeout
+        (relaxed-spin-acquire-confirm-metadata-flag-wait), the rest misc compile errors
+        (E0308/E0277/E0599/E0614, lifetime, Debug-derive). Full ledger + repair: Issue 193.
+      - libtest failure reports go to STDOUT — the harness reads stdout first for run-failure
+        diagnosis (the stderr-only read reported empty errors on the 22-run-fail class).
 - [ ] T3 — wire the full numeric validator into `kernel_verify` (replace the STUB delegation
       path for the promoted set only; the stub stays for the long tail). AMENDED: propagate a
       `validated: fixture-green | parse-only` annotation end-to-end via the `context_notes`

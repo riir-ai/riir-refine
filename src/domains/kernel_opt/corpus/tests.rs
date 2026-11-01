@@ -24991,6 +24991,7 @@ fn batch322_pseudocode_parses() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // batch-wide census: every rule asserted in one corpus pass
 fn batch323_rules_landed() {
     let corpus = build_kernel_seed_corpus();
 
