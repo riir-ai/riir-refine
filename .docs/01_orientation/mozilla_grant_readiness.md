@@ -140,7 +140,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 >
 > We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first code-healing tool — a modelless core paired with an optional ≈0.4B-parameter encoder — that starts with Rust and expands to further languages, Python, JavaScript and Go included, by community demand, embedding our open decision-serving components for its escalation decisions.)
 >
-> 1. **Open-source sustainability + contribution points.** Our tool is free for open-source repositories, and the healing core AND the fleet/corpus-production tooling are MIT. We sustain it as a public good: contributors earn non-transferable, expiring reputation points (no payment, no token, no speculation — the point balance only meters hosted lanes as fair use); a public leaderboard ranks joined contributors; revenue later comes from enterprise corpus licensing, hosted/support services, and additional language domains. One plain disclosure: we are removing the old credit/token lane from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
+> 1. **Open-source sustainability + contribution points.** Our tool is free for open-source repositories; the repair corpus is MIT open data today, and the healing core and the fleet/corpus-production tooling will be MIT — the core source opens during months 1–3 of the grant term. We sustain it as a public good: contributors earn non-transferable, expiring reputation points (no payment, no token, no speculation — the point balance only meters hosted lanes as fair use); a public leaderboard ranks joined contributors; revenue later comes from enterprise corpus licensing, hosted/support services, and additional language domains. One plain disclosure: we are removing the old credit/token lane from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
 > 3. **"Work in the open."** The tool currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
 >
@@ -228,17 +228,20 @@ cost: built for developers without cloud-AI budgets, anywhere.
 | Technical viability | Shipped and used: 13 releases, 200+ installer downloads, 5 OS targets, 200+ scored benchmark runs at a 96%+ heal rate, deployed as the default dev-loop tool across a 32-repo production workspace (evidence pack). |
 | Problem-community clarity | Software teams lose hours every week to compiler, linter and review friction; the healer fixes the mechanical share of it in-loop, in seconds, for free — alpha targets Rust, the domain set expands by community demand. |
 | Product-community fit | One command, offline, no account; free for open-source repositories forever; pluggable domains (Rust alpha, Docker and shader domains shipped, Python/JS/Go roadmap); the people it serves build it — their contributions become the corpus. |
-| Impact and values | Open core (MIT), community corpus (MIT forever), consent-first, no token, no payment, no speculation; works without cloud AI; keeps small hardware useful. |
+| Impact and values | Community corpus MIT-licensed and live today, with a committed, dated open-core plan (the core source opens during the grant term); consent-first, no token, no payment, no speculation; works without cloud AI; keeps small hardware useful. |
 | Sustainability potential | Free for OSS forever; contribution points — non-transferable, expiring reputation, never payment — meter hosted lanes as fair use; later revenue from enterprise corpus licensing, hosted/support services, and additional language domains (Python/Go planned). |
 
 ### 13.4 The corpus / points / governance story (the sustainability paragraph, one form)
 
-> cargo refine is open source (MIT) and its repair corpus is MIT open data, forever. Anyone can
+> cargo refine's repair corpus is MIT open data — live today, forever. The core itself ships
+> as checksum-verified binaries today, with a committed, dated plan to open the source during
+> the grant term (months 1–3). Anyone can
 > contribute repairs; contributions earn contribution points — non-transferable, expiring
 > reputation that meters hosted lanes as fair use. There is no payment and no token: points can
 > never be bought, sold, or traded. The public leaderboard (roadmap) ranks contributors by
 > reputation; the corpus they build stays open for everyone, including competitors. Governance
-> is the licence plus the public record: open core, reviewed corpus, published bench history.
+> is the licence plus the public record: reviewed corpus, published bench history, and a
+> dated open-core commitment.
 > New domains — Python, JavaScript, Go and beyond — are roadmap, added when the community
 > asks; every contribution is reviewed, bench-scored in public, and improves healing for
 > everyone without retraining anything.

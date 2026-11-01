@@ -21,6 +21,7 @@
 | [`kat_billing.md`](kat_billing.md) | The KAT billing + TUNA trial-credit surfaces: the two tanks and the fixed-rate draw order, the run footer spec, the offline arc (stacking, report-time plane decision), why no debt exists, and the depleted posture (the 075 gate, the two refuel doors, the count-only survey, the 7-day payout clock) |
 | [`mozilla_grant_readiness.md`](mozilla_grant_readiness.md) | Mozilla Human-Scale AI grant playbook (PRIVATE strategy — deadline 2026-11-20): program facts, per-repo eligibility matrices + verdicts, frictions, evidence inventory, consult-email draft, timeline |
 | [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md) | Issue 190 T3 evidence pack (2026-10-31): public-surface counters (13 releases, 201 downloads, stars/forks) + internal-usage ledger (209 score-bench runs, 96.4% heal rate, corpus counts) + the honest T10 reading |
+| [`mozilla_site_audit_2026_11_01.md`](mozilla_site_audit_2026_11_01.md) | Live audit of all four fronts vs the Mozilla principles/criteria (2026-11-01, four read-only subagents): refine.riir.ai sourced from riir-dapps (not riir-refine), the economy layer is structural, riir.ai IS the network home, "private moat" public leak, /pay devnet-mint wording — input to the Plan 324 re-scope |
 | [`role_flows.md`](role_flows.md) | The four Get-started roles (coder / miner / fixer / trainer) as DO → GET → COST flow diagrams + the shared cost plane + the role × tier grid; the per-tab SVG renders the front page embeds (Issue 132) |
 
 ## See also
