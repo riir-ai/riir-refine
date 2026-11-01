@@ -2,6 +2,8 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-10-31 — Issue 175 REMOVED (mainnet frozen for refine): owner directive "no more mainnet" — the migration defers to this record + plan 302's re-genesis posture; proposal 023 status now DEFERRED-FROZEN. STANDING DIRECTIVE carried out of the file: any key ACTUALLY EXPOSED rotates NOW regardless of the freeze; routine rotation belongs to the re-genesis ceremony. Full file life: `git log --follow -- .issues/175_refine_mainnet_account_migration.md`. Part of the public-goods pivot (issue 191).
+
 ## 2026-10-30 — AGENTS.md compaction: the Role-bullet per-batch rule arcs (Batches 282–319) moved out of AGENTS.md
 
 rust_perf: B282 Plan 286 · B283 Plan 287 · B284 Plan 288 · B288 Plan 293 · B298+B305 Plan 289 (entries_52) · B308 Plan 313 (entries_54) · B316 Plan 316 (entries_55) · B318 Plan 318 (entries_56) → 287 rules. kernel_opt: B283 Plan 287 · B284 Plan 288 · B286 Plan 291 · B288 Plan 293 · B295 Plan 300 · B296 Plan 301 (gpu_132) · B297 Plan 303 (gpu_133) · B299 Plan 304 (gpu_134) · B302 Plan 307 (gpu_135) · B303 Plan 308 (gpu_136) · B304 Plan 309 (gpu_137+138) · B307 Plan 312 (gpu_139) · B309 Plan 314 (gpu_140) · B310 Plan 315 (gpu_141) · B317 Plan 317 (gpu_142) · B319 Plan 319 (gpu_143) → 1033 rules.

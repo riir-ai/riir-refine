@@ -1,6 +1,7 @@
 # Proposal 023 — refine mainnet account migration: the 4090 heal-network account onto the rotation lane (ASAP — the account is LIVE)
 
-**Status:** WIRED — owner-directed 2026-10-26 ("riir-refine is live on
+**Status:** **DEFERRED-FROZEN 2026-10-31 (owner): NO MORE MAINNET for refine.** The public-goods pivot (issue 191) removes the mainnet lane from the product entirely — this proposal and its wire chain stay as the design record; any revival needs an explicit owner un-freeze AND the re-genesis posture of plan 302 D1. **Standing directive carried out of removed issue 175 (preserve):** any key ACTUALLY EXPOSED rotates NOW, regardless of the freeze; routine rotation belongs to the re-genesis ceremony.
+**Status (prior):** WIRED — owner-directed 2026-10-26 ("riir-refine is live on
 mainnet, no issue to teardown current and do full migration yet, migration
 ASAP"); T-PREFLIGHT + the wire chain (T3d/T4/T5/T6) LANDED 2026-10-26
 (commits in issue 175's T-WIRE row); T7 (devnet rehearsal + the real

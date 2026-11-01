@@ -4,8 +4,8 @@
 > eligibility matrices, verdicts, frictions, the evidence inventory, the
 > consult email, and the timeline. Program digest (public-safe):
 > [katgpt-rs Research 642](../../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md).
-> Working proposal: [`../../.proposals/025_mozilla_human_scale_ai_incubator.md`](../../.proposals/025_mozilla_human_scale_ai_incubator.md).
-> Task issue: [`../../.issues/190_mozilla_grant_readiness_gaps.md`](../../.issues/190_mozilla_grant_readiness_gaps.md).
+> Working proposal: [`../../.proposals/025_mozilla_human_scale_ai_incubator.md`](../../.proposals/025_mozilla_human_scale_ai_incubator.md) (v4).
+> Task issues: [`../../.issues/190_…`](../../.issues/190_mozilla_grant_readiness_gaps.md) + [`../../.issues/192_…`](../../.issues/192_refine_public_goods_pivot.md) (the v4 pivot).
 > **This file is grant strategy in a private repo — do not mirror, quote, or
 > link it from any public surface.**
 
@@ -140,7 +140,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 >
 > We are preparing an application for the Human-Scale AI Incubator (deadline Nov 20) and would be grateful for steerage on three eligibility points. (We have consolidated to a single proposal: a local-first, modelless code-healing tool for Rust, which embeds our open decision-serving components for its escalation decisions.)
 >
-> 1. **Open-core sustainability.** Our tool is free for open-source repositories. We sustain it as a fully open-source project: the healing core AND the fleet/corpus-production tooling are MIT, and the community-contributed repair corpus stays open (MIT) forever. Revenue comes from enterprise licensing of the repair corpus our own GPU infrastructure produces, and from hosted/support services. One plain disclosure: a separate credit/ledger commercial lane exists in our workspace — we are removing it from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
+> 1. **Open-source sustainability + contribution points.** Our tool is free for open-source repositories, and the healing core AND the fleet/corpus-production tooling are MIT. We sustain it as a public good: contributors earn non-transferable, expiring reputation points (no payment, no token, no speculation — the point balance only meters hosted lanes as fair use); a public leaderboard ranks joined contributors; revenue later comes from enterprise corpus licensing, hosted/support services, and additional language domains. One plain disclosure: we are removing the old credit/token lane from the public builds entirely before any public release, and it is entirely outside the funded scope. Is this sustainability model acceptable within a funded project?
 > 2. **Charitable purpose as a self-funded team.** Neither project has revenue or clients yet; the team is self-funded on consumer hardware. Is applying via a fiscal sponsor acceptable, and what documentation do you require?
 > 3. **"Work in the open."** The tool currently distributes via public installers while its source is private. We are prepared to open-source the core during the grant term (months 1–3) under a permissive licence and to publish our consent-gated repair-rule corpus as open data. Is a committed, dated open-sourcing plan acceptable evidence of working in the open, or is open source required at application time?
 >
