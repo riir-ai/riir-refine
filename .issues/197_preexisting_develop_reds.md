@@ -24,5 +24,3 @@ cargo clippy --all-targets --all-features -- -D warnings 2>&1 | grep -c '^error'
   docker-control test and the --all-features sweep, neither touched by 326.
 - The all-features findings are in files plan 326 never touched; fixing them is
   a standalone heal lane (healer-first per the lint law).
-
-**Claimed:** no one yet
