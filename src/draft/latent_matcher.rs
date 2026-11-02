@@ -23,7 +23,7 @@ use riir_rag::Chunker;
 use crate::domain::{HealDomain, HealEntry};
 
 use super::clippy_feed::ClippyDiagnostic;
-use super::corpus_index::{RuleIndex, ScoredRule};
+use super::corpus_index::{RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 use super::domain_router::{DomainId, DomainRouter, RoutingEmbedding, SpectralOrder};
 
 /// A leased epoch's per-domain corpus overlay (T1.6): domain → retrieval
@@ -116,6 +116,86 @@ pub struct RuleInfo {
     pub fixed_code: String,
 }
 
+/// The kernel domain's index: the flat `RuleIndex`, or — under the opt-in
+/// `kernel_route_narrow` feature (Issue 196) — the route-narrowed index of
+/// 15 per-category slices with a bounded global tail. Every consumer
+/// dispatches through this type's methods, so the OFF posture is the flat
+/// path byte-identical.
+pub(crate) enum KernelIndex {
+    /// The flat full-corpus index (the pre-196 shape, the default posture).
+    /// Never constructed under the narrow feature (the build arm selects
+    /// `Narrowed` there) — the lint is feature-gated, not a defect. Boxed
+    /// beside `Narrowed` so neither variant inflates the enum (the matcher
+    /// struct rides by value).
+    #[cfg_attr(feature = "kernel_route_narrow", allow(dead_code))]
+    Flat(Box<RuleIndex>),
+    /// The route-narrowed index (Issue 196; the feature selects it at
+    /// build — see [`Self::build`]). Boxed: 16 sub-`RuleIndex`es dwarf the
+    /// flat variant.
+    #[cfg(feature = "kernel_route_narrow")]
+    Narrowed(Box<crate::domains::kernel_opt::route_narrow::NarrowedKernelIndex>),
+}
+
+impl KernelIndex {
+    /// Build the kernel index — flat by default, route-narrowed under the
+    /// feature. The single posture-selection point. The flat arm copies the
+    /// slice into `build_with`'s owned shape (build-time, once per process);
+    /// the narrowed arm partitions by reference — no by-value split to
+    /// annotate per posture.
+    fn build(patterns: &[(String, String)], config: RetrievalConfig) -> Result<Self, String> {
+        #[cfg(feature = "kernel_route_narrow")]
+        return Ok(Self::Narrowed(Box::new(
+            crate::domains::kernel_opt::route_narrow::NarrowedKernelIndex::build(patterns, config)?,
+        )));
+        #[cfg(not(feature = "kernel_route_narrow"))]
+        Ok(Self::Flat(Box::new(RuleIndex::build_with(
+            patterns.to_vec(),
+            config,
+        )?)))
+    }
+
+    /// Dispatch the multi-scale suggest — flat self, narrowed via the
+    /// slice+tail retrieval (Issue 196).
+    fn suggest_deep_into<'s>(
+        &self,
+        code: &str,
+        top_k: usize,
+        scratch: &'s mut SuggestScratch,
+    ) -> &'s [ScoredRule] {
+        match self {
+            Self::Flat(index) => index.suggest_deep_into(code, top_k, scratch),
+            #[cfg(feature = "kernel_route_narrow")]
+            Self::Narrowed(narrowed) => narrowed.suggest_deep_into(code, top_k, scratch),
+        }
+    }
+
+    /// Forward the differential-anchor rider (flat: the index's own;
+    /// narrowed: every slice + tail — the per-domain rider semantics).
+    #[cfg(feature = "differential_anchor")]
+    fn set_differential_anchor(&mut self, lambda: f32) {
+        match self {
+            Self::Flat(index) => index.set_differential_anchor(lambda),
+            #[cfg(feature = "kernel_route_narrow")]
+            Self::Narrowed(narrowed) => narrowed.set_differential_anchor(lambda),
+        }
+    }
+
+    /// Forward the Issue-126 trained-term rider — FLAT only (the trained
+    /// term is a flat-index rider; the narrowed posture falls back to the
+    /// untrained ranking — the disclosed interaction, the `route_narrow`
+    /// module docs).
+    #[cfg(feature = "rule_embed_poc")]
+    fn set_rule_embed(
+        &mut self,
+        tables: &std::sync::Arc<super::rule_embed::TrainedTables>,
+        weight: f32,
+    ) {
+        if let Self::Flat(index) = self {
+            index.set_rule_embed(tables, weight);
+        }
+    }
+}
+
 /// The cross-domain latent matcher — owns the router + one index per enabled
 /// domain.
 ///
@@ -127,7 +207,7 @@ pub struct LatentMatcher {
     rerank_mode: super::instantiation_rerank::RerankMode,
     clippy: Option<RuleIndex>,
     perf: Option<RuleIndex>,
-    kernel: Option<RuleIndex>,
+    kernel: Option<KernelIndex>,
     sec: Option<RuleIndex>,
     docker: Option<RuleIndex>,
     dist: Option<RuleIndex>,
@@ -249,7 +329,7 @@ impl LatentMatcher {
         // same lane discipline: unused when every consumer domain is off
         #[cfg_attr(not(feature = "clippy_lints"), allow(unused_macros))]
         macro_rules! index_domain {
-            ($var:ident, $domain:expr, $corpus:expr) => {{
+            ($domain:expr, $corpus:expr, $index_ctor:expr) => {{
                 let entries: Vec<_> = $corpus;
                 let mut pattern_texts = Vec::with_capacity(entries.len());
                 for (rule_id, buggy, fixed) in &entries {
@@ -268,13 +348,16 @@ impl LatentMatcher {
                     .into_iter()
                     .map(|(rule_id, buggy, _fixed)| (rule_id, buggy))
                     .collect();
-                Some(RuleIndex::build_with(patterns, config)?)
+                // The constructor tail is per-domain: `RuleIndex::build_with`
+                // (owned patterns) for the six flat domains, a borrowing
+                // closure over `KernelIndex::build` for kernel — which
+                // selects flat vs route-narrowed under Issue 196's feature.
+                Some(($index_ctor)(patterns, config)?)
             }};
         }
 
         #[cfg(feature = "clippy_lints")]
         let clippy = index_domain!(
-            clippy,
             DomainId::Clippy,
             overlay_for(DomainId::Clippy).unwrap_or_else(|| {
                 crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
@@ -287,14 +370,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "clippy_lints"))]
         let clippy = None;
 
         #[cfg(feature = "rust_perf")]
         let perf = index_domain!(
-            perf,
             DomainId::Perf,
             overlay_for(DomainId::Perf).unwrap_or_else(|| {
                 crate::domains::rust_perf::RustPerfDomain::build_corpus()
@@ -307,14 +390,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "rust_perf"))]
         let perf = None;
 
         #[cfg(feature = "kernel_opt")]
         let kernel = index_domain!(
-            kernel,
             DomainId::Kernel,
             overlay_for(DomainId::Kernel).unwrap_or_else(|| {
                 crate::domains::kernel_opt::KernelOptDomain::build_corpus()
@@ -327,14 +410,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            |patterns: Vec<(String, String)>, config| KernelIndex::build(&patterns, config)
         );
         #[cfg(not(feature = "kernel_opt"))]
         let kernel = None;
 
         #[cfg(feature = "sec")]
         let sec = index_domain!(
-            sec,
             DomainId::Sec,
             overlay_for(DomainId::Sec).unwrap_or_else(|| {
                 crate::domains::sec::SecDomain::build_corpus()
@@ -347,14 +430,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "sec"))]
         let sec = None;
 
         #[cfg(feature = "docker")]
         let docker = index_domain!(
-            docker,
             DomainId::Docker,
             overlay_for(DomainId::Docker).unwrap_or_else(|| {
                 crate::domains::docker::DockerDomain::build_corpus()
@@ -367,14 +450,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "docker"))]
         let docker = None;
 
         #[cfg(feature = "dist")]
         let dist = index_domain!(
-            dist,
             DomainId::Dist,
             overlay_for(DomainId::Dist).unwrap_or_else(|| {
                 crate::domains::dist::DistDomain::build_corpus()
@@ -387,14 +470,14 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "dist"))]
         let dist = None;
 
         #[cfg(feature = "shader_perf")]
         let shader_perf = index_domain!(
-            shader_perf,
             DomainId::ShaderPerf,
             overlay_for(DomainId::ShaderPerf).unwrap_or_else(|| {
                 crate::domains::shader_perf::ShaderPerfDomain::build_corpus()
@@ -407,7 +490,8 @@ impl LatentMatcher {
                         )
                     })
                     .collect::<Vec<_>>()
-            })
+            }),
+            RuleIndex::build_with
         );
         #[cfg(not(feature = "shader_perf"))]
         let shader_perf = None;
@@ -475,7 +559,6 @@ impl LatentMatcher {
         for index in [
             &mut self.clippy,
             &mut self.perf,
-            &mut self.kernel,
             &mut self.sec,
             &mut self.docker,
             &mut self.dist,
@@ -485,6 +568,13 @@ impl LatentMatcher {
         .flatten()
         {
             index.set_differential_anchor(lambda);
+        }
+        // Kernel dispatches through [`KernelIndex`] (flat or route-narrowed,
+        // Issue 196) — the rider forwards to the flat index's own anchor or
+        // to every slice + tail (the per-domain rider semantics).
+        #[cfg(feature = "kernel_opt")]
+        if let Some(kernel_index) = self.kernel.as_mut() {
+            kernel_index.set_differential_anchor(lambda);
         }
         self
     }
@@ -570,7 +660,6 @@ impl LatentMatcher {
         for index in [
             &mut self.clippy,
             &mut self.perf,
-            &mut self.kernel,
             &mut self.sec,
             &mut self.docker,
             &mut self.dist,
@@ -580,6 +669,13 @@ impl LatentMatcher {
         .flatten()
         {
             index.set_rule_embed(tables, weight);
+        }
+        // Kernel dispatches through [`KernelIndex`] — the trained term is a
+        // FLAT-index rider: the narrowed posture (Issue 196) does not apply
+        // it (the disclosed interaction, route_narrow module docs).
+        #[cfg(feature = "kernel_opt")]
+        if let Some(kernel_index) = self.kernel.as_mut() {
+            kernel_index.set_rule_embed(tables, weight);
         }
         self
     }
@@ -680,72 +776,84 @@ impl LatentMatcher {
         };
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
-            // Direct field access (not `index_for`) so the immutable index
-            // borrow + the mutable scratch borrow stay provably disjoint.
-            let index = match domain {
-                DomainId::Clippy => self.clippy.as_ref(),
-                DomainId::Perf => self.perf.as_ref(),
-                DomainId::Kernel => self.kernel.as_ref(),
-                DomainId::Sec => self.sec.as_ref(),
-                DomainId::Docker => self.docker.as_ref(),
-                DomainId::Dist => self.dist.as_ref(),
-                DomainId::ShaderPerf => self.shader_perf.as_ref(),
-            };
-            if let Some(index) = index {
-                // Retrieve a POOL deeper than the caller's top_k: re-ranking
-                // can only promote a rule that was retrieved, and the residual
-                // T3.5.2 misses sat at rank 2-3 (T3.5.4).
-                #[cfg(feature = "demonstrability_gate")]
-                let mut pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
-                #[cfg(not(feature = "demonstrability_gate"))]
-                let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
-                // Issue 134 T2 (cfg(demonstrability_gate)): scale the
-                // fan-out width by the domain's measured demonstrability
-                // factor — identity returns the base EXACTLY (the
-                // byte-identity fast path; the default posture).
-                #[cfg(feature = "demonstrability_gate")]
-                {
-                    pool = self.depth_policy.scale(domain.label(), pool);
-                }
-                let mut rules = index
-                    .suggest_deep_into(code, pool, &mut self.scratch)
-                    .to_vec();
-                // Issue 102 T2/T3: the active-set honor — demoted rules
-                // leave the fan-out BEFORE instantiation marking + rerank +
-                // truncate, so the surviving pool fills top_k. Oracle
-                // ANCHORS pass through untouched (`push_anchor` reads the
-                // rule book, not this list): an anchor is real-clippy
-                // ground truth, and demotion is a similarity-fan-out
-                // lifecycle operation, never an oracle override — the fix
-                // lane's proposer honor + auto re-admit carry the demotion
-                // there (coordinator-wired). The is_empty guard keeps the
-                // default posture byte-identical (zero work, zero
-                // reallocation).
-                if !self.active_exclusions.is_empty() {
-                    let key = active_set_domain_key(domain);
-                    rules.retain(|r| !self.active_exclusions.excludes(key, &r.rule_id));
-                }
-                if let Some(file) = &parsed {
-                    super::instantiation_rerank::mark_instantiation_with_file(
-                        domain,
-                        code,
-                        file,
-                        &mut rules,
-                        self.rerank_mode,
-                    );
-                }
-                // No parse (or Off): no evidence in any domain — identical to
-                // the per-domain `mark_instantiation` short-circuit.
-                super::instantiation_rerank::rerank(&mut rules);
-                // Issue 134 T2 (cfg(demonstrability_gate)): the truncation K
-                // scales by the SAME factor as the pool above (a max is
-                // preserved under positive scaling, so pool >= k holds); K is
-                // clamped to >= 1 — a depth is never zeroed.
-                #[cfg(feature = "demonstrability_gate")]
-                let top_k = self.depth_policy.scale(domain.label(), top_k).min(pool);
-                rules.truncate(top_k);
-                out.push((domain, rules));
+            // Issue 134 T2 (cfg(demonstrability_gate)): scale the
+            // fan-out width by the domain's measured demonstrability
+            // factor — identity returns the base EXACTLY (the
+            // byte-identity fast path; the default posture).
+            // Retrieve a POOL deeper than the caller's top_k: re-ranking
+            // can only promote a rule that was retrieved, and the residual
+            // T3.5.2 misses sat at rank 2-3 (T3.5.4).
+            #[cfg(feature = "demonstrability_gate")]
+            let mut pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
+            #[cfg(not(feature = "demonstrability_gate"))]
+            let pool = top_k.max(super::instantiation_rerank::RERANK_POOL);
+            #[cfg(feature = "demonstrability_gate")]
+            {
+                pool = self.depth_policy.scale(domain.label(), pool);
             }
+            // Field-direct index access (not a helper) so the immutable
+            // index borrow + the mutable scratch borrow stay provably
+            // disjoint. Kernel dispatches through [`KernelIndex`] — flat or
+            // route-narrowed (Issue 196) — with the same scratch.
+            let mut rules = if domain == DomainId::Kernel {
+                match self.kernel.as_ref() {
+                    Some(kernel_index) => kernel_index
+                        .suggest_deep_into(code, pool, &mut self.scratch)
+                        .to_vec(),
+                    None => continue,
+                }
+            } else {
+                let index = match domain {
+                    DomainId::Clippy => self.clippy.as_ref(),
+                    DomainId::Perf => self.perf.as_ref(),
+                    DomainId::Sec => self.sec.as_ref(),
+                    DomainId::Docker => self.docker.as_ref(),
+                    DomainId::Dist => self.dist.as_ref(),
+                    DomainId::ShaderPerf => self.shader_perf.as_ref(),
+                    DomainId::Kernel => unreachable!("handled above"),
+                };
+                let Some(index) = index else {
+                    continue;
+                };
+                index
+                    .suggest_deep_into(code, pool, &mut self.scratch)
+                    .to_vec()
+            };
+            // Issue 102 T2/T3: the active-set honor — demoted rules
+            // leave the fan-out BEFORE instantiation marking + rerank +
+            // truncate, so the surviving pool fills top_k. Oracle
+            // ANCHORS pass through untouched (`push_anchor` reads the
+            // rule book, not this list): an anchor is real-clippy
+            // ground truth, and demotion is a similarity-fan-out
+            // lifecycle operation, never an oracle override — the fix
+            // lane's proposer honor + auto re-admit carry the demotion
+            // there (coordinator-wired). The is_empty guard keeps the
+            // default posture byte-identical (zero work, zero
+            // reallocation).
+            if !self.active_exclusions.is_empty() {
+                let key = active_set_domain_key(domain);
+                rules.retain(|r| !self.active_exclusions.excludes(key, &r.rule_id));
+            }
+            if let Some(file) = &parsed {
+                super::instantiation_rerank::mark_instantiation_with_file(
+                    domain,
+                    code,
+                    file,
+                    &mut rules,
+                    self.rerank_mode,
+                );
+            }
+            // No parse (or Off): no evidence in any domain — identical to
+            // the per-domain `mark_instantiation` short-circuit.
+            super::instantiation_rerank::rerank(&mut rules);
+            // Issue 134 T2 (cfg(demonstrability_gate)): the truncation K
+            // scales by the SAME factor as the pool above (a max is
+            // preserved under positive scaling, so pool >= k holds); K is
+            // clamped to >= 1 — a depth is never zeroed.
+            #[cfg(feature = "demonstrability_gate")]
+            let top_k = self.depth_policy.scale(domain.label(), top_k).min(pool);
+            rules.truncate(top_k);
+            out.push((domain, rules));
         }
         out
     }
@@ -762,22 +870,36 @@ impl LatentMatcher {
         domain: DomainId,
         code: &str,
     ) -> Option<(Vec<ScoredRule>, Vec<ScoredRule>)> {
-        let index = match domain {
-            DomainId::Clippy => self.clippy.as_ref(),
-            DomainId::Perf => self.perf.as_ref(),
-            DomainId::Kernel => self.kernel.as_ref(),
-            DomainId::Sec => self.sec.as_ref(),
-            DomainId::Docker => self.docker.as_ref(),
-            DomainId::Dist => self.dist.as_ref(),
-            DomainId::ShaderPerf => self.shader_perf.as_ref(),
-        }?;
-        let mut pool = index
-            .suggest_deep_into(
-                code,
-                super::instantiation_rerank::RERANK_POOL,
-                &mut self.scratch,
-            )
-            .to_vec();
+        // Kernel dispatches through [`KernelIndex`] — flat or route-narrowed
+        // (Issue 196); the other six are flat `RuleIndex` fields. Field-
+        // direct access keeps the index borrow disjoint from the scratch.
+        let mut pool = if domain == DomainId::Kernel {
+            self.kernel
+                .as_ref()?
+                .suggest_deep_into(
+                    code,
+                    super::instantiation_rerank::RERANK_POOL,
+                    &mut self.scratch,
+                )
+                .to_vec()
+        } else {
+            let index = match domain {
+                DomainId::Clippy => self.clippy.as_ref(),
+                DomainId::Perf => self.perf.as_ref(),
+                DomainId::Sec => self.sec.as_ref(),
+                DomainId::Docker => self.docker.as_ref(),
+                DomainId::Dist => self.dist.as_ref(),
+                DomainId::ShaderPerf => self.shader_perf.as_ref(),
+                DomainId::Kernel => unreachable!("handled above"),
+            }?;
+            index
+                .suggest_deep_into(
+                    code,
+                    super::instantiation_rerank::RERANK_POOL,
+                    &mut self.scratch,
+                )
+                .to_vec()
+        };
         // Issue 102 T2/T3: same honor as `suggest_all_domains` — the
         // retrieved pool drops demoted rules before the ranked copy, so
         // pool + ranked agree on what the fan-out serves.

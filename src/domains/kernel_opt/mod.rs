@@ -41,6 +41,12 @@ use crate::domain::{HealDomain, HealEntry};
 pub mod corpus;
 pub mod cube_extract;
 pub mod router;
+
+/// Issue 196: the route-narrowed kernel retrieval (opt-in `kernel_route_narrow`) —
+/// the matcher's kernel index as 15 per-category slices + a bounded global tail.
+#[cfg(feature = "kernel_route_narrow")]
+pub mod route_narrow;
+
 pub mod thermal;
 pub mod wgsl_scan;
 

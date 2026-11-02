@@ -253,6 +253,15 @@ rust_perf_bench = ["rust_perf"]
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
 kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 
+# Issue 196: the route-narrowed kernel retrieval — 15 per-category
+# sub-indices + a bounded global tail; every query scores only its span's
+# routed expert slice + tail (the G5 cost-leg repair, Bench 125). OFF
+# posture byte-identical; design + disclosures in
+# domains/kernel_opt/route_narrow.rs. Implies latent_retrieval: the
+# narrowed index is a MATCHER index (the draft module's RuleIndex slices),
+# and the matcher only exists under latent_retrieval.
+kernel_route_narrow = ["kernel_opt", "latent_retrieval"]
+
 # Plan 202 R1 (2026-10-07): the escalation manifest — the operator-owned
 # ARMING surface for per-domain escalation (`.refine/escalation_manifest.json`),
 # consuming the SHARED katgpt-core `escalation_guard` primitive (Issue 923:
@@ -1198,6 +1207,17 @@ required-features = ["score_bench", "kernel_opt", "sec", "docker"]
 # Print-only report, always exit 0. Reads stores via /tmp mirrors only.
 [[example]]
 name = "tca_covariability_poc"
+required-features = ["latent_retrieval"]
+
+# Issue 191 bar 5 — the G5 utility/cost harness (Bench 125 + the Issue-196
+# census re-runs). Compiles at BOTH postures via cfg (kernel_opt off = the
+# OFF leg; on = the census). Uses the draft module's LatentMatcher, so it
+# needs the retrieval tree at minimum — without this row the auto-discovered
+# example fails `clippy --all-targets`/`cargo test` at default features
+# (the P43 law: a gated target without its row compiles to an error, and
+# the default lane is blind to why).
+[[example]]
+name = "kernel_goat_g5"
 required-features = ["latent_retrieval"]
 
 # E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).

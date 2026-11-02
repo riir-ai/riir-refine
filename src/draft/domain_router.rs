@@ -483,17 +483,27 @@ impl SpectralVocab {
     /// Tokens = runs of `[A-Za-z0-9_]` with length ≥ 2 (case-sensitive —
     /// Rust keywords + API casing carry signal).
     #[must_use]
-    #[allow(clippy::cast_precision_loss)] // token counts/totals are ≤ ~10⁵; f32 ranks them exactly
     pub fn build(domains: &[(DomainId, Vec<String>)], order: SpectralOrder) -> Self {
+        let texts: Vec<Vec<String>> = domains.iter().map(|(_, p)| p.clone()).collect();
+        Self::build_from_patterns(&texts, order)
+    }
+
+    /// [`SpectralVocab::build`] over RAW pattern groups — no `DomainId`
+    /// labels. The Issue-196 category router reuses the vocab machinery at
+    /// kernel-CATEGORY granularity (15 sibling groups of one domain), which
+    /// `DomainId` cannot type; group INDEX is the identity here.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)] // token counts/totals are ≤ ~10⁵; f32 ranks them exactly
+    pub fn build_from_patterns(group_texts: &[Vec<String>], order: SpectralOrder) -> Self {
         use std::collections::BTreeMap;
 
-        // Per-domain token counts (BTreeMap: deterministic iteration + no
+        // Per-group token counts (BTreeMap: deterministic iteration + no
         // hash-order leakage into the vocab ranking). Vec-per-token so the
-        // domain count is not hardcoded (4 domains under `sec`; Plan 018).
-        let ndomains = domains.len();
+        // group count is not hardcoded (4 domains under `sec`; Plan 018).
+        let ndomains = group_texts.len();
         let mut counts: BTreeMap<&str, Vec<u32>> = BTreeMap::new();
         let mut totals = vec![0u64; ndomains];
-        for (di, (_id, patterns)) in domains.iter().enumerate() {
+        for (di, patterns) in group_texts.iter().enumerate() {
             for pattern in patterns {
                 for_each_token(pattern, &mut |tok| {
                     counts.entry(tok).or_insert(vec![0; ndomains])[di] += 1;

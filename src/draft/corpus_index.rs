@@ -63,13 +63,15 @@ pub struct ScoredRule {
 #[derive(Default)]
 pub struct SuggestScratch {
     /// Accumulated retrieved candidates across the multi-scale queries of
-    /// one suggest call (cleared per call; capacity persists).
-    retrieved: Vec<riir_rag::RetrievedChunk>,
+    /// one suggest call (cleared per call; capacity persists). `pub(crate)`
+    /// so the Issue-196 narrowed kernel index reuses the SAME scratch
+    /// (one caller-owned buffer, the G4 discipline).
+    pub(crate) retrieved: Vec<riir_rag::RetrievedChunk>,
     /// Per-rule best score accumulator (cleared via `drain` per call — the
     /// owned keys move straight into `ranked`).
-    best: HashMap<String, f32>,
+    pub(crate) best: HashMap<String, f32>,
     /// Ranked output (cleared per call; capacity persists).
-    ranked: Vec<ScoredRule>,
+    pub(crate) ranked: Vec<ScoredRule>,
 }
 
 impl SuggestScratch {
@@ -84,6 +86,90 @@ impl SuggestScratch {
     pub fn ranked_capacity(&self) -> usize {
         self.ranked.capacity()
     }
+}
+
+/// The multi-scale index rows for one pattern text: the whole text plus
+/// each significant line (`>8` trimmed chars) of a multi-line pattern. The
+/// ONE definition of "significant line" — the flat build and the Issue-196
+/// narrowed kernel build's merged zone lookup share it, so the two zone
+/// maps can never drift apart on which rows exist.
+pub(crate) fn significant_lines(text: &str) -> impl Iterator<Item = &str> {
+    let multi_line = text.lines().count() > 1;
+    std::iter::once(text).chain(
+        text.lines()
+            .filter(move |line| multi_line && line.trim().len() > 8)
+            .map(str::trim),
+    )
+}
+
+/// Merge retrieved chunks → per-rule best score, reading `zone_lookup`
+/// (`zone_hash` → `rule_id`) and `config` (the fused-score weights). The shared
+/// merge core: `RuleIndex::rank_into` delegates with its own fields, and
+/// the Issue-196 narrowed kernel index calls it directly with its merged
+/// zone lookup — one scoring semantics, never a re-implementation.
+pub(crate) fn merge_retrieved_best(
+    zone_lookup: &HashMap<[u8; 32], String>,
+    config: &RetrievalConfig,
+    retrieved: &[riir_rag::RetrievedChunk],
+    best: &mut HashMap<String, f32>,
+) {
+    best.clear();
+    for chunk in retrieved {
+        let Some(rule_id) = zone_lookup.get(&chunk.zone_hash) else {
+            continue;
+        };
+        let latent = config.latent_weight * chunk.latent_score;
+        #[allow(unused_mut)] // `mut` is only exercised under `bonsai_retrieval`
+        let mut score = chunk.exact_score.map_or(latent, |exact| latent + exact);
+        // `dense_score` only exists on RetrievedChunk under riir-rag's
+        // `bonsai_embedder` cfg — gate the read, not just the weight.
+        #[cfg(feature = "bonsai_retrieval")]
+        if config.dense_weight > 0.0 {
+            if let Some(dense) = chunk.dense_score {
+                score += config.dense_weight * dense;
+            }
+        }
+        let entry = best.entry(rule_id.clone()).or_insert(f32::NEG_INFINITY);
+        if score > *entry {
+            *entry = score;
+        }
+    }
+}
+
+/// Drain the per-rule best map into `ranked`, sort (score desc, then the
+/// canonical `rule_id` order), and truncate to `top_k`. The `rule_id` tie-break
+/// is LOAD-BEARING, not cosmetic: `best` is a `HashMap`, so `.drain()` order
+/// varies per process (`RandomState`), and without a total order two
+/// equal-scored rules land in drain-luck order — which rule survives the
+/// `top_k` truncation below then differs run to run (the
+/// `t48_gp_acquisition_ab` ordering A/B flaked exactly this way: the set
+/// flipped at the pool boundary while every aggregate jittered).
+/// `total_cmp` + `rule_id` is the same canonical key order
+/// `instantiation_rerank::rerank` and the eval's `canonical_rank` already
+/// apply — this aligns the substrate with them so the whole retrieval stack
+/// is order-deterministic.
+pub(crate) fn finalize_ranked<'s>(
+    best: &mut HashMap<String, f32>,
+    ranked: &'s mut Vec<ScoredRule>,
+    top_k: usize,
+) -> &'s [ScoredRule] {
+    ranked.clear();
+    // drain() moves the owned rule-id Strings straight into the output —
+    // no per-rule re-allocation for keys.
+    for (rule_id, score) in best.drain() {
+        ranked.push(ScoredRule {
+            rule_id,
+            score,
+            instantiates: false,
+        });
+    }
+    ranked.sort_unstable_by(|a, b| {
+        b.score
+            .total_cmp(&a.score)
+            .then_with(|| a.rule_id.cmp(&b.rule_id))
+    });
+    let len = ranked.len().min(top_k);
+    &ranked[..len]
 }
 
 /// Which BM25 tokenizer an index is built with (Plan 005 T3.5).
@@ -314,15 +400,12 @@ impl RuleIndex {
             let whole_hash = push(&text, &mut chunks);
             by_zone_hash.insert(whole_hash, rule_id.clone());
             // Multi-scale: index each significant line of a multi-line pattern
-            // under the SAME rule_id (>8 chars skips braces/blank noise).
-            if text.lines().count() > 1 {
-                for line in text.lines() {
-                    let trimmed = line.trim();
-                    if trimmed.len() > 8 {
-                        let line_hash = push(trimmed, &mut chunks);
-                        by_zone_hash.insert(line_hash, rule_id.clone());
-                    }
-                }
+            // under the SAME rule_id (>8 chars skips braces/blank noise) —
+            // the shared `significant_lines` definition (the narrowed kernel
+            // build's merged zone lookup reuses it, Issue 196).
+            for content in significant_lines(&text).skip(1) {
+                let line_hash = push(content, &mut chunks);
+                by_zone_hash.insert(line_hash, rule_id.clone());
             }
         }
         #[cfg(feature = "differential_anchor")]
@@ -488,13 +571,11 @@ impl RuleIndex {
                 None
             }
         };
-        let query = self.query_for(code);
         // Score-only retrieval (Issue 063): `rank_into` reads `zone_hash` +
         // scores only, so the packed `retrieve()` path's content Strings +
         // source lookups were 100% discarded work — measured 53-61% of each
         // retrieve call (the gate's G2 latency overrun).
-        let mut retrieved = self.retriever.retrieve_for_scoring(&query);
-        scratch.retrieved.append(&mut retrieved);
+        self.retrieve_scored_into(code, &mut scratch.retrieved);
         self.rank_into(
             phi,
             &scratch.retrieved,
@@ -544,9 +625,7 @@ impl RuleIndex {
             }
         };
         {
-            let query = self.query_for(code);
-            let mut retrieved_vec = self.retriever.retrieve_for_scoring(&query);
-            scratch.retrieved.append(&mut retrieved_vec);
+            self.retrieve_scored_into(code, &mut scratch.retrieved);
         }
         for line in code.lines() {
             let trimmed = line.trim();
@@ -558,9 +637,7 @@ impl RuleIndex {
             if trimmed.len() <= 8 || trimmed == code {
                 continue;
             }
-            let query = self.query_for(trimmed);
-            let mut line_vec = self.retriever.retrieve_for_scoring(&query);
-            scratch.retrieved.append(&mut line_vec);
+            self.retrieve_scored_into(trimmed, &mut scratch.retrieved);
         }
         self.rank_into(
             phi,
@@ -618,27 +695,7 @@ impl RuleIndex {
         best: &'s mut HashMap<String, f32>,
         ranked: &'s mut Vec<ScoredRule>,
     ) -> &'s [ScoredRule] {
-        best.clear();
-        for chunk in retrieved {
-            let Some(rule_id) = self.by_zone_hash.get(&chunk.zone_hash) else {
-                continue;
-            };
-            let latent = self.config.latent_weight * chunk.latent_score;
-            #[allow(unused_mut)] // `mut` is only exercised under `bonsai_retrieval`
-            let mut score = chunk.exact_score.map_or(latent, |exact| latent + exact);
-            // `dense_score` only exists on RetrievedChunk under riir-rag's
-            // `bonsai_embedder` cfg — gate the read, not just the weight.
-            #[cfg(feature = "bonsai_retrieval")]
-            if self.config.dense_weight > 0.0 {
-                if let Some(dense) = chunk.dense_score {
-                    score += self.config.dense_weight * dense;
-                }
-            }
-            let entry = best.entry(rule_id.clone()).or_insert(f32::NEG_INFINITY);
-            if score > *entry {
-                *entry = score;
-            }
-        }
+        merge_retrieved_best(&self.by_zone_hash, &self.config, retrieved, best);
         // The trained posture (Issue 126): score EVERY indexed rule through
         // the frozen towers and blend — additive on retrieved candidates,
         // stand-alone for rules retrieval missed entirely (the rescue path
@@ -658,33 +715,18 @@ impl RuleIndex {
                 }
             }
         }
-        ranked.clear();
-        // drain() moves the owned rule-id Strings straight into the output —
-        // no per-rule re-allocation for keys.
-        for (rule_id, score) in best.drain() {
-            ranked.push(ScoredRule {
-                rule_id,
-                score,
-                instantiates: false,
-            });
-        }
-        // The rule_id tie-break is LOAD-BEARING, not cosmetic: `best` is a
-        // HashMap, so `.drain()` order varies per process (RandomState), and
-        // without a total order two equal-scored rules land in drain-luck
-        // order — which rule survives the `top_k` truncation below then
-        // differs run to run (the t48_gp_acquisition_ab ordering A/B flaked
-        // exactly this way: the set flipped at the pool boundary while every
-        // aggregate jittered). `total_cmp` + rule_id is the same canonical
-        // key order `instantiation_rerank::rerank` and the eval's
-        // `canonical_rank` already apply — this aligns the substrate with
-        // them so the whole retrieval stack is order-deterministic.
-        ranked.sort_unstable_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-                .then_with(|| a.rule_id.cmp(&b.rule_id))
-        });
-        let len = ranked.len().min(top_k);
-        &ranked[..len]
+        finalize_ranked(best, ranked, top_k)
+    }
+
+    /// Retrieve scored candidates for `text` into `out` (append) — the ONE
+    /// retrieval primitive, shared by the flat suggest paths and the
+    /// Issue-196 narrowed kernel index (which queries its per-category
+    /// sub-indices through this method, never the substrate directly).
+    /// Score-only packed path: no content/source loads (Issue 063 law).
+    pub(crate) fn retrieve_scored_into(&self, text: &str, out: &mut Vec<riir_rag::RetrievedChunk>) {
+        let query = self.query_for(text);
+        let mut retrieved = self.retriever.retrieve_for_scoring(&query);
+        out.append(&mut retrieved);
     }
 }
 
