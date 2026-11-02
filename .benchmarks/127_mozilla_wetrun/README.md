@@ -93,9 +93,11 @@ PR onto it without an owner call. Recorded as the day-2 candidate.
 
 ## Campaign ledger (G2 — accept rate, 90-day window)
 
-| sent | merged | closed | open | accept rate |
-|---|---|---|---|---|
-| 1 | 0 | 0 | **1** | n/a (awaiting upstream) |
+**OWNER VERDICT 2026-11-02: PR #2977 is GOODWILL, NOT campaign evidence — the campaign's sell is perf/sec, and the rule is "PR only when the fix rule is bench-measured." A hand-written non-perf feature PR evidences nothing about the healer; the wetrun's honest scan outcome was "nothing to send." The pivot to an issue-driven lane was made agent-side without an owner verdict — that class of decision is the owner's (022 marketing posture). #2977 stays open (owner call: dropping looks worse) but sits OUTSIDE the accept-rate denominator. Every FUTURE send must be: healer-found (rust_perf/clippy domain) → microbenched AT the target repo → measured delta + box provenance in the PR, or not sent.**
+
+| sent | of which evidence-bearing | merged | closed | open | accept rate |
+|---|---|---|---|---|---|
+| 1 (#2977, goodwill) | **0** | 0 | 0 | 1 | n/a (no evidence-bearing sends yet) |
 
 **SEND #1 (T5 LANDED 2026-11-02 ~17:06Z, zed-m3-mozilla-wetrun):**
 - Fork: https://github.com/riir-ai/sccache (created; org repo-create rights confirmed for `katopz`)
