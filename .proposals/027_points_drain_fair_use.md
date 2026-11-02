@@ -35,9 +35,10 @@ A client-reported meter cannot bind a patched client (the client is open source;
 `RIIR_REFINE_OFFLINE=1` or a dropped report would zero it). So the meter of record
 lives where the spend happens: **the hosted instinct seat counts what it serves**.
 
-- **Per-call attestation (identity on the seat request).** The client attaches three
+- **Per-call attestation (identity on the seat request).** The client attaches four
   HTTP headers — `X-Points-Account: <account_id hex>` + `X-Points-Pubkey: <ed25519
-  pubkey hex>` + `X-Points-Sig: <ed25519 sig>` — over
+  pubkey hex>` + `X-Points-Seq: <decimal, UNTRUSTED transport>` + `X-Points-Sig:
+  <ed25519 sig>` — over
   `account_id ‖ utc_day ‖ call_seq ‖ blake3(request_body)`. Headers, not JSON
   fields: the seat's `/decide` envelope is the **frozen v1 decision_wire contract**
   (riir-reflex issue 074 R7); unknown headers are ignored by today's readers, so
@@ -48,15 +49,25 @@ lives where the spend happens: **the hosted instinct seat counts what it serves*
   no registry lookup needed to VERIFY; a fresh unregistered key verifies fine),
   then verifies the signature (anti-spoof: nobody can attribute calls to someone
   else's account and drain THEIR points; the body hash ties each signature to the
-  exact request it authenticates). `call_seq` is a per-process counter checked at
-  the seat through a **replay window** — a fixed per-`(account, day)` bitmap over
-  the last N sequence numbers (the IPsec anti-replay shape): unseen-and-in-window
+  exact request it authenticates). **The seq is TRANSPORT, not authority:**
+  Ed25519 has no message recovery, so the seat cannot reconstruct the signed
+  payload without the seq — the header supplies it, the signature AUTHENTICATES
+  it (a forged header fails the sig → the anonymous posture), and the replay
+  window reads the AUTHORITATIVE seq from the VERIFIED payload bytes `[42..50]`
+  (offset 32+10, u64 BE), never from the header. `call_seq` is a per-process
+  counter checked at the seat through a **replay window** — a fixed per-`(account, day)` bitmap
+  over the last N sequence numbers (the IPsec anti-replay shape): unseen-and-in-window
   accepts, below-window rejects as replay — because several concurrent `cargo
   refine` runs (worktrees, parallel agents — this workspace's ordinary posture)
   share one account and day, and a strictly-increasing check would drop their
   out-of-order calls to the anonymous posture. Account EXISTENCE (joined? has
   balance?) is a seat-side lookup that fails gracefully to the unjoined posture —
   verification and enforcement are independent steps.
+  *(Amendment 1, 2026-11-02: the seq transport header was added post-verdict when
+  the instinct seat lane (plan 326 T8–T12, `22ff162`) found the three-header wire
+  unverifiable — the round-2/3 reviews and this proposal's text carried the gap;
+  the fix changes no security property: the seq was already signature-bound, it
+  just needed a transport. Landed: refine `943de6a5`, ledger `032f1ea`.)*
 - **Seat-side day counters** keyed `(account, utc_day)`: `free_calls ≤ A`,
   `billable_calls ≤ B` (billable only while the seat's cached balance for the
   account is `≥ R`). At `A + B` the seat refuses further hosted calls that day →
@@ -152,8 +163,9 @@ flag.
 
 ### Wire changes (additive only)
 
-- Seat request: the three attestation headers (outside the frozen JSON contract;
-  old seats ignore them, old clients omit them — byte-compatible both directions).
+- Seat request: the four attestation headers (outside the frozen JSON contract;
+  old seats ignore them, old clients omit them — byte-compatible both directions;
+  amendment 1 adds the seq transport).
 - `/points/balance` gains `drain_state` (additive serde, the `pay` precedent):
   `{ allowance_remaining_today, billable_ceiling_today, rate_served }` — the
   client's pre-check constants come from the SERVER (`A_served`, `B_served`,

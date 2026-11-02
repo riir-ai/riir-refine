@@ -85,6 +85,7 @@ contribution / contributor / contribution points — never mining/mine/miner.
 | Contribution rows | fix outcomes the user consented to share | server store (existing sync-payload lane) | corpus (MIT) after review + proven | permanent — **history is never erased by expiry** (verdict r1 GAP 4b: only the rank *weight* decays) | n/a |
 | Rank weight | derived: decaying function of permanent contributions | derived at epoch recompute | leaderboard ranks only | recomputed per epoch | decays to zero; history unaffected |
 | Published anchors | per-epoch `anchor_root` over ledger state | status/explorer JSON | **roots only** — no client UUIDs, no GitHub ids in any published anchor or stat (Proposal 025 privacy row) | permanent | n/a |
+| Seat per-source key (drain free tier) | salted BLAKE3 of the client's /24 (IPv4) or /64 (IPv6) prefix; the salt rotates at the UTC day boundary, lives in hosted-seat memory only | hosted-seat day counters (report-only until ratification) | never published — per-source counts are internal sizing data; per-source HASHES go nowhere but the seat's local day dump, never past the day | THE DAY ONLY — the hash is never persisted past its UTC day (Proposal 027 two-caller-classes law) | automatic at the day boundary |
 
 ## 7. Feeds (what this note unblocks)
 
@@ -96,6 +97,11 @@ contribution / contributor / contribution points — never mining/mine/miner.
 3. **Plan 325 CLI surface** — the first-run consent UX, `join`/`leave` semantics,
    `RIIR_REFINE_OFFLINE=1`, and the sweep's positive assertions (the consent text
    above is asserted by the charitable gate once the surfaces ship).
+4. **Proposal 027 drain plane** — the seat-side per-source key (the §6 row above:
+   the free tier's enforcer, disclosed in plain words like every other surface);
+   the four-header attestation; the usage aggregates the plane ingests. *(2026-11-02
+   amendment: the seat row + this feed, landed with plan 326's seat lane —
+   owner-review item alongside the instinct BOUNDARY row.)*
 
 ## 8. Amendment rule
 
