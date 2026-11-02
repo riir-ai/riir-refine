@@ -49,7 +49,7 @@ pub const DEFAULT_GITHUB_CLIENT_ID: &str = "Ov23liAe58wk2byrYeOv";
 /// routes are Proposal 026 P2 (not deployed yet): until they answer, verbs
 /// refuse with [`PointsError::ServiceNotLive`], which the CLI renders as
 /// the W0 roadmap sentence. The env override is the operator's dial.
-pub const DEFAULT_SERVICE_URL: &str = "https://honor.riir.ai";
+pub const DEFAULT_SERVICE_URL: &str = "https://tuna.riir.ai";
 
 /// The join path (Proposal 026 §2).
 pub const JOIN_PATH: &str = "/points/join";
@@ -583,7 +583,7 @@ mod tests {
         assert!(response.joined);
         assert_eq!(response.epoch, 7);
         let seen = fake.seen.borrow();
-        assert!(seen[0].starts_with("POST https://honor.riir.ai/points/join"));
+        assert!(seen[0].starts_with("POST https://tuna.riir.ai/points/join"));
         assert!(seen[0].contains("octocat"));
         assert!(seen[0].contains("583231"));
     }
@@ -596,6 +596,6 @@ mod tests {
         assert_eq!(service_url(), DEFAULT_SERVICE_URL);
         // The default is the points plane's own host — never the KAT ledger
         // host (the charitable gate's hard-zero host class stays intact).
-        assert_eq!(DEFAULT_SERVICE_URL, "https://honor.riir.ai");
+        assert_eq!(DEFAULT_SERVICE_URL, "https://tuna.riir.ai");
     }
 }
