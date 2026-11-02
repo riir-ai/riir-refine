@@ -66,52 +66,7 @@ fn stage_all_coherent(
 fn coherent_load<T: Copy>(x: &T) -> T { *x } // every load: coherent path
 "
             .to_string(),
-            opt_pattern: "// optimized: the staging pass classifies by WRITE-SET, per POINTER.
-//   immutable across the dispatch -> ORDINARY loads (weight-cache path kept):
-//     packed weights | KV prefix strictly before `pos` | prior-dispatch inputs
-//   everything else (scratch, cross-task intermediates, tail rows) -> coherent.
-// Conflict/barrier classification stays BUFFER-granular conservative in the
-// same pass: aliases at different offsets coarsen to the whole buffer name.
-#[derive(Clone, Copy, PartialEq)]
-enum Scope {
-    Ordinary, // non-coherent: the read-only/weight-cache path serves it
-    Coherent, // racing or written: full coherence
-}
-
-fn classify(provably_immutable: bool) -> Scope {
-    // conservative default: only a PROVEN immutable class strips coherence
-    match provably_immutable {
-        true => Scope::Ordinary,
-        false => Scope::Coherent,
-    }
-}
-
-fn stage_write_set_scoped(
-    weights: &[u128],    // ordinary: no stage writes the weight buffer
-    kv_prefix: &[f32],   // ordinary: reads clamped into [0..pos); writes start AT pos
-    scratch: &mut [f32], // coherent: written mid-dispatch
-    pos: usize,
-) -> f32 {
-    let mut acc = 0.0;
-    for (i, w) in weights.iter().enumerate() {
-        // ordinary loads; the KV read is CLAMPED so speculation past the
-        // select is legal, and the clamp keeps the read inside the prefix
-        acc += ordinary_load(w) as f32 * ordinary_load(&kv_prefix[i.min(pos - 1)]);
-    }
-    scratch[0] = acc; // coherent store: the write set, unchanged
-    acc
-}
-
-fn ordinary_load<T: Copy>(x: &T) -> T { *x } // non-coherent path
-
-// the two views of ONE weight block take DIFFERENT qualifiers: the narrow
-// scale reinterpret keeps ordinary, the activation view stays coherent.
-#[test]
-fn narrow_scale_view_keeps_weight_cache_path() {
-    assert_eq!(classify(is_weight_block_view(SCALE_REINTERPRET)), Scope::Ordinary);
-    assert_eq!(classify(is_weight_block_view(ACTIVATION_VIEW)), Scope::Coherent);
-}
-"
+            opt_pattern: "// optimized: the staging pass classifies by WRITE-SET, per POINTER.\n//   immutable across the dispatch -> ORDINARY loads (weight-cache path kept):\n//     packed weights | KV prefix strictly before `pos` | prior-dispatch inputs\n//   everything else (scratch, cross-task intermediates, tail rows) -> coherent.\n// Conflict/barrier classification stays BUFFER-granular conservative in the\n// same pass: aliases at different offsets coarsen to the whole buffer name.\n#[derive(Clone, Copy, PartialEq, Eq, Debug)]\nenum Scope {\n    Ordinary, // non-coherent: the read-only/weight-cache path serves it\n    Coherent, // racing or written: full coherence\n}\n\nfn classify(provably_immutable: bool) -> Scope {\n    // conservative default: only a PROVEN immutable class strips coherence\n    match provably_immutable {\n        true => Scope::Ordinary,\n        false => Scope::Coherent,\n    }\n}\n\n/// a device pointer's view of one allocation. The tensor-view type cannot\n/// carry the qualifier, so the classification is a per-binding decision,\n/// never a type-level one.\nstruct View {\n    block: &'static str,  // the allocation the view names\n    narrow_scale: bool,   // a narrow scale reinterpret of the weight block\n}\n\n/// the SAME weight block, two views: the narrow scale reinterpret (a\n/// view of the immutable packed weights, not a cross-worker activation)\n/// and the backing activation pointer (a cross-worker intermediate).\nconst SCALE_REINTERPRET: View = View { block: \"weights\", narrow_scale: true };\nconst ACTIVATION_VIEW: View = View { block: \"weights\", narrow_scale: false };\n\n/// is this view of the IMMUTABLE weight block itself (the narrow scale\n/// load face)? An activation view of the same allocation is NOT - it\n/// stays coherent per the conservative default.\nfn is_weight_block_view(v: &View) -> bool {\n    v.block == \"weights\" && v.narrow_scale\n}\n\n/// the padded-speculation rider: ordinary cached reads may be speculated\n/// past a select, so the load index is clamped to the live prefix extent\n/// [0, pos) - a speculated read lands inside the prefix even when the\n/// select would have rejected the lane.\nfn clamped_prefix_index(i: usize, pos: usize) -> usize {\n    i.min(pos - 1) // caller guarantees pos >= 1 (the kernel runs on a live prefix)\n}\n\nfn stage_write_set_scoped(\n    weights: &[u128],    // ordinary: no stage writes the weight buffer\n    kv_prefix: &[f32],   // ordinary: reads clamped into [0..pos); writes start AT pos\n    scratch: &mut [f32], // coherent: written mid-dispatch\n    pos: usize,\n) -> f32 {\n    let mut acc = 0.0;\n    for (i, w) in weights.iter().enumerate() {\n        // ordinary loads; the KV read is CLAMPED so speculation past the\n        // select is legal, and the clamp keeps the read inside the prefix\n        acc += ordinary_load(w) as f32 * ordinary_load(&kv_prefix[clamped_prefix_index(i, pos)]);\n    }\n    scratch[0] = acc; // coherent store: the write set, unchanged\n    acc\n}\n\nfn ordinary_load<T: Copy>(x: &T) -> T { *x } // non-coherent path\n\n// the two views of ONE weight block take DIFFERENT qualifiers: the narrow\n// scale reinterpret keeps ordinary, the activation view stays coherent.\n#[test]\nfn narrow_scale_view_keeps_weight_cache_path() {\n    assert_eq!(classify(is_weight_block_view(&SCALE_REINTERPRET)), Scope::Ordinary);\n    assert_eq!(classify(is_weight_block_view(&ACTIVATION_VIEW)), Scope::Coherent);\n    // the immutable CLASSES strip coherence; the conservative default is a\n    // lift, never a strip: anything the write-set cannot prove stays coherent\n    assert_eq!(classify(true), Scope::Ordinary); // packed weights\n    assert_eq!(classify(false), Scope::Coherent); // racing scratch / unprovable alias\n    // the clamp keeps a speculated read inside the live prefix: any i\n    // lands in [0, pos) when the kernel runs on a live prefix\n    for i in [0usize, 3, 999, usize::MAX - 1] {\n        assert!(clamped_prefix_index(i, 4) < 4);\n    }\n    assert_eq!(clamped_prefix_index(999, 4), 3);\n}\n"
             .to_string(),
         },
         KernelRule {
@@ -131,75 +86,7 @@ fn encode_v0(n_ops: usize) -> Vec<bool> {
 }
 "
             .to_string(),
-            opt_pattern: "// optimized: OPEN-GROUP placement under whole-prefix semantics. Track the
-// ops since the last barrier; a new op joins unless it WAR/WAW/RAW-conflicts
-// with a member (buffer-granular: a row view aliases its whole base). On
-// conflict with the GROUP but not the immediate predecessor, the barrier
-// moves ONTO the predecessor -- the conflicting pair runs TOGETHER instead
-// of sandwiching the whole prefix.
-struct Op {
-    reads: &'static [&'static str],
-    writes: &'static [&'static str],
-    writes_known: bool,                  // false = writes everything it binds
-    variant_group: Option<&'static str>, // mutually exclusive per-T variants
-}
-
-// buffer granularity: compare BASE buffer names so aliases at different
-// offsets of one allocation coarsen to the whole buffer
-fn conflicts(a: &Op, b: &Op) -> bool {
-    let base = |s: &&str| s.split('.').next().unwrap_or(s);
-    let touches = |x: &Op| x.reads.iter().chain(x.writes.iter()).map(base);
-    let wr = |x: &Op| x.writes.iter().map(base);
-    wr(a).any(|w| touches(b).any(|t| t == w)) || wr(b).any(|w| touches(a).any(|t| t == w))
-}
-
-// one flag per op: barrier_before[i] -- the READER's flag orders the
-// dependency; ops without one may start while their predecessors still run
-fn encode_open_group(ops: &[Op]) -> Vec<bool> {
-    let mut barrier_before = vec![false; ops.len()];
-    let mut group: Vec<usize> = Vec::new(); // the open group
-    let mut open_variant: Option<&str> = None;
-    for (i, op) in ops.iter().enumerate() {
-        let same_variant = op.variant_group.is_some() && op.variant_group == open_variant;
-        // unknown write metadata writes everything it binds: never joins
-        let conflict =
-            op.writes_known && !same_variant && group.iter().any(|&g| conflicts(&ops[g], op));
-        if i == 0 {
-            barrier_before[i] = true; // the previous step's tail is real
-            group = vec![i];
-        } else if conflict {
-            let pred = group[group.len() - 1];
-            if group.len() >= 2 && ops[pred].variant_group.is_none() && !conflicts(&ops[pred], op)
-            {
-                // THE SWAP: the predecessor gates the group; this op runs
-                // WITH it -- the pair overlaps instead of sandwiching
-                barrier_before[pred] = true;
-                group = vec![pred, i];
-            } else {
-                barrier_before[i] = true;
-                group = vec![i];
-            }
-        } else {
-            group.push(i); // joins the open group: no barrier, may overlap
-        }
-        open_variant = op.variant_group;
-    }
-    barrier_before
-}
-
-#[test]
-fn conflict_with_group_not_predecessor_swaps() {
-    let ops = vec![
-        Op { reads: &[\"h\"], writes: &[\"x\"], writes_known: true, variant_group: None },
-        Op { reads: &[\"h\"], writes: &[\"y\"], writes_known: true, variant_group: None },
-        Op { reads: &[\"x\"], writes: &[\"n\"], writes_known: true, variant_group: None },
-    ];
-    let flags = encode_open_group(&ops);
-    // the barrier lands on the PREDECESSOR, not on the reader: the reader
-    // overlaps it instead of the whole prefix serializing behind its flag
-    assert_eq!(flags, vec![true, true, false]);
-}
-"
+            opt_pattern: "// optimized: OPEN-GROUP placement under whole-prefix semantics. Track the\n// ops since the last barrier; a new op joins unless it WAR/WAW/RAW-conflicts\n// with a member (buffer-granular: a row view aliases its whole base). On\n// conflict with the GROUP but not the immediate predecessor, the barrier\n// moves ONTO the predecessor - the conflicting pair runs TOGETHER instead\n// of sandwiching the whole prefix.\nstruct Op {\n    reads: &'static [&'static str],\n    writes: &'static [&'static str],\n    writes_known: bool,                  // false = writes everything it binds\n    variant_group: Option<&'static str>, // mutually exclusive per-T variants\n}\n\n// buffer granularity: compare BASE buffer names so aliases at different\n// offsets of one allocation coarsen to the whole buffer. A fn (not a\n// closure): one elided input lifetime ties the returned slice.\nfn base(s: &str) -> &str {\n    s.split('.').next().unwrap_or(s)\n}\n\nfn conflicts(a: &Op, b: &Op) -> bool {\n    let touches = |x: &Op| x.reads.iter().chain(x.writes.iter()).map(|s| base(s));\n    let wr = |x: &Op| x.writes.iter().map(|s| base(s));\n    wr(a).any(|w| touches(b).any(|t| t == w)) || wr(b).any(|w| touches(a).any(|t| t == w))\n}\n\n// one flag per op: barrier_before[i] -- the READER's flag orders the\n// dependency; ops without one may start while their predecessors still run\nfn encode_open_group(ops: &[Op]) -> Vec<bool> {\n    let mut barrier_before = vec![false; ops.len()];\n    let mut group: Vec<usize> = Vec::new(); // the open group\n    let mut open_variant: Option<&str> = None;\n    for (i, op) in ops.iter().enumerate() {\n        let same_variant = op.variant_group.is_some() && op.variant_group == open_variant;\n        // the variant join skips the check (mutually exclusive per-T arms);\n        // unknown write metadata WRITES EVERYTHING IT BINDS: never joins;\n        // otherwise the buffer-granular WAR/WAW/RAW test against the group\n        let conflict = if same_variant {\n            false\n        } else if !op.writes_known {\n            true\n        } else {\n            group.iter().any(|&g| conflicts(&ops[g], op))\n        };\n        if i == 0 {\n            barrier_before[i] = true; // the previous step's tail is real\n            group = vec![i];\n        } else if conflict {\n            let pred = group[group.len() - 1];\n            if group.len() >= 2 && ops[pred].variant_group.is_none() && !conflicts(&ops[pred], op)\n            {\n                // THE SWAP: the predecessor gates the group; this op runs\n                // WITH it -- the pair overlaps instead of sandwiching\n                barrier_before[pred] = true;\n                group = vec![pred, i];\n            } else {\n                barrier_before[i] = true;\n                group = vec![i];\n            }\n        } else {\n            group.push(i); // joins the open group: no barrier, may overlap\n        }\n        open_variant = op.variant_group;\n    }\n    barrier_before\n}\n\n#[test]\nfn conflict_with_group_not_predecessor_swaps() {\n    let ops = vec![\n        Op { reads: &[\"h\"], writes: &[\"x\"], writes_known: true, variant_group: None },\n        Op { reads: &[\"h\"], writes: &[\"y\"], writes_known: true, variant_group: None },\n        Op { reads: &[\"x\"], writes: &[\"n\"], writes_known: true, variant_group: None },\n    ];\n    let flags = encode_open_group(&ops);\n    // the barrier lands on the PREDECESSOR, not on the reader: the reader\n    // overlaps it instead of the whole prefix serializing behind its flag\n    assert_eq!(flags, vec![true, true, false]);\n    // the free pair: ops 0 and 1 share no buffer and both keep running\n    // while op 2 waits only on op 1's flag (v0 would have set all three)\n    assert_ne!(flags, vec![true, true, true]);\n    // the first op of the step always waits (the previous step's tail)\n    assert!(flags[0]);\n\n    // unknown write metadata writes everything it binds: it NEVER joins\n    // the open group (the conservative default), so its flag is set even\n    // though its named buffers conflict with nothing\n    let with_unknown = vec![\n        Op { reads: &[\"a\"], writes: &[\"x\"], writes_known: true, variant_group: None },\n        Op { reads: &[], writes: &[\"zz\"], writes_known: false, variant_group: None },\n    ];\n    let flags = encode_open_group(&with_unknown);\n    assert_eq!(flags, vec![true, true]);\n\n    // the predicated per-T variants of one GEMV are mutually exclusive and\n    // join WITHOUT a check - even a same-buffer write (WAW) joins\n    let variants = vec![\n        Op { reads: &[\"q\"], writes: &[\"o\"], writes_known: true, variant_group: Some(\"t\") },\n        Op { reads: &[\"q\"], writes: &[\"o\"], writes_known: true, variant_group: Some(\"t\") },\n    ];\n    let flags = encode_open_group(&variants);\n    assert_eq!(flags, vec![true, false]);\n\n    // a conflict with BOTH the group and the predecessor cannot swap: the\n    // barrier lands on the op itself and the group resets\n    let hard = vec![\n        Op { reads: &[\"h\"], writes: &[\"x\"], writes_known: true, variant_group: None },\n        Op { reads: &[\"x\"], writes: &[\"x\"], writes_known: true, variant_group: None },\n    ];\n    let flags = encode_open_group(&hard);\n    assert_eq!(flags, vec![true, true]);\n}\n"
             .to_string(),
         },
         KernelRule {
@@ -289,60 +176,9 @@ fn spin_bound_reports_failure_instead_of_hanging() {
         KernelRule {
             rule_id: "fusion-scope-by-barrier-cost-not-dispatch-count".to_string(),
             gpu_concept: "MECHANISM (the fusion boundary is a MEASURED cost decision, never a dispatch count): on Apple-class GPUs the dispatch boundary is cheap and global sync is polling-based, and the source priced the in-kernel alternative AT the dispatch boundary before refusing it — the pin's contract form, verbatim: 'An ICB dispatch boundary can provide ordering for whole-region dependencies. The compiler chooses between an in-kernel join and separate dispatches using the complete cost of the region. Global barriers are not assumed to be cheaper just because they occur inside one kernel.' (docs/design/apple-gpu.md:49-51). The boundary settled LAYER-WISE, verbatim: 'The compiler fuses operations when their dependencies, layouts, and storage requirements permit useful reuse. In selected GDN and full-attention configurations, one layer's mixer becomes a single megakernel; the MLP remains a separate region.' (docs/design/design.md:43-45) — never a whole-model megakernel. THREE COMPANION LAWS ride the same decision: (1) the dispatch-count proxy decouples from the traffic it proxies, verbatim 'Merely reducing the number of dispatches does not guarantee lower memory traffic: cross-worker intermediates can still require device storage.' (apple-gpu.md:40-41); (2) removing a barrier is a PROOF obligation while removing a dispatch is the timing question, verbatim 'Omitting a barrier requires dependency analysis, not a timing observation.' (apple-gpu.md:64) — and mixers.md states the negative form: 'Removing a dispatch is not sufficient evidence of a latency improvement.' (docs/design/mixers.md:104); (3) the residency/progress condition, verbatim 'The compiler does not assume that worker IDs identify physical cores or that an arbitrary number of threadgroups are resident simultaneously.' (apple-gpu.md:14-15) — a megakernel whose workers must ALL be co-resident to make progress deadlocks on a smaller GPU, so residency is a progress property to be scheduled, never an assumption; and the sharing cost of getting it wrong, verbatim: 'Each dispatch and command-buffer batch is bounded. GPU sharing and preemption vary with the device and OS, so the runtime cannot rely on immediate interruption of a long-running kernel. Cancellation stops future work after the active dispatch completes.' (apple-gpu.md:53-55) — one long non-preemptible dispatch freezes every other GPU client. THE DISCIPLINE THAT KEEPS IT HONEST: the compiler builds the UNFUSED normalized program as the control for every fused region, verbatim 'The unfused normalized program is returned as the numerical and performance control.' (region_fusion.py:4-5); regions are validated 'fusion regions must be disjoint, nonempty and uniquely named' (region_fusion.py:37); the genericity fence 'Model-specific names never enter the compiler.' (region_fusion.py:30); and the validation language, verbatim: 'A candidate is evaluated as a complete mixer or layer, including intermediate traffic, synchronization, and adjacent layout preparation. Algorithm and layout improvements must be distinguished from the effect of fusion itself.' (mixers.md:107-109). THE MEASUREMENT-PROVENANCE META-LAW: 'Device-specific measurements belong in backend configurations and benchmark artifacts; the contracts below must hold independently of one machine's timing results.' (apple-gpu.md:3-5) — the doc carries the CONTRACT (never assume), the numbers live in per-chip artifacts; the original design snapshot the pin points at (design.md:10-12 -> 46b2bc4) records the probe datum itself: in-kernel barriers priced at or above the dispatch boundary in fenced and unfenced forms, the remainder erased by real block work, and a long single dispatch stalling other GPU clients for over a second — carried as provenance, never quoted as a bar. Selection authority is the backend, verbatim: 'Fusion selection belongs to the chip backend and can depend on shapes, formats, active-row bounds, and context. An available fused implementation is not automatically the default. Native kernels remain available when their complete-region cost is better or the fusion's preconditions do not hold.' (design.md:52-54). REGIME: choosing fusion scope where dispatch overhead is small and global sync is polling-based (Apple-class; a long-dispatch sharing penalty on top). ANTI-REGIME: architectures with cheap hardware grid sync (CUDA cooperative launch) or dispatch overhead large enough to dominate — there the megakernel may win; measure, never assume either way. Distinct from epilogue-must-be-workgroup-local (gpu_03 — the OWNERSHIP legality of the same boundary: what an epilogue may read without cross-workgroup sync; this is the COST side), from grid-collapsing-mega-kernel-occupancy-trap (gpu_07 — the WebGPU trap where fusion collapses the GRID into one workgroup for lack of ANY cross-workgroup sync; this prices the boundary where a cross-worker protocol EXISTS and still loses), from fusion-payback-gated-on-per-dispatch-overhead (gpu_07 — prices the SAVINGS side, dispatches saved times per-dispatch overhead, against a fused penalty; this prices the COST side, the in-kernel barrier vs the boundary it replaces, plus the sharing penalty), and from dispatch-cost-sequential-measurement-not-single-op (gpu_07 — the measurement PROTOCOL for the per-dispatch half of that ratio; compose). Pairs with bounded-cross-worker-barrier-protocol-polling-fan-in-ladder (this batch — the protocol that prices the in-kernel alternative this rule declines). Source: lithos-ai/lithos-metal @ 236475fa716434807668562cd878ae623c2c1fd5 (Apache-2.0) -- docs/design/apple-gpu.md:3-5 + 14-15 + 40-41 + 49-55 + 64 + docs/design/design.md:41-54 + docs/design/mixers.md:104-109 + monolith/compiler/region_fusion.py:4-5 + 30 + 37. NotBenchable here (Metal/ICB decision content; the probe numbers are M5-class provenance-only and live in per-chip artifacts by the doc's own provenance law). Batch 223 / Plan 222 / Research 249 (drafts; Research 248 is the quote authority).".to_string(),
-            ref_shape: "// naive: fuse the WHOLE model into one megakernel because fewer-dispatches-
-// is-faster -- assumed, never measured; the in-kernel global barriers
-// between layers cost what dispatches cost, and the long single dispatch
-// freezes every other GPU client behind a non-preemptible kernel.
-fn whole_model_megakernel(tokens: &mut [f32], layers: usize) {
-    launch_persistent(|worker| {
-        for layer in 0..layers {
-            mixer_stage(tokens, layer, worker);
-            global_barrier(); // polling fan-in: costs a dispatch boundary
-        }
-        mlp_stage(tokens, worker);
-        global_barrier();
-    });
-}
-"
+            ref_shape: "// naive: fuse the WHOLE model into one megakernel because fewer-dispatches-\n// is-faster -- assumed, never measured; the in-kernel global barriers\n// between layers cost what dispatches cost, and the long single dispatch\n// freezes every other GPU client behind a non-preemptible kernel.\n#![allow(dead_code)]\n\nfn launch_persistent(f: impl FnOnce(usize)) {\n    f(0); // one worker stand-in for the persistent kernel\n}\n\n/// exact-integer stage math: every intermediate stays exact in f32, so\n/// any boundary placement that preserves op order is bit-identical\nfn mixer_stage(tokens: &mut [f32], layer: usize, worker: usize) {\n    let _ = worker;\n    for (i, t) in tokens.iter_mut().enumerate() {\n        *t = (*t + (i % 4) as f32) * 0.5 + layer as f32;\n    }\n}\n\nfn mlp_stage(tokens: &mut [f32], worker: usize) {\n    let _ = worker;\n    for t in tokens.iter_mut() {\n        *t = *t * 2.0 + 1.0;\n    }\n}\n\nfn global_barrier() {} // polling fan-in: costs a dispatch boundary\n\nfn whole_model_megakernel(tokens: &mut [f32], layers: usize) {\n    launch_persistent(|worker| {\n        for layer in 0..layers {\n            mixer_stage(tokens, layer, worker);\n            global_barrier(); // polling fan-in: costs a dispatch boundary\n        }\n        mlp_stage(tokens, worker);\n        global_barrier();\n    });\n}\n"
             .to_string(),
-            opt_pattern: "// optimized: the boundary is decided by the MEASURED ratio, and the
-// unfused normalized program stays runnable as the built-in control --
-// numerics oracle AND perf baseline for every future re-measurement.
-enum Scope {
-    FusedLayerWise,   // one layer's mixer per dispatch
-    DispatchBoundary, // the unfused control: never deleted, only re-measured
-}
-
-fn choose_scope(barrier_us: f32, dispatch_us: f32) -> Scope {
-    // in-kernel barrier >= dispatch boundary => fusing buys nothing; and
-    // removing a dispatch is not sufficient evidence of a latency win --
-    // measure the complete region, never the dispatch count alone.
-    match barrier_us < dispatch_us {
-        true => Scope::FusedLayerWise,
-        false => Scope::DispatchBoundary,
-    }
-}
-
-fn layer_wise_pipeline(tokens: &mut [f32], layers: usize, scope: Scope) -> Vec<f32> {
-    match scope {
-        Scope::FusedLayerWise => {
-            for layer in 0..layers {
-                dispatch_mixer(tokens, layer); // barrier = the dispatch boundary
-            }
-            dispatch_mlp(tokens);
-        }
-        Scope::DispatchBoundary => run_unfused_control(tokens, layers),
-    }
-    tokens.to_vec()
-}
-
-#[test]
-fn control_is_the_numerical_oracle_for_the_fused_region() {
-    let fused = layer_wise_pipeline(&mut real_tokens(), 64, Scope::FusedLayerWise);
-    let control = layer_wise_pipeline(&mut real_tokens(), 64, Scope::DispatchBoundary);
-    assert_eq!(fused, control); // fused regions validate against the control
-}
-"
+            opt_pattern: "// optimized: the boundary is decided by the MEASURED ratio, and the\n// unfused normalized program stays runnable as the built-in control --\n// numerics oracle AND perf baseline for every future re-measurement.\n// Equal costs are NOT a fusion win: an in-kernel barrier >= the dispatch\n// boundary means fusing buys nothing.\n#![allow(dead_code)]\n\n#[derive(Clone, Copy, PartialEq, Eq, Debug)]\nenum Scope {\n    FusedLayerWise,   // one layer's mixer per dispatch\n    DispatchBoundary, // the unfused control: never deleted, only re-measured\n}\n\nfn choose_scope(barrier_us: f32, dispatch_us: f32) -> Scope {\n    // in-kernel barrier >= dispatch boundary => fusing buys nothing; and\n    // removing a dispatch is not sufficient evidence of a latency win --\n    // measure the complete region, never the dispatch count alone.\n    match barrier_us < dispatch_us {\n        true => Scope::FusedLayerWise,\n        false => Scope::DispatchBoundary,\n    }\n}\n\n/// deterministic stand-in activations: small exact integers, so the\n/// fused and control runs are bit-identical by construction\nfn real_tokens() -> Vec<f32> {\n    (0..16).map(|i| ((i * 7 + 3) % 13) as f32 - 6.0).collect()\n}\n\n/// the mixer math - the SAME arithmetic either way: fusion moves the\n/// boundary, never the arithmetic\nfn mixer_stage(tokens: &mut [f32], layer: usize) {\n    for (i, t) in tokens.iter_mut().enumerate() {\n        *t = (*t + (i % 4) as f32) * 0.5 + layer as f32;\n    }\n}\n\nfn mlp_stage(tokens: &mut [f32]) {\n    for t in tokens.iter_mut() {\n        *t = *t * 2.0 + 1.0;\n    }\n}\n\n/// one dispatch per layer's mixer: the barrier is the dispatch boundary\nfn dispatch_mixer(tokens: &mut [f32], layer: usize) {\n    mixer_stage(tokens, layer);\n}\n\nfn dispatch_mlp(tokens: &mut [f32]) {\n    mlp_stage(tokens);\n}\n\n/// the UNFUSED normalized program, kept runnable as the control: the\n/// same stages, same order, boundaries between every stage\nfn run_unfused_control(tokens: &mut [f32], layers: usize) {\n    for layer in 0..layers {\n        mixer_stage(tokens, layer);\n    }\n    mlp_stage(tokens);\n}\n\nfn layer_wise_pipeline(tokens: &mut [f32], layers: usize, scope: Scope) -> Vec<f32> {\n    match scope {\n        Scope::FusedLayerWise => {\n            for layer in 0..layers {\n                dispatch_mixer(tokens, layer); // barrier = the dispatch boundary\n            }\n            dispatch_mlp(tokens);\n        }\n        Scope::DispatchBoundary => run_unfused_control(tokens, layers),\n    }\n    tokens.to_vec()\n}\n\n#[test]\nfn control_is_the_numerical_oracle_for_the_fused_region() {\n    let fused = layer_wise_pipeline(&mut real_tokens(), 64, Scope::FusedLayerWise);\n    let control = layer_wise_pipeline(&mut real_tokens(), 64, Scope::DispatchBoundary);\n    assert_eq!(fused, control); // fused regions validate against the control\n    // a nontrivial fixture: the control actually transformed the tokens\n    let zero = real_tokens();\n    assert_ne!(fused, zero);\n    // the boundary is a MEASURED ratio, never the dispatch count: a\n    // barrier at OR ABOVE the dispatch boundary is not a fusion win\n    assert_eq!(choose_scope(3.0, 5.0), Scope::FusedLayerWise); // barrier cheaper\n    assert_eq!(choose_scope(5.0, 5.0), Scope::DispatchBoundary); // equal: no win\n    assert_eq!(choose_scope(7.0, 5.0), Scope::DispatchBoundary); // barrier dearer\n}\n"
             .to_string(),
         },
     ]
