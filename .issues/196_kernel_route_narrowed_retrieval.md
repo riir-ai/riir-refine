@@ -1,8 +1,11 @@
 # Issue 196 — wire the category-expert router into the kernel_opt matcher index (the G5 cost-leg repair path)
 
-**Status:** OPEN — filed from Bench 125's cost-leg FAIL (added scan latency p50 38.795 ms/file
-vs the pre-registered p50 ≤ 1.0 ms ceiling, 39× over). Claimed by no one yet.
-**Claimed:** zed-riir-g5, 1793591179, expires 2026-11-04T16:26:19+00:00
+**Status:** CLOSED MEASURED-NEGATIVE (Bench 126, 2026-11-02) — R1 landed + measured; the narrowed
+index FAILS the pre-registered ceilings (and is SLOWER than flat: added p50 45.8 ms vs flat's
+36.3 ms vs the 1.0 ms ceiling) and loses the 15/15 utility floor (14/15). The flag stays opt-in,
+never default; the G5-cost fence stays up with the next lever named (substrate-level score-only
+retrieval, riir-neuron-db's lane). Lease closed: zed-riir-g5 epoch=1793591179 (claimed
+2026-11-02T16:26Z, expires 2026-11-04T16:26:19+00:00 — closed 2026-11-02 well before expiry).
 
 ## What happened
 
@@ -70,17 +73,29 @@ out to all 1051 rules. The router narrowing was never wired into the matcher.
 
 ## Tasks
 
-- [ ] R1 — the route-narrowed kernel index behind `kernel_route_narrow` (option (b) first:
-      route on the existing span embedding via a 15-column projection; the projection is
-      derived from the category rule-id clustering, deterministic, pinned in the corpus).
-- [ ] R2 — the census re-run at both postures (Bench 125's harness unchanged): utility leg
-      must still PASS (15/15 experts rank-1), recall delta disclosed per expert.
-- [ ] R3 — the cost re-run at the same ceilings; the honest verdict recorded (Bench 126 or
-      an addendum to 125) — including the possibility that 15× narrowing alone does not
-      reach 1.0 ms and the flag stays opt-in with the measured residual named.
-- [ ] R4 — the promotion-path decision: if the ceilings pass, the G5-cost axis of the
-      re-campaign unblocks (Bench 124 §Next step 3); if not, the re-campaign stays fenced
-      and the owner owns the re-registration call.
+- [x] R1 — the route-narrowed kernel index behind `kernel_route_narrow` (commit 06217f8f): the
+      option-(b) embedding-dot routing was implemented FIRST and REFUTED by measurement (kernel
+      top-1 100% → 16.7% ≈ random — the 8-D ModellessEmbedder is a hash-space signal, the Issue-020
+      finding); pivoted to the TF-cosine lexical router (`SpectralVocab::build_from_patterns`,
+      `Discriminative` order) at category granularity. The single-slice shape was ALSO refuted by
+      the K-sweep diagnostic (13/30 at K=1 → 29/30 at K=6); K=6 + tail (ROUTE_TAIL_RULES=128) is
+      the first point holding the retrieval-precision gate floors UNTOUCHED (no eval pin moved).
+      Full disclosures in `src/domains/kernel_opt/route_narrow.rs` module docs.
+- [x] R2 — the census re-run at both postures (Bench 125's harness + the rank1_rule_ids paired
+      disclosure): utility floor LOST at the narrow posture — 14/15 distinct rank-1 experts (expert
+      9 dropped out), 728/1051 cited (−22), 2,426/4,063 rank-1 flips, 0 spans lost. Recorded in
+      Bench 126 §R2.
+- [x] R3 — the cost re-run at the same ceilings, the honest verdict recorded (Bench 126): added
+      p50 45.849 ms / p95 219.815 ms vs the 1.0/5.0 ms ceilings — FAIL, and 26% SLOWER than the
+      flat reference at p50 (the 7-calls-per-query × per-call floor beats the ~2× mass cut; the
+      mechanism section is in Bench 126). The 15× narrowing plausibility argument was wrong about
+      the cost model, and quality demanded K≥6 (≈52% mass) anyway.
+- [x] R4 — the promotion-path decision, applied per the pre-registration: the ceilings do NOT
+      pass → the flag stays opt-in, promotion DENIED, no ceiling re-registration requested (the
+      residual is 46× the ceiling and moves the wrong direction), the re-campaign stays fenced
+      (Bench 124 §Next updated), and the next lever is named OUTSIDE this repo's shape:
+      substrate-level score-only retrieval (riir-rag, riir-neuron-db's lane) or a multi-scale
+      query-mass lever — both Bench-gated quality trades, never a refine-side index shape.
 
 ## Refs
 

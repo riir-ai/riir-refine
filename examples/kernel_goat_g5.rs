@@ -22,7 +22,13 @@
 //! ```sh
 //! cargo run --release --example kernel_goat_g5 -- --out /tmp/g5_off.json
 //! cargo run --release --example kernel_goat_g5 --features kernel_opt -- --out /tmp/g5_on.json
+//! cargo run --release --example kernel_goat_g5 --features kernel_route_narrow -- --out /tmp/g5_narrow.json
 //! ```
+//!
+//! The posture label is cfg-derived (`posture` field) — the flat ON run and
+//! the route-narrowed run emit the same schema so the runner script can
+//! diff any two (Issue 196 R2/R3: the census re-run + recall delta at the
+//! narrowed posture).
 //!
 //! No exit-code verdict here — the runner script owns the ceilings (the
 //! goat_g1/g2 precedent: the harness measures, the record adjudicates).
@@ -111,6 +117,10 @@ fn report_and_emit(
     let mut rank1_by_expert: BTreeMap<usize, usize> = BTreeMap::new();
     let mut cited_by_expert: BTreeMap<usize, usize> = BTreeMap::new();
     let mut cited_rules: BTreeSet<String> = BTreeSet::new();
+    // Issue 196 R2: per-span rank-1 kernel rule ids in walk order (last
+    // pass) — the paired disclosure the runner script diffs across ON
+    // postures (the rank-1 flip census: flat vs narrowed).
+    let mut rank1_rule_ids: Vec<String> = Vec::new();
     let mut kernel_spans = 0usize;
     let mut total_spans = 0usize;
 
@@ -147,6 +157,11 @@ fn report_and_emit(
                     }
                     cited_rules.insert(top.rule_id.clone());
                 }
+                rank1_rule_ids.push(
+                    rules
+                        .first()
+                        .map_or(String::new(), |r| r.rule_id.clone()),
+                );
                 for r in rules {
                     if let Some(e) = KernelExpertRouter::expert_for_rule(&r.rule_id) {
                         *cited_by_expert.entry(e).or_insert(0) += 1;
@@ -159,11 +174,17 @@ fn report_and_emit(
 
     let zero_match = total_rules - cited_rules.len();
     let distinct_rank1_experts = rank1_by_expert.len();
+    // The cfg-derived posture label — flat ON vs route-narrowed ON (Issue
+    // 196 R2/R3 run the same harness at both ON postures).
+    #[cfg(feature = "kernel_route_narrow")]
+    let posture = "kernel_opt ON + kernel_route_narrow";
+    #[cfg(not(feature = "kernel_route_narrow"))]
+    let posture = "kernel_opt ON";
 
     let mut json = String::new();
     writeln!(json, "{{").unwrap();
     writeln!(json, "  \"leg\": \"G5 utility/cost (Issue 191 bar 5)\",").unwrap();
-    writeln!(json, "  \"posture\": \"kernel_opt ON\",").unwrap();
+    writeln!(json, "  \"posture\": \"{posture}\",").unwrap();
     let root_json = root.replace(std::path::MAIN_SEPARATOR, "/");
     writeln!(json, "  \"corpus_root\": \"{root_json}\",").unwrap();
     writeln!(json, "  \"files\": {},", files.len()).unwrap();
@@ -197,6 +218,14 @@ fn report_and_emit(
         write!(json, "\"{e}\": {c}{comma} ").unwrap();
     }
     writeln!(json, "}},").unwrap();
+    // Issue 196 R2: per-span rank-1 ids, walk order (last pass). Empty
+    // string = the span had no kernel rank-1 (no kernel rules surfaced).
+    write!(json, "  \"rank1_rule_ids\": [").unwrap();
+    for (i, id) in rank1_rule_ids.iter().enumerate() {
+        let sep = if i == 0 { "" } else { ", " };
+        write!(json, "{sep}\"{id}\"").unwrap();
+    }
+    writeln!(json, "],").unwrap();
     writeln!(
         json,
         "  \"total_rules\": {total_rules}, \"cited_rules\": {}, \"zero_match_rules\": {zero_match},",

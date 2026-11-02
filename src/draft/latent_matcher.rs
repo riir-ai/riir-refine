@@ -136,6 +136,9 @@ pub(crate) enum KernelIndex {
     Narrowed(Box<crate::domains::kernel_opt::route_narrow::NarrowedKernelIndex>),
 }
 
+// The whole type is dead when the kernel domain is feature-off (the field
+// stays None; the enum exists only so the field type is posture-stable).
+#[cfg_attr(not(feature = "kernel_opt"), allow(dead_code))]
 impl KernelIndex {
     /// Build the kernel index — flat by default, route-narrowed under the
     /// feature. The single posture-selection point. The flat arm copies the
