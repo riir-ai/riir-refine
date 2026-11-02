@@ -158,6 +158,17 @@ blacklist. The send queue is a file the owner reviews; `--harvest-send` executes
   pushes fixes to upstream repos. Each lane feeds the other (harvest misses → mining
   intake; mined rules → harvest corpus).
 
+## The four send gates (owner verdict 2026-11-02 — binding, in order, ALL required)
+
+Every future send passes all four. A gate that fails means NO send — that is the gate working (Bench 127's lesson: a sent non-evidence PR is worse than no PR).
+
+- **G-PR1 — GOAT perf/sec gain with proof.** The fix must deliver a measured perf/sec win: before/after benched AT the target repo, their toolchain, a pinned reproducible harness (the Plan 224 shape), box-state provenance quoted (M3 law: free RAM, load, power source beside every number). No bench → no PR. Goodwill/non-perf sends no longer exist — #2977 was the last and it sits outside the campaign ledger.
+- **G-PR2 — Claude verdict AGREE.** Before any send, a delegated-owner Claude verdict judges (a) the slop quality of body + diff — zero invented facts (the #2977 hallucinated-tool-list lesson: a confident claim the spec contradicts is the one slop-tell that matters), plain fix voice, and (b) whether the gain claim is sound against the bench. Claude must AGREE; a REVISE loops back to fix and re-verdicts. No AGREE → no send.
+- **G-PR3 — SVG before/after chart.** The PR carries the comparison chart (Plan 224's SVG shape: before/after bars + per-row speedup, box provenance in the caption). The chart is the proof visual; no chart → no PR.
+- **G-PR4 — Owner fingerprint send.** Only the owner's Touch ID releases the send identity, per send (kat-secret `exec` — the touch-deploy pattern: `kat-secret exec gh-outbound-pr --env GH_TOKEN --why "send <repo> PR" -- gh pr create …`). The agent never pushes upstream on its own authority; the fingerprint IS the owner approval. The `gh-outbound-pr` token (repo-scoped) is owner-sealed in their own terminal when first needed; add the Known-tokens row to the touch-deploy skill at that sealing.
+
+The PR body (post-G-PR2) carries: the SVG + the measured delta + box provenance + the verification story — and NOTHING else (the attribution ban stands).
+
 ## GOAT gate
 
 - **G1 (correctness, per-PR):** created-warnings == 0; compile green at the target's
