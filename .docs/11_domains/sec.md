@@ -254,6 +254,44 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 325 (2026-11-02) — the uniffi-rs FFI-hygiene quartet
+
+Four suggest-only rules from the mozilla/uniffi-rs distill (Research 361,
+MPL-2.0 @ `ef9625b6` — cited as class provenance; the fixtures are ORIGINAL
+syntheses, never uniffi source). The sec FFI-hygiene family extended onto
+the pyo3/cxx/uniffi-class mixed-language surface. ALL
+NotBenchable-by-domain (correctness/liveness wins at the boundary, never
+latency — the dial9 split; the proof path is the fixture falsification
+arms + the integer-exact refcount ledger):
+
+| Rule | Family | Shape |
+|---|---|---|
+| `arc-refcount-across-raw-boundary` | `DropLeak` | a raw `Arc` pointer crossing an unsafe boundary has TWO custody regimes — BORROWED (`increment_strong_count` + deref) or CONSUMING (`from_raw` exactly once); mixing them (from_raw+forget, double from_raw, increment stacked on a consume) double-frees or leaks. The `into_raw` round-trip is the legitimate shape and suppresses the fn; `ManuallyDrop` custody suppresses. Detector `arc_raw_boundary::detect`; the waker-vtable class (uniffi future.rs clone/wake arms) |
+| `ffi-callback-invoke-outside-lock` | `Ffi` | a callback/waker INVOKED while its mutex guard is live — the cross-FFI ABBA deadlock (internal Mutex vs the foreign GIL/event-loop lock). Extract-under-lock, invoke-after-release. ADJACENT-DISTINCT from `host-lock-across-reentrant-blocking-call` (same-lock re-entry vs cross-FFI two-lock — in-rule adjudication note mandatory, reviewer-flippable). Detector `callback_lock_invoke::detect`; drop(g)/inner-scope/guard-tail gates |
+| `out-param-manuallydrop-not-maybeuninit` | `Ffi` | a caller-initialized repr(C) out-param takes `&mut ManuallyDrop<T>` (safe reads, set-twice = a visible leak), never `&mut MaybeUninit<T>`; MaybeUninit stays for callee-initializes scratch. Full-write sites fire; partial field-init keeps MaybeUninit (its legitimate home). Detector `outparam_init_contract::detect` |
+| `panic-handler-nested-catch-unwind` | `PanicSafety` | an error-REPORTING handler doing fallible work (`format!`/alloc) carries its own `catch_unwind` + graceful degradation — a panic on the handler path double-panics an active unwind and masks the original error. The handler PATH was unowned (`ffi-extern-fn-catch-unwind` owns the extern body wrapper, `drop-impl-no-panic` Drop bodies). Detector `panic_handler_guard::detect`; vocabulary-gated, logging-only bodies silent |
+
+The two stretch candidates are HONEST NON-CONVERSIONS at this batch: #5
+`null-sentinel-companion-conjunction` (B−) held at its own
+conjunction-or-demote bar (the conjunction fixture set needs the authoring
+budget the four mains consumed — a named lead for a future FFI batch); #6
+`vec-promote-manuallydrop-not-forget` (C+) thin + perf-neutral.
+
+Gates at landing: sec self-variants 35/35 top-1 (the out-param fixture
+carries a status-code return — the unit-return extern shape is the
+catch-unwind proposer's territory by its own scope line, and a fixture in
+that territory reads as that rule's bug under Structural rerank);
+router annotation (full seven-domain arm) re-pinned 84/195 → 85/210
+(measured 90/210 = 42.9%; the B131 sec-centroid mechanism compounding with
+the kernel arm's generic Rust-span attraction — the re-pin recorded
+in-code, gating stays killed); all-features lib 4466/0 (the b324-missed
+kernel-side rust_perf count witness repaired en route 289 → 292, the
+B266/B271/B305 missed-pin class); clippy −D × postures
+(default/sec/no-default/all-features) clean; score-bench run #220
+recorded (gen-1 heal 0.9636 FLAT, parse 1.0 — the clippy-seeded bench
+corpus unmoved, freeze tables NOT moved); binary rebuild NOT owed (sec is
+NOT in the release set — the manifest verified live).
+
 ## Property evidence — machine-checked (Kani, Issue 127)
 
 A second evidence axis beside probe evidence: Kani (model checking over
@@ -368,6 +406,12 @@ proposer.
   defined in-fixture) so the boundary-gate probe crate compiles. Workspace
   sweep: `examples/softmax_collapse_sweep.rs` (read-only; hits recorded in
   the issue).
+- Batch 325 (2026-11-02): corpus 31 → 35 (7 fixable + 28 suggest-only;
+  the uniffi-rs FFI-hygiene distill, Plan 327) — sec self-variants 35/35
+  top-1, router annotation (full seven-domain arm) re-pinned 84/195 →
+  85/210 (measured 90/210 = 42.9%, the re-pin recorded in-code); freeze
+  NOT owed (clippy-seeded corpus unmoved); binary rebuild NOT owed (sec
+  not in the release set).
 - Promotion to default: needs ≥1 workspace repo adopting sec in CI
 
 ## See also

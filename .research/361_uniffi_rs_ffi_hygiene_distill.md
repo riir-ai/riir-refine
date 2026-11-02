@@ -1,6 +1,6 @@
 # 361 — uniffi-rs FFI-Hygiene Distill
 
-**Status:** DISTILLED — pending owner decision (Plan 327 staged behind the live queue heads)
+**Status:** DISTILLED — batch landed (Batch 325, 2026-11-02: 4 of 6 candidates converted — rules 1–4; #5 held at its conjunction-or-demote bar and #6 held thin at authoring, both honest non-conversions named in the corpus + `.docs/11_domains/sec.md`)
 **Date:** 2026-11-02 (zed-m3-mozilla-quartet/M3, user-directed four-repo @distill — uniffi-rs + sccache + rust-code-analysis + supply-chain; this note covers uniffi-rs, its sibling note is `.research/362`)
 **Queue slot:** nominal batch per queue order / Plan 327 — staged behind the live queue heads
 
