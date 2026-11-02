@@ -2,6 +2,10 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-02 — Issue 197 CLOSED: the pre-existing develop reds healed (file removed per the noise-reduction rule — this row + commit `3c5004fb9` are the durable record)
+
+T5 pin moved `rust:1.98.1-alpine` → `rust:1.99.0-alpine` (riir-chain `de1b3d9f` bumped the tag deliberately; the file's own dated-comment precedent). All-features clippy: the Issue-153 doc comment re-attached to `run_update_surface_hooks` (orphaned by the Plan 325 insert `7b8aebe51` — root cause, not lint-silence), `doc_markdown` backticked, `cast_precision_loss` house-allow. Reproducers re-run green: docker_t5_control 10/10 · all-features clippy clean · points wired posture 3018 · regime 7/7. Claim `1c0a2c671` folded to the Lease-closed row.
+
 ## 2026-10-31 — Issue 175 REMOVED (mainnet frozen for refine): owner directive "no more mainnet" — the migration defers to this record + plan 302's re-genesis posture; proposal 023 status now DEFERRED-FROZEN. STANDING DIRECTIVE carried out of the file: any key ACTUALLY EXPOSED rotates NOW regardless of the freeze; routine rotation belongs to the re-genesis ceremony. Full file life: `git log --follow -- .issues/175_refine_mainnet_account_migration.md`. Part of the public-goods pivot (issue 192).
 
 ## 2026-10-30 — AGENTS.md compaction: the Role-bullet per-batch rule arcs (Batches 282–319) moved out of AGENTS.md
