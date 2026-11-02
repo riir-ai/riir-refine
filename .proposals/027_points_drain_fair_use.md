@@ -1,7 +1,7 @@
 # Proposal 027 — the points drain: the hosted-lane fair-use budget (rates, cap, refill, the O(1) gate)
 
-**Status:** Proposed — the §4 follow-up [Proposal 026](026_points_plane_riir_ledger.md) defers (issue 192 GAP 4); this proposal owns the numeric fair-use policy (drain rate, balance cap, refill paths) and the enforcement mechanism. The numbers below are the **PROPOSED defaults** — one owner ratification act pins them alongside the earn table + rank half-life (026 §3/§5.2), and nothing enforces before that act.
-**Claimed:** zed-m3-drain, 1793593066, expires 2026-11-04T04:17:46+00:00
+**Status:** Proposed — the §4 follow-up [Proposal 026](026_points_plane_riir_ledger.md) defers (issue 192 GAP 4); this proposal owns the numeric fair-use policy (drain rate, balance cap, refill paths) and the enforcement mechanism. The numbers below are the **PROPOSED defaults** — one owner ratification act pins them alongside the earn table + rank half-life (026 §3/§5.2), and nothing enforces before that act. Delegated verdict AGREE r3 (session `f64f7d90`, 2026-11-02 — three rounds: r1/r2 REVISE drove the meter server-side, the `B` ceiling, the unjoined consistency law, and the tiered fail).
+**Lease closed:** zed-m3-drain, 1793593066, claimed 2026-11-02, expired 2026-11-04T04:17:46+00:00 — filed + AGREE'd within the window (`24cee313c` r1, `a382e3563` r2, `fefce49f5` r3); execution plan: [Plan 326](../.plans/326_points_drain_phase12.md).
 
 ## TL;DR
 
@@ -141,6 +141,7 @@ the settle reconciliation reports it — caveat 2).
 | `B` — hard daily billable ceiling | **200 calls / UTC-day** | closes the 1-point-unlimited-day hole: max hosted calls/day = `A + B = 400` regardless of balance; the day-flag fee then bounds COST, `B` bounds CALLS |
 | `R` — billable-day fee | **2 points / billable day** | day-flag, not per-call: un-gameable, trivially deterministic. Under any plausible ratified earn (10–30/epoch ≈ 1.4–4.3/day), a hosted-heavy contributor pays ≈ half their earn rate — contributing stays above water; pure consumption drains |
 | `C` — spendable balance cap | **90 points** | this proposal's own bounded-drain-window rule, **[30 days, 2 years]** at the sustained billable rate — 90 / 2 = 45 days ✓. The window is ours (looser than the KAT free-grant's [7 days, 2 years] envelope-gate doctrine, `../riir-dao/crates/riir-dao/tests/envelope_gate.rs` + the riir-dao AGENTS envelope row, cited as lineage): `C` caps CONTRIBUTED balance, not a free grant — a contributor's earned runway should outlast a giveaway's |
+| `P` — per-source daily budget (the unjoined/anonymous free tier) | **SIZED AT RATIFICATION from the report-only counts** | the free tier's main enforcer (the consistency law) — deliberately NOT pre-numbered: the seat's pre-ratification report-only counting measures the real per-source distribution, and the ratified `P` must clear the shared-NAT edge case (a campus/carrier /24 is many humans; sizing from measured counts is the honest input, a guess is not) |
 | join grant | **none** | points come only from proven contribution; no faucet, no packs, no purchase — the D4 doctrine shape: contribute or the modelless path (which is the product's primary path anyway) |
 
 The window bounds [30 days, 2 years] are the INVARIANT; the absolutes are
@@ -297,11 +298,15 @@ the served reflex/rethink product economics; a client-side enforcement gate (nev
 ### Phase 2 — seat counting + service accounting (riir-instinct, riir-dapps)
 - Seat report-only counters + attestation verify; the aggregate export; the plane
   ingest route; `drain_state` on balance; the debit-at-settle path; enforcement
-  hooks wired but config-gated OFF; reconciliation test.
+  hooks wired but config-gated OFF; reconciliation test. The replay window is a
+  FIXED `N = 128` (the usual IPsec size) pinned by a test — in-window unseen
+  accepts, below-window rejects; wrapping it takes 128 distinct seqs per
+  `(account, day)`, far above any real day.
 
 ### Phase 3 — gates, ratification, promotion
-- G2 bench both postures; G3 full suites; read the report-only counts (measured
-  A/B sizing input); the joint owner ratification act (earn table + H + A/B/R/C in
+- G2 bench both postures; G3 full suites; read the report-only counts (the
+  measured A/B sizing input AND the `P` sizing input — the per-source
+  distribution); the joint owner ratification act (earn table + H + A/B/R/C/P in
   one sitting); deploy config; promote; publish the numbers on the fronts
   (Plan 324 G-B un-block).
 

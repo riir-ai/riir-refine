@@ -95,11 +95,14 @@ does not exist), and a wire-contract test asserts the absence.
 
 Binding law 1: local `fix` is always free, points never go negative-locked, and v1
 public copy leaves the drain OUT entirely. The numeric fair-use policy (drain rate,
-balance cap, refill paths) is defined in a follow-up proposal BEFORE any drain
-ships. Until then the only public sentence is "points meter hosted lanes as fair
-use" (roadmap framing on all fronts — Plan 324 G-B law). The design bar is already
-pinned (Proposal 025): a cached-balance O(1) pre-check ≤ 1 ms p99 or post-hoc
-accounting — never a synchronous remote-permission check on the decision path.
+balance cap, refill paths) is defined by the follow-up proposal —
+[**Proposal 027**](027_points_drain_fair_use.md), filed + AGREE'd 2026-11-02 —
+BEFORE any drain ships. Until ratification the only public sentence is "points
+meter hosted lanes as fair use" (roadmap framing on all fronts — Plan 324 G-B law).
+The design bar is already pinned (Proposal 025): a cached-balance O(1) pre-check
+≤ 1 ms p99 or post-hoc accounting — never a synchronous remote-permission check on
+the decision path (027's client pre-check meets it; enforcement is server-side at
+the seat).
 
 ## 5. Leaderboard rules (rank)
 
@@ -150,8 +153,10 @@ DEFERRED-FROZEN; issue 188 carries the un-freeze note).
 - [x] **P4 — GOAT + bench gates**: earn-sync batch cost (≤ 5 s budget, never blocks the run — measured, box state recorded); rank query O(1) from cache (p50/p99); epoch settle + anchor cost per 1M rows; determinism (same rows → byte-identical board + anchor); privacy gates (no client UUID/GitHub id in any published anchor, board payload, or stat — asserted by test, not prose). **— CLIENT-SIDE HALF 2026-11-02:** the transport is budget-bounded (`POINTS_TIMEOUT_SECS = 5`, never blocks the run); the privacy gates ride the wire crate's shape tests (the no-hardware walk) + the board payload law (handles + points only). The service-side measurements (rank O(1), settle/anchor cost, determinism) are P2's — the gates price them when the routes exist. **— SERVICE HALF LANDED 2026-11-02 (dapps `.benchmarks/025_points_scale_goat.md`, the `scale_bench` lane):** rank O(1) **PASS** — p99 flat 0.50–1.38 µs across a 1000× account range (bars: p50 ≤ 20 µs / p99 ≤ 100 µs at ANY scale); settle + anchor @ exactly 1M `points:` rows (worst case — every binding active + positive) **PASS** at 0.593 s vs the 30 s DO-wall bar; determinism **PASS** at the 1M-row scale (byte-identical root + board across fresh stores, on top of the contract suite's toy-scale assert); redaction by shape re-asserted at scale. Earn-sync service ingest: **nothing to measure by design** — the earn table is the owner gate (§3), the path does not exist as code; the client half's 5 s budget landed with P2. The lane re-runs: `cargo test --release --lib scale -- --ignored --nocapture`.
 - [x] **P5 — sweep + posture**: the T14-family sweep re-scope's positive assertions (join/points/corpus surfaces present + consent-gated — Plan 325's task row); vocabulary law sweep over all new user-facing strings; charitable-gate green at both feature extremes. **— LANDED 2026-11-02:** the sweep's positive half IS Plan 325 T6 (the charitable gate PASSes with the arms); the vocabulary law is pinned by tests + the gate's consent-text pins.
 - **Owner gates before any public mint:** the numeric earn table (§3) + the rank
-  half-life (§5.2); the drain follow-up proposal (§4) before any drain ships; the
-  deployment act itself (devnet first, prod via the touch-deploy lane).
+  half-life (§5.2); the drain follow-up proposal (§4 → **[Proposal 027](027_points_drain_fair_use.md)**,
+  FILED + AGREE'd 2026-11-02 — the ratification act (earn table + H + A/B/R/C/P)
+  clears it) before any drain ships; the deployment act itself (devnet first, prod
+  via the touch-deploy lane).
 
 ## 9. Compliance
 
