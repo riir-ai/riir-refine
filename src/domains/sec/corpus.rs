@@ -149,6 +149,7 @@
 //! userland classes). TWO suggest-only rules, all `InputValidation`:
 //! the masked-key packing site (`packed-field-silent-overflow-wrong-key`
 //! — a count/ID masked to a 2^k−1 literal then used as a lookup key
+//! `packed-field-silent-overflow-wrong-key` — a count/ID masked to a 2^k−1 literal then used as a lookup key
 //! silently loses the high bits; CVE-2026-115889's 24-bit packed
 //! value-number class; the B258 recorded drop adjudicated in-rule — the
 //! mask site is invisible to `unchecked-wire-arithmetic` (`BitAnd` is not
@@ -163,6 +164,36 @@
 //! `proposers::capacity_silent_truncate`; probe evidence (the
 //! boundary-gate protocol — std-only fixtures, no probe deps added)
 //! recorded in Plan 298 T1.
+//!
+//! Batch 325 (2026-11-02, Plan 327 / Research 361): the mozilla/uniffi-rs
+//! FFI-hygiene distill (MPL-2.0 @ `ef9625b68dd51207f55f024a27649e58edb52b09`
+//! — cited as class provenance; the fixtures are ORIGINAL syntheses, never
+//! uniffi source). FOUR suggest-only rules — the sec FFI-hygiene family
+//! (panic containment, ABI hygiene, custody) extended onto the
+//! pyo3/cxx/uniffi-class mixed-language surface. ALL NotBenchable-by-domain
+//! per the dial9 split (correctness/liveness wins at the boundary, never
+//! latency): raw-`Arc` custody across an unsafe boundary
+//! (`arc-refcount-across-raw-boundary`, `DropLeak` — the A− lead; the
+//! borrowed/consume two-regime law, the integer-exact refcount ledger the
+//! test oracle), the callback invoked under a live mutex guard
+//! (`ffi-callback-invoke-outside-lock`, `Ffi` — the cross-FFI ABBA
+//! deadlock class; ADJACENT-DISTINCT from the `entries_08`
+//! `host-lock-across-reentrant-blocking-call` same-lock regime, the
+//! in-rule adjudication note mandatory), the caller-initialized repr(C)
+//! out-param taken as `&mut MaybeUninit` where `&mut ManuallyDrop` is the
+//! honest contract (`out-param-manuallydrop-not-maybeuninit`, `Ffi` — the
+//! set-twice = leak single-writer contract), and the error-REPORTING
+//! handler doing fallible work without its own `catch_unwind`
+//! (`panic-handler-nested-catch-unwind`, `PanicSafety` — the handler path
+//! was unowned; the extern body wrapper + Drop bodies keep their own
+//! rules). Detector modules: `proposers::arc_raw_boundary`,
+//! `proposers::callback_lock_invoke`, `proposers::outparam_init_contract`,
+//! `proposers::panic_handler_guard`. The two stretch candidates are HONEST
+//! NON-CONVERSIONS at this batch: #5 `null-sentinel-companion-conjunction`
+//! (B−) held at its own conjunction-or-demote bar (the conjunction fixture
+//! set needs the authoring budget the four mains consumed — a named lead
+//! for a future FFI batch); #6 `vec-promote-manuallydrop-not-forget` (C+)
+//! thin + perf-neutral (borrowck-prose novelty).
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -869,6 +900,75 @@ logits. Shipped repairs: riir-ai 8981315af, riir-refine 1b426b53. Issue 185 T3."
             fixed_code: "pub fn ce_loss(logits: &[f32], target: usize) -> f32 {\n    let max = logits.iter().copied().fold(f32::NEG_INFINITY, f32::max);\n    let sum_excl: f32 = logits\n        .iter()\n        .enumerate()\n        .filter(|&(i, _)| i != target)\n        .map(|(_, &z)| (z - max).exp())\n        .sum();\n    let gap = sum_excl.ln() + max - logits[target];\n    gap.max(0.0) + (-gap.abs()).exp().ln_1p()\n}\n".to_string(),
             family: SecFamily::Numerics,
         },
+        // ── arc-refcount-across-raw-boundary (DropLeak; suggest-only, B325) ──
+        SecRule {
+            rule_id: "arc-refcount-across-raw-boundary".to_string(),
+            sec_concept: "a raw Arc pointer crossing an unsafe boundary has exactly two \
+custody regimes — BORROWED (`Arc::increment_strong_count` + deref, the boundary keeps \
+the count) or CONSUMING (`Arc::from_raw` exactly once) — and any mix of the two \
+(from_raw-then-forget, double from_raw, an increment stacked on a from_raw consume) \
+double-frees or leaks. Detector: `proposers::arc_raw_boundary` (the `into_raw` \
+round-trip is the legitimate shape and suppresses). Batch 325 / Plan 327 / Research 361 \
+(mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class provenance, original fixture)."
+                .to_string(),
+            buggy_code: "// waker-shaped custody bug: the borrowed handout (increment) and the consuming\n// path (from_raw) collapse into one fn, and the consume is forgotten — the\n// count is over-handed AND never retired (double-own → double-free or leak).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let waker = unsafe { Arc::<InstinctWaker>::from_raw(ptr) };\n    std::mem::forget(waker);\n}\n"
+                .to_string(),
+            fixed_code: "// fixed: pick ONE regime per path — borrowed (increment + deref, the boundary\n// keeps custody) or consuming (from_raw exactly once; the Arc's own drop retires it).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let borrowed: &InstinctWaker = &*ptr;\n    let _ = borrowed;\n}\n\nunsafe fn consume_waker(ptr: *mut InstinctWaker) {\n    let owned: Arc<InstinctWaker> = Arc::from_raw(ptr);\n    drop(owned);\n}\n"
+                .to_string(),
+            family: SecFamily::DropLeak,
+        },
+        // ── ffi-callback-invoke-outside-lock (Ffi; suggest-only, B325) ──
+        SecRule {
+            rule_id: "ffi-callback-invoke-outside-lock".to_string(),
+            sec_concept: "a callback/waker stored behind a mutex must be EXTRACTED under the lock \
+and INVOKED after the guard drops — invoking while the guard is live deadlocks when the \
+callback re-enters this lock or holds a foreign runtime lock (the cross-FFI ABBA regime: \
+internal Mutex vs GIL/event-loop). Distinct-from `host-lock-across-reentrant-blocking-call` \
+(same-lock re-entry vs cross-FFI ABBA two-lock — in-rule adjudication note mandatory). \
+Detector: `proposers::callback_lock_invoke`. Batch 325 / Plan 327 / Research 361 \
+(mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class provenance, original fixture)."
+                .to_string(),
+            buggy_code: "use std::sync::Mutex;\ntrait Invoke { fn invoke(&self, poll: u32); }\nstruct Scheduler { cb: Mutex<Option<Box<dyn Invoke>>> }\nimpl Scheduler {\n    fn poll_once(&self, poll: u32) {\n        let g = self.cb.lock().unwrap();\n        if let Some(cb) = g.as_ref() {\n            cb.invoke(poll); // guard live: the callback may re-enter — ABBA deadlock\n        }\n    }\n}\n"
+                .to_string(),
+            fixed_code: "use std::sync::Mutex;\ntrait Invoke { fn invoke(&self, poll: u32); }\nstruct Scheduler { cb: Mutex<Option<Box<dyn Invoke>>> }\nimpl Scheduler {\n    fn poll_once(&self, poll: u32) {\n        let to_invoke = self.cb.lock().unwrap().take();\n        if let Some(cb) = to_invoke {\n            cb.invoke(poll); // extract-under-lock, invoke-after-release\n        }\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::Ffi,
+        },
+        // ── out-param-manuallydrop-not-maybeuninit (Ffi; suggest-only, B325) ──
+        SecRule {
+            rule_id: "out-param-manuallydrop-not-maybeuninit".to_string(),
+            sec_concept: "a caller-initialized `#[repr(C)]` FFI out-parameter slot — an output struct the \
+FOREIGN caller allocates and the callee OVERWRITES exactly once — takes `&mut ManuallyDrop<T>` \
+(safe reads, explicit drop discipline, set-twice = a visible single-writer leak), never \
+`&mut MaybeUninit<T>`: MaybeUninit is for callee-initializes scratch the caller never reads \
+as initialized, not for a write-once caller-owned slot. Detector: \
+`proposers::outparam_init_contract` (full-write sites fire; partial field init keeps \
+MaybeUninit). Batch 325 / Plan 327 / Research 361 (mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — \
+class provenance, original fixture)."
+                .to_string(),
+            buggy_code: "#[repr(C)]\npub struct RustBuffer {\n    pub capacity: i64,\n    pub len: i64,\n    pub data: *mut u8,\n}\n\n#[no_mangle]\npub extern \"C\" fn rustbuf_from_vec(out: &mut MaybeUninit<RustBuffer>) -> i32 {\n    // caller-initialized MaybeUninit slot: the callee overwrites the whole\n    // value exactly once, so ManuallyDrop was the honest contract; the\n    // status code is the C-ABI pair for the out-param\n    let buf = RustBuffer { capacity: 16, len: 0, data: std::ptr::null_mut() };\n    unsafe { MaybeUninit::write(out, MaybeUninit::new(buf)) };\n    0\n}\n"
+                .to_string(),
+            fixed_code: "#[repr(C)]\npub struct RustBuffer {\n    pub capacity: i64,\n    pub len: i64,\n    pub data: *mut u8,\n}\n\n#[no_mangle]\npub extern \"C\" fn rustbuf_from_vec(out: &mut ManuallyDrop<RustBuffer>) -> i32 {\n    // caller-initialized contract: safe reads; set-twice = a visible leak;\n    // the status code is the C-ABI pair for the out-param\n    let buf = RustBuffer { capacity: 16, len: 0, data: std::ptr::null_mut() };\n    unsafe { ManuallyDrop::write(out, ManuallyDrop::new(buf)) };\n    0\n}\n"
+                .to_string(),
+            family: SecFamily::Ffi,
+        },
+        // ── panic-handler-nested-catch-unwind (PanicSafety; suggest-only, B325) ──
+        SecRule {
+            rule_id: "panic-handler-nested-catch-unwind".to_string(),
+            sec_concept: "an error-reporting handler that itself does fallible work (`format!`/alloc) \
+carries its own `catch_unwind` + graceful degradation — a panic escaping the handler during \
+an active unwind double-panics, and a panic from the reporting path masks the original error. \
+Distinct-from `ffi-extern-fn-catch-unwind` (extern BODY wrapper) and `drop-impl-no-panic` \
+(Drop bodies) — the handler PATH was unowned. Detector: `proposers::panic_handler_guard`. \
+Batch 325 / Plan 327 / Research 361 (mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class \
+provenance, original fixture)."
+                .to_string(),
+            buggy_code: "pub struct DecodeError {\n    pub code: i32,\n}\n\npub fn report_error(err: &DecodeError, out: &mut String) {\n    // render the failure for the caller; the buffer is the contract\n    out.push_str(&format!(\"decode failed: code={}\", err.code));\n}\n"
+                .to_string(),
+            fixed_code: "pub struct DecodeError {\n    pub code: i32,\n}\n\npub fn report_error(err: &DecodeError, out: &mut String) {\n    // the handler guards ITSELF: a panic here would double-panic the\n    // active unwind and mask this very error\n    if let Ok(msg) = std::panic::catch_unwind(|| format!(\"decode failed: code={}\", err.code)) {\n        out.push_str(&msg);\n    }\n    // graceful degradation: an empty buffer is the spoken fallback\n}\n"
+                .to_string(),
+            family: SecFamily::PanicSafety,
+        },
     ]
 }
 
@@ -919,5 +1019,50 @@ mod tests {
             "Phase 2 gate: need >=6 surviving rules, have {}",
             entries().len()
         );
+    }
+
+    /// Batch 325 (the uniffi-rs FFI-hygiene distill, Plan 327 /
+    /// Research 361, mozilla/uniffi-rs @ ef9625b6, MPL-2.0) — presence,
+    /// families, provenance discipline. All four are suggest-only
+    /// (NotBenchable-by-domain per the dial9 split) and none may join
+    /// `FIXABLE_SEC`.
+    #[test]
+    fn batch325_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            ("arc-refcount-across-raw-boundary", SecFamily::DropLeak),
+            ("ffi-callback-invoke-outside-lock", SecFamily::Ffi),
+            ("out-param-manuallydrop-not-maybeuninit", SecFamily::Ffi),
+            ("panic-handler-nested-catch-unwind", SecFamily::PanicSafety),
+        ];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-325 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-325 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 325 / Plan 327 / Research 361"),
+                "batch-325 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("ef9625b6"),
+                "batch-325 {id} must cite the uniffi-rs pin"
+            );
+        }
+        // Suggest-only discipline: none of the batch ids may be
+        // --fix-eligible (the detector modules ship no collect_edits arm).
+        for id in [
+            "arc-refcount-across-raw-boundary",
+            "ffi-callback-invoke-outside-lock",
+            "out-param-manuallydrop-not-maybeuninit",
+            "panic-handler-nested-catch-unwind",
+        ] {
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-325 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
     }
 }

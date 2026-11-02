@@ -141,9 +141,31 @@
 //! sites stay countable (`softmax_collapse::detect_all`,
 //! `sigmoid_minus_one::collect_edits_with_allow`).
 
+//! ## Batch 325 (2026-11-02, Plan 327) — the uniffi-rs FFI-hygiene distill
+//!
+//! Four detectors from the mozilla/uniffi-rs distill (Research 361, MPL-2.0
+//! @ `ef9625b6` — cited as class provenance; fixtures are ORIGINAL
+//! syntheses), the sec FFI-hygiene family's extension onto the
+//! pyo3/cxx/uniffi-class mixed-language surface. ALL suggest-only — every
+//! candidate is a correctness/liveness win at the boundary (double-free,
+//! deadlock, leak), never latency (the dial9 NotBenchable-by-domain split;
+//! the proof path is the fixture falsification arms + the integer-exact
+//! refcount ledger):
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `arc-refcount-across-raw-boundary` | `arc_raw_boundary::detect` | the borrowed-vs-consume regime is the boundary protocol's answer (waker clone borrows, wake consumes) — a mechanical fix would have to invent the vtable's semantics and a wrong one double-frees; the `into_raw` round-trip is the legitimate shape and suppresses the fn |
+//! | `ffi-callback-invoke-outside-lock` | `callback_lock_invoke::detect` | whether the callback can re-enter (or holds a foreign GIL/event-loop lock) is a protocol property; ADJACENT-DISTINCT from `host-lock-across-reentrant-blocking-call` (same-lock re-entry vs cross-FFI ABBA two-lock) — the in-rule adjudication note is mandatory, the tokio-guard precedent cited, reviewer-flippable |
+//! | `out-param-manuallydrop-not-maybeuninit` | `outparam_init_contract::detect` | switching the param type changes the ABI contract shared with foreign callers; full-write sites fire, partial-init keeps `MaybeUninit` (its legitimate home) |
+//! | `panic-handler-nested-catch-unwind` | `panic_handler_guard::detect` | the graceful-degradation choice is a protocol decision; distinct-from `ffi-extern-fn-catch-unwind` (extern BODY wrapper) and `drop-impl-no-panic` (Drop bodies) — the handler PATH was unowned |
+//!
+//! The two stretch candidates (Research 361 #5 `null-sentinel-companion-conjunction` B−, #6 `vec-promote-manuallydrop-not-forget` C+) are HONEST NON-CONVERSIONS at this batch: #5 held at its own conjunction-or-demote bar (the conjunction fixture set needs the authoring budget the four mains consumed — it stays a named lead); #6 is thin and perf-neutral (borrowck-prose novelty). `io-copy-write-adapter-hash-loop`'s sibling honesty class: recorded here, recoverable at a future FFI batch.
+
 use syn::File;
 
+pub mod arc_raw_boundary;
 pub mod auth_cookie_missing_flags;
+pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
 pub mod cors_any_creds;
@@ -154,7 +176,9 @@ pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
+pub mod outparam_init_contract;
 pub mod packed_field_wrong_key;
+pub mod panic_handler_guard;
 pub mod path_join_escape;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;

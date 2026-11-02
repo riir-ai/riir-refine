@@ -10,7 +10,7 @@
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
 //! 292 entries across 14 categories as of Batch 324 (+3: io — the sccache
-//! distill (Plan 328 / Research 362, entries_58); prior: 289 at Batch 318 (+2: concurrency
+//! distill (Plan 328 / Research 362, `entries_58`); prior: 289 at Batch 318 (+2: concurrency
 //! +1 `generation-counter-stale-timer-invalidation` + io +1
 //! `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
 //! impeccable io stretch-tier remainder (plan 316's `- [-]` rows),

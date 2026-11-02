@@ -2416,7 +2416,15 @@ mod tests {
                 // 169 → 172 — the 3 new spans ALL routed Sec). Delta +2
                 // correct, +0.5pp. Floor = measured − 5 = 64 per the
                 // Plan-030 convention. Annotation only.
-                (false, true, true) => 64.0 / 172.0, // measured 69/172 (40.1%) — Issue 185 re-pin, 2026-10-27 (was 62/169; B294 measured 67/169)
+                // Batch 325 re-pin (2026-11-02, Plan 327): the uniffi-rs
+                // FFI-hygiene sec adds re-measured 90/210 (42.9%; population
+                // 172 → 210 — the docker+dist fixture-set T1 growth and the
+                // 4 new sec spans both in the delta; the FFI-custody
+                // vocabulary is retrieval-decay-adjacent, the sec arm rides
+                // the B131 sec-centroid mechanism). Floor = measured − 5
+                // spans = 85 per the Plan-030 convention. Annotation only;
+                // gating stays killed (85% bar, Bench 025).
+                (false, true, true) => 85.0 / 210.0, // measured 90/210 (42.9%) — Batch 325 re-pin, 2026-11-02 (was 64/172; Issue 185 measured 69/172)
                 // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
                 // Batch 130) -- same sec-centroid drift on the full state;
                 // floor = measured - 5.
@@ -2436,11 +2444,17 @@ mod tests {
                     // Plan-030 convention. Annotation only: gating stays
                     // killed (85% bar, Bench 025).
                     // Batch 179 re-pin (2026-09-25): population 195, MEASURED
-                    // 89/195 (45.6%) — floor = 84 (the 3 new rust_perf spans
-                    // routed correctly AND the shader spans hold 100%, so the
-                    // ratio ROSE 44.8% → 45.6% despite the sec/kernel
-                    // attractor mass).
-                    84.0 / 195.0 // measured 89/195 (45.6%)
+                    // 89/195 (45.6%) — floor = 84. Annotation only.
+                    // Batch 325 re-pin (2026-11-02, Plan 327): population
+                    // 195 → 210 (docker+dist T1 fixture growth was already
+                    // in the no-kernel arm's re-pin; this state's delta is
+                    // the same 4 sec spans + the shared population growth),
+                    // MEASURED 90/210 (42.9%) — the B131 sec-centroid
+                    // mechanism compounding with the kernel arm's generic
+                    // Rust-span attraction. Floor = measured − 5 = 85 per
+                    // the Plan-030 convention. Annotation only; gating
+                    // stays killed (85% bar, Bench 025).
+                    85.0 / 210.0 // measured 90/210 (42.9%) — Batch 325 re-pin, 2026-11-02 (was 84/195; B179 measured 89/195)
                 }
             }
         }
