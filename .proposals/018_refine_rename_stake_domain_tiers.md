@@ -80,10 +80,10 @@ P013's tier presets × P007's live staking × 051's sixth axis (designed for ret
 ### Phase 2 — the stake→domain axis
 - [ ] T2.1 dapps: the tier rows (stake posture → served-domain set) + the soft-gate third door (contribute/pay/stake)
 - [ ] T2.2 the corpus-lease/mining gating (server-side; devnet-first; owner constants)
-- [ ] T2.3 `node_tiers.md` gains the sixth axis (the one-place rule) + the mirrors (ai.gist.rs umbrella, refine.gist.rs)
+- [ ] T2.3 `node_tiers.md` gains the sixth axis (the one-place rule) + the mirrors (ai.gist.rs umbrella, refine.riir.ai)
 
 ### Phase 3 — the fleet domains (executed by dapps Plan 042)
-- [ ] T3.1 cross-ref: umbrella at the apex, refine.gist.rs marketing, devnet console, mainnet.ai.gist.rs OFF, reflex-site lane renames, rethink.gist.rs — see [Plan 042](../../riir-dapps/.plans/042_fleet_domains_umbrella.md)
+- [ ] T3.1 cross-ref: umbrella at the apex, refine.riir.ai marketing, devnet console, mainnet.ai.gist.rs OFF, reflex-site lane renames, rethink.gist.rs — see [Plan 042](../../riir-dapps/.plans/042_fleet_domains_umbrella.md)
 
 ## Risks
 

@@ -4,7 +4,7 @@
 
 Source: https://github.com/noahdunnagan/fsearch — whole-disk file search for macOS (fuzzy names, typo tolerance, indexed content grep, ~1 ms over 8M files). 1.6k stars, MIT, 136 commits, Rust, benchmarked upstream (pgo.sh, README before/now tables, `examples/rig.rs` + `demo/abba.py`).
 
-Owner directive (2026-10-11): this is a **bench-refine-pr** candidate — the outbound fix-PR campaign (Proposal 022) with a marketing tie-in: a before/after bench SVG that mentions refine.gist.rs, to show the fix and the bench tool to the repo's devs. The "before" bench is THIS session's work; the fix and the "after" refine wait for mainnet.
+Owner directive (2026-10-11): this is a **bench-refine-pr** candidate — the outbound fix-PR campaign (Proposal 022) with a marketing tie-in: a before/after bench SVG that mentions refine.riir.ai, to show the fix and the bench tool to the repo's devs. The "before" bench is THIS session's work; the fix and the "after" refine wait for mainnet.
 
 ## The distill verdict (T1 — recorded here; MARGINAL sources take no research note per the distill skill)
 
@@ -35,12 +35,12 @@ Owner directive (2026-10-11): this is a **bench-refine-pr** candidate — the ou
 
 - [x] T1 — distill verdict + dedup greps + GOAT two-class test + lane/product axes (this file's verdict section; queue-snapshot line landed the same commit).
 - [x] T2 — bench fixture: scoped index (bench_scope.rs), frozen APFS snapshot on SDXC1TB, corpus via the rig's own sampling (gen_names.rs), blake3 both, harness sidecars into the record dir.
-- [x] T3 — quiet-box before bench (before_q1.json) + `scripts/fsearch_pr_bench_svg.py` (before/after renderer, refine.gist.rs footer) + `bench_before.svg` (after pending, marked).
+- [x] T3 — quiet-box before bench (before_q1.json) + `scripts/fsearch_pr_bench_svg.py` (before/after renderer, refine.riir.ai footer) + `bench_before.svg` (after pending, marked).
 - [x] T4 — `.benchmarks/112` record + this plan + the queue line; `.raw/fsearch` clone removed at the commit per the ephemeral-clone law (pin + sidecars carried).
 - [-] T5 — **GATED: mainnet launch** — the fix hunt at the pin: re-clone, restore harness, profile the pinned build under the rig (sample/instruments + their pgo.sh flow), pick ONE real, honest win (candidate leads from the verdict read: whole-`/` no-FDA crawl stall — reproduces here, may be our box, verify on theirs first; typing-run batch path (7.49 ms / 10 runs = ~750 µs per keystroke is the fattest row); multi/filter query paths; mmap prefault strategy on cold start). Implement upstream-shaped (their style: dense, commented, no new deps); `rig run` digests byte-identical.
 - [-] T6 — **GATED: T5 landed** — after bench: same snapshot (verify blake3), same window rule (load < 8, 3 runs, publish clean run), after.json + digests identical + the after SVG (before/after bars + per-row speedup). Honest bar: only chart rows that move ≥ measurement noise; rows that don't move keep their before value.
-- [-] T7 — **GATED: mainnet + T6 ≥ noise on ≥1 row** — the upstream PR: fork, branch, minimal diff, the SVG in the PR body, one attribution line per Proposal 022's recorded posture (measured perf deltas allowed for bench-measured rules; logo + tool-name + site attribution allowed; owner-approved sends → owner account). The PR text leads with THEIR harness and the identical-digests proof, refine.gist.rs mentioned once as the bench/fix tool, no numbers for anything NotBenchable.
-- [-] T8 — **GATED: T7 opened** — marketing tie-in close-out: refine.gist.rs bench page row (the site renders the same SVG), queue-snapshot close-out line with the PR URL, AGENTS.md line if the campaign repeats, HISTORY.md record.
+- [-] T7 — **GATED: mainnet + T6 ≥ noise on ≥1 row** — the upstream PR: fork, branch, minimal diff, the SVG in the PR body, one attribution line per Proposal 022's recorded posture (measured perf deltas allowed for bench-measured rules; logo + tool-name + site attribution allowed; owner-approved sends → owner account). The PR text leads with THEIR harness and the identical-digests proof, refine.riir.ai mentioned once as the bench/fix tool, no numbers for anything NotBenchable.
+- [-] T8 — **GATED: T7 opened** — marketing tie-in close-out: refine.riir.ai bench page row (the site renders the same SVG), queue-snapshot close-out line with the PR URL, AGENTS.md line if the campaign repeats, HISTORY.md record.
 
 ## Gates (bind T6/T7)
 
