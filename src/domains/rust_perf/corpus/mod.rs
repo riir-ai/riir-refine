@@ -9,7 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 287 entries across 14 categories as of Batch 318 (+2: concurrency
+//! 292 entries across 14 categories as of Batch 324 (+3: io — the sccache
+//! distill (Plan 328 / Research 362, entries_58); prior: 289 at Batch 318 (+2: concurrency
 //! +1 `generation-counter-stale-timer-invalidation` + io +1
 //! `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
 //! impeccable io stretch-tier remainder (plan 316's `- [-]` rows),
@@ -709,13 +710,14 @@ mod entries_54;
 mod entries_55;
 mod entries_56;
 mod entries_57;
+mod entries_58;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 287 entries
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 292 entries
 /// (Batch 318, 2026-10-30, Plan 318 / Research 356: +2 -- the impeccable
 /// io stretch-tier remainder, `entries_56` (plan 316's `- [-]` rows):
 /// the generation-counter timer law + the exclusive-mkdir reservation
@@ -872,5 +874,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_55::entries());
     entries.extend(entries_56::entries());
     entries.extend(entries_57::entries());
+    entries.extend(entries_58::entries());
     Corpus::new(entries)
 }

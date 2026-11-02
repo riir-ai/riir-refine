@@ -1,6 +1,6 @@
 # 362 — sccache Distill
 
-**Status:** DISTILLED — pending owner decision (Plan 328 staged behind the live queue heads)
+**Status:** DISTILLED — batch landed (Batch 324 / Plan 328, 2026-11-02: 3 of 5 ranked candidates converted — the spawn GOAT lead + the two caching laws; io-copy-write-adapter DROPPED POSITIVE-INSTANCE at the probe; get-with-raw B− DEFERRED to a future io batch; the landing commit is the arbiter)
 **Date:** 2026-11-02 (zed-m3-mozilla-quartet/M3, user-directed four-repo @distill — uniffi-rs + sccache + rust-code-analysis + supply-chain; this note covers sccache, its sibling note is `.research/361`)
 **Queue slot:** nominal batch per queue order / Plan 328 — staged behind the live queue heads
 
