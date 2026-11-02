@@ -66,6 +66,15 @@ pub const PUBKEY_HEADER: &str = "X-Points-Pubkey";
 /// [`riir_ledger::attestation_signing_bytes`] — distinct from the
 /// points-plane's `X-Points-Signature`.
 pub const SIG_HEADER: &str = "X-Points-Sig";
+/// The call-sequence TRANSPORT (decimal). Untrusted: Ed25519 has no
+/// message recovery, so the seat could not otherwise reconstruct the
+/// signed payload (the seq is inside it). The header exists only to let
+/// the seat re-derive those bytes — the signature authenticates the
+/// seq (a forged header fails the sig → the anonymous posture), and the
+/// seat's replay window reads the AUTHORITATIVE seq from the verified
+/// payload bytes `[42..50]`, never from this header (the seat-side
+/// contract; plan 326 Appendix A amendment 1).
+pub const SEQ_HEADER: &str = "X-Points-Seq";
 
 /// The machine-local day state (0600, beside the client UUID). The file
 /// is a CACHE, never a ledger: the seat's counters are the enforcement
@@ -460,11 +469,14 @@ fn persist_best_effort(dir: Option<&Path>, state: &DayState) {
     }
 }
 
-/// The three attestation headers over the EXACT request body bytes
-/// (plan 326 T5). Each name appears exactly once; the seat verifies
-/// `blake3(pubkey) == account` and then the signature over
-/// `attestation_signing_bytes(account_id, utc_day, call_seq,
-/// blake3(body))`.
+/// The four attestation headers over the EXACT request body bytes
+/// (plan 326 T5 + the Appendix A amendment 1: Ed25519 has no message
+/// recovery, so the seq rides as untrusted transport and the signature
+/// authenticates it). Each name appears exactly once; the seat checks
+/// `blake3(pubkey) == account`, re-derives the signing bytes from the
+/// headers + body, verifies the signature, then reads the AUTHORITATIVE
+/// seq from the verified payload bytes `[42..50]` for the replay
+/// window.
 fn compose_attestation(
     key: &ed25519_dalek::SigningKey,
     utc_day: &str,
@@ -485,6 +497,7 @@ fn compose_attestation(
             riir_kat::kat_account::account_id_for(pubkey),
         ),
         (PUBKEY_HEADER.to_string(), hex(pubkey)),
+        (SEQ_HEADER.to_string(), call_seq.to_string()),
         (SIG_HEADER.to_string(), hex(&sig.to_bytes())),
     ]
 }
@@ -856,8 +869,13 @@ mod tests {
         let names: Vec<&str> = headers.iter().map(|(k, _)| *k).collect();
         assert_eq!(
             names,
-            [ACCOUNT_HEADER, PUBKEY_HEADER, SIG_HEADER],
-            "each name EXACTLY once (the kat_ua law)"
+            [
+                ACCOUNT_HEADER,
+                PUBKEY_HEADER,
+                SEQ_HEADER,
+                SIG_HEADER
+            ],
+            "each name EXACTLY once (the kat_ua law); the seq rides as transport"
         );
         let account = &headers
             .iter()
@@ -870,6 +888,13 @@ mod tests {
             .expect("p")
             .1;
         let sig_hex = &headers.iter().find(|(k, _)| *k == SIG_HEADER).expect("s").1;
+        // The seq TRANSPORT (untrusted): the seat reconstructs the
+        // signing payload from it, the signature authenticates it, and
+        // the AUTHORITATIVE seq is read from the verified payload
+        // bytes [42..50] — the exact seat-side flow (Appendix A
+        // amendment 1).
+        let seq_header = &headers.iter().find(|(k, _)| *k == SEQ_HEADER).expect("q").1;
+        let seq_transport: u64 = seq_header.parse().expect("decimal seq");
         // the account id IS the substrate's own BLAKE3(pubkey) derivation
         assert_eq!(
             account,
@@ -884,11 +909,22 @@ mod tests {
         let account_raw = *blake3::hash(key.verifying_key().as_bytes()).as_bytes();
         let body_hash = *blake3::hash(body).as_bytes();
         let snap = gate.test_snapshot().expect("injected state");
-        let signing =
-            riir_ledger::attestation_signing_bytes(&account_raw, &snap.utc_day, 0, &body_hash);
+        let signing = riir_ledger::attestation_signing_bytes(
+            &account_raw,
+            &snap.utc_day,
+            seq_transport,
+            &body_hash,
+        );
         key.verifying_key()
             .verify(&signing, &ed25519_dalek::Signature::from_bytes(&sig_bytes))
             .expect("the seat-side verification must pass");
+        // the authoritative seq comes from the VERIFIED payload, not the
+        // header — re-derive and read bytes [42..50] (offset 32+10, BE)
+        let authoritative = u64::from_be_bytes(signing[42..50].try_into().expect("8 bytes"));
+        assert_eq!(
+            authoritative, seq_transport,
+            "the payload's seq matches the transported header"
+        );
         // the signature binds the body hash — a flipped body is rejected
         let other_body =
             riir_ledger::attestation_signing_bytes(&account_raw, &snap.utc_day, 0, &[0u8; 32]);
