@@ -2,7 +2,7 @@
 
 **Status:** OPEN — filed from Bench 125's cost-leg FAIL (added scan latency p50 38.795 ms/file
 vs the pre-registered p50 ≤ 1.0 ms ceiling, 39× over). Claimed by no one yet.
-**Claimed:** zed-riir-g5 epoch=1793591179, expires 2026-11-04T16:26:19+00:00
+**Claimed:** zed-riir-g5, 1793591179, expires 2026-11-04T16:26:19+00:00
 
 ## What happened
 
