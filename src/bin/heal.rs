@@ -13376,6 +13376,17 @@ fn main() {
             // Exhaustiveness only — `config` is dispatched (ungated) before
             // this match ever runs.
             KatCommand::Config => unreachable!("config is dispatched before the gated match"),
+            // The points plane (Plan 325): dispatched under `points` (the
+            // early-return block above) and refused under `not(points)`
+            // before this match — the release set (no `points`) never
+            // reaches here; the arms exist for exhaustiveness only.
+            KatCommand::Join
+            | KatCommand::Leave
+            | KatCommand::Rank
+            | KatCommand::PointsInfo
+            | KatCommand::Corpus => {
+                unreachable!("points-plane commands are dispatched before the gated match")
+            }
         }
         return;
     }
