@@ -2,7 +2,7 @@
 
 **Status:** OPEN — scan+heal complete, send owner-gated (Plan 329 executing)
 
-Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a wetrun against the Mozilla quartet (uniffi-rs, sccache, rust-code-analysis, supply-chain), forks under the `riir-ai` GitHub org, as Proposal 025 grant evidence (real upstream PRs = the product-community-fit proof). Full plan: `.plans/329_mozilla_outbound_pr_wetrun.md`; bench record: `.benchmarks/126_mozilla_wetrun/README.md`.
+Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a wetrun against the Mozilla quartet (uniffi-rs, sccache, rust-code-analysis, supply-chain), forks under the `riir-ai` GitHub org, as Proposal 025 grant evidence (real upstream PRs = the product-community-fit proof). Full plan: `.plans/329_mozilla_outbound_pr_wetrun.md`; bench record: `.benchmarks/127_mozilla_wetrun/README.md`.
 
 ## Findings so far
 
@@ -14,7 +14,7 @@ Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a
 
 ## Acceptance
 
-- [ ] T5 send executed (fork + push + PR URL recorded in bench 126's ledger)
+- [ ] T5 send executed (fork + push + PR URL recorded in bench 127's ledger)
 - [ ] Outcome poller: PR merged/closed recorded; accept-rate ledger row updated
 - [ ] T7 post-mining intake line landed in `.distill/001_mining_queue_snapshot.md`
 - [ ] T8 close-out: HISTORY record + Proposal 022/025 evidence lines + `.raw` clones removed
