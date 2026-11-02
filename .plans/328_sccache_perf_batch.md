@@ -1,7 +1,7 @@
 # Plan 328 — Batch (nominal): sccache io/cache/process → rust_perf
 
 **Status:** STAGED — distill verdict 362 (2026-11-02); claim per the queue before any corpus edit
-**Claimed:** zed-m3-sccache-b324, 1793599016, expires 2026-11-04T05:56:56+00:00
+**Lease released:** zed-m3-sccache-b324, 1793599016 — released 2026-11-02 ~06:1xZ UNLANDED at owner direction ("fix these and bench on bmo" → riir-ai prefill issues 876 + 851, Rule 0); zero corpus edits made (claim + .raw clone + dedup only); plan 328 STAYS STAGED for the next lane
 
 Distill verdict: `.research/362_sccache_distill.md` (YES B− corpus, mozilla/sccache @ `71d107e0ad86239bb8a134edfab82e337ffecaab`, Apache-2.0). This batch converts the io/cache/process candidates into rust_perf corpus rules, led by the ONE genuinely benchable GOAT candidate (spawn-latency syscall class) and the alloc-count-benchable hashing rule.
 
