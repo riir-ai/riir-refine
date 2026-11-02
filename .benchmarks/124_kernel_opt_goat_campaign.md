@@ -8,6 +8,11 @@ checks (numbers reconcile across Bench 124 ↔ Issue 191 ↔ Issue 193 ↔ harne
 no silent bar weakening — the floor correction documented pre-measurement in issue+code;
 nothing owner-gated decided without the owner). Two non-blocking nits: the ≥290/≥74→≥70
 historical reference (fixed same session) and exact per-class counts pinned at Issue-193 R6.
+**Follow-up verdict 2026-11-02** (same delegated channel — native fallback sub-agent session
+dfc6bea6, the claude_code request_verdict auth-unavailable on this box): **#Verdict: AGREE**
+on the three remaining owner-gated calls — the G2-convention closure (§Next item 2, option c),
+the G5-ceiling non-re-registration (§Next item 3), and the amo hand-off for the substrate-side
+lever (§Next item 3) — records verified at develop 49d4dc99.
 Claimed + executed by
 zed-shikuwa-i191gate (epoch 1793523566) on the 4090 box (shikuwa), 2026-11-01.
 
@@ -61,9 +66,17 @@ fails, the domain stays opt-in with the failing axis named in the record."
 1. ~~Issue 193 repairs (R1–R5) → G1 green~~ **DONE 2026-11-01** (Issue 193 closed:
    65/65 repaired, zero demotions; full G1 248 green / 0 FAIL / 803 parse-only in 100.8 s;
    closing commits `50ba6983fb8`/`90c68b7f74e`/`84e4432dfe9`/`a82a5b29bd5`).
-2. The G2 convention decision (owner-gated): a corpus bench-entry convention vs GPU-host
-   benches vs closing the CPU-G2 axis with the disclosure (the flat median IS the measured
-   answer for scalar ports).
+2. ~~The G2 convention decision (owner-gated)~~ **CLOSED — option (c), close the CPU-G2 axis
+   with the disclosure** (delegated owner-verdict review, native fallback sub-agent session
+   dfc6bea6, 2026-11-02 — the request_verdict claude_code channel auth-unavailable on this
+   box, the Issue-1115 arc; **#Verdict: AGREE**): the measured median 1.0000 STANDS as the
+   CPU-portable answer — the verdict-table row above is history, not erased, and the one
+   2.05× scalar-twin finding (fp32-pipe-mma-role-split) stays on record; a future G2 re-gate
+   rides the Tier-B GPU-host trigger (option b) if kernel_opt ever approaches promotion —
+   NEVER a CPU tranche re-run. The corpus bench-entry convention (option a) declines with
+   the same measured reasoning: 20 of 21 measured rules sit at 1.00±0.01 (the GPU-shape wins
+   are structurally not CPU-demonstrable), so even full bench-entry coverage moves only the
+   scalar-twin subset and the CPU median stays ~1.0.
 3. ~~G5 census~~ **MEASURED — Bench 125** (2026-11-01, early because convention-independent):
    utility PASS, cost FAIL (added p50 38.8 ms ≫ 1.0 ms ceiling) — the re-campaign is now
    fenced on TWO axes: G2 (convention pending, item 2) and G5-cost (Issue 196's
@@ -77,6 +90,10 @@ fails, the domain stays opt-in with the failing axis named in the record."
    OUTSIDE this repo's index shape — substrate-level score-only retrieval (riir-rag,
    riir-neuron-db's lane) or a multi-scale query-mass lever; ceiling re-registration remains
    an owner act and is NOT requested (the residual is 46× the ceiling, wrong direction).
-4. Re-campaign: G1 + G2 (tranche re-selected from the repaired corpus) + G5 re-run in the
-   same run. NOTE: the G1 digests moved with the 193 repairs — the tranche re-selection and
-   the G5 corpus pin re-derive in the same re-campaign run.
+   **Confirmed by the same 2026-11-02 delegated verdict (#Verdict: AGREE): no
+   re-registration — the 1.0/5.0 ms ceilings stay the contract for any future cost-axis
+   mechanism; with the G2 axis closed (item 2), the re-campaign fence is single-axis
+   (G5-cost).**
+4. Re-campaign: G1 + G5 re-run in the same run (G2 is CLOSED per item 2 — its future re-gate
+   rides the Tier-B GPU-host trigger, never a CPU tranche re-run). NOTE: the G1 digests moved
+   with the 193 repairs — the G5 corpus pin re-derives in the same re-campaign run.

@@ -1,6 +1,14 @@
 # Bench 126 — the route-narrowed kernel index: the G5 cost-leg repair MEASURED (Issue 196 R2+R3)
 
 **Status:** CLOSED — verdict recorded; the narrowed design is MEASURED NEGATIVE on the cost axis and stays opt-in (never default); the G5-cost fence stays up, the next lever is named and it is NOT narrowing.
+**Owner-gated follow-ups RATIFIED 2026-11-02** (delegated owner-verdict review, native fallback
+sub-agent session dfc6bea6 — the claude_code request_verdict channel auth-unavailable on this box,
+the Issue-1115 arc; **#Verdict: AGREE** on all three, records verified at develop 49d4dc99):
+(1) the G2-convention decision closed as option (c) — see Bench 124 §Next item 2; (2) the
+G5-ceiling non-re-registration confirmed — the 1.0/5.0 ms ceilings stay the contract (bar changes
+remain owner acts; this verdict CONFIRMS the standing non-request, it does not move the bar);
+(3) the substrate-lever hand-off to the builder rig (amo) approved and executed after this
+record's commit.
 
 ## The pre-registration (Issue 196 / Issue 191 T1)
 
