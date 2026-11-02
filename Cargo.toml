@@ -1209,17 +1209,6 @@ required-features = ["score_bench", "kernel_opt", "sec", "docker"]
 name = "tca_covariability_poc"
 required-features = ["latent_retrieval"]
 
-# Issue 191 bar 5 — the G5 utility/cost harness (Bench 125 + the Issue-196
-# census re-runs). Compiles at BOTH postures via cfg (kernel_opt off = the
-# OFF leg; on = the census). Uses the draft module's LatentMatcher, so it
-# needs the retrieval tree at minimum — without this row the auto-discovered
-# example fails `clippy --all-targets`/`cargo test` at default features
-# (the P43 law: a gated target without its row compiles to an error, and
-# the default lane is blind to why).
-[[example]]
-name = "kernel_goat_g5"
-required-features = ["latent_retrieval"]
-
 # E2E tokens/sec harness (Bonsai/llama.cpp head-to-head denominator).
 # Emits JSONL of (lint, emitted fix, latency); tokens are counted externally by
 # scripts/bench_bonsai_vs_clippy_tokps.py using the SAME Bonsai tokenizer, so
