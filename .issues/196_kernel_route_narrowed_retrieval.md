@@ -52,6 +52,20 @@ out to all 1051 rules. The router narrowing was never wired into the matcher.
   no new extraction, one matrix multiply. Option (b) is the substrate-first choice: the
   matcher computes the span embedding for scoring regardless; routing on it adds one
   dot-product per span.
+- **THE DOMINANT COST IS THE LINE-QUERY LOOP, not the whole-span queries** (measured
+  2026-11-01, this repo's src/: 342,876 lines, 248,223 significant (>8 chars) ≈ 72%):
+  `suggest_deep_into` issues one full-corpus retrieval PER SIGNIFICANT LINE (the
+  multi-scale merge — "a whole-function span whose interior line instantiates a rule still
+  surfaces that rule"), so the query mass is ~20× the span count. The narrowing must
+  cover the line queries (route LINE queries to their CONTAINING span's routed expert —
+  the lines exist to refine the span's own scoring, so the span's expert is the right
+  scope; a per-line re-route would re-embed 248k queries for nothing), or the first lever
+  is cheaper line queries by construction. Retrieval internals: the retriever owns the
+  packed chunk embeddings (`retrieve_for_scoring` over `by_zone_hash`'s corpus); a
+  per-category SUB-RETRIEVER slice (15 + one global-tail) is the likely shape — the
+  embeddings are built once at `build_with` and the split is index-structural, not
+  per-call. G4 discipline: scratch capacities stabilize, no per-call allocation; the
+  OFF-flag posture stays byte-identical (the G3 disclosure boundary).
 
 ## Tasks
 
