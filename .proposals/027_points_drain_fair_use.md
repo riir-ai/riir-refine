@@ -35,16 +35,28 @@ A client-reported meter cannot bind a patched client (the client is open source;
 `RIIR_REFINE_OFFLINE=1` or a dropped report would zero it). So the meter of record
 lives where the spend happens: **the hosted instinct seat counts what it serves**.
 
-- **Per-call attestation (identity on the seat request).** The client attaches two
-  HTTP headers — `X-Points-Account: <account_id hex>` + `X-Points-Sig: <ed25519 sig>`
-  — over `account_id ‖ utc_day ‖ call_seq`. Headers, not JSON fields: the seat's
-  `/decide` envelope is the **frozen v1 decision_wire contract** (riir-reflex issue
-  074 R7); unknown headers are ignored by today's readers, so identity is
-  backward-compatible (the `kat_ua` `X-Kat-Totp` precedent — the one header-setter
-  law applies client-side). The signature proves possession (anti-spoof: nobody can
-  attribute calls to someone else's account and drain THEIR points), `call_seq` is
-  per-`(account, day)` monotone at the seat (anti-replay: a replayed header cannot
-  re-count), and the account binding makes the count debit the right ledger.
+- **Per-call attestation (identity on the seat request).** The client attaches three
+  HTTP headers — `X-Points-Account: <account_id hex>` + `X-Points-Pubkey: <ed25519
+  pubkey hex>` + `X-Points-Sig: <ed25519 sig>` — over
+  `account_id ‖ utc_day ‖ call_seq ‖ blake3(request_body)`. Headers, not JSON
+  fields: the seat's `/decide` envelope is the **frozen v1 decision_wire contract**
+  (riir-reflex issue 074 R7); unknown headers are ignored by today's readers, so
+  identity is backward-compatible (the `kat_ua` `X-Kat-Totp` precedent — the one
+  header-setter law applies client-side). The pubkey rides WITH the signature
+  because a hash cannot be reversed into a key: the seat checks
+  `blake3(pubkey) == account_id` (the id is bound to the key that presents it —
+  no registry lookup needed to VERIFY; a fresh unregistered key verifies fine),
+  then verifies the signature (anti-spoof: nobody can attribute calls to someone
+  else's account and drain THEIR points; the body hash ties each signature to the
+  exact request it authenticates). `call_seq` is a per-process counter checked at
+  the seat through a **replay window** — a fixed per-`(account, day)` bitmap over
+  the last N sequence numbers (the IPsec anti-replay shape): unseen-and-in-window
+  accepts, below-window rejects as replay — because several concurrent `cargo
+  refine` runs (worktrees, parallel agents — this workspace's ordinary posture)
+  share one account and day, and a strictly-increasing check would drop their
+  out-of-order calls to the anonymous posture. Account EXISTENCE (joined? has
+  balance?) is a seat-side lookup that fails gracefully to the unjoined posture —
+  verification and enforcement are independent steps.
 - **Seat-side day counters** keyed `(account, utc_day)`: `free_calls ≤ A`,
   `billable_calls ≤ B` (billable only while the seat's cached balance for the
   account is `≥ R`). At `A + B` the seat refuses further hosted calls that day →
@@ -52,14 +64,25 @@ lives where the spend happens: **the hosted instinct seat counts what it serves*
   `BLAKE3(pubkey)` (the riir-auth account-key substrate — pseudonymous, not
   hardware-derived, nothing about the machine), consistent with the T16.1 privacy
   law; the seat learns no more than the id the caller chose to attest.
-- **Anonymous / un-attested callers** (no headers — including patched clients that
-  strip them): the seat's existing anonymous posture — the coarse rate-guard family
-  it already runs (the advisory ladder's own ceilings) plus a per-source coarse
-  daily allowance. Un-attested callers are never billable (no balance to debit):
-  the enforcement bound for a stripped-identity client is exactly what an anonymous
-  caller gets. Rotation bound: a fresh account key attests fine but starts at
-  balance 0 → allowance-only (`A`/day), and join (the Sybil anchor) is one-account-
-  per-GitHub-id — so the billable tier is rotation-resistant by construction.
+- **Two caller classes, two budgets — signing alone multiplies nothing.**
+  **JOINED accounts** (GitHub-anchored — one account per GitHub id, the Sybil
+  anchor) draw their own `A`/day from the seat, plus the billable tier (`B` calls
+  at balance ≥ `R`). **UNJOINED keys — signed or not — share the same per-source
+  budget** as anonymous callers. This is the consistency law: a throwaway keygen
+  is free, so an unjoined key must never out-draw an un-attested caller; what
+  join buys is the personal allowance and the billable tier, and join is the one
+  identity axis a farmer cannot freely rotate. The per-source key is a
+  **salted, daily-rotating hash of the client's /24 (IPv4) or /64 (IPv6) prefix**
+  — the salt rotates at the UTC day boundary, the hash is kept for THE DAY ONLY
+  and never persisted past it, and the practice is disclosed beside the T16.1
+  privacy law (it is the free tier's main enforcer and must be said in plain
+  words, like the client-UUID disclosure).
+- **Availability is tiered fail-open/fail-closed.** If the seat's counter store is
+  down: anonymous and per-source traffic fails OPEN (the coarse allowance family
+  serves — the caller is never broken by the meter), while the BILLABLE tier fails
+  CLOSED (billable callers get the anonymous posture for the outage — spend is
+  never unbounded because the enforcement store is gone). An uncountable seat is
+  a degraded meter, never a client failure and never an open bar.
 - **The aggregate settles to the points plane server-to-server.** The seat exports
   daily `(account, day, free_calls, billable_calls)` rows to the kat-service points
   plane (authenticated service route, **idempotent by `(account, day)`** — the
@@ -69,7 +92,7 @@ lives where the spend happens: **the hosted instinct seat counts what it serves*
   Debit at processing: a day with `billable_calls > 0` debits `R`, **floored at 0**
   — points never go negative-locked (issue 192 GAP 4 law; property-test invariant).
   Integer math only; no floats anywhere near the money path (the dao law).
-- **The client sends NO usage report.** The original draft's `POST /points/usage`
+  **The client sends NO usage report.** The original draft's `POST /points/usage`
   from the client is dropped — it was the self-reported hole. The client gate
   (below) is pure-local; its only network contact is the `/points/balance` reads
   the user already runs.
@@ -114,10 +137,10 @@ the settle reconciliation reports it — caveat 2).
 
 | Constant | Proposed | Logic |
 |---|---|---|
-| `A` — free daily hosted allowance | **200 / UTC-day** per attested account | `seat_rerank` fires only on modelless-MISS ∩ pool ≥ `min_pool`; real heavy usage is tens/day. 200 is generous fair use AND bounds rotation to 200/day/key server-side (no balance ⇒ no billable tier) |
+| `A` — free daily hosted allowance | **200 / UTC-day** per JOINED account | `seat_rerank` fires only on modelless-MISS ∩ pool ≥ `min_pool`; real heavy usage is tens/day. 200 is generous fair use; unjoined keys never see it (they share the per-source budget — the consistency law above), and join is one-account-per-GitHub-id, so the personal allowance is not freely rotatable |
 | `B` — hard daily billable ceiling | **200 calls / UTC-day** | closes the 1-point-unlimited-day hole: max hosted calls/day = `A + B = 400` regardless of balance; the day-flag fee then bounds COST, `B` bounds CALLS |
 | `R` — billable-day fee | **2 points / billable day** | day-flag, not per-call: un-gameable, trivially deterministic. Under any plausible ratified earn (10–30/epoch ≈ 1.4–4.3/day), a hosted-heavy contributor pays ≈ half their earn rate — contributing stays above water; pure consumption drains |
-| `C` — spendable balance cap | **90 points** | this proposal's own bounded-drain-window rule, **[30 days, 2 years]** at the sustained billable rate — 90 / 2 = 45 days ✓. The window is ours (looser than the KAT free-grant's [7 days, 2 years] envelope-gate doctrine, `riir-dapps/tests/envelope_gate.rs` + the riir-dao AGENTS envelope row, cited as lineage): `C` caps CONTRIBUTED balance, not a free grant — a contributor's earned runway should outlast a giveaway's |
+| `C` — spendable balance cap | **90 points** | this proposal's own bounded-drain-window rule, **[30 days, 2 years]** at the sustained billable rate — 90 / 2 = 45 days ✓. The window is ours (looser than the KAT free-grant's [7 days, 2 years] envelope-gate doctrine, `../riir-dao/crates/riir-dao/tests/envelope_gate.rs` + the riir-dao AGENTS envelope row, cited as lineage): `C` caps CONTRIBUTED balance, not a free grant — a contributor's earned runway should outlast a giveaway's |
 | join grant | **none** | points come only from proven contribution; no faucet, no packs, no purchase — the D4 doctrine shape: contribute or the modelless path (which is the product's primary path anyway) |
 
 The window bounds [30 days, 2 years] are the INVARIANT; the absolutes are
@@ -128,8 +151,8 @@ flag.
 
 ### Wire changes (additive only)
 
-- Seat request: the two attestation headers (outside the frozen JSON contract; old
-  seats ignore them, old clients omit them — byte-compatible both directions).
+- Seat request: the three attestation headers (outside the frozen JSON contract;
+  old seats ignore them, old clients omit them — byte-compatible both directions).
 - `/points/balance` gains `drain_state` (additive serde, the `pay` precedent):
   `{ allowance_remaining_today, billable_ceiling_today, rate_served }` — the
   client's pre-check constants come from the SERVER (`A_served`, `B_served`,
@@ -166,14 +189,16 @@ the drain promotes BEFORE (or with) any `hosted_expert` manifest arming.
    cache TTL is the enforced-side leak: a stale-positive seat admits billable days
    past true exhaustion, bounded by the TTL and surfaced by the settle
    reconciliation. Tightening is a config change (shorter TTL), never a redesign.
-3. **Rotation is bounded, not eliminated.** A fresh key attests and gets `A`/day
-   at balance 0 — the server-enforced per-key bound, same magnitude as the
-   per-UUID bound the reset-client-id privacy right already implies (which stays —
-   it is a privacy right, not revoked for metering). The billable tier is
-   rotation-resistant (join = one account per GitHub id). If seat receipts ever
-   show allowance farming at scale, the named escalation is a joined-only
-   billable/allowance amendment — REFUSED for v1 (it would couple basic utility to
-   identity; the privacy law prefers allowance-for-all).
+3. **Rotation is bounded, not eliminated — and signing buys nothing.** Unjoined
+   keys (signed or not) share the per-source budget, so throwaway keygen draws no
+   more than staying anonymous; the per-source hash rotates daily and is kept for
+   the day only (a privacy cost, disclosed beside T16.1, accepted as the free
+   tier's enforcer). Joined rotation is bounded by join itself (one account per
+   GitHub id). If seat receipts ever show allowance farming at scale (many
+   unjoined sources per human, or join-farm attempts), the named escalations are
+   per-source tuning (a config act) or a joined-only-allowance amendment — the
+   latter REFUSED for v1 (it would couple basic utility to identity; the privacy
+   law prefers allowance-for-all).
 4. **Promotion ordering is load-bearing:** `points_drain` must promote BEFORE (or
    with) any `hosted_expert` manifest arming. The meter must never ship after the
    spend it meters.
@@ -193,7 +218,8 @@ the drain promotes BEFORE (or with) any `hosted_expert` manifest arming.
 - **Issue 075's depleted-account soft gate** (refuse + name the refuel path,
   server-truth-only — the property this design finally honors by putting the
   ledger server-side) → the decline UX shape, reused verbatim.
-- **The envelope-gate doctrine** (`riir-dapps/tests/envelope_gate.rs`, Plan 035 T5;
+- **The envelope-gate doctrine**
+  (`../riir-dao/crates/riir-dao/tests/envelope_gate.rs`, Plan 035 T5;
   the riir-dao AGENTS envelope row — the [7 days, 2 years] free-grant drain window)
   → the bounded-drain-window parameterization; this proposal sets its OWN window
   ([30 days, 2 years]) for a contributed-balance cap.
@@ -217,8 +243,11 @@ the drain promotes BEFORE (or with) any `hosted_expert` manifest arming.
   the seat counts the call to ITS day (the server's), so no straddling call is
   unreported or double-charged (the seat count is the ledger; the client count is
   never reconciled against for money); **attestation pins** — a wrong-key sig, a
-  reused `call_seq`, and a missing header all fall back to the anonymous posture,
-  never an error.
+  reuse `call_seq` within the replay window, and a missing header all fall back to
+  the unjoined posture, never an error; an out-of-order `call_seq` from concurrent
+  runs ACCEPTS (the window bitmap is the point — only below-window replays
+  reject); the counter-store outage arms the tiered fail (open for per-source
+  traffic, closed for the billable tier).
 - **G2 perf:** the client pre-check adds zero network + zero alloc to the
   escalation path; measured dispatch overhead delta ≤ 1 ms p99 against the
   pre-gate posture (the 025 bar) — expected µs-class. The modelless hot path is
@@ -295,9 +324,11 @@ the served reflex/rethink product economics; a client-side enforcement gate (nev
    disclosure line says contribute, not pay. The public copy stays roadmap-framed
    until ratification.
 5. **Availability:** the seat is already the availability bottleneck of the hosted
-   lane (a dead peer surfaces as a decline today); the drain adds no new coupling
-   — an uncounted call on a seat that cannot count is a lost meter entry, never a
-   client failure (fail-open at the meter, fail-safe at the caller).
+   lane (a dead peer surfaces as a decline today); the drain adds no new client
+   coupling. The counter-store outage fails OPEN for anonymous/per-source traffic
+   and CLOSED for the billable tier (the anonymous posture serves billable
+   callers for the outage) — the caller is never broken and spend is never
+   unbounded.
 
 ## Out of scope
 
@@ -316,7 +347,8 @@ variant (the named revisit lever).
    family (cited-only): <https://bytebytego.com/courses/system-design-interview/design-a-rate-limiter>
 3. In-workspace: Proposal 025 (the bar), Proposal 026 (the deferral + plane), issue
    192 (GAP 4 laws), Plan 061 (the service plane), Plan 325 (the client), Plan 225
-   T5.2 (the production wiring), `riir-dapps/tests/envelope_gate.rs` + the riir-dao
+   T5.2 (the production wiring),
+   `../riir-dao/crates/riir-dao/tests/envelope_gate.rs` + the riir-dao
    AGENTS envelope row (the envelope doctrine), issue 075 (the soft-gate shape,
    closed — git history), the v1 decision_wire freeze (riir-reflex issue 074 —
    why identity rides headers, not JSON).
