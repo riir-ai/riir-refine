@@ -169,7 +169,7 @@ pub fn regime_line(score: &BenchScore) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// The drive helper mirrors katgpt-rs tests/step_noise_gates.rs: push
+    /// The drive helper mirrors katgpt-rs `tests/step_noise_gates.rs`: push
     /// an explicit synthetic (state, objective) series, return the final
     /// read. This prices the MONITOR + the consumer calibration; the
     /// window/slice arithmetic above is the production wiring.
@@ -213,6 +213,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::cast_precision_loss)] // loop-index fixture, exact at these magnitudes (t ≤ 47)
     fn learning_fixture_class_reads_learning_on_a_healthy_improvement_series() {
         // Resolutions every step (slope ≈ 1 ≫ p0) while picks alternate:
         // the thrash gate's (1−progress) term must fail and Learning win.

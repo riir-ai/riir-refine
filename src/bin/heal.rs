@@ -2861,12 +2861,6 @@ fn print_mine_encouragement(
     // CTA — they are contributed; the quorum decides, not the user.
 }
 
-// ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
-
-/// The run-start legs (T1 alert + T2 hands-free upgrade + T4 auto corpus).
-/// Every leg fail-soft — a network-less run must never turn into a nonzero
-/// exit here. A feature-less build compiles the whole fn to nothing (the
-/// caller skips it anyway on the same gates).
 // ── Plan 325 T4/T5 (issue 192): the points verbs' runners ────────────────
 // The public-goods surface: thin fetch + render over
 // `riir_refine::points_client` (the pure logic lives in the lib; these
@@ -3083,6 +3077,12 @@ fn run_points_corpus() {
     );
 }
 
+// ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
+
+/// The run-start legs (T1 alert + T2 hands-free upgrade + T4 auto corpus).
+/// Every leg fail-soft — a network-less run must never turn into a nonzero
+/// exit here. A feature-less build compiles the whole fn to nothing (the
+/// caller skips it anyway on the same gates).
 fn run_update_surface_hooks(paths: &[PathBuf]) {
     #[cfg(feature = "update_check")]
     {

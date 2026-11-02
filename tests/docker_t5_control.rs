@@ -101,7 +101,12 @@ fn t5_control_scanner_structure_on_in_tree_files() {
         // lane) bumped the builder tag as a rider; stages 2 + stanzas 18
         // re-verified unchanged, only the tag moved. The pin had been red
         // for any fetcher since 09-07 with the owning lane gone.
-        ("deploy", 2, 18, "rust:1.98.1-alpine"),
+        // base 1.98.1 -> 1.99.0 on 2026-10-29: riir-chain `de1b3d9f`
+        // (the 963-T3 toolchain-coherence lane) bumped the builder tag
+        // deliberately — the docs sweep had synced everything but this
+        // file; stages 2 + stanzas 18 re-verified unchanged, only the tag
+        // moved. The pin had been red since 10-29 (issue 197).
+        ("deploy", 2, 18, "rust:1.99.0-alpine"),
         // 9 -> 11 on 2026-08-28: riir-chain ADOPTED the healer's fixes
         // (Plan 030 T1.6), adding the `SHELL` pipefail stanza and a
         // runtime-stage `USER`. Re-verified with `grep -cE '^[A-Za-z]+ '`.
