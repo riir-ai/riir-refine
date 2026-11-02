@@ -58,9 +58,12 @@ fails, the domain stays opt-in with the failing axis named in the record."
 
 ## Next (the re-campaign path)
 
-1. Issue 193 repairs (R1–R5) → G1 green (or recorded demotions + floor re-derivation).
+1. ~~Issue 193 repairs (R1–R5) → G1 green~~ **DONE 2026-11-01** (Issue 193 closed:
+   65/65 repaired, zero demotions; full G1 248 green / 0 FAIL / 803 parse-only in 100.8 s;
+   closing commits `50ba6983fb8`/`90c68b7f74e`/`84e4432dfe9`/`a82a5b29bd5`).
 2. The G2 convention decision (owner-gated): a corpus bench-entry convention vs GPU-host
    benches vs closing the CPU-G2 axis with the disclosure (the flat median IS the measured
    answer for scalar ports).
 3. Re-campaign: G1 + G2 (tranche re-selected from the repaired corpus) + G5 census on the
-   pinned corpus in the same run.
+   pinned corpus in the same run. NOTE: the G1 digests moved with the 193 repairs — the
+   tranche re-selection and the G5 corpus pin re-derive in the same re-campaign run.

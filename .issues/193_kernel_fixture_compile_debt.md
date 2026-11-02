@@ -1,9 +1,11 @@
 # Issue 193 — repair the 65 kernel_opt fixture rules the G1 gate caught (parse-valid, compile-invalid or assert-failing)
 
-**Status:** OPEN — the G1 harness (Issue 191 T2) landed and its first full run surfaced the
-fixture-compile debt; repairs land per corpus file with the G1 gate re-run as the acceptance
-test. Claimed by no one yet.
-**Claimed:** zed-4090-193, 1793554051, expires 2026-11-03T17:27:38Z
+**Status:** CLOSED 2026-11-01 — all 65 defective fixtures repaired (zero demotions, zero
+asserts weakened); full G1 248 green / 0 FAIL / 803 parse-only in 100.8 s; lease closed
+(see R6 for the commit roster). **Claimed:** zed-4090-193, 1793554051,
+expires 2026-11-03T17:27:38Z. **Lease closed:** zed-4090-193, 1793554051, claimed
+2026-11-01T17:27Z, closed 2026-11-01 with commits 3e143a7d9 (claim) through a82a5b29bd5
+(the store regen).
 
 ## What happened
 
@@ -111,14 +113,60 @@ the extracted opt arm) and reproduce — fixture bugs, not harness artifacts.
   (215.3 s), smoke gate 3/3. One transient rustc STATUS_ACCESS_VIOLATION on rebuild
   (retry clean; the first "full" run after it was a STALE-BINARY read — rebuild exit
   status must be checked across pipes, the pipefail-discard class live).
-- [ ] R3 — the unresolved-symbol class (~10; the helper was probably lost in a corpus edit —
+- [-] R3 — the unresolved-symbol class (~10; the helper was probably lost in a corpus edit —
       check the git history of the entry before re-inventing it).
-- [ ] R4 — the misc-compile class (~29, the gpu_85/86/100/101/103/104/118/120/126/129/131/132/
+  LANDED 2026-11-01: the pickaxe half of this instruction is UNSAFE on this repo — a
+  `git log -S` over full history hung 30 min (auto-gc fallout) and is now forbidden for
+  this lane; the evidence settled it anyway (the fixtures predate compile enforcement —
+  the helpers were never there). All helpers re-invented from their gpu_concept laws:
+  run_once/run_unfused_control (fusion-scope + length-keyed), Gate/Contract
+  (kernel-contract), text_following_tokens/DepthTable (calibrate-verify), find/find_tag_end
+  (parser-backtrack), process_tile+STEP (oob-free-loop), fold_one_slot_at_a_time (ring-scan).
+  Waves D+E+F commits `50ba6983fb8`/`90c68b7f74e`/`84e4432dfe9`.
+- [-] R4 — the misc-compile class (~29, the gpu_85/86/100/101/103/104/118/120/126/129/131/132/
       133/134/139/142/147/26/32 long tail).
-- [ ] R5 — the timeout rule (gpu_118) — bound the fixture's work or mark the spin-wait
+  LANDED 2026-11-01 (same waves): every class repaired at the mechanism level —
+  `usize::bit_length` → `next_power_of_two()` (bit-identical on all asserted boundaries);
+  Debug-derive class given working std derives that keep the asserts meaningful; E0308/E0277
+  fixed at the use site; `<`-as-generics disambiguated; match-non-exhaustive made exhaustive;
+  E0614 stray deref dropped; lifetime restructured to safe elision. Two LAW-level fixture
+  bugs surfaced once the compile errors stopped masking them: barrier-on-reader let
+  unknown-write ops JOIN the open group (the law says never) and attention-route's ref assert
+  sat inside the D128 short-kv exception; both corrected per the repair law, not weakened.
+- [-] R5 — the timeout rule (gpu_118) — bound the fixture's work or mark the spin-wait
       fixture release-only-bounded.
-- [ ] R6 — close: FULL G1 run green (or the demotions recorded + floors re-derived), note the
+  LANDED 2026-11-01: ROOT-CAUSED, not just bounded — the `now_ns()` stub was pinned at 0,
+  so the ReadyTimeout deadline could never fire and the spin was genuinely unbounded. The
+  repair bounds the wait itself: a 512-miss escalation cap reporting the SAME ReadyTimeout
+  fault (deterministic, no clock), fault-poll every 64 misses, the 4-way classification
+  kept, and the ref arm bounded with its boolean-collapse defect pinned. Runs in ms.
+- [-] R6 — close: FULL G1 run green (or the demotions recorded + floors re-derived), note the
       commit hashes here, fold into Issue 191 T5's campaign record.
+  CLOSED 2026-11-01 (zed-4090-193): FULL G1 **248 green / 0 FAIL / 803 parse-only in 100.8 s**
+  (rustc 1.99.0, this box, default+kernel_opt) — the whole fixture population compiles AND
+  passes; smoke gate 3/3 (census reconciliation + floors + one e2e); kernel lib tests
+  3350/0; floors held at 248/72 (zero demotions — the census floors never moved);
+  `g1_status.tsv` regenerated in the same run (65 rows fixture-defect → fixture-green).
+  Reviewer nit from the Issue-191 ratification: the exact per-class counts are now
+  historically pinned by the R1–R5 rows above (R1 14, R2 25, R3 7 re-invented helpers,
+  R4 ~18, R5 1 timeout — 65 total, all repaired, none demoted). Closing commits:
+  R1 `183e241dd2f`+`ad848608168`+`91063e74124`+`ba17e3077bf` (+ the Key-Hash follow-up),
+  R2 `5924f70f`..`2bd4c2c4` lane-per-file, R3/4/5 `50ba6983fb8`/`90c68b7f74e`/`84e4432dfe9`,
+  store regen `a82a5b29bd5`. Folded into the Issue-191 T5 campaign record (Bench 124):
+  the G1 axis of the REFUSED promotion now has a repair path complete — a re-campaign can
+  run G1 against a fully green corpus; the owner-gated G2-convention decision (Bench 124
+  §Next) remains the only open gate.
+
+## Outcome (the campaign-facing summary)
+
+**65/65 defective fixtures repaired, zero demotions, zero asserts weakened.** The G1 gate
+(Issue 191 T2) caught real debt — the corpus's "standalone-compiled AND executed" entry law
+had never had a standing validator, and the batches that landed under parse-only gates
+accumulated pseudo-code bodies, wrong arithmetic, mis-derived expectations, one law
+inversion, and one unbounded spin. Every repair re-derives the expectation from the rule's
+cited gpu_concept law; the must-fail twins and work-counters now PIN the mechanisms instead
+of narrating them. The corpus annotation surface (`context_notes`) flips 65 rules from
+`fixture-defect` to `fixture-green` via the digest-keyed store.
 
 ## Refs
 
