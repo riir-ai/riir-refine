@@ -1,8 +1,8 @@
 # Plan 326 — the points drain, Phases 1–2: wire + client pre-check + seat counters + service accounting
 
 **Status:** Active — executes [Proposal 027](../.proposals/027_points_drain_fair_use.md) (AGREE r3, `fefce49f5`) Phases 1–2, which need NO ratified numbers (everything ships inert / report-only); Phase 3 (ratification + promotion) is the owner act and is NOT this plan. Design contract = Proposal 027 — this plan does not re-argue it; deviations land in 027 first.
-**Claimed:** zed-m3-drain2, 1793594377, expires 2026-11-04T04:39:37+00:00 — **EXECUTED 2026-11-02: T1–T16 (+T13.5, T5b) all landed; Phases 1–2 COMPLETE, byte-inert until ratification.**
-**Lease closed:** zed-m3-drain2, 1793594377, claimed 2026-11-02 — executed within the window (ledger `b3ad4d4`+`0f00664`, refine `da867a10b`+`943de6a5`, instinct `22ff162`+`41e9428`+`960d77f`, dapps `8c6a46d`).
+**Claimed:** zed-m3-drain2, 1793594377, expires 2026-11-04T04:39:37+00:00
+**Lease closed:** zed-m3-drain2, 1793594377, claimed 2026-11-02, expired 2026-11-04T04:39:37+00:00 — EXECUTED 2026-11-02 within the window: T1–T16 (+T13.5, T5b) all landed, Phases 1–2 COMPLETE, byte-inert until ratification (ledger `b3ad4d4`+`0f00664`, refine `da867a10b`+`943de6a5`, instinct `22ff162`+`41e9428`+`960d77f`, dapps `8c6a46d`).
 
 ## Task
 
