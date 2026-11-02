@@ -1,6 +1,7 @@
 # Issue 197 — pre-existing develop reds: docker_t5_control test failure + 5 --all-features clippy findings
 
 **Status:** OPEN — pre-existing on clean develop, NOT introduced by plan 326 (verified by the T2–T7 lane via stash on clean develop, 2026-11-02); filed so the reds are tracked, not absorbed into a later lane's diff.
+**Claimed:** zed-780f7da3@m3, 1793602209, expires 2026-11-04T06:50:09Z
 
 ## What fails
 
