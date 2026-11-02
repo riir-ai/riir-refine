@@ -2177,6 +2177,9 @@ fn run_hosted(
     let (mut n_worthy, mut n_pick, mut n_generate) = (0usize, 0usize, 0usize);
     let (mut n_abstain, mut n_below_min, mut n_declined, mut n_latched) =
         (0usize, 0usize, 0usize, 0usize);
+    // Plan 326 T4: the drain's polite declines (the local fair-use
+    // pre-check), counted on their own axis beside the other reasons.
+    let mut n_drained = 0usize;
     let (mut esc_wall_ms_total, mut esc_wall_ms_max) = (0u128, 0u128);
     let mut cases_escalated = 0u128;
     #[cfg(feature = "seat_rerank")]
@@ -2234,6 +2237,7 @@ fn run_hosted(
                             &mut n_below_min,
                             &mut n_declined,
                             &mut n_latched,
+                            &mut n_drained,
                         );
                         (
                             class,
@@ -2273,6 +2277,7 @@ fn run_hosted(
                             &mut n_below_min,
                             &mut n_declined,
                             &mut n_latched,
+                            &mut n_drained,
                         );
                         (
                             class,
@@ -2414,7 +2419,7 @@ fn run_hosted(
     println!("{}", escalated_summary.markdown_row("H-escalated"));
     println!(
         "  chain: worthy(stands) {n_worthy} · seat picks {n_pick} · hosted generates {n_generate} · \
-         abstained {n_abstain} · below min_pool {n_below_min} · declined {n_declined} · rate-latched {n_latched}"
+         abstained {n_abstain} · below min_pool {n_below_min} · declined {n_declined} · rate-latched {n_latched} · drained {n_drained}"
     );
     println!(
         "  paired keep_s over {n}: escalated wins {esc_wins}, loses {esc_losses}, ties {ties}"
@@ -2563,6 +2568,7 @@ fn stand_reason_axes(
     n_below_min: &mut usize,
     n_declined: &mut usize,
     n_latched: &mut usize,
+    n_drained: &mut usize,
 ) -> (String, String) {
     match reason {
         riir_refine::escalation_dispatch::StandReason::Worthy => {
@@ -2593,6 +2599,18 @@ fn stand_reason_axes(
         riir_refine::escalation_dispatch::StandReason::Declined(m) => {
             *n_declined += 1;
             ("declined".to_string(), m)
+        }
+        riir_refine::escalation_dispatch::StandReason::DrainExhausted => {
+            *n_drained += 1;
+            (
+                "drain_exhausted".to_string(),
+                // Plan 326 T4 — the ONE run-log disclosure: contribution
+                // vocabulary ONLY (the issue-075 soft-gate sentence
+                // shape); payment vocabulary is deliberately absent.
+                "hosted runway exhausted for today — contribute to earn more; the \
+                 modelless fix stands"
+                    .to_string(),
+            )
         }
     }
 }

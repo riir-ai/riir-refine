@@ -39,7 +39,7 @@
 use std::time::{Duration, Instant};
 
 use crate::code_egress::EgressConsent;
-use crate::escalation_manifest::{DEMOTE_ENV, EscalationManifest, EscalationRow, TargetKind};
+use crate::escalation_manifest::{EscalationManifest, EscalationRow, TargetKind, DEMOTE_ENV};
 
 /// The suite every healing rerank rides (the R7 freeze: ONE suite for v1 —
 /// one seat lane hosts the healing rerank expert; per-domain lanes wait
@@ -92,6 +92,14 @@ pub enum StandReason {
     /// override. The modelless answer stands BY DESIGN (abstention is
     /// first-class).
     SeatAbstained,
+    /// The hosted lane's fair-use drain pre-check declined (Proposal
+    /// 027): the day's free allowance is spent and the cached balance
+    /// cannot cover a billable call — the LOCAL mirror of the seat's
+    /// enforcement, and a POLICY verdict like
+    /// [`StandReason::SeatAbstained`], never a wire error. The modelless
+    /// answer stands; the refuel path is contribution (the run-log
+    /// disclosure names it — payment vocabulary is deliberately absent).
+    DrainExhausted,
     /// The transport declined (consent / cap / deadline / wire / contract).
     /// Carries the short class text for the run log.
     Declined(String),
@@ -158,6 +166,13 @@ pub struct EscalationDispatch {
     /// compiled — `arm` refuses the row otherwise).
     #[cfg(feature = "hosted_expert")]
     expert: Option<crate::hosted_expert::HostedExpertL4>,
+    /// The points-drain gate (Proposal 027 — the hosted seat's fair-use
+    /// pre-check + per-call attestation). Construction is I/O-free; the
+    /// process posture resolves the account dir + key lazily at the
+    /// FIRST seat call. It exists exactly where it can act: the seat
+    /// call path (a gate without the seat transport is dead weight).
+    #[cfg(all(feature = "points_drain", feature = "seat_rerank"))]
+    drain: crate::points_drain::DrainGate,
 }
 
 impl std::fmt::Debug for EscalationDispatch {
@@ -279,6 +294,8 @@ impl EscalationDispatch {
             }
             _ => None,
         };
+        #[cfg(all(feature = "points_drain", feature = "seat_rerank"))]
+        let drain = crate::points_drain::DrainGate::for_process();
         Ok(Some(Self {
             label: label.to_string(),
             latch: katgpt_core::escalation_guard::RollingRateLatch::with_window(
@@ -291,7 +308,20 @@ impl EscalationDispatch {
             seat,
             #[cfg(feature = "hosted_expert")]
             expert,
+            #[cfg(all(feature = "points_drain", feature = "seat_rerank"))]
+            drain,
         }))
+    }
+
+    /// The drain-injectable test seam (plan 326 T6): replace the
+    /// process-resolved gate with an injected one BEFORE any call — the
+    /// `is_armed_with` seam pattern, so no test ever touches the real
+    /// account dir or races a process env.
+    #[cfg(all(test, feature = "points_drain", feature = "seat_rerank"))]
+    #[must_use]
+    pub fn with_drain_gate(mut self, gate: crate::points_drain::DrainGate) -> Self {
+        self.drain = gate;
+        self
     }
 
     /// The domain label the row is armed under.
@@ -395,8 +425,44 @@ impl EscalationDispatch {
         let _ = pool;
         #[cfg(feature = "seat_rerank")]
         if let Some(client) = self.seat.as_ref() {
-            return match rerank_with_readiness_checked(
-                client, snippet, &presented, deadline, policy, consent,
+            // ONE body builder (the R7 rule), pre-built here so the
+            // drain's attestation signs the EXACT bytes on the wire.
+            let body = match client.build_body(snippet, &presented) {
+                Ok(body) => body,
+                // min_pool ≥ the frozen default (2) makes this
+                // unreachable; the conservative contract declines rather
+                // than proves it.
+                Err(e) => {
+                    return EscalatedFix::StoodByModelless {
+                        reason: StandReason::Declined(e.to_string()),
+                    };
+                }
+            };
+            // Proposal 027's UX pre-check (plan 326 T3): AFTER `min_pool`
+            // (BelowMinPool never consumes) and IMMEDIATELY before the
+            // transport. A refused consent skips the gate — the client's
+            // own refusal below is the verdict, and a refusal never
+            // becomes a metered call. Inert unless an account key AND
+            // served constants exist; fails open on any local error.
+            #[cfg(feature = "points_drain")]
+            let attested = if matches!(consent, EgressConsent::Allowed) {
+                match self.drain.begin_hosted_call(body.as_bytes()) {
+                    Ok(attested) => attested,
+                    Err(crate::points_drain::DrainDeclined) => {
+                        return EscalatedFix::StoodByModelless {
+                            reason: StandReason::DrainExhausted,
+                        };
+                    }
+                }
+            } else {
+                crate::points_drain::AttestedCall::default()
+            };
+            #[cfg(feature = "points_drain")]
+            let headers = attested.header_refs();
+            #[cfg(not(feature = "points_drain"))]
+            let headers: Vec<(&str, &str)> = Vec::new();
+            return match rerank_with_readiness_checked_with_headers(
+                client, &body, &presented, &headers, deadline, policy, consent,
             ) {
                 Ok(crate::seat_rerank::SeatAnswer::Pick {
                     candidate, receipt, ..
@@ -531,8 +597,33 @@ pub fn rerank_with_readiness_checked(
     policy: ReadinessPolicy,
     consent: &EgressConsent,
 ) -> Result<crate::seat_rerank::SeatAnswer, crate::seat_rerank::SeatDecline> {
+    let body = client.build_body(snippet, pool)?;
+    rerank_with_readiness_checked_with_headers(client, &body, pool, &[], deadline, policy, consent)
+}
+
+/// The headers-carrying core of the readiness retry (plan 326 T5): the
+/// SAME law — retries ONLY the lazy seat's loading code, every other
+/// decline falls through on the first attempt, the whole loop bounded by
+/// the caller's deadline — over a PRE-BUILT body + the per-call
+/// attestation headers. The drain composes the headers once per
+/// dispatch call; a readiness retry re-sends the identical request (the
+/// same logical call, not a second metered one).
+///
+/// # Errors
+///
+/// Same taxonomy as [`rerank_with_readiness`].
+#[cfg(feature = "seat_rerank")]
+pub fn rerank_with_readiness_checked_with_headers(
+    client: &crate::seat_rerank::SeatRerankClient,
+    body: &str,
+    pool: &[String],
+    headers: &[(&str, &str)],
+    deadline: Instant,
+    policy: ReadinessPolicy,
+    consent: &EgressConsent,
+) -> Result<crate::seat_rerank::SeatAnswer, crate::seat_rerank::SeatDecline> {
     for _ in 0..policy.max_attempts {
-        match client.rerank_checked_with(snippet, pool, deadline, consent.clone()) {
+        match client.rerank_body_checked_with(body, pool, headers, deadline, consent.clone()) {
             Ok(answer) => return Ok(answer),
             // The lazy seat's loading window: the ONE retryable decline.
             Err(crate::seat_rerank::SeatDecline::Wire(code)) if code == "loading" => {
@@ -607,7 +698,7 @@ mod tests {
         use super::*;
         use std::io::{Read, Write};
         use std::net::TcpListener;
-        use std::sync::mpsc::{Receiver, channel};
+        use std::sync::mpsc::{channel, Receiver};
 
         const SNIPPET: &str = "fn foo() -> i32 { return 42; }";
         const BASE: &str = "http://127.0.0.1:9";
@@ -1031,6 +1122,282 @@ mod tests {
                 }
             );
             listener.assert_no_connections();
+        }
+
+        /// The points-drain order pins (plan 326 T6): the gate sits AFTER
+        /// `min_pool` and IMMEDIATELY before the transport — a
+        /// non-seat-call outcome consumes NOTHING, an exhausted gate
+        /// declines locally, an inert gate changes nothing on the wire.
+        /// Compiled only when the drain rides the seat transport (the
+        /// combined posture).
+        #[cfg(feature = "points_drain")]
+        mod drain_tests {
+            use super::*;
+            use crate::points_drain::{DayState, DrainGate};
+            use riir_ledger::DrainState;
+
+            const SEED: [u8; 32] = [11u8; 32];
+
+            fn served(allowance: u64, ceiling: u64, rate: u64) -> DrainState {
+                DrainState {
+                    allowance_remaining_today: allowance,
+                    billable_ceiling_today: ceiling,
+                    rate_served: rate,
+                }
+            }
+
+            fn gate_with(state: DayState) -> DrainGate {
+                DrainGate::for_tests(state, Some(ed25519_dalek::SigningKey::from_bytes(&SEED)))
+            }
+
+            fn armed_drain(json: &str, gate: DrainGate) -> EscalationDispatch {
+                EscalationDispatch::arm_with(&manifest_from(json), "clippy", None)
+                    .expect("arm ok")
+                    .expect("armed")
+                    .with_drain_gate(gate)
+            }
+
+            fn counters(state: &DayState) -> (u64, u64, u64) {
+                (
+                    state.hosted_calls_today,
+                    state.billable_calls_today,
+                    state.call_seq,
+                )
+            }
+
+            #[test]
+            fn worthy_never_consumes_the_day_state() {
+                let listener = SilentListener::bind();
+                let gate = gate_with(DayState {
+                    drain_state: Some(served(10, 10, 2)),
+                    ..DayState::default()
+                });
+                let probe = gate.clone(); // clones share the injected state
+                let before = probe.test_snapshot().expect("injected state");
+                let mut d = armed_drain(&seat_row_json(0.5, ""), gate);
+                let fix = d.escalate_rerank_checked_with(
+                    0.9, // >= cap 0.5: the worthiness gate says STANDS
+                    SNIPPET,
+                    &pool2(),
+                    Instant::now() + Duration::from_secs(1),
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert_eq!(
+                    fix,
+                    EscalatedFix::StoodByModelless {
+                        reason: StandReason::Worthy
+                    }
+                );
+                assert_eq!(
+                    counters(&probe.test_snapshot().expect("injected state")),
+                    counters(&before),
+                    "a Worthy outcome consumes NOTHING (the gate sits after it)"
+                );
+                listener.assert_no_connections();
+            }
+
+            #[test]
+            fn below_min_pool_never_consumes_the_day_state() {
+                let listener = SilentListener::bind();
+                let gate = gate_with(DayState {
+                    drain_state: Some(served(10, 10, 2)),
+                    ..DayState::default()
+                });
+                let probe = gate.clone();
+                let before = probe.test_snapshot().expect("injected state");
+                let mut d = armed_drain(&seat_row_json(0.5, ""), gate);
+                let fix = d.escalate_rerank_checked_with(
+                    0.1,
+                    SNIPPET,
+                    &["the-only-candidate".to_string()], // 1 < the frozen default 2
+                    Instant::now() + Duration::from_secs(1),
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert_eq!(
+                    fix,
+                    EscalatedFix::StoodByModelless {
+                        reason: StandReason::BelowMinPool
+                    }
+                );
+                assert_eq!(
+                    counters(&probe.test_snapshot().expect("injected state")),
+                    counters(&before),
+                    "BelowMinPool returns BEFORE the drain gate — nothing consumed"
+                );
+                listener.assert_no_connections();
+            }
+
+            #[test]
+            fn rate_latched_never_consumes_the_day_state() {
+                let listener = SilentListener::bind();
+                let gate = gate_with(DayState {
+                    drain_state: Some(served(10, 10, 2)),
+                    ..DayState::default()
+                });
+                let probe = gate.clone();
+                let before = probe.test_snapshot().expect("injected state");
+                let mut d = armed_drain(&seat_row_json(0.5, ""), gate);
+                let deadline = Instant::now() + Duration::from_secs(1);
+                // Fill the latch window with below-min-pool misses —
+                // those return BEFORE the drain gate (the order under
+                // test) and consume nothing.
+                let single = vec!["only".to_string()];
+                for _ in 0..katgpt_core::escalation_guard::DEFAULT_WINDOW {
+                    let _ = d.escalate_rerank_checked_with(
+                        0.1,
+                        SNIPPET,
+                        &single,
+                        deadline,
+                        ReadinessPolicy::default(),
+                        &EgressConsent::Allowed,
+                    );
+                }
+                // The latched verdict, on a WORTHY score with a full pool:
+                // the gate is never reached (the latch fires first).
+                let fix = d.escalate_rerank_checked_with(
+                    0.9,
+                    SNIPPET,
+                    &pool2(),
+                    deadline,
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert_eq!(
+                    fix,
+                    EscalatedFix::StoodByModelless {
+                        reason: StandReason::RateLatched
+                    }
+                );
+                assert_eq!(
+                    counters(&probe.test_snapshot().expect("injected state")),
+                    counters(&before),
+                    "the latched verdict consumed NOTHING"
+                );
+                listener.assert_no_connections();
+            }
+
+            #[test]
+            fn exhausted_declines_before_any_socket() {
+                let listener = SilentListener::bind();
+                let gate = gate_with(DayState {
+                    cached_balance: Some(1), // below the fee
+                    drain_state: Some(served(0, 10, 2)),
+                    ..DayState::default()
+                });
+                let probe = gate.clone();
+                let mut d = armed_drain(&seat_row_json(0.5, ""), gate);
+                let fix = d.escalate_rerank_checked_with(
+                    0.1,
+                    SNIPPET,
+                    &pool2(),
+                    Instant::now() + Duration::from_secs(1),
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert_eq!(
+                    fix,
+                    EscalatedFix::StoodByModelless {
+                        reason: StandReason::DrainExhausted
+                    }
+                );
+                listener.assert_no_connections();
+                let snap = probe.test_snapshot().expect("injected state");
+                assert_eq!(
+                    counters(&snap),
+                    (0, 0, 0),
+                    "the decline consumed NOTHING (no count, no seq)"
+                );
+            }
+
+            #[test]
+            fn absent_constants_are_inert_and_send_no_headers() {
+                let (addr, rx) = fake_seat_multi(&[("200 OK", &ok_pick_doc(0))]);
+                let json = seat_row_json(0.5, "").replace(BASE, &addr);
+                let gate = gate_with(DayState {
+                    cached_balance: Some(99),
+                    drain_state: None, // the inert posture: no served constants
+                    ..DayState::default()
+                });
+                let probe = gate.clone();
+                let mut d = armed_drain(&json, gate);
+                let fix = d.escalate_rerank_checked_with(
+                    0.1,
+                    SNIPPET,
+                    &pool2(),
+                    Instant::now() + Duration::from_secs(1),
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert!(
+                    matches!(
+                        fix,
+                        EscalatedFix::Answer {
+                            source: "seat_pick",
+                            ..
+                        }
+                    ),
+                    "inert: the seat call proceeds as before"
+                );
+                let snap = probe.test_snapshot().expect("injected state");
+                assert_eq!(counters(&snap), (0, 0, 0), "inert consumes nothing");
+                let reqs = drain(&rx);
+                assert_eq!(reqs.len(), 1);
+                let head = String::from_utf8_lossy(&reqs[0]).to_ascii_lowercase();
+                assert!(
+                    !head.contains("x-points-"),
+                    "an inert gate composes no attestation headers"
+                );
+            }
+
+            #[test]
+            fn attested_calls_count_and_land_the_three_headers_once() {
+                let (addr, rx) = fake_seat_multi(&[("200 OK", &ok_pick_doc(0))]);
+                let json = seat_row_json(0.5, "").replace(BASE, &addr);
+                let gate = gate_with(DayState {
+                    cached_balance: Some(99),
+                    drain_state: Some(served(10, 10, 2)),
+                    ..DayState::default()
+                });
+                let probe = gate.clone();
+                let mut d = armed_drain(&json, gate);
+                let fix = d.escalate_rerank_checked_with(
+                    0.1,
+                    SNIPPET,
+                    &pool2(),
+                    Instant::now() + Duration::from_secs(1),
+                    ReadinessPolicy::default(),
+                    &EgressConsent::Allowed,
+                );
+                assert!(matches!(fix, EscalatedFix::Answer { .. }));
+                let snap = probe.test_snapshot().expect("injected state");
+                assert_eq!(
+                    counters(&snap),
+                    (1, 0, 1),
+                    "the allowed call consumed one free count + one seq"
+                );
+                let reqs = drain(&rx);
+                assert_eq!(reqs.len(), 1);
+                let raw = String::from_utf8_lossy(&reqs[0]);
+                let (head, body) = raw.split_once("\r\n\r\n").expect("request shape");
+                let head = head.to_ascii_lowercase();
+                for name in ["x-points-account:", "x-points-pubkey:", "x-points-sig:"] {
+                    assert_eq!(
+                        head.matches(name).count(),
+                        1,
+                        "{name} appears EXACTLY once (the kat_ua law)"
+                    );
+                }
+                // the sent body IS the one the one builder emits — the
+                // attestation signed exactly these bytes (the crypto pin
+                // lives in the points_drain module tests)
+                let expected = crate::seat_rerank::SeatRerankClient::new(&addr, HEAL_SUITE)
+                    .expect("endpoint ok")
+                    .build_body(SNIPPET, &pool2())
+                    .expect("pool ok");
+                assert_eq!(body, expected, "the transport sent exactly the built body");
+            }
         }
     }
 

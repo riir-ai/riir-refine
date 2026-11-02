@@ -309,20 +309,58 @@ impl SeatRerankClient {
         if candidates.is_empty() {
             return Err(SeatDecline::NoCandidates);
         }
+        let body = self.build_body(snippet, candidates)?;
+        self.rerank_body_checked_with(&body, candidates, &[], deadline, consent)
+    }
+
+    /// The pre-built-body core (plan 326 T5's header seam): the
+    /// escalation dispatch builds the body ONCE so the drain's
+    /// attestation signs the EXACT bytes on the wire, then routes
+    /// through here with the composed headers. `headers` carries each
+    /// name EXACTLY once — the `kat_ua` law (a duplicate header name is
+    /// a silent comma-join and a 403 on conforming edges); this client
+    /// writes each entry verbatim, never a second setter on a name
+    /// already present.
+    ///
+    /// # Errors
+    ///
+    /// Same taxonomy as [`Self::rerank`].
+    pub fn rerank_body_checked_with(
+        &self,
+        body: &str,
+        candidates: &[String],
+        headers: &[(&str, &str)],
+        deadline: Instant,
+        consent: EgressConsent,
+    ) -> Result<SeatAnswer, SeatDecline> {
+        // The same pre-socket guards as [`Self::rerank_checked_with`] —
+        // both public entries enforce the full contract.
+        if let EgressConsent::Refused(r) = consent {
+            return Err(SeatDecline::Egress(r));
+        }
+        if candidates.is_empty() {
+            return Err(SeatDecline::NoCandidates);
+        }
         // (3) deadline — an expired budget declines pre-socket.
         if deadline_expired(deadline) {
             return Err(SeatDecline::DeadlineExpired);
         }
-        let body = self.build_body(snippet, candidates)?;
-        let raw = self.post(&body, deadline)?;
+        let raw = self.post(body, headers, deadline)?;
         Self::parse_reply(&raw, candidates, deadline)
     }
 
     /// The HTTP/1.1 exchange, deadline-phased (the `decision_client`
     /// shape): a capped connect, write under the remaining budget, read
     /// to EOF under the remaining budget. `Connection: close` — the edge
-    /// answers one request per connection.
-    fn post(&self, body: &str, deadline: Instant) -> Result<String, SeatDecline> {
+    /// answers one request per connection. `headers` are written each
+    /// EXACTLY once between Content-Length and Connection (the
+    /// `kat_ua` law — see [`Self::rerank_body_checked_with`]).
+    fn post(
+        &self,
+        body: &str,
+        headers: &[(&str, &str)],
+        deadline: Instant,
+    ) -> Result<String, SeatDecline> {
         let expired = || SeatDecline::DeadlineExpired;
         let remaining = deadline.saturating_duration_since(Instant::now());
         let connect_budget = remaining.min(CONNECT_BUDGET_CAP).max(CONNECT_BUDGET_FLOOR);
@@ -342,13 +380,23 @@ impl SeatRerankClient {
             Ok(s) => s,
             Err(e) => return Err(SeatDecline::Wire(format!("connect: {e}"))),
         };
-        let request = format!(
+        let mut request = format!(
             "POST /decide HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
-             Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+             Content-Length: {}\r\n",
             self.host,
-            body.len(),
-            body
+            body.len()
         );
+        // Extra headers (the drain attestation when composed) — each
+        // name written EXACTLY once, verbatim; the values are
+        // client-composed hex so no CRLF can ride in one.
+        for (name, value) in headers {
+            request.push_str(name);
+            request.push_str(": ");
+            request.push_str(value);
+            request.push_str("\r\n");
+        }
+        request.push_str("Connection: close\r\n\r\n");
+        request.push_str(body);
         if deadline_expired(deadline) {
             return Err(expired());
         }

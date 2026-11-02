@@ -64,6 +64,13 @@ pub mod client_id;
 pub mod first_run_consent;
 #[cfg(feature = "points")]
 pub mod points_client;
+// Proposal 027 (plan 326 T2): the points-drain CLIENT half — the
+// machine-local day state, the hosted-lane UX pre-check, and the
+// per-call attestation composer. Implies `points`; INERT until served
+// constants are cached (the constants are served, never compiled), and
+// keyless entirely without an account.
+#[cfg(feature = "points_drain")]
+pub mod points_drain;
 
 // ── Domain-agnostic core (always compiled) ─────────────────────────────
 pub mod adaptive_drafter;

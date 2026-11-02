@@ -598,6 +598,17 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # identity chain" — kat_transport/kat_service stay hard-zero (T6).
 points = ["dep:riir-ledger", "dep:ureq", "dep:getrandom", "dep:ed25519-dalek", "riir-kat/client", "riir-kat/provider_login"]
 
+# Proposal 027 (plan 326 T2): the points-drain CLIENT half — the hosted
+# seat's fair-use pre-check (two integer compares against the SERVED
+# constants), the `StandReason::DrainExhausted` policy decline, and the
+# per-call attestation header composer. Implies `points` (the day state
+# rides the account-dir store law; the constants come from
+# /points/balance). Implied by NOTHING and in NO default or release set:
+# inert until the joint ratification serves constants AND a balance read
+# caches them — promotion is the owner act (Phase 3), BEFORE any
+# hosted_expert arming.
+points_drain = ["points"]
+
 # Issue 188: the normal-user migrate lane — the device flow + the recovery
 # bind routes + the `.keys` listed-check (base64 rides the same lock-neutral
 # row as kat_service's comment).
@@ -1054,6 +1065,17 @@ required-features = ["kernel_opt"]
 [[example]]
 name = "kernel_goat_g2"
 required-features = ["kernel_opt"]
+
+# Plan 326 session note (pre-existing defect, fixed to unblock the
+# all-targets gates): the G5 utility/cost harness imports the
+# latent_retrieval-gated `draft` module UNGATED and had no required-
+# features row — every `--all-targets` posture without latent_retrieval
+# failed E0432 (develop-red before the drain work landed). Both of the
+# runner script's postures build WITH latent_retrieval
+# (scripts/g5_utility_cost.sh), so the row names that feature.
+[[example]]
+name = "kernel_goat_g5"
+required-features = ["latent_retrieval"]
 
 # Issue 035 T2: the G-floor measurement — every arm scored against
 # `cargo fix --broken-code` on the known-inverse mutation corpus.
@@ -1861,3 +1883,13 @@ required-features = ["latent_retrieval", "rust_perf", "clippy_lints", "kat_servi
 [[test]]
 name = "kat_migrate_normal_gates"
 required-features = ["kat_transport"]
+
+# Plan 326 T6(f): the G4 alloc canary on the drain pre-check's pure
+# decision path (Proposal 027: "two integer compares; no allocation").
+# Own binary — the counting global allocator counts every thread, so
+# parallel sibling tests would pollute the bracket (the
+# kat_meter_g2_alloc convention). Whole-file gated; this row protects
+# the reader (the green-zero law, same commit).
+[[test]]
+name = "points_drain_g4_alloc"
+required-features = ["points_drain"]
