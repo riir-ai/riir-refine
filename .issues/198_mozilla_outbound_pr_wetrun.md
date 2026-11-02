@@ -14,7 +14,7 @@ Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a
 
 ## Acceptance
 
-- [ ] T5 send executed (fork + push + PR URL recorded in bench 127's ledger)
+- [x] T5 send executed — **PR https://github.com/mozilla/sccache/pull/2977** (fork `riir-ai/sccache`, branch `refine/cachedir-tag` @ `b97bcc0`; 2026-11-02 ~17:06Z)
 - [ ] Outcome poller: PR merged/closed recorded; accept-rate ledger row updated
 - [ ] T7 post-mining intake line landed in `.distill/001_mining_queue_snapshot.md`
 - [ ] T8 close-out: HISTORY record + Proposal 022/025 evidence lines + `.raw` clones removed

@@ -95,7 +95,14 @@ PR onto it without an owner call. Recorded as the day-2 candidate.
 
 | sent | merged | closed | open | accept rate |
 |---|---|---|---|---|
-| 0 | 0 | 0 | 0 | n/a (sends pending) |
+| 1 | 0 | 0 | **1** | n/a (awaiting upstream) |
+
+**SEND #1 (T5 LANDED 2026-11-02 ~17:06Z, zed-m3-mozilla-wetrun):**
+- Fork: https://github.com/riir-ai/sccache (created; org repo-create rights confirmed for `katopz`)
+- Branch: `refine/cachedir-tag` @ `b97bcc0` pushed to the fork
+- **PR: https://github.com/mozilla/sccache/pull/2977** — "Tag the disk cache directory with CACHEDIR.TAG", 1 commit, 1 file, +80/−0, referencing #2975; API-verified head `riir-ai:refine/cachedir-tag` → base `main`; `mergeable_state: unstable` at open = their CI starting (their Linux runners; the macOS `randomize_readdir` pre-existing failure does not ride this PR — it never reached CI here because it panics at process spawn on THIS box only, and the PR touches no test-infra file).
+- Login mechanics: the THIRD device-flow window (code `2525-AD3A`) completed ~4 min after arming — token scopes `gist, read:org, repo` (repo scope suffices for fork+push+PR; no extra scopes requested).
+- Next poll (T6): merge/close state → the accept-rate row updates; on maintainer review comments, respond within the 022 posture (rework or close, never argue).
 
 ## Post-mining intake (the lane coupling, 022 fusion lineage)
 
