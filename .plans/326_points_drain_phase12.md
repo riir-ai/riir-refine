@@ -47,3 +47,39 @@ G1 property tests per T6/T9/T10/T11/T13/T15; G2 dispatch-overhead bench (T6); G3
 - Lease per the claim protocol before starting any task; one repo's tasks per session ideally (disjoint write sets: T1–T7 refine+ledger, T8–T12 instinct, T13–T16 dapps — parallelizable across agents with the boundary-guard run on the instinct edge).
 - riir-ledger push residue: T1 lands locally; the push fires when the owner creates the `gist-rs/riir-ledger` remote (same residue as Plan 325 T9).
 - The seat touch (T8–T12) is the FIRST hosted-seat meter change — the instinct serve gates (`tests/ext_seat_rerank_gates.rs`) must stay green; the echo contract is untouched (headers only).
+
+## Appendix A — the landed wire contract (T1 + T1b, riir-ledger `b3ad4d4` + `0f00664`)
+
+Landed 2026-11-02; every task below consumes THIS, never a local re-derivation:
+
+- **`FORMAT_VERSION = 2`** (the v1→2 bump IS the drain vocabulary).
+- **`BalanceResponse.drain_state: Option<DrainState>`** (`serde(default)`):
+  `{ allowance_remaining_today, billable_ceiling_today, rate_served }` — served
+  constants; `None` = inert pre-check. A v1-era server JSON decodes `None`
+  (golden-pinned).
+- **`DrainState`** — the three served constants (T14 fills them from config).
+- **`DrainUsageRow { account_id_hex, utc_day, free_calls, billable_calls }`** +
+  **`DrainUsageExport { format_version, rows }`** — the seat→plane daily
+  aggregate; idempotent by `(account_id_hex, utc_day)`; `utc_day` = `YYYY-MM-DD`
+  UTC.
+- **`UsageState { format_version, account_id_hex, joined, balance }`** — the
+  plane's bearer-authed service answer the seat TTL-caches (the NEW T13 surface:
+  `GET /points/usage-state?account=<64hex>`; the dapps agent names the route per
+  the worker's routing conventions — the CONTRACT is: service bearer, account →
+  joined+balance, `UsageState` body).
+- **`attest::attestation_signing_bytes(account_id, utc_day, call_seq, body_hash)`**
+  — the ONE signing-bytes home: raw 32-byte account id ‖ ASCII `YYYY-MM-DD` ‖
+  u64 call_seq BIG-endian ‖ 32-byte BLAKE3(body), NO separators, 82 bytes total.
+  `body_hash` is caller-computed (leaf law: no hash dep). Headers:
+  `X-Points-Account` (64 hex) / `X-Points-Pubkey` (ed25519 pubkey, 64 hex) /
+  `X-Points-Sig` (detached Ed25519 over those exact bytes). The seat checks
+  `blake3(pubkey) == account_id` then verifies; ANY attestation failure → the
+  unjoined posture, never an error.
+- **Route pair for T12/T13:** the seat POSTs `DrainUsageExport` to the plane's
+  usage-ingest route (T13; bearer service token — the service-secret pattern the
+  kat-service already uses) and reads `UsageState` (above). Until the plane URL
+  + token are configured, the seat keeps counters LOCAL (a daily JSON-lines dump
+  beside its state) — that dump is the `P` sizing data.
+- **Config seams (all ABSENT pre-ratification):** the plane carries the ratified
+  `A/B/R/C/P` (config; absent → `drain_state: None`, no debits); the seat carries
+  its enforcement copy (env/config; absent → report-only counting only).
