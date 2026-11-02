@@ -19,7 +19,7 @@ zed-shikuwa-i191gate (epoch 1793523566) on the 4090 box (shikuwa), 2026-11-01.
 | **G2** perf | CPU-portable ref-vs-opt microbench, interleaved 15-pair median ≥ 1.06 at release, deterministic tranche (15 files), rig exclusivity mandatory | tranche = 15 files / 74 green rules; **21 measured / 1 passing / 7 regressing / 53 not-measured** (no mirrored fn pair); tranche median **1.0000 < 1.06**; best: fp32-pipe-mma-role-split 2.05× | **FAIL** — the GPU-shape wins do not transfer to the CPU-portable surface (bar 2's own caveat: "a GPU-shaped rule's win is not CPU-measurable") |
 | **G3** no-regression | clippy_lints + rust_perf score-bench verdicts byte-stable with kernel_opt ON (existing domains, disclosure boundary) | `scripts/g3_scorebench_stability.sh`: clippy lane 40 verdict lines byte-identical, perf lane 67 byte-identical | **PASS** |
 | **G4** alloc-free | default build (kernel_opt OFF) byte-identical — compile-time-only cost | structural: the whole domain compiles only behind `kernel_opt`; the default clippy gate is clean and untouched | **PASS** (structural) |
-| **G5** utility/cost | match census on a pinned corpus + p50 ≤ 1 ms / p95 ≤ 5 ms per file + ≥ 3-expert utility floor | **NOT RUN this campaign** — the verdict was already determined by the G1+G2 failures, and the Issue-193 repairs change the census population anyway; G5 runs at the re-campaign | n/a (disclosed) |
+| **G5** utility/cost | match census on a pinned corpus + p50 ≤ 1 ms / p95 ≤ 5 ms per file + ≥ 3-expert utility floor | **NOT RUN this campaign** — measured 2026-11-01 as **Bench 125** (the disclosed deferral, run early because it is convention-independent): utility **PASS** (15/15 experts at rank-1 over 4,055 kernel-cited spans), cost **FAIL** (added p50 38.795 ms / p95 177.612 ms — 39× over the ceiling; mechanism = the flat 1051-rule fan-out, repair filed as Issue 196) | **FAIL** (cost leg; utility leg pass — Bench 125) |
 
 **Promotion verdict: REFUSED — `kernel_opt` stays opt-in**, failing axes named: G1 (65
 fixture defects) and G2 (no CPU-demonstrable median win). Per Issue-191 bar 6: "If any gate
@@ -64,6 +64,11 @@ fails, the domain stays opt-in with the failing axis named in the record."
 2. The G2 convention decision (owner-gated): a corpus bench-entry convention vs GPU-host
    benches vs closing the CPU-G2 axis with the disclosure (the flat median IS the measured
    answer for scalar ports).
-3. Re-campaign: G1 + G2 (tranche re-selected from the repaired corpus) + G5 census on the
-   pinned corpus in the same run. NOTE: the G1 digests moved with the 193 repairs — the
-   tranche re-selection and the G5 corpus pin re-derive in the same re-campaign run.
+3. ~~G5 census~~ **MEASURED — Bench 125** (2026-11-01, early because convention-independent):
+   utility PASS, cost FAIL (added p50 38.8 ms ≫ 1.0 ms ceiling) — the re-campaign is now
+   fenced on TWO axes: G2 (convention pending, item 2) and G5-cost (Issue 196's
+   router-narrowing repair path; ceiling re-registration is an owner act if the narrowing
+   alone cannot reach the bar).
+4. Re-campaign: G1 + G2 (tranche re-selected from the repaired corpus) + G5 re-run in the
+   same run. NOTE: the G1 digests moved with the 193 repairs — the tranche re-selection and
+   the G5 corpus pin re-derive in the same re-campaign run.

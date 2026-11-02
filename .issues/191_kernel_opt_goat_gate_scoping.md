@@ -162,6 +162,10 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
         default).
       - G5: NOT RUN this campaign (disclosed in the record — the verdict was determined by
         G1+G2; the census runs at the re-campaign on the repaired corpus).
+        **UPDATE 2026-11-01:** G5 measured early as **Bench 125** (convention-independent
+        leg): utility PASS (15/15 experts at rank-1), cost FAIL (added p50 38.795 ms vs the
+        ≤ 1.0 ms ceiling; repair path Issue 196). The re-campaign is fenced on G2
+        (owner-gated convention) AND G5-cost (Issue 196 / owner re-registration).
       - **PROMOTION VERDICT: REFUSED — `kernel_opt` stays opt-in** (failing axes: G1, G2),
         per bar 6. The re-campaign path is in Bench 124: Issue-193 repairs → the G2
         convention decision (owner-gated: corpus bench-entry convention vs GPU-host benches
