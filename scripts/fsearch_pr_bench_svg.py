@@ -157,8 +157,9 @@ def main():
 
     y += 12
     o.append(f'<line x1="24" y1="{y}" x2="{width-24}" y2="{y}" stroke="#2a2e35"/>')
-    o.append(f'<text x="24" y="{y+22}" fill="#c9cdd3" font-size="13">fix + bench by cargo refine · harness: fsearch examples/rig.rs (upstream, identical corpus both arms)</text>')
-    o.append(f'<text x="24" y="{y+42}" fill="#5b8def" font-size="14" font-weight="bold">refine.riir.ai — the modelless Rust fixer + bench tool</text>')
+    # ⛔ No tool/site tagline in this footer (owner verdict 2026-11-02: no
+    # self-promotion in upstream-facing artifacts until the grant lands).
+    o.append(f'<text x="24" y="{y+22}" fill="#c9cdd3" font-size="13">bench: fsearch examples/rig.rs (upstream, identical corpus both arms)</text>')
 
     Path(a.out).write_text("\n".join(o) + "\n", encoding="utf-8")
     print(f"wrote {a.out} ({len(rows)} rows, after={'yes' if after else 'pending'})")
