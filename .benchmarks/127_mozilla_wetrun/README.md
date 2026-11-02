@@ -1,6 +1,6 @@
 # Bench 127 — Mozilla outbound fix-PR wetrun (sccache CACHEDIR.TAG): before/after
 
-**Status:** RECORD — T2–T4 of [Plan 329](../.plans/329_mozilla_outbound_pr_wetrun.md); SEND (T5) owner-gated on gh auth
+**Status:** RECORD — T2–T4 of [Plan 329](../../.plans/329_mozilla_outbound_pr_wetrun.md); SEND (T5) owner-gated on gh auth
 **Date:** 2026-11-02 · zed-m3-mozilla-wetrun, epoch 1793602400 · M3 Max (macOS, AC power)
 
 ## What this measures
