@@ -1,6 +1,6 @@
 # Issue 199: sweep the deprecated "heal" vocabulary from doc surfaces — the rulewright/rulegram/refinery coins
 
-**Status:** CLOSED 2026-11-03 — all sweeps landed: Tier A `771e7ad15`+`1862743`+`47e71ce78`; fleet-wide Lint-fixing act `c6d258115` (16 sibling AGENTS.md files, per-repo hashes in the row below, landed by the sibling idle lane); Tier B deep book + skills + derived flow artifacts `f9727c207` (41 files — the between-batches window came same-day: both miner batches discharged, contested paths clean). One open residue: the KAT node-tier rows, owner-call
+**Status:** CLOSED 2026-11-03 — all sweeps landed: Tier A `771e7ad15`+`1862743`+`47e71ce78`; fleet-wide Lint-fixing act `c6d258115` (16 sibling AGENTS.md files, per-repo hashes in the row below, landed by the sibling idle lane); Tier B deep book + skills + derived flow artifacts `f9727c207` (41 files — the between-batches window came same-day: both miner batches discharged, contested paths clean). The last residue — the KAT node-tier rows — LANDED same-day on the owner call: `Rulewright client` / `rulewright-proof` in both `node_tiers.md` surfaces + the rename note in Proposal 005 §Node-tier additions (see the Tier B residue row)
 
 ## Sweep legend (what the sweep replaced vs intentionally kept)
 
@@ -8,7 +8,7 @@
 - KEPT — code identifiers + file names: `HealDomain` / `HealPipeline` / `HealEntry` / `heal()` / `heal_with_pool` / `perf_heal_demo` / `heal_demo` / `watch_heal.sh` / `HEAL_*` envs / `heal_domain_trait.md` / `heal_pipeline.md` / the retired `clippy_healing/` git-history paths / Proposal-001/005 + Plan-005 + Proposal-034 record file names.
 - KEPT — metrics + history: the `heal_rate` score-curve axis (schema), recorded bench run rows ("heal 84.6%…"), the mozilla evidence pack's "96.4% heal rate" (historical evidence record), batch-landing rule descriptions inside the README history table (e.g. Batch 157 "receivers heal `.get(n)`"), doc-sync historical run-log rows.
 - KEPT — different "heal": MAPE-K self-healing (`MapeKLoop` self-heal cascade) is riir-neuron-db's autonomic-loop architecture term, not the refine product word.
-- KEPT — owner-call: KAT plane vocabulary ("Healer client", "heal-proof hat", "KAT heal service network", "heal data/ingest").
+- KEPT — owner-call (SUPERSEDED 2026-11-03: the owner call landed — see the Tier B residue row): KAT plane vocabulary ("Healer client", "heal-proof hat", "KAT heal service network", "heal data/ingest").
 
 ## Landed (Tier A)
 
@@ -26,7 +26,7 @@
 - [x] riir-refine skills (`cargo-refine`, `riir-refine` idle-loop, `distill`, `outbound-pr`, `refine-e2e-doctor`) — swept; the `fix: heal <repo>` commit convention → `fix: refine <repo>`
 - [x] Derived flow artifacts kept in lockstep — `role_flows.md` / `role_miner_flow.walk.json` / `role_coder_flow.walk.json` say the same thing ("fix run", "fix burn", "fixing was always local"); kat_economy TUNA "heals only" untouched (KAT plane)
 - [x] Fleet-wide "## Lint healing" headers — landed by the sibling idle lane (row below)
-- [ ] KAT node-tier rows "Healer client" + "heal-proof hat" (riir-clippy Proposal 005; riir-ai `.docs/01_orientation/node_tiers.md`) — **OWNER-CALL** (the sweep's one open residue; sed patterns constructed to not touch it)
+- [x] KAT node-tier rows "Healer client" + "heal-proof hat" — **LANDED 2026-11-03, owner call (lgtm)**: `Rulewright client` / `rulewright-proof` in riir-ai + riir-refine `node_tiers.md`, the KAT-heal-network prose de-healed (fix/fixing), rename note in Proposal 005 §"Node-tier additions"; record file name `005_kat_heal_service_network.md` stays (keep-list)
 
 ## Premise
 

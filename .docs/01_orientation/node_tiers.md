@@ -1,6 +1,6 @@
 # Node Tiers — the install spec (one place to compare what you can run)
 
-> **Purpose:** the consumer/dev/investor-facing tier spec for the KAT heal
+> **Purpose:** the consumer/dev/investor-facing tier spec for the KAT rulewright
 > network — which install fits which rig, what each tier does, what it costs,
 > what it can earn, and what is actually runnable **today** vs designed vs
 > blocked. The canonical argument + corrections live in
@@ -46,7 +46,7 @@ the machinery knows; the tiers are what a human picks.
 
 ### Lite — the anonymous binary
 
-Today's bare `cargo refine`. Modelless healing (L0–L3), offline, no account,
+Today's bare `cargo refine`. Modelless fixing (L0–L3), offline, no account,
 frozen corpus, free forever — the honesty dividend. Outside the economy: no
 KAT, no earnings, no hot-push. The planned witness upgrade (client-side
 verification of chain-anchored ledger roots — a light-client read path, vote
@@ -54,7 +54,7 @@ weight 0) is the Satellite pattern; it adds verification, **not consensus**.
 
 ### Pro — account + miner (+ fixer when unblocked)
 
-`cargo refine login` + sync-as-mining: heal locally → sync redacted trajectory
+`cargo refine login` + sync-as-mining: fix locally → sync redacted trajectory
 batches → quorum-proven novelty mints KAT from the epoch pool. Burns KAT per
 code word token; the 100 KAT login grant ≈ 100M tokens of buying power.
 The **fixer half** (consumer pays KAT → live span → fixed via API at LLM-token

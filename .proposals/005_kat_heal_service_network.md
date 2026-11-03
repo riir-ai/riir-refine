@@ -437,6 +437,16 @@ Blocked on: (a) ~~quality~~ **MET 2026-08-26** — Issue 040's unblock bar (*ver
 
 No new *chain* tier is needed — **`Trainer(2)` already exists** (stake 1K, GPU, "submit training data + endorsement") and gains a heal-proof endorsement class. The additions are roles/hats/platform rows:
 
+> **Rename note (2026-11-03, owner call — riir-refine Issue 199):** the row
+> names below are deprecated in the tier docs — `Healer client` →
+> **`Rulewright client`**, `heal-proof hat` → **`rulewright-proof` hat**,
+> "the KAT healer network" → "the KAT rulewright network"; verb prose
+> de-healed (fix/fixing, fix data). This proposal's body keeps the original
+> spellings as the historical record; the `HealDomain`/`HealPipeline` code
+> identifiers are a separate, explicitly out-of-scope surface (Issue 199).
+> *(First application was swept by a concurrent session's tree clean;
+> re-applied at commit time.)*
+
 | Addition | System | Placement |
 |---|---|---|
 | **`Healer client`** (modes: anonymous / account / miner) | 1 (game runtime roles table) | **dApp/service-plane row, `Satellite`-style** (no game-plane role; chain identity `Player(1)`, stake 0, vote 0). Native desktop + musl Linux (§4b rows). |
