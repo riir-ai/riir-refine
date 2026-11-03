@@ -41,6 +41,9 @@
 //! | `sigmoid-minus-one` | `Numerics` | yes (strict-gated, Issue 185 T1) | — (valid code; no lint sees a rounding cliff) |
 //! | `softmax-onehot-collapse` | `Numerics` | no (suggest-only, Issue 185 T2) | — (valid code; the repair restructures the pass) |
 //! | `neg-ln-softmax-prob` | `Numerics` | no (suggest-only, Issue 185 T3) | — (valid code; the row no longer carries the logits) |
+//! | `secret-key-without-zeroize` | `CryptoHygiene` | no (suggest-only, dep-gated) | — (the repair is an API decision — a field-type change every constructor site feels; the dep gate keeps the suggestion buildable) |
+//! | `untrusted-keyed-state-unbounded` | `InputValidation` | no (suggest-only) | — (the cap + the full-table policy are protocol decisions — the eviction-vs-refusal axis changes what an attacker can do to honest tenants) |
+//! | `gateway-type-forces-security-check` | `InputValidation` | no (suggest-only) | — (the ctor flip ripples to every caller — an API-design decision; precision honestly poor, vocabulary-gated, review decides) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -186,7 +189,7 @@
 //! handler doing fallible work without its own `catch_unwind`
 //! (`panic-handler-nested-catch-unwind`, `PanicSafety` — the handler path
 //! was unowned; the extern body wrapper + Drop bodies keep their own
-//! rules). Detector modules: `proposers::arc_raw_boundary`,
+//!Detector modules: `proposers::arc_raw_boundary`,
 //! `proposers::callback_lock_invoke`, `proposers::outparam_init_contract`,
 //! `proposers::panic_handler_guard`. The two stretch candidates are HONEST
 //! NON-CONVERSIONS at this batch: #5 `null-sentinel-companion-conjunction`
@@ -194,6 +197,32 @@
 //! set needs the authoring budget the four mains consumed — a named lead
 //! for a future FFI batch); #6 `vec-promote-manuallydrop-not-forget` (C+)
 //! thin + perf-neutral (borrowck-prose novelty).
+//!
+//! Batch 327 (2026-11-03, Plan 332 / Research 364): the firezone/sanstun
+//! distill (Apache-2.0 @ `35cb1932948bd0776` — a `sans-IO` `WireGuard`
+//! protocol implementation; cited as class provenance; the fixtures are
+//! ORIGINAL syntheses, never pasted source). THREE suggest-only rules
+//! across the two families: secret lifetime
+//! (`secret-key-without-zeroize`, `CryptoHygiene` — the dep-gated
+//! `constant-time-secret-compare` shape: a secret-vocabulary struct
+//! holding raw key material with no Drop impl and no zeroization wrapper
+//! keeps the bytes alive in freed memory; keys.rs's pervasive
+//! `Zeroizing<[u8; 32]>` wrap and its `zeroized on drop` docs are the
+//! anchor), the resource-exhaustion CARDINALITY face
+//! (`untrusted-keyed-state-unbounded`, `InputValidation` — a peer-keyed
+//! `HashMap` growing via insert with no cap guard; the fix is the source's
+//! own bounded table + fail-closed refusal of NEW keys when full —
+//! eviction would reward the attacker over honest entries;
+//! ratelimiter.rs's `MAX_SOURCES` guard and its
+//! `full_table_refuses_new_sources_until_idle_ones_are_dropped` test are
+//! the anchor), and checkpoint bypass via constructor reachability
+//! (`gateway-type-forces-security-check`, `InputValidation` — a pub ctor
+//! on a message-vocabulary struct beside a same-file gateway fn whose
+//! checks the ctor skips; message.rs's crate-private ctors +
+//! `Interface::receive` as the single parse dispatch are the anchor;
+//! honest poor precision — vocabulary-gated, same-file only, review
+//! decides). Detector modules: `proposers::zeroize_secret`,
+//! `proposers::keyed_state_cap`, `proposers::gateway_ctor`.
 
 use super::{SecFamily, SecRule};
 use crate::corpus::Corpus;
@@ -969,6 +998,194 @@ provenance, original fixture)."
                 .to_string(),
             family: SecFamily::PanicSafety,
         },
+        // ══ Batch 327 (2026-11-03, Plan 332 / Research 364) — the       ══
+        // ══ firezone/sanstun distill (Apache-2.0 @ 35cb1932948bd0776):  ══
+        // ══ three suggest-only rules across the two families.           ══
+        // ── secret-key-without-zeroize (CryptoHygiene; suggest-only, dep-gated) ──
+        SecRule {
+            rule_id: "secret-key-without-zeroize".to_string(),
+            sec_concept: "a struct in the secret vocabulary (*Key/*Secret/*Seed/*Token/*\
+Password/*Credential as word segments) holding RAW key material ([u8; N], Vec<u8>, String) \
+with no Drop impl and no zeroization wrapper keeps the secret bytes alive in FREED MEMORY \
+after the struct drops — heap spray, core dumps and swap all read them back. Wrap in \
+`zeroize::Zeroizing` or derive Zeroize/ZeroizeOnDrop (the sanstun anchor: keys.rs documents \
+`An X25519 static private key, zeroized on drop.` and carries `pub struct \
+PresharedKey(Zeroizing<[u8; 32]>);` — Zeroizing wraps owned [u8; 32] key material across \
+8 files of the crate, fields/params/returns alike). DEP-GATED, the \
+constant-time-secret-compare shape: fires only when the file already imports zeroize, so \
+the suggestion cannot break the build (a file doing secret hygiene without the dep is an \
+honest miss). Distinct-from constant-time-secret-compare IN-RULE: that rule owns the \
+COMPARE primitive (the timing leak at comparison); this owns the LIFETIME/ERASE axis (bytes \
+persisting after drop). Suggest-only: choosing the wrapper (Zeroizing vs derive vs a custom \
+Drop) is an API decision the struct's users feel. Gates: struct-name vocabulary + raw field \
+type NOT already Zeroizing-wrapped + NO Drop impl for the struct in the file + NO \
+Zeroize/ZeroizeOnDrop derive or non-doc zeroize attribute on it; #[cfg(test)] mods skipped; \
+doc-comment prose never counts as a derive. Honest recall limits: wrapper-typed secrets \
+(x25519_dalek::StaticSecret fields) parse as opaque and stay silent — only the three raw \
+shapes fire; a Drop impl in ANOTHER file is invisible; per-field findings — a struct with \
+one wrapped and one raw field still fires on the raw one (partial wrapping is the bug); a \
+zeroize import used only through fully-qualified paths is an honest miss; the vocabulary \
+proves a NAME CLASS — a TokenBucket over Vec<u8> fires and review decides. Batch 327 / \
+Plan 332 / Research 364 (firezone/sanstun @ 35cb1932948bd0776, Apache-2.0 — cited as class \
+provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use zeroize::Zeroizing;\n\
+\n/// The tenant's signing seed as loaded from disk.\n\
+pub struct SigningSeed {\n\
+    pub tenant: u32,\n\
+    pub material: [u8; 32],\n\
+}\n\
+\npub fn scratch_tag() -> Zeroizing<[u8; 32]> {\n\
+    Zeroizing::new([0_u8; 32]) // a scratch value is wrapped; the struct's own seed is not\n\
+}\n"
+                .to_string(),
+            fixed_code: "use zeroize::{Zeroize, Zeroizing};\n\
+\n/// The tenant's signing seed, zeroized on drop.\n\
+pub struct SigningSeed {\n\
+    pub tenant: u32,\n\
+    pub material: Zeroizing<[u8; 32]>,\n\
+}\n\
+\npub fn scratch_tag() -> Zeroizing<[u8; 32]> {\n\
+    Zeroizing::new([0_u8; 32])\n\
+}\n"
+                .to_string(),
+            family: SecFamily::CryptoHygiene,
+        },
+        // ── untrusted-keyed-state-unbounded (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "untrusted-keyed-state-unbounded".to_string(),
+            sec_concept: "a HashMap/HashSet keyed by PEER-DERIVED distinct keys (peer \
+vocabulary as word segments of the map variable/field, the key type, or the enclosing fn: \
+addr/ip/peer/session/device/tenant/origin/client/conn/source) growing via insert with NO \
+cap guard admits the many-keys memory DoS — one adversarial peer family minting distinct \
+keys exhausts memory. The CARDINALITY face of resource exhaustion. The fix shape is the \
+source's own bounded table + FAIL-CLOSED refusal of NEW keys when full: `const \
+MAX_SOURCES: usize = 65536;` + `if self.buckets.len() >= MAX_SOURCES { return false; }` \
+before the insert — eviction would REWARD the attacker by admitting them over honest \
+entries (the source's own test name says it: `full_table_refuses_new_sources_until_idle_\
+ones_are_dropped`; its doc: `Packets from new sources are refused while the table is \
+full.`). Distinct-from length-prefix-validate-before-alloc and unbounded-read-into-vec \
+IN-RULE: those own the VOLUME faces (one length field to one alloc; one stream to one \
+growing buffer); this owns the CARDINALITY face (many distinct keys to an unbounded entry \
+count). Suggest-only: choosing the cap and the full-table policy is a protocol decision. \
+Gates: the receiver resolves to a HashMap/HashSet declared IN THE SAME FILE (a local or a \
+struct field); peer-key vocabulary on the map name, key type, or fn name; suppression is \
+FN-WIDE, the one-guard-hides-the-fn house rule — any len()-vs-cap comparison, any \
+contains_key call, or any remove/retain/extract_if/drain/clear in the fn silences every \
+insert in it. Honest recall limits: cross-file map types are an honest NO; \
+entry().or_insert() growth undetected (insert only); with_capacity is a capacity HINT, \
+never a bound, and never a suppression; plural names miss the exact segment (`sessions` is \
+not `session`) unless another source hits; the vocabulary proves a NAME CLASS — a \
+session-named map over trusted internal ids fires and review decides. Batch 327 / Plan \
+332 / Research 364 (firezone/sanstun @ 35cb1932948bd0776, Apache-2.0 — cited as class \
+provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use std::collections::HashMap;\n\
+\npub struct Room {\n\
+    members: HashMap<ClientId, Member>,\n\
+}\n\
+\nimpl Room {\n\
+    pub fn join(&mut self, who: ClientId, m: Member) {\n\
+        // a client family mints distinct ids; nothing bounds the table\n\
+        self.members.insert(who, m);\n\
+    }\n\
+}\n"
+                .to_string(),
+            fixed_code: "use std::collections::HashMap;\n\
+\npub struct Room {\n\
+    members: HashMap<ClientId, Member>,\n\
+}\n\
+\nconst MAX_CLIENTS: usize = 1024;\n\
+\nimpl Room {\n\
+    pub fn join(&mut self, who: ClientId, m: Member) -> bool {\n\
+        if self.members.len() >= MAX_CLIENTS {\n\
+            return false; // full: refuse NEW clients, known ones keep service\n\
+        }\n\
+        self.members.insert(who, m);\n\
+        true\n\
+    }\n\
+}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── gateway-type-forces-security-check (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "gateway-type-forces-security-check".to_string(),
+            sec_concept: "a security-relevant message/handler type whose CONSTRUCTOR is \
+PUBLIC lets any caller synthesize inputs and walk around the gateway's checkpoint — rate \
+limit, MAC verification, replay check — the checks exist but are skippable because the \
+dangerous handler stays reachable without them. The fix is crate-private constructors + \
+the gateway type as the ONLY producer, so the handler is UNREACHABLE without passing the \
+checkpoint (the sanstun anchor: message.rs keeps every message-type constructor \
+crate-private — `pub(crate) fn new<const N: usize>` on Datagram, pub(crate) fields on \
+HandshakeResponse/CookieReply/TransportData, no public ctor anywhere — and the doc pins \
+the law: `Messages can only be obtained through that method and cannot be cloned or \
+constructed directly.`; interface.rs's `pub fn receive(&mut self, src_addr: SocketAddr, \
+datagram: &[u8], now: Instant)` is the single parse dispatch behind the guard sequence \
+mac1 ct_eq, under-load window, cookie check, rate_limiter.allow). Distinct-from \
+client-ip-from-untrusted-forwarded-header IN-RULE: that rule owns rate-limit KEY SPOOFING \
+(an untrusted header as the identity); this owns CHECKPOINT BYPASS via constructor \
+reachability. Suggest-only, and precision is honestly POOR: which handler is \
+security-relevant is vocabulary-gated (message vocabulary on the struct name: \
+handshake/response/reply/datagram/packet/frame/ticket/claim/envelope/message; gateway \
+vocabulary on the fn name: receive/verify/gateway/checkpoint/accept/authorize + check \
+tokens in the body: rate/limit/mac/verif/auth/replay/cookie/allow); cross-file gateway \
+relationships are invisible (same-file only); a pub ctor on a genuinely-public DTO fires \
+and review decides — suggest-only is the blast-radius control. Gates: ALL must hold — a \
+pub struct in the message vocabulary + a pub associated ctor (new / from_*) on it + a \
+same-file gateway fn taking a self reference with check vocabulary that references the \
+struct's type by EXACT ident; the fixed shape (the ctor already pub(crate)/private, or \
+no ctor in the file) stays silent. Batch 327 / Plan 332 / Research 364 (firezone/sanstun \
+@ 35cb1932948bd0776, Apache-2.0 — cited as class provenance; the fixture is an original \
+synthesis)."
+                .to_string(),
+            buggy_code: "pub struct LoginClaim {\n\
+    user: u64,\n\
+}\n\
+\nimpl LoginClaim {\n\
+    pub fn new(user: u64) -> Self {\n\
+        Self { user }\n\
+    }\n\
+}\n\
+\npub struct Gate {\n\
+    rate_budget: u32,\n\
+}\n\
+\nimpl Gate {\n\
+    // the budget exists — but the pub ctor walks around the checkpoint\n\
+    pub fn authorize(&mut self, claim: &LoginClaim) -> bool {\n\
+        if self.rate_budget == 0 {\n\
+            return false;\n\
+        }\n\
+        self.rate_budget -= 1;\n\
+        true\n\
+    }\n\
+}\n"
+                .to_string(),
+            fixed_code: "pub struct LoginClaim {\n\
+    user: u64,\n\
+}\n\
+\nimpl LoginClaim {\n\
+    // crate-private: the gateway is the only producer\n\
+    pub(crate) fn new(user: u64) -> Self {\n\
+        Self { user }\n\
+    }\n\
+}\n\
+\npub struct Gate {\n\
+    rate_budget: u32,\n\
+}\n\
+\nimpl Gate {\n\
+    // the budget exists — and now the ctor cannot walk around it\n\
+    pub fn authorize(&mut self, claim: &LoginClaim) -> bool {\n\
+        if self.rate_budget == 0 {\n\
+            return false;\n\
+        }\n\
+        self.rate_budget -= 1;\n\
+        true\n\
+    }\n\
+}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -1004,10 +1221,7 @@ mod tests {
         // domain carried no live count pin before; AGENTS/README carried
         // the only numbers). A red means the corpus moved without
         // `scripts/pins_manifest.py --write`.
-        assert_eq!(
-            all.len(),
-            crate::pins_manifest::count("sec", "rules")
-        );
+        assert_eq!(all.len(), crate::pins_manifest::count("sec", "rules"));
         for id in ids {
             assert!(
                 id.chars()

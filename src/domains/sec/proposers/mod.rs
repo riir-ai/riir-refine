@@ -161,6 +161,19 @@
 //!
 //! The two stretch candidates (Research 361 #5 `null-sentinel-companion-conjunction` B−, #6 `vec-promote-manuallydrop-not-forget` C+) are HONEST NON-CONVERSIONS at this batch: #5 held at its own conjunction-or-demote bar (the conjunction fixture set needs the authoring budget the four mains consumed — it stays a named lead); #6 is thin and perf-neutral (borrowck-prose novelty). `io-copy-write-adapter-hash-loop`'s sibling honesty class: recorded here, recoverable at a future FFI batch.
 
+//! ## Batch 327 (2026-11-03, Plan 332) — the sanstun distill joins
+//!
+//! Three detectors from the firezone/sanstun distill (Research 364,
+//! Apache-2.0 @ `35cb1932948bd0776` — a `sans-IO` `WireGuard` protocol
+//! implementation; cited as class provenance, fixtures are ORIGINAL
+//! syntheses), two families, all suggest-only:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `secret-key-without-zeroize` | `zeroize_secret::detect` | the wrapper choice (`Zeroizing::new(..)` vs `#[derive(Zeroize, ZeroizeOnDrop)]` vs a custom Drop) is an API decision the struct's users feel; DEP-GATED on a `zeroize` import (the `constant-time-secret-compare` shape — the suggestion cannot break the build); distinct-from that rule in-rule: it owns the COMPARE primitive, this the LIFETIME/ERASE axis |
+//! | `untrusted-keyed-state-unbounded` | `keyed_state_cap::detect` | choosing the cap + the full-table policy is a protocol decision (refuse-new vs evict-idle vs shed-oldest changes what an attacker can do to honest tenants); the fix is the source's own fail-closed shape — bounded table, refuse NEW keys when full, eviction would reward the attacker; the CARDINALITY face, distinct-from `length-prefix-validate-before-alloc` + `unbounded-read-into-vec` (both VOLUME faces) |
+//! | `gateway-type-forces-security-check` | `gateway_ctor::detect` | the pub-vs-`pub(crate)` ctor flip ripples to every caller (an API-design decision); precision is honestly poor — vocabulary-gated security-handler detection, same-file only, suggest-only is the blast-radius control; distinct-from `client-ip-from-untrusted-forwarded-header` (rate-limit KEY SPOOFING vs checkpoint BYPASS via constructor reachability) |
+
 use syn::File;
 
 pub mod arc_raw_boundary;
@@ -172,8 +185,10 @@ pub mod cors_any_creds;
 pub mod drop_no_panic;
 pub mod egress_url;
 pub mod ffi_catch_unwind;
+pub mod gateway_ctor;
 pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
+pub mod keyed_state_cap;
 pub mod length_prefix_alloc;
 pub mod nan_safe_cmp;
 pub mod outparam_init_contract;
@@ -191,6 +206,7 @@ pub mod strike_cross_site;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;
 pub mod webhook_raw_bytes;
+pub mod zeroize_secret;
 
 /// The shared wire-taint walker (Batch 165) — one walker, the
 /// `InputValidation` wire sinks. Crate-internal: the public surface is the
@@ -199,7 +215,7 @@ pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
 };
 
 /// The `--fix`-eligible sec rules.

@@ -4,7 +4,8 @@
 //! the web-trust seed's three (Plan 262); Batch 291 the penthera
 //! distill's three (Plan 295); Batch 292 the `CVEngine` distill's four
 //! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298);
-//! Issue 185 the softmax-collapse family's three.
+//! Issue 185 the softmax-collapse family's three; Batch 327 the
+//! sanstun distill's three (Plan 332).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -318,6 +319,61 @@ fn accept_delivery(key: &[u8], wire: &[u8]) -> bool {
         r#"pub fn nll(logits: &[f32], label: usize) -> f32 {
     let probs = softmax(logits);
     -probs[label].max(1e-7).ln()
+}
+"#,
+    ),
+    // Batch 327 (Plan 332) — the sanstun distill, one span per new rule.
+    (
+        "secret-key-without-zeroize",
+        r#"use zeroize::Zeroizing;
+
+pub struct DeviceToken {
+    pub device_id: u64,
+    pub material: [u8; 32],
+}
+
+pub fn scratch_nonce() -> Zeroizing<[u8; 32]> {
+    Zeroizing::new([0_u8; 32])
+}
+"#,
+    ),
+    (
+        "untrusted-keyed-state-unbounded",
+        r#"pub struct Relay {
+    peers: std::collections::HashMap<u64, PeerState>,
+}
+
+impl Relay {
+    pub fn note(&mut self, addr: std::net::SocketAddr, seen: u64) {
+        self.peers.insert(addr.port(), PeerState { last: seen });
+    }
+}
+"#,
+    ),
+    (
+        "gateway-type-forces-security-check",
+        r#"pub struct SessionTicket {
+    holder: u64,
+}
+
+impl SessionTicket {
+    pub fn new(holder: u64) -> Self {
+        Self { holder }
+    }
+}
+
+pub struct Checkpoint {
+    allowance: u32,
+}
+
+impl Checkpoint {
+    pub fn accept(&mut self, ticket: &SessionTicket) -> bool {
+        if self.allowance == 0 {
+            return false; // the checkpoint the pub ctor skips
+        }
+        self.allowance -= 1;
+        true
+    }
 }
 "#,
     ),
