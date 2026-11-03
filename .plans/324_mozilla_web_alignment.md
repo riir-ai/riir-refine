@@ -2,7 +2,8 @@
 
 **Date:** 2026-10-31
 **Status:** Active — Phase 1 landed local; rethink + reflex fronts DEPLOYED 2026-11-03 (touch-deploy); refine + riir.ai fronts pending the kat-service/owner lane; T2.2 landed+deployed; T2.4 mostly landed (completion rides riir-dapps issue 157); T2.1/T2.3 open
-**Claimed:** zed-9e5cd646-continuation, 1793823300, expires 2026-11-05T00:00:00+00:00 (prior claim zed-riir-docs expired 2026-11-03T16:57)
+**Claimed:** zed-9e5cd646-continuation, 1793823300, expires 2026-11-05T00:00:00+00:00
+(prior claim zed-riir-docs expired 2026-11-03T16:57; the lease line stays parseable — prose rides its own line)
 **Research:** [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) (public program digest)
 **Target:** `reflex-site` (reflex.riir.ai), `riir-refine` site lane (refine.riir.ai), `riir-rethink` site lane (rethink.riir.ai), `riir-dapps`/root (riir.ai) — per the web-family skill
 **Deadline driver:** consult email ~Nov 7; application Nov 17–19 (grant lane: issue 190)
