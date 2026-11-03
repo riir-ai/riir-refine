@@ -1,7 +1,7 @@
 # Plan 332 — Batch (nominal 327): sanstun → rust_perf concurrency + sec families
 
 **Status:** STAGED — claim-first at the next mining slot (distill verdict YES B−; no corpus edit before the claim + T0)
-**Claimed:** — (open; append `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under the Status line before implementing, per the claim-lease protocol)
+**Claimed:** zed-m3-batch327, 1793708074, expires 2026-11-05T12:14Z
 
 Distill verdict: `.research/364_sanstun_distill.md` (YES B− corpus / lane-intel N-A stated / product-coverage MODERATE). Source: firezone/sanstun @ `35cb1932948bd0776ef7d590329c1fdc0b1b9718` (Apache-2.0, tip 2026-11-03). Five candidates: 1 rust_perf concurrency lead (B, NotBenchable-by-domain annotation class) + 4 sec transcription candidates (suggest-only, 2 expected to survive cleanly, 1 adjudicated at T0, 1 expected drop).
 
