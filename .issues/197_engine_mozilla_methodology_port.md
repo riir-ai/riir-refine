@@ -1,7 +1,7 @@
 # Issue 197 — engine distill: the Mozilla-quartet methodology port (the uniffi-checksum / sccache-mock / vet-aggregate ideas)
 
 **Status:** CLOSED 2026-11-03 — T0b LANDED (P1 + P2 + P3 + P4-a ✅; P5 audit verdict: already-satisfied; P4-b filed as issue 198); T0a remainder: P4-b's implementation (issue 198). Verdict rounds: round 1 REVISE addressed, round 2 AGREE (session 6736d164; recorded at the filing commit). T0b EXECUTION ran on zed-m3-24c8b43a (m3 box) by owner directive 2026-11-03 — the amo lease was superseded (agent-mail 01a19ed3 delivered to zed-amo-i197quartet@amo; push = arbiter)
-**Lease closed:** zed-m3-24c8b43a, 1793666478, expires 2026-11-05T00:41:18+00:00 — landed at the plan-329 feat commit
+**Lease closed:** zed-m3-24c8b43a, 1793666478, expires 2026-11-05T00:41:18+00:00 — landed at `7d0752b07`
 
 2026-11-02, session zed-m3-mozilla-quartet. The corpus half of the four-repo distill landed as `.research/361` (uniffi-rs, YES B−) + `.research/362` (sccache, YES B−); rust-code-analysis and supply-chain graded NO as corpus sources. This issue is the OTHER half the user asked for: distill the way these projects ENGINEER into the healer itself — the same treatment the blaze idea got (issue 171: RA pre-filter oracle, T0b package-scoped re-checks landed as scoped_recheck GOAT PASS, T0a deferred-if-2) and the fusion/Fourier wild-idea lanes (issues 157/020: PoC-first, verdict-gated).
 
