@@ -1,41 +1,11 @@
-Write a cache-directory tag (`CACHEDIR.TAG`) into the disk cache root when
-it is created, per the [Cache Directory Tagging Specification]
-(https://bford.info/cachedir/), so backup tools that honor the spec (rsync
-with an exclude plugin, borg, restic, timeshift, …) can skip the cache
-automatically — the same way cargo already tags `target/`.
+Fixes #2975.
 
-## What
+Writes a `CACHEDIR.TAG` ([spec](https://bford.info/cachedir/)) into the disk cache root on init, like cargo does for `target/`, so backup tools that honor it (GNU tar / borg / restic `--exclude-caches`) skip the cache automatically.
 
-- `LruDiskCache::init` writes the canonical tag file into the cache root
-  right after creating it.
-- The write is best-effort: an unwritable cache directory logs a warning
-  and continues — cache creation never fails because of the tag.
-- On later runs the write is skipped when the existing tag already matches,
-  so plain cache hits do not touch the directory's mtime.
-- The startup scan now skips `CACHEDIR.TAG`: it is metadata for backup
-  tools, not a cache entry, so it must not enter the LRU (eviction would
-  otherwise delete it once the cache is full) and must not be subject to
-  the per-file size limit (a tiny max-size cache would otherwise remove it
-  at init).
+- Best-effort: if the write fails it logs a warning and cache creation continues.
+- Skips the write when an identical tag already exists, so cache hits don't touch the directory mtime.
+- The init scan ignores the root-level tag, so it never enters the LRU (where eviction would delete it) and isn't hit by the per-file size limit.
 
-## Why
+Two new tests cover the tag contents and that it survives re-opens and eviction. Ran `cargo test --lib`, the CI clippy invocation and `cargo fmt --check` on 1.91.0.
 
-Fixes #2975. The cache directory can grow to tens of GB, and today every
-backup that sweeps `$HOME` copies all of it unless the user hand-configures
-an exclude. The tag is the standard, zero-config mechanism for that, and it
-is a no-op for tools that ignore it.
-
-## How verified
-
-- `cargo +1.91.0 test -p sccache --lib` — 598 passed, 0 failed (including
-  two new tests: tag content matches the spec's signature line; the tag is
-  not counted as a cache entry, survives re-opens and forced eviction).
-- `cargo +1.91.0 clippy --workspace --all-targets --locked -- -D warnings
-  -A unknown-lints -A clippy::type_complexity -A clippy::new-without-default`
-  (the CI gate) — zero warnings.
-- `cargo +1.91.0 fmt -- --check` — clean.
-- MSRV note: the code is `const`/`b"..."`/generics-free-of-new-features;
-  `rust-version = "1.91.0"` is untouched and the gates above ran pinned at
-  1.91.0.
-
-Happy to rework or close.
+Happy to adjust.
