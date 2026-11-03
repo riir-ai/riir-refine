@@ -1,7 +1,7 @@
 # Research 363 — rust-lang/rust PR #164484: adaptive sparse encoding for metadata tables
 
-**Status:** DISTILLED — pending owner decision
-**Verdict:** YES B− corpus (1 rust_perf rule + 1 face; category `layout`; suggestion-tier; NotBenchable-by-metric) · league-lane N/A STATED · the standing "nnethercote ~11-01" queue dated lead partially discharged (see Lane-intel)
+**Status:** DISTILLED — pending owner decision. **Delegated-owner verdict round: AGREE (round 1, session aa025329, 2026-11-03)** — grade/domain/dedup upheld; the reviewer's independent dedup pass (`rank.?select|succinct|elias.?fano|roaring`) found no collision (`byte-rank-select-rarest-probe` is frequency-rank for search, not popcount-rank); one wording correction adopted: the nnethercote ~11-01 queue lead is RELATED EVIDENCE and stays OPEN (the lead is author-scoped; this PR is TaKO8Ki-authored / nnethercote-reviewed), never "discharged".
+**Verdict:** YES B− corpus (1 rust_perf rule + 1 face; category `layout`; suggestion-tier; NotBenchable-by-metric) · league-lane N/A STATED · the standing "nnethercote ~11-01" queue dated lead: RELATED EVIDENCE, lead stays OPEN (author-scoped; see the verdict-recording line above)
 **Batch slot:** nominal Batch 326 — `.plans/330_rustc_sparse_metadata_tables_batch326.md` (STAGED, plan-first)
 **Inspected:** 2026-11-03 (Zed m3, GitHub API reads: PR metadata + files/patch + issue-comments thread; no clone needed — the entire mechanism is 4 files, +101/−24, quoted from the files API at the pins)
 
@@ -86,7 +86,7 @@ Candidate: `adaptive-sparse-blocked-table-encoding` (final name at authoring).
 
 **No league/lane mapping** — the league lanes are Metal/CUDA Bonsai prefill/decode; compiler metadata does not move them. STATED per the skill.
 
-**Queue-lead discharge (partial):** the mining queue carries a standing dated lead "nnethercote ~11-01" (the 10-17 watch pass: `author:nnethercote` merged ≥10-08 = 5 PRs, "ALL rustc-internals class … none converts to app-level rust_perf/kernel_opt at fidelity; the ~11-01 dated lead STANDS"; cited again at B323's landing). This PR merged exactly 2026-11-01T01:40Z in nnethercote's review domain (metadata/rmeta, his active area) and **converts at fidelity** — the 11-01 window produced its converter. The lead discharges as PARTIAL: author-scoped (strict `author:nnethercote`) re-sweep remains with the next watch pass; this note is the discharge record.
+**Queue-lead relation (the strict reading, verdict round 1):** the mining queue carries a standing dated lead "nnethercote ~11-01" (the 10-17 watch pass: `author:nnethercote` merged ≥10-08 = 5 PRs, "ALL rustc-internals class … none converts to app-level rust_perf/kernel_opt at fidelity; the ~11-01 dated lead STANDS"; cited again at B323's landing). This PR merged exactly 2026-11-01T01:40Z in nnethercote's review domain (metadata/rmeta, his active area) and converts at fidelity — but the lead is AUTHOR-scoped and this PR is TaKO8Ki-authored, so it is RELATED EVIDENCE for the watch, not a discharge: the strict `author:nnethercote` re-sweep stays with the next watch pass, lead OPEN.
 
 ## Product-coverage axis
 
