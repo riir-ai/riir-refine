@@ -1,7 +1,6 @@
 # Plan 327 — Batch (nominal): uniffi-rs FFI hygiene → sec
 
 **Status:** LANDED 2026-11-02 (Batch 325; 4 of 6 candidates converted; the lease FOLDS: claim closed at the landing commit)
-**Claimed:** zed-amo-hkg327, 1793638171, expires 2026-11-04T16:49:31+00:00 (the queue-snapshot claim row is the fuller scope record)
 **Lease closed:** zed-amo-hkg327, 1793638171, expires 2026-11-04T16:49:31+00:00 — landed at the Batch-325 commit
 
 Distill verdict: `.research/361_uniffi_rs_ffi_hygiene_distill.md` (YES B− corpus, mozilla/uniffi-rs @ `ef9625b68dd51207f55f024a27649e58edb52b09`, MPL-2.0). This batch converts the FFI-hygiene candidates into sec-domain corpus rules. ALL candidates are NotBenchable-by-domain (correctness/liveness wins, per the dial9 split) — the batch's proof path is the fixture falsification arms + the integer-exact refcount ledger, not a Pareto bench.
