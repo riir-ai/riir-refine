@@ -129,7 +129,7 @@ def compare(committed: dict, live: dict) -> list[tuple[str, object, object]]:
 PROSE_SITES = [
     (
         "AGENTS.md",
-        r"heals `cargo clippy` warnings; (\d+) corpus lints",
+        r"drafts fixes for `cargo clippy` warnings; (\d+) corpus lints",
         ("clippy_lints/rules",),
     ),
     ("AGENTS.md", r"`rust_perf`[^\n]*?\*\*(\d+) rules\*\* standing", ("rust_perf/rules",)),
