@@ -63,6 +63,53 @@ directions (KAT classes hard-zero in the public set; points verbs PRESENT).
 - crates.io names + the publish secret (T8).
 - Any deployment act: devnet first; prod via the touch-deploy lane only.
 
+## MORNING RUNBOOK — 2026-11-04 (the owner's touch list, in order)
+
+Everything below is PREPARED and gated only on the owner's fingerprint/click.
+Session zed-9e5cd646 prepared all of it overnight; nothing else should need
+deciding.
+
+1. **gen2 site leg (the copy fix)** — Touch ID + one browser click:
+   ```sh
+   # build is stale after the asset edits — rebuild first:
+   cd /Users/kat/git/riir-dapps/cloudflare/kat-service && rm -rf build/worker && \
+     env PATH="/Users/kat/.cargo/bin:/opt/homebrew/opt/rustup/bin:/opt/homebrew/bin:/usr/bin:/bin" worker-build --release
+   script -q /dev/null env RIIR_DEPLOY_NETLEG_IMAGE=sha256:a29c31294ee126651547120a934a8b580a9395c26bd986ca03a95b0b958cfc39 \
+     RIIR_DEPLOY_KAT_SE_BIN=/Users/kat/.kat/bin/kat-se RIIR_DEPLOY_KAT_SE_B3=83ef29a6fe069c3fd05256aa78e8cddf6b5c34e3628a20762bf6dadc31483915 \
+     /Users/kat/git/riir-deployer/target/release/riir-deploy vault net-leg --login \
+     --tree /Users/kat/git/riir-dapps/cloudflare/kat-service --env gen2 \
+     --account-id 7e11517c4dd4f6e9cede7da9b60d66eb --restart-docker-vm
+   ```
+   (Or ask the session to run it — the script-TTY trick is proven.) Then:
+   probes = refine.riir.ai walks carry "cargo refine join" and zero
+   "--unmine"; coder walk zero "billed"; FAQ says `cargo refine fix`.
+   Bench-018 gen2 row: tree `f3e1df8` (or HEAD), the worker diff vs the
+   10-30 row = pivot copy + points routes (inert) + drain (inert, 3 vars
+   absent) — NOT a money-path diff.
+2. **tuna.riir.ai attach (dashboard, one click)** — Workers & Pages →
+   riir-kat-service-gen2 → Settings → Domains & Routes → Custom domain →
+   `tuna.riir.ai`. Then `cargo refine join` resolves. Verify:
+   `curl -sI https://tuna.riir.ai/points/anchor`.
+3. **Release v0.4.0 publish (Touch ID #2)** — the package is complete at
+   `/tmp/manual_release_dist/` (5 archives + LICENSE.md +
+   THIRD_PARTY_LICENSES.md + SHA256SUMS; leak-scan PASS, size-gate PASS,
+   arm64 smoke = 0.4.0 / build d2fbba094c91 / charitable set / verb help):
+   ```sh
+   kat-secret exec gh-release-pat --env GH_TOKEN --why "release cargo-refine v0.4.0" -- \
+     gh release create v0.4.0 -R gist-rs/cargo-refine \
+     --title "cargo-refine v0.4.0 — corpus: kernel_opt 1051 (+29) · rust_perf 293 (+15) · sec 38 (+7)" \
+     --notes-file /Users/kat/git/riir-refine/release/notes-v0.4.0.md \
+     /tmp/manual_release_dist/*
+   ```
+   (Or simply ask — the session runs it under Touch ID.) The tap + scoop
+   manifests are ALREADY bumped to 0.4.0 (they 404 until this publish —
+   do this first if anyone might `brew upgrade` today).
+4. **Verify channels**: `cargo refine upgrade` from a 0.3.5 install (or
+   download the tarball, run `./cargo-refine version`), `brew info
+   cargo-refine`, the site's install CTA.
+5. **update_check server**: the release-alert lane reads the releases API
+   — no server act needed; the alert quotes the title's corpus line.
+
 ## Sequencing laws (restated from Plan 324)
 
 - **G-B:** no front describes the points plane as live until this plan ships (W0).

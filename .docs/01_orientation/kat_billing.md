@@ -1,5 +1,15 @@
 # The KAT billing + TUNA trial-credit surfaces
 
+> ⛔ **FROZEN LANE (T16.7, issue 192 — 2026-10-31, extended 2026-11-03).** The
+> KAT billing plane is OUT of the shipped product: the public release set is
+> the charitable posture (latent_retrieval,points,fix_verify,update_check —
+> no kat_service/kat_transport), Refine is MAINNET-ONLY (no devnet lane for
+> anyone), and the user story speaks contribution points, not KAT. This page
+> describes the FROZEN internal lane only — reference, not a user surface.
+> Re-opens only if the Mozilla grant fails and the owner re-promotes
+> chain/chaind (Proposal 023 DEFERRED-FROZEN; the USDC-pour rail stays
+> tested and available).
+
 What the footer charges, what the tanks are, what happens offline, why
 there is no debt, and what a depleted account can still do. The client
 half of the KAT network (riir-dapps Proposal 005) and the TUNA trial
