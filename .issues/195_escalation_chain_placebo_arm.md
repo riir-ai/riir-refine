@@ -1,6 +1,7 @@
 # Issue 195: Escalation-chain production measurement needs a judgment-free placebo arm (JevAct's Table-3 lesson)
 
 **Status:** OPEN — measurement-gate proposal, filed from `../riir-reflex/.research/013_JevAct_Decision_Gate_Agent_Runtime.md` (arXiv:2610.38620 "Think Before You Act: Decision Gate for LLM Agents", IBM SIL 2026-10-28). Timing is the point: T5.2 landed 2026-11-01 (`2623f4d09`) — the escalation chain (seat rerank over the proposer pool) is production-wired at the serve boundary, and its first production-gain measurement must not be interpretable as revision-opportunity gain.
+**Claimed:** zed-riir-refine-195, 1793706957, expires 2026-11-05T12:00:00+00:00
 
 ## The paper's finding (why this is not paranoia)
 
