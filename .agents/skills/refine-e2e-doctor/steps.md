@@ -62,7 +62,7 @@ rm -rf /tmp/refine_e2e /tmp/refine_e2e_target
 ```
 
 PASS = `verify: 2 cargo check(s) — kept 1 file(s) / 1 edit(s), reverted 0
-edit(s)`, `fmt: formatted`, the healed source correct, no `no corpus rule`
+edit(s)`, `fmt: formatted`, the fixed source correct, no `no corpus rule`
 for `needless_return`. The `mining: batch pushed` line is a DISCLOSED
 production write: the synthetic shapes dedup server-side (they earn
 nothing) and metering is ~µKAT while TUNA trial credit lasts — after the

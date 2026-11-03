@@ -1,6 +1,6 @@
 # ClippyCorpus — BLAKE3-committed lint fix corpus
 
-The foundation (L0) of the clippy-healing pipeline. Each clippy lint is
+The foundation (L0) of the clippy-fix pipeline. Each clippy lint is
 distilled into a named rule with a bounded fix-space, stored as a
 `(lint_name, buggy_code, fixed_code, lint_group)` tuple.
 

@@ -12,7 +12,7 @@
 Every quality property downstream — L1 retrieval precision, the L2 verify
 gate's revert rate, the GOAT verdicts, the binary cost of the corpus
 tables — is decided at authoring time (L0). A rule that enters the corpus
-wrong costs every future heal run; the authoring filters below are
+wrong costs every future fix run; the authoring filters below are
 ordered cheapest-first, so most candidates die before any code is written.
 
 ## 1. Route before you propose
@@ -50,7 +50,7 @@ on the shape TODAY (the pinned toolchain version), which shape variants
 fire and which are SILENT (the probe envelope), and what clippy's own
 suggestion does (applicability, and whether it is CORRECT — clippy's
 suggestion can be wrong; the `useless_format` escape class, HISTORY
-§P23, is the canonical specimen: the healer must refuse consuming it
+§P23, is the canonical specimen: the rulewright must refuse consuming it
 where the literal carries brace escapes).
 
 The probe corrects the intake's premise routinely — `filter_map_bool_then`

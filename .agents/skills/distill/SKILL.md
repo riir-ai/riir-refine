@@ -15,7 +15,7 @@ This skill does for CODE SOURCES what the `research` skill does for papers: a di
 - Grading individual rule candidates + estimating realistic batch yield.
 - A future domain is being proposed (wasm, ...) and the source would be its seed.
 
-Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug fixes, clippy heal sweeps, or paper distillation (that is `research`).
+Do NOT activate for: in-repo hazard audits of already-mined files, proposer bug fixes, clippy fix sweeps, or paper distillation (that is `research`).
 
 ## The domains — routing table
 
@@ -139,7 +139,7 @@ The lane-intel axis greps OUR workspace issue ledger — it answers "does this m
 
 Do not let a lane-intel zero suppress a product-coverage YES; do not let product coverage inflate a weak corpus grade — the grade still counts rules, the axis sets the family's priority and continuation.
 
-**The self-evolve product aim + ungoat law (owner directive 2026-10-31):** the product is the SELF-EVOLVE stack — this healer's corpus + self-evolve loop, and the Rethink (Reflex+Instinct) decision family it shares machinery with. Batches feeding the self-evolve surfaces (`self_evolve.rs`, `tier_guard.rs`, the escalation chain `seat_rerank`/`hosted_expert`/`escalation_dispatch`, `score_bench/generations.rs` freeze tables) tier FIRST when a source feeds several domains equally. **Ungoat:** a candidate that FAILS its gate at landing is DEMOTED in the landing commit — grade struck, evidence tier → Withdrawn, queue line updated; stale grades and zombie candidates are noise, and demotion is a same-commit act, never a deferred note. Every batch plan carries its proof path (fixture + falsification arm + pre-registered gate) BEFORE the first corpus edit — no runnable proof path ⇒ the candidate stays an annotation, not a graded rule.
+**The self-evolve product aim + ungoat law (owner directive 2026-10-31):** the product is the SELF-EVOLVE stack — this rulewright's corpus + self-evolve loop, and the Rethink (Reflex+Instinct) decision family it shares machinery with. Batches feeding the self-evolve surfaces (`self_evolve.rs`, `tier_guard.rs`, the escalation chain `seat_rerank`/`hosted_expert`/`escalation_dispatch`, `score_bench/generations.rs` freeze tables) tier FIRST when a source feeds several domains equally. **Ungoat:** a candidate that FAILS its gate at landing is DEMOTED in the landing commit — grade struck, evidence tier → Withdrawn, queue line updated; stale grades and zombie candidates are noise, and demotion is a same-commit act, never a deferred note. Every batch plan carries its proof path (fixture + falsification arm + pre-registered gate) BEFORE the first corpus edit — no runnable proof path ⇒ the candidate stays an annotation, not a graded rule.
 
 ## Verdict format — exact output shape, in conversation
 

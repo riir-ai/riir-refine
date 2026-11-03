@@ -1,6 +1,6 @@
 # ClippyTernaryDrafter — modelless ternary SIMD matvec drafter
 
-The L1 layer of the clippy-healing pipeline. Proposes fixes using frozen
+The L1 layer of the clippy-fix pipeline. Proposes fixes using frozen
 ternary direction vectors via a multiplication-free SIMD matvec from
 `katgpt-core`. Zero-alloc hot path.
 

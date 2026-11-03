@@ -1,12 +1,12 @@
 ---
 name: outbound-pr
-description: The gated lane for sending cargo refine's fixes to external repositories as upstream pull requests (fork → heal → prove → verdict → fingerprint send). Activate when the user says outbound PR, fix-PR campaign, send fixes upstream, harvest-and-send, or names an external repo to PR fixes into; when preparing, gating, or reviewing an upstream fix-PR; when a maintainer replies to one of our PRs; or when asked whether a fix is PR-worthy. Enforces the five send gates (G-PR0 healer provenance, G-PR1 GOAT proof, G-PR2 Claude AGREE, G-PR3 SVG chart, G-PR4 owner fingerprint), the attribution ban, the human-voice reply rules, the rate ceiling, and the bench-then-PR order. Not for inbound mining (use the distill skill) or local healing (use the cargo-refine skill).
+description: The gated lane for sending cargo refine's fixes to external repositories as upstream pull requests (fork → fix → prove → verdict → fingerprint send). Activate when the user says outbound PR, fix-PR campaign, send fixes upstream, harvest-and-send, or names an external repo to PR fixes into; when preparing, gating, or reviewing an upstream fix-PR; when a maintainer replies to one of our PRs; or when asked whether a fix is PR-worthy. Enforces the five send gates (G-PR0 rulewright provenance, G-PR1 GOAT proof, G-PR2 Claude AGREE, G-PR3 SVG chart, G-PR4 owner fingerprint), the attribution ban, the human-voice reply rules, the rate ceiling, and the bench-then-PR order. Not for inbound mining (use the distill skill) or local fixing (use the cargo-refine skill).
 ---
 
 # outbound-pr — the gated fix-PR lane (cargo refine → upstream)
 
 Every upstream PR is the campaign's evidence. A PR that doesn't evidence the
-healer is worse than no PR (the #2977 lesson, three owner corrections in one
+rulewright is worse than no PR (the #2977 lesson, three owner corrections in one
 day). Doctrine home: `../../.proposals/022_outbound_fix_pr_campaign.md` (the
 binding gates + history); the worked example with every failure recorded:
 `../../.benchmarks/127_mozilla_wetrun/README.md`. When this skill and those
@@ -23,16 +23,16 @@ records disagree, the records win — read them at activation.
 
 Run them in order. A gate that fails means NO send; that is the gate working.
 
-### G-PR0 — healer provenance (the fix must BE a cargo refine output)
+### G-PR0 — rulewright provenance (the fix must BE a cargo refine output)
 
-- The PR must originate from the healer's own scan of the target repo:
+- The PR must originate from the rulewright's own scan of the target repo:
   `cargo refine --suggest <clone>` (dry run), oracle-anchored findings
   (`--clippy-json` with THEIR clippy run), or `--fix` output. Any domain is
   eligible — clippy_lints, rust_perf, rustc_errors, docker, sec, whatever the
   corpus carries. **perf/sec is the priority order, not exclusivity**: a
   rust_perf finding takes the next send slot over a clippy one; a
-  healer-fixed clippy finding beats a hand-written perf feature.
-- A fix the healer could not find (maintainer-issue-driven, hand-derived) is
+  rulewright-fixed clippy finding beats a hand-written perf feature.
+- A fix the rulewright could not find (maintainer-issue-driven, hand-derived) is
   GOODWILL: it may still be sent if the owner explicitly approves, but it
   sits OUTSIDE the campaign ledger and never counts as evidence. Do not
   invent a "pivot" to justify one (that was the #2977 error).

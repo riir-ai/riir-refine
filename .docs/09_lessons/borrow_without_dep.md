@@ -77,7 +77,7 @@ not just the boundary rule.
 
 ## Canonical precedent
 
-**(2026-08-10):** the clippy-healing pipeline (Proposal 034) borrows the
+**(2026-08-10):** the clippy-fix pipeline (Proposal 034) borrows the
 `TernaryDraftModel` + `SealQuestCorpus` + `ConstraintPruner` pattern from
 `quest_grammar` but has zero game-domain coupling. It ships in
 `/git/riir-refine` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.

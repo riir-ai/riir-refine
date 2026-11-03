@@ -10,7 +10,7 @@
 | [`heal_demo.md`](heal_demo.md) | `examples/heal_demo.rs` — end-to-end L0→L1→L2 demo (clippy domain) |
 | [`perf_heal_demo.md`](perf_heal_demo.md) | `examples/perf_heal_demo.rs` — rust_perf domain end-to-end demo (Plan 001 Phase 2) |
 | [`perf_bench_demo.md`](perf_bench_demo.md) | `examples/perf_bench_demo.rs` — rust_perf bench Pareto validator GOAT gate (Bench 013) |
-| [`kernel_opt_demo.md`](kernel_opt_demo.md) | `examples/kernel_opt_demo.rs` — kernel_opt routed healing pipeline demo (Plan 003/004 composition) |
+| [`kernel_opt_demo.md`](kernel_opt_demo.md) | `examples/kernel_opt_demo.rs` — kernel_opt routed fixing pipeline demo (Plan 003/004 composition) |
 | [`clippy_verify_demo.md`](clippy_verify_demo.md) | `examples/clippy_verify_demo.rs` — clippy lint resolution GOAT gate |
 | [`ruliology_search_demo.md`](ruliology_search_demo.md) | `examples/ruliology_search_demo.rs` — L3 Pareto-front GOAT gate |
 | [`self_evolve_real_world_demo.md`](self_evolve_real_world_demo.md) | `examples/self_evolve_real_world_demo.rs` — self_evolve G6/G7 GOAT gate |

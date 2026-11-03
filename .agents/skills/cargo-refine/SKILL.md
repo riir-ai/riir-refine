@@ -1,11 +1,11 @@
 ---
 name: cargo-refine
-description: Dev-time lint healing with the riir-refine `cargo refine` binary. Activate when about to fix clippy warnings manually, when clippy reports mechanical findings before a commit, or when asked to auto-fix lints across files. Covers dry run, compile-gated write, feature-gated code, the documented divergence classes the healer refuses by design, and post-mining logging (feeding misses and divergences back to the healer's improvement queue).
+description: Dev-time lint fixing with the riir-refine `cargo refine` binary. Activate when about to fix clippy warnings manually, when clippy reports mechanical findings before a commit, or when asked to auto-fix lints across files. Covers dry run, compile-gated write, feature-gated code, the documented divergence classes the rulewright refuses by design, and post-mining logging (feeding misses and divergences back to the rulewright's improvement queue).
 ---
 
-# cargo-refine — dev-time lint healing
+# cargo-refine — dev-time lint fixing
 
-Mechanical clippy findings are fixed by the healer FIRST, manual second.
+Mechanical clippy findings are fixed by the rulewright FIRST, manual second.
 It is span-preserving, comment-guarded, compile-gated under `--verify`
 (bad edits auto-revert), auto-rustfmts fmt-clean files, and records
 self-evolve trajectories on every apply.
@@ -17,11 +17,11 @@ self-evolve trajectories on every apply.
   (built with `--features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`
   — the bin's required-features + the verify features; Plan 107 T1 made
   kat_service mandatory).
-- Rebuild after healer source changes:
+- Rebuild after rulewright source changes:
   `cd /Users/katopz/git/riir-refine && cargo build --release --features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport --bin cargo-refine`
   (the symlink keeps pointing at the rebuilt binary).
 - Fresh box without the sibling repo → fall back to manual fixes +
-  `cargo clippy --fix`; do not block on the healer.
+  `cargo clippy --fix`; do not block on the rulewright.
 - ⛔ **A bare `cargo build --release` of riir-refine silently re-stales the
   global binary** (Issue 117, the 00:21 class): it overwrites the symlink
   target with a DEFAULT-FEATURES build, so `sync` / `update` / `--refill` /
@@ -80,19 +80,19 @@ cargo refine --fix --groups pedantic <paths>                # also fix allow-by-
   `RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv>` (loud status line; a
   feature-superset clippy run is materially slower — pay it when the
   project's diagnostics of interest live behind cfg gates, e.g. after a
-  heal touched `#[cfg(feature)]` code; `RIIR_REFINE_AUTO_ORACLE=0` disables
+  fix touched `#[cfg(feature)]` code; `RIIR_REFINE_AUTO_ORACLE=0` disables
   the auto-run entirely; a manual `--clippy-json` still wins over both).
   Unknown feature names fail the spawn → LOUD heuristic-only fallback
   naming the knob.
-- Commit the heal separately: `fix: heal <repo> <scope>`.
-- **Invocation note (agents, the misattribution trap)**: run the healer with
+- Commit the fix separately: `fix: refine <repo> <scope>`.
+- **Invocation note (agents, the misattribution trap)**: run the rulewright with
   your terminal tool's `cd` PARAMETER + absolute target paths. A
   `cd <abs> && cargo-refine …` form INSIDE the command string dies with
   `'.' is ambiguous in multi-root workspaces` — that error is the Zed
-  terminal wrapper's (it fires before the healer runs), NOT the healer's.
+  terminal wrapper's (it fires before the rulewright runs), NOT the rulewright's.
   Cross-workspace targets are fine: `owning_package_root` walks up from
   each target FILE, never the cwd (verified live 2026-08-28, Plan 550
-  session — same command, `cd &&` form fails / `cd`-param form heals).
+  session — same command, `cd &&` form fails / `cd`-param form fixes).
 
 ## What it fixes vs refuses
 
@@ -104,7 +104,7 @@ more clippy classes + the rust_perf proposers. The pedantic/nursery ones
 `semicolon_if_nothing_returned`, `doc_markdown`, …) apply only where the
 target crate enables them, or with `--groups` (Issue 135 level gate above).
 
-REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
+REFUSES BY DESIGN (fix manually — the rulewright is SAFER than clippy here):
 
 | Divergence class | Why silent |
 |---|---|
@@ -120,13 +120,13 @@ REFUSES BY DESIGN (fix manually — the healer is SAFER than clippy here):
 | `doc_markdown` context shapes (Issue 120, 2026-09-16 — all SKIP-direction: clippy fires, the proposer stays silent) | words inside fenced/indented code blocks, blockquote lines, lines with an odd raw backtick count (clippy's per-paragraph unbalanced-tick suppression), link-shaped tokens (`[text](dest)` — clippy checks the TEXT through pulldown events), bare URLs (clippy suggests `<url>` — a different fix shape we do not produce), `#[doc = "…"]` attribute-form docs, doc text inside macro token trees, shell-command doc lines (Issue 135 T4 — first word `cargo`/`rustup`/`npm`/`git`/…, a `$ ` prompt, or `./`·`../`·`scripts/` path: backticking one argv token breaks copy-paste; fence/indent it by hand — the oracle lane DECLINES these too). The `--clippy-json` oracle lane consumes clippy's own spans for all of these — feed it when the proposer's silence leaves findings standing |
 | LENGTH-MISMATCH iterator rewrites (`needless_range_loop` and kin — `for i in 0..N { slice[i] }` → `for x in slice` / `.iter_mut()` / `.enumerate()`, P34 2026-09-20, live evidence riir-ai Issue 981) | the rewrite is mechanical ONLY when `N == slice.len()` — a slice offset into a larger buffer (`let gs = &mut buf[h * sph..]` runs to the parent's END, len > sph) makes every iterator form a SEMANTIC rewrite (981: one head's decay multiplied every later head's BPTT slab; misread as a GPU kernel failure for a forensic session; note `.enumerate()` does NOT bound the iteration either — it iterates the WHOLE collection, `min` semantics differ from `0..N`). **The proposer refuses non-`len()` bounds + local collections (fixture-pinned); the oracle door declines range-dropping suggestions whose end is not a syntactic zero-arg `.len()` (P34). MANUAL conversions — the actual 981 emitter — must verify `N == coll.len()` at the site, or keep the range visible: `&mut buf[base..][..N]`, `.take(N)`** |
 
-Semantic lints (`if_same_then_else`, …) are not heal class — owner call.
+Semantic lints (`if_same_then_else`, …) are not fix class — owner call.
 
 ## Discipline
 
-- NEVER heal files with sibling WIP mid-flight — `git status` first; commit
-  only your own hunks; a heal diff is mechanical and must stay separable.
-- One-off single finding → manual is fine. Heal shines on batches.
+- NEVER fix files with sibling WIP mid-flight — `git status` first; commit
+  only your own hunks; a fix diff is mechanical and must stay separable.
+- One-off single finding → manual is fine. Refine shines on batches.
 - Wrong suggestion or miss? Fix the PROPOSER at root cause in riir-refine
   (`src/domains/*/proposers/`) + add a fixture regression test — never
   suppress, never hand-edit past it silently.
@@ -135,15 +135,15 @@ Semantic lints (`if_same_then_else`, …) are not heal class — owner call.
 
 Every run records trajectories to `~/.cache/riir-refine/memory.json`
 (applied counts by lint; `--verify` reverts + the clippy_verify oracle feed
-outcome verdicts). Usage artifacts are the healer's improvement queue —
+outcome verdicts). Usage artifacts are the rulewright's improvement queue —
 **post-mining** (mined from usage) vs **pre-mining** (mined from external
 sources — papers, crates, articles; Protocol A of the riir-refine skill):
 
-- **miss** — real clippy fires, healer silent → proposer extension candidate
-- **created** — the healer's output trips a NEW lint → terminal-state emission bug
+- **miss** — real clippy fires, rulewright silent → proposer extension candidate
+- **created** — the rulewright's output trips a NEW lint → terminal-state emission bug
 - **revert** — an edit the compile gate caught → proposer guard bug
 
-After healing sessions, append observed misses/divergences to the post-mining
+After fixing sessions, append observed misses/divergences to the post-mining
 intake in `riir-refine/.distill/001_mining_queue_snapshot.md` (one line each:
 class, site, evidence type). The idle loop (riir-refine skill queue item 14)
 consumes it: probe each class against real clippy FIRST, then extend the
@@ -163,7 +163,7 @@ stages nothing and gates nothing.
 
 Audit adoption + loop state in one command (Issue 037's instrument):
 `/Users/katopz/git/riir-refine/scripts/self_evolve_audit.sh` — memory
-tiers/outcomes, score-bench history, intake progress, heal-commit trail.
+tiers/outcomes, score-bench history, intake progress, fix-commit trail.
 
 ## Evidence (2026-08-24 adoption trial, M3)
 

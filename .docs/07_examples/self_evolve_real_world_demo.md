@@ -22,7 +22,7 @@ ground truth instead of an oracle:
 - **G7 (self-evolution with real clippy feedback)**: seeds memory with
   `[correct_fix, identity_transform]` per lint, rotates which candidate the
   drafter picks first (even-indexed → correct, odd-indexed → identity), then
-  runs 3 rounds of heal → verify-with-cargo-clippy → record-outcome. The
+  runs 3 rounds of fix → verify-with-cargo-clippy → record-outcome. The
   baseline is ~50% (5/10); the evolved rate after feedback should be ≥5pp
   higher. Measured: **50.0pp improvement (50% → 100%)**.
 

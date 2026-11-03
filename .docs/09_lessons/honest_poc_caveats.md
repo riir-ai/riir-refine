@@ -1,6 +1,6 @@
 # Honest POC caveats — what the pipeline does NOT do
 
-The clippy-healing pipeline is a POC. These are the documented
+The clippy-fix pipeline is a POC. These are the documented
 limitations, not bugs.
 
 ## 1. The fast path doesn't verify lint resolution

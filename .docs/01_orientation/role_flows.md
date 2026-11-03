@@ -120,11 +120,11 @@ steps = ["meter"]
 
 ```mermaid
 flowchart LR
-    JOIN["cargo refine --mine — join once<br/>consent · login · sync"] --> RUN["every heal run<br/>auto-syncs the redacted batch"]
+    JOIN["cargo refine --mine — join once<br/>consent · login · sync"] --> RUN["every fix run<br/>auto-syncs the redacted batch"]
     RUN --> PUSH["sync — rule verdicts + counters<br/>never source · never paths · signed"]
     PUSH --> PROOF["proof queue<br/>credited at a real clippy re-run"]
     PROOF --> SETTLE["GET — KAT at the epoch settle<br/>70% of every KAT the network burns<br/>≤ 7 days from a push"]
-    RUN -.-> COST["COST — your own heal burn<br/>+ consent: redacted verdicts leave the machine"]
+    RUN -.-> COST["COST — your own fix burn<br/>+ consent: redacted verdicts leave the machine"]
     SETTLE -.-> LIFT["contributed = never re-gated<br/>while depleted"]
     PROOF --> GROW["fleet corpus grows"]
     GROW -.->|"leased back"| RUN
@@ -132,9 +132,9 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | `cargo refine --mine` once (opts in, auto-logs-in, syncs). After that, every heal run auto-syncs the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
+| **Does** | `cargo refine --mine` once (opts in, auto-logs-in, syncs). After that, every fix run auto-syncs the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
 | **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are credited at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
-| **Pays** | your own heal burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. `--unmine` stops the push half (the lease pull half still runs — a read is not a contribution); healing was always local. |
+| **Pays** | your own fix burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. `--unmine` stops the push half (the lease pull half still runs — a read is not a contribution); fixing was always local. |
 
 ### The miner render source (renders `role_miner_flow.svg`)
 
@@ -188,11 +188,11 @@ from = "grow"; to = "bat"; back = true; label = "leased back — your own retrie
 
 [[walk]]
 title = "Join once"
-text  = "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; healing was always local). Consent tiers: Unset never pushes; running sync IS the consent."
+text  = "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; fixing was always local). Consent tiers: Unset never pushes; running sync IS the consent."
 steps = ["join"]
 [[walk]]
 title = "The redacted batch"
-text  = "Every heal run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in."
+text  = "Every fix run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in."
 steps = ["bat"]
 in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one --mine batch (published sample)" }
 [[walk]]

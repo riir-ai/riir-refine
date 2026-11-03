@@ -1,4 +1,4 @@
-# kernel_opt_demo — kernel_opt routed healing pipeline (Plan 003/004)
+# kernel_opt_demo — kernel_opt routed fixing pipeline (Plan 003/004)
 
 **Source:** [`examples/kernel_opt_demo.rs`](../../examples/kernel_opt_demo.rs)
 **Feature:** `kernel_opt` (or `kernel_verify` for CubeCL compile check)

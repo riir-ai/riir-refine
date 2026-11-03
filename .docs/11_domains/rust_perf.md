@@ -966,7 +966,7 @@ The 4 annotated rules (2 `ParetoDominated` + 2 regime-fragile) carry a
 `context_notes: Some(...)` annotation on
 [`PerfRule`](../../src/domains/rust_perf/mod.rs). The annotation is **rule-level
 metadata** — it describes the RULE, not a specific fix. The pipeline looks it
-up from the corpus at heal time + surfaces it on ALL paths (drafter / memory /
+up from the corpus at fix time + surfaces it on ALL paths (drafter / memory /
 Stage2):
 
 ```text
@@ -1026,10 +1026,10 @@ real cargo subprocess (seconds); also needs `--test-threads=1` under
 cargo-in-cargo"). This mirrors the `clippy_verify` test pattern — concurrent
 cargo invocations against temp crates race on cargo's build cache lock.
 
-## Build-config recommendations (not healable)
+## Build-config recommendations (not fixable)
 
-The code healer edits `.rs` via `syn`. PGO / LTO / codegen-units / BOLT are
-`Cargo.toml` + CI-workflow changes — **out of scope for the healer.** This
+The rulewright edits `.rs` via `syn`. PGO / LTO / codegen-units / BOLT are
+`Cargo.toml` + CI-workflow changes — **out of scope for the rulewright.** This
 section documents them as recommendations, not corpus rules. Source:
 nnethercote/perf-book `build-configuration.md` + Kobzol (cargo-pgo).
 
@@ -1047,7 +1047,7 @@ nnethercote/perf-book `build-configuration.md` + Kobzol (cargo-pgo).
 2. PGO if the workload is stable + representable (biggest single gain)
 3. BOLT if on Linux x86-64 + already doing PGO (incremental on top)
 
-The healer does NOT suggest these — they're Cargo.toml/CI changes, not code
+The rulewright does NOT suggest these — they're Cargo.toml/CI changes, not code
 patterns. A separate "build-config audit" tool (out of scope) could check for
 them.
 
@@ -1069,7 +1069,7 @@ auto-apply.
 | `entry-vs-contains-insert` | `if !m.contains_key(&k) { m.insert(k, v); }` → `m.entry(k).or_insert(v);` | statement-level rewrite (preserves `()` type); walks all stmts file-wide |
 | `static-str` | `-> String { "lit".to_string() }` → `-> &'static str { "lit" }` | signature-visible (return type); `.to_owned()` + `String::from` forms too |
 | `bool-to-bitpack` | `flags: &[bool]` count → `flags: &[u64]` + `count_ones().sum()` | signature-visible (param type); param name preserved (no rename hazards) |
-| `fxhashmap` | std `HashMap` → `rustc_hash::FxHashMap` (use swap + group slimming + path rewrite) | healed crate needs the `rustc-hash` dep; glob/`pub use`/fn-local forms skipped |
+| `fxhashmap` | std `HashMap` → `rustc_hash::FxHashMap` (use swap + group slimming + path rewrite) | fixed crate needs the `rustc-hash` dep; glob/`pub use`/fn-local forms skipped |
 | `hashset-insert-bool-return` | `if !s.contains(k) { s.insert(k); .. }` → `if s.insert(k) { .. }` | insert stmt deleted via the shared `delete_stmt_edit`; key equivalence modulo leading `&`/`*` layers (2026-08-17) |
 | `collect-append-to-extend` | `let mut staged = it.collect(); recv.append(&mut staged);` → `recv.extend(it);` | single-use staging gate (exactly 2 ident occurrences file-wide); first-mention adjacency in one block (2026-08-17) |
 | `vec-macro-zero-fill` | `let mut v = Vec::new(); v.resize(n, 0);` → `let mut v = vec![0; n];` | zero int/float literals only; `v` stays alive for later uses; a read-only-after binding may surface a rustc `unused_mut` warning — dropping `mut` unconditionally would risk E0596 on unknown mutators, which is strictly worse (2026-08-17) |

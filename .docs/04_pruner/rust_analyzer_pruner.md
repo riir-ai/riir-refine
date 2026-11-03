@@ -1,6 +1,6 @@
 # RustAnalyzerPruner — syn-based syntax validator
 
-The L2 layer of the clippy-healing pipeline. Validates that a drafted
+The L2 layer of the clippy-fix pipeline. Validates that a drafted
 fix parses as valid Rust syntax. Always-on, modelless, in-process.
 
 ## The two validation levels

@@ -1,8 +1,8 @@
-# Scope model — the input-scope gate at the heal seam
+# Scope model — the input-scope gate at the fix seam
 
 > The 2D complement of the Issue 030 relevance gate: rule coverage × **input
 > scope**. An out-of-scope input (`D > θ` under a two-corpus contrastive
-> table) declines the whole heal — never served, never escalated to L4.
+> table) declines the whole fix — never served, never escalated to L4.
 > Source: katgpt-core's `contrastive_scope` primitive (Issue 674 / Research
 > 493 / arXiv:2608.13545); consumer adoption = Bench 040 / Plan 016.
 
@@ -50,7 +50,7 @@ absence of evidence is not decline). **κ = 8.5** (re-pinned from 4.5 on
 2026-10-26, riir-refine Issue 172: the worst fixture `redundant_static_lifetimes`
 drifted to D = −2.08, and the pin's min/max accumulators were swapped so it
 never saw it) so the worst (least-negative) fixture saturates f32 `sigmoid` to **exactly `1.0`** — making in-distribution
-healing bit-identical with the model installed (`to_bits`-pinned by test).
+fixing bit-identical with the model installed (`to_bits`-pinned by test).
 The separation-pinning test fails loudly if the corpus grows a shorter
 fixture or a probe family drifts into the gap.
 

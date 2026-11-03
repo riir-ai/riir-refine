@@ -123,9 +123,9 @@ to queue item 1.
 |---|------|-----|
 | 1 | **Fix open issues — ISSUE-FIRST GATE** | Scan `.issues/` in THIS repo first, then every sibling repo (scan order below), oldest first, skip deferred. Items 5/11/12 are FORBIDDEN while any actionable issue remains anywhere. Fix → validate → doc → remove file (noise-reduction rule). |
 | 2 | **Finish in-flight plans** | `.plans/` with unchecked `- [ ]` — complete the next task group, honor `- [-]` defers. Rank plans from ORIGIN, never the working tree (Discipline: plan_read_origin). |
-| 3 | **Clippy sweep, all repos** | Heal-driven where possible (see heal protocol below), manual `cargo clippy --all-targets` otherwise. **GATE (2026-10-28, the plan-306 census finding): a clean sweep is NOT evidence over gated code — plain clippy silently skips every `required-features`-gated target. After any clean sweep of a repo, run `cargo refine --oracle-census <repo>` — non-empty output = the sweep was BLIND to those targets: either re-arm the healer there (its gap-arming now covers up to 3 distinct sets by default) or run the repo's own all-features posture (`RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv from the census>`). The oracle-census binary must be fresh (bin-age law). |
+| 3 | **Clippy sweep, all repos** | Fix-driven where possible (see fix protocol below), manual `cargo clippy --all-targets` otherwise. **GATE (2026-10-28, the plan-306 census finding): a clean sweep is NOT evidence over gated code — plain clippy silently skips every `required-features`-gated target. After any clean sweep of a repo, run `cargo refine --oracle-census <repo>` — non-empty output = the sweep was BLIND to those targets: either re-arm the rulewright there (its gap-arming now covers up to 3 distinct sets by default) or run the repo's own all-features posture (`RIIR_REFINE_AUTO_ORACLE_FEATURES=<csv from the census>`). The oracle-census binary must be fresh (bin-age law). |
 | 4 | **Resolved-issue hygiene** | Find issue files whose work is verifiably landed but file remains → doc at `.docs`/AGENTS.md → `rm` the file. |
-| 5 | **Batch mining + heal dry-run — GATED on 1–4 exhausted across ALL repos** | The centerpiece — see the two protocols below. If issues/plans exist anywhere, mining is a mispick, not a valid unit. |
+| 5 | **Batch mining + fix dry-run — GATED on 1–4 exhausted across ALL repos** | The centerpiece — see the two protocols below. If issues/plans exist anywhere, mining is a mispick, not a valid unit. |
 | 6 | **boundary-guard routine check** | Run `scripts/ci_boundary_guard.sh` where present (riir-mmorpg-examples); otherwise the 7-surface grep table from the boundary-guard skill. File violations as `.issues/` — do NOT fix in the same commit as detection. Record the run in the skill's Run log. |
 | 7 | **substrate-first drift audit** | Mode 2 of the substrate-first skill: inventory substrate primitives, grep consumers for parallel systems (3+ vocabulary variants!), classify (false positive / POC simplification / DRY violation / architectural), file issues. |
 | 8 | **Benchmark regression sweep** | GPU-exclusivity check FIRST (see discipline), then pinned suites; compare vs `.benchmarks/` baselines; drift → bisect → root-cause fix → new bench file. |
@@ -134,8 +134,8 @@ to queue item 1.
 | 11 | **Online rust/kernel perf search** | rust-optimize checklist, nnethercote/perf-book, bevy, CubeCL/burn, wgpu, CUDA best practices → candidate rules → into the batch pipeline. |
 | 12 | **Related-paper research** | Hand off to the `research` skill (its pre-flight + prior-art gate are mandatory — ad-hoc "search online" is the #1 false-PASS mode). |
 | 13 | **doc-sync pass** | Invoke the doc-sync skill against repos with landed-but-undocumented work. |
-| 14 | **Post-mining sweep** | Mine improvement candidates from the healer's OWN usage artifacts (Protocol C below) — misses, created-warnings, verify reverts, memory.json tier stats, score-bench delta. Contrast with items 5/11/12 which are PRE-mining (external sources). |
-| 15 | **Build-hygiene gate** | Invoke the `build-hygiene` skill (canonical home `katgpt-rs/.agents/skills/build-hygiene/`, the PUBLIC shareable copy): the five-profile discipline (dev line-tables-only + opt-3 deps, gate opt-0 shared cache, dist fat-LTO strip), target-dir size, binary size, the dev-loop driver posture (plain cargo vs framework dynamic-linking vs blaze), and the heal-before-perf law (`cargo refine --fix` where installed, else `cargo clippy --fix`). Quick pass rides Protocol H step 5; THIS item is the FULL pass — quarterly, or after any profile/feature-set/crate-count change. Run BEFORE item 8's benchmarks — a bloated target tree or a stale profile invalidates every timing row; re-run the workspace's dev-loop A/B harness (create one before adopting any driver) and re-time the quick gate layers vs the last recorded baseline. |
+| 14 | **Post-mining sweep** | Mine improvement candidates from the rulewright's OWN usage artifacts (Protocol C below) — misses, created-warnings, verify reverts, memory.json tier stats, score-bench delta. Contrast with items 5/11/12 which are PRE-mining (external sources). |
+| 15 | **Build-hygiene gate** | Invoke the `build-hygiene` skill (canonical home `katgpt-rs/.agents/skills/build-hygiene/`, the PUBLIC shareable copy): the five-profile discipline (dev line-tables-only + opt-3 deps, gate opt-0 shared cache, dist fat-LTO strip), target-dir size, binary size, the dev-loop driver posture (plain cargo vs framework dynamic-linking vs blaze), and the fix-before-perf law (`cargo refine --fix` where installed, else `cargo clippy --fix`). Quick pass rides Protocol H step 5; THIS item is the FULL pass — quarterly, or after any profile/feature-set/crate-count change. Run BEFORE item 8's benchmarks — a bloated target tree or a stale profile invalidates every timing row; re-run the workspace's dev-loop A/B harness (create one before adopting any driver) and re-time the quick gate layers vs the last recorded baseline. |
 
 Items 6 + 7 run BEFORE item 8 (benchmarks) by design — boundary/DRY
 findings are cheaper to fix before you benchmark around them. Item 15's
@@ -226,14 +226,14 @@ until the claims clear.
    bump the corpus count in `AGENTS.md`, update `.docs/11_domains/`.
 7. Commit `feat: batch NN: ...` + push. Update the mining queue snapshot
    at `.distill/001_mining_queue_snapshot.md` (same commit). **If the batch
-   touched healer source, the maintained binary must be rebuilt BEFORE the
+   touched rulewright source, the maintained binary must be rebuilt BEFORE the
    push** (the Issue-153 release feature set; verify with §0 of
    `scripts/self_evolve_audit.sh` or `cargo refine --version`'s `build:`
    hash == HEAD) — the B248 lesson: a landed corpus the global
-   `~/.cargo/bin/cargo-refine` does not serve silently heals with the OLD
+   `~/.cargo/bin/cargo-refine` does not serve silently fixes with the OLD
    rules until the next audit catches the bin-age.
 
-## Protocol B — heal dry-run on workspace repos (queue items 3 + 5)
+## Protocol B — fix dry-run on workspace repos (queue items 3 + 5)
 
 ```bash
 cd /Users/katopz/git/riir-refine
@@ -243,7 +243,7 @@ cargo run --features latent_retrieval --bin cargo-refine -- <target-repo>/src/  
 ```
 
 ⛔ **`--fix` is a REAL fix — the "preview" reading cost a measured incident
-(2026-10-30, amo idle lane):** a heal run at the all-features posture
+(2026-10-30, amo idle lane):** a fix run at the all-features posture
 believed the old preview text and invoked `--fix --verify`; the fix phase
 WROTE 83 files before any gate, and the verify's baseline guard (the
 tree was broken at that posture) then refused to classify or revert
@@ -254,9 +254,9 @@ cargo-refine skill's Usage block has said this since 2026-09-08 — this
 protocol was the stale copy.
 
 - Validate in the TARGET repo: `cargo clippy --all-targets` +
-  `cargo test --lib`. Use `CARGO_TARGET_DIR=/tmp/<repo>-heal` if the
+  `cargo test --lib`. Use `CARGO_TARGET_DIR=/tmp/<repo>-fix` if the
   repo's target dir is locked by a sibling build; clean it up after.
-- **The auto-oracle gap-arms by default (2026-10-28):** a heal dry-run's
+- **The auto-oracle gap-arms by default (2026-10-28):** a fix dry-run's
   oracle now runs up to 3 extra feature postures over the
   required-features census — read its stderr lines: `N gated target(s)
   invisible` = what the base posture cannot see; `M gap pass(es) armed`
@@ -268,7 +268,7 @@ protocol was the stale copy.
   cfg-gated edit site is INVISIBLE to default `cargo check`/`--all-targets`
   when the gate is a non-test feature — an E0432 sat green in
   `riir-game-sdk/src/backend/bevy_shared.rs` until validated with
-  `--features backend_bevy`. After a heal, compile the edited files under
+  `--features backend_bevy`. After a fix, compile the edited files under
   the features that actually include them (grep the `#[cfg(...)]` on the
   enclosing `mod`); a passing default check proves nothing about gated
   code. Same class as the count-assertion rule below.
@@ -277,8 +277,8 @@ protocol was the stale copy.
 - **Wrong suggestion → fix the proposer at root cause** (rule/pattern in
   `src/domains/*/proposers/`), add a fixture regression test, re-run.
   NEVER suppress the lint, NEVER hand-edit past it without a fixture —
-  the healer must adapt each iteration, not accumulate suppressed lints.
-- Commit separately: `fix: heal <repo> ...` (target repo) and
+  the rulewright must adapt each iteration, not accumulate suppressed lints.
+- Commit separately: `fix: refine <repo> ...` (target repo) and
   `fix: proposer ...` (riir-refine).
 
 ## Protocol C — post-mining sweep (queue item 14 — usage artifacts)
@@ -286,7 +286,7 @@ protocol was the stale copy.
 Pre-mining (Protocol A) distills rules from external sources BEFORE usage.
 Post-mining distills proposer extensions + new rules from artifacts that only
 exist AFTER usage. Intake lives in `.distill/001_mining_queue_snapshot.md`
-§"Post-mining intake" — appended by dev-time heal sessions (the `cargo-refine`
+§"Post-mining intake" — appended by dev-time fix sessions (the `cargo-refine`
 skill points agents there). Per sweep:
 
 1. Gather (one command: `scripts/self_evolve_audit.sh` — Issue 037's
@@ -442,5 +442,5 @@ repo — read it at session start, update it in the same commit as each batch.
 ## Manual invocation
 
 In Zed: `/riir-refine` in the agent panel, or ask "run the riir-refine
-skill". From a terminal, the underlying healer is `cargo-refine`
+skill". From a terminal, the underlying rulewright is `cargo-refine`
 (see Protocol B).

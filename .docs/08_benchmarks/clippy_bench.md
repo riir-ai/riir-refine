@@ -1,10 +1,10 @@
-# clippy-bench — the frozen real-code healing bench + score curve
+# clippy-bench — the frozen real-code fixing bench + score curve
 
 > **Plan 014.** The bench that can falsify "we're getting better": a FROZEN
-> fixture set healed by the production `--fix` path, scored against real
+> fixture set fixed by the production `--fix` path, scored against real
 > `cargo clippy` before/after, with an append-only score history rendered
 > as an SVG curve. The denominator never grows with the corpus — the score
-> can only move by healing better (or worse, which is the point).
+> can only move by fixing better (or worse, which is the point).
 
 ## Why (the gap it closes)
 
@@ -33,12 +33,12 @@ mine time; every run re-derives + warns loudly on toolchain drift.
 |---|---|
 | `heal_rate` | Σ resolved vocabulary lints / Σ vocabulary lints before |
 | `created_rate` | Σ newly-created clippy lints (ANY) / Σ vocab-before — the false-positive axis |
-| `parse_safety` | healed output still compiles / edited fixtures |
+| `parse_safety` | fixed output still compiles / edited fixtures |
 | `decline_correctness` | clean fixtures untouched (declining is a correct answer) |
 | `shaped_rate` (gen 8+, Issue 089 T7) | the half-win axis: resolved findings credited at `verdict × resolved` — a fixture whose heal clears its target AND leaves new diagnostics behind earns 0.5 per finding (`shaped_rate ≤ heal_rate` always) |
 
 Plus the **miss map**: which lints persist where, most-frequent first —
-the diagnostic for WHERE healing still fails. Instrumentation axes riding
+the diagnostic for WHERE fixing still fails. Instrumentation axes riding
 every row (the additive serde law): the **OOD entropy-gap axis** (issue 077),
 the **provenance strata** (Issue 089 T6 — heal rate split by repo/authored/
 construction class), the **shaped record** (Issue 089 T7 — n_shaped,
@@ -64,7 +64,7 @@ Run #1's two parse-safety failures were exactly the Issue 032 fixtures
 half-applied the rewrite → dangling loop variable). The remaining miss map
 (needless_range_loop, double_parens, needless_return,
 redundant_pattern_matching, useless_format — one each) is the honest open
-heal surface; `created_rate` 3 is the separate false-positive class.
+fix surface; `created_rate` 3 is the separate false-positive class.
 
 ### Run #3 — what the miss-map triage found (2026-08-19)
 
@@ -95,7 +95,7 @@ construction). Records: `HISTORY.md` per generation.
 | 3 | persist-stratified ladder (Bench 069 reopen #1) | admitted |
 | 4 | rustc-errors k-ladder vs rustc ground truth (Plan 093) | admitted (cross-domain floor) |
 | 5 | `rust_perf` vocabulary ladder, mechanical shape oracle (Plan 094) | admitted |
-| 6 | real-repo shape ladder, spans carved from pre-heal sibling states (Plan 095) | admitted |
+| 6 | real-repo shape ladder, spans carved from pre-fix sibling states (Plan 095) | admitted |
 | 7 | overlap-edit-chain ladder, manufactured drop-and-refire overlap, depth rungs 1–5 (Plan 096) | admitted |
 | 8 | **shaped-verdict ladder** (Issue 089 T7): atoms whose heal clears the target AND leaves new diagnostics — the closure-birth mechanism (`manual_map`'s arm→closure splice fires born-closure lints OUTSIDE FIXABLE: `redundant_closure`, `map_clone`, `map_identity`+`single_option_map`), so the fixpoint cannot dissolve them. 4 admitted / 3 excluded-on-record (dissolved). First run: shaped_rate 50.0% vs heal_rate 100.0%, 4/4 shaped, half_counts `manual_map`×3 (the "Beta (half-count)" feed; the Elo twin is the tie) | shape non-vacuity (n_shaped ≥ 1) |
 

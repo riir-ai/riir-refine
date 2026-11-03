@@ -1,4 +1,4 @@
-# cargo-refine — the unified healing CLI (Plan 005 Phase 2 + Phase 6 T6.1/T6.4)
+# cargo-refine — the unified fixing CLI (Plan 005 Phase 2 + Phase 6 T6.1/T6.4)
 
 **Source:** [`src/bin/heal.rs`](../../src/bin/heal.rs)
 **Feature:** `latent_retrieval` + `rust_perf` + `clippy_lints` (required —
@@ -91,7 +91,7 @@ cargo refine --fix [--write] [--quiet] [--verify [--verify-args <s>]] <path>...
 <path>...    Files or directories to scan (.rs files only).
 ```
 
-The `fxhashmap` fix requires the healed crate to have the `rustc-hash`
+The `fxhashmap` fix requires the fixed crate to have the `rustc-hash`
 dependency — parse-only validation cannot check this (documented per-rule
 caveat; review mode is the safety net). Under `--fix --verify` the dep gate
 is automatic: the owning crate's `Cargo.toml` is text-scanned for
@@ -134,7 +134,7 @@ without `kernel_opt`).
 
 ## Score bench + the authoring queue (Plan 014; Issue 072 T5/T6 — Plan 091/092)
 
-- `--score-bench` — run the frozen real-code healing bench (34+ fixtures,
+- `--score-bench` — run the frozen real-code fixing bench (34+ fixtures,
   real `cargo clippy` ground truth), append to
   `.benchmarks/score_history.jsonl`, re-render the SVG. No paths needed.
   Run after every proposer/corpus change so the history accumulates; the
@@ -167,7 +167,7 @@ without `kernel_opt`).
 
 ## KAT subcommands (Proposal 005 / 007 / 008 — `kat_service`, submit legs `kat_transport`)
 
-Beyond healing, the same binary carries the KAT metered-service client
+Beyond fixing, the same binary carries the KAT metered-service client
 (`cargo refine login|account|update|sync|claim|stake|unstake` — see `--help`;
 the accounting-only meter never mints, the server ledger is the authority).
 The newest member is the governance vote (Proposal 008 T2.4, G9-GOV):

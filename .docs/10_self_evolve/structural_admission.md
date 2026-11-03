@@ -1,6 +1,6 @@
 # Structural admission — the self-mutation safety vocabulary (Issue 136 / reef distill)
 
-> **Purpose:** the PRE-oracle layer for structural changes to the healer's
+> **Purpose:** the PRE-oracle layer for structural changes to the rulewright's
 > own surface. The loop already owns outcome gates on numbers
 > (`self_evolve`'s Lemma-4.2 tier certification, Elo/BetaPosterior
 > selection, the lexicographic keep rule) and an oracle gate on content
@@ -21,7 +21,7 @@
 >    `AlwaysReviewed` (fixture, config knob, active-set marker, playbook —
 >    each executes or changes executed behavior); `CorpusRule` is the one
 >    data-shaped `AutoServable` class. The honest finding is recorded, not
->    smoothed over: the healer's surface is mostly privileged.
+>    smoothed over: the rulewright's surface is mostly privileged.
 > 3. **Two-head commit chain** (reef P5) — `ChainState` carries
 >    `current` + `checkpoint` heads over immutable content-addressed
 >    artifacts (full 64-hex BLAKE3 of the canonical proposal JSON) with CAS

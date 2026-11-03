@@ -36,7 +36,7 @@ Two frozen in-tree sets, no oracle involved:
 | set | source | role | first measured |
 |---|---|---|---|
 | `v1_frozen` | `score_bench::fixtures` — the frozen v1 bench set (mined 2026-08-19) | reference | 35 fixtures, mean **3.840 nats** |
-| `gen6_real_repo` | `score_bench::generations::generation_v6` — real spans carved from pre-heal sibling states (mined 2026-09-06, AFTER the v1 freeze) | OOD | 17 spans, mean **3.110 nats** |
+| `gen6_real_repo` | `score_bench::generations::generation_v6` — real spans carved from pre-fix sibling states (mined 2026-09-06, AFTER the v1 freeze) | OOD | 17 spans, mean **3.110 nats** |
 
 Set choice: the v2–v5 ladders are corpus-derived composites (in-distribution
 by construction — composites OF corpus atoms), and v7 is authored-overlap;
@@ -80,7 +80,7 @@ the v1 reference spans. Two readings, both recorded:
    drafter entropy ≈ overfit"), sharper-on-held-out IS the overfit-direction
    signal, at moderate effect size (d = −1.11). The likely mechanism: the
    seed corpus and the generation-6 spans are siblings in provenance — both
-   carved from pre-heal/pre-sweep states of the same repos — while the v1
+   carved from pre-fix/pre-sweep states of the same repos — while the v1
    set is a broader mixed-era sample. The corpus is sharper on its own
    provenance family than on the broader bench. That is a real, measurable
    distribution shift the axis detected on its first run.
@@ -107,7 +107,7 @@ Measured:
 | set | families |
 |---|---|
 | `v1_frozen` | authored-composite, katgpt-rs@8da93f6c, katgpt-rs@9e0e6a57, riir-ai@849ce8330 (4 — mostly authored composites) |
-| `gen6_real_repo` | katgpt-rs@5b2d42970~1, riir-ai@1e050442a~1, riir-chain@7421245a~1, riir-train@a1197e06~1, riir-train@e6084429~1 (5 — all real pre-heal states) |
+| `gen6_real_repo` | katgpt-rs@5b2d42970~1, riir-ai@1e050442a~1, riir-chain@7421245a~1, riir-train@a1197e06~1, riir-train@e6084429~1 (5 — all real pre-fix states) |
 
 This pins reading 2 above as a set-COMPOSITION fact: the substrate fires
 more sharply on gen6 because gen6 is entirely sibling-provenance real code

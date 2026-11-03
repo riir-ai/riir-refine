@@ -165,7 +165,7 @@ pub fn success_rate_for(&self, lint_name: &str, fixed_code: &str) -> f32
 Looks up the actual success rate for a specific `(lint_name, fixed_code)`
 pair. Returns `0.5` (neutral) if no trajectory exists for this pair.
 
-This was added in Issue 008 to fix a G7 mechanism bug: the heal pipeline
+This was added in Issue 008 to fix a G7 mechanism bug: the fix pipeline
 previously hardcoded `success_rate = 0.5` for drafter candidates, which
 masked fail feedback — a repeatedly-failed drafter pick kept its neutral
 0.5, tying with the correct candidate (also 0.5) and winning ties. Now
@@ -229,7 +229,7 @@ losslessly:
   `(lint, buggy, fixed)` triples keep the LIVE stats (newer observations
   win); new triples append with their persisted stats.
 - `NotFound` = fresh memory `Ok(())` (first run); malformed JSON or an
-  unknown `version` = `InvalidData` (never aborts a heal run — the CLI
+  unknown `version` = `InvalidData` (never aborts a fix run — the CLI
   warns + continues fresh).
 - Retrieval weights are config, not state — never serialized.
 

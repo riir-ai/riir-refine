@@ -134,7 +134,7 @@ is why the proposers exist:
 ## The 2 P10 post-mining intake entries (2026-09-13)
 
 The 089-T3 usage artifact — both lints needed by hand on `src/bin/heal.rs`
-while the mechanical fixer healed around them; both probe-verified
+while the mechanical fixer worked around them; both probe-verified
 on-by-default in clippy 1.98 (probe crate, 2026-09-13):
 
 | Lint | Group | Tier | Pattern |

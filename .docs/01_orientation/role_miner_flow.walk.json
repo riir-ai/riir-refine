@@ -62,7 +62,7 @@
  "walk": [
   {
    "title": "Join once",
-   "text": "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; healing was always local). Consent tiers: Unset never pushes; running sync IS the consent.",
+   "text": "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; fixing was always local). Consent tiers: Unset never pushes; running sync IS the consent.",
    "steps": [
     "join"
    ],
@@ -71,7 +71,7 @@
   },
   {
    "title": "The redacted batch",
-   "text": "Every heal run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in.",
+   "text": "Every fix run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in.",
    "steps": [
     "bat"
    ],

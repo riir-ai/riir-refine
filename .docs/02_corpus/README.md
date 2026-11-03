@@ -2,7 +2,7 @@
 
 > **Purpose:** the BLAKE3-committed corpus of clippy lint fix examples.
 > Each lint is distilled into a named rule with a bounded fix-space. The
-> corpus is the foundation (L0) of the clippy-healing pipeline.
+> corpus is the foundation (L0) of the clippy-fix pipeline.
 
 ## Files
 

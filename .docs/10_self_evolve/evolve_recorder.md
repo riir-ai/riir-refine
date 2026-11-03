@@ -50,7 +50,7 @@ rec.load(&path) / rec.save(&path)               // persistence (see latent_fix_m
 ## Opt-out
 
 `RIIR_REFINE_SELF_EVOLVE=0` (or `off`/`false`/`no`) — fully inert: no
-recording, no persistence, no log lines. The pure heal loop.
+recording, no persistence, no log lines. The pure fix loop.
 
 ## GOAT
 

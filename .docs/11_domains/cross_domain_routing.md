@@ -1,7 +1,7 @@
 # Cross-domain auto-routing — NOT in scope
 
 > Each domain is selected by the caller enabling its feature flag. There is no
-> "this code has both a lint AND a perf issue, which domain heals it?" router.
+> "this code has both a lint AND a perf issue, which domain fixes it?" router.
 > That is over-engineering for now; revisit when a concrete need materializes.
 
 ## Why it's out of scope (Proposal 001 §"Cross-domain routing: NOT in scope")
@@ -37,7 +37,7 @@ A unified `cargo refine` CLI that auto-detects domain from code shape is a
 future design sketch (Proposal 001 §Product vision), not shipped. It would
 make sense when:
 
-1. A concrete consumer needs to heal code without knowing which domain
+1. A concrete consumer needs to fix code without knowing which domain
    applies (e.g., a CI integration that runs all domains sequentially).
 2. The domains have grown to the point where manual selection is a UX burden.
 

@@ -1,10 +1,10 @@
 # riir-refine `.docs/` book
 
 > **Purpose:** architectural narrative reference for the multi-domain
-> modelless code healer. Numbered folders for sort order, unnumbered
+> modelless rulewright. Numbered folders for sort order, unnumbered
 > `.md` files inside each. Each folder's `README.md` is the local index.
 
-This book documents the **modelless-first code-healing pipeline** that
+This book documents the **modelless-first code-fixing pipeline** that
 distills rules into a ruliology-style search space, drafts fixes via a
 modelless ternary SIMD matvec, validates with a `syn`-based syntax pruner,
 and refines via Pareto-front candidate search. Three domains ship (Plan 001):

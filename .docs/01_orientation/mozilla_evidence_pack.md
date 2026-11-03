@@ -34,14 +34,14 @@ Every release ships 5 platform archives (aarch64/x86_64 macOS, x86_64 Windows, a
 - **Heal-rate ledger**: `.benchmarks/score_history.jsonl` — **209 recorded score-bench runs** since the score-bench landed; latest entry (2026-10-29): **heal_rate 96.4%** of clippy findings auto-fixed, **parse_safety 1.0** (every write re-parses), **decline_correctness 1.0** (out-of-capability edits declined, never guessed), created-warning rate 1.8%.
 - **Corpus standing counts** (AGENTS.md §Role, 2026-10-31): clippy 112 lints · rust_perf 289 rules · kernel_opt 1,051 rules · sec 31 · docker 31 · shader_perf 8 · dist 7 — every rule standalone-compiled AND executed before entry.
 - **Batch cadence**: rust_perf at Batch 300, kernel_opt at Batch 323 (both 2026-10-31) — a rule-mining batch lands on a sustained near-daily cadence (batch history: `HISTORY.md` ledger).
-- **Adoption verdict**: production default dev-loop tool since 2026-08-24 (AGENTS.md "Production adoption — GO", live trial); mechanical clippy findings across the workspace route to the healer FIRST, manual second — the convention is written into every consuming repo's AGENTS.md.
-- **Deployment scale**: the default lint-healing tool across a **32-repo production workspace** (game runtime, chain, storage, training-methods, serving) — the consumers are private; the scale claim is attested by the workspace's tracked boundary contract (`katgpt-rs/AGENTS.md` repo roster).
+- **Adoption verdict**: production default dev-loop tool since 2026-08-24 (AGENTS.md "Production adoption — GO", live trial); mechanical clippy findings across the workspace route to the rulewright FIRST, manual second — the convention is written into every consuming repo's AGENTS.md.
+- **Deployment scale**: the default lint-fixing tool across a **32-repo production workspace** (game runtime, chain, storage, training-methods, serving) — the consumers are private; the scale claim is attested by the workspace's tracked boundary contract (`katgpt-rs/AGENTS.md` repo roster).
 
 ## 3. Deployment story + links
 
 - One-command install on 3 OS families: `install.sh` / `install.ps1` + verified binary self-update (`cargo refine upgrade`, SHA256SUMS-checked) — github.com/gist-rs/cargo-refine.
 - Package-manager lanes: `brew tap gist-rs/tap` (github.com/gist-rs/homebrew-tap), scoop bucket (github.com/gist-rs/scoop-bucket).
-- The product is **local-first and offline in its heal path**: modelless drafter + corpus, no code egress without explicit consent, no account required to run (KAT contribution plane is opt-in).
+- The product is **local-first and offline in its fix path**: modelless drafter + corpus, no code egress without explicit consent, no account required to run (KAT contribution plane is opt-in).
 - Honest gap: **no public consumer repos** — the workspace consumers are private, so external verification today is the install surface + counters, not consumer code in the open.
 
 ## 4. Reading for the T10 no-submit gate (2026-11-17)

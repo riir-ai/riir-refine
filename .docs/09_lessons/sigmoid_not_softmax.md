@@ -19,7 +19,7 @@ not a probability distribution over fixes.
 
 Softmax produces a probability distribution (sums to 1) over a set of
 candidates. This would be appropriate if we were selecting ONE fix from
-N candidates probabilistically. But the clippy-healing pipeline:
+N candidates probabilistically. But the clippy-fix pipeline:
 
 1. **Selects deterministically** (FNV-1a hash → index modulo
    `candidates.len()`). The confidence is metadata, not the selection

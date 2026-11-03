@@ -25,7 +25,7 @@ third accelerator in the stack's Metal/CUDA/ANE matrix, and any future
 ANE-side kernel work (Issue 726's hybrid prefill line, a potential
 `kernel_opt` ANE target, or distilling ANE fixes measured-GOAT-style per
 Research 489 §7's revisit trigger) starts from this substrate. The knowledge
-is hardware/platform reference material, not healer logic — it lives here
+is hardware/platform reference material, not rulewright logic — it lives here
 because this repo's `.docs/` book is the workspace's densest
 reverse-engineering record and this folder is pure reference.
 

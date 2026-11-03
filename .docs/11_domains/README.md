@@ -32,13 +32,13 @@
 
 | Feature | Default | Implies | Domain |
 |---|---|---|---|
-| `clippy_lints` | ✅ on | — | clippy lint healing |
-| `rust_perf` | ✅ on (since 2026-08-13) | — | rust perf healing (Phase 2) |
+| `clippy_lints` | ✅ on | — | clippy lint fixing |
+| `rust_perf` | ✅ on (since 2026-08-13) | — | rust perf fixing (Phase 2) |
 | `rust_perf_verify` | off | `rust_perf` | `cargo test` verifier |
 | `kernel_opt` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt (Phase 3) |
 | `kernel_verify` | off | `kernel_opt` | CubeCL compile verifier (STUB) |
-| `sec` | off | — | security-pattern healing (Plan 018) |
-| `docker` | ✅ on (since 2026-08-28) | — | Dockerfile bounded-fix healing (Plan 030) |
+| `sec` | off | — | security-pattern fixing (Plan 018) |
+| `docker` | ✅ on (since 2026-08-28) | — | Dockerfile bounded-fix drafting (Plan 030) |
 | `docker_verify` | off | `docker` | hadolint agreement oracle |
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` agreement oracle |
 | `dist` | ✅ on (since 2026-09-13) | — | shipped-artifact build-config advice (Issue 085; promoted on Bench 082 + §6 evidence + owner pull) |

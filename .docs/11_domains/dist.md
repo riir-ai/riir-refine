@@ -1,4 +1,4 @@
-# `dist` — shipped-artifact build-config healing (6th retrieval domain)
+# `dist` — shipped-artifact build-config fixing (6th retrieval domain)
 
 > Phase 1 landed 2026-09-09 (Issue 085); the B1/B2 context extensions landed
 > 2026-09-10 (`759e209d`). **DEFAULT-ON since 2026-09-13** (Issue 085 closed
@@ -21,7 +21,7 @@ This tool's own shipped binary rode plain `--release` through v0.1.4:
 **11,903,168 bytes** stripped where the knob set measures **4,546,448**
 (-61%) — found by the OWNER, not by any agent session, despite a rebuild-
 for-freshness pass in between. `binary_size_gate.sh` watches this repo's
-release lane at package time; this domain watches EVERY manifest the healer
+release lane at package time; this domain watches EVERY manifest the rulewright
 scans at dev time, before the bloat ships. `cargo bloat` first: 70% of
 `.text` was own-code corpus tables — codegen knobs win, dep removal does not.
 

@@ -1,4 +1,4 @@
-# The `docker` Domain — Dockerfile Bounded-Fix Healing + Retrieval
+# The `docker` Domain — Dockerfile Bounded-Fix Drafting + Retrieval
 
 **Feature:** `docker` (**DEFAULT-ON since 2026-08-28**, zero new dependencies)
 **Oracle ladder:** `docker_verify` (Tier 1 — implies `docker`; needs `hadolint`
@@ -93,7 +93,7 @@ with no minor is a **moving label**: it always resolves to the latest release
 of that major, so it satisfies every floor in it. **Measured, not inferred
 from the docs:** under `# syntax=docker/dockerfile:1`, `COPY --exclude=` — a
 1.19-only feature — passes `docker build --check` and builds green. Reading
-it as `1.0` got the ordering exactly backwards: the healer would demand `1.4`
+it as `1.0` got the ordering exactly backwards: the rulewright would demand `1.4`
 on a file already carrying something strictly newer, and would refuse
 V1_4-floor fixes the frontend supports. An explicitly pinned `1.0` still reads
 as `Builtin`; only the minor-less form is treated as latest-of-major.
@@ -113,7 +113,7 @@ Dockerfiles are matched by NAME — `Dockerfile`, `<name>.Dockerfile`,
 
 ### 1. Refusals are data, not prose
 
-Some incumbent advice is ANTI-MODERN and the healer must move AWAY from it.
+Some incumbent advice is ANTI-MODERN and the rulewright must move AWAY from it.
 `refuses()` names four, and `tests/docker_refusal_gate.rs` fails the moment a
 proposer emits one:
 
@@ -196,7 +196,7 @@ end to end.
 | **G2** latency | 17.05 µs/scan release (1.24 ms debug), 302-byte file, M3 Max |
 | **G3** no-regression | 5-domain router floors re-measured + re-pinned (below) |
 | **G4** alloc | scan buffers reach a steady state; a clean file allocates no findings at all |
-| **G5-real** | PASS — `edge-wallet-container` healed, `docker build` GREEN (the healed cache-mount `RUN` compiled for 167.7 s), image 141 MB, binary present |
+| **G5-real** | PASS — `edge-wallet-container` fixed, `docker build` GREEN (the fixed cache-mount `RUN` compiled for 167.7 s), image 141 MB, binary present |
 | **Class-A agreement** | PASS — all DL-coded rules agree with live hadolint 2.15.1 |
 | **Tier-2 agreement** | PASS — 4/4 BuildKit-check rules agree with live `docker build --check` (Docker 29.7.2 / buildx v0.36.1). Falsified with 3 injected defect classes. Since the Issue-071 repair the fixtures are registry-free: 2.7 s for the suite (was ~9.6 s with `alpine` round-trips, and 399 s + red on a registry-blocked box) |
 

@@ -78,7 +78,7 @@ ring, bounded 8192 frames, reset on effect switch).
 `cargo refine --frame-time-report [PATHS…]` consumes them:
 
 - **Budget report**: per-effect p50/p90/mean vs the carried budget
-  (`--frame-budget <MS>` overrides), `OK`/`OVER` per row, and the heal
+  (`--frame-budget <MS>` overrides), `OK`/`OVER` per row, and the fix
   hint — the over-budget effects are exactly where `--domain shader_perf`
   (the sample-budget / loop-boundedness corpus) should run next. The tier
   PRIORITIZES the source-scan rules; it does not replace them.

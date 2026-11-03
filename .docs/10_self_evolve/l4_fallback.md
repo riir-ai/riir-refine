@@ -54,8 +54,8 @@ gap **9/29** (Bench 037). Lesson generalized: *a syntactic check is not
 a relevance check.*
 
 The **input-scope gate** (Bench 040 / Plan 016, `ScopeModel`) sits one
-level up at the heal seam: out-of-scope (non-Rust) input declines the
-whole heal before any L4 call — the ~48 s GPU call is never spent on
+level up at the fix seam: out-of-scope (non-Rust) input declines the
+whole fix before any L4 call — the ~48 s GPU call is never spent on
 garbage.
 
 ## 3. The local model behind the seam

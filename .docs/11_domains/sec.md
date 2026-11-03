@@ -1,4 +1,4 @@
-# `sec` — security-pattern healing (4th retrieval domain)
+# `sec` — security-pattern fixing (4th retrieval domain)
 
 > Phase 0+1 shipped 2026-08-22 (Plan 018 / Proposal 004 / Research 078-079 /
 > Bench 046). Opt-in feature `sec`, default-off — promotion needs measured
@@ -33,7 +33,7 @@ suggest-only.
 All 5 candidates probed OPEN against real clippy 1.97.0 (pedantic +
 restriction + nursery; zero equivalent-fix firings). The crypto trio is
 **dep-gated** (the `fxhashmap` pattern: fires only when the file already
-imports the replacement crate — the healer never edits `Cargo.toml`).
+imports the replacement crate — the rulewright never edits `Cargo.toml`).
 
 | Rule | Family | `--fix` | The bounded fix / gate |
 |---|---|---|---|
@@ -105,9 +105,9 @@ was 35/101; the read_to_end/TcpStream vocabulary keeps the B131 sec-centroid
 drift ticking −1 span; floor re-pinned 30 → 29/101) and full state 83/131
 (63.4%, was 79/131 — +4 UP, cross-arm divergence consistent with the B130
 kernel-vocabulary raise; floor re-pinned 74 → 78/131); both deltas recorded,
-neither weakened silently. En-route fix on develop: `ce74bac`'s healer
+neither weakened silently. En-route fix on develop: `ce74bac`'s rulewright
 `redundant_closure` rewrite of the `--score-bench` filter was load-bearing
-(`&String` → `&str` deref-coercion — the documented healer escape class) and
+(`&String` → `&str` deref-coercion — the documented rulewright escape class) and
 compiled to nothing under default features; restored + verified via the
 score-bench run itself.
 
