@@ -1,8 +1,8 @@
 # Plan 324 — Mozilla web alignment: the four fronts answer the six criteria
 
 **Date:** 2026-10-31
-**Status:** Active — Phase 1 landed local; rethink + reflex fronts DEPLOYED 2026-11-03 (touch-deploy); refine + riir.ai fronts pending the kat-service/owner lane; Phase 2 open
-**Claimed:** zed-riir-docs, 1793552193, expires 2026-11-03T16:57:16+00:00
+**Status:** Active — Phase 1 landed local; rethink + reflex fronts DEPLOYED 2026-11-03 (touch-deploy); refine + riir.ai fronts pending the kat-service/owner lane; T2.2 landed+deployed; T2.4 mostly landed (completion rides riir-dapps issue 157); T2.1/T2.3 open
+**Claimed:** zed-9e5cd646-continuation, 1793823300, expires 2026-11-05T00:00:00+00:00 (prior claim zed-riir-docs expired 2026-11-03T16:57)
 **Research:** [katgpt-rs Research 642](../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md) (public program digest)
 **Target:** `reflex-site` (reflex.riir.ai), `riir-refine` site lane (refine.riir.ai), `riir-rethink` site lane (rethink.riir.ai), `riir-dapps`/root (riir.ai) — per the web-family skill
 **Deadline driver:** consult email ~Nov 7; application Nov 17–19 (grant lane: issue 190)
@@ -36,9 +36,9 @@ Owner pivot v4 (issue 192) supplies the narrative:
 ### Tasks
 
 - [ ] **T2.1** `refine.riir.ai` gains a "How it sustains" section: open core (MIT), community corpus (MIT forever), contribution points (TUNA — earn by contributing, spend on hosted lanes, expiring, non-transferable), future coding domains (Python/Go), enterprise services — the sustainability answer in public.
-- [ ] **T2.2** `rethink.riir.ai` gains a "Research status" block: the lanes on the board, what's beaten, what's open — the "PoC until every decision lane is beaten" line, verbatim from issue 192.
+- [x] **T2.2** `rethink.riir.ai` gains a "Research status" block: the lanes on the board, what's beaten, what's open — the "PoC until every decision lane is beaten" line, verbatim from issue 192. **— LANDED 2026-11-03 (`riir-rethink` `e46bf6f`, Plan 324 T1.2 + T2.2 one commit) and DEPLOYED 11-03 (probed live):** the `#research` section renders the board-status table from the published feed (record-only / tier-fallback / ahead / open), the "ongoing PoC until we beat all decision lanes possible" line verbatim from issue 192 §2; checkbox ticked 2026-11-04 (stale bookkeeping — the work shipped a day before the box was).
 - [ ] **T2.3** Evidence surfaces on-page: installer counts + crates.io downloads (once published — issue 192 GAP 11), pilot call link, corpus stats, leaderboard (once the points plane ships — link, don't wait).
-- [ ] **T2.4** Privacy answers on-page (the consent model: first-run consent, secret-blind redaction, anonymous vs joined, `leave`), so the Intentional principle is verifiable by a reviewer in one click.
+- [ ] **T2.4** Privacy answers on-page (the consent model: first-run consent, secret-blind redaction, anonymous vs joined, `leave`), so the Intentional principle is verifiable by a reviewer in one click. **— MOSTLY LANDED (the refine front's `#trust` section carries first-run consent, secret-blind redaction, anonymous-vs-joined); completion rides [riir-dapps issue 157](../../riir-dapps/.issues/157_legal_pages_teach_frozen_kat_surface.md): the same paragraphs still teach `--mine`/`--unmine` (frozen-flag mechanics the shipped binary refuses) and the `leave` verb is the missing piece — the 157 rewrite completes this task rather than a fresh build.
 
 ## Phase 3 — Launch readiness
 
