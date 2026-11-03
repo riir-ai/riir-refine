@@ -96,7 +96,8 @@ getrandom = { version = "0.2", optional = true }
 # Proposal 026 P1: the points-plane WIRE (DTOs + the privacy validators).
 # Load-bearing for every cargo command once the `points` feature exists —
 # cargo reads every dep manifest at workspace load; the sibling checkout
-# is required like katgpt-rs. Local repo (remote creation owner-pending).
+# is required like katgpt-rs. Remote LIVE: gist-rs/riir-ledger (created
+# 2026-11-02; ssh-verified 2026-11-03 — CI's sibling loop clones it).
 riir-ledger = { path = "../riir-ledger", optional = true }
 
 # Issue 153 T2: the self-update verifies the downloaded archive against the
