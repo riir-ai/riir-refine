@@ -23,6 +23,10 @@ records disagree, the records win — read them at activation.
 
 Run them in order. A gate that fails means NO send; that is the gate working.
 
+**G-PR0 provenance → G-PR1 proof → G-PR1b blast-radius harness → G-PR2 Claude
+AGREE → G-PR3 SVG → G-PR4 fingerprint.** (Six checkpoints, five gates —
+G-PR1b hangs off G-PR1: local proof alone never cleared a PR.)
+
 ### G-PR0 — rulewright provenance (the fix must BE a cargo refine output)
 
 - The PR must originate from the rulewright's own scan of the target repo:
@@ -54,6 +58,42 @@ Run them in order. A gate that fails means NO send; that is the gate working.
 - MSRV/edition gate BEFORE any fix: `rust-version` field > rust-toolchain >
   clippy.toml msrv > ABSENT ⇒ refuse (never guess). A fix that compiles on
   our toolchain but breaks their declared floor is the campaign killer.
+
+### G-PR1b — the blast-radius harness (run BEFORE G-PR2, after the fix compiles)
+
+Our own tests passing is NOT the gate — the gate is "their CI's known surfaces,
+reproduced locally." The #2977 round-4 failure (`--debug-preprocessor-cache`
+parsing our CACHEDIR.TAG) passed every local gate we ran because the failing
+test was in a suite we never invoked (`--test system`). The harness, in order:
+
+1. **Their CI, locally.** Read their workflow files (`.github/workflows/*`,
+   `.circleci/config.yml`, …) and enumerate EVERY test/clippy/build invocation.
+   Run each one locally at their toolchain that can run on this box — not just
+   `--lib`. System/integration test suites are MANDATORY for any change touching
+   files that tests read, write, or walk (`cargo test -p <pkg> --test system` was
+   the miss; it takes minutes, not hours).
+2. **Blast-radius grep (the walk/file rule).** For every file or directory your
+   change WRITES, CREATES, or MODERATES the contents of, grep the target repo
+   for every other reader/writer/walker of that same path: `grep -rn
+   '<dir-name>' src/ --include='*.rs'`, walk scanners (`WalkDir`, `read_dir`,
+   `glob`), format parsers keyed to files in that dir. Our miss: THREE readers
+   of the cache tree (LRU init, preprocessor scan, debug dump) — we gated two,
+   the third lived in a different crate file. Any hit you did not update is a
+   finding: either fix it or write down why it is unaffected.
+3. **The OS matrix spot-check.** If their CI runs freebsd/windows/mac beyond
+   linux, the failure class is usually OS-conditional (case sensitivity,
+   path separators, entry ORDER). You cannot run their OSes — so after the fix,
+   re-read your diff asking only: "what does this do differently when
+   `file_name()` ordering, separators, or case change?" One minute of reading;
+   it catches the freebsd-only class.
+4. **First-CI-wait discipline.** After the push, poll their CI runs once;
+   if any job fails, pull `--log-failed` and diagnose IMMEDIATELY (a red CI we
+   did not predict is a finding about our gates, not noise to wait out).
+   Maintain a per-repo `ci_surfaces.md` note in the campaign record listing
+   every invocation their CI runs, so the next PR to the same repo starts from
+   the map instead of re-deriving it.
+
+G-PR1b failure = the fix is NOT ready, regardless of G-PR1's local green.
 
 ### G-PR2 — Claude verdict AGREE (no send without it)
 
@@ -111,17 +151,65 @@ has an exact default.
 2. Fix what they asked, nothing else. Shorten comments when asked. Drop
    redundant tests when asked. Their preference between two correct shapes
    wins even when ours is prettier.
-3. Re-verify at THEIR toolchain (tests, clippy at their CI flags, fmt) and
-   ONLY THEN request the G-PR2 verdict on the response commit + reply draft.
+3. **Re-verify at THEIR toolchain (tests, clippy at their CI flags, fmt) and
+   run the CI harness (`scripts/outbound_pr_ci_harness.sh`) — THEN request the
+   G-PR2 verdict on the response commit + reply draft.**
 4. Root-cause claims get VERIFIED before they are written: registry
    manifests, `git log -S`, their CI runs on main. One wrong diagnosis in a
    reply burns the account's credibility (the round-2 lockfile failure).
+   ⛔ The round-4 corollary: before replying "that failure reproduces on
+   main, not mine", pull the failing job's OWN log and grep it for your
+   artifact names (file names your change writes, your crate names). The
+   round-3 reply blamed main while the freebsd log contained the literal
+   string `preprocessor/CACHEDIR.TAG` — the evidence was in the log we
+   already had, unread.
 5. Reply in short, plain sentences — human voice: no exclamation openers, no
    "Fixed all four:" ledgers, no three-paragraph structure on a small fix.
    Name the commit sha, use their vocabulary. If main's CI is broken,
    say so plainly with the reproducing fact, one sentence, and leave their
    bug alone unless asked.
 6. Patch the existing comment (PATCH API) rather than posting duplicates.
+
+## The pre-push harness script (mechanized G-PR1b — `scripts/outbound_pr_ci_harness.sh`)
+
+The script IS the gate's executor — run it before every push (new PR or
+review-response); the judgment gates (G-PR2) come after it, never before:
+
+```
+DIFF_WRITTEN_PATHS="CACHEDIR.TAG" BASE_REF=origin/main \
+  sh scripts/outbound_pr_ci_harness.sh <clone-dir> <their-msrv>
+```
+
+What it does (exit contract: 0 = READY, 1 = NOT READY (push waits), 2 = BLIND
+(never silently green)):
+1. **CI inventory** — parses their workflow files (`cargo test/clippy/build/
+   check/fmt` lines), strips CI-template variables (`\${{ }}`), drops commands
+   mangled beyond running, and SKIP-classifies the not-locally-runnable ones
+   (matrix/cross-target/all-features/windows/combinatorial) as named skips for
+   manual review.
+2. **Runs the runnable set** at THEIR toolchain, collecting failures (never
+   fast-exit — the report is the whole surface, not the first break).
+3. **Blast-radius grep** — for every CREATED file name (`DIFF_WRITTEN_PATHS`),
+   greps `src/` for OTHER code referencing it (excluding the diff's own
+   files); each hit prints file:line. This is the #2977 round-4 catch: on the
+   pre-fix tree the `commands.rs` debug-walk reference would have made the
+   harness NOT READY and stopped the push.
+
+Verified on the live sccache campaign: pre-fix trees go NOT READY, the fixed
+tree goes READY, and the run surfaces the CI's own `--bins --tests` suite that
+caught the failure upstream.
+
+Known limits (never hidden): OS-gated surfaces (freebsd/windows) are
+SKIP-classified — the OS-conditional read-through in G-PR1b step 3 covers
+them by hand; workflow parsing only sees what their files literally spell.
+After the push, poll their CI once; an unpredicted red job is a finding about
+OUR gates — pull `--log-failed` and diagnose immediately. Keep a per-repo
+`ci_surfaces.md` note in the campaign record so the next PR to the same repo
+starts from the map.
+
+State to encode from the #2977 rounds: the miss was `--test system` (a suite
+we never ran), the freebsd class was OS-conditional entry parsing, and the
+lockfile class needs `--locked` on the TARGET toolchain, not ours.
 
 ## Standing constraints
 
