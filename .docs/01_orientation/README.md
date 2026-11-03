@@ -13,7 +13,7 @@
 | [`boundary_rationale.md`](boundary_rationale.md) | Why this is a separate repo, not a module in riir-ai |
 | [`build_commands.md`](build_commands.md) | CI guard + GOAT benches + feature combos |
 | [`numbering_discipline.md`](numbering_discipline.md) | Monotonic numbers — never reused |
-| [`foo_end_to_end.md`](foo_end_to_end.md) | Proposal 011 §8 onboarding walkthrough — install → login → heal → `pay --request` / `faucet --request` / `wetrun`, with each step marked runnable-now or blocked-and-why |
+| [`foo_end_to_end.md`](foo_end_to_end.md) | Proposal 011 §8 onboarding walkthrough — install → login → fix → `pay --request` / `faucet --request` / `wetrun`, with each step marked runnable-now or blocked-and-why |
 | [`node_tiers.md`](node_tiers.md) | The install tier spec (Ultra/Max/Pro/Lite — Proposal 013; the Max replay earn class — Proposal 015): one place to compare what a rig can run, per-tier cost/earn, and honest shipped/designed/blocked status |
 | [`replay_lane.md`](replay_lane.md) | The `cargo refine replay` lane (P015 Phase 2 / Plan 127): lease → local clippy-oracle replay → signed verdict — gates, the pinned rate rule, canaries, and the honest no-settlement-yet status |
 | [`corpus_pr_lane.md`](corpus_pr_lane.md) | The `cargo refine corpus-pr` lane (riir-dapps Plan 050 S1.11): the devnet→mainnet corpus PR client half — the S1.0 auto-rebase, the three-way golden-pinned wire mirror, the T10/T2b gates, the per-pair bookkeeping, and the read-only gauge for the dark era |

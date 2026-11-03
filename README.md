@@ -36,7 +36,7 @@ library code).
 **POC — multi-domain framework (Plan 001) + Phase 0 (rule distillation) +
 L1 (drafter) + L2 (syntax validator) + additive self-evolution loop done.**
 
-The clippy-healing pipeline that distills clippy rules into a ruliology-style
+The rulewright pipeline that distills clippy rules into a ruliology-style
 search space, drafts fixes via a modelless ternary SIMD matvec, and validates
 with a `syn`-based syntax pruner. Heavyweight LoRA is the last-resort
 fallback, not the co-equal path. Plan 001 generalized the framework to be
@@ -51,7 +51,7 @@ domain-pluggable behind the `HealDomain` trait.
 | L2 — Test pass check (rust_perf) | ✅ Done (Plan 001 Phase 2, `rust_perf_verify` feature, real `cargo test` + compile-error detection via exit status + JSON parsing) |
 | L2 — Compile check (kernel_opt) | ✅ Stub (Plan 001 Phase 3, `kernel_verify` feature, delegates to shared `RustAnalyzerPruner`; full CubeCL compile + numeric compare deferred per Proposal 012 §Phase 0) |
 | L3 — Ruliology search | ✅ Done (Issue 005, `ruliology_search` feature, Pareto-front from katgpt-ruliology pattern, ~400µs/10-candidate search) |
-| SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` DEFAULT-ON since Issue 018 with `RIIR_REFINE_SELF_EVOLVE=0` opt-out; G1–G5 + G6/G7 ALL PASS — 50.0pp healing-rate improvement on real `cargo clippy` feedback; Plan 005 T9.3 selection is `SelectionMode::BetaPosterior` — −8.4% selection regret vs the raw-rate blend, Bench 028) |
+| SE — Self-evolution loop (additive) | ✅ Done (Issue 004 + Issue 008; `self_evolve` DEFAULT-ON since Issue 018 with `RIIR_REFINE_SELF_EVOLVE=0` opt-out; G1–G5 + G6/G7 ALL PASS — 50.0pp fix-rate improvement on real `cargo clippy` feedback; Plan 005 T9.3 selection is `SelectionMode::BetaPosterior` — −8.4% selection regret vs the raw-rate blend, Bench 028) |
 | Latent — span retrieval + suggest/fix CLI (Plan 005) | ✅ Phases 1–4 + 6 T6.1/T6.4 Done (`latent_retrieval` feature, opt-in; `cargo refine --suggest` — riir-rag `AstChunker`/`ModellessEmbedder`/`NeuronDbRetriever`, fan-out routing; GOAT G1–G4 PASS, Bench 018. Phase 4: top-5 rust_perf `propose_fix` proposers. Phase 6 T6.1: `cargo refine --fix [--write]` — **span-preserving** edit splice, visitor-gated; GOAT G1–G5 PASS, Bench 019 — G5 landed in katgpt-rs `katgpt-pruners` (commit `8c331cd9`, 12 files / 20 edits, 1233 tests green). T6.4: clippy proposers migrated to the shared emitter (`src/edit_emitter.rs`); `--fix` covers 5 perf rules + 33 structural clippy lints with fixpoint composition (Issue 016 expanded 7->33 + a 4-lint --verify tier, Bench 021); 3 type-blind clippy lints stay suggest-only). Phase 5 kernel proposers DEFERRED (concept-grade corpus — see Plan 005 §Phase 5). **Phase 3 REOPENED then partially recovered**: G1 is dead at scale (Bench 022), T3.5 lifted clippy top-1 54.2%→70.8% + perf→97.9% via the operator-aware tokenizer (Bench 027), still under the 80% bar; **Phase 3 CLOSED 2026-08-16**: T3.5.5's real-`cargo clippy` oracle + authored multi-lint spans gave the first uncontaminated measurement (+12.0pp, off 84.0%→96.0%), promoting `RerankMode::Structural`; clippy top-1 now 87.5% on the committed eval and 96.0% uncontaminated — both over the 80% bar  **Plan 005 COMPLETE as a document 2026-08-16**: Phase 7 closed as a negative result (T7.4 BLAKE3 commitment shipped), Phase 9 closed (T9.3 BetaPosterior default, Bench 028; T9.4 refuted, Bench 029), Phases 10/11/12/14 deferred on measured blockers (Bench 030), Phase 13 research half met (Research 058) |
 | Router — kernel_opt expert routing | ✅ Corpus-wired (Plan 003, `KernelExpertRouter` wraps `pick_domain<15,5>` from Plan 558; 15 category centroids wired to 68-rule corpus; 13/15 reachable, 2 documented unreachable) |
 | Thermal — kernel_opt tier dispatch | ✅ Stub (Plan 001 Phase 3, `KernelThermalRouter` + `ThermalTier` enum; Plasma→Hot→Warm→Cold→Freeze; returns Plasma for all calls) |
@@ -97,11 +97,11 @@ src/
 ├── ruliology_search.rs # Pareto-front candidate search (opt-in)
 ├── self_evolve.rs      # HealPipeline + LatentFixMemory + LatentSkillEvolution
 └── domains/
-    ├── clippy_lints/   # feature "clippy_lints" (DEFAULT) — clippy::* lint healing
+    ├── clippy_lints/   # feature "clippy_lints" (DEFAULT) — clippy::* lint fixing
     │   ├── corpus.rs   # 10 common clippy lints
     │   ├── verify.rs   # cargo clippy re-run (behind clippy_verify)
     │   └── proposers/  # 10 per-lint AST codemods (Issue 010 Stage 2)
-    ├── rust_perf/      # feature "rust_perf" (default-on since 2026-08-13) — rust-optimize perf healing
+    ├── rust_perf/      # feature "rust_perf" (default-on since 2026-08-13) — rust-optimize perf fixing
     │   ├── corpus.rs   # 126 perf rules (rust-optimize skill + perf-book + measured-GOAT/external distills; ledger in .docs/11_domains/rust_perf.md)
     │   ├── verify.rs   # cargo test re-run (behind rust_perf_verify)
     │   └── bench.rs    # perf-bench Pareto validator (behind rust_perf_bench, the GOAT gate)
@@ -125,15 +125,15 @@ code; `--fix` CLI wiring is Phase 6.
 
 | Feature | Default | Implies | Purpose |
 |---|---|---|---|
-| `clippy_lints` | ✅ on | — | clippy lint healing domain |
+| `clippy_lints` | ✅ on | — | clippy lint-fixing domain |
 | `clippy_verify` | off | `clippy_lints` | real `cargo clippy` lint resolution check |
-| `rust_perf` | ✅ on | — | rust perf healing domain (Plan 001 Phase 2; promoted 2026-08-13, Bench 013 G1+G5) |
+| `rust_perf` | ✅ on | — | rust perf-fixing domain (Plan 001 Phase 2; promoted 2026-08-13, Bench 013 G1+G5) |
 | `rust_perf_verify` | off | `rust_perf` | real `cargo test` test pass check |
 | `rust_perf_bench` | off | `rust_perf` | perf-bench Pareto validator (the GOAT gate; Bench 013) |
 | `kernel_opt` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt domain (Plan 001 Phase 3) |
 | `kernel_verify` | off | `kernel_opt` | CubeCL compile check (STUB — full validator deferred) |
-| `sec` | off | — | security-pattern healing domain (Plan 018; FFI/Drop/ptr hygiene + the Batch-131 InputValidation suggest-only pair + the Batch-140 advisory-db unbounded-read rule + the Batch-165 wire-arithmetic overflow sink + the Batch-258 web-trust seed + the Batch-291 penthera CORS/JWT/cookie trio + the Batch-292 CVEngine client-IP/shell-string/mapped-IP/strike-count quartet + the Batch-294 RustSec masked-key/silent-cap pair + the Issue-185 softmax-collapse trio + the Batch-325 uniffi-rs FFI-hygiene quartet, 35 rules + 7 fixable proposers + 22 suggest-only detectors; the `--domain sec` CLI + boundary gate) |
-| `docker` | **on** | — | Dockerfile bounded-fix healing + retrieval (Plan 030 / Proposal 006; 27 rules, 14 bounded, `--domain docker` CLI + the DL3059-refusal gate). Zero new deps |
+| `sec` | off | — | security-pattern fixing domain (Plan 018; FFI/Drop/ptr hygiene + the Batch-131 InputValidation suggest-only pair + the Batch-140 advisory-db unbounded-read rule + the Batch-165 wire-arithmetic overflow sink + the Batch-258 web-trust seed + the Batch-291 penthera CORS/JWT/cookie trio + the Batch-292 CVEngine client-IP/shell-string/mapped-IP/strike-count quartet + the Batch-294 RustSec masked-key/silent-cap pair + the Issue-185 softmax-collapse trio + the Batch-325 uniffi-rs FFI-hygiene quartet, 35 rules + 7 fixable proposers + 22 suggest-only detectors; the `--domain sec` CLI + boundary gate) |
+| `docker` | **on** | — | Dockerfile bounded-fix drafting + retrieval (Plan 030 / Proposal 006; 27 rules, 14 bounded, `--domain docker` CLI + the DL3059-refusal gate). Zero new deps |
 | `docker_verify` | off | `docker` | hadolint agreement oracle for the Class-A overlays; degrades to the Tier-0 stanza check with one log line when the binary is absent |
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` (BuildKit's own linter) agreement oracle for the 4 rules whose incumbent is a check NAME, not a `DL` code. Stays opt-in on purpose: it needs a running daemon and a registry round-trip per non-`scratch` fixture (~1.3-2.2 s each), a strictly heavier dependency class than hadolint |
 | `dist` | **on** | — | Issue 085: shipped-artifact build-config advice over name-matched `Cargo.toml` manifests (suggest-only, never a manifest write). **DEFAULT-ON since 2026-09-13** — all four GOAT promotion conditions PASS (Bench 082 + §6 addendum: precision fixtures, score-bench #92 FLAT, router floor 74/101 measured at default+dist, real consumer cites; B1/B2 scanner extensions `759e209d`) and the owner pull arrived (the Issue-085 fix directive). Zero new deps (the second hand-written no-`syn` scanner after docker) |
@@ -147,11 +147,11 @@ code; `--fix` CLI wiring is Phase 6.
 | `groq_first` | off | `dep:ureq` | Issue 051: groq-first free-tier LLM routing (`src/groq.rs`) — the Groq chat client + the groq→CF provider ladder (`router`, also needs `cf_workers_ai`). The daily drain reasons on the free tier FIRST and falls back to metered CF on limit; either leg may be absent (`GROQ_API_KEY` absent → pure CF, byte-identical; CF creds absent → a groq-only window whose exhausted free tier ends it cleanly), both absent → refused. Hardened: split connect/call timeouts, single-allocation auth header, token scrubbed from server-controlled error strings. `kat_drain --preflight` checks the ladder on an empty backlog at zero metered cost. Usage lands on the cost ledger's `providers.groq` block → the ops dashboard's absorption card |
 | `compile_oracle` | off | — | Plan 019 T0.3: the real-`cargo` error-JSON capture plumbing for the `rustc_errors` domain (deliberately NOT implying `latent_retrieval` — a compile fixer must not grow a retrieval dep) |
 | `fix_verify` | off | `compile_oracle`, `latent_retrieval` | Issue 015: `--fix --verify` — the compile gate as tooling (apply → cargo-check → revert only offending edits; real-repo GOAT Bench 031) |
-| `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo refine --score-bench` — the frozen real-code healing bench + the committed score curve (`.benchmarks/score_history.jsonl`) |
+| `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo refine --score-bench` — the frozen real-code fix bench + the committed score curve
 | `margin_mining` | off | `score_bench`, `latent_retrieval` | Issue 077 T3: `e^{−2M}` margin-weighted carve order (`score_bench_mine_v6 --order margin` / `--ab`) — RECORDED DEMOTE (Bench 080: tie at every budget; retrieval-similarity margins don't select lint-bearing raw spans), stays opt-in, the carve default stays count-desc |
 | `l4_lora` | off | — | Plan 336 T4.4/T5.3: the L4 generative-fallback SEAM (`L4Fallback` trait + `DaemonL4` transport) — inert unless a fallback is installed; Plan 336 G1 measured 0/60, stays UNARMED (see [`.docs/10_self_evolve/l4_fallback.md`](.docs/10_self_evolve/l4_fallback.md)) |
 | `pav_data` | off | `l4_lora`, `score_bench` | Plan 356 A1: PAV (process-advantage) dataset curation for the L4 fixer campaign (real-daemon or seeded-mock source; opt-in — the campaign is a deliberate 30-40h exclusive-4090 budget) |
-| `contrastive_scope` | off | `katgpt-core/contrastive_scope` | Bench 040 / Plan 016: the input-scope gate at the heal seam — non-Rust garbage is declined whole before it can burn an LLM call (G1 8/8 OOS declined, bit-identical in-distribution) |
+| `contrastive_scope` | off | `katgpt-core/contrastive_scope` | Bench 040 / Plan 016: the input-scope gate at the fix seam — non-Rust garbage is declined whole before it can burn an LLM call (G1 8/8 OOS declined, bit-identical in-distribution) |
 | `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the service client substrate — account + local usage accounting + `kat_redact` (the secret-blind redaction gate) + the `cargo refine vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders your local activity view; `--corpus-stats` counts at runtime with provenance stamps) |
 | `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease HTTP transport (+ QR rendering + the dev/test refill client) |
 | `cf_workers_ai` | off | `dep:ureq`, `latent_retrieval`, `clippy_verify`, `l4_lora`, `kat_service` | Issue 040/046: the CF Workers AI REST client (`src/cf_workers_ai.rs`) — the fixer arms, the USD daily-cap ledger (reserve-then-reconcile), and the fixer model: DEFAULT `@cf/zai-org/glm-5.3-flash` (owner pivot 2026-08-28, second call — the prior default 4.7 FAILED the Issue 043 re-designation gate 3/9 and stays priced + selectable via `RIIR_CF_MODEL`; [Bench 057](.benchmarks/057_glm53_flash_fixer_regate.md) re-gated 5.3 at 7/9 strict-keep on BOTH arms, beating the earlier CF bar of [Bench 049](.benchmarks/049_fixer_regate_poc.md)) |
@@ -188,7 +188,7 @@ SE — SELF-EVOLUTION LOOP (composes on top of L0–L2)
                      trust prior — Certified/Heuristic/Withdrawn — with
                      Withdrawn never suggested; identical-triple dedup)
   LatentSkillEvolution: EMA per-lint direction-vector update
-  Heals + records outcome → next-call retrieval benefits
+  Fixes + records outcome → next-call retrieval benefits
   Degenerates to static-corpus path when memory is empty
 ```
 
@@ -245,7 +245,7 @@ resort, not a co-equal path.
 ## Quick Start
 
 ```sh
-# Run the clippy healing demo (L0 corpus → L1 drafter → L2 pruner)
+# Run the clippy fix demo (L0 corpus → L1 drafter → L2 pruner)
 cargo run --example heal_demo
 
 # Run the rust_perf domain demo (Plan 001 Phase 2; default-on since 2026-08-13)
@@ -272,11 +272,11 @@ cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet --writ
 
 ## Contributing fixes (opt-in)
 
-Healing is local: it runs offline and needs no account. Sharing fix data is
+Fixing is local: it runs offline and needs no account. Sharing fix data is
 a separate, explicit opt-in. Contributions are anonymized and secret-blind —
 the redaction layer never lets credentials or secrets leave the machine —
 and they build the MIT-licensed community corpus: every contributed repair
-is reviewed, never scraped, and improves healing for everyone.
+is reviewed, never scraped, and improves fixing for everyone.
 
 ```sh
 cargo refine login      # your account (Ed25519 key, OpenSSH format)
@@ -307,7 +307,7 @@ repo: open-source (LICENSE) — billing skipped (free for open-source repositori
 
 A private repository (no licence file, no public-forge origin — a plain
 local dir) bills normally. When in doubt, the run is free: the maintainer
-promise is that we never charge a maybe. "Free" is the healing/billing
+promise is that we never charge a maybe. "Free" is the fixing/billing
 plane only — the corpus-lease `update`/`sync` service is priced separately
 regardless of repository.
 
@@ -317,28 +317,28 @@ a local test service). `--net <devnet|mainnet>` steers a single invocation
 and `config set --url <alias|url>` stores a bookkeeping row — dialing
 follows the env or the default. `cargo refine --refill [--refill-wait <s>]`
 requests a dev/test service refill with a bounded settle poll. None of this
-is required for local healing.
+is required for local fixing.
 
 > Coming next: join the contribution network, earn contribution points,
 > appear on the public leaderboard.
 
 ## Automatic rustfmt (`--fix --write`)
 
-Healed files are **rustfmt'd automatically** after the write — default-on,
-`--no-fmt` to disable. No manual post-heal formatting step, no SKILL
+Fixed files are **rustfmt'd automatically** after the write — default-on,
+`--no-fmt` to disable. No manual post-fix formatting step, no SKILL
 required — the discipline is built into the tool:
 
-- **fmt-clean-at-HEAD gate**: rustfmt only touches a healed file when the
-  *original* (pre-heal) content was already rustfmt-clean. Files with
-  pre-existing formatting drift are healed but **left unfmt'd** — a
-  mechanical heal never drags unrelated formatting churn into your diff.
+- **fmt-clean-at-HEAD gate**: rustfmt only touches a fixed file when the
+  *original* (pre-fix) content was already rustfmt-clean. Files with
+  pre-existing formatting drift are fixed but **left unfmt'd** — a
+  mechanical fix never drags unrelated formatting churn into your diff.
 - **CRLF skip**: CRLF files are reported (`fmt: skip (CRLF)`) and never
   converted (rustfmt would rewrite every line ending).
 - **Edition-aware**: the rustfmt edition comes from the owning package's
   `Cargo.toml` (`edition = "..."`, default `2024`) — bare-file rustfmt
   defaults to a pre-2024 edition and fails on let-chains.
 - **Never fatal**: rustfmt missing from PATH or a parse failure warns and
-  skips; the healed file is always left as valid Rust.
+  skips; the fixed file is always left as valid Rust.
 
 Dry runs (`--fix` without `--write`) report the **fmt plan** per file
 (`fmt: would-format` / `skip (pre-existing drift)` / `skip (CRLF)`) plus a
@@ -359,10 +359,10 @@ The same summary appears after `--write` (`fmt: 22 formatted, 70 skip
 pre-existing drift, 3 skip CRLF`). Under `--verify` the fmt pass applies
 after the compile gate, to files with kept edits only.
 
-## clippy-bench — the frozen healing score + SVG curve (Plan 014)
+## clippy-bench — the frozen fix score + SVG curve (Plan 014)
 
 The bench that answers "are we getting better?" with a number that can
-only move by healing better — **the denominator is frozen** (34 fixtures:
+only move by fixing better — **the denominator is frozen** (34 fixtures:
 real pre-sweep extracted spans + the T3.5.5 realistic multi-lint composite set,
 provenance recorded per fixture), and the ground truth is real
 `cargo clippy` before/after, not our own proposers.
@@ -370,9 +370,9 @@ provenance recorded per fixture), and the ground truth is real
 ![clippy-bench score](.benchmarks/score_history.svg)
 
 Axes: `heal_rate` (up) · `created_rate` (RED, down — false positives)
-· `parse_safety` (healed output compiles) · `decline_correctness` (clean
+· `parse_safety` (fixed output compiles) · `decline_correctness` (clean
 code left untouched — declining is a correct answer). The console report
-also prints the **miss map** (which lints persist, where healing fails).
+also prints the **miss map** (which lints persist, where fixing fails).
 
 Run it after any proposer/corpus change; each run appends one point to
 `.benchmarks/score_history.jsonl` and re-renders the SVG:
@@ -426,7 +426,7 @@ encodes them, and a hand-rolled variant must too:
 3. **NEVER whole-repo scoping on a shared checkout.** Default scope =
    session-touched files (`git diff --name-only HEAD` + untracked `.rs`),
    the recorded sibling-collision discipline. The watch TRIGGER may be the
-   tree; the HEAL SCOPE stays the list.
+   tree; the fix scope stays the list.
 
 Self-evolution state lives at `<repo>/.refine/`: `trajectories.kv/` (the
 durable neuron-db store, `latent_retrieval` builds — encrypted WAL + BM25

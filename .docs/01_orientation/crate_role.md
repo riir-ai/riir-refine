@@ -1,6 +1,6 @@
 # Crate role
 
-**riir-refine** is a modelless-first developer tool that heals
+**riir-refine** is a modelless-first developer tool that drafts fixes for
 `cargo clippy` warnings. It is NOT a game concern, NOT a training repo,
 NOT a chain repo.
 
@@ -31,7 +31,7 @@ NOT a chain repo.
 | **Game runtime** (NPC cognition, perception, combat) | `riir-ai` | Developer tooling ≠ game runtime |
 | **Training research** (LoRA SFT, GRPO, distillation) | `riir-train` | Inference tool ≠ training experiment |
 | **Chain consensus** (block production, slashing) | `riir-chain` | Chain ≠ developer tool |
-| **Storage** (shard persistence, KV store) | `riir-neuron-db` | Storage ≠ lint healing |
+| **Storage** (shard persistence, KV store) | `riir-neuron-db` | Storage ≠ lint fixing |
 | **Game SDK facade** | `riir-game-sdk` | Game vocabulary ≠ clippy vocabulary |
 
 ## The modelless-first mandate

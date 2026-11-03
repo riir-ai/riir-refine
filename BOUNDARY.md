@@ -11,7 +11,7 @@
 
 ## Owns
 
-**Multi-domain modelless code healer** — developer tooling behind the
+**Multi-domain modelless rulewright** — developer tooling behind the
 `HealDomain` trait (clippy_lints, rust_perf, kernel_opt). Borrows *patterns*
 from game crates but has zero game-domain coupling.
 
@@ -19,7 +19,7 @@ from game crates but has zero game-domain coupling.
 plane, transports — 25 modules) moved to the sibling leaf crate
 `../riir-kat`; root re-exports every moved module at its historical path
 (`riir_refine::kat_meter` etc. resolve bit-identically). Root KEEPS the
-healer-coupled `kat_sync_payload` + `kat_pending_estimator` (traj_store)
+rulewright-coupled `kat_sync_payload` + `kat_pending_estimator` (traj_store)
 and `kat_promotion` (score_bench/domain).
 
 ## Does not own

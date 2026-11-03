@@ -3,7 +3,7 @@
 Path dependencies assume this on-disk layout:
 
 ```
-/git/riir-refine          ← this repo (clippy-healing pipeline)
+/git/riir-refine          ← this repo (the rulewright pipeline)
 /git/katgpt-rs            ← katgpt-core (NON-OPTIONAL: ConstraintPruner trait + ternary matvec)
 /git/riir-ai              ← OPTIONAL dep (feature-gated arms only — see below; default build: NOT a dep)
 /git/riir-train           ← OPTIONAL dep (only for L4 LoRA fallback, deferred)

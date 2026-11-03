@@ -2,12 +2,12 @@
 
 ## The question
 
-> Why isn't the clippy healer a module in riir-ai (e.g.
+> Why isn't the clippy rulewright a module in riir-ai (e.g.
 > `crates/riir-games-quest/src/clippy_healing/`)?
 
 ## The answer
 
-The clippy healer borrows an **architectural pattern** from
+The clippy rulewright borrows an **architectural pattern** from
 `riir-games-quest/quest_grammar` (TernaryDraftModel + SealQuestCorpus +
 ConstraintPruner) but has **zero game-domain coupling**. If the pattern
 can be reimplemented in ~200 LOC and the project has no other game-domain
@@ -37,12 +37,12 @@ because `riir-games` has heavy **bidirectional coupling** with
 `riir-engine` (NPC cognition dispatches into engine runtimes; engine
 exports game-shaped types).
 
-The clippy healer is fundamentally different: it has **zero** coupling
+The clippy rulewright is fundamentally different: it has **zero** coupling
 with any game crate.
 
 ## Canonical precedent
 
-**(2026-08-10):** the clippy-healing pipeline (Proposal 034) borrows the
+**(2026-08-10):** the clippy-fix pipeline (Proposal 034) borrows the
 `TernaryDraftModel` + `SealQuestCorpus` + `ConstraintPruner` pattern from
 `quest_grammar` but has zero game-domain coupling. It ships in
 `/git/riir-refine` (new repo), NOT in `crates/riir-games-quest/src/clippy_healing/`.
