@@ -1,6 +1,7 @@
 # Issue 198 — traj-store score-run key: the toolchain axis (the 197-followup)
 
 **Status:** Open — filed from plan 329 / issue 197 P4-b (2026-11-03); behavior change with its own gates, deliberately NOT in the 197 T0b set
+**Claimed:** zed-riir-refine-198 epoch=1793565213 expires=2026-11-05T15:00:00+00:00
 
 ## The finding
 
