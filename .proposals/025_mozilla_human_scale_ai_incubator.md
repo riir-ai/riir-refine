@@ -62,16 +62,36 @@ are FROZEN, not deleted: proposal 023 DEFERRED-FROZEN, KAT billing/orientation d
 "frozen lane" banner on next touch, no Refine chain consumer, chaind promotion continues for
 seal-* only. The points tier mints at the TUNA operator batch's fast shape — no 2/3 quorum wait.
 
-**The user flow (the new CLI surface):**
+**The user flow (the new CLI surface — verb-first; reconciled against the
+shipped binary 2026-11-03, owner v5):**
 
 | Verb | Behavior |
 |---|---|
-| `cargo refine fix` | free, local, no join needed; first-run consent ONCE for the secret-blind send (spans/results, `allow_redacted: false`); asks join-or-anonymous; fully-offline mode (`RIIR_REFINE_OFFLINE=1`) documented for air-gapped users |
+| `cargo refine` | dry run — review what would be fixed, zero edits; no account, no network |
+| `cargo refine fix` | free, local, no join needed; compile-gated (a fix that breaks the build reverts); first-run consent ONCE for the secret-blind send (spans/results, `allow_redacted: false`); asks join-or-anonymous; fully-offline mode (`RIIR_REFINE_OFFLINE=1`) documented for air-gapped users. The `--fix` flag stays as the alias |
+| `cargo refine scan` | the secret-blind scan — report secret-shaped content (kind + path:line:col + blinded context) in code, comments and string literals, over the canonical gitleaks-consolidated scanner; `scan --blind <file>` renders safe-to-share redacted text. Report-only, never auto-fixed, values never shown. (`--secret-scan` stays as the flag alias; owner pick 2026-11-03 — `scan`, not `lint`, because `lint` reads as the clippy-fixing domain and the bare dry run already owns the fix-scan meaning) |
 | `cargo refine join` | contribution policy accept + GitHub login — the EXISTING device-flow OAuth app, minimal `read:user` scope (proves identity, never write; the client id is public by design and compiles as the default in the public posture) |
 | `cargo refine left` / `leave` | leave contribution: log off, zero data sent (`leave` ships; `left` kept as hidden alias) |
 | `cargo refine rank` | top-ten leaderboard + own rank — **rank requires GitHub-joined identity** (anti-Sybil: a rotating derived ID could farm the board; anonymous users get local-only stats) |
 | `cargo refine info` | top fixed repos by domain — aggregated, redaction-policy-scoped, counts + domains only, never repo content |
-| `corpus` / `update` / `upgrade` / `version` | corpus info + update offer (points-free — corpus freshness is a public good); lease refresh without the KAT charge line; binary self-update; subcommand alias |
+| `cargo refine corpus` | corpus info + the freshness offer (points-free — corpus freshness is a public good; never a charge line in any posture) |
+| `cargo refine upgrade` | verified binary self-update — SHA256SUMS-checked fetch + backup-swap, refuses dev builds |
+| `cargo refine version` | version + the compiled feature set + the build stamp (alias of `--version`) |
+| `cargo refine --stats [on\|off]` | share rule-and-count stats (opt-in, never your code or paths) — a THIRD consent state, separate from contribution |
+| `--suggest` · `--fix-compile` · `--domain` · `--json` · `--help-all` | power + maintainer flags (the full inventory in `--help-all`) — never required for the user flow |
+
+**Compiled OUT of the public build (the frozen KAT lane):** `login` · `account`
+(keys/custody/migrate/totp/history) · `--mine`/`--unmine` (replaced by
+`join`/`leave`) · `sync` · `claim` · `stake`/`unstake` · `vote` · `pay` ·
+`topup`/`buy` · `kat`/`tuna` · `get`/`send tuna` · `faucet` · `wetrun` ·
+`replay` · `corpus-pr` · `config adopt-state` · `--refill` · `update` (the
+corpus-lease refresh — the public `corpus` verb is its points-free face).
+Refine is MAINNET-ONLY: there is no devnet lane and nobody — including us —
+uses one (owner directive 2026-11-03). The mainnet/devnet WORD belongs to
+chain (seal-*) and Rethink, not Refine. The chaind option stays open behind
+the grant: the USDC-pour rail is already tested (the pay lane), and if
+Mozilla passes, the frozen KAT/chaind plan (Proposal 023 DEFERRED-FROZEN)
+is the re-promotion path.
 
 **The three binding laws (verdict r1, 2026-10-31):**
 

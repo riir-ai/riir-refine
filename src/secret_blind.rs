@@ -831,7 +831,7 @@ impl SecretReport {
             }
         }
         out.push_str(
-            "\nremedy: move the value to an env var / secret store; `cargo refine --secret-scan --blind <path>` \
+            "\nremedy: move the value to an env var / secret store; `cargo refine scan --blind <path>` \
              prints safe-to-share text\n",
         );
         out

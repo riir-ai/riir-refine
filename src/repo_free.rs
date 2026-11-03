@@ -81,8 +81,11 @@ pub fn disclosure() -> Option<String> {
     match posture() {
         RepoFree::Free { licence } => {
             let evidence = licence.unwrap_or("public-forge origin");
+            // Issue 192 v5 (owner): no billing language on the public
+            // surface — the run is free, full stop (the licence evidence
+            // stays: it is how the posture was decided, useful context).
             Some(format!(
-                "repo: open-source ({evidence}) — billing skipped (free for open-source repositories)"
+                "repo: open-source ({evidence}) — free; local healing never bills"
             ))
         }
         RepoFree::Billable => None,

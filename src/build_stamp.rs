@@ -71,8 +71,14 @@ pub fn is_valid_stamp(stamp: &str) -> bool {
 /// claim — the rebuild command below is meant to be copy-pasteable).
 pub const RELEASE_FEATURES: &[&str] = &[
     "latent_retrieval",
-    "kat_service",
-    "kat_transport",
+    // Issue 192 / Plan 325 — the public-goods pivot (owner posture act,
+    // 2026-11-03): the shipped binary is the CHARITABLE set — the points
+    // surface (join/leave/rank/corpus + the client UUID + first-run consent
+    // + offline) REPLACES the KAT billing plane. points implies the join
+    // identity chain (riir-kat client + provider_login). kat_service /
+    // kat_transport stay OUT — the T14 charitable sweep holds its hard-zero
+    // KAT classes; Refine is mainnet-only (no devnet lane ships).
+    "points",
     "fix_verify",
     // Issue 153 — a shipped binary without the update alert is exactly the
     // "old version with no notice" class this feature exists to end.
@@ -356,9 +362,9 @@ mod tests {
     /// recreates a half of the 00:21 diagnosis that had to be done by hand.
     #[test]
     fn refusal_carries_all_four_facts() {
-        let text = refusal_lines("sync", &["kat_transport"]).join("\n");
+        let text = refusal_lines("sync", &["points"]).join("\n");
         assert!(text.contains("sync: refused"), "{text}");
-        assert!(text.contains("kat_transport"), "{text}");
+        assert!(text.contains("points"), "{text}");
         assert!(text.contains(COMPILED_FEATURES), "{text}");
         assert!(text.contains(&rebuild_command()), "{text}");
         // Never the shape the class is mistaken for.
@@ -394,8 +400,8 @@ mod tests {
     /// accepted by cargo but reads as a bug in the tool printing it.
     #[test]
     fn a_needed_feature_already_in_the_release_set_is_not_repeated() {
-        let cmd = rebuild_command_for(&["kat_transport"]);
-        assert_eq!(cmd.matches("kat_transport").count(), 1, "{cmd}");
+        let cmd = rebuild_command_for(&["fix_verify"]);
+        assert_eq!(cmd.matches("fix_verify").count(), 1, "{cmd}");
         assert_eq!(
             cmd,
             rebuild_command(),

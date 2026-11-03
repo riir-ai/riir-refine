@@ -104,7 +104,7 @@ jobs:
       - name: Generate THIRD_PARTY_LICENSES.md (fails on any non-accepted license)
         run: |
           cargo about generate --config .github/about/about.toml \
-            --features latent_retrieval,kat_service,kat_transport,fix_verify .github/about/about.hbs \
+            --features latent_retrieval,points,fix_verify .github/about/about.hbs \
             > THIRD_PARTY_LICENSES.md
 
       - uses: actions/upload-artifact@v4
@@ -201,15 +201,21 @@ jobs:
         env:
           SIBLING_TOKEN: ${{ secrets.SIBLING_REPOS_TOKEN }}
 
-      # Shipping feature set = default + latent_retrieval + kat_service +
-      # kat_transport + fix_verify (the bin's required-features; Proposal 003
-      # §leak-surface item 4 + Plan 107 T1). NEVER ternary_inference.
-      # kat_transport (ureq/qrcode) joined at v0.1.2. fix_verify joins at
-      # v0.1.4 (2026-09-09): the docs promise `--fix` compile-gates, and a
-      # shipped binary without the gate both breaks that promise AND records
-      # every fix as unverified (Heuristic tier) — which the mining pipeline
-      # then cannot treat as strong evidence. Adds no new external crates
-      # (compile_oracle is std + serde only), so the license read is unchanged.
+      # Shipping feature set = the CHARITABLE set (Issue 192 / Plan 325, owner
+      # posture act 2026-11-03): default + latent_retrieval + points (the
+      # public-goods surface — implies the join identity chain via riir-kat
+      # client + provider_login) + fix_verify + update_check. The KAT billing
+      # plane (kat_service/kat_transport) stays OUT — the T14 charitable sweep
+      # holds its hard-zero KAT classes; Refine is mainnet-only, no devnet
+      # lane ships. NEVER ternary_inference.
+      # fix_verify joins at v0.1.4 (2026-09-09): the docs promise `--fix`
+      # compile-gates, and a shipped binary without the gate both breaks that
+      # promise AND records every fix as unverified (Heuristic tier) — which
+      # the contribution pipeline then cannot treat as strong evidence.
+      # points joins at v0.4.0 (2026-11-03): join/leave/rank/corpus + the
+      # client UUID + first-run consent + offline; adds ureq via the existing
+      # TLS stack (already license-accepted through the kat_transport era)
+      # and riir-ledger (MIT OR Apache-2.0, our own wire leaf).
       # Build with --profile dist (size-optimized, Cargo.toml [profile.dist]):
       # measured 2026-09-09, 11.0 MB → 4.3 MB (-61%) on the arm64 shipping set.
       # Dev-time builds stay on plain --release (drafter speed); the shipped
@@ -222,7 +228,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo auditable build --profile dist --target ${{ matrix.target }} \
-            --features latent_retrieval,kat_service,kat_transport,fix_verify,update_check --bin cargo-refine
+            --features latent_retrieval,points,fix_verify,update_check --bin cargo-refine
 
       - uses: actions/upload-artifact@v4
         with:

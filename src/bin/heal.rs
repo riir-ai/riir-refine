@@ -7321,15 +7321,28 @@ fn user_help() -> String {
     } else {
         ""
     };
+    // Issue 192 / Plan 325: the public-goods verb fragment — the points
+    // build's contribution surface (a kat_service build already carries its
+    // own account fragment above; both may print in the internal build).
+    let points = if cfg!(feature = "points") {
+        "    cargo refine join                  Join the contribution network (policy + GitHub login)\n\
+         \x20   cargo refine leave                 Leave: log off, zero data sent (left = the same)\n\
+         \x20   cargo refine rank                  The contribution leaderboard (joined identities only)\n\
+         \x20   cargo refine info                  What the network fixed, by domain (counts only)\n\
+         \x20   cargo refine corpus                Corpus state + the freshness offer (always free)\n"
+    } else {
+        ""
+    };
     format!(
         "cargo-refine {version} — Refine, the code fixer that learns (https://refine.riir.ai)
 
 USAGE:
     cargo refine [<path>...]           Dry run: show what would be fixed, no edits (default path: .)
-    cargo refine --fix <path>...       Apply the fixes; edits that break the build are reverted
+    cargo refine fix <path>...         Apply the fixes; edits that break the build are reverted
+    cargo refine scan [<path>...]      Secret-blind scan: report secret-shaped content, never send it
     cargo refine --suggest [--domain <{domains}>] <path>...
                                        Show the matching rules per code span, no edits
-{compile}{account}    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
+{compile}{account}{points}    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
     cargo refine --version             Version and the features this build carries
     cargo refine --help-all            Every flag, including maintainer reports
 
@@ -9402,6 +9415,20 @@ fn parse_args() -> Args {
                     "corpus-pr" => KatCommand::CorpusPr,
                     _ => KatCommand::Claim,
                 });
+            }
+            // Issue 192 v5 (owner, 2026-11-03): the verb-first core — `fix`
+            // and `scan` parse as VERBS (the Proposal 025 user-flow table),
+            // ungated (core healing in every build). `fix` is the verb form
+            // of `--fix`; `scan` the verb form of `--secret-scan` (the flags
+            // stay — existing scripts keep working; `scan --blind <f>` is
+            // the blind form, same flag). Parsed before the path fallback
+            // so a directory literally named fix/scan still yields to the
+            // verb (the join/leave precedent — verbs win the first word).
+            "fix" if args.paths.is_empty() && !args.fix && args.command.is_none() => {
+                args.fix = true;
+            }
+            "scan" if args.paths.is_empty() && !args.secret_scan && args.command.is_none() => {
+                args.secret_scan = true;
             }
             // Plan 325 T4/T5 (issue 192): the public-goods points verbs —
             // the PUBLIC build's surface, dispatched on their own feature
