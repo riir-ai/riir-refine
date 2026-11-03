@@ -11234,6 +11234,10 @@ fn admission_gate(
         .find(|r| r.generation == 1)
         .map(|r| r.heal_rate)
     else {
+        // plan 329 P4-a: generation 0 is the LEGACY UNPINNED class — rows
+        // written before Plan 092's generation tag read as 0 and never feed
+        // a pinned baseline; an all-legacy history refuses admission here
+        // (honest, disclosed in issue 197).
         return Err(format!(
             "generation v{generation} admission refused: no v1 baseline row in {} — run `--score-bench` (v1) first",
             riir_refine::score_bench::report::HISTORY_JSONL
@@ -11353,6 +11357,9 @@ fn finish_score_bench(
     // Per-generation SVG curves (M5): v1 → score_history.svg, v2 → _v2.svg,
     // v3 → _v3.svg, v4 → _v4.svg.
     let gen_series = |g: u8| {
+        // plan 329 P4-a: generation 0 (the legacy-unpinned class) never
+        // enters a pinned series — the v1 SVG shrinks by pre-gen-tag rows
+        // (the labeled report delta, disclosed in issue 197).
         history
             .iter()
             .filter(|r| r.generation == g)
@@ -15337,6 +15344,13 @@ fn main() {
         std::collections::BTreeMap::new();
     #[allow(unused_mut)]
     let mut bp_verify: Option<riir_refine::blueprint::VerifyCapture> = None;
+    // Plan 329 P2: the run-end refusal roll-up — every fix-path
+    // VerifyReport's RefusalTally sums here and prints once at run end
+    // (silent-when-zero, like the findings roll-up).
+    #[cfg(feature = "fix_verify")]
+    #[allow(unused_mut)]
+    let mut verify_refusal_tally: riir_refine::fix_verify::RefusalTally =
+        riir_refine::fix_verify::RefusalTally::default();
     // Issue 182: the cfg-audit marks (inline + module-decl classes), hoisted
     // so the kept-edit record loop can refuse certification for edits the
     // verify posture provably did not compile, and the run verdict can say so.
@@ -16580,6 +16594,7 @@ fn main() {
                     let report = riir_refine::fix_verify::FixVerifier::new()
                         .with_extra_args(extra.clone())
                         .verify(&[batch]);
+                    verify_refusal_tally.add(&report.refusals);
                     report.ran && report.baseline_clean && report.kept_edits >= 1
                 };
                 let decision = riir_refine::escalation_serve::serve_seat_rerank(
@@ -17077,8 +17092,14 @@ fn main() {
             verify_batches.iter().map(|b| b.edits.len()).sum::<usize>()
         );
         let report = verifier.verify(&verify_batches);
+        verify_refusal_tally.add(&report.refusals);
         if let Some(err) = &report.error {
             eprintln!("verify: FAILED — {err}");
+            if !verify_refusal_tally.is_empty() {
+                // Plan 329 P2: per-class WHY beside the failure — the run
+                // ends here, so the run-end roll-up would never print.
+                println!("{}", verify_refusal_tally.rollup_line());
+            }
             std::process::exit(1);
         }
         if !report.ran {
@@ -17941,6 +17962,12 @@ fn main() {
                 println!("next: run `cargo refine --fix` to heal the fixable ones in place");
             }
         }
+    }
+    // Plan 329 P2: the verify refusal roll-up — silent-when-zero, like
+    // the findings roll-up above.
+    #[cfg(feature = "fix_verify")]
+    if !verify_refusal_tally.is_empty() {
+        println!("{}", verify_refusal_tally.rollup_line());
     }
     #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
     if !args.quiet {

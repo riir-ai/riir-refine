@@ -1000,6 +1000,14 @@ mod tests {
         ids.sort_unstable();
         ids.dedup();
         assert_eq!(ids.len(), n, "rule ids must be unique");
+        // plan 329 P1: the FIRST sec count pin — manifest-derived (the
+        // domain carried no live count pin before; AGENTS/README carried
+        // the only numbers). A red means the corpus moved without
+        // `scripts/pins_manifest.py --write`.
+        assert_eq!(
+            all.len(),
+            crate::pins_manifest::count("sec", "rules")
+        );
         for id in ids {
             assert!(
                 id.chars()

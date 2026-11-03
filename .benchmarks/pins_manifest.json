@@ -1,0 +1,22 @@
+{
+  "clippy_lints": {
+    "rules": 112
+  },
+  "kernel_opt": {
+    "rules": 1051,
+    "witness": {
+      "activity_dim": 8,
+      "experts": 15,
+      "kernel_categories": 15
+    }
+  },
+  "rust_perf": {
+    "benchable": 125,
+    "categories": 14,
+    "notbenchable": 167,
+    "rules": 292
+  },
+  "sec": {
+    "rules": 35
+  }
+}

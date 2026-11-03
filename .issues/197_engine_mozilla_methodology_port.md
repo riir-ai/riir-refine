@@ -1,7 +1,7 @@
 # Issue 197 — engine distill: the Mozilla-quartet methodology port (the uniffi-checksum / sccache-mock / vet-aggregate ideas)
 
-**Status:** Open — T0b staged (plan 329); Claude verdict round 1 REVISE addressed, round 2 AGREE (session 6736d164; recorded at the filing commit). T0b EXECUTION reassigned to zed-m3-24c8b43a (m3 box) by owner directive 2026-11-03 — the amo lease was superseded (agent-mail 01a19ed3 delivered to zed-amo-i197quartet@amo; push = arbiter)
-**Claimed:** zed-m3-24c8b43a, 1793666478, expires 2026-11-05T00:41:18+00:00
+**Status:** CLOSED 2026-11-03 — T0b LANDED (P1 + P2 + P3 + P4-a ✅; P5 audit verdict: already-satisfied; P4-b filed as issue 198); T0a remainder: P4-b's implementation (issue 198). Verdict rounds: round 1 REVISE addressed, round 2 AGREE (session 6736d164; recorded at the filing commit). T0b EXECUTION ran on zed-m3-24c8b43a (m3 box) by owner directive 2026-11-03 — the amo lease was superseded (agent-mail 01a19ed3 delivered to zed-amo-i197quartet@amo; push = arbiter)
+**Lease closed:** zed-m3-24c8b43a, 1793666478, expires 2026-11-05T00:41:18+00:00 — landed at the plan-329 feat commit
 
 2026-11-02, session zed-m3-mozilla-quartet. The corpus half of the four-repo distill landed as `.research/361` (uniffi-rs, YES B−) + `.research/362` (sccache, YES B−); rust-code-analysis and supply-chain graded NO as corpus sources. This issue is the OTHER half the user asked for: distill the way these projects ENGINEER into the healer itself — the same treatment the blaze idea got (issue 171: RA pre-filter oracle, T0b package-scoped re-checks landed as scoped_recheck GOAT PASS, T0a deferred-if-2) and the fusion/Fourier wild-idea lanes (issues 157/020: PoC-first, verdict-gated).
 
@@ -74,3 +74,14 @@ uniffi pins every binding against golden fixtures per language. The healer analo
 - Candidate C's substrate-first drop — the re-derivation doctrine already satisfies the uniffi checksum law.
 
 Plan: `.plans/329_engine_mozilla_methodology_port.md`. Related distill notes: `.research/361`, `.research/362`.
+
+## Landing record (2026-11-03, the plan-329 feat commit)
+
+- **P1** — `scripts/pins_manifest.py` + `.benchmarks/pins_manifest.json` (the ONE count source of truth, derived from the compiled builders via `src/pins_manifest.rs`'s dump test); every count assert reads the manifest (`crate::pins_manifest::count`); the prose half gates AGENTS/README/.docs live rows; ci Layer 7; `--self-test` proves both red directions. First run caught README's stale "100 corpus lints" (live 112) — the paid-for B308 class, closed structurally. The kernel total's 35 duplicated re-pin sites collapsed to one manifest diff per batch.
+- **P2** — `VerifyReport.refusals: RefusalTally` (7 classes, fixed order) + the `verify refusals:` roll-up line + `tests/fix_verify_failure_matrix.rs` (6 fix_verify arms + 3 CheckRunner arms + the two-sided completion-sentinel G1). ⛔ Labeled fail-closed delta: `run_check` refuses zero-JSON output regardless of exit (the empty/garbage-success shape used to read CLEAN and keep the edit); `CARGO_SPAWN_FAIL_PREFIX` pinned.
+- **P3** — `DOMAIN_REGISTRY` + `DOMAIN_DIR_EXEMPTIONS` (dist/docker, deletions-only ratchet) + 5 tests (population, labels, canonical keys, G1 canary, feature-manifest wiring) in `src/domains/mod.rs`.
+- **P4-a** — `HistoryRecord.{rustc_version, clippy_driver_version}` (additive law) + `ToolchainVersions` capture (OnceLock) + **generation 0 = the LEGACY UNPINNED sentinel** (default flipped from 1; store twin flipped) + the `detect_saturation` pooling split (never pool rows differing on toolchain ∨ generation). Labeled report delta, observed at landing: row #220 carries both versions; the pinned-toolchain row RESETS the gen-1 series (1/6 until 6 same-toolchain rows); an all-legacy history refuses v1-baseline admission.
+- **P5** — audit verdict ALREADY SATISFIED (stronger-than-byte-snapshots): per-entry propose_fix fire+re-parse, per-rule output-shape goldens, BLAKE3-frozen `fixed_code`, frozen fixture set + label-drift detection; the byte-snapshot lane deliberately NOT built (shape-pinned is the repo's law; re-opens only on a cross-toolchain fix-text drift class).
+- **P4-b** — filed as issue 198 (the traj-store toolchain key; behavior change, own gates).
+- En-route repairs (committed pre-existing, disclosed): the plan-327 malformed claim line (the lease-check BLIND class); README's stale clippy row; three -D-gate lints (doc_markdown, match_same_arms post-re-pin, sec proposers' unnecessary_hashes ×17).
+- Concurrent-session note: the worktree carried a sibling's uncommitted rustfmt-style sweep across ~60 files during this landing; out-of-scope reformatted files stay uncommitted (their author's), and the two sibling-dirty files needing lint fixes were staged as HEAD+fix blobs per the shared-worktree doctrine.

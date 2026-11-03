@@ -401,8 +401,14 @@ mod tests {
     fn num_experts_and_activity_dim_are_stable() {
         // Pin the const generics so future changes are deliberate.
         // Plan 004: ACTIVITY_DIM raised 5 → 8 (operation-class axes).
-        assert_eq!(NUM_KERNEL_EXPERTS, 15);
-        assert_eq!(ACTIVITY_DIM, 8);
+        assert_eq!(
+            NUM_KERNEL_EXPERTS,
+            crate::pins_manifest::count("kernel_opt", "witness/experts")
+        );
+        assert_eq!(
+            ACTIVITY_DIM,
+            crate::pins_manifest::count("kernel_opt", "witness/activity_dim")
+        );
         assert_eq!(KERNEL_EXPERT_NAMES.len(), NUM_KERNEL_EXPERTS);
         assert_eq!(CATEGORY_KERNEL_DIRECTIONS.len(), NUM_KERNEL_EXPERTS);
         assert_eq!(CATEGORY_KERNEL_DIRECTIONS[0].len(), ACTIVITY_DIM);

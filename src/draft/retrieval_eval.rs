@@ -2424,38 +2424,36 @@ mod tests {
                 // the B131 sec-centroid mechanism). Floor = measured − 5
                 // spans = 85 per the Plan-030 convention. Annotation only;
                 // gating stays killed (85% bar, Bench 025).
-                (false, true, true) => 85.0 / 210.0, // measured 90/210 (42.9%) — Batch 325 re-pin, 2026-11-02 (was 64/172; Issue 185 measured 69/172)
-                // Batch 131: measured 79/131 (60.3%, was 82/131 = 62.6% at
-                // Batch 130) -- same sec-centroid drift on the full state;
-                // floor = measured - 5.
-                // Batch 140 (2026-09-09, Plan 120): re-measured 83/131
-                // (63.4%, was 79/131 = 60.3% at B131) -- +4 UP; the same
-                // wire vocabulary that decays the no-kernel arm sharpened
-                // the full-state boundary here (cross-arm divergence is
-                // consistent with the B130 kernel-vocabulary raise); floor
-                // = 83 - 5 = 78.
-                (true, true, true) => {
-                    // Issue 134 T3 re-arm (MEASURED 2026-09-24, the full
-                    // seven-domain state): population 131 → 192 — every
-                    // thin domain adds spans whose Rust-shaped text routes
-                    // poorly (the compound B131 sec-centroid mechanism; the
-                    // shader corpus's generic control-flow vocabulary
-                    // compounds it). 86/192 (44.8%) — floor = 81 per the
-                    // Plan-030 convention. Annotation only: gating stays
-                    // killed (85% bar, Bench 025).
-                    // Batch 179 re-pin (2026-09-25): population 195, MEASURED
-                    // 89/195 (45.6%) — floor = 84. Annotation only.
-                    // Batch 325 re-pin (2026-11-02, Plan 327): population
-                    // 195 → 210 (docker+dist T1 fixture growth was already
-                    // in the no-kernel arm's re-pin; this state's delta is
-                    // the same 4 sec spans + the shared population growth),
-                    // MEASURED 90/210 (42.9%) — the B131 sec-centroid
-                    // mechanism compounding with the kernel arm's generic
-                    // Rust-span attraction. Floor = measured − 5 = 85 per
-                    // the Plan-030 convention. Annotation only; gating
-                    // stays killed (85% bar, Bench 025).
-                    85.0 / 210.0 // measured 90/210 (42.9%) — Batch 325 re-pin, 2026-11-02 (was 84/195; B179 measured 89/195)
-                }
+                // The two full-state arms (kernel off / kernel on) re-pinned to
+                // the SAME 85.0/210.0 at Batch 325 — one arm since
+                // (match_same_arms); both histories kept:
+                // (false, true, true): measured 90/210 (42.9%) — Batch 325
+                // re-pin, 2026-11-02 (was 64/172; Issue 185 measured
+                // 69/172). Batch 131: measured 79/131 (60.3%, was 82/131 =
+                // 62.6% at Batch 130) -- same sec-centroid drift on the
+                // full state; floor = measured - 5. Batch 140 (2026-09-09,
+                // Plan 120): re-measured 83/131 (63.4%, was 79/131 = 60.3%
+                // at B131) -- +4 UP; the same wire vocabulary that decays
+                // the no-kernel arm sharpened the full-state boundary here
+                // (cross-arm divergence is consistent with the B130
+                // kernel-vocabulary raise); floor = 83 - 5 = 78.
+                // (true, true, true): Issue 134 T3 re-arm (MEASURED
+                // 2026-09-24, the full seven-domain state): population
+                // 131 → 192 — every thin domain adds spans whose
+                // Rust-shaped text routes poorly (the compound B131
+                // sec-centroid mechanism; the shader corpus's generic
+                // control-flow vocabulary compounds it). 86/192 (44.8%) —
+                // floor = 81 per the Plan-030 convention. Batch 179 re-pin
+                // (2026-09-25): population 195, MEASURED 89/195 (45.6%) —
+                // floor = 84. Batch 325 re-pin (2026-11-02, Plan 327):
+                // population 195 → 210 (docker+dist T1 fixture growth was
+                // already in the no-kernel arm's re-pin; this state's delta
+                // is the same 4 sec spans + the shared population growth),
+                // MEASURED 90/210 (42.9%) — the B131 sec-centroid mechanism
+                // compounding with the kernel arm's generic Rust-span
+                // attraction. Annotation only, both arms: gating stays
+                // killed (85% bar, Bench 025); floor = measured − 5 = 85.
+                (false | true, true, true) => 85.0 / 210.0,
             }
         }
     }

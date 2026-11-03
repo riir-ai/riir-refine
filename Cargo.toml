@@ -1902,3 +1902,16 @@ required-features = ["kat_transport"]
 [[test]]
 name = "points_drain_g4_alloc"
 required-features = ["points_drain"]
+
+# Plan 329 P2 (issue 197, the sccache mock_command doctrine port): the
+# failure-injection matrix for the compile oracle — fix_verify +
+# compile_oracle (the plan's MINIMUM; the other four verifiers inherit
+# the run_check tightening at the shared CheckRunner seam). The
+# whole-file `#![cfg(feature = "fix_verify")]` protects the COUNT; this
+# row protects the READER — without it, auto-discovery would compile the
+# ungated file at the DEFAULT posture and red `cargo clippy
+# --all-targets` on the missing module (E0432), and with a cfg alone it
+# would print the green zero this row exists to refuse.
+[[test]]
+name = "fix_verify_failure_matrix"
+required-features = ["fix_verify"]

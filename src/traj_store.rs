@@ -286,12 +286,14 @@ fn is_first_hand_corpus_source(note: &str) -> bool {
 /// `.benchmarks/score_history.jsonl` line. The first eleven fields are the
 /// `score_bench::report::HistoryRecord` shape VERBATIM (schema-identity
 /// jsonl ↔ store is pinned by a test); `recorded_unix` is the ordering key
-/// derived from `ts` (0 when the timestamp does not parse). The one
-/// deliberate exception: `HistoryRecord`'s `ood` OOD-axis instrumentation
-/// (issue 077 T4) is dropped here — the jsonl stays the committed
-/// projection (pinned by the same test). Key:
-/// `scorerun:{recorded_unix}:{sha-or-"nosh"}` — upsert semantics, so a
-/// re-import or a dual-write of the same run is idempotent by construction.
+/// derived from `ts` (0 when the timestamp does not parse). The deliberate
+/// exceptions (instrumentation, not scored axes — the additive law):
+/// `HistoryRecord`'s `ood` OOD-axis (issue 077 T4) and the plan 329 P4-a
+/// toolchain provenance pair (`rustc_version` / `clippy_driver_version`)
+/// are dropped here — the jsonl stays the committed projection (pinned by
+/// the same test). Key: `scorerun:{recorded_unix}:{sha-or-"nosh"}` —
+/// upsert semantics, so a re-import or a dual-write of the same run is
+/// idempotent by construction.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct ScoreRunRow {
     /// ISO-8601 timestamp of the run (the `HistoryRecord` `ts` verbatim;
@@ -309,8 +311,9 @@ pub struct ScoreRunRow {
     pub edits_total: usize,
     pub vocab_size: usize,
     /// The bench generation (Plan 092 M5) — mirrors the `HistoryRecord`
-    /// field; pre-generation rows default to 1 (serde) exactly like the
-    /// jsonl shape.
+    /// field; `0` is the LEGACY UNPINNED class (plan 329 P4-a): rows
+    /// written before the field existed default to it (serde) and never
+    /// pool with a pinned generation in any comparison.
     #[serde(default = "default_score_generation")]
     pub generation: u8,
     /// Unix seconds of `ts` (the store-key ordering half; 0 = unparseable).
@@ -318,10 +321,14 @@ pub struct ScoreRunRow {
     pub recorded_unix: u64,
 }
 
-/// The serde default for pre-generation score rows (Plan 092 T4).
+/// The serde default for pre-generation score rows (Plan 092 T4): `0` —
+/// the LEGACY UNPINNED class (plan 329 P4-a), the same doctrine as the
+/// jsonl's `score_bench::report::default_generation`. `ScoreRunRow::from`
+/// copies `r.generation` verbatim (u8→u8), so the store carries `0` for
+/// legacy rows too — consistent across both media.
 #[must_use]
 pub fn default_score_generation() -> u8 {
-    1
+    0
 }
 
 #[cfg(feature = "score_bench")]

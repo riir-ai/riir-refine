@@ -1692,6 +1692,10 @@ fn score_run_row_is_schema_identical_to_history_record() {
         shaped: None,
         rule_outcomes: None,
         demonstrability: None,
+        // plan 329 P4-a — the additive toolchain provenance pair (the store
+        // row deliberately drops them; None = the legacy row shape).
+        rustc_version: None,
+        clippy_driver_version: None,
     };
     let row = ScoreRunRow::from(&rec);
     assert_eq!(row.ts, rec.ts);

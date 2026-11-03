@@ -84,8 +84,8 @@ use serde::Deserialize;
 // Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    CheckRunner, CheckVerdict, PackageGraph, check_verdict, owning_package_root,
-    resolve_reported_path, workspace_root,
+    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
+    CheckVerdict, PackageGraph, CARGO_SPAWN_FAIL_PREFIX,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -162,6 +162,81 @@ pub struct VerifyReport {
     /// reports `false` with `kept_edits == 0` (nothing kept, nothing to
     /// disclose).
     pub ended_clean: bool,
+    /// Per-class refusal tallies (plan 329 P2 — the sccache per-cause
+    /// stats doctrine): WHY verification refused, first-class.
+    /// Output-only; the run roll-up prints the tally.
+    pub refusals: RefusalTally,
+}
+
+/// Per-class refusal tallies (plan 329 P2 — the sccache per-cause stats
+/// doctrine). Fixed shape, fixed field order: the run roll-up prints the
+/// nonzero classes in exactly this order, no maps.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct RefusalTally {
+    /// `CARGO_SPAWN_FAIL_PREFIX` errors — cargo never ran.
+    pub spawn_failure: u32,
+    /// The other `run_check` `Err` arm: non-zero exit with no JSON
+    /// (the enriched cargo-refusal message), or the zero-JSON tightening.
+    pub cargo_refusal: u32,
+    /// `CheckVerdict::Incomplete` — non-zero exit with artifact JSON but
+    /// no error diagnostics: the check did not complete.
+    pub incomplete_check: u32,
+    /// The baseline (pre-edit) check failed — tree already broken.
+    pub baseline_broken: u32,
+    /// No Cargo.toml above an edited path.
+    pub no_manifest: u32,
+    /// fs write failure splicing a fix.
+    pub write_failed: u32,
+    /// Rounds exhausted with errors outstanding AND edits still kept
+    /// (`ended_clean == false && kept_edits > 0`) — the P104
+    /// unverified-kept verdict.
+    pub loop_exhausted: u32,
+}
+
+impl RefusalTally {
+    /// True when every class is zero (the roll-up prints nothing).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// Field-wise sum into `self` (the run roll-up aggregates per-report
+    /// tallies).
+    pub fn add(&mut self, other: &Self) {
+        self.spawn_failure += other.spawn_failure;
+        self.cargo_refusal += other.cargo_refusal;
+        self.incomplete_check += other.incomplete_check;
+        self.baseline_broken += other.baseline_broken;
+        self.no_manifest += other.no_manifest;
+        self.write_failed += other.write_failed;
+        self.loop_exhausted += other.loop_exhausted;
+    }
+
+    /// Empty → `String::new()`; else one line naming only the nonzero
+    /// classes in fixed field order, e.g.
+    /// `verify refusals: spawn_failure 1 · incomplete_check 2`.
+    #[must_use]
+    pub fn rollup_line(&self) -> String {
+        let rows = [
+            ("spawn_failure", self.spawn_failure),
+            ("cargo_refusal", self.cargo_refusal),
+            ("incomplete_check", self.incomplete_check),
+            ("baseline_broken", self.baseline_broken),
+            ("no_manifest", self.no_manifest),
+            ("write_failed", self.write_failed),
+            ("loop_exhausted", self.loop_exhausted),
+        ];
+        let parts: Vec<String> = rows
+            .iter()
+            .filter(|(_, n)| *n > 0)
+            .map(|(k, n)| format!("{k} {n}"))
+            .collect();
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!("verify refusals: {}", parts.join(" · "))
+        }
+    }
 }
 
 /// One cargo check result: the JSON-lines stdout + the exit status.
@@ -260,6 +335,7 @@ impl FixVerifier {
         let mut by_pkg: HashMap<PathBuf, Vec<usize>> = HashMap::new();
         for (idx, f) in touched.iter().enumerate() {
             let Some(pkg) = owning_package_root(&f.path) else {
+                report.refusals.no_manifest += 1;
                 report.error = Some(format!("no Cargo.toml above {}", f.path.display()));
                 return report;
             };
@@ -282,6 +358,7 @@ impl FixVerifier {
             return report;
         }
         if !report.baseline_clean {
+            report.refusals.baseline_broken += 1;
             report.error = Some(
                 "baseline cargo check failed — tree already broken, nothing written".to_string(),
             );
@@ -291,6 +368,7 @@ impl FixVerifier {
         // 2. Write every fixed file.
         for f in &touched {
             if let Err(e) = std::fs::write(&f.path, &f.fixed) {
+                report.refusals.write_failed += 1;
                 report.error = Some(format!("write failed for {}: {e}", f.path.display()));
                 restore_all(&touched);
                 return report;
@@ -351,7 +429,6 @@ impl FixVerifier {
             }
         }
 
-        report.ended_clean = ended_clean;
         // Tally.
         for (idx, _f) in touched.iter().enumerate() {
             if state.applied[idx].iter().any(|a| *a) {
@@ -359,6 +436,8 @@ impl FixVerifier {
                 report.kept_edits += state.applied[idx].iter().filter(|a| **a).count();
             }
         }
+        report.ended_clean = ended_clean;
+        tally_loop_exhaustion(&mut report, ended_clean);
         report
     }
 
@@ -447,7 +526,13 @@ impl FixVerifier {
     /// set on the report).
     fn run_baseline(&self, pkgs: &[PathBuf], report: &mut VerifyReport) -> Result<(), String> {
         for pkg in pkgs {
-            let outcome = self.run_check(pkg)?;
+            let outcome = match self.run_check(pkg) {
+                Ok(o) => o,
+                Err(e) => {
+                    tally_run_check_err(report, &e);
+                    return Err(e);
+                }
+            };
             report.n_checks += 1;
             let errors = parse_error_locations(&outcome.json);
             // The shared verdict's Errors and Incomplete arms both refuse
@@ -478,7 +563,13 @@ impl FixVerifier {
         pkg: &Path,
         report: &mut VerifyReport,
     ) -> Result<Option<String>, String> {
-        let outcome = self.run_check(pkg)?;
+        let outcome = match self.run_check(pkg) {
+            Ok(o) => o,
+            Err(e) => {
+                tally_run_check_err(report, &e);
+                return Err(e);
+            }
+        };
         report.n_checks += 1;
         match check_verdict(
             outcome.exit_ok,
@@ -486,12 +577,15 @@ impl FixVerifier {
         ) {
             CheckVerdict::Clean => Ok(None),
             CheckVerdict::Errors => Ok(Some(outcome.json)),
-            CheckVerdict::Incomplete => Err(format!(
-                "cargo check in {} exited unsuccessfully with no error \
-                 diagnostics — the check did not complete (killed, output \
-                 lost, or a cargo-level refusal); nothing kept as verified",
-                pkg.display()
-            )),
+            CheckVerdict::Incomplete => {
+                report.refusals.incomplete_check += 1;
+                Err(format!(
+                    "cargo check in {} exited unsuccessfully with no error \
+                     diagnostics — the check did not complete (killed, output \
+                     lost, or a cargo-level refusal); nothing kept as verified",
+                    pkg.display()
+                ))
+            }
         }
     }
 
@@ -505,6 +599,29 @@ impl FixVerifier {
             json: outcome.json,
             exit_ok: outcome.exit_ok,
         })
+    }
+}
+
+/// Plan 329 P2: rounds exhausted with edits still kept (`ended_clean ==
+/// false` after the loop, the P104 unverified-kept verdict) — counted
+/// once per `verify()` call. Split out of `verify` to keep it under the
+/// function-lines gate.
+fn tally_loop_exhaustion(report: &mut VerifyReport, ended_clean: bool) {
+    if !ended_clean && report.kept_edits > 0 {
+        report.refusals.loop_exhausted += 1;
+    }
+}
+
+/// Plan 329 P2: classify a `run_check` `Err` into its refusal class —
+/// spawn failures carry the pinned [`CARGO_SPAWN_FAIL_PREFIX`]; every
+/// other `Err` is a cargo-level refusal (non-zero exit with no JSON, or
+/// the zero-JSON tightening). Free fn so the unit test pins the exact
+/// predicate a message change would have to break loudly.
+fn tally_run_check_err(report: &mut VerifyReport, err: &str) {
+    if err.starts_with(CARGO_SPAWN_FAIL_PREFIX) {
+        report.refusals.spawn_failure += 1;
+    } else {
+        report.refusals.cargo_refusal += 1;
     }
 }
 
@@ -2431,10 +2548,13 @@ mod tests {
         let original = "pub fn existing() -> usize {\n    1\n}\n";
         std::fs::write(src_dir.join("lib.rs"), original).unwrap();
 
-        // Fake cargo: the FIRST invocation (the baseline) exits 0 silently;
-        // every later one (the post-edit re-check) emits an artifact JSON
-        // line and exits 1 with no error diagnostics — the killed-after-
-        // flushing-artifacts shape `is_json_line` lets past the Err arm.
+        // Fake cargo: the FIRST invocation (the baseline) exits 0 WITH an
+        // artifact JSON line (plan 329 P2: a zero-JSON success now
+        // refuses — real cargo never exits 0 with empty stdout under
+        // `--message-format=json`); every later one (the post-edit
+        // re-check) emits an artifact JSON line and exits 1 with no error
+        // diagnostics — the killed-after-flushing-artifacts shape
+        // `is_json_line` lets past the Err arm.
         let marker = tmp.join("baseline_done");
         let script = tmp.join("fake_cargo.sh");
         std::fs::write(
@@ -2446,6 +2566,7 @@ mod tests {
                   exit 1\n\
                  fi\n\
                  touch \"{}\"\n\
+                 echo '{{\"reason\":\"compiler-artifact\",\"package_id\":\"fv_kill\"}}'\n\
                  exit 0\n",
                 marker.display(),
                 marker.display(),
@@ -2504,9 +2625,10 @@ mod tests {
     /// still applied. Before the fix those kept edits read "verified"
     /// although no clean check ever covered them; now `ended_clean` is
     /// false and the fix lane discloses them unverified. Fake cargo:
-    /// baseline exit 0; every later check one error diagnostic at lib.rs
-    /// line 5 (no edit lives there) + exit 1 — a real Errors verdict, not
-    /// the Incomplete shape the kill-path test drives.
+    /// baseline exit 0 WITH artifact JSON (plan 329 P2: a zero-JSON
+    /// success now refuses); every later check one error diagnostic at
+    /// lib.rs line 5 (no edit lives there) + exit 1 — a real Errors
+    /// verdict, not the Incomplete shape the kill-path test drives.
     #[test]
     #[cfg(unix)]
     fn fix_verify_loop_exhaustion_keeps_unverified() {
@@ -2539,6 +2661,7 @@ mod tests {
                   exit 1\n\
                  fi\n\
                  touch \"{}\"\n\
+                 echo '{{\"reason\":\"compiler-artifact\",\"package_id\":\"fv_exhaust\"}}'\n\
                  exit 0\n",
                 marker.display(),
                 marker.display(),
@@ -3394,5 +3517,37 @@ mod tests {
         assert_eq!(marks.len(), 1, "{marks:?}");
         assert_eq!(marks[0].path, PathBuf::from("/p/src/bin/tool.rs"));
         assert_eq!(marks[0].missing, vec!["mi_probe".to_string()]);
+    }
+
+    /// Plan 329 P2: the spawn-failure classification is pinned to the
+    /// exact [`CARGO_SPAWN_FAIL_PREFIX`] — a message change that drops or
+    /// renames the prefix cannot silently reclassify refusals. The
+    /// end-to-end arms (real spawn failures through a fake cargo) live in
+    /// `tests/fix_verify_failure_matrix.rs`.
+    #[test]
+    fn spawn_failure_classification_is_prefix_pinned() {
+        let mut r = VerifyReport::default();
+        tally_run_check_err(
+            &mut r,
+            "cargo spawn failed: No such file or directory (os error 2)",
+        );
+        assert_eq!(r.refusals.spawn_failure, 1);
+        assert_eq!(r.refusals.cargo_refusal, 0);
+
+        let mut r2 = VerifyReport::default();
+        tally_run_check_err(
+            &mut r2,
+            "cargo check in /x produced no JSON output (exit ok)",
+        );
+        tally_run_check_err(
+            &mut r2,
+            "cargo check failed to run in /x: error: failed to parse manifest",
+        );
+        assert_eq!(r2.refusals.cargo_refusal, 2);
+        assert_eq!(r2.refusals.spawn_failure, 0);
+
+        // Silent-when-zero: the default tally renders as no line at all.
+        assert_eq!(VerifyReport::default().refusals, RefusalTally::default());
+        assert_eq!(VerifyReport::default().refusals.rollup_line(), "");
     }
 }

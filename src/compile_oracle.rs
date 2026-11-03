@@ -38,6 +38,13 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The pinned prefix of every spawn-failure error this module produces
+/// (plan 329 P2 — the sccache per-cause stats doctrine): `fix_verify`
+/// classifies a check refusal as `spawn_failure` by matching this exact
+/// prefix, so a message change here is a classification change — pinned
+/// by tests on both sides (producer + classifier).
+pub const CARGO_SPAWN_FAIL_PREFIX: &str = "cargo spawn failed:";
+
 /// One cargo check result: the JSON-lines stdout + the exit status.
 #[derive(Debug, Clone)]
 pub struct CheckOutcome {
@@ -147,15 +154,20 @@ impl CheckRunner {
     }
 
     /// One check in `pkg`. `Err` only when cargo could not run at all
-    /// (missing binary, broken manifest, bad args) — compile errors come
-    /// back as `Ok(outcome)` with `exit_ok = false` + error diagnostics in
+    /// (missing binary, broken manifest, bad args) or produced NO JSON
+    /// output whatever the exit status (plan 329 P2, the sccache
+    /// `mock_command` doctrine: a zero-JSON success — a wrapped/mocked
+    /// cargo printing human-readable text, or printing nothing — cannot
+    /// be trusted as a clean pass; fail closed). Compile errors come back
+    /// as `Ok(outcome)` with `exit_ok = false` + error diagnostics in
     /// the JSON.
     ///
     /// # Errors
     ///
     /// Returns a human-readable message when the cargo process cannot be
-    /// spawned or fails without emitting any JSON (bad args / broken
-    /// manifest).
+    /// spawned, fails without emitting any JSON (bad args / broken
+    /// manifest — stderr surfaced + enriched), or exits cleanly with no
+    /// JSON on stdout (the zero-JSON tightening).
     pub fn run_check(&self, pkg: &Path) -> Result<CheckOutcome, String> {
         let mut cmd = Command::new(&self.cargo_bin);
         cmd.current_dir(pkg)
@@ -173,7 +185,7 @@ impl CheckRunner {
         }
         let output = cmd
             .output()
-            .map_err(|e| format!("cargo spawn failed: {e}"))?;
+            .map_err(|e| format!("{CARGO_SPAWN_FAIL_PREFIX} {e}"))?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         if !output.status.success() && !stdout.lines().any(is_json_line) {
             // cargo itself failed without emitting JSON (bad args, broken
@@ -185,6 +197,25 @@ impl CheckRunner {
                 "cargo check",
                 pkg,
                 &first_meaningful_line(&stderr),
+            ));
+        }
+        if !stdout.lines().any(is_json_line) {
+            // Plan 329 P2 (the sccache mock_command doctrine): zero-JSON
+            // output cannot be trusted as a clean pass whatever the exit
+            // status — a wrapped/mocked cargo (sccache, a wrapper script,
+            // a corrupted pipe) can exit 0 having printed human-readable
+            // text or nothing at all. Fail closed: this can only turn a
+            // would-be false-clean into a refusal, never the reverse.
+            let exit_word = if output.status.success() {
+                "ok"
+            } else {
+                "non-zero"
+            };
+            return Err(format!(
+                "cargo check in {} produced no JSON output (exit {exit_word}) — \
+                 empty or non-JSON output cannot be trusted as a clean pass; \
+                 nothing kept as verified",
+                pkg.display()
             ));
         }
         Ok(CheckOutcome {
@@ -226,7 +257,7 @@ impl CheckRunner {
         }
         let output = cmd
             .output()
-            .map_err(|e| format!("cargo spawn failed: {e}"))?;
+            .map_err(|e| format!("{CARGO_SPAWN_FAIL_PREFIX} {e}"))?;
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         if !stdout.lines().any(is_json_line) {
             // cargo itself failed without emitting JSON (bad args, broken
@@ -747,5 +778,49 @@ mod tests {
             "[package]\nname = \"x\"\n\n[workspace]\nmembers = [\"crates/a\"]\n"
         ));
         assert!(!manifest_declares_workspace("[package]\nname = \"x\"\n"));
+    }
+
+    /// Plan 329 P2 (the sccache `mock_command` doctrine): a check that
+    /// exits 0 with NO JSON on stdout must refuse — a wrapped/mocked
+    /// cargo printing human-readable text used to read as a clean pass.
+    /// Fake cargo: echoes one garbage line, exits 0.
+    #[test]
+    #[cfg(unix)]
+    fn run_check_refuses_zero_json_success() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = std::env::temp_dir().join(format!("co_zerojson_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let script = tmp.join("fake_cargo.sh");
+        std::fs::write(&script, "#!/bin/sh\necho 'not json'\nexit 0\n").unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let err = CheckRunner::new()
+            .with_cargo_bin(script.display().to_string())
+            .run_check(&tmp)
+            .expect_err("zero-JSON success must refuse");
+        assert!(
+            err.contains("produced no JSON output"),
+            "names the class: {err}"
+        );
+        assert!(err.contains("exit ok"), "{err}");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// The spawn-failure message carries the pinned
+    /// [`CARGO_SPAWN_FAIL_PREFIX`] — the prefix `fix_verify`'s per-class
+    /// tally classifies on (plan 329 P2).
+    #[test]
+    fn run_check_spawn_error_carries_the_pinned_prefix() {
+        let tmp = std::env::temp_dir().join(format!("co_spawnfail_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let err = CheckRunner::new()
+            .with_cargo_bin(tmp.join("no_such_cargo_binary").display().to_string())
+            .run_check(&tmp)
+            .expect_err("a missing binary must refuse");
+        assert!(err.starts_with(CARGO_SPAWN_FAIL_PREFIX), "{err}");
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

@@ -124,8 +124,13 @@ pub mod tier_guard;
 // unix-only termios (a target dep — no feature-matrix churn).
 pub mod tty_pick;
 
-// ── Domain modules (feature-gated) ─────────────────────────────────────────
+// ── Domain modules (feature-gated) ─────────────────────────────────────
 pub mod domains;
+
+// The corpus pins manifest (plan 329 P1): the committed count manifest the
+// corpus count asserts read — test-only, the derivation dump rides it.
+#[cfg(test)]
+pub(crate) mod pins_manifest;
 
 // ── Opt-in layers ──────────────────────────────────────────────────────────
 

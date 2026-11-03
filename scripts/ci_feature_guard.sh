@@ -27,6 +27,10 @@
 #                              files; prod-name tracked refs carry the local
 #                              name or a comment (skips loud without the
 #                              deployer checkout — a deferral, never a pass)
+#   7. corpus-pins manifest  → the committed count manifest matches the
+#                              compiled corpus + the live prose rows
+#                              (plan 329 P1, issue 197; --write is the
+#                              count-pin landing pass, never run-to-pass)
 #
 # No Lean proof gate (this repo has no `.proofs/`).
 # No wasm32 gate (the `wasm_pruner` feature is deferred on rubrc maturity).
@@ -311,6 +315,17 @@ echo "=== Layer 6: deploy-token guard (the local dev-lane credential law) ==="
 GUARD="../riir-deployer/scripts/deploy_token_guard.sh"
 if [ -f "$GUARD" ]; then sh "$GUARD" --repo "$(pwd)" --static --quiet || exit 1
 else echo "  · ../riir-deployer absent — deploy-token guard SKIPPED (deferral, not a pass)"; fi
+
+echo
+echo "=== Layer 7: corpus-pins manifest gate (plan 329 P1, issue 197) ==="
+# The committed `.benchmarks/pins_manifest.json` is the single count source
+# of truth; this layer re-derives the live counts from the compiled corpus
+# builders (cargo test drives src/pins_manifest.rs's dump) and refuses any
+# drift + any stale live prose row (AGENTS/README/.docs). A red is repaired
+# by `--write` ONLY when the corpus genuinely moved; the manifest diff lands
+# WITH the corpus change. The pins posture build is warm after Layers 2–5.
+python3 scripts/pins_manifest.py || exit 1
+echo "✓ pins manifest + prose agree with the compiled corpus"
 
 echo
 echo "=== All layers PASS ==="

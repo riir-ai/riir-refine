@@ -45,9 +45,12 @@ pub struct HistoryRecord {
     pub decline_correctness: f32,
     pub edits_total: usize,
     pub vocab_size: usize,
-    /// The bench generation (Plan 092 M5): 1 = the frozen v1 set, 2 = the
-    /// construction-built generation-v2 ladder. Old rows predate the field
-    /// and deserialize as 1 — the v1 series is never renumbered.
+    /// The bench generation (Plan 092 M5): `1` = the frozen v1 set,
+    /// `2..=9` the ladders. `0` is the LEGACY UNPINNED class (plan 329
+    /// P4-a): rows written before the field existed — and only those —
+    /// deserialize to it via [`default_generation`], and it never pools
+    /// with a pinned generation in any comparison (the v1 series is built
+    /// from explicitly-tagged `generation: 1` rows only).
     #[serde(default = "default_generation")]
     pub generation: u8,
     /// Issue 077 T4 — the entropy-gap OOD axis (see [`super::ood`]). Always
@@ -109,6 +112,18 @@ pub struct HistoryRecord {
     /// deserialize as `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub demonstrability: Option<Vec<crate::demonstrability::Row>>,
+    /// Plan 329 P4-a — the toolchain provenance (sccache cache-key
+    /// completeness): the rustc version this bench ran under. The SAME
+    /// additive law as ood/strata: rows predating the field deserialize as
+    /// None; never a scored axis. Comparisons split on it (see
+    /// [`detect_saturation`]) — a row whose toolchain is unknown never pools
+    /// with a pinned one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rustc_version: Option<String>,
+    /// Plan 329 P4-a — the clippy version when the oracle lane ran
+    /// (`cargo clippy --version`, best-effort). Same additive law.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clippy_driver_version: Option<String>,
 }
 
 /// The shaped-verdict read of one bench run (Issue 089 T7) — the half-win
@@ -128,10 +143,14 @@ pub struct ShapedRecord {
     pub half_counts: Vec<(String, u32)>,
 }
 
-/// The serde default for pre-generation rows (issue 072 T4).
+/// The serde default for pre-generation rows (issue 072 T4): `0` — the
+/// LEGACY UNPINNED class (plan 329 P4-a). Rows written before the
+/// generation tag existed, and only those, deserialize to it; a pinned
+/// generation is `1..=255`; `0` never pools with a pinned generation in
+/// any comparison (see [`detect_saturation`]).
 #[must_use]
 pub fn default_generation() -> u8 {
-    1
+    0
 }
 
 /// Default history paths (relative to the repo root / CWD of the run).
@@ -242,11 +261,58 @@ pub fn record_store_best_effort(rec: &HistoryRecord) {
     }
 }
 
+/// Plan 329 P4-a — the toolchain provenance captured once per process: the
+/// `rustc --version` + `cargo clippy --version` first lines (best-effort —
+/// `None` when the binary is missing, fails, or prints nothing). The
+/// score-bench oracle RE-DERIVES ground truth every run (clippy's lint set
+/// moves between toolchains), so the row that carries a rate must name the
+/// toolchain that produced it — the sccache cache-key completeness axis.
+pub struct ToolchainVersions {
+    /// `rustc --version` first stdout line (trimmed).
+    pub rustc: Option<String>,
+    /// `cargo clippy --version` first stdout line (trimmed).
+    pub clippy: Option<String>,
+}
+
+static TOOLCHAIN_VERSIONS: std::sync::OnceLock<ToolchainVersions> = std::sync::OnceLock::new();
+
+/// The process-cached toolchain versions: one subprocess pair per process —
+/// the appended row and any sibling consumer in the same process share one
+/// measurement (the ood-axis precedent).
+#[must_use]
+pub fn toolchain_versions() -> &'static ToolchainVersions {
+    TOOLCHAIN_VERSIONS.get_or_init(|| ToolchainVersions {
+        rustc: version_first_line(&["rustc", "--version"]),
+        clippy: version_first_line(&["cargo", "clippy", "--version"]),
+    })
+}
+
+/// Best-effort version probe: run a `--version` command, trim the FIRST
+/// stdout line; `None` on any failure (binary missing, non-zero exit, empty
+/// output). Zero deps — std only.
+fn version_first_line(args: &[&str]) -> Option<String> {
+    let out = std::process::Command::new(args[0])
+        .args(&args[1..])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.lines()
+        .next()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+}
+
 impl HistoryRecord {
     /// Build the record from a finished bench run (generation 1 — the v1
     /// frozen set; gen-2 runs call [`Self::with_generation`] after). The OOD
     /// axis rides every row (issue 077 T4): cached per process, so the
-    /// appended row and the console report share one measurement.
+    /// appended row and the console report share one measurement. The
+    /// toolchain provenance rides every row too (plan 329 P4-a): the same
+    /// once-per-process capture.
     #[must_use]
     pub fn from_score(score: &super::BenchScore, sha: String) -> Self {
         let n_healable = score
@@ -277,6 +343,8 @@ impl HistoryRecord {
             }),
             rule_outcomes: None,
             demonstrability: None,
+            rustc_version: toolchain_versions().rustc.clone(),
+            clippy_driver_version: toolchain_versions().clippy.clone(),
         }
     }
 
@@ -332,13 +400,37 @@ pub enum SaturationVerdict {
 /// Detect saturation on the per-generation heal-rate series (issue 072 T3,
 /// M5): marginal = rate[last] − rate[last − [`SATURATION_WINDOW`]] over the
 /// records of ONE generation; saturated iff marginal < [`SATURATION_EPSILON`]
-/// (strict — exactly-ε is still active). Older rows with no `generation`
-/// field deserialize as 1, so the v1 verdict never sees v2 rows.
+/// (strict — exactly-ε is still active).
+///
+/// Plan 329 P4-a — comparisons never pool rows differing on (toolchain ∨
+/// generation): after the generation filter, the series anchors on the LAST
+/// row's toolchain class and keeps only rows whose `rustc_version` AND
+/// `clippy_driver_version` equal the anchor's (`None` pools only with
+/// `None`). Generation `0` (the legacy-unpinned class) rows never enter a
+/// pinned-generation series — the generation filter itself excludes them.
 #[must_use]
 pub fn detect_saturation(records: &[HistoryRecord], generation: u8) -> SaturationVerdict {
-    let rates: Vec<f32> = records
+    let filtered: Vec<&HistoryRecord> = records
         .iter()
         .filter(|r| r.generation == generation)
+        .collect();
+    // The pooling split (plan 329 P4-a): anchor on the LAST row's toolchain
+    // class — the verdict prices the CURRENT toolchain's trend, never a
+    // mixed-toolchain marginal. A toolchain change starts the series history
+    // over; that is an honest reset, not a regression.
+    let (anchor_rustc, anchor_clippy) = match filtered.last() {
+        Some(last) => (
+            last.rustc_version.as_ref(),
+            last.clippy_driver_version.as_ref(),
+        ),
+        None => (None, None),
+    };
+    let rates: Vec<f32> = filtered
+        .iter()
+        .filter(|r| {
+            r.rustc_version.as_ref() == anchor_rustc
+                && r.clippy_driver_version.as_ref() == anchor_clippy
+        })
         .map(|r| r.heal_rate)
         .collect();
     let have = rates.len();
@@ -740,6 +832,8 @@ mod tests {
             shaped: None,
             rule_outcomes: None,
             demonstrability: None,
+            rustc_version: None,
+            clippy_driver_version: None,
         }
     }
 
@@ -940,14 +1034,30 @@ mod tests {
     }
 
     #[test]
-    fn pre_generation_rows_deserialize_as_generation_one() {
-        // The v1 series is never renumbered: a row written before the
-        // generation field existed reads back as generation 1.
+    fn pre_generation_rows_deserialize_as_legacy_zero() {
+        // Plan 329 P4-a: a row written before the generation field existed
+        // reads back as `0` — the LEGACY UNPINNED class, never pooled with a
+        // pinned generation in any comparison (the v1 series is built from
+        // explicitly-tagged `generation: 1` rows only).
         let legacy = r#"{"ts":"2026-08-19T10:00:00","sha":"abc1234","n_ran":30,
             "n_healable":24,"n_clean":6,"heal_rate":0.9622642,"created_rate":0.02,
             "parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,
             "vocab_size":38}"#;
         let parsed: HistoryRecord = serde_json::from_str(legacy).unwrap();
+        assert_eq!(parsed.generation, 0);
+        assert_eq!(parsed.rustc_version, None);
+        assert_eq!(parsed.clippy_driver_version, None);
+    }
+
+    #[test]
+    fn tagged_generation_rows_keep_their_tag() {
+        // No behavior change for rows that carry the field: a tagged row
+        // deserializes to exactly the tag it carries.
+        let tagged = r#"{"ts":"2026-08-19T10:00:00","sha":"abc1234","n_ran":30,
+            "n_healable":24,"n_clean":6,"heal_rate":0.9622642,"created_rate":0.02,
+            "parse_safety":1.0,"decline_correctness":1.0,"edits_total":66,
+            "vocab_size":38,"generation":1}"#;
+        let parsed: HistoryRecord = serde_json::from_str(tagged).unwrap();
         assert_eq!(parsed.generation, 1);
     }
 
@@ -1091,5 +1201,142 @@ mod tests {
             2,
         );
         assert!(s.contains("no verdict") && s.contains("gen-2"));
+    }
+
+    /// A `rec` at a chosen generation + toolchain class (the split-test
+    /// constructor).
+    fn rec_with_toolchain(
+        ts: &str,
+        heal: f32,
+        generation: u8,
+        rustc: Option<&str>,
+        clippy: Option<&str>,
+    ) -> HistoryRecord {
+        let mut r = rec(ts, heal);
+        r.generation = generation;
+        r.rustc_version = rustc.map(str::to_string);
+        r.clippy_driver_version = clippy.map(str::to_string);
+        r
+    }
+
+    #[test]
+    fn detect_saturation_splits_on_toolchain_class() {
+        // Plan 329 P4-a: the series anchors on the LAST row's toolchain and
+        // drops rows from a different one. POOLED, [0.50×5 (Some b), 0.62
+        // (Some a)] reads marginal 0.12 → Active; SPLIT, only the Some(a)
+        // row survives → InsufficientHistory. The pooled verdict is what a
+        // mixed-toolchain marginal would have claimed — the split refuses it.
+        let rows: Vec<HistoryRecord> = (0..5)
+            .map(|i| {
+                rec_with_toolchain(
+                    &format!("2026-09-0{i}T10:00:00"),
+                    0.50,
+                    1,
+                    Some("rustc 1.79.0 (build b)"),
+                    Some("clippy 1.79.0 (build b)"),
+                )
+            })
+            .chain(std::iter::once(rec_with_toolchain(
+                "2026-09-06T10:00:00",
+                0.62,
+                1,
+                Some("rustc 1.80.0 (build c)"),
+                Some("clippy 1.80.0 (build c)"),
+            )))
+            .collect();
+        assert_eq!(
+            detect_saturation(&rows, 1),
+            SaturationVerdict::InsufficientHistory { have: 1, need: 6 }
+        );
+    }
+
+    #[test]
+    fn generation_zero_rows_never_enter_a_pinned_series() {
+        // The legacy-unpinned class sits beside, never inside, a pinned
+        // generation's series: five tagged gen-1 rows + one legacy (gen-0)
+        // row give the gen-1 query only the tagged rows (< WINDOW+1 → no
+        // verdict), and the gen-0 class is queried on its own.
+        let mut rows: Vec<HistoryRecord> = (0..5).map(|i| gen_rec(i, 0.50, 1)).collect();
+        rows.push(gen_rec(5, 0.62, 0)); // what a naive pool would have admitted
+        assert_eq!(
+            detect_saturation(&rows, 1),
+            SaturationVerdict::InsufficientHistory { have: 5, need: 6 }
+        );
+        // The gen-0 class forms its own series: six flat rows → Saturated
+        // (the hand-computed pre-change verdict for the same shape).
+        let legacy_rows: Vec<HistoryRecord> = (0..6).map(|i| gen_rec(i, 0.50, 0)).collect();
+        match detect_saturation(&legacy_rows, 0) {
+            SaturationVerdict::Saturated { marginal } => {
+                // float_cmp: identical rates subtract to EXACTLY 0.0 — a
+                // near-zero would mean the series moved.
+                #[allow(clippy::float_cmp)]
+                {
+                    assert_eq!(marginal, 0.0);
+                }
+            }
+            other => panic!("expected Saturated for the legacy class, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn toolchain_none_rows_pool_as_before() {
+        // The stable-history regression guard: all-None toolchain rows
+        // (every row predating plan 329 P4-a) behave exactly as the
+        // pre-change fn. Hand computation: rates = [0.80×5, 0.82]; base =
+        // rates[0] = 0.80; last = rates[5] = 0.82; marginal = 0.82 − 0.80 > ε
+        // → Active.
+        let rows: Vec<HistoryRecord> = (0..6)
+            .map(|i| gen_rec(i, if i == 5 { 0.82 } else { 0.80 }, 1))
+            .collect();
+        assert!(matches!(
+            detect_saturation(&rows, 1),
+            SaturationVerdict::Active { .. }
+        ));
+        // The other direction: a None series whose LAST row carries a pinned
+        // toolchain starts over — the None rows are excluded (None pools only
+        // with None).
+        let mut mixed = rows;
+        let last = mixed.last_mut().expect("six rows");
+        last.rustc_version = Some("rustc 9.9.9".to_string());
+        last.clippy_driver_version = Some("clippy 9.9.9".to_string());
+        assert_eq!(
+            detect_saturation(&mixed, 1),
+            SaturationVerdict::InsufficientHistory { have: 1, need: 6 }
+        );
+    }
+
+    #[test]
+    fn toolchain_fields_round_trip_and_skip_when_absent() {
+        // A from_score-shaped row carries both provenance fields through the
+        // jsonl encoding; a legacy row deserializes them as None and
+        // re-serializes WITHOUT the keys (the additive law: old jsonl
+        // consumers see the exact legacy shape).
+        let mut pinned = rec("2026-11-03T10:00:00", 0.9);
+        pinned.rustc_version = Some("rustc 1.99.0 (abc 2026-10-01)".to_string());
+        pinned.clippy_driver_version = Some("clippy 1.99.0 (abc 2026-10-01)".to_string());
+        let line = serde_json::to_string(&pinned).unwrap();
+        assert!(line.contains("\"rustc_version\":"), "{line}");
+        assert!(line.contains("\"clippy_driver_version\":"), "{line}");
+        let back: HistoryRecord = serde_json::from_str(&line).unwrap();
+        assert_eq!(back, pinned);
+
+        let legacy: HistoryRecord = serde_json::from_str(
+            r#"{"ts":"2026-08-19T10:00:00","sha":"abc","n_ran":1,"n_healable":1,
+                "n_clean":0,"heal_rate":0.5,"created_rate":0.0,"parse_safety":1.0,
+                "decline_correctness":1.0,"edits_total":1,"vocab_size":33,
+                "generation":1}"#,
+        )
+        .unwrap();
+        assert_eq!(legacy.rustc_version, None);
+        assert_eq!(legacy.clippy_driver_version, None);
+        let line = serde_json::to_string(&legacy).unwrap();
+        assert!(
+            !line.contains("rustc_version"),
+            "absent field writes no key: {line}"
+        );
+        assert!(
+            !line.contains("clippy_driver_version"),
+            "absent field writes no key: {line}"
+        );
     }
 }

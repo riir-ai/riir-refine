@@ -503,7 +503,7 @@ mod tests {
 
     /// The diagnostic fixture set: the narrowed index over the FULL corpus
     /// + the gate's 30 renamed self-variant spans (the same step-by
-    /// selection `retrieval_eval::kernel_fixture_spans` uses).
+    ///   selection `retrieval_eval::kernel_fixture_spans` uses).
     fn gate_fixture_index() -> (NarrowedKernelIndex, Vec<(String, String)>) {
         use crate::domains::kernel_opt::corpus::build_kernel_seed_corpus;
         use crate::draft::retrieval_eval::mutate_shape;

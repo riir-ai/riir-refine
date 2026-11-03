@@ -1426,7 +1426,13 @@ mod tests {
         // classes) added the four post-mining rows (unnecessary_get_then_check
         // + explicit_auto_deref + match_same_arms + used_underscore_binding)
         // = 112.
-        assert_eq!(corpus.entries.len(), 112);
+        // plan 329 P1: MANIFEST-DERIVED — a red means the corpus moved
+        // without `scripts/pins_manifest.py --write`; land the manifest
+        // diff WITH the corpus change.
+        assert_eq!(
+            corpus.entries.len(),
+            crate::pins_manifest::count("clippy_lints", "rules")
+        );
     }
 
     /// Every corpus entry's proposer round-trips: the buggy fixture fires

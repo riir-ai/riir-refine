@@ -244,6 +244,9 @@ pub fn extracted_census() -> G1Census {
 /// `corpus` module precisely so the `pub(super)` per-file builders are
 /// reachable — this is the attribution the whole-corpus `build_corpus()` path
 /// cannot provide.
+// plan 329 integration: the batch! macro expansion reads as 160 body
+// lines but is one declarative list — the allow is the fix, not a split.
+#[allow(clippy::too_many_lines)]
 fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
     macro_rules! batch {
         ($($mod:ident),* $(,)?) => {
