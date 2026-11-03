@@ -46,12 +46,10 @@ use crate::escalation_manifest::{EscalationManifest, EscalationRow, TargetKind, 
 /// for measured need).
 pub const HEAL_SUITE: &str = "heal";
 
-/// The seat's presentation cap (instinct S8): the pool is presented
-/// truncated to this many options. The manifest bounds `min_pool` above 1,
-/// but the POOL itself has no manifest bound — the truncation happens at
-/// the presentation boundary, and the pool length the measurement records
-/// stays the caller's.
-pub const PRESENTATION_CAP: usize = 8;
+/// The seat's presentation cap — moved to the manifest module (the
+/// Issue-195 placebo reads it at the manifest-alone posture); re-exported
+/// here so every existing dispatch-path spelling stays valid.
+pub use crate::escalation_manifest::PRESENTATION_CAP;
 
 /// The readiness-retry policy (the lazy 503 window). `max_attempts` is the
 /// belt against a pathologically fast-failing seat; the DEADLINE is the

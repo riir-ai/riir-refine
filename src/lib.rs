@@ -172,6 +172,14 @@ pub mod escalation_manifest;
     any(feature = "seat_rerank", feature = "hosted_expert")
 ))]
 pub mod escalation_dispatch;
+// Issue 195: the escalation-chain PLACEBO pick policy — the JevAct
+// Table-3 falsification arm (escalate at the row's rate, pick
+// seeded-random over the pool the seat saw, no judgment).
+// Manifest-ALONE posture: a placebo consumes the row's trigger constants
+// (cap + min_pool), never a transport — the standalone `--arm PLACEBO`
+// read needs no seat.
+#[cfg(feature = "escalation_manifest")]
+pub mod escalation_placebo;
 // Plan 225 T5.2: the production SERVE boundary for an armed escalation row
 // — the seat's answer passes the caller's compile gate (`fix_verify` in
 // the fix lane) BEFORE it is served; a wrong pick is rejected and the

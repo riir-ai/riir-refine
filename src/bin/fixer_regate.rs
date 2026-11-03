@@ -51,6 +51,25 @@
 //!   into the durable trajectory store, and emits the rescue exemplar set
 //!   (`b0=0 ∧ bd≥3`) with its BLAKE3 keep-set hash. AUGMENT-ONLY: the
 //!   tallies are a pre-filter; the agreement veto stays the authority.
+//! - `--arm PLACEBO` — Issue 195 (the JevAct Table-3 falsification arm):
+//!   the placebo pass over the frozen rows with NO seat — escalate at the
+//!   armed row's trigger rate (worthiness cap + min_pool on the frozen
+//!   gate fields; the fresh-per-case posture, latch-free) and pick a
+//!   BLAKE3-seeded RANDOM candidate from the pool the seat saw. Scores
+//!   against the frozen gold. Manifest-alone posture (no transport
+//!   feature, no network, no consent): the placebo consumes the row's
+//!   trigger constants, never a seat. Deterministically identical to
+//!   `--arm FROZEN --placebo`'s placebo half; the seat-vs-placebo paired
+//!   read (the ONLY gain figure attributable to the seat's judgment) is
+//!   the FROZEN arm's three-arm read below.
+//! - `--arm FROZEN --placebo` — the three-arm shape in ONE pass: A0
+//!   (verify-in-order baseline) + A1 (the live seat) + the placebo, same
+//!   population, trigger-matched by construction. The summary prints
+//!   seat-vs-placebo (judgment attribution) and placebo-vs-A0 (the
+//!   opportunity axis) beside the pre-registered A1-vs-A0 read, and the
+//!   attribution verdict per the issue: `real > placebo` (LB95 > 0) or
+//!   the attribution is demoted — the chain stays as a
+//!   revision-opportunity/cost feature, never re-graded silently.
 //!
 //! Run:
 //!
@@ -142,6 +161,11 @@ struct Args {
     /// Plan 225 T4.2's A0 cost leg: verify-in-order wall on the first N
     /// scored test rows (0 = off).
     a0_cost_sample: usize,
+    /// Issue 195 (`--placebo`, arm FROZEN modifier): run the placebo arm
+    /// in the SAME pass — trigger-matched by construction, seeded-random
+    /// pick over the pool the seat saw. Off by default (the pre-registered
+    /// T4 read is unchanged when absent).
+    placebo: bool,
 }
 
 impl Args {
@@ -173,6 +197,7 @@ impl Args {
             frozen_pools: None,
             frozen_split: None,
             a0_cost_sample: 0,
+            placebo: false,
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
@@ -224,6 +249,7 @@ impl Args {
                 "--a0-cost-sample" => {
                     a.a0_cost_sample = val().parse().expect("--a0-cost-sample must be an integer")
                 }
+                "--placebo" => a.placebo = true,
                 other => {
                     eprintln!("unknown arg: {other}");
                     std::process::exit(2);
@@ -597,25 +623,54 @@ fn main() {
     // population (test lints only) through the LIVE seat, A0 derived from
     // the frozen gate fields, verdict per T4.3. Also branches before
     // `prepare` (the prepared samples are not the frozen population).
+    //
+    // Issue 195 cfg law: the read runs the LIVE seat through
+    // `escalation_dispatch`, which compiles only with the manifest AND a
+    // transport — the FROZEN arm's gate is the same all()+any() shape (an
+    // under-gate here was E0432 at `--features escalation_manifest` alone,
+    // found while landing the placebo arm).
     if args.arm == "FROZEN" {
         let verifier = std::mem::replace(&mut harness.verifier, ClippyVerifier::new());
-        // Issue 177: the arm is compiled by cf_workers_ai alone, so the
-        // escalation_manifest-gated fn needs its own two-arm pair (the
-        // hosted_dispatch precedent) — an ungated call is E0425 at every
-        // legal posture without the feature.
-        #[cfg(feature = "escalation_manifest")]
+        #[cfg(all(
+            feature = "escalation_manifest",
+            any(feature = "seat_rerank", feature = "hosted_expert")
+        ))]
         {
             run_frozen(&args, &verifier);
             eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
             return;
         }
-        #[cfg(not(feature = "escalation_manifest"))]
+        #[cfg(not(all(
+            feature = "escalation_manifest",
+            any(feature = "seat_rerank", feature = "hosted_expert")
+        )))]
         {
             let _ = &verifier;
             eprintln!(
-                "--arm FROZEN requires --features escalation_manifest -- the frozen\
-                 read runs through the escalation dispatch; compile with the feature\
-                 or use the hosted arm"
+                "--arm FROZEN requires --features escalation_manifest plus the armed row's \
+                 transport (seat_rerank and/or hosted_expert) -- the frozen read runs the \
+                 LIVE seat through the escalation dispatch"
+            );
+            std::process::exit(2);
+        }
+    }
+
+    // Issue 195 — the standalone PLACEBO arm: the falsification pass over
+    // the frozen rows with NO seat (manifest-alone posture — a placebo
+    // consumes the row's trigger constants, never a transport). Branches
+    // before `prepare` like FROZEN (same reason).
+    if args.arm == "PLACEBO" {
+        #[cfg(feature = "escalation_manifest")]
+        {
+            run_placebo(&args);
+            eprintln!("[regate] total wall: {:.1}s", t0.elapsed().as_secs_f32());
+            return;
+        }
+        #[cfg(not(feature = "escalation_manifest"))]
+        {
+            eprintln!(
+                "--arm PLACEBO requires --features escalation_manifest -- the placebo reads \
+                 the armed row's trigger constants (modelless_cap + min_pool)"
             );
             std::process::exit(2);
         }
@@ -634,7 +689,7 @@ fn main() {
         "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
         other => {
             eprintln!(
-                "unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|POOLTEXTS|FROZEN|BT8|BT8DRY)"
+                "unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|POOLTEXTS|FROZEN|PLACEBO|BT8|BT8DRY)"
             );
             std::process::exit(2);
         }
@@ -2731,23 +2786,30 @@ fn run_pooltexts(args: &Args, harness: &mut RegateHarness) {
 // = paired LB95 > 0 (Holm, m=1 this round — A2/T3 not minted); NI route
 // = paired LB95 > −0.02 AND seat cost below the A0 verify-in-order wall.
 // Pool drift drops the case; >5% drift invalidates the read.
+/// The frozen fixture triple (Plan 225 T4 posture), shared by the FROZEN
+/// and PLACEBO arms so both read the SAME population the same way: the
+/// case rows path, the pin-verified pool texts (case_id → texts + pin
+/// verdict), and the train/test split.
 #[cfg(feature = "escalation_manifest")]
-fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
-    use riir_refine::escalation_dispatch::{EscalatedFix, EscalationDispatch, ReadinessPolicy};
-    use riir_refine::escalation_manifest::EscalationManifest;
+struct FrozenInputs {
+    cases_path: PathBuf,
+    pools: std::collections::BTreeMap<String, (Vec<String>, bool)>,
+    split: std::collections::BTreeMap<String, String>,
+}
 
-    let cases_path = args
-        .frozen_cases
-        .as_ref()
-        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-cases <cases.jsonl>"));
-    let pools_path = args
-        .frozen_pools
-        .as_ref()
-        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-pools <pool_texts.jsonl>"));
-    let split_path = args
-        .frozen_split
-        .as_ref()
-        .unwrap_or_else(|| panic!("--arm FROZEN needs --frozen-split <split.json>"));
+/// Load the frozen fixture triple. `arm_label` names the calling arm in
+/// the panics (the flags are arm-shared).
+#[cfg(feature = "escalation_manifest")]
+fn load_frozen_inputs(args: &Args, arm_label: &str) -> FrozenInputs {
+    let cases_path = args.frozen_cases.as_ref().unwrap_or_else(|| {
+        panic!("--arm {arm_label} needs --frozen-cases <cases.jsonl>")
+    });
+    let pools_path = args.frozen_pools.as_ref().unwrap_or_else(|| {
+        panic!("--arm {arm_label} needs --frozen-pools <pool_texts.jsonl>")
+    });
+    let split_path = args.frozen_split.as_ref().unwrap_or_else(|| {
+        panic!("--arm {arm_label} needs --frozen-split <split.json>")
+    });
     let split: std::collections::BTreeMap<String, String> =
         serde_json::from_str(&std::fs::read_to_string(split_path).expect("split.json reads"))
             .expect("split.json parses");
@@ -2772,6 +2834,44 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
             && row["served_ok"].as_bool().unwrap_or(false);
         pools.insert(id, (texts, ok));
     }
+    FrozenInputs {
+        cases_path: cases_path.clone(),
+        pools,
+        split,
+    }
+}
+
+/// The paired superiority read (Plan 225 T4.2's arithmetic, extracted so
+/// the FROZEN and PLACEBO arms share ONE paired number): mean paired
+/// delta, LB95 (1.96·SE), wins, losses, n.
+fn paired_read(a1: &[bool], a0: &[bool]) -> (f64, f64, usize, usize, usize) {
+    let n = a1.len();
+    let diffs: Vec<f64> = a1
+        .iter()
+        .zip(a0)
+        .map(|(&x, &y)| i8::from(x) as f64 - i8::from(y) as f64)
+        .collect();
+    let mean = diffs.iter().sum::<f64>() / n.max(1) as f64;
+    let wins = a1.iter().zip(a0).filter(|(x, y)| **x && !**y).count();
+    let losses = a1.iter().zip(a0).filter(|(x, y)| !**x && **y).count();
+    let se = if n > 1 {
+        let var = diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
+        (var / n as f64).sqrt()
+    } else {
+        0.0
+    };
+    (mean, mean - 1.96 * se, wins, losses, n)
+}
+
+#[cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
+fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
+    use riir_refine::escalation_dispatch::{EscalatedFix, EscalationDispatch, ReadinessPolicy};
+    use riir_refine::escalation_manifest::EscalationManifest;
+
+    let inputs = load_frozen_inputs(args, "FROZEN");
 
     let manifest = match EscalationManifest::load(&args.esc_manifest) {
         Ok(m) => m,
@@ -2796,6 +2896,19 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
         );
         std::process::exit(3);
     }
+    // Issue 195: the placebo reads the row's trigger constants from the
+    // SAME source the dispatch's gate reads — trigger-matched by
+    // construction, never a re-typed copy of the cap.
+    let (pl_cap, pl_min_pool) = match manifest.row(&args.esc_domain) {
+        Some(r) => (r.modelless_cap, r.target.min_pool_or_default()),
+        None => {
+            // Unreachable after the armed probe (arm() checks the same
+            // row); kept loud so a future probe change cannot silently
+            // zero the placebo's trigger rate.
+            eprintln!("FATAL: armed probe passed but the row is gone — manifest changed mid-read");
+            std::process::exit(1);
+        }
+    };
 
     let mut out = args
         .out
@@ -2804,6 +2917,11 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
     let policy = ReadinessPolicy::default();
     let (mut a1_dec, mut a0_dec) = (Vec::<bool>::new(), Vec::<bool>::new());
     let (mut a1_none, mut a0_none) = (Vec::<bool>::new(), Vec::<bool>::new());
+    // Issue 195: the placebo arm's paired columns (armed by --placebo;
+    // the placebo-vs-A0 and seat-vs-placebo paired reads below). Empty
+    // when the modifier is absent — the summary skips quietly.
+    let (mut pl_dec, mut pl_a0_dec) = (Vec::<bool>::new(), Vec::<bool>::new());
+    let (mut pl_none, mut pl_a0_none) = (Vec::<bool>::new(), Vec::<bool>::new());
     let (mut n_dropped_drift, mut n_scored) = (0usize, 0usize);
     let (mut n_pick, mut n_abstain, mut n_stood_other) = (0usize, 0usize, 0usize);
     let mut seat_wall_ms: Vec<f64> = Vec::new();
@@ -2811,7 +2929,7 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
     let mut a0_cost_ms: Vec<f64> = Vec::new();
     let t = std::time::Instant::now();
 
-    for line in std::fs::read_to_string(cases_path)
+    for line in std::fs::read_to_string(&inputs.cases_path)
         .expect("cases reads")
         .lines()
     {
@@ -2819,7 +2937,7 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
         let Some(target) = row["target_lint"].as_str() else {
             continue;
         };
-        if split.get(target).map(String::as_str) != Some("test") {
+        if inputs.split.get(target).map(String::as_str) != Some("test") {
             continue;
         }
         let stratum = row["stratum"].as_str().unwrap_or_default();
@@ -2827,7 +2945,7 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
             continue;
         }
         let id = row["case_id"].as_str().unwrap_or_default().to_string();
-        let Some((texts, pins_ok)) = pools.get(&id) else {
+        let Some((texts, pins_ok)) = inputs.pools.get(&id) else {
             n_dropped_drift += 1;
             continue;
         };
@@ -2878,11 +2996,14 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
             a0_cost_ms.push(tc.elapsed().as_secs_f64() * 1000.0);
         }
 
-        // A1 — the LIVE seat (fresh dispatch per case, see above).
+        // A1 — the LIVE seat (fresh dispatch per case, see above). The
+        // frozen confidence is hoisted once — the placebo's trigger reads
+        // the SAME field the dispatch's gate consumes.
+        let modelless_conf = row["modelless_score"].as_f64().unwrap_or(0.0) as f32;
         let t_seat = std::time::Instant::now();
         let answer = match EscalationDispatch::arm(&manifest, &args.esc_domain) {
             Ok(Some(mut d)) => d.escalate_rerank(
-                row["modelless_score"].as_f64().unwrap_or(0.0) as f32,
+                modelless_conf,
                 row["module"].as_str().unwrap_or_default(),
                 texts,
                 std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms),
@@ -2936,12 +3057,45 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
         let modelless_score = modelless_idx
             .and_then(|i| gold.get(i).copied())
             .unwrap_or(false);
+
+        // Issue 195 — the placebo arm (same pass, same population):
+        // trigger replication off the SAME frozen fields the dispatch's
+        // gate consumed (fresh-per-case posture — latch-free), then a
+        // seeded-random pick over the pool the seat SAW (presented cap).
+        // A trigger the seat abstained on still forces a placebo pick —
+        // the abstention IS judgment and the placebo has none; a stand
+        // (worthy / below min pool) serves modelless in BOTH arms, so the
+        // placebo's stand score is the modelless score.
+        let placebo = if args.placebo {
+            let presented_len =
+                texts.len().min(riir_refine::escalation_manifest::PRESENTATION_CAP);
+            let trig =
+                riir_refine::escalation_placebo::triggered(modelless_conf, presented_len, pl_cap, pl_min_pool);
+            let pidx = riir_refine::escalation_placebo::pick_idx(&id, presented_len);
+            let score = if trig {
+                gold.get(pidx).copied().unwrap_or(false)
+            } else {
+                modelless_score
+            };
+            Some((trig, pidx, score))
+        } else {
+            None
+        };
+
         if stratum == "deciding" {
             a1_dec.push(a1_score);
             a0_dec.push(a0_score);
+            if let Some((_, _, pl_score)) = placebo {
+                pl_dec.push(pl_score);
+                pl_a0_dec.push(a0_score);
+            }
         } else {
             a1_none.push(a1_score);
             a0_none.push(a0_score);
+            if let Some((_, _, pl_score)) = placebo {
+                pl_none.push(pl_score);
+                pl_a0_none.push(a0_score);
+            }
         }
         n_scored += 1;
         if let Some(w) = out.as_mut() {
@@ -2953,6 +3107,11 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
                 "a0": {"pick_idx": a0_idx, "score": a0_score},
                 "seat": {"note": seat_note, "score": a1_score, "wall_ms": wall_ms, "receipt_us": receipt_us},
                 "modelless": {"score": modelless_score},
+                // Issue 195: the placebo arm's per-case contribution
+                // (null when --placebo is absent).
+                "placebo": placebo.as_ref().map(|(trig, pidx, score)| {
+                    serde_json::json!({"triggered": trig, "pick_idx": pidx, "score": score})
+                }),
             });
             writeln!(w, "{ledger}").ok();
         }
@@ -2965,26 +3124,8 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
     }
 
     // ── the paired verdict (T4.2/T4.3, pre-registered) ──────────────────
-    let paired = |a1: &[bool], a0: &[bool]| -> (f64, f64, usize, usize, usize) {
-        let n = a1.len();
-        let diffs: Vec<f64> = a1
-            .iter()
-            .zip(a0)
-            .map(|(&x, &y)| i8::from(x) as f64 - i8::from(y) as f64)
-            .collect();
-        let mean = diffs.iter().sum::<f64>() / n.max(1) as f64;
-        let wins = a1.iter().zip(a0).filter(|(x, y)| **x && !**y).count();
-        let losses = a1.iter().zip(a0).filter(|(x, y)| !**x && **y).count();
-        let se = if n > 1 {
-            let var = diffs.iter().map(|d| (d - mean).powi(2)).sum::<f64>() / (n - 1) as f64;
-            (var / n as f64).sqrt()
-        } else {
-            0.0
-        };
-        (mean, mean - 1.96 * se, wins, losses, n)
-    };
-    let (dec_mean, dec_lb95, dec_wins, dec_losses, dec_n) = paired(&a1_dec, &a0_dec);
-    let (none_mean, none_lb95, none_wins, none_losses, none_n) = paired(&a1_none, &a0_none);
+    let (dec_mean, dec_lb95, dec_wins, dec_losses, dec_n) = paired_read(&a1_dec, &a0_dec);
+    let (none_mean, none_lb95, none_wins, none_losses, none_n) = paired_read(&a1_none, &a0_none);
     let a1_dec_correct = a1_dec.iter().filter(|b| **b).count();
     let a0_dec_correct = a0_dec.iter().filter(|b| **b).count();
     let p50 = |v: &mut Vec<f64>| -> f64 {
@@ -3042,7 +3183,225 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
             "DECLINE — the seat stays empty; decline is a correct answer (record the negative)"
         }
     );
+    // ── Issue 195: the placebo arms (only when --placebo armed) ────────
+    // Seat-vs-placebo is the ONLY gain figure attributable to the seat's
+    // judgment; placebo-vs-A0 is the opportunity axis (what a blind pick
+    // at the same trigger rate contributes). The pre-registered T4.2
+    // A1-vs-A0 read above is byte-unchanged by this block.
+    if args.placebo {
+        let (plm, plb, plw, pll, pln) = paired_read(&pl_dec, &pl_a0_dec);
+        let (jpm, jpb, jpw, jpl, _) = paired_read(&a1_dec, &pl_dec);
+        let pl_dec_correct = pl_dec.iter().filter(|b| **b).count();
+        println!("\n═ placebo arms (Issue 195 — JevAct Table-3 falsification) ═");
+        println!(
+            "DECIDING  n={pln}: placebo {pl_dec_correct}/{pln} · placebo-vs-A0 mean {plm:+.5} LB95 {plb:+.5} (W/L {plw}/{pll}) · seat-vs-placebo mean {jpm:+.5} LB95 {jpb:+.5} (W/L {jpw}/{jpl})"
+        );
+        if !pl_none.is_empty() {
+            let (nlm, nlb, nlw, nll, nln) = paired_read(&pl_none, &pl_a0_none);
+            let pl_none_correct = pl_none.iter().filter(|b| **b).count();
+            println!(
+                "NONE_GOLD n={nln}: placebo {pl_none_correct}/{nln} · placebo-vs-A0 mean {nlm:+.5} LB95 {nlb:+.5} (W/L {nlw}/{nll}) (no inference at n<2 — disclosed)"
+            );
+        }
+        if pln >= 2 {
+            println!(
+                "ATTRIBUTION: {}",
+                if jpb > 0.0 {
+                    "seat > placebo at LB95 > 0 — the gain IS the seat's judgment; quote 'seat gain over placebo' as the seat's, 'gain over baseline' as the harness's"
+                } else {
+                    "REFUTED — real ≤ placebo at LB95: the seat's judgment adds nothing over a seeded-random pick at the same trigger rate; demote the attribution (the chain stays a revision-opportunity/cost feature), never re-grade silently"
+                }
+            );
+        } else {
+            println!("ATTRIBUTION: undecidable at deciding n={pln} (< 2 — no paired read)");
+        }
+    }
     if n_dropped_drift * 20 > n_scored + n_dropped_drift {
+        // The INVALID ledger is kept (the Bench-119 INVALID_WIRING
+        // precedent — an adjudicated invalid read still leaves evidence),
+        // so flush before the exit: `process::exit` skips destructors and
+        // a BufWriter would silently lose every row.
+        if let Some(w) = out.as_mut() {
+            let _ = w.flush();
+        }
+        eprintln!("⚠ READ INVALID: pool drift exceeded 5% of scored rows");
+        std::process::exit(1);
+    }
+}
+
+/// Issue 195 — the standalone PLACEBO arm: the falsification pass over
+/// the frozen rows with NO seat, NO transport, NO verifier (manifest-
+/// alone posture). Population, filters, A0 derivation, and scoring are
+/// the FROZEN arm's (shared loader + shared arithmetic); the pick is
+/// [`riir_refine::escalation_placebo::pick_idx`] over the presented pool
+/// — deterministically IDENTICAL to `--arm FROZEN --placebo`'s placebo
+/// half, so a seatless run reproduces that arm's placebo rows exactly
+/// and the seat-vs-placebo paired read can be joined from the FROZEN
+/// ledger offline. This arm alone answers the placebo-vs-A0 question
+/// (the opportunity axis); it cannot answer seat-vs-placebo — say so,
+/// never imply a judgment read from a seatless posture.
+#[cfg(feature = "escalation_manifest")]
+fn run_placebo(args: &Args) {
+    use riir_refine::escalation_manifest::EscalationManifest;
+
+    let inputs = load_frozen_inputs(args, "PLACEBO");
+    let manifest = match EscalationManifest::load(&args.esc_manifest) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("FATAL: {e}");
+            std::process::exit(1);
+        }
+    };
+    let Some(row) = manifest.row(&args.esc_domain) else {
+        eprintln!(
+            "SKIP arm PLACEBO: no escalation row for {:?} in {} -- the placebo reads the \
+             row's trigger constants; add the row (arming is a manifest edit, never code)",
+            args.esc_domain,
+            args.esc_manifest.display()
+        );
+        std::process::exit(3);
+    };
+    let (cap, min_pool) = (row.modelless_cap, row.target.min_pool_or_default());
+    eprintln!(
+        "[regate] arm PLACEBO: domain={:?} cap={cap} min_pool={min_pool} seed=blake3(case_id) \
+         presented_cap={} (no seat, no verifier — frozen-gold scoring only)",
+        args.esc_domain,
+        riir_refine::escalation_manifest::PRESENTATION_CAP,
+    );
+
+    let mut out = args
+        .out
+        .as_ref()
+        .map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("ledger creates")));
+    let (mut pl_dec, mut a0_dec) = (Vec::<bool>::new(), Vec::<bool>::new());
+    let (mut pl_none, mut a0_none) = (Vec::<bool>::new(), Vec::<bool>::new());
+    let (mut n_trig, mut n_stood, mut n_dropped_drift, mut n_scored) =
+        (0usize, 0usize, 0usize, 0usize);
+    let t = std::time::Instant::now();
+
+    for line in std::fs::read_to_string(&inputs.cases_path)
+        .expect("cases reads")
+        .lines()
+    {
+        let row: serde_json::Value = serde_json::from_str(line).expect("frozen row parses");
+        let Some(target) = row["target_lint"].as_str() else {
+            continue;
+        };
+        if inputs.split.get(target).map(String::as_str) != Some("test") {
+            continue;
+        }
+        let stratum = row["stratum"].as_str().unwrap_or_default();
+        if stratum != "deciding" && stratum != "none_gold" {
+            continue;
+        }
+        let id = row["case_id"].as_str().unwrap_or_default().to_string();
+        let Some((texts, pins_ok)) = inputs.pools.get(&id) else {
+            n_dropped_drift += 1;
+            continue;
+        };
+        if !pins_ok {
+            n_dropped_drift += 1;
+            eprintln!("[placebo] DROP (pool pin) {id}");
+            continue;
+        }
+        let frozen_pool = row["pool"].as_array().cloned().unwrap_or_default();
+        let gold: Vec<bool> = frozen_pool
+            .iter()
+            .map(|c| c["gold_a_c"].as_bool().unwrap_or(false))
+            .collect();
+
+        // A0 — verify-in-order over the FROZEN gate fields (T4.1, the
+        // FROZEN arm's derivation verbatim — one arithmetic).
+        let a0_idx = frozen_pool
+            .iter()
+            .position(|c| {
+                c["compiled"].as_bool().unwrap_or(false)
+                    && c["target_resolved"].as_bool().unwrap_or(false)
+            })
+            .or_else(|| row["served_idx"].as_u64().map(|v| v as usize));
+        let a0_score = a0_idx.and_then(|i| gold.get(i).copied()).unwrap_or(false);
+
+        let modelless_idx = row["served_idx"].as_u64().map(|v| v as usize);
+        let modelless_score = modelless_idx
+            .and_then(|i| gold.get(i).copied())
+            .unwrap_or(false);
+
+        let modelless_conf = row["modelless_score"].as_f64().unwrap_or(0.0) as f32;
+        let presented_len = texts.len().min(riir_refine::escalation_manifest::PRESENTATION_CAP);
+        let trig = riir_refine::escalation_placebo::triggered(
+            modelless_conf,
+            presented_len,
+            cap,
+            min_pool,
+        );
+        let pidx = riir_refine::escalation_placebo::pick_idx(&id, presented_len);
+        let pl_score = if trig {
+            gold.get(pidx).copied().unwrap_or(false)
+        } else {
+            modelless_score
+        };
+        if trig {
+            n_trig += 1;
+        } else {
+            n_stood += 1;
+        }
+
+        if stratum == "deciding" {
+            pl_dec.push(pl_score);
+            a0_dec.push(a0_score);
+        } else {
+            pl_none.push(pl_score);
+            a0_none.push(a0_score);
+        }
+        n_scored += 1;
+        if let Some(w) = out.as_mut() {
+            let ledger = serde_json::json!({
+                "case_id": id,
+                "arm": "PLACEBO",
+                "stratum": stratum,
+                "pool_size": texts.len(),
+                "presented_len": presented_len,
+                "a0": {"pick_idx": a0_idx, "score": a0_score},
+                "modelless": {"score": modelless_score},
+                "placebo": {"triggered": trig, "pick_idx": pidx, "score": pl_score},
+            });
+            writeln!(w, "{ledger}").ok();
+        }
+        if n_scored % 50 == 0 {
+            eprintln!(
+                "[placebo] {n_scored} scored ({:.1}s)",
+                t.elapsed().as_secs_f32()
+            );
+        }
+    }
+
+    let (plm, plb, plw, pll, pln) = paired_read(&pl_dec, &a0_dec);
+    let pl_dec_correct = pl_dec.iter().filter(|b| **b).count();
+    let a0_dec_correct = a0_dec.iter().filter(|b| **b).count();
+    println!("\n═ arm PLACEBO — Issue 195: the falsification arm (NO seat) ═");
+    println!(
+        "scored: {n_scored} (deciding {pln} · none_gold {}) · triggers {n_trig} · stands {n_stood} · dropped(pool pin) {n_dropped_drift}",
+        pl_none.len()
+    );
+    println!(
+        "DECIDING  n={pln}: placebo {pl_dec_correct}/{pln} · A0 {a0_dec_correct}/{pln} · placebo-vs-A0 mean {plm:+.5} LB95 {plb:+.5} (W/L {plw}/{pll})"
+    );
+    if !pl_none.is_empty() {
+        let (nlm, nlb, nlw, nll, nln) = paired_read(&pl_none, &a0_none);
+        let pl_none_correct = pl_none.iter().filter(|b| **b).count();
+        let a0_none_correct = a0_none.iter().filter(|b| **b).count();
+        println!(
+            "NONE_GOLD n={nln}: placebo {pl_none_correct}/{nln} · A0 {a0_none_correct}/{nln} · mean {nlm:+.5} LB95 {nlb:+.5} (W/L {nlw}/{nll}) (no inference at n<2 — disclosed)"
+        );
+    }
+    println!(
+        "READ: placebo-vs-A0 is the OPPORTUNITY axis only — the seat-vs-placebo judgment \
+         attribution comes from --arm FROZEN --placebo (this posture never saw a seat)"
+    );
+    if n_dropped_drift * 20 > n_scored + n_dropped_drift {
+        if let Some(w) = out.as_mut() {
+            let _ = w.flush();
+        }
         eprintln!("⚠ READ INVALID: pool drift exceeded 5% of scored rows");
         std::process::exit(1);
     }

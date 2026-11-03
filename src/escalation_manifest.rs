@@ -157,6 +157,18 @@ impl EscalateTarget {
 /// The frozen rerank min-pool default (Plan 202 R7 / Bench 107).
 pub const DEFAULT_MIN_POOL: usize = 2;
 
+/// The seat's presentation cap (instinct S8): the pool is presented
+/// truncated to this many options. The manifest bounds `min_pool` above 1,
+/// but the POOL itself has no manifest bound — the truncation happens at
+/// the presentation boundary, and the pool length the measurement records
+/// stays the caller's.
+///
+/// Lives on the MANIFEST module (not the dispatch) so the manifest-alone
+/// posture — the Issue-195 placebo arm, which must pick from the pool the
+/// seat actually SAW — can read it without a transport feature. The
+/// dispatch re-exports it; every existing path is unchanged.
+pub const PRESENTATION_CAP: usize = 8;
+
 /// One domain's escalation row.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EscalationRow {
