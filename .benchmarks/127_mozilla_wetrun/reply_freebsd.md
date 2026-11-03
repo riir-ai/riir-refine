@@ -1,0 +1,1 @@
+The freebsd `entry format 53` failure was ours after all — sorry, I misread it as a main issue earlier. `sccache --debug-preprocessor-cache` walks `<cache>/preprocessor/` and parsed our CACHEDIR.TAG as an entry (first byte `S` = 0x53). Fixed in e93b70e: the walk skips the tag like the LRU scan does. All system tests pass locally on 1.91.0.
