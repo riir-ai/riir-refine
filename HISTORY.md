@@ -931,6 +931,51 @@ Commits: `c12d9cb`, `0b143d5`, `7dec777c`, `9d35593`.
 Folded from `.issues/183_migration_release_requires_owner_endorsement.md` +
 Commits: `a7a1c13`, `86a1622`, `e968b3e`, `921d2739`.
 
+## 2026-11-03 — Issue 195 LANDED + REMOVED: the escalation-chain placebo arm (the JevAct Table-3 falsification shape) — plus the FROZEN E0432 under-gate fix found while landing it
+
+The three-arm measurement shape for the escalation chain: baseline (no
+escalation) / real (seat rerank) / placebo (SAME trigger rate, BLAKE3-seeded
+random pick over the pool the seat saw, no judgment). "Seat gain over
+placebo" (paired LB95 > 0) is the only gain figure attributable to the seat's
+judgment; "gain over baseline" is the harness's. Landing: `--arm PLACEBO`
+(seatless, no verifier, frozen-gold scoring, manifest-alone posture — the
+arm that LEGITIMATELY occupies the posture where FROZEN previously failed to
+compile) + `--arm FROZEN --placebo` (the three arms in ONE pass, trigger-
+matched by construction, the ATTRIBUTION verdict with the issue's
+refutation language; the pre-registered T4.2 A1-vs-A0 read byte-unchanged
+when `--placebo` is absent). The pick formula is auditable:
+`blake3(case_id)` first 8 bytes LE, modulo the PRESENTATION_CAP-truncated
+pool length. Policy home: `src/escalation_placebo.rs` (+ PRESENTATION_CAP
+moved to `escalation_manifest` with a dispatch re-export). The standing
+shape + claim-language law: `.docs/08_benchmarks/placebo_arm.md`.
+
+**The defect found en route** (`3d608621`, the cfg_row_implication class):
+`--arm FROZEN` was gated `escalation_manifest` ALONE but imports
+`escalation_dispatch` (manifest + a transport) — E0432/E0433 at
+`--features escalation_manifest,cf_workers_ai --bin fixer_regate` (verified
+before the fix). Now gated `all(manifest, any(seat_rerank, hosted_expert))`
+with a loud runtime refusal naming the missing features (exit 2, verified).
+Also en route: the INVALID-ledger flush before `exit(1)` in both frozen
+arms — `std::process::exit` skips destructors and the BufWriter ledger was
+silently lost on an invalidated read (the Bench-119 INVALID_WIRING ledger
+precedent says an adjudicated invalid read keeps evidence; verified by
+fixture: the wall fires at 20% drops and the ledger now survives).
+
+Fixture e2e evidence (synthetic frozen set, /tmp, instrument proof not a
+measurement): determinism bit-identical across runs; every pick verified
+against blake3 by hand (c1=1 c2=1 c3=3 c4=1 c5=0); SKIP exit 3 with no row;
+lib tests 5/5 at escalation_manifest; clippy 0-warnings at all touched
+postures + default --all-targets.
+
+**Owner-gated residue:** adopting the three-arm shape as the STANDING
+convention for every future gate-shaped feature (the doc's Generalization
+section records the template; the mandate is the owner's call).
+
+Folded from `.issues/195_escalation_chain_placebo_arm.md` (removed per the
+noise-reduction rule; claim lease zed-riir-refine-195 honored — claimed and
+pushed `5c2851d4` before authoring, closed by this removal).
+Commits: `5c2851d4` (claim), `3d608621` (the arm + the fix).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

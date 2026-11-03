@@ -12,6 +12,7 @@
 | [`measured_results.md`](measured_results.md) | Consolidated results (M3 Max, commit `5b46556`) |
 | [`clippy_bench.md`](clippy_bench.md) | The frozen real-code healing bench + SVG score curve + the generation ratchet (Plan 014 + M5 gens 2–8, Issue 089 T7's shaped-verdict gen) |
 | [`entropy_gap_ood_axis.md`](entropy_gap_ood_axis.md) | The entropy-gap OOD axis on the bench (issue 077 T1/T4 — consumes `katgpt_core::regime_probe`; set choice, sign convention, first measured row) |
+| [`placebo_arm.md`](placebo_arm.md) | The three-arm attribution shape for gate-shaped features — judgment vs revision-opportunity (issue 195, the JevAct Table-3 lesson); `--arm PLACEBO` + `FROZEN --placebo` |
 
 ## Persisted results
 
