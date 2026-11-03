@@ -949,7 +949,7 @@ pool length. Policy home: `src/escalation_placebo.rs` (+ PRESENTATION_CAP
 moved to `escalation_manifest` with a dispatch re-export). The standing
 shape + claim-language law: `.docs/08_benchmarks/placebo_arm.md`.
 
-**The defect found en route** (`3d608621`, the cfg_row_implication class):
+**The defect found en route** (`70d5e072`, the cfg_row_implication class):
 `--arm FROZEN` was gated `escalation_manifest` ALONE but imports
 `escalation_dispatch` (manifest + a transport) — E0432/E0433 at
 `--features escalation_manifest,cf_workers_ai --bin fixer_regate` (verified
@@ -974,7 +974,8 @@ section records the template; the mandate is the owner's call).
 Folded from `.issues/195_escalation_chain_placebo_arm.md` (removed per the
 noise-reduction rule; claim lease zed-riir-refine-195 honored — claimed and
 pushed `5c2851d4` before authoring, closed by this removal).
-Commits: `5c2851d4` (claim), `3d608621` (the arm + the fix).
+Commits: `5c2851d4` (claim), `70d5e072` (the arm + the fix), `41613d2c`
+(this record).
 
 ## Lessons
 
