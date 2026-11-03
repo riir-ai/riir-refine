@@ -104,7 +104,7 @@ text  = "The bare `cargo refine` is a review: it lists the fixes it would make a
 steps = ["dry"]
 [[walk]]
 title = "The compile gate"
-text  = "`--fix` writes an edit only if your crate still compiles after it; a breaking fix is reverted automatically. Divergence classes the gate cannot judge (comment-guarded matches, array-literal defaults) stay manual and are listed, not applied."
+text  = "`cargo refine fix` writes an edit only if your crate still compiles after it; a breaking fix is reverted automatically. Divergence classes the gate cannot judge (comment-guarded matches, array-literal defaults) stay manual and are listed, not applied."
 steps = ["fix"]
 [[walk]]
 title = "What you get"
@@ -120,9 +120,9 @@ steps = ["meter"]
 
 ```mermaid
 flowchart LR
-    JOIN["cargo refine --mine — join once<br/>consent · login · sync"] --> RUN["every fix run<br/>auto-syncs the redacted batch"]
+    JOIN["cargo refine join — join once<br/>consent · login · sync"] --> RUN["every fix run<br/>auto-syncs the redacted batch"]
     RUN --> PUSH["sync — rule verdicts + counters<br/>never source · never paths · signed"]
-    PUSH --> PROOF["proof queue<br/>credited at a real clippy re-run"]
+    PUSH --> PROOF["proof queue<br/>verified at a real clippy re-run"]
     PROOF --> SETTLE["GET — KAT at the epoch settle<br/>70% of every KAT the network burns<br/>≤ 7 days from a push"]
     RUN -.-> COST["COST — your own fix burn<br/>+ consent: redacted verdicts leave the machine"]
     SETTLE -.-> LIFT["contributed = never re-gated<br/>while depleted"]
@@ -133,7 +133,7 @@ flowchart LR
 | | |
 |---|---|
 | **Does** | `cargo refine --mine` once (opts in, auto-logs-in, syncs). After that, every fix run auto-syncs the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
-| **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are credited at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
+| **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are verified at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
 | **Pays** | your own fix burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. `--unmine` stops the push half (the lease pull half still runs — a read is not a contribution); fixing was always local. |
 
 ### The miner render source (renders `role_miner_flow.svg`)
@@ -144,7 +144,7 @@ returns to your own retrieval, which is the flywheel closing.
 
 ```gfflow
 file  = "role_miner_flow.svg"
-title = "The miner loop: redacted records up, proof at real clippy, KAT at the epoch settle — and the corpus leases back"
+title = "The contributor loop: redacted records up, proof at real clippy, points at the epoch settle — and the corpus leases back"
 accent = "refine"
 
 [[lane]]
@@ -154,7 +154,7 @@ id = "fleet"; label = "The KAT fleet"; note = "the network side"; color = "ai"
 
 [[step]]
 id = "join"; n = "1"; lane = "me"; col = 0
-title = "Join once"; body = "--mine: consent · login · first sync"
+title = "Join once"; body = "cargo refine join: consent · login · first sync"
 status = "live"
 tag = { text = "opt-in · reversible", color = "refine" }
 [[step]]
@@ -163,11 +163,11 @@ title = "The redacted batch"; body = "verdicts + touched snippets, secret-scanne
 status = "live"
 [[step]]
 id = "proof"; n = "3"; lane = "fleet"; col = 2
-title = "Proof queue"; body = "rows are credited at a real clippy re-run"
+title = "Proof queue"; body = "rows are verified at a real clippy re-run"
 status = "test network"
 [[step]]
 id = "pay"; n = "4a"; lane = "fleet"; col = 3
-title = "KAT at the settle"; body = "the pool pays — mining = processing, minted = paid"
+title = "Points at the settle"; body = "the pool pays — contributing = processing, proven = paid"
 status = "test network"
 tag = { text = "never re-gated", color = "ai" }
 [[step]]
@@ -188,20 +188,20 @@ from = "grow"; to = "bat"; back = true; label = "leased back — your own retrie
 
 [[walk]]
 title = "Join once"
-text  = "`cargo refine --mine` opts in, auto-logs-in, and runs the first sync — one command, reversible (`--unmine` stops the push half; fixing was always local). Consent tiers: Unset never pushes; running sync IS the consent."
+text  = "`cargo refine join` opts in with the contribution policy + GitHub login, and binds your account — one command, reversible (`cargo refine leave` stops every send; fixing was always local). Local healing never needs consent or network."
 steps = ["join"]
 [[walk]]
 title = "The redacted batch"
 text  = "Every fix run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in."
 steps = ["bat"]
-in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one --mine batch (published sample)" }
+in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one contribution batch (published sample)" }
 [[walk]]
 title = "Proof queue"
-text  = "On push, rows enter the proof queue and are credited only at a real clippy re-run on the queue's own fixture — a verdict is measured, never trusted from the client. Test network today."
+text  = "On push, rows enter the proof queue and are verified only at a real clippy re-run on the queue's own fixture — a verdict is measured, never trusted from the client. Test network today."
 steps = ["proof"]
 [[walk]]
-title = "KAT at the settle"
-text  = "The epoch settle pays the pool to miners (mining = processing, minted = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Test network today."
+title = "Points at the settle"
+text  = "The epoch settle pays the pool to contributors (contributing = processing, proven = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Test network today."
 steps = ["pay"]
 [[walk]]
 title = "The corpus grows — and leases back"
@@ -580,7 +580,7 @@ steps = ["export"]
 in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one batch (published sample)" }
 [[walk]]
 title = "Sent over HTTPS"
-text  = "`--mine` (and every run after joining, or `cargo refine sync` itself) sends the signed batch over HTTPS. The signature proves who sent it; it does not hide the content — the network must read a row to verify it."
+text  = "A joined, consenting `cargo refine fix` sends the signed batch over HTTPS. The signature proves who sent it; it does not hide the content — the network must read a row to verify it."
 steps = ["post"]
 [[walk]]
 title = "Proof queue"
@@ -588,7 +588,7 @@ text  = "Rows wait in the proof queue until a real clippy re-run confirms the fi
 steps = ["proof"]
 [[walk]]
 title = "Public corpus"
-text  = "A proven row's before/after pair is published verbatim into the corpus segment — a public URL anyone can download without logging in. This is the shared corpus the flywheel promises; it is also why confidential code should not be mined."
+text  = "A proven row's before/after pair is published verbatim into the corpus segment — a public URL anyone can download without logging in. This is the shared corpus the flywheel promises; it is also why confidential code should stay out of your contributions."
 steps = ["pub"]
 [[walk]]
 title = "Lease back"

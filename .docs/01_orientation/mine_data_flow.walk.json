@@ -141,7 +141,7 @@
   },
   {
    "title": "Sent over HTTPS",
-   "text": "`--mine` (and every run after joining, or `cargo refine sync` itself) sends the signed batch over HTTPS. The signature proves who sent it; it does not hide the content — the network must read a row to verify it.",
+   "text": "A joined, consenting `cargo refine fix` sends the signed batch over HTTPS. The signature proves who sent it; it does not hide the content — the network must read a row to verify it.",
    "steps": [
     "post"
    ],

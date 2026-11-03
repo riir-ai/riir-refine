@@ -67,12 +67,12 @@ title = "Learn"; body = "skill memory updates from verified outcomes"
 status = "live"
 [[step]]
 id = "mine"; n = "6b.1"; lane = "fleet"; col = 4
-title = "Mining batch"; body = "opt-in: redacted records queue to leave"
+title = "Contribution batch"; body = "opt-in: redacted records queue to leave"
 status = "test network"
 tag = { text = "opt-in · off by default", color = "refine" }
 [[step]]
 id = "proof"; n = "6b.2"; lane = "fleet"; col = 5
-title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays KAT"
+title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays points"
 status = "test network"
 [[step]]
 id = "lse"; n = "7"; lane = "lease"; col = 1
@@ -114,7 +114,7 @@ text  = "Modelless proposers draft fixes from the retrieved rules; a real-clippy
 steps = ["dv"]
 [[walk]]
 title = "Fix, compile-gated"
-text  = "--fix writes only what the compile gate keeps: a fix that breaks your crate's build is reverted automatically. Divergence classes the gate cannot judge stay manual."
+text  = "`cargo refine fix` writes only what the compile gate keeps: a fix that breaks your crate's build is reverted automatically. Divergence classes the gate cannot judge stay manual."
 steps = ["fix"]
 [[walk]]
 title = "Record"
@@ -127,12 +127,12 @@ steps = ["learn"]
 out   = { lang = "json", src = "data/flows/self_evolve/01_learn.json", label = "one recorded score-bench row" }
 [[walk]]
 title = "The mining batch (opt-in)"
-text  = "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what mining uploads before opting in."
+text  = "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what contributing uploads before opting in."
 steps = ["mine"]
-in    = { lang = "json", src = "data/flows/self_evolve/02_batch.json", label = "one --mine batch (published sample)" }
+in    = { lang = "json", src = "data/flows/self_evolve/02_batch.json", label = "one contribution batch (published sample)" }
 [[walk]]
 title = "Proof + payout"
-text  = "On sync, rows enter the proof queue and are credited at a real clippy re-run; the epoch settle pays KAT to miners (mining = processing, minted = paid). Test network today."
+text  = "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Live on riir.ai."
 steps = ["proof"]
 [[walk]]
 title = "The lease-back"
@@ -156,12 +156,12 @@ flowchart TB
         LEARN --> RET
     end
 
-    REC -->|"opt-in consent --mine"| OUT["mining batch<br/>.refine/outbox"]
+    REC -->|"opt-in consent (join)"| OUT["contribution batch<br/>.refine/outbox"]
 
     subgraph NET["network — the KAT fleet (riir.ai)"]
         direction LR
         OUT -->|"auto-sync push"| PROOF["proof queue<br/>verified at real clippy"]
-        PROOF --> SETTLE["epoch settle<br/>pays KAT to miners"]
+        PROOF --> SETTLE["epoch settle<br/>pays points to contributors"]
         PROOF --> GROW["fleet corpus grows<br/>pattern classes per domain"]
     end
 

@@ -44,7 +44,7 @@
   },
   "mine": {
    "n": "6b.1",
-   "title": "Mining batch",
+   "title": "Contribution batch",
    "lane": "fleet",
    "color": "#5cc8e8"
   },
@@ -189,14 +189,14 @@
    "in": {
     "lang": "json",
     "src": "data/flows/self_evolve/02_batch.json",
-    "label": "one --mine batch (published sample)",
+    "label": "one contribution batch (published sample)",
     "from": "cargo refine sync --export on a ~30-line demo crate (4 fixes), signed with the export's throwaway key — published at riir.ai/sample-mine-batch.ndjson and ingest-verified by the worker's test",
     "body": "{\n  \"payload_version\": 3,\n  \"redact_version\": 6,\n  \"origin\": \"own-repo\",\n  \"created_unix\": 1791028699,\n  \"rows_included\": 4,\n  \"rows_blocked\": 0,\n  \"batch_commitment\": \"9c0e4935070db7b4b2ce346758824b3efbcc9d9a603bb4143d36f70080b63d58\",\n  \"account_pubkey_hex\": \"f80cccdce4ae1c07ae208a2adf99a310ae4207e0306fa0236110b06827bbb8d0\",\n  \"signature_hex\": \"addd61cb961023868a32bbc253b0891b745b1328cc3900c2c341ef06789f1cd7a9bff7ffb001a4d5e65b31dbc84b3785dbd871b355dc7a97d9e7f62c9c564307\"\n}\n{\n  \"shape_id\": \"7819c50b7076\",\n  \"lint_key\": \"filter_next\",\n  \"domain\": \"clippy\",\n  \"shape\": \"values.iter().filter(|v| *v % 2 == 0).next()\",\n  \"fix\": \"values.iter().find(|v| *v % 2 == 0)\",\n  \"direction\": [-0.9384366, 0.010083847, -0.044518255, -0.35203317, 0.107131176, 0.60174465, -0.8606558, 0.07532138],\n  \"success_count\": 0,\n  \"fail_count\": 0,\n  \"consecutive_fails\": 0,\n  \"tier\": 1,\n  \"last_run_id\": \"run-18db031b945c2c08-80989\",\n  \"last_seen_at\": 1791028693,\n  \"elo\": 1200.0,\n  \"span_elo\": 1200.0,\n  \"gate\": {\n    \"decision\": \"allow\",\n    \"findings\": []\n  }\n}\n{\n  \"shape_id\": \"c3a6997f234a\",\n  \"lint_key\": \"needless_range_loop\",\n  \"domain\": \"clippy\",\n  \"shape\": \"for i in 0..values.len() {\\n        total += values[i];\\n    }\",\n  \"fix\": \"for value in values {\\n        total += *value;\\n    }\",\n  \"direction\": [-0.31596875, 0.74847627, -0.25766408, -0.7536681, -0.8198199, -0.5253514, 0.24328057, 0.40595883],\n  \"success_count\": 0,\n  \"fail_count\": 0,\n  \"consecutive_fails\": 0,\n  \"tier\": 1,\n  \"last_run_id\": \"run-18db031b945c2c08-80989\",\n  \"last_seen_at\": 1791028693,\n  \"elo\": 1200.0,\n  \"span_elo\": 1200.0,\n  \"gate\": {\n    \"decision\": \"allow\",\n    \"findings\": []\n  }\n}\n{\n  \"shape_id\": \"2bd8a283534f\",\n  \"lint_key\": \"needless_return\",\n  \"domain\": \"clippy\",\n  \"shape\": \"return total;\",\n  \"fix\": \"total\",\n  \"direction\": [0.6863015, -0.76078856, -0.73800665, 0.8010406, 0.87747365, 0.82867664, 0.25373134, -0.0011432369],\n  \"success_count\": 0,\n  \"fail_count\": 0,\n  \"consecutive_fails\": 0,\n  \"tier\": 1,\n  \"last_run_id\": \"run-18db031b945c2c08-80989\",\n  \"last_seen_at\": 1791028693,\n  \"elo\": 1200.0,\n  \"span_elo\": 1200.0,\n  \"gate\": {\n    \"decision\": \"allow\",\n    \"findings\": []\n  }\n}\n{\n  \"shape_id\": \"34fc9d1c297e\",\n  \"lint_key\": \"vec-with-capacity\",\n  \"domain\": \"rust_perf\",\n  \"shape\": \"Vec::new()\",\n  \"fix\": \"Vec::with_capacity(words.len())\",\n  \"direction\": [0.7280237, -0.24283206, -0.594867, 0.99811685, 0.058567684, 0.06598411, 0.8178545, -0.09290348],\n  \"success_count\": 0,\n  \"fail_count\": 0,\n  \"consecutive_fails\": 0,\n  \"tier\": 1,\n  \"last_run_id\": \"run-18db031b945c2c08-80989\",\n  \"last_seen_at\": 1791028693,\n  \"elo\": 1200.0,\n  \"span_elo\": 1200.0,\n  \"gate\": {\n    \"decision\": \"allow\",\n    \"findings\": []\n  }\n}"
    }
   },
   {
    "title": "Proof + payout",
-   "text": "On sync, rows enter the proof queue and are credited at a real clippy re-run; the epoch settle pays KAT to miners (mining = processing, minted = paid). Test network today.",
+   "text": "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Test network today.",
    "steps": [
     "proof"
    ],
