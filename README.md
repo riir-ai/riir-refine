@@ -293,6 +293,24 @@ destructive and is never the default. A logged-in account reports usage
 totals for accounting only; fix content is shared solely through the
 explicit `sync` push after you opt in.
 
+**Free for open-source repositories.** A run over an open-source repository
+costs nothing — no accrual, no reporting, and the depleted-account gate
+never fires. The heuristic is fail-open: a licence file at the scan root
+(`LICENSE`, `COPYING`, `NOTICE`, … — presence is enough, the text is not
+parsed) or a public-forge git origin (`github.com`, `gitlab.com`,
+`bitbucket.org`, `codeberg.org`, `sr.ht`) marks the run free, and a FREE
+run prints one line saying so:
+
+```text
+repo: open-source (LICENSE) — billing skipped (free for open-source repositories)
+```
+
+A private repository (no licence file, no public-forge origin — a plain
+local dir) bills normally. When in doubt, the run is free: the maintainer
+promise is that we never charge a maybe. "Free" is the healing/billing
+plane only — the corpus-lease `update`/`sync` service is priced separately
+regardless of repository.
+
 **Advanced/service configuration.** The client talks to the hosted service
 by default; point it anywhere else with `RIIR_REFINE_KAT_SERVICE_URL` (e.g.
 a local test service). `--net <devnet|mainnet>` steers a single invocation

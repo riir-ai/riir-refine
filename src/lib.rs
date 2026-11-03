@@ -583,6 +583,12 @@ pub mod frontier_report;
 // stays the acceptance authority — this can only narrow.
 pub mod rescue_mine;
 
+// Issue 190 T11 — the free-for-open-source-repositories posture: a run over
+// an open-source repo (licence file or public-forge origin, fail-open) stands
+// the billing planes down. Ungated: the verdict is consulted only by the
+// kat-gated call sites, so a charitable build carries it inert.
+pub mod repo_free;
+
 // Issue 134 T1 — the compiled rule→domain table, moved UNGATED from
 // kat_sync_payload (which re-exports it at its historical path): the
 // demonstrability column + the score-bench lane project through the SAME

@@ -356,6 +356,15 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
     if kat_billing_disabled() {
         return None;
     }
+    // Issue 190 T11: a free posture opens NO meter — with no meter there is
+    // no accrual, no charge ledger, and the burn sync reports nothing. (The
+    // disclosure line printed once in main, right after the posture init.)
+    if matches!(
+        riir_refine::repo_free::posture(),
+        riir_refine::repo_free::RepoFree::Free { .. }
+    ) {
+        return None;
+    }
     if let Ok(file) = std::env::var("RIIR_REFINE_KAT_METER_FILE") {
         return Some(riir_refine::kat_meter::KatMeter::open_at(PathBuf::from(
             file,
@@ -524,6 +533,14 @@ fn sticky_grace(ack: &riir_refine::kat_burn_client::KatBurnAck) -> bool {
 fn enforce_kat_soft_gate(args: &Args) {
     if args.dump_trajectories {
         return; // a local export processes no source and burns no fuel
+    }
+    // Issue 190 T11: an open-source repo's run is free — the depleted-account
+    // refusal never fires over the commons (the product policy; fail-open).
+    if matches!(
+        riir_refine::repo_free::posture(),
+        riir_refine::repo_free::RepoFree::Free { .. }
+    ) {
+        return;
     }
     if kat_billing_disabled() || kat_gate_disabled() {
         return;
@@ -14531,6 +14548,14 @@ fn main() {
     if let Err(msg) = validate_mode_flags(&args) {
         eprintln!("{msg}");
         usage();
+    }
+    // Issue 190 T11: the run's billing posture over its scan root, computed
+    // once BEFORE any billing plane opens (the meter, the charge ledger, the
+    // soft gate, the burn sync all consult it). Billable is today's behavior
+    // byte-identical; a FREE run discloses once, here.
+    riir_refine::repo_free::init(&resolve_heal_root(&args.paths));
+    if let Some(line) = riir_refine::repo_free::disclosure() {
+        println!("{line}");
     }
     // Issue 075 (owner soft gate): the depleted-account refusal — fires
     // BEFORE any scanning (prepaid fuel: an empty tank dispenses nothing,
