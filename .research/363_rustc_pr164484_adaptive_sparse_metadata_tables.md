@@ -104,4 +104,4 @@ No famous-lib family in play (this is rustc itself, the ecosystem root). The rul
 
 ## Queue slot
 
-Nominal **Batch 326**, plan `.plans/330` (STAGED). At record time the queue head is open: uniffi-rs/plan 327 landed as Batch 325, sccache/plan 328 landed as Batch 324; the two `.plans/329_*` mozilla-lane files on disk are a live dual-allocation owned by their lanes (disclosed in the queue row, `.plans/.highwater` bumped 328→330 past the contested number). Corpus edit waits for the slot claim per the mining queue.
+Nominal **Batch 326**, plan `.plans/330` (STAGED). At record time the queue head is open: uniffi-rs/plan 327 landed as Batch 325, sccache/plan 328 landed as Batch 324; the two `.plans/329_*` mozilla-lane files on disk were a live dual-allocation — **resolved owner-directed 2026-11-03**: first-allocation keeps 329 for the methodology port, the wetrun renumbered to `.plans/331_mozilla_outbound_pr_wetrun.md` with every citing site moved, `.plans/.highwater` → 331. Corpus edit waits for the slot claim per the mining queue.

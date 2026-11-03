@@ -1,6 +1,6 @@
 # Plan 330 — Batch 326: rustc PR #164484 adaptive sparse metadata tables → rust_perf
 
-**Status:** STAGED — distill verdict landed (Research 363, YES B−); corpus entry waits for the next cargo-capable batch slot. Number note: 329 was found double-held on disk at write time (`329_engine_mozilla_methodology_port` + `329_mozilla_outbound_pr_wetrun`, `.highwater` stale at 328) — this plan takes the uncontended 330; the 329 collision belongs to its owning lanes, disclosed in the queue row.
+**Status:** STAGED — distill verdict landed (Research 363, YES B−); corpus entry waits for the next cargo-capable batch slot. Number note: 329 was found double-held on disk at write time (`329_engine_mozilla_methodology_port` + `329_mozilla_outbound_pr_wetrun`, `.highwater` stale at 328) — this plan took the uncontended 330; the collision was RESOLVED owner-directed the same day (first-allocation: the methodology port keeps 329, the wetrun renumbered to `331_mozilla_outbound_pr_wetrun`, highwater → 331).
 
 Source: rust-lang/rust [#164484](https://github.com/rust-lang/rust/pull/164484) "Use adaptive sparse encoding for metadata tables" — merged 2026-11-01T01:40Z, merge `026faeb1afef7581b2e49b2512d361d09819cb69`, head `de21c98c951e91adb4abf353494ba7739f425ab8`, r=nnethercote, milestone 1.101.0, METADATA_VERSION 11→12. Provenance record: `.research/363_rustc_pr164484_adaptive_sparse_metadata_tables.md`.
 

@@ -1,4 +1,6 @@
-# Plan 329 — Mozilla outbound fix-PR wetrun (uniffi-rs + sccache): scan → gate → heal → verify → PR-ready
+# Plan 331 — Mozilla outbound fix-PR wetrun (uniffi-rs + sccache): scan → gate → heal → verify → PR-ready
+
+**Renumbered:** 329 → 331 on 2026-11-03 (owner-directed collision fix; first-allocation loss to `329_engine_mozilla_methodology_port` — that file landed 3.5 h earlier, `ee0a6901` 11-02T13:08+07 vs this file's `531b83af` 11-02T16:41+07; bench 127 + issue 198 citations moved in the same commit). The claim line below is unchanged.
 
 **Status:** Claimed: zed-m3-mozilla-wetrun, 1793602400, expires 2026-11-04T06:30Z — the push is the arbiter
 

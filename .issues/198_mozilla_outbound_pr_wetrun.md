@@ -1,8 +1,8 @@
 # Issue 198 — Mozilla outbound fix-PR wetrun (Proposal 022 Phase 1, quartet)
 
-**Status:** OPEN — scan+heal complete, send owner-gated (Plan 329 executing)
+**Status:** OPEN — scan+heal complete, send owner-gated (Plan 331 executing — renumbered from 329 on 2026-11-03, first-allocation collision loss)
 
-Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a wetrun against the Mozilla quartet (uniffi-rs, sccache, rust-code-analysis, supply-chain), forks under the `riir-ai` GitHub org, as Proposal 025 grant evidence (real upstream PRs = the product-community-fit proof). Full plan: `.plans/329_mozilla_outbound_pr_wetrun.md`; bench record: `.benchmarks/127_mozilla_wetrun/README.md`.
+Owner directive 2026-11-02: run the outbound fix-PR campaign (Proposal 022) as a wetrun against the Mozilla quartet (uniffi-rs, sccache, rust-code-analysis, supply-chain), forks under the `riir-ai` GitHub org, as Proposal 025 grant evidence (real upstream PRs = the product-community-fit proof). Full plan: `.plans/331_mozilla_outbound_pr_wetrun.md`; bench record: `.benchmarks/127_mozilla_wetrun/README.md`.
 
 ## Findings so far
 

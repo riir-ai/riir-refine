@@ -1,5 +1,5 @@
 #!/bin/sh
-# Mozilla outbound fix-PR wetrun — send mechanics (Plan 329 T5)
+# Mozilla outbound fix-PR wetrun — send mechanics (Plan 331 T5)
 # Prereq: `gh auth login` completed by the owner (device flow).
 # Idempotent: safe to re-run (fork/remote/PR steps detect prior state).
 set -eu
