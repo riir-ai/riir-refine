@@ -1,6 +1,24 @@
 # Plan 334 — P015 Phase 3: replay settlement econ-sim arm + ratification runway (the Max tier's earn story)
 
-**Status:** ACTIVE 2026-11-03 — opened on the Plan 333 OwnerGate approval (Claude verdict round 1: "APPROVE opening it as its own plan now"); Phase A (T1–T1b) agent-executable; Phase B owner-gated; spec of record: [Proposal 015](../.proposals/015_replay_endorsement_reward_class.md) Phase 3 (DATED HOLD 2026-09-28 at `replay_cut_bp = 0` — basis riir-dapps Bench 013: a cut < 2,223 bp pays verifiers nothing; arming = one devnet act at cut ≥ 2,223 bp)
+**Status:** CLOSED 2026-11-03 (second session) — **DUPLICATE of riir-clippy [Plan 128](128_p015_phase3_replay_econ_sim.md)**, which is COMPLETE and its ratification CONSUMED (2026-09-15, owner delegation: `replay_cut_bp` STAYS 0). No task here was executed; none is owed. Premise defect recorded below; disposition: CLOSED-DUPLICATE.
+
+## Premise correction (2026-11-03, second session — the plan as allocated was wrong)
+
+This plan was allocated on the premise that P015 Phase 3's econ-sim arm was open. **It is not.** riir-clippy [Plan 128](128_p015_phase3_replay_econ_sim.md) ran the full sim (riir-dapps `tests/kat_econ_sim.rs` §`replay_econ`, G1-pinned against the real `record_proven_reward_with_replay` ledger math — no parallel money math), recorded [riir-dapps Bench 013](../../riir-dapps/.benchmarks/013_replay_econ_sim.md) (T1/T2/T4/T5/T6 + Addendum 1 the canary-bound conflict + Addendum 2 the plan-045 C4 re-run byte-identical + **verdict AGREE round 2 closing**), and the ratification ALREADY HAPPENED — 2026-09-15 under owner delegation ("make best decision for prod grade"): **`replay_cut_bp` STAYS 0** — the recording lane is live and free; paying at the current pool (~$3e-6/item, later decay-bound to ~0 µKAT/weight) buys no economic behavior.
+
+Map of the duplication: this plan's T1 = Plan 128 T1/T2 (the sweep ran, 48 cells, 40 pass, the 2%-canary ≥30%-share failures); this plan's T1b = Plan 128 T5 (= Bench 013 §T5, whose recommendation is KEEP 0); this plan's T2 was already consumed (the keep-0 ratification IS the T3.2 outcome); this plan's T3's flips are "NOT OWED at cut 0" per Plan 128's close. The grounding failure: allocation grepped P015 + `replay_lane.md` but NOT the parent Plan 128 or riir-dapps `.benchmarks/` — the numbering gates catch number collisions, not semantic duplicates. The verdict round that approved opening this plan was given the same incomplete framing.
+
+### What actually stands (the real Phase-3 runway — all recorded, none of it this plan's work)
+
+- **The arming interlock ships in code**: `REPLAY_CANARY_RATE_BOUND_PERMYRIAD` (50‰) + `REPLAY_CUT_ARMING_MIN_BOUND_PERMYRIAD` + the compile-time one-act `const` pin + `arming_interlock_check` (`riir-dapps/src/kat/replay.rs`; Bench 013 Addendum 1's bound+rate coupling, mechanized — arming under the bound is refused at both compile time and config validation).
+- **The arming preconditions** (pool scale ~10⁵×, 10% canary, the §T5 monitoring counters, cut ≥ 2 223 bp) live in Plan 128's close + Bench 013 F6 + Addendum 2 (devnet per-weight decay-bound to ~0 µKAT/weight — arming today pays verifiers ~nothing). dapps `.issues/091` (Plan 128's cited home for them) is closed+removed per the noise rule — record in git history.
+- **The Mozilla W3 pilot's earn story is carried by vouchers/service capacity** (Proposal 025 W3 verbatim: "pilot users never pay and never need to contribute" — funded as service capacity + expiring pilot vouchers), NOT by replay settlement. Bench 013's keep-0 verdict stands; the tier-spec Max row's "designed — does not settle" wording stays TRUE.
+
+---
+
+## The original (pre-correction) body — kept as the record of what was allocated
+
+**Status (superseded):** ACTIVE 2026-11-03 — opened on the Plan 333 OwnerGate approval (Claude verdict round 1: "APPROVE opening it as its own plan now"); Phase A (T1–T1b) agent-executable; Phase B owner-gated; spec of record: [Proposal 015](../.proposals/015_replay_endorsement_reward_class.md) Phase 3 (DATED HOLD 2026-09-28 at `replay_cut_bp = 0` — basis riir-dapps Bench 013: a cut < 2,223 bp pays verifiers nothing; arming = one devnet act at cut ≥ 2,223 bp)
 
 ## Why now
 
