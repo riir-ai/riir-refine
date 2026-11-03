@@ -27,6 +27,8 @@ Issue 051 (2026-08-31) made the daily trainer window **groq-first** after caveat
 
 ## Phase B — on signature (owner act; `- [-]` until signed)
 
+> **PIVOT 2026-11-03 (owner directive — [Plan 335](335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md)):** the fixer serving posture moves to the **LOCAL cluster** (amo/bmo via riir-infer; qwen3.8-27b now, GLM-5.3-Flash later per Plan 627) — **no third-party egress**. Consequences: the CF-only launch decision is superseded; T1b (Groq) and the CF vendor record **re-scope to the trainer-window lane**; the memo's vendor half becomes an annex. Phase B's flip now waits on **Plan 335 P0 (the qwen-local quality gate — Bench-049 protocol, local serving)** + the re-anchored first-party posture (Plan 335 P1), not on vendor verification. T6–T8 below survive re-anchored; their CF-specific wording is the pre-pivot record.
+
 - [-] **T6 — ENABLE flip**: the fixer serving lane per `l4_fallback.md` §5 item 2's own gate (the arm that already passed: modelless pre-pass → CF llama-3.3-70b → `fix_verify` strict-keep), CF provider only at first.
 - [-] **T7 — deployer manifest rows**: the fixer node (cf-worker + model binding) + un-`[-]` the Trainer-window row's leak gate (the proposal's "plus a leak-posture sign-off either way" covers both).
 - [-] **T8 — copy lifts**: Proposal 005 caveat #2 amended; `node_tiers.md` Pro row "fixer half BLOCKED" → live posture; Plan 107's no-LLM-fixer-marketing non-goal lifts; dist README gains the fixer section (source-free, Proposal 003) **including the consumer-facing disclosure notice (T3 fold-in #2)**.

@@ -1,5 +1,7 @@
 # Fixer serving lane — leak-posture sign-off memo (for owner signature)
 
+> **PIVOT 2026-11-03 (owner directive — [Plan 335](../../.plans/335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md)):** the fixer serving posture moves to the **LOCAL cluster** (amo/bmo via riir-infer) — consumer code never crosses to a third party. This memo's vendor-vetting half (CF no-training, Groq DPA, provider kill switches) **re-scopes to the TRAINER WINDOW lane** (own-repo redacted data; still groq-first/CF-fallback). The fixer lane's gate is now **Plan 335 P0** (the qwen-local quality gate) + the first-party posture: the consent gate, the scanner-before-egress, and OUR no-retention commitment survive verbatim (items 2–6 re-anchored: the recipient is the operator's cluster, not a vendor). **Do not sign this memo as-is for the fixer lane** — the re-anchored signature doc lands with Plan 335 P1.1.
+
 **Status:** DRAFTED 2026-11-03, READY FOR SIGNATURE (Plan 333 T3 · Claude verdict round 1 AGREE · OwnerGate target: signature ≤ 2026-11-14, ahead of the 11-17 prose window). Sign by replacing the last line; changing any pinned text below reopens this memo.
 
 **Decision requested:** enable the consumer-facing fixer serving lane (Proposal 005 caveat #2's remaining half) under the posture below. Signing flips Phase B of [Plan 333](../../.plans/333_p005_fixer_leak_signoff_and_all_tier_prep.md) (ENABLE flip + deployer manifest rows + copy lifts). Nothing else changes.

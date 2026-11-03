@@ -1,0 +1,50 @@
+# Plan 335 — the local-cluster fixer lane: qwen3.8-27b on amo/bmo now, GLM-5.3-Flash later; the riir-refine-fixer CLI + TUNA contributor runway
+
+**Status:** FILED + claimed 2026-11-03 (second session) — owner pivot directive: "we will run the fixer locally amo+bmo not anywhere else; prepare riir-infer + a new repo for the CLI (eg riir-refine-fixer) so others can join our cluster to help fixing and get TUNA; qwen3.8-27b fits the M5 Ultra 96 GB (llama-3.3-70b maybe too big); GLM via the new M5s soon (Plan 627) — qwen3 for now is fine." Supersedes the CF-serving posture in [Plan 333](333_p005_fixer_leak_signoff_and_all_tier_prep.md) Phase B for the FIXER lane; the vendor-verification record re-scopes to the TRAINER WINDOW lane only.
+
+**Claimed:** zed-m3-p005-unblock, 1793716277, expires 2026-11-05T00:00:00+00:00
+
+## Why this posture wins (the verdict, recorded)
+
+- **The leak blocker dissolves for the fixer lane.** Consumer code never crosses to a third party — it goes to OUR operated cluster. The trust surface re-anchors first-party: our ToS + OUR no-retention commitment; the client-side consent gate (`RIIR_REFINE_CODE_EGRESS` + the per-repo store) and the `kat_redact` scanner survive verbatim — consumer → cluster is still an egress that needs consent, but the recipient is us, not a vendor. Plan 333's T1b (Groq Services Agreement) and the CF no-training dependency re-scope to the **trainer window** (own-repo redacted data; groq-first/CF-fallback — the vendor record stays load-bearing THERE).
+- **Cost dies as a blocker.** No per-token vendor billing; the fleet is ours. Contributors earn **TUNA** (the trial-credit plane — cheap for us, real for them, exactly its design), consumers pay KAT pass-through at GPU-real-cost rates (Proposal 005 §cost basis anticipated this: "its LLM tokens price in KAT at a *higher* per-token rate (GPU-real cost)").
+- **Decentralization is phased, not launched.** v1 = operator-only (amo+bmo — Proposal 005 caveat-10 honesty: "our fixers", never "the network's fixers" while we run everything). Contributor nodes come after P0 passes AND the owner arms the TUNA values. The CLI (owner's example name `riir-refine-fixer`; dist posture per Proposal 003 — source private, public dist repo) is the runway.
+- **Model lineage rides [riir-infer Plan 627](../../riir-infer/.plans/627_glm53_flash_1m_lsa_prefill_lane.md)** (claimed zed-m3-lsa-distill to 2026-11-10 — do not touch that lane, reference it): qwen3.8-27b now (Q8 ≈ 28 GB / FP16 ≈ 54 GB on 96 GB — comfortable with KV), GLM-5.3-Flash (320B/18B-active MoE; PQ2 ≈ 63–80 GB) on the 128 GB fleet when it lands. The fixer consumes riir-infer's serving seam — a model swap is a re-gate, not a rewrite.
+
+## The one honest caveat that gates everything
+
+**qwen-local fixer quality is UNMEASURED.** Bench 049's "unusable" verdict was CF-pricing-specific (thinking-token economics on a paid API — `finish_reason:"length"` with null content, `/no_think` unreliable, per-request thinking burn) — **not a local-serving verdict.** Local serving controls the thinking budget directly: Proposal 005's §window gates (a)–(e) become serving params (completion budget sized for reasoning + visible output; hard-decline on length-null with a retry cap; the template-level thinking off-switch; a one-call smoke before the harness; both schemas parsed). This posture has never been measured → **P0 is a fresh Bench-049-style gate before ANY consumer-facing serving.** Miss → the GLM lineage is the fallback (Plan 627's own accuracy harness — same captures, different model).
+
+## Phases
+
+### P0 — the qwen-local quality gate (agent-executable; amo QUIET, bmo the quiet runner)
+
+- [ ] **P0.1 — weights + serving bring-up**: FIRST stage the base Qwen3.8-27B GGUF (Q8) onto the rig — `riir-train/data` currently holds only the **DFlash2-Q4_K_M derived variant** (drafter-class, lossy); the base Q8 is an on-demand `data_backup.sh pull` (BASE_MODELS.md pin law) or a copy from the 4090's league staging — owner-confirm only if space-bound. A Q4_K_M-gated run is recorded AS a lossy-surface run under that name and NEVER carried over to Q8/FP16 (the lossy-surface law). Then: riir-infer qwen3.8-27B on m5ultra (the existing Metal league posture — ktile64+zerocopy default); the §window gates wired as serving params (thinking budget, hard-decline-on-length, smoke probe). Rig discipline: `agent-mail rig run` — build on amo (--shared), long cells on bmo; box-state quoted per bench_preflight.
+- [ ] **P0.2 — the A/B harness**: the Bench-049 reachable-miss set, three arms — `decline` / raw / **modelless pre-pass + qwen** (the B-arm that dominated: pre-pass first, LLM sees span + candidate diff + retrieved few-shots) → `fix_verify` strict-keep + clippy oracle. Run `--release` on the rig; record GPU-exclusivity + box state beside the numbers.
+- [ ] **P0.3 — the gate** (fixed PRE-measurement — the verdict's anti-vacuity catch: decline recorded 0/9, so a bare "≥ decline" passes at zero keeps): **Arm B strict-keep > 0/9 AND ≥ 5/9** — within one keep of the CF llama B-arm's 6/9 reference; a local lane worse by more than one keep is a REGRESSION against the arm just retired, recorded as such. **+ never-wrong held** (0 divergent, 0 regressions). **n=9 is a SMOKE set, not a ranking** — if the reachable-miss set has grown since Bench 049, widen it and re-pin BOTH arms' numbers in the same run. PASS → the lane may serve (P1); FAIL → record the negative, the lane waits for the GLM re-gate (P3) — no silent swap, no threshold fiddling (the measured re-designation rule).
+- [ ] **P0.4 — the record**: fresh `.benchmarks/` doc in THIS repo (the Bench-049 protocol re-run, local posture, full attribution + box state), linked from Plan 333.
+
+### P1 — the cluster serving posture (the re-anchored leak posture, first-party)
+
+- [ ] **P1.1 — the posture doc** (replaces the memo's vendor half for the fixer lane): consent gate unchanged (client-side env + T4's per-repo store + scanner BEFORE any socket); **our** no-retention commitment (no snippet logging on the serving nodes — the memo's exclusion (a) survives re-anchored; no distillation capture on consumer live code — the CF `store` param's local analog); queue/concurrency caps replace the USD cap (per-node GPU fairness; the economy prices, the queue protects); kill switches = per-node + cluster-level (the LlmRouter provider-state shape, re-homed). **"First-party" means OPERATOR nodes only (amo/bmo) — it never quietly grows to cover contributor nodes** (P2's egress gate). **Rig capacity:** serving takes rig capacity through `agent-mail rig run` like any other tenant — `--exclusive` benchmark runs pre-empt serving or are scheduled around it (a consumer-facing node must never poison an exclusive bench).
+- [ ] **P1.2 — ToS/data-license rows** for the fixer lane (Proposal 005 caveat #7's list, scoped first-party): what we retain (nothing beyond the request), for how long (not past the response), the no-training commitment on live consumer code (mined/donated data remains the corpus path — the sync ToS license is unchanged), refund/chargeback mechanics via non-transferable credit (unchanged).
+- [ ] **P1.3 — Plan 333 T4 completes here**: the opt-in-dark per-repo consent UX lands as the cluster client's consent layer (the consumer code path it gates is now the cluster client instead of a CF-bound path — the seam is identical).
+
+### P2 — the riir-refine-fixer CLI (contributor runway; OWNER-GATED: repo creation + dist posture)
+
+- [-] **P2 — the CLI spec + repo** (owner act to create; this plan carries the spec): the serving-node binary (riir-infer serving + the `fix_verify` verify half, GPU-class hardware floor = the m5ultra class), node registration, and the TUNA earning wire (operator-batched issuance per Proposal 006's own law — TUNA is never an agent lever; values owner-armed). **THE CONTRIBUTOR-NODE EGRESS GATE (verdict round 2): contributor nodes may serve ONLY own-repo, donated, or public-corpus work (the mining + trainer-window class) — LIVE CONSUMER CODE GOES TO OPERATOR NODES ONLY.** A contributor serving a stranger's live code is third-party egress with NO DPA, no ZDR, no kill switch we control — a worse position than the CF row this pivot retired. Live-code serving on contributor nodes reopens ONLY behind a separate owner posture decision (attestation / signed contributor DPA class). Launch posture: contributor nodes AFTER P0 passes + the owner arms the economy, corpus-work class first. Source private (Research 003), public dist repo + installers per the Proposal 003 pattern.
+
+### P3 — the GLM re-gate (rides Plan 627; not this lane's claim)
+
+- [-] **P3 — re-run the P0 protocol on GLM-5.3-Flash** when the 128 GB fleet lands (Plan 627's own accuracy captures are the vehicle; the fixer consumes its serving seam). Swap the serving model on a WIN (per-family retention — the lossy-surface law; never aggregate-only), demote qwen, record the bout.
+
+## Non-goals
+
+- **No CF spend in the fixer path** — the pivot's whole point; the CF/Groq verification record serves the TRAINER WINDOW lane only.
+- No contributor-node launch before P0 passes + the owner arms TUNA values; **contributor nodes never touch live consumer code** (P2's egress gate) — first-party = operator nodes only.
+- No repo creation without the owner act; no Plan 627 edits (claimed to 11-10).
+- No qwen promotion on an unmeasured local posture — P0 or nothing.
+
+## Related
+
+[Plan 333](333_p005_fixer_leak_signoff_and_all_tier_prep.md) (Phase B re-anchored by this) · the memo [`fixer_leak_posture_signoff_memo.md`](../.docs/01_orientation/fixer_leak_posture_signoff_memo.md) (re-anchored; vendor half → window annex) · [Bench 049](../.benchmarks/049_fixer_regate_poc.md) (the protocol P0 re-runs) · riir-infer [Plan 627](../../riir-infer/.plans/627_glm53_flash_1m_lsa_prefill_lane.md) (the GLM lineage, claimed to 11-10) · Proposal 005 (caveat #2 dissolved-in-part; caveat #10 the phasing; §cost basis the pricing) · riir-dapps TUNA plane (Proposal 006/009 — the contributor credit) · Proposal 003 (the dist posture for the CLI)
