@@ -1,6 +1,6 @@
 # Fixer leak posture — vendor verification record
 
-**Status:** LIVE 2026-11-03 — CF Workers AI VERIFIED in writing (fetched + quoted this session); Groq OPEN (public pages explicitly route Customer Data to the Services Agreement + DPA). Consumer of: Proposal 005 caveat #2's leak half · cited by [Plan 333](../../.plans/333_p005_fixer_leak_signoff_and_all_tier_prep.md) (the sign-off package).
+**Status:** LIVE 2026-11-03 — CF Workers AI VERIFIED in writing (fetched + quoted this session); Groq OPEN (public pages explicitly route Customer Data to the Services Agreement + DPA) with a RECORDED EXPOSURE for the own-repo drain class (see the Groq section); model licenses: Llama 3.3 VERIFIED (fetched + quoted), qwen3.8-27b OPEN. Consumer of: Proposal 005 caveat #2's leak half · cited by [Plan 333](../../.plans/333_p005_fixer_leak_signoff_and_all_tier_prep.md) · the signature-ready memo: [fixer_leak_posture_signoff_memo.md](fixer_leak_posture_signoff_memo.md).
 
 Rule for this doc: a vendor row is VERIFIED only when the commitment is quoted verbatim with URL + the page's own "last updated" date, and the exceptions are named. Re-verify on any provider-terms change before the sign-off memo cites it.
 
@@ -41,9 +41,11 @@ Open items (Plan 333 T1b):
 2. If the terms do not carry a no-training commitment for the tier the `LlmRouter` free leg uses (Issue 051), either (a) get it in writing from Groq, or (b) route that leg's class of data elsewhere. This gates: any Groq arm in the fixer lane AND closes the trainer-window drift note (the window's free leg is groq-first over own-repo redacted data — lower bar than consumer code, but our own corpus spans are business IP).
 3. Re-check on terms changes; date every re-verification.
 
-## Model license rows (Plan 333 T2 — to fill)
+**Recorded exposure (Plan 333 T1c, 2026-11-03):** the exposure has ALREADY HAPPENED for the own-repo drain class — a live window row shows `served_by: "groq"` absorbing 2/2 drain calls (`.benchmarks/llm_cost_ledger.jsonl`, run `drain-18d01cf6ab6e21c8-99237`, ts 1787960899). Data class: the unproven queue = own-repo redacted, sync-ToS-licensed trajectories (donated) — NOT consumer code; no consumer live code has ever left a machine (no fixer lane exists). T1b is the closure for both classes.
+
+## Model license rows (Plan 333 T2 — filled 2026-11-03)
 
 | model | hosted by | license | serving-user-code terms | status |
 |---|---|---|---|---|
-| llama-3.3-70b | CF (Bench-049 winner arm) / Groq (window free leg) | Meta Llama 3.3 Community License + AUP | hosted commercial serving allowed below the 700M-MAU threshold; CF is the distributor; TO QUOTE (never assert): whether "Built with Llama" attribution is required given we serve outputs only and distribute no weights; AUP does not forbid automated code changes (expect the row to close without trouble — quote the license text) | OPEN |
-| qwen3.8-27b | CF (trainer-window designation, carries the §window gates) | expect Apache-2.0 family — verify the model card | to verify | OPEN |
+| llama-3.3-70b | CF (Bench-049 winner arm) / Groq (window free leg) | Meta **Llama 3.3 Community License** (release date December 6, 2024; text fetched 2026-11-03 from meta-llama/llama-models) + AUP | **VERIFIED** — commercial use granted; 700M-MAU clause far above us; attribution §1.b.i triggers on *distributing* the Materials or a product/service that *contains* them — calling a hosted provider distributes/contains nothing; the model-naming clause triggers on using outputs to TRAIN a distributed model (not our case). "Built with Llama" in product docs RECOMMENDED as cheap insurance, not required by the strict text. AUP (fetched): prohibits illegal/harmful classes; automated code-fix tooling is the intended commercial use; AUP item 4's end-user disclosure duty is satisfied by the memo's consumer notice. EU restriction = multimodal only; 3.3-70B is text-only (N/A). | CLOSED |
+| qwen3.8-27b | CF (trainer-window designation, carries the §window gates) | expected Apache-2.0 family | **OPEN** — verify the CF Workers AI model-catalog entry's license field before ANY qwen arm in the fixer lane; NOT load-bearing for the CF-llama first enablement (the memo's serving model is llama-3.3-70b) | OPEN |
