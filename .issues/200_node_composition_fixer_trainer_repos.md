@@ -1,45 +1,53 @@
-# Issue 200 — the node-composition family: `riir-refine-fixer` / `riir-refine-trainer` (superset repos)
+# Issue 200 — the node-composition family: `riir-refine-fixer` / `riir-refine-trainer` (inner crates + tier features, in-repo)
 
-**Status:** OPEN 2026-11-03 — owner-directed composition ("riir-refine-fixer = riir-refine + fixer tier code, so it can do anything riir-refine can do + fixer; same as riir-refine-trainer = riir-refine + fixer + trainer"); the design record + owner-act checklist. The lane plan is [Plan 335](../.plans/335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md) (P0 qwen-local gate → P1 posture → P2 this CLI).
+**Status:** OPEN 2026-11-03 — owner-directed composition, RE-SCOPED same day to the owner's shape: **inner workspace crates + per-tier features in THIS repo** (`/git/riir-refine`), not new repos ("it should be /Users/kat/git/riir-refine and use feature flag for each tier instead? and inner crate for riir-refine-fixer and riir-refine-trainer?" — agreed; the as-filed two-repo design is superseded below, kept as the record). The lane plan is [Plan 335](../.plans/335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md) (P0 qwen-local gate → P1 posture → P2 this CLI).
 
-## The composition (owner's model — supersets, never forks)
+## The composition (final — inner crates, the riir-infer root-package-workspace shape)
 
 ```
-riir-refine (core rulewright — UNCHANGED, zero network deps in the default build)
-   ▲ path-dep (one way)
-riir-refine-fixer = core + FIXER TIER
-   ▲ path-dep (one way)
-riir-refine-trainer = fixer + TRAINER TIER
+riir-refine (repo — root package = the core rulewright, UNCHANGED, default build clean)
+├── crates/riir-refine-fixer/    bin + FIXER TIER (path-dep: the core, same workspace)
+│     deps: core + riir-infer (serving seam) + ../riir-llm (hosted options, cap-checked)
+│           + the TUNA-client class; features: hosted-providers / kat (commercial lane) default-OFF
+└── crates/riir-refine-trainer/  bin + TRAINER TIER (path-dep: fixer — superset of the superset)
+          deps: fixer + the kat/replay/corpus machinery class (Proposal 005 trainer role)
 ```
 
-- **`riir-refine-fixer`** — new PRIVATE repo; its workspace path-deps `../riir-refine` (consume, never fork — the leaf law's shape) and adds the **fixer tier**: the serving-node binary (riir-infer serving seam + the `fix_verify` verify half), the provider ladder (local riir-infer first; **CF/Groq options via `../riir-llm`** — the shared transport leaf, protocol only, cap-checked consumer-side), the cluster client + consent layer (Plan 333 T4's per-repo store), node registration, the TUNA earning wire. Can do anything riir-refine can do **+ fix**.
-- **`riir-refine-trainer`** — same pattern stacked one level: adds the **trainer tier** (the Proposal 005 trainer role): quorum replay client (`kat_replay_client` lineage), corpus building / the daily drain window, the prove leg.
-- **A tier's heavy deps live in ITS repo** — the boundary-guard discipline: core stays clean; fixer owns riir-llm / riir-infer / the TUNA client class; trainer owns the kat/replay/corpus machinery. `ci_boundary_contract.sh` derives the graph once the repos are registered.
+- **`default-members = ["."]`**: `cargo build` at the repo root builds ONLY the core — the charitable/Posture A posture (issue 190 T14) and every existing gate on the root are untouched; tier binaries are built explicitly (`-p riir-refine-fixer`). The T14 discipline carries one layer up: the tier crates' KAT features default-OFF, so a Mozilla-facing build carries none.
+- **Why in-repo wins (the record of the re-scope):** (a) distribution is served by the PUBLIC DIST repos (Proposal 003 — contributors download binaries, never clone source; separate source repos bought nothing); (b) superset semantics = workspace path edges, no sibling-checkout requirement; (c) drops the 22-file registration ×2 + BOUNDARY.md ×2 + new sync surface (mac/4090); (d) W1b's "open the fleet tooling MIT" becomes a one-repo act; (e) the exact fleet precedent: riir-infer's root-package workspace ("own crate so CPU-only consumers never resolve the GPU dep tree").
+- **A tier's heavy deps live in ITS crate** — the boundary discipline survives as dependency isolation. PRECISELY (verdict round 4): the root manifest ALREADY carries the seams as OPTIONAL deps (`riir-llm` at Cargo.toml:172; `riir-infer-core`/`riir-infer-gpu` via `ternary_inference` :144-145) and already ships fixer/trainer-flavoured bins (`fixer_regate` :1263 behind `cf_workers_ai`; `kat_drain` :1274 — the trainer-window drain) — so the rule is: **tier crates add NO NEW heavy deps to the root; they turn ON the existing optional seams through features, in their own manifests.** Two resolution laws (the Issue 835 class): (a) once `[workspace]` exists, every member's path deps resolve into ONE shared Cargo.lock even when optional — a tier crate may only path-dep siblings the root already resolves, or each new sibling (e.g. a TUNA-client edge outside today's graph) gets a deliberate BOUNDARY.md row before it lands; (b) `--workspace` OVERRIDES `default-members` — `consumer_residue_sweep.sh:139` and the guard's all-features layer would silently compile the tiers — so the restructure step itself re-pins: root-scoped gates switch to `-p riir-refine` explicitly, and a separate tier layer runs `-p riir-refine-fixer -p riir-refine-trainer` at their feature extremes. **Why inner CRATES beat root features (the owner's second question): root features would put the tier deps in the ROOT manifest, and feature unification + `--all-features` would pull serving into the core gates — crates keep the deps in the tier manifests where unification cannot reach the default posture.** Bin migration is part of the restructure: `fixer_regate` moves to the fixer crate, `kat_drain` to the trainer crate (their `required-features` travel with them; until moved, the root's KAT-surface-free claim rests on `required-features` keeping them off by default — stated, not hidden). The root as workspace root keeps the `[patch.crates-io]` vendor mirrors + profiles in one place — the tier crates inherit them for free.
+- **Tier bins are NATIVE-ONLY** — serving + GPU verify never join a wasm32 combo (the `hero_planner` posture).
 
-## The trust rule (owner, final form — bakes into both repos' BOUNDARY.md)
+## The superseded design (record — two new repos, replaced by the inner-crate shape above)
 
-**The trust boundary follows CODE OWNERSHIP, not node class.** The contributor cluster serves the **open-source class** + own-repo/donated/public-corpus work, accruing TUNA point weights. **Private-repo targets are the code owner's problem to host: our job is to provide the fixer CLI so they can run their own node** — self-hosted on their own hardware = zero egress to anyone. One binary, two postures: join the cluster (OSS → point weights) or self-host (private code). We never promise custody of proprietary code; we provide the tool that makes custody unnecessary. **"Open-source class" is a CHECKED property, fail-closed (verdict round 3): a target is OSS only if its remote is publicly reachable AND carries an OSI license, verified client-side BEFORE any network connection; anything unconfirmable is PRIVATE → self-host route. The check lives in the client (both repos inherit it).**
+The as-filed design was two new private repos (`riir-refine-fixer`, `riir-refine-trainer`) path-depping `../riir-refine`, with per-repo BOUNDARY.mds + dist repos. Superseded: the dist pipeline already owns distribution (separate source repos bought nothing), and the registration + sync + openness costs were real while the isolation benefit is reproduced by workspace members + `default-members`.
+
+## The trust rule (owner, final form — bakes into riir-refine's BOUNDARY.md tier rows + both tier crates' docs)
+
+**The trust boundary follows CODE OWNERSHIP, not node class.** The contributor cluster serves the **open-source class** + own-repo/donated/public-corpus work, accruing TUNA point weights. **Private-repo targets are the code owner's problem to host: our job is to provide the fixer CLI so they can run their own node** — self-hosted on their own hardware = zero egress to anyone. One binary, two postures: join the cluster (OSS → point weights) or self-host (private code). We never promise custody of proprietary code; we provide the tool that makes custody unnecessary. **"Open-source class" is a CHECKED property, fail-closed (verdict round 3): a target is OSS only if its remote is publicly reachable AND carries an OSI license, verified client-side BEFORE any network connection; anything unconfirmable is PRIVATE → self-host route. The check lives in the fixer crate (the trainer crate inherits it).**
 
 ## The credit rule (owner: "no KAT, only TUNA — read mozilla proposal properly")
 
 - **TUNA point weights ONLY in the Mozilla lane** — operator-batched cadence per Proposal 006's own law, weights owner-armed, never an agent lever. **Wording per Proposal 025 (line 47, binding): TUNA is "non-transferable, expiring reputation — never purchase, never token value"; and (line 139) no reward attached in the funded scope.** "Earning" language is banned from the Mozilla-facing surfaces — contributors ACCRUE point weights, they do not earn money. **No KAT surfaces in the grant-facing lane** — Proposal 025's posture (charitable installs carry no commercial credit; Posture A builds exclude kat surfaces per issue 190 T14; the points plane is design-disclosed, W0/Q1).
 - The **commercial KAT lane** (consumer pass-through pricing, mining rewards) is a separate surface, untouched by this composition — it rides the existing Proposal 005 economy when the owner arms it.
 
-## Owner acts (the checklist)
+## Owner acts (the checklist — re-scoped in-repo; the repo-creation acts DROPPED)
 
-- [ ] Create `riir-refine-fixer` (private, gist-rs), then `riir-refine-trainer` — with the 22-file registration op (`repo_set.txt` + the per-repo pins) in the same act
-- [ ] Root `BOUNDARY.md` for each (owns / does-not-own / allowlist: fixer = core + riir-llm + riir-infer + the TUNA-client class; trainer = fixer's + the kat/replay/corpus class)
-- [ ] Public dist repos per the Proposal 003 pattern (source stays private; installers ship from the dist repos; zero `.rs` in dist)
+- [ ] Restructure riir-refine to the root-package workspace: `crates/riir-refine-fixer/` + `crates/riir-refine-trainer/` members, `default-members = ["."]` (root = the core; tier builds explicit `-p`) — AND the gate re-pins from verdict round 4: root-scoped gates switch to `-p riir-refine` explicitly (`--workspace` overrides default-members), `fixer_regate` migrates to the fixer crate + `kat_drain` to the trainer crate, and any NEW sibling edge a tier adds gets a BOUNDARY.md row before it lands (shared Cargo.lock resolves all member path deps — the Issue 835 class)
+- [ ] riir-refine `BOUNDARY.md` §Owns: the two tier-crate rows + the allowlist rows (riir-llm; the TUNA-client class; riir-infer serving — already optional via `ternary_inference`)
+- [ ] The guard gains a tier layer: `-p riir-refine-fixer -p riir-refine-trainer` at their feature extremes (the root-scoped layers re-pin to `-p riir-refine` in the same act — see the restructure row)
+- [ ] Dist: the fixer binary ships as a new artifact from the EXISTING Proposal 003 dist repos (no new dist repos)
 - [ ] TUNA point-weight table + operator-batch cadence (owner-armed; non-transferable, expiring, never token value — Proposal 025 line 47 wording)
-- [ ] Feature gate: KAT surfaces in tier repos default-OFF, so a Mozilla-facing build carries none (the T14 discipline, carried up a layer)
+- [ ] Feature gate: KAT surfaces in the tier crates default-OFF, so a Mozilla-facing build carries none (the T14 discipline, carried up a layer)
 
 ## Open design questions (settle at execution)
 
-- The tier bins' identity: new bins in the tier repos composing core's library + tier crates; dist binary names follow the `cargo-refine` lineage (owner picks).
-- Versioning/release cadence per tier (independent tags; the `release_set_matches_workflow` pin pattern per repo).
+- The tier bins' identity: the fixer bin name (dist artifact name follows the `cargo-refine` lineage — owner picks).
+- The CI guard's tier layer: the tier crates' clippy/tests at their feature extremes; whether the `--workspace` sweep layers stay root-scoped so tier deps never slow the default posture.
 - Contributor onboarding UX rides the points-plane CLI surface (`join`/`leave`/`rank`/`info`/`corpus` — Proposal 025 W0) + the first-run consent law.
 - Q4 note: P0 runs Q4_K_M per owner; the trainer tier's prove leg replays on the VERIFIER's rig — the toolchain+model fingerprint skew rules already exist (Plan 127 lineage).
 - Self-host posture docs: a runbook for private-code owners (the "setup a private node themselves" path — hardware floor, model staging, the consent gate in local-only mode).
+- Tier bins are NATIVE-ONLY (serving + GPU verify) — never join a wasm32 combo (the `hero_planner` posture).
 
 ## Related
 
