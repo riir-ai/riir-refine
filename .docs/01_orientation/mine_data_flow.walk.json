@@ -2,7 +2,7 @@
  "gfflow_walk": 1,
  "generated_by": "reflex-site scripts/render_flows.py",
  "file": "mine_data_flow.svg",
- "title": "What mining sends: your fix spans leave signed, the network proves them, and proven pairs join the public corpus",
+ "title": "What contributing sends: your fix spans leave signed, the network proves them, and proven pairs join the public corpus",
  "accent": "#3fd68a",
  "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
  "steps": {
@@ -101,7 +101,7 @@
   },
   {
    "title": "One row per fix",
-   "text": "A mining row is the exact code span a fix replaced and its replacement, plus the rule name, a short numeric shape fingerprint and counters. File paths, crate names, repo URLs, git remotes and usernames are not fields. A span is your code verbatim, and one field may be up to 64 KiB — a long function a fix rewrote travels whole.",
+   "text": "A contribution row is the exact code span a fix replaced and its replacement, plus the rule name, a short numeric shape fingerprint and counters. File paths, crate names, repo URLs, git remotes and usernames are not fields. A span is your code verbatim, and one field may be up to 64 KiB — a long function a fix rewrote travels whole.",
    "steps": [
     "rows"
    ],

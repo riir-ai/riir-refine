@@ -62,7 +62,7 @@
  "walk": [
   {
    "title": "The unproven queue",
-   "text": "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Test network today.",
+   "text": "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Live on riir.ai.",
    "steps": [
     "q"
    ],
@@ -105,7 +105,7 @@
   },
   {
    "title": "Pays on the board",
-   "text": "Accepted work settles through the miner rows on the public board — the operator lane's earn path today, in public.",
+   "text": "Accepted work settles through the contributor rows on the public board — the operator lane's earn path today, in public.",
    "steps": [
     "pay"
    ],

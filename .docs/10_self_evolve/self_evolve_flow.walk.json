@@ -177,8 +177,8 @@
    }
   },
   {
-   "title": "The mining batch (opt-in)",
-   "text": "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what mining uploads before opting in.",
+   "title": "The contribution batch (opt-in)",
+   "text": "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what contributing uploads before opting in.",
    "steps": [
     "mine"
    ],
@@ -196,7 +196,7 @@
   },
   {
    "title": "Proof + payout",
-   "text": "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Test network today.",
+   "text": "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Live on riir.ai.",
    "steps": [
     "proof"
    ],

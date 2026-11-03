@@ -164,16 +164,16 @@ status = "live"
 [[step]]
 id = "proof"; n = "3"; lane = "fleet"; col = 2
 title = "Proof queue"; body = "rows are verified at a real clippy re-run"
-status = "test network"
+status = "riir.ai"
 [[step]]
 id = "pay"; n = "4a"; lane = "fleet"; col = 3
 title = "Points at the settle"; body = "the pool pays — contributing = processing, proven = paid"
-status = "test network"
+status = "riir.ai"
 tag = { text = "never re-gated", color = "ai" }
 [[step]]
 id = "grow"; n = "4b"; lane = "fleet"; col = 4
 title = "The corpus grows"; body = "the network's observed pattern classes"
-status = "test network"
+status = "riir.ai"
 
 [[edge]]
 from = "join"; to = "bat"
@@ -197,11 +197,11 @@ steps = ["bat"]
 in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one contribution batch (published sample)" }
 [[walk]]
 title = "Proof queue"
-text  = "On push, rows enter the proof queue and are verified only at a real clippy re-run on the queue's own fixture — a verdict is measured, never trusted from the client. Test network today."
+text  = "On push, rows enter the proof queue and are verified only at a real clippy re-run on the queue's own fixture — a verdict is measured, never trusted from the client. Live on riir.ai."
 steps = ["proof"]
 [[walk]]
 title = "Points at the settle"
-text  = "The epoch settle pays the pool to contributors (contributing = processing, proven = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Test network today."
+text  = "The epoch settle pays the pool to contributors (contributing = processing, proven = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Live on riir.ai."
 steps = ["pay"]
 [[walk]]
 title = "The corpus grows — and leases back"
@@ -251,7 +251,7 @@ id = "rig"; label = "Your rig"; note = "the max tier · designed"; color = "refi
 [[step]]
 id = "q"; n = "1"; lane = "fleet"; col = 0
 title = "Unproven queue"; body = "pushed rows await proof"
-status = "test network"
+status = "riir.ai"
 [[step]]
 id = "drain"; n = "2a"; lane = "ops"; col = 1
 title = "The drain lane"; body = "hosted LLM drafts · cap-guarded · redaction-gated"
@@ -267,7 +267,7 @@ title = "The gates"; body = "compile gate + the real clippy oracle"
 status = "live"
 [[step]]
 id = "pay"; n = "4"; lane = "fleet"; col = 3
-title = "Pays on the board"; body = "accepted work settles through the miner rows"
+title = "Pays on the board"; body = "accepted work settles through the contributor rows"
 status = "live"
 
 [[edge]]
@@ -283,7 +283,7 @@ from = "gates"; to = "pay"
 
 [[walk]]
 title = "The unproven queue"
-text  = "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Test network today."
+text  = "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Live on riir.ai."
 steps = ["q"]
 [[walk]]
 title = "The operator's drain lane (live today)"
@@ -300,7 +300,7 @@ text  = "Every candidate, whichever lane drafted it, passes the same two gates: 
 steps = ["gates"]
 [[walk]]
 title = "Pays on the board"
-text  = "Accepted work settles through the miner rows on the public board — the operator lane's earn path today, in public."
+text  = "Accepted work settles through the contributor rows on the public board — the operator lane's earn path today, in public."
 steps = ["pay"]
 ```
 
@@ -397,94 +397,7 @@ is the full spec):
   machines are outside the economy — the lite tier's free-forever is a
   design property, not a promo.
 
-### The economy render source (renders `kat_economy_flow.svg`)
-
-The money loop as one figure — the trust section's companion on
-`refine.riir.ai/#trust`. The meter branches on which tank pays (TUNA
-trial credit is terminal: trial burns fund nothing and expire); every
-KAT burn funds the next epoch's pool, the settle pays the fleet, and
-the corpus leases back to close the loop. The split itself is NOT drawn
-as numbers — the live split renders from parameters on the pages; the
-figure names where the money lands, never a typed percentage.
-
-```gfflow
-file  = "kat_economy_flow.svg"
-title = "The KAT economy: the meter runs locally, burns fund the pool, the settle pays the fleet — and the corpus leases back"
-accent = "refine"
-
-[[lane]]
-id = "me"; label = "Your machine"; note = "the meter runs locally"; color = "refine"
-[[lane]]
-id = "led"; label = "The ledger"; note = "every burn, public"; color = "ai"
-[[lane]]
-id = "flt"; label = "Miners"; note = "the fleet that earns"; color = "ai"
-
-[[step]]
-id = "meter"; n = "1"; lane = "me"; col = 0
-title = "The run is metered"; body = "counts code-word tokens; logged out = never billed"
-status = "live"
-[[step]]
-id = "tuna"; n = "2a"; lane = "led"; col = 1
-title = "TUNA pays first"; body = "where funded: one grant · 30 days, expires"
-status = "test network"
-[[step]]
-id = "kat"; n = "2b"; lane = "led"; col = 2
-title = "KAT pays"; body = "after the trial — metered totals, signed"
-status = "test network"
-[[step]]
-id = "pool"; n = "3"; lane = "led"; col = 3
-title = "The mining pool"; body = "every KAT burn funds the next epoch's rewards"
-status = "test network"
-[[step]]
-id = "settle"; n = "4"; lane = "flt"; col = 4
-title = "The settle pays"; body = "rows mint — mining = processing, minted = paid"
-status = "test network"
-[[step]]
-id = "lease"; n = "5"; lane = "me"; col = 5
-title = "The lease-back"; body = "the fleet corpus refreshes every machine"
-status = "test network"
-
-[[edge]]
-from = "meter"; to = "tuna"; label = "trial credit left"
-[[edge]]
-from = "meter"; to = "kat"; label = "after TUNA · logged in"
-[[edge]]
-from = "kat"; to = "pool"; label = "burns"
-[[edge]]
-from = "pool"; to = "settle"; label = "the epoch closes"
-[[edge]]
-from = "settle"; to = "lease"; label = "the corpus grows"
-[[edge]]
-from = "lease"; to = "meter"; back = true; label = "every machine refines better"
-
-[[walk]]
-title = "The run is metered"
-text  = "The meter counts code-word tokens on your machine and bills a fixed µ rate per million. Logged out, nothing is billed anywhere — anonymous is outside the economy by design. Offline, the burn is a local commit; the next run pushes the cumulative total."
-steps = ["meter"]
-[[walk]]
-title = "TUNA pays first"
-text  = "Where the deployment funds trial credit, the server draws TUNA first — one grant per account, thirty days, heals only. Trial burns fund nothing and expired credit is inert; the public TUNA counters show the reservoir. Test network today."
-steps = ["tuna"]
-[[walk]]
-title = "KAT pays"
-text  = "After the trial (or where it is not funded), KAT pays — metered totals, signed, watermark-deduped so replays are no-ops. No debt exists: the server clamps warn-and-pay and never goes negative. Test network today."
-steps = ["kat"]
-[[walk]]
-title = "Every burn funds the pool"
-text  = "Each KAT burn is split by the network's published parameters — mostly into the next epoch's mining pool. The live split renders from parameters on the leaderboard and the explorer; the figure names where the money lands, never a typed percentage."
-steps = ["pool"]
-[[walk]]
-title = "The settle pays"
-text  = "The once-per-epoch settle fixes each miner's share of the pool and mints it (mining = processing, minted = paid), with mint receipts in public. Test network today."
-steps = ["settle"]
-[[walk]]
-title = "The lease-back"
-text  = "The fleet corpus every machine leases back — the newest row of the recorded corpus history: rules per domain, today. The wheel closes where it started: your next run retrieves more."
-steps = ["lease"]
-out   = { lang = "json", src = "data/flows/kat_economy/01_corpus.json", label = "the fleet corpus per domain" }
-```
-
-## What mining sends (the data path, request to public corpus)
+## What contributing sends (the data path, request to public corpus)
 
 The trust section's answer to "what leaves my machine when I mine, and
 who sees it" (riir-dapps Plan 046, `refine.riir.ai/#mining-data`). Three
@@ -500,7 +413,7 @@ network must read a row to re-run clippy on it.
 
 ```gfflow
 file  = "mine_data_flow.svg"
-title = "What mining sends: your fix spans leave signed, the network proves them, and proven pairs join the public corpus"
+title = "What contributing sends: your fix spans leave signed, the network proves them, and proven pairs join the public corpus"
 accent = "refine"
 
 [[lane]]
@@ -529,20 +442,20 @@ status = "live"
 [[step]]
 id = "post"; n = "4b"; lane = "net"; col = 1
 title = "Sent over HTTPS"; body = "the signed batch; the server checks the key"
-status = "test network"
+status = "riir.ai"
 tag = { text = "signed, not encrypted", color = "ai" }
 [[step]]
 id = "proof"; n = "5"; lane = "net"; col = 2
 title = "Proof queue"; body = "a real clippy re-run confirms the fix"
-status = "test network"
+status = "riir.ai"
 [[step]]
 id = "pub"; n = "6"; lane = "pub"; col = 2
 title = "Public corpus"; body = "proven before/after pairs, downloadable"
-status = "test network"
+status = "riir.ai"
 [[step]]
 id = "lease"; n = "7"; lane = "me"; col = 2
 title = "Lease back"; body = "downloads the corpus for your next run"
-status = "test network"
+status = "riir.ai"
 
 [[edge]]
 from = "run"; to = "rows"
@@ -567,7 +480,7 @@ text  = "`cargo refine --fix` runs on your machine and keeps only fixes that sti
 steps = ["run"]
 [[walk]]
 title = "One row per fix"
-text  = "A mining row is the exact code span a fix replaced and its replacement, plus the rule name, a short numeric shape fingerprint and counters. File paths, crate names, repo URLs, git remotes and usernames are not fields. A span is your code verbatim, and one field may be up to 64 KiB — a long function a fix rewrote travels whole."
+text  = "A contribution row is the exact code span a fix replaced and its replacement, plus the rule name, a short numeric shape fingerprint and counters. File paths, crate names, repo URLs, git remotes and usernames are not fields. A span is your code verbatim, and one field may be up to 64 KiB — a long function a fix rewrote travels whole."
 steps = ["rows"]
 [[walk]]
 title = "Secret scan + sign"
@@ -619,7 +532,6 @@ and the leaderboard stays honest about that.
 | [`role_miner_flow.svg`](role_miner_flow.svg) + `_m` | the miner gfflow block | Get started › miner |
 | [`role_fixer_flow.svg`](role_fixer_flow.svg) + `_m` | the fixer gfflow block | Get started › fixer |
 | [`role_trainer_flow.svg`](role_trainer_flow.svg) + `_m` | the trainer gfflow block | Get started › trainer |
-| [`kat_economy_flow.svg`](kat_economy_flow.svg) + `_m` | the economy gfflow block | the pricing section (`#buy`) |
 | [`mine_data_flow.svg`](mine_data_flow.svg) + `_m` | the mining data-path gfflow block | the trust section (`#mining-data`) |
 
 Each is rendered from this doc's own ` ```gfflow ` block by
@@ -636,7 +548,7 @@ needs no id-suffixing.
 
 Each block also carries a **walk** (the step-through, design guide §8.4).
 Its IN/OUT payloads live in the kat-service tree
-(`cloudflare/kat-service/src/data/flows/{role_miner,kat_economy}/`),
+(`cloudflare/kat-service/src/data/flows/role_miner/`),
 derived from recorded captures by `riir-dapps
 scripts/build_flow_walks.py` — never typed; steps with no committed
 capture stay payload-less. The no-JS fallback the worker serves is

@@ -68,16 +68,16 @@ status = "live"
 [[step]]
 id = "mine"; n = "6b.1"; lane = "fleet"; col = 4
 title = "Contribution batch"; body = "opt-in: redacted records queue to leave"
-status = "test network"
+status = "riir.ai"
 tag = { text = "opt-in · off by default", color = "refine" }
 [[step]]
 id = "proof"; n = "6b.2"; lane = "fleet"; col = 5
 title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays points"
-status = "test network"
+status = "riir.ai"
 [[step]]
 id = "lse"; n = "7"; lane = "lease"; col = 1
 title = "Leased corpus"; body = "the fleet corpus refreshes retrieval on every machine"
-status = "test network"
+status = "riir.ai"
 
 [[edge]]
 from = "scan"; to = "ret"
@@ -126,7 +126,7 @@ text  = "Learning is measured, not claimed: after corpus and memory changes the 
 steps = ["learn"]
 out   = { lang = "json", src = "data/flows/self_evolve/01_learn.json", label = "one recorded score-bench row" }
 [[walk]]
-title = "The mining batch (opt-in)"
+title = "The contribution batch (opt-in)"
 text  = "Only with consent do redacted records queue to leave: rule verdicts plus the short snippets each fix touched, secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch — inspect what contributing uploads before opting in."
 steps = ["mine"]
 in    = { lang = "json", src = "data/flows/self_evolve/02_batch.json", label = "one contribution batch (published sample)" }
