@@ -13,10 +13,10 @@
   "rust_perf": {
     "benchable": 125,
     "categories": 14,
-    "notbenchable": 167,
-    "rules": 292
+    "notbenchable": 168,
+    "rules": 293
   },
   "sec": {
-    "rules": 35
+    "rules": 38
   }
 }

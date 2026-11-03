@@ -644,4 +644,27 @@ impl EntityTable {
 }
 "#,
     ),
+    (
+        "batch-reserve-monotonic-counters-offload-bulk",
+        r#"pub struct Sender {
+    next_nonce: Mutex<u64>,
+}
+
+impl Sender {
+    // one synchronized trip PER PACKET on the sending thread: each item
+    // waits for its own lock round-trip before any worker can start it
+    pub fn send_batch(&self, packets: &[Vec<u8>]) -> Vec<u64> {
+        packets
+            .iter()
+            .map(|p| {
+                let mut n = self.next_nonce.lock().unwrap();
+                let nonce = *n;
+                *n = n.checked_add(1).expect("nonce exhausted");
+                encrypt(p, nonce) // the bulk work never leaves this thread
+            })
+            .collect()
+    }
+}
+"#,
+    ),
 ];

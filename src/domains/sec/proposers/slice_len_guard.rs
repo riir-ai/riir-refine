@@ -30,7 +30,7 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, File};
 
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut walker = Walker {

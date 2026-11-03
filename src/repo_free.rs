@@ -225,7 +225,7 @@ mod tests {
     #[test]
     fn the_disclosure_is_none_while_billable() {
         let dir = scratch("nodisclose");
-        assert!(verdict(&dir) == RepoFree::Billable);
+        assert_eq!(verdict(&dir), RepoFree::Billable);
         std::fs::remove_dir_all(&dir).expect("cleanup");
     }
 }

@@ -254,6 +254,27 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 327 (2026-11-03) — the sanstun trio: secret lifetime, cardinality, checkpoint bypass
+
+Three suggest-only rules from the firezone/sanstun distill (Research 364,
+Plan 332, Apache-2.0 @ `35cb1932` — a sans-IO WireGuard protocol
+implementation in Rust; the fixtures are ORIGINAL syntheses, never sanstun
+source). ALL NotBenchable-by-domain (correctness/security axes, never
+latency — the dial9 split):
+
+| Rule | Family | Shape |
+|---|---|---|
+| `secret-key-without-zeroize` | `CryptoHygiene` | a struct in the secret vocabulary (Key/Secret/Seed/Token/Password/Credential as underscore segments) holding RAW key material (`[u8; N]`/`Vec<u8>`/`String`) with no Drop impl and no zeroization wrapper keeps secret bytes alive in freed memory (heap spray, core dumps, swap). Fix: `Zeroizing::new(..)` or `Zeroize`/`ZeroizeOnDrop`. DEP-GATED on a zeroize import (the constant-time-secret-compare shape — the suggestion cannot break the build). DISTINCT-FROM `constant-time-secret-compare` IN-RULE: that owns the COMPARE primitive (timing leak at comparison), this the LIFETIME/ERASE axis (bytes persisting after drop) — CryptoHygiene's first lifetime member. Source anchor: keys.rs 'An X25519 static private key, zeroized on drop.' over `Zeroizing<[u8; 32]>` fields; Zeroizing wraps owned key material in 8 source files. Detector `zeroize_secret::detect` |
+| `untrusted-keyed-state-unbounded` | `InputValidation` | the resource-exhaustion family's CARDINALITY face: a HashMap/HashSet keyed by peer-derived distinct keys (addr/ip/peer/session/device/tenant/origin/client/conn vocabulary) growing via insert with NO cap guard admits a many-keys memory DoS — one adversarial peer family minting distinct keys exhausts memory. The fix shape (the source's own): a bounded table + FAIL-CLOSED refusal of NEW keys when full (`const MAX_SOURCES: usize = 65536;` + `if self.buckets.len() >= MAX_SOURCES { return false; }` before insert — eviction would reward the attacker by admitting them over honest entries; the source's test name says it: `full_table_refuses_new_sources_until_idle_ones_are_dropped`). DISTINCT-FROM `length-prefix-validate-before-alloc` + `unbounded-read-into-vec` IN-RULE: those own the VOLUME faces (one length → one alloc; one stream → one growing buffer), this the CARDINALITY face (many distinct keys → unbounded entry count). Detector `keyed_state_cap::detect` |
+| `gateway-type-forces-security-check` | `InputValidation` | a security-relevant message/handler type with PUBLIC constructors lets any caller synthesize inputs and bypass the gateway's checkpoint (rate limit, MAC verification, replay check) — the checks exist but are skippable. Fix: crate-private constructors + the gateway type as the only producer, so the dangerous handler is UNREACHABLE without passing the checkpoint. Source anchor: message.rs — every message-type constructor crate-private, the only public consumption `ReceivedMessage` produced by `Interface::receive` (mac1 ct_eq → under-load window → cookie → rate_limiter.allow); the source doc: 'Messages can only be obtained through that method and cannot be cloned or constructed directly.' DISTINCT-FROM `client-ip-from-untrusted-forwarded-header` IN-RULE: that owns rate-limit KEY SPOOFING (untrusted header as key), this CHECKPOINT BYPASS via constructor reachability. Honest recall limits: 'which handler is security-relevant' is vocabulary-gated, cross-file gateway relationships invisible — policy-class suggest-only, the SSRF-rule shape. Detector `gateway_ctor::detect` |
+
+The verdict's fifth candidate (`reject-before-expensive-sink`, the
+pre-decryption replay check) DROPPED at T0: the buggy direction requires
+INVENTING the check (nobody writes decrypt-then-replay-check — the B258
+recorded-drop class); the admission-before-work genus is owned by
+`batch-load-admission-sized-from-files-refuses-past-the-hard-budget`
+(rust_perf entries_47) and its family.
+
 ## Batch 325 (2026-11-02) — the uniffi-rs FFI-hygiene quartet
 
 Four suggest-only rules from the mozilla/uniffi-rs distill (Research 361,
@@ -406,6 +427,12 @@ proposer.
   defined in-fixture) so the boundary-gate probe crate compiles. Workspace
   sweep: `examples/softmax_collapse_sweep.rs` (read-only; hits recorded in
   the issue).
+- Batch 327 (2026-11-03): corpus 35 → 38 (7 fixable + 31 suggest-only;
+  the sanstun distill, Plan 332 / Research 364) — 3 detectors joined;
+  retrieval floors re-measured at the landing; freeze NOT owed
+  (clippy-seeded corpus unmoved); binary rebuild OWED at the landing HEAD
+  (rust_perf IS release-set — the batch's rust_perf half rides the same
+  rebuild; sec itself is not release-set).
 - Batch 325 (2026-11-02): corpus 31 → 35 (7 fixable + 28 suggest-only;
   the uniffi-rs FFI-hygiene distill, Plan 327) — sec self-variants 35/35
   top-1, router annotation (full seven-domain arm) re-pinned 84/195 →

@@ -381,7 +381,7 @@ impl LoginClaim {
     }
 }
 ";
-        assert!(findings(&src).is_empty(), "no gateway fn, no fire");
+        assert!(findings(src).is_empty(), "no gateway fn, no fire");
     }
 
     #[test]
@@ -409,7 +409,7 @@ impl Gate {
     }
 }
 ";
-        assert!(findings(&src).is_empty(), "no check tokens in the body");
+        assert!(findings(src).is_empty(), "no check tokens in the body");
     }
 
     #[test]
@@ -438,7 +438,7 @@ impl Store {
 }
 ";
         assert!(
-            findings(&src).is_empty(),
+            findings(src).is_empty(),
             "the struct name misses the vocabulary"
         );
     }
@@ -465,7 +465,7 @@ pub fn authorize(claim: &LoginClaim, budget: &mut u32) -> bool {
     true
 }
 ";
-        assert!(findings(&src).is_empty(), "a free fn is not a gateway");
+        assert!(findings(src).is_empty(), "a free fn is not a gateway");
     }
 
     #[test]
@@ -527,7 +527,7 @@ impl Gateway {
 }
 ";
         assert!(
-            findings(&src).is_empty(),
+            findings(src).is_empty(),
             "the wrapper enum is not the struct"
         );
     }

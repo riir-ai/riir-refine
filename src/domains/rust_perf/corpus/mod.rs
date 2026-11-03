@@ -9,7 +9,9 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 292 entries across 14 categories as of Batch 324 (+3: io — the sccache
+//! 293 entries across 14 categories as of Batch 327 (+1: concurrency —
+//! `batch-reserve-monotonic-counters-offload-bulk`, the firezone/sanstun
+//! distill (Plan 332 / Research 364, `entries_59`); prior: 292 at Batch 324 (+3: io — the sccache
 //! distill (Plan 328 / Research 362, `entries_58`); prior: 289 at Batch 318 (+2: concurrency
 //! +1 `generation-counter-stale-timer-invalidation` + io +1
 //! `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
@@ -711,14 +713,18 @@ mod entries_55;
 mod entries_56;
 mod entries_57;
 mod entries_58;
+mod entries_59;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 292 entries
-/// (Batch 318, 2026-10-30, Plan 318 / Research 356: +2 -- the impeccable
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 293 entries
+/// (Batch 327, 2026-11-03, Plan 332 / Research 364: +1 -- the firezone/
+/// sanstun distill, `entries_59`: `batch-reserve-monotonic-counters-
+/// offload-bulk`, concurrency, NotBenchable-annotated; prior: Batch 318,
+/// 2026-10-30, Plan 318 / Research 356: +2 -- the impeccable
 /// io stretch-tier remainder, `entries_56` (plan 316's `- [-]` rows):
 /// the generation-counter timer law + the exclusive-mkdir reservation
 /// law, both ANNOTATED `NotBenchable`; PRIOR-STATE NOTE: this fn doc's
@@ -875,5 +881,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_56::entries());
     entries.extend(entries_57::entries());
     entries.extend(entries_58::entries());
+    entries.extend(entries_59::entries());
     Corpus::new(entries)
 }
