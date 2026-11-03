@@ -17,12 +17,19 @@ corpus: kernel_opt 1051 (+29 since the v0.3.5 build) — rust_perf 293 (+15) · 
   consent or network. The first run asks ONCE: join, share anonymously under
   a random client UUID, or never send. `RIIR_REFINE_OFFLINE=1` kills every
   network lane (air-gapped users supported).
-- **New verbs: `join` / `leave` (+ hidden `left` alias) / `rank` / `info` /
-  `corpus` / `version`.** `join` = policy accept + GitHub device flow (the
-  minimal `read:user` scope — proving who you are, never write scope) + the
-  signed contribution binding. `rank` is joined-only (anonymous = local
-  stats + the named reason: no rotating-identity farming of the board).
-  Anonymous callers get public top-ten only.
+- **Verb-first CLI: `cargo refine fix` and `cargo refine scan`.** `fix`
+  is the verb form of the fixer (the `--fix` flag stays as an alias);
+  `scan` is the secret-blind scan (the `--secret-scan` flag alias —
+  same scanner, report-only, values never shown; `scan --blind <file>`
+  renders safe-to-share text). Bare `cargo refine` stays the free dry
+  run.
+- **New contribution verbs: `join` / `leave` (+ hidden `left` alias) /
+  `rank` / `info` / `corpus` / `version`.** `join` = policy accept +
+  GitHub device flow (the minimal `read:user` scope — proving who you
+  are, never write scope) + the signed contribution binding. `rank` is
+  joined-only (anonymous = local stats + the named reason: no
+  rotating-identity farming of the board). Anonymous callers get public
+  top-ten only.
 - **Contribution points, not tokens.** Points are non-transferable, expiring
   reputation (the balance decays for ranking; contribution history and the
   MIT corpus are permanent). No purchase, no KAT for users, no speculation —
