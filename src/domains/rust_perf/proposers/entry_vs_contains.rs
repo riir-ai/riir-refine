@@ -28,7 +28,7 @@ use quote::ToTokens;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt, UnOp};
 
-use super::{SourceEdit, count_ident_occurrences, edit, src};
+use super::{count_ident_occurrences, edit, src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // The statement can nest anywhere (match-arm blocks, closures, loop
@@ -209,51 +209,43 @@ mod tests {
 
     #[test]
     fn multi_stmt_then_unchanged() {
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) {\n    \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) {\n    \
              if !map.contains_key(&k) { map.insert(k, 1); map.insert(k + 1, 2); }\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn with_else_unchanged() {
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) -> u32 {\n    \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) -> u32 {\n    \
              if !map.contains_key(&k) { map.insert(k, 1); } else { return 2; }\n    0\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn positive_form_unchanged() {
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) {\n    \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(map: &mut std::collections::HashMap<u32, u32>, k: u32) {\n    \
              if map.contains_key(&k) { map.insert(k, 1); }\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn mismatched_receivers_unchanged() {
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(a: &mut std::collections::HashMap<u32, u32>, b: &mut \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(a: &mut std::collections::HashMap<u32, u32>, b: &mut \
              std::collections::HashMap<u32, u32>, k: u32) {\n    \
              if !a.contains_key(&k) { b.insert(k, 1); }\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
@@ -271,28 +263,24 @@ mod tests {
         // The value references the receiver: `vocab.entry(key).or_insert(
         // vocab.len())` is E0502 — entry() holds the &mut borrow while
         // vocab.len() needs &. Found live in katgpt-rs datrie_01_bench.
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(vocab: &mut std::collections::HashMap<Vec<u8>, usize>) {\n    \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(vocab: &mut std::collections::HashMap<Vec<u8>, usize>) {\n    \
              let key = vec![1u8];\n    \
              if !vocab.contains_key(&key) { vocab.insert(key, vocab.len()); }\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn key_borrows_receiver_stays() {
         // Same E0502 class on the key side: entry(map.len()) borrows
         // immutably while entry() holds &mut.
-        assert!(
-            propose_fix(
-                "entry-vs-contains-insert",
-                "fn f(map: &mut std::collections::HashMap<usize, u32>) {\n    \
+        assert!(propose_fix(
+            "entry-vs-contains-insert",
+            "fn f(map: &mut std::collections::HashMap<usize, u32>) {\n    \
              if !map.contains_key(&map.len()) { map.insert(map.len(), 1); }\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 }

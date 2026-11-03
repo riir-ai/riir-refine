@@ -60,11 +60,11 @@ use std::collections::BTreeMap;
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, ImplItemFn, ItemFn, Macro};
 
-use super::SourceEdit;
 use super::helpers::{byte_range, scalar_param_heads_over};
 use super::uninlined_format_args::{
-    Placeholder, classify_placeholder, has_dynamic_spec_ref, template_and_post_template_args,
+    classify_placeholder, has_dynamic_spec_ref, template_and_post_template_args, Placeholder,
 };
+use super::SourceEdit;
 
 /// The scalar annotations whose Display-blanket `to_string` is structural
 /// (`scalar_param_heads_over` yields `&str`/`&String` for the ref forms).

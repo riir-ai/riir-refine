@@ -10,7 +10,7 @@
 //! body moves nothing, so `.unwrap_or(x)` uses it identically.
 
 use super::helpers::{is_postfix_safe, is_pure_expr};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 

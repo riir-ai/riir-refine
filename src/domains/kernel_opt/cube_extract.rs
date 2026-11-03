@@ -320,11 +320,9 @@ mod tests {
         assert_eq!(names(&items), ["gelu"]);
         assert!(items[0].launch);
         assert!(items[0].text.starts_with("#[cube(launch_unchecked)]"));
-        assert!(
-            items[0]
-                .text
-                .contains("#[cfg(all(feature = \"cubecl_runtime\", test))]")
-        );
+        assert!(items[0]
+            .text
+            .contains("#[cfg(all(feature = \"cubecl_runtime\", test))]"));
         assert!(items[0].text.ends_with('}'));
     }
 

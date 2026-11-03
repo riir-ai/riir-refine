@@ -141,8 +141,8 @@ fn entries() -> Vec<DistRule> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domains::dist::rules::{scan_source_with, DIST_RULES};
     use crate::domains::dist::DistContext;
-    use crate::domains::dist::rules::{DIST_RULES, scan_source_with};
 
     #[test]
     fn rule_ids_unique_and_kebab() {
@@ -220,11 +220,9 @@ mod tests {
         let buggy =
             "[package]\nname = \"m\"\n\n[[bin]]\nname = \"m\"\n\n[profile.release]\nstrip = true\n";
         let findings = scan_source_with(buggy, ctx);
-        assert!(
-            findings
-                .iter()
-                .any(|f| f.rule_id == "member-profile-ignored")
-        );
+        assert!(findings
+            .iter()
+            .any(|f| f.rule_id == "member-profile-ignored"));
         // A virtual root (workspace, no package/bin) is silent even with the
         // evidence flag — nothing ships from it.
         let root = "[workspace]\nmembers = [\"m\"]\n";

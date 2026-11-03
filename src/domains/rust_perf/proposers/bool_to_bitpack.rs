@@ -21,7 +21,7 @@
 
 use syn::{Expr, File, FnArg, Pat, Stmt, Type};
 
-use super::{SourceEdit, edit};
+use super::{edit, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
@@ -184,49 +184,41 @@ mod tests {
     #[test]
     fn vec_param_unchanged() {
         // `&Vec<bool>` is a different type — out of scope.
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &Vec<bool>) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &Vec<bool>) -> usize {\n    \
                  flags.iter().filter(|&&b| b).count()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn mut_slice_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &mut [bool]) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &mut [bool]) -> usize {\n    \
                  flags.iter().filter(|&&b| b).count()\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn extra_body_stmts_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &[bool]) -> usize {\n    let n = \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &[bool]) -> usize {\n    let n = \
                  flags.iter().filter(|&&b| b).count();\n    n + 1\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn different_method_chain_unchanged() {
-        assert!(
-            propose_fix(
-                "bool-to-bitpack",
-                "fn f(flags: &[bool]) -> usize {\n    \
+        assert!(propose_fix(
+            "bool-to-bitpack",
+            "fn f(flags: &[bool]) -> usize {\n    \
                  flags.iter().position(|&&b| b).unwrap_or(0)\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 }

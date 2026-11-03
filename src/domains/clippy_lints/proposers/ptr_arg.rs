@@ -24,7 +24,7 @@
 //! `&mut` forms refused (the family fixture is the shared-ref shape and the
 //! mut twin interacts with reborrow analysis).
 
-use super::{SourceEdit, edit, for_each_fn, src};
+use super::{edit, for_each_fn, src, SourceEdit};
 use syn::{File, Signature, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.

@@ -56,7 +56,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprMethodCall, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{SourceEdit, edit};
+use super::{edit, SourceEdit};
 
 /// The proven types whose `.clone()` is a semantic no-op: every scalar
 /// primitive plus the shared-reference spellings the scalar derivation
@@ -229,13 +229,11 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -272,13 +270,11 @@ mod tests {
     fn clone_on_string_refuses() {
         // `String` is not Copy — the derivation refuses by construction
         // (`redundant_clone`'s territory, never ours).
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, s: String) -> String { hits.push(0); s.clone() }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, s: String) -> String { hits.push(0); s.clone() }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -305,24 +301,20 @@ mod tests {
     #[test]
     fn args_method_refuses() {
         // `clone` with an argument is not the no-arg Clone method.
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.clone(1) }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.clone(1) }",
+        )
+        .is_none());
     }
 
     #[test]
     fn comment_in_span_refuses() {
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x /* keep */ .clone() }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x /* keep */ .clone() }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -395,50 +387,42 @@ mod tests {
     fn ufcs_wrong_type_path_refuses() {
         // `u64::clone(&x)` where x is u32 — the path names a DIFFERENT type
         // than the proven one; refuse (conservative).
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); u64::clone(&x) }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); u64::clone(&x) }",
+        )
+        .is_none());
     }
 
     #[test]
     fn ufcs_by_ref_arg_refuses() {
         // `Clone::clone(s)` with `s: &str` — a by-ref argument spelling,
         // not `&ident`; refuse (narrower than clippy by design).
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(s) }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(s) }",
+        )
+        .is_none());
     }
 
     #[test]
     fn ufcs_double_ref_arg_refuses() {
         // `Clone::clone(&s)` with `s: &str` — `&s` is `&&str`; the
         // by-value-Copy derivation does not cover it.
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(&s) }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, s: &str) -> &str { hits.push(0); Clone::clone(&s) }",
+        )
+        .is_none());
     }
 
     #[test]
     fn ufcs_mut_ref_arg_refuses() {
-        assert!(
-            propose_fix(
-                "clone_on_copy",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); Clone::clone(&mut x) }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "clone_on_copy",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); Clone::clone(&mut x) }",
+        )
+        .is_none());
     }
 
     #[test]

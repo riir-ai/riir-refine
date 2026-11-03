@@ -39,7 +39,7 @@
 //! non-block bodies are braced.
 
 use super::helpers::{byte_range, drops_interior_comment, is_postfix_safe, is_unit_expr};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Lit, Pat, Stmt};

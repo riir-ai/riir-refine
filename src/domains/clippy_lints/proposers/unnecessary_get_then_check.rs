@@ -51,7 +51,7 @@ use syn::visit::Visit;
 use syn::{Expr, File};
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {

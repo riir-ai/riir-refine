@@ -103,15 +103,15 @@ pub struct MirroredPair {
 pub fn top_level_fns(arm_src: &str) -> Vec<(String, String)> {
     let mut out = Vec::new();
     for line in arm_src.lines() {
-        let rest = line.strip_prefix("pub fn ").or_else(|| line.strip_prefix("fn "));
+        let rest = line
+            .strip_prefix("pub fn ")
+            .or_else(|| line.strip_prefix("fn "));
         let Some(rest) = rest else { continue };
-        let Some(paren) = rest.find('(') else { continue };
+        let Some(paren) = rest.find('(') else {
+            continue;
+        };
         let name = rest[..paren].trim();
-        if name.is_empty()
-            || !name
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        {
+        if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
             continue; // generics (`fn f<T>(`) and where-clauses stay unbenchable
         }
         let Some(close_rel) = rest[paren..].find(')') else {
@@ -164,10 +164,12 @@ fn synth_param(param: &str, idx: usize) -> Option<ArgGen> {
     // and loop bounds like `0..n` stay inside the slice. Both arms receive
     // the SAME values, so the A/B comparison is unaffected. The arithmetic
     // happens IN the target integer type, so no narrowing cast is owed.
-    let int_salt_u =
-        |base: u32| (base.wrapping_add(u32::try_from(idx).unwrap_or(0).wrapping_mul(0x9E37_79B9)) % 48) + 4;
-    let int_salt_s =
-        |base: i32| (base.wrapping_add(i32::try_from(idx).unwrap_or(0).wrapping_mul(0x0013_79B9)) % 48) + 4;
+    let int_salt_u = |base: u32| {
+        (base.wrapping_add(u32::try_from(idx).unwrap_or(0).wrapping_mul(0x9E37_79B9)) % 48) + 4
+    };
+    let int_salt_s = |base: i32| {
+        (base.wrapping_add(i32::try_from(idx).unwrap_or(0).wrapping_mul(0x0013_79B9)) % 48) + 4
+    };
     Some(match ty {
         "&[u8]" => ArgGen("&INPUT_BYTES".to_string()),
         "&[f32]" => ArgGen("&INPUT_F32".to_string()),
@@ -296,14 +298,18 @@ pub fn bench_source(rule: &KernelRule, pairs: &[MirroredPair]) -> String {
     }
     s.push_str("use std::hint::black_box;\nuse std::time::Instant;\n\n");
     s.push_str("const INPUT_BYTES8: [u8; 8] = [0x1F, 0x2E, 0x3D, 0x4C, 0x5B, 0x6A, 0x79, 0x88];\n");
-    s.push_str("const fn input_byte(i: usize) -> u8 { (i.wrapping_mul(7).wrapping_add(i / 13)) as u8 }\n");
+    s.push_str(
+        "const fn input_byte(i: usize) -> u8 { (i.wrapping_mul(7).wrapping_add(i / 13)) as u8 }\n",
+    );
     s.push_str("const fn build_bytes() -> [u8; 4096] { let mut out = [0u8; 4096]; let mut i = 0; while i < 4096 { out[i] = input_byte(i); i += 1; } out }\n");
     s.push_str("const fn build_f32() -> [f32; 4096] { let mut out = [0f32; 4096]; let mut i = 0; while i < 4096 { out[i] = ((i % 251) as f32) * 0.125 - 15.0; i += 1; } out }\n");
     s.push_str("const fn build_f64() -> [f64; 4096] { let mut out = [0f64; 4096]; let mut i = 0; while i < 4096 { out[i] = ((i % 241) as f64) * 0.0625 - 7.5; i += 1; } out }\n");
     s.push_str("static INPUT_BYTES: [u8; 4096] = build_bytes();\n");
     s.push_str("static INPUT_F32: [f32; 4096] = build_f32();\n");
     s.push_str("static INPUT_F64: [f64; 4096] = build_f64();\n");
-    s.push_str("const INPUT_STR: &str = \"the quick brown fox jumps over the lazy dog 0123456789\";\n\n");
+    s.push_str(
+        "const INPUT_STR: &str = \"the quick brown fox jumps over the lazy dog 0123456789\";\n\n",
+    );
     // The G1 pair shape: ref at the crate root, opt in a bridged module.
     s.push_str(&ref_text);
     s.push('\n');
@@ -617,8 +623,7 @@ fn read_of(p: &std::path::Path) -> String {
 #[must_use]
 pub fn run_g2() -> (Vec<TrancheFile>, Vec<RuleG2>) {
     let files = tranche();
-    let file_set: std::collections::HashSet<&str> =
-        files.iter().map(|f| f.file.as_str()).collect();
+    let file_set: std::collections::HashSet<&str> = files.iter().map(|f| f.file.as_str()).collect();
     let mut rules = Vec::new();
     for (file, entries) in goat_g1::per_file_entries_for_tranche() {
         if !file_set.contains(file.as_str()) {

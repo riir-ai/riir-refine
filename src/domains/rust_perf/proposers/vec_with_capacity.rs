@@ -69,7 +69,7 @@
 //! Span-preserving: the edit replaces exactly the `Vec::new()` init text;
 //! the capacity fragment is the ORIGINAL source text of the inferred node.
 
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprLit, File, Lit, Local, Pat, RangeLimits, Signature, Stmt};
@@ -786,41 +786,35 @@ mod tests {
     fn later_let_bound_skipped() {
         // G5 scope-gate: the capacity text would land BEFORE `min_regions`'s
         // `let` (E0425) — the katgpt-pruners bfcp_region_cache shape.
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn build(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(a: &[u32], b: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
              let m = a.len().min(b.len());\n    for i in 0..m { v.push(a[i]); }\n    v\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn later_let_bound_len_form_skipped() {
         // Same scope gate for the LenOf form (`&items` where `items` is a
         // later `let`) — the katgpt-pruners reflection.rs shape.
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn build(pairs: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(pairs: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
              let items: Vec<u32> = pairs.to_vec();\n    for x in &items { v.push(*x); }\n    v\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn non_usize_param_bound_skipped() {
         // G5 usize gate: `n: u32` is a plain path that is provably NOT usize.
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn build(n: u32) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(n: u32) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
              for i in 0..n { v.push(i); }\n    v\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
@@ -828,25 +822,21 @@ mod tests {
         // `cfg.count()` is not parse-only-provably usize (G5 usize gate) —
         // the katgpt-pruners map_generator `num_floors.saturating_sub(1)`
         // class: arithmetic on a plain-path receiver.
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn build(cfg: &Cfg) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn build(cfg: &Cfg) -> Vec<u32> {\n    let mut v = Vec::new();\n    \
              for i in 0..cfg.count() { v.push(i as u32); }\n    v\n}",
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn no_loop_leaves_unchanged() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f() { let mut v = Vec::new(); v.push(1); }"
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f() { let mut v = Vec::new(); v.push(1); }"
+        )
+        .is_none());
     }
 
     #[test]
@@ -864,37 +854,31 @@ mod tests {
 
     #[test]
     fn shadowing_stops_scan() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    let mut v = \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f(items: &[u32]) -> Vec<u32> {\n    let mut v = Vec::new();\n    let mut v = \
              Vec::new();\n    for x in items { v.push(*x); }\n    v\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]
     fn already_with_capacity_unchanged() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f(n: usize) -> Vec<u32> { let mut v = Vec::with_capacity(n); v }"
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f(n: usize) -> Vec<u32> { let mut v = Vec::with_capacity(n); v }"
+        )
+        .is_none());
     }
 
     #[test]
     fn nonzero_range_start_skipped() {
-        assert!(
-            propose_fix(
-                "vec-with-capacity",
-                "fn f(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 1..n { \
+        assert!(propose_fix(
+            "vec-with-capacity",
+            "fn f(n: usize) -> Vec<u32> {\n    let mut v = Vec::new();\n    for i in 1..n { \
              v.push(i as u32); }\n    v\n}"
-            )
-            .is_none()
-        );
+        )
+        .is_none());
     }
 
     #[test]

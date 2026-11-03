@@ -12,7 +12,7 @@
 //! Span-preserving (T6.4): the whole `while` expr's byte range is replaced
 //! by `for <binding> in <IT> <body>` (body = the block's own source text).
 
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprLet, ExprMethodCall, ExprWhile, File, Ident, Pat, PatIdent};
 

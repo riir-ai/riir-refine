@@ -490,6 +490,6 @@ pub fn run_fixed(input: &[u32]) {
     std::hint::black_box(walk_interleaved(input));
 }
 "#
-            .to_string(),
+        .to_string(),
     }
 }

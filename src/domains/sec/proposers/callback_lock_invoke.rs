@@ -521,7 +521,7 @@ mod tests {
 
     #[test]
     fn buggy_invoke_under_lock_fires() {
-        let src = r#"use std::sync::Mutex;
+        let src = r"use std::sync::Mutex;
 trait Cb { fn invoke(&self, poll: u32); }
 struct State { cb: Option<Box<dyn Cb>> }
 fn poll(state: &Mutex<State>, poll_num: u32) {
@@ -530,7 +530,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
         cb.invoke(poll_num);
     }
 }
-"#;
+";
         let f = findings(src);
         assert_eq!(f.len(), 1, "the invoke-under-guard shape fires");
         assert_eq!(f[0].fn_name, "poll");
@@ -539,7 +539,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
 
     #[test]
     fn extract_then_invoke_silent() {
-        let src = r#"use std::sync::Mutex;
+        let src = r"use std::sync::Mutex;
 trait Cb { fn invoke(&self, poll: u32); }
 struct State { cb: Option<Box<dyn Cb>> }
 fn poll(state: &Mutex<State>, poll_num: u32) {
@@ -548,7 +548,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
         cb.invoke(poll_num);
     }
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "the guard is a temporary in the let-init — nothing live to hold"
@@ -557,7 +557,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
 
     #[test]
     fn explicit_drop_guard_silent() {
-        let src = r#"use std::sync::Mutex;
+        let src = r"use std::sync::Mutex;
 trait Cb { fn invoke(&self, poll: u32); }
 struct State { cb: Option<Box<dyn Cb>> }
 fn poll(state: &Mutex<State>, poll_num: u32) {
@@ -566,7 +566,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
     drop(g);
     cb.invoke(poll_num);
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "the guard is released before the invoke (gate a)"
@@ -575,7 +575,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
 
     #[test]
     fn inner_scope_separate_silent() {
-        let src = r#"use std::sync::Mutex;
+        let src = r"use std::sync::Mutex;
 trait Cb { fn invoke(&self, poll: u32); }
 struct State { cb: Option<Box<dyn Cb>> }
 fn poll(state: &Mutex<State>, poll_num: u32) {
@@ -585,7 +585,7 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
     };
     cb.invoke(poll_num);
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "the guard never leaves its inner block (gate b)"
@@ -594,17 +594,17 @@ fn poll(state: &Mutex<State>, poll_num: u32) {
 
     #[test]
     fn no_lock_silent() {
-        let src = r#"trait Cb { fn invoke(&self, x: u32); }
+        let src = r"trait Cb { fn invoke(&self, x: u32); }
 fn run(cb: &dyn Cb, x: u32) {
     cb.invoke(x);
 }
-"#;
+";
         assert!(findings(src).is_empty(), "no lock call, no rule (gate e)");
     }
 
     #[test]
     fn test_mod_skipped() {
-        let src = r#"use std::sync::Mutex;
+        let src = r"use std::sync::Mutex;
 #[cfg(test)]
 mod tests {
     fn poll(state: &Mutex<u8>) {
@@ -612,7 +612,7 @@ mod tests {
         g.invoke_all();
     }
 }
-"#;
+";
         assert!(findings(src).is_empty(), "fixture habitat stays silent");
     }
 
@@ -632,7 +632,7 @@ fn nudge(state: &Mutex<Waker>, waker: &Waker) {
 
     /// The corpus fixtures (returned with the rule entry) fire/stay-silent
     /// here so the corpus entry and the detector can never drift apart.
-    const CORPUS_BUGGY: &str = r#"use std::sync::Mutex;
+    const CORPUS_BUGGY: &str = r"use std::sync::Mutex;
 trait Invoke { fn invoke(&self, poll: u32); }
 struct Scheduler { cb: Mutex<Option<Box<dyn Invoke>>> }
 impl Scheduler {
@@ -643,9 +643,9 @@ impl Scheduler {
         }
     }
 }
-"#;
+";
 
-    const CORPUS_FIXED: &str = r#"use std::sync::Mutex;
+    const CORPUS_FIXED: &str = r"use std::sync::Mutex;
 trait Invoke { fn invoke(&self, poll: u32); }
 struct Scheduler { cb: Mutex<Option<Box<dyn Invoke>>> }
 impl Scheduler {
@@ -656,7 +656,7 @@ impl Scheduler {
         }
     }
 }
-"#;
+";
 
     #[test]
     fn corpus_fixtures_fire_and_stay_silent() {

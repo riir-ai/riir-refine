@@ -34,7 +34,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use super::driver::{FixCompileReport, MissRecord};
-use crate::dispersion::{OutcomeClass, PoolEntry, from_counts, frontier_order};
+use crate::dispersion::{from_counts, frontier_order, OutcomeClass, PoolEntry};
 use crate::recorder::EvolveRecorder;
 
 /// Trajectory bucket key: `"{code}:{strategy_id}"` (the plan's
@@ -277,7 +277,11 @@ pub fn parse_miss_code(file_name: &str) -> Option<&str> {
     }
     let idx = stem.rfind('-')?;
     let code = &stem[..idx];
-    if code.is_empty() { None } else { Some(code) }
+    if code.is_empty() {
+        None
+    } else {
+        Some(code)
+    }
 }
 
 /// Aggregate per-code outcome counts from trajectory rows
@@ -679,14 +683,12 @@ mod tests {
         let (written, warns) = dump_misses(&root, std::slice::from_ref(&m));
         assert!(warns.is_empty(), "{warns:?}");
         assert_eq!(written.len(), 1);
-        assert!(
-            written[0]
-                .file_name()
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .starts_with("E0502-")
-        );
+        assert!(written[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .starts_with("E0502-"));
         let body = std::fs::read_to_string(&written[0]).unwrap();
         assert!(
             body.contains("error[E0502]...rendered"),
@@ -697,12 +699,11 @@ mod tests {
             body.contains("**component:** E (corpus/proposer)"),
             "Issue 047 attribution line present: {body}"
         );
-        assert!(
-            root.join(".refine")
-                .join("misses")
-                .join("README.md")
-                .exists()
-        );
+        assert!(root
+            .join(".refine")
+            .join("misses")
+            .join("README.md")
+            .exists());
 
         // Second dump: README NOT rewritten (idempotent), new entry lands.
         let m2 = miss("E0499");

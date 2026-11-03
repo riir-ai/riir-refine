@@ -21,7 +21,7 @@
 //! the method call binds tighter.
 
 use super::helpers::{int_lit, is_postfix_safe};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprMethodCall, File};
 

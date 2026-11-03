@@ -27,7 +27,7 @@
 //! Vec/slice/array all deref to `[T]::fill`.
 
 use super::helpers::{drops_interior_comment, is_postfix_safe, is_pure_expr};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprAssign, ExprForLoop, ExprPath, File, Pat, Stmt, UnOp};

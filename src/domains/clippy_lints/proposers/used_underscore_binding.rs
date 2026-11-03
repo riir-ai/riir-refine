@@ -116,7 +116,7 @@ impl Census {
     fn record_binding(&mut self, name: &str, range: std::ops::Range<usize>) {
         let Some(scope) = self.scopes.last_mut() else {
             return; // a pattern outside any fn (const closures, trait
-            // default bodies) — not our shape, silently skipped
+                    // default bodies) — not our shape, silently skipped
         };
         match scope.iter_mut().find(|c| c.name == name) {
             Some(c) => c.bindings.push(range),

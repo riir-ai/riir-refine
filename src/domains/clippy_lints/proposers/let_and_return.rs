@@ -30,7 +30,7 @@
 //! position (clippy `MachineApplicable` on this shape).
 
 use super::helpers::count_binding_occurrences;
-use super::{SourceEdit, delete_stmt_edit, edit, for_each_fn, src};
+use super::{delete_stmt_edit, edit, for_each_fn, src, SourceEdit};
 use syn::{Expr, File, Ident, Pat, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.

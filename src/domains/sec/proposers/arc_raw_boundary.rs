@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn buggy_waker_forget_fires() {
-        let src = r#"
+        let src = r"
 struct InstinctWaker;
 
 unsafe fn clone_waker(ptr: *const InstinctWaker) {
@@ -699,7 +699,7 @@ unsafe fn clone_waker(ptr: *const InstinctWaker) {
     let waker = unsafe { Arc::<InstinctWaker>::from_raw(ptr) };
     std::mem::forget(waker);
 }
-"#;
+";
         let f = findings(src);
         let forget = f
             .iter()
@@ -722,13 +722,13 @@ unsafe fn clone_waker(ptr: *const InstinctWaker) {
 
     #[test]
     fn buggy_double_from_raw_fires() {
-        let src = r#"
+        let src = r"
 unsafe fn double_consume(ptr: *const VaultShard) {
     let a = unsafe { Arc::from_raw(ptr) };
     let b = unsafe { Arc::from_raw(ptr) };
     drop((a, b));
 }
-"#;
+";
         let f = findings(src);
         assert_eq!(
             f.len(),
@@ -742,13 +742,13 @@ unsafe fn double_consume(ptr: *const VaultShard) {
 
     #[test]
     fn buggy_increment_before_consume_fires() {
-        let src = r#"
+        let src = r"
 unsafe fn overcount_take(ptr: *const VaultShard) {
     Arc::increment_strong_count(ptr);
     let shard = unsafe { Arc::from_raw(ptr) };
     drop(shard);
 }
-"#;
+";
         let f = findings(src);
         assert_eq!(
             f.len(),
@@ -761,13 +761,13 @@ unsafe fn overcount_take(ptr: *const VaultShard) {
 
     #[test]
     fn legitimate_into_raw_roundtrip_silent() {
-        let src = r#"
+        let src = r"
 fn custody_transfer(shard: Arc<VaultShard>) -> usize {
     let ptr = Arc::into_raw(shard);
     let back = unsafe { Arc::from_raw(ptr) };
     Arc::into_raw(back) as usize
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "gate (a): the into_raw round-trip suppresses the whole fn"
@@ -776,12 +776,12 @@ fn custody_transfer(shard: Arc<VaultShard>) -> usize {
 
     #[test]
     fn legitimate_single_consume_silent() {
-        let src = r#"
+        let src = r"
 unsafe fn consume_once(ptr: *const VaultShard) {
     let shard = unsafe { Arc::from_raw(ptr) };
     drop(shard);
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "the benign single consume never fires"
@@ -790,19 +790,19 @@ unsafe fn consume_once(ptr: *const VaultShard) {
 
     #[test]
     fn manuallydrop_custody_silent() {
-        let src = r#"
+        let src = r"
 unsafe fn held_shard(ptr: *const VaultShard) {
     let held = ManuallyDrop::new(unsafe { Arc::from_raw(ptr) });
     Arc::increment_strong_count(ptr);
     let _ = &*held;
 }
-"#;
+";
         assert!(findings(src).is_empty(), "the custody marker suppresses");
     }
 
     #[test]
     fn test_mod_skipped() {
-        let src = r#"
+        let src = r"
 #[cfg(test)]
 mod custody_tests {
     unsafe fn clone_waker(ptr: *const InstinctWaker) {
@@ -811,13 +811,13 @@ mod custody_tests {
         std::mem::forget(waker);
     }
 }
-"#;
+";
         assert!(findings(src).is_empty(), "fixture habitat stays silent");
     }
 
     #[test]
     fn fixed_both_arms_stay_silent() {
-        let src = r#"
+        let src = r"
 struct InstinctWaker;
 
 unsafe fn clone_waker(ptr: *const InstinctWaker) {
@@ -830,7 +830,7 @@ unsafe fn consume_waker(ptr: *mut InstinctWaker) {
     let owned: Arc<InstinctWaker> = Arc::from_raw(ptr);
     drop(owned);
 }
-"#;
+";
         assert!(
             findings(src).is_empty(),
             "both fixed arms (borrowed increment+deref, single from_raw) stay silent"

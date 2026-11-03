@@ -44,7 +44,7 @@ use syn::visit::Visit;
 use syn::{Arm, ExprMatch, File, Pat};
 
 use super::helpers::{byte_range, drops_interior_comment, pattern_free};
-use super::{SourceEdit, src};
+use super::{src, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {

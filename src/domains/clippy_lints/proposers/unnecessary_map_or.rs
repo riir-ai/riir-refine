@@ -44,8 +44,8 @@
 use std::collections::HashMap;
 
 use super::helpers::{bool_lit, is_postfix_safe, macro_expr_args};
-use super::receiver_kind::{ReceiverKind, ScopeKinds, classify_receiver, collect_fn_rets};
-use super::{SourceEdit, edit, src};
+use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 

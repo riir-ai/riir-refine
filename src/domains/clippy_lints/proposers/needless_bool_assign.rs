@@ -16,7 +16,7 @@
 //! sits inside the statement span and is swallowed with it).
 
 use super::helpers::{bool_lit, contains_let, needs_logic_parens};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprAssign, ExprIf, File, Stmt};
 

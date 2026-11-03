@@ -226,8 +226,7 @@ impl NarrowedKernelIndex {
     ) -> Result<Self, String> {
         // The merged zone lookup, walked in corpus order through the SAME
         // row definition the flat build uses — identical semantics.
-        let mut zone_lookup: HashMap<[u8; 32], String> =
-            HashMap::with_capacity(patterns.len() * 2);
+        let mut zone_lookup: HashMap<[u8; 32], String> = HashMap::with_capacity(patterns.len() * 2);
         for (rule_id, text) in patterns {
             for content in significant_lines(text) {
                 zone_lookup.insert(
@@ -312,7 +311,8 @@ impl NarrowedKernelIndex {
                 }
                 slice.retrieve_scored_into(trimmed, &mut scratch.retrieved);
             }
-            self.tail.retrieve_scored_into(trimmed, &mut scratch.retrieved);
+            self.tail
+                .retrieve_scored_into(trimmed, &mut scratch.retrieved);
         }
         merge_retrieved_best(
             &self.zone_lookup,
@@ -373,9 +373,7 @@ mod tests {
 
         let mut scratch = SuggestScratch::default();
         let code = "fn kernel_step(p: *mut f32, n: usize) {\n    let tile = p.add(n);\n    *tile = 0.0;\n}";
-        let first = idx
-            .suggest_deep_into(code, 5, &mut scratch)
-            .to_vec();
+        let first = idx.suggest_deep_into(code, 5, &mut scratch).to_vec();
         assert!(!first.is_empty(), "narrowed retrieval returns candidates");
         // Deterministic: a fresh call (same scratch) replays byte-identical.
         let second = idx.suggest_deep_into(code, 5, &mut scratch).to_vec();
@@ -399,9 +397,8 @@ mod tests {
 
     #[test]
     fn scratch_capacities_stabilize_across_calls() {
-        let idx =
-            NarrowedKernelIndex::build(&seed_patterns(), RetrievalConfig::default())
-                .expect("narrowed index builds");
+        let idx = NarrowedKernelIndex::build(&seed_patterns(), RetrievalConfig::default())
+            .expect("narrowed index builds");
         let mut scratch = SuggestScratch::default();
         let code = "fn kernel_step(p: *mut f32, n: usize) {\n    let tile = p.add(n);\n    *tile = 0.0;\n}";
         let _ = idx.suggest_deep_into(code, 5, &mut scratch);

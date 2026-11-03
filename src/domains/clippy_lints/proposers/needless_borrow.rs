@@ -33,7 +33,7 @@
 //! (`retrieval_eval::clean_spans_fire_no_lint`).
 
 use super::helpers::is_postfix_safe;
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, ExprReference, File};
 

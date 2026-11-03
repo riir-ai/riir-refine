@@ -26,7 +26,7 @@
 use super::rules::{self, ScanContext};
 
 // Shared emitter substrate (re-exported like the other domains' proposers).
-pub use crate::edit_emitter::{RuleEdit, SourceEdit, apply_edits};
+pub use crate::edit_emitter::{apply_edits, RuleEdit, SourceEdit};
 
 pub use super::rules::FIXABLE_DOCKER;
 

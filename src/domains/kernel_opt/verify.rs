@@ -131,8 +131,7 @@ impl KernelVerifier {
         if !result.parses {
             return KernelVerifyResult::ran_with(false);
         }
-        let g1_backed =
-            crate::domains::kernel_opt::corpus::goat_g1::g1_opt_backed(code);
+        let g1_backed = crate::domains::kernel_opt::corpus::goat_g1::g1_opt_backed(code);
         KernelVerifyResult {
             compiles: true,
             ran: true,
@@ -206,8 +205,7 @@ mod tests {
         // A draft byte-identical to a G1-green rule's opt side is g1_backed;
         // the same draft perturbed by one byte loses the backing (the digest
         // law, fail-closed) but stays parse-valid.
-        let corpus =
-            crate::domains::kernel_opt::corpus::build_kernel_seed_corpus();
+        let corpus = crate::domains::kernel_opt::corpus::build_kernel_seed_corpus();
         let v = KernelVerifier::new();
         let backed = corpus
             .entries

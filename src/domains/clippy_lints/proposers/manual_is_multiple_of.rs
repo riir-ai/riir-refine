@@ -46,7 +46,7 @@
 //! Refused like `comparison_to_empty`'s `is_empty` twin.
 
 use super::helpers::{int_lit, is_postfix_safe};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, ExprLit, File, Lit};
 

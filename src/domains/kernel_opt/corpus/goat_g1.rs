@@ -152,8 +152,7 @@ impl G1Census {
 /// The corpus directory on disk (compile-time anchor — the census reads the
 /// crate's own source, so the population cannot drift with the CWD).
 fn corpus_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/domains/kernel_opt/corpus")
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/domains/kernel_opt/corpus")
 }
 
 /// Count `#[test]` token occurrences in raw text.
@@ -188,7 +187,7 @@ pub fn structural_census() -> std::io::Result<G1Census> {
         let tokens = count_test_tokens(&text);
         census.per_file.push(FileCensus {
             file: name,
-            rules: 0, // not a text-level property
+            rules: 0,                               // not a text-level property
             fixture_rules: usize::from(tokens > 0), // file-level flag
             test_tokens: tokens,
         });
@@ -217,8 +216,8 @@ pub fn extracted_census() -> G1Census {
         let mut fixture_rules = 0usize;
         let mut tokens = 0usize;
         for rule in &entries {
-            let arm_tokens = count_test_tokens(&rule.ref_shape)
-                + count_test_tokens(&rule.opt_pattern);
+            let arm_tokens =
+                count_test_tokens(&rule.ref_shape) + count_test_tokens(&rule.opt_pattern);
             if arm_tokens > 0 {
                 fixture_rules += 1;
             }
@@ -257,45 +256,158 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
     // build_kernel_seed_corpus() in the SAME commit — the census comparison
     // fails loud on divergence, by the ratified anti-circularity law.
     let mut all = batch![
-        entries_gpu_38, entries_gpu_39, entries_gpu_40, entries_gpu_41,
-        entries_gpu_42, entries_gpu_43, entries_gpu_44, entries_gpu_45,
-        entries_gpu_46, entries_gpu_47, entries_gpu_48, entries_gpu_49,
-        entries_gpu_50, entries_gpu_51, entries_gpu_52, entries_gpu_53,
-        entries_gpu_54, entries_gpu_55, entries_gpu_56, entries_gpu_57,
-        entries_gpu_58, entries_gpu_59, entries_gpu_60, entries_gpu_61,
-        entries_gpu_62, entries_gpu_63, entries_gpu_64, entries_gpu_65,
-        entries_gpu_66, entries_gpu_67, entries_gpu_68, entries_gpu_69,
-        entries_gpu_70, entries_gpu_71, entries_gpu_72, entries_gpu_73,
-        entries_gpu_74, entries_gpu_75, entries_gpu_76, entries_gpu_77,
-        entries_gpu_78, entries_gpu_79, entries_gpu_80, entries_gpu_81,
-        entries_gpu_82, entries_gpu_83, entries_gpu_84, entries_gpu_85,
-        entries_gpu_86, entries_gpu_87, entries_gpu_88, entries_gpu_89,
-        entries_gpu_90, entries_gpu_91, entries_gpu_92, entries_gpu_93,
-        entries_gpu_94, entries_gpu_95, entries_gpu_96, entries_gpu_97,
-        entries_gpu_98, entries_gpu_99, entries_gpu_100, entries_gpu_101,
-        entries_gpu_102, entries_gpu_103, entries_gpu_104, entries_gpu_105,
-        entries_gpu_106, entries_gpu_107, entries_gpu_108, entries_gpu_109,
-        entries_gpu_110, entries_gpu_111, entries_gpu_112, entries_gpu_113,
-        entries_gpu_114, entries_gpu_115, entries_gpu_116, entries_gpu_117,
-        entries_gpu_118, entries_gpu_119, entries_gpu_120, entries_gpu_121,
-        entries_gpu_122, entries_gpu_123, entries_gpu_124, entries_gpu_125,
-        entries_gpu_126, entries_gpu_127, entries_gpu_128, entries_gpu_129,
-        entries_gpu_130, entries_gpu_131, entries_gpu_132, entries_gpu_133,
-        entries_gpu_134, entries_gpu_135, entries_gpu_136, entries_gpu_137,
-        entries_gpu_138, entries_gpu_139, entries_gpu_140, entries_gpu_141,
-        entries_gpu_142, entries_gpu_143, entries_gpu_144, entries_gpu_145,
-        entries_gpu_146, entries_gpu_147, entries_gpu_37, entries_gpu_36,
-        entries_gpu_01, entries_gpu_02, entries_gpu_03, entries_gpu_04,
-        entries_gpu_05, entries_gpu_06, entries_gpu_07, entries_gpu_08,
-        entries_gpu_09, entries_gpu_10, entries_gpu_11, entries_gpu_12,
-        entries_gpu_13, entries_gpu_14, entries_gpu_15, entries_gpu_16,
-        entries_gpu_17, entries_gpu_18, entries_gpu_19, entries_gpu_20,
-        entries_gpu_21, entries_gpu_22, entries_gpu_23, entries_gpu_24,
-        entries_gpu_25, entries_gpu_26, entries_gpu_27, entries_gpu_28,
-        entries_gpu_29, entries_gpu_30, entries_gpu_31, entries_gpu_32,
-        entries_gpu_33, entries_gpu_34, entries_gpu_35,
+        entries_gpu_38,
+        entries_gpu_39,
+        entries_gpu_40,
+        entries_gpu_41,
+        entries_gpu_42,
+        entries_gpu_43,
+        entries_gpu_44,
+        entries_gpu_45,
+        entries_gpu_46,
+        entries_gpu_47,
+        entries_gpu_48,
+        entries_gpu_49,
+        entries_gpu_50,
+        entries_gpu_51,
+        entries_gpu_52,
+        entries_gpu_53,
+        entries_gpu_54,
+        entries_gpu_55,
+        entries_gpu_56,
+        entries_gpu_57,
+        entries_gpu_58,
+        entries_gpu_59,
+        entries_gpu_60,
+        entries_gpu_61,
+        entries_gpu_62,
+        entries_gpu_63,
+        entries_gpu_64,
+        entries_gpu_65,
+        entries_gpu_66,
+        entries_gpu_67,
+        entries_gpu_68,
+        entries_gpu_69,
+        entries_gpu_70,
+        entries_gpu_71,
+        entries_gpu_72,
+        entries_gpu_73,
+        entries_gpu_74,
+        entries_gpu_75,
+        entries_gpu_76,
+        entries_gpu_77,
+        entries_gpu_78,
+        entries_gpu_79,
+        entries_gpu_80,
+        entries_gpu_81,
+        entries_gpu_82,
+        entries_gpu_83,
+        entries_gpu_84,
+        entries_gpu_85,
+        entries_gpu_86,
+        entries_gpu_87,
+        entries_gpu_88,
+        entries_gpu_89,
+        entries_gpu_90,
+        entries_gpu_91,
+        entries_gpu_92,
+        entries_gpu_93,
+        entries_gpu_94,
+        entries_gpu_95,
+        entries_gpu_96,
+        entries_gpu_97,
+        entries_gpu_98,
+        entries_gpu_99,
+        entries_gpu_100,
+        entries_gpu_101,
+        entries_gpu_102,
+        entries_gpu_103,
+        entries_gpu_104,
+        entries_gpu_105,
+        entries_gpu_106,
+        entries_gpu_107,
+        entries_gpu_108,
+        entries_gpu_109,
+        entries_gpu_110,
+        entries_gpu_111,
+        entries_gpu_112,
+        entries_gpu_113,
+        entries_gpu_114,
+        entries_gpu_115,
+        entries_gpu_116,
+        entries_gpu_117,
+        entries_gpu_118,
+        entries_gpu_119,
+        entries_gpu_120,
+        entries_gpu_121,
+        entries_gpu_122,
+        entries_gpu_123,
+        entries_gpu_124,
+        entries_gpu_125,
+        entries_gpu_126,
+        entries_gpu_127,
+        entries_gpu_128,
+        entries_gpu_129,
+        entries_gpu_130,
+        entries_gpu_131,
+        entries_gpu_132,
+        entries_gpu_133,
+        entries_gpu_134,
+        entries_gpu_135,
+        entries_gpu_136,
+        entries_gpu_137,
+        entries_gpu_138,
+        entries_gpu_139,
+        entries_gpu_140,
+        entries_gpu_141,
+        entries_gpu_142,
+        entries_gpu_143,
+        entries_gpu_144,
+        entries_gpu_145,
+        entries_gpu_146,
+        entries_gpu_147,
+        entries_gpu_37,
+        entries_gpu_36,
+        entries_gpu_01,
+        entries_gpu_02,
+        entries_gpu_03,
+        entries_gpu_04,
+        entries_gpu_05,
+        entries_gpu_06,
+        entries_gpu_07,
+        entries_gpu_08,
+        entries_gpu_09,
+        entries_gpu_10,
+        entries_gpu_11,
+        entries_gpu_12,
+        entries_gpu_13,
+        entries_gpu_14,
+        entries_gpu_15,
+        entries_gpu_16,
+        entries_gpu_17,
+        entries_gpu_18,
+        entries_gpu_19,
+        entries_gpu_20,
+        entries_gpu_21,
+        entries_gpu_22,
+        entries_gpu_23,
+        entries_gpu_24,
+        entries_gpu_25,
+        entries_gpu_26,
+        entries_gpu_27,
+        entries_gpu_28,
+        entries_gpu_29,
+        entries_gpu_30,
+        entries_gpu_31,
+        entries_gpu_32,
+        entries_gpu_33,
+        entries_gpu_34,
+        entries_gpu_35,
     ];
-    let popcorn = (String::from("entries_popcorn"), super::entries_popcorn::entries());
+    let popcorn = (
+        String::from("entries_popcorn"),
+        super::entries_popcorn::entries(),
+    );
     all.insert(0, popcorn);
     all
 }
@@ -336,8 +448,11 @@ const CENSUS_DELTA_PINS: &[(&str, usize, &str)] = &[
 pub fn compare(raw: &G1Census, extracted: &G1Census) -> Result<(), String> {
     let raw_by: std::collections::HashMap<&str, &FileCensus> =
         raw.per_file.iter().map(|f| (f.file.as_str(), f)).collect();
-    let ext_by: std::collections::HashMap<&str, &FileCensus> =
-        extracted.per_file.iter().map(|f| (f.file.as_str(), f)).collect();
+    let ext_by: std::collections::HashMap<&str, &FileCensus> = extracted
+        .per_file
+        .iter()
+        .map(|f| (f.file.as_str(), f))
+        .collect();
     let mut problems = Vec::new();
     for f in &raw.per_file {
         match ext_by.get(f.file.as_str()) {
@@ -356,7 +471,10 @@ pub fn compare(raw: &G1Census, extracted: &G1Census) -> Result<(), String> {
                     ));
                     continue;
                 };
-                match CENSUS_DELTA_PINS.iter().find(|(name, _, _)| name == &f.file) {
+                match CENSUS_DELTA_PINS
+                    .iter()
+                    .find(|(name, _, _)| name == &f.file)
+                {
                     Some((_, expected, reason)) => {
                         if measured != *expected {
                             problems.push(format!(
@@ -473,7 +591,10 @@ pub fn pair_digest(ref_src: &str, opt_src: &str) -> String {
 /// rule's opt side inherits that rule's standing record).
 #[must_use]
 pub fn opt_digest(opt_src: &str) -> String {
-    blake3::Hasher::new().update(opt_src.as_bytes()).finalize().to_string()
+    blake3::Hasher::new()
+        .update(opt_src.as_bytes())
+        .finalize()
+        .to_string()
 }
 
 /// One row of the committed verdict store.
@@ -489,10 +610,7 @@ pub struct G1StatusRow {
 }
 
 #[allow(clippy::trivially_copy_pass_by_ref)] // serde's serialize_with hands &T
-fn serialize_record<S: serde::Serializer>(
-    r: &G1Record,
-    s: S,
-) -> Result<S::Ok, S::Error> {
+fn serialize_record<S: serde::Serializer>(r: &G1Record, s: S) -> Result<S::Ok, S::Error> {
     let name = match r {
         G1Record::Green => "green",
         G1Record::Fail => "fail",
@@ -535,7 +653,9 @@ pub fn status_rows(report: &G1Report) -> Vec<G1StatusRow> {
 /// A write failure is the caller's loud error.
 pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::Result<()> {
     use std::fmt::Write as _;
-    let mut out = String::from("# g1_status v1 — generated by kernel_goat_g1 --emit-status; do not hand-edit\n");
+    let mut out = String::from(
+        "# g1_status v1 — generated by kernel_goat_g1 --emit-status; do not hand-edit\n",
+    );
     for row in status_rows(report) {
         let status = match row.status {
             G1Record::Green => "green",
@@ -550,9 +670,11 @@ pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::
 
 /// The parsed store, keyed by `rule_id` (digests live in the value). Built
 /// once per process; keys borrow the committed static text.
-fn status_table() -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
-    static TABLE: std::sync::OnceLock<std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>> =
-        std::sync::OnceLock::new();
+fn status_table(
+) -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
+    static TABLE: std::sync::OnceLock<
+        std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>,
+    > = std::sync::OnceLock::new();
     TABLE.get_or_init(|| {
         let mut map = std::collections::HashMap::new();
         for line in G1_STATUS_TABLE.lines() {
@@ -736,7 +858,11 @@ pub fn per_file_entries_for_tranche() -> Vec<(String, Vec<KernelRule>)> {
 fn rustc_version() -> String {
     std::process::Command::new("rustc")
         .arg("--version")
-        .output().map_or_else(|_| "rustc unavailable".to_string(), |o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .output()
+        .map_or_else(
+            |_| "rustc unavailable".to_string(),
+            |o| String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        )
 }
 
 /// Spawn + poll with output to FILES (the G1 law: a large child stderr
@@ -746,10 +872,12 @@ fn rustc_version() -> String {
 /// # Errors
 /// A spawn/`try_wait` failure, a `File::create` failure, or the timeout
 /// firing — named in the `String`.
-pub fn run_with_timeout(mut cmd: std::process::Command, timeout: std::time::Duration,
-    out_path: &std::path::Path, err_path: &std::path::Path,
-) -> Result<std::process::ExitStatus, String>
-{
+pub fn run_with_timeout(
+    mut cmd: std::process::Command,
+    timeout: std::time::Duration,
+    out_path: &std::path::Path,
+    err_path: &std::path::Path,
+) -> Result<std::process::ExitStatus, String> {
     // std has no timeout on Command::output; spawn + poll, with output going
     // to FILES (a large rustc stderr through a pipe would fill the 64 KiB
     // buffer, block the child, and read as a false TIMEOUT).
@@ -768,10 +896,7 @@ pub fn run_with_timeout(mut cmd: std::process::Command, timeout: std::time::Dura
                 if start.elapsed() > timeout {
                     let _ = child.kill();
                     let _ = child.wait();
-                    return Err(format!(
-                        "timeout after {}s",
-                        timeout.as_secs_f64().round()
-                    ));
+                    return Err(format!("timeout after {}s", timeout.as_secs_f64().round()));
                 }
                 std::thread::sleep(std::time::Duration::from_millis(25));
             }
@@ -794,7 +919,9 @@ fn tail(s: &str, max: usize) -> String {
     } else {
         let cut = s.len() - max;
         // avoid splitting a UTF-8 boundary
-        let cut = (cut..s.len()).find(|&i| s.is_char_boundary(i)).unwrap_or(s.len());
+        let cut = (cut..s.len())
+            .find(|&i| s.is_char_boundary(i))
+            .unwrap_or(s.len());
         format!("…{}", &s[cut..])
     }
 }
@@ -818,11 +945,7 @@ fn pair_source(ref_src: &str, opt_src: &str) -> String {
 /// Compile ONE arm standalone (the per-arm fallback posture) and run its
 /// embedded tests (`rustc --edition 2021 --test`).
 #[allow(clippy::too_many_lines)] // one linear compile-then-run sequence; splitting it hides the ordering
-fn run_arm(
-    dir: &std::path::Path,
-    stem: &str,
-    source: &str,
-) -> ArmVerdict {
+fn run_arm(dir: &std::path::Path, stem: &str, source: &str) -> ArmVerdict {
     let started = std::time::Instant::now();
     let src_path = dir.join(format!("{stem}.rs"));
     let bin_path = dir.join(format!("{stem}_t.exe"));
@@ -865,7 +988,11 @@ fn run_arm(
                 compile_ok: false,
                 run_ok: false,
                 seconds: started.elapsed().as_secs_f64(),
-                error: Some(format!("rustc: {} | stderr: {}", e, tail(&read_file(&c_err), 400))),
+                error: Some(format!(
+                    "rustc: {} | stderr: {}",
+                    e,
+                    tail(&read_file(&c_err), 400)
+                )),
             }
         }
     };
@@ -894,13 +1021,21 @@ fn run_arm(
             compile_ok: true,
             run_ok: false,
             seconds: started.elapsed().as_secs_f64(),
-            error: Some(format!("run: {} | stderr: {}", e, tail(&read_file(&r_err), 400))),
+            error: Some(format!(
+                "run: {} | stderr: {}",
+                e,
+                tail(&read_file(&r_err), 400)
+            )),
         },
     }
 }
 
 fn stem_arm(stem: &str) -> String {
-    if stem.ends_with("_ref") { "ref".to_string() } else { "opt".to_string() }
+    if stem.ends_with("_ref") {
+        "ref".to_string()
+    } else {
+        "opt".to_string()
+    }
 }
 
 /// The two-posture compile cascade for one fixture-bearing rule: the PAIR
@@ -931,12 +1066,7 @@ fn run_rule_cascade(
 /// Compile one rule's PAIRED fixture unit — ref + opt as sibling modules —
 /// and run its embedded tests (`rustc --edition 2021 --test`).
 #[allow(clippy::too_many_lines)] // one linear compile-then-run sequence; splitting it hides the ordering
-fn run_pair(
-    dir: &std::path::Path,
-    stem: &str,
-    ref_src: &str,
-    opt_src: &str,
-) -> ArmVerdict {
+fn run_pair(dir: &std::path::Path, stem: &str, ref_src: &str, opt_src: &str) -> ArmVerdict {
     let started = std::time::Instant::now();
     let source = pair_source(ref_src, opt_src);
     let src_path = dir.join(format!("{stem}.rs"));
@@ -981,7 +1111,11 @@ fn run_pair(
                 compile_ok: false,
                 run_ok: false,
                 seconds: started.elapsed().as_secs_f64(),
-                error: Some(format!("rustc: {} | stderr: {}", e, tail(&read_file(&c_err), 400))),
+                error: Some(format!(
+                    "rustc: {} | stderr: {}",
+                    e,
+                    tail(&read_file(&c_err), 400)
+                )),
             }
         }
     };
@@ -1013,7 +1147,11 @@ fn run_pair(
             compile_ok: true,
             run_ok: false,
             seconds: started.elapsed().as_secs_f64(),
-            error: Some(format!("run: {} | stderr: {}", e, tail(&read_file(&r_err), 400))),
+            error: Some(format!(
+                "run: {} | stderr: {}",
+                e,
+                tail(&read_file(&r_err), 400)
+            )),
         },
     }
 }
@@ -1040,8 +1178,7 @@ fn failure_detail(out_path: &std::path::Path, err_path: &std::path::Path) -> Str
 #[must_use]
 pub fn run_g1(filter: Option<&str>, limit: Option<usize>) -> G1Report {
     let started = std::time::Instant::now();
-    let raw = structural_census()
-        .map_err(|e| format!("structural census failed: {e}"));
+    let raw = structural_census().map_err(|e| format!("structural census failed: {e}"));
     let extracted = extracted_census();
     let census_check = raw.and_then(|r| compare(&r, &extracted));
 
@@ -1063,7 +1200,11 @@ pub fn run_g1(filter: Option<&str>, limit: Option<usize>) -> G1Report {
             let fixture_bearing = !arms_src.is_empty();
             if let Some(cap) = limit {
                 if fixture_bearing
-                    && rules.iter().filter(|r: &&RuleVerdict| r.fixture_bearing).count() >= cap
+                    && rules
+                        .iter()
+                        .filter(|r: &&RuleVerdict| r.fixture_bearing)
+                        .count()
+                        >= cap
                 {
                     // keep iterating only to finish the current rule set? No —
                     // the population census already ran; a sampled execution
@@ -1076,8 +1217,13 @@ pub fn run_g1(filter: Option<&str>, limit: Option<usize>) -> G1Report {
             if fixture_bearing {
                 let dir = work_dir();
                 let _ = std::fs::create_dir_all(&dir);
-                let (deciding, failed_pair) =
-                    run_rule_cascade(&dir, &rule.rule_id, &rule.ref_shape, &rule.opt_pattern, &arms_src);
+                let (deciding, failed_pair) = run_rule_cascade(
+                    &dir,
+                    &rule.rule_id,
+                    &rule.ref_shape,
+                    &rule.opt_pattern,
+                    &arms_src,
+                );
                 arms = deciding;
                 discarded = failed_pair;
                 let _ = std::fs::remove_dir_all(&dir);
@@ -1097,7 +1243,13 @@ pub fn run_g1(filter: Option<&str>, limit: Option<usize>) -> G1Report {
 fn sanitize(rule_id: &str) -> String {
     rule_id
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '_' { c } else { '_' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
         .collect()
 }
 
@@ -1107,8 +1259,14 @@ fn finish(
     extracted: &G1Census,
     rules: Vec<RuleVerdict>,
 ) -> G1Report {
-    let green = rules.iter().filter(|r| r.outcome() == G1Outcome::Green).count();
-    let fail = rules.iter().filter(|r| r.outcome() == G1Outcome::Fail).count();
+    let green = rules
+        .iter()
+        .filter(|r| r.outcome() == G1Outcome::Green)
+        .count();
+    let fail = rules
+        .iter()
+        .filter(|r| r.outcome() == G1Outcome::Fail)
+        .count();
     let parse_only = rules
         .iter()
         .filter(|r| r.outcome() == G1Outcome::ParseOnly)

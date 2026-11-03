@@ -57,7 +57,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprReference, Local, Pat, UnOp};
 
-use super::{CompileProposer, FixCandidate, Playbooks, SpanEdit, anchor, cand};
+use super::{anchor, cand, CompileProposer, FixCandidate, Playbooks, SpanEdit};
 use crate::domains::rustc_errors::diag::{LabeledSpan, RustcErrorDiag};
 
 // ── shared syn extraction ─────────────────────────────────────────────
@@ -603,19 +603,17 @@ impl CompileProposer for E0505CloneAtMove {
         if source[end..].starts_with(".clone()") {
             return Vec::new(); // already cloned here
         }
-        vec![
-            cand(
-                diag,
-                file,
-                moved.line_start,
-                (end, end),
-                ".clone()".to_string(),
-                self.name(),
-            )
-            .with_note(
-                "clones at the move — the destination owns a copy; the source borrow is preserved",
-            ),
-        ]
+        vec![cand(
+            diag,
+            file,
+            moved.line_start,
+            (end, end),
+            ".clone()".to_string(),
+            self.name(),
+        )
+        .with_note(
+            "clones at the move — the destination owns a copy; the source borrow is preserved",
+        )]
     }
 }
 
@@ -695,17 +693,15 @@ impl CompileProposer for E0382CloneAtMove {
         if source[end..].starts_with(".clone()") {
             return Vec::new(); // already cloned here
         }
-        vec![
-            cand(
-                diag,
-                file,
-                moved.line_start,
-                (end, end),
-                ".clone()".to_string(),
-                self.name(),
-            )
-            .with_note("clones at the move — the destination owns a copy; the source stays live"),
-        ]
+        vec![cand(
+            diag,
+            file,
+            moved.line_start,
+            (end, end),
+            ".clone()".to_string(),
+            self.name(),
+        )
+        .with_note("clones at the move — the destination owns a copy; the source stays live")]
     }
 }
 
@@ -800,20 +796,18 @@ fn swap_move_with_use(
         return Vec::new();
     }
     let repl = format!("{u_text}{gap}{m_text}");
-    vec![
-        cand(
-            diag,
-            file,
-            moved.line_start,
-            (m.start, u.end),
-            repl,
-            strategy,
-        )
-        .with_note(
-            "swaps the move with the use — evaluation order of the two statements \
+    vec![cand(
+        diag,
+        file,
+        moved.line_start,
+        (m.start, u.end),
+        repl,
+        strategy,
+    )
+    .with_note(
+        "swaps the move with the use — evaluation order of the two statements \
          exchanges; legal only when neither reads the other's result",
-        ),
-    ]
+    )]
 }
 
 // ── the family registry ───────────────────────────────────────────────

@@ -23,7 +23,7 @@
 
 use std::path::Path;
 
-use super::{CompileProposer, FixCandidate, cand};
+use super::{cand, CompileProposer, FixCandidate};
 use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 /// `*head` → `head`: delete the stale deref star at the use the diagnostic

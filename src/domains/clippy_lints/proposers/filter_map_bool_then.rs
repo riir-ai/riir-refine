@@ -26,7 +26,7 @@
 //! did. Identical by construction, independent of types.
 
 use super::helpers::is_postfix_safe;
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Expr, ExprClosure, ExprMethodCall, File, Pat};
 

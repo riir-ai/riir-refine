@@ -13,7 +13,7 @@
 //! not become `*r` in expression position where `r` would read as the value).
 
 use super::helpers::{bool_lit, is_none_pat, is_postfix_safe};
-use super::{SourceEdit, edit, src};
+use super::{edit, src, SourceEdit};
 use syn::visit::Visit;
 use syn::{Arm, Expr, ExprMatch, File, Lit, Pat};
 

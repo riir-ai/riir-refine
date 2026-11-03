@@ -58,7 +58,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprCast, File, ImplItemFn, ItemFn, Lit};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{SourceEdit, edit};
+use super::{edit, SourceEdit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -293,13 +293,11 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>, p: u32) -> u32 { hits.push(0); p }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>, p: u32) -> u32 { hits.push(0); p }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -350,13 +348,11 @@ mod tests {
     fn cross_type_refuses() {
         // `x as u64` with x: u32 is a REAL conversion — cast_lossless's
         // territory, never ours.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>, x: u32) -> u64 { hits.push(0); x as u64 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>, x: u32) -> u64 { hits.push(0); x as u64 }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -365,13 +361,11 @@ mod tests {
         // path type — out of the fix-space by construction. `usize` is a
         // DIFFERENT type from `u32`, so this shape refuses on the
         // provenance match too (a genuine conversion).
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>, p: u32) -> usize { hits.push(0); p as usize }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>, p: u32) -> usize { hits.push(0); p as usize }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -389,25 +383,21 @@ mod tests {
         // Annotated-LET provenance is the documented v1 divergence (params
         // only) — upstream fires here; we refuse until the let-collector
         // rider.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> usize { hits.push(0); let x: usize = 7; x as usize }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> usize { hits.push(0); let x: usize = 7; x as usize }",
+        )
+        .is_none());
     }
 
     #[test]
     fn char_target_literal_refuses() {
         // `char` has no literal suffix form — the literal sub-arm refuses.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> char { hits.push(0); 'a' as char }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> char { hits.push(0); 'a' as char }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -416,25 +406,21 @@ mod tests {
         // `0x8000_f32` lexes as the hex INTEGER `0x8000f32` (E0277 — the
         // katgpt-rs `877d477cc` breakage). No float spelling exists for a
         // non-decimal token; upstream 1.98 is silent here too.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0x8000 as f32 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0x8000 as f32 }",
+        )
+        .is_none());
     }
 
     #[test]
     fn oct_int_to_float_refuses_p42() {
         // Same base-guard class for octal (upstream silent — parity).
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> f64 { hits.push(0); 0o777 as f64 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> f64 { hits.push(0); 0o777 as f64 }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -455,13 +441,11 @@ mod tests {
     fn float_lit_to_int_refuses_p42() {
         // `2.0_u64` is not a literal spelling (kind guard); upstream 1.98 is
         // silent on the shape — parity.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 2.0 as u64 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u64 { hits.push(0); 2.0 as u64 }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -469,13 +453,11 @@ mod tests {
         // `300_u8` is E0301 (literal out of range) — the value-fit guard.
         // Upstream 1.98 FIRES here with that broken suggestion (probe); the
         // fix-space is narrower than clippy by design.
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 300 as u8 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 300 as u8 }",
+        )
+        .is_none());
     }
 
     #[test]
@@ -508,13 +490,11 @@ mod tests {
 
     #[test]
     fn comment_in_span_refuses() {
-        assert!(
-            propose_fix(
-                "unnecessary_cast",
-                "fn f(hits: &mut Vec<u8>, p: u32) -> u32 { hits.push(0); p /* why */ as u32 }",
-            )
-            .is_none()
-        );
+        assert!(propose_fix(
+            "unnecessary_cast",
+            "fn f(hits: &mut Vec<u8>, p: u32) -> u32 { hits.push(0); p /* why */ as u32 }",
+        )
+        .is_none());
     }
 
     #[test]
