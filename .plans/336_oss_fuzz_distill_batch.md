@@ -1,6 +1,7 @@
 # Plan 336 — Batch 328: the oss-fuzz distill conversion (dist + sec)
 
-**Status:** STAGED — pending queue slot (verdict: Research 366, YES B−; nominal Batch 328)
+**Status:** CLAIMED — zed-m3-refine-b328 executing the batch
+**Claimed:** zed-m3-refine-b328, 1793793241, expires 2026-11-06T11:54Z
 
 Source: google/oss-fuzz @ `a380569f8dfef6d142d233725391a6168b41b639` (Apache-2.0,
 inspected 2026-11-04; shallow clone removed at the verdict commit — T0 re-clones at
