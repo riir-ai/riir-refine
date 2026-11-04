@@ -1,4 +1,6 @@
-Fixes #2968.
+Addresses #2968.
+
+The issue asked about the preferred behavior before an implementation; this is one concrete shape to discuss. Happy to change it or hand it over.
 
 When a cache backend stalls on every lookup, each compilation pays the full read timeout before falling back to a local compile. Those waits accumulate along the dependency graph and recur in every build served by the same daemon session, which is the cost described in the issue.
 
@@ -19,10 +21,6 @@ Measured on this machine at the repo's MSRV (rustc 1.91.0), against a WebDAV bac
 - after: median 4.409 s, 3 backend GETs, all 32 compiles and writes still succeed
 - with `SCCACHE_BACKEND_BACKOFF_THRESHOLD=0`: 33.528 s, indistinguishable from before
 
-The win in one line: 29 of the 32 read-timeout waits avoided, about 29 seconds saved on this workload; the ratio (7.6x here) depends on the build graph, and the issue author measured 11.7x on their cargo -j4 graph.
+The win in one line: 29 of the 32 read-timeout waits avoided, about 29 seconds saved on this workload. The ratio depends on the build graph and timeout; for scale, this issue measured a stalled build at 11.7x a healthy warm one.
 
-![bench](SVG_URL)
-
-Verification at 1.91.0, `--locked`: lib tests 632 passed with 8 new tests for the module; the 3 failures in the lib suite are environment-dependent on this macOS machine and fail identically on unmodified main. Their CI clippy line is clean, `cargo fmt --check` is clean, and `cargo check --no-default-features` passes.
-
-Happy to rework or adjust.
+The CI clippy invocation (from `ci.yml`) is clean on the branch, `cargo fmt --check` is clean, and `cargo check --no-default-features` passes. Lib tests: 632 passed with 8 new tests for the module; the 3 failures in the lib suite are environment-dependent on this macOS machine and fail identically on unmodified main.

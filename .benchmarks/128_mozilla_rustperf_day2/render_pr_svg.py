@@ -19,7 +19,7 @@ ROWS = [
     ("uncached control (no sccache)", 0.590, "", "#6b7280"),
     ("before — pin ba261b8 (median of 3)", 33.527, "33.595 / 33.478 / 33.527", "#5b8def"),
     ("after — backend backoff (median of 3)", 4.409, "4.773 / 4.409 / 4.407", "#3fbf7f"),
-    ("after, backoff disabled (THRESHOLD=0)", 33.528, "", "#8a6d3b"),
+    ("after, backoff disabled (THRESHOLD=0, 1 run)", 33.528, "", "#8a6d3b"),
 ]
 
 TOP = 116
@@ -111,7 +111,7 @@ def main():
     o.append(
         '<text x="24" y="'
         + str(y + 42)
-        + '" fill="#9aa0a6" font-size="12">repro: see PR description · workload = 32 distinct .c files, fresh daemon per run, uncached control 0.590 s</text>'
+        + '" fill="#9aa0a6" font-size="12">setup: see PR description · workload = 32 distinct .c files, fresh daemon per run, uncached control 0.590 s</text>'
     )
     o.append("</svg>")
 

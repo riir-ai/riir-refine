@@ -151,9 +151,9 @@ Medians: BEFORE 33.527 s · AFTER 4.409 s · ratio 7.60x (means 33.533 vs
 4.530 = 7.40x; worst-vs-best floor 33.478 / 4.773 = 7.01x).
 
 - The author shape reproduces exactly on BEFORE: 32 timeouts, zero hits,
-  32 successful writes, ~32 x 1 s timeout serially = 33.5 s (author
-  measured 11.7x on a cargo -j4 graph; ours is a controlled sequential
-  workload).
+  32 successful writes, ~32 x 1 s timeout serially = 33.5 s (the issue
+  author measured a stalled build at 11.7x a healthy warm one; ours is a
+  controlled sequential workload — different quantity, see §9).
 - AFTER pays exactly threshold = 3 real backend GETs (3 x 1 s timeouts),
   skips the remaining 29 lookups (zero backend contact), still compiles
   and stores all 32 entries. Expectation met: "threshold x timeout +
@@ -233,10 +233,14 @@ gate; those lines target matrix triples with vendored openssl).
 - Skips share the Cache timeouts stat label — --show-stats alone cannot distinguish a skip from a real timeout; backend request counts or debug logs do. A new MissType variant was considered and rejected (stats wire
   surface change; larger PR; upstream would need to want it).
 - Only backend-CONTACTED lookups move the gate state: `ForceNoCache`/`ForceRecache` requests answer without touching the backend and gate-skipped lookups never run — neither resets the consecutive-timeout counter (`record_outcome`'s contact rule, tested: `uncontacted_lookups_do_not_reset_the_counter`; G-PR2 round-1 catch, fixed `3fad121`).
-- Sequential workload (32 requests, one at a time) vs the author cargo -j4
-  graph: sequential is deterministic and conservative — parallelism
-  compresses the same saving into fewer wall seconds; the magnitude
-  depends on the build graph (author: 11.7x on theirs).
+- Sequential workload (32 requests, one at a time): deterministic and
+  conservative — parallelism compresses the same saving into fewer wall
+  seconds. NOTE corrected 2026-11-04 (G-PR2 body verdict): the earlier
+  "author cargo -j4 graph" phrasing was OUR gloss — removed: not in the
+  live issue text (grepped the fetched body). The issue's own numbers are
+  a different quantity: stalled build 9.019 s vs healthy warm 0.773 s
+  (11.7x), i.e. stalled-vs-healthy, while ours is stalled-vs-fixed on the
+  same stalled backend; the PR body carries the correct framing.
 - Pilot run (benchrun) had two harness defects, both fixed and disclosed:
   (a) driver looped 9+9 runs with appended backend logs (per-run deltas
   were exactly 32/3 — data consistent, medians 33.6 vs 4.4), (b) cache
@@ -305,6 +309,17 @@ Applied this session (commit `3fad121` + record edits):
 The reviewer re-verified on origin/develop `b6697879`: the real `clippy_after.log` (ends `Finished`, zero warnings, differs from prefix), the renamed patch matches `git diff ba261b8 3fad121` byte-for-byte with no stale references, all round-2 code findings hold, and the bench carry-over stands (the record names `135734f` as the benched commit in §1/§6/§10/§12). **G-PR3 (SVG chart) is UNLOCKED; G-PR4 send remains owner-fingerprint-gated (owner: "later"), collision watch on #2968 stays open.** The PR-body laws are pinned in the README framing section (saved-seconds lead; default-on stated plainly + opt-in as a maintainer question; the cache_timeouts reporting behavior explained).
 
 **Gate state: G-PR0 READY · G-PR1 READY · G-PR1b adjudicated · G-PR2 AGREE (3 rounds) · G-PR3/G-PR4 pending (owner-gated "later").**
+
+## 13. Send-artifact freeze (2026-11-04, verdict session 806b2620) — AGREE after 2 rounds
+
+With the fix+record verdict (§12) standing, the PR body + G-PR3 chart went through their own G-PR2 pass (fresh session; the fix session was at its round cap). Round-1 REVISE caught three real body defects, two needing live-issue verification first:
+- The 11.7× carried our gloss "on their cargo -j4 graph" — grepped the FETCHED issue body: no -j4 anywhere; the author's table is stalled 9.019 s vs healthy warm 0.773 s = a DIFFERENT quantity from ours (stalled-vs-fixed on the same stalled backend). Body reframed per the verdict's wording; record §3/§6 corrected with a "removed: not in the live issue text" note.
+- "Their CI clippy line" read as an internal note — now "The CI clippy invocation (from `ci.yml`) is clean on the branch".
+- Design-first tone: sentence 2 now acknowledges the issue asked for behavior discussion before implementation ("this is one concrete shape to discuss; happy to change it or hand it over"). `Fixes` → `Addresses` (the maintainer keeps the close decision on a design issue).
+- Chart: demote row labeled "(1 run)", footer "setup:" not "repro:". Optional polish taken: the trailing "Happy to rework or adjust." cut (two substantive "happy to" offers remain).
+- Round-2 **AGREE**: all seven items verified in, no new claims, chart layout holds. **The send artifact is FROZEN**: `pr_body.md` (with the `SVG_URL` gist placeholder) + `bench128_backend_backoff.svg` + branch `3fad121`.
+
+**Send checklist at owner-go** (owner hold: "wait for prev PR accepted first"): (1) #2977 outcome check — merged unblocks; closed-unmerged blocks under never-re-PR-after-close; (2) owner seals `gh-outbound-pr` in their terminal; (3) fork branch push (`refine/backend-backoff` @ `3fad121` → `riir-ai/sccache`); (4) gist the SVG (+ optionally `bench_backoff.sh`), paste the raw URL into the body's `SVG_URL`; (5) re-fetch #2968 for last-minute movement (a competing PR appears → owner call, do not pile on); (6) `kat-secret exec gh-outbound-pr --env GH_TOKEN --why "send sccache PR" -- gh pr create --repo mozilla/sccache --head riir-ai:refine/backend-backoff --base main --title ... --body-file ...`; (7) poll CI once (action_required = maintainer approve-and-run, say so, never re-push).
 
 ### Round 2 (same session): REVISE — one blocker, fixed same hour
 
