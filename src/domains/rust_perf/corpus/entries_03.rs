@@ -295,7 +295,13 @@ pub(super) fn entries() -> Vec<PerfRule> {
             category: "allocation".to_string(),
             buggy_code: "use std::collections::HashMap;\nfn index_items(items: &[u32]) -> HashMap<u32, u32> {\n    let mut map = HashMap::new(); // starts at capacity ~3\n    for &it in items {\n        map.insert(it, it.wrapping_mul(31)); // rehash ladder: ~log2(n) resizes, each re-SipHashing all entries\n    }\n    map\n}".to_string(),
             fixed_code: "use std::collections::HashMap;\nfn index_items(items: &[u32]) -> HashMap<u32, u32> {\n    let mut map = HashMap::with_capacity(items.len()); // one table alloc, zero resizes\n    for &it in items {\n        map.insert(it, it.wrapping_mul(31));\n    }\n    map\n}".to_string(),
-            context_notes: None,
+            // Arm A (issue 206, the corpus half's first live landing): the
+            // telemetry-driven templated note for the ONE rule the live-store
+            // diagnose flags (9/18 compile-gate failures, all W-class, across
+            // 3 repos' trajectory stores — 2026-11-04 harvest; the epoch is
+            // the corpus commit the diagnosis was made under). Advisory only:
+            // template + probe-derivable values, no fix content.
+            context_notes: Some("telemetry-context (corpus_binding v1, class W, stage compile-gate, epoch ac280021): this rule's drafted fixes failed the compile-gate in 9/18 recorded attempts (50%) at that epoch — the drafted fix was defective for this span's context (drafter class) — verify the span's shape against this rule's buggy/fixed pair before applying; decline when the context does not match. Counts are cumulative store telemetry over prior corpus epochs, not a measured gain.".to_string()),
             #[cfg(feature = "rust_perf_bench")]
             bench_spec: Some(hashmap_with_capacity_bench_spec()),
         },

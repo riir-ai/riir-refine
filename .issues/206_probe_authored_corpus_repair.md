@@ -1,12 +1,46 @@
 # Issue 206: Probe-authored corpus repair — templated context_notes + demote-execution behind a score-bench referee (Research 649 fusion; ILC leg dropped)
 
-**Status:** open — fusion idea (Research 649 × Latent-Prediction/ILC supergoat candidate; sweep record `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md` @ `e7a746274`), novelty TBD (contested: cleanlab); module-half LANDED 2026-11-04 (`src/corpus_binding.rs`, 9/9 tests, clippy-clean, default lib 2828/0), corpus-half deferred (sibling batch owns the corpus entries files); verdict round 1 REVISE addressed (claim scoped to telemetry-driven writers, `kat_corpus_pr` added as cousin, referee bar pinned to paired LCB95, arm B re-ruled)
+**Status:** open — fusion idea (Research 649 × Latent-Prediction/ILC supergoat candidate; sweep record `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md` @ `e7a746274`), novelty TBD (contested: cleanlab); module-half LANDED 2026-11-04 (`src/corpus_binding.rs`, 9/9 tests, clippy-clean, default lib 2828/0); corpus-half **PARTIALLY LANDED 2026-11-04 (live-telemetry diagnose + arm-A writer + first arm-A corpus edit + referee leg measured)** — verdict round 1 REVISE addressed (claim scoped to telemetry-driven writers, `kat_corpus_pr` added as cousin, referee bar pinned to paired LCB95, arm B re-ruled)
 **Date:** 2026-11-04
 **Repo:** riir-refine (corpus + self_evolve)
 **Filing analysis:** 10-analyst fusion sweep, 2026-11-04; the empty-seam claim and every mapped site coordinator-verified (`record_outcome` ×3 sites, `demotion_suggestions` report-only at `src/blueprint.rs` L428/L649, `--active-set-demote` CLI-only)
 **Sweep record:** `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md` @ katgpt-rs `e7a746274` (2026-11-04)
 
-## The verified empty seam
+## The corpus half — executed 2026-11-04 (this session)
+
+(For the verified empty seam + the idea's provenance, see git history — this section documents the executed corpus half; the sections below it stand as written.)
+
+**Trigger fired:** the re-open condition ("the batch landing commit") — Batch 329 landed
+(`f53555e04` + follow-through); the sibling moved to Batch 330 (its WIP,
+`entries_57.rs`, stayed untouched — write sets disjoint).
+
+**Live-telemetry harvest (the probe source, zero new collection):**
+
+| source | shape | population |
+|---|---|---|
+| `.refine/blueprint_history.jsonl` (11 repos with fix campaigns since 2026-10-27) | per-rule `written/reverted/declined` per campaign | 37 campaigns, 23 rules — **0 candidates** (max reverted share 0.00; era total reverts = 1 benign) |
+| `.refine/trajectories.kv` durable stores (riir-refine 376 + katgpt-rs 397 + riir-infer 8 + seal-game-editor 315 rows; riir-chain store EMPTY — 0 rows decoded) | cumulative `success_count/fail_count` per (rule, shape) + `component` (E/ρ/W/C) + `last_seen_at` | 46 rules with attempts — **1 formal candidate** |
+
+**Diagnose (the pinned predicate: attempts ≥ 8 ∧ fail-share ≥ 0.5 inclusive):**
+
+- **`hashmap-with-capacity`** — 18 attempts, 9 fails (0.50, at the inclusive bar), ALL W-class (drafter: parse/compile), across 3 stores; last seen **15 d ago** (~5 corpus batches back — the counts' vintage is disclosed in the note itself). The one candidate.
+- **Watch (below the pinned bar, not flagged):** `redundant_closure` — 29 attempts, 14 fails (0.48), W-class, `consecutive_fails`=3, last seen 6 d ago. Recorded as watch data; the bar is pinned, no near-miss rescue.
+- **Recent-14 d window: ZERO candidates.** The current corpus era is healthy by the pinned predicate.
+- **Arm-B population: zero.** C-class (verify-persist / gate) failures: none at the predicate anywhere in the stores — there is nothing to demote; arm B stays deferred WITH this concrete reason (not contention).
+
+**Arm A LANDED (the writer + the first edit):**
+
+- `corpus_binding.rs`: `FailureClass` (W/C, shared tags with `component::ComponentClass`), `degenerate_context_note` (the templated note — probe-derivable values only: class, stage word, counts, share, epoch label; no fix content, per the scope restriction), `CorpusBinding::compose_context_note` (the composition gate: stale-epoch refusal + rule-present check + diagnosis-identity check → the rendered note; the note never carries the binding digest — the digest binds the pre-edit epoch, the landed note would falsify it by construction; the `epoch_short` label is the honest carrier). **16/16 tests** (13 prior-shape + 3 writer), clippy-clean, default lib **2835/0**.
+- `entries_03.rs`: `hashmap-with-capacity` carries the FIRST live templated note (`context_notes: None → Some(note)`, epoch `ac280021`), landed under the pins-manifest same-commit discipline (counts unchanged — 296 corpus total; the three count pins re-pinned: annotated 243→244, unannotated 53→52 ×2).
+- **Pin-keeper check (the corpus-binding fixture gate):** `floor_corpus_integrity`-class pins all green at default features.
+
+**Referee leg — measured, verdict UNDECIDED (by the pinned support floor, structurally):**
+
+- Affected-stratum support: gen-5 (the rust_perf ladder, `--generation 5`) admits **exactly 4 fixtures** containing the hashmap atom (k=1..k=4 composites, `EXCLUDED_IDS_V5` empty) — 4 < 30 ⇒ **the pre-registered read is UNDECIDED regardless of outcome**; no clippy-oracle generation can exceed this (the rule touches only its own atoms).
+- The A/B itself (baseline ac280021 vs note-spliced corpus, one-off probe — dev scratch, never committed): **gen-5 atom tables byte-identical (14 atoms, 0 diffs — atoms are a pure function of `buggy_code`, which the note does not touch); the healed output of `gen5-k1-hashmap-with-capacity` byte-identical both postures** — the gen-5 heal dispatch is compile-time (`FIXABLE_RULES` + `collect_edits`); corpus entry TEXT is not an input. **Structural identity: the bench cannot regress and cannot improve on the note.** The consumer-facing advisory channel (agents reading suggestions; the latent index's corpus text) is the note's real effect surface and is NOT bench-measurable.
+- kill-criteria check: "arm A misses the bar" — the arm did NOT miss (there was no measurable bar to miss: structural identity + support 4 < 30 = UNDECIDED, never folded). The NOTE stays landed as an annotated rule (normal corpus practice — advisory metadata, no GOAT gate on annotations); the **telemetry-driven WRITER LANE** stays opt-in/deferred until a real candidate exists in a RECENT window (the current one was 15 d stale). No zombie lane: the writer is 3 small functions over the landed module, inert until wired into a harvest verb.
+
+**Honest scope note (recorded, not hidden):** the v1/v2 clippy-oracle generations were NOT run as full A/B builds (2 × cold release builds for a structurally-identity axis); the gen-5 structural identity argument covers the axis the rule actually touches, and the v1 gen-1 series (35 fixtures) measures clippy-lint vocabulary the rust_perf note cannot move. The harvest→binding→note pipeline exists in-repo; wiring it as a CLI verb is the next corpus-half task when a recent-window candidate exists.
 
 **No deterministic TELEMETRY-driven corpus-mutation writer exists** (grepped this
 session: `riir-refine/src`, `riir-rethink/src`; katgpt-rs `.research` for prior
@@ -79,15 +113,25 @@ applied to the RULE CORPUS instead of weights:
       reproduces), `verify_against` refuses `StaleEpoch` with exact bytes; 9 unit
       tests).
 - [-] Arm A: templated `context_notes` append (pins-manifest same-commit discipline) —
-      DEFERRED 2026-11-04: the sibling batch (Batch 329 voxl distill) owns the corpus
-      entries files + `pins_manifest.json` right now; the arm-A edit lands after that
-      batch closes (re-open trigger: the batch landing commit).
+      **LANDED 2026-11-04** (the deferred trigger fired: Batch 329 landed; the
+      writer + the first live edit on the ONE diagnosed rule,
+      `hashmap-with-capacity`; sibling `entries_57.rs` WIP untouched). The
+      HARVEST→BIND→NOTE pipeline is in-repo; a CLI verb wrapping the harvest
+      (stores sweep → diagnose → compose gate) re-opens when a recent-window
+      candidate exists.
 - [-] Arm B: deterministic demote-execution (the blueprint-named command, run
-      programmatically behind an explicit flag) — DEFERRED with arm A (same
-      contention; also needs the real-telemetry wiring to have candidates worth
-      demoting).
-- [-] Referee: score-bench A/B with the pinned paired-LCB95 bar — DEFERRED with arm A
-      (the A/B needs a stable corpus generation; the sibling batch is moving it).
+      programmatically behind an explicit flag) — DEFERRED with a CONCRETE
+      reason (2026-11-04): the live-store diagnose has **zero C-class
+      candidates** at the pinned predicate (all flagged failures are W-class;
+      there is nothing the note channel cannot address) — demote-execution
+      has no population to execute on; re-opens when a C-class candidate
+      appears in the stores.
+- [-] Referee: score-bench A/B with the pinned paired-LCB95 bar — MEASURED
+      2026-11-04, verdict **UNDECIDED** (support floor 4 < 30, structural for
+      single-rule arms; gen-5 identity proven byte-level, see the corpus-half
+      section). The bar itself may need re-pricing for single-rule edits (a
+      per-rule stratum cannot reach 30 on a finite fixture set) — that is a
+      referee-design decision for a follow-up, not a silent bar-bend.
 - [x] Smallest PoC (module scope) = fixture + binding + stale refusal on the synthetic
       fixture — LANDED. The GOAT question (measured heal-rate gain) stays with the
       deferred referee arm.

@@ -94,6 +94,94 @@ pub fn diagnose(rules: &[(&str, RuleOutcomes)]) -> Vec<DegenerateRule> {
     diagnose_with(rules, MIN_ATTEMPTS, DEGENERACY_BAR)
 }
 
+/// The failure class a gate stage belongs to — the issue-206 arm-A split
+/// (the `component::ComponentClass` Drafter/Gate tags, shared vocabulary):
+/// parse and compile failures are DRAFTER-context failures (the drafted fix
+/// was defective — the class a `context_notes` annotation addresses); a
+/// verify-persist failure is a GATE failure (the fix passed compile but did
+/// not resolve the lint — the demote-execution class).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum FailureClass {
+    /// `SynParse` + `CompileGate` (the drafter-context class).
+    Drafter = 0,
+    /// `ClippyVerify` (the gate class).
+    Gate = 1,
+}
+
+impl From<GateStage> for FailureClass {
+    fn from(stage: GateStage) -> Self {
+        match stage {
+            GateStage::SynParse | GateStage::CompileGate => Self::Drafter,
+            GateStage::ClippyVerify => Self::Gate,
+        }
+    }
+}
+
+impl FailureClass {
+    /// The stable short tag (mirrors `component::ComponentClass::as_str` so
+    /// a binding record and its component attribution read as one family).
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Drafter => "W",
+            Self::Gate => "C",
+        }
+    }
+}
+
+/// Arm A (issue 206): the templated `context_notes` text for a diagnosed
+/// degenerate rule — the ONLY probe-derivable corpus mutation. The template
+/// is keyed by failure class; every value in the text is telemetry
+/// (counts, share, stage, the corpus epoch the diagnosis was made under).
+/// No fix content is derived: template split / span narrowing are excluded
+/// by the issue's scope restriction, so the note only tells the consumer
+/// what the record measured and to verify context before applying.
+///
+/// `epoch_short` is the SHORT form of the corpus epoch commitment (the
+/// caller's digest prefix, typically 8-12 hex) — carried so a reader knows
+/// the counts' vintage (the stale-epoch law: the diagnosis is stale the
+/// moment a batch lands; the epoch label says which batch it predates).
+///
+/// Determinism: same inputs → byte-identical text (a re-run at a later
+/// time reproduces; no timestamps — the module law).
+#[must_use]
+pub fn degenerate_context_note(rule: &DegenerateRule, epoch_short: &str) -> String {
+    let class = FailureClass::from(rule.stage);
+    let rate_pct = rule.rate * 100.0;
+    let stage_word = match rule.stage {
+        GateStage::SynParse => "syn-parse",
+        GateStage::CompileGate => "compile-gate",
+        GateStage::ClippyVerify => "verify-persist",
+    };
+    let class_clause = match class {
+        FailureClass::Drafter => {
+            "the drafted fix was defective for this span's context (drafter \
+             class) — verify the span's shape against this rule's buggy/fixed \
+             pair before applying; decline when the context does not match"
+        }
+        FailureClass::Gate => {
+            "the drafted fix applied but the target lint persisted at verify \
+             (gate class) — this rule's fix does not reliably resolve this \
+             shape; treat any suggestion as a lead, not a fix"
+        }
+    };
+    format!(
+        "telemetry-context (corpus_binding v1, class {}, stage {}, epoch {}): \
+         this rule's drafted fixes failed the {} in {}/{} recorded attempts \
+         ({:.0}%) at that epoch — {}. Counts are cumulative store telemetry \
+         over prior corpus epochs, not a measured gain.",
+        class.as_str(),
+        stage_word,
+        epoch_short,
+        stage_word,
+        rule.failures,
+        rule.attempts,
+        rate_pct,
+        class_clause,
+    )
+}
+
 /// Diagnose with explicit floor and bar. Deterministic: output sorted by
 /// `rule_id`; each rule's stage is the first in tie order whose rate clears
 /// the bar; a rule below the attempt floor is UNDECIDED (absent, never
@@ -148,6 +236,10 @@ pub enum BindingRefusal {
         recorded_epoch: [u8; 32],
         current_epoch: [u8; 32],
     },
+    /// The rule is absent from the supplied corpus — it cannot carry a
+    /// `context_notes` annotation (the writer refuses loud, never silently
+    /// no-ops).
+    RuleAbsent { drive_rule: String },
 }
 
 /// The binding record: `drive rule × gate stage`, BLAKE3-digested over the
@@ -212,6 +304,42 @@ impl CorpusBinding {
                 current_epoch: *current_epoch,
             })
         }
+    }
+
+    /// Arm A's composition gate (the stale-refusal law applied to the
+    /// note writer): the note may be composed ONLY when the binding is
+    /// current against `current_epoch` AND its drive rule is present in the
+    /// supplied corpus. Returns the rendered template on success — the
+    /// caller's edit is exactly `context_notes = Some(return)`.
+    ///
+    /// The counts are the diagnose-time values the binding was raised from
+    /// (`rule`), re-checked here only for identity of rule + stage; the
+    /// template rendering itself is [`degenerate_context_note`].
+    ///
+    /// # Errors
+    ///
+    /// [`BindingRefusal::StaleEpoch`] per [`Self::verify_against`];
+    /// [`BindingRefusal::RuleAbsent`] when no corpus entry names
+    /// `drive_rule`.
+    pub fn compose_context_note(
+        &self,
+        corpus_rule_ids: &[String],
+        diagnosed: &DegenerateRule,
+        current_epoch: &[u8; 32],
+        epoch_short: &str,
+    ) -> Result<String, BindingRefusal> {
+        self.verify_against(current_epoch)?;
+        if diagnosed.rule_id != self.drive_rule || diagnosed.stage != self.stage {
+            return Err(BindingRefusal::RuleAbsent {
+                drive_rule: self.drive_rule.clone(),
+            });
+        }
+        if !corpus_rule_ids.iter().any(|id| id == &self.drive_rule) {
+            return Err(BindingRefusal::RuleAbsent {
+                drive_rule: self.drive_rule.clone(),
+            });
+        }
+        Ok(degenerate_context_note(diagnosed, epoch_short))
     }
 }
 
@@ -282,15 +410,33 @@ mod tests {
     #[test]
     fn output_is_sorted_and_deterministic() {
         let rules = [
-            ("zeta_rule", RuleOutcomes { compile_failures: 5, applied: 5, ..RuleOutcomes::default() }),
-            ("alpha_rule", RuleOutcomes { verify_failures: 6, applied: 4, ..RuleOutcomes::default() }),
+            (
+                "zeta_rule",
+                RuleOutcomes {
+                    compile_failures: 5,
+                    applied: 5,
+                    ..RuleOutcomes::default()
+                },
+            ),
+            (
+                "alpha_rule",
+                RuleOutcomes {
+                    verify_failures: 6,
+                    applied: 4,
+                    ..RuleOutcomes::default()
+                },
+            ),
             ("mid_rule", healthy_rule().1),
         ];
         let first = diagnose(&rules);
         let second = diagnose(&rules);
         assert_eq!(first, second, "re-run reproduces byte-identical verdicts");
         let ids: Vec<&str> = first.iter().map(|d| d.rule_id.as_str()).collect();
-        assert_eq!(ids, ["alpha_rule", "zeta_rule"], "sorted by rule_id; healthy rule absent");
+        assert_eq!(
+            ids,
+            ["alpha_rule", "zeta_rule"],
+            "sorted by rule_id; healthy rule absent"
+        );
     }
 
     #[test]
@@ -308,8 +454,15 @@ mod tests {
         );
         let out = diagnose(&[both_clear]);
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].stage, GateStage::SynParse, "earliest tie-order stage wins");
-        assert_eq!(out[0].failures, 5, "failures reported for the RECORDED stage");
+        assert_eq!(
+            out[0].stage,
+            GateStage::SynParse,
+            "earliest tie-order stage wins"
+        );
+        assert_eq!(
+            out[0].failures, 5,
+            "failures reported for the RECORDED stage"
+        );
     }
 
     #[test]
@@ -348,7 +501,8 @@ mod tests {
 
     #[test]
     fn stale_epoch_refuses_and_current_accepts() {
-        let binding = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 1_700_000_000);
+        let binding =
+            CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 1_700_000_000);
         // Same epoch: the record applies.
         assert!(binding.verify_against(&epoch(1)).is_ok());
         // A batch landed (epoch moved): loud typed refusal, exact bytes named.
@@ -368,9 +522,148 @@ mod tests {
         let b = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 1_700_000_500);
         assert_eq!(a.digest, b.digest);
         // A different rule or epoch: different digest (content-scoped identity).
-        let other_rule = CorpusBinding::new("map_unwrap_or", GateStage::CompileGate, epoch(1), 1_700_000_000);
-        let other_epoch = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(2), 1_700_000_000);
+        let other_rule = CorpusBinding::new(
+            "map_unwrap_or",
+            GateStage::CompileGate,
+            epoch(1),
+            1_700_000_000,
+        );
+        let other_epoch =
+            CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(2), 1_700_000_000);
         assert_ne!(a.digest, other_rule.digest);
         assert_ne!(a.digest, other_epoch.digest);
+    }
+
+    // ── arm A: the templated context_notes writer (issue 206 corpus half) ──
+
+    #[test]
+    fn failure_class_splits_the_three_stages() {
+        assert_eq!(
+            FailureClass::from(GateStage::SynParse),
+            FailureClass::Drafter
+        );
+        assert_eq!(
+            FailureClass::from(GateStage::CompileGate),
+            FailureClass::Drafter
+        );
+        assert_eq!(
+            FailureClass::from(GateStage::ClippyVerify),
+            FailureClass::Gate
+        );
+        // Shared vocabulary with the component taxonomy.
+        assert_eq!(FailureClass::Drafter.as_str(), "W");
+        assert_eq!(FailureClass::Gate.as_str(), "C");
+    }
+
+    #[test]
+    fn note_is_deterministic_and_carries_the_telemetry() {
+        let d = diagnose(&[degenerate_cluster()]).remove(0);
+        let a = degenerate_context_note(&d, "ac280021");
+        let b = degenerate_context_note(&d, "ac280021");
+        assert_eq!(a, b, "same telemetry in → byte-identical note out");
+        // Every probe-derivable value appears: class, stage word, counts, share.
+        assert!(a.contains("class W"), "drafter-class tag present: {a}");
+        assert!(a.contains("compile-gate"), "stage word present: {a}");
+        assert!(a.contains("7/10"), "counts present: {a}");
+        assert!(a.contains("70%"), "share present: {a}");
+        assert!(a.contains("epoch ac280021"), "epoch carried: {a}");
+        // A different epoch label changes the text (the counts' vintage is
+        // part of the note's identity).
+        assert_ne!(a, degenerate_context_note(&d, "0182f9d7"));
+    }
+
+    #[test]
+    fn note_text_is_keyed_by_failure_class() {
+        let drafter = diagnose(&[degenerate_cluster()]).remove(0);
+        let gate = diagnose(&[(
+            "stub_rule",
+            RuleOutcomes {
+                verify_failures: 9,
+                applied: 1,
+                ..RuleOutcomes::default()
+            },
+        )])
+        .remove(0);
+        let drafter_note = degenerate_context_note(&drafter, "ac280021");
+        let gate_note = degenerate_context_note(&gate, "ac280021");
+        assert!(
+            drafter_note.contains("verify the span's shape"),
+            "{drafter_note}"
+        );
+        assert!(!drafter_note.contains("lead, not a fix"));
+        assert!(gate_note.contains("lead, not a fix"), "{gate_note}");
+        assert!(!gate_note.contains("verify the span's shape"));
+    }
+
+    #[test]
+    fn note_composes_from_a_full_diagnose_pass() {
+        // The pipeline shape: diagnose → filter → note per rule, deterministic
+        // over the whole pass (the writer's real entry contract).
+        let rules = [degenerate_cluster(), healthy_rule()];
+        let epoch = "ac280021";
+        let notes: Vec<(String, String)> = diagnose(&rules)
+            .iter()
+            .map(|d| (d.rule_id.clone(), degenerate_context_note(d, epoch)))
+            .collect();
+        assert_eq!(notes.len(), 1, "only the degenerate rule emits a note");
+        assert_eq!(notes[0].0, "map_clone");
+        assert!(
+            notes[0]
+                .1
+                .starts_with("telemetry-context (corpus_binding v1")
+        );
+    }
+
+    #[test]
+    fn compose_gate_accepts_current_epoch_and_present_rule() {
+        let d = diagnose(&[degenerate_cluster()]).remove(0);
+        let binding = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 0);
+        let ids = vec!["map_clone".to_string(), "other".to_string()];
+        let note = binding
+            .compose_context_note(&ids, &d, &epoch(1), "ac280021")
+            .expect("current epoch + rule present");
+        assert_eq!(note, degenerate_context_note(&d, "ac280021"));
+    }
+
+    #[test]
+    fn compose_gate_refuses_stale_epoch_loud() {
+        let d = diagnose(&[degenerate_cluster()]).remove(0);
+        let binding = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 0);
+        let ids = vec!["map_clone".to_string()];
+        assert_eq!(
+            binding.compose_context_note(&ids, &d, &epoch(2), "x"),
+            Err(BindingRefusal::StaleEpoch {
+                recorded_epoch: epoch(1),
+                current_epoch: epoch(2)
+            }),
+            "a batch landed under the record: the writer refuses"
+        );
+    }
+
+    #[test]
+    fn compose_gate_refuses_absent_rule_and_mismatched_diagnosis() {
+        let d = diagnose(&[degenerate_cluster()]).remove(0);
+        let binding = CorpusBinding::new("map_clone", GateStage::CompileGate, epoch(1), 0);
+        // Rule not in the corpus: refuse loud.
+        assert_eq!(
+            binding.compose_context_note(&["other".to_string()], &d, &epoch(1), "x"),
+            Err(BindingRefusal::RuleAbsent {
+                drive_rule: "map_clone".to_string()
+            })
+        );
+        // Diagnosis names a different rule/stage than the binding: refuse
+        // (the composition must be the binding's own diagnose output).
+        let other = DegenerateRule {
+            rule_id: "other_rule".to_string(),
+            stage: GateStage::ClippyVerify,
+            attempts: 9,
+            failures: 5,
+            rate: 0.5,
+        };
+        assert!(
+            binding
+                .compose_context_note(&["map_clone".to_string()], &other, &epoch(1), "x")
+                .is_err()
+        );
     }
 }

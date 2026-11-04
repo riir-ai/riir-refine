@@ -1003,6 +1003,55 @@ pushed `5c2851d4` before authoring, closed by this removal).
 Commits: `5c2851d4` (claim), `70d5e072` (the arm + the fix), `41613d2c`
 (this record).
 
+## 2026-11-04 — Issue 206 corpus half: live-telemetry diagnose + the arm-A writer + the first templated note + the referee's UNDECIDED (support 4 < 30)
+
+The re-open trigger fired (Batch 329 landed `f53555e04`; the sibling's
+Batch-330 WIP `entries_57.rs` untouched — disjoint write sets). Harvested
+the REAL telemetry both sources: blueprint strata (11 repos, 37 campaigns,
+23 rules — 0 candidates) + the four trajectory stores (riir-refine 376 /
+katgpt-rs 397 / riir-infer 8 / seal-game-editor 315 rows; riir-chain's
+store decodes EMPTY — 0 rows), aggregated per rule with the W/C component
+split. The pinned predicate (attempts ≥ 8 ∧ share ≥ 0.5) flags exactly
+ONE rule all-time: `hashmap-with-capacity` — 9/18, ALL W-class, last seen
+15 d ago (~5 batches back; vintage disclosed in the note). Recent-14 d:
+ZERO candidates. Watch (below the bar, not flagged): `redundant_closure`
+0.48, consec 3, 6 d fresh. **Arm B population: zero C-class candidates —
+there is nothing to demote** (deferred with that concrete reason, not
+contention).
+
+Arm A landed: `FailureClass` (W/C tags shared with
+`component::ComponentClass`), `degenerate_context_note` (probe-derivable
+values only — class, stage word, counts, share, epoch label; NO fix
+content per the scope restriction), `CorpusBinding::compose_context_note`
+(the composition gate: stale-epoch refusal + rule-present + diagnosis-
+identity → the rendered note; the note never carries the binding digest —
+the digest binds the pre-edit epoch, a landed note would falsify it by
+construction). 16/16 module tests, clippy-clean, default lib 2835/0. The
+corpus edit: `entries_03.rs` hashmap-with-capacity `context_notes: None →
+Some(note)` (epoch `ac280021`), counts unchanged; the three annotation
+count pins re-pinned 243→244 / 53→52 ×2 with the issue-206 lead clause.
+
+The referee leg MEASURED, verdict **UNDECIDED by the pinned support
+floor** (gen-5 admits exactly 4 fixtures containing the rule — 4 < 30,
+structural for single-rule arms; no generation can exceed it). The A/B
+itself (baseline ac280021 vs note-spliced corpus, one-off dev probe):
+atom tables BYTE-IDENTICAL (14 atoms, 0 diffs — atoms are a pure function
+of `buggy_code`), healed output of `gen5-k1-hashmap-with-capacity`
+BYTE-IDENTICAL — gen-5 heal dispatch is compile-time, corpus entry text
+is not an input: the bench axis is structurally identity. The note's real
+effect surface (consumer-facing advisory + the latent index's corpus
+text) is not bench-measurable. Kill criteria NOT fired (UNDECIDED ≠
+miss); the NOTE rides as an annotated rule (normal corpus practice), the
+WRITER LANE stays inert until a recent-window candidate exists — no
+zombie machinery: 3 small functions over the landed module. Follow-up
+recorded in the issue: the n≥30 bar may need re-pricing for single-rule
+edits (a per-rule stratum cannot reach 30 on a finite fixture set) — a
+referee-design decision, never a silent bend.
+
+Commits: this one (writer + corpus edit + pins + issue + record).
+Full diagnose table + honest-scope notes: `.issues/206` (kept open — the
+harvest→bind→note CLI verb + arm B re-open on their recorded triggers).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
