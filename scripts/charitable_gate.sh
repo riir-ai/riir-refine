@@ -65,7 +65,7 @@ set -u
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root" || exit 2
 
-FEATURES="latent_retrieval,rust_perf,clippy_lints,points"
+FEATURES="latent_retrieval,rust_perf,clippy_lints,points,net-mainnet"
 # ^ Plan 325 T3/T6 (issue 192): the charitable set gains `points` — the
 # public-goods plane IS the public build's network surface (the owner's v4
 # pivot). The KAT features stay out (bar 2 keeps kat_transport/kat_service
@@ -83,11 +83,23 @@ PATTERN='(^|[^A-Za-z])(kat|payout|lease|pack|usdc|wallet|topup)([^A-Za-z]|$)|epo
 # prefixes; anything else matching the wide pattern still fails.
 VERSION_EXEMPT='^release set: STALE|^rebuild: cargo build'
 VERSION_EXEMPT_CAP=2
-# Bar-3 hard-zero classes: transport wire · KAT hosts · mining path ·
-# soft-gate/burn/meter machinery. Token-shaped (never a bare `kat`) so the
+# Bar-3 hard-zero classes: transport wire · KAT-era machinery · mining path ·
+# DEVNET hosts. Token-shaped (never a bare `kat`) so the
 # katgpt-core dep tree cannot false-positive. Zero hits expected — any hit
 # fails with no exemption path.
-SYMBOL_HARD='X-Kat-|mainnet\.riir\.ai|devnet\.riir\.ai|/mining/|soft_gate|kat_burn|burn_ack|burn_client|mining_consent|kat_meter|kat_charge|kat_protocol|kat_recovery|kat_admin|tuna_admin|KAT_SERVICE|KAT_TRANSPORT'
+# HOST-CLASS SPLIT (2026-11-04, the net-mainnet release pin): MAINNET hosts
+# (mainnet.riir.ai / tuna.riir.ai / riir.ai + gen-1 aliases) moved OUT of
+# hard-zero — the pin's own allowed-set + refusal diagnostics legitimately
+# carry them (the pin NAMES what it allows; issue 190 T14's class was the
+# KAT-era economy surface, which the pin build compiles out entirely). The
+# DEVNET hosts stay HARD-ZERO — the owner's mainnet-only directive: the
+# shipped binary carries no dialable devnet host at the byte level
+# (compile-to-nothing, riir-kat kat_service_urls).
+SYMBOL_HARD='X-Kat-|devnet\.riir\.ai|devnet\.gist\.rs|devnet\.ai\.gist\.rs|/mining/|soft_gate|kat_burn|burn_ack|burn_client|mining_consent|kat_meter|kat_charge|kat_protocol|kat_recovery|kat_admin|tuna_admin|KAT_SERVICE|KAT_TRANSPORT'
+# MAINNET hosts — disclosed + capped (the net-pin allowed-set diagnostics;
+# every occurrence is the pin naming what it allows or the honest refusal
+# text). The class growing past the cap is a loud FAIL.
+MAINNET_HOST_CAP=12
 # R1 — the disclosed help/reference class (reason per row class):
 #   --help-all maintenance listings + long-form command help fragments +
 #   typed-refusal texts naming the missing features (the same honest-detector
@@ -249,10 +261,18 @@ strings "$BIN" >"$work/strings.txt"
 # Hard-zero classes first — no exemption path.
 hard_hits=$(grep -E "$SYMBOL_HARD" "$work/strings.txt" || true)
 if [ -n "$hard_hits" ]; then
-    bar_fail "hard-zero class strings in the binary (wire/host/machinery):"
+    bar_fail "hard-zero class strings in the binary (wire/host/machinery/devnet hosts):"
     printf '%s\n' "$hard_hits" | sort -u | sed 's/^/       /' | sed -n '1,12p'
 else
-    note "  ok: zero hard-zero-class strings (X-Kat- / hosts / /mining/ / machinery)"
+    note "  ok: zero hard-zero-class strings (X-Kat- / devnet hosts / /mining/ / machinery)"
+fi
+# MAINNET host class — disclosed + capped (the net-pin allowed-set + the
+# refusal text naming what it allows; the pin build's honest diagnostics).
+mainnet_hits=$(grep -cE 'mainnet\.riir\.ai|tuna\.riir\.ai|https://riir\.ai|mainnet\.gist\.rs|ai\.gist\.rs' "$work/strings.txt" || true)
+if [ "$mainnet_hits" -gt "$MAINNET_HOST_CAP" ]; then
+    bar_fail "mainnet host strings exceed the disclosed cap ($mainnet_hits > $MAINNET_HOST_CAP) — the pin's diagnostics grew; re-adjudicate"
+else
+    note "  ok: mainnet host strings $mainnet_hits <= cap $MAINNET_HOST_CAP (the pin's allowed-set + refusal text)"
 fi
 # R2 census: every RIIR_REFINE_KAT_* occurrence classified against the pin.
 # ⛔ .rodata byte-adjacency merges consts (strings sees

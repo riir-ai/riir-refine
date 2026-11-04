@@ -80,10 +80,20 @@ impl JoinEnv {
 
     /// The pinned URL the alias resolves to (the `config set` writer
     /// stores exactly this — the validate step in [`record`] proves it).
+    /// Posture-adaptive on the devnet arm: under the `net-mainnet` sole pin
+    /// the devnet const compiles out (compile-to-nothing), so the arm
+    /// returns None-typed absence via an empty string it can never store —
+    /// callers validate before storing, and the pin would refuse the dial
+    /// anyway. `JoinEnv::Devnet` itself only ever constructs from the
+    /// alias parse, which the pin build never offers (the picker text is
+    /// the operator lane).
     #[must_use]
     pub fn url(self) -> &'static str {
         match self {
+            #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
             Self::Devnet => riir_kat::kat_service_urls::DEVNET_SERVICE_URL,
+            #[cfg(all(feature = "net-mainnet", not(feature = "net-devnet")))]
+            Self::Devnet => "",
             Self::Mainnet => riir_kat::kat_service_urls::MAINNET_SERVICE_URL,
         }
     }
@@ -591,14 +601,23 @@ mod tests {
         // is unreachable when configured (the env force is silently
         // mooted — the caller prints nothing).
         let dir = scratch("existing");
-        record(&dir, JoinEnv::Devnet).expect("seed a devnet record");
+        // Posture-adaptive seed: devnet is the interesting case where it
+        // exists (the record must survive untouched); at the mainnet-only
+        // pin the intent is identical with a mainnet seed.
+        let seeded = if cfg!(all(feature = "net-mainnet", not(feature = "net-devnet"))) {
+            record(&dir, JoinEnv::Mainnet).expect("seed a mainnet record");
+            JoinEnv::Mainnet
+        } else {
+            record(&dir, JoinEnv::Devnet).expect("seed a devnet record");
+            JoinEnv::Devnet
+        };
         match decide(Some("mainnet"), true, true) {
             Ok(JoinDecision::AlreadyConfigured) => {}
             other => panic!("a configured machine must never be re-asked: {other:?}"),
         }
         assert_eq!(
             riir_kat::kat_service_config::read(&dir).as_deref(),
-            Some(JoinEnv::Devnet.url()),
+            Some(seeded.url()),
             "the existing record is untouched"
         );
         let _ = std::fs::remove_dir_all(&dir);
@@ -737,6 +756,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
     fn devnet_record_survives_a_config_get_read() {
         // The record path IS the config-set record: `read` (what `config
         // get` prints) and the resolver see it with no second format.

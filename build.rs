@@ -13,6 +13,9 @@
 //! feature name exactly, because every feature in this manifest is `snake_case`
 //! (cargo's mangling only differs for `-`-bearing names, and there are none).
 //! So the stamp is a projection of the real build, not a claim about it.
+//! (The lowercasing unmangles `-` back from cargo's `_` since the
+//! `net-mainnet` release pin joined the manifest — the stamp carries the
+//! manifest spelling, and `build_stamp::has` normalizes both sides.)
 //!
 //! Issue 150 (option 3) adds the COMMIT stamp: the rerun inputs and the
 //! capture logic live in the shared [`build_commit`] module (build scripts
@@ -28,7 +31,7 @@ fn main() {
     let mut on: Vec<String> = std::env::vars()
         .filter_map(|(k, _)| {
             k.strip_prefix("CARGO_FEATURE_")
-                .map(|f| f.to_ascii_lowercase())
+                .map(|f| f.to_ascii_lowercase().replace('_', "-"))
         })
         .collect();
     on.sort();

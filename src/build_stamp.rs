@@ -79,6 +79,15 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // kat_transport stay OUT — the T14 charitable sweep holds its hard-zero
     // KAT classes; Refine is mainnet-only (no devnet lane ships).
     "points",
+    // The owner's mainnet-only directive (2026-11-04, the fifth raise —
+    // "do it now"): the shipped binary is net-PINNED, not default-mainnet.
+    // The pin compiles the devnet host set to nothing (the foreign-hosts
+    // compile-to-nothing discipline) — `--net devnet` and any env/config
+    // override pointing off the mainnet host family (mainnet.riir.ai /
+    // tuna.riir.ai / riir.ai) refuse at runtime naming the pin. Loopback
+    // stays out (no allow-local in the shipped set — the wrangler-dev
+    // lane is a dev build's).
+    "net-mainnet",
     "fix_verify",
     // Issue 153 — a shipped binary without the update alert is exactly the
     // "old version with no notice" class this feature exists to end.
@@ -124,10 +133,14 @@ pub fn compiled() -> Vec<&'static str> {
         .collect()
 }
 
-/// Is `feature` compiled into this binary?
+/// Is `feature` compiled into this binary? Cargo's env mangling turns `-`
+/// into `_` (`CARGO_FEATURE_NET_MAINNET` → `net_mainnet`), so the lookup
+/// compares in the SAME spelling — `net-mainnet` (the first hyphenated
+/// feature in the manifest) must not read as missing forever.
 #[must_use]
 pub fn has(feature: &str) -> bool {
-    compiled().contains(&feature)
+    let normalized = feature.replace('-', "_");
+    compiled().iter().any(|f| f.replace('-', "_") == normalized)
 }
 
 /// Which of [`RELEASE_FEATURES`] this build lacks, in the release order.

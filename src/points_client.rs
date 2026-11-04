@@ -72,7 +72,32 @@ pub const SIG_HEADER: &str = "X-Points-Signature";
 /// the run longer; the plan's earn-sync budget is the ceiling posture).
 pub const POINTS_TIMEOUT_SECS: u64 = 5;
 
-/// Resolve the base URL: env override wins; else the mainnet default.
+/// Resolve the base URL: env override wins; else the mainnet default. The
+/// result passes the compile-time net pin (`ensure_net_allowed`) — the
+/// owner's mainnet-only directive (2026-11-04) makes the SHIPPED release
+/// set carry `net-mainnet`, so a pinned build refuses any env override
+/// pointing the points plane off the mainnet host family (tuna.riir.ai is
+/// an admitted mainnet-pin host — same gen-2 worker + ledger). Unpinned
+/// builds (dev/tests) are a no-op passthrough.
+/// `Err` carries the pin refusal verbatim — callers fold it into the typed
+/// vocabulary (`ServiceNotLive`), never a panic, never a silent fallback
+/// to the default (an override the pin refuses is operator intent the
+/// build must not quietly ignore).
+#[must_use]
+pub fn service_url_checked() -> Result<String, String> {
+    let url = std::env::var(POINTS_SERVICE_URL_ENV)
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_SERVICE_URL.to_string())
+        .trim_end_matches('/')
+        .to_string();
+    riir_kat::kat_net_pin::ensure_net_allowed(&url)
+        .map(|canonical| canonical.trim_end_matches('/').to_string())
+}
+
+/// The unchecked twin — the DEFAULT dial only, for posture-independent
+/// call sites (tests, renders of the default host name). Every LIVE dial
+/// goes through [`service_url_checked`].
 #[must_use]
 pub fn service_url() -> String {
     std::env::var(POINTS_SERVICE_URL_ENV)
@@ -208,14 +233,31 @@ impl PointsTransport for UreqPointsTransport {
 pub struct PointsClient<'a> {
     transport: &'a dyn PointsTransport,
     base: String,
+    /// Set when the net pin refused the resolved service URL — re-raised
+    /// verbatim on every call (`ServiceNotLive`), never a silent default
+    /// dial to the refused host.
+    pin_refusal: Option<String>,
 }
 
 impl<'a> PointsClient<'a> {
+    /// The live-dial constructor: the base passes the net pin
+    /// ([`service_url_checked`]). A pin refusal is remembered
+    /// (`pin_refusal`) and re-raised on the FIRST call
+    /// ([`PointsClient::classify`]) as `ServiceNotLive` carrying the
+    /// refusal verbatim — never a panic in the constructor, never a
+    /// silent dial to the refused host (the base falls back to the
+    /// DEFAULT host so renders never print the refused override as if
+    /// it were dialable).
     #[must_use]
     pub fn new(transport: &'a dyn PointsTransport) -> Self {
+        let (base, pin_refusal) = match service_url_checked() {
+            Ok(canonical) => (canonical, None),
+            Err(reason) => (DEFAULT_SERVICE_URL.to_string(), Some(reason)),
+        };
         Self {
             transport,
-            base: service_url(),
+            base,
+            pin_refusal,
         }
     }
 
@@ -224,8 +266,13 @@ impl<'a> PointsClient<'a> {
     /// `ErrorEnvelope`; a transport error is `ServiceNotLive` — from this
     /// client's posture an unreachable route IS a not-yet-live service).
     fn classify<T: serde::de::DeserializeOwned>(
+        &self,
         answered: Result<(u16, String), String>,
     ) -> Result<T, PointsError> {
+        // The net-pin refusal outranks everything — no dial happens.
+        if let Some(reason) = &self.pin_refusal {
+            return Err(PointsError::ServiceNotLive(reason.clone()));
+        }
         let (status, body) = answered.map_err(PointsError::ServiceNotLive)?;
         if (200..300).contains(&status) {
             return serde_json::from_str(&body)
@@ -285,7 +332,7 @@ impl<'a> PointsClient<'a> {
         let answered = self
             .transport
             .request("POST", &url, Some(&body), &header_refs);
-        Self::classify(answered)
+        self.classify(answered)
     }
 
     /// POST /points/leave — unbind. One call, no retry stacking: a failure
@@ -315,7 +362,7 @@ impl<'a> PointsClient<'a> {
         let answered = self
             .transport
             .request("POST", &url, Some(&body), &header_refs);
-        Self::classify(answered)
+        self.classify(answered)
     }
 
     /// GET /points/balance — the caller's own balance (joined identity
@@ -338,7 +385,7 @@ impl<'a> PointsClient<'a> {
             headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let url = format!("{}{BALANCE_PATH}?client_uuid={client_uuid}", self.base);
         let answered = self.transport.request("GET", &url, None, &header_refs);
-        Self::classify(answered)
+        self.classify(answered)
     }
 
     /// GET /points/rank — the public top-ten; the signature headers ride
@@ -360,7 +407,7 @@ impl<'a> PointsClient<'a> {
             headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
         let url = format!("{}{RANK_PATH}", self.base);
         let answered = self.transport.request("GET", &url, None, &header_refs);
-        Self::classify(answered)
+        self.classify(answered)
     }
 
     /// GET /points/info — the public aggregate (counts + domains only).
@@ -370,7 +417,7 @@ impl<'a> PointsClient<'a> {
     pub fn info(&self) -> Result<InfoResponse, PointsError> {
         let url = format!("{}{INFO_PATH}", self.base);
         let answered = self.transport.request("GET", &url, None, &[]);
-        Self::classify(answered)
+        self.classify(answered)
     }
 }
 
