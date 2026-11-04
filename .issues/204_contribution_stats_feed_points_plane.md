@@ -1,6 +1,7 @@
 # Issue 204 — the contribution-stats feed: a joined user's fix/unfixed data auto-sends to the node (the owner's UX law: "after join it should auto send unfixed data")
 
 **Status:** open — filed 2026-11-04 (zed-m3-issues-fixall) from the CLI-UX overhaul session (the owner's fix-summary spec: `🛠️ N% unfixed — do \`cargo refine join\` for self-evolve` — the CTA is only honest if joining actually ARM the auto-send).
+**Claimed:** zed-m3-i204-contrib-feed, 1793838655, expires 2026-11-07T00:45:00+00:00
 
 ## What exists, what's missing
 
