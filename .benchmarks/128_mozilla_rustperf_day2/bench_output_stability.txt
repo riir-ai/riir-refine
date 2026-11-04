@@ -1,0 +1,6 @@
+# benchrun3 stability reps — block-ordered (3 BEFORE runs, then 3 AFTER runs; NOT alternating)
+# Wall lines were captured at the harness stdout (harness v1 did not persist them per-run); the per-run
+# show_stats JSONs + backend contact logs beside this file are the committed per-run evidence.
+# All six runs: compile_requests=32, cache_timeouts=32, cache_writes=32, compilations=32, cache_write_errors=0.
+# BEFORE wall (agent-captured, harness stdout): 33.649 / 33.999 / 33.523 s
+# AFTER  wall (agent-captured, harness stdout):  4.438 /  4.434 /  4.442 s

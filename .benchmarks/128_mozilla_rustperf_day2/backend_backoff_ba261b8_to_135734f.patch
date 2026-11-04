@@ -1,9 +1,9 @@
 diff --git a/src/compiler/backend_backoff.rs b/src/compiler/backend_backoff.rs
 new file mode 100644
-index 0000000..2c4b760
+index 0000000..b6cdd55
 --- /dev/null
 +++ b/src/compiler/backend_backoff.rs
-@@ -0,0 +1,259 @@
+@@ -0,0 +1,297 @@
 +// Copyright 2016 Mozilla Foundation
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,9 +28,12 @@ index 0000000..2c4b760
 +//! This module tracks consecutive timed-out cache lookups. Once a
 +//! configurable number of lookups time out in a row, cache reads are skipped
 +//! outright for a cooldown window and reported the same way a timed-out
-+//! lookup is reported, so compilation proceeds without paying the wait. The
-+//! first lookup after the cooldown expires acts as the recovery probe, and
-+//! any lookup the backend answers (hit, miss or error) resets the counter.
++//! lookup is reported, so compilation proceeds without paying the wait.
++//! Once the cooldown expires, later lookups probe the backend again; each
++//! probe that times out re-arms the skip window, and any lookup the backend
++//! answers (hit, miss or fast error) resets the counter. A parallel build
++//! can have several probes in flight, so one cooldown cycle can still pay
++//! up to one timeout per already-running lookup.
 +//!
 +//! Configuration, read once on first use:
 +//! - `SCCACHE_BACKEND_BACKOFF_THRESHOLD`: consecutive timed-out lookups
@@ -136,6 +139,19 @@ index 0000000..2c4b760
 +        let mut state = self.state.lock().unwrap();
 +        state.consecutive_timeouts = 0;
 +    }
++
++    /// Record the outcome of one cache lookup. See the module docs and the
++    /// `contacted` rule: only a backend-contacted lookup may reset the
++    /// consecutive-timeout counter.
++    fn record_outcome(&self, contacted: bool, outcome: LookupOutcome) {
++        if !contacted {
++            return;
++        }
++        match outcome {
++            LookupOutcome::TimedOut => self.record_timed_out(),
++            LookupOutcome::Answered => self.record_response(),
++        }
++    }
 +}
 +
 +fn parse_threshold(value: Option<&str>) -> u32 {
@@ -181,14 +197,22 @@ index 0000000..2c4b760
 +    anyhow::Error::new(LookupSkipped)
 +}
 +
-+/// Record a lookup that ran out of time.
-+pub(crate) fn record_timed_out() {
-+    BACKOFF.record_timed_out();
++/// The outcome of one cache lookup, classified at the call site.
++pub(crate) enum LookupOutcome {
++    /// The lookup ran out of time waiting for the backend.
++    TimedOut,
++    /// The backend answered: hit, miss or fast error.
++    Answered,
 +}
 +
-+/// Record a lookup the backend answered.
-+pub(crate) fn record_response() {
-+    BACKOFF.record_response();
++/// Record the outcome of one cache lookup.
++///
++/// Only a lookup that actually contacted the backend counts as evidence of
++/// backend health: `ForceNoCache`/`ForceRecache` requests and lookups the
++/// gate skipped never reached it, so they must not reset the
++/// consecutive-timeout counter.
++pub(crate) fn record_outcome(contacted: bool, outcome: LookupOutcome) {
++    BACKOFF.record_outcome(contacted, outcome);
 +}
 +
 +#[cfg(test)]
@@ -216,6 +240,20 @@ index 0000000..2c4b760
 +        backoff.record_timed_out();
 +        assert!(!backoff.lookup_blocked());
 +        backoff.record_timed_out();
++        assert!(backoff.lookup_blocked());
++    }
++
++    #[test]
++    fn uncontacted_lookups_do_not_reset_the_counter() {
++        // The `ForceNoCache`/`ForceRecache` shape: the outcome reads as a
++        // fast answer, but the backend was never contacted (cache control
++        // bypassed the lookup, or the gate skipped it).
++        let backoff = BackendBackoff::new(2, Duration::from_secs(60));
++        backoff.record_timed_out();
++        backoff.record_outcome(false, LookupOutcome::Answered);
++        backoff.record_timed_out();
++        // The second real timeout trips the gate: the uncontacted answer
++        // in the middle must not have reset the consecutive count.
 +        assert!(backoff.lookup_blocked());
 +    }
 +
@@ -264,7 +302,7 @@ index 0000000..2c4b760
 +    }
 +}
 diff --git a/src/compiler/compiler.rs b/src/compiler/compiler.rs
-index 6be1aa6..08e6dc8 100644
+index 6be1aa6..69a3fc8 100644
 --- a/src/compiler/compiler.rs
 +++ b/src/compiler/compiler.rs
 @@ -15,6 +15,7 @@
@@ -292,22 +330,26 @@ index 6be1aa6..08e6dc8 100644
              } else {
                  storage.get(&key).await
              }
-@@ -648,6 +654,14 @@ where
+@@ -648,6 +654,18 @@ where
              (res, duration)
          };
  
 +        let (cache_res, duration) = cache_status.await;
-+        if !skip_lookup {
-+            match &cache_res {
-+                Ok(_) => backend_backoff::record_response(),
-+                Err(_) => backend_backoff::record_timed_out(),
-+            }
-+        }
++        // Only a lookup that actually contacted the backend may move the
++        // backoff state: `ForceNoCache`/`ForceRecache` answered without
++        // touching it, and a gate-skipped lookup never ran.
++        let contacted_backend = !skip_lookup && cache_control == CacheControl::Default;
++        let outcome = if cache_res.is_err() {
++            backend_backoff::LookupOutcome::TimedOut
++        } else {
++            backend_backoff::LookupOutcome::Answered
++        };
++        backend_backoff::record_outcome(contacted_backend, outcome);
 +
          // Check the result of the cache lookup.
          let outputs = compilation
              .outputs()
-@@ -657,7 +671,7 @@ where
+@@ -657,7 +675,7 @@ where
              })
              .collect::<Vec<_>>();
  
@@ -316,7 +358,7 @@ index 6be1aa6..08e6dc8 100644
              (Ok(Ok(Cache::Hit(mut entry))), duration) => {
                  debug!(
                      "[{}]: Cache hit in {}",
-@@ -728,6 +742,14 @@ where
+@@ -728,6 +746,14 @@ where
                  );
                  Ok(CacheLookupResult::Miss(MissType::ForcedRecache))
              }

@@ -10,8 +10,8 @@ emitted this fix. Owner-sanctioned via riir-refine plan 331 T6a.
 - Pin: ba261b823392bf2020daef4ab86bd82165a60512 (origin/main tip 2026-11-04,
   "fix(clang): recognize -resource-dir"). Bench arm BEFORE = this pin,
   byte-identical worktree (/tmp/mozilla_day2/sccache-before).
-- Branch: refine/backend-backoff @ 135734f (clone
-  /Users/kat/git/riir-refine/.raw/mozilla-heal/sccache). Bench arm AFTER.
+- Branch: refine/backend-backoff — feature commit `135734f` + review-fix commit `3fad121` (G-PR2 round-1 fixes: the contact rule, the recovery-probe doc, the counter test). Clone
+  /Users/kat/git/riir-refine/.raw/mozilla-heal/sccache. Bench arm AFTER = `135734f`; the review-fix commit touches only the recording condition (no benched-path change — see §12).
 - Toolchain: 1.91.0 (rustc 1.91.0 f8297e35 2025-10-28) = their rust-version
   MSRV. All builds/tests/clippy/fmt at +1.91.0, --locked.
 - Features: default = ["all"] — azure, cos, gcs, gha, memcached, oss, redis,
@@ -53,7 +53,8 @@ decision, G-PR4.)
 
 ## 4. Design summary
 
-Daemon-scoped gate at the cache-read seam; ~50 LOC of logic + 7 unit tests.
+Daemon-scoped gate at the cache-read seam; ~50 LOC of logic + 8 unit tests
+(incl. the G-PR2-round-1 contact-rule test).
 
 Seams (verified in source at the pin):
 - Read path: src/compiler/compiler.rs get_cached_or_compile — the existing
@@ -95,10 +96,10 @@ src/compiler/mod.rs):
 
 ## 5. Diff stat (vs pin)
 
- src/compiler/backend_backoff.rs | 259 ++++++++++++++++++++++++++++++++++++++
- src/compiler/compiler.rs        |  24 +++++-
+ src/compiler/backend_backoff.rs | 297 ++++++++++++++++++++++++++++++++++++++
+ src/compiler/compiler.rs        |  28 +++++-
  src/compiler/mod.rs             |   1 +
- 3 files changed, 283 insertions(+), 1 deletion(-)
+ 3 files changed, 325 insertions(+), 1 deletion(-)
 
 ## 6. G-PR1 bench (the deliverable)
 
@@ -161,21 +162,25 @@ Medians: BEFORE 33.527 s · AFTER 4.409 s · ratio 7.60x (means 33.533 vs
   timed-out lookups by design (same miss path; no stats wire change). The
   arm distinction is wall time + backend GETs (32 vs 3).
 
-### Stability reps (benchrun3, same protocol, extra pair)
+### Stability reps (benchrun3 — BLOCK-ORDERED: 3 before runs, then 3 after runs; not alternating)
 
 before: 33.649 / 33.999 / 33.523 · after: 4.438 / 4.434 / 4.442 —
 consistent with the record run (after-arm even tighter: 4.43-4.44 s).
-Text --show-stats captured for one before-run and one after-run
-(benchrun3/run_before_1/show_stats.txt, run_after_1/show_stats.txt):
-Compile requests 32 · Cache timeouts 32 · Compilations 32 · Cache read
-errors 0 · Cache writes 32 in both.
+Per-run evidence COMMITTED in the bench record (`benchrun3_stats/` —
+show_stats JSONs + backend contact logs for before_1/after_1); the wall
+lines were captured at the harness stdout (harness v1 did not persist
+them per-run — disclosed, fix owed to `bench_backoff.sh` if the lane
+re-benches). Text --show-stats captured for one before-run and one
+after-run (benchrun3/run_before_1/show_stats.txt,
+run_after_1/show_stats.txt): Compile requests 32 · Cache timeouts 32 ·
+Compilations 32 · Cache read errors 0 · Cache writes 32 in both.
 
 ### Demote arm
 
 SCCACHE_BACKEND_BACKOFF_THRESHOLD=0, AFTER binary: 33.528 s vs BEFORE
 median 33.527 s (+0.03 %, noise); backend GETs 32 — the gate is fully
-inert; identical code path (gate_open() returns false before any state
-access; record functions early-return).
+inert; identical code path (`lookup_blocked()` returns false before any
+state access; the record functions early-return).
 
 ## 7. Gate outputs
 
@@ -195,7 +200,10 @@ access; record functions early-return).
   -A clippy::new-without-default, from .github/workflows/ci.yml:19):
   ZERO warnings after fixing 4 findings in the new code (2x
   unnecessary_map_or -> is_some_and/is_none_or, 2x
-  semicolon_if_nothing_returned).
+  semicolon_if_nothing_returned). Evidence: `clippy_prefix.log` (the
+  pre-fix run, 4 errors — the round-1 verdict caught that the committed
+  log was the PRE-fix run) + `clippy_after.log` (the post-fix run at
+  `3fad121`, ends `Finished`, zero warnings).
 - cargo +1.91.0 fmt -- --check (their CI command, whole package): CLEAN.
 - cargo check --no-default-features (their feature-matrix lane): PASS
   (6 pre-existing warnings, none touching the diff).
@@ -221,13 +229,10 @@ gate; those lines target matrix triples with vendored openssl).
 
 ## 9. Honesty notes
 
-- Everything is env-gated; the default build (no env) takes the identical
-  code path as the pin. Demote (THRESHOLD=0) measured ~identical to
-  BEFORE.
-- Skips share the Cache timeouts stat label — --show-stats alone cannot
-  distinguish a skip from a real timeout; backend request counts or debug
-  logs do. A new MissType variant was considered and rejected (stats wire
+- **The backoff is ON BY DEFAULT (threshold 3)** — a default build WITHOUT env takes the new gate path; this is a default-behaviour change the PR body must state plainly (`SCCACHE_BACKEND_BACKOFF_THRESHOLD=0` opts out; the demote arm measured ≈ BEFORE). Whether to offer an opt-in posture instead is a maintainer question to raise in the PR text, not a decision made here.
+- Skips share the Cache timeouts stat label — --show-stats alone cannot distinguish a skip from a real timeout; backend request counts or debug logs do. A new MissType variant was considered and rejected (stats wire
   surface change; larger PR; upstream would need to want it).
+- Only backend-CONTACTED lookups move the gate state: `ForceNoCache`/`ForceRecache` requests answer without touching the backend and gate-skipped lookups never run — neither resets the consecutive-timeout counter (`record_outcome`'s contact rule, tested: `uncontacted_lookups_do_not_reset_the_counter`; G-PR2 round-1 catch, fixed `3fad121`).
 - Sequential workload (32 requests, one at a time) vs the author cargo -j4
   graph: sequential is deterministic and conservative — parallelism
   compresses the same saving into fewer wall seconds; the magnitude
@@ -256,26 +261,44 @@ gate; those lines target matrix triples with vendored openssl).
 - G-PR1 GOAT bench — READY: 7.60x median (33.527 s -> 4.409 s) at THEIR
   MSRV toolchain 1.91.0, pinned harness beside the record, box provenance
   quoted, author failure shape reproduced (32 timeouts / 32 writes),
-  demote arm ~ BEFORE, +7 tests, clippy/fmt clean, identical feature sets.
+  demote arm ~ BEFORE, +8 tests, clippy/fmt clean, identical feature sets.
+  (Bench taken at `135734f`; the review-fix commit `3fad121` changes only
+  the recording condition — see §12 — the reviewer explicitly judged the
+  numbers stand.)
 - G-PR1b harness — RUN, adjudicated: raw verdict NOT READY solely from the
   3 pre-existing environmental test failures (identical on pristine pin);
-  every other runnable surface green; blast radius clean.
-- G-PR2 Claude verdict — PENDING (owner/verdict flow; not run by this
-  session).
+  every other runnable surface green; blast radius clean. (Harness ran at
+  `135734f`; `3fad121` re-ran its own gates separately: their CI clippy
+  line ZERO, fmt clean, lib 632/3 with the same 3 pre-existing names.)
+- G-PR2 Claude verdict — ROUND 1 = REVISE (2026-11-04, session 6ab80747,
+  recorded verbatim-summarized in §12); all four must-fix + the should-fix
+  items applied same session; ROUND 2 re-submission next.
 - G-PR3 SVG chart + G-PR4 owner fingerprint send — PENDING (send-prep;
   owner-gated). Collision watch: a third party claimed the issue on
-  2026-11-03; if we send, move promptly after G-PR2.
+  2026-11-03; if we send, move promptly after G-PR2 AGREE.
 
 ## 11. Files written
 
-- Clone (branch refine/backend-backoff, commit 135734f):
+- Clone (branch refine/backend-backoff, commits `135734f` + `3fad121`):
   src/compiler/backend_backoff.rs (new), src/compiler/compiler.rs,
   src/compiler/mod.rs; worktree /tmp/mozilla_day2/sccache-before (pin);
   clone ./target/ populated by the G-PR1b harness only.
 - /tmp/mozilla_day2/: scan_sccache.md, bench_backoff.sh,
   sccache_day2_results.md (this file), build_before.log, build_after.log,
-  test_before_full.log, test_after_full.log, clippy_after.log,
-  test_backend_backoff.log, bench_output.txt, gpr1b_harness.log,
-  benchrun/ (pilot), benchrun2/ (record run), benchrun3/ (stability +
-  text stats), target-before/, target-after/, target-check/,
-  target-clippy/, target-test-before/.
+  test_before_full.log, test_after_full.log, clippy_prefix.log,
+  clippy_after.log, test_backend_backoff.log, bench_output.txt,
+  gpr1b_harness.log, benchrun/ (pilot), benchrun2/ (record run),
+  benchrun3/ (stability + text stats), target-before/, target-after/,
+  target-check/, target-clippy/, target-test-before/, target-fix/.
+
+## 12. G-PR2 round 1 verdict (2026-11-04, delegated session 6ab80747) — REVISE, all items applied
+
+Verdict summary (verbatim intent): "The fix is sound and the 7.60× bench holds up when I re-derive it." REVISE on: (1) the committed clippy log was the PRE-fix run; (2) the §9 honesty note claimed default-build code-path-identical while DEFAULT_THRESHOLD=3 makes the backoff default-on; (3) a made-up name `gate_open()` in the demote explanation (real: `lookup_blocked()`); (4) the counter reset even when the backend was never contacted (ForceNoCache/ForceRecache flows) — plus should-fix: recovery-probe wording, benchrun3 not persisted + block-ordered not alternating, PR framing (lead with saved seconds, ratio is workload-specific). The reviewer independently re-ran their CI clippy line + fmt at the branch (both clean) and verified no lock held across .await, the skip-path map, the classification, and the G-PR1b adjudication.
+
+Applied this session (commit `3fad121` + record edits):
+- (1) fresh post-fix clippy run committed as `clippy_after.log`; old log renamed `clippy_prefix.log` (both in the record dir).
+- (2) §9 note replaced with the default-on truth (see Honesty notes).
+- (3) `gate_open()` → `lookup_blocked()` (§Demote).
+- (4) the contact rule: `backend_backoff::record_outcome(contacted, outcome)` — only `!skip_lookup && cache_control == CacheControl::Default` lookups move the state; `LookupOutcome::{TimedOut, Answered}` classified at the call site; new test `uncontacted_lookups_do_not_reset_the_counter` (lib now 632 passed / 3 pre-existing failed). The dead free wrappers `record_timed_out()`/`record_response()` removed (clippy -D dead_code).
+- Should-fix: module doc rewritten ("later lookups probe the backend again; each probe that times out re-arms the skip window ... one cooldown cycle can still pay up to one timeout per already-running lookup"); benchrun3 persisted (`benchrun3_stats/` JSONs + backend logs + `bench_output_stability.txt`, block-ordered disclosed); PR-framing note added to the README (lead with "29 of 32 read-timeout waits avoided (~29 s), 3 backend GETs instead of 32"; 7.60× is workload-specific).
+- NOT changed: the bench arms — `135734f` was benched; `3fad121` touches only the recording condition (the reviewer judged the numbers stand; a fresh bench is owed only if the send re-opens after close-out).
