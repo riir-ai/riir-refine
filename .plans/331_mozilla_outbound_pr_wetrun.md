@@ -2,7 +2,7 @@
 
 **Renumbered:** 329 → 331 on 2026-11-03 (owner-directed collision fix; first-allocation loss to `329_engine_mozilla_methodology_port` — that file landed 3.5 h earlier, `ee0a6901` 11-02T13:08+07 vs this file's `531b83af` 11-02T16:41+07; bench 127 + issue 198 citations moved in the same commit). The claim line below is unchanged.
 
-**Status:** Claimed: zed-m3-mozilla-wetrun, 1793602400, expires 2026-11-04T06:30Z — the push is the arbiter
+**Status:** Claimed: zed-m3-mozilla-day2, 1793800175, expires 2026-11-06T13:49Z — the push is the arbiter (re-claim after the wetrun lease expired; this lease covers T6a-exec: the owner-directed day-2 full-domain `cargo refine` sweep + the sccache #2968 backend-backoff G-PR1 bench)
 
 Executing [Proposal 022](../.proposals/022_outbound_fix_pr_campaign.md) (outbound fix-PR campaign) as a **manual wetrun** against the Mozilla quartet the owner named ([Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md) evidence: real upstream PRs are the grant's "product-community fit" proof, the self-graded WEAK criterion). The `harvest` CLI feature (Proposal 022 T1.x) does NOT exist yet — this wetrun applies the pipeline's GATES BY HAND and defers the feature to its own later plan. Owner-directed 2026-11-02: "wetrun first" (the real sends, not more planning); forks land in the `riir-ai` GitHub org; gh auth = the owner completes the device-flow login, sends are owner-approved per the 022 account rule.
 
