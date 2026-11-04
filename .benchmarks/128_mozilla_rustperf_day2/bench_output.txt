@@ -1,0 +1,9 @@
+uncached control (32 compiles, no sccache): 0.590s
+run arm=before rep=1 wall=33.595s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+run arm=after rep=2 wall=4.773s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=3 backend_puts=32
+run arm=before rep=3 wall=33.478s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+run arm=after rep=4 wall=4.409s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=3 backend_puts=32
+run arm=before rep=5 wall=33.527s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+run arm=after rep=6 wall=4.407s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=3 backend_puts=32
+run arm=demote rep=7 wall=33.528s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+done

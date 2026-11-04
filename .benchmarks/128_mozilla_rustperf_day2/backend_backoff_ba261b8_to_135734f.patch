@@ -1,0 +1,345 @@
+diff --git a/src/compiler/backend_backoff.rs b/src/compiler/backend_backoff.rs
+new file mode 100644
+index 0000000..2c4b760
+--- /dev/null
++++ b/src/compiler/backend_backoff.rs
+@@ -0,0 +1,259 @@
++// Copyright 2016 Mozilla Foundation
++//
++// Licensed under the Apache License, Version 2.0 (the "License");
++// you may not use this file except in compliance with the License.
++// You may obtain a copy of the License at
++//
++//     http://www.apache.org/licenses/LICENSE-2.0
++//
++// Unless required by applicable law or agreed to in writing, software
++// distributed under the License is distributed on an "AS IS" BASIS,
++// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++// See the License for the specific language governing permissions and
++// limitations under the License.
++
++//! Daemon-scoped backoff for an unhealthy cache backend.
++//!
++//! A cache backend that stalls on every lookup makes each compilation wait
++//! for the full read timeout (see `SCCACHE_CACHE_READ_TIMEOUT_SECS`) before
++//! compiling locally. Those waits accumulate along a build's dependency
++//! graph and recur in every build served by the same daemon session.
++//!
++//! This module tracks consecutive timed-out cache lookups. Once a
++//! configurable number of lookups time out in a row, cache reads are skipped
++//! outright for a cooldown window and reported the same way a timed-out
++//! lookup is reported, so compilation proceeds without paying the wait. The
++//! first lookup after the cooldown expires acts as the recovery probe, and
++//! any lookup the backend answers (hit, miss or error) resets the counter.
++//!
++//! Configuration, read once on first use:
++//! - `SCCACHE_BACKEND_BACKOFF_THRESHOLD`: consecutive timed-out lookups
++//!   required to open the gate (default 3). `0` disables the backoff.
++//! - `SCCACHE_BACKEND_BACKOFF_COOLDOWN_SECS`: how long cache reads stay
++//!   skipped once the gate opens (default 60).
++
++use std::env;
++use std::fmt;
++use std::sync::{LazyLock, Mutex};
++use std::time::{Duration, Instant};
++
++const DEFAULT_THRESHOLD: u32 = 3;
++const DEFAULT_COOLDOWN: Duration = Duration::from_secs(60);
++
++/// Marker for a lookup that was skipped because the backend is in backoff.
++///
++/// It never reaches the user: `get_cached_or_compile` recognizes it and
++/// reports the lookup the same way a lookup that ran out of time is
++/// reported.
++#[derive(Debug)]
++pub struct LookupSkipped;
++
++impl fmt::Display for LookupSkipped {
++    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
++        write!(f, "cache lookup skipped: backend in backoff")
++    }
++}
++
++impl std::error::Error for LookupSkipped {}
++
++struct GateState {
++    consecutive_timeouts: u32,
++    open_until: Option<Instant>,
++}
++
++struct BackendBackoff {
++    threshold: u32,
++    cooldown: Duration,
++    state: Mutex<GateState>,
++}
++
++impl BackendBackoff {
++    fn from_env() -> Self {
++        let threshold = parse_threshold(
++            env::var("SCCACHE_BACKEND_BACKOFF_THRESHOLD")
++                .ok()
++                .as_deref(),
++        );
++        let cooldown = parse_cooldown(
++            env::var("SCCACHE_BACKEND_BACKOFF_COOLDOWN_SECS")
++                .ok()
++                .as_deref(),
++        );
++        Self::new(threshold, cooldown)
++    }
++
++    fn new(threshold: u32, cooldown: Duration) -> Self {
++        Self {
++            threshold,
++            cooldown,
++            state: Mutex::new(GateState {
++                consecutive_timeouts: 0,
++                open_until: None,
++            }),
++        }
++    }
++
++    /// Whether cache lookups should be skipped right now.
++    fn lookup_blocked(&self) -> bool {
++        if self.threshold == 0 {
++            return false;
++        }
++        let state = self.state.lock().unwrap();
++        state.open_until.is_some_and(|until| Instant::now() < until)
++    }
++
++    /// Record a lookup that ran out of time.
++    fn record_timed_out(&self) {
++        if self.threshold == 0 {
++            return;
++        }
++        let mut state = self.state.lock().unwrap();
++        state.consecutive_timeouts += 1;
++        if state.consecutive_timeouts >= self.threshold {
++            let newly_open = state.open_until.is_none_or(|until| Instant::now() >= until);
++            if newly_open {
++                info!(
++                    "cache backend timed out {} lookups in a row, skipping cache reads for {}s",
++                    state.consecutive_timeouts,
++                    self.cooldown.as_secs()
++                );
++            }
++            state.open_until = Some(Instant::now() + self.cooldown);
++        }
++    }
++
++    /// Record a lookup the backend answered (hit, miss or error).
++    fn record_response(&self) {
++        if self.threshold == 0 {
++            return;
++        }
++        let mut state = self.state.lock().unwrap();
++        state.consecutive_timeouts = 0;
++    }
++}
++
++fn parse_threshold(value: Option<&str>) -> u32 {
++    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else {
++        return DEFAULT_THRESHOLD;
++    };
++    match value.parse::<u32>() {
++        Ok(threshold) => threshold,
++        _ => {
++            warn!(
++                "Ignoring invalid SCCACHE_BACKEND_BACKOFF_THRESHOLD value {value:?}, using {DEFAULT_THRESHOLD}"
++            );
++            DEFAULT_THRESHOLD
++        }
++    }
++}
++
++fn parse_cooldown(value: Option<&str>) -> Duration {
++    let Some(value) = value.map(str::trim).filter(|v| !v.is_empty()) else {
++        return DEFAULT_COOLDOWN;
++    };
++    match value.parse::<u64>() {
++        Ok(secs) => Duration::from_secs(secs),
++        _ => {
++            warn!(
++                "Ignoring invalid SCCACHE_BACKEND_BACKOFF_COOLDOWN_SECS value {value:?}, using {}s",
++                DEFAULT_COOLDOWN.as_secs()
++            );
++            DEFAULT_COOLDOWN
++        }
++    }
++}
++
++static BACKOFF: LazyLock<BackendBackoff> = LazyLock::new(BackendBackoff::from_env);
++
++/// Whether the cache backend is in backoff and lookups should be skipped.
++pub(crate) fn lookup_blocked() -> bool {
++    BACKOFF.lookup_blocked()
++}
++
++/// The error a skipped lookup reports to the compile path.
++pub(crate) fn skipped_error() -> anyhow::Error {
++    anyhow::Error::new(LookupSkipped)
++}
++
++/// Record a lookup that ran out of time.
++pub(crate) fn record_timed_out() {
++    BACKOFF.record_timed_out();
++}
++
++/// Record a lookup the backend answered.
++pub(crate) fn record_response() {
++    BACKOFF.record_response();
++}
++
++#[cfg(test)]
++mod test {
++    use super::*;
++
++    #[test]
++    fn consecutive_timeouts_trip_the_gate() {
++        let backoff = BackendBackoff::new(3, Duration::from_secs(60));
++        assert!(!backoff.lookup_blocked());
++        backoff.record_timed_out();
++        backoff.record_timed_out();
++        assert!(!backoff.lookup_blocked());
++        backoff.record_timed_out();
++        assert!(backoff.lookup_blocked());
++    }
++
++    #[test]
++    fn a_backend_response_resets_the_counter() {
++        let backoff = BackendBackoff::new(3, Duration::from_secs(60));
++        backoff.record_timed_out();
++        backoff.record_timed_out();
++        backoff.record_response();
++        backoff.record_timed_out();
++        backoff.record_timed_out();
++        assert!(!backoff.lookup_blocked());
++        backoff.record_timed_out();
++        assert!(backoff.lookup_blocked());
++    }
++
++    #[test]
++    fn zero_threshold_disables_the_backoff() {
++        let backoff = BackendBackoff::new(0, Duration::from_secs(60));
++        for _ in 0..10 {
++            backoff.record_timed_out();
++        }
++        assert!(!backoff.lookup_blocked());
++    }
++
++    #[test]
++    fn lookups_resume_after_the_cooldown_expires() {
++        let backoff = BackendBackoff::new(1, Duration::from_millis(20));
++        backoff.record_timed_out();
++        assert!(backoff.lookup_blocked());
++        std::thread::sleep(Duration::from_millis(40));
++        assert!(!backoff.lookup_blocked());
++        // The recovery lookup timing out again re-opens the gate.
++        backoff.record_timed_out();
++        assert!(backoff.lookup_blocked());
++    }
++
++    #[test]
++    fn skipped_lookup_error_is_recognizable() {
++        let err = skipped_error();
++        assert!(err.is::<LookupSkipped>());
++        assert_eq!(err.to_string(), "cache lookup skipped: backend in backoff");
++    }
++
++    #[test]
++    fn parse_threshold_defaults_and_coerces() {
++        assert_eq!(parse_threshold(None), DEFAULT_THRESHOLD);
++        assert_eq!(parse_threshold(Some("")), DEFAULT_THRESHOLD);
++        assert_eq!(parse_threshold(Some(" 5 ")), 5);
++        assert_eq!(parse_threshold(Some("0")), 0);
++        assert_eq!(parse_threshold(Some("nope")), DEFAULT_THRESHOLD);
++    }
++
++    #[test]
++    fn parse_cooldown_defaults_and_coerces() {
++        assert_eq!(parse_cooldown(None), DEFAULT_COOLDOWN);
++        assert_eq!(parse_cooldown(Some(" 2 ")), Duration::from_secs(2));
++        assert_eq!(parse_cooldown(Some("junk")), DEFAULT_COOLDOWN);
++    }
++}
+diff --git a/src/compiler/compiler.rs b/src/compiler/compiler.rs
+index 6be1aa6..08e6dc8 100644
+--- a/src/compiler/compiler.rs
++++ b/src/compiler/compiler.rs
+@@ -15,6 +15,7 @@
+ 
+ use crate::cache::{Cache, CacheWrite, DecompressionFailure, FileObjectSource, Storage};
+ use crate::compiler::args::*;
++use crate::compiler::backend_backoff;
+ use crate::compiler::c::{CCompiler, CCompilerKind};
+ use crate::compiler::cicc::Cicc;
+ use crate::compiler::clang::Clang;
+@@ -629,11 +630,16 @@ where
+         debug!("[{}]: Hash key: {}", out_pretty, key);
+         // If `ForceRecache` is enabled, we won't check the cache.
+         let start = Instant::now();
++        let skip_lookup = backend_backoff::lookup_blocked();
+         let cache_status = async {
+             if cache_control == CacheControl::ForceNoCache {
+                 Ok(Cache::None)
+             } else if cache_control == CacheControl::ForceRecache {
+                 Ok(Cache::Recache)
++            } else if skip_lookup {
++                // The backend is in backoff: skip the lookup instead of
++                // paying the read timeout on every compilation.
++                Err(backend_backoff::skipped_error())
+             } else {
+                 storage.get(&key).await
+             }
+@@ -648,6 +654,14 @@ where
+             (res, duration)
+         };
+ 
++        let (cache_res, duration) = cache_status.await;
++        if !skip_lookup {
++            match &cache_res {
++                Ok(_) => backend_backoff::record_response(),
++                Err(_) => backend_backoff::record_timed_out(),
++            }
++        }
++
+         // Check the result of the cache lookup.
+         let outputs = compilation
+             .outputs()
+@@ -657,7 +671,7 @@ where
+             })
+             .collect::<Vec<_>>();
+ 
+-        let lookup = match cache_status.await {
++        let lookup = match (cache_res, duration) {
+             (Ok(Ok(Cache::Hit(mut entry))), duration) => {
+                 debug!(
+                     "[{}]: Cache hit in {}",
+@@ -728,6 +742,14 @@ where
+                 );
+                 Ok(CacheLookupResult::Miss(MissType::ForcedRecache))
+             }
++            (Ok(Err(err)), _) if err.is::<backend_backoff::LookupSkipped>() => {
++                debug!(
++                    "[{}]: Cache lookup skipped (backend backoff) in {}",
++                    out_pretty,
++                    fmt_duration_as_secs(&duration)
++                );
++                Ok(CacheLookupResult::Miss(MissType::TimedOut))
++            }
+             (Ok(Err(err)), duration) => {
+                 error!(
+                     "[{}]: Cache read error: {:?} in {}",
+diff --git a/src/compiler/mod.rs b/src/compiler/mod.rs
+index c6aff76..8b1fb79 100644
+--- a/src/compiler/mod.rs
++++ b/src/compiler/mod.rs
+@@ -12,6 +12,7 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
++mod backend_backoff;
+ #[macro_use]
+ mod args;
+ mod c;
