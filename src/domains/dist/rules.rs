@@ -14,7 +14,12 @@
 //! The rules read SECTION MEMBERSHIP and KEY PRESENCE, which is exactly what
 //! a line scanner proves. Values are never interpreted: `strip = "symbols"`
 //! and `strip = true` both satisfy the strip check because BOTH mean the knob
-//! was deliberately set.
+//! was deliberately set. Batch 328 carries ONE deliberate, documented
+//! exception: `profiling-profile-debug-assertions` is value-shaped by nature
+//! (`inherits = "dev"` vs `inherits = "release"` selects cargo's
+//! debug-assertions default; `debug-assertions = true|false` flips it
+//! explicitly), so `profile_key_values` records the raw value of exactly
+//! three profile keys — every other key stays value-blind.
 //!
 //! ## What the scanner does NOT prove
 //!
@@ -48,6 +53,7 @@ pub const DIST_RULES: &[&str] = &[
     "large-api-dependency-mostly-unused-hint",
     "pgo-training-set-covers-real-workload-hint",
     "bench-targets-shared-dependency-cluster-hint",
+    "profiling-profile-debug-assertions",
 ];
 
 /// Phase 1 is suggest-only — no rule carries a bounded fix. The constant
@@ -79,6 +85,16 @@ pub struct ManifestScan {
     /// the `required-features` key PRESENCE per target; every other value
     /// stays unread (the same presence-only contract as the profile keys).
     pub benches: Vec<(usize, Vec<String>)>,
+    /// Per-profile recorded VALUES for exactly three value-shaped keys
+    /// (profile name, key, raw value — trimmed, quotes stripped). The
+    /// scanner's presence-only contract carries ONE deliberate exception
+    /// (Batch 328): `profiling-profile-debug-assertions` is value-shaped
+    /// by nature — `inherits = "dev"` vs `inherits = "release"` selects
+    /// between cargo's debug-assertions default ON vs OFF, and
+    /// `debug-assertions = true|false` flips it explicitly, so presence
+    /// alone cannot distinguish the rule's fixed artifact. Every other
+    /// key stays value-blind (presence only, unchanged).
+    pub profile_key_values: Vec<(String, String, String)>,
 }
 
 /// The known-large API crate table for `large_dependencies` (Batch 143 —
@@ -164,8 +180,33 @@ pub fn scan(source: &str) -> ManifestScan {
                 if let Some(eq) = trimmed.find('=') {
                     let key = trimmed[..eq].trim();
                     if !key.is_empty() {
+                        let key_lower = key.to_ascii_lowercase();
                         if let Some(last) = m.profiles.last_mut() {
-                            last.2.push(key.to_ascii_lowercase());
+                            last.2.push(key_lower.clone());
+                        }
+                        // Batch 328's ONE value-shaped exception: record the
+                        // raw value of exactly three keys (first occurrence
+                        // wins per (profile, key) — a TOML dupe-key is
+                        // cargo's error, not the scanner's).
+                        if matches!(
+                            key_lower.as_str(),
+                            "inherits" | "debug-assertions" | "overflow-checks"
+                        ) {
+                            let value = strip_surrounding_quotes(trimmed[eq + 1..].trim());
+                            if let Some(profile_name) =
+                                name.strip_prefix("profile.").filter(|p| !p.is_empty())
+                            {
+                                let seen = m.profile_key_values.iter().any(|(p, k, _)| {
+                                    p.as_str() == profile_name && k.as_str() == key_lower.as_str()
+                                });
+                                if !seen {
+                                    m.profile_key_values.push((
+                                        profile_name.to_string(),
+                                        key_lower.clone(),
+                                        value,
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -199,6 +240,20 @@ pub fn scan(source: &str) -> ManifestScan {
     m
 }
 
+/// Strip ONE layer of surrounding quotes from a raw TOML value text
+/// (`"dev"` → `dev`, `'dev'` → `dev`); bare tokens (`true`, `3`) pass
+/// through. The value-shaped exception reads these strings verbatim.
+fn strip_surrounding_quotes(raw: &str) -> String {
+    let t = raw.trim();
+    let quoted = t.len() >= 2
+        && ((t.starts_with('"') && t.ends_with('"')) || (t.starts_with('\'') && t.ends_with('\'')));
+    if quoted {
+        t[1..t.len() - 1].to_string()
+    } else {
+        t.to_string()
+    }
+}
+
 /// Minimal well-formedness gate. A line that LOOKS like it wants to be a
 /// header (`[foo` with no closing bracket) leaves `current` unchanged — it is
 /// an unknown line, harmless. The one thing the scanner refuses is a header
@@ -224,6 +279,16 @@ pub(crate) fn any_profile_key(scan: &ManifestScan, key: &str) -> bool {
     scan.profiles
         .iter()
         .any(|(_, _, keys)| keys.iter().any(|k| k == key))
+}
+
+/// The recorded VALUE for one (profile, key) pair — Batch 328's value-shaped
+/// exception reads this (first occurrence wins; `None` = key absent from
+/// that profile's recorded set).
+fn profile_key_value<'a>(scan: &'a ManifestScan, profile: &str, key: &str) -> Option<&'a str> {
+    scan.profile_key_values
+        .iter()
+        .find(|(p, k, _)| p.as_str() == profile && k.as_str() == key)
+        .map(|(_, _, v)| v.as_str())
 }
 
 /// Does this manifest ship a binary? An explicit `[[bin]]` section, or —
@@ -368,6 +433,12 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
                 advice: "every manifest-level size/tuning knob this domain advises is set here — the next build-time lever is out-of-manifest: IF you use (or add) PGO, the training set must cover the SHIPPED workload mix (rustc #159091: adding rustdoc benches to the PGO training set = 2.85% mean wall-time across rustdoc benchmarks, >6% best; 'PGO is fiddly to set up but it can really make a difference, and the training set matters'); train on the real workload corpus, not a narrow benchmark — measure before/after",
             });
         }
+
+        // Rule 8 — the profiling-profile debug-assertions hazard (Batch 328,
+        // google/oss-fuzz @ a380569f). The domain's ONE value-shaped rule:
+        // presence alone cannot distinguish the fixed form, so this reads
+        // the three recorded key values (the documented scanner exception).
+        profiling_profile_finding(scan, out);
     }
 
     // Rule 4 — caller evidence. Without the parent walk the rule is silent.
@@ -412,6 +483,38 @@ fn detect(scan: &ManifestScan, ctx: DistContext, out: &mut Vec<DistFinding>) {
     // (required-features rows present) IS the fixed artifact and stays
     // silent — strictly additive over every existing fixture.
     bench_cluster_finding(scan, out);
+}
+
+/// Rule 8's detector — extracted so `detect` keeps one rule per readable
+/// block (the `too_many_lines` split point, the `bench_cluster_finding`
+/// precedent). Batch 328, google/oss-fuzz @ a380569f: a profiling-named
+/// profile that inherits dev (or flips debug-assertions explicitly ON)
+/// samples a binary whose assertions are ARMED — one tripped assert aborts
+/// the profiled process mid-sample (the profile dies, or the collected
+/// profile over-represents the panic path).
+fn profiling_profile_finding(scan: &ManifestScan, out: &mut Vec<DistFinding>) {
+    for (name, line, _) in &scan.profiles {
+        if !matches!(
+            name.as_str(),
+            "profiling" | "flamegraph" | "pprof" | "coverage" | "instrument"
+        ) {
+            continue; // dev/test/release-named profiles never enter.
+        }
+        let explicit = profile_key_value(scan, name, "debug-assertions");
+        let inherits = profile_key_value(scan, name, "inherits");
+        let assertions_on = match explicit {
+            Some(v) => v == "true",
+            None => inherits == Some("dev"),
+        };
+        if assertions_on {
+            out.push(DistFinding {
+                rule_id: "profiling-profile-debug-assertions",
+                line: *line,
+                excerpt: format!("[profile.{name}]"),
+                advice: "pin `debug-assertions = false` + `overflow-checks = false` in the profiling profile — one tripped assert aborts the profiled process mid-sample (oss-fuzz's cargo wrapper: \"we do not want to trigger debug assertions and stops\")",
+            });
+        }
+    }
 }
 
 /// Rule 7's detector — extracted so `detect` keeps one rule per readable
@@ -532,5 +635,40 @@ mod tests {
         let m = scan(src);
         assert_eq!(m.large_dependencies.len(), 1);
         assert_eq!(m.large_dependencies[0].0, "windows");
+    }
+
+    #[test]
+    fn value_shaped_keys_record_first_occurrence_with_quotes_stripped() {
+        // Batch 328's value-shaped exception: exactly three keys record
+        // their raw value (quotes stripped), first occurrence wins per
+        // (profile, key); every other key stays value-blind.
+        let src = "[profile.profiling]\ninherits = \"dev\"\ninherits = \"release\"\ndebug-assertions = true\noverflow-checks = true\nstrip = true\n\n[profile.flamegraph]\ndebug-assertions = 'false'\n";
+        let m = scan(src);
+        assert_eq!(
+            m.profile_key_values,
+            vec![
+                (
+                    "profiling".to_string(),
+                    "inherits".to_string(),
+                    "dev".to_string()
+                ),
+                (
+                    "profiling".to_string(),
+                    "debug-assertions".to_string(),
+                    "true".to_string()
+                ),
+                (
+                    "profiling".to_string(),
+                    "overflow-checks".to_string(),
+                    "true".to_string()
+                ),
+                (
+                    "flamegraph".to_string(),
+                    "debug-assertions".to_string(),
+                    "false".to_string()
+                ),
+            ],
+            "first occurrence wins per (profile, key); quotes stripped; `strip` stays value-blind"
+        );
     }
 }

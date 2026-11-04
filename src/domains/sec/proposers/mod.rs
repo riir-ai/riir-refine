@@ -174,9 +174,21 @@
 //! | `untrusted-keyed-state-unbounded` | `keyed_state_cap::detect` | choosing the cap + the full-table policy is a protocol decision (refuse-new vs evict-idle vs shed-oldest changes what an attacker can do to honest tenants); the fix is the source's own fail-closed shape — bounded table, refuse NEW keys when full, eviction would reward the attacker; the CARDINALITY face, distinct-from `length-prefix-validate-before-alloc` + `unbounded-read-into-vec` (both VOLUME faces) |
 //! | `gateway-type-forces-security-check` | `gateway_ctor::detect` | the pub-vs-`pub(crate)` ctor flip ripples to every caller (an API-design decision); precision is honestly poor — vocabulary-gated security-handler detection, same-file only, suggest-only is the blast-radius control; distinct-from `client-ip-from-untrusted-forwarded-header` (rate-limit KEY SPOOFING vs checkpoint BYPASS via constructor reachability) |
 
+//! ## Batch 328 (2026-11-04, Plan 336) — the oss-fuzz distill joins
+//!
+//! One detector from the google/oss-fuzz distill (Research 366, Apache-2.0
+//! @ `a380569f` — the OSS-fuzz CI infrastructure itself; cited as class
+//! provenance, fixtures are ORIGINAL syntheses), suggest-only
+//! `InputValidation`:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `untrusted-archive-extract-paths` | `archive_extract::detect` | the screen IS the deployment's trust decision (which archive sources are legitimate is policy) and the repair choice (skip/refuse/mangle) changes what the caller observes; distinct-from `untrusted-path-join-escape` IN-RULE: that owns the CALLER-SUPPLIED name joined onto a trusted base (fn-parameter str/Path args → fs sinks), this the ARCHIVE-MEMBER surface — the names come from the untrusted file's own central directory, and the repair is the crate's own screened accessor (`enclosed_name`), a different fix-space; also distinct-from `unbounded-read-into-vec` (that owns the VOLUME of the read, this the PATHS the members carry) |
+
 use syn::File;
 
 pub mod arc_raw_boundary;
+pub mod archive_extract;
 pub mod auth_cookie_missing_flags;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
@@ -215,7 +227,7 @@ pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
+    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
 };
 
 /// The `--fix`-eligible sec rules.

@@ -154,6 +154,59 @@ llama-common's PUBLIC interface") and the workaround-collapse half (the
 LLAMA_TEST_NAME/target_link_libraries patches die once the helper can
 express per-test sets) ride the rule's notes.
 
+## The eighth rule (Batch 328, 2026-11-05)
+
+`profiling-profile-debug-assertions` — a profiling-named build profile
+that inherits `dev` samples a binary whose debug assertions and overflow
+checks are ON; one tripped assert aborts the profiled process mid-sample
+(the profile dies), or the collected profile over-represents the panic
+path. Provenance: google/oss-fuzz @ `a380569f` (Apache-2.0),
+`infra/base-images/base-builder/cargo` L43-44 verbatim:
+
+```bash
+    # we do not want to trigger debug assertions and stops
+    export RUSTFLAGS="$RUSTFLAGS -C debug-assertions=no"
+```
+
+The coverage-arm RUSTFLAGS rows in `base-builder/compile` L119-132
+corroborate — instrumentation builds always rebuild with assertions off.
+Cargo-book posture: `[profile.dev]` ships debug-assertions ON,
+`[profile.release]` OFF, and `inherits = "dev"` carries the dev default
+into the inheriting profile — so a profiling-named profile inheriting dev
+samples an assertions-armed binary (perf/flamegraph/pprof attach to a
+RUNNING binary; the fixed artifact pins `debug-assertions = false` +
+`overflow-checks = false`).
+
+| Fires | Silent |
+|---|---|
+| `[profile.profiling]` / `[profile.flamegraph]` / `[profile.pprof]` / `[profile.coverage]` / `[profile.instrument]` (EXACT name) + `debug-assertions = true` | explicit `debug-assertions = false` (the fixed form) |
+| same vocabulary, key absent, `inherits = "dev"` | key absent, `inherits = "release"` (or any non-dev value) |
+| | name not in the vocabulary (`dev` / `test` / `release`) |
+| | a suffixed name (`profiling-fast`) — honest NO |
+| | lib-only manifest (`ships_bin` gate) |
+
+**The value-shaped scanner exception (loud):** this is the scanner's
+FIRST value read. The domain's presence-only contract ("values are never
+interpreted") carries exactly ONE documented exception — the rule is
+value-shaped by nature (`inherits = "dev"` vs `inherits = "release"`
+selects cargo's assertion default; `debug-assertions = true|false` flips
+it explicitly; presence alone cannot distinguish the fixed form
+`debug-assertions = false`). The scanner records the raw value of
+exactly three keys per profile (`inherits`, `debug-assertions`,
+`overflow-checks`) into `ManifestScan::profile_key_values` (first
+occurrence wins per profile+key; quotes stripped) — every other key
+stays value-blind.
+
+Honest recall limits: the profile-name match is exact vocabulary — a
+suffixed `profiling-fast` inheriting dev is a silent no-advice, never a
+guess; the scanner reads the SELF manifest only — a workspace ROOT
+manifest overriding the same profile name is invisible to a member scan
+(profiles live at the root by cargo law — `member-profile-ignored`
+fires to move the block), so workspace members should carry profiling
+profiles at the root; a profile with no `inherits` key is out of
+trigger scope (explicit-only). NotBenchable by domain — build-config
+advice tier, no latency axis (annotate, never demote).
+
 ## See also
 
 - [`HISTORY.md`](../../HISTORY.md) §Issue 085 — the issue record + GOAT gate (issue file removed at closure)

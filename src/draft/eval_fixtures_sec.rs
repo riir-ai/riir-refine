@@ -5,7 +5,8 @@
 //! distill's three (Plan 295); Batch 292 the `CVEngine` distill's four
 //! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298);
 //! Issue 185 the softmax-collapse family's three; Batch 327 the
-//! sanstun distill's three (Plan 332).
+//! sanstun distill's three (Plan 332); Batch 328 the oss-fuzz
+//! distill's one (Plan 336).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -374,6 +375,20 @@ impl Checkpoint {
         self.allowance -= 1;
         true
     }
+}
+"#,
+    ),
+    // Batch 328 (Plan 336) — the oss-fuzz distill, one span.
+    (
+        "untrusted-archive-extract-paths",
+        r#"use zip::ZipArchive;
+
+pub fn unpack_plugin_bundle(
+    reader: std::io::Cursor<Vec<u8>>,
+    dest: &std::path::Path,
+) -> std::io::Result<()> {
+    let mut bundle = ZipArchive::new(reader)?;
+    bundle.extract(dest).map_err(std::io::Error::other)
 }
 "#,
     ),

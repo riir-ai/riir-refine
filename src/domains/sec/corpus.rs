@@ -44,6 +44,7 @@
 //! | `secret-key-without-zeroize` | `CryptoHygiene` | no (suggest-only, dep-gated) | — (the repair is an API decision — a field-type change every constructor site feels; the dep gate keeps the suggestion buildable) |
 //! | `untrusted-keyed-state-unbounded` | `InputValidation` | no (suggest-only) | — (the cap + the full-table policy are protocol decisions — the eviction-vs-refusal axis changes what an attacker can do to honest tenants) |
 //! | `gateway-type-forces-security-check` | `InputValidation` | no (suggest-only) | — (the ctor flip ripples to every caller — an API-design decision; precision honestly poor, vocabulary-gated, review decides) |
+//! | `untrusted-archive-extract-paths` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the screen is the deployment's trust decision — which archive sources are legitimate is policy — and the repair is the crate's own screened accessor) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -447,7 +448,12 @@ generic is an honest NO; File readers are the trusted regime and never fire; cro
 undetected. A decoder between the reader and the drain does NOT excuse the cap — \
 `Read::take` belongs on the DECODER (the decompressed side): a compressed body can expand \
 orders of magnitude past any transfer-size check, so verify limits after EVERY expansion stage \
-(the Batch-258 rider). Batch 140 / Research 161 / Plan 120 (rustsec/advisory-db @ b50980aa, CC0 — cited \
+(the Batch-258 rider). Second-expansion corroboration (Batch 328, google/oss-fuzz @ \
+`a380569f`): a download-then-extract pipeline makes the archive an untrusted read \
+source AND the extraction a second unbounded expansion (the zip-bomb adjacency — \
+the source's own `http_utils.py::download_and_unpack_zip` is the real regime \
+instance: download to tmp then `extractall`, no member screen). Corroboration \
+only — no new trigger. Batch 140 / Research 161 / Plan 120 (rustsec/advisory-db @ b50980aa, CC0 — cited \
 as class provenance; fixtures are original syntheses)."
                 .to_string(),
             buggy_code: "pub fn read_request(mut stream: std::net::TcpStream) -> std::io::Result<Vec<u8>> {\n    let mut buf = Vec::new();\n    std::io::Read::read_to_end(&mut stream, &mut buf)?;\n    Ok(buf)\n}\n"
@@ -513,7 +519,12 @@ TRUE finding, the rule's subtle half); `components()`/`canonicalize`/the \
 suppress (one hardened fn hides a sibling — conservative); literal/const \
 join args never fire (trusted by construction); field origins \
 (`entry.file_name()` — the read_dir iteration idiom) are an honest NO; \
-cross-fn joins undetected. Batch 258 / Plan 262 / Research 292 \
+cross-fn joins undetected. Fix-form rider (Batch 328, google/oss-fuzz @ \
+`a380569f`): when the untrusted input is a single file NAME (basename only), \
+extracting the basename before the join IS the repair — the source's own \
+`fuzz_target.py::_save_crash` copies via `os.path.basename(crash.input_path)` \
+before joining the artifact directory, the harness's own placement hygiene. \
+Batch 258 / Plan 262 / Research 292 \
 (cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as class \
 provenance; the fixture is an original synthesis)."
                 .to_string(),
@@ -940,7 +951,7 @@ double-frees or leaks. Detector: `proposers::arc_raw_boundary` (the `into_raw` \
 round-trip is the legitimate shape and suppresses). Batch 325 / Plan 327 / Research 361 \
 (mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class provenance, original fixture)."
                 .to_string(),
-            buggy_code: "// waker-shaped custody bug: the borrowed handout (increment) and the consuming\n// path (from_raw) collapse into one fn, and the consume is forgotten — the\n// count is over-handed AND never retired (double-own → double-free or leak).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let waker = unsafe { Arc::<InstinctWaker>::from_raw(ptr) };\n    std::mem::forget(waker);\n}\n"
+            buggy_code: "use std::sync::Arc;\n\n// waker-shaped custody bug: the borrowed handout (increment) and the consuming\n// path (from_raw) collapse into one fn, and the consume is forgotten — the\n// count is over-handed AND never retired (double-own → double-free or leak).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let waker = unsafe { Arc::<InstinctWaker>::from_raw(ptr) };\n    std::mem::forget(waker);\n}\n"
                 .to_string(),
             fixed_code: "// fixed: pick ONE regime per path — borrowed (increment + deref, the boundary\n// keeps custody) or consuming (from_raw exactly once; the Arc's own drop retires it).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let borrowed: &InstinctWaker = &*ptr;\n    let _ = borrowed;\n}\n\nunsafe fn consume_waker(ptr: *mut InstinctWaker) {\n    let owned: Arc<InstinctWaker> = Arc::from_raw(ptr);\n    drop(owned);\n}\n"
                 .to_string(),
@@ -975,7 +986,7 @@ as initialized, not for a write-once caller-owned slot. Detector: \
 MaybeUninit). Batch 325 / Plan 327 / Research 361 (mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — \
 class provenance, original fixture)."
                 .to_string(),
-            buggy_code: "#[repr(C)]\npub struct RustBuffer {\n    pub capacity: i64,\n    pub len: i64,\n    pub data: *mut u8,\n}\n\n#[no_mangle]\npub extern \"C\" fn rustbuf_from_vec(out: &mut MaybeUninit<RustBuffer>) -> i32 {\n    // caller-initialized MaybeUninit slot: the callee overwrites the whole\n    // value exactly once, so ManuallyDrop was the honest contract; the\n    // status code is the C-ABI pair for the out-param\n    let buf = RustBuffer { capacity: 16, len: 0, data: std::ptr::null_mut() };\n    unsafe { MaybeUninit::write(out, MaybeUninit::new(buf)) };\n    0\n}\n"
+            buggy_code: "use std::mem::MaybeUninit;\n\n#[repr(C)]\npub struct RustBuffer {\n    pub capacity: i64,\n    pub len: i64,\n    pub data: *mut u8,\n}\n\n#[no_mangle]\npub extern \"C\" fn rustbuf_from_vec(out: &mut MaybeUninit<RustBuffer>) -> i32 {\n    // caller-initialized MaybeUninit slot: the callee overwrites the whole\n    // value exactly once, so ManuallyDrop was the honest contract; the\n    // status code is the C-ABI pair for the out-param\n    let buf = RustBuffer { capacity: 16, len: 0, data: std::ptr::null_mut() };\n    unsafe { MaybeUninit::write(out, buf) };\n    0\n}\n"
                 .to_string(),
             fixed_code: "#[repr(C)]\npub struct RustBuffer {\n    pub capacity: i64,\n    pub len: i64,\n    pub data: *mut u8,\n}\n\n#[no_mangle]\npub extern \"C\" fn rustbuf_from_vec(out: &mut ManuallyDrop<RustBuffer>) -> i32 {\n    // caller-initialized contract: safe reads; set-twice = a visible leak;\n    // the status code is the C-ABI pair for the out-param\n    let buf = RustBuffer { capacity: 16, len: 0, data: std::ptr::null_mut() };\n    unsafe { ManuallyDrop::write(out, ManuallyDrop::new(buf)) };\n    0\n}\n"
                 .to_string(),
@@ -1081,6 +1092,9 @@ session-named map over trusted internal ids fires and review decides. Batch 327 
 provenance; the fixture is an original synthesis)."
                 .to_string(),
             buggy_code: "use std::collections::HashMap;\n\
+\n#[derive(Eq, Hash, PartialEq)]\n\
+pub struct ClientId(pub u32);\n\
+pub struct Member;\n\
 \npub struct Room {\n\
     members: HashMap<ClientId, Member>,\n\
 }\n\
@@ -1092,6 +1106,9 @@ provenance; the fixture is an original synthesis)."
 }\n"
                 .to_string(),
             fixed_code: "use std::collections::HashMap;\n\
+\n#[derive(Eq, Hash, PartialEq)]\n\
+pub struct ClientId(pub u32);\n\
+pub struct Member;\n\
 \npub struct Room {\n\
     members: HashMap<ClientId, Member>,\n\
 }\n\
@@ -1183,6 +1200,72 @@ synthesis)."
         true\n\
     }\n\
 }\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ══ Batch 328 (2026-11-04, Plan 336 / Research 366) — the        ══
+        // ══ google/oss-fuzz distill (Apache-2.0 @ a380569f): one         ══
+        // ══ suggest-only InputValidation rule (detector, no              ══
+        // ══ collect_edits arm).                                          ══
+        // ── untrusted-archive-extract-paths (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "untrusted-archive-extract-paths".to_string(),
+            sec_concept: "a path extracted from an UNTRUSTED ARCHIVE (remote download, \
+user upload) whose member names are attacker-chosen: `ZipArchive::extract(dest)` \
+with no member screen, or a `by_index`/`by_name` loop joining `entry.name()` into \
+a destination path — a member named `../../etc/cron.d/x` (or an absolute path, or \
+a Windows prefix) escapes the destination directory: arbitrary file write (the \
+zip-slip class). The bounded repair is the zip crate's own screened accessor \
+`entry.enclosed_name()` — `Some(p) => dest.join(p), None => skip/refuse` (refuses \
+`..`/absolute/prefix components) — or the generic `components()` walk refusing \
+everything but `Component::Normal`, or mangled extraction (sanitize separators \
+before the join). Suggest-only: the screen IS the deployment's trust decision — \
+which archive sources are legitimate is policy, and the repair choice \
+(skip-and-log vs refuse-loud vs mangle) changes what the caller observes. \
+Distinct-from `untrusted-path-join-escape` (owned): that rule owns the \
+CALLER-SUPPLIED name joined onto a trusted base (fn-parameter str/Path args → \
+fs sinks); this owns the ARCHIVE-MEMBER surface — the names come from the \
+untrusted FILE's own central directory, not the caller's arguments, and the \
+repair is the crate's own screened accessor (`enclosed_name`), a different \
+fix-space (sink-distinct per the `unvalidated-egress-url` precedent, the Plan \
+156 T2 shape). Also distinct-from `unbounded-read-into-vec`: that rule owns \
+the VOLUME of the read; this owns the PATHS the archive's members carry. \
+Verified advisory posture (rustsec.org fetched 2026-11-04): the zip crate's \
+extraction surface carries an ACTIVE advisory stream — RUSTSEC-2025-0168 \
+(Incorrect path canonicalization during archive extraction → arbitrary file \
+write, https://rustsec.org/advisories/RUSTSEC-2025-0168) plus a same-surface \
+2026 wave (symlink targets outside the destination, SUID/SGID preservation, \
+permissions applied through symlinks); the class fires in consumers too \
+(RUSTSEC-2026-0434 ant-releases, RUSTSEC-2026-0427 sn-releases — both zip-slip) \
+— the extract() surface's screening posture is version-dependent, consumers \
+re-derive the advisory posture at adoption. Honest recall limits: \
+parse-provable vocabulary fires (the zip-crate naming: `ZipArchive`/`zip::` \
+paths, `.extract(` on an archive-typed receiver, `by_index`/`by_name` + \
+`entry.name()`-shaped joins); the screening markers ANYWHERE in the fn suppress \
+the WHOLE fn (`enclosed_name(`/`.components()`/`mangled`/`sanitize` — one \
+screened member hides a sibling, conservative); a safe helper fn called from \
+the hazardous fn is an honest NO (same-fn only, cross-fn undetected); a \
+tar/7z extractor with no zip vocabulary is an honest miss (the class \
+generalizes; the vocabulary is the zip crate's); the shape proves a MISSING \
+SCREEN, not an attacker — a hardened-for-internal-use extractor fires too and \
+review decides. Detector: `proposers::archive_extract`. Batch 328 / Plan 336 / \
+Research 366 (google/oss-fuzz @ `a380569f`, Apache-2.0 — cited as class \
+provenance; the fixture is an original synthesis)."
+                .to_string(),
+            buggy_code: "use std::path::Path;\nuse zip::ZipArchive;\n\npub fn \
+unpack_bundle<R: std::io::Read + std::io::Seek>(\n    reader: R,\n    dest: &Path,\n) \
+-> std::io::Result<()> {\n    let mut archive = ZipArchive::new(reader)?;\n    for i in \
+0..archive.len() {\n        let mut entry = archive.by_index(i)?;\n        let out_path = \
+dest.join(entry.name().to_string());\n        let mut out = std::fs::File::create(out_path)?;\n        \
+std::io::copy(&mut entry, &mut out)?;\n    }\n    Ok(())\n}\n"
+                .to_string(),
+            fixed_code: "use std::path::Path;\nuse zip::ZipArchive;\n\npub fn \
+unpack_bundle<R: std::io::Read + std::io::Seek>(\n    reader: R,\n    dest: &Path,\n) \
+-> std::io::Result<()> {\n    let mut archive = ZipArchive::new(reader)?;\n    for i in \
+0..archive.len() {\n        let mut entry = archive.by_index(i)?;\n        let Some(rel) = \
+entry.enclosed_name() else {\n            continue;\n        };\n        let out_path = \
+dest.join(rel);\n        let mut out = std::fs::File::create(out_path)?;\n        \
+std::io::copy(&mut entry, &mut out)?;\n    }\n    Ok(())\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
@@ -1286,5 +1369,41 @@ mod tests {
                 "batch-325 {id} must stay suggest-only (never FIXABLE_SEC)"
             );
         }
+    }
+
+    /// Batch 328 (the google/oss-fuzz distill, Plan 336 / Research 366,
+    /// google/oss-fuzz @ a380569f, Apache-2.0) — presence, family,
+    /// provenance discipline. Suggest-only, never `FIXABLE_SEC`.
+    #[test]
+    fn batch328_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [(
+            "untrusted-archive-extract-paths",
+            SecFamily::InputValidation,
+        )];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-328 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-328 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 328 / Plan 336 / Research 366"),
+                "batch-328 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("a380569f"),
+                "batch-328 {id} must cite the oss-fuzz pin"
+            );
+        }
+        // Suggest-only discipline: the batch id may not be --fix-eligible
+        // (the detector module ships no collect_edits arm).
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"untrusted-archive-extract-paths"),
+            "batch-328 untrusted-archive-extract-paths must stay suggest-only \
+             (never FIXABLE_SEC)"
+        );
     }
 }

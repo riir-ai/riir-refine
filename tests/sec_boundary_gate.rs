@@ -70,7 +70,15 @@ fn run_clippy() -> Option<Vec<Diag>> {
         eprintln!("SKIP: cargo not on PATH — the boundary gate needs the live toolchain");
         return None;
     }
-    let dir: PathBuf = std::env::temp_dir().join(format!("sec_boundary_{}", std::process::id()));
+    // Both gate tests run in ONE process (libtest, parallel by default) —
+    // a pid-only temp name races them onto one crate dir, and the first
+    // test's `remove_dir_all` lands under the second's clippy (Batch 328:
+    // the zip dep tree stretched the probe build wide enough to make the
+    // window a guaranteed failure). One discriminator per call.
+    static SEQ: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("sec_boundary_{}_{}", std::process::id(), seq));
     let src = dir.join("src");
     std::fs::create_dir_all(&src).expect("mkdir");
     // Batch 88: the crypto fixtures import sha1/sha2/md-5/blake3/argon2/subtle —
@@ -83,12 +91,17 @@ fn run_clippy() -> Option<Vec<Diag>> {
     // 9.x fixture's `insecure_disable_signature_validation` surface —
     // REMOVED at 10.0, so the pin is load-bearing), cookie 0.18, and
     // serde's derive feature (the Claims derive).
+    // Batch 328: the archive-extract fixture names `zip::ZipArchive` —
+    // the probe crate must declare `zip` or the fixture fails to
+    // COMPILE (compile errors are not clippy diagnostics). zip 2.6.1
+    // verified at authoring (by_index/name/enclosed_name are 2.x-era
+    // API).
     std::fs::write(
         dir.join("Cargo.toml"),
         "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\
          \n[workspace]\n[dependencies]\nsha1 = \"0.10\"\nsha2 = \"0.10\"\
          \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\
-         \nserde_json = \"1\"\nureq = \"2\"\
+         \nserde_json = \"1\"\nureq = \"2\"\nzip = \"2\"\nzeroize = \"1\"\
          \nserde = { version = \"1\", features = [\"derive\"] }\
          \ntower-http = { version = \"0.7\", features = [\"cors\"] }\
          \njsonwebtoken = \"9\"\ncookie = \"0.18\"\n",

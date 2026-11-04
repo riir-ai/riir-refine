@@ -48,7 +48,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{CollapseVerdict, detect_collapse_rule_ids, rule_family};
+use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, CollapseVerdict};
 use super::latent_matcher::LatentMatcher;
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
@@ -1469,7 +1469,7 @@ pub fn print_report(report: &EvalReport) {
     // rustc_errors is never asserted ≈1 anywhere (a free coordinate in T3's
     // Spearman); the drop ledger says so where it has no labeled set.
     {
-        use crate::demonstrability::{MIN_PER_RULE_N, canonical_domain, eval_row, render_column};
+        use crate::demonstrability::{canonical_domain, eval_row, render_column, MIN_PER_RULE_N};
         let mut rows: Vec<crate::demonstrability::Row> = report
             .taxonomy_by_domain
             .iter()
@@ -2139,6 +2139,13 @@ mod tests {
         // pure DENOMINATOR growth (the new span itself retrieves its rule
         // at top-5 only: perf top-5 55/56 → 56/57, top-1/top-3 unchanged
         // 52/53). Floor = measured − ONE span per the convention.
+        // Batch 328 note (2026-11-05, Plan 336 / Research 366, the
+        // oss-fuzz distill: +1 dist rule + 1 sec rule + 1 sec span):
+        // MEASURED pre/post in the sibling detached worktree at 495687cd —
+        // the default+latent posture (the one this floor serves) is
+        // UNCHANGED at every depth (124/130/134 at labeled 142 both
+        // states; sec spans do not label there). No re-pin; the floor's
+        // margin stands.
         pub const BLENDED_TOP1: f32 = 123.0 / 142.0;
         pub const BLENDED_TOP3: f32 = 129.0 / 142.0;
         // Batch 200 re-pin (2026-10-03, the TensorFold serving-half landing,
@@ -2354,7 +2361,13 @@ mod tests {
                         // PERF_SPANS span) routes CORRECTLY. Floor stays
                         // measured − 5 = 80; the denominator follows the
                         // labeled set → 142.
-                        80.0 / 142.0 // measured 85/142 (59.9%)
+                        // Batch 328 note (2026-11-05, Plan 336): MEASURED
+                        // 86/142 (60.6%) — +1 UP vs B327's 85; the +1
+                        // dist corpus entry's centroid mass routes one
+                        // more span correctly. Floor stays measured − 5
+                        // = 80; denominator 142 (no default-posture
+                        // span added).
+                        80.0 / 142.0 // measured 86/142 (60.6%)
                     }
                 }
                 // Batch 130 (2026-09-08, Plan 111): the 5 kernel CloudRift
@@ -2486,6 +2499,17 @@ mod tests {
                 // vocabulary is router-positive, the B292/CVEngine
                 // mechanism). No re-pin; gating stays killed (85% bar,
                 // Bench 025).
+                // Batch 328 note (2026-11-05, Plan 336, the oss-fuzz
+                // distill — 1 sec rule + 1 sec span + 1 dist rule):
+                // MEASURED pre/post in the sibling detached worktree at
+                // 495687cd — kernel-OFF: 75/176 → 76/177 (42.6% →
+                // 42.9%); kernel-ON: 91/206 → 93/207 (44.2% → 44.9%,
+                // +1 sec span +1 more from the dist centroid
+                // sharpening). The new span routes CORRECTLY and
+                // retrieves its rule at top-1 (sec 34/34/34 → 35/35/35,
+                // the B292 mechanism again). Both states hold above the
+                // 85/210 pin; no re-pin; gating stays killed (85% bar,
+                // Bench 025).
                 (false | true, true, true) => 85.0 / 210.0,
             }
         }
@@ -2493,7 +2517,11 @@ mod tests {
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
-        if n == 0 { 1.0 } else { hits as f32 / n as f32 }
+        if n == 0 {
+            1.0
+        } else {
+            hits as f32 / n as f32
+        }
     }
 
     #[test]
@@ -2509,7 +2537,7 @@ mod tests {
         // The falsifiable prediction: All-mode top-1 == pool recall @
         // RERANK_POOL, exactly. If it holds, the measured gain is not an
         // effect size and must not be reported as one.
-        use crate::draft::{RERANK_POOL, RerankMode};
+        use crate::draft::{RerankMode, RERANK_POOL};
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher")
             .with_rerank_mode(RerankMode::Off);
@@ -2766,7 +2794,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clippy_fixture_labels_verify_via_proposers() {
-        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         let mut all: Vec<&str> = FIXABLE_LINTS.to_vec();
         all.extend_from_slice(VERIFY_LINTS);
         all.extend_from_slice(&[
@@ -2794,7 +2822,7 @@ mod tests {
     #[cfg(feature = "rust_perf")]
     #[test]
     fn perf_fixture_labels_verify_via_proposers() {
-        use crate::domains::rust_perf::proposers::{FIXABLE_RULES, propose_fix};
+        use crate::domains::rust_perf::proposers::{propose_fix, FIXABLE_RULES};
         for &(rule, code) in super::super::eval_fixtures_perf::PERF_SPANS {
             if FIXABLE_RULES.contains(&rule) {
                 assert!(
@@ -2938,7 +2966,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clean_spans_fire_no_lint() {
-        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for (tag, code) in CLEAN_SPANS {
             for &lint in &structural {
@@ -3141,7 +3169,7 @@ mod tests {
     // precedent).
     #[allow(clippy::too_many_lines)]
     fn cross_domain_agreement_rate_report() {
-        use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
+        use crate::draft::instantiation_rerank::{RerankMode, RERANK_POOL};
         use std::collections::{HashMap, HashSet};
 
         let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
@@ -3342,7 +3370,7 @@ mod tests {
 
     #[test]
     fn taxonomy_classifies_the_four_outcomes() {
-        use super::{ChoiceOutcome, DeclineClass, classify_choice_span};
+        use super::{classify_choice_span, ChoiceOutcome, DeclineClass};
 
         let acc = vec!["needless_return".to_string()];
         // strict hit: gold top-1
@@ -3373,7 +3401,7 @@ mod tests {
 
     #[test]
     fn taxonomy_decline_axis_is_three_way() {
-        use super::{DeclineClass, classify_choice_span};
+        use super::{classify_choice_span, DeclineClass};
 
         // covered: something fired
         let ranked = vec![scored("a", false), scored("b", true)];

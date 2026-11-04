@@ -23,8 +23,10 @@ fn corpus_detector_and_fixable_tables_agree() {
     // workload-hint — the pin moved WITH the batch. Suggest-only still holds.
     // Batch 221 (9080b598, bench-targets-shared-dependency-cluster-hint)
     // missed it too — found red at HEAD 2026-10-14 by the alignment sweep
-    // (the third instance of this exact failure mode).
-    assert_eq!(entries.len(), 7, "Phase 1 ships exactly 7 rules");
+    // (the third instance of this exact failure mode). Batch 328 (the
+    // oss-fuzz distill, profiling-profile-debug-assertions) moves it WITH
+    // the batch — the B146 discipline.
+    assert_eq!(entries.len(), 8, "Phase 1 ships exactly 8 rules");
     let ids: std::collections::BTreeSet<String> =
         entries.iter().map(|r| r.rule_id.clone()).collect();
     let detectors: std::collections::BTreeSet<String> =
@@ -81,6 +83,64 @@ fn member_rule_silent_without_evidence() {
             .all(|f| f.rule_id != "member-profile-ignored"),
         "member rule fired without the workspace evidence"
     );
+}
+
+/// Batch 328 — the profiling-profile debug-assertions rule: fires on the
+/// dev-inheriting / explicitly-armed vocabulary profiles, silent on the
+/// pinned form and every negative (inherits release, vocabulary miss,
+/// suffixed name, lib-only, the Batch-146 complete profile).
+#[test]
+fn profiling_profile_assertions_rule_precision() {
+    const D1: &str = "profiling-profile-debug-assertions";
+    let findings_for = |src: &str| scan_source_with(src, DistContext::default());
+
+    // The corpus buggy fixture fires; the fixed fixture loses the rule.
+    let r8 = DistDomain::build_corpus()
+        .into_iter()
+        .find(|r| r.rule_id == D1)
+        .expect("the corpus entry exists");
+    assert!(
+        findings_for(&r8.buggy_code).iter().any(|f| f.rule_id == D1),
+        "the buggy fixture must fire"
+    );
+    assert!(
+        findings_for(&r8.fixed_code).iter().all(|f| f.rule_id != D1),
+        "the fixed fixture (debug-assertions = false) must be silent"
+    );
+
+    // Explicit true fires; explicit false is the fixed form.
+    let armed = "[[bin]]\nname = \"s\"\n\n[profile.profiling]\ndebug-assertions = true\n";
+    assert!(findings_for(armed).iter().any(|f| f.rule_id == D1));
+    let pinned = "[[bin]]\nname = \"s\"\n\n[profile.profiling]\ndebug-assertions = false\noverflow-checks = false\n";
+    assert!(findings_for(pinned).iter().all(|f| f.rule_id != D1));
+
+    // inherits = "release" selects the OFF default — silent.
+    let release_inherit = "[[bin]]\nname = \"s\"\n\n[profile.profiling]\ninherits = \"release\"\n";
+    assert!(findings_for(release_inherit)
+        .iter()
+        .all(|f| f.rule_id != D1));
+
+    // Vocabulary misses: dev/test-named profiles and a SUFFIXED name
+    // (`profiling-fast` is an honest NO — exact-name match only).
+    for miss in [
+        "[[bin]]\nname = \"s\"\n\n[profile.dev]\ndebug-assertions = true\n",
+        "[[bin]]\nname = \"s\"\n\n[profile.test]\ndebug-assertions = true\n",
+        "[[bin]]\nname = \"s\"\n\n[profile.profiling-fast]\ndebug-assertions = true\n",
+    ] {
+        assert!(
+            findings_for(miss).iter().all(|f| f.rule_id != D1),
+            "vocabulary miss must stay silent: {miss}"
+        );
+    }
+
+    // Lib-only: no shipped binary, no sampling — the ships_bin gate holds.
+    let lib_only = "[package]\nname = \"lib\"\n\n[lib]\ncrate-type = [\"rlib\"]\n\n[profile.profiling]\ndebug-assertions = true\n";
+    assert!(findings_for(lib_only).is_empty());
+
+    // The Batch-146 complete profile ([profile.dist], inherits release)
+    // stays silent for D1 — vocabulary miss + inherits release.
+    let complete = "[[bin]]\nname = \"t\"\n\n[profile.dist]\ninherits = \"release\"\nopt-level = \"s\"\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\nstrip = true\n";
+    assert!(findings_for(complete).iter().all(|f| f.rule_id != D1));
 }
 
 /// Batch 146 — the PGO hint fires ONLY on the fully-tuned audience (all

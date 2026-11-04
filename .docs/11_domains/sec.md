@@ -254,6 +254,29 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 328 (2026-11-04) — the oss-fuzz distill: the archive-member zip-slip
+
+One suggest-only rule from the google/oss-fuzz distill (Research 366, Plan
+336, Apache-2.0 @ `a380569f` — the OSS-fuzz CI infrastructure itself;
+`infra/cifuzz/http_utils.py` downloads a remote zip then `extractall` with
+no member screen; the fixtures are ORIGINAL syntheses, never oss-fuzz
+source). NotBenchable-by-domain (security axis, never latency — the dial9
+split):
+
+| Rule | Family | Shape |
+|---|---|---|
+| `untrusted-archive-extract-paths` | `InputValidation` | a path extracted from an UNTRUSTED ARCHIVE whose member names are attacker-chosen: `ZipArchive::extract(dest)` with no member screen, or a `by_index`/`by_name` loop joining `entry.name()` into a destination path — a member named `../../etc/cron.d/x` (or an absolute path, or a Windows prefix) escapes the destination directory: arbitrary file write (zip-slip). Fix: the crate's own screened accessor `entry.enclosed_name()` (`Some(p) => dest.join(p), None => skip/refuse`), the generic `components()` walk refusing everything but Normal, or mangled extraction (sanitize separators before the join). DISTINCT-FROM `untrusted-path-join-escape` IN-RULE: that owns the CALLER-SUPPLIED name joined onto a trusted base (fn-parameter args → fs sinks), this the ARCHIVE-MEMBER surface — names come from the untrusted file's own central directory and the repair is the crate's own screened accessor, a different fix-space (the `unvalidated-egress-url` sink-distinct precedent); also distinct-from `unbounded-read-into-vec`: that owns the VOLUME of the read, this the PATHS the members carry. Advisory posture VERIFIED at authoring (rustsec.org fetch 2026-11-04): RUSTSEC-2025-0168 (zip crate — incorrect path canonicalization during archive extraction → arbitrary file write, https://rustsec.org/advisories/RUSTSEC-2025-0168) plus a same-surface 2026 wave (symlink targets, SUID/SGID preservation, permissions through symlinks); the class fires in consumers too (RUSTSEC-2026-0434 ant-releases, RUSTSEC-2026-0427 sn-releases — both zip-slip); the extract() surface's screening posture is version-dependent — consumers re-derive the advisory posture at adoption. Detector `archive_extract::detect` |
+
+Two count-neutral rider faces landed on the neighbors (notes only, no new
+triggers): the BASENAME-REDUCTION fix-form on `untrusted-path-join-escape`
+(a single untrusted NAME → extracting the basename before the join IS the
+repair — the source's own `fuzz_target.py::_save_crash` does
+`os.path.basename(crash.input_path)` before joining the artifact
+directory), and the SECOND-EXPANSION-STAGE corroboration on
+`unbounded-read-into-vec` (download-then-extract = untrusted read source +
+a second unbounded expansion — `http_utils.py::download_and_unpack_zip` is
+the real regime instance; the zip-bomb adjacency).
+
 ## Batch 327 (2026-11-03) — the sanstun trio: secret lifetime, cardinality, checkpoint bypass
 
 Three suggest-only rules from the firezone/sanstun distill (Research 364,
@@ -427,6 +450,13 @@ proposer.
   defined in-fixture) so the boundary-gate probe crate compiles. Workspace
   sweep: `examples/softmax_collapse_sweep.rs` (read-only; hits recorded in
   the issue).
+- Batch 328 (2026-11-04): corpus 38 → 39 (7 fixable + 32 suggest-only;
+  the oss-fuzz distill, Plan 336 / Research 366) — 1 detector joined;
+  boundary-gate probe crate gains the `zip` dep (2.6.1 verified);
+  corpus-count pin (`sec.rules` 38 → 39) owed the `pins_manifest.py
+  --write` manifest diff at the central landing; retrieval floors +
+  freeze/rebuild disposition are the central landing's calls (this block
+  authored by the batch agent).
 - Batch 327 (2026-11-03): corpus 35 → 38 (7 fixable + 31 suggest-only;
   the sanstun distill, Plan 332 / Research 364) — 3 detectors joined;
   retrieval floors re-measured at the landing; freeze NOT owed

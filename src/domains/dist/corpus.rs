@@ -1,6 +1,6 @@
 //! The dist seed corpus — Phase 1 (Issue 085).
 //!
-//! Seven rules, all suggest-only, every one with measured provenance — the
+//! Eight rules, all suggest-only, every one with measured provenance — the
 //! first four from the session that found the class (the owner had to ASK why
 //! the binary was 2x — that is the failure this domain exists to prevent),
 //! the fifth from upstream's own measured compile-time series (Batch 143 —
@@ -9,11 +9,14 @@
 //! from the July-2026 series (Batch 146 — rustc #159091: PGO training-set
 //! coverage, the out-of-manifest next lever for the fully-tuned audience),
 //! the seventh from bevy's own benches split (Batch 221 — #25321: per-crate
-//! bench features, optional bench deps, required-features per [[bench]]).
-//! The dedup verdict rides each rule's `incumbent` field: `cargo` itself
-//! warns about NOTHING here (checked live 2026-09-09 — a bare release build
-//! of a bin crate with no profile section compiles silent), so all seven are
-//! Class B (novel detection) with no incumbent to overlay.
+//! bench features, optional bench deps, required-features per [[bench]]),
+//! the eighth from google/oss-fuzz's own fuzzing wrapper (Batch 328 —
+//! @ a380569f: `-C debug-assertions=no` on every fuzzing/coverage build —
+//! a dev-inheriting profiling profile samples a binary whose assertions
+//! are ARMED). The dedup verdict rides each rule's `incumbent` field: `cargo`
+//! itself warns about NOTHING here (checked live 2026-09-09 — a bare release
+//! build of a bin crate with no profile section compiles silent), so all
+//! eight are Class B (novel detection) with no incumbent to overlay.
 //!
 //! | Rule | Family | Fix | Incumbent |
 //! |---|---|---|---|
@@ -24,6 +27,7 @@
 //! | `large-api-dependency-mostly-unused-hint` | `BuildTime` | suggest | none |
 //! | `pgo-training-set-covers-real-workload-hint` | `BuildTime` | suggest | none |
 //! | `bench-targets-shared-dependency-cluster-hint` | `BuildTime` | suggest | none |
+//! | `profiling-profile-debug-assertions` | `BuildTime` | suggest | none |
 
 use super::{DistDomain, DistFamily, DistRule};
 use crate::corpus::Corpus;
@@ -133,6 +137,17 @@ fn entries() -> Vec<DistRule> {
             F::BuildTime,
             Some(
                 "Source: bevyengine/bevy #25321, 'Split benchmarks with features to allow avoiding unnecessary compilation' (merged 2026-10-05 @ 430c448d4b0878741fa025836ffc26b852438cf2, +122/-20 — benches/Cargo.toml only), PR body verbatim: 'Since benchmarks share the same dependencies, that includes `bevy_render`, even though I'm only trying to run `bevy_ecs` benchmarks. `bevy_render` also happens to take way longer to compile than anything else.' + 'Add features to `benches` to enable specific crates' benchmarks: feature `bench_ecs` for `bevy_ecs`, `bench_render` for `bevy_render`, etc.' + 'All features are enabled by default, so default behavior should be the same.' + 'The dependencies are normal dependencies instead of dev-dependencies now, but they're also now `optional = true`.' — bevy's landed split: 10 bench_* features, deps optional-normal, required-features per [[bench]]; the merged resolution to the review's automated-benchmarking question IS the default-on half (bare `cargo bench` compiles everything, unchanged; the win is realized by the targeted --no-default-features --features bench_ecs invocation; the author ran both postures). ⛔ OUR OWN lore rides the advice: a feature-gated bench target WITHOUT its required-features row is skipped SILENTLY by --all-targets, and a whole-file-gated one reports ok. 0 passed (the cfg-gated green-zero class, katgpt-rs bench_694) — the rows are load-bearing, never decorative; this advice is for humans cutting bench compile time, never for gate-asserted suites. Detector precision: fires on >= 3 [[bench]] with NO required-features key on ANY of them (2 targets have nothing to split); the gated form is the fixed artifact and stays silent (strictly additive — every pre-existing fixture is benchless). RIDER (Batch 224 / Plan 226 — the C++ twin, ggml-org/llama.cpp @ ccdbe290533f68154ede46e0618622eebcb6c070 #30299, MIT, merged 2026-10-12, the commit immediately after 073b74034): 'tests : link each test against only the libraries it uses' — the SAME law in CMake spelling: the test-helper functions gain a LINK keyword (default llama-common) so CALL SITES DECLARE the minimal link set — 'ggml-only tests now link just ggml: test-opt, test-metal-graph-optimize, test-backend-ops, test-tiled-mulmat, test-barrier, test-quantize-fns, test-quantize-perf, test-rope, test-col2im-1d, test-gguf, test-alloc' + 'llama-only tests drop llama-common' + 'both mtmd tests link mtmd only, dropping the LLAMA_TEST_NAME / target_link_libraries workarounds'. TWO CARRY-OVER ATOMS for the Rust twin: (1) the INTERFACE-LEAK half — 'Both helpers now set cxx_std_17 explicitly, since the tests no longer inherit it from llama-common's PUBLIC interface.' — a shared helper that propagates a language standard PUBLICly makes every consumer depend on it transitively; the moment the fat dep leaves, the implicit std goes with it (the CMake face of the leaky-interface class — split the link set AND the helper must OWN what it used to propagate); (2) the WORKAROUND-COLLAPSE half — per-target post-hoc target_link_libraries patches (the LLAMA_TEST_NAME set/use/unset dance) exist exactly because the helper could not express per-test link sets; give the helper the parameter and the patches die ('tests/testing.h no longer includes common.h; the only symbol it used from there (string_join) is inlined' — the same collapse at the include seam). Cross-language confirmation of the Rust rule's mechanism-naming: the cost is at LINK/compile time, the unit of minimization is the PER-TARGET declared set, and the default stays the union (llama-common) so bare builds are unchanged — opt-in narrowing, never a default flip.",
+            ),
+        ),
+        rule(
+            "profiling-profile-debug-assertions",
+            "a profiling-named build profile that inherits `dev` samples a binary whose debug assertions and overflow checks are ON — one tripped assert aborts the profiled process mid-sample; profiling builds must pin `debug-assertions = false` + `overflow-checks = false`",
+            "a [profile.<name>] section whose name is EXACTLY one of the profiling vocabulary (profiling | flamegraph | pprof | coverage | instrument) that either inherits \"dev\" or sets debug-assertions = true, with no explicit debug-assertions = false in that profile",
+            "[package]\nname = \"sampler\"\n\n[[bin]]\nname = \"sampler\"\n\n[profile.profiling]\ninherits = \"dev\"\ndebug = true\n",
+            "[package]\nname = \"sampler\"\n\n[[bin]]\nname = \"sampler\"\n\n[profile.profiling]\ninherits = \"dev\"\ndebug = true\ndebug-assertions = false\noverflow-checks = false\n",
+            F::BuildTime,
+            Some(
+                "Source: google/oss-fuzz @ a380569f8dfef6d142d233725391a6168b41b639 (Apache-2.0), infra/base-images/base-builder/cargo L43-44 verbatim: '# we do not want to trigger debug assertions and stops' + 'export RUSTFLAGS=\"$RUSTFLAGS -C debug-assertions=no\"' — the wrapper strips assertions from every fuzzing build it runs; the coverage-arm RUSTFLAGS rows in infra/base-images/base-builder/compile L119-132 corroborate (instrumentation builds always rebuild with assertions off). Cargo-book posture: [profile.dev] has debug-assertions ON by default, [profile.release] OFF, and inherits = \"dev\" carries the dev default into the inheriting profile — so a profiling-named profile inheriting dev samples a binary whose assertions are armed. Sampling regime: perf/flamegraph/pprof attach to a RUNNING binary — one tripped assert (or overflow check) aborts the profiled process mid-sample: the profile dies, or the collected profile over-represents the panic path. NotBenchable by domain — build-config advice tier, no latency axis (annotate, never demote). SCANNER EXCEPTION (Batch 328 — the scanner's FIRST value read): this rule is value-shaped by nature (inherits = \"dev\" vs inherits = \"release\" selects cargo's assertion default; debug-assertions = true|false flips it explicitly; presence alone cannot distinguish the fixed form debug-assertions = false), so the scanner records the raw value of exactly three keys (inherits, debug-assertions, overflow-checks) per profile — every other key stays value-blind. HONEST RECALL LIMITS: the profile-name match is EXACT vocabulary (profiling | flamegraph | pprof | coverage | instrument) — a suffixed name like profiling-fast inheriting dev is an honest NO; the scanner reads the SELF manifest only — a workspace ROOT manifest overriding the same profile name is invisible to a member scan (profiles live at the root by cargo law — cross-ref member-profile-ignored, which fires to move the block), so workspace members should carry profiling profiles at the root; a profile with no inherits key is out of trigger scope (explicit-only).",
             ),
         ),
     ]
@@ -273,6 +288,11 @@ mod tests {
     fn lib_only_and_complete_profiles_stay_silent() {
         let lib_only = "[package]\nname = \"lib\"\n\n[lib]\ncrate-type = [\"rlib\"]\n";
         assert_eq!(scan_source_with(lib_only, DistContext::default()), []);
+        // Batch 328: a lib-only crate carrying a dev-inheriting profiling
+        // profile stays silent too — the profiling-profile rule rides the
+        // same ships_bin gate (a lib has no binary anyone samples).
+        let lib_profiling = "[package]\nname = \"lib\"\n\n[lib]\ncrate-type = [\"rlib\"]\n\n[profile.profiling]\ndebug-assertions = true\n";
+        assert_eq!(scan_source_with(lib_profiling, DistContext::default()), []);
         // Batch 146: a COMPLETE profile no longer scans empty — it earns
         // exactly ONE finding, the PGO next-lever hint (the manifest-level
         // levers are exhausted; the ship-size rules stay silent). The
