@@ -1,7 +1,7 @@
 # Plan 339: Batch 331 — the hindsight round-2 pool conversion (sec id-vs-index + rust_perf retry ladder)
 
 **Status:** LANDED 2026-11-05 (Batch 331 landed `40e05c069`, the landing commit is the arbiter; this row is the discharge record). Claimed 2026-11-05 ~01:1x +07; claim row appended to the queue snapshot and pushed BEFORE any corpus edit. Scope per the round-2 authoring pass (this session): the pool's 4 named candidates resolve to **2 corpus rules + 1 count-neutral rider face** — candidates (A) rank-space-RRF and (B) sum-fusion-buries-single-arm-best are CONFIRMED DROPS citing Research 368's own Drops rows (already adjudicated; never re-graded; decision-tier lane intel only).
-**Claimed:** zed-m3-r2pool-b331, 1793827572, expires 2026-11-07T01:15:00+00:00
+**Lease closed:** zed-m3-r2pool-b331, epoch 1793827572, expiry 2026-11-07T01:15:00+00:00 — work LANDED `40e05c069` (the landing is the arbiter); folded 2026-11-05 (zed-m3-b332)
 
 **Source:** vectorize-io/hindsight @ `841979dfd` (Apache-2.0; clone at `.raw/hindsight`, removed at the landing commit). Round-2 authoring pass quote ledger (this session, all re-verified at the pin):
 

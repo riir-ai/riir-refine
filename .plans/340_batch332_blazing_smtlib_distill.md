@@ -1,7 +1,7 @@
 # Plan 340: Batch 332 — the blazing-smtlib distill conversion (rust_perf byte-run-scan + token-batch)
 
-**Status:** OPEN (verdict landed 2026-11-05, Research 370; conversion unclaimed — the next mining slot claims this plan BEFORE any corpus edit).
-**Claimed:** —
+**Status:** CLAIMED 2026-11-05 ~05:2x +07 (claim pushed BEFORE any corpus edit; conversion in flight).
+**Claimed:** zed-m3-b332, 1793830986, expires 2026-11-06T22:23:06+00:00
 
 **Source:** onderjan/blazing-smtlib @ `42b45c20b0045495a40b9eaf0a717e0f1c976bed` (MIT OR Apache-2.0; v0.1.0, HEAD 2026-10-29; clone `.raw/blazing-smtlib` REMOVED at the verdict commit `—` — re-clone at the pinned sha for the batch; paper provenance: arXiv 2611.00185 "Blazing-Fast SMT-LIB Parsing for Rust and Lean", Onderka/Biere/Böving, 2026-10-30 — a NEW library, no upstream port; the 6× geomean is source-reported on their 9950X3D + 2025 SMT-LIB corpus, provenance never our bars).
 
