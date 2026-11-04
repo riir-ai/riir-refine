@@ -1,6 +1,7 @@
 # Issue 191 — scope the `kernel_opt` GOAT gate: real corpus + full numeric validator + promotion bars (the pending default-promotion precondition)
 
 **Status:** OPEN — T1–T5 ALL EXECUTED; the campaign verdict is IN and RATIFIED (Bench 124 + the delegated AGREE verdict, session 04ae2ccf, native fallback reviewer 2026-11-01): promotion REFUSED, `kernel_opt` stays opt-in (G1: 65 fixture defects → Issue 193; G2: tranche median 1.0000 < 1.06 on the CPU-portable surface). The issue remains open for the RE-CAMPAIGN path: Issue-193 repairs → the owner-gated G2-convention decision → re-run G1+G2+G5. Delegated-owner verdict 2026-11-01 (fallback reviewer sub-agent, the request_verdict claude_code channel auth-unavailable on that box): FILE, don't execute — the prefill-vs-llama.cpp lane stays the 4090's top priority, and kernel_opt is a heal-domain gate, not a league lane; PARK would leave a 1051-rule domain with a permanently unactionable promotion path.
+**Delegated-owner verdict 2026-11-04 (request session fe55a9d0, claude_code reviewer; AGREE, recorded per the delegated-owner flow): BOTH remaining fences adjudicated. (D1) The CPU-portable G2 axis is CLOSED with the measured disclosure (tranche median 1.0000 recorded — the axis structurally cannot express GPU-shaped wins; measured evidence, not a retune). The RE-CAMPAIGN G2 is the GPU-host microbench on the 4090 (`agent-mail rig run 4090 --exclusive`), the pre-registered ≥ 6% median bar UNCHANGED, and PRE-REGISTRATION IS REQUIRED BEFORE ANY RUN (T6's three conditions). (D2) The G5-cost fence STAYS — the ≤ 1.0 ms/file ceiling is never re-registered after a failing measurement; the substrate lever has since LANDED as riir-neuron-db Issue 642 (2026-11-03: `two_stage_oversample = Some(4)` measured 4.7×/call at the loop corpus + the scratch-reuse twins `retrieve_diverse[_two_stage]_into` / `DiverseScanScratch` shipped; ndb's projected refine loop scale 4.37 → 0.92 ms/file), so the fence clears via the REFINE-SIDE lane (T7): adopt the scratch twins in the per-line suggest loop + re-run the G5 cost harness on the REGISTERED corpus with the same p50 definition + box provenance — the fence clears iff p50 ≤ 1.0 ms THERE (ndb's number is ndb's corpus; the gap vs Bench 125's 38.795 ms settles at the re-measure). Promotion still requires BOTH G2(GPU-host) AND G5-cost. While recording: T3 verified LANDED (`mod.rs::context_notes` propagates the G1-record annotation; `verify.rs` consumes `g1_opt_backed` + the digest-keyed verdict store) — ticked below. Re-campaign sequence: T6 ∧ T7 → re-run G1+G3+G4+G5 → promotion verdict.
 **Lease closed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1–T5 executed and pushed (T2 `a9703c00a`, T3 `82b77f88b`, T4 `2ff3c0a61`, T5 `96f3733ee`, record `a0a751d25`); the delegated ratification verdict (AGREE, all five checks, two non-blocking nits fixed/deferred) closed the campaign.
 
 ## The question
@@ -134,11 +135,18 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
         (E0308/E0277/E0599/E0614, lifetime, Debug-derive). Full ledger + repair: Issue 193.
       - libtest failure reports go to STDOUT — the harness reads stdout first for run-failure
         diagnosis (the stderr-only read reported empty errors on the 22-run-fail class).
-- [ ] T3 — wire the full numeric validator into `kernel_verify` (replace the STUB delegation
+- [x] T3 — wire the full numeric validator into `kernel_verify` (replace the STUB delegation
       path for the promoted set only; the stub stays for the long tail). AMENDED: propagate a
       `validated: fixture-green | parse-only` annotation end-to-end via the `context_notes`
       channel — a suggestion from a parse-only rule must not look identical downstream to one
       from a fixture-green rule.
+      **— DONE (verified while recording the 2026-11-04 verdict):
+      `src/domains/kernel_opt/mod.rs::context_notes` returns the G1-record annotation
+      (`fixture-green` / `fixture-defect` / `parse-only`, failing CLOSED to `unverified` when a
+      rule's strings moved past the committed store) and
+      `src/domains/kernel_opt/verify.rs::verify` consumes `goat_g1::g1_opt_backed` + the
+      digest-keyed verdict store — the validator is wired for the promoted set and the
+      annotation propagates end-to-end.**
 - [x] T4 — the G3 score-bench byte-stability arm. DONE 2026-11-01
       (`scripts/g3_scorebench_stability.sh`, commit `2ff3c0a61`): the OFF posture
       (`--features score_bench`) vs ON (`+kernel_opt`), isolated target dirs, both lanes
@@ -173,6 +181,25 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       - AMENDED execution note: the original T5 text named the lease + fresh `.benchmarks/`
         number + rig exclusivity + PROVENANCE — all satisfied (Bench 124 §Provenance); the
         "G5 match census in the same campaign" clause is the one disclosed deferral.
+- [ ] T6 — PRE-REGISTER the GPU-host G2 bench (the 2026-11-04 verdict's conditions — ALL
+      pinned in a record BEFORE any run): (a) the full bench registration — tranche families
+      (the deterministic selector's rule extends to the GPU-shaped surface), the ref-vs-opt
+      kernel pairs, the interleaved A/B pairing, n, `agent-mail rig run 4090 --exclusive`, and
+      the box record (driver, clocks, thermals, power — the PROVENANCE line); (b) a minimum
+      measurable-pairs floor pinned before running — below the floor the leg reads UNSEEN,
+      never a pass (CPU's 53-of-74 unmeasurable is the cautionary shape); (c) the 7
+      CPU-regressing rules restricted to GPU contexts or disclosed per-rule in the record.
+      Then run: re-campaign G2 = the GPU-host microbench, ≥ 6% median bar UNCHANGED; a GPU-host
+      failure refuses promotion the same as a CPU one would have.
+- [ ] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
+      2026-11-03): adopt the scratch-reuse twins (`ShardIndex::retrieve_diverse_two_stage_into`
+      + `DiverseScanScratch`) in the per-line suggest loop (`corpus_index.rs::suggest_deep_into`
+      — today every per-line call allocates fresh candidates), then re-run the G5 cost harness
+      (`examples/kernel_goat_g5.rs`) on the REGISTERED corpus (this repo's `src/**/*.rs` at the
+      campaign commit + the pinned `.raw` vendor SHAs) with the SAME p50 definition + box
+      provenance. The fence clears iff added p50 ≤ 1.0 ms/file THERE. Claim first; run alone.
+      ⛔ A fix that shrinks or reshapes the scanned-file mix is a different measurement, not a
+      pass (the D2 condition).
 
 ## Refs
 
