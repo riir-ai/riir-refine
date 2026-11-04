@@ -2918,7 +2918,9 @@ fn run_points_join() {
         }
     };
     let Ok(signing) = account.signing_key() else {
-        eprintln!("join: the account key is present but not Ed25519-signable (custody/key-shape error)");
+        eprintln!(
+            "join: the account key is present but not Ed25519-signable (custody/key-shape error)"
+        );
         std::process::exit(2);
     };
     // GitHub identity: the EXISTING device-flow app (GAP 5) — the client
@@ -2927,7 +2929,9 @@ fn run_points_join() {
         .ok()
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| riir_refine::points_client::DEFAULT_GITHUB_CLIENT_ID.to_string());
-    println!("join: GitHub device login (read:user only — the flow proves who you are, it never takes write scope)");
+    println!(
+        "join: GitHub device login (read:user only — the flow proves who you are, it never takes write scope)"
+    );
     let (_token, identity) = {
         let transport = riir_kat::kat_recovery_client::UreqProviderTransport;
         match riir_kat::kat_recovery_client::github_device_login_with(&transport, &client_id) {
@@ -2951,7 +2955,9 @@ fn run_points_join() {
         }
     };
     // The consent record: joining IS the explicit consent act.
-    if let Err(e) = riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Joined) {
+    if let Err(e) =
+        riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Joined)
+    {
         eprintln!("join: {e}");
         std::process::exit(2);
     }
@@ -2991,8 +2997,13 @@ fn run_points_leave(left_alias: bool) {
     if riir_refine::offline::offline() {
         // Offline: zero data sent means ZERO — skip the unbind call, clear
         // locally, say so.
-        let _ = riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Never);
-        println!("leave: local state cleared; the server unbind was not called (offline) — it deactivates on your next online `leave` or ages out");
+        let _ = riir_refine::first_run_consent::write(
+            &dir,
+            riir_refine::first_run_consent::Answer::Never,
+        );
+        println!(
+            "leave: local state cleared; the server unbind was not called (offline) — it deactivates on your next online `leave` or ages out"
+        );
         return;
     }
     let signing = points_account_signing();
@@ -3007,15 +3018,20 @@ fn run_points_leave(left_alias: bool) {
                 Ok(response) => println!("leave: unbound server-side (epoch {})", response.epoch),
                 Err(e) => {
                     println!("{}", e.line());
-                    println!("leave: the server unbind is pending — nothing will be sent in the meantime (local state is cleared now)");
+                    println!(
+                        "leave: the server unbind is pending — nothing will be sent in the meantime (local state is cleared now)"
+                    );
                 }
             }
         }
     } else {
         println!("leave: no account here — nothing was bound; clearing local state");
     }
-    match riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Never) {
-        Ok(()) => println!("leave: contribution ended — zero data is sent from here on; local healing is identical"),
+    match riir_refine::first_run_consent::write(&dir, riir_refine::first_run_consent::Answer::Never)
+    {
+        Ok(()) => println!(
+            "leave: contribution ended — zero data is sent from here on; local healing is identical"
+        ),
         Err(e) => eprintln!("leave: {e}"),
     }
 }
@@ -3048,7 +3064,10 @@ fn run_points_rank() {
             } else {
                 None
             };
-            print!("{}", riir_refine::points_client::render_rank(&response, own_note.as_deref()));
+            print!(
+                "{}",
+                riir_refine::points_client::render_rank(&response, own_note.as_deref())
+            );
         }
         Err(e) => {
             println!("{}", e.line());
@@ -3809,6 +3828,23 @@ fn run_kat_config(
     println!("config: inspect anytime — cargo refine config get");
 }
 
+/// The net word's service URL for adopt-state, posture-adaptive on the
+/// devnet arm (the `JoinEnv::url` precedent): under the `net-mainnet` sole
+/// pin the devnet const compiles out (compile-to-nothing), so the arm
+/// answers absence ("") and the caller refuses loud at the pin seam —
+/// never a compile break, never a wrong-net resolution.
+#[cfg(feature = "kat_service")]
+fn adopt_net_url(net_word: &str) -> &'static str {
+    match net_word {
+        #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
+        "devnet" => riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
+        "mainnet" => riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
+        // A sole-pin build has no const for the other net: absence, not a
+        // neighbour's URL.
+        _ => "",
+    }
+}
+
 /// riir-kat Issue 003 T4 (the refine half): `config adopt-state <net>
 /// [--discard]` — the EXPLICIT, per-file migration for pre-split
 /// network-blind state. Never auto-adopts: adoption is oracle-confirmed
@@ -3827,16 +3863,8 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
     use riir_refine::kat_service_config as svc;
 
     let (default_url, other_net, other_url) = match net {
-        "devnet" => (
-            riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
-            "mainnet",
-            riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
-        ),
-        "mainnet" => (
-            riir_refine::kat_service_urls::MAINNET_SERVICE_URL,
-            "devnet",
-            riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
-        ),
+        "devnet" => (adopt_net_url("devnet"), "mainnet", adopt_net_url("mainnet")),
+        "mainnet" => (adopt_net_url("mainnet"), "devnet", adopt_net_url("devnet")),
         _ => unreachable!("parse_args validated the net word"),
     };
     let net_url = match url_override {
@@ -3849,6 +3877,14 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
         },
         None => default_url.to_string(),
     };
+    if net_url.is_empty() {
+        eprintln!(
+            "config adopt-state {net}: this build's net pin ({}) compiles the {net} host \
+             out — rebuild without net-mainnet for the multi-net bin",
+            riir_refine::kat_net_pin::NET_PIN
+        );
+        std::process::exit(2);
+    }
     if let Err(e) = riir_refine::kat_net_pin::ensure_net_allowed(&net_url) {
         eprintln!(
             "config adopt-state {net}: the target {net_url} is outside this build's net \
@@ -3951,7 +3987,20 @@ fn run_kat_adopt_state(net: &str, discard: bool, url_override: Option<&str>, pat
     // Second pass, only for acks the declared net did not match: consult
     // the OTHER live ledger once, then decide belongs-to-other vs discard.
     if !needs_other.is_empty() {
-        let (other_facts, other_why) = adopt_oracle_facts(other_url);
+        let (other_facts, other_why) = if other_url.is_empty() {
+            // A sole-pin build has no host for the other net
+            // (compile-to-nothing): fail-closed — no dial, the files stay
+            // discard-only, never adopted blind.
+            (
+                adopt::HostFacts::unreachable(),
+                Some(format!(
+                    "the other ledger ({other_net}) is outside this build's net pin ({})",
+                    riir_refine::kat_net_pin::NET_PIN
+                )),
+            )
+        } else {
+            adopt_oracle_facts(other_url)
+        };
         for f in needs_other {
             match adopt::adopt_verdict(f, net, &declared_facts, other_net, Some(&other_facts)) {
                 AdoptVerdict::BelongsToOtherNet { other } => refused.push(format!(
@@ -13045,9 +13094,8 @@ fn main() {
     #[cfg(feature = "points")]
     if args.command.is_none() || args.fix || args.suggest {
         let corpus_part = {
-            let store = riir_kat::kat_lease_client::LeaseStore::open(&resolve_heal_root(
-                &args.paths,
-            ));
+            let store =
+                riir_kat::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
             match store.current_epoch() {
                 Some(e) => format!(" · corpus epoch {e}"),
                 None => String::new(),
@@ -13077,9 +13125,9 @@ fn main() {
         let consent_dir = riir_kat::kat_account::KatAccount::default_dir();
         let stored = riir_refine::first_run_consent::read(&consent_dir);
         if stored == riir_refine::first_run_consent::Answer::Unset {
-            let asked = riir_refine::first_run_consent::ask_once(PROMPT_YES.load(
-                std::sync::atomic::Ordering::Relaxed,
-            ));
+            let asked = riir_refine::first_run_consent::ask_once(
+                PROMPT_YES.load(std::sync::atomic::Ordering::Relaxed),
+            );
             if let Err(e) = riir_refine::first_run_consent::write(&consent_dir, asked) {
                 eprintln!("consent: {e}");
             }
@@ -18052,8 +18100,7 @@ fn main() {
             // ∩ compiled fix set over the total) — the honest '~' when the
             // set cannot name one.
             if domain_tally.fixable_clippy > 0 {
-                let pct = (domain_tally.fixable_clippy * 100)
-                    / domain_tally.total().max(1);
+                let pct = (domain_tally.fixable_clippy * 100) / domain_tally.total().max(1);
                 println!(
                     "🛠️ ~{pct}% fixable via `cargo refine fix` (compile-gated; the suggest-only rows stay manual)"
                 );
@@ -18069,12 +18116,9 @@ fn main() {
                 thou(n_fixed_files)
             );
             if n_suggestions > n_fixed_edits {
-                let pct_unfixed =
-                    100 - (n_fixed_edits * 100 / n_suggestions.max(1));
+                let pct_unfixed = 100 - (n_fixed_edits * 100 / n_suggestions.max(1));
                 if pct_unfixed > 0 {
-                    println!(
-                        "🛠️ ~{pct_unfixed}% unfixed — `cargo refine join` for self-evolve"
-                    );
+                    println!("🛠️ ~{pct_unfixed}% unfixed — `cargo refine join` for self-evolve");
                 }
             }
         }
