@@ -9,7 +9,10 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 298 entries across 14 categories as of Batch 331 (+1: concurrency —
+//! 300 entries across 14 categories as of Batch 332 (+2: dispatch —
+//! `byte-flag-table-masked-run-scan` + `token-batch-cursor-handover`, the
+//! blazing-smtlib distill (Plan 340 / Research 370); prior: 298 at Batch 331
+//! (+1: concurrency —
 //! `batch-retry-ladder-classifies-failure-before-permanent-state`, the
 //! vectorize-io/hindsight round-2 pool (Plan 339 / Research 368 + addendum);
 //! prior: 297 at Batch 330 (+1: concurrency —
@@ -732,15 +735,24 @@ mod entries_61;
 mod entries_62;
 mod entries_63;
 mod entries_64;
+mod entries_65;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 298 entries
-/// (Batch 331, 2026-11-05, Plan 339 / Research 368 + addendum: +1 -- the
-/// hindsight round-2 pool, `entries_64`: the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 300 entries
+/// (Batch 332, 2026-11-05, Plan 340 / Research 370: +2 -- the blazing-smtlib
+/// distill, `entries_65`: the `byte-flag-table-masked-run-scan` law
+/// (dispatch, BENCHABLE -- a const-eval 256-entry u8 class-flag table + a
+/// masked-prefix run scan replaces the per-byte predicate chain; the
+/// regime-complementary sibling of B243's `ascii-run-swar-block-skip`) +
+/// the `token-batch-cursor-handover` law (dispatch, suggestion-only -- a
+/// fixed-capacity staging array of zero-copy views + a cursor bulk handover
+/// with boundary-applied abort actions); prior: Batch 331, 2026-11-05,
+/// Plan 339 / Research 368 + addendum: +1 -- the hindsight round-2 pool,
+/// `entries_64`: the
 /// `batch-retry-ladder-classifies-failure-before-permanent-state` law
 /// (concurrency, NotBenchable-by-domain -- classify before the ladder:
 /// PROPAGATE a quota-reset control signal at first sight, `FAIL_FAST` a
@@ -929,5 +941,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_62::entries());
     entries.extend(entries_63::entries());
     entries.extend(entries_64::entries());
+    entries.extend(entries_65::entries());
     Corpus::new(entries)
 }

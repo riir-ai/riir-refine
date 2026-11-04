@@ -2165,7 +2165,19 @@ mod tests {
         // TOP3 stand at their PRE-EXISTING zero-margin state (measured ==
         // floor before this batch too) — untouched here; the next batch that
         // moves them owes the Issue-063 one-span-margin repair.
-        pub const BLENDED_TOP5: f32 = 133.0 / 142.0;
+        // Batch 332 re-pin (2026-11-05, Plan 340 / Research 370, the
+        // blazing-smtlib distill: +2 rust_perf dispatch rules, NO new
+        // spans — labeled 142 UNCHANGED). ATTRIBUTION: blended top-1
+        // 124/142 and top-3 130/142 UNCHANGED (floors 123/129 held with
+        // margin); top-5 133/142 -> 132/142 — ONE span, `repr-u8-enum`,
+        // demoted 5th -> 6th (the miss taxonomy: rank=5 0-based) by
+        // legitimate corpus growth — the two new text-rich dispatch
+        // entries ("256-entry flag table", "run scan", "predicate
+        // chain") outrank it inside the perf pool. The P7/B200
+        // cross-pool-competition class again, no old-span content
+        // change. Floor re-derives from the convention (measured − ONE
+        // span) → 131/142, restoring the margin per the Issue-063 law.
+        pub const BLENDED_TOP5: f32 = 131.0 / 142.0;
         // Issue 170 re-pin (2026-10-24): clippy top-1 MEASURED 42/48 (87.5%)
         // at the post-B271 state — the pin had sat at ZERO margin since B243
         // (the B243 note above flagged it). Floor re-derives from the
