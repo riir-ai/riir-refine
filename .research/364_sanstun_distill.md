@@ -83,3 +83,14 @@ The league durable record + open lanes are Metal/CUDA GDN, prefill/decode, quant
 ## Recording
 
 Per the skill's YES path, one commit: this note + `.plans/332_sanstun_distill_batch.md` (plan-first, before any corpus edit) + the queue line in `.distill/001_mining_queue_snapshot.md`. Highwaters: `.research` 363→364, `.plans` 331→332. `.raw/sanstun` removed at the commit. Dual-allocation gate re-run at the landing.
+
+## Landing addendum (2026-11-04, close-out by zed-m3-refine-hygiene — the landing session's plan-file close-out was missed; landed `c6be8fe5c` 2026-11-03 21:01 +0700)
+
+Landing state, cited from the landing commit's own record:
+
+- **Converted (4):** rust_perf `batch-reserve-monotonic-counters-offload-bulk` (entries_59, concurrency, NotBenchable-by-domain, Grade B — N per-item synchronized counter trips collapse to ONE bound-checked range reservation, `checked_add` + REJECT filter, whole-batch loud refusal; disjoint contiguous splits front per-item bulk work on any thread in any order; replay-window tolerance is the regime; fixtures standalone-verified buggy 4/4 fixed 5/5; 15 needle gates first-shot; distinct-from the B283 certifying-token rule) + the sec trio (`secret-key-without-zeroize` CryptoHygiene dep-gated — the family's first LIFETIME member; `untrusted-keyed-state-unbounded` InputValidation CARDINALITY face, fail-closed full-table refusal; `gateway-type-forces-security-check` InputValidation constructor-reachability bypass). Probe-parity PASS (zero security lints on all three buggy shapes).
+- **Dropped (1):** candidate 5 `reject-before-expensive-sink`, as expected — the B258 invented-check class.
+- **Counts:** manifest regen 293/168/38 at the landing (rust_perf 292→293, sec 35→38); tests.rs pins 239→240. Post-landing B326 (Plan 330, entries_60) moved rust_perf to 294 — live counts at close-out: rust_perf 294 / sec 38.
+- **Retrieval floors re-measured with pre/post attribution** (pre-batch A/B in a sibling detached worktree at `befbdc416`): hits UNCHANGED at every depth — NOT the growth-competition mechanism; the batch's own PERF_SPANS span (top-5-only) dilutes labeled 141→142. Re-pinned measured−ONE-span: TOP1 123/142, TOP3 129/142, TOP5 133/142, PERF_TOP3 52/57 (the denominator-MUST-follow law); router arm 80/142; shared sec arm 85/210 holds both states (kernel-off 75/176, kernel-on 91/206; all 4 new spans route correctly). Full retrieval suite 27/0.
+- **Gates:** default lib 2817/0; rust_perf_bench 2848/0; sec+latent 3129/0; clippy `-D warnings` × 4 postures (2 en-route fixes disclosed: PRE-EXISTING `bool_assert_comparison` in `repo_free.rs` `5e92e305f` + 7 `needless_borrow` in gateway_ctor tests); score-bench #221 heal 0.9636 FLAT, parse 1.0; freeze-table NOT owed (zero clippy_lints delta, P30); release-set binary rebuilt + installed (the §0 bin-age law).
+- **Quote verification:** every source quote machine-verified at the pin `35cb1932` (the landing session's T0; the clone was removed at close).
