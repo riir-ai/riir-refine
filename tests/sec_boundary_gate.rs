@@ -96,12 +96,18 @@ fn run_clippy() -> Option<Vec<Diag>> {
     // COMPILE (compile errors are not clippy diagnostics). zip 2.6.1
     // verified at authoring (by_index/name/enclosed_name are 2.x-era
     // API).
+    // Batch 329: the mutation-gate fixture names `axum` (Body/State/
+    // StatusCode/IntoResponse are core axum — no extra features) and
+    // `tokio::fs` — the probe crate must declare both or the fixture
+    // fails to COMPILE. axum 0.8 + tokio fs verified at authoring (the
+    // identical handler compiled clean in the probe-parity run).
     std::fs::write(
         dir.join("Cargo.toml"),
         "[package]\nname=\"sec_boundary_probe\"\nversion=\"0.0.0\"\nedition=\"2021\"\
          \n[workspace]\n[dependencies]\nsha1 = \"0.10\"\nsha2 = \"0.10\"\
          \nmd-5 = \"0.10\"\nblake3 = \"1\"\nargon2 = \"0.5\"\nsubtle = \"2\"\
          \nserde_json = \"1\"\nureq = \"2\"\nzip = \"2\"\nzeroize = \"1\"\
+         \naxum = \"0.8\"\ntokio = { version = \"1\", features = [\"fs\"] }\
          \nserde = { version = \"1\", features = [\"derive\"] }\
          \ntower-http = { version = \"0.7\", features = [\"cors\"] }\
          \njsonwebtoken = \"9\"\ncookie = \"0.18\"\n",
@@ -138,6 +144,17 @@ fn run_clippy() -> Option<Vec<Diag>> {
         let Some(msg) = v.get("message") else {
             continue;
         };
+        // A build failure surfaces as error-level compiler messages with NO
+        // lint code — dropped silently below, which turns a broken probe
+        // into a vacuous green (the gate's own green-zero blindness). Witness
+        // the failure loud instead.
+        if msg.get("level").and_then(|l| l.as_str()) == Some("error") {
+            eprintln!(
+                "PROBE BUILD ERROR: {}",
+                msg.get("rendered").and_then(|r| r.as_str()).unwrap_or("?")
+            );
+            continue;
+        }
         let Some(code) = msg
             .get("code")
             .and_then(|c| c.get("code"))
@@ -199,8 +216,7 @@ fn no_banned_lint_fires_with_an_equivalent_fix() {
         let applicability = d.applicability.as_deref().unwrap_or("none");
         let d_code = &d.code;
         assert_ne!(
-            applicability,
-            "MachineApplicable",
+            applicability, "MachineApplicable",
             "BOUNDARY BREAK: {d_code} fires MachineApplicable on {rule} — \n\n             clippy now owns that fix; the rule moves to the \
              do-not-reimplement side (remove it or narrow past the overlap)"
         );

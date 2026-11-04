@@ -9,7 +9,11 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 294 entries across 14 categories as of Batch 326 (+1: layout —
+//! 296 entries across 14 categories as of Batch 329 (+2: dispatch +1
+//! `event-damage-map-selective-partition-skip-with-consumer-hints` +
+//! concurrency +1 `online-cost-fit-thread-ladder-reopen-hysteresis`, the
+//! tembo/voxl distill (Plan 337 / Research 367, `entries_61` + `entries_62`);
+//! prior: 294 at Batch 326 (+1: layout —
 //! `adaptive-sparse-blocked-table-encoding`, the rust-lang/rust #164484
 //! distill (Plan 330 / Research 363, `entries_60`); prior: 293 at Batch 327
 //! (+1: concurrency — `batch-reserve-monotonic-counters-offload-bulk`, the
@@ -718,15 +722,26 @@ mod entries_57;
 mod entries_58;
 mod entries_59;
 mod entries_60;
+mod entries_61;
+mod entries_62;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 294 entries
-/// (Batch 326, 2026-11-04, Plan 330 / Research 363: +1 -- the rust-lang/
-/// rust #164484 distill, `entries_60`: `adaptive-sparse-blocked-table-
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 296 entries
+/// (Batch 329, 2026-11-04, Plan 337 / Research 367: +2 -- the tembo/voxl
+/// distill, `entries_61` + `entries_62`: the
+/// `event-damage-map-selective-partition-skip-with-consumer-hints` law
+/// (dispatch, BENCHABLE -- the batch's GOAT-eligible lead, MEASURED
+/// `ParetoDominant` 8.18x/6.96x/6.99x at 256/4096/65536 cells, allocs 0/0,
+/// the 12% dirty band tracking the 1/dirty-fraction ceiling) + the
+/// `online-cost-fit-thread-ladder-reopen-hysteresis` law (concurrency,
+/// NotBenchable-by-regime); +1 count-neutral rider face on `reserve-then-commit-capacity-
+/// accounting` (`entries_58`, the wire-header reserve-in-place law);
+/// prior: Batch 326, 2026-11-04, Plan 330 / Research 363: +1 -- the
+/// rust-lang/rust #164484 distill, `entries_60`: `adaptive-sparse-blocked-table-
 /// encoding`, layout, NotBenchable-annotated; prior: Batch 327,
 /// 2026-11-03, Plan 332 / Research 364: +1 -- the firezone/
 /// sanstun distill, `entries_59`: `batch-reserve-monotonic-counters-
@@ -890,5 +905,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_58::entries());
     entries.extend(entries_59::entries());
     entries.extend(entries_60::entries());
+    entries.extend(entries_61::entries());
+    entries.extend(entries_62::entries());
     Corpus::new(entries)
 }

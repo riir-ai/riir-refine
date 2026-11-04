@@ -45,6 +45,8 @@
 //! | `untrusted-keyed-state-unbounded` | `InputValidation` | no (suggest-only) | — (the cap + the full-table policy are protocol decisions — the eviction-vs-refusal axis changes what an attacker can do to honest tenants) |
 //! | `gateway-type-forces-security-check` | `InputValidation` | no (suggest-only) | — (the ctor flip ripples to every caller — an API-design decision; precision honestly poor, vocabulary-gated, review decides) |
 //! | `untrusted-archive-extract-paths` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the screen is the deployment's trust decision — which archive sources are legitimate is policy — and the repair is the crate's own screened accessor) |
+//! | `browser-reachable-service-host-origin-rebinding-gate` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the allowlist + the missing-Origin fail-open stance are deployment policy, and WS handshakes are not CORS-gated so no response-header CORS lint can see the class) |
+//! | `custom-header-mutation-gate-unanswered-preflight` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the header name is a deployment decision and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate — review decides) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -524,6 +526,15 @@ cross-fn joins undetected. Fix-form rider (Batch 328, google/oss-fuzz @ \
 extracting the basename before the join IS the repair — the source's own \
 `fuzz_target.py::_save_crash` copies via `os.path.basename(crash.input_path)` \
 before joining the artifact directory, the harness's own placement hygiene. \
+Listing-time rider (Batch 329, tembo/voxl @ `eba3b7ce`, MIT): the join-time \
+guard is not the whole surface — an ENUMERATION (a directory listing served \
+to clients) must re-check each entry's RESOLVED target against the root \
+before trusting its metadata, because a symlink INSIDE the base escapes \
+through its canonical target — the source's `files.rs::list` follows \
+symlinks for type/size (\"as a file manager would\") but HIDES links whose \
+`canonicalize` escapes the root (files.rs L94-105: `t.is_symlink() && \
+!canonicalize(e.path()).starts_with(&f.root) → skip`), while its `resolve()` \
+owns the join half — two sinks, one boundary. \
 Batch 258 / Plan 262 / Research 292 \
 (cloudflare/security-audit-skill @ `c1c8a8c`, MIT — cited as class \
 provenance; the fixture is an original synthesis)."
@@ -1269,6 +1280,160 @@ std::io::copy(&mut entry, &mut out)?;\n    }\n    Ok(())\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ══ Batch 329 (2026-11-04, Plan 337 / Research 367) — the        ══
+        // ══ tembo/voxl distill (MIT @ eba3b7ce): one suggest-only        ══
+        // ══ InputValidation rule (detector, no collect_edits arm).       ══
+        // ── browser-reachable-service-host-origin-rebinding-gate (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "browser-reachable-service-host-origin-rebinding-gate".to_string(),
+            sec_concept: "a browser-reachable local service (a dev tool, dashboard, \
+debugger, agent API — anything bound to localhost/0.0.0.0 with a \
+browser-facing API or WS endpoint) answering requests whose Host it never \
+checks: ANY web page can open a WebSocket to it or POST to it (WS handshakes \
+are NOT CORS-gated — no preflight exists, so response-header CORS policy is \
+irrelevant), and a page whose own domain is DNS-rebound to the service's \
+address even presents a same-origin-looking Host. The bounded repair (the \
+source's gate, verbatim structure): refuse the Host unless it parses as an \
+IP literal || the localhost family (`localhost`/`*.localhost`) || an explicit \
+allowlist (entries like `.example.com` cover subdomains, `*` any); refuse \
+the Origin unless its canonical key equals the requested host:port or the \
+allowlist names it; the 403 refusal names the fix flag. The missing-Origin \
+allowance is fail-open BY DESIGN with the reason in-source, verbatim: \
+\"Browsers always send a Host, so one without it comes from another kind of \
+client.\" — the regime boundary: a non-browser client is allowed; the gate is \
+anti-browser-drive-by, not auth. Two count-neutral faces carried \
+in-concept: (a) origin default-port canonicalization BEFORE comparison — \
+an origin with its port written out, so `https://a.example` and \
+`https://a.example:443` compare equal — compare canonical keys, never raw \
+header strings; (b) a non-UTF-8 header value reads as \"\" → fail-closed \
+refusal (a value that isn't text can't name an allowed host or origin). \
+KINSHIPS: distinct-from `cors-any-origin-with-credentials` — that owns the \
+RESPONSE-header issuance policy (tower-http co-occurrence), THIS the \
+REQUEST-side handshake gate, and the mechanism reason is distinct: WS \
+handshakes are NOT CORS-gated, a WS server setting no CORS headers is still \
+reachable from any page, so the server itself must gate; distinct-from \
+`client-ip-from-untrusted-forwarded-header` — spoofed PROXY-header trust, \
+a different header on a different axis; distinct-from \
+`gateway-type-forces-security-check` — constructor reachability, not \
+header gating; the Host-rebinding/allowlist vocabulary has ZERO corpus \
+owners (the `unvalidated-egress-url` rider's DNS-rebinding phrase is the \
+OUTBOUND sink axis, not an inbound Host gate). Honest recall limits: the \
+shape proves a MISSING GATE, not an attacker — an internal-only tool fires \
+too and review decides (the regime IS browser-reachability, unknowable \
+parse-only); same-fn only — a cross-fn gate assembly (a helper, a \
+middleware layer) is undetected; a handler that never reads Host/Origin \
+vocabulary is an honest NO; the gate vocabulary (`host_allowed`/\
+`allowed_hosts`/`allowed_origins`/`origin_key`/`IpAddr`-parse/`refuse`/\
+`rebind`/`allowlist`/`is_loopback`) anywhere in the fn suppresses. Detector: \
+`proposers::origin_rebind_gate`. Batch 329 / Plan 337 / Research 367 \
+(tembo/voxl @ `eba3b7ce`, MIT — cited as class provenance; the fixture is \
+an original synthesis)."
+                .to_string(),
+            buggy_code: "use std::net::IpAddr;\n\npub struct RequestContext<'a> {\n    \
+pub host: Option<&'a str>,\n    pub origin: Option<&'a str>,\n    pub path: &'a str,\n}\n\n\
+pub fn handle(req: RequestContext<'_>, body: &str) -> String {\n    // any page can drive this: \
+no Host check, no Origin check\n    format!(\"{}: {}\", req.path, body)\n}\n\n\
+pub fn is_loopback(host: &str) -> bool {\n    host.parse::<IpAddr>().is_ok() || host == \
+\"localhost\"\n}\n"
+                .to_string(),
+            fixed_code: "use std::net::IpAddr;\n\npub struct RequestContext<'a> {\n    \
+pub host: Option<&'a str>,\n    pub origin: Option<&'a str>,\n    pub path: &'a str,\n}\n\n\
+const ALLOWED_HOSTS: [&str; 0] = [];\n\npub fn handle(req: RequestContext<'_>, body: &str) -> \
+Option<String> {\n    let (name, _port) = split_host(req.host?);\n    let host_ok = \
+name.parse::<IpAddr>().is_ok()\n        || name == \"localhost\"\n        || \
+name.ends_with(\".localhost\")\n        || ALLOWED_HOSTS.contains(&name.as_str());\n    if \
+!host_ok {\n        return None; // 403: host cannot be answered — DNS-rebinding gate\n    }\n    \
+if let Some(origin) = req.origin {\n        let own = origin.rsplit_once(\"//\").is_some_and(|(_, rest)| {\
+\n            rest.split(':').next() == Some(name.as_str())\n        });\n        if !own {\n            \
+return None; // 403: cross-origin browser request\n        }\n    }\n    \
+Some(format!(\"{}: {}\", req.path, body))\n}\n\nfn split_host(v: &str) -> (String, \
+Option<u16>) {\n    match v.rsplit_once(':') {\n        Some((n, p)) if !n.contains(':') => \
+(n.to_ascii_lowercase(), p.parse().ok()),\n        _ => \
+(v.trim_end_matches('.').to_ascii_lowercase(), None),\n    }\n}\n\npub fn \
+is_loopback(host: &str) -> bool {\n    host.parse::<IpAddr>().is_ok() || host == \
+\"localhost\"\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── custom-header-mutation-gate-unanswered-preflight (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "custom-header-mutation-gate-unanswered-preflight".to_string(),
+            sec_concept: "a browser-reachable MUTATING route (the upload class: an \
+upload/multipart handler that streams a request body to disk) performing NO \
+custom-header / CSRF-token check is writable by ANY web page the victim's \
+browser visits — a hostile page can POST the upload cross-site (an \
+auto-submitted form or a simple fetch) and the browser attaches the victim's \
+ambient credentials. The defense is MECHANICAL, the source's law verbatim (at \
+the pin): \"Uploads must carry this header. Browsers only send custom headers \
+cross-origin after a CORS preflight, which we never answer, so other sites \
+can't upload.\" — require a custom header on the mutating route and never \
+answer the CORS preflight: browsers cannot attach custom headers cross-site \
+without a successful preflight, so the gate closes the cross-site write path \
+while same-origin clients keep working (the `if \
+!headers.contains_key(UPLOAD_HEADER) { return 403; }` shape). Suggest-only: \
+the header name is a deployment decision (server and clients must agree), and \
+an API already protected by bearer-token auth, CSRF tokens, or \
+SameSite=Strict cookies deliberately skips the gate — bearer auth is the SAME \
+mechanism class (browsers cannot attach Authorization cross-site without a \
+preflight either), so an authorization-checked handler is the fixed shape, \
+not a finding. The B258 CSRF-bulk drop adjudicated at authoring: the declined \
+bulk is session ARCHITECTURE (rate limiting, IDOR, authz, session management, \
+OpenAPI exposure), THIS is the specific mechanical header-gate form with an \
+in-source mechanism reason — a different fix-space. Distinct-from \
+`browser-reachable-service-host-origin-rebinding-gate` (sibling, this \
+batch): that gates WHO may connect (the Host/Origin handshake — \
+DNS-rebinding + drive-by reachability), this gates WHICH requests may mutate \
+(the write path — cross-site state change); a server can pass the handshake \
+gate and still take a cross-site upload. Distinct-from \
+`cors-any-origin-with-credentials` (owned): that owns the RESPONSE-header \
+issuance policy, this a REQUEST gate. Distinct-from \
+`abuse-strike-counts-cross-site-requests` (owned): that owns the \
+CLASSIFICATION policy (counting vs rejecting cross-site traffic), this the \
+WRITE gate. Honest recall limits: both gates are fn-level — an upload \
+handler whose disk write delegates to a helper with no upload vocabulary, or \
+whose gate/middleware lives in another fn (an axum middleware layer — the \
+source itself gates Host/Origin in its access.rs, cross-fn to this handler), \
+is unconnected parse-only; the vocabulary proves a CLASS, not a verdict — \
+an offline batch uploader (no browser ever reaches it) fires too and review \
+decides; the broader mutating-route surface (rename/delete/create endpoints \
+without an upload file-write shape) is OUT of the fire set — same class, \
+deliberately refused for precision (the family's frontier). Detector: \
+`proposers::mutation_header_gate`. Batch 329 / Plan 337 / Research 367 \
+(tembo/voxl @ `eba3b7ce`, MIT — cited as class provenance; the fixture is an \
+original synthesis)."
+                .to_string(),
+            buggy_code: "use axum::body::Body;\nuse axum::extract::State;\nuse \
+axum::http::StatusCode;\nuse axum::response::{IntoResponse, Response};\nuse \
+std::path::PathBuf;\n\npub struct Store {\n    pub root: PathBuf,\n}\n\npub async \
+fn upload_file(State(state): State<Store>, body: Body) -> Response {\n    let \
+dir = state.root.join(\"incoming\");\n    if \
+tokio::fs::create_dir_all(&dir).await.is_err() {\n        return \
+StatusCode::INTERNAL_SERVER_ERROR.into_response();\n    }\n    let bytes = \
+axum::body::to_bytes(body, 1 << 20).await.unwrap_or_default();\n    if \
+tokio::fs::write(dir.join(\"blob\"), bytes).await.is_err() {\n        return \
+StatusCode::INTERNAL_SERVER_ERROR.into_response();\n    }\n    \
+StatusCode::OK.into_response()\n}\n"
+                .to_string(),
+            fixed_code: "use axum::body::Body;\nuse axum::extract::State;\nuse \
+axum::http::{HeaderMap, StatusCode};\nuse \
+axum::response::{IntoResponse, Response};\nuse std::path::PathBuf;\n\npub \
+struct Store {\n    pub root: PathBuf,\n}\n\nconst UPLOAD_HEADER: &str = \
+\"x-app-upload\";\n\npub async fn upload_file(State(state): State<Store>, \
+headers: HeaderMap, body: Body) -> Response {\n    // Browsers only send \
+custom headers cross-origin after a CORS preflight, which we never answer, \
+so other sites can't upload.\n    if !headers.contains_key(UPLOAD_HEADER) {\n    \
+    return StatusCode::FORBIDDEN.into_response();\n    }\n    let dir = \
+let dir = \
+state.root.join(\"incoming\");\n    if \
+tokio::fs::create_dir_all(&dir).await.is_err() {\n        return \
+StatusCode::INTERNAL_SERVER_ERROR.into_response();\n    }\n    let bytes = \
+axum::body::to_bytes(body, 1 << 20).await.unwrap_or_default();\n    if \
+tokio::fs::write(dir.join(\"blob\"), bytes).await.is_err() {\n        return \
+StatusCode::INTERNAL_SERVER_ERROR.into_response();\n    }\n    \
+StatusCode::OK.into_response()\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -1405,5 +1570,50 @@ mod tests {
             "batch-328 untrusted-archive-extract-paths must stay suggest-only \
              (never FIXABLE_SEC)"
         );
+    }
+
+    /// Batch 329 (the tembo/voxl distill, Plan 337 / Research 367,
+    /// tembo/voxl @ eba3b7ce, MIT) — presence, family, provenance
+    /// discipline. Suggest-only, never `FIXABLE_SEC`.
+    #[test]
+    fn batch329_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            (
+                "browser-reachable-service-host-origin-rebinding-gate",
+                SecFamily::InputValidation,
+            ),
+            (
+                "custom-header-mutation-gate-unanswered-preflight",
+                SecFamily::InputValidation,
+            ),
+        ];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-329 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-329 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 329 / Plan 337 / Research 367"),
+                "batch-329 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("eba3b7ce"),
+                "batch-329 {id} must cite the tembo/voxl pin"
+            );
+        }
+        // Suggest-only discipline: the batch ids may not be --fix-eligible
+        // (the detector modules ship no collect_edits arm).
+        for id in [
+            "browser-reachable-service-host-origin-rebinding-gate",
+            "custom-header-mutation-gate-unanswered-preflight",
+        ] {
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-329 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
     }
 }

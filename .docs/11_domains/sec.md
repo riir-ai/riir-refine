@@ -254,6 +254,18 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 329 (2026-11-04) — the tembo/voxl distill: the browser-reachable service gate
+
+Two suggest-only rules from the tembo/voxl distill (Research 367, Plan 337,
+MIT @ `eba3b7ce` — a browser-reachable local AI service; cited as class
+provenance; the fixtures are ORIGINAL syntheses, never voxl source).
+NotBenchable-by-domain (security axis, never latency — the dial9 split):
+
+| Rule | Family | Shape |
+|---|---|---|
+| `browser-reachable-service-host-origin-rebinding-gate` | `InputValidation` | a browser-reachable local service (dev tool, dashboard, debugger, agent API — anything bound to localhost/0.0.0.0 with a browser-facing API or WS endpoint) answering requests whose Host it never checks: ANY web page can open a WebSocket to it or POST to it (WS handshakes are NOT CORS-gated — no preflight exists, so response-header CORS policy is irrelevant), and a DNS-rebound page even presents a same-origin-looking Host. Fix (the source's gate, verbatim structure): refuse the Host unless it parses as an IP literal, is the localhost family, or the allowlist names it (`--allowed-hosts`; entries like `.example.com` cover subdomains, `*` any); refuse the Origin unless its canonical key equals the requested host:port or the allowlist names it (`--allowed-origins`); the 403 refusal names the fix flag. The missing-Origin allowance is fail-open BY DESIGN with the reason in-source: "Browsers always send a Host, so one without it comes from another kind of client." — the regime boundary: a non-browser client is allowed; the gate is anti-browser-drive-by, not auth. DISTINCT-FROM `cors-any-origin-with-credentials` IN-RULE: that owns the RESPONSE-header issuance policy (tower-http co-occurrence), this the REQUEST-side handshake gate — the mechanism reason is distinct: a WS server setting no CORS headers is still reachable from any page, so the server itself must gate; also distinct-from `client-ip-from-untrusted-forwarded-header` (spoofed PROXY-header trust — different header, different axis) and `gateway-type-forces-security-check` (constructor reachability); the Host-rebinding/allowlist vocabulary has ZERO corpus owners (the `unvalidated-egress-url` rider's DNS-rebinding phrase is the OUTBOUND sink axis, not an inbound Host gate). Two count-neutral faces carried in-concept: origin default-port canonicalization BEFORE comparison (`https://a.example` == `https://a.example:443` — compare canonical keys, never raw header strings), and non-UTF-8 header values read as "" → fail-closed refusal. Honest recall limits: the shape proves a MISSING GATE, not an attacker — an internal-only tool fires too and review decides (the regime IS browser-reachability, unknowable parse-only); same-fn only, cross-fn gate assembly undetected; a handler that never reads Host/Origin vocabulary is an honest NO; the gate vocabulary anywhere in the fn suppresses. Detector `origin_rebind_gate::detect` |
+| `custom-header-mutation-gate-unanswered-preflight` | `InputValidation` | a browser-reachable MUTATING route (the upload class: an upload/multipart handler streaming a request body to disk) performing NO custom-header / CSRF-token check is writable by ANY web page the victim's browser visits — a hostile page POSTs the upload cross-site (auto-submitted form or simple fetch) and the browser attaches the victim's ambient credentials. The defense is MECHANICAL, the source's law verbatim: "Uploads must carry this header. Browsers only send custom headers cross-origin after a CORS preflight, which we never answer, so other sites can't upload." — require a custom header on the mutating route and never answer the CORS preflight; the gate closes the cross-site write path while same-origin clients keep working. Suggest-only: the header name is a deployment decision, and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate — bearer auth is the SAME mechanism class (Authorization also cannot cross sites without a preflight), so an authorization-checked handler is the FIXED shape, not a finding. DISTINCT-FROM the B258 declined bulk IN-RULE (adjudicated at authoring): that is session ARCHITECTURE (rate limiting, IDOR, authz, session management, OpenAPI), this the specific MECHANICAL header-gate form with an in-source mechanism reason; DISTINCT-FROM the sibling `browser-reachable-service-host-origin-rebinding-gate`: that gates WHO may connect (Host/Origin handshake), this gates WHICH requests may mutate (the write path) — a server can pass the handshake gate and still take a cross-site upload; also distinct-from `cors-any-origin-with-credentials` (response-header issuance) and `abuse-strike-counts-cross-site-requests` (classification policy, not a write gate); the csrf/preflight/custom-header vocabulary has ZERO corpus owners. Honest recall limits: both gates are fn-level — a handler whose write delegates to a helper with no upload vocabulary, or whose gate lives in middleware (cross-fn), is undetected; an offline batch uploader fires too and review decides; the broader mutating-route surface (rename/delete/create without an upload file-write shape) is OUT of the fire set — same class, deliberately refused for precision. Detector `mutation_header_gate::detect` |
+
 ## Batch 328 (2026-11-04) — the oss-fuzz distill: the archive-member zip-slip
 
 One suggest-only rule from the google/oss-fuzz distill (Research 366, Plan
@@ -450,6 +462,22 @@ proposer.
   defined in-fixture) so the boundary-gate probe crate compiles. Workspace
   sweep: `examples/softmax_collapse_sweep.rs` (read-only; hits recorded in
   the issue).
+- Batch 329 (2026-11-04): corpus 39 → 41 (7 fixable + 34 suggest-only;
+  the tembo/voxl distill, Plan 337 / Research 367) — 2 detectors joined
+  (`browser-reachable-service-host-origin-rebinding-gate` +
+  `custom-header-mutation-gate-unanswered-preflight`); the B258
+  CSRF-bulk drop adjudicated IN-RULE (the declined bulk is session
+  ARCHITECTURE, the mechanical header-gate form survives); +2
+  count-neutral rider faces this batch: the symlink-listing re-check on
+  `untrusted-path-join-escape` (the listing must re-check each entry's
+  canonical target, not just the base path — voxl files.rs::list L94-105)
+  + the wire-header reserve-in-place law on rust_perf's
+  `reserve-then-commit-capacity-accounting` (cross-domain face,
+  rust_perf.md); R5 (untrusted-shared-memory-attach-pid-and-content-
+  verify) DROPPED honestly at T0 (niche population); corpus-count pin
+  (`sec.rules` 39 → 41) landed via the `pins_manifest.py --write`
+  manifest diff; retrieval floors + freeze/rebuild disposition are this
+  landing's calls (recorded in the landing commit).
 - Batch 328 (2026-11-04): corpus 38 → 39 (7 fixable + 32 suggest-only;
   the oss-fuzz distill, Plan 336 / Research 366) — 1 detector joined;
   boundary-gate probe crate gains the `zip` dep (2.6.1 verified);

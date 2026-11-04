@@ -1,6 +1,6 @@
 # Research 367 — tembo/voxl distill verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — LANDED (Batch 329, plan 337, 2026-11-04: rust_perf +2, sec +2, 2 faces; see the addendum)
 
 - **Source:** https://github.com/tembo/voxl — "extremely fast web remote desktop
   streaming": low-latency desktop streaming for the browser, in Rust. Streams an X11
@@ -350,3 +350,57 @@ shared-memory/attach owner in sec; kinship vocabulary: untrusted-keyed-state-unb
 3-4 rules land after ~50% coordinator falsification (R1 + R2 + R3 nearly certain;
 one of R4/R5 + 1-2 faces; honest drops allowed on the two C+ candidates). Corpus
 targets: rust_perf 294→296, sec 38→39-40.
+
+## Addendum — LANDED 2026-11-04 (Batch 329, plan 337, the claim-lease lane)
+
+**4 rules + 2 count-neutral faces land: rust_perf 294→296 (R1 `event-damage-map-
+selective-partition-skip-with-consumer-hints`, the GOAT-eligible lead BENCHABLE —
+ParetoDominant 2.14×/3.20×/3.14× at 256/4096/65536, allocs 0/0, dirty band ~12%,
+both arms checksum-identical asserted in-harness; R2 `online-cost-fit-thread-
+ladder-reopen-hysteresis`, NotBenchable-by-regime, the decayed-weight gate
+(w<30.0 → the 33rd sample) verified against the clone and mirrored faithfully) +
+sec 39→41 (R3 `browser-reachable-service-host-origin-rebinding-gate` + R4
+`custom-header-mutation-gate-unanswered-preflight` — the B258 CSRF-bulk drop
+ADJUDICATED IN-RULE: the declined bulk is session ARCHITECTURE; the mechanical
+header-gate form with the in-source unanswered-preflight mechanism reason survives
+as suggest-only).** Faces: the symlink-listing re-check rider on
+`untrusted-path-join-escape` (files.rs::list L94-105 — the listing re-checks each
+entry's canonical target; two sinks, one boundary) + the wire-header reserve-in-
+place rider on rust_perf `reserve-then-commit-capacity-accounting` (entries_58;
+video.rs out.resize(HDR,0) L911 + in-place writes L1107-1114 + Bytes::from zero-
+copy). Gates ALL GREEN: default lib 2819/0, sec+latent 3361/0, rust_perf_bench
+2850/0, clippy −D ×4 postures + all-targets zero, boundary gate 2/2 (its probe
+build-failure witness added en-route — the gate's green-zero blindness repaired:
+a probe whose fixtures fail to COMPILE produced zero diagnostics and read vacuous-
+green; the failure is now loud; the R4 fixture's axum API was repaired to real
+axum-0.8 `to_bytes` — `Body::into_inner` does not exist at 0.8 — and the probe
+crate gained the axum+tokio deps per the B88/B258/B291/B328 convention),
+retrieval re-measured (default+latent router 86/142 UNCHANGED, no re-pin; sec-on:
+sec self-variants 37/37 top-1 — 35→37, both new spans route + retrieve top-1),
+score-bench run #224 heal 0.9636 FLAT parse 1.0, freeze NOT owed (zero clippy_lints
+delta, P30), release-set binary rebuilt + installed at the landing HEAD.
+
+**R5 DROPPED honestly at T0** (the verdict's own drop-expected): the enumerated-
+SysV-shm attach population is niche (who else attaches to /proc/sysvipc/shm
+segments?). The creator-pid scoping + content-oracle law (≥98% pixel match over
+10 retries @ 30 ms) stays recorded here as the seed if the corpus ever opens an
+enumerated-cross-process-resource family.
+
+**T0's unread-file read (all 22 files, ~8.3k lines) — the value was KILLS, not
+candidates**: ~30 line-verified positive instances across the sec families
+(Drop/leak pairing on every platform, null-check-before-FFI everywhere,
+bound-before-alloc ×4, strike-counts ×3 platforms, constant-time ×4 sites,
+length-prefix ×2, keyed-state cleanup ×3, the mdat overflow check L111-113 a
+STRONG wire-arithmetic instance). The strong face candidate (guard the panicking
+conversion/clamp BEFORE applying client numbers — record.rs record_len L207-214 +
+screen.rs fit L21-28, both panic=abort-commented, both test-pinned) has NO corpus
+host rule, so it is a 5th-rule candidate, not a face — recorded as the TOP
+follow-up-pool item. Weaker faces likewise pooled: the DXGI rect-count>32
+whole-vs-incremental copy crossover (win/capture.rs L196-211, cost-based dispatch
+corollary) and the mp4 avc1 `as u16` vs tkhd full-width sibling-field truncation
+(mp4.rs L130-131 vs L185). Follow-up pools unchanged from the verdict: the
+incremental-computation sources (salsa, zed, turborepo-style) for the damage-map
+family; the localhost drive-by/rebinding literature for the web-trust family.
+
+Session: zed-m3-refine-b329, epoch 1793800137 (claim 817e8567 discharged by the
+landing; `.raw/voxl` removed at close).

@@ -185,6 +185,18 @@
 //! |---|---|---|
 //! | `untrusted-archive-extract-paths` | `archive_extract::detect` | the screen IS the deployment's trust decision (which archive sources are legitimate is policy) and the repair choice (skip/refuse/mangle) changes what the caller observes; distinct-from `untrusted-path-join-escape` IN-RULE: that owns the CALLER-SUPPLIED name joined onto a trusted base (fn-parameter str/Path args → fs sinks), this the ARCHIVE-MEMBER surface — the names come from the untrusted file's own central directory, and the repair is the crate's own screened accessor (`enclosed_name`), a different fix-space; also distinct-from `unbounded-read-into-vec` (that owns the VOLUME of the read, this the PATHS the members carry) |
 
+//! ## Batch 329 (2026-11-04, Plan 337) — the tembo/voxl distill joins
+//!
+//! Two detectors from the tembo/voxl distill (Research 367, MIT @
+//! `eba3b7ce` — a browser-reachable local AI service; cited as class
+//! provenance, fixtures are ORIGINAL syntheses), suggest-only
+//! `InputValidation`:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `browser-reachable-service-host-origin-rebinding-gate` | `origin_rebind_gate::detect` | the allowlist + the missing-Origin fail-open stance are deployment policy (which hosts/origins are legitimate, whether non-browser clients are trusted) and the refusal shape (403 body, fix-flag name) is the fn's choice; distinct-from `cors-any-origin-with-credentials` IN-RULE: that owns the RESPONSE-header issuance policy (tower-http co-occurrence), this the REQUEST-side handshake gate — the mechanism reason is distinct: WS handshakes are NOT CORS-gated, a WS server setting no CORS headers is still reachable from any page, so the server itself must gate; also distinct-from `client-ip-from-untrusted-forwarded-header` (spoofed PROXY-header trust — different header, different axis) and `gateway-type-forces-security-check` (constructor reachability); the Host-rebinding/allowlist vocabulary has ZERO corpus owners (the `unvalidated-egress-url` rider's DNS-rebinding phrase is the OUTBOUND sink axis, not an inbound Host gate) |
+//! | `custom-header-mutation-gate-unanswered-preflight` | `mutation_header_gate::detect` | the header name is a deployment decision (server and clients must agree) and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate; distinct-from the B258 declined bulk IN-RULE (adjudicated at authoring): that is session ARCHITECTURE (rate limiting, IDOR, authz, session management, OpenAPI), this the specific MECHANICAL header-gate form with an in-source mechanism reason — browsers cannot attach custom headers cross-site without a preflight, so a required custom header + an unanswered preflight closes the write path; distinct-from `browser-reachable-service-host-origin-rebinding-gate` (sibling, this batch): that gates WHO may connect (Host/Origin handshake), this gates WHICH requests may mutate (the write path); also distinct-from `cors-any-origin-with-credentials` (response-header issuance, not a request gate); the csrf/preflight/custom-header vocabulary has ZERO corpus owners (auth_cookie_missing_flags' SameSite mention is the cookie axis, cors_any_creds' preflight mention is the response axis) |
+
 use syn::File;
 
 pub mod arc_raw_boundary;
@@ -202,7 +214,9 @@ pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
 pub mod keyed_state_cap;
 pub mod length_prefix_alloc;
+pub mod mutation_header_gate;
 pub mod nan_safe_cmp;
+pub mod origin_rebind_gate;
 pub mod outparam_init_contract;
 pub mod packed_field_wrong_key;
 pub mod panic_handler_guard;
@@ -227,7 +241,7 @@ pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
 };
 
 /// The `--fix`-eligible sec rules.

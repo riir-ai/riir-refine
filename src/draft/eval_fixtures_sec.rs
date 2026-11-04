@@ -6,7 +6,8 @@
 //! (Plan 296); Batch 294 the `RustSec` transcription's two (Plan 298);
 //! Issue 185 the softmax-collapse family's three; Batch 327 the
 //! sanstun distill's three (Plan 332); Batch 328 the oss-fuzz
-//! distill's one (Plan 336).
+//! distill's one (Plan 336); Batch 329 the tembo/voxl
+//! distill's two (Plan 337).
 //!
 //! The thin-domain labeled sets are the T3 power-floor re-arm trigger: each
 //! set adds a qualifying domain to the demonstrability sweep (n=3 → n=7 at
@@ -389,6 +390,39 @@ pub fn unpack_plugin_bundle(
 ) -> std::io::Result<()> {
     let mut bundle = ZipArchive::new(reader)?;
     bundle.extract(dest).map_err(std::io::Error::other)
+}
+"#,
+    ),
+    // Batch 329 (Plan 337) — the tembo/voxl distill, two spans.
+    (
+        "browser-reachable-service-host-origin-rebinding-gate",
+        r#"pub struct DashboardCtx {
+    pub host: Option<String>,
+    pub origin: Option<String>,
+}
+
+pub fn render_dashboard(req: DashboardCtx, city: &str) -> String {
+    let _ = (req.host, req.origin); // read, never checked
+    format!("<h1>weather - {city}</h1>")
+}
+"#,
+    ),
+    (
+        "custom-header-mutation-gate-unanswered-preflight",
+        r#"use axum::body::Body;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+
+pub async fn save_attachment(body: Body) -> Response {
+    // No custom-header check: any web page can POST this upload cross-site.
+    let bytes = axum::body::to_bytes(body, 1 << 20).await.unwrap_or_default();
+    if tokio::fs::write("/srv/uploads/attachment.bin", bytes)
+        .await
+        .is_err()
+    {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+    StatusCode::OK.into_response()
 }
 "#,
     ),
