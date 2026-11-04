@@ -58,7 +58,7 @@
  "walk": [
   {
    "title": "Install",
-   "text": "One prebuilt binary (brew, scoop, or the install script) lands in ~/.cargo/bin — no repo clone, no build. Logged out it stays anonymous and nothing is charged.",
+   "text": "One prebuilt binary (brew, scoop, or the install script) lands in ~/.cargo/bin — no repo clone, no build. Logged out it stays anonymous and is never billed.",
    "steps": [
     "inst"
    ],
@@ -100,7 +100,7 @@
   },
   {
    "title": "What a logged-in run costs",
-   "text": "Fixes are free — nothing is charged; hosted lanes are metered as fair use, never billed. The run records locally under `.refine/`, and never carries your code.",
+   "text": "The meter counts code-word tokens and bills one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed burn report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code.",
    "steps": [
     "meter"
    ],

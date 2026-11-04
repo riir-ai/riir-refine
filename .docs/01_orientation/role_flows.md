@@ -164,16 +164,16 @@ status = "live"
 [[step]]
 id = "proof"; n = "3"; lane = "fleet"; col = 2
 title = "Proof queue"; body = "rows are verified at a real clippy re-run"
-status = "riir.ai"
+status = "live"
 [[step]]
 id = "pay"; n = "4a"; lane = "fleet"; col = 3
 title = "Points at the settle"; body = "the pool pays — contributing = processing, proven = paid"
-status = "riir.ai"
+status = "live"
 tag = { text = "never re-gated", color = "ai" }
 [[step]]
 id = "grow"; n = "4b"; lane = "fleet"; col = 4
 title = "The corpus grows"; body = "the network's observed pattern classes"
-status = "riir.ai"
+status = "live"
 
 [[edge]]
 from = "join"; to = "bat"
@@ -251,7 +251,7 @@ id = "rig"; label = "Your rig"; note = "the max tier · designed"; color = "refi
 [[step]]
 id = "q"; n = "1"; lane = "fleet"; col = 0
 title = "Unproven queue"; body = "pushed rows await proof"
-status = "riir.ai"
+status = "live"
 [[step]]
 id = "drain"; n = "2a"; lane = "ops"; col = 1
 title = "The drain lane"; body = "hosted LLM drafts · cap-guarded · redaction-gated"
@@ -437,25 +437,25 @@ title = "Secret scan + sign"; body = "a finding drops the row; Ed25519 signed"
 status = "live"
 [[step]]
 id = "export"; n = "4a"; lane = "me"; col = 1
-title = "Export only"; body = "sync --export writes a file, sends nothing"
+title = "Inspect first"; body = "consent + scan --blind show it; sends nothing"
 status = "live"
 [[step]]
 id = "post"; n = "4b"; lane = "net"; col = 1
 title = "Sent over HTTPS"; body = "the signed batch; the server checks the key"
-status = "riir.ai"
+status = "live"
 tag = { text = "signed, not encrypted", color = "ai" }
 [[step]]
 id = "proof"; n = "5"; lane = "net"; col = 2
 title = "Proof queue"; body = "a real clippy re-run confirms the fix"
-status = "riir.ai"
+status = "live"
 [[step]]
 id = "pub"; n = "6"; lane = "pub"; col = 2
 title = "Public corpus"; body = "proven before/after pairs, downloadable"
-status = "riir.ai"
+status = "live"
 [[step]]
 id = "lease"; n = "7"; lane = "me"; col = 2
 title = "Lease back"; body = "downloads the corpus for your next run"
-status = "riir.ai"
+status = "live"
 
 [[edge]]
 from = "run"; to = "rows"
@@ -476,7 +476,7 @@ from = "lease"; to = "run"; back = true
 
 [[walk]]
 title = "Your fix run"
-text  = "`cargo refine --fix` runs on your machine and keeps only fixes that still compile. Each fix is recorded locally under `.refine/`. Logged out, this is where the story ends: nothing is uploaded."
+text  = "`cargo refine fix` runs on your machine and keeps only fixes that still compile. The once-per-install consent question runs first — the demo on the front page captures it verbatim. Each fix is recorded locally under `.refine/`. Logged out, this is where the story ends: nothing is uploaded."
 steps = ["run"]
 [[walk]]
 title = "One row per fix"
@@ -484,11 +484,11 @@ text  = "A contribution row is the exact code span a fix replaced and its replac
 steps = ["rows"]
 [[walk]]
 title = "Secret scan + sign"
-text  = "Every span runs through the secret scanner — the consolidated provider-format set: API keys and tokens across the major AI, cloud and SaaS providers, private-key blocks (incl. PGP and PuTTY headers), credentialed connection strings, bearer tokens, secret assignments, long hex/base64 runs, and structured shapes like JWTs and bot tokens. Under the default policy any finding drops the whole row — it is never sent. The batch is signed with your account key, so the network can prove it is yours and untampered. The same scanner powers `cargo refine --secret-scan` and `--secret-scan --blind` on your side."
+text  = "Every span runs through the secret scanner — the consolidated provider-format set: API keys and tokens across the major AI, cloud and SaaS providers, private-key blocks (incl. PGP and PuTTY headers), credentialed connection strings, bearer tokens, secret assignments, long hex/base64 runs, and structured shapes like JWTs and bot tokens. Under the default policy any finding drops the whole row — it is never sent. The batch is signed with your account key, so the network can prove it is yours and untampered. The same scanner powers `cargo refine scan` and `scan --blind` on your side."
 steps = ["scan"]
 [[walk]]
-title = "Export only"
-text  = "`cargo refine sync --export batch.ndjson` writes the exact batch to a file and sends nothing, no login needed. Read it before you join; this is a real published sample of the same shape."
+title = "Inspect first"
+text  = "Nothing is sent before the consent answer, and the consent prompt (reproduced in the demo above) names exactly what sharing means. `cargo refine scan --blind FILE` shows what the scanner would redact in your own files before anything is ever shared. The published sample below is the batch shape the network's nodes push — read it before you join."
 steps = ["export"]
 in    = { lang = "json", src = "data/flows/role_miner/01_batch.json", label = "one batch (published sample)" }
 [[walk]]

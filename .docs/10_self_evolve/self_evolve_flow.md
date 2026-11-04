@@ -68,16 +68,16 @@ status = "live"
 [[step]]
 id = "mine"; n = "6b.1"; lane = "fleet"; col = 4
 title = "Contribution batch"; body = "opt-in: redacted records queue to leave"
-status = "riir.ai"
+status = "live"
 tag = { text = "opt-in · off by default", color = "refine" }
 [[step]]
 id = "proof"; n = "6b.2"; lane = "fleet"; col = 5
 title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays points"
-status = "riir.ai"
+status = "live"
 [[step]]
 id = "lse"; n = "7"; lane = "lease"; col = 1
 title = "Leased corpus"; body = "the fleet corpus refreshes retrieval on every machine"
-status = "riir.ai"
+status = "live"
 
 [[edge]]
 from = "scan"; to = "ret"
