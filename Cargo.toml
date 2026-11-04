@@ -310,6 +310,12 @@ latent_retrieval = ["dep:riir-rag", "dep:riir-neuron-db"]
 # Opt-in: report-only today; a projected-KNN lane (T3) would gate on it.
 basis_cert = ["katgpt-core/basis_split"]
 
+# Issue 201 (katgpt-rs Issue 978 T5 consumer lane) — forwards katgpt-core
+# `nuisance_fraction` (arXiv:2610.39302 Thm 3 ρ alignability gate) for the
+# report-only rho_embedder_report example over the frozen format_pairs
+# fixture. No new dep edge: katgpt-core is already the one public dep.
+nuisance_fraction = ["katgpt-core/nuisance_fraction"]
+
 # Issue 121 (katgpt-rs Plan 599 T4.2 — the first consumer of katgpt-core's
 # `set_admission` primitive): counter-anchored SET rerank of the merged
 # seven-domain span pool. The fan-out merge (`all_rules`' flat score sort)
@@ -946,6 +952,14 @@ required-features = ["linking_confusion_poc"]
 [[example]]
 name = "formatting_flip"
 required-features = ["latent_retrieval", "basis_cert"]
+
+# Issue 201 — the ρ-per-embedder alignability read over the frozen
+# format_pairs fixture (REPORT-ONLY; the pre-registered savings arm replays
+# the Bench-115 NOT-ARMED refusal). basis_cert rides along for the
+# certificate-core cost ledger.
+[[example]]
+name = "rho_embedder_report"
+required-features = ["latent_retrieval", "nuisance_fraction", "basis_cert"]
 
 # Issue 125 — the CUA-S1 specialist option-scorer PoC (render/train/eval/
 # selftest; measurement-only, never in default runs).
