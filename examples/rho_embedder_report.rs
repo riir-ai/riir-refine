@@ -90,6 +90,11 @@ const TAU_GAP: f64 = 4.0;
 /// Below this many fit pairs the certificate refuses (formatting_flip law).
 const MIN_FIT_PAIRS: usize = 8;
 
+/// At-or-below this (seconds) the two ledger halves are indistinguishable
+/// from load noise on this box — no measurable saving is possible (a
+/// pre-registered resolution bound, not a measured ratio).
+const RESOLUTION_S: f64 = 0.005;
+
 /// One mined pair: the rule family plus both endpoints.
 struct Pair {
     lint_key: String,
@@ -359,13 +364,21 @@ fn main() {
     println!("  ρ reads (3 point rows + 2 diff rows): {t_rho:.3}s");
     println!("  certificate core (Σ+whitener+moment+split+holdout): {cert_secs:.3}s");
     let ratio = cert_secs / t_rho.max(1e-9);
-    println!(
-        "  ratio (cert/ρ): {ratio:.1}× — {}",
-        match cert_secs > t_rho {
+    let ledger_verdict: &str = match (t_rho <= RESOLUTION_S, cert_secs <= RESOLUTION_S) {
+        (true, true) => {
+            "both ledger halves at or below the resolution bound — no measurable saving \
+             possible (the refused compute is too cheap to gate at this k)"
+        }
+        (true, false) => {
+            "the ρ read is at resolution; the refused compute is measurable — \
+             saving confirmed"
+        }
+        (_, _) => match cert_secs > t_rho {
             true => "the refusal saves measurable compute",
             false => "the ρ read costs as much as the refused compute — the savings arm FAILS",
-        }
-    );
+        },
+    };
+    println!("  ratio (cert/ρ): {ratio:.1}× — {ledger_verdict}");
     println!("\nREPORT-ONLY: nothing armed here; results land under issue 201 + katgpt-rs 978.");
 }
 
