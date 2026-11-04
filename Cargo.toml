@@ -1,6 +1,6 @@
 [package]
 name = "riir-refine"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 # The shipped binary is proprietary freeware (binary-only distribution): the
 # EULA it ships with is its licence. The source is private.
