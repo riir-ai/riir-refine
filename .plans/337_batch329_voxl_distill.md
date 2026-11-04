@@ -64,9 +64,14 @@ the /wait observe-at-source pattern). Zero GPU throughout (M3 mining posture).
       (work-count + copy-bytes axes; magnitude anchor 1/dirty-fraction). In-rule
       kinships: the gpu_07/gpu_129/gpu-B294 distinct-from lines.
       — DONE (entries_61.rs; fixed arm's #[test] green — consumer-visible byte-identity
-      over 4 moving-band steps + the empty step; validator-faithful bench ×3:
-      ParetoDominant 2.14×/3.20×/3.14× at 256/4096/65536, dirty band 12.5%/11.7%/12.0%,
-      allocs 0/0, alloc-det ×3; both arms checksum-identical asserted in-harness).
+      over 4 moving-band steps + the empty step; the slice's pre-assembly validator
+      probe ×3 measured 2.14×/3.20×/3.14× at a 12-12.5% dirty band (its own harness
+      shape kept the checksum fold in both arms — ratios under the 1/dirty-fraction
+      ceiling, alloc-det ×3); the LANDED harness's binding validator runs:
+      ParetoDominant 3/0/0, 8.18×/6.96×/6.99× at the landing, reproduced 8.66×/
+      6.93×/7.06× on a re-run at load ~21 (verdict class stable) — the corpus notes
+      carry the landed-harness numbers, the earlier probe's lower ratios disclosed
+      here as provenance).
 - [x] T3 — author R2 (rust_perf, concurrency, NotBenchable-annotation expected):
       fixtures for the fit + governor (EWLS fit over (work, ms) pairs, asymmetric
       hysteresis thresholds, min-samples, degenerate-variance fallback, switch cost
