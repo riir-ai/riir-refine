@@ -1,6 +1,7 @@
 # Plan 337 — Batch 329: the tembo/voxl distill conversion (rust_perf + sec)
 
-**Status:** STAGED — pending queue slot (verdict: Research 367, YES B−; nominal Batch 329)
+**Status:** CLAIMED — zed-m3-refine-b329 executing the batch
+**Claimed:** zed-m3-refine-b329, 1793800137, expires 2026-11-06T13:48Z
 
 Source: tembo/voxl @ `eba3b7ced9f60e885bb7b3a96a12e3ccb347fdcd` (MIT code; tip moved
 2026-11-03, one day before the 2026-11-04 inspection — FAST-MOVING, re-clone at the
