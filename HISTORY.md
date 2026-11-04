@@ -1052,6 +1052,66 @@ Commits: this one (writer + corpus edit + pins + issue + record).
 Full diagnose table + honest-scope notes: `.issues/206` (kept open — the
 harvest→bind→note CLI verb + arm B re-open on their recorded triggers).
 
+## 2026-11-04 — Issue 203 CLOSED LANDED: the corpus lease migrates to the points read (the shipped `update`/`corpus` dead-end ends)
+
+Filed from the first live-mainnet e2e of the shipped v0.4.0: `corpus`
+printed an unsatisfiable rebuild hint and `update` refused naming
+`kat_transport` — the plane the pivot deliberately compiles out. Root
+cause: the corpus-lease refresh wire stayed on the KAT transport while
+the release set moved to the points plane.
+
+**riir-kat `2bc6020`** (the substrate half): the lease READ half moved to
+the client tier — `LeaseReadTransport` (get_lease/get_segment) +
+`HttpResponse` + `LeaseReadStatus`/`LeaseReadOutcome` +
+`run_lease_read_phase` (the contract chain verbatim: decode+verify →
+compat → diff fetch → stage → atomic install; no charge, no stamps); the
+new `lease_http` feature carries the GET-only `HttpLeaseTransport` half +
+the failover machinery (NO `/sync`, NO `/claim`, NO signing, NO QR — the
+money surface stays kat_transport-only by construction); `LeaseTransport`
+keeps the write half + money stamps as the kat_transport supertrait;
+`run_update_phase` delegates the read chain and keeps the out-of-KAT
+pause + the charge judge + the charge book; `kat_ua::apply` rides
+`any(kat_transport, lease_http)` with the `X-Kat-Totp` factor arm
+extracted kat_transport-keyed (the header literal must never ride the
+charitable binary — measured bar-3 hard-zero hit, fixed by extraction).
+4 new read-phase tests; 538-544 passed at the kat_transport postures,
+444 at default+lease_http; clippy -D clean at five postures. COMPLETES
+`fad9e1d`'s net-mainnet lib-test compile fix: the devnet const's test
+sites now ride the const's own posture gate (the devnet rows are COMPILED
+OUT of the pair table + the refill classifier under the pin — gating the
+arms, not re-literalizing).
+
+**riir-refine (this commit)** (the consumer half): `points` gains
+`riir-kat/lease_http`; `kat_lease_client` re-exported under
+`all(points, not(kat_service))`; `points_lease.rs` (`run_points_update_at`
+— the offline law, the points dial law, the net pin, the gain renderer;
+`resolved_lease_url` shared with the run-context partition);
+`run_points_corpus`'s dead-end fork → the working offer; the Update
+dispatch points arm (kat_transport keeps the kat lane + its charge book);
+the run-context gates `any(kat_service, points)` with generation wording
+(scan-surface clean of the bar-1 classes) and the points partition
+resolved through the SAME points dial law (an install and the runs that
+read it name one partition); `maybe_auto_corpus`'s points arm (the
+hands-free refresh works in shipped builds, NotModified silent).
+charitable_gate: bar-2 names `lease_http` (GET-only read transport,
+explicitly not the money plane); R2 records the standing rule that
+`RIIR_REFINE_KAT_SERVICE_URL` can NEVER ride (its name contains the
+KAT_SERVICE hard-zero substring — measured: pulling the KAT dial seam in
+tripped bar 3, so the points posture resolves through the points plane's
+own env).
+
+**Gates + e2e**: CHARITABLE_GATE PASS (hard-zero zero · mainnet 2/12 ·
+R2 4/4 · bar-1 zero · --mine typed refusal · leak-scan PASS); refine lib
+2852 (points) / 2836 (default) / 2876 (kat_transport) · g10 battery 13/13;
+clippy -D clean at default / points / kat_transport / the release set.
+LIVE (release-set binary, net mainnet): `update` fetched + installed
+epoch 2971 (74 rules) — `never billed`; the second call 304'd; offline
+typed refusal; the next scan printed `corpus: running the refreshed rule
+set (generation 2971, domains: clippy)` — the installed epoch feeds the
+run overlay end to end. Residue (owner acts, recorded in the issue's
+sister findings): the tuna.riir.ai custom-domain DNS row; the join
+Device-Flow dashboard act.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

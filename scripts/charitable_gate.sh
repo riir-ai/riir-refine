@@ -120,6 +120,11 @@ R1_CAP=40
 #                                corpus-epoch line reads; a local path, never
 #                                a network dial; rode in with the points
 #                                feature's riir-kat/client edge, 2026-11-04)
+#   ⛔ RIIR_REFINE_KAT_SERVICE_URL stays OUT — deliberately NOT a pin: the
+#      points posture's lease read resolves through the points plane's own
+#      env (issue 203); the KAT dial-law env name contains KAT_SERVICE as a
+#      substring, the bar-3 HARD-ZERO class — a name that can never ride in
+#      (measured: pulling the kat dial seam in tripped bar 3, 2026-11-04).
 # The census extracts EVERY RIIR_REFINE_KAT_* name in the binary; a name
 # outside this pin fails even when its carrying line looks inert.
 R2_PINS='RIIR_REFINE_KAT_ACCOUNT_DIR
@@ -232,10 +237,13 @@ else
     done
     # The forbidden tier: anything the KAT wire/billing plane owns. Pinned
     # BY NAME (a new kat feature lands here only by an explicit edit).
+    # lease_http (issue 203): the corpus-lease READ transport — GET-only
+    # (/lease + /segment), no /sync, no /claim, no signing, no QR; the
+    # money surface stays kat_transport-only by construction.
     forbidden_tier=""
     for f in $blessed; do
         case "$f" in
-            redact|client|account_key|rebind|provider_login|github_login) ;;
+            redact|client|account_key|rebind|provider_login|github_login|lease_http) ;;
             *) forbidden_tier="$forbidden_tier $f" ;;
         esac
     done

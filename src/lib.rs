@@ -64,6 +64,11 @@ pub mod client_id;
 pub mod first_run_consent;
 #[cfg(feature = "points")]
 pub mod points_client;
+// Issue 203: the points posture's corpus-lease refresh — the lease READ
+// half over riir-kat's client-tier `run_lease_read_phase` (the charge
+// plane stays `kat_transport`).
+#[cfg(feature = "points")]
+pub mod points_lease;
 // Proposal 027 (plan 326 T2): the points-drain CLIENT half — the
 // machine-local day state, the hosted-lane UX pre-check, and the
 // per-call attestation composer. Implies `points`; INERT until served
@@ -391,6 +396,13 @@ pub use riir_kat::{
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
+// Issue 203: the corpus-lease client is ALSO the points posture's module —
+// the lease READ half (store, manifest, `run_lease_read_phase`, the
+// `lease_http` HttpLeaseTransport) is points-free by law. Mirrored at the
+// same path (the issue-088 mirror law); `not(kat_service)` avoids a
+// duplicate-name clash when both features ride.
+#[cfg(all(feature = "points", not(feature = "kat_service")))]
+pub use riir_kat::kat_lease_client;
 // The unit vocabulary (MicroKat/WholeKat + the µ constants) is feature-free
 // by construction (kat_units' own module doc) — and the Plan 035 T3
 // newtype adoption makes the UNGATED footer a consumer, so the root

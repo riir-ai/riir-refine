@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 
 use riir_refine::kat_lease_client::{
     self, run_update_phase, HttpLeaseTransport, HttpResponse, LeaseCharge, LeaseManifest,
-    LeaseSegmentDesc, LeaseStage, LeaseStore, LeaseTransport, UpdateStatus,
+    LeaseSegmentDesc, LeaseStage, LeaseStore, LeaseTransport as _, UpdateStatus,
 };
 
 // ── the mock server (std TCP; the kat_stripe shape) ────────────────────────

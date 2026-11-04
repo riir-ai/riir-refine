@@ -270,7 +270,7 @@ fn read_source(path: &std::path::Path) -> std::io::Result<String> {
 /// KAT meter: `RIIR_REFINE_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
 /// per-repo adoption audit) → else cwd.
-#[cfg(any(feature = "latent_retrieval", feature = "kat_service"))]
+#[cfg(any(feature = "latent_retrieval", feature = "kat_service", feature = "points"))]
 fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
     std::env::var("RIIR_REFINE_TRAJ_ROOT")
         .ok()
@@ -312,6 +312,8 @@ fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
 /// envelope once — envelope present + store empty → every bucket becomes a
 /// row verbatim, then the envelope is renamed `memory.json.migrated` so the
 /// import can never run twice (or drift into a second repo's store).
+/// Issue 203: `points` joins the gate (its update arm resolves the same
+/// root for the lease store).
 #[cfg(feature = "latent_retrieval")]
 fn open_traj_store(paths: &[PathBuf], migrate: bool) -> Option<riir_refine::traj_store::TrajStore> {
     let root = resolve_heal_root(paths);
@@ -426,12 +428,20 @@ fn kat_ledger_id(url: &str) -> Option<[u8; 32]> {
 /// kill a run that never dials. The pin contract refuses HOSTED dials at
 /// that seam (loopback follows `allow-local`, issue 163; hosted refusals
 /// stay fatal in [`command_service_url`]), but a conflicted build is a dev
+/// conflicted build is a dev
 /// posture whose local-only work — the scan, the corpus lease STORE, the
 /// trajectory memory — must still run: one advisory line, the default URL
 /// names the partition, and the first real dial still exits 2 through the
-/// strict seam.
-#[cfg(feature = "kat_service")]
+/// strict seam. Issue 203: the points posture partitions by ITS OWN dial
+/// law ([`riir_refine::points_lease::resolved_lease_url`]) — the update
+/// command that installed the epoch resolved through the same seam, and
+/// the KAT dial law's env name must never ride the charitable binary (the
+/// KAT_SERVICE hard-zero class).
+#[cfg(any(feature = "kat_service", feature = "points"))]
 fn net_partition_url() -> String {
+    #[cfg(all(feature = "points", not(feature = "kat_service")))]
+    let raw = riir_refine::points_lease::resolved_lease_url();
+    #[cfg(feature = "kat_service")]
     let raw = riir_refine::kat_lease_client::service_url_for_command();
     match riir_refine::kat_net_pin::ensure_net_allowed(&raw) {
         Ok(url) => url,
@@ -2794,6 +2804,8 @@ fn run_kat_update() {
 /// adds files, it never removes). No wire change; an unreadable overlay
 /// skips the line honestly instead of fabricating a diff. First-install
 /// (or old-epoch-unreadable) postures show the installed shape instead.
+/// Kat-lane only: the points posture's update renders its own gain through
+/// `points_lease::print_corpus_epoch_gain` (issue 203).
 #[cfg(feature = "kat_transport")]
 fn print_corpus_epoch_gain(
     store: &riir_refine::kat_lease_client::LeaseStore,
@@ -3095,7 +3107,10 @@ fn run_points_info() {
 
 /// `cargo refine corpus` — corpus info + the update offer (points-free:
 /// corpus freshness is a public good). The KAT charge line NEVER appears —
-/// this verb does not touch the lease/charge machinery at all.
+/// this verb does not touch the lease/charge machinery at all. Issue 203:
+/// the offer line is TRUE at every posture that compiles this fn — `update`
+/// works via the points read without `kat_transport`, and via the kat lane
+/// when that rides along.
 #[cfg(feature = "points")]
 fn run_points_corpus() {
     for line in riir_refine::build_stamp::version_lines() {
@@ -3104,13 +3119,7 @@ fn run_points_corpus() {
         }
     }
     println!("corpus freshness is a public good — points are never charged for it");
-    #[cfg(feature = "kat_transport")]
     println!("update: run `cargo refine update` to refresh the corpus lease");
-    #[cfg(not(feature = "kat_transport"))]
-    println!(
-        "update: this build has no corpus-lease transport — {}",
-        riir_refine::build_stamp::rebuild_command()
-    );
 }
 
 // ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
@@ -3157,25 +3166,31 @@ fn run_update_surface_hooks(paths: &[PathBuf]) {
             }
         }
     }
-    #[cfg(feature = "kat_transport")]
+    #[cfg(any(feature = "kat_transport", feature = "points"))]
     {
         let _ = paths; // the corpus leg resolves the root itself
         maybe_auto_corpus();
     }
-    #[cfg(not(any(feature = "update_check", feature = "kat_transport")))]
+    #[cfg(not(any(
+        feature = "update_check",
+        feature = "kat_transport",
+        feature = "points"
+    )))]
     {
         let _ = paths;
     }
 }
 
 /// Issue 153 T4: `RIIR_REFINE_AUTO_CORPUS=1` — the lease refresh (`update`)
-/// runs itself at run start, at most once per 12h. The lease charge is the
-/// tier gate HONORED, not bypassed: out-of-KAT and refused postures skip
-/// inside `run_update_phase` exactly as the explicit command does. One
-/// bookkeeping file records the ATTEMPT, not the success — a flaky network
-/// must not re-timeout on every invocation. Silent when the corpus is
-/// current (NotModified) — a run start is not a status page.
-#[cfg(feature = "kat_transport")]
+/// runs itself at run start, at most once per 12h. The KAT charge plane is
+/// the tier gate HONORED, not bypassed (out-of-KAT and refused postures
+/// skip inside `run_update_phase` exactly as the explicit command does);
+/// the points posture charges nothing by law, so its gate is only the
+/// window + the opt-in env. One bookkeeping file records the ATTEMPT, not
+/// the success — a flaky network must not re-timeout on every invocation.
+/// Silent when the corpus is current (NotModified) — a run start is not a
+/// status page.
+#[cfg(any(feature = "kat_transport", feature = "points"))]
 fn maybe_auto_corpus() {
     /// The auto-corpus bookkeeping window (Issue 153 T4).
     const AUTO_CORPUS_WINDOW_SECS: i64 = 12 * 3600;
@@ -3210,40 +3225,53 @@ fn maybe_auto_corpus() {
         .unwrap_or_default(),
     );
 
-    // The same legs run_kat_update runs — a startup-capped budget (the
-    // explicit command's 30s generous budget would stall every run start).
-    use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
-    };
-    let url = command_service_url();
-    let store = LeaseStore::open_net(&root, &url);
-    let mut charge = LeaseCharge::open(&store);
-    let transport = HttpLeaseTransport::new(&url, 4);
-    let deadline = Some(std::time::Instant::now() + std::time::Duration::from_secs(6));
-    let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
-    match outcome.status {
-        riir_refine::kat_lease_client::UpdateStatus::NotModified => {}
-        riir_refine::kat_lease_client::UpdateStatus::Applied {
-            epoch,
-            charge_micro_kat,
-        } => {
-            eprintln!(
-                "auto-corpus: {}",
-                riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
-            );
-            eprintln!(
-                "auto-corpus: epoch {epoch} installed — the retrieval index rebuilds on the next run"
-            );
+    // The KAT lane keeps its full phase (charge book + stamps); the points
+    // posture runs the charge-free read (issue 203). Exactly one arm
+    // compiles per posture.
+    #[cfg(feature = "kat_transport")]
+    {
+        use riir_refine::kat_lease_client::{
+            HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+        };
+        let url = command_service_url();
+        let store = LeaseStore::open_net(&root, &url);
+        let mut charge = LeaseCharge::open(&store);
+        let transport = HttpLeaseTransport::new(&url, 4);
+        let deadline = Some(std::time::Instant::now() + std::time::Duration::from_secs(6));
+        let outcome = run_update_phase(&transport, &store, &mut charge, false, deadline);
+        match outcome.status {
+            riir_refine::kat_lease_client::UpdateStatus::NotModified => {}
+            riir_refine::kat_lease_client::UpdateStatus::Applied {
+                epoch,
+                charge_micro_kat,
+            } => {
+                eprintln!(
+                    "auto-corpus: {}",
+                    riir_refine::kat_lease_client::LeaseCharge::line(epoch, charge_micro_kat)
+                );
+                eprintln!(
+                    "auto-corpus: epoch {epoch} installed — the retrieval index rebuilds on the next run"
+                );
+            }
+            riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
+                eprintln!("auto-corpus: skipped — {reason}");
+            }
+            riir_refine::kat_lease_client::UpdateStatus::Failed(e) => {
+                eprintln!("auto-corpus: failed ({e}) — proceeding on the local corpus");
+            }
         }
-        riir_refine::kat_lease_client::UpdateStatus::Skipped(reason) => {
-            eprintln!("auto-corpus: skipped — {reason}");
-        }
-        riir_refine::kat_lease_client::UpdateStatus::Failed(e) => {
-            eprintln!("auto-corpus: failed ({e}) — proceeding on the local corpus");
+        if let Err(e) = charge.save() {
+            eprintln!("auto-corpus: could not persist the charge ledger: {e}");
         }
     }
-    if let Err(e) = charge.save() {
-        eprintln!("auto-corpus: could not persist the charge ledger: {e}");
+    #[cfg(all(feature = "points", not(feature = "kat_transport")))]
+    {
+        // The points read runs with the SAME startup budget shape as the
+        // kat leg had: the read phase's transport timeout is the update
+        // command's generous 30s — the run-start window stays bounded by
+        // the transport's own connect/read timeout, and NotModified is
+        // silent inside `run_points_update_at`.
+        riir_refine::points_lease::run_points_update_at(true, &root);
     }
 }
 
@@ -13271,6 +13299,19 @@ fn main() {
                 run_points_corpus();
                 return;
             }
+            // Issue 203: the corpus-lease refresh over the points transport
+            // — the shipped posture's `update` (no kat_transport to
+            // refuse). A kat_transport build keeps the kat lane (its charge
+            // book + stamps) via the dispatch below; this arm only fires
+            // where the kat transport is compiled out.
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::Update => {
+                riir_refine::points_lease::run_points_update_at(
+                    false,
+                    &resolve_heal_root(&args.paths),
+                );
+                return;
+            }
             _ => {}
         }
     }
@@ -15150,30 +15191,34 @@ fn main() {
     // domains' compiled-in corpora for this run — a run-boundary install,
     // never mid-pass mutation. Fresh install + offline → no epoch → the
     // compiled-in seed stands (G3: byte-identical to features-off).
-    #[cfg(feature = "kat_service")]
+    // Issue 203: the points posture rides too — the store is the same
+    // per-net partition, the read lane just installs it. The print uses
+    // generation wording (never the `lease` word) — this line lands on a
+    // SCAN surface (the charitable bar-1 pattern).
+    #[cfg(any(feature = "kat_service", feature = "points"))]
     let lease_store = riir_refine::kat_lease_client::LeaseStore::open_net(
         &resolve_heal_root(&args.paths),
         &net_partition_url(),
     );
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
-    #[cfg(all(feature = "kat_service", feature = "score_bench"))]
+    #[cfg(all(any(feature = "kat_service", feature = "points"), feature = "score_bench"))]
     let run_overlay = run_overlay_with_promotion(
         &lease_store,
         args.corpus_epoch,
         &resolve_heal_root(&args.paths),
     );
-    #[cfg(all(feature = "kat_service", not(feature = "score_bench")))]
+    #[cfg(all(any(feature = "kat_service", feature = "points"), not(feature = "score_bench")))]
     let run_overlay = lease_overlay_for_run(&lease_store, args.corpus_epoch);
-    #[cfg(feature = "kat_service")]
+    #[cfg(any(feature = "kat_service", feature = "points"))]
     if let Some((epoch, overlay)) = &run_overlay {
         let pinned = args.corpus_epoch.is_some();
         let leased = lease_store.current().is_some();
         let domains: Vec<&str> = overlay.iter().map(|(d, _)| d.label()).collect();
         if leased {
             println!(
-                "corpus lease: running on epoch {epoch} ({}domains: {})",
-                if pinned { "pinned, " } else { "" },
+                "corpus: running the refreshed rule set (generation {epoch}{}domains: {})",
+                if pinned { ", pinned, " } else { ", " },
                 domains.join(", ")
             );
         }
@@ -15215,12 +15260,12 @@ fn main() {
     // lint-flagged under this feature union; allow is the honest shape).
     #[allow(clippy::redundant_closure_call)]
     let mut matcher = (|| {
-        #[cfg(feature = "kat_service")]
+        #[cfg(any(feature = "kat_service", feature = "points"))]
         if let Some((_, ref overlay)) = run_overlay {
             return LatentMatcher::from_enabled_domains_with_overlay(overlay);
         }
-        #[cfg(not(feature = "kat_service"))]
-        let _ = &args; // no lease context without kat_service
+        #[cfg(not(any(feature = "kat_service", feature = "points")))]
+        let _ = &args; // no lease context without a lease-bearing posture
         LatentMatcher::from_enabled_domains()
     })()
     .unwrap_or_else(|e| {
@@ -18946,7 +18991,7 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
 /// pin (exact reproduction) and when the registry is empty/unloadable (a
 /// corrupt registry WARNs and continues WITHOUT network rules — the safe
 /// direction for a heal run; the GATE refuses on the same condition).
-#[cfg(all(feature = "kat_service", feature = "score_bench"))]
+#[cfg(all(any(feature = "kat_service", feature = "points"), feature = "score_bench"))]
 #[allow(clippy::type_complexity)] // mirrors lease_overlay_for_run's shape one layer up
 fn run_overlay_with_promotion(
     store: &riir_refine::kat_lease_client::LeaseStore,
@@ -19007,7 +19052,7 @@ fn run_overlay_with_promotion(
     Some((epoch, overlay))
 }
 
-#[cfg(feature = "kat_service")]
+#[cfg(any(feature = "kat_service", feature = "points"))]
 #[allow(clippy::type_complexity)] // mirrors the lease module's DomainTriples shape one layer up
 fn lease_overlay_for_run(
     store: &riir_refine::kat_lease_client::LeaseStore,
@@ -19028,7 +19073,7 @@ fn lease_overlay_for_run(
             PACK_DOMAIN_DOCKER => Some(DomainId::Docker),
             PACK_DOMAIN_DIST => Some(DomainId::Dist),
             other => {
-                eprintln!("corpus lease: ignoring unknown pack domain {other:?} (client too old?)");
+                eprintln!("corpus: ignoring unknown rule domain {other:?} (client too old?)");
                 None
             }
         };

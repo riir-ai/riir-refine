@@ -612,7 +612,7 @@ kat_service = ["dep:ed25519-dalek", "riir-kat/client"]
 # default so join works out of the box). Charitable-gate note: bar 2's
 # "feature-free + redact only" riir-kat tier re-scopes to "+ the join
 # identity chain" — kat_transport/kat_service stay hard-zero (T6).
-points = ["dep:riir-ledger", "dep:ureq", "dep:getrandom", "dep:ed25519-dalek", "riir-kat/client", "riir-kat/provider_login"]
+points = ["dep:riir-ledger", "dep:ureq", "dep:getrandom", "dep:ed25519-dalek", "riir-kat/client", "riir-kat/provider_login", "riir-kat/lease_http"]
 
 # Proposal 027 (plan 326 T2): the points-drain CLIENT half — the hosted
 # seat's fair-use pre-check (two integer compares against the SERVED
