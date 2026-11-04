@@ -50,7 +50,7 @@ Executes [issue 197](../.issues/197_engine_mozilla_methodology_port.md) — the 
 - [x] ⛔ THE LABELED REPORT DELTA: `detect_saturation` anchors each series on the LAST row's toolchain class and never pools rows differing on (rustc_version ∨ clippy_driver_version ∨ generation); generation 0 never enters a pinned series. G1 tests: split-on-toolchain, generation-0 exclusion, None-pools-with-None stability, roundtrip + skip-when-absent
 - [x] The landing's own score-bench run appended row #220 carrying `rustc_version: rustc 1.99.0 (b940084d7 2026-09-28)` + `clippy_driver_version: clippy 0.1.99 (b940084d7e 2026-09-28)` — the fields' first live evidence. The honest reset observed and disclosed: the pinned-toolchain row anchors a FRESH gen-1 series (`saturation: gen-1 no verdict (1/6 runs)`) until 6 same-toolchain rows accumulate; the v1 SVG shrinks by pre-gen-tag rows
 - [x] heal.rs labeled-delta comments at the two generation-pooling sites (`admission_gate`'s v1 baseline, `gen_series`) — an all-legacy history now refuses admission (honest); `--score-report` re-renders share `gen_series`
-- [x] P4-b filed: `.issues/198_traj_store_toolchain_key.md` (the migration rule carried verbatim; behavior change with its own gates, NOT this plan)
+- [x] P4-b filed: `.issues/202_traj_store_toolchain_key.md` (the migration rule carried verbatim; behavior change with its own gates, NOT this plan; renumbered 198→202 2026-11-04 — the wetrun issue's first allocation won the 198 collision)
 
 ## Phase 5 — P5: the uniffi golden-fixture audit (T0a)
 

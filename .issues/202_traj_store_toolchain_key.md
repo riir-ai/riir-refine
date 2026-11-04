@@ -1,6 +1,6 @@
-# Issue 198 — traj-store score-run key: the toolchain axis (the 197-followup)
+# Issue 202 — traj-store score-run key: the toolchain axis (the 197-followup)
 
-**Status:** Open — filed from plan 329 / issue 197 P4-b (2026-11-03); behavior change with its own gates, deliberately NOT in the 197 T0b set
+**Status:** Open — filed from plan 329 / issue 197 P4-b (2026-11-03); behavior change with its own gates, deliberately NOT in the 197 T0b set. **Renumbered 198 → 202 on 2026-11-04 (COLLISION resolution): this file and `198_mozilla_outbound_pr_wetrun.md` both held 198 — the wetrun allocated first (`531b83af` 2026-11-02 16:39) vs this file's `7702625e` (2026-11-03 07:41), so the first-allocation rule decides the wetrun keeps 198 and this file is the loser; `citation_weight.py` independently agrees on direction (weak lead for the wetrun, attributed +3 vs 0) with the 5 UNRESOLVED sites disclosed. The live claim below is unaffected (the session name's `-198` suffix is historical).**
 **Claimed:** zed-riir-refine-198, 1793565213, expires 2026-11-05T15:00:00+00:00
 
 ## The finding
