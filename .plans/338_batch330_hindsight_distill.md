@@ -2,6 +2,8 @@
 
 **Status:** STAGED — waiting for a free batch slot (behind plans 336 / 337)
 
+**Claimed:** zed-m3-hindsight-b330, 1793807728, expires 2026-11-06T15:55:28+00:00
+
 Source: vectorize-io/hindsight @ `841979dfda4e1bebf7cbf68d0144d5d5454d93df`
 (MIT, tip 2026-11-04) — verdict Research 368 (YES B−). Nominal Batch 330,
 staged behind plan 336 (Batch 328, oss-fuzz) and plan 337 (Batch 329, voxl).
