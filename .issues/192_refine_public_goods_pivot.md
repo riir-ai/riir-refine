@@ -18,18 +18,18 @@
 
 ## The new CLI surface (owner's table, gaps filled)
 
-| Verb | Behavior | Notes/gaps flagged |
-|---|---|---|
-| `cargo refine` | dry-run scan (unchanged) | — |
-| `cargo refine fix` | **free, no join needed**; first-run consent ONCE for secret-blind data send (spans/results, `allow_redacted: false` policy); asks join-or-anonymous | Local healing never needs consent or network — consent gates the SEND only. Keep a fully-offline mode (`RIIR_REFINE_OFFLINE=1`) documented for air-gapped users |
-| `cargo refine join` | join contribution: policy accept + GitHub login | Reuses shipped substrate: `login --provider github` (device flow) + the mining-consent screen + `.refine-sync-policy` redaction. No new auth code |
-| `cargo refine left` | leave contribution: log off, zero data sent | **Naming flag:** `left` reads as past tense; ship `leave` with `left` as hidden alias (owner's word kept as alias) |
-| `cargo refine rank` | top-ten leaderboard + own rank | **Sybil flag:** anonymous/derived-ID users must NOT be rank-eligible (rotating identity farms the board) — rank requires GitHub-joined identity; anonymous = local-only stats |
-| `cargo refine info` | top fixed repos by domain (`--perf`, `--clippy`, …) | Aggregated, redaction-policy-scoped; no repo content, counts + domains only |
-| `cargo refine corpus` | corpus info + update offer | The corpus-lease/update surface minus KAT — points-free (corpus freshness is a public good) |
-| `cargo refine update` | corpus lease refresh (exists) | Drops the KAT charge line in the public build |
-| `cargo refine upgrade` | binary self-update (exists) | unchanged |
-| `cargo refine version` | NEW subcommand (alias of `--version`) | keep `--version` working |
+| Verb | Behavior | Notes/gaps flagged | Status 2026-11-04 (the live e2e + the UX session) |
+|---|---|---|---|
+| `cargo refine` | dry-run scan (unchanged) | — | SHIPS + the UX law applied (emoji summary, the four-line header, `Refining…`, the span preview cap 25) |
+| `cargo refine fix` | **free, no join needed**; first-run consent ONCE for secret-blind data send (spans/results, `allow_redacted: false` policy); asks join-or-anonymous | Local healing never needs consent or network — consent gates the SEND only. Keep a fully-offline mode (`RIIR_REFINE_OFFLINE=1`) documented for air-gapped users | SHIPS (free, verified live) + the emoji Fixed/unfixed summary; the auto-send-after-join = **issue 204** (the points-plane contribution feed) |
+| `cargo refine join` | join contribution: policy accept + GitHub login | Reuses shipped substrate: `login --provider github` (device flow) + the mining-consent screen + `.refine-sync-policy` redaction. No new auth code | SHIPS — verified e2e live (device flow → binding → "contribution credit on"); required the owner's GitHub Device-Flow enable (issue 188 T0, flipped 2026-11-04) |
+| `cargo refine left` | leave contribution: log off, zero data sent | **Naming flag:** `left` reads as past tense; ship `leave` with `left` as hidden alias (owner's word kept as alias) | SHIPS — `leave` + the hidden `left` alias both verified live ("unbound server-side, zero data sent") |
+| `cargo refine rank` | top-ten leaderboard + own rank | **Sybil flag:** anonymous/derived-ID users must NOT be rank-eligible (rotating identity farms the board) — rank requires GitHub-joined identity; anonymous = local-only stats | SHIPS — verified live (top-ten + own-rank; joined-only per the design) |
+| `cargo refine info` | top fixed repos by domain (`--perf`, `--clippy`, …) | Aggregated, redaction-policy-scoped; no repo content, counts + domains only | SHIPS — verified live (epoch + counts + domains; the honest empty-state) |
+| `cargo refine corpus` | corpus info + update offer | The corpus-lease/update surface minus KAT — points-free (corpus freshness is a public good) | PARTIAL — the info half ships; the update OFFER dead-ends in the shipped build (the lease transport rides kat_transport) → **issue 203** |
+| `cargo refine update` | corpus lease refresh (exists) | Drops the KAT charge line in the public build | PARTIAL — refused in the shipped build (same root, issue 203) |
+| `cargo refine upgrade` | binary self-update (exists) | unchanged | SHIPS — verified (the alert + the SHA256SUMS-checked fetch; the alert line is now ONE short line per the owner UX law) |
+| `cargo refine version` | NEW subcommand (alias of `--version`) | keep `--version` working | SHIPS — the subcommand parses + --version still works |
 
 ## Gaps the owner asked me to fill (the misses)
 
