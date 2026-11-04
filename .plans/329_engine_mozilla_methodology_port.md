@@ -2,7 +2,7 @@
 
 **Status:** T0b LANDED 2026-11-03 at `7d0752b07` (zed-m3-24c8b43a; owner reassignment from the amo lease, claim per issue 197); P4-b filed as issue 198; P5 audit verdict recorded in issue 197
 
-Executes [issue 197](../.issues/197_engine_mozilla_methodology_port.md) — the blaze-style methodology port (uniffi checksum-handshake × supply-chain vet-aggregate × sccache mock_command × sccache cache-key doctrines onto the healer). T0b is test/script-only: zero ENGINE behavior change, zero corpus change; the ONE report-behavior delta (the score_bench pooling split in P4-a's G1) is labeled in Phase 4.
+Executes `issue 197` — the blaze-style methodology port (uniffi checksum-handshake × supply-chain vet-aggregate × sccache mock_command × sccache cache-key doctrines onto the healer). T0b is test/script-only: zero ENGINE behavior change, zero corpus change; the ONE report-behavior delta (the score_bench pooling split in P4-a's G1) is labeled in Phase 4.
 
 ## Phase 0 — claim + substrate re-verify
 
