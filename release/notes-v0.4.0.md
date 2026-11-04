@@ -7,7 +7,7 @@ verbs ship.
 
 ---
 
-corpus: kernel_opt 1051 (+29 since the v0.3.5 build) — rust_perf 293 (+15) · sec 38 (+7) · clippy_lints 112 (=) · dist 7 (=)
+corpus: kernel_opt 1051 (+29 since the v0.3.5 build) — rust_perf 294 (+16) · sec 38 (+7) · clippy_lints 112 (=) · dist 7 (=)
 
 **Verify with SHA256SUMS; dependency attributions in THIRD_PARTY_LICENSES.md. Install: see README.**
 
@@ -41,9 +41,10 @@ corpus: kernel_opt 1051 (+29 since the v0.3.5 build) — rust_perf 293 (+15) · 
 - **Privacy law:** the client ID is a locally generated random UUID
   (CSPRNG, resettable via `config reset-client-id`) — never a hardware
   fingerprint; consent text says so in plain words.
-- **29 new kernel_opt rules, 15 new rust_perf rules, 7 new sec rules** since
+- **29 new kernel_opt rules, 16 new rust_perf rules, 7 new sec rules** since
   v0.3.5 (the firezone/sanstun, sccache, TensorFold and vllm distills among
-  them) — every verified fix still records a self-evolve trajectory.
+  them; rust_perf's 294th is the rust-lang/rust #164484 adaptive-sparse
+  blocked-table law) — every verified fix still records a self-evolve trajectory.
 
 ## Honest exposure bound (the T15 note)
 

@@ -190,7 +190,11 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       never a pass (CPU's 53-of-74 unmeasurable is the cautionary shape); (c) the 7
       CPU-regressing rules restricted to GPU contexts or disclosed per-rule in the record.
       Then run: re-campaign G2 = the GPU-host microbench, ≥ 6% median bar UNCHANGED; a GPU-host
-      failure refuses promotion the same as a CPU one would have.
+      failure refuses promotion the same as a CPU one would have. **OWNER GREENLIGHT 2026-11-04
+      ("do 8"): the exclusive 4090 rig hold is approved — the lane is GO, sequenced AFTER the
+      v0.4.0 publish + the 202/190/198/192 records (owner: "and 191 later"). The
+      pre-registration record lands FIRST (the three conditions), then the harness lane, then
+      the run.**
 - [ ] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
       2026-11-03): adopt the scratch-reuse twins (`ShardIndex::retrieve_diverse_two_stage_into`
       + `DiverseScanScratch`) in the per-line suggest loop (`corpus_index.rs::suggest_deep_into`
