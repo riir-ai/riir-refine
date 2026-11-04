@@ -2,7 +2,7 @@
 
 **Status:** LANDED (Batch 330: sec 41→44 SensitiveData trio + rust_perf 296→297; landing row in the queue snapshot + Research 368 addendum)
 
-**Claimed:** zed-m3-hindsight-b330, 1793807728, expires 2026-11-06T15:55:28+00:00 — **Lease closed:** zed-m3-hindsight-b330, discharged by the Batch-330 landing (the claim line reshaped per the Issue-943 rule).
+**Lease closed:** zed-m3-hindsight-b330, epoch 1793807728, was expires 2026-11-06T15:55:28+00:00 — discharged by the Batch-330 landing.
 
 Source: vectorize-io/hindsight @ `841979dfda4e1bebf7cbf68d0144d5d5454d93df`
 (MIT, tip 2026-11-04) — verdict Research 368 (YES B−). Nominal Batch 330,

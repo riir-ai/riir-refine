@@ -1,6 +1,7 @@
 # Issue 203 — the pivot's corpus-lease transport never migrated off `kat_transport`: the shipped v0.4.0 `corpus`/`update` verbs dead-end (found by the live-mainnet user-journey e2e, 2026-11-04)
 
 **Status:** open — filed 2026-11-04 (zed-m3-issues-fixall) from the first live-mainnet e2e of the shipped v0.4.0 binary (tag build `d2fbba094c91`, the release set) against the deployed gen2 worker. Blocks the "corpus freshness is a public good" half of the pivot's CLI table (issue 192: `corpus` = "corpus info + update offer", `update` = "corpus lease refresh (exists)").
+**Claimed:** zed-m3-i203-lease-read, 1793818213, expires 2026-11-06T19:00:00+00:00
 
 ## What the shipped binary actually does (measured, live)
 
