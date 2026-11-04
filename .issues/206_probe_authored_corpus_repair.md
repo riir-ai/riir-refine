@@ -1,6 +1,6 @@
 # Issue 206: Probe-authored corpus repair — templated context_notes + demote-execution behind a score-bench referee (Research 649 fusion; ILC leg dropped)
 
-**Status:** open — fusion idea (Research 649 × Latent-Prediction/ILC supergoat candidate; sweep record `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md`), novelty TBD (contested: cleanlab), PoC unrun; verdict round 1 REVISE addressed (claim scoped to telemetry-driven writers, `kat_corpus_pr` added as cousin, referee bar pinned to paired LCB95, arm B re-ruled)
+**Status:** open — fusion idea (Research 649 × Latent-Prediction/ILC supergoat candidate; sweep record `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md` @ `e7a746274`), novelty TBD (contested: cleanlab); module-half LANDED 2026-11-04 (`src/corpus_binding.rs`, 9/9 tests, clippy-clean, default lib 2828/0), corpus-half deferred (sibling batch owns the corpus entries files); verdict round 1 REVISE addressed (claim scoped to telemetry-driven writers, `kat_corpus_pr` added as cousin, referee bar pinned to paired LCB95, arm B re-ruled)
 **Date:** 2026-11-04
 **Repo:** riir-refine (corpus + self_evolve)
 **Filing analysis:** 10-analyst fusion sweep, 2026-11-04; the empty-seam claim and every mapped site coordinator-verified (`record_outcome` ×3 sites, `demotion_suggestions` report-only at `src/blueprint.rs` L428/L649, `--active-set-demote` CLI-only)
@@ -67,16 +67,30 @@ applied to the RULE CORPUS instead of weights:
 
 ## Tasks
 
-- [ ] Fixture: one seeded degenerate cluster (rule fires, `clippy_verify` fails
-      systematically, telemetry recorded).
-- [ ] `corpus_binding.rs`: diagnose → record + stale-refusal test.
-- [ ] Arm A: templated `context_notes` append (pins-manifest same-commit discipline).
-- [ ] Arm B: deterministic demote-execution (the blueprint-named command, run
-      programmatically behind an explicit flag).
-- [ ] Referee: score-bench A/B with the pinned paired-LCB95 bar; kill criteria below.
-- [ ] Smallest PoC = fixture + binding + referee on arm A; arm B is the SECOND candidate
-      arm (both A and B measured against the unedited generation N baseline — arm B is
-      not a control; the baseline is).
+- [x] Fixture (test-side, synthetic): the seeded degenerate cluster lives in
+      `src/corpus_binding.rs` tests (`degenerate_cluster()` — a rule firing with
+      systematic compile-gate failures over `RuleOutcomes` counts); the
+      real-telemetry fixture (outcomes harvested from actual fix campaigns) is the
+      corpus half's job.
+- [x] `corpus_binding.rs`: diagnose → record + stale-refusal test — LANDED
+      (`GateStage` first-index tie order, `MIN_ATTEMPTS` = 8 floor (UNDECIDED below,
+      never flagged), `DEGENERACY_BAR` = 0.5 inclusive, sorted deterministic output,
+      digest content-scoped (`recorded_at` deliberately un-hashed — a re-run
+      reproduces), `verify_against` refuses `StaleEpoch` with exact bytes; 9 unit
+      tests).
+- [-] Arm A: templated `context_notes` append (pins-manifest same-commit discipline) —
+      DEFERRED 2026-11-04: the sibling batch (Batch 329 voxl distill) owns the corpus
+      entries files + `pins_manifest.json` right now; the arm-A edit lands after that
+      batch closes (re-open trigger: the batch landing commit).
+- [-] Arm B: deterministic demote-execution (the blueprint-named command, run
+      programmatically behind an explicit flag) — DEFERRED with arm A (same
+      contention; also needs the real-telemetry wiring to have candidates worth
+      demoting).
+- [-] Referee: score-bench A/B with the pinned paired-LCB95 bar — DEFERRED with arm A
+      (the A/B needs a stable corpus generation; the sibling batch is moving it).
+- [x] Smallest PoC (module scope) = fixture + binding + stale refusal on the synthetic
+      fixture — LANDED. The GOAT question (measured heal-rate gain) stays with the
+      deferred referee arm.
 
 ## Kill criteria (pre-registered)
 

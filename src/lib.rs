@@ -625,6 +625,13 @@ pub mod frontier_miner;
 // report-first, gates nothing, replaces no Level-1 surface.
 pub mod blueprint;
 
+// Research-649-fusion record artifact (issue 206, test-side PoC of tasks 1+2):
+// per-rule drive×gate-stage×failure-class bindings, BLAKE3-digested and
+// corpus-epoch-keyed, stale-refusing (the sst_certified::verify_against
+// shape). Inert until the corpus half (arm-A writer + score-bench referee)
+// wires it; nothing here mutates the corpus.
+pub mod corpus_binding;
+
 // Attempt outcomes over the `.refine/fixseq/` ring (AUC(k) vs the base and
 // history-aggregate floors, LORO-held-out ridge readout). Pure stats over
 // the ring's jsonl wire shape, ungated so lib tests cover it at default
