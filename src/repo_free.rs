@@ -74,22 +74,17 @@ pub fn posture() -> RepoFree {
     *POSTURE.get_or_init(|| RepoFree::Billable)
 }
 
-/// The one-line disclosure a FREE run prints at startup. `None` when the
-/// posture is [`RepoFree::Billable`] (no line — byte-identical output).
+/// The run's posture disclosure — DROPPED from the output (owner UX law
+/// 2026-11-04): the word "bill" must never reach a user, and the posture
+/// line was noise in the four-line header spec. The [`verdict`] still runs
+/// (init) — the billing seams consult it internally; it just never prints.
+/// Free is the only posture the shipped build has; a future private/posture
+/// surface would re-introduce a line WITH the owner's wording, never the
+/// billing vocabulary.
 #[must_use]
 pub fn disclosure() -> Option<String> {
-    match posture() {
-        RepoFree::Free { licence } => {
-            let evidence = licence.unwrap_or("public-forge origin");
-            // Issue 192 v5 (owner): no billing language on the public
-            // surface — the run is free, full stop (the licence evidence
-            // stays: it is how the posture was decided, useful context).
-            Some(format!(
-                "repo: open-source ({evidence}) — free; local healing never bills"
-            ))
-        }
-        RepoFree::Billable => None,
-    }
+    let _ = posture();
+    None
 }
 
 /// The heuristic over a scan root — the tests' entry point (pure over the
@@ -218,10 +213,15 @@ mod tests {
     }
 
     #[test]
-    fn the_disclosure_names_the_evidence_once_free() {
+    fn the_disclosure_is_silence_at_every_posture() {
+        // The owner UX law (2026-11-04): the posture line never prints —
+        // "bill" vocabulary is banned from user output and the four-line
+        // header spec has no posture row. The verdict still decides the
+        // billing seams internally; the surface is silence.
         let dir = scratch("disclose");
         std::fs::write(dir.join("COPYING"), "GNU General Public License v2\n").expect("licence");
         assert!(matches!(verdict(&dir), RepoFree::Free { .. }));
+        assert!(disclosure().is_none(), "free stays silent");
         std::fs::remove_dir_all(&dir).expect("cleanup");
     }
 

@@ -10266,11 +10266,6 @@ fn snippet_head(text: &str) -> &str {
         .unwrap_or("…")
 }
 
-/// Issue 151: the in-run secret-disclosure caps — the warn names the count
-/// in full and samples the lines, never a firehose on a tree-wide leak.
-const MAX_SECRET_DISCLOSURE_FILES: usize = 8;
-const MAX_SECRET_DISCLOSURE_PER_FILE: usize = 4;
-
 /// Clamp a message to `n` chars for one-line report output.
 /// The T6.10 semantic-note suffix for fix-compile report lines: names
 /// the semantics change in the diff output when the applied strategy
@@ -10292,6 +10287,21 @@ fn truncate(s: &str, n: usize) -> String {
         let cut: String = s.chars().take(n.saturating_sub(1)).collect();
         format!("{cut}…")
     }
+}
+
+/// Thousands-separated integer (the owner's UX law: `1,234` — counts a
+/// user scans, not a number they parse).
+#[must_use]
+pub fn thou(n: usize) -> String {
+    let raw = n.to_string();
+    let mut out = String::with_capacity(raw.len() + raw.len() / 3);
+    for (i, c) in raw.chars().enumerate() {
+        if i > 0 && (raw.len() - i).is_multiple_of(3) {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Issue 165: the run-end per-domain roll-up's accumulator. `print_suggestion`
@@ -10345,18 +10355,25 @@ impl DomainTallies {
         self.citations + self.secrets
     }
 
-    /// The one roll-up line, e.g. `findings by domain: clippy 41 · perf 23
-    /// · sec 95 — 159 total`.
+    /// The one roll-up line — the owner's UX law (2026-11-04):
+    /// `🔍 Found 1,234 clippy | 345 perf | 6 sec` — thousands-separated,
+    /// big-to-small is the BTreeMap's key order reversed by display value
+    /// is NOT guaranteed, so sort by count DESCENDING for scannability.
     fn rollup_line(&self) -> String {
-        let parts: Vec<String> = self
+        let mut parts: Vec<(usize, String)> = self
             .per_domain
             .iter()
-            .map(|(domain, n)| format!("{domain} {n}"))
+            .map(|(domain, n)| (*n, format!("{domain} {}", thou(*n))))
             .collect();
+        parts.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
         format!(
-            "findings by domain: {} — {} total",
-            parts.join(" · "),
-            self.total()
+            "🔍 Found {} — {} total",
+            parts
+                .into_iter()
+                .map(|(_, s)| s)
+                .collect::<Vec<_>>()
+                .join(" | "),
+            thou(self.total())
         )
     }
 }
@@ -13016,6 +13033,39 @@ fn main() {
         }
     }
 
+    // ── The four-line header (owner UX law 2026-11-04): version (+update),
+    // corpus epoch (+freshness), the help hint — then the run begins. The
+    // update alert itself prints via run_update_surface_hooks (stderr, the
+    // 12h cache) in its OWN short form now; this line is the ALWAYS-on
+    // identity line so a user always knows what ran. The corpus epoch is
+    // the LOCALLY installed one (LeaseStore::open — local files only, no
+    // dial; riir-kat/client rides the points feature). Whether a NEWER
+    // epoch exists is the lease-refresh question — issue 203's migration;
+    // until it lands the line is honest about what is known locally.
+    #[cfg(feature = "points")]
+    if args.command.is_none() || args.fix || args.suggest {
+        let corpus_part = {
+            let store = riir_kat::kat_lease_client::LeaseStore::open(&resolve_heal_root(
+                &args.paths,
+            ));
+            match store.current_epoch() {
+                Some(e) => format!(" · corpus epoch {e}"),
+                None => String::new(),
+            }
+        };
+        println!(
+            "cargo-refine {}{corpus_part} — help: `cargo refine help`",
+            env!("CARGO_PKG_VERSION")
+        );
+    }
+    #[cfg(not(feature = "points"))]
+    if args.command.is_none() || args.fix || args.suggest {
+        println!(
+            "cargo-refine {} — help: `cargo refine help`",
+            env!("CARGO_PKG_VERSION")
+        );
+    }
+
     // ── Plan 325 T2: the first-run consent — the first `--fix` that could
     // ever send asks ONCE (the T16.1 §5 words). Every answer is safe to
     // proceed on: local healing is unconditional, the answer only gates
@@ -15215,6 +15265,10 @@ fn main() {
     for info in scan_root_infos(&args.paths, &scanned) {
         println!("{}", render_scan_line(&info));
     }
+    // The owner's UX law (2026-11-04): say what is happening before the
+    // quiet part — the pass can take a while (the oracle compiles, the
+    // retrieval warms); a user staring at silence thinks it hung.
+    println!("Refining…");
     #[cfg(not(feature = "docker"))]
     if !dockerfiles.is_empty() {
         eprintln!(
@@ -16953,15 +17007,23 @@ fn main() {
                     }
                 }
                 n_suggestions += 1;
-                print_suggestion(
-                    &s,
-                    &matcher,
-                    args.domain,
-                    clippy_feed.is_some() || hot_present,
-                    bench_target,
-                    &mut domain_tally,
-                    &fixable_set,
-                );
+                // The owner's UX law (2026-11-04): the per-span preview is
+                // capped on tree-wide runs — the summary lines are the
+                // product; the per-span review is a small-tree convenience
+                // (and --suggest / --verbose is the full dump). CAPPED_AT
+                // keeps small runs byte-complete.
+                const SPAN_PREVIEW_CAP: usize = 25;
+                if n_suggestions <= SPAN_PREVIEW_CAP {
+                    print_suggestion(
+                        &s,
+                        &matcher,
+                        args.domain,
+                        clippy_feed.is_some() || hot_present,
+                        bench_target,
+                        &mut domain_tally,
+                        &fixable_set,
+                    );
+                }
             }
         }
 
@@ -16988,6 +17050,16 @@ fn main() {
                     .or_insert(rules);
             }
         }
+    }
+
+    // The cap's tail (owner UX law): the run still COUNTS every span
+    // (n_suggestions), only the preview was truncated — one line names the
+    // overflow so the count and the visible rows never disagree.
+    if n_suggestions > 25 {
+        println!(
+            "  … and {} more span(s) — the summary below is the full count",
+            n_suggestions - 25
+        );
     }
 
     // ── Plan 030 T0.4: the docker lane (the second non-syn surface, and
@@ -17924,14 +17996,6 @@ fn main() {
             breakdown_of(&level_skipped_by_lint)
         )
     };
-    println!(
-        "\nscanned {} {file_pl} · {} {span_pl} · {} with {sugg_pl} (top-{} per \
-         domain){mode}{non_syn_note}{fmt_note}{oracle_note}{level_note}",
-        files.len(),
-        n_chunks,
-        n_suggestions,
-        args.top_k
-    );
 
     // ── Issue 151: the in-run secret disclosure (after the summary, the
     // corpus-delta placement convention — under the count it refines).
@@ -17954,34 +18018,13 @@ fn main() {
         } else {
             "files"
         };
+        // The owner's UX law (2026-11-04): ONE line, locations ride the
+        // dedicated report (`scan` / `--secret-scan`) — the run summary is
+        // a call to action, not a findings dump.
         println!(
-            "secrets: {total} finding(s) in {} {file_pl2}{pins_note} — suggest-only, never auto-fixed \
-             (run `cargo refine --secret-scan` for the report)",
+            "🔒 {total} secret-shaped literal(s) in {} {file_pl2}{pins_note} — suggest-only, never auto-fixed; details: `cargo refine scan`",
             secret_findings.len()
         );
-        for (display, finds) in secret_findings.iter().take(MAX_SECRET_DISCLOSURE_FILES) {
-            for f in finds.iter().take(MAX_SECRET_DISCLOSURE_PER_FILE) {
-                println!(
-                    "  [sec] secret-shaped literal ({}) at {display}:{}:{} [suggest-only — never \
-                     auto-fixed; value not shown]",
-                    f.tag(),
-                    f.line,
-                    f.col
-                );
-            }
-        }
-        let shown_files = secret_findings.len().min(MAX_SECRET_DISCLOSURE_FILES);
-        let shown = secret_findings
-            .iter()
-            .take(MAX_SECRET_DISCLOSURE_FILES)
-            .map(|(_, f)| f.len().min(MAX_SECRET_DISCLOSURE_PER_FILE))
-            .sum::<usize>();
-        if shown < total || shown_files < secret_findings.len() {
-            println!(
-                "  … and {} more (the report lists every finding)",
-                total - shown
-            );
-        }
     } else if secret_pinned > 0 {
         // P63: every finding in the run adjudicated benign — still loud
         // (never a silent green zero), but no longer the recurring
@@ -18004,17 +18047,49 @@ fn main() {
     if domain_tally.total() > 0 {
         println!("{}", domain_tally.rollup_line());
         if suggest_only && domain_tally.citations > 0 {
+            // The owner's UX law: one emoji line, the fixable share + the
+            // command. The share is the compiled-set floor (fixable_clippy
+            // ∩ compiled fix set over the total) — the honest '~' when the
+            // set cannot name one.
             if domain_tally.fixable_clippy > 0 {
+                let pct = (domain_tally.fixable_clippy * 100)
+                    / domain_tally.total().max(1);
                 println!(
-                    "next: ~{} clippy finding(s) look auto-fixable — run `cargo refine --fix` \
-                     (compile-gated; the suggest-only rows stay manual)",
-                    domain_tally.fixable_clippy
+                    "🛠️ ~{pct}% fixable via `cargo refine fix` (compile-gated; the suggest-only rows stay manual)"
                 );
             } else {
-                println!("next: run `cargo refine --fix` to heal the fixable ones in place");
+                println!("🛠️ fixable via `cargo refine --fix` to heal the fixable ones in place");
+            }
+        } else if args.fix && n_fixed_edits > 0 {
+            // The fix lane's emoji pair (owner UX law 2026-11-04): what
+            // was fixed, then the honest residual + the self-evolve CTA.
+            println!(
+                "🔍 Fixed {} edit(s) across {} file(s)",
+                thou(n_fixed_edits),
+                thou(n_fixed_files)
+            );
+            if n_suggestions > n_fixed_edits {
+                let pct_unfixed =
+                    100 - (n_fixed_edits * 100 / n_suggestions.max(1));
+                if pct_unfixed > 0 {
+                    println!(
+                        "🛠️ ~{pct_unfixed}% unfixed — `cargo refine join` for self-evolve"
+                    );
+                }
             }
         }
     }
+    // The scanned/count detail line rides BELOW the emoji summary (the
+    // owner's UX law: the call-to-action lines first; the run's own stats
+    // after — read if wanted, never in the way).
+    println!(
+        "\nscanned {} {file_pl} · {} {span_pl} · {} with {sugg_pl} (top-{} per \
+         domain){mode}{non_syn_note}{fmt_note}{oracle_note}{level_note}",
+        files.len(),
+        n_chunks,
+        n_suggestions,
+        args.top_k
+    );
     // Plan 329 P2: the verify refusal roll-up — silent-when-zero, like
     // the findings roll-up above.
     #[cfg(feature = "fix_verify")]
@@ -20164,9 +20239,11 @@ mod run_rollup_tests {
         t.add_citation("clippy", false);
         t.add_citation("perf", false);
         t.add_secrets(95);
+        // The owner UX law: `🔍 Found … ` — descending count, thousands
+        // separators, the total at the tail.
         assert_eq!(
             t.rollup_line(),
-            "findings by domain: clippy 2 · perf 1 · sec 95 — 98 total"
+            "🔍 Found sec 95 | clippy 2 | perf 1 — 98 total"
         );
         assert_eq!(t.total(), 98);
         assert_eq!(
@@ -20183,10 +20260,7 @@ mod run_rollup_tests {
         t.add_count("dist", 0);
         t.add_count("kernel", 5);
         t.add_count("shader", 0);
-        assert_eq!(
-            t.rollup_line(),
-            "findings by domain: docker 2 · kernel 5 — 7 total"
-        );
+        assert_eq!(t.rollup_line(), "🔍 Found kernel 5 | docker 2 — 7 total");
         assert!(
             !t.rollup_line().contains("dist"),
             "a zero lane never prints"

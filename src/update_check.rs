@@ -292,19 +292,20 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
 
 /// The alert line, or `None` when the installed build is current (or the tag
 /// is unordered — see [`version_newer`]).
+/// The alert line — the owner's UX law (2026-11-04): ONE short line, the
+/// version delta + the upgrade command. No release title, no URL — a user
+/// does not care about the release's marketing line or the network
+/// posture; they care that a new version exists and how to get it. The
+/// detail/title fields stay in the cache (the machine-readable surface for
+/// future surfaces), they just never render here.
 #[must_use]
 pub fn alert_line(latest: &CachedRelease, installed: &str) -> Option<String> {
     if !version_newer(&latest.version, installed) {
         return None;
     }
-    let detail = latest
-        .detail
-        .as_deref()
-        .map(|d| format!(" — {d}"))
-        .unwrap_or_default();
     Some(format!(
-        "update available: cargo-refine {} (installed {}){}\n  {}",
-        latest.version, installed, detail, latest.url
+        "⬆️ update available: {installed} → {} — run `cargo refine upgrade`",
+        latest.version
     ))
 }
 
@@ -990,21 +991,20 @@ mod tests {
 
     // ── the alert text ──
     #[test]
-    fn alert_line_carries_versions_detail_and_url() {
+    fn alert_line_is_one_short_line_with_the_upgrade_command() {
         let line = alert_line(
             &release("0.3.0", Some("corpus: +12 rust_perf rules")),
             INSTALLED,
         )
         .expect("newer alerts");
-        assert!(
-            line.contains("cargo-refine 0.3.0 (installed 0.2.1)"),
-            "{line}"
-        );
-        assert!(line.contains("corpus: +12 rust_perf rules"), "{line}");
-        assert!(
-            line.contains("https://github.com/gist-rs/cargo-refine"),
-            "{line}"
-        );
+        // The owner's UX law: ONE line — versions + the upgrade command.
+        // No release title/detail, no URL (a user does not care about the
+        // release's marketing line; they care a new version exists).
+        assert!(!line.contains('\n'), "one line only: {line}");
+        assert!(line.contains("0.2.1 → 0.3.0"), "{line}");
+        assert!(line.contains("cargo refine upgrade"), "{line}");
+        assert!(!line.contains("corpus: +12 rust_perf rules"), "{line}");
+        assert!(!line.contains("https://"), "{line}");
         assert!(alert_line(&release(INSTALLED, None), INSTALLED).is_none());
         assert!(alert_line(&release("0.1.0", None), INSTALLED).is_none());
     }

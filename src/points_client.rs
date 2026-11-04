@@ -83,7 +83,11 @@ pub const POINTS_TIMEOUT_SECS: u64 = 5;
 /// vocabulary (`ServiceNotLive`), never a panic, never a silent fallback
 /// to the default (an override the pin refuses is operator intent the
 /// build must not quietly ignore).
-#[must_use]
+///
+/// # Errors
+///
+/// The pin's refusal verbatim (`ensure_net_allowed`) when the resolved URL
+/// sits outside the compiled host set.
 pub fn service_url_checked() -> Result<String, String> {
     let url = std::env::var(POINTS_SERVICE_URL_ENV)
         .ok()

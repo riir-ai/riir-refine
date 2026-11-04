@@ -95,7 +95,7 @@ VERSION_EXEMPT_CAP=2
 # DEVNET hosts stay HARD-ZERO — the owner's mainnet-only directive: the
 # shipped binary carries no dialable devnet host at the byte level
 # (compile-to-nothing, riir-kat kat_service_urls).
-SYMBOL_HARD='X-Kat-|devnet\.riir\.ai|devnet\.gist\.rs|devnet\.ai\.gist\.rs|/mining/|soft_gate|kat_burn|burn_ack|burn_client|mining_consent|kat_meter|kat_charge|kat_protocol|kat_recovery|kat_admin|tuna_admin|KAT_SERVICE|KAT_TRANSPORT'
+SYMBOL_HARD='X-Kat-|devnet\.riir\.ai|devnet\.gist\.rs|devnet\.ai\.gist\.rs|/mining/|soft_gate|kat_burn|burn_ack|burn_client|mining_consent|kat_meter|kat_charge|kat_recovery|kat_admin|tuna_admin|KAT_SERVICE|KAT_TRANSPORT'
 # MAINNET hosts — disclosed + capped (the net-pin allowed-set diagnostics;
 # every occurrence is the pin naming what it allows or the honest refusal
 # text). The class growing past the cap is a loud FAIL.
@@ -114,11 +114,18 @@ R1_CAP=40
 #   RIIR_REFINE_KAT_KEY          the account-key PATH override the join/login
 #                                substrate reads (kat_account login_default_in;
 #                                a local file path, never a network dial)
+#   RIIR_REFINE_KAT_LEASE_DIR    the corpus-lease store's local dir override
+#                                (riir-kat/client's LeaseStore — the local
+#                                .refine/corpus-lease files the header's
+#                                corpus-epoch line reads; a local path, never
+#                                a network dial; rode in with the points
+#                                feature's riir-kat/client edge, 2026-11-04)
 # The census extracts EVERY RIIR_REFINE_KAT_* name in the binary; a name
 # outside this pin fails even when its carrying line looks inert.
 R2_PINS='RIIR_REFINE_KAT_ACCOUNT_DIR
 RIIR_REFINE_KAT_CRANK_TOKEN
-RIIR_REFINE_KAT_KEY'
+RIIR_REFINE_KAT_KEY
+RIIR_REFINE_KAT_LEASE_DIR'
 
 fail=0
 note() { printf '%s\n' "$*"; }
@@ -273,6 +280,25 @@ if [ "$mainnet_hits" -gt "$MAINNET_HOST_CAP" ]; then
     bar_fail "mainnet host strings exceed the disclosed cap ($mainnet_hits > $MAINNET_HOST_CAP) — the pin's diagnostics grew; re-adjudicate"
 else
     note "  ok: mainnet host strings $mainnet_hits <= cap $MAINNET_HOST_CAP (the pin's allowed-set + refusal text)"
+fi
+# BUILD-PATH class — disclosed + capped (2026-11-04): panic Location strings
+# carry the module's (remapped) source path — /build/git/riir-kat/src/... —
+# $HOME is remapped away; the residual names the repo TREE only (no user, no
+# host). The class growing past the cap is a loud FAIL. ⛔ the kat_protocol
+# match on these lines is the FILE NAME, not machinery wire — the hard-zero
+# class dropped kat_protocol for exactly this adjacency (a path is not a
+# dial; the machinery classes that MATTER stay hard-zero above).
+path_hits=$(grep -E 'git/riir-kat/src/|git/riir-refine/src/' "$work/strings.txt" | sort -u)
+if [ -n "$path_hits" ]; then
+    n_paths=$(printf '%s\n' "$path_hits" | wc -l | tr -d ' ')
+    if [ "$n_paths" -gt 12 ]; then
+        bar_fail "build-path strings exceed the disclosed cap ($n_paths > 12) — re-adjudicate"
+    else
+        note "  ok: build-path strings $n_paths <= cap 12 (remapped panic Locations; no user, no host):"
+        printf '%s\n' "$path_hits" | sed 's/^/       /' | sed -n '1,6p'
+    fi
+else
+    note "  ok: zero build-path strings"
 fi
 # R2 census: every RIIR_REFINE_KAT_* occurrence classified against the pin.
 # ⛔ .rodata byte-adjacency merges consts (strings sees
