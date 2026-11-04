@@ -45,6 +45,8 @@ Open items (Plan 333 T1b):
 
 **Recorded exposure (Plan 333 T1c, 2026-11-03):** the exposure has ALREADY HAPPENED for the own-repo drain class — a live window row shows `served_by: "groq"` absorbing 2/2 drain calls (`.benchmarks/llm_cost_ledger.jsonl`, run `drain-18d01cf6ab6e21c8-99237`, ts 1787960899). Data class: the unproven queue = own-repo redacted, sync-ToS-licensed trajectories (donated) — NOT consumer code; no consumer live code has ever left a machine (no fixer lane exists). T1b is the closure for both classes.
 
+**RESOLVED BY OWNER DECISION 2026-11-03 (lane b — risk acceptance):** own-repo redacted drain data through Groq's free tier is an **ACCEPTED business-IP risk** (owner lgtm on the recommendation). The Services Agreement/DPA pull is DEMOTED to optional/when-convenient (do it at the next terms-change check, or before any consumer-class Groq arm — which post-pivot would be OSS-class only, gated by Plan 335 P1.1's fail-closed check). The exposure record above stands as the honest history; consumer proprietary code never traverses any provider regardless (the trust rule — code ownership; private code = self-host).
+
 ## Model license rows (Plan 333 T2 — filled 2026-11-03)
 
 | model | hosted by | license | serving-user-code terms | status |

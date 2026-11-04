@@ -1,6 +1,6 @@
 # Plan 335 — the local-cluster fixer lane: qwen3.8-27b on amo/bmo now, GLM-5.3-Flash later; the riir-refine-fixer CLI + TUNA contributor runway
 
-**Status:** ACTIVE 2026-11-03 — second owner directive APPLIED (Q4 enough / bench on bmo / CF+Groq options via riir-llm / OSS-class leak relaxation with a fail-closed check / TUNA-only no KAT / the superset repo family → Issue 200); P0 next (the Q4_K_M bench on bmo); P2/P3 `- [-]` owner-gated; first pivot + verdict history in the blocks below
+**Status:** ACTIVE 2026-11-03 — second owner directive APPLIED (Q4 enough / bench on bmo / CF+Groq options via riir-llm / OSS-class leak relaxation with a fail-closed check / TUNA-only no KAT / the superset repo family → Issue 200); **owner lgtm (evening): the workspace restructure APPROVED + delegated to amo — P2 unblocks when it lands; T1b resolved by owner risk acceptance (see the vendor doc's Groq section); TUNA table deferred until P0 passes; the Mozilla G4 call (submit-or-not by 2026-11-07) stays on the owner's calendar.** P0 next (the Q4_K_M bench on bmo); P2/P3 `- [-]`; first pivot + verdict history in the blocks below
 
 **Claimed:** zed-m3-p005-unblock, 1793716277, expires 2026-11-05T00:00:00+00:00
 
