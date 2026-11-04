@@ -105,7 +105,8 @@ Method: `RIIR_REFINE_AUTO_ORACLE=0 cargo refine --suggest <clone>` per repo — 
 ## Files (this record dir — self-contained, /tmp may be cleaned)
 
 - `bench_backoff.sh` — the pinned harness, verbatim (POSIX sh, self-contained).
-- `backend_backoff_ba261b8_to_135734f.patch` — **the full fix as a patch (now `ba261b8..3fad121`, +325/−1)** — the durable copy of the branch's diff, so the ephemeral clone law can never orphan the send material; `git apply` on a fresh pin checkout reconstructs the branch.
+- `backend_backoff_ba261b8_to_3fad121.patch` — **the full fix as a patch (`ba261b8..3fad121`, +325/−1)** — the durable copy of the branch's diff, so the ephemeral clone law can never orphan the send material; `git apply` on a fresh pin checkout reconstructs the branch.
+- `clippy_after.log` — **the real post-fix run at `3fad121`** (rc=0, ends `Finished`, zero warnings; captured full-output, verified to differ from the prefix log after the round-2 catch).
 - `bench_output.txt` — the raw per-run log of the record run (all 7 rows, verbatim).
 - `clippy_prefix.log` / `clippy_after.log` — the pre-fix clippy run (4 findings, the round-1 catch) and the post-fix zero-warning run at `3fad121`.
 - `bench_output_stability.txt` + `benchrun3_stats/` — the block-ordered stability reps with per-run show_stats JSONs + backend contact logs (committed per the round-1 should-fix).
