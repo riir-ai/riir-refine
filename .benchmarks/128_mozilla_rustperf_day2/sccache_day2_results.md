@@ -272,9 +272,7 @@ gate; those lines target matrix triples with vendored openssl).
   line ZERO, fmt clean, lib 632/3 with the same 3 pre-existing names.)
 - G-PR2 Claude verdict — **AGREE** (2026-11-04, round 3 of 3, session 6ab80747;
   the full 3-round arc in §12 below).
-- G-PR3 SVG chart + G-PR4 owner fingerprint send — PENDING (send-prep;
-  owner-gated). Collision watch: a third party claimed the issue on
-  2026-11-03; if we send, move promptly after G-PR2 AGREE.
+- G-PR3 SVG chart + G-PR4 owner fingerprint send — **PREPARED, ON HOLD (owner 2026-11-04: "do prepare all but wait for my go for PR, we need to wait for prev PR accepted first")**: the chart is built (`bench128_backend_backoff.svg` + renderer, attribution-ban-clean), the body is drafted (`pr_body.md`, every claim diff-verified), the artifact goes to the G-PR2 verdict for a body-freeze pass; the fork push rides the verdict AGREE; the send itself waits for (a) #2977's outcome — merged unblocks, closed-unmerged blocks under never-re-PR-after-close, and (b) the owner's go + `gh-outbound-pr` seal. Collision re-check 2026-11-04: no competing PR; darshpatel1052's question is answered in the body.
 
 ## 11. Files written
 

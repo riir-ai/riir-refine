@@ -82,13 +82,14 @@ Method: `RIIR_REFINE_AUTO_ORACLE=0 cargo refine --suggest <clone>` per repo — 
 | G-PR1 GOAT proof | **READY — this bench** |
 | G-PR1b blast-radius harness | RUN + adjudicated |
 | G-PR2 Claude verdict | **AGREE (2026-11-04, round 3 of 3; session 6ab80747)** — round 1 REVISE (bench re-derived sound; 4 must-fix + 3 should-fix: stale clippy log, false default-identical note, made-up fn name, counter-reset contact bug, probe wording, benchrun3 persistence, PR framing) · round 2 REVISE (one coordinator copy blocker: the after-log) · round 3 **AGREE**. Full arc in results file §12. **G-PR3 unblocked — send (G-PR4) owner-gated "later"** |
-| G-PR3 SVG + G-PR4 fingerprint send | PENDING (owner: "later"); **collision watch: a third party claimed #2968 on 2026-11-03 — if the verdict AGREEs, move promptly** |
+| G-PR3 SVG chart | **BUILT (2026-11-04, owner "do prepare all but hold the send")** — `bench128_backend_backoff.svg` (renderer `render_pr_svg.py` committed beside it; Plan-224 shape, attribution-ban-clean: no tool names/links anywhere). Rides the PR body via a raw gist URL at send time |
+| G-PR4 fingerprint send | **DEFERRED — owner hold 2026-11-04: "wait for my go for PR, we need to wait for prev PR accepted first"** — the send additionally SEQUENCES behind #2977's outcome (merged → go possible; closed unmerged → the never-re-PR-after-close rule blocks; repo-block review = owner call). `gh-outbound-pr` token NOT yet sealed (only `gh-release-pat` in kat-secret) — the owner seals at go time. Collision status re-checked 2026-11-04: **no competing PR exists** — darshpatel1052's 11-03 comment is interest + a design question our body answers concretely (global vs per-backend) |
 
 ## Send queue
 
 | # | repo | branch | status |
 |---|---|---|---|
-| 1 | mozilla/sccache (the #2968 PR-to-be) | `refine/backend-backoff` @ `135734f`+`3fad121` (LOCAL, not pushed) | **G-PR1 READY — G-PR2 round 2 pending** |
+| 1 | mozilla/sccache (the #2968 PR-to-be) | `refine/backend-backoff` @ `135734f`+`3fad121` (fork push after the body verdict; not yet pushed) | **SEND-READY, ON HOLD — owner: wait for #2977's outcome first; then seal `gh-outbound-pr` + say go** |
 | — | uniffi-rs / mp4parse / rca | none | Part-1 verdict: nothing to send (PASS — the gate worked) |
 
 **Campaign ledger:** unchanged — 1 sent (#2977, goodwill, outside the denominator), **0 evidence-bearing**. #2968 is the first evidence-bearing candidate; it does not enter the ledger until sent.

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1098" height="372" viewBox="0 0 1098 372" font-family="ui-monospace,Menlo,monospace">
+<rect width="1098" height="372" fill="#14161a"/>
+<text x="24" y="32" fill="#f2f2f2" font-size="19" font-weight="bold">sccache wall time, 32 compile requests against an unhealthy cache backend</text>
+<text x="24" y="54" fill="#9aa0a6" font-size="12">before: sccache main ba261b8 · after: backend-read-timeout backoff (this PR)</text>
+<text x="24" y="72" fill="#9aa0a6" font-size="12">blackhole WebDAV backend (GETs never answer) · SCCACHE_CACHE_READ_TIMEOUT_SECS=1 · medians of 3 alternating runs</text>
+<text x="24" y="90" fill="#9aa0a6" font-size="12">box: Apple M3 Max, AC power, load 3.14 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>
+<rect x="444" y="104" width="12" height="12" fill="#5b8def"/><text x="462" y="114" fill="#c9cdd3" font-size="12">before (main)</text>
+<rect x="594" y="104" width="12" height="12" fill="#3fbf7f"/><text x="612" y="114" fill="#c9cdd3" font-size="12">after (backoff)</text>
+<text x="24" y="153" fill="#e8e8e8" font-size="13">uncached control (no sccache)</text>
+<rect x="444" y="130" width="7.038892865664536" height="34" fill="#6b7280" rx="3"/>
+<text x="459.03889286566454" y="162" fill="#c9cdd3" font-size="12">0.590 s</text>
+<text x="24" y="201" fill="#e8e8e8" font-size="13">before — pin ba261b8 (median of 3)</text>
+<rect x="444" y="178" width="399.98806967310907" height="34" fill="#5b8def" rx="3"/>
+<text x="851.9880696731091" y="200" fill="#9aa0a6" font-size="11">33.595 / 33.478 / 33.527</text>
+<text x="851.9880696731091" y="210" fill="#c9cdd3" font-size="12">33.527 s</text>
+<text x="24" y="249" fill="#e8e8e8" font-size="13">after — backend backoff (median of 3)</text>
+<rect x="444" y="226" width="52.6008112622286" height="34" fill="#3fbf7f" rx="3"/>
+<text x="504.6008112622286" y="248" fill="#9aa0a6" font-size="11">4.773 / 4.409 / 4.407</text>
+<text x="504.6008112622286" y="258" fill="#c9cdd3" font-size="12">4.409 s  7.60x faster</text>
+<text x="24" y="297" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0)</text>
+<rect x="444" y="274" width="400.0" height="34" fill="#8a6d3b" rx="3"/>
+<text x="852.0" y="306" fill="#c9cdd3" font-size="12">33.528 s</text>
+<line x1="24" y1="328" x2="1074" y2="328" stroke="#2a2e35"/>
+<text x="24" y="350" fill="#c9cdd3" font-size="13">backend GETs: 32 before, 3 after (threshold 3 + skip window) — all 32 compiles and cache writes succeed on every arm</text>
+<text x="24" y="370" fill="#9aa0a6" font-size="12">repro: see PR description · workload = 32 distinct .c files, fresh daemon per run, uncached control 0.590 s</text>
+</svg>
