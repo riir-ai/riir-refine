@@ -25,8 +25,8 @@
 
 use riir_ledger::FORMAT_VERSION;
 use riir_ledger::dto::{
-    BalanceResponse, ErrorEnvelope, InfoResponse, JoinRequest, JoinResponse, LeaveRequest,
-    LeaveResponse, RankResponse,
+    BalanceResponse, ContributeRequest, ContributeResponse, ContributeRuleOutcome, ErrorEnvelope,
+    InfoResponse, JoinRequest, JoinResponse, LeaveRequest, LeaveResponse, RankResponse,
 };
 
 /// The operator override env for the points service base URL.
@@ -67,6 +67,37 @@ pub const INFO_PATH: &str = "/points/info";
 /// one canonicalization).
 pub const SIG_PUBKEY_HEADER: &str = "X-Points-Pubkey";
 pub const SIG_HEADER: &str = "X-Points-Signature";
+
+/// The contribute path (issue 204 — the contribution feed).
+pub const CONTRIBUTE_PATH: &str = "/points/contribute";
+
+/// The rule-outcome axis the client sends (issue 204): one entry per
+/// rule with its landed/declined counts. The client folds + sorts by
+/// name BEFORE signing (the canonical-order law — the server refuses an
+/// unsorted body).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContributeOutcome {
+    pub name: String,
+    pub written: u32,
+    pub declined: u32,
+}
+
+/// A fresh run id: BLAKE3(machine ‖ pid ‖ nanos) — the wire's 32-byte
+/// idempotency key (the fixstat lane's `fresh_run_id` shape, points-
+/// local so the feed needs no kat fixstat dep).
+#[must_use]
+pub fn fresh_contribute_run_id(machine: &str) -> [u8; 32] {
+    let mut h = blake3::Hasher::new();
+    h.update(b"riir-refine.points.contribute.run.v1");
+    h.update(machine.as_bytes());
+    h.update(&std::process::id().to_le_bytes());
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    h.update(&nanos.to_le_bytes());
+    h.finalize().into()
+}
+
 
 /// The default connect/read timeout (the ~5 s budget law — never blocks
 /// the run longer; the plan's earn-sync budget is the ceiling posture).
@@ -369,6 +400,65 @@ impl<'a> PointsClient<'a> {
         self.classify(answered)
     }
 
+
+    /// POST /points/contribute — a joined install's fix-run outcome feed
+    /// (issue 204; the owner's auto-send law: join turns the push ON).
+    /// The outcomes fold + name-sort BEFORE signing (the canonical-order
+    /// law); empty/absent outcomes never dial (nothing to share).
+    ///
+    /// # Errors
+    /// [`PointsError`] — typed; the tail renders the one line.
+    pub fn contribute(
+        &self,
+        signing: &ed25519_dalek::SigningKey,
+        client_uuid: &str,
+        run_id_hex: &str,
+        toolchain: &str,
+        files_touched: u32,
+        outcomes: &[ContributeOutcome],
+    ) -> Result<ContributeResponse, PointsError> {
+        // Canonical order: sorted + deduplicated by name (the counts of a
+        // duplicate fold — the client's own maps are already unique, the
+        // fold is the defensive half).
+        let mut folded: std::collections::BTreeMap<&str, (u32, u32)> =
+            std::collections::BTreeMap::new();
+        for o in outcomes {
+            let e = folded.entry(o.name.as_str()).or_insert((0, 0));
+            e.0 = e.0.saturating_add(o.written);
+            e.1 = e.1.saturating_add(o.declined);
+        }
+        let rules: Vec<ContributeRuleOutcome> = folded
+            .into_iter()
+            .map(|(name, (written, declined))| ContributeRuleOutcome {
+                name: name.to_string(),
+                written,
+                declined,
+            })
+            .collect();
+        let request = ContributeRequest {
+            format_version: FORMAT_VERSION,
+            client_uuid: client_uuid.to_string(),
+            account_pubkey_hex: hex(&signing.verifying_key().to_bytes()),
+            run_id_hex: run_id_hex.to_string(),
+            toolchain: toolchain.to_string(),
+            files_touched,
+            rules,
+        };
+        let body =
+            serde_json::to_string(&request).map_err(|e| PointsError::Protocol(e.to_string()))?;
+        let message = request
+            .signed_message_bytes()
+            .map_err(|e| PointsError::Protocol(e.to_string()))?;
+        let headers = Self::signature_headers(signing, &message);
+        let header_refs: Vec<(&str, &str)> =
+            headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let url = format!("{}{CONTRIBUTE_PATH}", self.base);
+        let answered = self
+            .transport
+            .request("POST", &url, Some(&body), &header_refs);
+        self.classify(answered)
+    }
+
     /// GET /points/balance — the caller's own balance (joined identity
     /// required: the signature IS the auth).
     ///
@@ -591,6 +681,14 @@ mod tests {
         }
     }
 
+
+    /// The env-var lock (the process-global RIIR_REFINE_POINTS_SERVICE_URL
+    /// is set/removed by one test while parallel tests construct clients
+    /// over the DEFAULT host — the race fired when the contribute tests
+    /// joined the module (issue 204's landing exposed it); the lock is the
+    /// minimal honest serialization).
+    static SERVICE_URL_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn key() -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(&[9u8; 32])
     }
@@ -621,6 +719,7 @@ mod tests {
 
     #[test]
     fn join_sends_the_signed_wire_and_parses_the_answer() {
+        let _env = SERVICE_URL_ENV_LOCK.lock().unwrap();
         let answer = r#"{"format_version":1,"joined":true,"epoch":7}"#;
         let fake = FakeTransport::new(vec![(200, answer.to_string())]);
         let client = PointsClient::new(&fake);
@@ -639,8 +738,93 @@ mod tests {
         assert!(seen[0].contains("583231"));
     }
 
+
+    #[test]
+    fn contribute_sends_the_folded_sorted_signed_body() {
+        let _env = SERVICE_URL_ENV_LOCK.lock().unwrap();
+        let answer = r#"{"format_version":1,"recorded_new":true,"epoch":9}"#;
+        let fake = FakeTransport::new(vec![(200, answer.to_string())]);
+        let client = PointsClient::new(&fake);
+        let outcomes = vec![
+            ContributeOutcome {
+                name: "map_clone".to_string(),
+                written: 1,
+                declined: 0,
+            },
+            ContributeOutcome {
+                name: "needless_return".to_string(),
+                written: 2,
+                declined: 3,
+            },
+            // The fold axis: a duplicate name folds its counts into one
+            // entry, and the body arrives name-sorted regardless of the
+            // caller's order.
+            ContributeOutcome {
+                name: "map_clone".to_string(),
+                written: 2,
+                declined: 1,
+            },
+        ];
+        let response = client
+            .contribute(
+                &key(),
+                "0f4e2d3c-4b5a-6c7d-8e9f-0a1b2c3d4e5f",
+                "aa",
+                "rustc 1.99.0",
+                4,
+                &outcomes,
+            )
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        assert!(response.recorded_new);
+        assert_eq!(response.epoch, 9);
+        let seen = fake.seen.borrow();
+        assert!(seen[0].starts_with("POST https://tuna.riir.ai/points/contribute"));
+        // The fold: map_clone 3 written / 1 declined, one entry (the
+        // seen log carries the body's DEBUG form — escaped quotes).
+        assert!(seen[0].contains(r#"name\":\"map_clone\",\"written\":3,\"declined\":1"#));
+        // The sort: needless_return AFTER map_clone in the wire order.
+        let mc = seen[0].find("map_clone").expect("map_clone present");
+        let nr = seen[0].find("needless_return").expect("needless_return present");
+        assert!(mc < nr, "the body must be name-sorted");
+    }
+
+    #[test]
+    fn contribute_surfaces_the_typed_not_joined_refusal() {
+        let fake = FakeTransport::new(vec![(
+            403,
+            r#"{"format_version":1,"code":"not_joined","message":"points: this account is not joined — run `cargo refine join` first"}"#.to_string(),
+        )]);
+        let client = PointsClient::new(&fake);
+        let err = client
+            .contribute(
+                &key(),
+                "0f4e2d3c-4b5a-6c7d-8e9f-0a1b2c3d4e5f",
+                "aa",
+                "",
+                0,
+                &[ContributeOutcome {
+                    name: "lint_a".to_string(),
+                    written: 1,
+                    declined: 0,
+                }],
+            )
+            .unwrap_err();
+        let line = err.line();
+        assert!(line.contains("not_joined"), "{line}");
+        assert!(line.contains("join"), "{line}");
+    }
+
+    #[test]
+    fn the_run_id_is_32_bytes_and_does_not_repeat() {
+        let a = fresh_contribute_run_id("");
+        let b = fresh_contribute_run_id("");
+        assert_ne!(a, b, "two ids on one machine must differ");
+        let _ = fresh_contribute_run_id("seeded");
+    }
+
     #[test]
     fn service_url_env_overrides_the_default() {
+        let _guard = SERVICE_URL_ENV_LOCK.lock().unwrap();
         std::env::set_var(POINTS_SERVICE_URL_ENV, "http://127.0.0.1:9/");
         assert_eq!(service_url(), "http://127.0.0.1:9");
         std::env::remove_var(POINTS_SERVICE_URL_ENV);

@@ -1112,6 +1112,33 @@ run overlay end to end. Residue (owner acts, recorded in the issue's
 sister findings): the tuna.riir.ai custom-domain DNS row; the join
 Device-Flow dashboard act.
 
+## 2026-11-04 — Issue 204 CLOSED LANDED: the contribution feed — join arms the auto-send (the owner's UX law), the points plane grows /points/contribute
+
+The fix run-end's "unfixed" evidence now flows to the network when the
+user is joined: consent `Answer::Joined` (join writes it, leave
+unwrites — the state machine already carried the law) auto-sends
+per-rule written/declined counts over the new `POST /points/contribute`
+(the joined-identity lane; anonymous stays the `--stats` plane).
+Three halves: riir-ledger `a1ee0fb` (the wire DTOs — counts only, the
+privacy floor by shape, goldens + the privacy census; the machine label
+deliberately dropped — T16.1), riir-dapps `21b461e` (the plane + route:
+the run tombstone FIRST-WRITE-WINS, per-rule counters on the points:
+family inside the settle anchor's chunked_root fold, the join signature
+family + the canonical-order law, the ACTIVE-binding gate with the
+typed not_joined refusal; 3 contract tests, 16/16), riir-refine (the
+client fold+sign method, the run-end tail — one 📡 line, ~5 s, never an
+exit-code change; the join CTA suppressed while the feed is armed;
+`tests/points_contribute_feed_law.rs` both directions + the shape
+floor). CHARITABLE_GATE PASS. Live-probed: Joined → the tail dials and
+surfaces the deployed worker's typed not_found until the route deploys
+(the deploy + the bench-018 ledger row are the owner lane); Never/Unset
+→ zero data sent. Found + fixed while landing: the points_client env
+race (the service-url env test vs parallel client-construction tests —
+a static lock serializes; the contribute tests exposed it). The v1
+payload carries the outcome strata the run already computes; the
+shape-hash miss axis is the v2 wire field when a client-side aggregator
+exists — deliberately not invented sloppy.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

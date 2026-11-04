@@ -18162,7 +18162,18 @@ fn main() {
             );
             if n_suggestions > n_fixed_edits {
                 let pct_unfixed = 100 - (n_fixed_edits * 100 / n_suggestions.max(1));
-                if pct_unfixed > 0 {
+                // Issue 204: the join CTA is only honest while the auto-send
+                // is NOT armed — a joined run's residual is carried by the
+                // 📡 feed line below, never a re-ask. (The points gate: the
+                // consent plane is the points posture's module; the KAT
+                // posture's own tail line carries its posture.)
+                #[cfg(feature = "points")]
+                let joined_feed = riir_refine::first_run_consent::read(
+                    &riir_kat::kat_account::KatAccount::default_dir(),
+                ) == riir_refine::first_run_consent::Answer::Joined;
+                #[cfg(not(feature = "points"))]
+                let joined_feed = false;
+                if pct_unfixed > 0 && !joined_feed {
                     println!("🛠️ ~{pct_unfixed}% unfixed — `cargo refine join` for self-evolve");
                 }
             }
@@ -18432,6 +18443,10 @@ fn main() {
                     &url,
                     riir_refine::kat_fixstat_client::FIXSTAT_TIMEOUT_SECS,
                 );
+                // The run id's entropy seed: deliberately NOT a machine
+                // identifier (the T16.1 law) — nanos + pid carry the
+                // uniqueness; the KAT page's user-authored label is
+                // that plane's display vocabulary, not this feed's.
                 let machine = riir_refine::kat_consent_client::machine_label();
                 let toolchain = std::process::Command::new("rustc")
                     .arg("--version")
@@ -18515,7 +18530,13 @@ fn main() {
     // Issue 117 (the delta half) — the loud companion: a consenting --fix
     // run's stats row is lost, not stacked (no offline stacking BY DESIGN),
     // so the skip must be audible on exactly the runs that earned one.
-    #[cfg(not(all(feature = "kat_service", feature = "kat_transport")))]
+    // Issue 204: the KAT-skip line exists only where the points feed ALSO
+    // doesn't — a points build pushes through the contribution feed below,
+    // never a KAT-vocabulary skip line.
+    #[cfg(not(any(
+        feature = "points",
+        all(feature = "kat_service", feature = "kat_transport")
+    )))]
     if args.fix
         && !fixstat_rules.is_empty()
         && riir_refine::kat_stats_consent::read(&riir_refine::kat_stats_consent::default_dir())
@@ -18526,6 +18547,122 @@ fn main() {
              is a lost stat, not a lost commit); rebuild with: {}",
             riir_refine::build_stamp::rebuild_command()
         );
+    }
+
+    // Issue 204 — the contribution feed's auto-send tail (the owner's UX
+    // law: "after join it should auto send unfixed data to the node"). The
+    // consent state machine IS the law: `join` writes Answer::Joined (the
+    // send-allowed state) and `leave` writes Answer::Never — so this tail
+    // pushes exactly when the user is in the joined posture, and the
+    // server's ACTIVE-binding gate refuses the same way if the binding is
+    // gone. Anonymous (the other send-allowed state) stays the --stats
+    // plane's business — never this feed. One line, a ~5 s budget, never
+    // an exit-code change; not-present → one honest skip line (the KAT
+    // skip's discipline). The KAT tail above keeps the operator lane.
+    #[cfg(all(feature = "points", not(all(feature = "kat_service", feature = "kat_transport"))))]
+    if args.fix
+        && (!fixstat_rules.is_empty() || !posture_declined_by_lint.is_empty())
+        && !riir_refine::offline::offline()
+        && riir_refine::first_run_consent::read(&riir_kat::kat_account::KatAccount::default_dir())
+            == riir_refine::first_run_consent::Answer::Joined
+    {
+        let account = riir_kat::kat_account::KatAccount::load(
+            &riir_kat::kat_account::KatAccount::default_dir(),
+        );
+        let signing = account.as_ref().ok().and_then(|a| a.signing_key().ok());
+        if let Some(key) = signing {
+                let transport = riir_refine::points_client::UreqPointsTransport::new(
+                    riir_refine::points_client::POINTS_TIMEOUT_SECS,
+                );
+                let client = riir_refine::points_client::PointsClient::new(&transport);
+                let client_uuid = riir_refine::client_id::load_or_create(
+                    &riir_kat::kat_account::KatAccount::default_dir(),
+                )
+                .map(|u| u.to_string())
+                .unwrap_or_default();
+                // The run id's entropy seed: deliberately NOT a machine
+                // identifier (the T16.1 law) — nanos + pid carry the
+                // uniqueness; the KAT page's user-authored label is
+                // that plane's display vocabulary, not this feed's.
+                let machine = "";
+                let toolchain = std::process::Command::new("rustc")
+                    .arg("--version")
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .map(|s| s.lines().next().unwrap_or("").trim().to_string())
+                    .unwrap_or_default();
+                // The outcome fold: written from the fix map, declined from
+                // the posture + level-skip decline maps (keyed by the same
+                // rule token). Counts only — never spans, never source.
+                let mut outcomes: std::collections::BTreeMap<String, (u32, u32)> =
+                    std::collections::BTreeMap::new();
+                for (k, v) in &fixstat_rules {
+                    outcomes
+                        .entry(k.clone())
+                        .or_insert((0, 0))
+                        .0 += *v;
+                }
+                for (k, v) in &posture_declined_by_lint {
+                    outcomes
+                        .entry(k.clone())
+                        .or_insert((0, 0))
+                        .1 += u32::try_from(*v).unwrap_or(u32::MAX);
+                }
+                for (k, v) in &level_skipped_by_lint {
+                    outcomes
+                        .entry(k.clone())
+                        .or_insert((0, 0))
+                        .1 += u32::try_from(*v).unwrap_or(u32::MAX);
+                }
+                let outcomes: Vec<riir_refine::points_client::ContributeOutcome> = outcomes
+                    .into_iter()
+                    .map(|(name, (written, declined))| {
+                        riir_refine::points_client::ContributeOutcome {
+                            name,
+                            written,
+                            declined,
+                        }
+                    })
+                    .collect();
+                let run_id =
+                    riir_refine::points_client::fresh_contribute_run_id(machine);
+                let run_id_hex: String = {
+                    let mut s = String::with_capacity(64);
+                    for b in run_id {
+                        s.push_str(&format!("{b:02x}"));
+                    }
+                    s
+                };
+                let shared = outcomes.iter().map(|o| o.written + o.declined).sum::<u32>();
+                let pushed = client.contribute(
+                    &key,
+                    &client_uuid,
+                    &run_id_hex,
+                    &toolchain,
+                    u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
+                    &outcomes,
+                );
+                match pushed {
+                    Ok(ack) => println!(
+                        "📡 shared {shared} finding(s) with the network — epoch {}{}",
+                        ack.epoch,
+                        if ack.recorded_new {
+                            ""
+                        } else {
+                            " (replay — already shared)"
+                        },
+                    ),
+                    Err(e) => eprintln!(
+                        "📡 the network share failed ({}) — nothing retried; the next run shares its own outcomes",
+                        e.line()
+                    ),
+                }
+        } else {
+            eprintln!(
+                "📡 the joined feed is armed but the account key is unreadable — nothing shared this run"
+            );
+        }
     }
 
     // ── Blueprint Phase A (proposal 024 / issue 178): the campaign history
@@ -19369,7 +19506,7 @@ fn run_reheat_pass(
     active_set: &riir_refine::active_set::ActiveSet,
 ) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseManifest, LeaseTransport, PassSpans, run_update_phase,
+        HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans, run_update_phase,
     };
 
     // One bounded lease check: did a new epoch land?
