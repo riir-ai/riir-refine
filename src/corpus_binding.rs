@@ -387,7 +387,7 @@ mod tests {
 
     #[test]
     fn healthy_rule_is_never_flagged() {
-        assert!(diagnose(&[healthy_rule()]).is_empty());
+        assert_eq!(diagnose(&[healthy_rule()]).len(), 0);
     }
 
     #[test]
@@ -402,7 +402,7 @@ mod tests {
             },
         );
         // 4/4 failing but under MIN_ATTEMPTS: UNDECIDED, never a verdict.
-        assert!(diagnose(&[starving]).is_empty());
+        assert_eq!(diagnose(&[starving]).len(), 0);
         // With the floor lowered it IS flagged — the floor is the only guard.
         assert_eq!(diagnose_with(&[starving], 4, DEGENERACY_BAR).len(), 1);
     }

@@ -47,6 +47,9 @@
 //! | `untrusted-archive-extract-paths` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the screen is the deployment's trust decision — which archive sources are legitimate is policy — and the repair is the crate's own screened accessor) |
 //! | `browser-reachable-service-host-origin-rebinding-gate` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the allowlist + the missing-Origin fail-open stance are deployment policy, and WS handshakes are not CORS-gated so no response-header CORS lint can see the class) |
 //! | `custom-header-mutation-gate-unanswered-preflight` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the header name is a deployment decision and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate — review decides) |
+//! | `ascii-token-unicode-word-boundary-scan-miss` | `SensitiveData` | no (suggest-only) | — (no lint fires; the fix choice among the three Rust spellings (`(?-u:\\b)` / fancy-regex lookarounds / flanking-byte validation) is a dependency + correctness decision, and Unicode boundaries are sometimes deliberate — review decides) |
+//! | `luhn-validate-numeric-pii-candidates-before-redact` | `SensitiveData` | no (suggest-only) | — (no lint fires; the validator scheme + the rescan policy are the detector's design decisions, and a compliance-first over-redaction stance deliberately rejects the rule) |
+//! | `redaction-audit-hit-carries-raw-match` | `SensitiveData` | no (suggest-only) | — (no lint fires; whether previews ship at all and the tier boundaries are compliance decisions, not physics) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -1434,6 +1437,192 @@ StatusCode::OK.into_response()\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ══ Batch 330 (2026-11-04, Plan 338 / Research 368) — the         ══
+        // ══ vectorize-io/hindsight distill (MIT @ 841979df): three        ══
+        // ══ suggest-only rules founding the SensitiveData family (the     ══
+        // ══ scan/redact/audit lane — detection precision, redaction       ══
+        // ══ precision, audit-emission hygiene).                           ══
+        // ── ascii-token-unicode-word-boundary-scan-miss (SensitiveData; suggest-only) ──
+        SecRule {
+            rule_id: "ascii-token-unicode-word-boundary-scan-miss".to_string(),
+            sec_concept: "a token-anchored secret/PII scan whose boundary is Unicode-aware silently MISSES the token when it is butted against non-ASCII word characters: both Python `re` and the Rust `regex` crate compile `\\b` (and `\\w`) with Unicode semantics by default, so a CJK character counts as a word character and there is no word boundary between 为 and s — `\\bsk_test_...\\b` fails to match in 凭证为sk_test_ABC... and secrets embedded in Chinese/Japanese/Korean prose reach the store unredacted. The source's law, verbatim (at the pin): \"``re`` compiles ``\\b`` (and ``\\w``) with Unicode semantics, so a CJK character counts as a word character: there is no word boundary between 为 and s, and ``\\bsk_test_...\\b`` silently fails to match in 凭证为sk_test_ABC... . Secrets embedded in Chinese/Japanese/Korean prose therefore reached memory units unredacted.\" — fixed by anchoring on the ASCII token alphabet instead (`(?<![A-Za-z0-9_])` / `(?![A-Za-z0-9_])` lookarounds; the source's helper + its in-source enforcement, verbatim: \"New boundary-based patterns must use this helper, not ``\\b`` — test_redaction_patterns_do_not_use_unicode_word_classes enforces it.\"). The lookarounds are STRICTLY MORE PERMISSIVE than `\\b` (`[A-Za-z0-9_]` is a subset of `\\w`), so nothing that matched before stops matching while a secret butted against non-ASCII is now detected — the property that makes the rewrite safe. THE RUST FIX-SPACE DIFFERS (the `regex` crate has NO lookarounds; carried as the bounded spellings, review picks): (a) `(?-u:\\b)` — the ASCII word boundary (byte-lossy on non-UTF-8 patterns only); (b) fancy-regex lookarounds (dep-gated); (c) post-match flanking-byte validation (`is_ascii_alphanumeric`/`_` on the byte before/after the match — no regex change at all). KINSHIPS: distinct-from the corpus's own identifier-vocabulary gates (`secret_file_create`, `secret_ct_eq` — word-boundary SEGMENTS gating code identifiers, a different surface: those decide WHERE a detector looks, this decides WHAT a pattern's boundary means); the unicode-boundary-semantics vocabulary has ZERO corpus owners (greps `word.bound|(?-u|look.?around|cjk` at authoring: only the identifier-gate hits above + the text-normalization SIMD family, entries_243-class — byte classification, not boundary semantics). Honest recall limits: shape-gated to scan/redact contexts (a fn naming secret/token/scan/redact vocabulary holding a pattern literal or a boundary predicate) — a scanner with no such vocabulary is an honest NO; a Unicode-aware boundary may be DELIBERATE (a CJK word-segmenter wants Unicode `\\b`) — the class fires when the TOKEN ALPHABET is ASCII (prefixed secret keys, card/SSN digit runs) and review decides; a secret already matched by a non-anchored pattern is out of class. Suggest-only: the choice among the three Rust spellings is a dependency + correctness decision, and Unicode boundaries are sometimes the intent. Detector: `proposers::sensitive_data_boundary`. Batch 330 / Plan 338 / Research 368 (vectorize-io/hindsight @ `841979df`, MIT — cited as class provenance; the fixture is an original std-only synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// Token-anchored scan: the boundary predicate is Unicode-aware —\n/// the same trap as the regex crate's default `\\b`.\nfn boundary_before(prev: Option<char>) -> bool {
+    match prev {
+        None => true,
+        // is_alphanumeric() counts CJK: no boundary between 为 and `s`.
+        Some(c) => !(c.is_alphanumeric() || c == '_'),
+    }
+}
+
+/// Redact every token-anchored `needle` occurrence. The secret in\n/// \"凭证为sk_test_ABC...\" is silently skipped: the preceding CJK char\n/// reads as a word character, so the anchor never fires.\npub fn redact_tokens(text: &str, needle: &str, mask: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = text.to_string();
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(needle) {
+        let byte_pos = start + pos;
+        let idx = text[..byte_pos].chars().count();
+        let prev = if idx == 0 { None } else { Some(chars[idx - 1]) };
+        if boundary_before(prev) {
+            out = out.replace(needle, mask);
+        }
+        start = byte_pos + 1;
+    }
+    out
+}
+"
+                .to_string(),
+            fixed_code: "/// Token-anchored scan on the ASCII token alphabet — the source's\n/// lookaround pair (?<![A-Za-z0-9_]) / (?![A-Za-z0-9_]) as a std\n/// boundary predicate. Strictly more permissive than Unicode `\\b`.\nfn boundary_before_ascii(prev: Option<char>) -> bool {
+    match prev {
+        None => true,
+        // Only [A-Za-z0-9_] count as token chars: 为 IS a boundary.
+        Some(c) => !(c.is_ascii_alphanumeric() || c == '_'),
+    }
+}
+
+/// Redact every token-anchored `needle` occurrence. The secret butted\n/// against CJK prose is now detected; nothing that matched before\n/// stops matching (the subset property that makes this safe).\npub fn redact_tokens(text: &str, needle: &str, mask: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = text.to_string();
+    let mut start = 0;
+    while let Some(pos) = text[start..].find(needle) {
+        let byte_pos = start + pos;
+        let idx = text[..byte_pos].chars().count();
+        let prev = if idx == 0 { None } else { Some(chars[idx - 1]) };
+        if boundary_before_ascii(prev) {
+            out = out.replace(needle, mask);
+        }
+        start = byte_pos + 1;
+    }
+    out
+}
+"
+                .to_string(),
+            family: SecFamily::SensitiveData,
+        },
+        // ── luhn-validate-numeric-pii-candidates-before-redact (SensitiveData; suggest-only) ──
+        SecRule {
+            rule_id: "luhn-validate-numeric-pii-candidates-before-redact".to_string(),
+            sec_concept: "a digit-FORMAT-only PII detector (13-16 decimal digits with optional separators) redacts benign numeric runs — timestamps, unix millis, port lists — as if they were cards; checksum-validate each candidate BEFORE substituting, and a REJECTED candidate must not consume a later valid start. The source's law, verbatim (at the pin): \"Candidates also need a Luhn check below: digit count alone redacted timestamps and port lists as if they were cards.\" The three in-source guards carried with it: (a) the repeated-digit guard, verbatim: \"Repeated-digit placeholders (including all zeroes) can pass Luhn.\" — `0000 0000 0000 0000` passes the checksum and must refuse; (b) the UUID-overlap window, verbatim: \"A UUID's numeric segments may pass Luhn. Inspect only the bounded neighborhood of this candidate (UUIDs are 36 chars)\" — a hex segment crossing a card candidate is inspected within a bounded window, not re-scanned greedily; (c) THE OVERLAP RESCAN (the load-bearing mechanic), verbatim: \"A rejected candidate must not consume a later valid start (e.g. \\\"2026 4111 1111 1111 1111\\\"). re.sub resumes at the rejected span's end; search again from its next character instead. Keep offsets in the original content so boundaries and UUID checks remain intact.\" — the naive span from `2026` fails Luhn and the substitution pass jumps PAST the whole rejected span, missing the real card starting mid-span; the rescan from start+1 finds it. Rust shape: same three guards over any digit-run candidate — checksum before mask, placeholder refusal, rescan-from-rejected-start+1 on the match loop. KINSHIPS: distinct-from `packed-field-silent-overflow-wrong-key` (a mask/checksum for overflow KEYS in packed fields — wire arithmetic, not PII detection); `luhn|credit.card` have ZERO corpus owners (grep at authoring). Honest limits: Luhn-valid ≠ card — any digit run passes at ~1/10 rate, so the checksum is a PRECISION multiplier layered on the format gate, never a standalone classifier (a 10x false-positive drop, not zero); which validator is the detector's design decision (Luhn owns cards; other PII classes carry other schemes — the CLASS is checksum-before-substitute, the scheme is policy); a deployment that deliberately over-redacts (compliance-first) rejects this rule — that stance is why it stays suggest-only. Suggest-only: the validator scheme + the rescan policy are the detector's design decisions. Detector: `proposers::luhn_before_redact`. Batch 330 / Plan 338 / Research 368 (vectorize-io/hindsight @ `841979df`, MIT — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "fn digits_of(s: &str) -> Vec<u32> {
+    s.chars().filter_map(|c| c.to_digit(10)).collect()
+}
+
+/// NAIVE: any 13-16 digit run is a card. The unix-millis timestamp\n/// below is not a card, and the naive span from `2026` eats the real\n/// card that starts mid-string.\nfn is_card_candidate(s: &str) -> bool {
+    let n = digits_of(s).len();
+    (13..=16).contains(&n)
+}
+
+pub fn redact_cards(content: &str) -> String {
+    // one pass, resume at each span's end: a rejected span's tail is\n    // never re-inspected
+    if is_card_candidate(content) {
+        return \"[REDACTED-CARD]\".to_string();
+    }
+    content.to_string()
+}
+"
+                .to_string(),
+            fixed_code: "fn digits_of(s: &str) -> Vec<u32> {
+    s.chars().filter_map(|c| c.to_digit(10)).collect()
+}
+
+fn is_card_candidate(s: &str) -> bool {
+    let n = digits_of(s).len();
+    (13..=16).contains(&n)
+}
+
+/// The Luhn checksum over the candidate's digits.
+fn passes_luhn(s: &str) -> bool {
+    let digits = digits_of(s);
+    // Repeated-digit placeholders (including all zeroes) can pass Luhn.
+    if digits.is_empty() || digits.iter().all(|&d| d == digits[0]) {
+        return false;
+    }
+    let mut checksum = 0u32;
+    for (index, &d) in digits.iter().rev().enumerate() {
+        let mut d = d;
+        if index % 2 == 1 {
+            d *= 2;
+            if d > 9 {
+                d -= 9;
+            }
+        }
+        checksum += d;
+    }
+    checksum % 10 == 0
+}
+
+pub fn redact_cards(content: &str) -> String {
+    if !is_card_candidate(content) {
+        return content.to_string();
+    }
+    if passes_luhn(content) {
+        return \"[REDACTED-CARD]\".to_string();
+    }
+    content.to_string()
+}
+
+/// The overlap rescan: search again from the REJECTED candidate's next\n/// character (start + 1), never resume past the whole rejected span —\n/// \"2026 4111 1111 1111 1111\" keeps its inner card.\npub fn rescan_from(rejected_start: usize) -> usize {
+    rejected_start + 1
+}
+"
+                .to_string(),
+            family: SecFamily::SensitiveData,
+        },
+        // ── redaction-audit-hit-carries-raw-match (SensitiveData; suggest-only) ──
+        SecRule {
+            rule_id: "redaction-audit-hit-carries-raw-match".to_string(),
+            sec_concept: "a detection/audit emission that carries the MATCHED VALUE verbatim re-leaks the secret into logs, APMs, queues and audit stores — the audit wire IS a second copy of the data at rest, one nobody redacted. Emit a LENGTH-TIERED FINGERPRINT PREVIEW instead: enough prefix + suffix for a SIEM operator to correlate against their credential inventory, never the body. The source's law, verbatim (at the pin): \"The preview keeps the prefix and a short suffix so a SIEM operator can correlate against their credential inventory (the prefix names the provider; the suffix disambiguates specific instances) without the raw secret crossing the wire.\" The tiers, verbatim: \"Length < 6: redact entirely (return a fixed-length mask). Catches noise like a single -----BEGIN... marker line. / Length 6-15: keep the first 2 + last 2 around an ellipsis. / Length > 15: keep the first 4 + last 4 around an ellipsis.\" The contract on the emission type, verbatim: \"The preview is *never* the raw value.\" And the honest-absence half (the T0 corroborating file, verbatim): \"None when no per-hit data ... so receivers can distinguish 'no preview info' from 'scanned, nothing matched'\" — an ABSENT preview must stay absent (None/empty-with-meaning), never a blank string that reads as a clean scan. KINSHIPS: distinct-from `constant-time-secret-compare` (comparison TIMING vs emission CONTENT — different leak axis); distinct-from `secret-key-without-zeroize` (memory lifetime/erase vs the log copy); the `fingerprint` hits at authoring are entries_08's hash-table fingerprint SLOTS (a storage layout, not an emission mask) — zero owners of the preview/mask-emission class. Honest limits: a fingerprint is DERIVED data — first4+last4 of a 40-char token still leaks 8 chars, and for a short high-entropy body even 4+4 may be too much; the tier boundaries are compliance policy, not physics (which is exactly why this stays suggest-only); the class is the AUDIT EMISSION of a detector — the scanner tooling's own --blind discipline is a different surface (that redacts FILES for sharing, this redacts EMISSIONS for telemetry). Suggest-only: whether previews ship at all, and the tier boundaries, are compliance decisions. Detector: `proposers::audit_hit_fingerprint`. Batch 330 / Plan 338 / Research 368 (vectorize-io/hindsight @ `841979df`, MIT — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the audit trail records what matched — the secret itself.\npub struct ScanHit {
+    pub detector: String,
+    pub matched: String,
+}
+
+pub fn record_hit(hits: &mut Vec<ScanHit>, detector: &str, matched: &str) {
+    hits.push(ScanHit {
+        detector: detector.to_string(),
+        matched: matched.to_string(), // the raw value crosses to the log wire
+    });
+}
+"
+                .to_string(),
+            fixed_code: "/// FIXED: the emission carries a length-tiered fingerprint preview —\n/// correlation prefix + suffix, never the body. Absent stays absent.\npub struct ScanHit {
+    pub detector: String,
+    pub preview: Option<String>, // None = no per-hit data, NOT a clean scan
+}
+
+fn fingerprint_value(value: &str) -> String {
+    let n = value.chars().count();
+    if n < 6 {
+        return \"[redacted]\".to_string();
+    }
+    let chars: Vec<char> = value.chars().collect();
+    if n <= 15 {
+        format!(
+            \"{}...{}\",
+            chars[..2].iter().collect::<String>(),
+            chars[n - 2..].iter().collect::<String>()
+        )
+    } else {
+        format!(
+            \"{}...{}\",
+            chars[..4].iter().collect::<String>(),
+            chars[n - 4..].iter().collect::<String>()
+        )
+    }
+}
+
+pub fn record_hit(hits: &mut Vec<ScanHit>, detector: &str, matched: Option<&str>) {
+    hits.push(ScanHit {
+        detector: detector.to_string(),
+        preview: matched.map(fingerprint_value),
+    });
+}
+"
+                .to_string(),
+            family: SecFamily::SensitiveData,
+        },
     ]
 }
 
@@ -1615,5 +1804,85 @@ mod tests {
                 "batch-329 {id} must stay suggest-only (never FIXABLE_SEC)"
             );
         }
+    }
+
+    /// Batch 330 (the vectorize-io/hindsight distill, Plan 338 / Research
+    /// 368, vectorize-io/hindsight @ 841979df, MIT) — presence, family,
+    /// provenance discipline; founds the `SensitiveData` family. All three
+    /// suggest-only, never `FIXABLE_SEC`.
+    #[test]
+    fn batch330_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            (
+                "ascii-token-unicode-word-boundary-scan-miss",
+                SecFamily::SensitiveData,
+            ),
+            (
+                "luhn-validate-numeric-pii-candidates-before-redact",
+                SecFamily::SensitiveData,
+            ),
+            (
+                "redaction-audit-hit-carries-raw-match",
+                SecFamily::SensitiveData,
+            ),
+        ];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-330 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-330 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 330 / Plan 338 / Research 368"),
+                "batch-330 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("841979df"),
+                "batch-330 {id} must cite the hindsight pin"
+            );
+        }
+        // Suggest-only discipline: none of the batch ids may be
+        // --fix-eligible (the detector modules ship no collect_edits arm).
+        for id in [
+            "ascii-token-unicode-word-boundary-scan-miss",
+            "luhn-validate-numeric-pii-candidates-before-redact",
+            "redaction-audit-hit-carries-raw-match",
+        ] {
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-330 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+        // The sensitive-data family's founding members' law needles (keyed
+        // after reading the landed text).
+        let c1 = all
+            .iter()
+            .find(|r| r.rule_id == "ascii-token-unicode-word-boundary-scan-miss")
+            .unwrap();
+        assert!(
+            c1.sec_concept.contains("STRICTLY MORE PERMISSIVE")
+                && c1.sec_concept.contains("(?-u:"),
+            "batch-330 C1 must carry the subset property + the Rust fix-space"
+        );
+        let c2 = all
+            .iter()
+            .find(|r| r.rule_id == "luhn-validate-numeric-pii-candidates-before-redact")
+            .unwrap();
+        assert!(
+            c2.sec_concept.contains("Repeated-digit placeholders")
+                && c2.sec_concept.contains("search again from its next character"),
+            "batch-330 C2 must carry the placeholder guard + the overlap rescan"
+        );
+        let c3 = all
+            .iter()
+            .find(|r| r.rule_id == "redaction-audit-hit-carries-raw-match")
+            .unwrap();
+        assert!(
+            c3.sec_concept.contains("*never* the raw value")
+                && c3.sec_concept.contains("scanned, nothing matched"),
+            "batch-330 C3 must carry the emission contract + the honest absence"
+        );
     }
 }

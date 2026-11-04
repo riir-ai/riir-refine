@@ -254,6 +254,43 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 330 (2026-11-04) — the hindsight distill: the SensitiveData family
+
+Three suggest-only rules from the vectorize-io/hindsight distill (Research
+368, Plan 338, MIT @ `841979df` — an agent-memory product's redaction lane;
+cited as class provenance; the fixtures are ORIGINAL syntheses, standalone
+rustc-compiled AND executed before landing). This batch FOUNDs the
+`SensitiveData` family (the scan/redact/audit lane that keeps secrets and
+PII out of stored text — detection precision, redaction precision,
+audit-emission hygiene; distinct from `InputValidation` (untrusted input
+into sinks) and `CryptoHygiene` (crypto-API misuse)):
+
+- `ascii-token-unicode-word-boundary-scan-miss` — a `\\b`-anchored
+  ASCII-prefix secret pattern silently MISSES tokens butted against
+  non-ASCII word characters (regex `\\b`/`\\w` are Unicode-aware by
+  default: there is no boundary between 为 and s). The bounded Rust
+  spellings: `(?-u:\\b)`, fancy-regex lookarounds, flanking-byte
+  `is_ascii_alphanumeric` validation. The ASCII alphabet is a subset of
+  Unicode `\\w`, so nothing that matched before stops matching. Detector:
+  `sensitive_data_boundary`.
+- `luhn-validate-numeric-pii-candidates-before-redact` — digit-format-only
+  detectors redact timestamps/port lists as cards; Luhn-validate + the
+  repeated-digit guard + the bounded UUID-neighborhood before substituting,
+  and a REJECTED candidate must not consume a later valid start (rescan
+  from rejected_start+1, never resume past the span). Detector:
+  `luhn_before_redact`.
+- `redaction-audit-hit-carries-raw-match` — audit emissions carrying the
+  matched value verbatim re-leak the secret into logs/APMs (the audit wire
+  IS a second copy of the data at rest); emit length-tiered fingerprint
+  previews (<6 mask / 6-15 first2+last2 / >15 first4+last4), and absent
+  stays absent — receivers must distinguish 'no preview info' from
+  'scanned, nothing matched'. Detector: `audit_hit_fingerprint`.
+
+All three suggest-only (the fix choices are dependency/compliance
+decisions), never `FIXABLE_SEC`; T0 found the fan-out sibling candidate
+(#3) STRENGTHENED by the consolidator body read (the await-before-propagate
+law) and the audit-preview candidate (#4) corroborated verbatim.
+
 ## Batch 329 (2026-11-04) — the tembo/voxl distill: the browser-reachable service gate
 
 Two suggest-only rules from the tembo/voxl distill (Research 367, Plan 337,

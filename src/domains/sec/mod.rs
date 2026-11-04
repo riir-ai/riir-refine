@@ -58,6 +58,16 @@ pub enum SecFamily {
     /// clippy — the `PanicSafety` precedent's shape (a float defect, one
     /// mechanical rewrite, suggest-only siblings). Added APPEND-ONLY.
     Numerics,
+    /// Sensitive-data-at-rest correctness (Batch 330 — the hindsight
+    /// distill): the scan/redact/audit lane that keeps secrets and PII out
+    /// of stored text — detection precision (boundary semantics), redaction
+    /// precision (checksum-validate before substitute), and audit-emission
+    /// hygiene (fingerprint previews, never the raw match). Distinct from
+    /// `InputValidation` (untrusted sizes/paths flowing into sinks) and
+    /// `CryptoHygiene` (crypto-API misuse): the data is at rest in the
+    /// process's own stores/logs, the sink is the stored text itself.
+    /// Added APPEND-ONLY.
+    SensitiveData,
 }
 
 impl SecFamily {
@@ -72,6 +82,7 @@ impl SecFamily {
             Self::PanicSafety => "panic-safety",
             Self::InputValidation => "input-validation",
             Self::Numerics => "numerics",
+            Self::SensitiveData => "sensitive-data",
         }
     }
 }

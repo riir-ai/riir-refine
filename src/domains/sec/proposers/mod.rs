@@ -195,12 +195,28 @@
 //! | Rule | Detector | Why suggest-only |
 //! |---|---|---|
 //! | `browser-reachable-service-host-origin-rebinding-gate` | `origin_rebind_gate::detect` | the allowlist + the missing-Origin fail-open stance are deployment policy (which hosts/origins are legitimate, whether non-browser clients are trusted) and the refusal shape (403 body, fix-flag name) is the fn's choice; distinct-from `cors-any-origin-with-credentials` IN-RULE: that owns the RESPONSE-header issuance policy (tower-http co-occurrence), this the REQUEST-side handshake gate — the mechanism reason is distinct: WS handshakes are NOT CORS-gated, a WS server setting no CORS headers is still reachable from any page, so the server itself must gate; also distinct-from `client-ip-from-untrusted-forwarded-header` (spoofed PROXY-header trust — different header, different axis) and `gateway-type-forces-security-check` (constructor reachability); the Host-rebinding/allowlist vocabulary has ZERO corpus owners (the `unvalidated-egress-url` rider's DNS-rebinding phrase is the OUTBOUND sink axis, not an inbound Host gate) |
-//! | `custom-header-mutation-gate-unanswered-preflight` | `mutation_header_gate::detect` | the header name is a deployment decision (server and clients must agree) and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate; distinct-from the B258 declined bulk IN-RULE (adjudicated at authoring): that is session ARCHITECTURE (rate limiting, IDOR, authz, session management, OpenAPI), this the specific MECHANICAL header-gate form with an in-source mechanism reason — browsers cannot attach custom headers cross-site without a preflight, so a required custom header + an unanswered preflight closes the write path; distinct-from `browser-reachable-service-host-origin-rebinding-gate` (sibling, this batch): that gates WHO may connect (Host/Origin handshake), this gates WHICH requests may mutate (the write path); also distinct-from `cors-any-origin-with-credentials` (response-header issuance, not a request gate); the csrf/preflight/custom-header vocabulary has ZERO corpus owners (auth_cookie_missing_flags' SameSite mention is the cookie axis, cors_any_creds' preflight mention is the response axis) |
+//! | `custom-header-mutation-gate-unanswered-preflight` | `mutation_header_gate::detect` | the header name is a deployment decision (server and clients must agree) and bearer-auth/CSRF-token/SameSite=Strict APIs deliberately skip the gate; distinct-from the B258 declined bulk IN-RULE (adjudicated at authoring): that is session ARCHITECTURE (rate limiting, IDOR, authz, session management, `OpenAPI`), this the specific MECHANICAL header-gate form with an in-source mechanism reason — browsers cannot attach custom headers cross-site without a preflight, so a required custom header + an unanswered preflight closes the write path; distinct-from `browser-reachable-service-host-origin-rebinding-gate` (sibling, this batch): that gates WHO may connect (Host/Origin handshake), this gates WHICH requests may mutate (the write path); also distinct-from `cors-any-origin-with-credentials` (response-header issuance, not a request gate); the csrf/preflight/custom-header vocabulary has ZERO corpus owners (`auth_cookie_missing_flags`' `SameSite` mention is the cookie axis, `cors_any_creds`' preflight mention is the response axis) |
+
+//! ## Batch 330 (2026-11-04, Plan 338) — the hindsight distill founds the
+//! `SensitiveData` family
+//!
+//! Three detectors from the vectorize-io/hindsight distill (Research 368,
+//! MIT @ `841979df` — an agent-memory product's redaction lane; cited as
+//! class provenance, fixtures are ORIGINAL syntheses), suggest-only
+//! `SensitiveData` (the scan/redact/audit lane — detection precision,
+//! redaction precision, audit-emission hygiene):
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `ascii-token-unicode-word-boundary-scan-miss` | `sensitive_data_boundary::detect` | the fix choice among the three Rust spellings (`(?-u:\\b)` / fancy-regex lookarounds / flanking-byte validation) is a dependency + correctness decision, and a Unicode-aware boundary is sometimes deliberate (a CJK word-segmenter wants Unicode `\\b`) — review decides; distinct-from the corpus's identifier-vocabulary gates (`secret_file_create`, `secret_ct_eq`) IN-RULE: those gate WHERE a detector looks (code identifiers), this WHAT a pattern's boundary means (scan/regex boundary semantics); the unicode-boundary-semantics vocabulary has ZERO corpus owners (greps `word.bound|(?-u|look.?around|cjk` at authoring: only the identifier-gate hits + the text-normalization SIMD family — byte classification, not boundary semantics) |
+//! | `luhn-validate-numeric-pii-candidates-before-redact` | `luhn_before_redact::detect` | the validator scheme + the rescan policy are the detector's design decisions (Luhn owns cards; other PII classes carry other schemes), and a compliance-first deployment deliberately over-redacts — that stance is legitimate; distinct-from `packed-field-silent-overflow-wrong-key` IN-RULE: a mask/checksum for overflow KEYS in packed fields (wire arithmetic), this checksum-before-substitute in PII DETECTION; `luhn|credit.card` have ZERO corpus owners (grep at authoring) |
+//! | `redaction-audit-hit-carries-raw-match` | `audit_hit_fingerprint::detect` | whether previews ship at all and the tier boundaries are compliance decisions, not physics — a fingerprint is derived data (first4+last4 of a 40-char token still leaks 8 chars) and a compliance-first deployment may want full masks or nothing; distinct-from `constant-time-secret-compare` IN-RULE (comparison TIMING vs emission CONTENT — different leak axis) and `secret-key-without-zeroize` (memory lifetime/erase vs the log copy); the `fingerprint` hits at authoring are entries_08's hash-table fingerprint SLOTS (a storage layout, not an emission mask) — zero owners of the preview/mask-emission class |
 
 use syn::File;
 
 pub mod arc_raw_boundary;
 pub mod archive_extract;
+pub mod audit_hit_fingerprint;
 pub mod auth_cookie_missing_flags;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
@@ -214,6 +230,7 @@ pub mod ipv4_mapped_range;
 pub mod jwt_insecure_validation;
 pub mod keyed_state_cap;
 pub mod length_prefix_alloc;
+pub mod luhn_before_redact;
 pub mod mutation_header_gate;
 pub mod nan_safe_cmp;
 pub mod origin_rebind_gate;
@@ -224,6 +241,7 @@ pub mod path_join_escape;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
+pub mod sensitive_data_boundary;
 pub mod shell_string_command;
 pub mod sigmoid_minus_one;
 pub mod slice_len_guard;

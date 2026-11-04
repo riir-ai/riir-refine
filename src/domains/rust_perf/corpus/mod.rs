@@ -9,7 +9,10 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 296 entries across 14 categories as of Batch 329 (+2: dispatch +1
+//! 297 entries across 14 categories as of Batch 330 (+1: concurrency —
+//! `fanout-first-error-leaves-siblings-running`, the vectorize-io/hindsight
+//! distill (Plan 338 / Research 368, `entries_63`); prior: 296 at Batch 329
+//! (+2: dispatch +1
 //! `event-damage-map-selective-partition-skip-with-consumer-hints` +
 //! concurrency +1 `online-cost-fit-thread-ladder-reopen-hysteresis`, the
 //! tembo/voxl distill (Plan 337 / Research 367, `entries_61` + `entries_62`);
@@ -724,15 +727,21 @@ mod entries_59;
 mod entries_60;
 mod entries_61;
 mod entries_62;
+mod entries_63;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 296 entries
-/// (Batch 329, 2026-11-04, Plan 337 / Research 367: +2 -- the tembo/voxl
-/// distill, `entries_61` + `entries_62`: the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 297 entries
+/// (Batch 330, 2026-11-04, Plan 338 / Research 368: +1 -- the
+/// vectorize-io/hindsight distill, `entries_63`: the
+/// `fanout-first-error-leaves-siblings-running` law (concurrency,
+/// NotBenchable-by-domain -- cancel-then-await on the fan-out error path,
+/// the two-sided shared-state discriminator, the error-envelope
+/// reclassification caveat); Batch 329, 2026-11-04, Plan 337 / Research
+/// 367: +2 -- the tembo/voxl distill, `entries_61` + `entries_62`: the
 /// `event-damage-map-selective-partition-skip-with-consumer-hints` law
 /// (dispatch, BENCHABLE -- the batch's GOAT-eligible lead, MEASURED
 /// `ParetoDominant` 8.18x/6.96x/6.99x at 256/4096/65536 cells, allocs 0/0,
@@ -907,5 +916,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_60::entries());
     entries.extend(entries_61::entries());
     entries.extend(entries_62::entries());
+    entries.extend(entries_63::entries());
     Corpus::new(entries)
 }
