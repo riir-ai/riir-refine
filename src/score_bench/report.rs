@@ -59,7 +59,10 @@ pub struct HistoryRecord {
     /// the SVG renderer and the saturation detector ignore it, and the
     /// Warm-tier [`crate::traj_store::ScoreRunRow`] mirror deliberately drops
     /// it (the jsonl stays the committed projection — pinned by the
-    /// traj-store schema-identity test).
+    /// traj-store schema-identity test). Unlike the plan 329 P4-a toolchain
+    /// pair, which RIDES the store row since issue 202 (a scored-axis
+    /// provenance: comparisons bucket on it), `ood` is instrumentation and
+    /// stays dropped there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ood: Option<super::ood::OodRow>,
     /// Issue 098 T3/T4 — the cross-OOO rule-redundancy axis (see

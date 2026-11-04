@@ -2449,6 +2449,8 @@ mod tests {
                     vocab_size: 1,
                     generation: *g,
                     recorded_unix: 1_800_000_000 + i as u64,
+                    rustc_version: None,
+                    clippy_driver_version: None,
                 })
                 .expect("record score run");
         }

@@ -80,7 +80,7 @@ use riir_neuron_db::bm25::Bm25Index;
 use riir_neuron_db::local_kv::LocalKvStore;
 
 use crate::elo::EloTable;
-use crate::embedder::{embed_into, EMBED_DIM};
+use crate::embedder::{EMBED_DIM, embed_into};
 use crate::memory::EvidenceTier;
 
 /// One durable trajectory row (JSON doc — numeric + text halves together).
@@ -288,12 +288,20 @@ fn is_first_hand_corpus_source(note: &str) -> bool {
 /// jsonl ↔ store is pinned by a test); `recorded_unix` is the ordering key
 /// derived from `ts` (0 when the timestamp does not parse). The deliberate
 /// exceptions (instrumentation, not scored axes — the additive law):
-/// `HistoryRecord`'s `ood` OOD-axis (issue 077 T4) and the plan 329 P4-a
+/// `HistoryRecord`'s `ood` OOD-axis (issue 077 T4), `strata` (issue 089 T6),
+/// `rule_outcomes` (issue 089 T8), `cross_ooo` (issue 098 T3/T4) and
+/// `demonstrability` (issue 134 T1) are dropped here — the jsonl stays the
+/// committed projection (pinned by the same test). The plan 329 P4-a
 /// toolchain provenance pair (`rustc_version` / `clippy_driver_version`)
-/// are dropped here — the jsonl stays the committed projection (pinned by
-/// the same test). Key: `scorerun:{recorded_unix}:{sha-or-"nosh"}` —
-/// upsert semantics, so a re-import or a dual-write of the same run is
-/// idempotent by construction.
+/// RIDES the row since issue 202 (option (a): stamp fields only, the KEY
+/// unchanged — `scorerun:{recorded_unix}:{sha-or-"nosh"}` keeps its shape;
+/// new rows just carry longer payloads). The pooling law is P4-a's report
+/// G1 mirrored store-side: a row whose toolchain is unknown (`None` via the
+/// serde default — every row written before issue 202) NEVER pools with a
+/// pinned row, and a clippy-only difference is a different bucket too
+/// ([`score_runs_share_toolchain`] is the bucket rule). Upsert semantics,
+/// so a re-import or a dual-write of the same run is idempotent by
+/// construction.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
 pub struct ScoreRunRow {
     /// ISO-8601 timestamp of the run (the `HistoryRecord` `ts` verbatim;
@@ -319,6 +327,19 @@ pub struct ScoreRunRow {
     /// Unix seconds of `ts` (the store-key ordering half; 0 = unparseable).
     #[serde(default)]
     pub recorded_unix: u64,
+    /// Plan 329 P4-a / issue 202 — the toolchain that produced this row's
+    /// rates, mirrored from `HistoryRecord` verbatim (Option semantics
+    /// included: `None` = unknown-toolchain, the serde default for every
+    /// row written before the field existed). A rate without its toolchain
+    /// is not a measurement — the sccache cache-key completeness doctrine.
+    #[serde(default)]
+    pub rustc_version: Option<String>,
+    /// Plan 329 P4-a / issue 202 — the clippy-driver version when the
+    /// oracle lane ran (`None` = the lane did not run, or the row predates
+    /// the stamp). Part of the pooling pair: a clippy-only difference is a
+    /// different comparison bucket.
+    #[serde(default)]
+    pub clippy_driver_version: Option<String>,
 }
 
 /// The serde default for pre-generation score rows (Plan 092 T4): `0` —
@@ -348,8 +369,24 @@ impl From<&crate::score_bench::report::HistoryRecord> for ScoreRunRow {
             vocab_size: r.vocab_size,
             generation: r.generation,
             recorded_unix: parse_ts_unix(&r.ts),
+            rustc_version: r.rustc_version.clone(),
+            clippy_driver_version: r.clippy_driver_version.clone(),
         }
     }
+}
+
+/// Plan 329 P4-a's report G1, mirrored store-side (issue 202): two
+/// score-run rows share a comparison bucket ONLY when both toolchain halves
+/// match exactly (`None == None` pools with `None`). An unknown-toolchain
+/// row never pools with a pinned row, and a clippy-only difference is a
+/// different bucket too — the oracle lane may have run on one row and not
+/// the other, so the rates are not comparable. The jsonl-side twin is
+/// `score_bench::report::detect_saturation`'s anchor split; the store-side
+/// comparison sites (`score_runs` consumers) must bucket through this
+/// predicate, never compare raw rates across it.
+#[must_use]
+pub fn score_runs_share_toolchain(a: &ScoreRunRow, b: &ScoreRunRow) -> bool {
+    a.rustc_version == b.rustc_version && a.clippy_driver_version == b.clippy_driver_version
 }
 
 /// One construction-labeled preference pair (Issue 072 T1) — the durable
@@ -1485,7 +1522,7 @@ impl TrajStore {
     /// KV put or JSON encode failure on a changed row.
     #[allow(clippy::float_cmp)] // bit-identity IS the idempotency gate (deterministic replay)
     pub fn recompute_elo(&self) -> Result<EloRecomputeSummary, String> {
-        use crate::elo::{elo_k_eff, ELO_K, ELO_K_EFF_FLOOR};
+        use crate::elo::{ELO_K, ELO_K_EFF_FLOOR, elo_k_eff};
         let rows = self.dump();
         let mut summary = EloRecomputeSummary {
             rows_seen: rows.len(),

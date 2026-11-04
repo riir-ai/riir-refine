@@ -1141,7 +1141,7 @@ fn recompute_elo_backfills_and_is_idempotent() {
 #[test]
 #[allow(clippy::float_cmp)] // damped-vs-full comparisons + off-path k identity
 fn damped_replay_moves_young_rules_less_and_reaches_full_k_at_the_floor() {
-    use crate::elo::{elo_k_eff, ELO_K_EFF_FLOOR};
+    use crate::elo::{ELO_K_EFF_FLOOR, elo_k_eff};
     let root = tmp_root("elo-damped");
     // rule_young: 4 outcomes (all one shape) — deep in the damp band.
     // rule_old: ELO_K_EFF_FLOOR + 8 outcomes on a second shape, so the
@@ -1482,6 +1482,8 @@ fn score_run_roundtrip_and_ordering() {
         vocab_size: 33,
         generation: 1,
         recorded_unix: unix,
+        rustc_version: None,
+        clippy_driver_version: None,
     };
     let (store, _) = TrajStore::open(&root).unwrap();
     // Insert out of order; score_runs must return (recorded_unix, key)
@@ -1665,8 +1667,10 @@ fn parse_ts_unix_and_today_roundtrip() {
 fn score_run_row_is_schema_identical_to_history_record() {
     // The jsonl ↔ store schema-identity contract (Issue 050 T2): a
     // HistoryRecord round-trips through ScoreRunRow with every scored
-    // field preserved — only `recorded_unix` is added. The five
-    // DELIBERATE exceptions (instrumentation, not scored axes — the
+    // field preserved — `recorded_unix` is added and the plan 329 P4-a
+    // toolchain pair RIDES since issue 202 (a scored-axis provenance:
+    // comparisons bucket on it — see `score_runs_share_toolchain`). The
+    // five DELIBERATE exceptions (instrumentation, not scored axes — the
     // additive law): `ood` (issue 077 T4), `strata` (issue 089 T6),
     // `rule_outcomes` (issue 089 T8), `cross_ooo` (issue 098 T3/T4), and
     // `demonstrability` (issue 134 T1). The store row drops all five
@@ -1692,10 +1696,10 @@ fn score_run_row_is_schema_identical_to_history_record() {
         shaped: None,
         rule_outcomes: None,
         demonstrability: None,
-        // plan 329 P4-a — the additive toolchain provenance pair (the store
-        // row deliberately drops them; None = the legacy row shape).
-        rustc_version: None,
-        clippy_driver_version: None,
+        // plan 329 P4-a — the additive toolchain provenance pair; it RIDES
+        // the store row since issue 202 (the pooling axis — pinned below).
+        rustc_version: Some("rustc 1.99.0 (test-pin)".to_string()),
+        clippy_driver_version: Some("clippy-driver 0.99.0 (test-pin)".to_string()),
     };
     let row = ScoreRunRow::from(&rec);
     assert_eq!(row.ts, rec.ts);
@@ -1716,6 +1720,12 @@ fn score_run_row_is_schema_identical_to_history_record() {
     assert_eq!(row.vocab_size, rec.vocab_size);
     assert_eq!(row.generation, rec.generation, "generation rides the row");
     assert_eq!(row.recorded_unix, parse_ts_unix(&rec.ts));
+    // issue 202 — the toolchain pair rides the row verbatim.
+    assert_eq!(row.rustc_version, rec.rustc_version, "rustc stamp rides");
+    assert_eq!(
+        row.clippy_driver_version, rec.clippy_driver_version,
+        "clippy stamp rides"
+    );
     // And the serialized jsonl line of the record is a PREFIX-shape of
     // the row: deserializing the record's JSON into a ScoreRunRow keeps
     // recorded_unix at its serde default (0) — the import path.
@@ -1726,6 +1736,24 @@ fn score_run_row_is_schema_identical_to_history_record() {
         "jsonl shape carries no unix stamp"
     );
     assert_eq!(from_jsonl.ts, rec.ts);
+    assert_eq!(
+        from_jsonl.rustc_version, rec.rustc_version,
+        "rustc stamp rides the import"
+    );
+
+    // The PRE-issue-202 legacy line (no toolchain keys at all) imports
+    // with both stamps at their serde default `None` — the
+    // unknown-toolchain class that never pools with a pinned row.
+    let legacy: ScoreRunRow = serde_json::from_str(
+        &serde_json::to_string(&crate::score_bench::report::HistoryRecord {
+            rustc_version: None,
+            clippy_driver_version: None,
+            ..rec.clone()
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(legacy.rustc_version.is_none() && legacy.clippy_driver_version.is_none());
 
     // The ood asymmetry is TOLERANT in both directions: an ood-carrying
     // jsonl line imports into the store row with the scored fields
@@ -1755,6 +1783,95 @@ fn score_run_row_is_schema_identical_to_history_record() {
     assert_eq!(
         from_ood_line, expected,
         "the dropped axis must not move any scored field"
+    );
+}
+
+/// Plan 329 P4-a's report G1, mirrored store-side (issue 202): two rows
+/// differing on the toolchain never share a comparison bucket, an
+/// unknown-toolchain row never pools with a pinned row, a clippy-only
+/// difference is its own bucket, and the round-trip through the STORE
+/// keeps the stamps exact so the split holds on read-back rows.
+#[test]
+fn score_run_toolchain_pooling_g1() {
+    let mk = |rustc: Option<&str>, clippy: Option<&str>| ScoreRunRow {
+        ts: "2026-11-04T00:00:00".to_string(),
+        sha: String::new(),
+        n_ran: 1,
+        n_healable: 1,
+        n_clean: 0,
+        heal_rate: 1.0,
+        created_rate: 0.0,
+        parse_safety: 1.0,
+        decline_correctness: 1.0,
+        edits_total: 1,
+        vocab_size: 1,
+        generation: 1,
+        recorded_unix: 1,
+        rustc_version: rustc.map(str::to_string),
+        clippy_driver_version: clippy.map(str::to_string),
+    };
+    let legacy = mk(None, None);
+    let pinned = mk(Some("rustc 1.99.0"), None);
+    let pinned_clippy = mk(Some("rustc 1.99.0"), Some("clippy 0.99.0"));
+    let other_rustc = mk(Some("rustc 1.98.1"), None);
+    // The truth table: only the EXACT pair match pools.
+    assert!(
+        score_runs_share_toolchain(&legacy, &legacy),
+        "None pools with None"
+    );
+    assert!(
+        !score_runs_share_toolchain(&legacy, &pinned),
+        "an unknown-toolchain row never pools with a pinned row"
+    );
+    assert!(score_runs_share_toolchain(&pinned, &pinned));
+    assert!(score_runs_share_toolchain(&pinned_clippy, &pinned_clippy));
+    assert!(
+        !score_runs_share_toolchain(&pinned, &pinned_clippy),
+        "a clippy-only difference is a different bucket"
+    );
+    assert!(!score_runs_share_toolchain(&pinned, &other_rustc));
+
+    // The store round-trip: the stamps survive record/read-back exactly,
+    // so the split holds on rows read from the store (not just in-memory
+    // constructions).
+    let root = tmp_root("score-run-toolchain");
+    let (store, _) = TrajStore::open(&root).unwrap();
+    let mut older = pinned_clippy.clone();
+    older.ts = "2026-11-01T00:00:00".to_string();
+    older.recorded_unix = parse_ts_unix(&older.ts);
+    let mut newest = legacy.clone();
+    newest.ts = "2026-11-04T09:00:00".to_string();
+    newest.recorded_unix = parse_ts_unix(&newest.ts);
+    store.record_score_run(&older).unwrap();
+    store.record_score_run(&newest).unwrap();
+    let runs = store.score_runs().unwrap();
+    assert_eq!(runs.len(), 2);
+    // detect_saturation's anchor rule, store-side: anchor on the LAST
+    // row's toolchain class; only rows sharing it stay in the bucket. The
+    // anchor here is the unknown-toolchain class, so the pinned row is
+    // OUT — the verdict prices the anchor's trend, never a mixed marginal.
+    let anchor = runs.last().unwrap();
+    let bucket: Vec<&ScoreRunRow> = runs
+        .iter()
+        .filter(|r| score_runs_share_toolchain(r, anchor))
+        .collect();
+    assert_eq!(
+        bucket.len(),
+        1,
+        "the pinned row must not pool with the unknown anchor"
+    );
+    assert!(bucket[0].rustc_version.is_none());
+    // And the mirrored direction: anchoring on the pinned row excludes
+    // the legacy row.
+    let pinned_anchor = &runs[0];
+    let pinned_bucket: Vec<&ScoreRunRow> = runs
+        .iter()
+        .filter(|r| score_runs_share_toolchain(r, pinned_anchor))
+        .collect();
+    assert_eq!(pinned_bucket.len(), 1);
+    assert_eq!(
+        pinned_bucket[0].clippy_driver_version.as_deref(),
+        Some("clippy 0.99.0")
     );
 }
 
