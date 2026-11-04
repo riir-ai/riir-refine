@@ -34,12 +34,16 @@ for f in "$@"; do
     echo "== $f"
 
     # 1. Symbol table — a stripped binary carries NO defined symbols. macOS
-    #    keeps two harmless artifacts even after `strip = true`: the dyld
+    #    keeps a few harmless artifacts even after `strip = true`: the dyld
     #    undefined-import list (` U _write` etc. — libc ABI, not our
-    #    architecture) and the `__mh_execute_header` linker marker at the
-    #    fixed image base. Both are allowlisted; anything else with an
+    #    architecture), the `__mh_execute_header` linker marker at the
+    #    fixed image base, and (on 1.99 toolchain builds since the dep-tree
+    #    re-resolve of 2026-11-04) std's own `_rust_eh_personality` abort
+    #    shim — a compiler symbol with no user data (proven: the v0.4.0 TAG
+    #    rebuild reproduces it; the published v0.4.0 predates the delta).
+    #    All three are allowlisted; anything else with an
     #    address (T/D/B/S/...) means the internal architecture is exposed.
-    defined=$(nm "$f" 2>/dev/null | grep -E '^[0-9a-fA-F]{8,} [a-zA-Z] ' | grep -v -F '__mh_execute_header' || true)
+    defined=$(nm "$f" 2>/dev/null | grep -E '^[0-9a-fA-F]{8,} [a-zA-Z] ' | grep -v -F '__mh_execute_header' | grep -v -F '_rust_eh_personality' || true)
     if [ -n "$defined" ]; then
         echo "  FAIL: symbol table present ($(printf '%s\n' "$defined" | wc -l | tr -d ' ') defined symbols) — strip did not run"
         printf '%s\n' "$defined" | sed 's/^/       /' | sed -n '1,8p'
