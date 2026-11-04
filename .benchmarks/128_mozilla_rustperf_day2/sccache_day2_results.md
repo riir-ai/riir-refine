@@ -270,9 +270,8 @@ gate; those lines target matrix triples with vendored openssl).
   every other runnable surface green; blast radius clean. (Harness ran at
   `135734f`; `3fad121` re-ran its own gates separately: their CI clippy
   line ZERO, fmt clean, lib 632/3 with the same 3 pre-existing names.)
-- G-PR2 Claude verdict — ROUND 1 = REVISE (2026-11-04, session 6ab80747,
-  recorded verbatim-summarized in §12); all four must-fix + the should-fix
-  items applied same session; ROUND 2 re-submission next.
+- G-PR2 Claude verdict — **AGREE** (2026-11-04, round 3 of 3, session 6ab80747;
+  the full 3-round arc in §12 below).
 - G-PR3 SVG chart + G-PR4 owner fingerprint send — PENDING (send-prep;
   owner-gated). Collision watch: a third party claimed the issue on
   2026-11-03; if we send, move promptly after G-PR2 AGREE.
@@ -302,6 +301,12 @@ Applied this session (commit `3fad121` + record edits):
 - (4) the contact rule: `backend_backoff::record_outcome(contacted, outcome)` — only `!skip_lookup && cache_control == CacheControl::Default` lookups move the state; `LookupOutcome::{TimedOut, Answered}` classified at the call site; new test `uncontacted_lookups_do_not_reset_the_counter` (lib now 632 passed / 3 pre-existing failed). The dead free wrappers `record_timed_out()`/`record_response()` removed (clippy -D dead_code).
 - Should-fix: module doc rewritten ("later lookups probe the backend again; each probe that times out re-arms the skip window ... one cooldown cycle can still pay up to one timeout per already-running lookup"); benchrun3 persisted (`benchrun3_stats/` JSONs + backend logs + `bench_output_stability.txt`, block-ordered disclosed); PR-framing note added to the README (lead with "29 of 32 read-timeout waits avoided (~29 s), 3 backend GETs instead of 32"; 7.60× is workload-specific).
 - NOT changed: the bench arms — `135734f` was benched; `3fad121` touches only the recording condition (the reviewer judged the numbers stand; a fresh bench is owed only if the send re-opens after close-out).
+
+### Round 3 (same session): **AGREE** — G-PR2 CLEARED (round 3 of 3)
+
+The reviewer re-verified on origin/develop `b6697879`: the real `clippy_after.log` (ends `Finished`, zero warnings, differs from prefix), the renamed patch matches `git diff ba261b8 3fad121` byte-for-byte with no stale references, all round-2 code findings hold, and the bench carry-over stands (the record names `135734f` as the benched commit in §1/§6/§10/§12). **G-PR3 (SVG chart) is UNLOCKED; G-PR4 send remains owner-fingerprint-gated (owner: "later"), collision watch on #2968 stays open.** The PR-body laws are pinned in the README framing section (saved-seconds lead; default-on stated plainly + opt-in as a maintainer question; the cache_timeouts reporting behavior explained).
+
+**Gate state: G-PR0 READY · G-PR1 READY · G-PR1b adjudicated · G-PR2 AGREE (3 rounds) · G-PR3/G-PR4 pending (owner-gated "later").**
 
 ### Round 2 (same session): REVISE — one blocker, fixed same hour
 
