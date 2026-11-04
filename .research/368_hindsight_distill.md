@@ -240,3 +240,19 @@ demotion: graded on decision content × novelty × dedup clearance × yield.
 **Session-incident disclosure (the shared-worktree race):** the batch claim commit (`0182f9d7`) swept the mozilla lane's staged `.issues/205` deletion (their index entry rode the push); the restore (`263cfe5e`) then raced the owner's own landing (`e21887291`) and the re-remove (`ac280021`) restored their noise-reduction state. Net tree state correct; four commits of churn, all disclosed. The mozilla lane's `corpus_binding.rs` (landed `10f3783c8`) carried 2 `assert_is_empty` clippy errors that blocked the batch-330 clippy gate — fixed en-route as mechanical ride-alongs (assert_eq len/0), NOT silently suppressed.
 
 **Landing:** entries_63 + mod.rs registration + tests needles (rust_perf); SecFamily::SensitiveData + 3 entries + table rows + batch330 test (sec corpus); 3 detector modules + registration + table rows (proposers); AGENTS.md ×3 sites + README ×3 + .docs/11_domains ×2; pins manifest + Research 368 addendum (this section) + plan 338 + queue snapshot, one commit. Highwaters unchanged (no new numbered docs).
+
+## Batch 331 landing addendum (2026-11-05, zed-m3-r2pool-b331 — the round-2 pool CONVERTED)
+
+**Claim/plan:** plan 339 (nominal Batch 331), claimed pre-work `5ca45028`, discharged by the landing.
+**LANDED (2 rules + 1 count-neutral face — exactly the authoring pass's 4→2+1face yield):**
+
+| # | Candidate | Landing | Where |
+|---|---|---|---|
+| C | externally-authored-edits-by-id-not-counted-index | **LANDED** — sec, InputValidation, suggest-only (the addressing scheme is the API designer's choice; no detector at landing — vocabulary-gated hard) | sec corpus.rs + the batch331 provenance test |
+| D | batch-retry-ladder-classifies-failure-before-permanent-state | **LANDED** — rust_perf, concurrency, NotBenchable-by-domain, bench_spec None + the fact_extraction.py L2799-2806 promote-permanent-type law as the count-neutral rider face (same fixture) | rust_perf entries_64 + the batch331 needle test |
+| A | rank-space RRF under a hard cap | **CONFIRMED DROP** (citing this note's own Drops rows — decision content, no Rust-shaped bounded fix; the workspace consumers are decision-tier: refine's BLENDED_TOP*/PERF_TOP* floors, neuron-db AnyRAG, reflex/rethink budgets) | never re-graded |
+| B | sum-fusion buries the single-arm best / interleave-for-dedup | **CONFIRMED DROP** (same ruling + the vocabulary collision: entries_53 `batch-miss-interleave-tiny-executor` owns "interleave" in rust_perf) | never re-graded |
+
+**T5 honorable-mention triage (executed read-only this session):** none of the 10 survives falsification as a corpus rule — each is ambient structure, algorithm-adoption, or a decision-tier law without a bounded fix-space (the fusion pair's class). Recorded, not landed.
+**Path corrections carried into the landed citations:** C's source is `engine/reflect/delta_ops.py` (not `consolidation/`); D's second site is `engine/retain/fact_extraction.py` (verified L2787-2796 the retry_at control-signal re-raise + L2799-2806 the permanent-type law verbatim).
+**Gates:** batch331 needles+parse 2/2 · default lib 2837/0 · sec-posture 3194/0 · rust_perf_bench 2868/0 (7i) · score_bench suite 148/0 · clippy −D ×4 postures 0 (1 doc_markdown mechanical `FAIL_FAST`→`FAIL_FAST` backticked en-route) · retrieval floors HELD (default+latent 27/0, sec-on 29/0 — no re-pin) · score-bench run #226 appended (heal 0.9636 FLAT vs #225, parse 1.0, decline 1.0) · freeze-table NOT owed (zero clippy_lints delta, the P30 rule) · release-set binary REBUILT + installed at the landing sha (rust_perf IS release-set, the B329 precedent) · pins manifest --write (rust_perf 297→298 / NotBenchable 171→172, sec 44→45) · dual_allocation 0/0/0 at plan allocation. `.raw/hindsight` REMOVED at the landing.

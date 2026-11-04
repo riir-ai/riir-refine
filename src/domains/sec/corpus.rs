@@ -50,6 +50,7 @@
 //! | `ascii-token-unicode-word-boundary-scan-miss` | `SensitiveData` | no (suggest-only) | — (no lint fires; the fix choice among the three Rust spellings (`(?-u:\\b)` / fancy-regex lookarounds / flanking-byte validation) is a dependency + correctness decision, and Unicode boundaries are sometimes deliberate — review decides) |
 //! | `luhn-validate-numeric-pii-candidates-before-redact` | `SensitiveData` | no (suggest-only) | — (no lint fires; the validator scheme + the rescan policy are the detector's design decisions, and a compliance-first over-redaction stance deliberately rejects the rule) |
 //! | `redaction-audit-hit-carries-raw-match` | `SensitiveData` | no (suggest-only) | — (no lint fires; whether previews ship at all and the tier boundaries are compliance decisions, not physics) |
+//! | `externally-authored-edits-by-id-not-counted-index` | `InputValidation` | no (suggest-only) | — (no lint fires on the shape; the addressing scheme is the API designer's choice, and a detector would be vocabulary-gated hard — machine-internal indexing is everywhere) |
 //!
 //! Phase-1 killed candidates (recorded in the batch research note):
 //! `ffi-fnptr-type-unsafe-extern` + `ffi-by-value-no-drop-type`
@@ -1623,6 +1624,70 @@ pub fn record_hit(hits: &mut Vec<ScanHit>, detector: &str, matched: Option<&str>
                 .to_string(),
             family: SecFamily::SensitiveData,
         },
+        // ── externally-authored-edits-by-id-not-counted-index (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "externally-authored-edits-by-id-not-counted-index".to_string(),
+            sec_concept: "an edit-application API addressed by an index the AUTHOR COUNTED from a rendered view cannot be range-validated into correctness: an off-by-one is still in range, so it silently overwrites an UNRELATED block and is recorded as a success — and the operation usually leaves the structural length unchanged, so no shrink guard or length-diff can notice. The law, verbatim (at the pin): \"An index has to be *counted* by the model, and an off-by-one is still in range, so it silently overwrites an unrelated block and is recorded as a success — no length change for a shrink guard to notice. An id is copied, not derived; a wrong one does not resolve and is skipped and reported.\" Address externally-authored edits by a COPIED IDENTITY (a block/item/section id the author transcribes from the source), resolve it, and SKIP-AND-REPORT a non-resolving id — validity is IDENTITY MEMBERSHIP, never range membership. KINSHIPS: distinct-from `packed-field-silent-overflow-wrong-key` (a masked key ALIASING below a packing width — bits lost, read-side lookup sink, repair = widen/assert; this = write-side edit application where the address was never the identity, repair = id addressing + resolve-or-skip); distinct-from `capacity-exceeded-silent-fallback-not-refusal` (shares the silent-wrong-write-recorded-as-success harm but owns the lying-cap face); distinct-from `luhn-validate-numeric-pii-candidates-before-redact` (the same genus — syntactic validity ≠ semantic validity before acting — at the detection/redaction sink, not edit addressing); distinct-from `untrusted-archive-extract-paths`/`untrusted-path-join-escape` (those names ESCAPE a sink; this ordinal stays in range and corrupts by MISIDENTIFICATION). Regime: externally-authored edit application (LLM ops on documents, scripted patches, DSL/config overlays) where the author saw a rendered view and derives the address by counting; harm peaks when ops leave length unchanged. Anti-regimes: machine-internal callers computing indices from the same authoritative structure (no counting error exists); whole-document rewrite APIs (no addressing); append-only logs (a wrong append corrupts nothing prior). Honest limits: a mis-copied-but-VALID id still names the wrong block (the law's protection is against non-resolving addresses; a semantic wrong-id is review's problem); ids are only as trustworthy as their namespace. Suggest-only: the addressing scheme is the API designer's choice. Detector: none at landing (vocabulary-gated hard — machine-internal indexing is everywhere; a detector would need edit/apply/patch vocabulary + an in-range-branch-without-identity-check shape, deferred). Batch 331 / Plan 339 / Research 368 (+ addendum; the hindsight round-2 pool — vectorize-io/hindsight @ `841979df`, MIT — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: edits addressed by a counted index. An off-by-one is still in
+/// range, so it silently overwrites an unrelated block and is recorded as
+/// a success — no length change for a shrink guard to notice.
+pub struct Block {
+    pub text: String,
+}
+pub struct Edit {
+    pub block_index: usize,
+    pub new_text: String,
+}
+
+/// Returns how many edits were applied (each journaled as a success).
+pub fn apply_edits(doc: &mut [Block], edits: &[Edit]) -> usize {
+    let mut applied = 0;
+    for e in edits {
+        if e.block_index < doc.len() {
+            // in-range is the ONLY check
+            doc[e.block_index].text = e.new_text.clone();
+            applied += 1; // recorded as success
+        }
+    }
+    applied
+}
+"
+                .to_string(),
+            fixed_code: "/// FIXED: edits addressed by COPIED ids. A wrong id does not resolve: it
+/// is skipped and reported — never a silent sibling overwrite.
+pub struct Block {
+    pub id: String,
+    pub text: String,
+}
+pub struct Edit {
+    pub block_id: String,
+    pub new_text: String,
+}
+
+#[derive(Default, Debug, PartialEq)]
+pub struct Report {
+    pub applied: Vec<String>,
+    pub skipped: Vec<(String, &'static str)>,
+}
+
+pub fn apply_edits(doc: &mut [Block], edits: &[Edit]) -> Report {
+    let mut report = Report::default();
+    for e in edits {
+        match doc.iter_mut().find(|b| b.id == e.block_id) {
+            Some(b) => {
+                b.text = e.new_text.clone();
+                report.applied.push(b.id.clone());
+            }
+            None => report.skipped.push((e.block_id.clone(), \"no such block\")),
+        }
+    }
+    report
+}
+"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -1883,6 +1948,46 @@ mod tests {
             c3.sec_concept.contains("*never* the raw value")
                 && c3.sec_concept.contains("scanned, nothing matched"),
             "batch-330 C3 must carry the emission contract + the honest absence"
+        );
+    }
+
+    /// Batch 331 (the hindsight round-2 pool conversion, Plan 339 /
+    /// Research 368 + addendum, vectorize-io/hindsight @ 841979df, MIT) —
+    /// presence, family, provenance discipline. Suggest-only (the
+    /// addressing scheme is the API designer's choice; no detector at
+    /// landing — vocabulary-gated hard), never `FIXABLE_SEC`.
+    #[test]
+    fn batch331_rules_present_families_and_provenance() {
+        let all = entries();
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == "externally-authored-edits-by-id-not-counted-index")
+            .unwrap_or_else(|| panic!("batch-331 rule missing from corpus"));
+        assert_eq!(r.family, SecFamily::InputValidation, "batch-331 family");
+        assert!(
+            r.sec_concept.contains("Batch 331 / Plan 339 / Research 368"),
+            "batch-331 must cite its landing lineage"
+        );
+        assert!(
+            r.sec_concept.contains("841979df"),
+            "batch-331 must cite the hindsight pin"
+        );
+        // Suggest-only discipline.
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"externally-authored-edits-by-id-not-counted-index"),
+            "batch-331 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        // The law needles (keyed after reading the landed text).
+        assert!(
+            r.sec_concept.contains("silently overwrites an unrelated block")
+                && r.sec_concept.contains("no length change for a shrink guard"),
+            "batch-331 must carry the silent-overwrite harm + the shrink-guard gap"
+        );
+        assert!(
+            r.sec_concept.contains("An id is copied, not derived")
+                && r.sec_concept.contains("skipped and reported"),
+            "batch-331 must carry the id law + the skip-and-report contract"
         );
     }
 }

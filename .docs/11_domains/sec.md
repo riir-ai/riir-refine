@@ -254,6 +254,10 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 331 (2026-11-05) — the hindsight round-2 pool: InputValidation +1
+
+`externally-authored-edits-by-id-not-counted-index` (InputValidation, suggest-only, no detector at landing) — an edit API addressed by an index the AUTHOR COUNTED from a rendered view cannot be range-validated into correctness: an off-by-one is still in range, silently overwrites an unrelated block, is recorded as success, and leaves length unchanged so no shrink guard notices. The repair: address externally-authored edits by a COPIED id, resolve it, skip-and-report a non-resolving one — validity is identity membership, never range membership. The same genus as `luhn-before-redact` (syntactic validity ≠ semantic validity before acting) at the edit-addressing sink. vectorize-io/hindsight @ 841979df (MIT), the round-2 pool (Plan 339 / Research 368 + addendum); the pool's fusion pair (A/B) recorded as cited drops — decision content without a fix-space (Research 368's own Drops rows); the pool's retry-classification candidate landed as rust_perf's `batch-retry-ladder-classifies-failure-before-permanent-state` (entries_64). Corpus 44 → 45.
+
 ## Batch 330 (2026-11-04) — the hindsight distill: the SensitiveData family
 
 Three suggest-only rules from the vectorize-io/hindsight distill (Research

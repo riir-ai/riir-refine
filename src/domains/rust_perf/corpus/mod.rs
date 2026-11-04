@@ -9,7 +9,10 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 297 entries across 14 categories as of Batch 330 (+1: concurrency —
+//! 298 entries across 14 categories as of Batch 331 (+1: concurrency —
+//! `batch-retry-ladder-classifies-failure-before-permanent-state`, the
+//! vectorize-io/hindsight round-2 pool (Plan 339 / Research 368 + addendum);
+//! prior: 297 at Batch 330 (+1: concurrency —
 //! `fanout-first-error-leaves-siblings-running`, the vectorize-io/hindsight
 //! distill (Plan 338 / Research 368, `entries_63`); prior: 296 at Batch 329
 //! (+2: dispatch +1
@@ -728,14 +731,22 @@ mod entries_60;
 mod entries_61;
 mod entries_62;
 mod entries_63;
+mod entries_64;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 297 entries
-/// (Batch 330, 2026-11-04, Plan 338 / Research 368: +1 -- the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 298 entries
+/// (Batch 331, 2026-11-05, Plan 339 / Research 368 + addendum: +1 -- the
+/// hindsight round-2 pool, `entries_64`: the
+/// `batch-retry-ladder-classifies-failure-before-permanent-state` law
+/// (concurrency, NotBenchable-by-domain -- classify before the ladder:
+/// PROPAGATE a quota-reset control signal at first sight, `FAIL_FAST` a
+/// deterministic failure with the permanent type, the bounded ladder for
+/// transport-shaped only; the permanent-flag-from-transient orphaning
+/// harm); Batch 330, 2026-11-04, Plan 338 / Research 368: +1 -- the
 /// vectorize-io/hindsight distill, `entries_63`: the
 /// `fanout-first-error-leaves-siblings-running` law (concurrency,
 /// NotBenchable-by-domain -- cancel-then-await on the fan-out error path,
@@ -917,5 +928,6 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_61::entries());
     entries.extend(entries_62::entries());
     entries.extend(entries_63::entries());
+    entries.extend(entries_64::entries());
     Corpus::new(entries)
 }
