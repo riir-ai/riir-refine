@@ -197,6 +197,17 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       v0.4.0 publish + the 202/190/198/192 records (owner: "and 191 later"). The
       pre-registration record lands FIRST (the three conditions), then the harness lane, then
       the run.**
+      **— STEP 1 LANDED 2026-11-05 (zed-m3-i191t6): [Bench 130](../.benchmarks/130_kernel_opt_g2_gpu_preregistration.md)
+      — the full registration (the selector extended + recomputed at `2498cc501`: 15 files,
+      13 registered / 2 NOT-REGISTERED with reasons; 21 named pairs with pinned geometry),
+      MIN_MEASURED_PAIRS = 12 with UNSEEN semantics, condition (c) pinned as
+      restricted-AND-disclosed (the 7 CPU-regressors stay unnamed by policy — naming them
+      would require the forbidden CPU re-run), the harness law (PAIRS=15 interleave, WARMUP=3,
+      correctness gate pre-timing, black_box loud zero), the rig contract (--exclusive --needs
+      cuda + the PROVENANCE field list + the thermal gate), and the verdict arithmetic
+      (≥ 1.06 median bar unchanged). REMAINING: the sources lane (the pair sources committed
+      + digest-pinned — no timing before that commit), then the exclusive run + the run
+      record.**
 - [x] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
       2026-11-03): adopt the scratch-reuse twins (`ShardIndex::retrieve_diverse_two_stage_into`
       + `DiverseScanScratch`) in the per-line suggest loop (`corpus_index.rs::suggest_deep_into`
