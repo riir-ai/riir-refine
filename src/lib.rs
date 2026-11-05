@@ -94,6 +94,13 @@ pub mod dispersion;
 pub mod domain;
 pub mod drafter;
 pub mod edit_emitter;
+// Issue 208 / Bench 131: the kernel pregate — detect kernel-bearing files
+// BEFORE the kernel matcher fans out, then scope the fan-out to the
+// indexed/mapped files only (Bench-129 lever (b), owner-directed).
+// Ungated module (the unit tests run at default features); the BEHAVIOR
+// arms only behind `kernel_pregate` — off, `KernelPlan::for_file` returns
+// `Off` without scanning and the scan path is byte-identical.
+pub mod kernel_pregate;
 // Issue 134 T1 — the standing demonstrability column (measurement only,
 // no behavior change; Research 585 / SAT arXiv:2609.22682). Pure over its
 // inputs; the eval half of its API is cfg(latent_retrieval) and the bench
@@ -389,14 +396,14 @@ pub mod scope_model;
 pub use riir_kat::kat_redact;
 #[cfg(feature = "kat_service")]
 pub use riir_kat::{
-    kat_account, kat_account_client, kat_adoption, kat_burn_client, kat_fixstat_client,
-    kat_genesis_client, kat_identity, kat_keyset_client, kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client,
-    kat_admin_client, kat_protocol_account, kat_protocol_admin, kat_protocol_genesis,
-    kat_protocol_burn, kat_protocol_fixstat, kat_protocol_lease, kat_protocol_migrate,
-    kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq, kat_protocol_replay,
-    kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2, kat_protocol_vote,
-    kat_protocol_wetrun, kat_replay_client, kat_service_config, kat_stake_client,
-    kat_tuna_admin_client, kat_vote_client, kat_wetrun,
+    kat_account, kat_account_client, kat_admin_client, kat_adoption, kat_burn_client,
+    kat_fixstat_client, kat_genesis_client, kat_identity, kat_keyset_client, kat_lease_client,
+    kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account, kat_protocol_admin,
+    kat_protocol_burn, kat_protocol_fixstat, kat_protocol_genesis, kat_protocol_lease,
+    kat_protocol_migrate, kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq,
+    kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2,
+    kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_service_config,
+    kat_stake_client, kat_tuna_admin_client, kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};

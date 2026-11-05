@@ -254,6 +254,13 @@ rust_perf_bench = ["rust_perf"]
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
 kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 
+# Issue 208 / Bench 131: the kernel pregate — detect kernel-bearing files
+# BEFORE the kernel matcher fans out, then scope the fan-out to the
+# indexed/mapped files only (file-level GATE arm; `Scope` via the
+# promote-only RIIR_KERNEL_PREGATE_SCOPE env). Inert without kernel_opt;
+# the scan path is byte-identical without this feature.
+kernel_pregate = ["kernel_opt"]
+
 # Issue 196: the route-narrowed kernel retrieval — 15 per-category
 # sub-indices + a bounded global tail; every query scores only its span's
 # routed expert slice + tail (the G5 cost-leg repair, Bench 125). OFF

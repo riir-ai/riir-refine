@@ -19,9 +19,9 @@
 
 ## Tasks
 
-- [ ] T1 `kernel_signal` detector module + tests (needle set pinned; .wgsl always-signal; cache-per-run)
-- [ ] T2 file-level gate wiring in the scan fan-out behind `kernel_pregate` (+ the `--domain kernel` bypass) + gate tests
-- [ ] T3 span-scope arm (± 24-line window) + tests
+- [x] T1 `kernel_signal` detector module + tests (needle set pinned; .wgsl always-signal; cache-per-run) — `src/kernel_pregate.rs` (always compiled, inert without the feature; unit tests run at default features)
+- [x] T2 file-level gate wiring in the scan fan-out behind `kernel_pregate` (+ the `--domain kernel` bypass) + gate tests — `suggest_file_inner` resolves `KernelPlan::for_file` once per file; the denied shape is the kernel-disabled `by_domain` shape; wiring tests in `latent_matcher.rs::kernel_pregate_tests`
+- [x] T3 span-scope arm (± 24-line window) + tests — the GATE+SCOPE arm rides the promote-only `RIIR_KERNEL_PREGATE_SCOPE` env (same binary as GATE: only TWO bench builds needed); scope boundaries unit-tested
 - [ ] T4 run Bench 131's pre-registered A/B (OFF / GATE / GATE+SCOPE) on the registered corpus, record the run bench
 - [ ] T5 verdict: if an arm clears BOTH cost legs AND the utility floor holds, record it as the promotion-candidate posture for the Issue-191 re-campaign (T6 ∧ T7 → G1+G3+G4+G5); file the rulewright-queue finding if the utility floor drops (detector misses are the finding, never a needle-silent retry)
 - [-] Per-span line-query CAP (Bench-129 lever (a)) — the named follow-up if GATE+SCOPE cannot reach the p95 bar; a separate design change, its own pre-registration

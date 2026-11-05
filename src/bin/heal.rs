@@ -15638,6 +15638,17 @@ fn main() {
         );
     }
 
+    // Issue 208 / Bench 131: the kernel pregate's explicit-domain bypass —
+    // an operator who ASKED for the kernel domain (`--domain kernel`) gets
+    // every file; the gate never refuses an explicit ask. Armed once per
+    // process BEFORE any file walk; every later matcher rebuild inherits it
+    // (the plan is consulted per file at scan time, never baked into the
+    // matcher). Ungated: the arm is inert when the feature is off (the plan
+    // is `Off` regardless).
+    if args.domain.is_some_and(|d| d == DomainId::Kernel) {
+        riir_refine::kernel_pregate::arm_domain_bypass();
+    }
+
     // IIFE because the kat_service arm returns early from inside a
     // cfg-gated block — a plain let-chain would need the same cfg pair
     // on a variable initializer (the immediately-invoked-closure idiom,

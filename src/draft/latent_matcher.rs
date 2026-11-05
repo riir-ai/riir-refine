@@ -753,8 +753,22 @@ impl LatentMatcher {
         code: &str,
         top_k: usize,
     ) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
+        self.suggest_span_gated(code, top_k, true)
+    }
+
+    /// [`Self::suggest_span`] with the kernel domain's participation decided
+    /// by the caller (the kernel pregate's per-span verdict, Issue 208 /
+    /// Bench 131). `kernel_allowed == true` is byte-identical to
+    /// [`Self::suggest_span`]; `false` skips the kernel index ENTIRELY —
+    /// the kernel-disabled `by_domain` shape — every other domain untouched.
+    fn suggest_span_gated(
+        &mut self,
+        code: &str,
+        top_k: usize,
+        kernel_allowed: bool,
+    ) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
         let routed = self.router.route(code).unwrap_or(DomainId::Clippy);
-        let by_domain = self.suggest_all_domains(code, top_k);
+        let by_domain = self.suggest_all_domains(code, top_k, kernel_allowed);
         (routed, by_domain)
     }
 
@@ -765,6 +779,7 @@ impl LatentMatcher {
         &mut self,
         code: &str,
         top_k: usize,
+        kernel_allowed: bool,
     ) -> Vec<(DomainId, Vec<ScoredRule>)> {
         // One parse per span, shared across every domain's instantiation
         // probe (Issue 063): the parse-fail contract — no parse, no marking,
@@ -799,6 +814,15 @@ impl LatentMatcher {
             // disjoint. Kernel dispatches through [`KernelIndex`] — flat or
             // route-narrowed (Issue 196) — with the same scratch.
             let mut rules = if domain == DomainId::Kernel {
+                // Issue 208 / Bench 131: the kernel pregate — a denied span
+                // skips the kernel index ENTIRELY (no `by_domain` entry: the
+                // kernel-disabled shape, the same one `None => continue`
+                // produces below). Every other domain is untouched. The
+                // pregate resolves per FILE (`KernelPlan::for_file` in
+                // [`Self::suggest_file_inner`]); this is its per-span verdict.
+                if !kernel_allowed {
+                    continue;
+                }
                 match self.kernel.as_ref() {
                     Some(kernel_index) => kernel_index
                         .suggest_deep_into(code, pool, &mut self.scratch)
@@ -1037,9 +1061,18 @@ impl LatentMatcher {
     ) -> Vec<SpanSuggestion> {
         let chunker = AstChunker;
         let chunks = chunker.chunk(src, path);
+        // Issue 208 / Bench 131: the kernel pregate — ONE signal read per
+        // file (the run-level index the walk builds as it reads), resolved
+        // to a per-chunk verdict against the chunk's line range. `Off` (the
+        // feature-off posture and the explicit `--domain kernel` bypass)
+        // allows every span: byte-identical pre-gate behavior.
+        let kernel_plan = crate::kernel_pregate::KernelPlan::for_file(src, path);
         let mut out = Vec::with_capacity(chunks.len());
         for chunk in chunks {
-            let (routed_domain, by_domain) = self.suggest_span(&chunk.content, top_k);
+            let kernel_allowed =
+                kernel_plan.span_allowed(chunk.source.start_line, chunk.source.end_line);
+            let (routed_domain, by_domain) =
+                self.suggest_span_gated(&chunk.content, top_k, kernel_allowed);
             out.push(SpanSuggestion {
                 path: chunk.source.path.clone(),
                 start_line: chunk.source.start_line,
@@ -1763,5 +1796,51 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .by_domain
             .iter()
             .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return")));
+    }
+}
+
+// Issue 208 / Bench 131: the kernel pregate's scan-path wiring — the gate
+// DENIES the kernel domain on non-signaling files and KEEPS it on signaling
+// ones, through the real `suggest_file` walk. Gated: the gate only arms
+// under `kernel_pregate`; the tests need the matcher (latent_retrieval) and
+// the kernel index (implied).
+#[cfg(all(test, feature = "kernel_pregate", feature = "latent_retrieval"))]
+mod kernel_pregate_tests {
+    use super::*;
+
+    #[test]
+    fn the_gate_denies_kernel_on_non_signaling_files() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "fn main() { println!(\"hi\"); }\nstruct S { a: u32 }\n";
+        let spans = m.suggest_file(src, "plain.rs", 3);
+        assert!(!spans.is_empty());
+        for span in &spans {
+            assert!(
+                !span.by_domain.iter().any(|(d, _)| *d == DomainId::Kernel),
+                "kernel must be ABSENT (the kernel-disabled shape) on a non-signaling file"
+            );
+        }
+    }
+
+    #[test]
+    fn the_gate_keeps_kernel_on_signaling_files() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "use cubecl::prelude::*;\nfn kernel_driver() { }\n";
+        let spans = m.suggest_file(src, "gpu.rs", 3);
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.by_domain.iter().any(|(d, _)| *d == DomainId::Kernel)),
+            "kernel must be PRESENT on a signaling file"
+        );
+    }
+
+    #[test]
+    fn the_public_suggest_span_is_ungated_allow_all() {
+        // The public per-span entry keeps the exact pre-gate behavior (the
+        // gate is a per-FILE scan-path posture, never a span-API one).
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let (_, by_domain) = m.suggest_span("let x = 1;", 3);
+        assert!(by_domain.iter().any(|(d, _)| *d == DomainId::Kernel));
     }
 }
