@@ -65,7 +65,7 @@ Every pair is **two CubeCL kernels** (`ref_naive`, `opt`) implementing the SAME 
 | P75-B | `strided-loop-batched-prefetch-unroll-tail` | plain strided loop | batched prefetch (double-buffer) + unrolled tail | N = 2^22, stride 128 |
 | P75-C | `partial-unroll-bounds-register-spill-cliff` | fully unrolled body (register spill cliff) | partially unrolled at the pinned bound (4) | window=64 conv scan over 2^20 |
 
-*(21 named pairs across 13 registered families — several families carry 2–3; the leg median reads all measured pairs, the family median is the secondary read.)*
+*(23 named pairs across 13 registered families — several families carry 2–3; the leg median reads all measured pairs, the family median is the secondary read. PRE-RUN AMENDMENT 2026-11-05 (zed-m3-i191t6): this prose originally said "21 named pairs" — an under-count of the table's own 23 rows; corrected per the amendment record in [Bench 131](131_kernel_opt_g2_gpu_sources.md) §Pre-run amendments, which also pins the sources + digests.)*
 
 ### The harness law (unchanged from the CPU G2 where the law is box-agnostic)
 
@@ -79,7 +79,7 @@ Every pair is **two CubeCL kernels** (`ref_naive`, `opt`) implementing the SAME 
 ### n and floors (condition (b) — pinned before running)
 
 - **PAIRS = 15** interleaved chunks per measured pair (the CPU G2's n, unchanged).
-- **MIN_MEASURED_PAIRS = 12** — at least 12 of the 21 registered pairs must produce a valid correctness-gated timing read. Below the floor the leg reads **UNSEEN**, never a pass (the CPU cautionary shape: 53-of-74 unmeasurable made the CPU read structurally blind; this floor exists so a GPU run cannot green on a sliver).
+- **MIN_MEASURED_PAIRS = 12** — at least 12 of the 23 registered pairs must produce a valid correctness-gated timing read. Below the floor the leg reads **UNSEEN**, never a pass (the CPU cautionary shape: 53-of-74 unmeasurable made the CPU read structurally blind; this floor exists so a GPU run cannot green on a sliver).
 - A pair that fails to COMPILE on the 4090 (toolchain/runtime mismatch) is a pair FAIL counted toward the disclosure but NOT toward MIN_MEASURED_PAIRS' numerator — it is a registration defect to fix and re-run, not an absence (the green-zero law: an extraction/compile failure is a FAIL, never absent-from-population).
 
 ## Condition (c) — the CPU-regressing rules: restricted AND disclosed
