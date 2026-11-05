@@ -1,4 +1,12 @@
-# Bench 131 — the kernel_opt GPU-host G2 SOURCES PIN (Bench 130's companion; Issue 191 T6 step 2)
+# Bench 133 — the kernel_opt GPU-host G2 SOURCES PIN (Bench 130's companion; Issue 191 T6 step 2)
+
+> **RENUMBERED 131 → 133 (2026-11-05, zed-m3-i208pregate):** a dual allocation — this
+> document and `131_kernel_pregate_ab_preregistration.md` (the pregate lane, Issue 208)
+> each claimed 131 from concurrent sessions. First allocation owns the number
+> (`1894374f` 20:08 vs this commit's parent-side `82b5aaf2` 21:16; citation_weight's WEAK
+> +1 concurs, 42/46 sites UNRESOLVED). Every citing site moved in the same commit; the
+> sources themselves (the 10 pinned files + their BLAKE3 digests) are UNCHANGED — the
+> pin's identity is the digests + the sources commit `82b5aaf2`, both stable.
 
 **Status:** SOURCES PINNED 2026-11-05 (zed-m3-i191t6, the issue-191 lease) — **NO TIMING RUN HAS HAPPENED.** This document materializes the exact sources the 4090 run compiles, pinned per file by BLAKE3 (recomputed at emit time by the regeneration script preserved in this file's git history). The runner at its scratch home (`kernel_bench_g2_gpu/` beside the siblings, untracked) is the working copy; THIS file is the pin. Any source change after this commit = a NEW sources pin (a fresh bench number), never an edit here.
 

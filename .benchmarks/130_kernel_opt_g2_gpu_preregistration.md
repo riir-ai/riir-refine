@@ -1,6 +1,6 @@
 # Bench 130 — PRE-REGISTRATION: the kernel_opt GPU-host G2 re-gate (Issue 191 T6, the 2026-11-04 D1 verdict's three conditions)
 
-**Status:** PRE-REGISTRATION LANDED 2026-11-05 (zed-m3-i191t6, lease on issue 191) — **NO TIMING RUN HAS HAPPENED.** This record pins the full bench registration BEFORE any run, per the D1 verdict ("PRE-REGISTRATION IS REQUIRED BEFORE ANY RUN — T6's three conditions"). The sources lane (a companion `.benchmarks/131_sources*.md` commit at the time it lands — number allocated fresh at write time) materializes the pinned pair sources; the timing run may not start until that commit exists and its BLAKE3 digests are recorded in the same family. The run record is a SEPARATE later bench document; nothing in this file may be amended after the first timed chunk (the T1 law: amended pre-measurement, never after).
+**Status:** PRE-REGISTRATION LANDED 2026-11-05 (zed-m3-i191t6, lease on issue 191) — **NO TIMING RUN HAS HAPPENED.** This record pins the full bench registration BEFORE any run, per the D1 verdict ("PRE-REGISTRATION IS REQUIRED BEFORE ANY RUN — T6's three conditions"). The sources lane (a companion sources-pin commit at the time it lands — number allocated fresh at write time; LANDED as Bench 133, renumbered from 131 on a dual allocation — see Bench 133's renumber note) materializes the pinned pair sources; the timing run may not start until that commit exists and its BLAKE3 digests are recorded in the same family. The run record is a SEPARATE later bench document; nothing in this file may be amended after the first timed chunk (the T1 law: amended pre-measurement, never after).
 
 **Claimed:** zed-m3-i191t6, 1793878648, expires 2026-11-07T11:37:28+00:00 — this record + the sources lane + the run are one lease.
 
@@ -65,7 +65,7 @@ Every pair is **two CubeCL kernels** (`ref_naive`, `opt`) implementing the SAME 
 | P75-B | `strided-loop-batched-prefetch-unroll-tail` | plain strided loop | batched prefetch (double-buffer) + unrolled tail | N = 2^22, stride 128 |
 | P75-C | `partial-unroll-bounds-register-spill-cliff` | fully unrolled body (register spill cliff) | partially unrolled at the pinned bound (4) | window=64 conv scan over 2^20 |
 
-*(23 named pairs across 13 registered families — several families carry 2–3; the leg median reads all measured pairs, the family median is the secondary read. PRE-RUN AMENDMENT 2026-11-05 (zed-m3-i191t6): this prose originally said "21 named pairs" — an under-count of the table's own 23 rows; corrected per the amendment record in [Bench 131](131_kernel_opt_g2_gpu_sources.md) §Pre-run amendments, which also pins the sources + digests.)*
+*(23 named pairs across 13 registered families — several families carry 2–3; the leg median reads all measured pairs, the family median is the secondary read. PRE-RUN AMENDMENT 2026-11-05 (zed-m3-i191t6): this prose originally said "21 named pairs" — an under-count of the table's own 23 rows; corrected per the amendment record in [Bench 133](133_kernel_opt_g2_gpu_sources.md) §Pre-run amendments, which also pins the sources + digests. RENUMBER NOTE 2026-11-05 (zed-m3-i208pregate): that companion was written as "Bench 131" and renamed 131 → 133 on a dual allocation — first allocation kept 131 (the pregate prereg); see Bench 133's renumber note.)*
 
 ### The harness law (unchanged from the CPU G2 where the law is box-agnostic)
 
