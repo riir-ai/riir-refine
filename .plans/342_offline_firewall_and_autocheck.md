@@ -1,6 +1,6 @@
 # 342 — the offline firewall + the run-start auto-check + the settings.toml surface
 
-**Status:** IN_PROGRESS — claimed by zed-m3-cargo-refine-update, 1793809690, expires 2026-11-07T00:00:00Z
+**Status:** LANDED — code 530979967 (2026-11-05); distribution + rig e2e in flight
 
 The owner's five asks (2026-11-05): (1) auto-check app + corpus before any
 `cargo refine`; (2) `cargo refine off --auto-update` with the same on/off
@@ -31,32 +31,32 @@ saved config is a well-commented TOML. Then re-distribute + e2e every rig
 
 ## Tasks
 
-- [ ] `src/refine_settings.rs` (ungated): `Settings { app_check,
+- [x] `src/refine_settings.rs` (ungated): `Settings { app_check,
       corpus_refresh, auto_upgrade }`, defaults on / off / off,
       `settings.toml` template (well-commented), comment-preserving
       `set()`, `flag_keys()` mapping (`--auto-update` → app_check +
       corpus_refresh; `--auto-corpus`; `--app-check`; `--auto-upgrade`),
       in-module unit tests (parse, defaults, comment preservation,
       malformed → defaults + warning, template-well-commented gate).
-- [ ] `src/offline.rs`: the marker file (`<dir>/offline`) —
+- [x] `src/offline.rs`: the marker file (`<dir>/offline`) —
       `offline() = marker || env` (env can NEVER clear the marker — the
       firewall law), `refusal_line` names the marker + `cargo refine
       online` when the marker is the cause (the stable `offline: <lane>
       skipped — ` prefix stays), marker tests (marker + `=0` env still
       offline).
-- [ ] heal.rs verbs: `offline` / `online` / `off --<flag>` / `on --<flag>`
+- [x] heal.rs verbs: `offline` / `online` / `off --<flag>` / `on --<flag>`
       (ungated, local-only, parsed like the points verbs; hook exempt like
       `upgrade`/`--version`), `online` prints the settings reminder, bare
       `off`/`on` prints status + valid flags (exit 2).
-- [ ] heal.rs firewall consult at `command_service_url()` (exit 2 naming
+- [x] heal.rs firewall consult at `command_service_url()` (exit 2 naming
       the marker + the `online` remedy) — covers every kat dial lane.
-- [ ] heal.rs hooks: app_check + auto_upgrade + corpus_refresh gates from
+- [x] heal.rs hooks: app_check + auto_upgrade + corpus_refresh gates from
       settings (corpus leg PROMOTED to default-on, `RIIR_REFINE_AUTO_CORPUS=0`
       demote-only; `auto_upgrade` = config OR the env, still opt-in);
       `off --auto-update` warns when auto_upgrade is still on.
-- [ ] usage_text lines for the four verbs; AGENTS.md CLI UX contract
+- [x] usage_text lines for the four verbs; AGENTS.md CLI UX contract
       bullets (the settings.toml shape + the promotion note).
-- [ ] clippy `-D warnings` at the build posture + fmt + tests green;
+- [x] clippy `-D warnings` at the build posture + fmt + tests green;
       commit + push (fix/feat prefix, Session line).
 - [ ] Distribute: m3 rebuild (symlink target in place), amo scp (same
       triple), 4090 gitsync + on-box build + cp install.
