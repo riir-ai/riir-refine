@@ -71,8 +71,12 @@ saved config is a well-commented TOML. Then re-distribute + e2e every rig
   one stat (microseconds); the network legs keep their existing 12h caches
   and budgets. The promotion is an owner mandate (the ask itself), the
   charge plane stays the tier gate.
-- The shipped charitable release set still compiles the corpus leg out
-  (kat_transport absence) — the hooks degrade honestly exactly as today;
-  this changes nothing for release users.
+- ⛔ CORRECTED 2026-11-05 (was wrong here): the shipped release set does
+  NOT compile the corpus leg out — it carries `points` (since aea8e270c),
+  and the leg's gate is `any(kat_transport, points)`; release users get
+  the update verb (charge-free points read), the corpus verb, and the
+  auto-corpus hook. The plan's earlier "changes nothing for release
+  users" note misread the posture; the honest residue was the four stale
+  strings saying kat_transport-only — fixed in f5cf676af.
 - `service_url.json` (config set) and `settings.toml` are different files
   in the same dir — no collision, no migration.
