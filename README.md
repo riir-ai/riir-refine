@@ -30,6 +30,14 @@ library code).
 > **MIT open data today**; the core source has a **committed, dated plan to
 > open during the grant term (months 1–3)** — until then the binaries are
 > the supported surface.
+>
+> **The charitable posture is the shipped posture** (v0.4.0+): the release
+> set carries the points plane (join/contribute/rank/corpus/update — the
+> public network half, mainnet-only) and compiles out every payment/token
+> surface (no `kat_service`, no `kat_transport`, no billing). Fixing is
+> free and local; sharing fix data is a separate explicit opt-in; contribution
+> points are non-transferable, expiring reputation — no payment, no token,
+> no speculation.
 
 ## Status
 
@@ -98,15 +106,15 @@ src/
 ├── self_evolve.rs      # HealPipeline + LatentFixMemory + LatentSkillEvolution
 └── domains/
     ├── clippy_lints/   # feature "clippy_lints" (DEFAULT) — clippy::* lint fixing
-    │   ├── corpus.rs   # 10 common clippy lints
+    │   ├── corpus.rs   # the compiled-in clippy seed (112 corpus lints live — see the domain table)
     │   ├── verify.rs   # cargo clippy re-run (behind clippy_verify)
     │   └── proposers/  # 10 per-lint AST codemods (Issue 010 Stage 2)
     ├── rust_perf/      # feature "rust_perf" (default-on since 2026-08-13) — rust-optimize perf fixing
-    │   ├── corpus.rs   # 126 perf rules (rust-optimize skill + perf-book + measured-GOAT/external distills; ledger in .docs/11_domains/rust_perf.md)
+    │   ├── corpus.rs   # 302 perf rules (rust-optimize skill + perf-book + measured-GOAT/external distills; ledger in .docs/11_domains/rust_perf.md)
     │   ├── verify.rs   # cargo test re-run (behind rust_perf_verify)
     │   └── bench.rs    # perf-bench Pareto validator (behind rust_perf_bench, the GOAT gate)
     └── kernel_opt/     # feature "kernel_opt" (opt-in, 4090 DEFERRED)
-        │   └── corpus/     # 795 rules across entries_gpu_*.rs (Batch 1-223: popcorn + riir-gpu + measured-GOAT + external distills; ledger in .docs/11_domains/kernel_opt.md)
+        │   └── corpus/     # 1056 rules across entries_gpu_*.rs (Batch 1-335: popcorn + riir-gpu + measured-GOAT + external distills; ledger in .docs/11_domains/kernel_opt.md)
         ├── router.rs   # KernelExpertRouter wraps pick_domain<4,5> (Plan 558)
         ├── thermal.rs  # Plasma→Hot→Warm→Cold→Freeze tier dispatch (returns Plasma)
         └── verify.rs   # compile-only stub (behind kernel_verify)
@@ -152,9 +160,10 @@ code; `--fix` CLI wiring is Phase 6.
 | `l4_lora` | off | — | Plan 336 T4.4/T5.3: the L4 generative-fallback SEAM (`L4Fallback` trait + `DaemonL4` transport) — inert unless a fallback is installed; Plan 336 G1 measured 0/60, stays UNARMED (see [`.docs/10_self_evolve/l4_fallback.md`](.docs/10_self_evolve/l4_fallback.md)) |
 | `pav_data` | off | `l4_lora`, `score_bench` | Plan 356 A1: PAV (process-advantage) dataset curation for the L4 fixer campaign (real-daemon or seeded-mock source; opt-in — the campaign is a deliberate 30-40h exclusive-4090 budget) |
 | `contrastive_scope` | off | `katgpt-core/contrastive_scope` | Bench 040 / Plan 016: the input-scope gate at the fix seam — non-Rust garbage is declined whole before it can burn an LLM call (G1 8/8 OOS declined, bit-identical in-distribution) |
-| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | Proposal 005 Phase 0 (Plans 023/024/025): the service client substrate — account + local usage accounting + `kat_redact` (the secret-blind redaction gate) + the `cargo refine vote` governance CLI (Proposal 008 T2.4, G9-GOV) + the onboarding CLI (kat-011 T0.2, [Plan 059](.plans/059_kat011_t02_and_corpus_runtime_counts.md): `login` adopts the default SSH key as the account identity, `account --history` renders your local activity view; `--corpus-stats` counts at runtime with provenance stamps) |
-| `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | Proposal 005 Phase 1 T1.6 (Plan 040): the corpus-lease HTTP transport (+ QR rendering + the dev/test refill client) |
+| `kat_service` | off | `dep:ssh-key`, `dep:ed25519-dalek` | INTERNAL-ONLY (the retired KAT credit plane's client substrate; compiled out of every shipped build since the v0.4.0 pivot — the public network half is `points` below) |
+| `kat_transport` | off | `dep:ureq`, `dep:qrcode`, `kat_service` | INTERNAL-ONLY (the retired KAT transport lane; the corpus-lease READ moved to `points`/`lease_http` — issue 203 — so the shipped build never carries this) |
 | `cf_workers_ai` | off | `dep:ureq`, `latent_retrieval`, `clippy_verify`, `l4_lora`, `kat_service` | Issue 040/046: the CF Workers AI REST client (`src/cf_workers_ai.rs`) — the fixer arms, the USD daily-cap ledger (reserve-then-reconcile), and the fixer model: DEFAULT `@cf/zai-org/glm-5.3-flash` (owner pivot 2026-08-28, second call — the prior default 4.7 FAILED the Issue 043 re-designation gate 3/9 and stays priced + selectable via `RIIR_CF_MODEL`; [Bench 057](.benchmarks/057_glm53_flash_fixer_regate.md) re-gated 5.3 at 7/9 strict-keep on BOTH arms, beating the earlier CF bar of [Bench 049](.benchmarks/049_fixer_regate_poc.md)) |
+| `points` | off (✅ in the release set) | `dep:riir-ledger`, `riir-kat/lease_http` | The PUBLIC network half (Plan 325 / Proposal 026): the contribution-points client — `join` (GitHub device flow) / `leave` / `rank` / `info` / `corpus` / the issue-204 contribute feed (joined machines auto-share run outcomes — per-rule counts only) + the issue-203 corpus-lease read (GET-only, never billed). Points are non-transferable, expiring reputation |
 | `wasm_pruner` | off | — | WASM rust-analyzer pruner (L2 sandboxed variant — deferred on rubrc maturity) |
 
 ## Architecture
@@ -245,6 +254,12 @@ resort, not a co-equal path.
 ## Quick Start
 
 ```sh
+# The everyday user path (the shipped binary): dry run, then fix
+cargo refine            # dry run — lists what it would fix, changes nothing
+cargo refine fix        # apply the fixes (compile-checked; review first)
+
+# Developer demos from source:
+
 # Run the clippy fix demo (L0 corpus → L1 drafter → L2 pruner)
 cargo run --example heal_demo
 
@@ -279,48 +294,32 @@ and they build the MIT-licensed community corpus: every contributed repair
 is reviewed, never scraped, and improves fixing for everyone.
 
 ```sh
-cargo refine login      # your account (Ed25519 key, OpenSSH format)
-cargo refine --mine     # opt in to contributing fixes (one-time consent screen)
-cargo refine sync       # push the redacted, signed contribution batch + pull the corpus lease
-cargo refine sync --export batch.ndjson  # write that batch locally, send nothing
-cargo refine account    # your account — contribution history and service state
-cargo refine --unmine   # opt out — key and history untouched, reversible
+cargo refine join       # join the contribution network (GitHub device flow, once)
+cargo refine fix        # heal the crate (free, local, compile-checked)
+                        #   — joined machines share run outcomes automatically;
+                        #     not joined: nothing is ever sent
+cargo refine rank       # the public leaderboard + your rank (joined identities)
+cargo refine info       # the one-command stats view (local + corpus)
+cargo refine corpus     # corpus info + the rule-set refresh offer
+cargo refine update     # refresh the rule set (the corpus lease read — free, never billed)
+cargo refine leave      # leave the network — unbinds the identity, zero data sent
+cargo refine upgrade    # update the binary itself (SHA256SUMS-checked)
 ```
 
-`--unmine` stops the push half of `sync` (the lease pull — a read — still
-runs); `--unmine --purge` additionally removes the local identity, which is
-destructive and is never the default. A logged-in account reports usage
-totals for accounting only; fix content is shared solely through the
-explicit `sync` push after you opt in.
+The consent screen at first `fix` explains exactly what a contribution
+carries (run outcomes — per-rule written/declined counts; never spans,
+source or paths) before anything is ever shared. `cargo refine scan --blind
+FILE` shows what the scanner would redact in your own files. `leave`
+unwrites the join locally and server-side — zero data flows afterwards.
 
-**Free for open-source repositories.** A run over an open-source repository
-costs nothing — no accrual, no reporting, and the depleted-account gate
-never fires. The heuristic is fail-open: a licence file at the scan root
-(`LICENSE`, `COPYING`, `NOTICE`, … — presence is enough, the text is not
-parsed) or a public-forge git origin (`github.com`, `gitlab.com`,
-`bitbucket.org`, `codeberg.org`, `sr.ht`) marks the run free, and a FREE
-run prints one line saying so:
+**Offline mode.** `RIIR_REFINE_OFFLINE=1` (or `cargo refine offline` to
+persist the choice) turns every network lane off — local healing never
+needs the network and keeps working fully offline.
 
-```text
-repo: open-source (LICENSE) — billing skipped (free for open-source repositories)
-```
-
-A private repository (no licence file, no public-forge origin — a plain
-local dir) bills normally. When in doubt, the run is free: the maintainer
-promise is that we never charge a maybe. "Free" is the fixing/billing
-plane only — the corpus-lease `update`/`sync` service is priced separately
-regardless of repository.
-
-**Advanced/service configuration.** The client talks to the hosted service
-by default; point it anywhere else with `RIIR_REFINE_KAT_SERVICE_URL` (e.g.
-a local test service). `--net <devnet|mainnet>` steers a single invocation
-and `config set --url <alias|url>` stores a bookkeeping row — dialing
-follows the env or the default. `cargo refine --refill [--refill-wait <s>]`
-requests a dev/test service refill with a bounded settle poll. None of this
-is required for local fixing.
-
-> Coming next: join the contribution network, earn contribution points,
-> appear on the public leaderboard.
+**What the tool keeps on your machine:** fix history and the rule-set cache
+under your repo's `.refine/`; the machine-local account/identity state under
+`~/.config/` (deleted by `cargo refine leave --purge`, which is explicit and
+never the default).
 
 ## Automatic rustfmt (`--fix --write`)
 
