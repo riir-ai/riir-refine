@@ -16,6 +16,13 @@
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 | L4 LoRA fallback | | ✅ Deferred across all domains |
 
+## Promotion status: both fences measured (2026-11-05)
+
+`kernel_opt` stays opt-in. Promotion requires BOTH fences; both were measured today:
+
+- **G2 (GPU-host leg)** — **PASSES** (Bench 135, the issue-191 T6 run of Bench 130's registration + Bench 133's sources pin): correctness 23/23 on CUDA, 23/23 measured, leg median **1.3774 ≥ 1.06** over per-pair medians; thermal clean; per-rule regressions recorded per-pair, never pooled. The CPU-host leg was closed earlier at tranche-median 1.0000 (the wins are structurally not CPU-demonstrable — disclosed, never re-run).
+- **G5 (added cost)** — **FAILS** (Bench 129 flat 33.127/37.306 ms added p50 vs the ≤ 1.0 ceiling; ceiling never re-registered per the 2026-11-04 D2 verdict). The clearing lane is Issue 208: the `kernel_pregate` file-gate + span-scope A/B (Bench 132) flipped the median leg green (0.191/0.036 ms) but the p95 leg still FAILs (122.5/92.4 vs ≤ 5.0) — the per-span cap lever is the active path.
+
 ## Corpus
 
 Batch 1 (Research 002): 21 rules — 2 original + 19 popcorn-distilled across 5 categories.
