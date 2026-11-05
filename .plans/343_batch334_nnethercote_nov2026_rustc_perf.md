@@ -1,6 +1,6 @@
 # Plan 343 — Batch 334: the nnethercote Nov-2026 rustc-perf post distill (rust_perf)
 
-**Status:** STAGED — verdict landed (Research 372 + queue row, same commit); unclaimed; claim-before-edit per protocol; claim expiry 48 h from claim; push is the arbiter.
+**Status:** CLAIMED — zed-m3-batch334, 1794037726, expires 2026-11-07T09:08:46+00:00. Verdict landed (Research 372 + queue row, same commit); the Issue-983 sibling WIP landed (`494f70e96`) and the tree is clean, so the batch slot is taken. Push is the arbiter.
 
 Source: nnethercote.github.io "How to speed up the Rust compiler in November 2026" (2026-11-04) + the named rust-lang/rust PRs. Discharges the standing "nnethercote ~11-01" author-scoped dated lead. No `.raw/` clone needed — the mine surface is the blog text + PR API reads. Zero-GPU throughout.
 
