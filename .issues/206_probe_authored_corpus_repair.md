@@ -1,6 +1,7 @@
 # Issue 206: Probe-authored corpus repair — templated context_notes + demote-execution behind a score-bench referee (Research 649 fusion; ILC leg dropped)
 
 **Status:** open — fusion idea (Research 649 × Latent-Prediction/ILC supergoat candidate; sweep record `katgpt-rs/.research/650_Probe_Grammar_Consumer_Fusion_Sweep.md` @ `e7a746274`), novelty TBD (contested: cleanlab); module-half LANDED 2026-11-04 (`src/corpus_binding.rs`, 9/9 tests, clippy-clean, default lib 2828/0); corpus-half **PARTIALLY LANDED 2026-11-04 (live-telemetry diagnose + arm-A writer + first arm-A corpus edit + referee leg measured)** — verdict round 1 REVISE addressed (claim scoped to telemetry-driven writers, `kat_corpus_pr` added as cousin, referee bar pinned to paired LCB95, arm B re-ruled)
+**Claimed:** zed-a1ac63f1, 1793890102, expires 2026-11-07T14:48:22+00:00 — the harvest→bind→note CLI verb (the corpus half's next task per the issue's own scope note; re-open trigger: telemetry shows the pipeline exists but no verb wraps the harvest sweep)
 **Date:** 2026-11-04
 **Repo:** riir-refine (corpus + self_evolve)
 **Filing analysis:** 10-analyst fusion sweep, 2026-11-04; the empty-seam claim and every mapped site coordinator-verified (`record_outcome` ×3 sites, `demotion_suggestions` report-only at `src/blueprint.rs` L428/L649, `--active-set-demote` CLI-only)
