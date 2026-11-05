@@ -36,6 +36,10 @@ const SCOPE_ENV: &str = "RIIR_KERNEL_PREGATE_SCOPE";
 /// pinned literals `4`/`2` — see [`line_cap`].
 const LINE_CAP_ENV: &str = "RIIR_KERNEL_PREGATE_LINE_CAP";
 
+/// The per-query TEXT budget (Bench 136, issue 208 T7): promote-only env,
+/// pinned literals `4096`/`2048`/`1024` — see [`query_text_cap`].
+const QUERY_TEXT_CAP_ENV: &str = "RIIR_KERNEL_PREGATE_QUERY_TEXT_CAP";
+
 /// The pinned needle set (Bench 131, pinned pre-run; widening is a NEW
 /// pre-registration). Case-insensitive ASCII substring over the raw source;
 /// `.wgsl` paths always signal. `cube` deliberately subsumes `cubecl` and
@@ -147,6 +151,27 @@ pub fn line_cap() -> Option<usize> {
     *CAP.get_or_init(|| match std::env::var(LINE_CAP_ENV).as_deref() {
         Ok("4") => Some(4),
         Ok("2") => Some(2),
+        _ => None,
+    })
+}
+
+/// The per-query TEXT budget (Bench 136, issue 208 T7): promote-only env
+/// `RIIR_KERNEL_PREGATE_QUERY_TEXT_CAP` — arms ONLY on the exact pinned
+/// literals `"4096"`, `"2048"` and `"1024"` (any other value is
+/// unset-equivalent, never armed; the env-switch law). Read once per
+/// process. When armed, EVERY query text in the kernel index's capped
+/// suggest path (the whole-span query AND every per-line query) is
+/// head-truncated to at most B bytes — the Bench-135 finding is that the
+/// residual G5 cost is query-COUNT-invariant, i.e. carried by the text mass
+/// of the whole-span query over giant spans. `None` = no truncation (the
+/// exact pre-cap behavior).
+#[must_use]
+pub fn query_text_cap() -> Option<usize> {
+    static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    *CAP.get_or_init(|| match std::env::var(QUERY_TEXT_CAP_ENV).as_deref() {
+        Ok("4096") => Some(4096),
+        Ok("2048") => Some(2048),
+        Ok("1024") => Some(1024),
         _ => None,
     })
 }

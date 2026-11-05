@@ -112,6 +112,33 @@ pub(crate) fn significant_lines(text: &str) -> impl Iterator<Item = &str> {
     )
 }
 
+/// Head-truncate `text` to at most `budget` BYTES (Bench 136, issue 208
+/// T7): a below-budget text (or `budget = None`) returns `text` unchanged
+/// (byte-identical, the unarmed posture's contract). Above budget: take the
+/// first `budget` bytes, walk back to a char boundary, then cut at the last
+/// `\n` within that prefix so the query stays LINE-shaped (BM25 never sees
+/// a torn token at the cut); if that only newline is at position 0 — or no
+/// newline exists in the prefix — the char-safe byte cut stands. Zero
+/// allocation (a slice of the input); deterministic for a given
+/// (text, budget) pair.
+#[must_use]
+pub(crate) fn query_text_within(text: &str, budget: Option<usize>) -> &str {
+    let Some(budget) = budget else { return text };
+    if text.len() <= budget {
+        return text;
+    }
+    let mut end = budget;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    if let Some(nl) = text[..end].rfind('\n') {
+        if nl > 0 {
+            return &text[..nl];
+        }
+    }
+    &text[..end]
+}
+
 /// Merge retrieved chunks → per-rule best score, reading `zone_lookup`
 /// (`zone_hash` → `rule_id`) and `config` (the fused-score weights). The shared
 /// merge core: `RuleIndex::rank_into` delegates with its own fields, and
@@ -623,8 +650,9 @@ impl RuleIndex {
     ) -> &'s [ScoredRule] {
         // `usize::MAX` = every significant line (the exact pre-cap behavior:
         // same skips, same order, same query sequence — the capped variant's
-        // below-cap branch IS this loop).
-        self.suggest_deep_into_capped(code, top_k, scratch, usize::MAX)
+        // below-cap branch IS this loop). No text budget (the T7 cap arms
+        // only through the `KernelIndex` dispatch).
+        self.suggest_deep_into_capped(code, top_k, scratch, usize::MAX, None)
     }
 
     /// [`Self::suggest_deep_into`] with a per-span line-query cap (Bench 134,
@@ -634,16 +662,27 @@ impl RuleIndex {
     /// per-rule-best merge makes query order irrelevant, so selection affects
     /// only WHICH lines are queried). `usize::MAX` = the exact uncapped path.
     /// The allocation is one bounded scratch Vec per SPAN (never per query).
+    ///
+    /// `query_text_budget` (Bench 136, issue 208 T7): when `Some(B)`, EVERY
+    /// query text this call issues — the whole-span query AND each line
+    /// query — is head-truncated to at most `B` bytes via
+    /// [`query_text_within`] (a lossy, deterministic cut; Bench 135 proved
+    /// the residual cost is query-COUNT-invariant, so the text mass is the
+    /// lever). `None` = the exact pre-T7 text (below-budget and unarmed
+    /// paths are byte-identical by construction).
     pub(crate) fn suggest_deep_into_capped<'s>(
         &self,
         code: &str,
         top_k: usize,
         scratch: &'s mut SuggestScratch,
         max_line_queries: usize,
+        query_text_budget: Option<usize>,
     ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
+        // The whole-span query text (truncated only when a budget arms).
+        let whole = query_text_within(code, query_text_budget);
         #[cfg(feature = "rule_embed_poc")]
-        let phi_owned = self.phi_for(code);
+        let phi_owned = self.phi_for(whole);
         let phi: Option<&[f32]> = {
             #[cfg(feature = "rule_embed_poc")]
             {
@@ -655,7 +694,7 @@ impl RuleIndex {
             }
         };
         {
-            self.retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
+            self.retrieve_scored_into(whole, &mut scratch.retrieved, &mut scratch.retrieval);
         }
         // The significant lines (the SAME two skips as always, Issue 063:
         // insignificant lines contribute nothing, and a line whose trimmed
@@ -670,7 +709,11 @@ impl RuleIndex {
         }
         if significant.len() <= max_line_queries {
             for line in &significant {
-                self.retrieve_scored_into(line, &mut scratch.retrieved, &mut scratch.retrieval);
+                self.retrieve_scored_into(
+                    query_text_within(line, query_text_budget),
+                    &mut scratch.retrieved,
+                    &mut scratch.retrieval,
+                );
             }
         } else {
             // Stride selection over `significant` (len > cap here, so the
@@ -678,7 +721,7 @@ impl RuleIndex {
             for i in 0..max_line_queries {
                 let idx = i * significant.len() / max_line_queries;
                 self.retrieve_scored_into(
-                    significant[idx],
+                    query_text_within(significant[idx], query_text_budget),
                     &mut scratch.retrieved,
                     &mut scratch.retrieval,
                 );
@@ -790,6 +833,7 @@ impl RuleIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt::Write as _;
 
     fn mini_corpus() -> Vec<(String, String)> {
         vec![
@@ -839,7 +883,7 @@ mod tests {
         let mut s1 = SuggestScratch::default();
         let mut s2 = SuggestScratch::default();
         let a = index.suggest_deep_into(code, 3, &mut s1);
-        let b = index.suggest_deep_into_capped(code, 3, &mut s2, usize::MAX);
+        let b = index.suggest_deep_into_capped(code, 3, &mut s2, usize::MAX, None);
         assert_eq!(a.len(), b.len());
         for (x, y) in a.iter().zip(b.iter()) {
             assert_eq!(x.rule_id, y.rule_id);
@@ -854,9 +898,7 @@ mod tests {
         let mut code =
             String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
         for i in 0..60 {
-            code.push_str(&format!(
-                "    let pad_{i} = {i} + some_padding_value_{i};\n"
-            ));
+            let _ = writeln!(code, "    let pad_{i} = {i} + some_padding_value_{i};");
         }
         code.push_str(
             "    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}",
@@ -864,8 +906,8 @@ mod tests {
         let mut s1 = SuggestScratch::default();
         let mut s2 = SuggestScratch::default();
         let uncapped = index.suggest_deep_into(&code, 3, &mut s1);
-        let capped = index.suggest_deep_into_capped(&code, 3, &mut s2, 2);
-        assert!(!uncapped.is_empty());
+        let capped = index.suggest_deep_into_capped(&code, 3, &mut s2, 2, None);
+        assert_ne!(uncapped, []);
         assert_eq!(
             capped[0].rule_id, uncapped[0].rule_id,
             "the cap must preserve the rank-1 rule on a line-heavy span (the whole-span query dominates; stride selection keeps body coverage)"
@@ -879,8 +921,109 @@ mod tests {
         let index = RuleIndex::build(mini_corpus()).expect("build");
         let code = "fn compute(x: i32) -> i32 {\n    let a = first_step(x);\n    let b = second_step(a);\n    return b * 2;\n}";
         let mut s = SuggestScratch::default();
-        let capped = index.suggest_deep_into_capped(code, 3, &mut s, 1);
+        let capped = index.suggest_deep_into_capped(code, 3, &mut s, 1, None);
         assert!(!capped.is_empty(), "the whole-span query always runs");
+    }
+
+    // ── Bench 136 (issue 208 T7): the per-query TEXT cap ───────────────
+
+    #[test]
+    fn query_text_within_below_budget_and_none_are_identity() {
+        let text = "fn a() { b }\nfn c() { d }"; // 24 bytes
+        assert_eq!(query_text_within(text, None), text);
+        assert_eq!(query_text_within(text, Some(1024)), text, "below budget = unchanged");
+        assert_eq!(query_text_within(text, Some(text.len())), text, "exactly at budget = unchanged");
+    }
+
+    #[test]
+    fn query_text_within_cuts_at_the_last_newline_within_budget() {
+        // Three lines of 10 bytes each (with the \n separators).
+        let text = "aaaaaaaaaa\nbbbbbbbbbb\ncccccccccc";
+        // Budget 22 → the char-safe prefix covers through the 2nd \n (idx 21);
+        // the cut lands at the last \n within it → exactly the first two lines
+        // minus the trailing newline.
+        let cut = query_text_within(text, Some(22));
+        assert_eq!(cut, "aaaaaaaaaa\nbbbbbbbbbb");
+        assert!(cut.len() <= 22);
+    }
+
+    #[test]
+    fn query_text_within_char_boundary_fallback() {
+        // 'é' is 2 bytes; 'π' is 2 bytes. A budget landing mid-char must walk
+        // back to a boundary, never panic, never split a char.
+        let text = "hélloé wörldπéπ"; // multibyte throughout
+        let cut = query_text_within(text, Some(5));
+        assert!(cut.len() <= 5, "the char-safe cut never exceeds the budget");
+        assert!(text.starts_with(cut), "the cut is a prefix of the input");
+        // Every char boundary of the cut is a char boundary of the text by
+        // construction (it IS a &str slice) — the assertion above pins the
+        // prefix property; this test exists to prove no panic + no torn char.
+    }
+
+    #[test]
+    fn query_text_within_newline_at_zero_and_no_newline_fallbacks() {
+        // A text STARTING with \n: the only newline in the prefix is at 0 →
+        // the byte cut stands (never an empty query).
+        let text = "\nbbbbbbbbbb\ncccccccccc";
+        let cut = query_text_within(text, Some(6));
+        assert!(!cut.is_empty(), "the nl==0 guard must never produce an empty query");
+        assert_eq!(cut, "\nbbbbb");
+        // A single-line giant text: no \n in the prefix → the byte cut stands.
+        let flat = "x".repeat(100);
+        assert_eq!(query_text_within(&flat, Some(40)), &flat[..40]);
+    }
+
+    #[test]
+    fn text_cap_none_is_byte_identical_to_uncapped_on_a_giant_span() {
+        // The `MAX + None` ≡ `suggest_deep_into` delegation equivalence,
+        // pinned on a GIANT span (the shape the T7 lever targets).
+        let index = RuleIndex::build(mini_corpus()).expect("build");
+        let mut code = String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
+        for i in 0..200 {
+            let _ = writeln!(
+                code,
+                "    let literal_{i} = \"pad text {i} to grow the span past any sane budget\""
+            );
+        }
+        code.push_str("    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}");
+        assert!(code.len() > 4096, "the fixture span must be giant");
+        let mut s1 = SuggestScratch::default();
+        let mut s2 = SuggestScratch::default();
+        let a = index.suggest_deep_into(&code, 3, &mut s1);
+        let b = index.suggest_deep_into_capped(&code, 3, &mut s2, usize::MAX, None);
+        assert_eq!(a.len(), b.len());
+        for (x, y) in a.iter().zip(b.iter()) {
+            assert_eq!(x.rule_id, y.rule_id);
+            assert_eq!(x.score, y.score, "None budget must be bit-identical");
+        }
+    }
+
+    #[test]
+    fn text_cap_truncated_whole_span_query_still_runs_and_retrieves() {
+        // Behavior guard: the whole-span query runs on the TRUNCATED text and
+        // still retrieves (an empty armed-budget result is a bug); and the
+        // truncation helper bounds the giant span's line queries too.
+        let index = RuleIndex::build(mini_corpus()).expect("build");
+        let mut code = String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
+        for i in 0..120 {
+            let _ = writeln!(
+                code,
+                "    let literal_{i} = \"pad text {i} padding the span far past the budget\""
+            );
+        }
+        code.push_str("    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}");
+        // The whole-span text the armed budget would hand the query:
+        let whole = query_text_within(&code, Some(1024));
+        assert!(whole.len() <= 1024, "the giant span's query text is bounded");
+        assert!(code.starts_with(whole), "head truncation = a prefix");
+        // A giant single LINE (the kilobyte-literal shape) is bounded too:
+        let giant_line = format!("let s = \"{}\";", "y".repeat(3000));
+        let line_cut = query_text_within(&giant_line, Some(1024));
+        assert!(line_cut.len() <= 1024);
+        // And the capped+budgeted suggest still answers (whole-span query ran).
+        let mut s = SuggestScratch::default();
+        let capped = index.suggest_deep_into_capped(&code, 3, &mut s, 2, Some(1024));
+        assert!(!capped.is_empty(), "the whole-span query always runs, truncated or not");
     }
 
     #[test]

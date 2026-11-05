@@ -159,12 +159,17 @@ impl KernelIndex {
 
     /// Dispatch the multi-scale suggest — flat self, narrowed via the
     /// slice+tail retrieval (Issue 196). The FLAT arm honors the kernel
-    /// pregate's per-span line-query cap (Bench 134, issue 208 T6): when
+    /// pregate's per-span line-query cap (Bench 134, issue 208 T6) AND the
+    /// per-query text cap (Bench 136, issue 208 T7): when
     /// `RIIR_KERNEL_PREGATE_LINE_CAP` arms (pinned literals 4/2), per-span
-    /// line queries are stride-capped — the whole-span query always runs.
-    /// `None` = the exact pre-cap behavior. The narrowed arm is NOT in the
-    /// Bench-134 registration (the Issue-196 measured-negative lane) and
-    /// stays uncapped.
+    /// line queries are stride-capped — the whole-span query always runs;
+    /// when `RIIR_KERNEL_PREGATE_QUERY_TEXT_CAP` arms (pinned literals
+    /// 4096/2048/1024), every query text this call issues is head-truncated
+    /// to the budget bytes (Bench 135: the residual cost is
+    /// query-COUNT-invariant — the text mass is the lever). Either env
+    /// unset = the exact pre-cap behavior for that axis. The narrowed arm is
+    /// NOT in the Bench-134/136 registrations (the Issue-196
+    /// measured-negative lane) and stays uncapped.
     fn suggest_deep_into<'s>(
         &self,
         code: &str,
@@ -172,10 +177,19 @@ impl KernelIndex {
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
         match self {
-            Self::Flat(index) => match crate::kernel_pregate::line_cap() {
-                Some(cap) => index.suggest_deep_into_capped(code, top_k, scratch, cap),
-                None => index.suggest_deep_into(code, top_k, scratch),
-            },
+            Self::Flat(index) => {
+                let budget = crate::kernel_pregate::query_text_cap();
+                match crate::kernel_pregate::line_cap() {
+                    // `usize::MAX` = every significant line — the documented
+                    // uncapped spelling of the capped path (the delegation
+                    // test pins `MAX + None` ≡ `suggest_deep_into`).
+                    Some(cap) => index.suggest_deep_into_capped(code, top_k, scratch, cap, budget),
+                    None if budget.is_some() => {
+                        index.suggest_deep_into_capped(code, top_k, scratch, usize::MAX, budget)
+                    }
+                    None => index.suggest_deep_into(code, top_k, scratch),
+                }
+            }
             #[cfg(feature = "kernel_route_narrow")]
             Self::Narrowed(narrowed) => narrowed.suggest_deep_into(code, top_k, scratch),
         }
@@ -1822,7 +1836,7 @@ mod kernel_pregate_tests {
         let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
         let src = "fn main() { println!(\"hi\"); }\nstruct S { a: u32 }\n";
         let spans = m.suggest_file(src, "plain.rs", 3);
-        assert!(!spans.is_empty());
+        assert_ne!(spans, []);
         for span in &spans {
             assert!(
                 !span.by_domain.iter().any(|(d, _)| *d == DomainId::Kernel),
