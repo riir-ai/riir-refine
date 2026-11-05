@@ -621,6 +621,26 @@ impl RuleIndex {
         top_k: usize,
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
+        // `usize::MAX` = every significant line (the exact pre-cap behavior:
+        // same skips, same order, same query sequence — the capped variant's
+        // below-cap branch IS this loop).
+        self.suggest_deep_into_capped(code, top_k, scratch, usize::MAX)
+    }
+
+    /// [`Self::suggest_deep_into`] with a per-span line-query cap (Bench 134,
+    /// issue 208 T6): the whole-span query ALWAYS runs; the per-line queries
+    /// are stride-selected when they exceed `max_line_queries` (indices
+    /// `floor(i * len / cap)`, distinct ascending — uniform coverage; the
+    /// per-rule-best merge makes query order irrelevant, so selection affects
+    /// only WHICH lines are queried). `usize::MAX` = the exact uncapped path.
+    /// The allocation is one bounded scratch Vec per SPAN (never per query).
+    pub(crate) fn suggest_deep_into_capped<'s>(
+        &self,
+        code: &str,
+        top_k: usize,
+        scratch: &'s mut SuggestScratch,
+        max_line_queries: usize,
+    ) -> &'s [ScoredRule] {
         scratch.retrieved.clear();
         #[cfg(feature = "rule_embed_poc")]
         let phi_owned = self.phi_for(code);
@@ -637,17 +657,32 @@ impl RuleIndex {
         {
             self.retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
         }
+        // The significant lines (the SAME two skips as always, Issue 063:
+        // insignificant lines contribute nothing, and a line whose trimmed
+        // text IS the whole span duplicates the whole-span query).
+        let mut significant = Vec::new();
         for line in code.lines() {
             let trimmed = line.trim();
-            // Two skips, both output-identical by construction (Issue 063):
-            // insignificant lines contribute nothing, and a line whose
-            // trimmed text IS the whole span (single-line spans) is a
-            // duplicate of the whole-span query — same query, same results,
-            // already merged by `rank_into`'s per-rule best.
             if trimmed.len() <= 8 || trimmed == code {
                 continue;
             }
-            self.retrieve_scored_into(trimmed, &mut scratch.retrieved, &mut scratch.retrieval);
+            significant.push(trimmed);
+        }
+        if significant.len() <= max_line_queries {
+            for line in &significant {
+                self.retrieve_scored_into(line, &mut scratch.retrieved, &mut scratch.retrieval);
+            }
+        } else {
+            // Stride selection over `significant` (len > cap here, so the
+            // indices are strictly ascending and distinct).
+            for i in 0..max_line_queries {
+                let idx = i * significant.len() / max_line_queries;
+                self.retrieve_scored_into(
+                    significant[idx],
+                    &mut scratch.retrieved,
+                    &mut scratch.retrieval,
+                );
+            }
         }
         self.rank_into(
             phi,
@@ -793,6 +828,59 @@ mod tests {
             hits[0].rule_id, "needless-return",
             "top-1 must be the return-shape rule, got {hits:?}"
         );
+    }
+
+    // ── Bench 134 (issue 208 T6): the per-span line-query cap ───────────
+
+    #[test]
+    fn capped_at_max_is_byte_identical_to_uncapped() {
+        let index = RuleIndex::build(mini_corpus()).expect("build");
+        let code = "fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n    let mut found: Option<&User> = None;\n    for u in users.iter() {\n        if u.id == id { found = Some(u); }\n    }\n    found\n}";
+        let mut s1 = SuggestScratch::default();
+        let mut s2 = SuggestScratch::default();
+        let a = index.suggest_deep_into(code, 3, &mut s1);
+        let b = index.suggest_deep_into_capped(code, 3, &mut s2, usize::MAX);
+        assert_eq!(a.len(), b.len());
+        for (x, y) in a.iter().zip(b.iter()) {
+            assert_eq!(x.rule_id, y.rule_id);
+            assert_eq!(x.score, y.score, "scores must be bit-identical at MAX");
+        }
+    }
+
+    #[test]
+    fn cap_preserves_the_top_rule_on_a_line_heavy_span() {
+        let index = RuleIndex::build(mini_corpus()).expect("build");
+        // A line-heavy span whose interior instantiates the o1-lookup rule.
+        let mut code =
+            String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
+        for i in 0..60 {
+            code.push_str(&format!(
+                "    let pad_{i} = {i} + some_padding_value_{i};\n"
+            ));
+        }
+        code.push_str(
+            "    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}",
+        );
+        let mut s1 = SuggestScratch::default();
+        let mut s2 = SuggestScratch::default();
+        let uncapped = index.suggest_deep_into(&code, 3, &mut s1);
+        let capped = index.suggest_deep_into_capped(&code, 3, &mut s2, 2);
+        assert!(!uncapped.is_empty());
+        assert_eq!(
+            capped[0].rule_id, uncapped[0].rule_id,
+            "the cap must preserve the rank-1 rule on a line-heavy span (the whole-span query dominates; stride selection keeps body coverage)"
+        );
+    }
+
+    #[test]
+    fn cap_below_max_queries_fewer_lines_but_same_whole_span() {
+        // Behavior guard: the capped path still runs the whole-span query
+        // (the span itself is significant), so an empty cap result is a bug.
+        let index = RuleIndex::build(mini_corpus()).expect("build");
+        let code = "fn compute(x: i32) -> i32 {\n    let a = first_step(x);\n    let b = second_step(a);\n    return b * 2;\n}";
+        let mut s = SuggestScratch::default();
+        let capped = index.suggest_deep_into_capped(code, 3, &mut s, 1);
+        assert!(!capped.is_empty(), "the whole-span query always runs");
     }
 
     #[test]

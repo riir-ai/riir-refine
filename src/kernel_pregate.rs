@@ -32,6 +32,10 @@ pub const SPAN_SCOPE_WINDOW_LINES: usize = 24;
 /// once per process. Without it the feature arms the file-level GATE arm.
 const SCOPE_ENV: &str = "RIIR_KERNEL_PREGATE_SCOPE";
 
+/// The line-cap switch (Bench 134's CAP arms): promote-only env, the exact
+/// pinned literals `4`/`2` — see [`line_cap`].
+const LINE_CAP_ENV: &str = "RIIR_KERNEL_PREGATE_LINE_CAP";
+
 /// The pinned needle set (Bench 131, pinned pre-run; widening is a NEW
 /// pre-registration). Case-insensitive ASCII substring over the raw source;
 /// `.wgsl` paths always signal. `cube` deliberately subsumes `cubecl` and
@@ -130,6 +134,21 @@ pub fn span_in_scope(start_line: usize, end_line: usize, signal_lines: &[u32]) -
 fn scope_armed() -> bool {
     static ARMED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ARMED.get_or_init(|| matches!(std::env::var(SCOPE_ENV).as_deref(), Ok("1" | "true" | "on")))
+}
+
+/// The per-span line-query cap (Bench 134, issue 208 T6): promote-only env
+/// `RIIR_KERNEL_PREGATE_LINE_CAP` — arms ONLY on the exact pinned literals
+/// `"4"` and `"2"` (any other value is unset-equivalent, never armed; the
+/// env-switch law). Read once per process. `None` = uncapped (the exact
+/// pre-cap behavior).
+#[must_use]
+pub fn line_cap() -> Option<usize> {
+    static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    *CAP.get_or_init(|| match std::env::var(LINE_CAP_ENV).as_deref() {
+        Ok("4") => Some(4),
+        Ok("2") => Some(2),
+        _ => None,
+    })
 }
 
 /// The explicit-`--domain kernel` bypass (the operator asked for the domain,

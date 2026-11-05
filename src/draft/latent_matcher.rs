@@ -158,7 +158,13 @@ impl KernelIndex {
     }
 
     /// Dispatch the multi-scale suggest — flat self, narrowed via the
-    /// slice+tail retrieval (Issue 196).
+    /// slice+tail retrieval (Issue 196). The FLAT arm honors the kernel
+    /// pregate's per-span line-query cap (Bench 134, issue 208 T6): when
+    /// `RIIR_KERNEL_PREGATE_LINE_CAP` arms (pinned literals 4/2), per-span
+    /// line queries are stride-capped — the whole-span query always runs.
+    /// `None` = the exact pre-cap behavior. The narrowed arm is NOT in the
+    /// Bench-134 registration (the Issue-196 measured-negative lane) and
+    /// stays uncapped.
     fn suggest_deep_into<'s>(
         &self,
         code: &str,
@@ -166,7 +172,10 @@ impl KernelIndex {
         scratch: &'s mut SuggestScratch,
     ) -> &'s [ScoredRule] {
         match self {
-            Self::Flat(index) => index.suggest_deep_into(code, top_k, scratch),
+            Self::Flat(index) => match crate::kernel_pregate::line_cap() {
+                Some(cap) => index.suggest_deep_into_capped(code, top_k, scratch, cap),
+                None => index.suggest_deep_into(code, top_k, scratch),
+            },
             #[cfg(feature = "kernel_route_narrow")]
             Self::Narrowed(narrowed) => narrowed.suggest_deep_into(code, top_k, scratch),
         }
