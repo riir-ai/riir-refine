@@ -1,0 +1,26 @@
+# Issue 200 C1 — the FIXER TIER stub (the `fixer_regate` bin migrates here
+# in C2). Inner workspace member: `default-members = ["."]` keeps every root
+# gate and the charitable posture on the core alone; tier builds are
+# explicit (`-p riir-refine-fixer`).
+[package]
+name = "riir-refine-fixer"
+# Rides the product version: the migrated bin's `env!("CARGO_PKG_VERSION")`
+# (and any ledger row carrying it) must stay byte-identical across the move.
+version = "0.4.2"
+edition = "2021"
+publish = false
+
+[dependencies]
+# The core rulewright (this repo's root package). Features are FORWARDED,
+# never duplicated: the tier adds no new heavy dep to the graph (issue 200,
+# verdict round 4) — it turns ON the root's existing optional seams in its
+# own manifest, where feature unification cannot reach the default posture.
+riir-refine = { path = "../..", default-features = false }
+
+[features]
+default = []
+# Forwarded EXACTLY per issue 200 C2: `cf_workers_ai` already implies
+# `kat_service` core-side, so `kat_service`/`kat_transport` are deliberately
+# NOT re-declared here — the commercial KAT lane stays default-OFF (the
+# issue 190 T14 discipline carried up a layer).
+cf_workers_ai = ["riir-refine/cf_workers_ai"]

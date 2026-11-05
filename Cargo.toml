@@ -12,6 +12,20 @@ publish = false
 name = "riir_refine"
 path = "src/lib.rs"
 
+# Issue 200 C1 — the root-package workspace (the riir-infer shape): the root
+# package is the core rulewright and the ONLY default member, so every bare
+# cargo command (and every pre-existing guard layer) stays root-scoped
+# byte-identically — the charitable posture (issue 190 T14) is untouched and
+# the tier binaries build explicitly (`-p riir-refine-fixer`). exclude holds
+# the nested Cargo.tomls that are their own cargo projects (the
+# wasm-validator-build lane's validator_src/, the patched vendor/ mirrors,
+# .refine/v3live) and the Lean tree — the shared workspace resolution must
+# never absorb them as members.
+[workspace]
+members = [".", "crates/riir-refine-fixer", "crates/riir-refine-trainer"]
+default-members = ["."]
+exclude = ["validator_src", "vendor", ".refine", ".proofs"]
+
 [dependencies]
 # Public substrate: ConstraintPruner trait + ternary SIMD matvec
 katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", default-features = false, features = ["entropic_tilt", "rating", "best_belief", "plasma_path"] }

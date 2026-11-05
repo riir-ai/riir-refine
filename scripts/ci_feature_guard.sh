@@ -304,6 +304,29 @@ fi
 echo "✓ every tests/*.rs target ran at least one test"
 
 echo
+echo "=== Layer 5t: tier crates (issue 200) at their feature extremes ==="
+# The root-package workspace's tier members (crates/riir-refine-fixer +
+# crates/riir-refine-trainer) are NOT covered by Layers 1–5d: those are
+# default-members-scoped (the root only, by design — the charitable posture
+# must not pay the tiers' deps), and --workspace would pull the tiers into
+# every root layer (feature unification reaching the default posture is
+# exactly what the inner-crate shape exists to prevent). This layer is the
+# tiers' coverage owner: clippy at BOTH feature extremes + the full test
+# surface at all-features — which compiles + runs the migrated bins'
+# unit-test modules (kat_drain's 25 offline tests moved here from Layer 5c
+# when the bin left the root package; fixer_regate has none, measured, and
+# the fixer lib is a charter stub — a legitimate running-0 there).
+# Required-features keep the bins skipped at the bare posture: cargo reports
+# the skip, and no target compiles to nothing behind a `#![cfg]` — the
+# tier-level green-zero class is the --tests arm's job to surface.
+for tier in riir-refine-fixer riir-refine-trainer; do
+    cargo clippy -p "$tier" --all-targets --no-default-features -- -D warnings
+    cargo clippy -p "$tier" --all-targets --all-features -- -D warnings
+    cargo test -p "$tier" --all-features --tests
+done
+echo "✓ tier crates clean (both feature extremes + all-features tests)"
+
+echo
 echo "=== Layer 6: deploy-token guard (the local dev-lane credential law) ==="
 # The owner deploy-token law (runbook: ../riir-deployer/.docs/02_runbooks/deploy_tokens.md):
 # local env files carry ONLY CLOUDFLARE_DEPLOY_API_TOKEN (dev-lane scoped) —

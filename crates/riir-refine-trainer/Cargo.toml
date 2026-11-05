@@ -1,0 +1,26 @@
+# Issue 200 C1 — the TRAINER TIER stub (the `kat_drain` bin migrates here in
+# C2). Superset of the fixer tier: it path-deps the fixer crate (intra-repo
+# edge — the approved composition shape) and adds the drain features.
+[package]
+name = "riir-refine-trainer"
+# Rides the product version: `kat_drain` stamps `env!("CARGO_PKG_VERSION")`
+# into its cost/quality ledger rows — byte-identical across the move.
+version = "0.4.2"
+edition = "2021"
+publish = false
+
+[dependencies]
+riir-refine = { path = "../..", default-features = false }
+riir-refine-fixer = { path = "../riir-refine-fixer" }
+
+[features]
+default = []
+# Forwarded EXACTLY per issue 200 C2: the drain routes groq-first with the
+# CF fallback (issue 051) — both are core seams, forwarded with their fixer
+# superset halves; `kat_service`/`kat_transport` ride `cf_workers_ai`
+# core-side and are NOT re-declared here.
+cf_workers_ai = [
+    "riir-refine/cf_workers_ai",
+    "riir-refine-fixer/cf_workers_ai",
+]
+groq_first = ["riir-refine/groq_first"]

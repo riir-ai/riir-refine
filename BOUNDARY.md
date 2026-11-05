@@ -22,6 +22,30 @@ plane, transports — 25 modules) moved to the sibling leaf crate
 rulewright-coupled `kat_sync_payload` + `kat_pending_estimator` (traj_store)
 and `kat_promotion` (score_bench/domain).
 
+**Issue 200 (2026-11-05):** the node-composition family — TWO inner
+workspace members under the root-package workspace (`default-members =
+["."]`, so every bare cargo command and every pre-existing gate stays
+root-scoped):
+
+- `crates/riir-refine-fixer` — the FIXER TIER: the migrated `fixer_regate`
+  bin + the charter for the fail-closed OSS-class check (the owner trust
+  rule: the trust boundary follows CODE OWNERSHIP, not node class —
+  "open-source class" is checked client-side BEFORE any network connection,
+  fail-closed; anything unconfirmable is PRIVATE → self-host route).
+- `crates/riir-refine-trainer` — the TRAINER TIER: the migrated `kat_drain`
+  bin; path-dep superset of the fixer (intra-repo edge). NEVER-WRONG by
+  construction: the drain never writes a repo file.
+
+Tier law: tier manifests forward the ROOT'S EXISTING optional seams
+(`cf_workers_ai`, `groq_first`) and add NO new sibling edge to the graph —
+the shared Cargo.lock resolves every member's path deps, so each NEW tier
+sibling edge (e.g. the TUNA-client class, when the operator arms it) gets
+an allowlist row HERE before it lands (issue 200 verdict round 4). Tier
+bins are NATIVE-ONLY — never join a wasm32 combo (the `hero_planner`
+posture). `riir-llm` (hosted options) and `riir-infer` serving (opt-in
+`ternary_inference`) stay root-allowlisted rows, reachable by the tiers
+through the core's features.
+
 ## Does not own
 
 | Concern | Correct home |
