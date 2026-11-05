@@ -293,9 +293,10 @@ impl NarrowedKernelIndex {
             if slice.is_empty() {
                 continue;
             }
-            slice.retrieve_scored_into(code, &mut scratch.retrieved);
+            slice.retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
         }
-        self.tail.retrieve_scored_into(code, &mut scratch.retrieved);
+        self.tail
+            .retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
         for line in code.lines() {
             let trimmed = line.trim();
             // The same two skips as the flat multi-scale path (Issue 063):
@@ -309,10 +310,10 @@ impl NarrowedKernelIndex {
                 if slice.is_empty() {
                     continue;
                 }
-                slice.retrieve_scored_into(trimmed, &mut scratch.retrieved);
+                slice.retrieve_scored_into(trimmed, &mut scratch.retrieved, &mut scratch.retrieval);
             }
             self.tail
-                .retrieve_scored_into(trimmed, &mut scratch.retrieved);
+                .retrieve_scored_into(trimmed, &mut scratch.retrieved, &mut scratch.retrieval);
         }
         merge_retrieved_best(
             &self.zone_lookup,
@@ -460,13 +461,15 @@ mod tests {
             for (rule_id, code) in &spans {
                 let routed = idx.router.route_top(code, k);
                 let mut retrieved: Vec<riir_rag::RetrievedChunk> = Vec::new();
+                let mut retrieval = riir_rag::retriever::RetrievalScratch::default();
                 for slice_i in &routed {
                     let slice = &idx.slices[*slice_i];
                     if !slice.is_empty() {
-                        slice.retrieve_scored_into(code, &mut retrieved);
+                        slice.retrieve_scored_into(code, &mut retrieved, &mut retrieval);
                     }
                 }
-                idx.tail.retrieve_scored_into(code, &mut retrieved);
+                idx.tail
+                    .retrieve_scored_into(code, &mut retrieved, &mut retrieval);
                 // Multi-scale: the line queries ride the same K slices.
                 for line in code.lines() {
                     let trimmed = line.trim();
@@ -476,10 +479,11 @@ mod tests {
                     for slice_i in &routed {
                         let slice = &idx.slices[*slice_i];
                         if !slice.is_empty() {
-                            slice.retrieve_scored_into(trimmed, &mut retrieved);
+                            slice.retrieve_scored_into(trimmed, &mut retrieved, &mut retrieval);
                         }
                     }
-                    idx.tail.retrieve_scored_into(trimmed, &mut retrieved);
+                    idx.tail
+                        .retrieve_scored_into(trimmed, &mut retrieved, &mut retrieval);
                 }
                 let mut best = std::collections::HashMap::new();
                 crate::draft::corpus_index::merge_retrieved_best(

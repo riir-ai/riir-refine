@@ -57,9 +57,11 @@ pub struct ScoredRule {
 /// Owned by the caller (the [`LatentMatcher`](super::LatentMatcher) holds
 /// one) and threaded through `*_into` calls — capacities stabilize across
 /// queries, so steady-state scanning grows nothing. Remaining per-query
-/// allocations are bounded: the substrate's per-`retrieve()` candidate `Vec`
-/// (≤ `latent_k` + `bm25_k`) + ≤ one rule-id `String` per distinct retrieved
-/// rule + the output clone.
+/// allocations are bounded: ≤ one rule-id `String` per distinct retrieved
+/// rule + the output clone (the substrate scratch — the candidate `Vec` +
+/// `by_zone` map + the two-stage scan buffers — moved into this struct by
+/// Issue 191 T7, so the per-line loop pays its fixed allocations once per
+/// SCRATCH, not once per call).
 #[derive(Default)]
 pub struct SuggestScratch {
     /// Accumulated retrieved candidates across the multi-scale queries of
@@ -67,6 +69,14 @@ pub struct SuggestScratch {
     /// so the Issue-196 narrowed kernel index reuses the SAME scratch
     /// (one caller-owned buffer, the G4 discipline).
     pub(crate) retrieved: Vec<riir_rag::RetrievedChunk>,
+    /// The substrate retrieval scratch (candidate `Vec` + `by_zone` map +
+    /// the two-stage scan buffers). Cleared at entry by every
+    /// `retrieve_for_scoring_into` call (no cross-call state — the
+    /// substrate's determinism contract), so one instance per `SuggestScratch`
+    /// is correct for the whole multi-scale loop. Byte-identical results to
+    /// the fresh-allocation path, pinned by riir-rag's
+    /// `retrieve_for_scoring_into_matches_plain` contract test.
+    pub(crate) retrieval: riir_rag::retriever::RetrievalScratch,
     /// Per-rule best score accumulator (cleared via `drain` per call — the
     /// owned keys move straight into `ranked`).
     pub(crate) best: HashMap<String, f32>,
@@ -575,7 +585,7 @@ impl RuleIndex {
         // scores only, so the packed `retrieve()` path's content Strings +
         // source lookups were 100% discarded work — measured 53-61% of each
         // retrieve call (the gate's G2 latency overrun).
-        self.retrieve_scored_into(code, &mut scratch.retrieved);
+        self.retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
         self.rank_into(
             phi,
             &scratch.retrieved,
@@ -625,7 +635,7 @@ impl RuleIndex {
             }
         };
         {
-            self.retrieve_scored_into(code, &mut scratch.retrieved);
+            self.retrieve_scored_into(code, &mut scratch.retrieved, &mut scratch.retrieval);
         }
         for line in code.lines() {
             let trimmed = line.trim();
@@ -637,7 +647,7 @@ impl RuleIndex {
             if trimmed.len() <= 8 || trimmed == code {
                 continue;
             }
-            self.retrieve_scored_into(trimmed, &mut scratch.retrieved);
+            self.retrieve_scored_into(trimmed, &mut scratch.retrieved, &mut scratch.retrieval);
         }
         self.rank_into(
             phi,
@@ -723,10 +733,22 @@ impl RuleIndex {
     /// Issue-196 narrowed kernel index (which queries its per-category
     /// sub-indices through this method, never the substrate directly).
     /// Score-only packed path: no content/source loads (Issue 063 law).
-    pub(crate) fn retrieve_scored_into(&self, text: &str, out: &mut Vec<riir_rag::RetrievedChunk>) {
+    ///
+    /// Issue 191 T7: the substrate half of the call runs through the
+    /// scratch-reuse twin (`retrieve_for_scoring_into`) — `retrieval` carries
+    /// the candidate `Vec` + `by_zone` map + the two-stage scan buffers
+    /// across the per-line loop instead of reallocating them per call.
+    /// Byte-identical results (substrate contract test); the scratch is
+    /// cleared at entry, so no state crosses calls.
+    pub(crate) fn retrieve_scored_into(
+        &self,
+        text: &str,
+        out: &mut Vec<riir_rag::RetrievedChunk>,
+        retrieval: &mut riir_rag::retriever::RetrievalScratch,
+    ) {
         let query = self.query_for(text);
-        let mut retrieved = self.retriever.retrieve_for_scoring(&query);
-        out.append(&mut retrieved);
+        let retrieved = self.retriever.retrieve_for_scoring_into(&query, retrieval);
+        out.append(retrieved);
     }
 }
 
