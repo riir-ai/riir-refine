@@ -15653,6 +15653,13 @@ fn main() {
     // cfg-gated block — a plain let-chain would need the same cfg pair
     // on a variable initializer (the immediately-invoked-closure idiom,
     // lint-flagged under this feature union; allow is the honest shape).
+    // ⏱️ (P-PAR, 2026-11-05): the run-wall clock + the clippy-oracle share —
+    // one end-of-run line so a slow run's blame lands on the right lane
+    // (the oracle is CARGO CLIPPY COMPILING the workspace, not refine).
+    let run_started = std::time::Instant::now();
+    // ⏱️ the clippy-oracle share: set ONLY inside the auto-oracle arm (a
+    // manual feed is a file read, not a compile — never labeled clippy).
+    let mut oracle_secs = 0.0f32;
     #[allow(clippy::redundant_closure_call)]
     let mut matcher = (|| {
         #[cfg(any(feature = "kat_service", feature = "points"))]
@@ -16156,12 +16163,20 @@ fn main() {
                 // census — the gated code the P43 class compiles to nothing
                 // at one posture is linted at another. Every failure mode
                 // lands in a disclosed field; nothing here aborts the run.
+                // ⏱️ the owner's UX law (2026-11-05): name the lane BLUNTLY —
+                // a user watching minutes of compile thinks cargo refine is
+                // slow; this is cargo clippy compiling THEIR workspace.
+                eprintln!(
+                    "⏳ clippy oracle (auto): this is CARGO CLIPPY compiling the workspace — cargo refine is waiting, not working; the ⏱️ line at run end splits the two"
+                );
+                let oracle_session_started = std::time::Instant::now();
                 let session = riir_refine::clippy_oracle::run_oracle_session(
                     &root,
                     &cargo_bin,
                     features.as_deref(),
                     all_targets,
                 );
+                oracle_secs = oracle_session_started.elapsed().as_secs_f32();
                 // ── the gap disclosures (stderr; the feed stays
                 // stdout-shaped). Opting out is quiet by design (the
                 // RIIR_REFINE_AUTO_ORACLE=0 law): GAP_ARM=0 prints nothing.
@@ -16528,18 +16543,22 @@ fn main() {
         scan_parallel = false;
     }
     let build_scan_matcher = || -> Result<riir_refine::draft::LatentMatcher, String> {
-        let base = (|| {
+        // The cfg-selected base (no IIFE — `redundant_closure_call`): a
+        // `match ()` arm per posture, each arm the same value the closure
+        // returned there.
+        let base = match () {
             #[cfg(any(feature = "kat_service", feature = "points"))]
-            if let Some((_, ref overlay)) = run_overlay {
-                return riir_refine::draft::LatentMatcher::from_enabled_domains_with_overlay(
-                    overlay,
-                );
+            () => {
+                if let Some((_, ref overlay)) = run_overlay {
+                    riir_refine::draft::LatentMatcher::from_enabled_domains_with_overlay(overlay)
+                } else {
+                    riir_refine::draft::LatentMatcher::from_enabled_domains()
+                }
             }
             #[cfg(not(any(feature = "kat_service", feature = "points")))]
-            let _ = &();
-            riir_refine::draft::LatentMatcher::from_enabled_domains()
-        })()?;
-        let mut m = base;
+            () => riir_refine::draft::LatentMatcher::from_enabled_domains(),
+        };
+        let mut m = base?;
         m = m.with_active_set(active_set.clone());
         #[cfg(feature = "demonstrability_gate")]
         if let Some(root) = resolve_corpus_repo_root() {
@@ -16549,17 +16568,46 @@ fn main() {
         }
         Ok(m)
     };
+    let scan_started = std::time::Instant::now();
     let pre_scanned: Vec<PreScannedFile> = if scan_parallel {
         let threads = std::thread::available_parallelism()
             .map_or(4usize, |n| n.get())
             .min(8)
             .min(files.len());
-        let chunk_len = files.len().div_ceil(threads.max(1));
+        // Byte-weighted contiguous ranges (P-PAR): file-count chunks let one
+        // monster file pin its whole chunk (the 1.5 MB feat-map lib.rs made
+        // one thread eat half the 15.7 s wall on seal-game-editor). A greedy
+        // prefix split on metadata sizes keeps every slice contiguous —
+        // results concatenate in file order, byte-identical — while
+        // balancing bytes per thread.
+        let sizes: Vec<u64> = files
+            .iter()
+            .map(|f| std::fs::metadata(f).map_or(0u64, |m| m.len()))
+            .collect();
+        let total_bytes: u64 = sizes.iter().sum();
+        let target = (total_bytes / u64::from(threads as u32).max(1)).max(1);
+        let mut ranges: Vec<(usize, usize)> = Vec::with_capacity(threads);
+        let mut range_start = 0usize;
+        let mut acc = 0u64;
+        for (i, &sz) in sizes.iter().enumerate() {
+            acc += sz;
+            if threads.saturating_sub(ranges.len() + 1) == 0 {
+                break; // the last range takes the whole tail
+            }
+            if acc >= target && i + 1 > range_start {
+                ranges.push((range_start, i + 1));
+                range_start = i + 1;
+                acc = 0;
+            }
+        }
+        if range_start < files.len() {
+            ranges.push((range_start, files.len()));
+        }
         // Pre-build per-thread matchers serially: a build failure here is
         // the same loud exit the single-matcher build has, before any
         // thread starts.
-        let mut thread_matchers = Vec::with_capacity(threads);
-        for _ in 0..threads {
+        let mut thread_matchers = Vec::with_capacity(ranges.len());
+        for _ in 0..ranges.len() {
             match build_scan_matcher() {
                 Ok(m) => thread_matchers.push(m),
                 Err(e) => {
@@ -16568,15 +16616,18 @@ fn main() {
                 }
             }
         }
-        std::thread::scope(|s| {
-            let handles: Vec<_> = files
-                .chunks(chunk_len)
+        let files_ref = &files;
+        let scan_started = std::time::Instant::now();
+        let pre = std::thread::scope(|s| {
+            let handles: Vec<_> = ranges
+                .iter()
                 .zip(thread_matchers.iter_mut())
-                .map(|(chunk, m)| {
+                .map(|(range, m)| {
+                    let (lo, hi) = *range;
                     let feed_ref = clippy_feed.as_deref();
                     let hot_ref = hotpath_spans.as_deref();
                     s.spawn(move || {
-                        chunk
+                        files_ref[lo..hi]
                             .iter()
                             .map(|f| {
                                 scan_one_file(
@@ -16600,9 +16651,10 @@ fn main() {
                 }
             }
             all
-        })
+        });
+        pre
     } else {
-        files
+        let pre = files
             .iter()
             .map(|f| {
                 scan_one_file(
@@ -16614,8 +16666,10 @@ fn main() {
                     hotpath_spans.as_deref(),
                 )
             })
-            .collect()
+            .collect();
+        pre
     };
+    let scan_secs = scan_started.elapsed().as_secs_f32();
 
     for (file, scanned) in files.iter().zip(pre_scanned) {
         let PreScannedFile {
@@ -18761,6 +18815,22 @@ fn main() {
         n_suggestions,
         args.top_k
     );
+    // ⏱️ (P-PAR, 2026-11-05): the one-line blame split — the clippy-oracle
+    // share (CARGO CLIPPY compiling the workspace, base + gap passes) vs the
+    // scan (the parallel precompute) vs the whole run. The clippy slot is
+    // present only when the auto-oracle spawned (a manual feed is a file
+    // read, not a compile).
+    {
+        let mut line = String::from("⏱️");
+        if oracle_secs > 0.0 {
+            line.push_str(&format!(" clippy {oracle_secs:.1}s |"));
+        }
+        line.push_str(&format!(
+            " scan {scan_secs:.1}s | refine {:.1}s",
+            run_started.elapsed().as_secs_f32()
+        ));
+        println!("{line}");
+    }
     // Plan 329 P2: the verify refusal roll-up — silent-when-zero, like
     // the findings roll-up above.
     #[cfg(feature = "fix_verify")]
