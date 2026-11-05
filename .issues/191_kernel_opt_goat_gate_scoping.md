@@ -4,6 +4,7 @@
 **Delegated-owner verdict 2026-11-04 (request session fe55a9d0, claude_code reviewer; AGREE, recorded per the delegated-owner flow): BOTH remaining fences adjudicated. (D1) The CPU-portable G2 axis is CLOSED with the measured disclosure (tranche median 1.0000 recorded — the axis structurally cannot express GPU-shaped wins; measured evidence, not a retune). The RE-CAMPAIGN G2 is the GPU-host microbench on the 4090 (`agent-mail rig run 4090 --exclusive`), the pre-registered ≥ 6% median bar UNCHANGED, and PRE-REGISTRATION IS REQUIRED BEFORE ANY RUN (T6's three conditions). (D2) The G5-cost fence STAYS — the ≤ 1.0 ms/file ceiling is never re-registered after a failing measurement; the substrate lever has since LANDED as riir-neuron-db Issue 642 (2026-11-03: `two_stage_oversample = Some(4)` measured 4.7×/call at the loop corpus + the scratch-reuse twins `retrieve_diverse[_two_stage]_into` / `DiverseScanScratch` shipped; ndb's projected refine loop scale 4.37 → 0.92 ms/file), so the fence clears via the REFINE-SIDE lane (T7): adopt the scratch twins in the per-line suggest loop + re-run the G5 cost harness on the REGISTERED corpus with the same p50 definition + box provenance — the fence clears iff p50 ≤ 1.0 ms THERE (ndb's number is ndb's corpus; the gap vs Bench 125's 38.795 ms settles at the re-measure). Promotion still requires BOTH G2(GPU-host) AND G5-cost. While recording: T3 verified LANDED (`mod.rs::context_notes` propagates the G1-record annotation; `verify.rs` consumes `g1_opt_backed` + the digest-keyed verdict store) — ticked below. Re-campaign sequence: T6 ∧ T7 → re-run G1+G3+G4+G5 → promotion verdict.
 **Lease closed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1–T5 executed and pushed (T2 `a9703c00a`, T3 `82b77f88b`, T4 `2ff3c0a61`, T5 `96f3733ee`, record `a0a751d25`); the delegated ratification verdict (AGREE, all five checks, two non-blocking nits fixed/deferred) closed the campaign.
 **Claimed:** zed-m3-i191t7, 1793839152, expires 2026-11-07T00:39:12+00:00 — T7 (the G5-cost clearing lane) only; T6 stays parked (4090 busy + sequenced behind v0.4.0 publish / the 202·190·198·192 records).
+**Lease closed:** zed-m3-i191t7, 1793839152, was expires 2026-11-07T00:39:12+00:00 — T7 executed + landed the same session (`77f7e46a9`, Bench 129): the adoption landed, the fence verdict FAIL recorded, T6 remains parked (4090 busy + owner sequencing).
 
 ## The question
 
@@ -196,7 +197,7 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       v0.4.0 publish + the 202/190/198/192 records (owner: "and 191 later"). The
       pre-registration record lands FIRST (the three conditions), then the harness lane, then
       the run.**
-- [ ] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
+- [x] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
       2026-11-03): adopt the scratch-reuse twins (`ShardIndex::retrieve_diverse_two_stage_into`
       + `DiverseScanScratch`) in the per-line suggest loop (`corpus_index.rs::suggest_deep_into`
       — today every per-line call allocates fresh candidates), then re-run the G5 cost harness
@@ -205,6 +206,20 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       provenance. The fence clears iff added p50 ≤ 1.0 ms/file THERE. Claim first; run alone.
       ⛔ A fix that shrinks or reshapes the scanned-file mix is a different measurement, not a
       pass (the D2 condition).
+      **— EXECUTED 2026-11-05 (zed-m3-i191t7, lease below; `77f7e46a9` + Bench 129): the
+      adoption LANDED (byte-identical, floors held at every standing posture: latent_retrieval
+      full lib 3036/0 · kernel_opt 3390/0 · narrow battery 6/0 · clippy −D ×4 postures), the
+      FENCE DOES NOT CLEAR — added p50 33.127 ms/file (flat) / 37.306 (narrow) vs the ≤ 1.0
+      ceiling. The lever measured −9% flat / −19% narrow (vs Bench 126's 36.346/45.849) on a
+      LARGER corpus+walk (+4 kernel rules, +28 files) — real, but the remaining cost is the
+      per-line query mass itself (query_for + the O(N) scan over 1053 shards per line query),
+      structural, not allocation. Per D2 the ceiling is never re-registered; the fence STAYS
+      failing and the re-campaign remains blocked on BOTH G2(GPU-host, T6 — parked: 4090 busy
+      + the owner's sequencing) and G5-cost. The next lever is a retrieval-contract design
+      change (cap/batch the per-line queries, cheaper first-pass scan key, or narrowed shape
+      at reduced K) — owner-visible, never a silent tuning pass. Side finding filed: Issue 207
+      (the narrow-posture retrieval floor decayed pre-existing on clean develop, byte-identical
+      with/without T7).**
 
 ## Refs
 
