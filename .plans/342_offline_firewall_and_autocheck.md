@@ -1,6 +1,6 @@
 # 342 — the offline firewall + the run-start auto-check + the settings.toml surface
 
-**Status:** LANDED — code 530979967 (2026-11-05); distribution + rig e2e in flight
+**Status:** DONE — code 530979967; distributed m3+amo (aa2fbb491 build) + 4090 (on-box build); e2e green on all three rigs (bmo skipped per the ask), 2026-11-05
 
 The owner's five asks (2026-11-05): (1) auto-check app + corpus before any
 `cargo refine`; (2) `cargo refine off --auto-update` with the same on/off
@@ -58,9 +58,9 @@ saved config is a well-commented TOML. Then re-distribute + e2e every rig
       bullets (the settings.toml shape + the promotion note).
 - [x] clippy `-D warnings` at the build posture + fmt + tests green;
       commit + push (fix/feat prefix, Session line).
-- [ ] Distribute: m3 rebuild (symlink target in place), amo scp (same
+- [x] Distribute: m3 rebuild (symlink target in place), amo scp (same
       triple), 4090 gitsync + on-box build + cp install.
-- [ ] E2E every rig (skip bmo): version → `off --auto-update` (settings
+- [x] E2E every rig (skip bmo): version → `off --auto-update` (settings
       file + comments asserted) → bare `off` status → `on --auto-update` →
       `offline` marker → `update` refuses (firewall) → `online` reminder →
       `update` works again.
