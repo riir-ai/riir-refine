@@ -1,7 +1,7 @@
 # Issue 208 — the kernel pregate: detect kernel-bearing files BEFORE the kernel matcher fans out, then scope the fan-out to the indexed/mapped files only (the G5-cost clearing lane)
 
 **Status:** OPEN — T1–T7 LANDED; the G5-cost fence CLEARS (Bench 137: marginal, confirmed alone — p95 42.8 → 4.7 ms at QUERY_TEXT_CAP=2048, 1.07× headroom; 3.4 ms at 1024, 1.49×) with the utility floor 15/15 held; the cap is deterministic-lossy (109/664 rank-1 flips at the TC2048 candidate, identical across sessions) so the bundle's promotion into the Issue-191 re-campaign is OWNER-GATED per Bench 136's pre-pin (no 0-flip clearing arm exists — the owner picks 2048 vs 1024 vs decline; the non-lossy complement is riir-neuron-db Issue 642). T1–T6 records in HISTORY and the bench table below. ("a cheaper first-pass scan key"), owner-directed 2026-11-05. The G5-cost fence (added p50 ≤ 1.0 / p95 ≤ 5.0 ms per file, never re-registered per the 2026-11-04 D2 verdict) fails at 33×–39× because the flat 1053-rule kernel matcher queries EVERY span of EVERY file in the scan walk — 483/594 files pay > 1 ms added to learn they hold no kernel code. This lane gates the kernel domain's fan-out behind a cheap, recall-biased kernel-signal detector (file-level), then scopes within signaled files (span-level). Disjoint from Issue 191 T6 (the GPU-host G2 leg, leased zed-m3-i191t6) — this is the T7-side cost axis.
-**Claimed:** zed-m3-i208pregate, 1793883835, expires 2026-11-07T13:03:55+00:00
+**Lease closed:** zed-m3-i208pregate, 1793883835 (held to expiry 2026-11-07T13:03:55+00:00) — T1–T7 landed through dcae10aa4; the remaining item (bundle promotion) is OWNER-GATED, no active claim
 
 ## Premise (from the measured record, not new claims)
 
