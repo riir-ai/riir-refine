@@ -1196,6 +1196,71 @@ advisory corpus annotation (annotations carry no GOAT gate). Issue file
 removed per the noise-reduction rule — full arc in git history
 (`git log --follow -- .issues/206_probe_authored_corpus_repair.md`).
 
+## 2026-11-06 — the scan perf lane LANDED: parallel precompute (3.4×) + byte-weighted ranges + the ⏳/⏱ run-cost lines (owner UX ask, no issue file)
+
+The serial per-file scan was the run's floor. `374394d0f`: read + secret + suggest
+hoisted into a scoped-thread PARALLEL phase, default-on
+(`RIIR_REFINE_SCAN_PARALLEL=0` demotes byte-identically) — `suggest_file(&mut)`
+stays single-threaded by the G4-scratch discipline, so each thread rebuilds its
+OWN matcher at the identical posture (lease overlay + active-set + standing
+depth policy); the armed escalation seat keeps serial (the hosted
+deadline/rate-latch contract); matcher-build failure exits loud pre-thread;
+thread panics propagate via `resume_unwind`. Measured A/B same binary on
+seal-game-editor (770 files, 63 MB, ~7 ms/span): 53.3 s → 15.7 s wall (3.4×,
+8 threads), stdout byte-identical vs the serial arm, the roll-up (770 files ·
+7048 spans · 159 findings) matches. `2986c4a92`: file-count chunks let the
+1.5 MB monster file pin one thread — greedy BYTE-PREFIX ranges keep slices
+contiguous (order preserved, results byte-identical) while balancing
+bytes/thread; re-measured 17.8 s parallel vs 55.5 s serial (3.1× same build).
+The same commit adds the two UX lines the owner asked for: the
+`⏳ this is CARGO CLIPPY compiling the workspace — cargo refine is waiting, not
+working` notice at oracle spawn (an oracle-on 4-file run is 97% cargo clippy:
+31.8 s of 32.8 s), and the end-of-run `⏱ clippy | scan | refine` phase-blame
+split (only the legs that ran; the oracle-off run's scan leg is the line that
+moves). `86324551` (follow-up): dropped a dead `scan_started` shadow in the
+parallel arm — an unused-variable red that broke clippy -D warnings (Layer 5a)
+for every lane on develop; the outer binding already covers both arms. Both
+lines are in the AGENTS.md CLI UX contract (same commit). Direct owner-ask perf
+work — no issue file; the full measurements live in the two commit messages.
+
+## 2026-11-06 — Issue 209 T1–T5 LANDED: the c′ referee — telemetry before/after + the structural-identity certificate (verdicts PENDING, case #1 enrolled)
+
+`a6eb6be0` + `a7307895` (zed-ceeedd52@m3, the issue 206 delegated-owner
+follow-up): new ungated module `src/corpus_referee.rs` — a store-free state
+machine over the dependency-inverted `AttemptRow` view (the state machine + LCB
+math + verdict table test at DEFAULT features; the `TrajRowDoc` mapping is the
+one `latent_retrieval`-gated seam). T1: `BenchIdentity` — domain-separated
+BLAKE3 over the gen-N atom tables + healed output —+
+`CorpusBinding::with/verify_bench_identity`; the binding digest domain bumps
+v1 → v2 (safe: nothing persisted in the wild; the certificate folds the record
+identity; an ABSENT cert field is not an axis move — the pre-209 binding shape
+passes through). T2: `split_windows` partitions per-row `last_seen_at` vs the
+edit epoch (untouched rows = pure pre-edit evidence); controls = rules with
+evidence on BOTH sides; the control drift is a deterministic sorted median
+(`f64::midpoint` at even n). T3: the pre-registered bar =
+`best_belief_score(f_pre, s_pre, 0.025) − best_belief_score(f_post, s_post,
+0.975)` — the Bonferroni split of LCB95 across the two windows (joint ≥95% by
+the union bound; the katgpt-core `best_belief` LUT/closed form, zero new
+deps); PASS = lcb_drop > 0 ∧ drop > control drift (the DiD gate — the
+false-attribution pin); verdict states PASS / FAIL / PENDING /
+UNDECIDED-by-starvation (8-batch kill window), PENDING never folded into a
+pass; 16 tests incl. the four-state table, the DiD bind, vintage, starvation,
+and the enrollment-file round-trip + unknown-version refusal. T4:
+`corpus_diagnose --referee [<rule>]` (REPORT-ONLY; the read BUMPS the batch
+counter and persists it — a report that forgets its own observations would
+re-count the same epoch forever) + `--enroll` (atomic machine-local ledger
+`.refine/corpus_referee_enrollments.json`, unknown-version refusal). T5: case
+#1 `hashmap-with-capacity` @ ac280021 enrolled (pre snapshot 9 fails / 18
+attempts, compile bucket, edit_ts 1793793600); the live read (15 stores /
+1,557 rows): PENDING (BelowSupport) — 2/30 post-edit attempts, 6 controls; the
+snapshot-over-3-stores population bias disclosed in the enrollment record
+(conservative against PASS). Gates: 16/16 referee tests, default lib 2873/0,
+clippy −D clean at both postures (default + latent_retrieval --all-targets),
+rulewright-first mechanical fixes (6 edits via `cargo refine --verify`) +
+manual semantic fixes (`manual_midpoint`, `assert_is_empty`). The referee is
+now the STANDING read — verdicts accrue passively as the stores grow; the next
+meaningful event is a read at n ≥ 30. The issue stays OPEN until then.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
