@@ -1,6 +1,6 @@
 # Plan 344: Batch 335 — the mxfp4-int8-m5 kernel_opt distill (Research 373)
 
-**Status:** OPEN — staged, unclaimed (verdict YES B corpus / lane-intel MEDIUM-HIGH; claim row `e3e6e9aa9` + `d64eba822` discharged at the verdict commit; the batch conversion takes a FRESH claim row per the snapshot protocol)
+**Status:** OPEN — claimed (Batch 335 conversion in flight; **Claimed:** shikuwa-4090-b335, 1793878792, expires 2026-11-07T11:39:52+00:00; the walk-22 verdict claim row `e3e6e9aa9` + `d64eba822` discharged at the verdict commit)
 
 Source: `shinyoungkang1/mxfp4-int8-m5` @ `3d060c616738b980155f712a5e5505caeb32b7c2` (MIT) + arXiv 2611.00486 (the paper's own code release). Record: `.research/373_mxfp4_int8_m5_distill.md`.
 
