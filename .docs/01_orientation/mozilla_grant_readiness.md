@@ -84,13 +84,14 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 
 ## 8. Pre-deadline checklist
 
-- [ ] Owner: openness amendment decided (T1) — **by 2026-11-07**
-- [ ] Owner: event posture confirmed (T2) — **by 2026-11-07**
+- [x] Owner: openness amendment decided (T1) — **DECIDED YES 2026-10-31 (issue 192 decision 1; Proposal 025 G1); ticked 2026-11-05 (was stale vs the issue row)**
+- [x] Owner: event posture confirmed (T2) — **CONFIRMED-BY-ACT 2026-11-03 (`aea8e270`: RELEASE_FEATURES flipped to the charitable posture, v0.4.0 tagged on main); delegated ratification recorded 2026-11-04; ticked 2026-11-05 (was stale vs the issue row)**
 - [x] Evidence pack collected (T3) — landed 2026-10-31 by zed-m3-idle-ev190 → [`mozilla_evidence_pack.md`](mozilla_evidence_pack.md)
-- [ ] Charitable-build sweep passes (T14) — **requires T14a + T14b landed by 2026-11-14; blocks pilot installers**
+- [ ] Charitable-build sweep passes (T14) — **requires T14a + T14b landed by 2026-11-14; blocks pilot installers. State 2026-11-05: T14b LANDED 2026-10-31 (`a96a293f`); T14a-min LANDED (`e7cf72ea`), T14a's OPTIONAL half (riir-kat → optional dep) owner-gated; REGULAR bar LANDED (bench 123, `charitable_gate.sh`). Remaining: the T14a optional half + the strict-bar sweep run**
+- [x] IPP form answer blocks prepared (§14) — **2026-11-05 (this doc): the live IPP form (mozillafoundation.tfaforms.net/f/humanscaleai) field-mapped; drafts are agent source material, owner re-voices before submission**
 - [ ] Pilot soft launch published (T4), announcing the T11 public-repo-free policy
 - [ ] Owner: entity / fiscal sponsor path known (T5) — **by 2026-11-07**
-- [ ] Public-copy audit done (T6)
+- [ ] Public-copy audit done (T6) — **probe 2026-11-05 (zed-m3 idle lane): the gen2 copy is NOT live — refine.riir.ai still serves the pre-pivot page (mining/KAT/pricing vocabulary, Pricing + Network-pulse sections, token-&-staking-risk links). The deploy stays owner-timed (vault leg) and MUST land before submission — a reviewer clicking the application's link sees the credit plane the application says is gone. Re-probe after the leg**
 - [ ] Consult email v3 sent (~Nov 7) + info session attended (T7)
 - [ ] T11 public-repo-free policy shipped (code + README) — **by 2026-11-17**
 - [ ] No-submit gate check (T10) — **by 2026-11-17**
@@ -260,3 +261,227 @@ sense only, no sign-up UI, no beta list until W0 ships.
 - No unqualified "as small as you like" size claims — the ladder names its measured rungs;
   lighter quantization below Q8 is a recorded quality negative and is never offered.
 - No user counts, testimonials, or metrics that the evidence pack cannot pin.
+
+## 14. IPP form answer blocks (agent source material — NEVER paste-ready; form mapped live 2026-11-05)
+
+The live form (`mozillafoundation.tfaforms.net/f/humanscaleai`, fetched 2026-11-05): save-and-resume
+supported; **submitted forms are final**; an eligibility hard-stop fires on the applicant country
+before the project section; `Countries/Regions served` is asked right after the fiscal-sponsor block.
+Field order: Applicant Info & Eligibility → Acknowledgements → **Project Overview (the selects)** →
+**Project Details (7 long answers)** → **Impact and Openness (5 long answers)** → links + video →
+AI-disclosure → sharing/newsletter/terms.
+
+**Compliance (binds every block below):** Mozilla's AI policy allows prep assistance but submitted
+content must be the applicant's own work and voice — the owner re-voices each answer before entry;
+this section is raw material, in one voice, for that pass. Vocabulary law (§13) applies: contribute /
+contribution points only; points are roadmap; every number traces to the evidence pack and is
+re-verified on submission day.
+
+### 14.1 Select-field recommendations
+
+| Field | Recommended | Note |
+|---|---|---|
+| Applicant Type | **Fiscal sponsorship** if a sponsor is signed by submission; else **Individual** | T5 is deferred to the shortlist stage — an individual may lawfully receive 501(c)(3) funds; owner decision, MUST be settled before the country gate fires |
+| Cohort availability ack | Yes | 12 months from April 2027 |
+| Human-Scale AI principles | **Small + Intentional + Tailored** (all three) | §13.2 maps each to a one-click on-page answer |
+| Project Stage | **Deployed with early users (less than 100 users)** IF ≥1 external user can be evidenced by submission day; else **Working prototype** | The T10 gate (Nov 17) governs this exact call — the stage answer must match the evidence ON submission day, not the aspiration |
+| Early signals | **Users**; add **Contributors** only if an external contribution lands by submission | The 32-repo deployment is one team — honest reading is Users-only today; the sccache PR is us contributing upstream, not external contribution to us |
+| Approx users | **Less than 100** | Honest; download counts ≠ users |
+| Primary outputs | **Technology platform or tool + Dataset**; optionally Educational resources | The MIT corpus is the dataset claim |
+| Accessibility | **"We have considered it, but it is not yet a focus"** | CLI-first product; do not overclaim — all answers are considered equally |
+| Frontier-model API dependence | **No** | The hot path calls no model; no GPT/Claude/Gemini/Llama family anywhere core |
+| Largest parameter count | **10 billion or fewer** | The ≈0.4B escalation encoder is the largest model named in the application; "does not use AI models directly" is defensible for the healer core alone but reads inconsistent once the decision arm is named — keep the application text and this select coherent |
+| Charitable purpose | **Yes** | Public benefit described below |
+| Work in the open | **Open sourcing code or other assets · Openly sharing datasets · Publishing educational materials · Public workshops or presentations** | Research papers: unchecked (not on the plan — never claim) |
+| How did you hear | Owner picks (Foundation Website / Web Search / etc.) | Explicitly not review criteria |
+| Share with other funders | **Yes** | Optional, no effect |
+| Countries/Regions served | Owner picks | Global software community; the team's own location is the org-address country — that field hits the eligibility gate, not this one |
+
+### 14.2 Short-form answers
+
+**Proposed Project Title**
+> cargo refine — the modelless code healer: free, offline fixing for every Rust developer
+
+**Project Summary**
+> cargo refine is a local-first developer tool that fixes compiler warnings, lint findings and
+> performance problems in Rust code in-loop — on the developer's own machine, offline, with no AI
+> service call. Its core is modelless: a reviewed, MIT-licensed corpus of repair patterns plus
+> deterministic drafters and a compile gate that keeps only fixes that still build. Where a case
+> needs more, a ≈0.4B-parameter escalation arm answers — roughly 17× smaller than the small-model
+> bar this call itself sets. It is free forever for open-source repositories, installable in one
+> command on five OS targets, and it improves by community contribution, never by retraining.
+
+**Public benefit (beyond the organization)**
+> Every Rust developer without a cloud-AI budget — students, FOSS maintainers, regional and
+> resource-constrained dev communities — gets lint/perf fixing that today requires paid cloud
+> copilots or local 7B+ models they cannot run. The benefit is durable commons, not a free trial:
+> the repair corpus is MIT open data forever, the core source opens under MIT/Apache-2.0 in months
+> 1–3 of the term, and free-for-open-source-repositories is shipped product policy, not a promise.
+
+### 14.3 Project Details — the seven long answers
+
+**1. What technology are you building and how does it address this cohort's theme?**
+> cargo refine is a command-line tool that fixes Rust code the way a careful reviewer would: it
+> reads the compiler's and Clippy's findings, proposes the repair, re-builds the project, and keeps
+> the fix only if the code still compiles. The intelligence is a mix, not one model: a zero-weight
+> modelless engine — a reviewed corpus of repair patterns, deterministic drafters, and a
+> similarity-ranked retrieval — answers the common case instantly and privately on any machine;
+> where a case genuinely needs more, a small (≈0.4B-parameter) escalation arm is consulted. This
+> addresses the cohort's theme directly: it is Small (the hot path uses no model at all, and the
+> largest component is ~17× below the call's own 7B calibration), Intentional (local by default,
+> opt-in sharing, secret-blind redaction, a `leave` command, MIT open data), and Tailored (built
+> with and for developers excluded from cloud-AI economics — free for open-source repositories,
+> one-command install, works offline on a laptop).
+
+**2. Small — models, hardware, infrastructure, and why they fit**
+> The healer ships as a single binary with no model files on the hot path: its knowledge is a
+> curated corpus (~1,500 reviewed repair rules) plus the developer's own verified-fix history,
+> retrieved and applied deterministically. The escalation arm is one ≈0.4B encoder; its deployed
+> serving posture is measured at 484 MB end to end (Q8 checkpoint + seats), and the heavier
+> quantizations below that are a recorded quality negative we refuse to offer. The full decision
+> ladder tops out ~17× below the 7B small-model calibration in this call. Hardware: any laptop —
+> no GPU, no cloud dependency; the tool works with the network off. This is the right fit because
+> code repair is pattern-classification over a bounded, reviewed vocabulary — scaling laws for
+> generative models do not apply to a corpus a community curates, and every removed megabyte is a
+> developer who can actually run it.
+
+**3. Intentional — data understanding, control, community agency**
+> Default is local and silent: healing runs offline and uploads nothing — verifiable by running
+> the tool with the network off. Sharing is opt-in, consented once, reversible (`leave` restores
+> the logged-out tool with no loss), and secret-blind by construction: every shared snippet passes
+> a secret scanner first, and any finding drops the row — the redaction never sees credentials as
+> shareable data. What sharing produces is a public MIT-licensed repair corpus and a public,
+> published benchmark history (200+ scored runs) — the community can audit exactly what the tool
+> learned and how well it works. Governance on the roadmap is contribution-based: contributors
+> earn contribution points — non-transferable, expiring reputation that meters hosted lanes as
+> fair use, never payment, never a token — and the corpus they build stays open for everyone,
+> including competitors. Governance is the licence plus the public record: reviewed corpus,
+> published benches, dated open-core commitment.
+
+**4. Tailored — how people, problem, context shaped the technology**
+> The alpha community is Rust developers — the most lint-saturated, tooling-demanding language
+> community — chosen because their pain is measurable (compiler + Clippy diagnostics) and their
+> tooling culture demands correctness: hence the compile gate, which discards any fix that does
+> not build, and the divergence classes the tool openly refuses to touch. The context is
+> resource constraint: no cloud budget, sometimes no reliable network — hence offline-first, a
+> single static binary, five OS targets, and free-for-open-source-repositories as shipped policy.
+> The dialogue is structural: every contributed repair joins the reviewed MIT corpus, the public
+> bench history scores every change, and new domains (Dockerfiles and shaders shipped today;
+> Python, JavaScript, Go on the roadmap) are added when the community asks — healing improves by
+> what the community contributes, never by retraining.
+
+**5. Traction — early product-community fit evidence**
+> Working, shipped, measured: 13 public releases with checksum-verified installers and 200+
+> downloads across 5 OS targets (macOS Apple Silicon/Intel, Linux x86_64/aarch64 static, Windows);
+> a public benchmark history of 200+ scored runs at a 96%+ heal rate; deployed daily as the
+> default dev-loop tool across a 32-repo production workspace since August 2026 — the tool fixes
+> real code every working day, not in demos. First external upstream engagement is open:
+> a fix PR to Mozilla's own sccache (issue #2975), maintainer-engaged through five review rounds
+> in November 2026. The pilot cohort (30–50 Rust developers from student groups, FOSS maintenance
+> and regional communities) is being recruited now — the application window is when that evidence
+> lands, and we will report it openly either way.
+
+**6. Challenges and biggest blockers right now**
+> Three, honestly. (a) Adoption signal: converting installer downloads into an active external
+> user and contributor base — the pilot cohort is the instrument, and it is the same evidence this
+> call weights (early product-community fit). (b) Receiving-entity paperwork: a self-funded team
+> needs a fiscal-sponsor path to lawfully receive US 501(c)(3) grant funds; the research is done,
+> the decision lands with the shortlist stage. (c) Executing the dated open-core extraction
+> without slowing the product: opening the core in months 1–3 means restructuring a private
+> workspace into a public repository with public CI and a contribution guide — real engineering
+> capacity the grant directly funds.
+
+**7. Team**
+> A self-funded team of experienced Rust systems engineers who build and operate the entire stack
+> themselves — the healing engine and its rule corpus, the benchmark infrastructure, the serving
+> tier, and the public sites — with production Rust across a 32-repository workspace where the
+> tool runs as the default dev-loop instrument every day. The dogfooding is the team's most
+> relevant experience: the tool is not a research prototype; it is infrastructure the team
+> depends on. [Owner: add names, roles, prior work links.]
+
+### 14.4 Impact and Openness — the five long answers
+
+**8. Success in 12 and 36 months + measurement**
+> 12 months: the modelless core open-sourced under MIT/Apache-2.0 with public CI and published
+> crates (downloads as the public counter); the pilot cohort complete with an openly published
+> report (heal rates, retention, offline usage, participant quotes); one community-built language
+> domain landed; 1–2 external corpus contributors onboarded. 36 months: a multi-language repair
+> commons governed publicly (reviewed corpus, published benches, contribution governance live);
+> the tool a default in resource-constrained development environments; sustainability running on
+> enterprise corpus licensing and hosted/support services so the commons never needs charity to
+> stay open. Measurement is public counters only: crates/downloads, the pilot report's own
+> numbers, contributor count, and the published benchmark history — nothing self-attested.
+
+**9. Sustainability needs + barriers**
+> Needs: a durable legal home (fiscal sponsor now, foundation path later); the pilot-to-community
+> conversion that turns downloads into contributors; and revenue lanes that do not tax the
+> commons — enterprise licensing of our own GPU-mined corpora and hosted/support services, while
+> community-contributed data stays MIT forever and the core stays open. Barriers: capacity (the
+> team is self-funded — the grant is the runway that converts a working tool into an open
+> program); the corpus-split boundary (community-contributed MIT vs own-mined proprietary) must
+> stay trustworthy and auditable; and keeping the contribution-points reputation system strictly
+> non-speculative while still genuinely motivating.
+
+**10. What the $300,000 grant unlocks**
+> It converts a working, self-funded prototype into an open, governed, community-owned program in
+> the first year: ~60% funds 2–3 contributors (the open-core extraction, the pilot, the second
+> language domain); ~15% funds the pilot itself (service capacity and expiring pilot vouchers —
+> pilot users never pay and never need to contribute); ~15% infrastructure and audit (public CI,
+> security review of the redaction and consent planes); ~10% contingency. Concretely: months 1–3
+> the core is public; by month 6 the pilot cohort's report is published; by month 12 a language
+> domain built by someone outside the team ships. Without it the same roadmap runs — slower,
+> and private for longer; the grant buys openness sooner, which is the point.
+
+**11. Working in the open — code, learnings, data**
+> Code: the modelless core (corpus format, retrieval, drafters, compile gate, self-evolve loop)
+> and the fleet/corpus-production tooling open under MIT/Apache-2.0 — one license story — in
+> months 1–3, with public CI, docs and a contribution guide; crates published to crates.io.
+> Data: the consented repair corpus is MIT open data today and stays MIT forever, with a published
+> corpus-authoring guide so other communities can distill and govern corpora for their own
+> languages and codebases. Learnings: the benchmark history is public (200+ scored runs, appended
+> per change — negative results included); the pilot report publishes openly; we present at
+> Mozilla Festival. Educational: agent-facing and human docs ship with the installers today.
+
+**12. Novel approaches the work introduces**
+> (a) Modelless-by-architecture repair: a reviewed corpus plus deterministic drafters plus a
+> compile gate replaces the field's assumption that code fixing needs an LLM on the hot path —
+> our October 2026 landscape search found no shipped modelless healer; local coding tools ride
+> 7B–14B models. (b) Improvement by corpus, not retraining: the tool's capability grows from
+> community-contributed, reviewed pairs with a fixed evaluator — bounded self-refinement that is
+> measured and published, convergent and evaluable, with negative results kept. (c) A measured
+> size ladder instead of one scaled-down model: zero-weight floor → ≈0.4B escalation arm at a
+> measured 484 MB deployed → a hosted think leg — each rung admitted only when it beats the one
+> below on the public bench. (d) Consent-first data plane as a product primitive: secret-blind
+> redaction and one-command reversible sharing built into the tool, not a policy page.
+
+### 14.5 Links + video (owner acts)
+
+- **Repository/demo/website:** `refine.riir.ai` + `github.com/gist-rs/cargo-refine` (releases) +
+  the public bench tables. ⛔ **Gate:** the gen2 de-tokenized deploy MUST be live before submission
+  (probe 2026-11-05: still the pre-pivot copy — see §8 T6 row and issue 190 T6).
+- **Two-minute video (strongly encouraged):** owner act. Suggested script shape: 30s the problem
+  (lint/perf friction), 40s live demo (dry run → --fix → compile gate → network off), 30s the
+  corpus/community story, 20s the team and why it matters. No polish needed; reviewers want the
+  technology working and the team's voice.
+
+### 14.6 AI-disclosure + honest-tension register
+
+**AI disclosure (the form asks; answer honestly):** recommended: "Yes — AI tools were used for
+research preparation and drafting assistance; every submitted answer was written and voiced by the
+applicant." This is exactly Mozilla's allowed use; the owner's re-voicing pass (T8) is what makes
+it true — do not submit before that pass.
+
+**Tension register (each must be TRUE on submission day):**
+
+1. **Stage + signals ↔ the T10 gate (Nov 17).** The form's stage answer must match the evidence
+   that exists that day. Zero pilot sign-ups + no external-user evidence by Nov 17 = the playbook's
+   own no-submit gate holds; do not submit a "deployed with early users" claim without a user.
+2. **The live site.** refine.riir.ai serves the pre-pivot copy until the gen2 deploy lands
+   (owner-timed). A reviewer clicking the application's link must NOT see the credit plane the
+   application says is gone.
+3. **Points plane = roadmap.** The Intentional/governance answers must not imply the leaderboard
+   or contribution points exist today — §13.4's roadmap framing only.
+4. **Numbers.** Every figure in these drafts traces to the evidence pack; re-verify download and
+   release counts on submission day (they grow — use the fresh ones).
+5. **No fabrication.** The pilot is recruiting, not run; partner names do not exist; the sccache
+   engagement is an open PR, not an accept. Say exactly that.
