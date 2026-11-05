@@ -1,6 +1,8 @@
 # Plan 345 — Batch 336: the walk-23 B+ pair kernel_opt distill (loopvq + vllm-rlt)
 
-**Status:** IN PROGRESS — claimed 2026-11-05 by shikuwa-4090-w23pair (claim `7fa4be48` + LF-normalize `74bafecf`, pushed pre-work; expiry 2026-11-07T13:40:47+00:00). All tasks unchecked at claim — checked as they complete. — claimed 2026-11-05 by shikuwa-4090-w23pair (claim `7fa4be48` + LF-normalize `74bafecf`, pushed pre-work; expiry 2026-11-07T13:40:47+00:00)
+**Status:** LANDED — Batch 336 (all tasks [x]; the T4 faces + staged-defer table disclosed inline; verdict ping-pong round 1 REVISE → round 2 AGREE).
+**Lease closed:** shikuwa-4090-w23pair, 1793886047, expires 2026-11-07T13:40:47+00:00 — discharged by the Batch 336 landing commit
+Claim pushed pre-work as the snapshot claim row `7fa4be48` (+ LF-normalize `74bafecf`); plan committed `8a161dee`. — claimed 2026-11-05 by shikuwa-4090-w23pair (claim `7fa4be48` + LF-normalize `74bafecf`, pushed pre-work; expiry 2026-11-07T13:40:47+00:00)
 
 Two-source batch (the B320–322 multi-source precedent): the walk-23 B+ pair repo scans
 (the cycle's claimed queue head) completed with YES verdicts on BOTH sources; this batch
@@ -22,24 +24,24 @@ entry.
 
 Five whole rules in `entries_gpu_149.rs` + one count-neutral rider face:
 
-- [ ] R1 `chunked-argmax-strict-gt-tie-identical` (loopvq; **the batch GOAT lead**,
+- [x] R1 `chunked-argmax-strict-gt-tie-identical` (loopvq; **the batch GOAT lead**,
       BENCHABLE) — chunking a materialize-then-argmax scoring loop to bound a spilling
       intermediate keeps per-entry ops identical and the cross-chunk update strict `>`,
       so the full-reduction first-index tie rule holds bit-identically (88%-of-decode-
       time spill provenance, `vq_codebook.py:887-911`). Category B (kin gpu_03/gpu_20).
-- [ ] R2 `repeat-axis-aliased-index-arena` (loopvq; BENCHABLE) — when per-repeat-
+- [x] R2 `repeat-axis-aliased-index-arena` (loopvq; BENCHABLE) — when per-repeat-
       instance values of one base computation are stored linearly and a joint code
       covers several repeats, ONE arena row set per code is aliased by the Tc slots
       through the existing indirection: consumers unchanged, index bytes at the
       redundancy-folded size, storage counted once (`loopvq_pack.py:3-47`,
       `unified_kv_pool.py:679-705`, `:976`). Category A (kin gpu_01 residency family).
-- [ ] R3 `load-time-decode-blind-transform-absorption` (loopvq; NotBenchable-by-regime,
+- [x] R3 `load-time-decode-blind-transform-absorption` (loopvq; NotBenchable-by-regime,
       equivalence-pinned) — every quantization-space transform (axis coupling,
       sensitivity scale, weight fold) is absorbed into the per-slot DECODE table at
       load; the hot decode kernel consumes plain coordinates and ships unchanged across
       all features (`loopvq_pack.py:78-91`, `vq_codebook.py:269-282`, `:349-365`).
       Category N (kin gpu_102 hi-lo-split) — L alternative noted at authoring.
-- [ ] R4 `graph-fallback-coverage-ladder` (vllm-rlt; its GOAT lead, BENCHABLE) — a
+- [x] R4 `graph-fallback-coverage-ladder` (vllm-rlt; its GOAT lead, BENCHABLE) — a
       shape-keyed captured-graph cache under heterogeneous arrivals hits an eager-
       fallback CLIFF (16 entries: 77-93% of warmed speculative calls fall back); the
       landed remedy is DERIVED COVERAGE: bucket ladder from reachable row counts,
@@ -47,14 +49,14 @@ Five whole rules in `entries_gpu_149.rs` + one count-neutral rider face:
       capture and skipped at execution via a device-side active-row mask, fallbacks
       counted loud (`worker/cuda_graph.py:22-63`, `:335-392`, `kernels/graph_kv.py:1-42`).
       gpu_57 owns the LRU-amortization half only — cite, never merge. Category D.
-- [ ] R5 `i64-index-promote-before-stride-multiply` (vllm-rlt; NotBenchable —
+- [x] R5 `i64-index-promote-before-stride-multiply` (vllm-rlt; NotBenchable —
       correctness class) — a byte address `index * stride` inside a kernel overflows
       32-bit index arithmetic on >2^31-byte pools; the promotion must happen on the
       INDEX BEFORE the multiply (`kernels/graph_kv.py:39-42` "Promote before
       multiplying: large cache offsets exceed int32", `routing.py:40-41`, `:172`).
       Host-side sibling: Batch 195 `strided-view-offset-fit32-launch-proof` (prove-or-
       promote = the two postures of one width law). Category O (kin in O).
-- [ ] F1 rider face (count-neutral) — dtype-width packed-register cliff onto
+- [x] F1 rider face (count-neutral) — dtype-width packed-register cliff onto
       `inner-loop-select-division-shift-mask-vgpr-pressure`: packed vector products are
       free register-wise only where the packed type is NARROWER than the scalar
       register; forcing the packed form on FP32 doubled registers 28→34 and dropped
@@ -62,27 +64,27 @@ Five whole rules in `entries_gpu_149.rs` + one count-neutral rider face:
 
 ## Tasks
 
-- [ ] Claim pushed pre-work (`7fa4be48`) + LF-normalize (`74bafecf`)
-- [ ] Code homes found (paper HTML + ls-remote), clones at the pins, license + NOTICE recorded
-- [ ] Two parallel scout subagents (read-only reports; 3+-vocab dedup pre-checks)
-- [ ] T0: every quote re-verified at the pins by the batch lane
-- [ ] Fixtures authored as standalone Rust, compiled AND executed green BEFORE entry
-- [ ] `entries_gpu_149.rs` written (5 rules, quotes + dedup + regime + kinship + P113)
-- [ ] Count-pin web: corpus/mod.rs (mod decl + extend + KERNEL_CATEGORIES category lists
+- [x] Claim pushed pre-work (`7fa4be48`) + LF-normalize (`74bafecf`)
+- [x] Code homes found (paper HTML + ls-remote), clones at the pins, license + NOTICE recorded
+- [x] Two parallel scout subagents (read-only reports; 3+-vocab dedup pre-checks)
+- [x] T0: every quote re-verified at the pins by the batch lane
+- [x] Fixtures authored as standalone Rust, compiled AND executed green BEFORE entry
+- [x] `entries_gpu_149.rs` written (5 rules, quotes + dedup + regime + kinship + P113)
+- [x] Count-pin web: corpus/mod.rs (mod decl + extend + KERNEL_CATEGORIES category lists
       + header counts), router.rs total 1056→1061, goat_g1.rs (expected_corpus_files
       1..=149, len pin 149→150, per-file membership list, + the new file in BOTH census
       paths — the B335 coverage-debt lesson applied in the same landing)
-- [ ] batch336 needles + pseudocode-parse tests in corpus/tests.rs
-- [ ] Gates at the isolated `/tmp/b336_target`: kernel_opt lib, default lib, clippy -D
+- [x] batch336 needles + pseudocode-parse tests in corpus/tests.rs
+- [x] Gates at the isolated `/tmp/b336_target`: kernel_opt lib, default lib, clippy -D
       ×4 postures (default / no-default / kernel_opt / --all-features), batch336
       needles+parse, retrieval floors both lanes (kernel+latent + default+latent), G1
       fixture harness
-- [ ] `pins_manifest --write` (kernel_opt 1061) + prose sites (AGENTS.md §Role,
+- [x] `pins_manifest --write` (kernel_opt 1061) + prose sites (AGENTS.md §Role,
       README.md table, .docs/11_domains/kernel_opt.md count + Batch 336 entry)
-- [ ] Verdict ping-pong (subagent reviewer) BEFORE the landing commit
-- [ ] Research note `.research/374` (the pair distill record; staged-defer table)
-- [ ] Snapshot landing row (`.distill/001`) — claim discharged; `.raw/` clones REMOVED
-- [ ] Commit `feat: batch 336: ...` + push (NO release-set rebuild — kernel_opt opt-in)
+- [x] Verdict ping-pong (subagent reviewer) BEFORE the landing commit
+- [x] Research note `.research/374` (the pair distill record; staged-defer table)
+- [x] Snapshot landing row (`.distill/001`) — claim discharged; `.raw/` clones REMOVED
+- [x] Commit `feat: batch 336: ...` + push (NO release-set rebuild — kernel_opt opt-in)
 
 ## Staged defers (- [-]) — the B333 T3 precedent (authoring budget → leads)
 

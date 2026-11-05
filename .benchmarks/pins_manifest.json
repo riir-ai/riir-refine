@@ -3,7 +3,7 @@
     "rules": 112
   },
   "kernel_opt": {
-    "rules": 1056,
+    "rules": 1061,
     "witness": {
       "activity_dim": 8,
       "experts": 15,
