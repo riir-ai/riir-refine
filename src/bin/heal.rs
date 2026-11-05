@@ -16431,21 +16431,212 @@ fn main() {
         }
     };
 
-    for file in &files {
-        let Ok(src) = read_source(file) else {
+    // ── the scan precompute (P-PAR, 2026-11-05): read + secret + suggest
+    // hoisted out of the per-file loop into a parallel phase. The scan was
+    // the run's serial floor — measured 53.3 s on seal-game-editor (770
+    // files, 63 MB, user ≈ real: single core, ~7 ms/span) — and per-file
+    // work (~70 ms avg) dwarfs thread overhead by 4 orders. Default-on;
+    // `RIIR_REFINE_SCAN_PARALLEL=0` (exact literal) restores the serial
+    // read+scan. Byte-identical by construction: suggestions + secret
+    // findings are pure per-file functions of (src, display, feed, hot),
+    // the consumer below keeps file order, and the G4 scratch is
+    // per-call-cleared state — matcher call order never moves a byte.
+    // The armed escalation seat keeps the serial path (its hosted
+    // deadline/rate-latch semantics are serial-by-contract).
+    //
+    // The matcher is single-threaded by design (`suggest_file(&mut self)` —
+    // the G4 scratch discipline), so parallel scanning gives each thread
+    // its OWN matcher rebuilt with the SAME posture (lease overlay +
+    // active-set + standing depth policy): byte-identical to the
+    // shared-matcher serial run, zero contention.
+    struct PreScannedFile {
+        display: String,
+        read: Option<String>,
+        secret_findings: Vec<riir_refine::secret_blind::SpanFinding>,
+        secret_pins: usize,
+        suggestions: Vec<SpanSuggestion>,
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn scan_one_file(
+        matcher: &mut riir_refine::draft::LatentMatcher,
+        file: &Path,
+        top_k: usize,
+        suggest_active: bool,
+        clippy_feed: Option<&[ClippyDiagnostic]>,
+        hot_spans: Option<&[riir_refine::hotpath_report::HotSpan]>,
+    ) -> PreScannedFile {
+        let display = file.display().to_string();
+        let src = match read_source(file) {
+            Ok(src) => src,
+            Err(_) => {
+                return PreScannedFile {
+                    display,
+                    read: None,
+                    secret_findings: Vec::new(),
+                    secret_pins: 0,
+                    suggestions: Vec::new(),
+                };
+            }
+        };
+        let outcome = riir_refine::secret_blind::scan_file_with_pins(&src);
+        let mut suggestions = Vec::new();
+        if suggest_active {
+            let file_hot: Vec<riir_refine::hotpath_report::HotSpan> = hot_spans
+                .map(|spans| {
+                    spans
+                        .iter()
+                        .filter(|hs| paths_ref_match(&hs.file, &display))
+                        .cloned()
+                        .collect()
+                })
+                .unwrap_or_default();
+            suggestions = if clippy_feed.is_some() || hot_spans.is_some() {
+                let file_anchors: Vec<ClippyDiagnostic> = clippy_feed
+                    .map(|feed| {
+                        feed.iter()
+                            .filter(|d| paths_ref_match(&d.file, &display))
+                            .cloned()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                matcher.suggest_file_hot_anchored(&src, &display, top_k, &file_anchors, &file_hot)
+            } else {
+                matcher.suggest_file(&src, &display, top_k)
+            };
+        }
+        PreScannedFile {
+            display,
+            read: Some(src),
+            secret_findings: outcome.findings,
+            secret_pins: outcome.digest_pins.len(),
+            suggestions,
+        }
+    }
+
+    let suggest_pass_active = args.suggest || (args.fix && !args.quiet);
+    #[allow(unused_mut)]
+    let mut scan_parallel = suggest_pass_active
+        && files.len() >= 16
+        && std::env::var("RIIR_REFINE_SCAN_PARALLEL").map_or(true, |v| v != "0");
+    #[cfg(all(
+        feature = "escalation_manifest",
+        feature = "seat_rerank",
+        feature = "fix_verify"
+    ))]
+    if escalation_dispatch.is_some() {
+        scan_parallel = false;
+    }
+    let build_scan_matcher = || -> Result<riir_refine::draft::LatentMatcher, String> {
+        let base = (|| {
+            #[cfg(any(feature = "kat_service", feature = "points"))]
+            if let Some((_, ref overlay)) = run_overlay {
+                return riir_refine::draft::LatentMatcher::from_enabled_domains_with_overlay(
+                    overlay,
+                );
+            }
+            #[cfg(not(any(feature = "kat_service", feature = "points")))]
+            let _ = &();
+            riir_refine::draft::LatentMatcher::from_enabled_domains()
+        })()?;
+        let mut m = base;
+        m = m.with_active_set(active_set.clone());
+        #[cfg(feature = "demonstrability_gate")]
+        if let Some(root) = resolve_corpus_repo_root() {
+            if let Some(policy) = riir_refine::demonstrability_gate::DepthPolicy::standing(&root) {
+                m = m.with_depth_policy(policy);
+            }
+        }
+        Ok(m)
+    };
+    let pre_scanned: Vec<PreScannedFile> = if scan_parallel {
+        let threads = std::thread::available_parallelism()
+            .map_or(4usize, |n| n.get())
+            .min(8)
+            .min(files.len());
+        let chunk_len = files.len().div_ceil(threads.max(1));
+        // Pre-build per-thread matchers serially: a build failure here is
+        // the same loud exit the single-matcher build has, before any
+        // thread starts.
+        let mut thread_matchers = Vec::with_capacity(threads);
+        for _ in 0..threads {
+            match build_scan_matcher() {
+                Ok(m) => thread_matchers.push(m),
+                Err(e) => {
+                    eprintln!("index build failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+        std::thread::scope(|s| {
+            let handles: Vec<_> = files
+                .chunks(chunk_len)
+                .zip(thread_matchers.iter_mut())
+                .map(|(chunk, m)| {
+                    let feed_ref = clippy_feed.as_deref();
+                    let hot_ref = hotpath_spans.as_deref();
+                    s.spawn(move || {
+                        chunk
+                            .iter()
+                            .map(|f| {
+                                scan_one_file(
+                                    m,
+                                    f,
+                                    args.top_k,
+                                    suggest_pass_active,
+                                    feed_ref,
+                                    hot_ref,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            let mut all = Vec::with_capacity(files.len());
+            for h in handles {
+                match h.join() {
+                    Ok(part) => all.extend(part),
+                    Err(e) => std::panic::resume_unwind(e),
+                }
+            }
+            all
+        })
+    } else {
+        files
+            .iter()
+            .map(|f| {
+                scan_one_file(
+                    &mut matcher,
+                    f,
+                    args.top_k,
+                    suggest_pass_active,
+                    clippy_feed.as_deref(),
+                    hotpath_spans.as_deref(),
+                )
+            })
+            .collect()
+    };
+
+    for (file, scanned) in files.iter().zip(pre_scanned) {
+        let PreScannedFile {
+            display,
+            read,
+            secret_findings: file_secret_findings,
+            secret_pins,
+            suggestions: pre_suggestions,
+        } = scanned;
+        let Some(src) = read else {
             eprintln!("skip (unreadable): {}", file.display());
             continue;
         };
-        let display = file.display().to_string();
         // Issue 151: the same-file secret scan (suggest-only; values and
         // fingerprints never shown — the shareable-output rule). P63: the
         // adjudicated outcome — digest pins leave the finding list (they
         // were the recurring all-false noise) and ride the disclosure
-        // count instead.
-        let file_secret_outcome = riir_refine::secret_blind::scan_file_with_pins(&src);
-        secret_pinned += file_secret_outcome.digest_pins.len();
-        if !file_secret_outcome.findings.is_empty() {
-            secret_findings.push((display.clone(), file_secret_outcome.findings));
+        // count instead. (The scan itself rides the precompute above.)
+        secret_pinned += secret_pins;
+        if !file_secret_findings.is_empty() {
+            secret_findings.push((display.clone(), file_secret_findings));
         }
         // P30: bench-target detection, shared by both lanes — the fix lane
         // declines rust_perf edits on it, the suggest lane stamps perf rows.
@@ -17425,18 +17616,13 @@ fn main() {
         // source — suggestions reference the user's current file; the fix
         // review above is the change record.
         if args.suggest || (args.fix && !args.quiet) {
+            // The suggestions themselves ride the precompute phase (P-PAR):
+            // computed per file in the parallel/serial scan above — pure
+            // functions of (src, display, feed, hot), consumed here in file
+            // order.
             // Feed-file matching is tail-based (component boundary): clippy
             // prints workspace-relative paths, scan paths are whatever the
             // caller typed (clippy_feed::paths_ref_match).
-            let file_anchors: Vec<ClippyDiagnostic> = clippy_feed
-                .as_ref()
-                .map(|feed| {
-                    feed.iter()
-                        .filter(|d| paths_ref_match(&d.file, &display))
-                        .cloned()
-                        .collect()
-                })
-                .unwrap_or_default();
             // Issue 146 T0.2: this file's measured-hot spans, same tail-based
             // matching (the report's `file!()` paths are workspace-relative
             // too). Feed order is time-share desc — the ranking signal.
@@ -17451,17 +17637,7 @@ fn main() {
                 })
                 .unwrap_or_default();
             let hot_present = hotpath_spans.is_some();
-            let mut suggestions = if clippy_feed.is_some() || hot_present {
-                matcher.suggest_file_hot_anchored(
-                    &src,
-                    &display,
-                    args.top_k,
-                    &file_anchors,
-                    &file_hot,
-                )
-            } else {
-                matcher.suggest_file(&src, &display, args.top_k)
-            };
+            let mut suggestions = pre_suggestions;
             // T0.2's ranking signal made literal: hot spans surface FIRST in
             // the review output, ordered by their max time share (calls ×
             // avg — B129: instrumented timing ATTRIBUTES, never verifies),
