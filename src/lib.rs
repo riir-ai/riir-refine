@@ -729,6 +729,21 @@ pub mod frame_time_report;
 // never closes it: the split is load-bearing. Pure over its inputs, silent
 // on an empty delta.
 pub mod corpus_delta;
+
+// katgpt-rs Issue 983 T1 — the heal-lane corpus-gap event, the FIRST
+// consumer of katgpt-core's `coverage_manifest` substrate (the opt-in
+// `coverage_gap_event` feature forwards it). Stamps the clippy corpus's
+// coverage of the installed driver's lint surface ONCE per epoch (F2), in
+// the versioned canonical encoding, persisted digest-cross-checked;
+// partitions a run's `[no corpus rule]` anchors three ways — freshness
+// (corpus-covered, the Issue-116 seam, NOT events) / gap (the manifest's
+// gap set → mining-intake rows) / unknown (out of scope, counted loud) —
+// never pooled; and emits content-addressed intake rows into
+// `.refine/misses/corpus-gap/` (the `--misses` queue the issue names).
+// Report-only first: exits unchanged, never gates a fix (the frontier-report
+// law); the substrate stays opt-in pending a real-corpus GOAT cell.
+#[cfg(feature = "coverage_gap_event")]
+pub mod corpus_gap;
 pub mod downstream_hint;
 pub mod scope_hint;
 

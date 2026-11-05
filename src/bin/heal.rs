@@ -285,7 +285,8 @@ fn read_source(path: &std::path::Path) -> std::io::Result<String> {
 #[cfg(any(
     feature = "latent_retrieval",
     feature = "kat_service",
-    feature = "points"
+    feature = "points",
+    feature = "coverage_gap_event"
 ))]
 fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
     std::env::var("RIIR_REFINE_TRAJ_ROOT")
@@ -7831,6 +7832,17 @@ USAGE:
                     coverage gap, where it means UNSUPPORTED). Report-only, exit
                     unchanged; the two lanes' corpus truths are different BY DESIGN
                     and this names the seam rather than closing it.
+    --corpus-gap    Stamp the clippy corpus's coverage manifest over the installed
+                    driver's lint surface (katgpt-rs Issue 983 T1; the coverage_gap_event
+                    feature) and emit corpus-gap intake rows into .refine/misses/corpus-gap/
+                    for this run's [no corpus rule] anchors the compiled corpus does NOT
+                    cover. Three buckets, never pooled: freshness anchors (corpus-covered)
+                    are NOT queued — --fix heals those today; gap anchors become one
+                    content-addressed row per (lint, corpus epoch) — re-running against
+                    the same epoch queues nothing; unknown lints (rustc/tool lints) are
+                    counted loud, never bucketed. The canonical manifest persists at
+                    .refine/coverage_manifest/clippy.canonical (digest-cross-checked).
+                    Report-only, exit unchanged; needs an oracle feed for anchors.
     --coverage-report
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
                     lint surface, DERIVED from the installed driver
@@ -8742,6 +8754,17 @@ struct Args {
     /// an oracle feed (the delta is measured over `[no corpus rule]`
     /// anchors, which only a feed produces).
     corpus_delta: bool,
+    /// katgpt-rs Issue 983 T1 (`coverage_gap_event` feature): `--corpus-gap`
+    /// — stamp the clippy corpus's coverage manifest over the installed
+    /// driver's lint surface and emit corpus-gap intake rows for this run's
+    /// `[no corpus rule]` anchors the compiled corpus does not cover. The
+    /// three-way partition never pools: freshness anchors (corpus-covered,
+    /// the Issue-116 seam) are NOT queued — `--fix` heals those today. Needs
+    /// an oracle feed for anchors (the auto-oracle runs one on cargo
+    /// projects); a run without anchors stamps + reports the census and
+    /// emits nothing. Report-only: writes the canonical manifest +
+    /// `.refine/misses/corpus-gap/` rows; exits unchanged.
+    corpus_gap: bool,
 }
 
 fn parse_args() -> Args {
@@ -8882,6 +8905,7 @@ fn parse_args() -> Args {
         orphan_report: false,
         coverage_report: false,
         corpus_delta: false,
+        corpus_gap: false,
         feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
@@ -9082,6 +9106,7 @@ fn parse_args() -> Args {
             }
             "--coverage-report" => args.coverage_report = true,
             "--corpus-delta" => args.corpus_delta = true,
+            "--corpus-gap" => args.corpus_gap = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -10867,6 +10892,16 @@ fn run_misses_queue(limit: Option<usize>, paths: &[PathBuf]) {
     let rendered_any = true;
     #[cfg(not(feature = "rustc_errors"))]
     let rendered_any = !sections.is_empty();
+
+    // katgpt-rs Issue 983 T1 — the corpus-gap intake rows (the consumer
+    // lane's queue; report-only, never counted into rendered_any: this
+    // build cannot have queued rows without clippy_lints, which already
+    // rendered section 2). Skips silently when nothing is queued — the
+    // expected state (the corpus-delta noise law).
+    #[cfg(feature = "coverage_gap_event")]
+    if let Some(section) = riir_refine::corpus_gap::misses_section(&root, limit) {
+        print_report_capped(&section, limit);
+    }
     if !rendered_any {
         eprintln!(
             "misses: no healing domain compiled into this build — rebuild with at least one domain feature"
@@ -12477,7 +12512,11 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 /// 3. the real-code fired histogram, which is OPTIONAL — its absence costs
 ///    the local half of the frequency axis and nothing else, so it degrades
 ///    to `None` provenance rather than refusing the whole report.
-fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
+/// The installed driver's lint surface (`clippy-driver -W help`), shared by
+/// the Issue-119 coverage report and the Issue-983 corpus-gap lane — one
+/// spawn, one parse, one blind-disclosure shape. A spawn failure or a
+/// non-zero exit is BLIND, never an empty surface.
+fn spawn_lint_surface() -> riir_refine::corpus_coverage::LintSurface {
     use riir_refine::corpus_coverage as cc;
 
     let driver =
@@ -12491,7 +12530,7 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
         .arg("help")
         .stdin(std::process::Stdio::null())
         .output();
-    let surface = match &help {
+    match &help {
         Ok(out) if out.status.success() => {
             cc::parse_lint_help(&String::from_utf8_lossy(&out.stdout))
         }
@@ -12509,8 +12548,94 @@ fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
             )),
             ..cc::LintSurface::default()
         },
+    }
+}
+
+/// katgpt-rs Issue 983 T1 — the corpus-gap emission lane, the I/O half (the
+/// rules live in [`riir_refine::corpus_gap`], unit-tested at the feature).
+/// Stamp once (F2), partition the run's `[no corpus rule]` anchors three
+/// ways — freshness / gap / unknown, never pooled — emit intake rows for
+/// the true gaps, print one census line. Report-only: the run's exit code
+/// and stdout verdicts are untouched; the lane's side effects are the
+/// canonical manifest + the intake rows it names.
+#[cfg(feature = "coverage_gap_event")]
+fn run_corpus_gap_lane(has_anchors: bool, missing_by_span: &[Vec<String>], paths: &[PathBuf]) {
+    use riir_refine::corpus_gap;
+
+    let root = resolve_heal_root(paths);
+    let surface = spawn_lint_surface();
+    let (corpus_rules, _bodies) = clippy_corpus_ids_and_bodies();
+    let stamped = match corpus_gap::stamp_clippy(&surface, &corpus_rules) {
+        Ok(ok) => ok,
+        Err(e) => {
+            eprintln!("corpus-gap: refused — {e}");
+            return;
+        }
+    };
+    if !stamped.stale_covered.is_empty() {
+        println!(
+            "corpus-gap: {} stale corpus key(s) the derived surface does not name \
+             (renamed/removed lints — excluded from covered):",
+            stamped.stale_covered.len()
+        );
+        for k in stamped.stale_covered.iter().take(5) {
+            println!("  {k}");
+        }
+        if stamped.stale_covered.len() > 5 {
+            println!("  ... +{} more", stamped.stale_covered.len() - 5);
+        }
+    }
+
+    let partition = match corpus_gap::classify(
+        &stamped.manifest,
+        &corpus_rules,
+        missing_by_span.iter().map(Vec::as_slice),
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("corpus-gap: refused — {e}");
+            return;
+        }
+    };
+    let emitted = match corpus_gap::emit_events(&root, &partition, &stamped.manifest) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("corpus-gap: emission failed — {e}");
+            return;
+        }
     };
 
+    let row = stamped.manifest.row(corpus_gap::SECTION);
+    let (covered, census) = row
+        .map(|r| (r.covered_count, r.census_count))
+        .unwrap_or((0, 0));
+    let short = &emitted.canonical_digest_hex[..8];
+    println!(
+        "corpus-gap: clippy {covered}/{census} covered (manifest {short}) — {} freshness \
+         anchor(s) (not events; --fix heals those today), {} gap anchor(s), {} \
+         out-of-scope; {} event(s) written, {} already queued",
+        partition.freshness.len(),
+        partition.gaps.len(),
+        partition.unknown.len(),
+        emitted.written.len(),
+        emitted.skipped_existing,
+    );
+    if !has_anchors {
+        eprintln!(
+            "corpus-gap: no oracle anchors this run — stamped the census and persisted \
+             the canonical manifest; no anchors to partition. Re-run with --clippy-json \
+             <path> (or let the auto-oracle run on a cargo project)."
+        );
+    }
+}
+
+fn run_coverage_report() -> riir_refine::corpus_coverage::CoverageReport {
+    use riir_refine::corpus_coverage as cc;
+
+    let surface = spawn_lint_surface();
+
+    let driver =
+        std::env::var("RIIR_REFINE_CLIPPY_DRIVER").unwrap_or_else(|_| "clippy-driver".into());
     let toolchain = std::process::Command::new(&driver)
         .arg("--version")
         .stdin(std::process::Stdio::null())
@@ -13285,6 +13410,20 @@ fn main() {
     // site (the `--net`/Buy blocks) is gated out — the mut is kat-only.
     #[cfg_attr(not(feature = "kat_service"), allow(unused_mut))]
     let mut args = parse_args();
+
+    // katgpt-rs Issue 983 T1: `--corpus-gap` is feature-gated — a build
+    // without `coverage_gap_event` refuses LOUD (exit 2, naming the
+    // rebuild) instead of silently doing nothing (the corpus-delta
+    // precondition law, the build-stamp exit-2 shape). Checked before any
+    // dispatch so the refusal never wastes a scan.
+    #[cfg(not(feature = "coverage_gap_event"))]
+    if args.corpus_gap {
+        eprintln!(
+            "corpus-gap: this build lacks the coverage_gap_event feature — rebuild with: \
+             cargo build --features coverage_gap_event"
+        );
+        std::process::exit(2);
+    }
 
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
@@ -18485,6 +18624,21 @@ fn main() {
              [no corpus rule] markers, which only a clippy feed produces. Re-run with \
              --clippy-json <path> (or let the auto-oracle run on a cargo project)."
         );
+    }
+
+    // ── katgpt-rs Issue 983 T1: the corpus-gap event lane ────────────────
+    // The `coverage_gap_event` consumer: stamp once per epoch (F2),
+    // partition the run's anchors three ways (freshness / gap / unknown —
+    // never pooled), emit intake rows for the true gaps. Report-only: exit
+    // code and verdicts untouched; the side effects are the canonical
+    // manifest + the `.refine/misses/corpus-gap/` rows. Runs AFTER the
+    // corpus-delta surface so the census line sits under the count it
+    // refines, and only when a feed ran — without one there are no anchors
+    // (the lane stamps the census and says so instead of partitioning
+    // nothing silently).
+    #[cfg(feature = "coverage_gap_event")]
+    if args.corpus_gap {
+        run_corpus_gap_lane(clippy_feed.is_some(), &missing_by_span, &args.paths);
     }
 
     // KAT meter (T0.5): persist the session's burn. Save failure is a lost

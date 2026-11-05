@@ -316,6 +316,20 @@ basis_cert = ["katgpt-core/basis_split"]
 # fixture. No new dep edge: katgpt-core is already the one public dep.
 nuisance_fraction = ["katgpt-core/nuisance_fraction"]
 
+# katgpt-rs Issue 983 T1 — the heal-lane corpus-gap event, the FIRST consumer
+# of katgpt-core's `coverage_manifest` substrate (the Coverage-Manifested
+# Memory + gap-check protocol): stamp the clippy corpus's coverage of the
+# installed driver's lint surface ONCE per epoch (counts + BLAKE3 digests,
+# canonical encoding persisted digest-cross-checked), partition a run's
+# `[no corpus rule]` anchors into freshness (corpus-covered — the Issue-116
+# seam, NOT events) vs gap (the manifest's gap set — mining intake) vs
+# unknown (out of scope, counted loud), and emit content-addressed intake
+# rows into `.refine/misses/corpus-gap/` (the `--misses` queue the issue
+# names). Report-only first — exits unchanged, never gates a fix; the
+# substrate stays opt-in pending a wired real-corpus GOAT cell. Implies
+# `clippy_lints`: the covered set IS that corpus.
+coverage_gap_event = ["katgpt-core/coverage_manifest", "clippy_lints"]
+
 # Issue 121 (katgpt-rs Plan 599 T4.2 — the first consumer of katgpt-core's
 # `set_admission` primitive): counter-anchored SET rerank of the merged
 # seven-domain span pool. The fan-out merge (`all_rules`' flat score sort)
