@@ -1159,6 +1159,43 @@ payload carries the outcome strata the run already computes; the
 shape-hash miss axis is the v2 wire field when a client-side aggregator
 exists — deliberately not invented sloppy.
 
+## 2026-11-05 — Issue 206 CLOSED per delegated-owner verdict: the c′ referee filed as issue 209 (probe-authored corpus repair, full arc)
+
+The corpus half LANDED in three steps: the module (`src/corpus_binding.rs`,
+2026-11-04 — diagnose → BLAKE3 epoch-keyed binding record → stale-refusing
+compose gate), arm A (the templated `context_notes` writer + the first live
+edit on `hashmap-with-capacity` @ epoch ac280021, pins-manifest same-commit),
+and the harvest→bind→note CLI verb (`src/bin/corpus_diagnose.rs`,
+`289cab470` — 15 stores / 1,539 rows folded, the one candidate mechanically
+reproduced, `--bind` proof through the live-epoch compose gate, REPORT-ONLY,
+blind-walk exit 2). Arm B deferred with a concrete reason (zero C-class
+candidates at the pinned predicate — reopen trigger moved to issue 209 T4).
+The referee leg measured UNDECIDED-BY-STRUCTURE: gen-5 admits exactly 4
+fixtures carrying the rule's atom (4 < the pre-registered n ≥ 30 support
+floor — a per-rule stratum cannot reach 30 on a finite fixture set), and the
+bench axis is compile-time dispatch (atom tables + healed output
+byte-identical baseline vs note-spliced), so the fixture A/B cannot decide
+single-rule note edits in either direction. Delegated-owner verdict (Claude,
+round 1, REVISE → **c′**): (a) keep-n≥30 leaves the referee permanently
+unable to judge its own input; (b) the zero-flip floor cannot fail when the
+edit provably misses the bench axis; (c′) replaces the EVIDENCE SOURCE —
+structural-identity certificate (BLAKE3 atom+healed digests in the binding
+record) where the axis is provably untouched + a telemetry before/after
+referee on the rule's own live failure rate (one-sided Beta-LCB95 on the
+failure-rate drop, split at the edit epoch, n ≥ 30 post-edit attempts,
+co-epoch difference-in-differences control vs un-noted W-class rules,
+8-batch starvation kill window, PENDING never folded into a pass). The
+11-04 note re-enrolls as case #1 (post-edit window starts at ac280021).
+Batch/multi-rule arms unchanged (fixture A/B + paired LCB95 > 0 + n ≥ 30).
+The pre-registration is `.issues/209_cprime_referee_telemetry_before_after.md`
+(highwater bumped 208 → 209) — pinned BEFORE any data was read, so no silent
+bar-bend. The stale-epoch observation (the 11-04 note's epoch label vs the
+live corpus epoch) is EXPECTED: the compose gate's stale-epoch refusal is
+the policing working as designed. The note itself stays landed as normal
+advisory corpus annotation (annotations carry no GOAT gate). Issue file
+removed per the noise-reduction rule — full arc in git history
+(`git log --follow -- .issues/206_probe_authored_corpus_repair.md`).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
