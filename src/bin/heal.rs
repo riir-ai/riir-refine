@@ -16617,7 +16617,6 @@ fn main() {
             }
         }
         let files_ref = &files;
-        let scan_started = std::time::Instant::now();
         let pre = std::thread::scope(|s| {
             let handles: Vec<_> = ranges
                 .iter()
