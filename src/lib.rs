@@ -57,6 +57,10 @@
 // ── The offline gate (Plan 325 T2 — ungated: every build honors the env)
 pub mod offline;
 
+// ── The machine-local settings file (Plan 342 — ungated: every build owns
+// its choices; the offline marker + the run-start auto-check gates)
+pub mod refine_settings;
+
 // ── The public-goods points plane (Plan 325 / Proposal 026 — `points`)
 #[cfg(feature = "points")]
 pub mod client_id;

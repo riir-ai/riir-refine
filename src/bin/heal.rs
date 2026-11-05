@@ -37,17 +37,17 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use riir_refine::EvolveRecorder;
 use riir_refine::domains::clippy_lints::lint_level::{
-    ALLOW_BY_DEFAULT_GROUPS, LevelResolver, gated_lints,
+    gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
 };
 use riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_refine::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_refine::draft::span_source::collect_source_files;
 use riir_refine::draft::{
-    ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion, parse_clippy_feed, paths_ref_match,
+    parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
 };
 use riir_refine::edit_emitter::RuleEdit;
+use riir_refine::EvolveRecorder;
 
 /// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
@@ -214,6 +214,18 @@ enum KatCommand {
     /// Plan 325 T5: `corpus` — corpus info + the update offer (points-free
     /// — corpus freshness is a public good; no KAT charge line anywhere).
     Corpus,
+    /// Plan 342: `offline` — the firewall marker. EVERY network lane
+    /// refuses until `cargo refine online`; env vars and settings.toml
+    /// cannot override it. Local-only verb, works in every build.
+    Offline,
+    /// Plan 342: `online` — clear the firewall marker and remind the user
+    /// what their settings.toml chose (the auto surfaces that now resume).
+    Online,
+    /// Plan 342: `off --<flag>` — persist a feature OFF in settings.toml
+    /// (the run-start auto-check family). Local-only verb.
+    FeatureOff,
+    /// Plan 342: `on --<flag>` — persist a feature ON in settings.toml.
+    FeatureOn,
 }
 
 #[cfg(feature = "fix_verify")]
@@ -270,7 +282,11 @@ fn read_source(path: &std::path::Path) -> std::io::Result<String> {
 /// KAT meter: `RIIR_REFINE_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
 /// per-repo adoption audit) → else cwd.
-#[cfg(any(feature = "latent_retrieval", feature = "kat_service", feature = "points"))]
+#[cfg(any(
+    feature = "latent_retrieval",
+    feature = "kat_service",
+    feature = "points"
+))]
 fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
     std::env::var("RIIR_REFINE_TRAJ_ROOT")
         .ok()
@@ -394,6 +410,14 @@ fn open_kat_meter(paths: &[PathBuf]) -> Option<riir_refine::kat_meter::KatMeter>
 /// the runtime half of that law). Exit 2, never a silent canonicalization.
 #[cfg(feature = "kat_service")]
 fn command_service_url() -> String {
+    // Plan 342: the FIREWALL at the one URL seam — every kat dial resolves
+    // through here (update, sync, login, topup, buy, corpus-pr, replay, …),
+    // so one consult covers them all. Exit 2 before any socket: an explicit
+    // command has no degrade half (the `--net` pin's discipline). The
+    // marker version names `cargo refine online` — the env cannot clear it.
+    if riir_refine::offline::offline() {
+        riir_refine::offline::refuse_command("this command");
+    }
     let raw = riir_refine::kat_lease_client::service_url_for_command();
     match riir_refine::kat_net_pin::ensure_net_allowed(&raw) {
         Ok(url) => url,
@@ -1731,7 +1755,7 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
 #[cfg(feature = "kat_transport")]
 fn run_kat_keys(words: &[String]) {
     use riir_refine::kat_account::KatAccount;
-    use riir_refine::kat_keyset_client::{self as ks, JoinRequest, http};
+    use riir_refine::kat_keyset_client::{self as ks, http, JoinRequest};
 
     let fail = |msg: String| -> ! {
         eprintln!("account keys: {msg}");
@@ -1833,7 +1857,7 @@ fn run_kat_keys(words: &[String]) {
 #[cfg(feature = "kat_service")]
 fn run_kat_genesis(words: &[String]) {
     use riir_refine::kat_genesis_client as gc;
-    use riir_refine::kat_protocol_genesis::{GenesisStatus, import_digest};
+    use riir_refine::kat_protocol_genesis::{import_digest, GenesisStatus};
     use riir_refine::kat_protocol_lease::hex32;
 
     let fail = |msg: String| -> ! {
@@ -2253,8 +2277,8 @@ fn prompt_factor(prompt: &str) -> Option<String> {
 #[cfg(feature = "kat_transport")]
 fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     use riir_kat::kat_recovery_client::{
-        BindRequest, HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure, bind_flow,
-        compose_numeric_claim, github_device_login, nonce_flow,
+        bind_flow, compose_numeric_claim, github_device_login, nonce_flow, BindRequest,
+        HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure,
     };
 
     debug_assert_eq!(provider, "github", "the parse arm gates the vocabulary");
@@ -2442,7 +2466,7 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
 /// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_refine::kat_account::{KatAccount, history_lines};
+    use riir_refine::kat_account::{history_lines, KatAccount};
     use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
@@ -2742,7 +2766,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
 #[cfg(feature = "kat_transport")]
 fn run_kat_update() {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
@@ -3122,6 +3146,125 @@ fn run_points_corpus() {
     println!("update: run `cargo refine update` to refresh the corpus lease");
 }
 
+// ── Plan 342: the machine-local posture verbs ──────────────────────────────
+// Local-only: settings.toml + the offline marker, no dial, ungated, every
+// build. `online` MUST run while the firewall stands (it is the way out),
+// so none of these consult [`riir_refine::offline::offline`].
+
+/// `cargo refine offline` — the firewall: write the marker, name what it
+/// blocks and the one way out. Idempotent (the first timestamp wins).
+fn run_offline_verb() {
+    match riir_refine::offline::write_marker() {
+        Ok(path) => {
+            println!("offline: the firewall is ON — marker at {}", path.display());
+            println!(
+                "offline: every network lane refuses until `cargo refine online` — env vars and settings.toml cannot override it"
+            );
+            println!("offline: local healing is unaffected; your settings.toml choices are kept");
+        }
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+    }
+}
+
+/// `cargo refine online` — clear the marker, then REMIND the user what
+/// their settings.toml chose (the auto surfaces that resume on the next
+/// healing run). Idempotent ("already online" is an honest answer).
+fn run_online_verb() {
+    match riir_refine::offline::clear_marker() {
+        Ok(true) => {
+            println!("online: the firewall is OFF — marker removed, network lanes re-enabled");
+        }
+        Ok(false) => println!("online: no offline marker — already online"),
+        Err(e) => {
+            eprintln!("{e}");
+            std::process::exit(2);
+        }
+    }
+    let dir = riir_refine::refine_settings::default_dir();
+    let (settings, warning) = riir_refine::refine_settings::read_with_warning(&dir);
+    if let Some(w) = warning {
+        eprintln!("{w}");
+    }
+    let path = riir_refine::refine_settings::settings_path(&dir);
+    let suffix = if path.exists() {
+        String::new()
+    } else {
+        " — defaults, no file yet".to_string()
+    };
+    println!("online: your settings ({}){}:", path.display(), suffix);
+    println!("online:   {}", settings.state_line());
+    if settings.app_check || settings.corpus_refresh {
+        println!("online: the auto surfaces resume on your next healing run");
+    }
+}
+
+/// `cargo refine off|on --<flag>` — persist the feature in settings.toml
+/// (comment-preserving). Bare (no flag) prints the current state + the
+/// valid flags and exits 2 — a status read is not an action.
+fn run_feature_toggle_verb(on: bool, flags: &[String]) {
+    let word = if on { "on" } else { "off" };
+    if flags.is_empty() {
+        let dir = riir_refine::refine_settings::default_dir();
+        let (settings, warning) = riir_refine::refine_settings::read_with_warning(&dir);
+        if let Some(w) = warning {
+            eprintln!("{w}");
+        }
+        eprintln!("state: {}", settings.state_line());
+        eprintln!(
+            "usage: cargo refine {word} {} — one or more, space-separated",
+            riir_refine::refine_settings::VALID_FLAGS.join("|")
+        );
+        std::process::exit(2);
+    }
+    let mut unknown = Vec::new();
+    let mut lines = Vec::new();
+    for flag in flags {
+        match riir_refine::refine_settings::flag_keys(flag) {
+            Some(keys) => {
+                let dir = riir_refine::refine_settings::default_dir();
+                for key in keys {
+                    if let Err(e) = riir_refine::refine_settings::set(&dir, key, on) {
+                        eprintln!("{e}");
+                        std::process::exit(2);
+                    }
+                }
+                let v = if on { "on" } else { "off" };
+                lines.push(format!("{flag}: {v}"));
+            }
+            None => unknown.push(flag.clone()),
+        }
+    }
+    if !unknown.is_empty() {
+        eprintln!(
+            "{word}: unknown flag(s) {} — valid: {}",
+            unknown.join(", "),
+            riir_refine::refine_settings::VALID_FLAGS.join(", ")
+        );
+        std::process::exit(2);
+    }
+    for line in &lines {
+        println!("{line}");
+    }
+    let dir = riir_refine::refine_settings::default_dir();
+    let settings = riir_refine::refine_settings::read(&dir);
+    println!("state: {}", settings.state_line());
+    // The honest cross-flag note: silencing the auto-check while the
+    // hands-free upgrade still applies would surprise the user.
+    if !on && settings.auto_upgrade && !settings.app_check {
+        println!(
+            "note: auto upgrade is ON — it still applies pending upgrades; `cargo refine off --auto-upgrade` silences it fully"
+        );
+    }
+    println!(
+        "re-enable with `cargo refine {} {}`",
+        if on { "off" } else { "on" },
+        flags.join(" ")
+    );
+}
+
 // ── Issue 153: the update surface (alert + self-update + auto-corpus) ─────
 
 /// The run-start legs (T1 alert + T2 hands-free upgrade + T4 auto corpus).
@@ -3131,11 +3274,20 @@ fn run_points_corpus() {
 fn run_update_surface_hooks(paths: &[PathBuf]) {
     #[cfg(feature = "update_check")]
     {
+        // Plan 342: the settings gates — the persisted app_check / auto_upgrade
+        // choices (defaults: check on, hands-free apply off). One small file
+        // read per healing run.
+        let settings =
+            riir_refine::refine_settings::read(&riir_refine::refine_settings::default_dir());
         let root = resolve_heal_root(paths);
-        let lines = riir_refine::update_check::check_for_alert(
-            &root,
-            &riir_refine::update_check::GitHubLatest::new(),
-        );
+        let lines = if settings.app_check {
+            riir_refine::update_check::check_for_alert(
+                &root,
+                &riir_refine::update_check::GitHubLatest::new(),
+            )
+        } else {
+            Vec::new()
+        };
         let newer = !lines.is_empty();
         for line in &lines {
             eprintln!("{line}");
@@ -3143,9 +3295,12 @@ fn run_update_surface_hooks(paths: &[PathBuf]) {
         // T2: the hands-free apply is OPT-IN — a binary that replaces itself
         // without the env set would be a consent violation, full stop. The
         // CURRENT run keeps the old binary (the swap renames, it cannot
-        // relaunch us); the message says so.
-        if newer && riir_refine::update_check::auto_upgrade_enabled() {
-            eprintln!("auto-upgrade: RIIR_REFINE_AUTO_UPGRADE=1 — applying…");
+        // relaunch us); the message says so. Plan 342: the persisted
+        // settings.auto_upgrade arms it too (the config OR the env; still
+        // opt-in by default).
+        let hands_free = settings.auto_upgrade || riir_refine::update_check::auto_upgrade_enabled();
+        if newer && hands_free {
+            eprintln!("auto-upgrade: applying (settings auto_upgrade = true, or RIIR_REFINE_AUTO_UPGRADE=1)…");
             match riir_refine::update_check::upgrade(
                 &riir_refine::update_check::GitHubLatest::new(),
                 &riir_refine::update_check::HttpDownload::new(),
@@ -3181,20 +3336,31 @@ fn run_update_surface_hooks(paths: &[PathBuf]) {
     }
 }
 
-/// Issue 153 T4: `RIIR_REFINE_AUTO_CORPUS=1` — the lease refresh (`update`)
-/// runs itself at run start, at most once per 12h. The KAT charge plane is
-/// the tier gate HONORED, not bypassed (out-of-KAT and refused postures
-/// skip inside `run_update_phase` exactly as the explicit command does);
-/// the points posture charges nothing by law, so its gate is only the
-/// window + the opt-in env. One bookkeeping file records the ATTEMPT, not
-/// the success — a flaky network must not re-timeout on every invocation.
+/// Issue 153 T4 + Plan 342 (the owner mandate "auto check app and corpus
+/// before any `cargo refine`"): the lease refresh (`update`) runs itself at
+/// run start, at most once per 12h — PROMOTED to default-on; the persisted
+/// settings.corpus_refresh (or `RIIR_REFINE_AUTO_CORPUS=0`, demote-only
+/// since the promotion) turns it off. The KAT charge plane is the tier
+/// gate HONORED, not bypassed (out-of-KAT and refused postures skip inside
+/// `run_update_phase` exactly as the explicit command does); the points
+/// posture charges nothing by law, so its gate is only the window + the
+/// persisted choice. One bookkeeping file records the ATTEMPT, not the
+/// success — a flaky network must not re-timeout on every invocation.
 /// Silent when the corpus is current (NotModified) — a run start is not a
-/// status page.
+/// status page. Belt-and-braces: this lane ALSO consults the offline
+/// firewall (its caller gates already — a lane that dials without
+/// consulting is a bug).
 #[cfg(any(feature = "kat_transport", feature = "points"))]
 fn maybe_auto_corpus() {
     /// The auto-corpus bookkeeping window (Issue 153 T4).
     const AUTO_CORPUS_WINDOW_SECS: i64 = 12 * 3600;
-    if std::env::var("RIIR_REFINE_AUTO_CORPUS").as_deref() != Ok("1") {
+    if riir_refine::offline::offline() {
+        eprintln!("{}", riir_refine::offline::refusal_line("auto corpus"));
+        return;
+    }
+    let settings = riir_refine::refine_settings::read(&riir_refine::refine_settings::default_dir());
+    let env_demoted = std::env::var("RIIR_REFINE_AUTO_CORPUS").as_deref() == Ok("0");
+    if !settings.corpus_refresh || env_demoted {
         return;
     }
     let root = resolve_heal_root(&[]);
@@ -3231,7 +3397,7 @@ fn maybe_auto_corpus() {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_lease_client::{
-            HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+            run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
         };
         let url = command_service_url();
         let store = LeaseStore::open_net(&root, &url);
@@ -3439,7 +3605,7 @@ fn print_no_policy_remedy(
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 fn run_kat_sync_export(target: &Path) {
     use riir_refine::kat_redact::SpanOrigin;
-    use riir_refine::kat_sync_payload::{SyncPayloadBuilder, ephemeral_signer};
+    use riir_refine::kat_sync_payload::{ephemeral_signer, SyncPayloadBuilder};
 
     let root = resolve_heal_root(&[]);
     let Some((rows, loaded)) = load_mining_rows(&root, true, "export") else {
@@ -3507,7 +3673,7 @@ fn push_mining_batch(
     url: &str,
     transport: &riir_refine::kat_lease_client::HttpLeaseTransport,
 ) -> MinePush {
-    use riir_refine::kat_lease_client::{LeaseTransport, queue_outbox};
+    use riir_refine::kat_lease_client::{queue_outbox, LeaseTransport};
     use riir_refine::kat_redact::SpanOrigin;
     use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
@@ -4127,7 +4293,7 @@ fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
@@ -4237,7 +4403,7 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_refine::kat_lease_client::{CLAIM_VERSION, ClaimRequest, queue_claim};
+    use riir_refine::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
@@ -4903,7 +5069,7 @@ fn run_kat_migrate(
             // printed prefilled URL (the worker holds no write credential).
             if let Some(draft) = ack.proposal_draft.as_ref() {
                 use riir_refine::kat_migrate_client::{
-                    DraftOpen, open_proposal_draft, render_draft_instructions,
+                    open_proposal_draft, render_draft_instructions, DraftOpen,
                 };
                 match open_proposal_draft(draft) {
                     DraftOpen::Opened(issue_url) => println!(
@@ -4975,10 +5141,10 @@ fn run_migrate_normal(
     github_token_flag: Option<String>,
     totp_code: Option<&str>,
 ) {
-    use riir_kat::kat_recovery_client::{CLIENT_ID_ENV, HttpRecoveryTransport, ssh_picker};
+    use riir_kat::kat_recovery_client::{ssh_picker, HttpRecoveryTransport, CLIENT_ID_ENV};
     use riir_refine::kat_migrate_normal::{
-        LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg, UreqKeysBodySource,
-        run_normal_migration,
+        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg,
+        UreqKeysBodySource,
     };
     use std::io::{BufRead as _, IsTerminal as _, Write as _};
 
@@ -6519,7 +6685,7 @@ pub fn show(p: &P) -> String {
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
     fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
-        use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, collect_edits};
+        use riir_refine::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
         use riir_refine::edit_emitter::apply_edits;
         use riir_refine::kat_meter::{KatCharge, KatMeter};
 
@@ -6751,7 +6917,7 @@ fn run_kat_corpus_pr(
     submit: bool,
     root: &std::path::Path,
 ) {
-    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
+    use riir_refine::kat_corpus_pr::{run_corpus_pr, CorpusPrArgs, HttpCorpusPrWire};
 
     let args = CorpusPrArgs {
         src: src.unwrap_or_default().to_string(),
@@ -6787,10 +6953,10 @@ fn run_kat_corpus_pr(
 fn run_kat_replay() {
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
     use riir_refine::kat_replay::{
-        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
+        judge_item, toolchain_display, toolchain_fingerprint, ReplayVerdict,
     };
     use riir_refine::kat_replay_client::{
-        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
+        accept_line, request_lease, submit_verdict, unhex32, HttpReplayTransport,
     };
 
     // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
@@ -7522,6 +7688,10 @@ USAGE:
     cargo refine --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
     cargo refine login [--key <path>]                   (KAT account, needs --features kat_service)
     cargo refine account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
+    cargo refine offline                                 (Plan 342 firewall: every network lane refuses until `online`; marker-based — env vars and settings.toml cannot override; ungated)
+    cargo refine online                                  (clear the firewall + remind what your settings.toml chose; ungated)
+    cargo refine off --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist OFF in settings.toml — the run-start auto-check family; --auto-update = app check + corpus refresh together; ungated)
+    cargo refine on  --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist ON; bare off/on prints the current state)
     cargo refine update                                 (corpus lease refresh, kat_transport)
     cargo refine sync                                   (push redacted batches + pull lease, kat_transport)
     cargo refine sync --export <file|->                 (WRITE the redacted batch, send nothing — no login, throwaway key)
@@ -8279,6 +8449,10 @@ struct Args {
     /// Plan 325 T4: `left` was the spelling used (the hidden alias) — the
     /// runner prints the one alias note, then runs leave.
     points_left_alias: bool,
+    /// Plan 342: `--auto-update` / `--auto-upgrade` / `--auto-corpus` /
+    /// `--app-check` — with `off` / `on` ONLY: the settings.toml features
+    /// the verb flips (validated at dispatch, not here).
+    feature_flags: Vec<String>,
     /// riir-dapps Issue 112 T4: `--export <file|->` — with `sync` ONLY: write
     /// the redacted batch locally instead of pushing it.
     sync_export: Option<PathBuf>,
@@ -8707,6 +8881,7 @@ fn parse_args() -> Args {
         orphan_report: false,
         coverage_report: false,
         corpus_delta: false,
+        feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
     // argv[1] — cargo passes the binary's own name-spelling through (direct
@@ -9458,6 +9633,19 @@ fn parse_args() -> Args {
                     usage();
                 }));
             }
+            // Plan 342: the `off`/`on` flag words — consumed inline (the
+            // `set`/`migrate` modifier law), validated at dispatch so a
+            // typo names every valid flag. MUST sit above the generic
+            // `--*` catch-all: match arms are order-sensitive and the
+            // catch-all would eat them as unknown flags.
+            "--auto-update" | "--auto-upgrade" | "--auto-corpus" | "--app-check"
+                if matches!(
+                    args.command,
+                    Some(KatCommand::FeatureOff | KatCommand::FeatureOn)
+                ) =>
+            {
+                args.feature_flags.push(arg.to_string());
+            }
             flag if flag.starts_with("--") => {
                 eprintln!("unknown flag {flag:?}");
                 usage();
@@ -9533,6 +9721,21 @@ fn parse_args() -> Args {
             // below dispatches on args.version.
             "version" if args.paths.is_empty() && args.command.is_none() => {
                 args.version = true;
+            }
+            // Plan 342: the machine-local posture verbs — local-only,
+            // ungated (a charitable build owns its choices too), parsed
+            // before the path fallback like every other verb. `offline`/
+            // `online` are the firewall pair; `off`/`on` flip the
+            // settings.toml features named by their `--<flag>` words.
+            "offline" | "online" | "off" | "on"
+                if args.paths.is_empty() && args.command.is_none() =>
+            {
+                args.command = Some(match arg.as_str() {
+                    "offline" => KatCommand::Offline,
+                    "online" => KatCommand::Online,
+                    "off" => KatCommand::FeatureOff,
+                    _ => KatCommand::FeatureOn,
+                });
             }
             // Plan 023: the `config set` modifier — a bare word after the
             // `config` subcommand, before any path arm can eat it.
@@ -11563,7 +11766,7 @@ fn finish_score_bench(
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
 fn run_score_bench_compile() {
     use riir_refine::domains::rustc_errors::composite;
-    use riir_refine::domains::rustc_errors::corpus_gen::{Territory, territory_of};
+    use riir_refine::domains::rustc_errors::corpus_gen::{territory_of, Territory};
     use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
@@ -13093,15 +13296,40 @@ fn main() {
         std::sync::atomic::Ordering::Relaxed,
     );
 
+    // ── Plan 342: the machine-local posture verbs — dispatched BEFORE the
+    // run-start hook (they ARE the state that hook consults, and `offline`
+    // must not print the hook's own skip line mid-flip). Local-only:
+    // settings.toml + the marker file, no dial, ungated, every build.
+    match args.command {
+        Some(KatCommand::Offline) => {
+            run_offline_verb();
+            return;
+        }
+        Some(KatCommand::Online) => {
+            run_online_verb();
+            return;
+        }
+        Some(KatCommand::FeatureOff | KatCommand::FeatureOn) => {
+            run_feature_toggle_verb(
+                args.command == Some(KatCommand::FeatureOn),
+                &args.feature_flags,
+            );
+            return;
+        }
+        _ => {}
+    }
+
     // ── Issue 153 T1/T2/T4: the run-start surface — update alert, hands-free
     // upgrade, auto corpus refresh. Order matters and is deliberate:
     // upgrade BEFORE the corpus refresh (a swapped binary wants the fresh
     // corpus too, and the refresh re-resolves nothing else), alert lines
     // always to stderr, every leg fail-soft — a network-less run must never
     // turn into a nonzero exit here. `upgrade` (the explicit command) and
-    // `--version` (which alerts post-output in its own arm) skip this hook.
-    // Plan 325 T2: the OFFLINE gate — the whole surface dials; the env cuts
-    // it in one place (the lane's own legs stay fail-soft regardless).
+    // `--version` (which alerts post-output in its own arm) skip this hook —
+    // and so do the Plan 342 posture verbs (dispatched above, returned).
+    // Plan 325 T2 + Plan 342: the OFFLINE gate — the whole surface dials;
+    // the env OR the firewall marker cuts it in one place (the lane's own
+    // legs stay fail-soft regardless).
     if args.command != Some(KatCommand::Upgrade) && !args.version {
         if riir_refine::offline::offline() {
             eprintln!("{}", riir_refine::offline::refusal_line("update checks"));
@@ -13360,6 +13588,14 @@ fn main() {
             // Exhaustiveness only — `upgrade` is dispatched (on its own
             // feature, NOT kat_service) before this match ever runs.
             KatCommand::Upgrade => unreachable!("upgrade is dispatched before the kat match"),
+            // Exhaustiveness only — the Plan 342 posture verbs dispatch
+            // (ungated, local-only) before this match ever runs.
+            KatCommand::Offline
+            | KatCommand::Online
+            | KatCommand::FeatureOff
+            | KatCommand::FeatureOn => {
+                unreachable!("the posture verbs dispatch before the kat match")
+            }
             // Issue 112 T4: the local export sends nothing, so it needs no
             // transport — it dispatches ahead of the transport-gated push.
             KatCommand::Sync if args.sync_export.is_some() => {
@@ -15202,13 +15438,19 @@ fn main() {
     );
     // T2.4: with the promotion surface compiled in, Certified network rules
     // merge into the run overlay (never under a --corpus-epoch pin).
-    #[cfg(all(any(feature = "kat_service", feature = "points"), feature = "score_bench"))]
+    #[cfg(all(
+        any(feature = "kat_service", feature = "points"),
+        feature = "score_bench"
+    ))]
     let run_overlay = run_overlay_with_promotion(
         &lease_store,
         args.corpus_epoch,
         &resolve_heal_root(&args.paths),
     );
-    #[cfg(all(any(feature = "kat_service", feature = "points"), not(feature = "score_bench")))]
+    #[cfg(all(
+        any(feature = "kat_service", feature = "points"),
+        not(feature = "score_bench")
+    ))]
     let run_overlay = lease_overlay_for_run(&lease_store, args.corpus_epoch);
     #[cfg(any(feature = "kat_service", feature = "points"))]
     if let Some((epoch, overlay)) = &run_overlay {
@@ -16106,11 +16348,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-            // The bench-target guard (2026-09-16 intake, P30): applying a
-            // perf rule to a bench target changes WHAT the bench measures —
-            // `--verify` proves compilation, never measurement validity,
-            // and a bench file's numbers ARE its artifact. Decline loudly,
-            // never silently; the operator can still apply manually.
+                             // The bench-target guard (2026-09-16 intake, P30): applying a
+                             // perf rule to a bench target changes WHAT the bench measures —
+                             // `--verify` proves compilation, never measurement validity,
+                             // and a bench file's numbers ARE its artifact. Decline loudly,
+                             // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
             // P39 (post-mining intake, 2026-09-25): under --repo-posture the
             // rust_perf lane is exempt from the posture MECHANISM (the
@@ -18559,7 +18801,10 @@ fn main() {
     // plane's business — never this feed. One line, a ~5 s budget, never
     // an exit-code change; not-present → one honest skip line (the KAT
     // skip's discipline). The KAT tail above keeps the operator lane.
-    #[cfg(all(feature = "points", not(all(feature = "kat_service", feature = "kat_transport"))))]
+    #[cfg(all(
+        feature = "points",
+        not(all(feature = "kat_service", feature = "kat_transport"))
+    ))]
     if args.fix
         && (!fixstat_rules.is_empty() || !posture_declined_by_lint.is_empty())
         && !riir_refine::offline::offline()
@@ -18571,79 +18816,71 @@ fn main() {
         );
         let signing = account.as_ref().ok().and_then(|a| a.signing_key().ok());
         if let Some(key) = signing {
-                let transport = riir_refine::points_client::UreqPointsTransport::new(
-                    riir_refine::points_client::POINTS_TIMEOUT_SECS,
-                );
-                let client = riir_refine::points_client::PointsClient::new(&transport);
-                let client_uuid = riir_refine::client_id::load_or_create(
-                    &riir_kat::kat_account::KatAccount::default_dir(),
-                )
-                .map(|u| u.to_string())
+            let transport = riir_refine::points_client::UreqPointsTransport::new(
+                riir_refine::points_client::POINTS_TIMEOUT_SECS,
+            );
+            let client = riir_refine::points_client::PointsClient::new(&transport);
+            let client_uuid = riir_refine::client_id::load_or_create(
+                &riir_kat::kat_account::KatAccount::default_dir(),
+            )
+            .map(|u| u.to_string())
+            .unwrap_or_default();
+            // The run id's entropy seed: deliberately NOT a machine
+            // identifier (the T16.1 law) — nanos + pid carry the
+            // uniqueness; the KAT page's user-authored label is
+            // that plane's display vocabulary, not this feed's.
+            let machine = "";
+            let toolchain = std::process::Command::new("rustc")
+                .arg("--version")
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.lines().next().unwrap_or("").trim().to_string())
                 .unwrap_or_default();
-                // The run id's entropy seed: deliberately NOT a machine
-                // identifier (the T16.1 law) — nanos + pid carry the
-                // uniqueness; the KAT page's user-authored label is
-                // that plane's display vocabulary, not this feed's.
-                let machine = "";
-                let toolchain = std::process::Command::new("rustc")
-                    .arg("--version")
-                    .output()
-                    .ok()
-                    .and_then(|o| String::from_utf8(o.stdout).ok())
-                    .map(|s| s.lines().next().unwrap_or("").trim().to_string())
-                    .unwrap_or_default();
-                // The outcome fold: written from the fix map, declined from
-                // the posture + level-skip decline maps (keyed by the same
-                // rule token). Counts only — never spans, never source.
-                let mut outcomes: std::collections::BTreeMap<String, (u32, u32)> =
-                    std::collections::BTreeMap::new();
-                for (k, v) in &fixstat_rules {
-                    outcomes
-                        .entry(k.clone())
-                        .or_insert((0, 0))
-                        .0 += *v;
+            // The outcome fold: written from the fix map, declined from
+            // the posture + level-skip decline maps (keyed by the same
+            // rule token). Counts only — never spans, never source.
+            let mut outcomes: std::collections::BTreeMap<String, (u32, u32)> =
+                std::collections::BTreeMap::new();
+            for (k, v) in &fixstat_rules {
+                outcomes.entry(k.clone()).or_insert((0, 0)).0 += *v;
+            }
+            for (k, v) in &posture_declined_by_lint {
+                outcomes.entry(k.clone()).or_insert((0, 0)).1 +=
+                    u32::try_from(*v).unwrap_or(u32::MAX);
+            }
+            for (k, v) in &level_skipped_by_lint {
+                outcomes.entry(k.clone()).or_insert((0, 0)).1 +=
+                    u32::try_from(*v).unwrap_or(u32::MAX);
+            }
+            let outcomes: Vec<riir_refine::points_client::ContributeOutcome> = outcomes
+                .into_iter()
+                .map(
+                    |(name, (written, declined))| riir_refine::points_client::ContributeOutcome {
+                        name,
+                        written,
+                        declined,
+                    },
+                )
+                .collect();
+            let run_id = riir_refine::points_client::fresh_contribute_run_id(machine);
+            let run_id_hex: String = {
+                let mut s = String::with_capacity(64);
+                for b in run_id {
+                    s.push_str(&format!("{b:02x}"));
                 }
-                for (k, v) in &posture_declined_by_lint {
-                    outcomes
-                        .entry(k.clone())
-                        .or_insert((0, 0))
-                        .1 += u32::try_from(*v).unwrap_or(u32::MAX);
-                }
-                for (k, v) in &level_skipped_by_lint {
-                    outcomes
-                        .entry(k.clone())
-                        .or_insert((0, 0))
-                        .1 += u32::try_from(*v).unwrap_or(u32::MAX);
-                }
-                let outcomes: Vec<riir_refine::points_client::ContributeOutcome> = outcomes
-                    .into_iter()
-                    .map(|(name, (written, declined))| {
-                        riir_refine::points_client::ContributeOutcome {
-                            name,
-                            written,
-                            declined,
-                        }
-                    })
-                    .collect();
-                let run_id =
-                    riir_refine::points_client::fresh_contribute_run_id(machine);
-                let run_id_hex: String = {
-                    let mut s = String::with_capacity(64);
-                    for b in run_id {
-                        s.push_str(&format!("{b:02x}"));
-                    }
-                    s
-                };
-                let shared = outcomes.iter().map(|o| o.written + o.declined).sum::<u32>();
-                let pushed = client.contribute(
-                    &key,
-                    &client_uuid,
-                    &run_id_hex,
-                    &toolchain,
-                    u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
-                    &outcomes,
-                );
-                match pushed {
+                s
+            };
+            let shared = outcomes.iter().map(|o| o.written + o.declined).sum::<u32>();
+            let pushed = client.contribute(
+                &key,
+                &client_uuid,
+                &run_id_hex,
+                &toolchain,
+                u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
+                &outcomes,
+            );
+            match pushed {
                     Ok(ack) => println!(
                         "📡 shared {shared} finding(s) with the network — epoch {}{}",
                         ack.epoch,
@@ -18927,7 +19164,7 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
 #[cfg(feature = "docker")]
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
     use riir_refine::domains::docker::proposers::fix_all;
-    use riir_refine::domains::docker::rules::{FIXABLE_DOCKER, scan_source_with};
+    use riir_refine::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
 
     let mut printed = 0usize;
     for path in paths {
@@ -18986,8 +19223,8 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 /// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
 #[cfg(feature = "shader_perf")]
 fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
+    use riir_refine::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
     use riir_refine::domains::shader_perf::ShaderScanner;
-    use riir_refine::domains::shader_perf::proposers::{FIXABLE_SHADER, collect_all_edits};
 
     let mut printed = 0usize;
     for path in paths {
@@ -19128,14 +19365,17 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
 /// pin (exact reproduction) and when the registry is empty/unloadable (a
 /// corrupt registry WARNs and continues WITHOUT network rules — the safe
 /// direction for a heal run; the GATE refuses on the same condition).
-#[cfg(all(any(feature = "kat_service", feature = "points"), feature = "score_bench"))]
+#[cfg(all(
+    any(feature = "kat_service", feature = "points"),
+    feature = "score_bench"
+))]
 #[allow(clippy::type_complexity)] // mirrors lease_overlay_for_run's shape one layer up
 fn run_overlay_with_promotion(
     store: &riir_refine::kat_lease_client::LeaseStore,
     pin: Option<u64>,
     heal_root: &std::path::Path,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_refine::kat_promotion::{PromotionRegistry, REGISTRY_FILE, promotion_run_overlay};
+    use riir_refine::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
 
     let leased = lease_overlay_for_run(store, pin);
     let registry_path = heal_root.join(REGISTRY_FILE);
@@ -19196,8 +19436,8 @@ fn lease_overlay_for_run(
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_refine::kat_lease_client::{
-        PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER, PACK_DOMAIN_KERNEL,
-        PACK_DOMAIN_PERF, PACK_DOMAIN_SEC, overlay_from_epoch,
+        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
+        PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -19506,7 +19746,7 @@ fn run_reheat_pass(
     active_set: &riir_refine::active_set::ActiveSet,
 ) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans,
     };
 
     // One bounded lease check: did a new epoch land?
@@ -19872,7 +20112,7 @@ mod fix_domain_tests {
 #[cfg(test)]
 mod corpus_stats_needle_tests {
     use super::{
-        CORPUS_DOMAIN_TABLE, count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count,
+        count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE,
     };
 
     #[test]
@@ -19929,7 +20169,7 @@ mod corpus_stats_needle_tests {
 /// this task closed) fails here instead of in a user's shell.
 #[cfg(test)]
 mod mode_flag_tests {
-    use super::{Args, validate_mode_flags as v};
+    use super::{validate_mode_flags as v, Args};
 
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were
