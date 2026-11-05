@@ -476,7 +476,7 @@ mod tests {
             .map(<[&str]>::len)
             .sum();
         assert_eq!(
-            total, 1053,
+            total, 1056,
             "Batch 333 +2: the sgl-nvidia-mega distill, Plan 341 (E fail-stop-deadline-trap-bounded-cross-rank-wait + E peer-mailbox-rotation-depth-reader-residency-plus-one, sgl-nvidia-mega c396f2ab; +2 count-neutral rider faces gpu_20 + gpu_52; prior: Batch 323 +7: the 10-30i + 10-30j staged leads conversion, Plan 323 (N nan-preserving-select-over-fmaxf-in-scale-reductions + D banded-launch-order-shares-weight-tiles + L quant-block-keyed-index-space + A simdgroup-fragment-whole-store-generation-keyed + A stream-through-load-no-l1-allocate-once-read + B inner-loop-select-division-shift-mask-vgpr-pressure + L activation-layout-mirrors-weight-bit-serialism; +6 count-neutral rider faces gpu_99 x2 + gpu_140 B309 + gpu_111 + gpu_146 + gpu_51 + gpu_141 B310; prior: Batch 322 +3: the 10-30g + 10-30h staged leads conversion, Plan 322 (A checkpoint-boot-staged-upload-bounded-bytes + B boot-identity-hash-read-once, tensorfold 7fce15ce/618625fd; D vendor-intrinsic-staged-operands-by-value-scheduling-attribute, llama.cpp 792fcf4e #31341); prior: Batch 320 +4: the post-B319 staged remainder, Plan 320 (A immutable-operand-device-resident-per-buffer-type (llama.cpp fb59972) + N word-native-byte-pair-minifloat-conversion + B block-scaled-operand-declared-form-refusal-ladder + D plane-storage-barrier-scope-covers-global-exchange, all cubecl 07cd07a)",
         );
     }
