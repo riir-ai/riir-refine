@@ -2,6 +2,8 @@
 
 **Status:** LANDED — Batch 336 (all tasks [x]; the T4 faces + staged-defer table disclosed inline; verdict ping-pong round 1 REVISE → round 2 AGREE).
 **Lease closed:** shikuwa-4090-w23pair, 1793886047, expires 2026-11-07T13:40:47+00:00 — discharged by the Batch 336 landing commit
+
+Lane lesson (the staged_set_audit miss, disclosed to the verdict reviewer and pinned here for the next multi-file landing): the instrument reads the STAGED set, so its trigger is BEFORE `git add`, never before `git commit` — `py ../katgpt-rs/scripts/staged_set_audit.py .` at the staging step. The Batch 336 landing skipped it; the explicit named-path staging discipline (15 files, each edited this session; sibling lane file-disjoint, arrived via rebase) held as the mitigation, verified by `git status --porcelain` pre-stage — but the instrument call itself was missed.
 Claim pushed pre-work as the snapshot claim row `7fa4be48` (+ LF-normalize `74bafecf`); plan committed `8a161dee`. — claimed 2026-11-05 by shikuwa-4090-w23pair (claim `7fa4be48` + LF-normalize `74bafecf`, pushed pre-work; expiry 2026-11-07T13:40:47+00:00)
 
 Two-source batch (the B320–322 multi-source precedent): the walk-23 B+ pair repo scans
