@@ -655,6 +655,14 @@ pub mod blueprint;
 // wires it; nothing here mutates the corpus.
 pub mod corpus_binding;
 
+// The c′ referee (issue 209): telemetry before/after + structural-identity
+// certificate for single-rule corpus-note edits — the delegated-owner verdict
+// on 206's structurally-UNDECIDED fixture bench. Store-free arithmetic over
+// the AttemptRow view (the durable-store mapping is the one gated seam);
+// four pinned states (PASS / FAIL / PENDING / UNDECIDED-by-starvation),
+// Beta-LCB95 via katgpt-core best_belief_score, DiD control arm.
+pub mod corpus_referee;
+
 // Attempt outcomes over the `.refine/fixseq/` ring (AUC(k) vs the base and
 // history-aggregate floors, LORO-held-out ridge readout). Pure stats over
 // the ring's jsonl wire shape, ungated so lib tests cover it at default

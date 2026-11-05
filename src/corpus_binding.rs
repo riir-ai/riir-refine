@@ -245,9 +245,14 @@ pub enum BindingRefusal {
 /// The binding record: `drive rule × gate stage`, BLAKE3-digested over the
 /// content fields and keyed to the corpus epoch it was diagnosed under.
 ///
-/// Digest scope: domain separator ‖ `drive_rule` ‖ stage ‖ `corpus_epoch` —
-/// deliberately NOT `recorded_at` (a re-run at a later time must reproduce
-/// the same record; the timestamp is bookkeeping, not identity).
+/// Digest scope (v2, issue 209 T1): domain separator ‖ `drive_rule` ‖ stage ‖
+/// `corpus_epoch` ‖ the bench-identity cert tag — deliberately NOT
+/// `recorded_at` (a re-run at a later time must reproduce the same record;
+/// the timestamp is bookkeeping, not identity). The cert tag folds the
+/// attached [`BenchIdentity`] in when present (tag byte 0x01 ‖ the four
+/// digests) and a bare 0x00 tag when absent — the v1→v2 bump is safe: the
+/// record was never persisted in the wild (the verb renders it, the note
+/// landing is a batch commit).
 pub struct CorpusBinding {
     pub drive_rule: String,
     pub stage: GateStage,
@@ -256,6 +261,10 @@ pub struct CorpusBinding {
     pub corpus_epoch: [u8; 32],
     /// Unix seconds at record time; un-hashed bookkeeping.
     pub recorded_at: u64,
+    /// The structural-identity certificate (issue 209 T1) — `None` is the
+    /// pre-209 shape; its absence is not an axis move (see
+    /// `corpus_referee::BenchIdentity`).
+    pub bench_identity: Option<crate::corpus_referee::BenchIdentity>,
     pub digest: [u8; 32],
 }
 
@@ -267,25 +276,74 @@ impl CorpusBinding {
         corpus_epoch: [u8; 32],
         recorded_at: u64,
     ) -> Self {
-        let digest = Self::compute_digest(drive_rule, stage, &corpus_epoch);
+        let digest = Self::compute_digest(drive_rule, stage, &corpus_epoch, None);
         Self {
             drive_rule: drive_rule.to_string(),
             stage,
             corpus_epoch,
             recorded_at,
+            bench_identity: None,
             digest,
         }
     }
 
     #[must_use]
-    fn compute_digest(drive_rule: &str, stage: GateStage, corpus_epoch: &[u8; 32]) -> [u8; 32] {
+    fn compute_digest(
+        drive_rule: &str,
+        stage: GateStage,
+        corpus_epoch: &[u8; 32],
+        cert: Option<&crate::corpus_referee::BenchIdentity>,
+    ) -> [u8; 32] {
         let mut h = Hasher::new();
-        h.update(b"riir-refine/corpus_binding/v1");
+        h.update(b"riir-refine/corpus_binding/v2");
         h.update(drive_rule.as_bytes());
         h.update(&[0]);
         h.update(&[stage as u8]);
         h.update(corpus_epoch);
+        // The cert rides the record's identity when attached (v2); absence
+        // is a bare tag so the no-cert digest stays deterministic.
+        if let Some(c) = cert {
+            h.update(&[0x01]);
+            h.update(&c.baseline_atoms);
+            h.update(&c.baseline_healed);
+            h.update(&c.edited_atoms);
+            h.update(&c.edited_healed);
+        } else {
+            h.update(&[0x00]);
+        }
         *h.finalize().as_bytes()
+    }
+
+    /// Attach a bench-identity certificate to a binding (chainable — the
+    /// cert rides the record the compose gate carries into a note landing).
+    /// The digest is RE-DERIVED: the cert is part of the v2 identity (a
+    /// record with a cert and the same record without are different
+    /// identities, verifiable apart).
+    #[must_use]
+    pub fn with_bench_identity(mut self, identity: crate::corpus_referee::BenchIdentity) -> Self {
+        self.digest = Self::compute_digest(
+            &self.drive_rule,
+            self.stage,
+            &self.corpus_epoch,
+            Some(&identity),
+        );
+        self.bench_identity = Some(identity);
+        self
+    }
+
+    /// The certificate read on an attached cert; `None` (no cert) is the
+    /// pre-209 binding shape and passes through — the cert is opt-in
+    /// evidence, its absence is not an axis move.
+    ///
+    /// # Errors
+    ///
+    /// [`crate::corpus_referee::BenchIdentityRefusal::AxisMoved`] per
+    /// [`crate::corpus_referee::BenchIdentity::verify`].
+    pub fn verify_bench_identity(&self) -> Result<(), crate::corpus_referee::BenchIdentityRefusal> {
+        match &self.bench_identity {
+            Some(cert) => cert.verify(),
+            None => Ok(()),
+        }
     }
 
     /// The `sst_certified::verify_against` shape: accept the epoch the record

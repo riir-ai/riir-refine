@@ -53,6 +53,9 @@ use std::path::{Path, PathBuf};
 use riir_refine::corpus_binding::{
     diagnose_with, CorpusBinding, RuleOutcomes, DEGENERACY_BAR, MIN_ATTEMPTS,
 };
+use riir_refine::corpus_referee::{
+    split_windows, AttemptRow, Enrollment, EnrollmentFile, RefereeInputs, Verdict, WindowTally,
+};
 use riir_refine::traj_store::TrajStore;
 
 /// One store's contribution to the fold.
@@ -103,7 +106,7 @@ impl StoreFold {
     }
 }
 
-fn fold_store(root: &Path) -> Result<StoreFold, String> {
+fn fold_store(root: &Path) -> Result<(StoreFold, Vec<AttemptRow>), String> {
     let (store, bad) = TrajStore::open(root).map_err(|e| {
         format!(
             "store under {} refused: {e}",
@@ -117,11 +120,13 @@ fn fold_store(root: &Path) -> Result<StoreFold, String> {
         per_rule: BTreeMap::new(),
         last_seen: BTreeMap::new(),
     };
+    let mut referee_rows = Vec::new();
     for row in store.dump() {
         fold.rows += 1;
         fold.fold_row(&row);
+        referee_rows.push(AttemptRow::from(&row));
     }
-    Ok(fold)
+    Ok((fold, referee_rows))
 }
 
 /// The blueprint history's watch half: per-rule reverted shares over the
@@ -185,6 +190,33 @@ fn default_roots() -> Vec<PathBuf> {
     roots
 }
 
+/// The enrolled rule's corpus domain — clippy first, then perf (the same
+/// resolution order the bind arm uses; the 11-04 candidate is a rust_perf
+/// rule). Unknown to both = perf default (the report still runs; the epoch
+/// label is advisory bookkeeping).
+#[must_use]
+fn domain_of(rule: &str, clippy_ids: &[&str], perf_ids: &[&str]) -> &'static str {
+    if clippy_ids.contains(&rule) {
+        "clippy_lints"
+    } else if perf_ids.contains(&rule) {
+        "rust_perf"
+    } else {
+        // Unknown to both: default the perf domain (the epoch label is
+        // advisory bookkeeping; the report still runs).
+        "rust_perf"
+    }
+}
+
+/// The rule's post-window failure rate (current − snapshot), for the
+/// report line.
+#[must_use]
+fn post_rate_of(case: &Enrollment, current: &WindowTally) -> f64 {
+    current
+        .saturating_sub(&case.pre)
+        .failure_rate()
+        .unwrap_or(0.0)
+}
+
 fn print_usage() {
     println!(
         "corpus-diagnose — the HARVEST→BIND→NOTE verb (issue 206)\n\
@@ -205,6 +237,14 @@ fn main() {
     let mut repos: Option<Vec<PathBuf>> = None;
     let mut recent_days: Option<u64> = None;
     let mut bind: Option<String> = None;
+    let mut referee: Option<String> = None;
+    let mut referee_set = false;
+    let mut enroll: Option<String> = None;
+    let mut edit_epoch: Option<String> = None;
+    let mut edit_ts: Option<u64> = None;
+    let mut pre_attempts: Option<u32> = None;
+    let mut pre_fails: Option<u32> = None;
+    let mut batches: Option<u32> = None;
     let mut argv = std::env::args().skip(1).peekable();
     while let Some(arg) = argv.next() {
         match arg.as_str() {
@@ -235,6 +275,60 @@ fn main() {
                     std::process::exit(2);
                 }
             },
+            "--referee" => {
+                // Optional rule filter; bare --referee reports all cases.
+                // A following token counts as the filter ONLY when it is
+                // not another flag (the classic optional-value trap —
+                // peeking, never blind next()).
+                referee_set = true;
+                if let Some(next) = argv.peek() {
+                    if !next.starts_with('-') {
+                        referee = Some(argv.next().expect("peeked"));
+                    }
+                }
+            }
+            "--enroll" => match argv.next() {
+                Some(v) => enroll = Some(v),
+                None => {
+                    eprintln!("--enroll needs a rule id");
+                    std::process::exit(2);
+                }
+            },
+            "--edit-epoch" => match argv.next() {
+                Some(v) => edit_epoch = Some(v),
+                None => {
+                    eprintln!("--edit-epoch needs the note's 8-hex epoch label");
+                    std::process::exit(2);
+                }
+            },
+            "--edit-ts" => match argv.next().and_then(|v| v.parse::<u64>().ok()) {
+                Some(v) => edit_ts = Some(v),
+                None => {
+                    eprintln!("--edit-ts needs a unix-seconds number");
+                    std::process::exit(2);
+                }
+            },
+            "--pre-attempts" => match argv.next().and_then(|v| v.parse::<u32>().ok()) {
+                Some(v) => pre_attempts = Some(v),
+                None => {
+                    eprintln!("--pre-attempts needs a number");
+                    std::process::exit(2);
+                }
+            },
+            "--pre-fails" => match argv.next().and_then(|v| v.parse::<u32>().ok()) {
+                Some(v) => pre_fails = Some(v),
+                None => {
+                    eprintln!("--pre-fails needs a number");
+                    std::process::exit(2);
+                }
+            },
+            "--batches" => match argv.next().and_then(|v| v.parse::<u32>().ok()) {
+                Some(v) => batches = Some(v),
+                None => {
+                    eprintln!("--batches needs a number (the corpus epochs observed since the edit)");
+                    std::process::exit(2);
+                }
+            },
             "--help" | "-h" => {
                 print_usage();
                 return;
@@ -257,9 +351,12 @@ fn main() {
     let mut folds: Vec<StoreFold> = Vec::new();
     let mut stores_opened = 0usize;
     let mut history_rows = 0usize;
+    // The referee's per-row view (controls + vintage need last_seen stamps;
+    // the summary fold above aggregates them away) — ONE pass, two views.
+    let mut referee_rows: Vec<AttemptRow> = Vec::new();
     for root in &roots {
         match fold_store(root) {
-            Ok(f) => {
+            Ok((f, rows)) => {
                 if f.rows > 0 || f.bad_rows > 0 {
                     stores_opened += 1;
                 }
@@ -270,6 +367,7 @@ fn main() {
                     f.rows,
                     f.bad_rows
                 );
+                referee_rows.extend(rows);
                 folds.push(f);
             }
             Err(e) => {
@@ -393,6 +491,188 @@ fn main() {
                 eprintln!("bind refused: {e:?}");
                 std::process::exit(2);
             }
+        }
+    }
+
+    // ── The enroll arm (issue 209 T5): seed a case from the note's own ────
+    // diagnose-time values. The snapshot values ARE the landed note's
+    // numbers (case #1: 9/18 at compile gate — the note text carries them).
+    if let Some(rule) = enroll.as_deref() {
+        let (Some(edit_epoch), Some(ts), Some(pa), Some(pf)) =
+            (edit_epoch.clone(), edit_ts, pre_attempts, pre_fails)
+        else {
+            eprintln!(
+                "--enroll needs --edit-epoch <8hex> --edit-ts <unix> \
+                 --pre-attempts <N> --pre-fails <M> (the landed note's values)"
+            );
+            std::process::exit(2);
+        };
+        if pa < pf {
+            eprintln!("--pre-attempts {pa} must be ≥ --pre-fails {pf}");
+            std::process::exit(2);
+        }
+        // The snapshot's stage attribution: the 11-04 candidates were all
+        // W-class compile-gate — the compile bucket carries the fails, the
+        // applied bucket the successes.
+        let mut file = EnrollmentFile::load(std::path::Path::new(".")).unwrap_or_else(|e| {
+            eprintln!("enroll refused: {e}");
+            std::process::exit(2);
+        });
+        file.upsert(Enrollment {
+            rule: rule.to_string(),
+            edit_epoch_short: edit_epoch.clone(),
+            edit_ts: ts,
+            pre: riir_refine::corpus_referee::WindowTally {
+                parse_failures: 0,
+                compile_failures: pf,
+                verify_failures: 0,
+                applied: pa - pf,
+            },
+            batches_observed: batches.unwrap_or(0),
+            last_seen_epoch: None,
+            snapshot_population: String::new(),
+        });
+        if let Err(e) = file.save(std::path::Path::new(".")) {
+            eprintln!("enroll save failed: {e}");
+            std::process::exit(2);
+        }
+        println!(
+            "enrolled: {rule} epoch={edit_epoch} ts={ts} pre={} fail={} batches={} → {}",
+            pa,
+            pf,
+            batches.unwrap_or(0),
+            EnrollmentFile::path(std::path::Path::new(".")).display(),
+        );
+        return;
+    }
+
+    // ── The referee arm (issue 209 T4): read the enrolled cases. ─────────
+    if referee_set {
+        let want = referee.as_deref();
+        let mut file = EnrollmentFile::load(std::path::Path::new(".")).unwrap_or_else(|e| {
+            eprintln!("referee refused: {e}");
+            std::process::exit(2);
+        });
+        if file.cases.is_empty() {
+            println!("referee: no enrolled cases (enroll one with --enroll)");
+            return;
+        }
+        let clippy_corpus = riir_refine::domains::clippy_lints::corpus::build_seed_corpus();
+        let perf_corpus = riir_refine::domains::rust_perf::corpus::build_perf_seed_corpus();
+        // Per-rule rows for the split + controls (the sweep above already
+        // collected them once).
+        let mut by_rule: BTreeMap<String, Vec<AttemptRow>> = BTreeMap::new();
+        for row in referee_rows {
+            let rule = row.rule_id.clone();
+            by_rule.entry(rule).or_default().push(row);
+        }
+        // The live corpus epoch per domain (clippy first, then perf — the
+        // same order the bind arm resolves; the batch counter tracks the
+        // enrolled rule's OWN domain).
+        let clippy_ids = clippy_corpus.rule_ids();
+        let perf_ids = perf_corpus.rule_ids();
+        let epoch_hex = |c: &[u8; 32]| c.iter().map(|b| format!("{b:02x}")).collect::<String>();
+        // Both epochs computed eagerly — the two corpora are different
+        // Corpus<D> instantiations and cannot share a binding.
+        let (clippy_epoch, perf_epoch) = (epoch_hex(&clippy_corpus.commitment), epoch_hex(&perf_corpus.commitment));
+        let live_epoch = |domain: &str| -> &str {
+            if domain == "clippy_lints" { &clippy_epoch } else { &perf_epoch }
+        };
+        let mut any = false;
+        for case in &mut file.cases {
+            if let Some(w) = want {
+                if case.rule != w {
+                    continue;
+                }
+            }
+            any = true;
+            // Batch-counter bump: a corpus epoch the file has not seen
+            // counts one observed batch (the first run seeds the stamp;
+            // undercounting delays starvation — the conservative side).
+            let live = live_epoch(domain_of(&case.rule, &clippy_ids, &perf_ids)).to_string();
+            match &case.last_seen_epoch {
+                None => case.last_seen_epoch = Some(live.clone()),
+                Some(seen) if *seen != live => {
+                    case.batches_observed += 1;
+                    case.last_seen_epoch = Some(live.clone());
+                }
+                _ => {}
+            }
+            let rows = by_rule.get(&case.rule).map(Vec::as_slice).unwrap_or(&[]);
+            let (rule_pre_rows, _rule_post_rows) = split_windows(rows, case.edit_ts);
+            let _ = rule_pre_rows; // the snapshot IS the pre side (the split informs controls)
+            let current = WindowTally::from_rule_outcomes(
+                merged.get(&case.rule).unwrap_or(&RuleOutcomes::default()),
+            );
+            let rule_last_seen = merged_seen.get(&case.rule).copied().unwrap_or(0);
+            // The control set: every OTHER rule with evidence on both sides
+            // of the edit (the fold's split), never the enrolled rule.
+            let mut controls: Vec<(String, WindowTally, WindowTally)> = Vec::new();
+            for (rule, rows) in &by_rule {
+                if rule == &case.rule {
+                    continue;
+                }
+                let (cpre, cpost) = split_windows(rows, case.edit_ts);
+                if cpre.attempts() > 0 && cpost.attempts() > 0 {
+                    controls.push((rule.clone(), cpre, cpost));
+                }
+            }
+            let inputs = RefereeInputs {
+                rule_current: &current,
+                rule_last_seen,
+                controls: &controls,
+                now,
+                recent_floor: window_floor,
+            };
+            let verdict = riir_refine::corpus_referee::read(case, &inputs);
+            println!();
+            println!(
+                "referee: {} (edit epoch {}, ts {}) batches={} controls={}",
+                case.rule,
+                case.edit_epoch_short,
+                case.edit_ts,
+                case.batches_observed,
+                controls.len(),
+            );
+            if !case.snapshot_population.is_empty() {
+                println!("  snapshot population: {}", case.snapshot_population);
+            }
+            match &verdict {
+                Verdict::Pass { lcb_drop, drop, control_drift } | Verdict::Fail { lcb_drop, drop, control_drift } => {
+                    println!(
+                        "  {}: drop {drop:.3} (LCB95 {lcb_drop:.3}) vs control drift {control_drift:.3} — \
+                         pre {:.3} → post {:.3} (n={} post-edit attempts)",
+                        verdict.state(),
+                        case.pre.failure_rate().unwrap_or(0.0),
+                        post_rate_of(case, &current),
+                        current.saturating_sub(&case.pre).attempts(),
+                    );
+                }
+                Verdict::Pending { reason } => {
+                    let post_attempts = current.saturating_sub(&case.pre).attempts();
+                    println!(
+                        "  PENDING ({reason:?}) — post-edit attempts so far: {post_attempts}/{}",
+                        riir_refine::corpus_referee::MIN_POST_ATTEMPTS,
+                    );
+                }
+                Verdict::Starved { post_attempts, batches_observed } => {
+                    println!(
+                        "  UNDECIDED-BY-STARVATION — {post_attempts}/{} post-edit attempts \
+                         over {batches_observed} observed corpus epochs",
+                        riir_refine::corpus_referee::MIN_POST_ATTEMPTS,
+                    );
+                }
+            }
+        }
+        if !any {
+            eprintln!("referee: no enrolled case names {}", want.unwrap_or(""));
+            std::process::exit(2);
+        }
+        // Persist the bumped batch counters (a report that forgets its own
+        // observations would re-count the same epoch forever).
+        if let Err(e) = file.save(std::path::Path::new(".")) {
+            eprintln!("referee save failed (counters): {e}");
+            std::process::exit(2);
         }
     }
 }

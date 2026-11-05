@@ -1315,7 +1315,10 @@ required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
 # sweeps the durable trajectory stores + blueprint histories, folds per-rule
 # outcomes, and reports the degenerate-cluster diagnose at the pinned
 # predicate; `--bind` renders the CorpusBinding + templated note against the
-# live corpus epoch (the compose-gate proof). REPORT-ONLY — the corpus is
+# live corpus epoch (the compose-gate proof); `--enroll` seeds a referee
+# case and `--referee` reads it (issue 209's c′ telemetry referee —
+# REPORT-ONLY; the verdict table is PASS/FAIL/PENDING/UNDECIDED-by-
+# starvation). REPORT-ONLY throughout — the corpus is
 # never written; the note landing stays a batch commit + pins manifest.
 [[bin]]
 name = "corpus_diagnose"
