@@ -4,8 +4,7 @@
 **Delegated-owner verdict 2026-11-04 (request session fe55a9d0, claude_code reviewer; AGREE, recorded per the delegated-owner flow): BOTH remaining fences adjudicated. (D1) The CPU-portable G2 axis is CLOSED with the measured disclosure (tranche median 1.0000 recorded — the axis structurally cannot express GPU-shaped wins; measured evidence, not a retune). The RE-CAMPAIGN G2 is the GPU-host microbench on the 4090 (`agent-mail rig run 4090 --exclusive`), the pre-registered ≥ 6% median bar UNCHANGED, and PRE-REGISTRATION IS REQUIRED BEFORE ANY RUN (T6's three conditions). (D2) The G5-cost fence STAYS — the ≤ 1.0 ms/file ceiling is never re-registered after a failing measurement; the substrate lever has since LANDED as riir-neuron-db Issue 642 (2026-11-03: `two_stage_oversample = Some(4)` measured 4.7×/call at the loop corpus + the scratch-reuse twins `retrieve_diverse[_two_stage]_into` / `DiverseScanScratch` shipped; ndb's projected refine loop scale 4.37 → 0.92 ms/file), so the fence clears via the REFINE-SIDE lane (T7): adopt the scratch twins in the per-line suggest loop + re-run the G5 cost harness on the REGISTERED corpus with the same p50 definition + box provenance — the fence clears iff p50 ≤ 1.0 ms THERE (ndb's number is ndb's corpus; the gap vs Bench 125's 38.795 ms settles at the re-measure). Promotion still requires BOTH G2(GPU-host) AND G5-cost. While recording: T3 verified LANDED (`mod.rs::context_notes` propagates the G1-record annotation; `verify.rs` consumes `g1_opt_backed` + the digest-keyed verdict store) — ticked below. Re-campaign sequence: T6 ∧ T7 → re-run G1+G3+G4+G5 → promotion verdict.
 **Lease closed:** zed-shikuwa-i191gate, 1793523566, expires 2026-11-03T01:39:26+00:00 — T1–T5 executed and pushed (T2 `a9703c00a`, T3 `82b77f88b`, T4 `2ff3c0a61`, T5 `96f3733ee`, record `a0a751d25`); the delegated ratification verdict (AGREE, all five checks, two non-blocking nits fixed/deferred) closed the campaign.
 **Lease closed:** zed-m3-i191t7, 1793839152, expires 2026-11-07T00:39:12+00:00 — claimed for T7 only (T6 stayed parked: 4090 busy + the owner's sequencing); T7 executed + landed the same session (`77f7e46a9`, Bench 129): the adoption landed, the fence verdict FAIL recorded, T6 remains parked (4090 busy + owner sequencing).
-**Claimed:** zed-m3-i191t6, 1793878648, expires 2026-11-07T11:37:28+00:00
-— T6 only (the pre-registration record first per the D1 verdict; the harness lane + the exclusive run after). Sequencing precondition re-verified 2026-11-05: the v0.4.x publish LANDED (v0.4.0/0.4.1/0.4.2 all public, assets up, 2026-11-04), the 202/190/198/192 records are at their owner-gated rest state (202 resolved+removed; 190/192 remainders owner acts; 198 outcome-polled same day), and the 4090 reads QUIET — the T7 lane's two parking reasons no longer hold.
+**Lease closed:** zed-m3-i191t6, 1793878648, was expires 2026-11-07T11:37:28+00:00 — T6 completed in-window (Bench 130 pre-registration + Bench 133 sources pin + Bench 135 run: GPU G2 PASS 1.3774; the sequencing precondition re-verified at claim time — v0.4.x publish landed 11-04, records at owner-gated rest, 4090 QUIET) (claim record: zed-m3-i191t6, epoch 1793878648, was expires 2026-11-07T11:37:28+00:00)
 
 ## The question
 
@@ -184,7 +183,7 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       - AMENDED execution note: the original T5 text named the lease + fresh `.benchmarks/`
         number + rig exclusivity + PROVENANCE — all satisfied (Bench 124 §Provenance); the
         "G5 match census in the same campaign" clause is the one disclosed deferral.
-- [ ] T6 — PRE-REGISTER the GPU-host G2 bench (the 2026-11-04 verdict's conditions — ALL
+- [x] T6 — PRE-REGISTER the GPU-host G2 bench (the 2026-11-04 verdict's conditions — ALL
       pinned in a record BEFORE any run): (a) the full bench registration — tranche families
       (the deterministic selector's rule extends to the GPU-shaped surface), the ref-vs-opt
       kernel pairs, the interleaved A/B pairing, n, `agent-mail rig run 4090 --exclusive`, and
@@ -198,17 +197,23 @@ by NOTHING standing; only Batch 322 landed its fixtures in-tree.
       v0.4.0 publish + the 202/190/198/192 records (owner: "and 191 later"). The
       pre-registration record lands FIRST (the three conditions), then the harness lane, then
       the run.**
-      **— STEP 1 LANDED 2026-11-05 (zed-m3-i191t6): [Bench 130](../.benchmarks/130_kernel_opt_g2_gpu_preregistration.md)
-      — the full registration (the selector extended + recomputed at `2498cc501`: 15 files,
-      13 registered / 2 NOT-REGISTERED with reasons; 21 named pairs with pinned geometry),
-      MIN_MEASURED_PAIRS = 12 with UNSEEN semantics, condition (c) pinned as
-      restricted-AND-disclosed (the 7 CPU-regressors stay unnamed by policy — naming them
-      would require the forbidden CPU re-run), the harness law (PAIRS=15 interleave, WARMUP=3,
-      correctness gate pre-timing, black_box loud zero), the rig contract (--exclusive --needs
-      cuda + the PROVENANCE field list + the thermal gate), and the verdict arithmetic
-      (≥ 1.06 median bar unchanged). REMAINING: the sources lane (the pair sources committed
-      + digest-pinned — no timing before that commit), then the exclusive run + the run
-      record.**
+      **— DONE 2026-11-05 (zed-m3-i191t6, all three steps under the one lease):**
+      [Bench 130](../.benchmarks/130_kernel_opt_g2_gpu_preregistration.md) (the
+      pre-registration: 23 pairs, pinned geometry, MIN_MEASURED_PAIRS=12, condition (c)
+      restricted-AND-disclosed) → [Bench 133](../.benchmarks/133_kernel_opt_g2_gpu_sources.md)
+      (the sources pin: 10 files BLAKE3-digested, Metal-verified 23/0 correctness + clippy
+      clean before any run; the number moved 131→133 by the pregate lane's first-allocation
+      adjudication `3d5aff179`) → [Bench 135](../.benchmarks/135_kernel_opt_g2_gpu_run.md)
+      (the RUN: correctness **23/0 on CUDA**, **23/23 measured** ≥ the 12 floor, **leg median
+      1.3774 ≥ 1.06 — the GPU-host G2 leg PASSES**; 13 pairs ≥ 1.06, 8 measured regressions
+      recorded per-rule; thermal clean; rustc 1.99.0 b940084d7 both boxes; the first job
+      failed pre-compile on the box's 1.93.0 default — the toolchain-selector disclosure +
+      the one-alignment fix are in the record). Promotion STILL REFUSED — the failing axis is
+      G5-cost (Bench 129; Bench 132's pregate p50 green / p95 fail), per bar 6. The
+      re-campaign is now single-fence (G5-cost, the pregate lane's Bench 134 lever). Lease
+      closed: **Lease closed:** zed-m3-i191t6, 1793878648, was expires 2026-11-07T11:37:28+00:00 — T6
+      completed in-window (Bench 130+133+135; the claim epoch on the Status line is the
+      provenance).
 - [x] T7 — the G5-cost clearing lane (the substrate half LANDED as riir-neuron-db Issue 642,
       2026-11-03): adopt the scratch-reuse twins (`ShardIndex::retrieve_diverse_two_stage_into`
       + `DiverseScanScratch`) in the per-line suggest loop (`corpus_index.rs::suggest_deep_into`
