@@ -37,17 +37,17 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
+use riir_refine::EvolveRecorder;
 use riir_refine::domains::clippy_lints::lint_level::{
-    gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
+    ALLOW_BY_DEFAULT_GROUPS, LevelResolver, gated_lints,
 };
 use riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_refine::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_refine::draft::span_source::collect_source_files;
 use riir_refine::draft::{
-    parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
+    ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion, parse_clippy_feed, paths_ref_match,
 };
 use riir_refine::edit_emitter::RuleEdit;
-use riir_refine::EvolveRecorder;
 
 /// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
@@ -1756,7 +1756,7 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
 #[cfg(feature = "kat_transport")]
 fn run_kat_keys(words: &[String]) {
     use riir_refine::kat_account::KatAccount;
-    use riir_refine::kat_keyset_client::{self as ks, http, JoinRequest};
+    use riir_refine::kat_keyset_client::{self as ks, JoinRequest, http};
 
     let fail = |msg: String| -> ! {
         eprintln!("account keys: {msg}");
@@ -1858,7 +1858,7 @@ fn run_kat_keys(words: &[String]) {
 #[cfg(feature = "kat_service")]
 fn run_kat_genesis(words: &[String]) {
     use riir_refine::kat_genesis_client as gc;
-    use riir_refine::kat_protocol_genesis::{import_digest, GenesisStatus};
+    use riir_refine::kat_protocol_genesis::{GenesisStatus, import_digest};
     use riir_refine::kat_protocol_lease::hex32;
 
     let fail = |msg: String| -> ! {
@@ -2278,8 +2278,8 @@ fn prompt_factor(prompt: &str) -> Option<String> {
 #[cfg(feature = "kat_transport")]
 fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     use riir_kat::kat_recovery_client::{
-        bind_flow, compose_numeric_claim, github_device_login, nonce_flow, BindRequest,
-        HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure,
+        BindRequest, HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure, bind_flow,
+        compose_numeric_claim, github_device_login, nonce_flow,
     };
 
     debug_assert_eq!(provider, "github", "the parse arm gates the vocabulary");
@@ -2467,7 +2467,7 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
 /// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_refine::kat_account::{history_lines, KatAccount};
+    use riir_refine::kat_account::{KatAccount, history_lines};
     use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
@@ -2767,7 +2767,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
 #[cfg(feature = "kat_transport")]
 fn run_kat_update() {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
     };
 
     let root = resolve_heal_root(&[]);
@@ -3301,7 +3301,9 @@ fn run_update_surface_hooks(paths: &[PathBuf]) {
         // opt-in by default).
         let hands_free = settings.auto_upgrade || riir_refine::update_check::auto_upgrade_enabled();
         if newer && hands_free {
-            eprintln!("auto-upgrade: applying (settings auto_upgrade = true, or RIIR_REFINE_AUTO_UPGRADE=1)…");
+            eprintln!(
+                "auto-upgrade: applying (settings auto_upgrade = true, or RIIR_REFINE_AUTO_UPGRADE=1)…"
+            );
             match riir_refine::update_check::upgrade(
                 &riir_refine::update_check::GitHubLatest::new(),
                 &riir_refine::update_check::HttpDownload::new(),
@@ -3398,7 +3400,7 @@ fn maybe_auto_corpus() {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_lease_client::{
-            run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+            HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
         };
         let url = command_service_url();
         let store = LeaseStore::open_net(&root, &url);
@@ -3606,7 +3608,7 @@ fn print_no_policy_remedy(
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 fn run_kat_sync_export(target: &Path) {
     use riir_refine::kat_redact::SpanOrigin;
-    use riir_refine::kat_sync_payload::{ephemeral_signer, SyncPayloadBuilder};
+    use riir_refine::kat_sync_payload::{SyncPayloadBuilder, ephemeral_signer};
 
     let root = resolve_heal_root(&[]);
     let Some((rows, loaded)) = load_mining_rows(&root, true, "export") else {
@@ -3674,7 +3676,7 @@ fn push_mining_batch(
     url: &str,
     transport: &riir_refine::kat_lease_client::HttpLeaseTransport,
 ) -> MinePush {
-    use riir_refine::kat_lease_client::{queue_outbox, LeaseTransport};
+    use riir_refine::kat_lease_client::{LeaseTransport, queue_outbox};
     use riir_refine::kat_redact::SpanOrigin;
     use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
@@ -4294,7 +4296,7 @@ fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
+        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
     };
 
     let root = resolve_heal_root(&[]);
@@ -4404,7 +4406,7 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_refine::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
+    use riir_refine::kat_lease_client::{CLAIM_VERSION, ClaimRequest, queue_claim};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
@@ -5070,7 +5072,7 @@ fn run_kat_migrate(
             // printed prefilled URL (the worker holds no write credential).
             if let Some(draft) = ack.proposal_draft.as_ref() {
                 use riir_refine::kat_migrate_client::{
-                    open_proposal_draft, render_draft_instructions, DraftOpen,
+                    DraftOpen, open_proposal_draft, render_draft_instructions,
                 };
                 match open_proposal_draft(draft) {
                     DraftOpen::Opened(issue_url) => println!(
@@ -5142,10 +5144,10 @@ fn run_migrate_normal(
     github_token_flag: Option<String>,
     totp_code: Option<&str>,
 ) {
-    use riir_kat::kat_recovery_client::{ssh_picker, HttpRecoveryTransport, CLIENT_ID_ENV};
+    use riir_kat::kat_recovery_client::{CLIENT_ID_ENV, HttpRecoveryTransport, ssh_picker};
     use riir_refine::kat_migrate_normal::{
-        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg,
-        UreqKeysBodySource,
+        LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg, UreqKeysBodySource,
+        run_normal_migration,
     };
     use std::io::{BufRead as _, IsTerminal as _, Write as _};
 
@@ -6686,7 +6688,7 @@ pub fn show(p: &P) -> String {
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
     fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
-        use riir_refine::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
+        use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, collect_edits};
         use riir_refine::edit_emitter::apply_edits;
         use riir_refine::kat_meter::{KatCharge, KatMeter};
 
@@ -6918,7 +6920,7 @@ fn run_kat_corpus_pr(
     submit: bool,
     root: &std::path::Path,
 ) {
-    use riir_refine::kat_corpus_pr::{run_corpus_pr, CorpusPrArgs, HttpCorpusPrWire};
+    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
 
     let args = CorpusPrArgs {
         src: src.unwrap_or_default().to_string(),
@@ -6954,10 +6956,10 @@ fn run_kat_corpus_pr(
 fn run_kat_replay() {
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
     use riir_refine::kat_replay::{
-        judge_item, toolchain_display, toolchain_fingerprint, ReplayVerdict,
+        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
     };
     use riir_refine::kat_replay_client::{
-        accept_line, request_lease, submit_verdict, unhex32, HttpReplayTransport,
+        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
     };
 
     // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
@@ -11802,7 +11804,7 @@ fn finish_score_bench(
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
 fn run_score_bench_compile() {
     use riir_refine::domains::rustc_errors::composite;
-    use riir_refine::domains::rustc_errors::corpus_gen::{territory_of, Territory};
+    use riir_refine::domains::rustc_errors::corpus_gen::{Territory, territory_of};
     use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
@@ -12512,10 +12514,10 @@ const BUILD_MACHINE_MANIFEST_DIR: Option<&str> = None;
 /// 3. the real-code fired histogram, which is OPTIONAL — its absence costs
 ///    the local half of the frequency axis and nothing else, so it degrades
 ///    to `None` provenance rather than refusing the whole report.
-/// The installed driver's lint surface (`clippy-driver -W help`), shared by
-/// the Issue-119 coverage report and the Issue-983 corpus-gap lane — one
-/// spawn, one parse, one blind-disclosure shape. A spawn failure or a
-/// non-zero exit is BLIND, never an empty surface.
+///    The installed driver's lint surface (`clippy-driver -W help`), shared by
+///    the Issue-119 coverage report and the Issue-983 corpus-gap lane — one
+///    spawn, one parse, one blind-disclosure shape. A spawn failure or a
+///    non-zero exit is BLIND, never an empty surface.
 fn spawn_lint_surface() -> riir_refine::corpus_coverage::LintSurface {
     use riir_refine::corpus_coverage as cc;
 
@@ -16488,11 +16490,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-                             // The bench-target guard (2026-09-16 intake, P30): applying a
-                             // perf rule to a bench target changes WHAT the bench measures —
-                             // `--verify` proves compilation, never measurement validity,
-                             // and a bench file's numbers ARE its artifact. Decline loudly,
-                             // never silently; the operator can still apply manually.
+            // The bench-target guard (2026-09-16 intake, P30): applying a
+            // perf rule to a bench target changes WHAT the bench measures —
+            // `--verify` proves compilation, never measurement validity,
+            // and a bench file's numbers ARE its artifact. Decline loudly,
+            // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
             // P39 (post-mining intake, 2026-09-25): under --repo-posture the
             // rust_perf lane is exempt from the posture MECHANISM (the
@@ -19036,20 +19038,20 @@ fn main() {
                 &outcomes,
             );
             match pushed {
-                    Ok(ack) => println!(
-                        "📡 shared {shared} finding(s) with the network — epoch {}{}",
-                        ack.epoch,
-                        if ack.recorded_new {
-                            ""
-                        } else {
-                            " (replay — already shared)"
-                        },
-                    ),
-                    Err(e) => eprintln!(
-                        "📡 the network share failed ({}) — nothing retried; the next run shares its own outcomes",
-                        e.line()
-                    ),
-                }
+                Ok(ack) => println!(
+                    "📡 shared {shared} finding(s) with the network — epoch {}{}",
+                    ack.epoch,
+                    if ack.recorded_new {
+                        ""
+                    } else {
+                        " (replay — already shared)"
+                    },
+                ),
+                Err(e) => eprintln!(
+                    "📡 the network share failed ({}) — nothing retried; the next run shares its own outcomes",
+                    e.line()
+                ),
+            }
         } else {
             eprintln!(
                 "📡 the joined feed is armed but the account key is unreadable — nothing shared this run"
@@ -19319,7 +19321,7 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
 #[cfg(feature = "docker")]
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
     use riir_refine::domains::docker::proposers::fix_all;
-    use riir_refine::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
+    use riir_refine::domains::docker::rules::{FIXABLE_DOCKER, scan_source_with};
 
     let mut printed = 0usize;
     for path in paths {
@@ -19378,8 +19380,8 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 /// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
 #[cfg(feature = "shader_perf")]
 fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
-    use riir_refine::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
     use riir_refine::domains::shader_perf::ShaderScanner;
+    use riir_refine::domains::shader_perf::proposers::{FIXABLE_SHADER, collect_all_edits};
 
     let mut printed = 0usize;
     for path in paths {
@@ -19530,7 +19532,7 @@ fn run_overlay_with_promotion(
     pin: Option<u64>,
     heal_root: &std::path::Path,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_refine::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
+    use riir_refine::kat_promotion::{PromotionRegistry, REGISTRY_FILE, promotion_run_overlay};
 
     let leased = lease_overlay_for_run(store, pin);
     let registry_path = heal_root.join(REGISTRY_FILE);
@@ -19591,8 +19593,8 @@ fn lease_overlay_for_run(
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_refine::kat_lease_client::{
-        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
-        PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
+        PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER, PACK_DOMAIN_KERNEL,
+        PACK_DOMAIN_PERF, PACK_DOMAIN_SEC, overlay_from_epoch,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -19901,7 +19903,7 @@ fn run_reheat_pass(
     active_set: &riir_refine::active_set::ActiveSet,
 ) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_refine::kat_lease_client::{
-        run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans,
+        HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans, run_update_phase,
     };
 
     // One bounded lease check: did a new epoch land?
@@ -20267,7 +20269,7 @@ mod fix_domain_tests {
 #[cfg(test)]
 mod corpus_stats_needle_tests {
     use super::{
-        count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE,
+        CORPUS_DOMAIN_TABLE, count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count,
     };
 
     #[test]
@@ -20324,7 +20326,7 @@ mod corpus_stats_needle_tests {
 /// this task closed) fails here instead of in a user's shell.
 #[cfg(test)]
 mod mode_flag_tests {
-    use super::{validate_mode_flags as v, Args};
+    use super::{Args, validate_mode_flags as v};
 
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were

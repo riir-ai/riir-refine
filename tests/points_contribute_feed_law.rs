@@ -9,10 +9,7 @@
 use riir_refine::first_run_consent::{Answer, CONSENT_FILE};
 
 fn temp_dir(tag: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!(
-        "refine-i204-{tag}-{}",
-        std::process::id()
-    ));
+    let d = std::env::temp_dir().join(format!("refine-i204-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).expect("temp dir");
     d
@@ -42,7 +39,7 @@ fn the_feed_payload_is_counts_only_by_shape() {
     // pins the exact shape in riir-ledger; this floor re-asserts the same
     // law over the client's fold output so a client-side field addition
     // cannot slip the wire silently.
-    let outcomes = vec![
+    let outcomes = [
         riir_refine::points_client::ContributeOutcome {
             name: "needless_return".to_string(),
             written: 2,
@@ -60,11 +57,13 @@ fn the_feed_payload_is_counts_only_by_shape() {
         .collect();
     let rules: Vec<riir_ledger::dto::ContributeRuleOutcome> = folded
         .into_iter()
-        .map(|(name, (written, declined))| riir_ledger::dto::ContributeRuleOutcome {
-            name: name.to_string(),
-            written,
-            declined,
-        })
+        .map(
+            |(name, (written, declined))| riir_ledger::dto::ContributeRuleOutcome {
+                name: name.to_string(),
+                written,
+                declined,
+            },
+        )
         .collect();
     let body = serde_json::to_string(&rules).unwrap();
     for banned in ["span", "source", "path", "file", "snippet", "code_text"] {

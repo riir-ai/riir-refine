@@ -1,6 +1,16 @@
 # Research 372 — Distill verdict: nnethercote "How to speed up the Rust compiler in November 2026"
 
-**Status:** DISTILLED — staged as plan 343 (nominal Batch 334), unclaimed; claim-before-edit per protocol. Discharges the standing "nnethercote ~11-01" author-scoped dated lead (the lead awaited nnethercote-AUTHORED work; this is his month-2 Hexcat report; the 2026-11-03 #164484 verdict (Research 363) recorded the lead OPEN as author-scoped — this verdict is the author-scoped re-sweep that closes it).
+**Status:** DISTILLED — LANDED as Batch 334 (2026-11-05, Plan 343, entries_66, rust_perf 300→302; claim `d4d7ba8` pre-work, discharged by the landing). Discharges the standing "nnethercote ~11-01" author-scoped dated lead (the lead awaited nnethercote-AUTHORED work; this is his month-2 Hexcat report; the 2026-11-03 #164484 verdict (Research 363) recorded the lead OPEN as author-scoped — this verdict is the author-scoped re-sweep that closes it).
+
+## Landing addendum (2026-11-05, zed-m3-batch334)
+
+- **T0 outcome: BOTH candidates survived the full-diff read — zero drops.** The 10-17 pass's #163857 title-triage ("no-convert-at-fidelity") did NOT survive: the full read surfaced the four-format table behind a variable-length high-bit prefix, the first-fit invariant, and three generalizable design laws (hot field inline in EVERY format incl. the interned one + the cold-field-only intern key `SpanDataNoCtxt`; measured field widths — "the best one found after many measurements"; alignment as part of the claim — `repr(packed(4))` keeps container types small). #163628's full diff read surfaced the verbatim "TLS, locking, etc." cost face + the three adopted call sites (hash/encode/decode) + the removed-direct-helpers detail (the memo REPLACED, not decorated).
+- **Rule 1 GOAT: ParetoDominant 3/0/0** — 6.79×/6.24×/5.49× at 1K/16K/262K, allocs 0/0 at every size, release posture, preflight `PROVENANCE: power=AC Power load=2.50 swap=985.31M canary=skipped powermode=2(high)`; the yield estimate's benchable 127→128 and notbenchable 173→174 landed exactly as forecast (302 total, the top of the 301–302 band).
+- **Retrieval floors HELD — no re-pin** (gate 27/0; zero span casualties at 300→302 — Batch 332's top-5 demotion class did NOT recur).
+- **Score-bench run #230: heal 0.9636 FLAT, parse 1.0** — no corpus-growth regression.
+- **Release-set binary rebuilt + installed** (rust_perf is release-set; the B329/B331 precedent).
+- En-route: five pre-existing HEAD reds the ×4-clippy gate surfaced were repaired in the batch commit (offline.rs / heal.rs docs / points test vec / points_client doc / retrieval_eval flat-posture floor cfgs); one rulewright wrong-heal (heal.rs:11993's comment-guarded closure → the documented E0631 bare-fn path) caught and reverted by hand — logged for the rulewright's improvement queue.
+- Gates: needles+parse 2/2 · default lib 2851/0 · rust_perf 352/0 · score_bench 3234/0 (11i) · clippy −D ×4 postures 0 · retrieval 27/0 · pins_manifest + prose agree. Full record: the queue landing row + plan 343.
 
 ## Source
 

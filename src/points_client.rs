@@ -98,7 +98,6 @@ pub fn fresh_contribute_run_id(machine: &str) -> [u8; 32] {
     h.finalize().into()
 }
 
-
 /// The default connect/read timeout (the ~5 s budget law — never blocks
 /// the run longer; the plan's earn-sync budget is the ceiling posture).
 pub const POINTS_TIMEOUT_SECS: u64 = 5;
@@ -400,7 +399,6 @@ impl<'a> PointsClient<'a> {
         self.classify(answered)
     }
 
-
     /// POST /points/contribute — a joined install's fix-run outcome feed
     /// (issue 204; the owner's auto-send law: join turns the push ON).
     /// The outcomes fold + name-sort BEFORE signing (the canonical-order
@@ -681,8 +679,7 @@ mod tests {
         }
     }
 
-
-    /// The env-var lock (the process-global RIIR_REFINE_POINTS_SERVICE_URL
+    /// The env-var lock (the process-global `RIIR_REFINE_POINTS_SERVICE_URL`
     /// is set/removed by one test while parallel tests construct clients
     /// over the DEFAULT host — the race fired when the contribute tests
     /// joined the module (issue 204's landing exposed it); the lock is the
@@ -738,7 +735,6 @@ mod tests {
         assert!(seen[0].contains("583231"));
     }
 
-
     #[test]
     fn contribute_sends_the_folded_sorted_signed_body() {
         let _env = SERVICE_URL_ENV_LOCK.lock().unwrap();
@@ -784,7 +780,9 @@ mod tests {
         assert!(seen[0].contains(r#"name\":\"map_clone\",\"written\":3,\"declined\":1"#));
         // The sort: needless_return AFTER map_clone in the wire order.
         let mc = seen[0].find("map_clone").expect("map_clone present");
-        let nr = seen[0].find("needless_return").expect("needless_return present");
+        let nr = seen[0]
+            .find("needless_return")
+            .expect("needless_return present");
         assert!(mc < nr, "the body must be name-sorted");
     }
 

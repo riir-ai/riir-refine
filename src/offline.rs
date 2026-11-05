@@ -159,7 +159,9 @@ mod tests {
 
     impl EnvGuard {
         fn fresh(tag: &str) -> Self {
-            let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let lock = ENV_LOCK
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
             let dir = std::env::temp_dir().join(format!(
                 "refine_offline_test_{}_{}",
                 tag,

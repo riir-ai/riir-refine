@@ -48,7 +48,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, CollapseVerdict};
+use super::instantiation_rerank::{CollapseVerdict, detect_collapse_rule_ids, rule_family};
 use super::latent_matcher::LatentMatcher;
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
@@ -1469,7 +1469,7 @@ pub fn print_report(report: &EvalReport) {
     // rustc_errors is never asserted ≈1 anywhere (a free coordinate in T3's
     // Spearman); the drop ledger says so where it has no labeled set.
     {
-        use crate::demonstrability::{canonical_domain, eval_row, render_column, MIN_PER_RULE_N};
+        use crate::demonstrability::{MIN_PER_RULE_N, canonical_domain, eval_row, render_column};
         let mut rows: Vec<crate::demonstrability::Row> = report
             .taxonomy_by_domain
             .iter()
@@ -2208,6 +2208,10 @@ mod tests {
         // at the post-B271 state — the pin had sat at ZERO margin since B243
         // (the B243 note above flagged it). Floor re-derives from the
         // convention (measured − ONE span) → 41, restoring the margin.
+        // Flat-posture-only: every use sits behind cfg(not(kernel_route_narrow))
+        // (the narrow posture refuses flat per-domain pins), so the const is
+        // gated symmetrically — ungated it is dead code under --all-features.
+        #[cfg(not(feature = "kernel_route_narrow"))]
         pub const CLIPPY_TOP1: f32 = 41.0 / 48.0;
         // Issue 063 sweep, 2026-09-02 — **convention alignment, NOT a
         // loosened bar.** This const was `45.0 / 48.0` while clippy top-3
@@ -2229,6 +2233,8 @@ mod tests {
         // had been spent again (B243 flagged the zero-margin state; the B248–
         // B271 growth held the measured AT the pin). Re-derives from the
         // convention (measured − ONE span) → 42.
+        // Flat-posture-only (same cfg symmetry as CLIPPY_TOP1 above).
+        #[cfg(not(feature = "kernel_route_narrow"))]
         pub const CLIPPY_TOP3: f32 = 42.0 / 48.0;
         // Issue 170 re-pin (2026-10-24): perf top-3 MEASURED 54/56 (96.4%)
         // at the post-B271 state — the pin had sat at ZERO margin since B243
@@ -2240,8 +2246,14 @@ mod tests {
         // — the floor fraction's denominator MUST follow the labeled set
         // or every future perf landing reds spuriously. Floor = measured
         // − ONE span = 52/57 per the convention.
+        // Flat-posture-only (same cfg symmetry as CLIPPY_TOP1 above).
+        #[cfg(not(feature = "kernel_route_narrow"))]
         pub const PERF_TOP3: f32 = 52.0 / 57.0;
-        #[cfg(feature = "kernel_opt")]
+        // Flat-posture-only: the use sits behind
+        // cfg(all(kernel_opt, not(kernel_route_narrow))) — the narrow
+        // posture refuses flat per-domain pins — so the gate is symmetric,
+        // else the const is dead code under --all-features.
+        #[cfg(all(feature = "kernel_opt", not(feature = "kernel_route_narrow")))]
         pub const KERNEL_TOP3: f32 = 29.0 / 30.0;
         /// Router-annotation accuracy floor (Issue 020 wiring, Bench 025):
         /// the TF-cosine-global annotation measured 71/101 (70.3%, 2-domain,
@@ -2575,11 +2587,7 @@ mod tests {
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
-        if n == 0 {
-            1.0
-        } else {
-            hits as f32 / n as f32
-        }
+        if n == 0 { 1.0 } else { hits as f32 / n as f32 }
     }
 
     #[test]
@@ -2595,7 +2603,7 @@ mod tests {
         // The falsifiable prediction: All-mode top-1 == pool recall @
         // RERANK_POOL, exactly. If it holds, the measured gain is not an
         // effect size and must not be reported as one.
-        use crate::draft::{RerankMode, RERANK_POOL};
+        use crate::draft::{RERANK_POOL, RerankMode};
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher")
             .with_rerank_mode(RerankMode::Off);
@@ -2867,7 +2875,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clippy_fixture_labels_verify_via_proposers() {
-        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
+        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
         let mut all: Vec<&str> = FIXABLE_LINTS.to_vec();
         all.extend_from_slice(VERIFY_LINTS);
         all.extend_from_slice(&[
@@ -2895,7 +2903,7 @@ mod tests {
     #[cfg(feature = "rust_perf")]
     #[test]
     fn perf_fixture_labels_verify_via_proposers() {
-        use crate::domains::rust_perf::proposers::{propose_fix, FIXABLE_RULES};
+        use crate::domains::rust_perf::proposers::{FIXABLE_RULES, propose_fix};
         for &(rule, code) in super::super::eval_fixtures_perf::PERF_SPANS {
             if FIXABLE_RULES.contains(&rule) {
                 assert!(
@@ -3039,7 +3047,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clean_spans_fire_no_lint() {
-        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
+        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for (tag, code) in CLEAN_SPANS {
             for &lint in &structural {
@@ -3242,7 +3250,7 @@ mod tests {
     // precedent).
     #[allow(clippy::too_many_lines)]
     fn cross_domain_agreement_rate_report() {
-        use crate::draft::instantiation_rerank::{RerankMode, RERANK_POOL};
+        use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
         use std::collections::{HashMap, HashSet};
 
         let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
@@ -3443,7 +3451,7 @@ mod tests {
 
     #[test]
     fn taxonomy_classifies_the_four_outcomes() {
-        use super::{classify_choice_span, ChoiceOutcome, DeclineClass};
+        use super::{ChoiceOutcome, DeclineClass, classify_choice_span};
 
         let acc = vec!["needless_return".to_string()];
         // strict hit: gold top-1
@@ -3474,7 +3482,7 @@ mod tests {
 
     #[test]
     fn taxonomy_decline_axis_is_three_way() {
-        use super::{classify_choice_span, DeclineClass};
+        use super::{DeclineClass, classify_choice_span};
 
         // covered: something fired
         let ranked = vec![scored("a", false), scored("b", true)];
