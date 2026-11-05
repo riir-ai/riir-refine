@@ -7692,7 +7692,7 @@ USAGE:
     cargo refine online                                  (clear the firewall + remind what your settings.toml chose; ungated)
     cargo refine off --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist OFF in settings.toml — the run-start auto-check family; --auto-update = app check + corpus refresh together; ungated)
     cargo refine on  --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist ON; bare off/on prints the current state)
-    cargo refine update                                 (corpus lease refresh, kat_transport)
+    cargo refine update                                 (corpus lease refresh, kat_transport or points)
     cargo refine sync                                   (push redacted batches + pull lease, kat_transport)
     cargo refine sync --export <file|->                 (WRITE the redacted batch, send nothing — no login, throwaway key)
     cargo refine claim --tx <sig>                       (queue/submit a payment claim, kat_service)
@@ -8030,10 +8030,11 @@ USAGE:
                     binary carries the compiled corpus — upgrading it is how
                     the compiled rules move. Needs --features update_check
                     (the release set carries it). RIIR_REFINE_AUTO_UPGRADE=1
-                    applies pending upgrades at run start; RIIR_REFINE_
-                    AUTO_CORPUS=1 auto-runs the lease refresh (update) at run
-                    start, at most once per 12h, charge-gated as usual.
-    update          T1.6 corpus lease refresh (needs --features kat_transport):
+                    applies pending upgrades at run start; the corpus lease
+                    refresh (update) auto-runs at run start, at most once
+                    per 12h — RIIR_REFINE_AUTO_CORPUS=0 demotes (default-on).
+    update          T1.6 corpus lease refresh (needs a kat_transport or
+                    points build — the release set carries points):
                     GET /lease with If-None-Match → 304 (up to date, no
                     charge) or 200 → manifest verify (tamper → reject, fall
                     back local) → segment diff → fetch → staged verify →

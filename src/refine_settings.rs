@@ -52,8 +52,8 @@ pub struct Settings {
     /// one cached GET, ok → 12 h window).
     pub app_check: bool,
     /// The run-start corpus lease refresh (at most once per 12 h; the
-    /// charge plane stays the tier gate). Needs a `kat_transport` build —
-    /// a charitable build's hook degrades honestly exactly as today.
+    /// charge plane stays the tier gate). Needs a `kat_transport` or
+    /// `points` build — a build with neither compiles the hook out.
     pub corpus_refresh: bool,
     /// The hands-free upgrade apply at run start (opt-in).
     pub auto_upgrade: bool,
@@ -143,8 +143,9 @@ app_check = {app_check}
 # Refresh the corpus lease before every healing run, at most once per
 # 12 h (charges 0.001 KAT per NEW epoch on the KAT lane; the points
 # posture charges nothing by law). Silent when the corpus is current.
-# Needs a kat_transport build — a build without it prints its rebuild
-# line instead. Per-run demote: RIIR_REFINE_AUTO_CORPUS=0.
+# Needs a kat_transport or points build (the shipped release set carries
+# points) — a build with neither prints its rebuild line instead.
+# Per-run demote: RIIR_REFINE_AUTO_CORPUS=0.
 corpus_refresh = {corpus_refresh}
 
 # Apply a pending upgrade automatically at run start (the swap renames;
