@@ -16,6 +16,15 @@ publish = false
 # verdict round 4) — it turns ON the root's existing optional seams in its
 # own manifest, where feature unification cannot reach the default posture.
 riir-refine = { path = "../..", default-features = false }
+# The migrated bin's DIRECT extern crates (issue 200 C2 — the bins could see
+# the root package's [dependencies]; the tier manifest carries its own rows
+# now, at the root's versions/features so the shared lock unifies to one
+# copy): fixer_regate uses serde/serde_json (prompt snapshots, arm reports)
+# + syn (the planted-fix AST plumbing) + blake3 (golden prompt digests).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+syn = { version = "2", default-features = false, features = ["full", "parsing", "derive", "visit", "visit-mut", "printing", "extra-traits", "clone-impls"] }
+blake3 = "1"
 
 [features]
 default = []
@@ -24,3 +33,22 @@ default = []
 # NOT re-declared here — the commercial KAT lane stays default-OFF (the
 # issue 190 T14 discipline carried up a layer).
 cf_workers_ai = ["riir-refine/cf_workers_ai"]
+# The bin's OWN cfg gates (issue 200 C2 — these named ROOT features while the
+# bin lived in the root package; the fixer crate must declare them or clippy's
+# unexpected_cfgs reds every gate site, and the BT8/re-rank arms stay
+# unreachable). All forwarded from the core's existing seams — zero new deps:
+score_bench = ["riir-refine/score_bench"]
+seat_rerank = ["riir-refine/seat_rerank"]
+escalation_manifest = ["riir-refine/escalation_manifest"]
+hosted_expert = ["riir-refine/hosted_expert"]
+
+# Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
+# the local Bonsai daemon; --dry-run = offline harness validation on planted
+# fixes + golden prompt snapshots, no model needed). Migrated verbatim from
+# the root package (issue 200 C2, NO refactor); it writes
+# `.benchmarks/fixer_quality_history.jsonl` CWD-relative — run from the repo
+# root (see lib.rs).
+[[bin]]
+name = "fixer_regate"
+path = "src/bin/fixer_regate.rs"
+required-features = ["cf_workers_ai"]

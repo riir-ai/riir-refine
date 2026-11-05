@@ -1203,7 +1203,8 @@ fn record_case(
     }
 }
 
-// ── Tests (offline; pinned by ci_feature_guard.sh Layer 5c) ────────────────
+// ── Tests (offline; pinned by ci_feature_guard.sh Layer 5t — the trainer ────
+// ── tier's --tests arm, where this bin's coverage moved in issue 200 C2) ───
 
 #[cfg(test)]
 mod tests {

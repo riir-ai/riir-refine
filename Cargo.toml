@@ -1307,13 +1307,9 @@ path = "src/bin/heal.rs"
 # the kat_redact decision (gate-vs-inline for the secret scanner).
 required-features = ["latent_retrieval", "rust_perf", "clippy_lints"]
 
-# Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
-# the local Bonsai daemon; --dry-run = offline harness validation on planted
-# fixes + golden prompt snapshots, no model needed).
-[[bin]]
-name = "fixer_regate"
-path = "src/bin/fixer_regate.rs"
-required-features = ["cf_workers_ai"]
+# Issue 040 — the fixer re-gate POC runner: MOVED to the fixer tier crate
+# (crates/riir-refine-fixer/src/bin/fixer_regate.rs, issue 200 C2) — the
+# [[bin]] row + its `cf_workers_ai` required-features live there now.
 
 # Issue 206 (the corpus half's third task) — the HARVEST→BIND→NOTE verb:
 # sweeps the durable trajectory stores + blueprint histories, folds per-rule
@@ -1328,17 +1324,10 @@ path = "src/bin/corpus_diagnose.rs"
 # dep closure, same as every other `.refine/trajectories.kv` consumer.
 required-features = ["latent_retrieval"]
 
-# Plan 031 Phase A (A3) — the trainer-window LOCAL drain (T2.0's local half):
-# TrajStore miss backlog → priority → modelless pre-pass → redaction gate →
-# smoke → capped LLM → strict-keep verify → Certified trajectories + the
-# transparency ledger row. `--dry-run` is the offline queue review (CI-able).
-# Same feature gate as fixer_regate: the drain SENDS PROMPTS OFF-MACHINE and
-# must never compile without the redaction gate it gates through.
-[[bin]]
-name = "kat_drain"
-path = "src/bin/kat_drain.rs"
-# Issue 051: groq_first joins — the drain routes groq-first, CF fallback.
-required-features = ["cf_workers_ai", "groq_first"]
+# Plan 031 Phase A (A3) — the trainer-window LOCAL drain: MOVED to the
+# trainer tier crate (crates/riir-refine-trainer/src/bin/kat_drain.rs,
+# issue 200 C2) — the [[bin]] row + its `cf_workers_ai, groq_first`
+# required-features live there now.
 
 # Plan 199 T3.2 — the validator authoring lane: build every validator source
 # crate under validator_src/ for wasm32-unknown-unknown, install the

@@ -12,6 +12,16 @@ publish = false
 [dependencies]
 riir-refine = { path = "../..", default-features = false }
 riir-refine-fixer = { path = "../riir-refine-fixer" }
+# The migrated bin's DIRECT extern crates (issue 200 C2 — kat_drain could
+# see the root package's [dependencies]; the tier manifest carries its own
+# rows now, at the root's versions/features so the shared lock unifies):
+# serde/serde_json (the drain's JSONL ledgers) + blake3 (shape hashes)
+# + riir-kat (the kat_ua consumer-tag seam the bin stamps at startup — the
+# root's exact row, an already-allowlisted sibling).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+blake3 = "1"
+riir-kat = { path = "../../../riir-kat", default-features = false, features = ["redact"] }
 
 [features]
 default = []
@@ -24,3 +34,16 @@ cf_workers_ai = [
     "riir-refine-fixer/cf_workers_ai",
 ]
 groq_first = ["riir-refine/groq_first"]
+
+# Plan 031 Phase A (A3) — the trainer-window LOCAL drain (T2.0's local half):
+# TrajStore miss backlog → priority → modelless pre-pass → redaction gate →
+# smoke → capped LLM → strict-keep verify → Certified trajectories + the
+# transparency ledger row. `--dry-run` is the offline queue review (CI-able).
+# The drain SENDS PROMPTS OFF-MACHINE and must never compile without the
+# redaction gate it gates through (the same law that gated it at the root).
+# Issue 051: groq_first joins — the drain routes groq-first, CF fallback.
+# Migrated verbatim from the root package (issue 200 C2, NO refactor).
+[[bin]]
+name = "kat_drain"
+path = "src/bin/kat_drain.rs"
+required-features = ["cf_workers_ai", "groq_first"]

@@ -209,9 +209,9 @@ sweep_one() {
 # ── the drain (A3): build + run kat_drain, wrap with /usr/bin/time (A4) ─────
 run_drain() {
   local log="$LOG_DIR/drain-$(today_ymd)-$(now_unix).log"
-  echo "[drain] building kat_drain (release, cf_workers_ai) → $DRAIN_TARGET_DIR"
-  if ! CARGO_TARGET_DIR="$DRAIN_TARGET_DIR" cargo build --release --features cf_workers_ai \
-        --bin kat_drain >>"$log" 2>&1; then
+  echo "[drain] building kat_drain (release, trainer tier: cf_workers_ai + groq_first) → $DRAIN_TARGET_DIR"
+  if ! CARGO_TARGET_DIR="$DRAIN_TARGET_DIR" cargo build --release -p riir-refine-trainer \
+        --features cf_workers_ai,groq_first --bin kat_drain >>"$log" 2>&1; then
     echo "[drain] BUILD FAILED (see $log)"
     record_row drain riir-refine - kat_drain 5 0 0 0 0 0 0 ""
     return 1

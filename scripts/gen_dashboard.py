@@ -24,7 +24,8 @@ Data sources (ALL optional — each degrades gracefully):
                                             (Issue 045)
   8. riir-train/.benchmarks/runs.jsonl   — training/GPU run log (T6)
   9. .benchmarks/fixer_quality_history   — fixer-arm quality history (T8)
-                                            .jsonl (src/bin/fixer_regate.rs)
+                                            .jsonl (fixer tier:
+                                crates/riir-refine-fixer/src/bin/fixer_regate.rs)
  10. housekeeping worker GET /latest     — LIVE staleness badge + live cap
                                             (T3/T9; fetched client-side,
                                             the only network call)
@@ -1212,8 +1213,9 @@ def collect_training() -> list[dict]:
 # ── 8. fixer-arm quality history (Issue 044 T8 surfacing) ──────────────────
 
 def load_fixer_quality() -> list[dict]:
-    """Fixer-arm quality rows from src/bin/fixer_regate.rs::append_quality_history
-    (.benchmarks/fixer_quality_history.jsonl; tolerant — [] when missing).
+    """Fixer-arm quality rows from the fixer tier's fixer_regate bin
+    (crates/riir-refine-fixer/src/bin/fixer_regate.rs::append_quality_history;
+    .benchmarks/fixer_quality_history.jsonl; tolerant — [] when missing).
 
     Row: {ts_unix, arm, model, n, em:{hits,total}, fragment_parses, merge_ok,
           control_fires, oracle_scoreable, strictly_fewer, keep_oracle,
@@ -1986,7 +1988,7 @@ if (D.coverage.length) {
           (r.latency_ms.total/1000/r.n).toFixed(1):'—')+'</td>');
   } else {
     $('fixerQ').innerHTML = '<div class="sub">no arm runs recorded yet — '
-      + 'src/bin/fixer_regate.rs appends one row per arm run</div>';
+      + 'crates/riir-refine-fixer/src/bin/fixer_regate.rs appends one row per arm run</div>';
   }
 }
 
