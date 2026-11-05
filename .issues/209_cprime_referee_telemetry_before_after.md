@@ -1,5 +1,6 @@
 # Issue 209 — the c′ referee: telemetry before/after + structural-identity certificate for single-rule corpus-note edits (issue 206's named follow-up)
 
+**Claimed:** zed-ceeedd52@m3, 1793898463, expires 2026-11-07T17:07:43+00:00
 **Status:** OPEN 2026-11-05 — pre-registration filed per the delegated-owner verdict on issue 206 (Claude verdict round 1, **REVISE → c′**, session `411cdf2b`, 2026-11-05): the fixture-set score-bench A/B is structurally UNDECIDED for single-rule arms (the affected stratum cannot reach n ≥ 30 on a finite fixture set) and option (b)'s zero-flip check cannot fail when the edit provably does not touch the bench axis — a check that cannot fail proves nothing. c′ replaces the referee's EVIDENCE SOURCE for single-rule note edits: **(1)** a structural-identity certificate where the edit provably does not touch the bench axis, **(2)** a before/after TELEMETRY referee measuring the note's real effect surface — the rule's own live failure rate. Batch and multi-rule arms are UNCHANGED: the fixture score-bench A/B with paired LCB95 > 0 and n ≥ 30 stays their bar.
 
 ## The pre-registered design (pinned BEFORE any data is read)
