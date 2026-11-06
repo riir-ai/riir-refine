@@ -877,9 +877,9 @@ mod tests {
     fn corpus_line_carries_the_pinned_counts() {
         let line = corpus_counts_line();
         assert!(line.contains("clippy 112"), "{line}");
-        assert!(line.contains("kernel 1068"), "{line}");
+        assert!(line.contains("kernel 1073"), "{line}");
         assert!(line.contains("perf 302"), "{line}");
-        assert!(line.contains("sec 45"), "{line}");
+        assert!(line.contains("sec 46"), "{line}");
         assert!(line.contains("docker 31"), "{line}");
         assert!(line.contains("dist 8"), "{line}");
         assert!(line.contains("shader 8"), "{line}");
@@ -906,7 +906,7 @@ mod tests {
                 "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
             ]
         );
-        assert_eq!(rows[0].total, 1574);
+        assert_eq!(rows[0].total, 1580);
     }
 
     #[test]

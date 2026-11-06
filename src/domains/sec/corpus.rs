@@ -1688,6 +1688,17 @@ pub fn apply_edits(doc: &mut [Block], edits: &[Edit]) -> Report {
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ── conditional-reuseaddr-after-liveness-probe (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "conditional-reuseaddr-after-liveness-probe".to_string(),
+            sec_concept: "an explicit `SO_REUSEADDR` (socket2::set_reuseaddr) on a listener bind turns the port into a take-over surface: on the BSD/macOS semantics a loopback bind WITH reuse sits beside a LIVE wildcard (0.0.0.0 / [::]) listener and SHADOWS it for local clients — the local traffic hijack — while the legitimate use of reuse is only the quick restart over a previous server's TIME_WAIT ends. The source's law, verbatim (at the pin): 'The server binds without `SO_REUSEADDR`, so it cannot sit on `127.0.0.1` beside a live server and take its local traffic. It rebinds with `SO_REUSEADDR` only when no live server answers on the port, so a quick restart over a previous server's closed connections still works.' — and the refusal half: 'A port already in use is refused, also when the other server listens at `0.0.0.0` or `[::]`.' THE POLICY, three legs: (1) bind WITHOUT reuse first — every holder refuses, a live same-address listener AND a live wildcard one; (2) on EADDRINUSE, run a LIVENESS PROBE — dial the address with a short timeout: answered or timed out means a LIVE listener answers (a wildcard holder answers a loopback probe), ConnectionRefused means the holders are TIME_WAIT ends only; (3) rebind WITH reuse only on the refused probe — the quick-restart path — and refuse loudly otherwise. THE ANTI-REGIME carried in-rule: std's `TcpListener::bind` never sets SO_REUSEADDR — safe by default; the rule exists to gate the EXPLICIT opt-in call sites, and the platform split is the decision content (BSD/macOS SO_REUSEADDR permits the wildcard-shadow bind; Linux refuses same-addr:port live-over-live but still permits loopback-over-wildcard under reuse — probe-first is the portable posture, never assume either semantics). KINSHIPS: distinct-from `browser-reachable-service-host-origin-rebinding-gate` (the REQUEST-side handshake gate against DNS rebinding — this is the BIND-side posture; both are 'verify the resource is actually yours/free before attaching', adjacent, compose); distinct-from `secret-file-create-without-0600` (permission hardening on a created file vs bind-option discipline on a created socket); zero corpus owners of the reuseaddr class (T0 grep: reuseaddr / reuse_address / SO_REUSE / EADDRINUSE — all zero). Suggest-only: the bind/rebind/probe flow is the service author's control; no mechanical rewrite exists. Fixture: the bind table model — beside-live refusal (loopback AND wildcard holders), the probe-pass quick restart over TIME_WAIT, and the unconditional-reuse bind demonstrating the shadow hazard it must refuse. Detector: `proposers::reuseaddr_gate` (vocabulary-gated: an explicit reuseaddr/set_reuseaddr call site is the seed). Batch 337 / Plan 346 / Research 376 (skydiscover-ai/jitengine @ `2c34508d`, Apache-2.0 — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "/// NAIVE: unconditional SO_REUSEADDR on the listener bind — beside a\n/// live wildcard listener, the loopback bind with reuse shadows it for\n/// local clients: the port hijack.\nuse std::net::{TcpListener};\nuse socket2::{Socket, Domain, Type, SockAddr};\n\npub fn serve_reuse(address: &str) -> std::io::Result<TcpListener> {\n    let addr: SockAddr = address.parse()?;\n    let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;\n    socket.set_reuseaddr(true)?; // UNCONDITIONAL — the hazard\n    socket.bind(&addr)?;\n    socket.listen(128)?;\n    Ok(TcpListener::from(socket))\n}\n"
+                .to_string(),
+            fixed_code: "/// FIXED: bind WITHOUT reuse first; on EADDRINUSE, probe; rebind WITH\n/// reuse only when NO live listener answers the address (TIME_WAIT ends\n/// only). A live wildcard holder answers the loopback probe: refused.\nuse std::net::TcpListener;\n\n#[derive(Debug, PartialEq)]\npub enum BindVerdict {\n    Bound,\n    ReboundOverTimeWait,\n    RefusedLive,\n}\n\n/// `probe_free` dials (host, port) with a short timeout: false only when\n/// the dial is CONNECTION REFUSED (no live listener — TIME_WAIT ends hold\n/// nothing); answered/timeout/other-error means something live answers.\npub fn serve_gated<F>(address: &str, probe_free: F) -> std::io::Result<(TcpListener, BindVerdict)>\nwhere\n    F: Fn(&str) -> bool,\n{\n    // leg 1: the strict bind — every holder refuses.\n    match TcpListener::bind(address) {\n        Ok(l) => Ok((l, BindVerdict::Bound)),\n        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {\n            // leg 2: the liveness probe decides.\n            if probe_free(address) {\n                // leg 3: TIME_WAIT only — the quick restart may reuse.\n                let l = reuse_bind(address)?;\n                Ok((l, BindVerdict::ReboundOverTimeWait))\n            } else {\n                Err(std::io::Error::new(\n                    std::io::ErrorKind::AddrInUse,\n                    \"a live listener answers the address; refusing the takeover\",\n                ))\n            }\n        }\n        Err(e) => Err(e),\n    }\n}\n\nfn reuse_bind(address: &str) -> std::io::Result<TcpListener> {\n    // the ONLY reuse site in the service: past the probe.\n    let _ = address;\n    // platform note carried in-rule: on Linux the same-addr live-over-live\n    // bind refuses without reuse too — probe-first stays the portable path.\n    unimplemented!() // socket2 set_reuseaddr(true) + bind, probe-gated\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -1992,6 +2003,52 @@ mod tests {
             r.sec_concept.contains("An id is copied, not derived")
                 && r.sec_concept.contains("skipped and reported"),
             "batch-331 must carry the id law + the skip-and-report contract"
+        );
+    }
+
+    #[test]
+    fn batch337_rules_present_families_and_provenance() {
+        let all = entries();
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == "conditional-reuseaddr-after-liveness-probe")
+            .unwrap_or_else(|| panic!("batch-337 rule missing from corpus"));
+        assert_eq!(r.family, SecFamily::InputValidation, "batch-337 family");
+        assert!(
+            r.sec_concept
+                .contains("Batch 337 / Plan 346 / Research 376"),
+            "batch-337 must cite its landing lineage"
+        );
+        assert!(
+            r.sec_concept.contains("2c34508d"),
+            "batch-337 must cite the jitengine pin"
+        );
+        // Suggest-only discipline.
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"conditional-reuseaddr-after-liveness-probe"),
+            "batch-337 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        // The law needles (keyed after reading the landed text).
+        assert!(
+            r.sec_concept
+                .contains("cannot sit on `127.0.0.1` beside a live server")
+                && r.sec_concept.contains("take its local traffic"),
+            "batch-337 must carry the shadow harm verbatim"
+        );
+        assert!(
+            r.sec_concept
+                .contains("only when no live server answers on the port"),
+            "batch-337 must carry the probe gate verbatim (the 'on the port' record correction)"
+        );
+        assert!(
+            r.sec_concept.contains("0.0.0.0") && r.sec_concept.contains("[::]"),
+            "batch-337 must carry the wildcard/dual-stack refusal"
+        );
+        assert!(
+            r.sec_concept
+                .contains("TcpListener::bind` never sets SO_REUSEADDR"),
+            "batch-337 must carry the std-safe-by-default anti-regime"
         );
     }
 }

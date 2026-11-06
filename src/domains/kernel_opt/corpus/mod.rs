@@ -1953,6 +1953,7 @@ mod entries_gpu_149;
 mod entries_gpu_15;
 mod entries_gpu_150;
 mod entries_gpu_151;
+mod entries_gpu_152;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
@@ -2167,6 +2168,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_149::entries());
     entries.extend(entries_gpu_150::entries());
     entries.extend(entries_gpu_151::entries());
+    entries.extend(entries_gpu_152::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2955,6 +2957,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 337 +1 (Plan 346 / Research 376): the jitengine
+            // declared-input pacing — a call that declares the whole
+            // expert stack crosses the commit watermark on its own;
+            // per-call one-expert views keep the buffer open (the
+            // declared-input lever vs the cap lever, compose).
+            "command-buffer-declared-input-pacing",
             // Batch 338 +2 (Plan 347 / Research 379): the TileQuant pair —
             // the address-shape law (pack sorts payloads into the
             // consumer's traversal order so the hot loop's weight address
@@ -3344,6 +3352,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Parallelism,
         "E: parallelism",
         &[
+            // Batch 337 +1 (Plan 346 / Research 376): the jitengine
+            // position-pure grid — the chunk grid is a pure function of
+            // the row's own position, never of request capacity, so a
+            // verify row equals the M = 1 pass at its position across
+            // every grid change; PASS_M1 verify twin in-construction.
+            "verify-parity-position-pure-grid",
             // Batch 333 +2 (Plan 341): the sgl-nvidia-mega distill —
             // the co-resident-launch fail-stop enforcement law (the
             // deadline's only sound action is a deliberate device
@@ -3556,6 +3570,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::LinearAttnRecurrence,
         "G: linear-attn recurrence",
         &[
+            // Batch 337 +1 (Plan 346 / Research 376): the jitengine GDN
+            // per-position state snapshots — the speculation early-exit
+            // substrate; bit-identical to the chained single-position
+            // calls; adversarially adjudicated vs the journaling pole.
+            "gdn-state-snapshot-per-position-verify-early-exit",
             // Batch 303 +1 (Plan 308 / Research 345): the splash tape — a step
             // leaves its rows on the lane's tape and the NEXT step folds
             // the retained ones in before its own rows (one state RMW per
@@ -3614,6 +3633,11 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
         &[
+            // Batch 337 +1 (Plan 346 / Research 376): the jitengine
+            // compute-ahead — expert compute submitted on a device-side
+            // slot snapshot before the host lookup finishes; keep on
+            // agree, miss-only row rebuild, never the whole layer.
+            "compute-experts-before-router-lookup-fixup",
             // Batch 335 +1 (Plan 344 / Research 373): the one-kernel
             // counting-sort route permute — histogram + prefix sums +
             // fetch-add slots emit (pos, tok, esorted, off, tstart) in
@@ -3914,6 +3938,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::DtypeAlignment,
         "N: dtype + alignment",
         &[
+            // Batch 337 +1 (Plan 346 / Research 376): the jitengine
+            // per-op-class exactness admission — integer and MAC classes
+            // admit on zero differing pairs, transcendentals refuse on a
+            // demonstrated pick flip (the Rust face: fast-math/FMA
+            // contraction adoption on pick-feeding paths).
+            "compiled-vs-eager-per-op-exactness-admission",
             // Batch 339 +1 (Plan 348 / Research 380): the TriAttention
             // tied-rotation GOAT lead -- the SAME pinned sign-Hadamard
             // rotation on BOTH operands before per-row absmax; the dot

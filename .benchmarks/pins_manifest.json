@@ -5,7 +5,7 @@
   "dist_rules": 8,
   "docker_rules": 31,
   "kernel_opt": {
-    "rules": 1068,
+    "rules": 1073,
     "witness": {
       "activity_dim": 8,
       "experts": 15,
@@ -19,7 +19,7 @@
     "rules": 302
   },
   "sec": {
-    "rules": 45
+    "rules": 46
   },
   "shader_perf_rules": 8
 }
