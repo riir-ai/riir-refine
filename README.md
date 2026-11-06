@@ -103,7 +103,7 @@ src/
 ├── adaptive_drafter.rs # AdaptiveDrafter (Stage 2) — domain-agnostic
 ├── draft/              # Plan 005 latent retrieval (RuleIndex + DomainRouter + LatentMatcher)
 ├── pruner.rs           # RustAnalyzerPruner — domain-agnostic syntax check
-├── ruliology_search.rs # Pareto-front candidate search (opt-in)
+├── ruliology_search.rs # Pareto-front candidate search (default-on)
 ├── self_evolve.rs      # HealPipeline + LatentFixMemory + LatentSkillEvolution
 └── domains/
     ├── clippy_lints/   # feature "clippy_lints" (DEFAULT) — clippy::* lint fixing
@@ -146,7 +146,7 @@ code; `--fix` CLI wiring is Phase 6.
 | `docker_verify` | off | `docker` | hadolint agreement oracle for the Class-A overlays; degrades to the Tier-0 stanza check with one log line when the binary is absent |
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` (BuildKit's own linter) agreement oracle for the 4 rules whose incumbent is a check NAME, not a `DL` code. Stays opt-in on purpose: it needs a running daemon and a registry round-trip per non-`scratch` fixture (~1.3-2.2 s each), a strictly heavier dependency class than hadolint |
 | `dist` | **on** | — | Issue 085: shipped-artifact build-config advice over name-matched `Cargo.toml` manifests (suggest-only, never a manifest write). **DEFAULT-ON since 2026-09-13** — all four GOAT promotion conditions PASS (Bench 082 + §6 addendum: precision fixtures, score-bench #92 FLAT, router floor 74/101 measured at default+dist, real consumer cites; B1/B2 scanner extensions `759e209d`) and the owner pull arrived (the Issue-085 fix directive). Zero new deps (the second hand-written no-`syn` scanner after docker) |
-| `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
+| `ruliology_search` | on | `clippy_lints` | L3 Pareto-front candidate search (DEFAULT-ON since 2026-11-06, Issue 212) |
 | `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + the `cargo refine suggest`/`fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
 | `clippy_verify` + `latent_retrieval` | off | — | T3.5.5 real-`cargo clippy` labeling oracle (`ClippyOracle`) + the uncontaminated G1 harness (`tests/uncontaminated_g1.rs`) |
 | `bonsai_retrieval` | off | `latent_retrieval`, `riir-rag/bonsai_embedder` | Plan 005 T3.5 option 3: 768-D Bonsai dense rerank. **HEAVY** — 6.7 GB GGUF, ~48 s/embed on CPU. Measurement-only (Bench 027) |
@@ -243,7 +243,7 @@ The primary path (L0–L3) is entirely modelless — no training, no backprop:
 - **L0**: rule distillation (named rules + bounded fix-space)
 - **L1**: ternary SIMD matvec drafter (frozen direction vectors)
 - **L2**: rust-analyzer validation
-- **L3** (opt-in): ruliology Pareto-front candidate search
+- **L3** (default-on since 2026-11-06): ruliology Pareto-front candidate search
 - **SE** (opt-in, additive): self-evolution loop — latent retrieval + EMA
   direction update. No gradient descent; the only state mutations are
   append-only memory + EMA direction refresh, matching the global

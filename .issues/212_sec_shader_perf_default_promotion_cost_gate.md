@@ -1,6 +1,6 @@
 # Issue 212 — promote `sec` + `shader_perf` (+ `ruliology_search`) to default: the G5 fan-out cost leg first
 
-**Status:** IN PROGRESS 2026-11-06 (katgpt-rs-18 lane) — T1 harness landed; run protocol pinned below BEFORE any measurement; T2/T3 dispatched to a quiet rig. Filed from the 11-06 feature audit under the owner law "any gain no perf hurt must enabled by default, dont make good goat sad".
+**Status:** DONE 2026-11-06 (katgpt-rs-18-i212) — Bench 140: `sec` FAIL + `shader_perf` FAIL (narrow) on the G5 cost leg, both G3 PASS → both stay opt-in, axis named; `ruliology_search` PROMOTED to default (compile-only gate).
 
 ## Why
 
@@ -30,7 +30,7 @@ Per feature (sec, shader_perf), the Issue-191 bar-5 cost definition reused verba
 ## Tasks
 
 - [x] T1 the cost harness for an arbitrary domain feature — `examples/kernel_goat_g5.rs` consumed (adds the `compiled_features` build stamp to both emitters), `scripts/g5_domain_cost.sh --feature <f>` the generic interleaved runner, `scripts/g5_cost_math.py` the ONE copy of the medians/nearest-rank math (g5_utility_cost.sh now imports it), `scripts/g3_scorebench_stability.sh [feature]` generalized for T3
-- [ ] T2 run sec + shader_perf on bmo exclusive; record a benchmark with PROVENANCE
-- [ ] T3 G3 byte-stability ON vs OFF per feature
-- [ ] T4 promote the passers in ONE commit: `default` + RELEASE_FEATURES + release.yml (build AND licenses lines) + manual_release.sh in lockstep (build_stamp tests pin them); Cargo.toml comments + AGENTS.md rows; demote the failers' comments to name the failing axis
+- [x] T2 run sec + shader_perf — Bench 140 (amo, bmo OFFLINE + no exclusive slot anywhere; preflight REFUSED, disclosed): sec p50 1.95–2.16 / p95 9.18–10.31 ms FAIL; shader_perf p50 1.10–1.28 / p95 5.30–5.92 ms FAIL (narrow)
+- [x] T3 G3 byte-stability ON vs OFF per feature — PASS both (clippy 41 + perf 68 verdict lines identical)
+- [x] T4 promote the passers (ruliology_search → default; sec/shader_perf comments name the failing axis; release surfaces unchanged — no scan-path passer) in ONE commit: `default` + RELEASE_FEATURES + release.yml (build AND licenses lines) + manual_release.sh in lockstep (build_stamp tests pin them); Cargo.toml comments + AGENTS.md rows; demote the failers' comments to name the failing axis
 - [x] T5 side fixes from the audit: `Cargo.toml` elo_k_eff comment cites "Issue 190" (double-allocated number — Mozilla grant issue vs the elo item; re-point to the commit/plan that owns it); disclose in docs that the shipped binary's `self_evolve` EMA-learning half is inert without `clippy_verify` (memory half runs) — DONE: the Cargo.toml + AGENTS.md `elo_k_eff` rows re-pointed to the owning commit `280f15766`; the release-set inert-EMA disclosure added to the Cargo.toml `self_evolve` comment + the AGENTS.md row

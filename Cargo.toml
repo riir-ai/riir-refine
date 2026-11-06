@@ -228,7 +228,12 @@ ed25519-dalek = "2"
 # set) and the kernel domain joins the fan-out on signaling files only.
 # Demote envs: RIIR_KERNEL_PREGATE_SCOPE=0 / LINE_CAP=0 /
 # QUERY_TEXT_CAP=0 (each restores its pre-promotion axis byte-identically).
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate"]
+# ruliology_search joined default 2026-11-06 (Issue 212): GOAT G1–G4 PASS on
+# record (Bench 001), zero deps, lib-only (no bin path → no scan fan-out), so
+# its promotion gate is compile-only (default lib tests + clippy -D clean).
+# sec / shader_perf were measured in the same issue and FAILED the G5 cost
+# leg (Bench 140) — they stay opt-in, their comments name the axis.
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search"]
 
 # Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
 # capability frontier (unsolved-before / solved-after / regression-green /
@@ -781,6 +786,11 @@ rustc_errors = ["compile_oracle"]
 # side; two candidates had no bounded fix). NOT dependency auditing
 # (cargo-audit/cargo-deny), NOT a lint engine (dylint), NOT
 # judgment-bearing detection.
+# Issue 212 / Bench 140 (2026-11-06): the default-promotion G5 cost leg FAILED
+# — added matcher fan-out per .rs file p50 1.95–2.16 ms (ceiling 1.0) / p95
+# 9.18–10.31 ms (ceiling 5.0), all 3 interleaved rounds; the AXIS is the
+# sec index joining every .rs span's fan-out. Stays opt-in until a
+# scoping lever (the kernel_pregate shape) clears the same bar.
 sec = []
 
 # Plan 030 / Proposal 006: the `docker` domain — Dockerfile bounded-fix
@@ -857,6 +867,12 @@ dist = []
 # below the Proposal 014 close-condition bar (≥6) — recorded as a
 # sec-style marginal landing: opt-in, doc-noted, folded-not (see the
 # domain doc page for the ledger).
+# Issue 212 / Bench 140 (2026-11-06): the default-promotion G5 cost leg FAILED
+# narrowly — added fan-out per .rs file p50 1.10–1.28 ms (ceiling 1.0) / p95
+# 5.30–5.92 ms (ceiling 5.0), all 3 rounds, measured on a LOADED box
+# (disclosed). The AXIS: the WGSL render corpus is indexed into the .rs
+# matcher fan-out although it targets .wgsl only — scoping it to .wgsl
+# inputs is the named lever. Stays opt-in.
 shader_perf = []
 
 # The shader_perf oracle tier: naga validation (in-process, pure Rust) of
@@ -866,7 +882,8 @@ shader_perf = []
 # naga is already in the lock via the riir-gpu arm — zero new packages.
 shader_verify = ["shader_perf", "dep:naga"]
 
-# Ruliology candidate enumeration (L3 refinement layer).
+# Ruliology candidate enumeration (L3 refinement layer). DEFAULT-ON since
+# 2026-11-06 (Issue 212; Bench 001 G1–G4 PASS, compile-only gate).
 # Implies `clippy_lints` (searches over clippy corpus entries).
 ruliology_search = ["clippy_lints"]
 

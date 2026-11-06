@@ -77,7 +77,9 @@ def main(argv):
         off, on = load(off_p), load(on_p)
         check_walk(off, on)
         added, removed = feature_delta(off, on)
-        if feature not in added or removed:
+        # the build stamp spells features cargo's way (CARGO_FEATURE_* ->
+        # lowercase, `_` -> `-`): compare on that normalisation
+        if feature.replace("_", "-") not in {f.replace("_", "-") for f in added} or removed:
             raise SystemExit(
                 f"REFUSE: round {r} binaries do not differ by {feature} "
                 f"(ON-only {added}, OFF-only {removed})"
