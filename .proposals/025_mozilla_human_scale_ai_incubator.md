@@ -1,6 +1,6 @@
 # Proposal 025 — Mozilla Human-Scale AI Incubator application: cargo refine, the modelless code healer
 
-Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12
+Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12 · 2026-11-06: draft answers filed (§Draft application answers)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned (grant submitter = owner)
 Deadline: **2026-11-20 11:59 PM PST** · Info session: **2026-11-12 17:00 UTC** · Consult email: draft in [`../.docs/01_orientation/mozilla_grant_readiness.md`](../.docs/01_orientation/mozilla_grant_readiness.md) (v2 — credit-plane question added)
@@ -195,6 +195,20 @@ Budget shape (indicative): ~60% people (2–3 contributors), ~15% pilot + commun
 | Product-community fit | **Weak — the decisive risk** | No external users yet. Mitigations: installer download counts, dist-repo issues/stars, internal-deployment-at-scale story, soft-launch pilot recruitment; the no-submit gate (190 T10) keeps submission honest. First external upstream contribution open (mozilla/sccache#2977 — fixes their #2975, maintainer-engaged through five rounds 2026-11-02..03; a goodwill signal, honestly not yet an accept). |
 | Impact and values | **Strong** | Open code + open data + free-for-the-commons policy + privacy-by-default + measured benefit. |
 | Sustainability potential | **Medium-strong** | Open-core end to end (MIT core + MIT fleet tooling) with revenue from enterprise corpus licensing + hosted/support services — a standard, checkable answer to "how does this endure" (their criterion 6); durable home via W6; team open to models. Re-grade if the model shifts. |
+
+## Draft application answers (source material — owner-voiced before submission; per §Compliance, agent text is source, never paste-ready prose)
+
+**Q: "Briefly describe the public benefit of this project and who will benefit from this work beyond your organization." (149 words)**
+
+Public benefit. cargo refine keeps software development affordable, private, and accessible for developers the cloud-AI economy leaves out. Its repair engine is a small, inspectable corpus of open repair rules: zero parameters, sub-millisecond on ordinary CPUs, running offline on hardware people already own; no account, no subscription, no GPU. Code never leaves the developer’s machine without explicit, redacted, revocable consent.
+
+Who benefits beyond us. Rust developers without cloud-AI budgets: students and learners, indie and FOSS maintainers, educators, and developers in regions where subscriptions, reliable connectivity, or recent hardware cannot be assumed. Open-source repositories are free by policy. The grant opens the modelless core, fleet tooling, and the community-contributed repair corpus under MIT with authoring tools so communities build corpora for other languages, plus Rethink, the calibrated escalation tier: small trained encoders that abstain when uncertain. Benefit is measured: published benchmarks and a public pilot cohort reported at Mozilla Festival.
+
+**Short summary (50 words)**
+
+cargo refine fixes what clippy's autofix can't: compile errors, Dockerfiles, performance issues no lint catches. An offline corpus is the model; code never leaves your machine. Opt in and secret-scanned fix records teach a shared corpus; every machine's Refine gets better. Rethink adds small calibrated encoders that abstain when uncertain.
+
+⚠ Both texts name Rethink — that inclusion is contingent on the openness amendment (a new owner gate + workplan row, mirroring G1's Research 003 amendment for Refine) landing first. If the amendment does not land, strip the two Rethink clauses before submission.
 
 ## Owner gates (must resolve before submission)
 
