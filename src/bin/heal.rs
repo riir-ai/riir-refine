@@ -10298,9 +10298,10 @@ fn parse_args() -> Args {
     // paths guard below included — sees the final posture:
     //   * bare `cargo refine` (no mode, no KAT command) = DRY RUN: suggest
     //     over `.` (or the given paths), zero edits;
-    //   * `--fix` = REAL fix: writes (the explicit flag is the consent)
-    //     and compile-gates on fix_verify builds (opt out --no-verify);
-    //   * `--suggest` stays the explicit review command (unchanged).
+    //   * `fix` = REAL fix: writes (the explicit word is the consent)
+    //     and compile-gates on release builds (opt out --no-verify);
+    //   * `suggest` = the explicit review command — same posture as bare,
+    //     cwd default included.
     //
     // EVERY standalone early-return mode is excluded (`is_bare_posture`):
     // the original 4-flag check set `suggest=true` under `--misses` too,
@@ -10316,9 +10317,12 @@ fn parse_args() -> Args {
             args.paths.push(std::path::PathBuf::from("."));
         }
     }
-    // `--fix` with no paths scans the cwd too — the just-works contract is
-    // "no flags, no paths": only `--suggest` demands explicit paths.
-    if args.fix && args.paths.is_empty() && args.command.is_none() {
+    // `fix`/`suggest` with no paths scan the cwd too — the just-works
+    // contract is "no flags, no paths": bare, `suggest` and `fix` all
+    // review the cwd, so every spelling of a posture behaves identically
+    // (the old "only --suggest demands explicit paths" split was a
+    // green-zero trap: `cargo refine suggest` scanned NOTHING, exit 0).
+    if (args.fix || args.suggest) && args.paths.is_empty() && args.command.is_none() {
         args.paths.push(std::path::PathBuf::from("."));
     }
     if args.fix {
