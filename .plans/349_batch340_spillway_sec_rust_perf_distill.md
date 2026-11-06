@@ -1,6 +1,8 @@
 # Plan 349 — Batch 340: the SPILLWAY sec + rust_perf distill (arXiv 2611.07222 code release)
 
-**Status:** STAGED, UNCLAIMED — claim-first at the next slot (claim row in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter).
+**Status:** STAGED → CLAIMED — Batch 340 sec + rust_perf in flight (claim-before-edit per the law; claim row pushed in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter).
+**Claimed:** zed-m3-b340, 1793977886, expires 2026-11-08T15:11:26+00:00
+**Landing sequencing note:** Batch 337 (plan 346, kernel_opt) is mid-flight by zed-m3-b337 on THIS box with dirty `pins_manifest.json` + `entries_gpu_119.rs` in the main clone — this lane authors in an isolated worktree off origin/develop (disjoint corpus files: sec `corpus.rs` + rust_perf `entries_67.rs`, never their kernel entries), lands via worktree push with count pins derived at the LANDING head, so the main clone's sibling WIP is never staged or touched; b337's landing re-fetches + re-derives pins on top per the standing law.
 
 Verdict: Research 381 — YES B− corpus [2 rust_perf rules (benchable) + 2 sec suggestion-only rules + ~3 faces expected after ~50% falsification]. Source pin `saintmachines/spillway @ 0fc9f55f3d5380108be5f2f6680fa07affedfe83` (push 2026-11-05; **Apache-2.0** — outbound-PR posture OPEN). This is the walk-24 staged lead SPILLWAY; LoopDuet closed no-source, TileQuant staged Plan 347, TriAttention staged Plan 348 the same day (snapshot rows).
 
