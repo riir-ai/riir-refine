@@ -16166,9 +16166,7 @@ fn main() {
                 // ⏱️ the owner's UX law (2026-11-05): name the lane BLUNTLY —
                 // a user watching minutes of compile thinks cargo refine is
                 // slow; this is cargo clippy compiling THEIR workspace.
-                eprintln!(
-                    "⏳ clippy oracle (auto): this is CARGO CLIPPY compiling the workspace — cargo refine is waiting, not working; the ⏱️ line at run end splits the two"
-                );
+                eprintln!("⏳ clippy compiling...");
                 let oracle_session_started = std::time::Instant::now();
                 let session = riir_refine::clippy_oracle::run_oracle_session(
                     &root,
