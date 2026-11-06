@@ -1351,7 +1351,7 @@ fn run_unmine(purge_server: bool) {
     println!();
     println!("UNCHANGED (and always was local): healing itself.");
     println!("  cargo refine              <- dry run, zero edits, local");
-    println!("  cargo refine --fix        <- real fixes, written locally, compile-gated");
+    println!("  cargo refine fix          <- real fixes, written locally, compile-gated");
     println!("  cargo refine --suggest    <- review, local");
     println!("Trajectories still record locally — that is how the healer learns on YOUR");
     println!("machine. Opting out stops the upload, not the local memory.");
@@ -7664,7 +7664,7 @@ fn usage_text() -> String {
 
 USAGE:
     cargo refine                                        <- DRY RUN: review what would be fixed (no edits)
-    cargo refine --fix [--top-k <N>] [--no-fmt] <path>...  <- REAL FIX: writes (compile-gated on fix_verify builds)
+    cargo refine fix [--top-k <N>] [--no-fmt] <path>...   <- REAL FIX: writes (compile-gates on release builds)
     cargo refine --suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
 {credit_help}    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
@@ -7723,12 +7723,15 @@ USAGE:
 
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
-                    zero edits. The explicit word for it is --dry-run.
+                    zero edits. Bare `cargo refine` IS the dry run — there is
+                    no heal-mode dry flag (--dry-run belongs to
+                    `get`/`send`/`wetrun`).
     --suggest       Suggest mode: print matching rules per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
                     ({} perf rules + {} clippy lints: {} | {}). WRITES by default (the
                     explicit flag is the consent) and compile-gates on --verify builds
-                    (opt out: --no-verify). Bare `cargo refine` is the dry run. The proposer's
+                    (opt out: --no-verify). Bare `cargo refine` is the dry run, and `--fix`
+                    is an alias of the `fix` verb. The proposer's
                     visitor is the gate — latent suggestions never auto-apply.
     --fix-compile   Compile-error repair (Plan 019, needs --features rustc_errors):
                     cargo-check the owning packages, parse coded errors (E0597...),
@@ -8937,8 +8940,8 @@ fn parse_args() -> Args {
             // The owner's just-works UX (2026-09-08): `--fix` is a REAL fix —
             // it writes (and verify-gates when the build carries
             // `fix_verify`), because the explicit flag IS the consent. The
-            // old review-only behavior needs one explicit word: `--dry-run`
-            // (also the bare `cargo refine` default — see validate_mode_flags).
+            // dry run needs NO word: bare `cargo refine` IS the dry run —
+            // `--dry-run` belongs to `get`/`send`/`wetrun` only.
             "--fix" => args.fix = true,
             "--fix-compile" => args.fix_compile = true,
             "--dump-trajectories" => args.dump_trajectories = true,
@@ -9977,7 +9980,9 @@ fn parse_args() -> Args {
             Some(KatCommand::TunaGet) | Some(KatCommand::TunaSend)
         )
     {
-        eprintln!("--dry-run requires the `get`, `send` or `wetrun` command");
+        eprintln!(
+            "--dry-run requires the `get`, `send` or `wetrun` command — the heal modes' dry run is bare `cargo refine`"
+        );
         usage();
     }
     if args.command == Some(KatCommand::TunaGet) && args.tuna_target.is_some() {
@@ -10430,9 +10435,9 @@ fn standalone_mode(args: &Args) -> bool {
 /// accepted/rejected combination is pinnable by test. The owner's
 /// just-works UX (2026-09-08) folded the DEFAULTS in: a caller with NO
 /// mode and NO standalone command gets a DRY-RUN suggest over `.` — bare
-/// `cargo refine` must just work — and `--fix` without `--dry-run` writes
-/// (the explicit flag is the consent); `--dry-run` pins the review
-/// posture regardless of flag order.
+/// `cargo refine` must just work — and the fix verb (or its `--fix`
+/// alias) writes (the explicit word is the consent). There is no
+/// heal-mode dry flag: bare IS the dry run.
 ///
 /// The silent-usability trap this closes: the existing guards rejected
 /// `--fix-compile --write --verify-args "..."` because `--write` demanded
