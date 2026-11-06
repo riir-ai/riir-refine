@@ -10317,12 +10317,16 @@ fn parse_args() -> Args {
             args.paths.push(std::path::PathBuf::from("."));
         }
     }
-    // `fix`/`suggest` with no paths scan the cwd too — the just-works
-    // contract is "no flags, no paths": bare, `suggest` and `fix` all
-    // review the cwd, so every spelling of a posture behaves identically
-    // (the old "only --suggest demands explicit paths" split was a
-    // green-zero trap: `cargo refine suggest` scanned NOTHING, exit 0).
-    if (args.fix || args.suggest) && args.paths.is_empty() && args.command.is_none() {
+    // `fix`/`suggest`/`fix-compile` with no paths scan the cwd too — the
+    // just-works contract is "no flags, no paths": every heal-verb
+    // spelling reviews the cwd, so no spelling of a posture silently
+    // scans nothing (the old "only --suggest demands explicit paths"
+    // split was a green-zero trap: `cargo refine suggest` scanned
+    // NOTHING, exit 0; fix-compile did the same until it joined here).
+    if (args.fix || args.suggest || args.fix_compile)
+        && args.paths.is_empty()
+        && args.command.is_none()
+    {
         args.paths.push(std::path::PathBuf::from("."));
     }
     if args.fix {
