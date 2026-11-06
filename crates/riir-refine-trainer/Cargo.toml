@@ -1,6 +1,9 @@
 # Issue 200 C1 — the TRAINER TIER stub (the `kat_drain` bin migrates here in
-# C2). Superset of the fixer tier: it path-deps the fixer crate (intra-repo
-# edge — the approved composition shape) and adds the drain features.
+# C2). Superset of the fixer tier by FEATURE: it forwards the same core seams
+# and adds the drain features. The intra-repo path edge to the fixer crate is
+# allowlisted (BOUNDARY.md) but NOT carried until the trainer consumes a
+# fixer-lib item (the OSS-class check) — an edge with no use trips cargo
+# 1.101's `cargo::unused_dependencies` (riir-refine issue 211 hygiene).
 [package]
 name = "riir-refine-trainer"
 # Rides the product version: `kat_drain` stamps `env!("CARGO_PKG_VERSION")`
@@ -11,7 +14,6 @@ publish = false
 
 [dependencies]
 riir-refine = { path = "../..", default-features = false }
-riir-refine-fixer = { path = "../riir-refine-fixer" }
 # The migrated bin's DIRECT extern crates (issue 200 C2 — kat_drain could
 # see the root package's [dependencies]; the tier manifest carries its own
 # rows now, at the root's versions/features so the shared lock unifies):
@@ -29,10 +31,7 @@ default = []
 # CF fallback (issue 051) — both are core seams, forwarded with their fixer
 # superset halves; `kat_service`/`kat_transport` ride `cf_workers_ai`
 # core-side and are NOT re-declared here.
-cf_workers_ai = [
-    "riir-refine/cf_workers_ai",
-    "riir-refine-fixer/cf_workers_ai",
-]
+cf_workers_ai = ["riir-refine/cf_workers_ai"]
 groq_first = ["riir-refine/groq_first"]
 
 # Plan 031 Phase A (A3) — the trainer-window LOCAL drain (T2.0's local half):

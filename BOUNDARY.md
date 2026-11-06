@@ -33,7 +33,10 @@ root-scoped):
   "open-source class" is checked client-side BEFORE any network connection,
   fail-closed; anything unconfirmable is PRIVATE → self-host route).
 - `crates/riir-refine-trainer` — the TRAINER TIER: the migrated `kat_drain`
-  bin; path-dep superset of the fixer (intra-repo edge). NEVER-WRONG by
+  bin; feature-superset of the fixer. The intra-repo path edge to the fixer
+  is allowlisted but carried only once the trainer consumes a fixer-lib item
+  (an unused edge trips cargo 1.101 `cargo::unused_dependencies`; dropped
+  2026-11-06, issue 211). NEVER-WRONG by
   construction: the drain never writes a repo file.
 
 Tier law: tier manifests forward the ROOT'S EXISTING optional seams

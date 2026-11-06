@@ -1,5 +1,6 @@
 //! Issue 200 — the TRAINER TIER (inner crate, root-package workspace
-//! member; superset of the fixer tier via its path dep).
+//! member; superset of the fixer tier by forwarded features — the path
+//! edge to the fixer lands with the first fixer-lib item it consumes).
 //!
 //! Charter (the Proposal 005 trainer role): the daily trainer window —
 //! TrajStore miss backlog → dedup + priority → modelless pre-pass →

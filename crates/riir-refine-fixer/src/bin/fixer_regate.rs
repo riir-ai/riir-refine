@@ -2843,7 +2843,9 @@ fn load_frozen_inputs(args: &Args, arm_label: &str) -> FrozenInputs {
 
 /// The paired superiority read (Plan 225 T4.2's arithmetic, extracted so
 /// the FROZEN and PLACEBO arms share ONE paired number): mean paired
-/// delta, LB95 (1.96·SE), wins, losses, n.
+/// delta, LB95 (1.96·SE), wins, losses, n. Gated like its only callers
+/// (`run_frozen`/`run_placebo`), or every other posture reports it dead.
+#[cfg(feature = "escalation_manifest")]
 fn paired_read(a1: &[bool], a0: &[bool]) -> (f64, f64, usize, usize, usize) {
     let n = a1.len();
     let diffs: Vec<f64> = a1
