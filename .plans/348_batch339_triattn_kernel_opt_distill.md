@@ -1,6 +1,7 @@
 # Plan 348 — Batch 339: the TriAttention kernel_opt distill (arXiv 2611.07256 code release)
 
 **Status:** STAGED, UNCLAIMED — claim-first at the next kernel_opt slot (claim row in `.distill/001_mining_queue_snapshot.md` BEFORE any corpus edit; push is the arbiter).
+**Claimed:** zed-m3-b339, 1793969109, expires 2026-11-08T12:45:00+00:00
 
 Verdict: Research 380 — YES B− corpus [3 own rules + 1 suggestion-only + ~8 faces expected after ~50% falsification]. Source pin `HanzhiZhang-Ulrica/TriAttention @ 805fae2cd7a04c7b6ed70df910f434d82682c397` (push 2026-10-29T05:01:59Z; NO LICENSE — decision-content-only posture, ORIGINAL fixtures mandatory). This is the walk-24 staged lead TriAttention; the LoopDuet lead closed no-source and TileQuant staged as Plan 347 the same day (snapshot rows).
 
