@@ -69,6 +69,56 @@ pub enum DomainId {
     ShaderPerf,
 }
 
+/// A set of [`DomainId`]s (one bit per domain, `ALL` order) — the per-span
+/// fan-out allow set (Issue 213). Copy, zero-allocation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DomainMask(u8);
+
+impl DomainMask {
+    /// Every domain allowed — the path-less / pre-213 fan-out.
+    pub const ALL: Self = Self((1 << DomainId::ALL.len()) - 1);
+    /// No domain allowed.
+    pub const NONE: Self = Self(0);
+
+    const fn bit(domain: DomainId) -> u8 {
+        1 << domain as u8
+    }
+
+    /// Whether `domain` is in the set.
+    #[must_use]
+    pub const fn allows(self, domain: DomainId) -> bool {
+        self.0 & Self::bit(domain) != 0
+    }
+
+    /// The set with `domain` added.
+    #[must_use]
+    pub const fn with(self, domain: DomainId) -> Self {
+        Self(self.0 | Self::bit(domain))
+    }
+
+    /// The set with `domain` removed.
+    #[must_use]
+    pub const fn without(self, domain: DomainId) -> Self {
+        Self(self.0 & !Self::bit(domain))
+    }
+
+    /// Whether the set is empty.
+    #[must_use]
+    pub const fn is_empty(self) -> bool {
+        self.0 == 0
+    }
+
+    /// The domains among `present` whose rules can touch a file at `path`
+    /// ([`DomainId::applies_to_path`], the Issue 145 T4 contract).
+    #[must_use]
+    pub fn applying_to_path(path: &str, present: impl Fn(DomainId) -> bool) -> Self {
+        DomainId::ALL
+            .into_iter()
+            .filter(|&d| present(d) && d.applies_to_path(path))
+            .fold(Self::NONE, Self::with)
+    }
+}
+
 impl DomainId {
     /// All domains, in router order.
     pub const ALL: [Self; 7] = [

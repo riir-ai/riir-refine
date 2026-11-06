@@ -95,8 +95,8 @@ pub use clippy_feed::{parse_clippy_feed, paths_ref_match, ClippyDiagnostic};
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{
-    DomainId, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab, SPECTRAL_DIM,
-    SPECTRAL_K, SPECTRAL_VOCAB_N,
+    DomainId, DomainMask, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab,
+    SPECTRAL_DIM, SPECTRAL_K, SPECTRAL_VOCAB_N,
 };
 pub use headroom_probe::{
     decompose_headroom, decompose_headroom_with_spans, print_headroom_decomposition,

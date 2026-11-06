@@ -24,7 +24,7 @@ use crate::domain::{HealDomain, HealEntry};
 
 use super::clippy_feed::ClippyDiagnostic;
 use super::corpus_index::{RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
-use super::domain_router::{DomainId, DomainRouter, RoutingEmbedding, SpectralOrder};
+use super::domain_router::{DomainId, DomainMask, DomainRouter, RoutingEmbedding, SpectralOrder};
 
 /// A leased epoch's per-domain corpus overlay (T1.6): domain → retrieval
 /// triples. Mirrors [`crate::kat_lease_client::DomainTriples`] one layer up
@@ -776,7 +776,27 @@ impl LatentMatcher {
         code: &str,
         top_k: usize,
     ) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
-        self.suggest_span_gated(code, top_k, true)
+        self.suggest_span_gated(code, top_k, DomainMask::ALL)
+    }
+
+    /// The per-span fan-out allow set (Issue 213). `applying` is the file's
+    /// Issue-145 path set; the kernel pregate's span verdict removes the
+    /// kernel bit. When NO allowed domain applies (an unusual extension, or
+    /// a `.cu` span the pregate denied), every domain runs — exactly the
+    /// display's `fits_any` fallback (`heal.rs`), so the shown list is
+    /// unchanged; only retrieval the display would discard is skipped.
+    fn span_allow(applying: DomainMask, kernel_allowed: bool) -> DomainMask {
+        let gate = |m: DomainMask| {
+            if kernel_allowed {
+                m
+            } else {
+                m.without(DomainId::Kernel)
+            }
+        };
+        match gate(applying) {
+            m if m.is_empty() => gate(DomainMask::ALL),
+            m => m,
+        }
     }
 
     /// [`Self::suggest_span`] with the kernel domain's participation decided
@@ -788,10 +808,10 @@ impl LatentMatcher {
         &mut self,
         code: &str,
         top_k: usize,
-        kernel_allowed: bool,
+        allow: DomainMask,
     ) -> (DomainId, Vec<(DomainId, Vec<ScoredRule>)>) {
         let routed = self.router.route(code).unwrap_or(DomainId::Clippy);
-        let by_domain = self.suggest_all_domains(code, top_k, kernel_allowed);
+        let by_domain = self.suggest_all_domains(code, top_k, allow);
         (routed, by_domain)
     }
 
@@ -802,7 +822,7 @@ impl LatentMatcher {
         &mut self,
         code: &str,
         top_k: usize,
-        kernel_allowed: bool,
+        allow: DomainMask,
     ) -> Vec<(DomainId, Vec<ScoredRule>)> {
         // One parse per span, shared across every domain's instantiation
         // probe (Issue 063): the parse-fail contract — no parse, no marking,
@@ -817,6 +837,14 @@ impl LatentMatcher {
         };
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
+            // Issue 213: a domain outside the span's allow set skips its
+            // index ENTIRELY (no `by_domain` entry — the domain-disabled
+            // shape). The set carries the kernel pregate's per-span verdict
+            // (Issue 208) and the Issue-145 path contract; see
+            // `Self::span_allow`.
+            if !allow.allows(domain) {
+                continue;
+            }
             // Issue 134 T2 (cfg(demonstrability_gate)): scale the
             // fan-out width by the domain's measured demonstrability
             // factor — identity returns the base EXACTLY (the
@@ -837,15 +865,6 @@ impl LatentMatcher {
             // disjoint. Kernel dispatches through [`KernelIndex`] — flat or
             // route-narrowed (Issue 196) — with the same scratch.
             let mut rules = if domain == DomainId::Kernel {
-                // Issue 208 / Bench 131: the kernel pregate — a denied span
-                // skips the kernel index ENTIRELY (no `by_domain` entry: the
-                // kernel-disabled shape, the same one `None => continue`
-                // produces below). Every other domain is untouched. The
-                // pregate resolves per FILE (`KernelPlan::for_file` in
-                // [`Self::suggest_file_inner`]); this is its per-span verdict.
-                if !kernel_allowed {
-                    continue;
-                }
                 match self.kernel.as_ref() {
                     Some(kernel_index) => kernel_index
                         .suggest_deep_into(code, pool, &mut self.scratch)
@@ -1090,12 +1109,15 @@ impl LatentMatcher {
         // feature-off posture and the explicit `--domain kernel` bypass)
         // allows every span: byte-identical pre-gate behavior.
         let kernel_plan = crate::kernel_pregate::KernelPlan::for_file(src, path);
+        // Issue 213: the Issue-145 path contract, resolved ONCE per file —
+        // the domains whose rules can touch this file kind.
+        let applying = DomainMask::applying_to_path(path, |d| self.has_domain(d));
         let mut out = Vec::with_capacity(chunks.len());
         for chunk in chunks {
             let kernel_allowed =
                 kernel_plan.span_allowed(chunk.source.start_line, chunk.source.end_line);
-            let (routed_domain, by_domain) =
-                self.suggest_span_gated(&chunk.content, top_k, kernel_allowed);
+            let allow = Self::span_allow(applying, kernel_allowed);
+            let (routed_domain, by_domain) = self.suggest_span_gated(&chunk.content, top_k, allow);
             out.push(SpanSuggestion {
                 path: chunk.source.path.clone(),
                 start_line: chunk.source.start_line,
@@ -1865,5 +1887,83 @@ mod kernel_pregate_tests {
         let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
         let (_, by_domain) = m.suggest_span("let x = 1;", 3);
         assert!(by_domain.iter().any(|(d, _)| *d == DomainId::Kernel));
+    }
+}
+
+// Issue 213: the per-span allow set — the Issue-145 path contract applied
+// BEFORE retrieval. Parity is pinned against the ungated fan-out
+// (`suggest_span`, `DomainMask::ALL`) on the same chunk text.
+#[cfg(all(test, feature = "latent_retrieval"))]
+mod path_gate_tests {
+    use super::*;
+
+    const SRC: &str = "fn main() {\n    let mut v = Vec::new();\n    for i in 0..10 { v.push(i); }\n    println!(\"{v:?}\");\n}\n";
+
+    #[test]
+    fn applying_domains_are_byte_identical_and_the_rest_absent() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let spans = m.suggest_file(SRC, "plain.rs", 3);
+        assert_ne!(spans, []);
+        for span in &spans {
+            let text: String = SRC
+                .lines()
+                .skip(span.start_line - 1)
+                .take(span.end_line + 1 - span.start_line)
+                .collect::<Vec<_>>()
+                .join("\n");
+            let (_, ungated) = m.suggest_span(&text, 3);
+            for (domain, rules) in &span.by_domain {
+                assert!(
+                    domain.applies_to_path("plain.rs"),
+                    "{domain:?} must be gated off .rs"
+                );
+                let twin = ungated.iter().find(|(d, _)| d == domain).map(|(_, r)| r);
+                assert_eq!(
+                    Some(rules),
+                    twin,
+                    "{domain:?} must match the ungated fan-out"
+                );
+            }
+            for (domain, _) in &ungated {
+                if domain.applies_to_path("plain.rs") && *domain != DomainId::Kernel {
+                    assert!(
+                        span.by_domain.iter().any(|(d, _)| d == domain),
+                        "{domain:?} applies to .rs and must stay present"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn an_unclaimed_extension_keeps_every_present_domain() {
+        // The display's `fits_any` fallback: no domain claims `.txt`, so the
+        // fan-out stays full (kernel still rides its own pregate).
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let spans = m.suggest_file(SRC, "notes.txt", 3);
+        for span in &spans {
+            for d in DomainId::ALL {
+                if d != DomainId::Kernel && m.has_domain(d) {
+                    assert!(
+                        span.by_domain.iter().any(|(x, _)| *x == d),
+                        "{d:?} must stay"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn span_allow_falls_back_when_the_pregate_empties_the_set() {
+        let only_kernel = DomainMask::NONE.with(DomainId::Kernel);
+        assert_eq!(
+            LatentMatcher::span_allow(only_kernel, false),
+            DomainMask::ALL.without(DomainId::Kernel)
+        );
+        assert_eq!(LatentMatcher::span_allow(only_kernel, true), only_kernel);
+        assert_eq!(
+            LatentMatcher::span_allow(DomainMask::NONE, true),
+            DomainMask::ALL
+        );
     }
 }
