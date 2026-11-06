@@ -1,6 +1,7 @@
 # Issue 210 — cargo refine docs sweep: teach the `fix` verb + bare dry run (one way per action)
 
 **Status:** OPEN — owner UX law 2026-11-06 (one way per action, Claude verdict AGREE `72d8f279`): fix = `cargo refine fix <paths>` (writes + compile-gates on release builds; `--no-verify` opts out; `--verify-args "--features <set>"` for gated code), dry run = bare `cargo refine` (no heal-mode dry flag; `--dry-run` belongs to `get`/`send`/`wetrun`).
+**Claimed:** zed-m3-idle210 (m3 idle lane), epoch=1793954917, expires 2026-11-08T08:48:37+00:00
 
 ## Landed already (the source of truth)
 
