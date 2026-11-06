@@ -1,6 +1,6 @@
 # Research 379 — TileQuant distill verdict (arXiv 2611.07217 code release)
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 338, Plan 347 STAGED unclaimed)
+**Status:** DISTILLED-batch-landed (Batch 338 / Plan 347 landed 2026-11-06 — 3 rules + 3 faces, corpus 1061→1064; the landing corrections carried below in the addendum)
 
 ## Source
 
@@ -60,3 +60,17 @@ First PURE-Triton source. The Triton-kernel family was 0 members (vLLM's Triton 
 ## Queue slot
 
 Plan 347 (nominal Batch 338) STAGED unclaimed — claim-first at the next kernel_opt slot per the queue protocol. Research highwater 378 → 379. The LoopDuet lead (the other walk-24 staged scan) CLOSED no-source this session (snapshot row upstream).
+
+## Landing addendum (Batch 338, 2026-11-06, zed-m3-b338)
+
+T0 verification corrections carried into the rules:
+1. Claim 9 (graph_decode): the constant sits at **L21-24** (comment L21-23, `MAX_CAPTURED_PREFILL_TOKENS = 16384` at L24), enforcement at L304 — not L13-15 (that range is imports).
+2. Claim 6 (fused-kernel gates): the fused kernel serves ALL n (`BLOCK_N = next_power_of_2(n)`, grid `(n_tc, 1, 1)`); `n <= 64` (quantize_activation.py L134) gates the COMPILED-LAUNCH KEY only (n > 64 → key=None → JIT launch of the SAME kernel); the torch dispatcher routes the fused kernel for `n <= 128` (quant_utils.py L127). The verdict's "fused single-kernel when N <= 64" conflated the launch-key gate with the path gate.
+3. Claim 4's `tl.atomic_xchg(counter, 0, ...)` lives at gemm **L183** (inside the kernel); L193-218 is the `_SplitKWorkspace` docstring + getters. Counters keyed per (device_index, raw stream), L206.
+
+New candidates found in the unread-file sweep (recorded, mostly folded):
+- **B empty_cache-before-capture** (graph_decode.py L301-303) + **C+ captured-reset independent replay** (L326-328) — LANDED as atoms of the graph-fallback-coverage-ladder capture-hygiene face.
+- **B buffer-device residency** (api.py L282-293: host-resident buffers issue implicit H2D which also blocks CUDA-graph capture) — recorded, no corpus host this batch.
+- **C+ token-major cache pre-allocation** (graph_decode.py L190-195) + **C+ mask-less attention backend** (L232-234, transformers-5.1-conditional) — recorded as drops (thin / version-conditional).
+
+Five graph-capture-family candidates total; per corpus convention they ride as rider faces on one graph host, never five entries. Yield: 3 own rules + 3 faces (above the ~50% falsification rate — the verdict was mechanism-level).

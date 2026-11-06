@@ -14,7 +14,7 @@
 //!
 //! The four nested domains are the prose-gated ones (live rows in
 //! AGENTS.md / README.md); the three flat keys are the also-compiled trio
-//! (docker / dist / shader_perf — counted, no prose rows gated on them).
+//! (docker / dist / `shader_perf` — counted, no prose rows gated on them).
 //!
 //! The numbers are DERIVED, never hand-typed: `scripts/pins_manifest.py`
 //! runs [`dump::dump_pins_manifest`] (this module, under `cargo test`) with
@@ -86,6 +86,7 @@ pub(crate) fn count(domain: &str, key: &str) -> usize {
 /// dump asserts all seven counts are present and the caller builds with
 /// `--features kernel_opt,sec,rust_perf_bench,shader_perf` (`clippy_lints` +
 /// `rust_perf` + `docker` + `dist` are default-on).
+
 #[test]
 fn dump_pins_manifest() {
     let Some(path) = std::env::var_os("RIIR_REFINE_PINS_DUMP") else {
@@ -158,35 +159,7 @@ fn dump_pins_manifest() {
     // prose-gated nested domains (this is `corpus_counts_line`'s own reader
     // shape, pre-seamed). docker + dist are default-on; `shader_perf` is
     // opt-in and joins the script's build posture.
-    #[cfg(feature = "docker")]
-    root.insert(
-        "docker_rules".to_string(),
-        serde_json::json!(
-            crate::domains::docker::corpus::build_docker_seed_corpus()
-                .entries
-                .len()
-        ),
-    );
-
-    #[cfg(feature = "dist")]
-    root.insert(
-        "dist_rules".to_string(),
-        serde_json::json!(
-            crate::domains::dist::corpus::build_dist_seed_corpus()
-                .entries
-                .len()
-        ),
-    );
-
-    #[cfg(feature = "shader_perf")]
-    root.insert(
-        "shader_perf_rules".to_string(),
-        serde_json::json!(
-            crate::domains::shader_perf::corpus::build_shader_seed_corpus()
-                .entries
-                .len()
-        ),
-    );
+    dump_also_compiled_trio(&mut root);
 
     for required in [
         "clippy_lints",
@@ -216,4 +189,48 @@ fn dump_pins_manifest() {
 
     let json = serde_json::to_string_pretty(&Value::Object(root)).expect("manifest serializes");
     std::fs::write(&path, json + "\n").expect("pins dump write");
+}
+
+/// The also-compiled trio (docker / dist / `shader_perf`) as flat top-level
+/// keys — extracted from [`dump_pins_manifest`] so the test stays under the
+/// line budget; each insert keeps its own feature gate, so the flag-off
+/// posture is byte-identical (the B331 en-route-repair class, disclosed in
+/// the Batch-338 landing row).
+// `root` is unused when all three trio features are off (the flag-off test
+// posture keeps the shape compiled — the allow is the shape, not a lint
+// suppression of live code).
+#[cfg_attr(
+    not(any(feature = "docker", feature = "dist", feature = "shader_perf")),
+    allow(unused_variables)
+)]
+fn dump_also_compiled_trio(root: &mut serde_json::Map<String, serde_json::Value>) {
+    #[cfg(feature = "docker")]
+    root.insert(
+        "docker_rules".to_string(),
+        serde_json::json!(
+            crate::domains::docker::corpus::build_docker_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
+    #[cfg(feature = "dist")]
+    root.insert(
+        "dist_rules".to_string(),
+        serde_json::json!(
+            crate::domains::dist::corpus::build_dist_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
+    #[cfg(feature = "shader_perf")]
+    root.insert(
+        "shader_perf_rules".to_string(),
+        serde_json::json!(
+            crate::domains::shader_perf::corpus::build_shader_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
 }

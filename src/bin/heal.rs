@@ -11592,9 +11592,10 @@ fn run_score_bench_perf() {
         .map(|a| a.expect[0].clone())
         .collect::<std::collections::BTreeSet<String>>()
         .into_iter()
-        // fn(&str) over String items — the closure adapts (a bare fn path
-        // here failed E0631 on this score_bench-only lane, pre-existing).
-        .filter(sb::generations::v5_is_removal_rule)
+        // fn(&str) over String items — the closure derefs (the bare fn path
+        // is E0631 at the all-features posture; the pre-existing HEAD red
+        // repaired at the Batch-338 landing, disclosed).
+        .filter(|r| sb::generations::v5_is_removal_rule(r))
         .collect();
 
     let mut members_total = 0usize;

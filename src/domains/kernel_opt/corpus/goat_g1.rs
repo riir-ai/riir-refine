@@ -89,7 +89,7 @@ use crate::domains::kernel_opt::KernelRule;
 #[must_use]
 pub fn expected_corpus_files() -> Vec<String> {
     let mut names = vec!["entries_popcorn".to_string()];
-    for n in 1..=149 {
+    for n in 1..=150 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -368,6 +368,7 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_147,
         entries_gpu_148,
         entries_gpu_149,
+        entries_gpu_150,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -672,8 +673,8 @@ pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::
 
 /// The parsed store, keyed by `rule_id` (digests live in the value). Built
 /// once per process; keys borrow the committed static text.
-fn status_table(
-) -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
+fn status_table()
+-> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
     static TABLE: std::sync::OnceLock<
         std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>,
     > = std::sync::OnceLock::new();
@@ -995,7 +996,7 @@ fn run_arm(dir: &std::path::Path, stem: &str, source: &str) -> ArmVerdict {
                     e,
                     tail(&read_file(&c_err), 400)
                 )),
-            }
+            };
         }
     };
     let _ = compile;
@@ -1118,7 +1119,7 @@ fn run_pair(dir: &std::path::Path, stem: &str, ref_src: &str, opt_src: &str) -> 
                     e,
                     tail(&read_file(&c_err), 400)
                 )),
-            }
+            };
         }
     };
     let _ = compile;
@@ -1293,7 +1294,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 150); // popcorn + gpu_01..149 (the B335 repair caught 148; B336 keeps the census current at landing)
+        assert_eq!(names.len(), 151); // popcorn + gpu_01..150 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continues)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));

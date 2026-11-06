@@ -877,7 +877,7 @@ mod tests {
     fn corpus_line_carries_the_pinned_counts() {
         let line = corpus_counts_line();
         assert!(line.contains("clippy 112"), "{line}");
-        assert!(line.contains("kernel 1061"), "{line}");
+        assert!(line.contains("kernel 1064"), "{line}");
         assert!(line.contains("perf 302"), "{line}");
         assert!(line.contains("sec 45"), "{line}");
         assert!(line.contains("docker 31"), "{line}");
@@ -902,9 +902,11 @@ mod tests {
         let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
         assert_eq!(
             labels,
-            vec!["kernel", "perf", "clippy", "sec", "docker", "dist", "shader"]
+            vec![
+                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
+            ]
         );
-        assert_eq!(rows[0].total, 1567);
+        assert_eq!(rows[0].total, 1570);
     }
 
     #[test]
