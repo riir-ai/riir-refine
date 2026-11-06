@@ -98,7 +98,11 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
-    if list.is_empty() { None } else { Some(list) }
+    if list.is_empty() {
+        None
+    } else {
+        Some(list)
+    }
 }
 
 /// The live env read.
@@ -362,9 +366,7 @@ fn cache_fingerprint(
         auto_oracle_gap_max_passes(),
     );
     Some(crate::oracle_cache::workspace_fingerprint(
-        root,
-        cargo_bin,
-        &posture,
+        root, cargo_bin, &posture,
     ))
 }
 
@@ -487,13 +489,19 @@ pub fn run_oracle_session(
 }
 
 /// The cache-side mirror of a run's results, stored under the fingerprint.
-fn store_cache(root: &Path, fp: &crate::oracle_cache::WorkspaceFingerprint, session: &OracleSession) {
+fn store_cache(
+    root: &Path,
+    fp: &crate::oracle_cache::WorkspaceFingerprint,
+    session: &OracleSession,
+) {
     let mut cached = crate::oracle_cache::CachedOracleSession::from_parts(
         fp.key_hex.clone(),
         session.text.clone(),
         session.base_exit,
     );
-    cached.base_spawn_error.clone_from(&session.base_spawn_error);
+    cached
+        .base_spawn_error
+        .clone_from(&session.base_spawn_error);
     cached.census_error.clone_from(&session.census_error);
     cached.census = session
         .census

@@ -60,7 +60,7 @@ use syn::{BinOp, Expr, File, UnOp};
 use super::softmax_collapse::{
     allow_reason, is_float_one, is_primitive_fn, is_test_fn, is_test_mod, onehot_shape, peel_paren,
 };
-use super::{SourceEdit, src};
+use super::{src, SourceEdit};
 use crate::edit_emitter::drops_interior_comment;
 
 /// The rule id.

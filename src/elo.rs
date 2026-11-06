@@ -713,7 +713,10 @@ mod tests {
         let k_damped = elo_k_eff(ELO_K, 4, ELO_K_EFF_FLOOR);
         assert!(k_damped < ELO_K);
         let (r_damped, b_damped) = update_pair_k(1200.0, 1200.0, true, k_damped);
-        assert!((r_damped - 1200.0 + (b_damped - 1200.0)).abs() < 1e-4, "zero-sum");
+        assert!(
+            (r_damped - 1200.0 + (b_damped - 1200.0)).abs() < 1e-4,
+            "zero-sum"
+        );
         let (r_full, b_full) = update_pair_k(1200.0, 1200.0, true, ELO_K);
         assert!(r_damped < r_full, "damped win moves less");
         assert!(b_damped > b_full, "damped loss costs less");

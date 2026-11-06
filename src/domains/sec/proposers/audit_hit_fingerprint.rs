@@ -136,9 +136,9 @@ fn scan_items(source: &str, items: &[Item], findings: &mut Vec<AuditHitFinding>)
 
 /// `#[cfg(test)]` mods are fixture habitat.
 fn is_test_mod(m: &ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
 fn scan_fn_source(
@@ -148,15 +148,16 @@ fn scan_fn_source(
     findings: &mut Vec<AuditHitFinding>,
 ) {
     let name_segs = word_segments(fn_name);
-    let audit_ctx = AUDIT_VOCAB
-        .iter()
-        .any(|v| name_segs.iter().any(|s| s == v));
+    let audit_ctx = AUDIT_VOCAB.iter().any(|v| name_segs.iter().any(|s| s == v));
     if !audit_ctx {
         return;
     }
     let body_lower = body_text.to_ascii_lowercase();
     // Suppression: the fingerprint law already applied anywhere in the fn.
-    if SUPPRESS.iter().any(|s| body_lower.contains(&s.to_ascii_lowercase())) {
+    if SUPPRESS
+        .iter()
+        .any(|s| body_lower.contains(&s.to_ascii_lowercase()))
+    {
         return;
     }
     // Raw-carry shape: a struct-literal expression or format!/push binds a

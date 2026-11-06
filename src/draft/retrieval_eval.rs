@@ -48,7 +48,7 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{CollapseVerdict, detect_collapse_rule_ids, rule_family};
+use super::instantiation_rerank::{detect_collapse_rule_ids, rule_family, CollapseVerdict};
 use super::latent_matcher::LatentMatcher;
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
@@ -1469,7 +1469,7 @@ pub fn print_report(report: &EvalReport) {
     // rustc_errors is never asserted ≈1 anywhere (a free coordinate in T3's
     // Spearman); the drop ledger says so where it has no labeled set.
     {
-        use crate::demonstrability::{MIN_PER_RULE_N, canonical_domain, eval_row, render_column};
+        use crate::demonstrability::{canonical_domain, eval_row, render_column, MIN_PER_RULE_N};
         let mut rows: Vec<crate::demonstrability::Row> = report
             .taxonomy_by_domain
             .iter()
@@ -2587,7 +2587,11 @@ mod tests {
 
     #[allow(clippy::cast_precision_loss)] // ratio arithmetic over tiny counts
     fn ratio(hits: usize, n: usize) -> f32 {
-        if n == 0 { 1.0 } else { hits as f32 / n as f32 }
+        if n == 0 {
+            1.0
+        } else {
+            hits as f32 / n as f32
+        }
     }
 
     #[test]
@@ -2603,7 +2607,7 @@ mod tests {
         // The falsifiable prediction: All-mode top-1 == pool recall @
         // RERANK_POOL, exactly. If it holds, the measured gain is not an
         // effect size and must not be reported as one.
-        use crate::draft::{RERANK_POOL, RerankMode};
+        use crate::draft::{RerankMode, RERANK_POOL};
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher")
             .with_rerank_mode(RerankMode::Off);
@@ -2875,7 +2879,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clippy_fixture_labels_verify_via_proposers() {
-        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         let mut all: Vec<&str> = FIXABLE_LINTS.to_vec();
         all.extend_from_slice(VERIFY_LINTS);
         all.extend_from_slice(&[
@@ -2903,7 +2907,7 @@ mod tests {
     #[cfg(feature = "rust_perf")]
     #[test]
     fn perf_fixture_labels_verify_via_proposers() {
-        use crate::domains::rust_perf::proposers::{FIXABLE_RULES, propose_fix};
+        use crate::domains::rust_perf::proposers::{propose_fix, FIXABLE_RULES};
         for &(rule, code) in super::super::eval_fixtures_perf::PERF_SPANS {
             if FIXABLE_RULES.contains(&rule) {
                 assert!(
@@ -3047,7 +3051,7 @@ mod tests {
     #[cfg(feature = "clippy_lints")]
     #[test]
     fn clean_spans_fire_no_lint() {
-        use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS, propose_fix};
+        use crate::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS, VERIFY_LINTS};
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
         for (tag, code) in CLEAN_SPANS {
             for &lint in &structural {
@@ -3250,7 +3254,7 @@ mod tests {
     // precedent).
     #[allow(clippy::too_many_lines)]
     fn cross_domain_agreement_rate_report() {
-        use crate::draft::instantiation_rerank::{RERANK_POOL, RerankMode};
+        use crate::draft::instantiation_rerank::{RerankMode, RERANK_POOL};
         use std::collections::{HashMap, HashSet};
 
         let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
@@ -3451,7 +3455,7 @@ mod tests {
 
     #[test]
     fn taxonomy_classifies_the_four_outcomes() {
-        use super::{ChoiceOutcome, DeclineClass, classify_choice_span};
+        use super::{classify_choice_span, ChoiceOutcome, DeclineClass};
 
         let acc = vec!["needless_return".to_string()];
         // strict hit: gold top-1
@@ -3482,7 +3486,7 @@ mod tests {
 
     #[test]
     fn taxonomy_decline_axis_is_three_way() {
-        use super::{DeclineClass, classify_choice_span};
+        use super::{classify_choice_span, DeclineClass};
 
         // covered: something fired
         let ranked = vec![scored("a", false), scored("b", true)];

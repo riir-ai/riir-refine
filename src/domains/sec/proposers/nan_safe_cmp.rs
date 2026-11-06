@@ -50,7 +50,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Item};
 
-use super::{SourceEdit, src};
+use super::{src, SourceEdit};
 use crate::edit_emitter::comment_marker_positions;
 
 /// The sort-family method names that license the rewrite (the precision

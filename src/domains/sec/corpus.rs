@@ -1927,8 +1927,7 @@ mod tests {
             .find(|r| r.rule_id == "ascii-token-unicode-word-boundary-scan-miss")
             .unwrap();
         assert!(
-            c1.sec_concept.contains("STRICTLY MORE PERMISSIVE")
-                && c1.sec_concept.contains("(?-u:"),
+            c1.sec_concept.contains("STRICTLY MORE PERMISSIVE") && c1.sec_concept.contains("(?-u:"),
             "batch-330 C1 must carry the subset property + the Rust fix-space"
         );
         let c2 = all
@@ -1937,7 +1936,9 @@ mod tests {
             .unwrap();
         assert!(
             c2.sec_concept.contains("Repeated-digit placeholders")
-                && c2.sec_concept.contains("search again from its next character"),
+                && c2
+                    .sec_concept
+                    .contains("search again from its next character"),
             "batch-330 C2 must carry the placeholder guard + the overlap rescan"
         );
         let c3 = all
@@ -1965,7 +1966,8 @@ mod tests {
             .unwrap_or_else(|| panic!("batch-331 rule missing from corpus"));
         assert_eq!(r.family, SecFamily::InputValidation, "batch-331 family");
         assert!(
-            r.sec_concept.contains("Batch 331 / Plan 339 / Research 368"),
+            r.sec_concept
+                .contains("Batch 331 / Plan 339 / Research 368"),
             "batch-331 must cite its landing lineage"
         );
         assert!(
@@ -1980,8 +1982,10 @@ mod tests {
         );
         // The law needles (keyed after reading the landed text).
         assert!(
-            r.sec_concept.contains("silently overwrites an unrelated block")
-                && r.sec_concept.contains("no length change for a shrink guard"),
+            r.sec_concept
+                .contains("silently overwrites an unrelated block")
+                && r.sec_concept
+                    .contains("no length change for a shrink guard"),
             "batch-331 must carry the silent-overwrite harm + the shrink-guard gap"
         );
         assert!(

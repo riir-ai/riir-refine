@@ -131,17 +131,12 @@ fn scan_items(source: &str, items: &[Item], findings: &mut Vec<LuhnFinding>) {
 
 /// `#[cfg(test)]` mods are fixture habitat.
 fn is_test_mod(m: &ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
-fn scan_fn_source(
-    source: &str,
-    fn_name: &str,
-    body_text: &str,
-    findings: &mut Vec<LuhnFinding>,
-) {
+fn scan_fn_source(source: &str, fn_name: &str, body_text: &str, findings: &mut Vec<LuhnFinding>) {
     let name_segs = word_segments(fn_name);
     let redact_ctx = REDACT_VOCAB
         .iter()
@@ -179,7 +174,12 @@ fn scan_fn_source(
 /// A bare card-class length (13/16/19) in a comparison or range shape.
 fn has_card_length_gate(body: &str) -> bool {
     for len in ["13", "16", "19"] {
-        for ctx in [format!("== {len}"), format!(">= {len}"), format!("> {len}"), format!("{len}..")] {
+        for ctx in [
+            format!("== {len}"),
+            format!(">= {len}"),
+            format!("> {len}"),
+            format!("{len}.."),
+        ] {
             if body.contains(&ctx) {
                 return true;
             }
@@ -248,7 +248,10 @@ mod tests {
         let src = "fn parse_digits(s: &str) -> usize {\n    \
                    let n = digits_of(s).len();\n    n\n}\n";
         let file: File = parse_str(src).unwrap();
-        assert!(detect(src, &file).is_empty(), "non-redaction fn never fires");
+        assert!(
+            detect(src, &file).is_empty(),
+            "non-redaction fn never fires"
+        );
     }
 
     #[test]

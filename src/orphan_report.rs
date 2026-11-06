@@ -143,8 +143,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use crate::config_audit::{
-    FieldCandidate, FileScope, WalkMode, ZeroReadField, ZeroReadScan, collect_struct_field_sets,
-    field_member_name, literal_is_field_mismatch,
+    collect_struct_field_sets, field_member_name, literal_is_field_mismatch, FieldCandidate,
+    FileScope, WalkMode, ZeroReadField, ZeroReadScan,
 };
 
 /// Default probe depths (commits back from HEAD), clamped to history depth.

@@ -52,9 +52,9 @@ use blake3::Hasher;
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{RERANK_POOL, RerankMode, mark_instantiation_with_file, rerank};
+use super::instantiation_rerank::{mark_instantiation_with_file, rerank, RerankMode, RERANK_POOL};
 use super::op_tokenizer::RustOpTokenizer;
-use super::retrieval_eval::{CLEAN_SPANS, canonical_rank, domain_index, labeled_eval_spans};
+use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, CLEAN_SPANS};
 use riir_neuron_db::bm25::Tokenizer;
 
 /// Probe depth — mirrors `retrieval_eval::PROBE_TOP_K` (private there;

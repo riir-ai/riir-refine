@@ -86,7 +86,7 @@ use std::collections::BTreeSet;
 use crate::draft::clippy_oracle::OracleVerdict;
 use crate::frontier_pairs::PROVENANCE;
 use crate::frontier_report;
-use crate::score_bench::{ComponentOverride, heal_fixpoint_cfg};
+use crate::score_bench::{heal_fixpoint_cfg, ComponentOverride};
 
 /// Where committed miner rows live (append-only; BLAKE3-deduped on load).
 pub const MINER_ROWS_JSONL: &str = ".benchmarks/frontier_miner_rows.jsonl";
@@ -1493,12 +1493,10 @@ mod tests {
             1,
             "the family's NEXT candidate admits"
         );
-        assert!(
-            third
-                .rejections
-                .iter()
-                .any(|r| matches!(r, Rejection::Duplicate { .. }))
-        );
+        assert!(third
+            .rejections
+            .iter()
+            .any(|r| matches!(r, Rejection::Duplicate { .. })));
     }
 
     #[test]
@@ -1523,11 +1521,10 @@ mod tests {
             out.admitted.is_empty(),
             "the adversarial solution must not commit"
         );
-        assert!(
-            out.rejections
-                .iter()
-                .any(|r| matches!(r, Rejection::RegressionRefused { .. }))
-        );
+        assert!(out
+            .rejections
+            .iter()
+            .any(|r| matches!(r, Rejection::RegressionRefused { .. })));
         // Directly: the perturbation names the stock row it re-broke.
         let perturbed = regression_perturbations(&broad).expect("must refuse");
         assert!(perturbed.contains(&"needless_return".to_string()));
@@ -1565,11 +1562,10 @@ mod tests {
             &dirty,
         );
         assert_eq!(out.admitted, [] as [AdmittedRow; 0]);
-        assert!(
-            out.rejections
-                .iter()
-                .all(|r| matches!(r, Rejection::SeedNotClean { .. }))
-        );
+        assert!(out
+            .rejections
+            .iter()
+            .all(|r| matches!(r, Rejection::SeedNotClean { .. })));
     }
 
     #[test]
@@ -1592,11 +1588,10 @@ mod tests {
             &blind,
         );
         assert_eq!(out.admitted, [] as [AdmittedRow; 0]);
-        assert!(
-            out.rejections
-                .iter()
-                .all(|r| matches!(r, Rejection::TargetLintNotFired { .. }))
-        );
+        assert!(out
+            .rejections
+            .iter()
+            .all(|r| matches!(r, Rejection::TargetLintNotFired { .. })));
     }
 
     #[test]

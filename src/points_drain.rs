@@ -869,12 +869,7 @@ mod tests {
         let names: Vec<&str> = headers.iter().map(|(k, _)| *k).collect();
         assert_eq!(
             names,
-            [
-                ACCOUNT_HEADER,
-                PUBKEY_HEADER,
-                SEQ_HEADER,
-                SIG_HEADER
-            ],
+            [ACCOUNT_HEADER, PUBKEY_HEADER, SEQ_HEADER, SIG_HEADER],
             "each name EXACTLY once (the kat_ua law); the seq rides as transport"
         );
         let account = &headers

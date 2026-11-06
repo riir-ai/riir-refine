@@ -23,11 +23,11 @@
 //! the KAT service surface (the dialing law's default-mainnet posture is
 //! kept; the env is the operator override).
 
-use riir_ledger::FORMAT_VERSION;
 use riir_ledger::dto::{
     BalanceResponse, ContributeRequest, ContributeResponse, ContributeRuleOutcome, ErrorEnvelope,
     InfoResponse, JoinRequest, JoinResponse, LeaveRequest, LeaveResponse, RankResponse,
 };
+use riir_ledger::FORMAT_VERSION;
 
 /// The operator override env for the points service base URL.
 pub const POINTS_SERVICE_URL_ENV: &str = "RIIR_REFINE_POINTS_SERVICE_URL";

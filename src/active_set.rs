@@ -446,11 +446,9 @@ mod tests {
         set.demote(CLIPPY_DOMAIN_KEY, "needless_return");
         let marker = dir.join(ACTIVE_SET_FILE);
         set.save(&marker).expect("save");
-        assert!(
-            ActiveSet::load_default(&dir)
-                .expect("reload")
-                .excludes(CLIPPY_DOMAIN_KEY, "needless_return")
-        );
+        assert!(ActiveSet::load_default(&dir)
+            .expect("reload")
+            .excludes(CLIPPY_DOMAIN_KEY, "needless_return"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

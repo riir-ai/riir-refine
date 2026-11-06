@@ -931,8 +931,16 @@ mod tests {
     fn query_text_within_below_budget_and_none_are_identity() {
         let text = "fn a() { b }\nfn c() { d }"; // 24 bytes
         assert_eq!(query_text_within(text, None), text);
-        assert_eq!(query_text_within(text, Some(1024)), text, "below budget = unchanged");
-        assert_eq!(query_text_within(text, Some(text.len())), text, "exactly at budget = unchanged");
+        assert_eq!(
+            query_text_within(text, Some(1024)),
+            text,
+            "below budget = unchanged"
+        );
+        assert_eq!(
+            query_text_within(text, Some(text.len())),
+            text,
+            "exactly at budget = unchanged"
+        );
     }
 
     #[test]
@@ -966,7 +974,10 @@ mod tests {
         // the byte cut stands (never an empty query).
         let text = "\nbbbbbbbbbb\ncccccccccc";
         let cut = query_text_within(text, Some(6));
-        assert!(!cut.is_empty(), "the nl==0 guard must never produce an empty query");
+        assert!(
+            !cut.is_empty(),
+            "the nl==0 guard must never produce an empty query"
+        );
         assert_eq!(cut, "\nbbbbb");
         // A single-line giant text: no \n in the prefix → the byte cut stands.
         let flat = "x".repeat(100);
@@ -978,14 +989,17 @@ mod tests {
         // The `MAX + None` ≡ `suggest_deep_into` delegation equivalence,
         // pinned on a GIANT span (the shape the T7 lever targets).
         let index = RuleIndex::build(mini_corpus()).expect("build");
-        let mut code = String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
+        let mut code =
+            String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
         for i in 0..200 {
             let _ = writeln!(
                 code,
                 "    let literal_{i} = \"pad text {i} to grow the span past any sane budget\""
             );
         }
-        code.push_str("    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}");
+        code.push_str(
+            "    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}",
+        );
         assert!(code.len() > 4096, "the fixture span must be giant");
         let mut s1 = SuggestScratch::default();
         let mut s2 = SuggestScratch::default();
@@ -1004,17 +1018,23 @@ mod tests {
         // still retrieves (an empty armed-budget result is a bug); and the
         // truncation helper bounds the giant span's line queries too.
         let index = RuleIndex::build(mini_corpus()).expect("build");
-        let mut code = String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
+        let mut code =
+            String::from("fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n");
         for i in 0..120 {
             let _ = writeln!(
                 code,
                 "    let literal_{i} = \"pad text {i} padding the span far past the budget\""
             );
         }
-        code.push_str("    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}");
+        code.push_str(
+            "    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}",
+        );
         // The whole-span text the armed budget would hand the query:
         let whole = query_text_within(&code, Some(1024));
-        assert!(whole.len() <= 1024, "the giant span's query text is bounded");
+        assert!(
+            whole.len() <= 1024,
+            "the giant span's query text is bounded"
+        );
         assert!(code.starts_with(whole), "head truncation = a prefix");
         // A giant single LINE (the kilobyte-literal shape) is bounded too:
         let giant_line = format!("let s = \"{}\";", "y".repeat(3000));
@@ -1023,7 +1043,10 @@ mod tests {
         // And the capped+budgeted suggest still answers (whole-span query ran).
         let mut s = SuggestScratch::default();
         let capped = index.suggest_deep_into_capped(&code, 3, &mut s, 2, Some(1024));
-        assert!(!capped.is_empty(), "the whole-span query always runs, truncated or not");
+        assert!(
+            !capped.is_empty(),
+            "the whole-span query always runs, truncated or not"
+        );
     }
 
     #[test]

@@ -682,7 +682,7 @@ fn line_of_offset(source: &str, offset: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ArcRawBoundaryFinding, ArcRawBuggyKind, detect};
+    use super::{detect, ArcRawBoundaryFinding, ArcRawBuggyKind};
 
     fn findings(src: &str) -> Vec<ArcRawBoundaryFinding> {
         let file = syn::parse_file(src).expect("fixture parses");
@@ -714,10 +714,9 @@ unsafe fn clone_waker(ptr: *const InstinctWaker) {
         // The fixture collapses BOTH waker arms into one fn, so the
         // increment-then-consume shape (c) is genuinely present too — rule
         // 3 fires beside rule 1. DoubleFromRaw must not (one from_raw site).
-        assert!(
-            f.iter()
-                .any(|fd| fd.kind == ArcRawBuggyKind::IncrementBeforeFromRaw)
-        );
+        assert!(f
+            .iter()
+            .any(|fd| fd.kind == ArcRawBuggyKind::IncrementBeforeFromRaw));
         assert!(!f.iter().any(|fd| fd.kind == ArcRawBuggyKind::DoubleFromRaw));
     }
 

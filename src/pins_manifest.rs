@@ -102,11 +102,8 @@ fn dump_pins_manifest() {
     #[cfg(feature = "rust_perf")]
     {
         let corpus = crate::domains::rust_perf::corpus::build_perf_seed_corpus();
-        let categories: std::collections::BTreeSet<&str> = corpus
-            .entries
-            .iter()
-            .map(|e| e.category.as_str())
-            .collect();
+        let categories: std::collections::BTreeSet<&str> =
+            corpus.entries.iter().map(|e| e.category.as_str()).collect();
         // benchable/notbenchable need the BenchSpec field, which only
         // exists under `rust_perf_bench` — the script's build posture
         // enables it (checked by the required-keys assert below).
@@ -152,7 +149,13 @@ fn dump_pins_manifest() {
         }),
     );
 
-    for required in ["clippy_lints", "rust_perf", "kernel_opt", "sec", "rust_perf_bench"] {
+    for required in [
+        "clippy_lints",
+        "rust_perf",
+        "kernel_opt",
+        "sec",
+        "rust_perf_bench",
+    ] {
         let present = match required {
             // The benchable/notbenchable pair proves the rust_perf_bench posture.
             "rust_perf_bench" => root

@@ -60,8 +60,9 @@ use katgpt_core::exact_mass_admit::exact_mass_admit_into;
 
 use super::choice_scorer::{AdamW, Rng};
 use super::rule_embed::{
-    EMBED_DIM, FEATURE_BUCKETS, FlatAdamW, SIGMOID_TAU, TrainConfig, Trained, decode_verified, dot,
-    encode_artifact, fixture_is_withheld, matvec, quantize, scatter_grad, sigmoid, sparse_features,
+    decode_verified, dot, encode_artifact, fixture_is_withheld, matvec, quantize, scatter_grad,
+    sigmoid, sparse_features, FlatAdamW, TrainConfig, Trained, EMBED_DIM, FEATURE_BUCKETS,
+    SIGMOID_TAU,
 };
 
 /// One supervised span: text, THIS split's gold rules, and the other split's
@@ -489,12 +490,10 @@ mod tests {
             }],
             rule_texts: rules.clone(),
         };
-        assert!(
-            train_spanwise(&bad, &MattrConfig::default())
-                .err()
-                .unwrap_or_default()
-                .contains("withheld")
-        );
+        assert!(train_spanwise(&bad, &MattrConfig::default())
+            .err()
+            .unwrap_or_default()
+            .contains("withheld"));
         // A forbidden NON-withheld rule is refused (builder bug).
         let nw = (0..8)
             .find(|&i| i != w && !fixture_is_withheld(&rules[i].0))
@@ -510,12 +509,10 @@ mod tests {
             }],
             rule_texts: rules,
         };
-        assert!(
-            train_spanwise(&bad2, &MattrConfig::default())
-                .err()
-                .unwrap_or_default()
-                .contains("NON-withheld")
-        );
+        assert!(train_spanwise(&bad2, &MattrConfig::default())
+            .err()
+            .unwrap_or_default()
+            .contains("NON-withheld"));
     }
 
     #[test]

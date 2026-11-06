@@ -342,11 +342,7 @@ pub fn run_synth_floor_on(matcher: &mut super::latent_matcher::LatentMatcher) ->
             .map(|s| (DomainId::Clippy, s)),
     );
     #[cfg(feature = "rust_perf")]
-    spans.extend(
-        perf_synth_spans()
-            .into_iter()
-            .map(|s| (DomainId::Perf, s)),
-    );
+    spans.extend(perf_synth_spans().into_iter().map(|s| (DomainId::Perf, s)));
 
     let mut report = SynthReport::default();
     for (domain, span) in &spans {
@@ -371,10 +367,7 @@ pub fn run_synth_floor_on(matcher: &mut super::latent_matcher::LatentMatcher) ->
         if rank.is_some_and(|r| r < 5) {
             report.blended.hits_at_5 += 1;
         }
-        let row = report
-            .by_mutation
-            .entry(span.mutation)
-            .or_default();
+        let row = report.by_mutation.entry(span.mutation).or_default();
         row.labeled += 1;
         if rank.is_some_and(|r| r < 1) {
             row.hits_at_1 += 1;
@@ -456,7 +449,10 @@ mod tests {
     fn retrieval_synth_rename_erases_names_keeps_structure() {
         let code = "fn alpha(beta: u8) -> u8 { beta.wrapping_add(1) }";
         let renamed = SynthMutation::IdentRename.apply(code).expect("renames");
-        assert!(renamed.contains("xalpha"), "identifiers prefixed: {renamed}");
+        assert!(
+            renamed.contains("xalpha"),
+            "identifiers prefixed: {renamed}"
+        );
         assert!(!renamed.contains("fn xfn"), "keywords untouched: {renamed}");
         // The atomic-null invariant: the renamed text normalizes to the SAME
         // token stream (identifiers collapse to `I` on both sides).
@@ -534,7 +530,10 @@ mod tests {
         let corpus_only = pop.iter().filter(|b| b.source == "corpus").count();
         let synth = pop.iter().filter(|b| b.source == "synth").count();
         assert!(corpus_only > 0);
-        assert!(synth >= corpus_only, ">=1 variant per corpus entry (reindent always fires)");
+        assert!(
+            synth >= corpus_only,
+            ">=1 variant per corpus entry (reindent always fires)"
+        );
         // No variant collides with its corpus text (index dedup safety).
         let texts: std::collections::HashSet<&str> = pop.iter().map(|b| b.text.as_str()).collect();
         assert_eq!(texts.len(), pop.len(), "all texts distinct (dedup-safe)");

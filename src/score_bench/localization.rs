@@ -1563,16 +1563,12 @@ mod tests {
     #[test]
     fn loop_harm_refuses_unfixed_and_broken_positions() {
         assert!(loop_harm_verdict(4, 4, 0, 0.05).is_ok());
-        assert!(
-            loop_harm_verdict(4, 3, 0, 0.05)
-                .unwrap_err()
-                .contains("unfixed")
-        );
-        assert!(
-            loop_harm_verdict(4, 4, 1, 0.05)
-                .unwrap_err()
-                .contains("broke 1")
-        );
+        assert!(loop_harm_verdict(4, 3, 0, 0.05)
+            .unwrap_err()
+            .contains("unfixed"));
+        assert!(loop_harm_verdict(4, 4, 1, 0.05)
+            .unwrap_err()
+            .contains("broke 1"));
         assert!(loop_harm_verdict(0, 0, 0, 0.05).is_err());
     }
 

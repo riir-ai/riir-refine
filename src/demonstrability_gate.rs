@@ -88,7 +88,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::demonstrability::{Row, canonical_domain};
+use crate::demonstrability::{canonical_domain, Row};
 
 /// The runtime kill-switch (guards [`standing`], the auto-arm path).
 /// Deliberately exact: only the literal `"0"` disarms — a typo must not
@@ -253,7 +253,7 @@ pub fn env_kills(value: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::demonstrability::{Source, bench_row};
+    use crate::demonstrability::{bench_row, Source};
 
     fn row(domain: &str, selected: u32, rejected: u32) -> Row {
         Row {

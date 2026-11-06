@@ -68,20 +68,20 @@
 
 use crate::kat_account::KatAccount;
 use riir_kat::kat_protocol_migrate::{
-    MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL, ProposalDraft,
-    proposal_issue_html_url,
-};
-use riir_kat::kat_protocol_migrate::{
-    MigratePowAttestation, attest_only_line, decode_pubkey, migrate_attest_message,
-    migrate_attest_message_v2,
+    attest_only_line, decode_pubkey, migrate_attest_message, migrate_attest_message_v2,
+    MigratePowAttestation,
 };
 #[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
-    MigrateRequestBody, migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
-    migrate_release_message_v2,
+    migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
+    migrate_release_message_v2, MigrateRequestBody,
+};
+use riir_kat::kat_protocol_migrate::{
+    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, ProposalDraft,
+    PROPOSAL_LABEL,
 };
 use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
-use riir_kat::kat_protocol_migrate_tally::{TALLY_CORE, TallyTiming};
+use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_CORE};
 
 /// The migrate repo base the proposal-issue URL composes against when the
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
@@ -1960,12 +1960,10 @@ mod tests {
             &b_acct,
         );
         let sig = decode_sig64(&b.attest_signature_hex).expect("128 hex");
-        assert!(
-            ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
-                .expect("vk")
-                .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
-                .is_ok()
-        );
+        assert!(ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
+            .expect("vk")
+            .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+            .is_ok());
         // Only public data travels: no field carries the private seed.
         let json = serde_json::to_string(&b).expect("serialize");
         assert!(!json.contains(&hex(&[0x42; 32])), "{json}");

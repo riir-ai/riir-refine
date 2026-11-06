@@ -157,9 +157,9 @@ fn scan_items(source: &str, items: &[Item], findings: &mut Vec<SensitiveDataBoun
 
 /// `#[cfg(test)]` mods are fixture habitat.
 fn is_test_mod(m: &ItemMod) -> bool {
-    m.attrs.iter().any(|a| {
-        a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test")
-    })
+    m.attrs
+        .iter()
+        .any(|a| a.path().is_ident("cfg") && a.meta.to_token_stream().to_string().contains("test"))
 }
 
 fn scan_fn_source(

@@ -25247,7 +25247,10 @@ fn batch333_rules_landed() {
         "the grid must be co-resident",
         "NOT-BENCHABLE-BY-DOMAIN",
     ] {
-        assert!(r1.gpu_concept.contains(mark), "batch-333 r1 needle missing: {mark}");
+        assert!(
+            r1.gpu_concept.contains(mark),
+            "batch-333 r1 needle missing: {mark}"
+        );
     }
 
     let r2 = corpus
@@ -25363,11 +25366,15 @@ fn batch335_rules_landed() {
         .find(|e| e.rule_id == "fuse-gate-up-gemv-activation")
         .unwrap_or_else(|| panic!("fuse-gate-up owner missing"));
     assert!(
-        owner.gpu_concept.contains("GEMV-PROLOGUE ACT-QUANT ANTI-FACE"),
+        owner
+            .gpu_concept
+            .contains("GEMV-PROLOGUE ACT-QUANT ANTI-FACE"),
         "batch-335 anti-face rider missing"
     );
     assert!(
-        owner.gpu_concept.contains("IN-REGISTER EPILOGUE face on the exact-integer path"),
+        owner
+            .gpu_concept
+            .contains("IN-REGISTER EPILOGUE face on the exact-integer path"),
         "batch-335 epilogue face rider missing"
     );
 }

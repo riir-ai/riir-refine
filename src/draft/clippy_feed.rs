@@ -1629,7 +1629,7 @@ mod tests {
         let src = "fn f() -> String {\n    format!(\"{{x}}\")\n}\n".to_string();
         let off = src.find("format!").expect("fixture has the site");
         let covered = "format!(\"{{x}}\")"; // 17 bytes, brace-carrying
-        // clippy's own (wrong) suggestion: the escaped literal verbatim.
+                                            // clippy's own (wrong) suggestion: the escaped literal verbatim.
         let feed = vec![ClippyDiagnostic {
             span: None,
             file: "src/lib.rs".to_string(),

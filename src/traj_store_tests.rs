@@ -1141,7 +1141,7 @@ fn recompute_elo_backfills_and_is_idempotent() {
 #[test]
 #[allow(clippy::float_cmp)] // damped-vs-full comparisons + off-path k identity
 fn damped_replay_moves_young_rules_less_and_reaches_full_k_at_the_floor() {
-    use crate::elo::{ELO_K_EFF_FLOOR, elo_k_eff};
+    use crate::elo::{elo_k_eff, ELO_K_EFF_FLOOR};
     let root = tmp_root("elo-damped");
     // rule_young: 4 outcomes (all one shape) — deep in the damp band.
     // rule_old: ELO_K_EFF_FLOOR + 8 outcomes on a second shape, so the

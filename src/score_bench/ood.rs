@@ -59,7 +59,7 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use katgpt_core::regime_probe::{EntropyGapReport, conditional_entropy_nats, entropy_gap_into};
+use katgpt_core::regime_probe::{conditional_entropy_nats, entropy_gap_into, EntropyGapReport};
 use serde::{Deserialize, Serialize};
 
 use super::BenchFixture;
@@ -548,11 +548,10 @@ mod tests {
         sorted.dedup();
         assert_eq!(sorted, axis.ref_provenance_families);
         // v1: the composite era + exactly one real mining state family.
-        assert!(
-            axis.ref_provenance_families
-                .iter()
-                .any(|f| f == "authored-composite")
-        );
+        assert!(axis
+            .ref_provenance_families
+            .iter()
+            .any(|f| f == "authored-composite"));
         assert_eq!(
             axis.ref_provenance_families
                 .iter()

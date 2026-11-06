@@ -612,12 +612,11 @@ mod tests {
             fix.context_notes.is_some(),
             "L1 must propagate context_notes"
         );
-        assert!(
-            fix.context_notes
-                .as_ref()
-                .unwrap()
-                .contains("ParetoDominated")
-        );
+        assert!(fix
+            .context_notes
+            .as_ref()
+            .unwrap()
+            .contains("ParetoDominated"));
     }
 
     #[test]
@@ -643,12 +642,11 @@ mod tests {
             fix.context_notes.is_some(),
             "L0 must propagate context_notes"
         );
-        assert!(
-            fix.context_notes
-                .as_ref()
-                .unwrap()
-                .contains("single-threaded")
-        );
+        assert!(fix
+            .context_notes
+            .as_ref()
+            .unwrap()
+            .contains("single-threaded"));
     }
 
     #[test]

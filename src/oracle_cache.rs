@@ -200,11 +200,7 @@ pub fn workspace_root_for(root: &Path) -> PathBuf {
 }
 
 #[must_use]
-pub fn workspace_fingerprint(
-    root: &Path,
-    cargo_bin: &str,
-    posture: &str,
-) -> WorkspaceFingerprint {
+pub fn workspace_fingerprint(root: &Path, cargo_bin: &str, posture: &str) -> WorkspaceFingerprint {
     let mut hasher = blake3::Hasher::new();
     hasher.update(CACHE_FORMAT_VERSION.to_le_bytes().as_slice());
     let mut files_hashed = 0usize;
@@ -218,10 +214,9 @@ pub fn workspace_fingerprint(
             let Ok(bytes) = std::fs::read(f) else {
                 continue;
             };
-            let rel = f.strip_prefix(&rel_base).map_or_else(
-                |_| f.display().to_string(),
-                |p| p.display().to_string(),
-            );
+            let rel = f
+                .strip_prefix(&rel_base)
+                .map_or_else(|_| f.display().to_string(), |p| p.display().to_string());
             bytes_hashed += bytes.len() as u64;
             files_hashed += 1;
             fold_path_into(&mut hasher, &rel, &bytes);
@@ -513,7 +508,10 @@ mod tests {
         .unwrap();
         std::fs::write(member.join("Cargo.toml"), "[package]\nname = \"m\"\n").unwrap();
         let hit = workspace_root_for(&member);
-        assert_eq!(hit, root, "member dir resolves UP to the [workspace] manifest");
+        assert_eq!(
+            hit, root,
+            "member dir resolves UP to the [workspace] manifest"
+        );
         // A standalone crate (no [workspace] anywhere) keys itself: a SEPARATE
         // parent with no workspace manifest — the walk stops after checking
         // the chain above it and finds nothing declaring [workspace].

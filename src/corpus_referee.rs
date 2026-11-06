@@ -197,7 +197,8 @@ impl From<&crate::traj_store::TrajRowDoc> for AttemptRow {
         Self {
             rule_id: row
                 .lint_key
-                .rsplit_once(':').map_or_else(|| row.lint_key.clone(), |(code, _)| code.to_string()),
+                .rsplit_once(':')
+                .map_or_else(|| row.lint_key.clone(), |(code, _)| code.to_string()),
             success_count: row.success_count,
             fail_count: row.fail_count,
             component: row.component,
@@ -428,7 +429,9 @@ fn median(values: &mut [f64]) -> Option<f64> {
     values.sort_by(f64::total_cmp);
     Some(match values.len() {
         1 => values[0],
-        even_len if even_len % 2 == 0 => f64::midpoint(values[even_len / 2 - 1], values[even_len / 2]),
+        even_len if even_len % 2 == 0 => {
+            f64::midpoint(values[even_len / 2 - 1], values[even_len / 2])
+        }
         _ => values[values.len() / 2],
     })
 }
@@ -543,7 +546,9 @@ impl EnrollmentFile {
     /// The ledger's path under a repo root.
     #[must_use]
     pub fn path(repo_root: &std::path::Path) -> std::path::PathBuf {
-        repo_root.join(".refine").join("corpus_referee_enrollments.json")
+        repo_root
+            .join(".refine")
+            .join("corpus_referee_enrollments.json")
     }
 
     /// Load from a repo's `.refine/` dir; a missing file is the empty
@@ -584,8 +589,7 @@ impl EnrollmentFile {
     pub fn save(&self, repo_root: &std::path::Path) -> Result<(), String> {
         let path = Self::path(repo_root);
         if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir)
-                .map_err(|e| format!("{}: {e}", dir.display()))?;
+            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         }
         let text = serde_json::to_string_pretty(self)
             .map_err(|e| format!("enrollment ledger serialize: {e}"))?;
@@ -703,8 +707,7 @@ mod tests {
             "no cert = the pre-209 shape, not an axis move"
         );
         let bytes = b"same";
-        let certed =
-            binding.with_bench_identity(BenchIdentity::new(bytes, bytes, bytes, bytes));
+        let certed = binding.with_bench_identity(BenchIdentity::new(bytes, bytes, bytes, bytes));
         assert!(certed.verify_bench_identity().is_ok());
         // The cert rides the digest: the same content WITHOUT the cert is a
         // different identity (v2), so build the moved record fresh.
@@ -718,13 +721,21 @@ mod tests {
     #[test]
     fn split_windows_separates_on_the_edit_stamp() {
         let rows = [
-            row("r", 5, 5, None, 900), // pre-edit row (untouched)
+            row("r", 5, 5, None, 900),   // pre-edit row (untouched)
             row("r", 7, 3, None, 1_500), // updated after the edit
-            row("r", 1, 0, None, 0),   // unstamped → post-side
+            row("r", 1, 0, None, 0),     // unstamped → post-side
         ];
         let (pre, post) = split_windows(&rows, 1_000);
-        assert_eq!(pre.attempts(), 10, "untouched rows are pure pre-edit evidence");
-        assert_eq!(post.attempts(), 11, "updated + unstamped rows fold post-side");
+        assert_eq!(
+            pre.attempts(),
+            10,
+            "untouched rows are pure pre-edit evidence"
+        );
+        assert_eq!(
+            post.attempts(),
+            11,
+            "updated + unstamped rows fold post-side"
+        );
     }
 
     #[test]
@@ -732,8 +743,14 @@ mod tests {
         let mut t = WindowTally::default();
         t.fold_row(&row("r", 3, 2, Some(ComponentClass::Gate), 1));
         t.fold_row(&row("r", 3, 4, None, 1));
-        assert_eq!(t.verify_failures, 2, "Gate-class fails land in the verify bucket");
-        assert_eq!(t.compile_failures, 4, "unattributed fails land in the compile bucket");
+        assert_eq!(
+            t.verify_failures, 2,
+            "Gate-class fails land in the verify bucket"
+        );
+        assert_eq!(
+            t.compile_failures, 4,
+            "unattributed fails land in the compile bucket"
+        );
         assert_eq!(t.applied, 6);
     }
 
@@ -748,7 +765,7 @@ mod tests {
     #[test]
     fn below_support_is_pending_with_the_reason() {
         let e = enrollment(9, 9); // pre rate 0.5
-        // post = (11,13) − (9,9) = (2 fails, 4 applied) = 6 attempts.
+                                  // post = (11,13) − (9,9) = (2 fails, 4 applied) = 6 attempts.
         let v = read(&e, &inputs(&tally(11, 13), &[]));
         assert_eq!(
             v,
@@ -799,7 +816,9 @@ mod tests {
         assert_eq!(
             read(&e, &i),
             Verdict::Pending {
-                reason: PendingReason::Vintage { last_seen_at: 1_500 }
+                reason: PendingReason::Vintage {
+                    last_seen_at: 1_500
+                }
             },
             "the vintage predicate gates the READ, not the enrollment"
         );
@@ -849,7 +868,8 @@ mod tests {
             lcb_drop,
             drop,
             control_drift,
-        } = read(&e, &inputs(&tally(33, 67), &[])) // post: 15/50 = 0.3
+        } = read(&e, &inputs(&tally(33, 67), &[]))
+        // post: 15/50 = 0.3
         else {
             panic!("expected FAIL");
         };
@@ -858,14 +878,17 @@ mod tests {
             lcb_drop <= 0.0,
             "…but n=50 post attempts at this delta cannot verify at LCB95"
         );
-        assert_eq!(control_drift, 0.0, "no controls → drift defaults to 0 (printed)");
+        assert_eq!(
+            control_drift, 0.0,
+            "no controls → drift defaults to 0 (printed)"
+        );
     }
 
     #[test]
     fn a_drop_that_does_not_exceed_the_era_drift_fails_the_bar() {
         let e = enrollment(18, 18); // pre rate 0.5
-        // The WHOLE era improved by ~0.175 — the control moved with the
-        // rule, so the drop is not attributable to the note.
+                                    // The WHOLE era improved by ~0.175 — the control moved with the
+                                    // rule, so the drop is not attributable to the note.
         let controls = [(
             "c1".to_string(),
             tally(20, 20), // pre rate 0.5
@@ -876,7 +899,9 @@ mod tests {
         // fails, the DiD gate binds, verdict FAIL.
         let v = read(&e, &inputs(&tally(31, 45), &controls));
         let Verdict::Fail {
-            drop, control_drift, ..
+            drop,
+            control_drift,
+            ..
         } = v
         else {
             panic!("expected FAIL, got {v:?}");
@@ -907,10 +932,8 @@ mod tests {
     #[test]
     fn enrollment_file_round_trips_and_refuses_unknown_versions() {
         // pid-scoped scratch (the shared-temp-path law: never a fixed name).
-        let dir = std::env::temp_dir().join(format!(
-            "corpus_referee_roundtrip_{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("corpus_referee_roundtrip_{}", std::process::id()));
         std::fs::create_dir_all(&dir).expect("scratch dir");
 
         let mut file = EnrollmentFile::load(&dir).expect("missing file = empty ledger");
@@ -935,7 +958,10 @@ mod tests {
             cases: Vec::new(),
         };
         bad.save(&dir).expect("save bad");
-        assert!(EnrollmentFile::load(&dir).is_err(), "unknown version refuses");
+        assert!(
+            EnrollmentFile::load(&dir).is_err(),
+            "unknown version refuses"
+        );
 
         std::fs::remove_dir_all(&dir).ok();
     }

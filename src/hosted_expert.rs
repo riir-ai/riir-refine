@@ -52,7 +52,7 @@ use std::time::Instant;
 // one definition, the `llm_spend` ANY-of-consumers gate shape). The
 // re-export preserves every historical path (`hosted_expert::EgressConsent`...
 // — the R2 tests and any external caller compile unchanged).
-pub use crate::code_egress::{EGRESS_ALLOW, EGRESS_ENV, EgressConsent, EgressRefusal};
+pub use crate::code_egress::{EgressConsent, EgressRefusal, EGRESS_ALLOW, EGRESS_ENV};
 
 /// The hosted endpoint's bearer token env (optional — a local/loopback
 /// expert may skip auth; a real hosted tier will not).

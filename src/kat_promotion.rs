@@ -51,7 +51,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{HealDomain, HealEntry};
 use crate::draft::clippy_oracle::ClippyOracle;
 use crate::memory::EvidenceTier;
-use crate::score_bench::{BenchFixture, BenchScore, run_bench, run_bench_with};
+use crate::score_bench::{run_bench, run_bench_with, BenchFixture, BenchScore};
 
 /// The candidates-file schema version this build defines (strict match).
 pub const CANDIDATE_SCHEMA_VERSION: u32 = 1;
@@ -315,7 +315,7 @@ impl PromotionRegistry {
             return false;
         };
         let _ = entry.tier; // (the tier travels with history only — the
-        // blacklists below are what enforce absorbing)
+                            // blacklists below are what enforce absorbing)
         self.withdrawn_hashes.insert(entry.row.content_hash_hex());
         self.withdrawn_ids.insert(rule_id.to_string());
         true
@@ -906,7 +906,11 @@ pub fn promotion_run_overlay(
         let base = compiled_in_triples(&domain);
         out.push((domain, merge_triples(&base, &extra)));
     }
-    if out.is_empty() { None } else { Some(out) }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────
@@ -1091,7 +1095,7 @@ mod tests {
         assert_eq!(merged[1].1, "bb"); // base's version
         assert_eq!(merged[2].0, "c");
         assert_eq!(merge_triples(&base, &promoted), merged); // deterministic
-        // base untouched
+                                                             // base untouched
         assert_eq!(base.len(), 2);
     }
 

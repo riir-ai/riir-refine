@@ -26,7 +26,7 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprCall, ExprMethodCall, File};
 
-use super::{SourceEdit, src};
+use super::{src, SourceEdit};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();

@@ -368,8 +368,8 @@ pub fn standing_from_jsonl(path: &std::path::Path) -> std::io::Result<Option<(St
 mod tests {
     #[cfg(feature = "latent_retrieval")]
     use super::eval_row;
-    use super::{Row, Source, T3_DOMAINS};
     use super::{bench_row, canonical_domain, render_column, standing_from_jsonl};
+    use super::{Row, Source, T3_DOMAINS};
 
     fn row(domain: &str, selected: u32, rejected: u32) -> Row {
         Row {
@@ -551,11 +551,9 @@ mod tests {
     fn standing_from_jsonl_none_when_file_absent_or_field_never_present() {
         let dir = std::env::temp_dir().join(format!("demo_absent_{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
-        assert!(
-            standing_from_jsonl(&dir.join("nope.jsonl"))
-                .unwrap()
-                .is_none()
-        );
+        assert!(standing_from_jsonl(&dir.join("nope.jsonl"))
+            .unwrap()
+            .is_none());
         // A file whose rows predate the field → None (additive law).
         let path = dir.join("old.jsonl");
         std::fs::write(
@@ -628,10 +626,9 @@ mod tests {
         );
         // Per-rule floor: the clippy rule is at n=40 >= 20 → a per-rule row
         // exists; the n=10 mystery rule does not.
-        assert!(
-            out.iter()
-                .any(|r| r.rule.as_deref() == Some("needless_return"))
-        );
+        assert!(out
+            .iter()
+            .any(|r| r.rule.as_deref() == Some("needless_return")));
         assert!(!out.iter().any(|r| r.rule.as_deref() == Some("mystery")));
         // The below-floor rule contributes to its DOMAIN aggregate even
         // though it never prints per-rule (aggregation is unconditional).

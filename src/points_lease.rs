@@ -165,8 +165,12 @@ mod tests {
 
     #[test]
     fn the_explicit_applied_line_names_the_free_read() {
-        let applied = "corpus lease:   epoch 12 installed atomically (the points read — never billed)";
-        assert!(applied.contains("never billed"), "the honest free-read claim");
+        let applied =
+            "corpus lease:   epoch 12 installed atomically (the points read — never billed)";
+        assert!(
+            applied.contains("never billed"),
+            "the honest free-read claim"
+        );
         assert!(applied.contains("atomically"), "the swap is the install");
     }
 }

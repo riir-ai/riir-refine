@@ -49,7 +49,10 @@
 /// than folding into a silent stand.
 #[must_use]
 pub fn pick_idx(case_id: &str, pool_len: usize) -> usize {
-    assert!(pool_len > 0, "placebo pick over an empty pool — trigger gate bug");
+    assert!(
+        pool_len > 0,
+        "placebo pick over an empty pool — trigger gate bug"
+    );
     let digest = blake3::hash(case_id.as_bytes());
     let seed = u64::from_le_bytes(digest.as_bytes()[..8].try_into().expect("8 bytes"));
     // The modulo bounds the result by pool_len — always a valid usize on
@@ -103,7 +106,9 @@ mod tests {
         // pick from the case id with the documented formula.
         for case in ["x", "case-17", "lint:merge_bool:shape"] {
             let seed = u64::from_le_bytes(
-                blake3::hash(case.as_bytes()).as_bytes()[..8].try_into().unwrap(),
+                blake3::hash(case.as_bytes()).as_bytes()[..8]
+                    .try_into()
+                    .unwrap(),
             );
             assert_eq!(pick_idx(case, 5), (seed % 5) as usize);
         }

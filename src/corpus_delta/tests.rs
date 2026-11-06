@@ -228,10 +228,10 @@ fn missing_spans_matches_the_run_summarys_own_count() {
 ))]
 #[test]
 fn a_lagging_lease_produces_a_real_freshness_delta() {
-    use crate::DomainId;
     use crate::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
     use crate::draft::clippy_feed::ClippyDiagnostic;
     use crate::draft::latent_matcher::LatentMatcher;
+    use crate::DomainId;
 
     const SRC: &str = "pub fn area(w: f64, h: f64) -> f64 {\n    return w * h;\n}\n";
 

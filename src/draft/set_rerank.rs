@@ -60,10 +60,10 @@
 //! `RIIR_CLIPPY_NO_TWO_STAGE` precedent).
 
 use katgpt_core::set_admission::{
-    AdmissionScratch, CertificateReport, DIM, FanScratch, RecoveryOutcome, SetAdmissionConfig,
-    admit_with_recovery_into, certify_set,
+    admit_with_recovery_into, certify_set, AdmissionScratch, CertificateReport, FanScratch,
+    RecoveryOutcome, SetAdmissionConfig, DIM,
 };
-use riir_rag::{Embedder, ModellessEmbedder, query::LATENT_DIM};
+use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;

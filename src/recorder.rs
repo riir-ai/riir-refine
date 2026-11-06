@@ -41,7 +41,7 @@
 //! fully inert — no recording, no persistence, no log lines — for consumers
 //! who want the pure heal loop.
 
-use crate::embedder::{EMBED_DIM, embed_into};
+use crate::embedder::{embed_into, EMBED_DIM};
 use crate::evolve::LatentSkillEvolution;
 use crate::memory::{FixTrajectory, LatentFixMemory};
 

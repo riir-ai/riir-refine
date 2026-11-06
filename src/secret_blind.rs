@@ -95,7 +95,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use crate::kat_redact::{Finding, FindingKind, REDACT_VERSION, redact, scan_secrets};
+use crate::kat_redact::{redact, scan_secrets, Finding, FindingKind, REDACT_VERSION};
 
 /// One detection localized to a file: kind + 1-based line/col. The finding
 /// bytes and the BLAKE3 fingerprint are deliberately NOT carried — nothing
