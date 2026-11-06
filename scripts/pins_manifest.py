@@ -21,8 +21,8 @@ Modes:
               naming the key (the stale-manifest direction — ``--write``
               is never run-to-pass, the corpus is the truth).
 
-The build posture is fixed: ``--features kernel_opt,sec,rust_perf_bench``
-(clippy_lints + rust_perf are default-on). The Rust dump REFUSES a
+The build posture is fixed: ``--features kernel_opt,sec,rust_perf_bench,shader_perf``
+(clippy_lints + rust_perf + docker + dist are default-on). The Rust dump REFUSES a
 partial manifest, so a feature typo fails loud on both sides.
 
 Ratchet: any exemption this gate grows (EXEMPT_PROSE rows) takes
@@ -44,9 +44,17 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = REPO / ".benchmarks" / "pins_manifest.json"
-FEATURES = "kernel_opt,sec,rust_perf_bench"
+FEATURES = "kernel_opt,sec,rust_perf_bench,shader_perf"
 DUMP_TEST = "dump_pins_manifest"
-REQUIRED_DOMAINS = ("clippy_lints", "rust_perf", "kernel_opt", "sec")
+REQUIRED_DOMAINS = (
+    "clippy_lints",
+    "rust_perf",
+    "kernel_opt",
+    "sec",
+    "docker_rules",
+    "dist_rules",
+    "shader_perf_rules",
+)
 
 
 def flatten(value, prefix=""):
@@ -148,6 +156,14 @@ PROSE_SITES = [
         r"now (\d+) rules across (\d+) categories",
         ("rust_perf/rules", "rust_perf/categories"),
     ),
+    # The also-compiled trio (flat manifest keys): AGENTS.md gates all
+    # three live rows; README.md's domain table carries docker + dist
+    # (no shader_perf row exists there).
+    ("AGENTS.md", r"Dockerfile bounded-fix drafting \((\d+) rules", ("docker_rules",)),
+    ("AGENTS.md", r"manifests; (\d+) suggest-only rules", ("dist_rules",)),
+    ("AGENTS.md", r"bounded-fix drafting; (\d+) rules", ("shader_perf_rules",)),
+    ("README.md", r"\| \*\*docker\*\*[^\n]*?\| (\d+) rules", ("docker_rules",)),
+    ("README.md", r"\| \*\*dist\*\*[^\n]*?\| (\d+) suggest-only rules", ("dist_rules",)),
 ]
 
 # THE RATCHET: deletions only. A row lands here ONLY when a prose site is

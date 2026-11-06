@@ -2,6 +2,8 @@
   "clippy_lints": {
     "rules": 112
   },
+  "dist_rules": 8,
+  "docker_rules": 31,
   "kernel_opt": {
     "rules": 1061,
     "witness": {
@@ -18,5 +20,6 @@
   },
   "sec": {
     "rules": 45
-  }
+  },
+  "shader_perf_rules": 8
 }

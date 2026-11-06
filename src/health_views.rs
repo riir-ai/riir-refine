@@ -697,7 +697,8 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
     let bar_w = 10usize;
     let rows = corpus_rows();
     let branch = |last: bool| crate::kat_footer::colorize(&["2"], if last { "└──" } else { "├──" });
-    for row in &rows {
+    let last = rows.len();
+    for (idx, row) in rows.iter().enumerate() {
         #[allow(clippy::cast_precision_loss)]
         let share = if row.total > 0 {
             row.rules as f64 / row.total as f64
@@ -707,7 +708,7 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
         writeln!(
             out,
             "  {} {} {} {}",
-            branch(false),
+            branch(idx + 1 == last),
             row.emoji,
             crate::kat_footer::colorize(&["36"], &format!("{:>4} {}", row.rules, row.label)),
             crate::kat_footer::braille_bar(share, bar_w, crate::kat_footer::color_enabled()),
@@ -716,11 +717,10 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
     }
     writeln!(
         out,
-        "  {} {}",
-        branch(true),
+        "  {}",
         crate::kat_footer::colorize(
             &["2"],
-            "also compiled: docker · dist · shader (counts in the manifest lane)"
+            "also compiled: rustc_errors (oracle-driven, uncounted)"
         )
     )
     .ok();
@@ -738,7 +738,8 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
 
 /// One corpus row for the 🧬 block: emoji + count + label + the share
 /// denominator. Counts from the pins manifest (the ONE source of truth);
-/// docker/dist/shader are not manifest-numbered and ride the tail line.
+/// the nested domains are the prose-gated four, the also-compiled trio
+/// (docker/dist/shader) rides flat `*_rules` keys.
 struct CorpusRow {
     emoji: &'static str,
     label: &'static str,
@@ -759,12 +760,18 @@ fn corpus_rows() -> Vec<CorpusRow> {
         kernel_opt: Option<Count>,
         #[serde(default)]
         sec: Option<Count>,
+        #[serde(default)]
+        docker_rules: Option<u64>,
+        #[serde(default)]
+        dist_rules: Option<u64>,
+        #[serde(default)]
+        shader_perf_rules: Option<u64>,
     }
     #[derive(serde::Deserialize)]
     struct Count {
         rules: u64,
     }
-    let (clippy, perf, kernel, sec) =
+    let (clippy, perf, kernel, sec, docker, dist, shader) =
         match serde_json::from_str::<Manifest>(include_str!("../.benchmarks/pins_manifest.json")) {
             Ok(m) => (
                 m.clippy_lints
@@ -772,10 +779,13 @@ fn corpus_rows() -> Vec<CorpusRow> {
                 m.rust_perf.map(|c| usize::try_from(c.rules).unwrap_or(0)),
                 m.kernel_opt.map(|c| usize::try_from(c.rules).unwrap_or(0)),
                 m.sec.map(|c| usize::try_from(c.rules).unwrap_or(0)),
+                m.docker_rules.map(|n| usize::try_from(n).unwrap_or(0)),
+                m.dist_rules.map(|n| usize::try_from(n).unwrap_or(0)),
+                m.shader_perf_rules.map(|n| usize::try_from(n).unwrap_or(0)),
             ),
-            Err(_) => (None, None, None, None),
+            Err(_) => (None, None, None, None, None, None, None),
         };
-    let sum = [clippy, perf, kernel, sec]
+    let sum = [clippy, perf, kernel, sec, docker, dist, shader]
         .into_iter()
         .flatten()
         .sum::<usize>();
@@ -812,6 +822,30 @@ fn corpus_rows() -> Vec<CorpusRow> {
             total: sum,
         });
     }
+    if let Some(n) = docker {
+        rows.push(CorpusRow {
+            emoji: "🐳",
+            label: "docker",
+            rules: n,
+            total: sum,
+        });
+    }
+    if let Some(n) = dist {
+        rows.push(CorpusRow {
+            emoji: "📦",
+            label: "dist",
+            rules: n,
+            total: sum,
+        });
+    }
+    if let Some(n) = shader {
+        rows.push(CorpusRow {
+            emoji: "🎨",
+            label: "shader",
+            rules: n,
+            total: sum,
+        });
+    }
     // Biggest first (the roll-up's convention) — the owner's sort call.
     rows.sort_by_key(|r| std::cmp::Reverse(r.rules));
     rows
@@ -828,6 +862,33 @@ mod tests {
         assert!(line.contains("kernel 1061"), "{line}");
         assert!(line.contains("perf 302"), "{line}");
         assert!(line.contains("sec 45"), "{line}");
+        assert!(line.contains("docker 31"), "{line}");
+        assert!(line.contains("dist 8"), "{line}");
+        assert!(line.contains("shader 8"), "{line}");
+    }
+
+    #[test]
+    fn corpus_tree_carries_the_also_compiled_trio() {
+        let rows = corpus_rows();
+        let by_label = |label: &str| {
+            rows.iter()
+                .find(|r| r.label == label)
+                .unwrap_or_else(|| panic!("corpus tree missing {label}"))
+                .rules
+        };
+        assert_eq!(by_label("docker"), 31);
+        assert_eq!(by_label("dist"), 8);
+        assert_eq!(by_label("shader"), 8);
+        // Biggest first, ties stable (dist before shader): the seven
+        // compiled domains, no unnumbered survivors in the bars.
+        let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
+        assert_eq!(
+            labels,
+            vec![
+                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
+            ]
+        );
+        assert_eq!(rows[0].total, 1567);
     }
 
     #[test]

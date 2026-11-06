@@ -8,12 +8,17 @@
 //! {"clippy_lints": {"rules": N},
 //!  "rust_perf": {"rules": N, "categories": N, "benchable": N, "notbenchable": N},
 //!  "kernel_opt": {"rules": N, "witness": {"kernel_categories": 15, "experts": 15, "activity_dim": 8}},
-//!  "sec": {"rules": N}}
+//!  "sec": {"rules": N},
+//!  "docker_rules": N, "dist_rules": N, "shader_perf_rules": N}
 //! ```
+//!
+//! The four nested domains are the prose-gated ones (live rows in
+//! AGENTS.md / README.md); the three flat keys are the also-compiled trio
+//! (docker / dist / shader_perf — counted, no prose rows gated on them).
 //!
 //! The numbers are DERIVED, never hand-typed: `scripts/pins_manifest.py`
 //! runs [`dump::dump_pins_manifest`] (this module, under `cargo test`) with
-//! `kernel_opt,sec,rust_perf_bench` enabled and the compiled corpus
+//! `kernel_opt,sec,rust_perf_bench,shader_perf` enabled and the compiled corpus
 //! builders report their own live counts. The count asserts across
 //! `corpus/tests.rs` / `clippy_lints/corpus.rs` / `sec/corpus.rs` /
 //! `kernel_opt/corpus/tests.rs` / `kernel_opt/router.rs` read this manifest
@@ -78,9 +83,9 @@ pub(crate) fn count(domain: &str, key: &str) -> usize {
 /// The derivation half. A no-op unless `RIIR_REFINE_PINS_DUMP` names an
 /// output path (the script sets it); REFUSES to emit a partial manifest —
 /// a feature left off the build would silently shrink the counts, so the
-/// dump asserts all four domains are present and the caller builds with
-/// `--features kernel_opt,sec,rust_perf_bench` (`clippy_lints` +
-/// `rust_perf` are default-on).
+/// dump asserts all seven counts are present and the caller builds with
+/// `--features kernel_opt,sec,rust_perf_bench,shader_perf` (`clippy_lints` +
+/// `rust_perf` + `docker` + `dist` are default-on).
 #[test]
 fn dump_pins_manifest() {
     let Some(path) = std::env::var_os("RIIR_REFINE_PINS_DUMP") else {
@@ -149,11 +154,48 @@ fn dump_pins_manifest() {
         }),
     );
 
+    // The also-compiled trio rides FLAT top-level keys — counted, but not
+    // prose-gated nested domains (this is `corpus_counts_line`'s own reader
+    // shape, pre-seamed). docker + dist are default-on; `shader_perf` is
+    // opt-in and joins the script's build posture.
+    #[cfg(feature = "docker")]
+    root.insert(
+        "docker_rules".to_string(),
+        serde_json::json!(
+            crate::domains::docker::corpus::build_docker_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
+    #[cfg(feature = "dist")]
+    root.insert(
+        "dist_rules".to_string(),
+        serde_json::json!(
+            crate::domains::dist::corpus::build_dist_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
+    #[cfg(feature = "shader_perf")]
+    root.insert(
+        "shader_perf_rules".to_string(),
+        serde_json::json!(
+            crate::domains::shader_perf::corpus::build_shader_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
     for required in [
         "clippy_lints",
         "rust_perf",
         "kernel_opt",
         "sec",
+        "docker_rules",
+        "dist_rules",
+        "shader_perf_rules",
         "rust_perf_bench",
     ] {
         let present = match required {
@@ -166,8 +208,9 @@ fn dump_pins_manifest() {
         assert!(
             present,
             "pins dump: domain/posture `{required}` missing — the dump must run \
-             at `--features kernel_opt,sec,rust_perf_bench` (clippy_lints + \
-             rust_perf are default); a partial manifest is refused, never written"
+             at `--features kernel_opt,sec,rust_perf_bench,shader_perf` (clippy_lints + \
+             rust_perf + docker + dist are default); a partial manifest is refused, \
+             never written"
         );
     }
 
