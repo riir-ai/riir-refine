@@ -257,6 +257,14 @@ pub mod draft;
 // required-feature set would not compile.
 pub mod clippy_oracle;
 
+// The auto-oracle's persistent results cache (P-PAR, 2026-11-05): the whole
+// clippy session (base + gap passes + census) content-keyed by a workspace
+// fingerprint (sources + manifests + lockfile + toolchain + posture) with
+// LRU caps + a loud HIT line + the `RIIR_REFINE_ORACLE_CACHE=0` demote env.
+// Ungated — clippy_oracle itself is ungated; zero new deps (blake3/serde
+// already in the tree).
+pub mod oracle_cache;
+
 // The shared manifest-gate parser substrate (feature tables + target rows +
 // the required-features census) — UNGATED for the same reason: the oracle's
 // gap-arming census consumes it at every feature posture, and `fix_verify`'s

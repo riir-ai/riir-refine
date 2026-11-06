@@ -341,10 +341,43 @@ fn sorted_covers(gap_sorted: &[String], missing_sorted: &[String]) -> bool {
         .all(|m| gap_sorted.iter().any(|g| g == m))
 }
 
+/// The cache fingerprint for one oracle posture (`None` = the cache is
+/// demoted by `RIIR_REFINE_ORACLE_CACHE=0`). Every knob that can move
+/// clippy's output folds into the posture string — a knob change is a new
+/// key, never a stale hit.
+fn cache_fingerprint(
+    root: &Path,
+    cargo_bin: &str,
+    features: Option<&[String]>,
+    all_targets: bool,
+) -> Option<crate::oracle_cache::WorkspaceFingerprint> {
+    if !crate::oracle_cache::oracle_cache_enabled() {
+        return None;
+    }
+    let posture = format!(
+        "features={};all_targets={};gap_arm={};gap_max={};",
+        features.map_or(String::new(), |f| f.join(",")),
+        all_targets,
+        auto_oracle_gap_arm(),
+        auto_oracle_gap_max_passes(),
+    );
+    Some(crate::oracle_cache::workspace_fingerprint(
+        root,
+        cargo_bin,
+        &posture,
+    ))
+}
+
 /// Run the full oracle posture in `root`: the base pass exactly as the knobs
 /// request it, then (default) the bounded gap passes. Never panics, never
 /// aborts the caller's run — every failure mode lands in a field the caller
 /// discloses.
+///
+/// The session is CACHE-KEYED (P-PAR, 2026-11-05): a fingerprint over the
+/// workspace sources + manifests + lockfile + toolchain + invocation posture
+/// admits a loud cache hit (`clippy oracle (auto): cache HIT …`) that
+/// rebuilds the session from `.refine/oracle-cache/` instead of spawning
+/// clippy. `RIIR_REFINE_ORACLE_CACHE=0` restores spawn-always.
 #[must_use]
 pub fn run_oracle_session(
     root: &Path,
@@ -352,6 +385,25 @@ pub fn run_oracle_session(
     features: Option<&[String]>,
     all_targets: bool,
 ) -> OracleSession {
+    // ── the cache lookup (P-PAR): every knob that can move the output is in
+    // the posture string — a knob change is a new key, never a stale hit.
+    // The fingerprint (and the cache dir) key the INHERITED WORKSPACE root —
+    // `--workspace` from a member dir compiles the whole workspace, so a
+    // member-local key would miss sibling-crate changes.
+    let cache_root = crate::oracle_cache::workspace_root_for(root);
+    let fingerprint = cache_fingerprint(&cache_root, cargo_bin, features, all_targets);
+    if let Some(fp) = &fingerprint {
+        if let Some(cached) = crate::oracle_cache::load_session(&cache_root, &fp.key_hex) {
+            eprintln!(
+                "clippy oracle (auto): cache HIT {} — {} file(s)/{} hashed, {} gap pass(es) reused (RIIR_REFINE_ORACLE_CACHE=0 disables)",
+                &fp.key_hex[..12],
+                fp.files_hashed,
+                fp.toolchain,
+                cached.gaps.len()
+            );
+            return hit_session(cached);
+        }
+    }
     let mut session = OracleSession {
         text: String::new(),
         base_exit: None,
@@ -426,7 +478,95 @@ pub fn run_oracle_session(
         })
         .cloned()
         .collect();
+    // ── the cache store (P-PAR): best-effort, never aborts — the run already
+    // paid for the clippy passes; the cache only serves the NEXT run.
+    if let Some(fp) = &fingerprint {
+        store_cache(&cache_root, fp, &session);
+    }
     session
+}
+
+/// The cache-side mirror of a run's results, stored under the fingerprint.
+fn store_cache(root: &Path, fp: &crate::oracle_cache::WorkspaceFingerprint, session: &OracleSession) {
+    let mut cached = crate::oracle_cache::CachedOracleSession::from_parts(
+        fp.key_hex.clone(),
+        session.text.clone(),
+        session.base_exit,
+    );
+    cached.base_spawn_error.clone_from(&session.base_spawn_error);
+    cached.census_error.clone_from(&session.census_error);
+    cached.census = session
+        .census
+        .iter()
+        .map(|c| crate::oracle_cache::CachedSkippedTarget {
+            package: c.package.clone(),
+            target: c.target.clone(),
+            kind: c.kind.clone(),
+            missing: c.missing.clone(),
+        })
+        .collect();
+    cached.gaps = session
+        .gaps
+        .iter()
+        .map(|g| crate::oracle_cache::CachedGapRun {
+            features: g.features.clone(),
+            exit: g.exit,
+            new_lines: g.new_lines,
+            spawn_error: g.spawn_error.clone(),
+        })
+        .collect();
+    cached.uncovered = session
+        .uncovered
+        .iter()
+        .map(|c| crate::oracle_cache::CachedSkippedTarget {
+            package: c.package.clone(),
+            target: c.target.clone(),
+            kind: c.kind.clone(),
+            missing: c.missing.clone(),
+        })
+        .collect();
+    crate::oracle_cache::store_session(root, &cached);
+}
+
+/// Rebuild a live session from a cache entry (the HIT path).
+#[must_use]
+pub fn hit_session(cached: crate::oracle_cache::CachedOracleSession) -> OracleSession {
+    OracleSession {
+        text: cached.text,
+        base_exit: cached.base_exit,
+        base_spawn_error: cached.base_spawn_error,
+        census: cached
+            .census
+            .into_iter()
+            .map(|c| SkippedTarget {
+                package: c.package,
+                target: c.target,
+                kind: c.kind,
+                missing: c.missing,
+            })
+            .collect(),
+        census_error: cached.census_error,
+        gaps: cached
+            .gaps
+            .into_iter()
+            .map(|g| GapRun {
+                features: g.features,
+                exit: g.exit,
+                new_lines: g.new_lines,
+                spawn_error: g.spawn_error,
+            })
+            .collect(),
+        uncovered: cached
+            .uncovered
+            .into_iter()
+            .map(|c| SkippedTarget {
+                package: c.package,
+                target: c.target,
+                kind: c.kind,
+                missing: c.missing,
+            })
+            .collect(),
+    }
 }
 
 /// The `--oracle-census` report: what the oracle's CURRENT posture cannot
