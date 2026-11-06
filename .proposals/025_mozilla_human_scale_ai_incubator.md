@@ -20,7 +20,7 @@ We propose to apply to Mozilla Foundation's Human-Scale AI Incubator with **carg
 
 ### Intentional — the developer owns their repair memory
 
-- **Consent-first telemetry:** the contribution plane never transmits unless the developer opts in (`Unset` never pushes; `OptedOut` never transmits). The consent screen states the **MIT licence for published pairs** — contributed repair knowledge becomes open data by design.
+- **Consent-first telemetry:** the contribution plane never transmits unless the developer opts in (`Unset` never pushes; `OptedOut` never transmits). The consent screen will state the **MIT licence for published pairs** (funded build — the `--mine` surface that carried it was removed `5e61bb59`, issue 192 GAP 10; port to the `join` consent copy, see §Draft application answers fact-pins) — contributed repair knowledge becomes open data by design.
 - **Local-first memory:** fix trajectories live in `.refine/` on the developer's disk — inspectable, exportable, purgeable (funded build; the `--purge` flag retired 2026-11-06, `5e61bb59`, issue 192 GAP 10); self-evolution has a documented opt-out.
 - **Redaction by default:** the contribution policy refuses repo-private context (`allow_redacted: false`, own-repo + standard source globs only).
 - **Disclosed costs:** every credit/fee surface prints in the run footer; nothing is hidden in the heal path.
