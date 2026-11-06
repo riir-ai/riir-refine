@@ -1,6 +1,6 @@
 # Bench 139 — build-loop pilot II: the shared-target gate-invalidation hazard (plain vs huacnlee fork) + the blaze dev-loop A/B
 
-**Status:** IN PROGRESS — Part A (hazard) MEASURED; Part B (blaze) PRE-REGISTERED, not yet measured (riir-refine issue 211)
+**Status:** PARTIAL — Part A (hazard) MEASURED + verdict; Part B (blaze) PRE-REGISTERED (`c26f9690`, before install), installed on amo, QUEUED but NOT YET MEASURED — queue head-of-line blocked (see Part B results) (riir-refine issue 211)
 
 Session: katgpt-rs-18@m3, 1793966832. Follows [Bench 138](138_build_loop_pilot_huacnlee_fork_sccache.md).
 
@@ -115,4 +115,37 @@ Pre-registered protocol (fixed before install):
 
 ### Part B results
 
-PENDING.
+**NOT MEASURED YET — blocked in the rig queue, not by the tool.** No number
+below is a blaze result.
+
+Feasibility (verified, not assumed):
+
+- Install needs NO root: the installer (`https://ix.dev/blaze`, 353 lines,
+  sha256 `2cca089b…98eb6`, read before running) writes only
+  `~/.cargo/bin/{blaze,blaze-proc-macro-srv,ra-jit,ra-jit-rustc,ra-jit-rustc-first}`
+  + `~/.blaze/` and checks the release tarball against its `SHA256SUMS`.
+  Installed on amo 2026-11-06: `blaze 0.20261027.0 (49ca152)`, stable channel,
+  toolchain `nightly-2026-10-27` (123 MB download, 24.8 s), `~/.blaze` = 661 MB.
+  Side-by-side — no cargo wrapper enabled, system cargo untouched. Uninstall:
+  `blaze stop; rm -rf ~/.blaze ~/.cargo/bin/{blaze,blaze-proc-macro-srv,ra-jit,ra-jit-rustc,ra-jit-rustc-first}`.
+- Platform: macOS Apple silicon + Linux only (Windows v2 untested by upstream)
+  → amo/bmo/m3 qualify, the 4090 does not.
+
+Run state: the pre-registered script `/tmp/blz/run_ab.sh` on amo is queued as
+`agent-mail rig run amo --shared --cores 8 --mem 12 --timeout 3h` (job
+`01a1b0cb-3d02-76e3-bbe5-3b3a62549c83`). It creates its own `/tmp/blz`
+worktree of amo's seal-game-editor (the probe edit lives only in that
+worktree), symlinks siblings, runs the warm-up + 7 interleaved pairs, then
+stops the daemon, removes the worktree and symlinks; results land in
+`/tmp/blz/out/{meta,cells}.txt` (+ `blaze_status.txt`, `disk.txt`).
+
+Why it has not run (2026-11-06, ~1.5 h waited): bmo — the preferred quiet
+runner — was OFFLINE (ssh timeout to 100.100.117.44) throughout; on amo an
+Exclusive job (`2993a478`, riir-game-sdk budget gate) sits at queue head
+waiting for an empty rig, while a Shared ~36 h campaign (`44cdb52a`,
+sr1098, running 8 h at the time) holds amo — so every Shared job behind the
+Exclusive is head-of-line blocked even with 81 GB free / load 6 of 30.
+Bypassing the queue was rejected (fleet law: heavy work through the queue).
+m3 refused (owner laptop, BUSY: 20 contenders). **Next agent:** read
+`/tmp/blz/out/cells.txt` on amo once the job ends (or re-queue the same
+script on bmo when it returns), then apply the bar above unchanged.

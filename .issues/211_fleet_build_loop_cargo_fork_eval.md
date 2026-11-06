@@ -1,6 +1,6 @@
 # Issue 211 — fleet build-loop lever: the huacnlee/cargo fork + blaze (owner-gated pilot)
 
-**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) Part A LANDED — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; blaze A/B pre-registered + queued on amo; fleet adoption remains the owner call
+**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) Part A LANDED — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; blaze A/B pre-registered, installed + queued on amo (queue head-of-line blocked, NOT measured yet); fleet adoption remains the owner call
 
 ## Source
 
@@ -140,7 +140,13 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
 - [ ] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3): install its
       own nightly toolchain + daemon on ONE box, measure edit→test-green on the
       bevy loop (seal-remake/seal-game-editor), pre-registered bar ≥ 2× vs the
-      plain dev loop. NOT run in Bench 138 — separate session.
+      plain dev loop. PROGRESS: bar + protocol pre-registered in Bench 139 Part B
+      (`c26f9690`, before install: amo, sge `-p feat-item --lib`, N=7 interleaved
+      pairs, blaze p50 ≤ 0.5× cargo p50 AND identical pass count); blaze
+      `0.20261027.0` installed on amo (no root, ~/.cargo/bin + ~/.blaze, 661 MB);
+      run QUEUED as amo job `01a1b0cb…62549c83` — head-of-line blocked behind an
+      Exclusive waiting on the ~36 h sr1098 campaign; bmo offline. Results land
+      in amo `/tmp/blz/out/cells.txt`; read and apply the bar unchanged.
 - [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
       reproduce isolated or file upstream.
 - [x] Hygiene residue the fork surfaced — riir-refine `b43a3c32` (the
