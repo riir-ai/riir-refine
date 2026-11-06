@@ -1,6 +1,6 @@
 # Research 380 — TriAttention distill verdict (arXiv 2611.07256 code release)
 
-**Status:** DISTILLED — pending owner decision (nominal Batch 339, Plan 348 STAGED unclaimed)
+**Status:** DISTILLED — CONVERTED, Batch 339 landed (Plan 348; the T0 re-verification carried 4 record corrections — the general-policy twin at prefill_sm89.cu:308-313 not 305-313; the cheapest-passing selection block at select.py:71-74 not ~67; the config grid counts **86**, not 66 — mechanically counted at the pin: per-w8 13+12+11+10+9+8+7+6+5+4+1; the "diagonal distance" semantics are CODE-IMPLICIT only, decode.py:29-30 is the closest code line, never a prose quote)
 
 ## Source
 
