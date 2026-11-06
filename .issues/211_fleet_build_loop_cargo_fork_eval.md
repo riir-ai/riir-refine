@@ -1,6 +1,6 @@
 # Issue 211 — fleet build-loop lever: the huacnlee/cargo fork + blaze (owner-gated pilot)
 
-**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); first measured cells LANDED — [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md); the fleet-scale flip + the CARGO_TARGET_DIR hazard test remain owner-gated
+**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) Part A LANDED — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; blaze A/B pre-registered + queued on amo; fleet adoption remains the owner call
 
 ## Source
 
@@ -80,9 +80,10 @@ Silicon, no pre-registered bar): 5 worktrees of a 525-crate workspace 33.6 GB �
       7-day disk halves, AND no gate premise breaks; otherwise uninstall.
 - [ ] Box-state provenance beside every number (`bench_preflight`).
 - [ ] Verify the binary-sha-changed law (a comment touch must not relink).
-- [ ] Explicitly test the CARGO_TARGET_DIR posture: run a gate concurrent with a
+- [x] Explicitly test the CARGO_TARGET_DIR posture: run a gate concurrent with a
       build and confirm the verdict stays valid (the shared-target hazard,
-      reproduced on purpose, before trusting the fork's locking).
+      reproduced on purpose, before trusting the fork's locking). DONE — Bench
+      139 Part A (`c26f9690`): the fork does NOT keep the verdict valid.
 - [ ] 4090 note: Windows install exists (`install.ps1`) but the CUDA box syncs via
       schtasks; any adoption there is a separate owner call after m3 evidence.
 
@@ -113,11 +114,7 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
   cacheable surface: bins/proc-macros/path deps; dep units key differently
   across lockfiles). Its `CARGO_INCREMENTAL=0` half is a free 3× CPU cut on
   gates — a build-hygiene posture note, not a tool adoption.
-- **The CARGO_TARGET_DIR hazard test is STILL OWED** before any default
-  adoption: reproduce the shared-target gate-invalidation on purpose and verify
-  the fork's fine-grained locking actually prevents that class (not just build
-  races). This remains the blocker for flipping the fork from side-by-side to
-  default on any rig.
+- **The CARGO_TARGET_DIR hazard test — DONE in Bench 139 Part A** (below).
 - Fork state on m3 after the bench (kept, disclosed): `cargo-hc` binary +
   `~/.cargo/targets/` 3.59 GB (fork-GC-bounded, `rm -rf` resets).
 
@@ -127,14 +124,28 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
       git-workflow ticket lanes — amo/bmo heavy-ticket work) vs keep
       side-by-side. Decision input: Bench 138 + the fleet worktree-concurrency
       census.
-- [ ] The CARGO_TARGET_DIR hazard reproduction test (blocking any default
-      adoption; issue §Conflicts 1).
+- [x] The CARGO_TARGET_DIR hazard reproduction test — [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md)
+      Part A (`c26f9690`, m3, 9 cells × 4 runs, deterministic 4/4). A concurrent
+      re-uplift (`build --features variant`) or `cargo clean` flips/kills a
+      running `CARGO_BIN_EXE` gate under plain cargo in a shared target (P1/P3),
+      and `CARGO_TARGET_DIR` isolation fixes it (P2). **The fork's locking does
+      NOT prevent the class** (F1/F3 — locks cover the build, the window is the
+      test run after the lock is released) **and the fork ignores
+      `CARGO_TARGET_DIR`, so the isolation escape hatch is gone on one checkout**
+      (F2 FAIL where P2 passes). Only a separate git worktree isolates under the
+      fork (F4/F5 PASS). Verdict: FAIL as a drop-in; adoption needs the law
+      rewritten to "one git worktree per concurrent lane" — sessions sharing a
+      checkout (m3: 6 in `katgpt-rs/`) get NO isolation under the fork. The class
+      is live: riir-refine has 18 `CARGO_BIN_EXE` files.
 - [ ] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3): install its
       own nightly toolchain + daemon on ONE box, measure edit→test-green on the
       bevy loop (seal-remake/seal-game-editor), pre-registered bar ≥ 2× vs the
       plain dev loop. NOT run in Bench 138 — separate session.
 - [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
       reproduce isolated or file upstream.
-- [ ] Hygiene residue the fork surfaced: `cargo::unused_dependencies`
-      (riir-refine-fixer) + `package.homepage` redundant with `repository`
-      (riir-neuron-db) — fold into the next hygiene sweep, not this issue.
+- [x] Hygiene residue the fork surfaced — riir-refine `b43a3c32` (the
+      `cargo::unused_dependencies` hit was the TRAINER's edge to
+      `riir-refine-fixer`, never used in code — dropped, BOUNDARY.md keeps it
+      allowlisted; plus `paired_read` gated on `escalation_manifest`, dead under
+      `--features cf_workers_ai`) + riir-neuron-db `04fc3c8` (redundant
+      `package.homepage` removed).
