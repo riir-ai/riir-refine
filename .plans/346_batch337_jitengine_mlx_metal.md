@@ -1,6 +1,8 @@
 # Plan 346 — Batch 337: the jitengine MLX/Metal kernel_opt + sec conversion
 
-**Status:** STAGED — unclaimed; claim-before-edit at the next kernel_opt/sec mining slot (yields to the walk-23 pair's live claim, shikuwa-4090-w23pair, through 2026-11-07T13:40:47+00:00; Research 376 is the verdict record; batch number 337 — 336 is taken by plan 345)
+**Status:** STAGED → CLAIMED — Batch 337 kernel_opt + sec conversion in flight (claim-before-edit per the law; the walk-23 pair's yield condition is VOID — Batch 336 landed 2026-11-05, plan 345 lease discharged). Counts re-derive at landing: kernel_opt stands 1068 (not the staged 1056 — B336/B338/B339 landed first), sec 45. Kernel_opt delta re-derives: N-target 95→96–98, F-target 26→27–29, B-target 125→126–128, K 29 stays.
+
+**Claimed:** zed-m3-b337, 1793973971, expires 2026-11-08T14:06:32+00:00
 
 **Source:** skydiscover-ai/jitengine @ `2c34508d617800ab7448a69e14a6dd551aec156e` (Apache-2.0). Verdict: YES B corpus — kernel_opt +3–4 own rules + 2–3 count-neutral faces, sec +1 own rule (drop-expected allowed on the sec candidate without hurting the verdict). Targets: kernel_opt 1056 → 1058–1060, sec 45 → 45–46.
 
