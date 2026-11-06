@@ -1,6 +1,6 @@
 # Issue 211 — fleet build-loop lever: the huacnlee/cargo fork + blaze (owner-gated pilot)
 
-**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) Part A LANDED — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; blaze A/B pre-registered, installed + queued on amo (queue head-of-line blocked, NOT measured yet); fleet adoption remains the owner call
+**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) COMPLETE — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; **blaze A/B MEASURED (via the bmo bridge) — FAIL, 0/14 valid arms, NOT adopted** (details in Bench 139 Part B); fleet fork adoption remains the owner call
 
 ## Source
 
@@ -137,16 +137,7 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
       rewritten to "one git worktree per concurrent lane" — sessions sharing a
       checkout (m3: 6 in `katgpt-rs/`) get NO isolation under the fork. The class
       is live: riir-refine has 18 `CARGO_BIN_EXE` files.
-- [ ] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3): install its
-      own nightly toolchain + daemon on ONE box, measure edit→test-green on the
-      bevy loop (seal-remake/seal-game-editor), pre-registered bar ≥ 2× vs the
-      plain dev loop. PROGRESS: bar + protocol pre-registered in Bench 139 Part B
-      (`c26f9690`, before install: amo, sge `-p feat-item --lib`, N=7 interleaved
-      pairs, blaze p50 ≤ 0.5× cargo p50 AND identical pass count); blaze
-      `0.20261027.0` installed on amo (no root, ~/.cargo/bin + ~/.blaze, 661 MB);
-      run QUEUED as amo job `01a1b0cb…62549c83` — head-of-line blocked behind an
-      Exclusive waiting on the ~36 h sr1098 campaign; bmo offline. Results land
-      in amo `/tmp/blz/out/cells.txt`; read and apply the bar unchanged.
+- [x] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3) — **MEASURED, FAIL** (Bench 139 Part B, 2026-11-06, ran on bmo via the thunderbolt bridge — tailscale down, machine up, preflight PASSED both cells): blaze `0.20261027.0` cannot build either fleet workspace tried — sge's `coreaudio-sys` build script trips its MIR frontend (daemon cannot LOAD the workspace; every arm rc=101) and riir-kat's workspace panics its embedded rust-analyzer loader (`Unable to get FileSourceRootInput … this is a bug`); the plain-checkout control fails on blaze's own `unsupported: writable static __RUST_STD_INTERNAL_VAL` in test code and exits via its cargo fallback. **0/14 valid timed arms — the pre-registered correctness precondition unreachable → recorded, NOT adopted**; uninstalled from bmo + amo, `/tmp/blz*` scratch removed, the moot queued amo job `62549c83` cancelled (disclosed in Bench 139). Re-open triggers in Bench 139 (upstream build-script compilation + std-internal support, or a workspace it demonstrably loads+passes). Side note: the plain cargo loop it would have to beat is already 1.3-1.5 s on riir-kat and ~17 s on sge's feat-item lib (the 15 s test-run floor dominates).
 - [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
       reproduce isolated or file upstream.
 - [x] Hygiene residue the fork surfaced — riir-refine `b43a3c32` (the

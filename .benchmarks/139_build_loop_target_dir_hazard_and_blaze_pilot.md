@@ -1,8 +1,8 @@
 # Bench 139 — build-loop pilot II: the shared-target gate-invalidation hazard (plain vs huacnlee fork) + the blaze dev-loop A/B
 
-**Status:** PARTIAL — Part A (hazard) MEASURED + verdict; Part B (blaze) PRE-REGISTERED (`c26f9690`, before install), installed on amo, QUEUED but NOT YET MEASURED — queue head-of-line blocked (see Part B results) (riir-refine issue 211)
+**Status:** COMPLETE — Part A (hazard) MEASURED + verdict (katgpt-rs-18@m3); Part B (blaze) MEASURED 2026-11-06 ~21:2x via the bmo thunderbolt bridge (tailscale down, machine up — the ON/OFF jump rule), verdict FAIL (riir-refine issue 211)
 
-Session: katgpt-rs-18@m3, 1793966832. Follows [Bench 138](138_build_loop_pilot_huacnlee_fork_sccache.md).
+Session: katgpt-rs-18@m3, 1793966832 (Part A + pre-registration); zed-m3-cargofork@m3, epoch 1793973547 (Part B measurement). Follows [Bench 138](138_build_loop_pilot_huacnlee_fork_sccache.md).
 
 ## Part A — the CARGO_TARGET_DIR hazard, reproduced on purpose
 
@@ -113,12 +113,67 @@ Pre-registered protocol (fixed before install):
   (build-hygiene §2 rung 3) for bevy-scale loops, with cargo/CI kept as the
   final word (blaze's own README says so); FAIL → recorded, not adopted.
 
-### Part B results
+### Part B results — MEASURED (2026-11-06 ~21:2x, bmo via the thunderbolt bridge), VERDICT FAIL
 
-**NOT MEASURED YET — blocked in the rig queue, not by the tool.** No number
-below is a blaze result.
+**Blaze failed to build BOTH fleet workspaces tried — the pre-registered
+correctness precondition ("identical pass count") is unreachable; 0/14 valid
+arms. Per the decision rule: FAIL → recorded, not adopted.** The speed bar was
+never reached because the load/precondition leg failed first:
 
-Feasibility (verified, not assumed):
+- **seal-game-editor (the registered target):** the daemon cannot LOAD the
+  workspace — `coreaudio-sys v0.2.18`'s build script contains a fn blaze's MIR
+  frontend cannot compile (`clang_sys::build::dynamic::search_libclang_directories:
+  IncompleteExpr`), and "a build with nothing of rustc's has nothing else to
+  compile it". Every B cell (warm ×2 + 7 pairs) = build error, rc=101, ~20 s of
+  load-attempt + fallback. The A arm was real and is the reported baseline:
+  edit→test-green **17.0-18.0 s** (the test run floor is ~15 s of it; the
+  suite's 2-5 flaky content-fixture failures on a bare worktree are
+  cargo-vs-cargo identical and do not affect the A/B validity).
+- **riir-kat (compatible-workspace control, leaf crate, no C build scripts):**
+  the daemon PANICS loading the workspace — `vendor/rust-analyzer/crates/base-db/src/lib.rs:299:
+  Unable to get FileSourceRootInput with vfs::FileId … this is a bug` — 0/7
+  valid arms. The A arm: **444/444 green, edit→test-green 1.3-1.5 s** steady.
+- **Control (harness exoneration):** `blaze test --lib` directly in bmo's own
+  plain `~/git/riir-kat` checkout (no worktree, no symlinks) fails on blaze's
+  own backend limit — `unsupported: writable static __RUST_STD_INTERNAL_VAL
+  without a rustc symbol` across dozens of test fns (fn-pointer default
+  closures, collect/from_iter paths — test code touching std internals its
+  MIR/Cranelift backend cannot compile) — and exits via its cargo fallback, not
+  its fast path. The worktree+symlink harness is NOT the cause.
+- **An invalid lane, disclosed:** a riir-refine B2 cell set on bmo died in 0.08 s
+  — bmo's `~/git` predates `riir-ledger` joining the workspace (no clone → cargo
+  resolution refuses; a bmo sync-gap finding, not a blaze result).
+
+Provenance (bmo, m5 ultra, quiet): sge cells `power=AC load=2.24 swap=756M
+powermode=0(auto)`; riir-kat cells `power=AC load=1.77 powermode=0(auto)` —
+preflight PASSED both. Blaze `0.20261027.0 (49ca152)`, its own
+`nightly-2026-10-27`; cargo arm 1.99.0 (the sge/riir-kat pins). Scripts kept as
+artifacts: `blz3_run_ab.sh` (riir-kat, the valid control pair) beside this
+record; the sge script lives verbatim in the pre-registration above and was
+`/tmp/blz/run_ab.sh` on bmo.
+
+Reading per the pre-registered decision rule: **FAIL → recorded, not adopted.**
+Blaze's own README concession ("It's young. Keep cargo check or your CI as the
+final word") is the operative fact on our surface. Re-open triggers: upstream
+ships `coreaudio-sys`-class build-script compilation + the std-internal-static
+test-code support, OR a fleet workspace blaze demonstrably loads+passes.
+Uninstalled from bmo (installed for this bench: `~/.blaze` 651 MB + the five
+`~/.cargo/bin/{blaze,blaze-proc-macro-srv,ra-jit,ra-jit-rustc,ra-jit-rustc-first}`
+binaryies) and from amo (the pre-registration install), `/tmp/blz*` scratch
+removed on both; the queued amo job `62549c83` (head-of-line blocked, now moot)
+is GONE from the queue (absent at close — expired or sibling-cancelled; my own
+cancel found nothing to cancel) — no orphaned run remains. No numbers above may be quoted as
+blaze SPEED results — blaze never reached a timed valid arm anywhere in this
+bench.
+
+Why it ran on bmo and not amo (kept from the pre-registration, for the record):
+bmo — the preferred quiet runner — was tailnet-offline all day; the rig queue
+laws forbid bypassing amo's head-of-line Exclusive job; the ON/OFF jump rule
+(`ssh -J katopz@100.111.186.76 katopz@192.168.10.2`) reached the box (up 4
+days, load 1.4-3.2, preflight PASSED) so the measurement ran there under the
+identical pre-registered protocol, unchanged.
+
+### Pre-measurement feasibility (kept verbatim from the pre-registration; installer sha + install surface are load-bearing for the uninstall above)
 
 - Install needs NO root: the installer (`https://ix.dev/blaze`, 353 lines,
   sha256 `2cca089b…98eb6`, read before running) writes only
@@ -131,21 +186,6 @@ Feasibility (verified, not assumed):
 - Platform: macOS Apple silicon + Linux only (Windows v2 untested by upstream)
   → amo/bmo/m3 qualify, the 4090 does not.
 
-Run state: the pre-registered script `/tmp/blz/run_ab.sh` on amo is queued as
-`agent-mail rig run amo --shared --cores 8 --mem 12 --timeout 3h` (job
-`01a1b0cb-3d02-76e3-bbe5-3b3a62549c83`). It creates its own `/tmp/blz`
-worktree of amo's seal-game-editor (the probe edit lives only in that
-worktree), symlinks siblings, runs the warm-up + 7 interleaved pairs, then
-stops the daemon, removes the worktree and symlinks; results land in
-`/tmp/blz/out/{meta,cells}.txt` (+ `blaze_status.txt`, `disk.txt`).
-
-Why it has not run (2026-11-06, ~1.5 h waited): bmo — the preferred quiet
-runner — was OFFLINE (ssh timeout to 100.100.117.44) throughout; on amo an
-Exclusive job (`2993a478`, riir-game-sdk budget gate) sits at queue head
-waiting for an empty rig, while a Shared ~36 h campaign (`44cdb52a`,
-sr1098, running 8 h at the time) holds amo — so every Shared job behind the
-Exclusive is head-of-line blocked even with 81 GB free / load 6 of 30.
-Bypassing the queue was rejected (fleet law: heavy work through the queue).
-m3 refused (owner laptop, BUSY: 20 contenders). **Next agent:** read
-`/tmp/blz/out/cells.txt` on amo once the job ends (or re-queue the same
-script on bmo when it returns), then apply the bar above unchanged.
+The amo queue block (job `62549c83` head-of-line behind the Exclusive budget
+gate behind the sr1098 campaign) is CLOSED — superseded by the bmo-bridge
+measurement above; the job was cancelled at close.
