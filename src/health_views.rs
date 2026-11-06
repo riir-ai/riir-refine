@@ -878,8 +878,8 @@ mod tests {
         let line = corpus_counts_line();
         assert!(line.contains("clippy 112"), "{line}");
         assert!(line.contains("kernel 1073"), "{line}");
-        assert!(line.contains("perf 302"), "{line}");
-        assert!(line.contains("sec 46"), "{line}");
+        assert!(line.contains("perf 304"), "{line}");
+        assert!(line.contains("sec 48"), "{line}");
         assert!(line.contains("docker 31"), "{line}");
         assert!(line.contains("dist 8"), "{line}");
         assert!(line.contains("shader 8"), "{line}");
@@ -906,7 +906,7 @@ mod tests {
                 "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
             ]
         );
-        assert_eq!(rows[0].total, 1580);
+        assert_eq!(rows[0].total, 1584); // Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381)
     }
 
     #[test]

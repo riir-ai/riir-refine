@@ -1699,6 +1699,171 @@ pub fn apply_edits(doc: &mut [Block], edits: &[Edit]) -> Report {
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ── removed-span-veto-outscopes-recovery-path (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "removed-span-veto-outscopes-recovery-path".to_string(),
+            sec_concept: "sanitization EVIDENCE outscopes the recovery path: when a sanitizer removes attacker-suspect regions and a downstream recovery path (a model judge, a re-review, a heuristic rescuer) may re-admit refused calls, the recovery path is scoped OUT of authority over anything riding the removed text — a target (URL/email/account/routing string) appearing inside a removed span stays refused even when the judge scores it coherent. The source's law, verbatim (at the pin): 'A taint-novel routing target is recoverable iff NONE of its significant tokens appear as a SUBSTRING of the detected injection span text' — and the plumbing law that makes the veto real: the veto gate sits BEFORE the judge invocation, so the judge never even sees a vetoed call. THE GENUS: sanitization output is ADMISSIBILITY evidence — the removed-span record bounds what ANY later authority may restore (fail-closed by construction, not by review); the fast path cannot bypass the gate, and neither can the slow path. KINSHIPS: distinct-from `externally-authored-edits-by-id-not-counted-index` (identity-vs-range validity at the ADDRESSING sink — this is ADMISSION authority scoping at the recovery sink); adjacent the SensitiveData family (detection/redaction precision is the PREVIOUS layer — what the sanitizer removed; this rule is the layer AFTER redaction: what the removed evidence then forbids); kin `gateway-type-forces-security-check` (the checkpoint-bypass genus — the same 'the fast path cannot bypass the gate' shape, here extended to the RECOVERY path). Regime: any pipeline with (a) a sanitizer/redactor producing removed-region evidence and (b) a downstream re-admission authority (LLM judge, retry-with-more-context, allowlist heuristic) — agent tool-call gates, mail/chat moderation rescuers, injection-filtered command relays. Anti-regimes: no recovery path exists (the refusal is final — nothing to scope); the removed regions carry no targets (pure prose). Suggest-only: the veto's placement (before vs after the judge) is the pipeline author's design. Detector: none at landing (vocabulary-gated hard — needs sanitizer-output + judge/referral vocabulary co-residence in one flow; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F3 (the veto state machine: a refusal whose target rides the removed span is NOT restorable by the recovery path; a clean target IS; fail-closed default). Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `no_target_in_injection_span` + the mvspan gate at the referral site, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: the recovery path (judge) is consulted on EVERY refused
+/// call, INCLUDING calls whose target rode the removed span — the
+/// judge can re-admit a target the sanitizer explicitly removed.
+pub struct SanitizeReport {
+    pub clean: String,
+    pub removed_spans: Vec<String>, // the evidence
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Verdict {
+    Allowed,
+    Blocked,
+}
+
+fn judge_allows(target: &str, task: &str) -> bool {
+    target.len() + task.len() > 8
+}
+
+pub fn gate(
+    report: &SanitizeReport,
+    target: &str,
+    task: &str,
+) -> Verdict {
+    if report.removed_spans.iter().any(|s| s.contains(target)) {
+        // removed-span evidence recorded — but then...
+        if judge_allows(target, task) {
+            return Verdict::Allowed; // the judge OVERRIDES the evidence
+        }
+    }
+    if judge_allows(target, task) {
+        return Verdict::Allowed;
+    }
+    Verdict::Blocked
+}
+"
+                .to_string(),
+            fixed_code: "/// FIXED: the removed-span VETO gates the recovery path — the judge
+/// is never consulted for a target riding the removed text; the
+/// evidence outscopes every later authority (fail-closed).
+pub struct SanitizeReport {
+    pub clean: String,
+    pub removed_spans: Vec<String>, // the evidence
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Verdict {
+    Allowed,
+    Blocked,
+}
+
+fn judge_allows(target: &str, task: &str) -> bool {
+    target.len() + task.len() > 8
+}
+
+fn target_in_removed_span(target: &str, report: &SanitizeReport) -> bool {
+    report.removed_spans.iter().any(|s| s.contains(target))
+}
+
+pub fn gate(
+    report: &SanitizeReport,
+    target: &str,
+    task: &str,
+) -> Verdict {
+    // THE VETO comes FIRST: the judge never sees a vetoed call.
+    if target_in_removed_span(target, report) {
+        return Verdict::Blocked;
+    }
+    if judge_allows(target, task) {
+        return Verdict::Allowed;
+    }
+    Verdict::Blocked
+}
+"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── read-output-trust-inherits-argument-taint (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "read-output-trust-inherits-argument-taint".to_string(),
+            sec_concept: "a read's output inherits its ARGUMENTS' trust: outputs of a read whose argument values are attacker-derived (taint-novel — present in untrusted tool/content text, absent from the user's own request) are untrusted EVEN WHEN delivered in typed, well-formed fields — provenance flows through the CALL, not through the channel. The source's law, verbatim (at the pin): 'A read's output identities are trustworthy only if the read was NOT steered by injection, i.e. none of the read's arg values are taint-novel.' The attack shape: injected content steers one argument (a query, a path, an id filter) of a structured read; the read returns attacker-chosen rows in perfectly typed fields; a downstream consumer that trusts the CHANNEL (typed output == safe) is steered without ever seeing a malformed value. KINSHIPS: distinct-from the wire_taint family (`proposers::wire_taint` — buffer-level code patterns: length-prefix/read-into-vec shapes at the WIRE decode sink; this rule is call-level information flow at the TOOL/QUERY composition sink — different layer, different sink, adjacent genus note mandatory); distinct-from `unvalidated-egress-url` (egress URL assembly — this is input-side read steering feeding trust decisions); kin `abuse-strike-counts-cross-site-requests` (label/provenance carried across requests — the same 'the channel is not the provenance' genus at the counting sink). Regime: tool-using agents, plugin/function-call hosts, RPC layers where untrusted text can reach ARGUMENT values while outputs are consumed as trusted structure. Anti-regimes: arguments are machine-derived constants (no taint exists); the consumer re-validates outputs against the user's own request anyway (the inheritance is redundant). Suggest-only: the taint tracking's granularity (per-argument vs per-call) is the host's design. Detector: none at landing (vocabulary-gated hard — needs call-argument provenance vocabulary; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F4 (dual-source conflict: a value read under a steered argument poisons its typed outputs even when the same value arrives clean elsewhere — the conflict resolves to the attacker). Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `query_entailed`, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed)."
+                .to_string(),
+            buggy_code: "/// NAIVE: outputs are trusted because the CHANNEL is typed. The
+/// arguments that selected the rows are never checked for taint —
+/// steered arguments steer the typed output.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Account {
+    pub id: String,
+    pub payee: String,
+    pub balance_cents: u64,
+}
+
+pub struct Read {
+    pub query: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Provenance {
+    Trusted,
+    Attacker,
+}
+
+pub fn lookup(accounts: &[Account], read: &Read, arg_prov: &Provenance) -> Option<Account> {
+    let _ = arg_prov;
+    accounts
+        .iter()
+        .find(|a| a.payee.contains(&read.query))
+        .cloned()
+}
+
+pub fn pay_selected(account: &Account) -> String {
+    format!(\"pay {} ({})\", account.payee, account.id)
+}
+"
+                .to_string(),
+            fixed_code: "/// FIXED: the output carries the MAX of its arguments' provenance;
+/// the consumer pays only Trusted-provenance outputs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Account {
+    pub id: String,
+    pub payee: String,
+    pub balance_cents: u64,
+}
+
+pub struct Read {
+    pub query: String,
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Provenance {
+    Trusted,
+    Attacker,
+}
+
+pub struct ReadOutput {
+    pub account: Account,
+    pub provenance: Provenance,
+}
+
+pub fn lookup(accounts: &[Account], read: &Read, arg_prov: &Provenance) -> ReadOutput {
+    let account = accounts
+        .iter()
+        .find(|a| a.payee.contains(&read.query))
+        .cloned()
+        .expect(\"caller pins existence\");
+    ReadOutput {
+        account,
+        provenance: arg_prov.clone(),
+    }
+}
+
+pub fn pay_selected(out: &ReadOutput) -> Option<String> {
+    match out.provenance {
+        Provenance::Trusted => Some(format!(\"pay {} ({})\", out.account.payee, out.account.id)),
+        Provenance::Attacker => None,
+    }
+}
+"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -2049,6 +2214,65 @@ mod tests {
             r.sec_concept
                 .contains("TcpListener::bind` never sets SO_REUSEADDR"),
             "batch-337 must carry the std-safe-by-default anti-regime"
+        );
+    }
+
+    /// Batch 340 (the SPILLWAY agent-egress-guard distill, Plan 349 /
+    /// Research 381, saintmachines/spillway @ 0fc9f55f, Apache-2.0) —
+    /// presence, family, provenance discipline. TWO suggest-only rules
+    /// (the recovery-authority + trust-inheritance axes), never
+    /// `FIXABLE_SEC`.
+    #[test]
+    fn batch340_rules_present_families_and_provenance() {
+        let all = entries();
+        let r3 = all
+            .iter()
+            .find(|r| r.rule_id == "removed-span-veto-outscopes-recovery-path")
+            .unwrap_or_else(|| panic!("batch-340 rule 3 missing from corpus"));
+        assert_eq!(r3.family, SecFamily::InputValidation, "batch-340 rule 3 family");
+        assert!(
+            r3.sec_concept.contains("Batch 340 / Plan 349 / Research 381")
+                && r3.sec_concept.contains("0fc9f55f"),
+            "batch-340 rule 3 must cite its lineage + the spillway pin"
+        );
+        assert!(
+            r3.sec_concept.contains("verbatim (at the pin)")
+                && r3.sec_concept.contains("recoverable iff NONE"),
+            "batch-340 rule 3 must carry the source law verbatim"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"removed-span-veto-outscopes-recovery-path"),
+            "batch-340 rule 3 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        for needle in [
+            "gateway-type-forces-security-check",
+            "externally-authored-edits-by-id-not-counted-index",
+            "ADMISSIBILITY evidence",
+        ] {
+            assert!(
+                r3.sec_concept.contains(needle),
+                "batch-340 rule 3 notes must carry '{needle}'"
+            );
+        }
+        let r4 = all
+            .iter()
+            .find(|r| r.rule_id == "read-output-trust-inherits-argument-taint")
+            .unwrap_or_else(|| panic!("batch-340 rule 4 missing from corpus"));
+        assert_eq!(r4.family, SecFamily::InputValidation, "batch-340 rule 4 family");
+        assert!(
+            r4.sec_concept.contains("0fc9f55f")
+                && r4.sec_concept.contains("none of the read's arg values are taint-novel"),
+            "batch-340 rule 4 must cite the pin + carry the source law verbatim"
+        );
+        assert!(
+            r4.sec_concept.contains("proposers::wire_taint"),
+            "batch-340 rule 4 must carry the wire_taint adjacency note"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"read-output-trust-inherits-argument-taint"),
+            "batch-340 rule 4 must stay suggest-only (never FIXABLE_SEC)"
         );
     }
 }

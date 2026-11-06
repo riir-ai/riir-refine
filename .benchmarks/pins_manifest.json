@@ -15,11 +15,11 @@
   "rust_perf": {
     "benchable": 128,
     "categories": 14,
-    "notbenchable": 174,
-    "rules": 302
+    "notbenchable": 176,
+    "rules": 304
   },
   "sec": {
-    "rules": 46
+    "rules": 48
   },
   "shader_perf_rules": 8
 }
