@@ -57,7 +57,18 @@ set -u
 # · aarch64-unknown-linux-musl 10,276,856 · x86_64-pc-windows-gnu 10,974,208.
 # Ceiling 12.0 MiB = the v0.3.4 max + ~9% headroom. The dist-loss signature
 # is now ~2.5x the dist size (>20 MiB), far above it.
-limit="${MAX_BINARY_BYTES:-12582912}"
+# v0.4.3 re-measure (2026-11-06, the kernel-pregate promotion): the 12.0 MiB
+# ceiling RED on ALL FIVE targets (+56–63% vs v0.3.4, evenly — the shape of
+# code+corpus growth, not a lost dist profile; that signature is ~2.5x, i.e.
+# >40 MiB here). Measured BEFORE raising, per the rule above. Basis: the
+# release set gained kernel_pregate (implies kernel_opt — the 1,061-rule
+# kernel corpus + its matcher + dep:regex join the shipped closure; the
+# corpus IS the product, this is the model's size). aarch64-apple-darwin
+# 16,874,624 · aarch64-unknown-linux-musl 17,534,928 · x86_64-apple-darwin
+# 18,166,544 · x86_64-pc-windows-gnu 18,370,560 · x86_64-unknown-linux-musl
+# 18,996,120 (max). Ceiling 21.0 MiB = the v0.4.3 max + ~10% corpus-growth
+# headroom; the dist-loss signature stays ~2.5x (>40 MiB), far above it.
+limit="${MAX_BINARY_BYTES:-22020096}"
 
 file_size() {
     # BSD stat (macOS) first, GNU stat (Linux/CI) second; empty on failure —
