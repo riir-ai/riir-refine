@@ -28,24 +28,26 @@
 
 One batched sweep, not piecemeal (verdict decision). Each: replace the fix-spelling rows with the two-form law above; keep `--fix` accepted (quiet parser alias) but undocumented.
 
+**Sibling half LANDED 2026-11-06 (zed-c29c7b20@m3, one `docs:` commit per repo, pushed):** katgpt-rs `e0835a1a4` · riir-ai `63cd36cfd` · riir-chain `d5f56c04` (folded the missed `--fix --domain docker` row via amend) · riir-dapps `8531523` · riir-deployer `3698307` · riir-game-sdk `8a37345` · riir-neuron-db `e81ff5e` · riir-reflex `2282944` · riir-rethink `0f9efd6` · riir-train `0ae4c960` · riir-viewbridge `849e2c9` · riir-refab `402875e`. Verified ZERO stale refs (no edit needed): riir-dao · riir-instinct · riir-kat · riir-reflexer. SKIPPED: seal-remake (its AGENTS.md + 5 seal-view files are sibling-session WIP — sweep lands after that does).
+
 - [x] THIS repo: `AGENTS.md` (Lint fixing section + Build Commands block) — **LANDED 2026-11-06 (zed-c29c7b20@m3 idle lane):** the Status row, the global-binary row, the CLI-UX rows (bare-dry-run + roll-up CTA + fix row + burn-sync), and the Plan-005 verbs row all teach the verb forms; the roll-up row now quotes the SHIPPED CTA (`🛠️ ~N% fixable via `cargo refine fix` …`).
-- [ ] `../katgpt-rs/AGENTS.md` (Lint fixing section)
-- [ ] `../riir-ai/AGENTS.md` (Lint fixing section)
-- [ ] `../riir-chain/AGENTS.md` (Lint fixing section)
-- [ ] `../riir-dapps/AGENTS.md` (Lint fixing section)
-- [ ] `../riir-dao/AGENTS.md` (no lint section — verify zero refs)
-- [ ] `../riir-deployer/AGENTS.md` (Lint fixing)
-- [ ] `../riir-game-sdk/AGENTS.md` (Lint fixing)
-- [ ] `../riir-instinct/AGENTS.md` (Build commands: `--release` note rows carry no fix spelling — verify)
-- [ ] `../riir-kat/AGENTS.md` (no lint section — verify zero refs)
-- [ ] `../riir-neuron-db/AGENTS.md` (Lint fixing)
-- [ ] `../riir-reflex/AGENTS.md` (Lint fixing)
-- [ ] `../riir-reflexer/AGENTS.md` (Lint fixing)
-- [ ] `../riir-rethink/AGENTS.md` (Lint fixing)
-- [ ] `../riir-train/AGENTS.md` (Lint fixing)
-- [ ] `../riir-viewbridge/AGENTS.md` (Lint fixing)
-- [ ] `../riir-refab/AGENTS.md` (Lint fixing)
-- [ ] `../seal-remake/AGENTS.md` (Lint fixing)
+- [x] `../katgpt-rs/AGENTS.md` (Lint fixing section)
+- [x] `../riir-ai/AGENTS.md` (Lint fixing section)
+- [x] `../riir-chain/AGENTS.md` (Lint fixing section)
+- [x] `../riir-dapps/AGENTS.md` (Lint fixing section)
+- [x] `../riir-dao/AGENTS.md` (no lint section — verified zero refs)
+- [x] `../riir-deployer/AGENTS.md` (Lint fixing)
+- [x] `../riir-game-sdk/AGENTS.md` (Lint fixing)
+- [x] `../riir-instinct/AGENTS.md` (Build commands: `--release` note rows carry no fix spelling — verified zero refs)
+- [x] `../riir-kat/AGENTS.md` (no lint section — verified zero refs)
+- [x] `../riir-neuron-db/AGENTS.md` (Lint fixing)
+- [x] `../riir-reflex/AGENTS.md` (Lint fixing)
+- [x] `../riir-reflexer/AGENTS.md` (Lint fixing — verified zero refs)
+- [x] `../riir-rethink/AGENTS.md` (Lint fixing)
+- [x] `../riir-train/AGENTS.md` (Lint fixing)
+- [x] `../riir-viewbridge/AGENTS.md` (Lint fixing)
+- [x] `../riir-refab/AGENTS.md` (Lint fixing)
+- [ ] `../seal-remake/AGENTS.md` (Lint fixing) — BLOCKED on the sibling session's WIP in that file; re-sweep when its tree lands.
 - [x] `.agents/skills/cargo-refine/SKILL.md` — the primary consumer doc: every `--fix`/`--write --verify` row — **LANDED 2026-11-06 (same lane):** the usage block teaches the verb forms, the consent paragraph names the verb-first law + the quiet aliases.
 - [x] release docs teaching the old form: `scripts/manual_release.sh` comments (verified: no fix spelling — no work), README.md quickstart **LANDED same lane**, `.docs/` book pages that name `--fix` **LANDED same lane (12 pages)** (grep `--fix` across `*.md`, fix doc rows only — never bench/fixture goldens).
 
