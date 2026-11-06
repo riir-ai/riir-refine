@@ -104,7 +104,7 @@ The refusal names exactly TWO refuel paths (the faucet/drip tier is
 retired — riir-dapps Issue 094 D4: *"in the long run they have to pay or
 this tokenomics will die"*):
 
-1. **Contribute** — `cargo refine --mine` (what mining is) → `cargo refine
+1. **Contribute** — `cargo refine join` (the contribution surface) → `cargo refine
    sync`. One accepted push records the server's `contributed` truth and
    lifts the gate for good.
 2. **Top up** — the payment page.

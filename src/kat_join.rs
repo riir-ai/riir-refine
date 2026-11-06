@@ -1,5 +1,5 @@
 //! The first-join environment choice (riir-dapps Plan 045 Phase A1/A2/A3,
-//! Proposal 008 §2): `--mine` / `login` on a machine with NO service
+//! Proposal 008 §2): `login`/`join` on a machine with NO service
 //! config offers a one-time network choice instead of silently riding the
 //! mainnet default.
 //!
@@ -42,8 +42,8 @@
 //!
 //! ## Deliberate non-features (the consent-module rules)
 //!
-//! - **Never gated.** Compiles in EVERY feature build: `--mine` is the
-//!   join command in every build, and the choice must fire in each.
+//! - **Never gated.** Compiles in EVERY feature build: the login/join
+//!   paths call it in every build, and the choice must fire in each.
 //! - **Never hangs.** A non-TTY stdin with no `--yes` and no
 //!   [`JOIN_ENV_ENV_VAR`] REFUSES with the env-var remedy (exit 2 at the
 //!   call site) — the join never silently continues on the old default,
@@ -353,7 +353,7 @@ pub fn record(dir: &Path, env: JoinEnv) -> Result<PathBuf, String> {
     riir_kat::kat_service_config::store(dir, &validated)
 }
 
-/// The join-path entry (the `--mine` / `login` call sites): decides,
+/// The join-path entry (the `login` call sites): decides,
 /// prompts when asked, records, prints the post-record copy. `Ok(())` on
 /// an already-configured machine too — the callers cannot (and must not)
 /// distinguish it from a fresh devnet record: the zero-output path is the

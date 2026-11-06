@@ -34,7 +34,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
         Ok(a) => a,
         Err(e) => {
             eprintln!(
-                "info: no account ({e}) — run `cargo refine --mine` (or `cargo refine login`) first"
+                "info: no account ({e}) — run `cargo refine login` (or `cargo refine join`) first"
             );
             std::process::exit(1);
         }
@@ -76,7 +76,7 @@ pub(crate) fn run_kat_info(paths: &[PathBuf]) {
     println!(
         "{}",
         account_line(
-            "mining:",
+            "contribution:",
             format!("{} (contribution consent)", mining.label())
         )
     );
@@ -206,7 +206,7 @@ fn network_sections(acct32: Option<&str>) {
     // pseudonym (the full id never enters the public body).
     println!(
         "{}",
-        riir_refine::kat_account_client::account_header("MINING (public table)")
+        riir_refine::kat_account_client::account_header("CONTRIBUTION (public table)")
     );
     if offline {
         println!("  (offline — skipped after the wallet read failed)");
@@ -291,7 +291,7 @@ fn wallet_lines(h: &riir_refine::kat_protocol_account::ServiceHistory) -> Vec<St
         (true, None) => account_line("contributed:", "yes"),
         (false, _) => account_line(
             "contributed:",
-            "no mining batch has landed from this account yet",
+            "no contribution batch has landed from this account yet",
         ),
     });
     lines.push(receipts_line(h, &kat));
@@ -308,7 +308,7 @@ fn receipts_line(
     if h.receipts.is_empty() {
         return riir_refine::kat_account_client::account_line(
             "receipts:",
-            "none yet (mining rewards mint per epoch after proof)",
+            "none yet (rewards mint per epoch after proof)",
         );
     }
     let minted: Vec<_> = h.receipts.iter().filter(|r| r.state == "Minted").collect();
@@ -457,7 +457,7 @@ fn local_section(paths: &[PathBuf]) {
             println!("  soft gate:   warn-only — {why} (no server truth to gate on)");
         }
         SoftGateVerdict::Refuse { balance_micro } => println!(
-            "  soft gate:   REFUSED — depleted balance {} (refuel: `cargo refine --refill`, `--mine` + sync, or the payment page)",
+            "  soft gate:   REFUSED — depleted balance {} (refuel: `cargo refine refill`, `mine` + sync, or the payment page)",
             kat(balance_micro)
         ),
     }

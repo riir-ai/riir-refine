@@ -281,7 +281,7 @@ impl KatFooter<'_> {
                 let queued = if *queued_batches == 0 {
                     String::new()
                 } else {
-                    format!(" · {queued_batches} mining batch(es) queued")
+                    format!(" · {queued_batches} contribution batch(es) queued")
                 };
                 format!(
                     "{gutter}⚠ {} KAT unsynced (burn){queued}\n               pushing again next \
@@ -765,7 +765,7 @@ mod tests {
             ..footer_mixed()
         }
         .render(false);
-        assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 mining batch(es) queued"));
+        assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 contribution batch(es) queued"));
         assert!(unsynced.contains("or `cargo refine sync`"));
 
         let logged_out = KatFooter {

@@ -227,10 +227,30 @@ pub struct TrainerCorpus {
     pub newest_epoch: Option<u64>,
 }
 
+/// The lease-host URL at this build's posture — the ONE resolver for the
+/// health views (both call sites). `points` owns the points-plane env
+/// override + the tuna default; a kat_service-only build has no points
+/// module, so it rides the kat lease plane's own resolver (the same
+/// `RIIR_REFINE_KAT_SERVICE_URL` > config > mainnet ladder every other kat
+/// lane uses). The two defaults point at the same fleet; the env override
+/// stays plane-specific by design.
+#[cfg(any(feature = "kat_service", feature = "points"))]
+#[must_use]
+fn lease_url_at_posture() -> String {
+    #[cfg(feature = "points")]
+    {
+        crate::points_lease::resolved_lease_url()
+    }
+    #[cfg(not(feature = "points"))]
+    {
+        crate::kat_lease_client::service_url_for_command()
+    }
+}
+
 #[cfg(any(feature = "kat_service", feature = "points"))]
 #[must_use]
 pub fn trainer_corpus(root: &Path) -> TrainerCorpus {
-    let url = crate::points_lease::resolved_lease_url();
+    let url = lease_url_at_posture();
     let store = crate::kat_lease_client::LeaseStore::open_net(root, &url);
     let mut epochs: Vec<u64> = Vec::new();
     let man = store.dir().join("man");
@@ -475,7 +495,7 @@ pub fn render_trainer(
         }
     );
     // The trainer's output: the leased corpus. THIS is how the trainer gets
-    // measurably smarter — every epoch, the network's mined rules land here.
+    // measurably smarter — every epoch, the network's distilled rules land here.
     match corpus.epoch {
         Some(e) => {
             let _ = writeln!(out, "  corpus (the trainer's output): epoch {e}");
@@ -500,7 +520,7 @@ pub fn render_trainer(
     }
     let _ = writeln!(
         out,
-        "  loop: unfixed → .refine/misses/ → mined rules → the next epoch → the fixer cites them"
+        "  loop: unfixed → .refine/misses/ → distilled rules → the next epoch → the fixer cites them"
     );
     out
 }
@@ -521,7 +541,7 @@ pub struct CorpusGrowth {
 #[cfg(any(feature = "kat_service", feature = "points"))]
 #[must_use]
 pub fn corpus_growth(root: &Path) -> CorpusGrowth {
-    let url = crate::points_lease::resolved_lease_url();
+    let url = lease_url_at_posture();
     let store = crate::kat_lease_client::LeaseStore::open_net(root, &url);
     let epoch = store.current_epoch();
     let (rules, shape, delta, prev_cached) = match epoch {
@@ -882,9 +902,7 @@ mod tests {
         let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
         assert_eq!(
             labels,
-            vec![
-                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
-            ]
+            vec!["kernel", "perf", "clippy", "sec", "docker", "dist", "shader"]
         );
         assert_eq!(rows[0].total, 1567);
     }

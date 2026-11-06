@@ -1318,7 +1318,7 @@ pub fn run_gated(
     let rb = rebase(&src_read.rows, &dst_read.rows);
     report.lines.push(rb.disclosure(src_read.rows.len()));
     if rb.kept.is_empty() {
-        return Err("nothing new for mainnet — mine on mainnet instead".into());
+        return Err("nothing new for mainnet — contribute from a devnet box instead".into());
     }
     let chunks = chunk_plan(rb.kept)?;
     let draft = PrDraft::build(pr_seq, chunks)?;
@@ -2015,7 +2015,10 @@ mod wire_tests {
             },
         )
         .expect_err("kept == 0 refuses");
-        assert_eq!(err, "nothing new for mainnet — mine on mainnet instead");
+        assert_eq!(
+            err,
+            "nothing new for mainnet — contribute from a devnet box instead"
+        );
         let _ = std::fs::remove_dir_all(&root);
     }
 

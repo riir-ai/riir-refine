@@ -229,7 +229,7 @@ fn depleted_never_contributed_refuses_at_run_start() {
         "the refusal must be loud. output:\n{text}"
     );
     assert!(
-        text.contains("cargo refine --mine"),
+        text.contains("cargo refine join"),
         "must name the contribute path. output:\n{text}"
     );
     assert!(
@@ -266,8 +266,8 @@ fn depleted_never_contributed_refuses_at_run_start() {
         "the survey count must render (the count itself is corpus-dependent). output:\n{text}"
     );
     assert!(
-        text.contains("mining:"),
-        "the mining line must render. output:\n{text}"
+        text.contains("contribute:"),
+        "the contribute line must render. output:\n{text}"
     );
     assert!(
         text.contains("within 7 days"),
@@ -323,8 +323,8 @@ fn the_refusal_surveys_what_it_would_have_fixed() {
         "the fixable fixture must measure ABOVE zero. output:\n{text}"
     );
     assert!(
-        text.contains("mining:"),
-        "the mining line must render. output:\n{text}"
+        text.contains("contribute:"),
+        "the contribute line must render. output:\n{text}"
     );
     // The pipeline never ran: no scan summary, no suggestion content.
     assert!(!text.contains("scanned "), "output:\n{text}");
@@ -366,7 +366,7 @@ fn the_survey_mining_arm_counts_the_queued_outbox() {
     let (code, text) = heal(&dir, &[], &[]);
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
     assert!(
-        text.contains("mining: 1 batch(es) queued"),
+        text.contains("contribute: 1 batch(es) queued"),
         "the queued count must render. output:\n{text}"
     );
     assert!(
@@ -407,8 +407,8 @@ fn the_survey_never_fabricates_a_count_without_sources() {
         "no count line without sources. output:\n{text}"
     );
     assert!(
-        text.contains("mining:"),
-        "the mining arm does not depend on sources. output:\n{text}"
+        text.contains("contribute:"),
+        "the contribute arm does not depend on sources. output:\n{text}"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

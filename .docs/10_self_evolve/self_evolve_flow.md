@@ -178,7 +178,7 @@ flowchart TB
   half — no-ops with one log line without `clippy_verify`).
 - **record → mining batch is OPT-IN** (owner mandate 2026-09-08): the
   consent tiers are `Unset` / `OptedIn` / `OptedOut`; `Unset` never
-  pushes — running `sync` IS the consent. `--unmine` stops the push
+  pushes — running `sync` IS the consent. A persisted opt-out record stops the push
   half; healing was always local.
 - **proof queue → epoch settle:** rows enter the proof queue on push,
   are credited at the proof pass (real `cargo clippy` re-run), and pay

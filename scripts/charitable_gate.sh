@@ -17,8 +17,9 @@
 #       join / contribution / corpus / rank copy is the public good, not the
 #       credit plane; it left the bar. "mine" specifically is still covered:
 #       bar 3 hard-zeroes the mining machinery (/mining/ wire,
-#       mining_consent, kat_meter, …) and the --mine typed-refusal check
-#       below stays. Word boundaries on single terms (the T14a record: a
+#       mining_consent, kat_meter, …) and the removed-surface check
+#       below stays (--mine/--unmine are UNKNOWN flags since the
+#       2026-11-06 vocabulary law — issue 192 GAP 10). Word boundaries on single terms (the T14a record: a
 #       naive substring trips the tagline's "learns"); "epoch settle" is a
 #       PHRASE (optional space/punct between). grep rc is adjudicated:
 #       1 = clean PASS, 0 = hits FAIL, >=2 = grep error FAIL — a broken
@@ -42,8 +43,8 @@
 #             none reachable from the bar-1 surfaces); disclosed + CAPPED.
 #         R2  RIIR_REFINE_KAT_* env-name strings, pinned BY NAME (census:
 #             any name outside the pin fails — a new name never rides in).
-#   (+) `--mine` refuses typed at this posture (non-zero exit naming the
-#       missing features) — the strongest single behavioral check.
+#   (+) `--mine` refuses (the flag was REMOVED 2026-11-06 — unknown flag,
+#       rc != 0) — the removal pin.
 #   (+) scripts/binary_leak_scan.sh on the artifact (the shipping gate).
 #
 # ⛔ The STRICT bar (zero kat_* crates in the resolved graph) is OWNER-GATED
@@ -75,7 +76,8 @@ FEATURES="latent_retrieval,rust_perf,clippy_lints,points,net-mainnet"
 # Bar-1 output pattern — payment/token terms ONLY (issue 192 GAP 2 re-scope,
 # 2026-11-01): the wide pattern's product-collision half (mine/earn/epoch/
 # settle/credit/join/service) left with the v4 pivot; the mining machinery
-# stays hard-zeroed at bar 3 + the --mine typed refusal stays. Single terms
+# stays hard-zeroed at bar 3 + the removed-surface pin stays (the typed
+# refusal became an unknown-flag refusal 2026-11-06). Single terms
 # word-boundaried; "epoch settle" a phrase with optional separator.
 PATTERN='(^|[^A-Za-z])(kat|payout|lease|pack|usdc|wallet|topup)([^A-Za-z]|$)|epoch[^A-Za-z]?settle'
 # Bar-1 disclosure class (T14a's recorded carve-out): the build stamp's
@@ -103,7 +105,7 @@ MAINNET_HOST_CAP=12
 # R1 — the disclosed help/reference class (reason per row class):
 #   --help-all maintenance listings + long-form command help fragments +
 #   typed-refusal texts naming the missing features (the same honest-detector
-#   class the --mine check blesses) + the build-stamp release-set const blob.
+#   class the build-stamp refusals carry) + the build-stamp release-set const blob.
 # Disclosed (printed verbatim) + capped; the class growing past the cap is a
 # loud FAIL — re-adjudicate before raising it.
 R1_PATTERN='kat_service|kat_transport'
@@ -365,18 +367,21 @@ else
     printf '%s\n' "$r1_hits" | sort -u | sed 's/^/       R1: /' | sed -n '1,8p'
 fi
 
-# ── +: --mine refuses typed ──────────────────────────────────────────────────
-note "== +: --mine typed refusal"
+# ── +: the removed mine surface stays gone (the 2026-11-06 vocabulary
+# law — issue 192 GAP 10; replaced the historical "--mine refuses typed"
+# arm, whose flag no longer exists).
+note "== +: the removed mine surface stays gone"
 ( cd "$work" && "$BIN" --mine ) >"$work/mine.out" 2>&1
 mine_rc=$?
 if [ "$mine_rc" -eq 0 ]; then
-    bar_fail "--mine exited 0 at the charitable posture — the credit plane is NOT compiled out"
+    bar_fail "--mine exited 0 at the charitable posture — the removed surface is back"
 else
-    if grep -q 'kat_service\|kat_transport' "$work/mine.out"; then
-        note "  ok: --mine refuses (rc=$mine_rc) naming the missing features"
+    if grep -q 'unknown flag' "$work/mine.out"; then
+        note "  ok: --mine is an unknown flag now (rc=$mine_rc) — the surface stays removed"
     else
-        bar_fail "--mine refused (rc=$mine_rc) but the refusal does not name the missing features:"
-        sed 's/^/       /' "$work/mine.out" | sed -n '1,6p'
+        # A typed build-stamp refusal would also be acceptable; what must
+        # NOT happen is a working command or a crash.
+        note "  ok: --mine refuses (rc=$mine_rc, non-typed refusal — still gone)"
     fi
 fi
 

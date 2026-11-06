@@ -53,7 +53,7 @@ activation.
    line; the `RIIR_REFINE_KAT_METER` idiom).
 2. **Login** — load-only (the wetrun precedent: a SIGNING command never
    silently mints an identity; run `cargo refine login` first).
-3. **Mining consent** — `OptedOut` refuses with the `--mine` remedy
+3. **Contribution consent** — a persisted opted-out record refuses (the CLI writer `--mine`/`--unmine` was removed 2026-11-06; the record file governs)
    (verdicts are contributions to the same economy the sync push feeds);
    `Unset` proceeds — running the command IS the consent (the sync
    precedent).

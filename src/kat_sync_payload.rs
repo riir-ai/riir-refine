@@ -617,7 +617,7 @@ impl<'g, 'k> SyncPayloadBuilder<'g, 'k> {
 /// ## The source path (riir-dapps Issue 119 T2)
 ///
 /// Every field is checked WITH the row's [`TrajRowDoc::src_path`], so the
-/// policy's `allow_paths` actually binds (the `--mine` promise: snippets
+/// policy's `allow_paths` actually binds (the contribution promise: snippets
 /// only from the allowed source globs). A row with NO recorded path (legacy
 /// rows, path-less writers) FAILS CLOSED whenever `allow_paths` is
 /// non-empty — blocked as [`BlockReason::PathNotAllowed`]`("")`, the same
@@ -944,7 +944,7 @@ mod tests {
         assert!(verify_payload(&lines.join("\n")).is_ok());
     }
 
-    /// riir-dapps Issue 119 T2: the `--mine` default policy's source globs
+    /// riir-dapps Issue 119 T2: the default policy's source globs
     /// BIND — a row's recorded file decides whether its snippet may leave.
     fn source_globs_policy() -> SyncPolicy {
         SyncPolicy {

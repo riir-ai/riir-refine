@@ -425,12 +425,12 @@ fn the_depleted_gate_names_contribute_and_pay_never_refill() {
     }
     assert_eq!(code, Some(1), "the soft gate must refuse. output:\n{text}");
     assert!(
-        !text.contains("cargo refine --refill"),
-        "D4: a retired user path must not be advertised. output:\n{text}"
+        !text.contains("cargo refine --refill") && !text.contains("cargo refine refill"),
+        "D4: a retired user path must not be advertised (either spelling). output:\n{text}"
     );
     assert!(
-        text.contains("cargo refine --mine"),
-        "contribute must be named. output:\n{text}"
+        text.contains("cargo refine join"),
+        "the join contribute path must be named. output:\n{text}"
     );
     assert!(
         text.contains("top up:"),
@@ -472,8 +472,8 @@ fn refill_refuses_on_mainnet_posture_and_names_both_paths() {
     assert!(text.contains("REFUSED"), "loudly. output:\n{text}");
     assert!(text.contains("MAINNET"), "by posture. output:\n{text}");
     assert!(
-        text.contains("cargo refine --mine"),
-        "contribute must be named verbatim. output:\n{text}"
+        text.contains("cargo refine join"),
+        "the join contribute path must be named verbatim. output:\n{text}"
     );
     assert!(
         text.contains("/pay?acct="),

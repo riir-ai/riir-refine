@@ -20,8 +20,8 @@
 //! Toolchain and target-dir discipline stay the caller's environment; a
 //! manual `--clippy-json` still wins outright. Before that the oracle was
 //! manual-only, and the owner's finding was sharp: a gain path that exists
-//! only behind a flag nobody discovers is not a gain path — `cargo refine
-//! --mine` must do every good for the user (the auto-login/auto-sync
+//! only behind a flag nobody discovers is not a gain path — the auto-oracle
+//! must do every good for the user (the auto-login/auto-sync
 //! precedent).
 //! Only what anchoring needs is parsed: the primary-span file + line and
 //! the `clippy::*` code. Non-`clippy::` codes are ignored — rustc lints

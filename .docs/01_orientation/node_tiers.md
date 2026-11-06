@@ -105,7 +105,7 @@ install + incentive + honest status, a **tier chip on every contributor
 row**, the **operator-lanes strip**) and moved one day later to the FRONT
 page, where it belongs: a **node tiers × roles cross-matrix card** (coder /
 miner / fixer / trainer × lite / pro / max / ultra) above a **role-tabbed
-Get started** card (coder default; miner = the `--mine` join; fixer +
+Get started** card (coder default; miner = the `join` + `sync` onboarding; fixer +
 trainer = operator-lane status, no install). The leaderboard renders
 leader stats only now — one pointer line to the front page, no install
 commands, JSON shape untouched. Capabilities-only copy per the P013 law:

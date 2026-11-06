@@ -1643,7 +1643,7 @@ required-features = ["kat_service", "latent_retrieval"]
 # subsumes `kat_service`; the other three are the cargo-refine bin's own
 # required-features, without which CARGO_BIN_EXE_cargo-refine does not exist.
 [[test]]
-name = "unmine_consent_cli"
+name = "mining_consent_gate_cli"
 required-features = ["kat_transport", "latent_retrieval", "rust_perf", "clippy_lints"]
 
 # riir-dapps Issue 112 T4: `sync --export` through the real binary. The
@@ -1657,7 +1657,7 @@ required-features = ["kat_service", "latent_retrieval", "rust_perf", "clippy_lin
 # analogy through the real binary (closed port → one stacked line + no ack;
 # live mock → ONE report carrying the FULL cumulative total + ack advance +
 # signature verify; no new burn → zero requests). Same feature set as
-# unmine_consent_cli: `kat_transport` for the burn client's transport half
+# mining_consent_gate_cli: `kat_transport` for the burn client's transport half
 # + the cargo-refine bin's own required-features so CARGO_BIN_EXE_cargo-refine
 # exists.
 [[test]]
