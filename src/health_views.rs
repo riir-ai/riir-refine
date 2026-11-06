@@ -335,7 +335,11 @@ pub fn render_fixer(view: &FixerView<'_>) -> String {
         Some((k, f, pct, unfixed)) => {
             let _ = writeln!(
                 out,
-                "  fix rate: {pct}% of the clippy fix-set citations landed ({k}/{f}) · ~{unfixed}% unfixed"
+                "  fix rate: {} landed ({}/{}) · {}",
+                crate::kat_footer::colorize(&["32;1"], &format!("{pct}%")),
+                crate::kat_footer::colorize(&["36"], &k.to_string()),
+                crate::kat_footer::colorize(&["36"], &f.to_string()),
+                crate::kat_footer::colorize(&["2"], &format!("~{unfixed}% unfixed")),
             );
         }
         None => {
@@ -581,7 +585,7 @@ pub fn corpus_growth(_root: &Path) -> CorpusGrowth {
 /// and the network aggregate. Every line states its precondition when its
 /// data is absent — no fake numbers, ever (the verdict's law).
 #[must_use]
-pub fn render_stats(root: &Path, network_line: Option<&str>, corpus_line: &str) -> String {
+pub fn render_stats(root: &Path, network_line: Option<&str>) -> String {
     use std::fmt::Write as _;
     let mut out = String::new();
     let _ = writeln!(out, "self-evolve loop — fixer · trainer · corpus · network");
@@ -590,10 +594,17 @@ pub fn render_stats(root: &Path, network_line: Option<&str>, corpus_line: &str) 
     // scope + sample named per the verdict).
     let (campaigns, _findings, _kept, _reverted, _last) = fixer_history(root);
     match fixer_rate(root) {
-        Some((k, f, pct, unfixed)) => {
+        Some((k, f, pct, _unfixed)) => {
             let _ = writeln!(
                 out,
-                "\u{1f6e0}\u{fe0f} {pct}% fixer success rate ({k}/{f}) — this machine, {campaigns} campaign(s); ~{unfixed}% of the fix set did not land"
+                "🛠️ {} fixer success ({}/{}) — {}",
+                crate::kat_footer::colorize(&["32;1"], &format!("{pct}%")),
+                crate::kat_footer::colorize(&["36"], &k.to_string()),
+                crate::kat_footer::colorize(&["36"], &f.to_string()),
+                crate::kat_footer::colorize(
+                    &["2"],
+                    &format!("this machine, {campaigns} campaign(s)")
+                ),
             );
         }
         None if campaigns > 0 => {
@@ -610,63 +621,194 @@ pub fn render_stats(root: &Path, network_line: Option<&str>, corpus_line: &str) 
         }
     }
 
-    // 👩‍🔬 the trainer: the leased corpus = its output so far.
+    // 🔬 the trainer: the leased corpus = its output so far. SHORT lines
+    // (the owner's 2026-11-06 UX call: the one-liner was too long).
     let growth = corpus_growth(root);
     match growth.epoch {
         Some(e) => {
-            let delta_note = match (growth.delta, growth.previous_cached) {
-                (Some(d), true) if d >= 0 => {
-                    format!(" (+{d} vs epoch {})", e.saturating_sub(1))
-                }
-                (Some(d), true) => format!(" ({d} vs epoch {})", e.saturating_sub(1)),
-                _ => " (previous epoch not cached — no delta)".to_string(),
-            };
             let _ = writeln!(
                 out,
-                "\u{1f469}\u{200d}\u{1f52c} trainer: {} rules leased{} across {} epoch(s) installed — trained-surface coverage is the next gate (riir-dapps issue 160)",
-                growth.rules.unwrap_or(0),
-                delta_note,
-                growth.epochs_installed,
+                "🔬 {} · {} epoch{} · {}",
+                crate::kat_footer::colorize(
+                    &["36"],
+                    &format!("{} rules", growth.rules.unwrap_or(0))
+                ),
+                crate::kat_footer::colorize(&["36"], &growth.epochs_installed.to_string()),
+                if growth.epochs_installed == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+                crate::kat_footer::colorize(&["2"], &format!("epoch {e}")),
             );
-            if let Some(shape) = &growth.shape_line {
-                let _ = writeln!(out, "   {shape}");
+            if let Some(d) = growth.delta {
+                let (word, code) = if d > 0 { ("+", "32") } else { ("", "33") };
+                let _ = writeln!(
+                    out,
+                    "  {} {}",
+                    crate::kat_footer::colorize(&[code], &format!("{word}{d}")),
+                    crate::kat_footer::colorize(&["2"], "vs prev epoch"),
+                );
+            } else if !growth.previous_cached {
+                let _ = writeln!(
+                    out,
+                    "  {}",
+                    crate::kat_footer::colorize(&["2"], "prev epoch not cached — no delta")
+                );
             }
+            let _ = writeln!(
+                out,
+                "  {}",
+                crate::kat_footer::colorize(&["2"], "coverage gate pending (dapps #160)")
+            );
         }
         None => {
             let _ = writeln!(
                 out,
-                "\u{1f469}\u{200d}\u{1f52c} trainer: (no lease cache yet — run `cargo refine update` to install the trained corpus)"
+                "🔬 (no lease cache yet — run `cargo refine update` to install the trained corpus)"
             );
         }
     }
 
-    // 🧬 corpus growth: the compiled base + the leased delta (the per-day
-    // network growth rate is riir-dapps issue 160 — named, not faked).
-    let _ = writeln!(out, "\u{1f9ec} corpus growth: {corpus_line}");
-    if let (Some(e), Some(r)) = (growth.epoch, growth.rules) {
-        let d = match (growth.delta, growth.previous_cached) {
-            (Some(d), true) => format!(" {d:+}"),
-            _ => " (no cached previous epoch)".to_string(),
-        };
-        let _ = writeln!(
-            out,
-            "   leased epoch {e}: {r} rules{d} — growth rate per day lands with riir-dapps issue 160"
-        );
-    }
+    render_corpus_growth(&growth, &mut out);
 
     // 📡 network aggregate (points) or its honest pointer.
     match network_line {
         Some(line) => {
-            let _ = writeln!(out, "\u{1f4e1} network: {line}");
+            let _ = writeln!(out, "📡 {line}");
         }
         None => {
             let _ = writeln!(
                 out,
-                "\u{1f4e1} network: (this build has no points surface — rank/info live in the shipped set)"
+                "📡 (no points surface — rank/info live in the shipped set)"
             );
         }
     }
     out
+}
+
+/// The 🧬 corpus block: one row per manifest-numbered domain (emoji +
+/// colored count + a braille bar of its share of the compiled corpus),
+/// the unnumbered tail, and the leased-growth delta.
+fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
+    use std::fmt::Write as _;
+    writeln!(out, "🧬 corpus").ok();
+    let bar_w = 10usize;
+    for row in corpus_rows() {
+        #[allow(clippy::cast_precision_loss)]
+        let share = if row.total > 0 {
+            row.rules as f64 / row.total as f64
+        } else {
+            0.0
+        };
+        writeln!(
+            out,
+            "  {} {} {}",
+            row.emoji,
+            crate::kat_footer::colorize(&["36"], &format!("{:>4} {}", row.rules, row.label)),
+            crate::kat_footer::braille_bar(share, bar_w, crate::kat_footer::color_enabled()),
+        )
+        .ok();
+    }
+    writeln!(
+        out,
+        "  {} {}",
+        crate::kat_footer::colorize(&["2"], "· also compiled:"),
+        crate::kat_footer::colorize(
+            &["2"],
+            "docker · dist · shader (counts in the manifest lane)"
+        )
+    )
+    .ok();
+    if let Some(d) = growth.delta {
+        let (word, code) = if d > 0 { ("+", "32") } else { ("", "33") };
+        writeln!(
+            out,
+            "  {} {}",
+            crate::kat_footer::colorize(&[code], &format!("leased {word}{d}")),
+            crate::kat_footer::colorize(&["2"], "vs prev epoch (the trainer's growth)")
+        )
+        .ok();
+    }
+}
+
+/// One corpus row for the 🧬 block: emoji + count + label + the share
+/// denominator. Counts from the pins manifest (the ONE source of truth);
+/// docker/dist/shader are not manifest-numbered and ride the tail line.
+struct CorpusRow {
+    emoji: &'static str,
+    label: &'static str,
+    rules: usize,
+    total: usize,
+}
+
+#[must_use]
+fn corpus_rows() -> Vec<CorpusRow> {
+    // Same embedded manifest corpus_counts_line reads.
+    #[derive(serde::Deserialize)]
+    struct Manifest {
+        #[serde(default)]
+        clippy_lints: Option<Count>,
+        #[serde(default)]
+        rust_perf: Option<Count>,
+        #[serde(default)]
+        kernel_opt: Option<Count>,
+        #[serde(default)]
+        sec: Option<Count>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Count {
+        rules: u64,
+    }
+    let (clippy, perf, kernel, sec) =
+        match serde_json::from_str::<Manifest>(include_str!("../.benchmarks/pins_manifest.json")) {
+            Ok(m) => (
+                m.clippy_lints
+                    .map(|c| usize::try_from(c.rules).unwrap_or(0)),
+                m.rust_perf.map(|c| usize::try_from(c.rules).unwrap_or(0)),
+                m.kernel_opt.map(|c| usize::try_from(c.rules).unwrap_or(0)),
+                m.sec.map(|c| usize::try_from(c.rules).unwrap_or(0)),
+            ),
+            Err(_) => (None, None, None, None),
+        };
+    let sum = [clippy, perf, kernel, sec]
+        .into_iter()
+        .flatten()
+        .sum::<usize>();
+    let mut rows = Vec::new();
+    if let Some(n) = clippy {
+        rows.push(CorpusRow {
+            emoji: "📎",
+            label: "clippy",
+            rules: n,
+            total: sum,
+        });
+    }
+    if let Some(n) = perf {
+        rows.push(CorpusRow {
+            emoji: "⚡",
+            label: "perf",
+            rules: n,
+            total: sum,
+        });
+    }
+    if let Some(n) = kernel {
+        rows.push(CorpusRow {
+            emoji: "🧬",
+            label: "kernel",
+            rules: n,
+            total: sum,
+        });
+    }
+    if let Some(n) = sec {
+        rows.push(CorpusRow {
+            emoji: "🛡️",
+            label: "sec",
+            rules: n,
+            total: sum,
+        });
+    }
+    rows
 }
 
 #[cfg(test)]

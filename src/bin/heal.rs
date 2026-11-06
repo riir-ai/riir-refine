@@ -3218,11 +3218,7 @@ fn run_stats_verb(args: &Args) {
     let network = fixer_network_line();
     print!(
         "{}",
-        riir_refine::health_views::render_stats(
-            &root,
-            network.as_deref(),
-            &riir_refine::health_views::corpus_counts_line(),
-        )
+        riir_refine::health_views::render_stats(&root, network.as_deref())
     );
 }
 
