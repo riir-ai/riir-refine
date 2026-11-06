@@ -137,3 +137,19 @@ RIIR_KERNEL_PREGATE_SCOPE=1 RIIR_KERNEL_PREGATE_LINE_CAP=2 RIIR_KERNEL_PREGATE_Q
   query-mass attribution), Bench 125 (the instrument + floors), Issue 191 (the re-campaign
   sequence: T6-GPU ∧ the cost lane — the cost lane is NOW GREEN-MARGINAL), riir-neuron-db
   Issue 642 (the substrate lever's home).
+
+## PROMOTION (owner verdict, 2026-11-06) — this record's posture shipped
+
+Owner call, verbatim: "any gain no perf hurt must enabled by default, dont
+make good goat sad". The composed posture of this record
+(GATE+SCOPE+LINE_CAP=2+QUERY_TEXT_CAP=2048) ships as the IN-CODE DEFAULTS:
+`kernel_pregate` joined the crate's default features (implies `kernel_opt`)
+and the shipped release set (RELEASE_FEATURES + release.yml build/licenses +
+manual_release.sh, pinned in lockstep by the build_stamp tests). The three
+envs are DEMOTE-ONLY — the exact literal `0` restores each axis's
+pre-promotion behavior byte-identically; the other pinned literals (4;
+4096/1024) remain accepted tunings. The deterministic-lossy flip class of
+this record (109/664 rank-1 flips at TC2048, identical across sessions,
+census 462→538/1061 cited) is disclosed and accepted by the same call; the
+non-lossy complement stays riir-neuron-db Issue 642. Issue 208 closed on
+this verdict. Consuming session: zed-m3-kernel-promo, 2026-11-06.

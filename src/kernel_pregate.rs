@@ -15,10 +15,16 @@
 //! kill criterion. The needle set is therefore GPU-vocabulary-shaped, not
 //! import-exact: any hit signals the file.
 //!
-//! **Inert without the feature:** the module is always compiled (the unit
-//! tests run at default features), but [`KernelPlan::for_file`] returns
-//! [`KernelPlan::Off`] without scanning when `kernel_pregate` is off —
-//! byte-identical default posture, zero added cost. The wiring lives in
+//! **PROMOTED to default (owner call 2026-11-06, "any gain no perf hurt
+//! must enabled by default"):** `kernel_pregate` is a default feature
+//! (implies `kernel_opt`) — every scan auto-detects kernel-bearing files
+//! and the kernel domain joins the fan-out on signaling files only, at the
+//! Bench-137 posture (SCOPE + `LINE_CAP=2` + `QUERY_TEXT_CAP=2048` baked as
+//! the in-code defaults). The three envs are now DEMOTE-ONLY (the exact
+//! literal `0` restores that axis's pre-promotion behavior);
+//! `--no-default-features` still compiles the gate away (the tested
+//! flag-OFF posture), and the explicit `--domain kernel` bypass still
+//! wins. The wiring lives in
 //! `draft::latent_matcher::suggest_file_inner`; the scan path's per-span
 //! verdict rides one bool, every other domain untouched.
 
@@ -27,9 +33,10 @@
 /// lines. Widening it is a NEW pre-registration, never an in-place amendment.
 pub const SPAN_SCOPE_WINDOW_LINES: usize = 24;
 
-/// The scope-arm switch (Bench 131's GATE+SCOPE arm): promote-only env —
-/// arms on the exact literals `1`/`true`/`on` (the env-switch law), read
-/// once per process. Without it the feature arms the file-level GATE arm.
+/// The scope-arm switch (Bench 131's GATE+SCOPE arm). PROMOTED default-on
+/// 2026-11-06 (owner call — the Bench-137 posture ships as the default):
+/// unset = armed; the exact demote literal `0` restores the GATE-only
+/// incumbent byte-identically (env-switch law). Read once per process.
 const SCOPE_ENV: &str = "RIIR_KERNEL_PREGATE_SCOPE";
 
 /// The line-cap switch (Bench 134's CAP arms): promote-only env, the exact
@@ -137,42 +144,47 @@ pub fn span_in_scope(start_line: usize, end_line: usize, signal_lines: &[u32]) -
 
 fn scope_armed() -> bool {
     static ARMED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ARMED.get_or_init(|| matches!(std::env::var(SCOPE_ENV).as_deref(), Ok("1" | "true" | "on")))
+    *ARMED.get_or_init(|| match std::env::var(SCOPE_ENV).as_deref() {
+        // Demote literal only; unset AND junk both ride the promoted default
+        // (the arm is the default now — junk env is unset-equivalent, never a
+        // demote).
+        Ok("0") => false,
+        _ => true,
+    })
 }
 
-/// The per-span line-query cap (Bench 134, issue 208 T6): promote-only env
-/// `RIIR_KERNEL_PREGATE_LINE_CAP` — arms ONLY on the exact pinned literals
-/// `"4"` and `"2"` (any other value is unset-equivalent, never armed; the
-/// env-switch law). Read once per process. `None` = uncapped (the exact
-/// pre-cap behavior).
+/// The per-span line-query cap (Bench 134, issue 208 T6). PROMOTED
+/// default-on 2026-11-06 (owner call) at the Bench-137 measured value:
+/// unset/junk = `Some(2)`; the exact demote literal `0` restores the
+/// uncapped pre-cap behavior byte-identically; `4` remains an accepted
+/// tuning literal (the Bench-134 pin). Read once per process.
 #[must_use]
 pub fn line_cap() -> Option<usize> {
     static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
     *CAP.get_or_init(|| match std::env::var(LINE_CAP_ENV).as_deref() {
+        Ok("0") => None,
         Ok("4") => Some(4),
-        Ok("2") => Some(2),
-        _ => None,
+        _ => Some(2),
     })
 }
 
-/// The per-query TEXT budget (Bench 136, issue 208 T7): promote-only env
-/// `RIIR_KERNEL_PREGATE_QUERY_TEXT_CAP` — arms ONLY on the exact pinned
-/// literals `"4096"`, `"2048"` and `"1024"` (any other value is
-/// unset-equivalent, never armed; the env-switch law). Read once per
-/// process. When armed, EVERY query text in the kernel index's capped
-/// suggest path (the whole-span query AND every per-line query) is
-/// head-truncated to at most B bytes — the Bench-135 finding is that the
-/// residual G5 cost is query-COUNT-invariant, i.e. carried by the text mass
-/// of the whole-span query over giant spans. `None` = no truncation (the
-/// exact pre-cap behavior).
+/// The per-query TEXT budget (Bench 136, issue 208 T7). PROMOTED
+/// default-on 2026-11-06 (owner call) at the Bench-137 measured value:
+/// unset/junk = `Some(2048)`; the exact demote literal `0` restores the
+/// no-truncation pre-cap behavior byte-identically; `4096`/`1024` remain
+/// accepted tuning literals (the Bench-136 pins). When armed, EVERY query
+/// text in the kernel index's capped suggest path (the whole-span query
+/// AND every per-line query) is head-truncated to at most B bytes — the
+/// Bench-135 finding is that the residual G5 cost is query-COUNT-invariant,
+/// i.e. carried by the text mass of the whole-span query over giant spans.
 #[must_use]
 pub fn query_text_cap() -> Option<usize> {
     static CAP: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
     *CAP.get_or_init(|| match std::env::var(QUERY_TEXT_CAP_ENV).as_deref() {
+        Ok("0") => None,
         Ok("4096") => Some(4096),
-        Ok("2048") => Some(2048),
         Ok("1024") => Some(1024),
-        _ => None,
+        _ => Some(2048),
     })
 }
 

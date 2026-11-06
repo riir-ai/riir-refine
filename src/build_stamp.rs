@@ -92,6 +92,13 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // Issue 153 — a shipped binary without the update alert is exactly the
     // "old version with no notice" class this feature exists to end.
     "update_check",
+    // Issue 208 / Bench 137 — the kernel pregate PROMOTED to the shipped set
+    // (owner call 2026-11-06, "any gain no perf hurt must enabled by
+    // default"): every scan auto-detects kernel-bearing files and the kernel
+    // domain joins the fan-out there, at the measured composed posture.
+    // Implies kernel_opt — dep:regex enters the shipped license graph, so
+    // the licenses job names the feature for cargo-about too.
+    "kernel_pregate",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names

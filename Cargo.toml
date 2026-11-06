@@ -219,7 +219,16 @@ log = "0.4"
 ed25519-dalek = "2"
 
 [features]
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist"]
+# kernel_pregate joined default 2026-11-06 (owner call: "any gain no perf
+# hurt must enabled by default, dont make good goat sad") — the Bench-137
+# composed posture (GATE+SCOPE+LINE_CAP=2+QUERY_TEXT_CAP=2048) cleared the
+# G5-cost fence (added p95 4.685 ms ≤ 5.0, 1.07× headroom, confirmed alone;
+# utility floor 15/15 held at every arm). Implies kernel_opt: every scan
+# auto-detects kernel-bearing files (.wgsl always; .rs by the pinned needle
+# set) and the kernel domain joins the fan-out on signaling files only.
+# Demote envs: RIIR_KERNEL_PREGATE_SCOPE=0 / LINE_CAP=0 /
+# QUERY_TEXT_CAP=0 (each restores its pre-promotion axis byte-identically).
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate"]
 
 # Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
 # capability frontier (unsolved-before / solved-after / regression-green /
