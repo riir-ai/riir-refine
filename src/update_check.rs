@@ -299,7 +299,7 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
 /// detail/title fields stay in the cache (the machine-readable surface for
 /// future surfaces), they just never render here.
 /// Owner call 2026-11-06: the NEW version renders GREEN and the installed
-/// (old) version YELLOW — gated on the shared color gate (NO_COLOR / TERM
+/// (old) version YELLOW — gated on the shared color gate (`NO_COLOR` / TERM
 /// =dumb / stdout TTY), and the escape codes wrap the WHOLE tokens, never
 /// sit inside them, so grep/regex on `0.4.5` still matches the plain text.
 #[must_use]

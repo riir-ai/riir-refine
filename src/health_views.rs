@@ -530,9 +530,7 @@ pub fn corpus_growth(root: &Path) -> CorpusGrowth {
             let shape = overlay
                 .as_ref()
                 .and_then(|(_, o)| crate::kat_lease_client::corpus_shape_line(o));
-            let total = overlay
-                .map(|(_, o)| o.iter().map(|(_, v)| v.len()).sum::<usize>())
-                .unwrap_or(0);
+            let total = overlay.map_or(0, |(_, o)| o.iter().map(|(_, v)| v.len()).sum::<usize>());
             let prev = e
                 .checked_sub(1)
                 .and_then(|p| crate::kat_lease_client::overlay_from_epoch(&store, Some(p)));
@@ -542,7 +540,7 @@ pub fn corpus_growth(root: &Path) -> CorpusGrowth {
                     (
                         Some(total),
                         shape,
-                        Some(total as isize - ptotal as isize),
+                        Some(total.cast_signed() - ptotal.cast_signed()),
                         true,
                     )
                 }
