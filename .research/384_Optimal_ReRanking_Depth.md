@@ -1,6 +1,6 @@
 # Research 384 — Optimal Re-Ranking Depth (arXiv 2611.05908)
 
-**Status:** DISTILLED — **Gain** verdict, plan filed ([Plan 351](../.plans/351_adaptive_rerank_pool_depth.md)); pending Claude verdict round (recorded here on close)
+**Status:** DISTILLED — **Gain** verdict, plan filed ([Plan 351](../.plans/351_adaptive_rerank_pool_depth.md)); Claude verdict **AGREE** round 2/3 (delegated-owner reviewer path, session `37108d48`, fallback channel per the Issue-1115-arc precedent); landed as `58b8c356`
 
 ## Source
 
