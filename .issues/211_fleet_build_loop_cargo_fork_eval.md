@@ -1,6 +1,6 @@
-# Issue 211 — fleet build-loop lever: the huacnlee/cargo fork (owner-gated pilot)
+# Issue 211 — fleet build-loop lever: the huacnlee/cargo fork + blaze (owner-gated pilot)
 
-**Status:** OPEN — POC/eval; owner-gated (installs a third-party cargo fork on build rigs)
+**Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); first measured cells LANDED — [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md); the fleet-scale flip + the CARGO_TARGET_DIR hazard test remain owner-gated
 
 ## Source
 
@@ -93,3 +93,48 @@ Silicon, no pre-registered bar): 5 worktrees of a 525-crate workspace 33.6 GB �
 - No riir-refine code changes — the lever is fleet posture, not the rulewright.
 - Fork internals were NOT read line-by-line (README + commit surface + their
   bench pages only); re-clone at the pin before quoting implementation details.
+
+## Results — Bench 138 (2026-11-06, m3, side-by-side, system cargo untouched)
+
+Measured (full record: `.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md`;
+fork v0.102.0-9 sha256-verified, side-by-side at `~/.cargo/bin/cargo-hc`;
+sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
+
+- **Fork worktree amortization: REAL at dep-heavy scale.** seal-game-editor
+  (bevy tree): second-worktree gate **12.77 s vs 88.81 s plain (6.95×, 0.14× of
+  the pre-registered bar)**; second-worktree disk +425 MB vs +1.27 GB. Small
+  workspaces (riir-refine, riir-kat): only 0.75× — build.rs carve-outs keep
+  workspace units per-checkout; only deps share.
+- **Fork first-build tax: heavy.** bevy-scale first build 2.0× wall / 3.3× CPU
+  vs plain (anomaly, unexplained — reproduce before quoting). NET at N=2
+  worktrees the fork LOSES on wall and disk; **crossover at the 3rd worktree
+  per repo**, widening linearly after.
+- **sccache: NO wall gain** for the fixer posture (0 cross-project hits; thin
+  cacheable surface: bins/proc-macros/path deps; dep units key differently
+  across lockfiles). Its `CARGO_INCREMENTAL=0` half is a free 3× CPU cut on
+  gates — a build-hygiene posture note, not a tool adoption.
+- **The CARGO_TARGET_DIR hazard test is STILL OWED** before any default
+  adoption: reproduce the shared-target gate-invalidation on purpose and verify
+  the fork's fine-grained locking actually prevents that class (not just build
+  races). This remains the blocker for flipping the fork from side-by-side to
+  default on any rig.
+- Fork state on m3 after the bench (kept, disclosed): `cargo-hc` binary +
+  `~/.cargo/targets/` 3.59 GB (fork-GC-bounded, `rm -rf` resets).
+
+## Remaining tasks (this issue)
+
+- [ ] Owner call: adopt the fork on the ≥3-concurrent-worktree rigs (the
+      git-workflow ticket lanes — amo/bmo heavy-ticket work) vs keep
+      side-by-side. Decision input: Bench 138 + the fleet worktree-concurrency
+      census.
+- [ ] The CARGO_TARGET_DIR hazard reproduction test (blocking any default
+      adoption; issue §Conflicts 1).
+- [ ] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3): install its
+      own nightly toolchain + daemon on ONE box, measure edit→test-green on the
+      bevy loop (seal-remake/seal-game-editor), pre-registered bar ≥ 2× vs the
+      plain dev loop. NOT run in Bench 138 — separate session.
+- [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
+      reproduce isolated or file upstream.
+- [ ] Hygiene residue the fork surfaced: `cargo::unused_dependencies`
+      (riir-refine-fixer) + `package.homepage` redundant with `repository`
+      (riir-neuron-db) — fold into the next hygiene sweep, not this issue.
