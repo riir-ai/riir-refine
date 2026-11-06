@@ -120,14 +120,16 @@ fn write_token(path: &Path, token: &str) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    /// A unique scratch dir per CALL: pid (other processes) + a process-wide
+    /// counter (sibling tests in this binary). The previous pid + wall-clock
+    /// nanos key collided on macOS (µs clock resolution — two parallel tests
+    /// shared one dir and one rewrote the other's store mid-assert).
     fn tmp_dir() -> PathBuf {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let dir = std::env::temp_dir().join(format!(
             "refine_client_id_{}_{}",
             std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_nanos()
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
