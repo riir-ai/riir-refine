@@ -1,7 +1,7 @@
 # Issue 210 — cargo refine docs sweep: teach the `fix` verb + bare dry run (one way per action)
 
 **Status:** OPEN — parse-tests + follow-up verbs LANDED 2026-11-06 (zed-m3-idle210); the mine/unmine surface REMOVED same day (GAP 10 extension). Remaining: seal-remake AGENTS.md re-sweep (blocked on sibling WIP), the --fix flag hard-removal revisit (owner-gated DEFERRED). — owner UX law 2026-11-06 (one way per action, Claude verdict AGREE `72d8f279`): fix = `cargo refine fix <paths>` (writes + compile-gates on release builds; `--no-verify` opts out; `--verify-args "--features <set>"` for gated code), dry run = bare `cargo refine` (no heal-mode dry flag; `--dry-run` belongs to `get`/`send`/`wetrun`).
-**Claimed:** zed-m3-idle210 (m3 idle lane), epoch=1793954917, expires 2026-11-08T08:48:37+00:00
+**Lease closed:** zed-m3-idle210, 1793954917 — the claimed scope (parse-tests + follow-up verbs) landed 2026-11-06; provenance and residue in the Status row above.
 
 ## Landed already (the source of truth)
 
