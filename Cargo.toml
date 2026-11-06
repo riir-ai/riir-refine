@@ -377,7 +377,9 @@ coverage_gap_event = ["katgpt-core/coverage_manifest", "clippy_lints"]
 # precedent).
 set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 
-# katgpt-rs Issue 975 T5(c) consumer (Issue 190): the evidence-damped Elo
+# katgpt-rs Issue 975 T5(c) consumer (landed `280f15766`; its commit said
+# "issue 190", a double-allocated number — riir-refine Issue 190 is the
+# Mozilla-grant/charitable item, not this): the evidence-damped Elo
 # schedule on the batch rating replay — `elo_k_eff = K·min(1, n/n_floor)`,
 # n the per-rule outcome count in canonical order, n_floor the regime
 # monitor's own warmup (one evidence notion across the lane) — plus the
@@ -892,7 +894,11 @@ ternary_inference = ["dep:riir-infer-core", "dep:riir-infer-gpu"]
 # DEFAULT-ON since Issue 018 (promotion with graceful oracle degradation): the
 # memory half runs wherever fixes are applied + persists across runs; the EMA
 # learning half no-ops with one log line when the clippy_verify oracle is
-# unavailable. The modules are UNCONDITIONAL — this flag is a back-compat alias
+# unavailable. ⚠ The SHIPPED release set (src/build_stamp.rs RELEASE_FEATURES)
+# does NOT carry clippy_verify, so in the released binary the EMA learning
+# half is INERT by design — only the memory half runs (`cargo refine`'s
+# trainer health view prints `learning half: memory-only`).
+# The modules are UNCONDITIONAL — this flag is a back-compat alias
 # so the benches'/examples' required-features lists keep resolving; a build
 # with --no-default-features still gets the full layer.
 # Validated: G1-G5 PASS (Issue 004) + G6/G7 real cargo clippy PASS (Issue 008):
