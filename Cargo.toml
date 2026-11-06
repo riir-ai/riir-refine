@@ -269,9 +269,13 @@ rust_perf_verify = ["rust_perf"]
 rust_perf_bench = ["rust_perf"]
 
 # Phase 3: GPU kernel optimization healing domain (absorbs Proposal 012).
-# Opt-in (default-off). 4090 LoRA (L4) deferred to riir-train. Not promoted
-# to default until a domain-specific GOAT (real corpus + full numeric
-# validator) passes.
+# DEFAULT-ON since 2026-11-06 via `kernel_pregate` (implied, not listed in
+# `default` directly — scan-first: the pregate scopes the fan-out to
+# kernel-bearing files, so the default scan pays no latency on the rest).
+# Issue 191 GOAT gate (closed): G1 248 green / 0 FAIL (Issue 193 repairs),
+# G2 GPU-host median 1.3774 ≥ 1.06 (Bench 135), G3 byte-stable, G4
+# structural, G5 utility 15/15 + cost cleared under the pregate posture
+# (Bench 137). 4090 LoRA (L4) stays riir-train's.
 # Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
 # expert router (`pick_domain`, Plan 558). Also gates `dep:regex` for the
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
