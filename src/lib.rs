@@ -55,6 +55,7 @@
 #![warn(clippy::all, clippy::pedantic)]
 
 // ── The offline gate (Plan 325 T2 — ungated: every build honors the env)
+pub mod health_views;
 pub mod offline;
 
 // ── The machine-local settings file (Plan 342 — ungated: every build owns

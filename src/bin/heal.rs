@@ -37,17 +37,17 @@
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
-use riir_refine::EvolveRecorder;
 use riir_refine::domains::clippy_lints::lint_level::{
-    ALLOW_BY_DEFAULT_GROUPS, LevelResolver, gated_lints,
+    gated_lints, LevelResolver, ALLOW_BY_DEFAULT_GROUPS,
 };
 use riir_refine::domains::clippy_lints::proposers::FIXABLE_LINTS;
 use riir_refine::domains::rust_perf::proposers::{FIXABLE_RULES, NOT_BENCHABLE_FIXABLE};
 use riir_refine::draft::span_source::collect_source_files;
 use riir_refine::draft::{
-    ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion, parse_clippy_feed, paths_ref_match,
+    parse_clippy_feed, paths_ref_match, ClippyDiagnostic, DomainId, LatentMatcher, SpanSuggestion,
 };
 use riir_refine::edit_emitter::RuleEdit;
+use riir_refine::EvolveRecorder;
 
 /// `cargo refine --info` — the one-command stats view (the 2026-09-17 owner
 /// ask): account + consents, wallet, staking, this machine's mining queue
@@ -208,6 +208,14 @@ enum KatCommand {
     /// identities only; anonymous callers get local stats + the named
     /// anti-Sybil reason).
     Rank,
+    /// The fixer lane's read-only health view (`cargo refine fixer`) —
+    /// posture + corpus counts + the local campaign history + the network
+    /// aggregate. Ungated (local halves run in every build).
+    Fixer,
+    /// The trainer lane's read-only health view (`cargo refine trainer`) —
+    /// learning/memory halves, the corpus-lease epoch, the opt-out state.
+    /// Ungated like `fixer`.
+    Trainer,
     /// Plan 325 T5: `info` — the contribution network's aggregate (top
     /// domains, counts only — never repo content).
     PointsInfo,
@@ -1756,7 +1764,7 @@ fn run_kat_login(import_key: Option<&Path>, provider: Option<&str>, totp_code: O
 #[cfg(feature = "kat_transport")]
 fn run_kat_keys(words: &[String]) {
     use riir_refine::kat_account::KatAccount;
-    use riir_refine::kat_keyset_client::{self as ks, JoinRequest, http};
+    use riir_refine::kat_keyset_client::{self as ks, http, JoinRequest};
 
     let fail = |msg: String| -> ! {
         eprintln!("account keys: {msg}");
@@ -1858,7 +1866,7 @@ fn run_kat_keys(words: &[String]) {
 #[cfg(feature = "kat_service")]
 fn run_kat_genesis(words: &[String]) {
     use riir_refine::kat_genesis_client as gc;
-    use riir_refine::kat_protocol_genesis::{GenesisStatus, import_digest};
+    use riir_refine::kat_protocol_genesis::{import_digest, GenesisStatus};
     use riir_refine::kat_protocol_lease::hex32;
 
     let fail = |msg: String| -> ! {
@@ -2278,8 +2286,8 @@ fn prompt_factor(prompt: &str) -> Option<String> {
 #[cfg(feature = "kat_transport")]
 fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
     use riir_kat::kat_recovery_client::{
-        BindRequest, HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure, bind_flow,
-        compose_numeric_claim, github_device_login, nonce_flow,
+        bind_flow, compose_numeric_claim, github_device_login, nonce_flow, BindRequest,
+        HttpRecoveryTransport, ProviderBindResponse, RecoveryFailure,
     };
 
     debug_assert_eq!(provider, "github", "the parse arm gates the vocabulary");
@@ -2467,7 +2475,7 @@ fn run_kat_login_provider(provider: &str, totp_code: Option<&str>) {
 /// answer, and to the local projection when the service is unreadable.
 #[cfg(feature = "kat_service")]
 fn run_kat_account(paths: &[PathBuf], show_history: bool) {
-    use riir_refine::kat_account::{KatAccount, history_lines};
+    use riir_refine::kat_account::{history_lines, KatAccount};
     use riir_refine::kat_meter::ChargeState;
 
     let dir = KatAccount::default_dir();
@@ -2767,7 +2775,7 @@ fn run_kat_account(paths: &[PathBuf], show_history: bool) {
 #[cfg(feature = "kat_transport")]
 fn run_kat_update() {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
@@ -3130,6 +3138,93 @@ fn run_points_info() {
     }
 }
 
+/// The network aggregate as ONE line for the `fixer` view (None when this
+/// build has no points surface). Offline degrades loudly; a transport error
+/// degrades to its typed line — the local halves are the point of the verb.
+#[cfg(feature = "points")]
+fn fixer_network_line() -> Option<String> {
+    if riir_refine::offline::offline() {
+        return Some("offline (cargo refine online restores rank/info)".to_string());
+    }
+    let transport = riir_refine::points_client::UreqPointsTransport::new(
+        riir_refine::points_client::POINTS_TIMEOUT_SECS,
+    );
+    let client = riir_refine::points_client::PointsClient::new(&transport);
+    match client.info() {
+        Ok(response) => {
+            let rendered = riir_refine::points_client::render_info(&response);
+            let head = rendered.lines().next().unwrap_or("");
+            Some(head.to_string())
+        }
+        Err(e) => Some(e.line()),
+    }
+}
+
+#[cfg(not(feature = "points"))]
+fn fixer_network_line() -> Option<String> {
+    None
+}
+
+/// Count the queued authoring rows under `<root>/.refine/misses/` (files,
+/// recursive — the queues are plain files). Missing dir = 0.
+#[must_use]
+fn count_misses(root: &std::path::Path) -> usize {
+    let dir = root.join(".refine").join("misses");
+    let mut n = 0usize;
+    let mut stack = vec![dir];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for e in rd.flatten() {
+            match e.file_type() {
+                Ok(t) if t.is_dir() => stack.push(e.path()),
+                Ok(t) if t.is_file() => n += 1,
+                _ => {}
+            }
+        }
+    }
+    n
+}
+
+/// `cargo refine fixer` — the fixer lane's health view (read-only).
+fn run_fixer_verb(args: &Args) {
+    let root = resolve_heal_root(&args.paths);
+    let (campaigns, findings, kept, reverted, last) =
+        riir_refine::health_views::fixer_history(&root);
+    let network = fixer_network_line();
+    let view = riir_refine::health_views::FixerView {
+        version_lines: &riir_refine::build_stamp::version_lines(),
+        corpus_line: &riir_refine::health_views::corpus_counts_line(),
+        campaigns,
+        findings,
+        kept,
+        reverted,
+        last: last.as_ref(),
+        misses: count_misses(&root),
+        network_line: network.as_deref(),
+    };
+    print!("{}", riir_refine::health_views::render_fixer(&view));
+}
+
+/// `cargo refine trainer` — the trainer (self-evolve) lane's health view
+/// (read-only, fully offline — the store and the lease cache are local).
+fn run_trainer_verb() {
+    let root = resolve_heal_root(&[]);
+    let memory = riir_refine::health_views::trainer_memory(&root);
+    let epoch = riir_refine::health_views::lease_epoch(&root);
+    let env_optout = std::env::var("RIIR_REFINE_SELF_EVOLVE").is_ok_and(|v| v == "0");
+    print!(
+        "{}",
+        riir_refine::health_views::render_trainer(
+            riir_refine::health_views::learning_enabled(),
+            &memory,
+            epoch,
+            env_optout,
+        )
+    );
+}
+
 /// `cargo refine corpus` — corpus info + the update offer (points-free:
 /// corpus freshness is a public good). The KAT charge line NEVER appears —
 /// this verb does not touch the lease/charge machinery at all. Issue 203:
@@ -3400,7 +3495,7 @@ fn maybe_auto_corpus() {
     #[cfg(feature = "kat_transport")]
     {
         use riir_refine::kat_lease_client::{
-            HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+            run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
         };
         let url = command_service_url();
         let store = LeaseStore::open_net(&root, &url);
@@ -3608,7 +3703,7 @@ fn print_no_policy_remedy(
 #[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 fn run_kat_sync_export(target: &Path) {
     use riir_refine::kat_redact::SpanOrigin;
-    use riir_refine::kat_sync_payload::{SyncPayloadBuilder, ephemeral_signer};
+    use riir_refine::kat_sync_payload::{ephemeral_signer, SyncPayloadBuilder};
 
     let root = resolve_heal_root(&[]);
     let Some((rows, loaded)) = load_mining_rows(&root, true, "export") else {
@@ -3676,7 +3771,7 @@ fn push_mining_batch(
     url: &str,
     transport: &riir_refine::kat_lease_client::HttpLeaseTransport,
 ) -> MinePush {
-    use riir_refine::kat_lease_client::{LeaseTransport, queue_outbox};
+    use riir_refine::kat_lease_client::{queue_outbox, LeaseTransport};
     use riir_refine::kat_redact::SpanOrigin;
     use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 
@@ -4296,7 +4391,7 @@ fn adopt_oracle_facts(_url: &str) -> (riir_refine::kat_adopt::HostFacts, Option<
 #[cfg(all(feature = "kat_transport", feature = "latent_retrieval"))]
 fn run_kat_sync() {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseCharge, LeaseStore, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseCharge, LeaseStore,
     };
 
     let root = resolve_heal_root(&[]);
@@ -4406,7 +4501,7 @@ fn run_kat_sync() {
 /// mint (G9d — client counts never mint or spend).
 #[cfg(feature = "kat_service")]
 fn run_kat_claim(sig: Option<&str>) {
-    use riir_refine::kat_lease_client::{CLAIM_VERSION, ClaimRequest, queue_claim};
+    use riir_refine::kat_lease_client::{queue_claim, ClaimRequest, CLAIM_VERSION};
 
     let Some(sig) = sig else {
         eprintln!("claim: --tx <signature> is required (the Solana transaction signature)");
@@ -5072,7 +5167,7 @@ fn run_kat_migrate(
             // printed prefilled URL (the worker holds no write credential).
             if let Some(draft) = ack.proposal_draft.as_ref() {
                 use riir_refine::kat_migrate_client::{
-                    DraftOpen, open_proposal_draft, render_draft_instructions,
+                    open_proposal_draft, render_draft_instructions, DraftOpen,
                 };
                 match open_proposal_draft(draft) {
                     DraftOpen::Opened(issue_url) => println!(
@@ -5144,10 +5239,10 @@ fn run_migrate_normal(
     github_token_flag: Option<String>,
     totp_code: Option<&str>,
 ) {
-    use riir_kat::kat_recovery_client::{CLIENT_ID_ENV, HttpRecoveryTransport, ssh_picker};
+    use riir_kat::kat_recovery_client::{ssh_picker, HttpRecoveryTransport, CLIENT_ID_ENV};
     use riir_refine::kat_migrate_normal::{
-        LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg, UreqKeysBodySource,
-        run_normal_migration,
+        run_normal_migration, LoginProof, NormalMigrateDeps, NormalMigrateInput, ProviderLeg,
+        UreqKeysBodySource,
     };
     use std::io::{BufRead as _, IsTerminal as _, Write as _};
 
@@ -6688,7 +6783,7 @@ pub fn show(p: &P) -> String {
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
     fn scored_cycle(&mut self) -> Result<(u32, i64), String> {
-        use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, collect_edits};
+        use riir_refine::domains::clippy_lints::proposers::{collect_edits, FIXABLE_LINTS};
         use riir_refine::edit_emitter::apply_edits;
         use riir_refine::kat_meter::{KatCharge, KatMeter};
 
@@ -6920,7 +7015,7 @@ fn run_kat_corpus_pr(
     submit: bool,
     root: &std::path::Path,
 ) {
-    use riir_refine::kat_corpus_pr::{CorpusPrArgs, HttpCorpusPrWire, run_corpus_pr};
+    use riir_refine::kat_corpus_pr::{run_corpus_pr, CorpusPrArgs, HttpCorpusPrWire};
 
     let args = CorpusPrArgs {
         src: src.unwrap_or_default().to_string(),
@@ -6956,10 +7051,10 @@ fn run_kat_corpus_pr(
 fn run_kat_replay() {
     use riir_kat::kat_protocol_replay::ReplayOutcomeWire;
     use riir_refine::kat_replay::{
-        ReplayVerdict, judge_item, toolchain_display, toolchain_fingerprint,
+        judge_item, toolchain_display, toolchain_fingerprint, ReplayVerdict,
     };
     use riir_refine::kat_replay_client::{
-        HttpReplayTransport, accept_line, request_lease, submit_verdict, unhex32,
+        accept_line, request_lease, submit_verdict, unhex32, HttpReplayTransport,
     };
 
     // 1. Kill switch (the RIIR_REFINE_KAT_METER idiom: exactly "0" disables).
@@ -9733,7 +9828,9 @@ fn parse_args() -> Args {
             "suggest" if args.paths.is_empty() && !args.suggest && args.command.is_none() => {
                 args.suggest = true;
             }
-            "fix-compile" if args.paths.is_empty() && !args.fix_compile && args.command.is_none() => {
+            "fix-compile"
+                if args.paths.is_empty() && !args.fix_compile && args.command.is_none() =>
+            {
                 args.fix_compile = true;
             }
             // Plan 325 T4/T5 (issue 192): the public-goods points verbs —
@@ -9741,7 +9838,7 @@ fn parse_args() -> Args {
             // (never kat_service). `left` parses as the hidden alias of
             // `leave` (the owner's word kept, the ship verb is leave);
             // `version` is an alias of --version (set here, no variant).
-            "join" | "leave" | "left" | "rank" | "info" | "corpus"
+            "join" | "leave" | "left" | "rank" | "info" | "corpus" | "fixer" | "trainer"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -9750,6 +9847,10 @@ fn parse_args() -> Args {
                     "rank" => KatCommand::Rank,
                     "info" => KatCommand::PointsInfo,
                     "corpus" => KatCommand::Corpus,
+                    // The lane health views (read-only local, the network
+                    // line points-gated inside the runner).
+                    "fixer" => KatCommand::Fixer,
+                    "trainer" => KatCommand::Trainer,
                     _ => unreachable!("the guard arm names exactly these words"),
                 });
                 if arg == "left" {
@@ -11827,7 +11928,7 @@ fn finish_score_bench(
 #[cfg(all(feature = "score_bench", feature = "rustc_errors"))]
 fn run_score_bench_compile() {
     use riir_refine::domains::rustc_errors::composite;
-    use riir_refine::domains::rustc_errors::corpus_gen::{Territory, territory_of};
+    use riir_refine::domains::rustc_errors::corpus_gen::{territory_of, Territory};
     use riir_refine::score_bench as sb;
     use std::collections::BTreeMap;
 
@@ -12015,7 +12116,7 @@ fn run_score_bench_perf() {
         .into_iter()
         // fn(&str) over String items — the closure adapts (a bare fn path
         // here failed E0631 on this score_bench-only lane, pre-existing).
-        .filter(|r| sb::generations::v5_is_removal_rule(r))
+        .filter(sb::generations::v5_is_removal_rule)
         .collect();
 
     let mut members_total = 0usize;
@@ -13663,6 +13764,22 @@ fn main() {
     #[cfg(not(feature = "points"))]
     if args.command == Some(KatCommand::Config) && args.config_reset_client_id {
         riir_refine::build_stamp::refuse("config reset-client-id", &["points"]);
+    }
+
+    // ── the lane health views (`fixer` / `trainer`) — read-only local
+    // halves in EVERY build (they read files the default build writes); the
+    // network line inside is points-gated. Same early-dispatch shape as the
+    // Plan 342 local verbs.
+    if matches!(
+        args.command,
+        Some(KatCommand::Fixer) | Some(KatCommand::Trainer)
+    ) {
+        match args.command {
+            Some(KatCommand::Fixer) => run_fixer_verb(&args),
+            Some(KatCommand::Trainer) => run_trainer_verb(),
+            _ => unreachable!("the matches! guard names exactly these two"),
+        }
+        return;
     }
 
     // ── Plan 325 T4/T5: the points verbs — dispatched BEFORE the
@@ -16766,11 +16883,11 @@ fn main() {
             let (run_perf, run_clippy, run_sec) = fix_domain_scopes(args.domain);
             #[cfg(not(feature = "sec"))]
             let _ = run_sec; // only consumed under the `sec` feature
-            // The bench-target guard (2026-09-16 intake, P30): applying a
-            // perf rule to a bench target changes WHAT the bench measures —
-            // `--verify` proves compilation, never measurement validity,
-            // and a bench file's numbers ARE its artifact. Decline loudly,
-            // never silently; the operator can still apply manually.
+                             // The bench-target guard (2026-09-16 intake, P30): applying a
+                             // perf rule to a bench target changes WHAT the bench measures —
+                             // `--verify` proves compilation, never measurement validity,
+                             // and a bench file's numbers ARE its artifact. Decline loudly,
+                             // never silently; the operator can still apply manually.
             let bench_guard = run_perf && bench_target;
             // P39 (post-mining intake, 2026-09-25): under --repo-posture the
             // rust_perf lane is exempt from the posture MECHANISM (the
@@ -19598,7 +19715,7 @@ fn run_dist_lane(paths: &[PathBuf]) -> usize {
 #[cfg(feature = "docker")]
 fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> usize {
     use riir_refine::domains::docker::proposers::fix_all;
-    use riir_refine::domains::docker::rules::{FIXABLE_DOCKER, scan_source_with};
+    use riir_refine::domains::docker::rules::{scan_source_with, FIXABLE_DOCKER};
 
     let mut printed = 0usize;
     for path in paths {
@@ -19657,8 +19774,8 @@ fn run_docker_lane(paths: &[PathBuf], suggest: bool, fix: bool, write: bool) -> 
 /// (degrades to Tier-0 with ONE line — the Issue 018 oracle-split).
 #[cfg(feature = "shader_perf")]
 fn run_shader_lane(paths: &[PathBuf], suggest: bool, fix_write: bool) -> usize {
+    use riir_refine::domains::shader_perf::proposers::{collect_all_edits, FIXABLE_SHADER};
     use riir_refine::domains::shader_perf::ShaderScanner;
-    use riir_refine::domains::shader_perf::proposers::{FIXABLE_SHADER, collect_all_edits};
 
     let mut printed = 0usize;
     for path in paths {
@@ -19809,7 +19926,7 @@ fn run_overlay_with_promotion(
     pin: Option<u64>,
     heal_root: &std::path::Path,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
-    use riir_refine::kat_promotion::{PromotionRegistry, REGISTRY_FILE, promotion_run_overlay};
+    use riir_refine::kat_promotion::{promotion_run_overlay, PromotionRegistry, REGISTRY_FILE};
 
     let leased = lease_overlay_for_run(store, pin);
     let registry_path = heal_root.join(REGISTRY_FILE);
@@ -19870,8 +19987,8 @@ fn lease_overlay_for_run(
     pin: Option<u64>,
 ) -> Option<(u64, Vec<(DomainId, Vec<(String, String, String)>)>)> {
     use riir_refine::kat_lease_client::{
-        PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER, PACK_DOMAIN_KERNEL,
-        PACK_DOMAIN_PERF, PACK_DOMAIN_SEC, overlay_from_epoch,
+        overlay_from_epoch, PACK_DOMAIN_CLIPPY, PACK_DOMAIN_DIST, PACK_DOMAIN_DOCKER,
+        PACK_DOMAIN_KERNEL, PACK_DOMAIN_PERF, PACK_DOMAIN_SEC,
     };
     let (epoch, raw) = overlay_from_epoch(store, pin)?;
     let mut overlay = Vec::new();
@@ -20180,7 +20297,7 @@ fn run_reheat_pass(
     active_set: &riir_refine::active_set::ActiveSet,
 ) -> Option<(riir_refine::kat_lease_client::ReheatReport, Option<String>)> {
     use riir_refine::kat_lease_client::{
-        HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans, run_update_phase,
+        run_update_phase, HttpLeaseTransport, LeaseManifest, LeaseReadTransport as _, PassSpans,
     };
 
     // One bounded lease check: did a new epoch land?
@@ -20546,7 +20663,7 @@ mod fix_domain_tests {
 #[cfg(test)]
 mod corpus_stats_needle_tests {
     use super::{
-        CORPUS_DOMAIN_TABLE, count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count,
+        count_corpus_domain, resolve_corpus_repo_root, runtime_corpus_count, CORPUS_DOMAIN_TABLE,
     };
 
     #[test]
@@ -20603,7 +20720,7 @@ mod corpus_stats_needle_tests {
 /// this task closed) fails here instead of in a user's shell.
 #[cfg(test)]
 mod mode_flag_tests {
-    use super::{Args, validate_mode_flags as v};
+    use super::{validate_mode_flags as v, Args};
 
     /// The --misses regression pin: the 2026-09-08 just-works bare default
     /// fired under EVERY standalone mode (only the four primary modes were
