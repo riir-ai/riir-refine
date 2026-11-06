@@ -2,6 +2,10 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-06 — Issue 212 CLOSED + removed: `ruliology_search` promoted to default; `sec` + `shader_perf` FAIL the G5 cost leg and stay opt-in (Bench 140)
+
+T1 `5f985649` (generic `scripts/g5_domain_cost.sh` + shared `g5_cost_math.py`, `kernel_goat_g5` stamps `compiled_features`, G3 arm takes a feature), T5 `76b6af81` (elo_k_eff comment re-pointed to `280f15766`; shipped-binary inert EMA learning half disclosed), T2–T4 `615744da`: sec added p50 1.95–2.16 / p95 9.18–10.31 ms per file, shader_perf p50 1.10–1.28 / p95 5.30–5.92 (ceilings 1.0/5.0, all 3 interleaved rounds FAIL; G3 byte-stable both) — axis: the domain corpus joins every `.rs` span's matcher fan-out (lever: a pregate/scope, `.wgsl`-only for shader). Measured on amo under load (bmo offline, preflight REFUSED — disclosed in Bench 140); a quiet-rig re-run is the open confirmation if a scoping lever is attempted.
+
 ## 2026-11-06 — Issue 210 CLOSED + removed: the `fix`-verb docs sweep is workspace-complete; `--fix` stays a quiet alias (no hard removal)
 
 The last rows landed: seal-remake `8fec50de` (was blocked on sibling WIP — landed from a clean develop worktree, the sibling branch untouched) + three repos the original list missed, found by the closing workspace grep: riir-ledger `f4f5bfa`, riir-llm `b1ccdb3`, riir-mmorpg-examples `d0631a2`. Re-grep: zero AGENTS.md rows teach `cargo refine --fix` (only `*-i172` scratch worktrees + dated records). The deferred `--fix` hard-removal (owner-gated #OwnerGate 1) is DECLINED, not deferred: the removal buys nothing (the flag is already untaught, the parser alias costs one arm) and breaks every pinned script/muscle memory — `--fix` stays a permanent quiet alias. Session: katgpt-rs-18.
