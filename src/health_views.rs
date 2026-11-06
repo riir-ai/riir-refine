@@ -96,12 +96,16 @@ pub struct CampaignSummary {
     pub kept_edits: usize,
     pub reverted: usize,
     pub verify_ran: bool,
-    pub paths_head: Option<String>,
+    /// Citations in the compiled clippy fix set (the fix-rate denominator).
+    pub fixable_clippy: usize,
 }
 
 /// Load the blueprint campaign history (newest last) and summarize the
 /// fleet: total campaigns, lifetime outcomes, and the last campaign's row.
 /// Missing file = an empty history (an honest zero, never an error).
+/// Returns the lifetime sums INCLUDING the per-campaign fixable-citation
+/// denominator (the compiled clippy fix set — the honest fix-rate axis;
+/// suggest-only domains are citations, not fixable failures).
 #[must_use]
 pub fn fixer_history(root: &Path) -> (usize, usize, usize, usize, Option<CampaignSummary>) {
     let path = root.join(".refine").join("blueprint_history.jsonl");
@@ -123,9 +127,27 @@ pub fn fixer_history(root: &Path) -> (usize, usize, usize, usize, Option<Campaig
         kept_edits: r.outcomes.kept_edits,
         reverted: r.outcomes.reverted,
         verify_ran: r.outcomes.verify_ran,
-        paths_head: None,
+        fixable_clippy: r.findings.fixable_clippy,
     });
     (campaigns, findings, kept, reverted, summary)
+}
+
+/// The lifetime fix-rate arithmetic over the history file: kept edits vs
+/// the compiled clippy fix-set citations (the run's own "~N% fixable"
+/// denominator). `None` when the denominator is zero (no campaigns or an
+/// all-suggest-only history) — never a fake 0%.
+#[must_use]
+pub fn fixer_rate(root: &Path) -> Option<(usize, usize, u64, u64)> {
+    let path = root.join(".refine").join("blueprint_history.jsonl");
+    let (rows, _bad) = crate::blueprint::load_rows(&path);
+    let kept: usize = rows.iter().map(|r| r.outcomes.kept_edits).sum();
+    let fixable: usize = rows.iter().map(|r| r.findings.fixable_clippy).sum();
+    if fixable == 0 {
+        return None;
+    }
+    let rate = (kept as u64) * 100 / fixable as u64;
+    let unfixed = 100u64.saturating_sub(rate);
+    Some((kept, fixable, rate, unfixed))
 }
 
 /// The trainer's memory-half facts, read WITHOUT opening the encrypted
@@ -189,25 +211,65 @@ pub fn trainer_memory(root: &Path) -> TrainerMemory {
     }
 }
 
-/// The corpus-lease epoch the machine has cached (the trained corpus the
-/// fixer cites). Offline-safe: reads the local store only, through the SAME
-/// net-partitioned resolution `update` installs under (the stamp placement
-/// law — `.refine/net/<host>/corpus-lease`). Gated to the feature sets
-/// that carry the lease client; the slim posture prints the honest None.
-#[cfg(any(feature = "kat_service", feature = "points"))]
-#[must_use]
-pub fn lease_epoch(root: &Path) -> Option<u64> {
-    let url = crate::points_lease::resolved_lease_url();
-    let store = crate::kat_lease_client::LeaseStore::open_net(root, &url);
-    store.current_epoch()
+/// The corpus-lease store this machine has cached (the trainer's OUTPUT —
+/// the trained rules the network ships each epoch). Offline-safe, read-only.
+/// Gated to the feature sets that carry the lease client; the slim posture
+/// prints the honest zero.
+/// The trainer's OUTPUT — the leased corpus this machine has installed.
+/// `epochs_installed` counts the manifests on disk (how many training
+/// upgrades this machine took); `shape_line` is the current epoch's rule
+/// census (the same line `update` prints). Both read-only, offline-safe.
+pub struct TrainerCorpus {
+    pub epoch: Option<u64>,
+    pub shape_line: Option<String>,
+    pub epochs_installed: usize,
+    pub oldest_epoch: Option<u64>,
+    pub newest_epoch: Option<u64>,
 }
 
-/// The slim (no-points, no-kat_service) posture: no lease surface, the
-/// honest None.
+#[cfg(any(feature = "kat_service", feature = "points"))]
+#[must_use]
+pub fn trainer_corpus(root: &Path) -> TrainerCorpus {
+    let url = crate::points_lease::resolved_lease_url();
+    let store = crate::kat_lease_client::LeaseStore::open_net(root, &url);
+    let mut epochs: Vec<u64> = Vec::new();
+    let man = store.dir().join("man");
+    if let Ok(rd) = std::fs::read_dir(&man) {
+        for e in rd.flatten() {
+            let name = e.file_name().to_string_lossy().to_string();
+            if let Some(stem) = name.strip_suffix(".bin") {
+                if let Ok(n) = stem.parse::<u64>() {
+                    epochs.push(n);
+                }
+            }
+        }
+    }
+    epochs.sort_unstable();
+    let epoch = store.current_epoch();
+    let shape = store
+        .current()
+        .and_then(|_| crate::kat_lease_client::overlay_from_epoch(&store, None))
+        .and_then(|(_, overlay)| crate::kat_lease_client::corpus_shape_line(&overlay));
+    TrainerCorpus {
+        epoch,
+        shape_line: shape,
+        epochs_installed: epochs.len(),
+        oldest_epoch: epochs.first().copied(),
+        newest_epoch: epochs.last().copied(),
+    }
+}
+
+/// The slim posture: no lease surface.
 #[cfg(not(any(feature = "kat_service", feature = "points")))]
 #[must_use]
-pub fn lease_epoch(_root: &Path) -> Option<u64> {
-    None
+pub fn trainer_corpus(_root: &Path) -> TrainerCorpus {
+    TrainerCorpus {
+        epoch: None,
+        shape_line: None,
+        epochs_installed: 0,
+        oldest_epoch: None,
+        newest_epoch: None,
+    }
 }
 
 /// The learning half's posture: TRUE when the binary carries the
@@ -230,6 +292,9 @@ pub struct FixerView<'a> {
     pub last: Option<&'a CampaignSummary>,
     pub misses: usize,
     pub network_line: Option<&'a str>,
+    /// Lifetime (kept, fixable, rate%, unfixed%) over the clippy fix-set
+    /// axis; `None` = no measurable denominator yet.
+    pub rate: Option<(usize, usize, u64, u64)>,
 }
 
 /// Render the fixer view. `network_line` is the points aggregate (or the
@@ -247,6 +312,7 @@ pub fn render_fixer(view: &FixerView<'_>) -> String {
         last,
         misses,
         network_line,
+        rate,
     } = view;
     let mut out = String::new();
     let _ = writeln!(out, "fixer lane — the local heal surface");
@@ -265,15 +331,37 @@ pub fn render_fixer(view: &FixerView<'_>) -> String {
         out,
         "  history: {campaigns} fix campaign(s) · {findings} finding(s) cited · {kept} edit(s) kept · {reverted} reverted"
     );
+    match rate {
+        Some((k, f, pct, unfixed)) => {
+            let _ = writeln!(
+                out,
+                "  fix rate: {pct}% of the clippy fix-set citations landed ({k}/{f}) · ~{unfixed}% unfixed"
+            );
+        }
+        None => {
+            let _ = writeln!(
+                out,
+                "  fix rate: (no fix-set citations recorded yet — the denominator is the compiled clippy fix set)"
+            );
+        }
+    }
     if let Some(l) = last {
         let verify = if l.verify_ran {
             "verify ran"
         } else {
             "no verify (not a fix_verify build or --no-verify)"
         };
+        let rate_note = if l.fixable_clippy > 0 {
+            format!(
+                ", {p}% of its fix-set citations",
+                p = (l.kept_edits as u64) * 100 / l.fixable_clippy as u64
+            )
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             out,
-            "  last: {} findings, kept {}, reverted {} ({verify})",
+            "  last: {} findings, kept {}, reverted {}{rate_note} ({verify})",
             l.findings_total, l.kept_edits, l.reverted
         );
     } else {
@@ -329,12 +417,14 @@ pub fn hum_bytes(b: u64) -> String {
 
 /// Render the trainer view. The opt-out is the env law only
 /// (`RIIR_REFINE_SELF_EVOLVE=0`) — the settings.toml family owns the
-/// auto-check flags, not this lane.
+/// auto-check flags, not this lane. `corpus` is the trainer's OUTPUT — the
+/// leased corpus this machine installs each epoch (the network trainer's
+/// training landing as new rules the fixer cites).
 #[must_use]
 pub fn render_trainer(
     learning: bool,
     memory: &TrainerMemory,
-    epoch: Option<u64>,
+    corpus: &TrainerCorpus,
     env_optout: bool,
 ) -> String {
     use std::fmt::Write as _;
@@ -380,12 +470,22 @@ pub fn render_trainer(
             "recording on (RIIR_REFINE_SELF_EVOLVE unset/on, settings off not set)"
         }
     );
-    match epoch {
+    // The trainer's output: the leased corpus. THIS is how the trainer gets
+    // measurably smarter — every epoch, the network's mined rules land here.
+    match corpus.epoch {
         Some(e) => {
-            let _ = writeln!(
-                out,
-                "  corpus: lease epoch {e} installed — run `cargo refine update` to refresh"
-            );
+            let _ = writeln!(out, "  corpus (the trainer's output): epoch {e}");
+            if let Some(shape) = &corpus.shape_line {
+                let _ = writeln!(out, "    {shape}");
+            }
+            let range = match (corpus.oldest_epoch, corpus.newest_epoch) {
+                (Some(o), Some(n)) if n > o => format!(
+                    "    upgrades {o}→{n} ({} installed) — each epoch is a training round\n",
+                    corpus.epochs_installed
+                ),
+                _ => format!("    {} epoch(s) installed\n", corpus.epochs_installed),
+            };
+            let _ = write!(out, "{range}");
         }
         None => {
             let _ = writeln!(
@@ -394,6 +494,10 @@ pub fn render_trainer(
             );
         }
     }
+    let _ = writeln!(
+        out,
+        "  loop: unfixed → .refine/misses/ → mined rules → the next epoch → the fixer cites them"
+    );
     out
 }
 
@@ -438,9 +542,28 @@ mod tests {
             oldest_seg: None,
             newest_seg: None,
         };
-        let t = render_trainer(false, &mem, None, false);
+        let corpus = TrainerCorpus {
+            epoch: Some(2971),
+            shape_line: Some("corpus: 74 rules — clippy 74".into()),
+            epochs_installed: 15,
+            oldest_epoch: Some(2957),
+            newest_epoch: Some(2971),
+        };
+        let t = render_trainer(false, &mem, &corpus, false);
         assert!(t.contains("trainer lane"), "{t}");
         assert!(t.contains("memory-only"), "{t}");
+        assert!(t.contains("epoch 2971"), "{t}");
+        assert!(t.contains("2957→2971"), "{t}");
+        assert!(t.contains("loop:"), "{t}");
+        let empty = TrainerCorpus {
+            epoch: None,
+            shape_line: None,
+            epochs_installed: 0,
+            oldest_epoch: None,
+            newest_epoch: None,
+        };
+        let t2 = render_trainer(false, &mem, &empty, false);
+        assert!(t2.contains("no lease cache yet"), "{t2}");
         let f = render_fixer(&FixerView {
             version_lines: &["cargo-refine 0.0.0".into()],
             corpus_line: &corpus_counts_line(),
@@ -451,8 +574,19 @@ mod tests {
             last: None,
             misses: 0,
             network_line: None,
+            rate: Some((7, 10, 70, 30)),
         });
         assert!(f.contains("fixer lane"), "{f}");
-        assert!(f.contains("cargo refine fix"), "{f}");
+        assert!(f.contains("70%"), "{f}");
+        assert!(f.contains("~30% unfixed"), "{f}");
+    }
+
+    #[test]
+    fn fixer_rate_denominator_law() {
+        // A history with zero fix-set citations yields None (never a fake 0%).
+        let dir = std::env::temp_dir().join(format!("refine_health_rate_{}", std::process::id()));
+        std::fs::create_dir_all(dir.join(".refine")).expect("tmpdir");
+        assert_eq!(fixer_rate(&dir), None);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

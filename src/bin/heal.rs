@@ -3203,6 +3203,7 @@ fn run_fixer_verb(args: &Args) {
         last: last.as_ref(),
         misses: count_misses(&root),
         network_line: network.as_deref(),
+        rate: riir_refine::health_views::fixer_rate(&root),
     };
     print!("{}", riir_refine::health_views::render_fixer(&view));
 }
@@ -3212,14 +3213,14 @@ fn run_fixer_verb(args: &Args) {
 fn run_trainer_verb() {
     let root = resolve_heal_root(&[]);
     let memory = riir_refine::health_views::trainer_memory(&root);
-    let epoch = riir_refine::health_views::lease_epoch(&root);
+    let corpus = riir_refine::health_views::trainer_corpus(&root);
     let env_optout = std::env::var("RIIR_REFINE_SELF_EVOLVE").is_ok_and(|v| v == "0");
     print!(
         "{}",
         riir_refine::health_views::render_trainer(
             riir_refine::health_views::learning_enabled(),
             &memory,
-            epoch,
+            &corpus,
             env_optout,
         )
     );
