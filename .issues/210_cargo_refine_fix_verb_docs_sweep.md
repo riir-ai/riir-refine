@@ -7,6 +7,14 @@
 - [x] `src/bin/heal.rs` — usage_text top line teaches `cargo refine fix ...`; "(no mode)" block states bare IS the dry run (stale "--dry-run" claim removed); `--fix` flag desc names the alias; parse_args comment + validate_mode_flags docstring corrected; the `--dry-run` refusal names bare as the heal dry run; run_unmine explainer teaches `cargo refine fix`.
 - [x] Personal `~/.config/zed/AGENTS.md` — lint rule + golden rule teach the two forms (the file this started from).
 
+## Verb-first law (owner, 2026-11-06): any verb command is a bare word
+
+- [x] `suggest` verb landed (parser arm + user_help + usage_text + run_unmine; `--suggest` stays a quiet alias) — same shape as the `fix` verb.
+- [x] `fix-compile` verb landed (same arm block).
+- [x] Already bare verbs, no work: `fix`, `scan`, and every KatCommand word (`login`, `account`, `update`, `sync`, `topup`, `buy`, `wetrun`, `replay`, `config`, ...).
+- [ ] Follow-up verbs (same law, next pass — each needs its dispatch/docs row updated + the flag kept as quiet alias): `mine`, `unmine`, `purge`, `stats`, `info`, `refill`, `misses`, `offline`, and the maintainer report lane (`frontier-report`, `coverage-report`, `horizon-report`, `blueprint-report`, `gate-calibration`, `oracle-census`, `corpus-gap`, `config-audit`, `orphan-report`, `platform-audit`, `frame-time-report`, `score-bench`, `necessity-bench`, `active-set`). `--version`/`--help`/`--help-all` stay flags (conventional, not verb commands).
+- [ ] Update this sweep's doc rows to teach the verb forms (e.g. `cargo refine suggest`) wherever the fix/suggest spellings are rewritten.
+
 ## Sweep — every doc still teaching `--fix --write --verify` / `--fix` as THE spelling
 
 One batched sweep, not piecemeal (verdict decision). Each: replace the fix-spelling rows with the two-form law above; keep `--fix` accepted (quiet parser alias) but undocumented.

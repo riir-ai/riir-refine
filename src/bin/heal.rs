@@ -1352,7 +1352,7 @@ fn run_unmine(purge_server: bool) {
     println!("UNCHANGED (and always was local): healing itself.");
     println!("  cargo refine              <- dry run, zero edits, local");
     println!("  cargo refine fix          <- real fixes, written locally, compile-gated");
-    println!("  cargo refine --suggest    <- review, local");
+    println!("  cargo refine suggest      <- review, local");
     println!("Trajectories still record locally — that is how the healer learns on YOUR");
     println!("machine. Opting out stops the upload, not the local memory.");
     println!();
@@ -7586,7 +7586,7 @@ USAGE:
     cargo refine [<path>...]           Dry run: show what would be fixed, no edits (default path: .)
     cargo refine fix <path>...         Apply the fixes; edits that break the build are reverted
     cargo refine scan [<path>...]      Secret-blind scan: report secret-shaped content, never send it
-    cargo refine --suggest [--domain <{domains}>] <path>...
+    cargo refine suggest [--domain <{domains}>] <path>...
                                        Show the matching rules per code span, no edits
 {compile}{account}{points}    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
     cargo refine --version             Version and the features this build carries
@@ -7665,7 +7665,7 @@ fn usage_text() -> String {
 USAGE:
     cargo refine                                        <- DRY RUN: review what would be fixed (no edits)
     cargo refine fix [--top-k <N>] [--no-fmt] <path>...   <- REAL FIX: writes (compile-gates on release builds)
-    cargo refine --suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
+    cargo refine suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
 {credit_help}    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
     cargo refine --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
@@ -7726,7 +7726,8 @@ USAGE:
                     zero edits. Bare `cargo refine` IS the dry run — there is
                     no heal-mode dry flag (--dry-run belongs to
                     `get`/`send`/`wetrun`).
-    --suggest       Suggest mode: print matching rules per code span (no edits).
+    --suggest       Suggest mode (alias of the `suggest` verb): print matching rules
+                    per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
                     ({} perf rules + {} clippy lints: {} | {}). WRITES by default (the
                     explicit flag is the consent) and compile-gates on --verify builds
@@ -9725,6 +9726,15 @@ fn parse_args() -> Args {
             }
             "scan" if args.paths.is_empty() && !args.secret_scan && args.command.is_none() => {
                 args.secret_scan = true;
+            }
+            // The owner's verb-first law (2026-11-06): any verb command is a
+            // bare word — `cargo refine suggest`, never `--suggest`. The
+            // flag spelling stays parsed as a quiet alias, taught nowhere.
+            "suggest" if args.paths.is_empty() && !args.suggest && args.command.is_none() => {
+                args.suggest = true;
+            }
+            "fix-compile" if args.paths.is_empty() && !args.fix_compile && args.command.is_none() => {
+                args.fix_compile = true;
             }
             // Plan 325 T4/T5 (issue 192): the public-goods points verbs —
             // the PUBLIC build's surface, dispatched on their own feature
