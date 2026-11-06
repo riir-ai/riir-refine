@@ -21,14 +21,19 @@
 # Both postures carry the same store backend, so the bench tail's
 # best-effort lines are symmetric.
 #
-# Usage: scripts/g3_scorebench_stability.sh
+# Usage: scripts/g3_scorebench_stability.sh [feature]
+#   feature: the domain feature under test (default kernel_opt — the Issue
+#   191 arm, now a no-op diff since default kernel_pregate implies it; Issue
+#   212 T3 runs it for sec and shader_perf). The OFF posture
+#   is `--features score_bench`, ON adds the feature.
 # Env overrides: G3_TARGET_OFF / G3_TARGET_ON / G3_WORK (scratch dir).
 set -eu
 cd "$(dirname "$0")/.."
 
+FEATURE=${1:-kernel_opt}
 OFF_TARGET=${G3_TARGET_OFF:-/tmp/riir_refine_g3_off}
-ON_TARGET=${G3_TARGET_ON:-/tmp/riir_refine_g3_on}
-WORK=${G3_WORK:-/tmp/riir_refine_g3_work}
+ON_TARGET=${G3_TARGET_ON:-/tmp/riir_refine_g3_on_$FEATURE}
+WORK=${G3_WORK:-/tmp/riir_refine_g3_work_$FEATURE}
 mkdir -p "$WORK"
 
 filter_volatile() {
@@ -50,11 +55,11 @@ run_lane() {
 
 echo "== G3 arm: building the OFF posture (--features score_bench)…"
 run_lane "--features score_bench" "$OFF_TARGET" "" "$WORK/off_clippy.txt"
-echo "== G3 arm: building the ON posture (+kernel_opt)…"
-run_lane "--features score_bench,kernel_opt" "$ON_TARGET" "" "$WORK/on_clippy.txt"
+echo "== G3 arm: building the ON posture (+$FEATURE)…"
+run_lane "--features score_bench,$FEATURE" "$ON_TARGET" "" "$WORK/on_clippy.txt"
 echo "== G3 arm: gen-5 (rust_perf) lane…"
 run_lane "--features score_bench" "$OFF_TARGET" "--generation 5" "$WORK/off_perf.txt"
-run_lane "--features score_bench,kernel_opt" "$ON_TARGET" "--generation 5" "$WORK/on_perf.txt"
+run_lane "--features score_bench,$FEATURE" "$ON_TARGET" "--generation 5" "$WORK/on_perf.txt"
 
 fail=0
 for lane in clippy perf; do
@@ -70,8 +75,8 @@ for lane in clippy perf; do
 done
 
 if [ "$fail" -eq 0 ]; then
-    echo "G3 verdict: PASS — the existing domains' score-bench verdicts are byte-stable with kernel_opt enabled"
+    echo "G3 verdict: PASS — the existing domains' score-bench verdicts are byte-stable with $FEATURE enabled"
 else
-    echo "G3 verdict: FAIL — kernel_opt perturbed an existing domain's verdicts (bar 3)"
+    echo "G3 verdict: FAIL — $FEATURE perturbed an existing domain's verdicts (bar 3)"
 fi
 exit "$fail"

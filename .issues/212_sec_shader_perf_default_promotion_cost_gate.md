@@ -1,6 +1,6 @@
 # Issue 212 — promote `sec` + `shader_perf` (+ `ruliology_search`) to default: the G5 fan-out cost leg first
 
-**Status:** OPEN 2026-11-06 (katgpt-rs-18) — filed from the 11-06 feature audit under the owner law "any gain no perf hurt must enabled by default, dont make good goat sad"; measurement lane dispatched same day.
+**Status:** IN PROGRESS 2026-11-06 (katgpt-rs-18 lane) — T1 harness landed; run protocol pinned below BEFORE any measurement; T2/T3 dispatched to a quiet rig. Filed from the 11-06 feature audit under the owner law "any gain no perf hurt must enabled by default, dont make good goat sad".
 
 ## Why
 
@@ -20,9 +20,16 @@ Per feature (sec, shader_perf), the Issue-191 bar-5 cost definition reused verba
 
 `ruliology_search`: no scan fan-out (no bin path) — promotion gate is compile-only (default lib tests + clippy −D clean).
 
+## Run protocol (pinned 2026-11-06 BEFORE any measurement — refines HOW, never the ceilings)
+
+- **Base (OFF) posture** = crate defaults + `latent_retrieval` (the shipped scan's matcher; the release set carries `latent_retrieval`, and `kernel_pregate` is already default). ON = base + the feature. The runner REFUSES unless the two build stamps (`compiled_features`) differ by exactly the feature under test.
+- **Walk** = `src/**/*.rs` at the measured commit (603 files at `370854fe`; the "600-file" figure was Bench 137's count of the same walk). No pinned `.raw` vendor set exists in the repo → `src` alone, disclosed. `src` carries 0 `.wgsl` files, so shader_perf's `.wgsl` render lane (`run_shader_lane`) is outside this walk by construction — the walk prices its MATCHER fan-out on `.rs` spans (the every-scan cost); the `.wgsl` lane only runs on `.wgsl` inputs.
+- **Interleaving** (katgpt-rs sequential-A/B law): 3 ROUNDS per feature, alternating binary order (odd rounds OFF first, even ON first); each round is a full instance of the bar (3 timed passes per binary, per-file medians, nearest-rank); **verdict PASS only if ALL 3 rounds pass** (stricter than one run, never looser). Marginal = any passing round under 2× headroom on p50 or p95 → re-run alone (bar text).
+- Not in the bar, disclosed only: the `--fix` lane's sec proposer pass (`FIXABLE_SEC`) — a fix-time cost, not a scan fan-out.
+
 ## Tasks
 
-- [ ] T1 the cost harness for an arbitrary domain feature (generalize `examples/kernel_goat_g5.rs`'s cost leg, or a sibling example) — consume, never fork
+- [x] T1 the cost harness for an arbitrary domain feature — `examples/kernel_goat_g5.rs` consumed (adds the `compiled_features` build stamp to both emitters), `scripts/g5_domain_cost.sh --feature <f>` the generic interleaved runner, `scripts/g5_cost_math.py` the ONE copy of the medians/nearest-rank math (g5_utility_cost.sh now imports it), `scripts/g3_scorebench_stability.sh [feature]` generalized for T3
 - [ ] T2 run sec + shader_perf on bmo exclusive; record a benchmark with PROVENANCE
 - [ ] T3 G3 byte-stability ON vs OFF per feature
 - [ ] T4 promote the passers in ONE commit: `default` + RELEASE_FEATURES + release.yml (build AND licenses lines) + manual_release.sh in lockstep (build_stamp tests pin them); Cargo.toml comments + AGENTS.md rows; demote the failers' comments to name the failing axis

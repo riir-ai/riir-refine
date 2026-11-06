@@ -50,9 +50,8 @@ CARGO_TARGET_DIR="$TD/t_narrow" cargo build --release --example kernel_goat_g5 -
 "$TD/t_narrow/release/examples/kernel_goat_g5.exe" --root "$ROOT" --top-k "$TOP_K" --out "$TD/g5_narrow.json"
 
 # ── the adjudication ─────────────────────────────────────────────────────
-python3 - "$TD/g5_off.json" "$TD/g5_on.json" "$TD/g5_narrow.json" <<'PYEOF'
+G5_SCRIPTS_DIR="$(dirname "$0")" python3 - "$TD/g5_off.json" "$TD/g5_on.json" "$TD/g5_narrow.json" <<'PYEOF'
 import json
-import statistics
 import sys
 
 off = json.load(open(sys.argv[1], encoding="utf-8"))
@@ -64,27 +63,17 @@ for tbl, name in [(on, "flat"), (narrow, "narrow")]:
     if tbl["files"] != off["files"] or tbl["corpus_root"] != root:
         raise SystemExit(f"REFUSE: {name} posture table disagrees on the corpus walk")
 
-def medians(tbl):
-    rows = tbl["per_pass_us"]
-    paths = [p for p, _ in rows[0]]
-    return paths, [statistics.median([rows[k][i][1] for k in range(len(rows))]) for i in range(len(paths))]
+# Issue 212 T1: the medians/nearest-rank arithmetic lives in ONE copy,
+# scripts/g5_cost_math.py (shared with the generic g5_domain_cost.sh).
+import os  # noqa: E402
+
+sys.path.insert(0, os.environ["G5_SCRIPTS_DIR"])
+from g5_cost_math import added_dists, medians  # noqa: E402
 
 off_paths, off_med = medians(off)
 on_paths, on_med = medians(on)
 narrow_paths, narrow_med = medians(narrow)
 assert off_paths == on_paths == narrow_paths, "file order drifted between postures"
-
-def added_dists(flat_med, tbl_med):
-    added_ms = sorted((t - f) / 1000.0 for f, t in zip(flat_med, tbl_med))
-    n = len(added_ms)
-    def pct(sorted_xs, p):
-        # nearest-rank on the pre-sorted list; tail support disclosed
-        idx = min(n - 1, max(0, round(p * n) - 1))
-        return sorted_xs[idx], n - idx
-    p50, sup50 = pct(added_ms, 0.50)
-    p95, sup95 = pct(added_ms, 0.95)
-    over = sum(1 for x in added_ms if x > 1.0)
-    return p50, sup50, p95, sup95, over, n
 
 for name, tbl_med in [("flat (kernel_opt)", on_med), ("narrow (kernel_route_narrow)", narrow_med)]:
     p50, sup50, p95, sup95, over, n = added_dists(off_med, tbl_med)

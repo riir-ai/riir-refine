@@ -32,6 +32,14 @@
 //!
 //! No exit-code verdict here — the runner script owns the ceilings (the
 //! goat_g1/g2 precedent: the harness measures, the record adjudicates).
+//!
+//! **The generic domain cost leg (Issue 212 T1).** The timed region is the
+//! production matcher over EVERY compiled domain, so the same harness prices
+//! any domain feature's fan-out: build it at a base feature set and at
+//! base+`<feature>`, diff the per-file medians. Both emitters carry the
+//! cfg-derived `compiled_features` list (the build stamp) so the runner can
+//! prove the two binaries differ by exactly the feature under test —
+//! `scripts/g5_domain_cost.sh --feature <f>` is that runner.
 
 use std::time::Instant;
 
@@ -157,11 +165,7 @@ fn report_and_emit(
                     }
                     cited_rules.insert(top.rule_id.clone());
                 }
-                rank1_rule_ids.push(
-                    rules
-                        .first()
-                        .map_or(String::new(), |r| r.rule_id.clone()),
-                );
+                rank1_rule_ids.push(rules.first().map_or(String::new(), |r| r.rule_id.clone()));
                 for r in rules {
                     if let Some(e) = KernelExpertRouter::expert_for_rule(&r.rule_id) {
                         *cited_by_expert.entry(e).or_insert(0) += 1;
@@ -185,6 +189,12 @@ fn report_and_emit(
     writeln!(json, "{{").unwrap();
     writeln!(json, "  \"leg\": \"G5 utility/cost (Issue 191 bar 5)\",").unwrap();
     writeln!(json, "  \"posture\": \"{posture}\",").unwrap();
+    writeln!(
+        json,
+        "  \"compiled_features\": \"{}\",",
+        riir_refine::build_stamp::COMPILED_FEATURES
+    )
+    .unwrap();
     let root_json = root.replace(std::path::MAIN_SEPARATOR, "/");
     writeln!(json, "  \"corpus_root\": \"{root_json}\",").unwrap();
     writeln!(json, "  \"files\": {},", files.len()).unwrap();
@@ -282,6 +292,12 @@ fn report_and_emit(
     writeln!(json, "{{").unwrap();
     writeln!(json, "  \"leg\": \"G5 utility/cost (Issue 191 bar 5)\",").unwrap();
     writeln!(json, "  \"posture\": \"kernel_opt OFF\",").unwrap();
+    writeln!(
+        json,
+        "  \"compiled_features\": \"{}\",",
+        riir_refine::build_stamp::COMPILED_FEATURES
+    )
+    .unwrap();
     let root_json = root.replace(std::path::MAIN_SEPARATOR, "/");
     writeln!(json, "  \"corpus_root\": \"{root_json}\",").unwrap();
     writeln!(json, "  \"files\": {},", files.len()).unwrap();
