@@ -298,15 +298,27 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
 /// posture; they care that a new version exists and how to get it. The
 /// detail/title fields stay in the cache (the machine-readable surface for
 /// future surfaces), they just never render here.
+/// Owner call 2026-11-06: the NEW version renders GREEN and the installed
+/// (old) version YELLOW — gated on the shared color gate (NO_COLOR / TERM
+/// =dumb / stdout TTY), and the escape codes wrap the WHOLE tokens, never
+/// sit inside them, so grep/regex on `0.4.5` still matches the plain text.
 #[must_use]
 pub fn alert_line(latest: &CachedRelease, installed: &str) -> Option<String> {
     if !version_newer(&latest.version, installed) {
         return None;
     }
-    Some(format!(
-        "⬆️ update available: {installed} → {} — run `cargo refine upgrade`",
-        latest.version
-    ))
+    if crate::kat_footer::color_enabled() {
+        Some(format!(
+            "⬆️ update available: {} → {} — run `cargo refine upgrade`",
+            crate::kat_footer::yellow(installed),
+            crate::kat_footer::green(&latest.version)
+        ))
+    } else {
+        Some(format!(
+            "⬆️ update available: {installed} → {} — run `cargo refine upgrade`",
+            latest.version
+        ))
+    }
 }
 
 // ── the fetcher (the one network seam) ──────────────────────────────────────

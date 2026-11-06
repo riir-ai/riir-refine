@@ -1840,7 +1840,7 @@ pub fn render_cfg_audit(marks: &[CfgUnverified], verify_args: Option<&str>) -> S
         };
         let _ = writeln!(
             out,
-            "  re-run for full coverage: cargo refine --fix --write --verify --verify-args \"{suggested}\""
+            "  re-run for full coverage: cargo refine fix --write --verify --verify-args \"{suggested}\""
         );
     }
     out
@@ -1984,7 +1984,7 @@ pub fn render_unverified_kept_tail(files: &[(std::path::PathBuf, usize)]) -> Str
     }
     let _ = writeln!(
         out,
-        "  re-run: cargo refine --fix --write --verify <the same paths> to certify \
+        "  re-run: cargo refine fix --write --verify <the same paths> to certify \
          or revert them"
     );
     out
@@ -2044,7 +2044,7 @@ pub fn render_required_features_audit(
         };
         let _ = writeln!(
             out,
-            "  re-run for full coverage: cargo refine --fix --write --verify --verify-args \"{suggested}\""
+            "  re-run for full coverage: cargo refine fix --write --verify --verify-args \"{suggested}\""
         );
     }
     out

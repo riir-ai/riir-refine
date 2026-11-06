@@ -339,10 +339,45 @@ pub fn footer_color_enabled() -> bool {
             return false;
         }
     }
+    crate::kat_footer::color_enabled()
+}
+
+/// The ONE color gate for every user-facing colored line (the owner call
+/// 2026-11-06: the update alert names the new version GREEN and the old
+/// YELLOW). Verdict-gated: env override → `NO_COLOR` → `TERM=dumb` → stdout
+/// TTY. Color is NEVER the only signal — every colored line keeps its words
+/// plain, and no escape code ever lands INSIDE a version token (agents grep
+/// the token).
+#[must_use]
+pub fn color_enabled() -> bool {
     if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
         return false;
     }
+    if std::env::var("TERM").is_ok_and(|t| t == "dumb") {
+        return false;
+    }
     std::io::stdout().is_terminal()
+}
+
+/// Wrap `text` in the ANSI SGR `codes` when color is on; verbatim otherwise.
+#[must_use]
+pub fn colorize(codes: &[&str], text: &str) -> String {
+    if codes.is_empty() || !color_enabled() {
+        return text.to_string();
+    }
+    format!("\x1b[{}m{}\x1b[0m", codes.join(";"), text)
+}
+
+/// GREEN (the new version in the update alert).
+#[must_use]
+pub fn green(text: &str) -> String {
+    colorize(&["32"], text)
+}
+
+/// YELLOW (the installed (old) version in the update alert).
+#[must_use]
+pub fn yellow(text: &str) -> String {
+    colorize(&["33"], text)
 }
 
 /// Thousands-separated token count (`15080719` → `15,080,719`).

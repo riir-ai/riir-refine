@@ -501,6 +501,174 @@ pub fn render_trainer(
     out
 }
 
+/// The corpus growth the lease store can answer locally: current epoch's
+/// rule total + the delta vs the PREVIOUS installed epoch (by epoch
+/// number, not list order). `previous_cached = false` renders the honest
+/// "previous epoch not cached" line (never a fake +0) — the verdict's law.
+pub struct CorpusGrowth {
+    pub epoch: Option<u64>,
+    pub rules: Option<usize>,
+    pub shape_line: Option<String>,
+    pub delta: Option<isize>,
+    pub previous_cached: bool,
+    pub epochs_installed: usize,
+}
+
+#[cfg(any(feature = "kat_service", feature = "points"))]
+#[must_use]
+pub fn corpus_growth(root: &Path) -> CorpusGrowth {
+    let url = crate::points_lease::resolved_lease_url();
+    let store = crate::kat_lease_client::LeaseStore::open_net(root, &url);
+    let epoch = store.current_epoch();
+    let (rules, shape, delta, prev_cached) = match epoch {
+        Some(e) => {
+            let overlay = crate::kat_lease_client::overlay_from_epoch(&store, None);
+            let shape = overlay
+                .as_ref()
+                .and_then(|(_, o)| crate::kat_lease_client::corpus_shape_line(o));
+            let total = overlay
+                .map(|(_, o)| o.iter().map(|(_, v)| v.len()).sum::<usize>())
+                .unwrap_or(0);
+            let prev = e
+                .checked_sub(1)
+                .and_then(|p| crate::kat_lease_client::overlay_from_epoch(&store, Some(p)));
+            match prev {
+                Some((_, po)) => {
+                    let ptotal = po.iter().map(|(_, v)| v.len()).sum::<usize>();
+                    (
+                        Some(total),
+                        shape,
+                        Some(total as isize - ptotal as isize),
+                        true,
+                    )
+                }
+                None => (Some(total), shape, None, false),
+            }
+        }
+        None => (None, None, None, false),
+    };
+    let mut epochs = 0usize;
+    let man = store.dir().join("man");
+    if let Ok(rd) = std::fs::read_dir(&man) {
+        epochs = rd.flatten().count();
+    }
+    CorpusGrowth {
+        epoch,
+        rules,
+        shape_line: shape,
+        delta,
+        previous_cached: prev_cached,
+        epochs_installed: epochs,
+    }
+}
+
+#[cfg(not(any(feature = "kat_service", feature = "points")))]
+#[must_use]
+pub fn corpus_growth(_root: &Path) -> CorpusGrowth {
+    CorpusGrowth {
+        epoch: None,
+        rules: None,
+        shape_line: None,
+        delta: None,
+        previous_cached: false,
+        epochs_installed: 0,
+    }
+}
+
+/// Render the `stats` panel — the standing aggregate the owner asked for
+/// (2026-11-06): the fixer's success rate (this machine's campaign ledger,
+/// scope + sample size named), the trainer's output, the corpus growth,
+/// and the network aggregate. Every line states its precondition when its
+/// data is absent — no fake numbers, ever (the verdict's law).
+#[must_use]
+pub fn render_stats(root: &Path, network_line: Option<&str>, corpus_line: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    let _ = writeln!(out, "self-evolve loop — fixer · trainer · corpus · network");
+
+    // 🛠️ the fixer's success rate (kept / fixable-citations, THIS machine,
+    // scope + sample named per the verdict).
+    let (campaigns, _findings, _kept, _reverted, _last) = fixer_history(root);
+    match fixer_rate(root) {
+        Some((k, f, pct, unfixed)) => {
+            let _ = writeln!(
+                out,
+                "\u{1f6e0}\u{fe0f} {pct}% fixer success rate ({k}/{f}) — this machine, {campaigns} campaign(s); ~{unfixed}% of the fix set did not land"
+            );
+        }
+        None if campaigns > 0 => {
+            let _ = writeln!(
+                out,
+                "\u{1f6e0}\u{fe0f} fixer success rate: (no fix-set citations recorded in {campaigns} campaign(s) — the denominator is the compiled clippy fix set)"
+            );
+        }
+        None => {
+            let _ = writeln!(
+                out,
+                "\u{1f6e0}\u{fe0f} fixer success rate: (no campaigns yet — run `cargo refine fix` on a repo)"
+            );
+        }
+    }
+
+    // 👩‍🔬 the trainer: the leased corpus = its output so far.
+    let growth = corpus_growth(root);
+    match growth.epoch {
+        Some(e) => {
+            let delta_note = match (growth.delta, growth.previous_cached) {
+                (Some(d), true) if d >= 0 => {
+                    format!(" (+{d} vs epoch {})", e.saturating_sub(1))
+                }
+                (Some(d), true) => format!(" ({d} vs epoch {})", e.saturating_sub(1)),
+                _ => " (previous epoch not cached — no delta)".to_string(),
+            };
+            let _ = writeln!(
+                out,
+                "\u{1f469}\u{200d}\u{1f52c} trainer: {} rules leased{} across {} epoch(s) installed — trained-surface coverage is the next gate (riir-dapps issue 160)",
+                growth.rules.unwrap_or(0),
+                delta_note,
+                growth.epochs_installed,
+            );
+            if let Some(shape) = &growth.shape_line {
+                let _ = writeln!(out, "   {shape}");
+            }
+        }
+        None => {
+            let _ = writeln!(
+                out,
+                "\u{1f469}\u{200d}\u{1f52c} trainer: (no lease cache yet — run `cargo refine update` to install the trained corpus)"
+            );
+        }
+    }
+
+    // 🧬 corpus growth: the compiled base + the leased delta (the per-day
+    // network growth rate is riir-dapps issue 160 — named, not faked).
+    let _ = writeln!(out, "\u{1f9ec} corpus growth: {corpus_line}");
+    if let (Some(e), Some(r)) = (growth.epoch, growth.rules) {
+        let d = match (growth.delta, growth.previous_cached) {
+            (Some(d), true) => format!(" {d:+}"),
+            _ => " (no cached previous epoch)".to_string(),
+        };
+        let _ = writeln!(
+            out,
+            "   leased epoch {e}: {r} rules{d} — growth rate per day lands with riir-dapps issue 160"
+        );
+    }
+
+    // 📡 network aggregate (points) or its honest pointer.
+    match network_line {
+        Some(line) => {
+            let _ = writeln!(out, "\u{1f4e1} network: {line}");
+        }
+        None => {
+            let _ = writeln!(
+                out,
+                "\u{1f4e1} network: (this build has no points surface — rank/info live in the shipped set)"
+            );
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

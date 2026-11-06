@@ -65,8 +65,8 @@ impl FixTier {
     #[must_use]
     pub const fn remedy(self) -> &'static str {
         match self {
-            Self::Fixable => "cargo refine --fix",
-            Self::Verify => "cargo refine --fix --verify",
+            Self::Fixable => "cargo refine fix",
+            Self::Verify => "cargo refine fix --verify",
         }
     }
 }

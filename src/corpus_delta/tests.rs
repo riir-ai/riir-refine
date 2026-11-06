@@ -65,8 +65,8 @@ fn the_verify_tier_is_kept_apart_because_the_remedy_differs() {
     let per_span = vec![missing(&["redundant_closure"])];
     let d = delta(spans(&per_span), &fixable(), &verify());
     assert_eq!(d.rows[0].tier, FixTier::Verify);
-    assert_eq!(d.rows[0].tier.remedy(), "cargo refine --fix --verify");
-    assert_eq!(FixTier::Fixable.remedy(), "cargo refine --fix");
+    assert_eq!(d.rows[0].tier.remedy(), "cargo refine fix --verify");
+    assert_eq!(FixTier::Fixable.remedy(), "cargo refine fix");
     assert_ne!(
         FixTier::Fixable.remedy(),
         FixTier::Verify.remedy(),

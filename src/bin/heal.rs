@@ -216,6 +216,10 @@ enum KatCommand {
     /// learning/memory halves, the corpus-lease epoch, the opt-out state.
     /// Ungated like `fixer`.
     Trainer,
+    /// The standing self-evolve panel (`cargo refine stats`) — fixer
+    /// success rate (local, scoped), trainer output, corpus growth, the
+    /// network aggregate. Ungated like `fixer`.
+    Stats,
     /// Plan 325 T5: `info` — the contribution network's aggregate (top
     /// domains, counts only — never repo content).
     PointsInfo,
@@ -1069,7 +1073,7 @@ fn run_mine_intro() {
     println!("  * Machine label: none unless you set RIIR_REFINE_MACHINE_LABEL; a label");
     println!("    you set is shown on the public adoption card.");
     println!("  * Contributing is opt-in per MACHINE: after --mine, every heal run (the");
-    println!("    dry run and --fix) auto-syncs the redacted batch — one line, fail-soft.");
+    println!("    dry run and fix) auto-syncs the redacted batch — one line, fail-soft.");
     println!("    Before --mine, nothing leaves this machine (one exception: --mine/--unmine");
     println!("    send a signed tier note); --unmine stops the auto-push; `cargo refine sync`");
     println!("    stays the manual push.");
@@ -1079,7 +1083,7 @@ fn run_mine_intro() {
     println!(
         "  2. login:      automatic — --mine logs you in when no account exists (explicit: cargo refine login)"
     );
-    println!("  3. heal:       cargo refine --fix        <- real fixes, metered locally");
+    println!("  3. heal:       cargo refine fix          <- real fixes, metered locally");
     println!(
         "  sync:          --mine just ran it; re-run --mine or `cargo refine sync` to push newer batches"
     );
@@ -1517,7 +1521,7 @@ fn run_stats_consent(on: bool, off: bool) {
     );
     println!();
     println!(
-        "WHAT future --fix runs share: one tiny signed row each — {{lane, rule_id, count}} \
+        "WHAT future fix runs share: one tiny signed row each — {{lane, rule_id, count}} \
          pairs + totals; rule VOCABULARY only."
     );
     println!(
@@ -2892,7 +2896,7 @@ fn print_mine_encouragement(
     let Some(store) = traj_store else {
         if flow_tip {
             println!(
-                "mine: `cargo refine --fix` records your heal history — \
+                "mine: `cargo refine fix` records your heal history — \
                  `cargo refine --mine` opts in and shares it for KAT service credit"
             );
         }
@@ -2915,7 +2919,7 @@ fn print_mine_encouragement(
         );
     } else if flow_tip {
         println!(
-            "mine: `cargo refine --fix` records your heal history — \
+            "mine: `cargo refine fix` records your heal history — \
              `cargo refine --mine` opts in and shares it for KAT service credit"
         );
     }
@@ -3206,6 +3210,20 @@ fn run_fixer_verb(args: &Args) {
         rate: riir_refine::health_views::fixer_rate(&root),
     };
     print!("{}", riir_refine::health_views::render_fixer(&view));
+}
+
+/// `cargo refine stats` — the standing self-evolve panel (read-only).
+fn run_stats_verb(args: &Args) {
+    let root = resolve_heal_root(&args.paths);
+    let network = fixer_network_line();
+    print!(
+        "{}",
+        riir_refine::health_views::render_stats(
+            &root,
+            network.as_deref(),
+            &riir_refine::health_views::corpus_counts_line(),
+        )
+    );
 }
 
 /// `cargo refine trainer` — the trainer (self-evolve) lane's health view
@@ -3637,7 +3655,7 @@ fn load_mining_rows(
     if !kv.exists() {
         if verbose {
             println!(
-                "{label}: no trajectory store at {} — run any --fix in this repo first",
+                "{label}: no trajectory store at {} — run any fix in this repo first",
                 kv.display()
             );
         }
@@ -6837,7 +6855,7 @@ impl riir_refine::kat_wetrun::LocalLegs for CliLocalLegs {
         let rows = traj.dump();
         if rows.is_empty() {
             return Err(
-                "the trajectory store has no rows to push — run a `--fix` in this repo first; \
+                "the trajectory store has no rows to push — run a `fix` in this repo first; \
                  pushing an EMPTY payload would let step 4 pass without recording anything"
                     .to_string(),
             );
@@ -7645,7 +7663,7 @@ fn domain_choices() -> String {
 fn user_help() -> String {
     let domains = domain_choices();
     let compile = if cfg!(feature = "rustc_errors") {
-        "    cargo refine --fix-compile [--write] <path>...\n\
+        "    cargo refine fix-compile [--write] <path>...\n\
          \x20                                      Plan (or with --write, apply) fixes for compile errors\n"
     } else {
         ""
@@ -7701,11 +7719,12 @@ Rule domains in this build: {list}",
 fn usage_text() -> String {
     #[cfg(feature = "fix_verify")]
     let verify_help = format!(
-        "    --verify        With --fix: write, cargo-check, auto-revert the offending edits\n\
+        "    --verify        With fix mode: write, cargo-check, auto-revert the offending edits\n\
          (adds {} + looser capacity bounds). Implies --write. DEFAULT-ON with\n\
          --fix now (the just-works UX); --no-verify skips it.\n\
     --verify-args <s> Extra cargo args for --verify (whitespace-split, e.g. \"--features a,b,c\").\n\
-    --no-verify     With --fix: skip the default compile gate (fast, syn-gated only).\n",
+    --no-verify     With fix mode: skip the default compile gate (fast, syn-gated only).\
+                    `--fix` is still accepted as the flag spelling.",
         VERIFY_LINTS.join(", ")
     );
     #[cfg(not(feature = "fix_verify"))]
@@ -7762,7 +7781,7 @@ USAGE:
     cargo refine                                        <- DRY RUN: review what would be fixed (no edits)
     cargo refine fix [--top-k <N>] [--no-fmt] <path>...   <- REAL FIX: writes (compile-gates on release builds)
     cargo refine suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
-    cargo refine --fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
+    cargo refine fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
 {credit_help}    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF)
     cargo refine --refill [--refill-wait <s>]           <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
     cargo refine --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service)
@@ -9840,6 +9859,7 @@ fn parse_args() -> Args {
             // `leave` (the owner's word kept, the ship verb is leave);
             // `version` is an alias of --version (set here, no variant).
             "join" | "leave" | "left" | "rank" | "info" | "corpus" | "fixer" | "trainer"
+            | "stats"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
                 args.command = Some(match arg.as_str() {
@@ -9852,6 +9872,7 @@ fn parse_args() -> Args {
                     // line points-gated inside the runner).
                     "fixer" => KatCommand::Fixer,
                     "trainer" => KatCommand::Trainer,
+                    "stats" => KatCommand::Stats,
                     _ => unreachable!("the guard arm names exactly these words"),
                 });
                 if arg == "left" {
@@ -10602,7 +10623,7 @@ fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
         args.command.is_some(),
     );
     if !suggest && !fix && !fix_compile && !dump_trajectories && !has_command {
-        return Err("no mode given — use --suggest, --fix, --fix-compile, or --dump-trajectories");
+        return Err("no mode given — use fix, suggest, fix-compile, or --dump-trajectories");
     }
     if dump_trajectories && (suggest || fix || fix_compile) {
         return Err("--dump-trajectories is a standalone mode");
@@ -13605,8 +13626,9 @@ fn main() {
         }
     }
 
-    // ── The four-line header (owner UX law 2026-11-04): version (+update),
-    // corpus epoch (+freshness), the help hint — then the run begins. The
+    // ── The header (owner UX law 2026-11-04, amended 2026-11-06): the
+    // version + corpus epoch ONLY — the help hint is gone (a user who wants
+    // help types `help`; a user who didn't ask shouldn't be told). The
     // update alert itself prints via run_update_surface_hooks (stderr, the
     // 12h cache) in its OWN short form now; this line is the ALWAYS-on
     // identity line so a user always knows what ran. The corpus epoch is
@@ -13624,17 +13646,11 @@ fn main() {
                 None => String::new(),
             }
         };
-        println!(
-            "cargo-refine {}{corpus_part} — help: `cargo refine help`",
-            env!("CARGO_PKG_VERSION")
-        );
+        println!("cargo-refine {}{corpus_part}", env!("CARGO_PKG_VERSION"));
     }
     #[cfg(not(feature = "points"))]
     if args.command.is_none() || args.fix || args.suggest {
-        println!(
-            "cargo-refine {} — help: `cargo refine help`",
-            env!("CARGO_PKG_VERSION")
-        );
+        println!("cargo-refine {}", env!("CARGO_PKG_VERSION"));
     }
 
     // ── Plan 325 T2: the first-run consent — the first `--fix` that could
@@ -13767,18 +13783,19 @@ fn main() {
         riir_refine::build_stamp::refuse("config reset-client-id", &["points"]);
     }
 
-    // ── the lane health views (`fixer` / `trainer`) — read-only local
-    // halves in EVERY build (they read files the default build writes); the
-    // network line inside is points-gated. Same early-dispatch shape as the
-    // Plan 342 local verbs.
+    // ── the lane health views (`fixer` / `trainer` / `stats`) — read-only
+    // local halves in EVERY build (they read files the default build
+    // writes); the network line inside is points-gated. Same early-dispatch
+    // shape as the Plan 342 local verbs.
     if matches!(
         args.command,
-        Some(KatCommand::Fixer) | Some(KatCommand::Trainer)
+        Some(KatCommand::Fixer) | Some(KatCommand::Trainer) | Some(KatCommand::Stats)
     ) {
         match args.command {
             Some(KatCommand::Fixer) => run_fixer_verb(&args),
             Some(KatCommand::Trainer) => run_trainer_verb(),
-            _ => unreachable!("the matches! guard names exactly these two"),
+            Some(KatCommand::Stats) => run_stats_verb(&args),
+            _ => unreachable!("the matches! guard names exactly these"),
         }
         return;
     }
@@ -14431,7 +14448,7 @@ fn main() {
                 }
             } else {
                 println!(
-                    "kv store: none at {} — run any --fix in this repo to create it (the 038 unified backend)",
+                    "kv store: none at {} — run any fix in this repo to create it (the 038 unified backend)",
                     kv.display()
                 );
             }
@@ -14458,7 +14475,7 @@ fn main() {
         let history = root.join(riir_refine::blueprint::HISTORY_RELPATH);
         if !history.exists() {
             eprintln!(
-                "blueprint-report: no history at {} — run any --fix in this repo first (or the lane is demoted via RIIR_REFINE_META_BLUEPRINT=0)",
+                "blueprint-report: no history at {} — run any fix in this repo first (or the lane is demoted via RIIR_REFINE_META_BLUEPRINT=0)",
                 history.display()
             );
             std::process::exit(1);
@@ -14514,7 +14531,7 @@ fn main() {
             let kv = root.join(".refine").join("trajectories.kv");
             if !kv.exists() {
                 eprintln!(
-                    "frontier-report: no store at {} — run any --fix in this repo first",
+                    "frontier-report: no store at {} — run any fix in this repo first",
                     kv.display()
                 );
                 std::process::exit(1);
@@ -15079,7 +15096,7 @@ fn main() {
             let kv = root.join(".refine").join("trajectories.kv");
             if !kv.exists() {
                 eprintln!(
-                    "recompute-elo: no store at {} — run any --fix in this repo first",
+                    "recompute-elo: no store at {} — run any fix in this repo first",
                     kv.display()
                 );
                 std::process::exit(1);
@@ -15222,7 +15239,7 @@ fn main() {
     // parse_args; the banner here is the only bare-mode surface.
     if args.bare_default {
         println!(
-            "cargo refine: dry run — reviewing {} (no edits). Real fixes: cargo refine --fix",
+            "cargo refine: dry run — reviewing {} (no edits). Real fixes: cargo refine fix",
             if args.paths.len() == 1 && args.paths[0] == std::path::Path::new(".") {
                 "the current directory".to_string()
             } else {
@@ -15741,10 +15758,20 @@ fn main() {
         let leased = lease_store.current().is_some();
         let domains: Vec<&str> = overlay.iter().map(|(d, _)| d.label()).collect();
         if leased {
+            // Owner UX call 2026-11-06: this line used to say just
+            // "domains: {leased domains}" and read as "only clippy is
+            // active" — wrong twice over. EVERY compiled domain already
+            // joins the scan fan-out (kernel is pregate-gated purely for
+            // COST — Benches 131-137, the detector decides per file); the
+            // domains listed here are the LEASED overlay's, the trainer's
+            // per-epoch network output (dapps issue 161 widens them).
             println!(
-                "corpus: running the refreshed rule set (generation {epoch}{}domains: {})",
-                if pinned { ", pinned, " } else { ", " },
+                "corpus: leased rules riding this run (epoch {epoch}{}): {}",
+                if pinned { " — pinned" } else { "" },
                 domains.join(", ")
+            );
+            println!(
+                "  compiled domains all active: clippy · perf · kernel (pregate-gated) · sec · docker · dist · shader"
             );
         }
         // No installed lease + a non-empty overlay ⇒ the T2.4 promotion
@@ -18913,32 +18940,55 @@ fn main() {
                     "🛠️ ~{pct}% fixable via `cargo refine fix` (compile-gated; the suggest-only rows stay manual)"
                 );
             } else {
-                println!("🛠️ fixable via `cargo refine --fix` to heal the fixable ones in place");
+                println!("🛠️ fixable via `cargo refine fix` to heal the fixable ones in place");
             }
         } else if args.fix && n_fixed_edits > 0 {
             // The fix lane's emoji pair (owner UX law 2026-11-04): what
-            // was fixed, then the honest residual + the self-evolve CTA.
+            // was fixed, then the honest split.
             println!(
                 "🔍 Fixed {} edit(s) across {} file(s)",
                 thou(n_fixed_edits),
                 thou(n_fixed_files)
             );
-            if n_suggestions > n_fixed_edits {
-                let pct_unfixed = 100 - (n_fixed_edits * 100 / n_suggestions.max(1));
-                // Issue 204: the join CTA is only honest while the auto-send
-                // is NOT armed — a joined run's residual is carried by the
-                // 📡 feed line below, never a re-ask. (The points gate: the
-                // consent plane is the points posture's module; the KAT
-                // posture's own tail line carries its posture.)
-                #[cfg(feature = "points")]
-                let joined_feed = riir_refine::first_run_consent::read(
-                    &riir_kat::kat_account::KatAccount::default_dir(),
-                ) == riir_refine::first_run_consent::Answer::Joined;
-                #[cfg(not(feature = "points"))]
-                let joined_feed = false;
-                if pct_unfixed > 0 && !joined_feed {
-                    println!("🛠️ ~{pct_unfixed}% unfixed — `cargo refine join` for self-evolve");
-                }
+            // The split (amended 2026-11-06 per the owner + verdict): the old line said
+            // "~N% unfixed" and that was AMBIGUOUS — it mixed "fixable but
+            // wasn't" (the fixer's gap) with "no compiled fix at all" (the
+            // trainer's queue). Two different problems, two owners. The
+            // split is SHARES OF TOTAL FINDINGS so the three add to 100:
+            //   fixed     = citations the fix lane closed (one landed edit
+            //               closes the (span, rule) citation it targeted —
+            //               the common case is 1:1; documented approximation)
+            //   unfixed   = fixable citations that did NOT land (fixer gap)
+            //   unfixable = citations with no compiled fix (the trainer's
+            //               queue — labeled per the verdict: not "no rule
+            //               yet", because a perf/sec rule may exist without
+            //               a static fix set)
+            // Arithmetic per the verdict: saturating (the fixable count is
+            // a FLOOR — kept can exceed it), and the unfixable share is the
+            // REMAINDER (100 − fixed − unfixed) so the line sums to 100.
+            let total = n_suggestions.max(1);
+            let fixed_n = n_fixed_edits.min(total);
+            let fixable_n = domain_tally.fixable_clippy.max(fixed_n).min(total);
+            let unfixed_n = fixable_n.saturating_sub(fixed_n);
+            let pct_fixed = (fixed_n * 100) / total;
+            let pct_unfixed = (unfixed_n * 100) / total;
+            let pct_unfixable = 100u64.saturating_sub(pct_fixed as u64 + pct_unfixed as u64);
+            println!(
+                "🛠️ {pct_fixed}% fixed · {pct_unfixed}% unfixed (fixable — the fixer's gap) · {pct_unfixable}% unfixable now (no compiled fix — the trainer's queue)"
+            );
+            // Issue 204: the join CTA is only honest while the auto-send
+            // is NOT armed — a joined run's residual is carried by the
+            // 📡 feed line below, never a re-ask. (The points gate: the
+            // consent plane is the points posture's module; the KAT
+            // posture's own tail line carries its posture.)
+            #[cfg(feature = "points")]
+            let joined_feed = riir_refine::first_run_consent::read(
+                &riir_kat::kat_account::KatAccount::default_dir(),
+            ) == riir_refine::first_run_consent::Answer::Joined;
+            #[cfg(not(feature = "points"))]
+            let joined_feed = false;
+            if !joined_feed {
+                println!("🛠️ lower the unfixed share: `cargo refine join` for self-evolve");
             }
         }
     }
