@@ -615,7 +615,7 @@ pub fn render_stats(root: &Path, network_line: Option<&str>) -> String {
         Some((k, f, pct, _unfixed)) => {
             let _ = writeln!(
                 out,
-                "🛠️ {} fixer success ({}/{}) — {}",
+                "🛠️  {} fixer success ({}/{}) — {}",
                 crate::kat_footer::colorize(&["32;1"], &format!("{pct}%")),
                 crate::kat_footer::colorize(&["36"], &k.to_string()),
                 crate::kat_footer::colorize(&["36"], &f.to_string()),
