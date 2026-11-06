@@ -687,14 +687,17 @@ pub fn render_stats(root: &Path, network_line: Option<&str>) -> String {
     out
 }
 
-/// The 🧬 corpus block: one row per manifest-numbered domain (emoji +
-/// colored count + a braille bar of its share of the compiled corpus),
-/// the unnumbered tail, and the leased-growth delta.
+/// The 📚 corpus block — a cargo-tree-style subtree: one `├──` child per
+/// manifest-numbered domain (emoji + colored count + a braille bar of its
+/// share of the compiled corpus), the unnumbered tail as `└──`, and the
+/// leased-growth delta under the tree.
 fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
     use std::fmt::Write as _;
-    writeln!(out, "🧬 corpus").ok();
+    writeln!(out, "📚 corpus").ok();
     let bar_w = 10usize;
-    for row in corpus_rows() {
+    let rows = corpus_rows();
+    let branch = |last: bool| crate::kat_footer::colorize(&["2"], if last { "└──" } else { "├──" });
+    for row in &rows {
         #[allow(clippy::cast_precision_loss)]
         let share = if row.total > 0 {
             row.rules as f64 / row.total as f64
@@ -703,7 +706,8 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
         };
         writeln!(
             out,
-            "  {} {} {}",
+            "  {} {} {} {}",
+            branch(false),
             row.emoji,
             crate::kat_footer::colorize(&["36"], &format!("{:>4} {}", row.rules, row.label)),
             crate::kat_footer::braille_bar(share, bar_w, crate::kat_footer::color_enabled()),
@@ -713,10 +717,10 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
     writeln!(
         out,
         "  {} {}",
-        crate::kat_footer::colorize(&["2"], "· also compiled:"),
+        branch(true),
         crate::kat_footer::colorize(
             &["2"],
-            "docker · dist · shader (counts in the manifest lane)"
+            "also compiled: docker · dist · shader (counts in the manifest lane)"
         )
     )
     .ok();
@@ -808,6 +812,8 @@ fn corpus_rows() -> Vec<CorpusRow> {
             total: sum,
         });
     }
+    // Biggest first (the roll-up's convention) — the owner's sort call.
+    rows.sort_by_key(|r| std::cmp::Reverse(r.rules));
     rows
 }
 
