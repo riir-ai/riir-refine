@@ -101,9 +101,9 @@ as `Builtin`; only the minor-less form is treated as latest-of-major.
 ## Usage
 
 ```bash
-cargo refine --suggest --domain docker path/to/Dockerfile   # cite findings
-cargo refine --fix     --domain docker path/                # show bounded fixes
-cargo refine --fix --write --domain docker path/            # apply them
+cargo refine suggest --domain docker path/to/Dockerfile   # cite findings
+cargo refine           --domain docker path/              # dry run: show bounded fixes
+cargo refine fix      --domain docker path/               # apply them (compile-gated where applicable)
 ```
 
 Dockerfiles are matched by NAME — `Dockerfile`, `<name>.Dockerfile`,

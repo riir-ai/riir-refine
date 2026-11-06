@@ -60,7 +60,7 @@ would be absurd duplication:
   benchmark against our own inference stack.
 - `latent_retrieval` (Plan 005) → `riir-rag` (`AstChunker` +
   `ModellessEmbedder` + `NeuronDbRetriever`), the retrieval substrate
-  behind `cargo refine --suggest`.
+  behind the `cargo refine suggest` CLI.
 
 No game crate is reachable from any feature combination.
 

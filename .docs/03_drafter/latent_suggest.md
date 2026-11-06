@@ -13,7 +13,7 @@ routed across domains, and matched against a per-domain latent index of the
 corpus. **ZERO proposer code** — the suggestion IS the corpus pattern text
 (`buggy_code`/`ref_shape` + the head of `fixed_code`/`opt_pattern`). The
 proposers (Phase 4 rust_perf + Phase 6 T6.4 clippy emitter migration) are
-wired into the `cargo refine --fix` CLI — they consume the same rule book
+wired into the `cargo refine fix` CLI — they consume the same rule book
 this layer builds; the emitter substrate lives in `src/edit_emitter.rs`.
 
 Zero retrieval code reimplemented — the layer composes riir-rag's substrate

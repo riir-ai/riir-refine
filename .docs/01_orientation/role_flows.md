@@ -29,7 +29,7 @@ earnings promise.
 ```mermaid
 flowchart LR
     INST["install cargo-refine"] --> DRY["cargo refine — dry run<br/>private · nothing sent"]
-    DRY --> FIX["cargo refine --fix<br/>compile-gated writes"]
+    DRY --> FIX["cargo refine fix<br/>compile-gated writes"]
     FIX --> GET["GET — fixed code<br/>clippy · perf · docker · dist<br/>+ compile errors"]
     FIX -.-> COST["COST — logged in only<br/>1 KAT-equiv / 1M code-word tokens<br/>TUNA trial credit pays first"]
     INST -.-> LITE["no login = lite tier<br/>never billed · anonymous<br/>earns nothing"]
@@ -38,7 +38,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | install (prebuilt binary → `~/.cargo/bin`) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine --fix` (compile-gated writes; divergence classes stay manual). Optional: login — creates the account + the TUNA trial grant. |
+| **Does** | install (prebuilt binary → `~/.cargo/bin`) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine fix` (compile-gated writes; divergence classes stay manual). Optional: login — creates the account + the TUNA trial grant. |
 | **Gets** | healed code across the domains: clippy lints + compile errors, perf, security, Dockerfiles, kernel/rust-perf rules, dist advice. Plus the local self-evolve loop (memory always; learning when the oracle is present). |
 | **Pays** | **lite: nothing** — anonymous, free forever, outside the economy (nothing is uploaded, nothing is billed). **Logged in:** the burn meter — 1 KAT-equivalent per million code-word tokens, TUNA trial credit first. Depleted + never contributed → the 075 soft gate refuses scanning until you contribute or top up. |
 

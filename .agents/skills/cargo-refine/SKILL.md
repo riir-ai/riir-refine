@@ -37,13 +37,13 @@ self-evolve trajectories on every apply.
 ## Usage (the just-works UX, 2026-09-08)
 
 ```bash
-cargo refine <paths>                                        # DRY RUN (the bare default — zero edits)
-cargo refine --fix <paths>                                  # REAL fix: writes + compile-gates (fix_verify builds)
-cargo refine --fix --no-verify <paths>                      # write without the compile gate (syn-gated only)
-cargo refine --suggest <paths>                              # rule suggestions, no edits
-cargo refine --fix --verify --verify-args "--features <set>" <paths>   # gated code
-cargo refine --info                                        # ONE COMMAND stats: wallet + account + mining + local work
-cargo refine --fix --groups pedantic <paths>                # also fix allow-by-default groups the crate does NOT enable
+cargo refine <paths>                                        # DRY RUN (bare IS the dry run — zero edits)
+cargo refine fix <paths>                                    # REAL fix: writes + compile-gates (fix_verify builds)
+cargo refine fix --no-verify <paths>                        # write without the compile gate (syn-gated only)
+cargo refine suggest <paths>                                # rule suggestions, no edits
+cargo refine fix --verify-args "--features <set>" <paths>   # gated code
+cargo refine info                                           # ONE COMMAND stats: wallet + account + mining + local work
+cargo refine fix --groups pedantic <paths>                  # also fix allow-by-default groups the crate does NOT enable
 ```
 
 - **Level gate (Issue 135)**: an allow-by-default lint (pedantic/nursery —
@@ -57,11 +57,13 @@ cargo refine --fix --groups pedantic <paths>                # also fix allow-by-
   restores the old apply-everything behaviour. `RUSTFLAGS` /
   `.cargo/config.toml` `-W clippy::…` are NOT read — pass `--groups` there.
 
-- `--fix` WRITES by default now (the explicit flag is the consent) and
+- `fix` WRITES by default (the explicit verb is the consent) and
   verify-gates by default on `fix_verify` builds. `--write` still parses
-  (no-op with --fix). `--suggest` is the explicit review command.
+  (no-op with fix). The `suggest` verb is the explicit review (`--suggest`
+  a quiet alias). The `--fix`/`--suggest` flags stay accepted, taught
+  nowhere (issue 210, the verb-first law).
 - ⚠ Old scripts/docs that used `--fix` as a dry run now WRITE — use the
-  bare form (or `--suggest`) for review.
+  bare form (or `suggest`) for review.
 
 - `--verify` runs a baseline `cargo check --all-targets`, applies, re-checks,
   and REVERTS any edit that broke compilation (line-matched span-level).

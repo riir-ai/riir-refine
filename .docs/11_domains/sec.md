@@ -19,7 +19,7 @@ suggest-only.
 
 ## The Phase-1 corpus (6 rules, 5 of 11 candidates killed)
 
-| Rule | Family | `--fix` | The bounded fix |
+| Rule | Family | fix | The bounded fix |
 |---|---|---|---|
 | `ffi-extern-fn-catch-unwind` | `Ffi` | ✓ | wrap unit-return extern fn bodies in `std::panic::catch_unwind` (the in-house `#[riir_ffi]` rule generalized) |
 | `ptr-deref-null-check-first` | `UnsafeHygiene` | ✓ | `let Some(p) = (unsafe { p.as_ref() }) else { return None };` prologue in Option-returning unsafe fns |
@@ -35,7 +35,7 @@ restriction + nursery; zero equivalent-fix firings). The crypto trio is
 **dep-gated** (the `fxhashmap` pattern: fires only when the file already
 imports the replacement crate — the rulewright never edits `Cargo.toml`).
 
-| Rule | Family | `--fix` | The bounded fix / gate |
+| Rule | Family | fix | The bounded fix / gate |
 |---|---|---|---|
 | `unsafe-impl-send-sync-unsound-field` | `UnsafeHygiene` | suggest-only | `unsafe impl Sync/Send` on a same-file type with `Rc`/`RefCell`/`Cell` fields — the Rudra unsound-impl class clippy cannot see; fix = Arc/Mutex redesign (type-level, never mechanical) |
 | `ffi-export-panicking-body` | `Ffi` | suggest-only | panicking body (unwrap/expect/panic/indexing/assert) in a `#[no_mangle] extern` fn — the VALUE-return complement of Phase-1's catch-unwind (unit-return); fix needs a caller-chosen sentinel |
@@ -45,12 +45,12 @@ imports the replacement crate — the rulewright never edits `Cargo.toml`).
 
 Honest scope notes: the R5 proposer is shape-based, so a `String`-typed
 secret (subtle has no `ConstantTimeEq` for `String`) FIRES and then the
-`--fix --verify` compile gate reverts it — the type backstop, recorded as
+fix lane's compile gate reverts it — the type backstop, recorded as
 a fixture. The `!=` form stays out of Phase-2 scope.
 
 ## P8 intake (2026-09-01) — the 12th rule, new `PanicSafety` family
 
-| Rule | Family | `--fix` | The bounded fix / gate |
+| Rule | Family | fix | The bounded fix / gate |
 |---|---|---|---|
 | `nan-unsafe-sort-comparator` | `PanicSafety` | yes (strict-gated) | `partial_cmp(..).unwrap_or(Equal)` (or `.unwrap()`) inside a sort comparator → `total_cmp(..)` — NaN becomes deterministically ordered instead of equal-to-everything (an inconsistent order the std sorts MAY PANIC on since 1.81). Gates: enclosing fn contains a `sort_by`/`sort_unstable_by`/`select_nth_unstable_by` call + exact chain shape + `Equal`-only default + comment guard + macro args refuse. The arg carries over VERBATIM (`PartialOrd::partial_cmp` pins `(&self, other: &Self)` — the same shape `total_cmp` takes), so the output is the idiomatic human form; non-float receivers (`Option<f32>`, other Ord primitives) fail E0599 → the `--verify` gate auto-reverts. Probe 2026-09-01: zero clippy lints fire on the shape (real clippy 1.97, pedantic+nursery+perf+suspicious+correctness+style) — the boundary holds with margin. Source: riir-ai Issue 832 T5's P8 intake (≈300 sibling library sites); the intake's type-blindness concern dissolved by `total_cmp` (direction-preserving recv/arg order + name-identical on f32/f64) — recorded in the intake close-out. Honest recall limit: a comparator defined in a helper fn and passed to `sort_by(helper)` by name is not detected — the sort call and the chain must share the enclosing fn. Property: KANI-VERIFIED (harnesses g1a/g1b/g1c, Issue 127 — see the "Property evidence" section below)
 
@@ -63,7 +63,7 @@ SUGGEST-ONLY: parse-only detectors with zero-FP negative suites ship in
 the `collect_edits` arms are deliberately untouched — these rules emit
 suggestions, never auto-fixes (the `ffi-export-panicking-body` shape).
 
-| Rule | Family | `--fix` | The detection + the bounded form |
+| Rule | Family | fix | The detection + the bounded form |
 |---|---|---|---|
 | `length-prefix-validate-before-alloc` | `InputValidation` | suggest-only | a length parsed in-fn (`from_be_bytes`-class byte-swap or a header `.parse()`) reaching `vec![0u8; len]` with NO intervening bound comparison = allocation-size DoS (one peer-controlled header demands a multi-GB buffer). The bounded form: `if len == 0 \|\| len > MAX { return Err(..) }` BEFORE the alloc. Gates: same-fn chain only (cross-fn origins undetected — the helper-fn recall limit), identity tracking through casts/`?`/`ok_or`/`Some`/arithmetic, any comparison/match/assert on the tracked ident suppresses (validating a derived length bounds its source), `vec!`-repeat form only (`with_capacity` out of scope), `#[cfg(test)]` mods skipped. The evidence was BOTH WAYS in one codebase: an unbounded transport beside its own bounded twin (same author) — the class recurs even in careful code |
 | `secret-file-create-without-0600` | `InputValidation` | suggest-only | a credential-named file (`secret`/`password`/`passwd`/`credential`/`token`/`hmac`, word-boundary, plural stems count — `secrets.json`) created by `File::create` / `fs::write` / an OpenOptions create-chain WITHOUT `.mode(..)` is 0644-by-umask, world-readable. The bounded forms: `#[cfg(unix)] OpenOptions::mode(0o600)` at create, or portably after create `#[cfg(unix)] set_permissions(Permissions::from_mode(0o600))` (the house `kat_account::write_private` form). Gates: narrow vocabulary (the ambiguous words are EXCLUDED — `key`/`identity`/`private`/`pem`, so `api_key` writes are missed, honest), create-class writes only (reads out), ANY hardening marker anywhere in the fn suppresses the whole fn (one hardened file hides a sibling — conservative). Suggest-only because a portable mechanical rewrite is not parse-only-provable (Windows `from_mode` maps coarsely) |
@@ -88,7 +88,7 @@ One rule from the rustsec/advisory-db seed (CC0 @ `b50980aa`; Research 161 /
 Plan 120 — the DB is a class TAXONOMY with real-world frequency, cited as
 class provenance only; fixtures are ORIGINAL syntheses):
 
-| Rule | Family | `--fix` | The detection + the bounded form |
+| Rule | Family | fix | The detection + the bounded form |
 |---|---|---|---|
 | `unbounded-read-into-vec` | `InputValidation` | suggest-only | an unbounded stream read into a growable Vec from a network reader (`read_to_end`/`read_to_string`, or a `loop { read?; extend }` drain, no `Read::take` cap) grows the buffer without limit on peer-controlled bytes — the RUSTSEC-2024-0003 / CVE-2019-9514 (h2) resource-exhaustion class. The bounded form: `Read::take(reader, MAX_BYTES)` + `Vec::with_capacity(..)`. Gates: untrusted-source vocabulary is parse-provable only (TcpStream-typed params/bindings, listener `accept()`/`incoming()` children, `connect()`/`reqwest::get()` results — a bare `R: Read` is an honest NO); File readers are the trusted regime and never track; `.take(` anywhere in the receiver chain suppresses; the loop-drain shape needs BOTH halves (read on a tracked reader + extend on a local Vec) and caps suppress (`resize` fn-wide, `buf.len()` in a loop comparison, the read-count binding vs a non-zero operand — `n == 0` is the EOF sentinel, not a cap); `#[cfg(test)]` mods skipped. Suggest-only: choosing the limit is a protocol decision |
 
@@ -126,7 +126,7 @@ bare ident. The repair is the checked op + an INVENTED error path
 (`len.checked_add(FRAME_OVERHEAD)` — the Option/Result type the fn may not
 carry), so suggest-only like the rest of the family.
 
-| Rule | Family | `--fix` | The detection + the bounded form |
+| Rule | Family | fix | The detection + the bounded form |
 |---|---|---|---|
 | `unchecked-wire-arithmetic` | `InputValidation` | suggest-only | a wire-byte-origin integer (`from_{be,le,ne}_bytes` / header `.parse()`) through a BARE overflow-prone operator with no intervening bound check — panic in debug, silent WRAP in release, and the wrapped length corrupts the frame parse ("check the multiplication, not just the result": the derived-validated shape's post-hoc range check validates the WRAPPED value). Bounded form: `checked_add`/`checked_sub`/`checked_mul`/`checked_shl` + an error path. Sink-distinct from `length-prefix-validate-before-alloc` (Plan 156 T2, recorded): distinct defect classes, distinct repairs, no composition gate — both sinks fire on the unvalidated composition shape with disjoint spans, and in the derived-validated shape the alloc rule is correctly silent while this one correctly still fires. Boundary (measured, Plan 156 T1 + T7 refinement): `arithmetic_side_effects` is SILENT on literal/const operands (`len + 8`, `len + CONST`) and where it fires (variable operands) it is blanket/unscoped/no-suggestion, restriction/allow-by-default; `manual_checked_ops` is Div-only at this pin; Div/Rem are NOT this sink. Honest recall limits: same-fn bare-ident origins only; `vec![0u8; len + 8]` (arithmetic INLINE in the repeat) is unreached — the shared walk never descends into macro tokens |
 
@@ -456,7 +456,7 @@ safe fns), unsafe impls/traits, unsafe exprs. Feeds
 ## Negative control
 
 riir-viewbridge IS the negative control: its whole FFI surface is
-`riir_ffi!`-wrapped (catch_unwind inside), and the dry `--fix --domain sec`
+`riir_ffi!`-wrapped (catch_unwind inside), and the dry fix-lane `--domain sec`
 run over its 24 files proposes 0 edits. A nonzero there falsifies the
 proposer.
 
@@ -494,7 +494,7 @@ proposer.
   the softmax-collapse family, new APPEND-ONLY `SecFamily::Numerics`,
   arXiv:2610.31642) — `sigmoid-minus-one` (mechanical, strict-gated:
   logistic-name allowlist, no comparison/`.abs()` context, bare-context
-  split form, comment guard; `--fix --write --verify` end-to-end on a
+  split form, comment guard; a `cargo refine fix` end-to-end on a
   /tmp fixture crate: 2 edits kept, 0 reverted, the collapse-premise test
   flips red → green) + `softmax-onehot-collapse` / `neg-ln-softmax-prob`
   (suggest-only detectors, `proposers::softmax_collapse::detect`). Router

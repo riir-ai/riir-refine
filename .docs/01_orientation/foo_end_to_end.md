@@ -18,7 +18,7 @@
 | 8.2 login | `cargo refine login` | ships |
 | 8.3 welcome | `cargo refine account` | ships (service-plane gate, T0.2b) |
 | 8.5 history | `cargo refine account --history` | ships, with a stated limit |
-| — heal | `cargo refine --fix --write --verify <paths>` | ships |
+| — heal | `cargo refine fix <paths>` | ships |
 | — sync | `cargo refine sync` | ships |
 | T1.3 get paid | `cargo refine pay --request` | ships |
 | T1.8 faucet | `cargo refine faucet --request` | ships (CLI); the credit needs a crank pass |
@@ -99,12 +99,12 @@ exact violation T0.2 avoided.
 ## 4. Heal something, and watch it cost KAT
 
 ```sh
-cargo refine --fix --write --verify src/
+cargo refine fix src/
 ```
 
 The meter records word tokens over the healed spans; the charge ledger
-settles them at 1 KAT per code word token. `--verify` compiles baseline →
-applies → re-checks → auto-reverts breaking edits. Feature-gated code needs
+settles them at 1 KAT per code word token. A fix run compile-gates:
+baseline check → apply → re-check → auto-revert breaking edits. Feature-gated code needs
 `--verify-args "--features <set>"` — a default-features check compiles gated
 files to nothing, and a green check then proves nothing about them.
 

@@ -122,7 +122,7 @@ src/
 ```
 
 **Cross-domain auto-routing — shipped as fan-out (Plan 005, 2026-08-14).**
-The unified `cargo refine --suggest` CLI runs with `--domain auto`: it **fans
+The unified `cargo refine suggest` CLI runs with `--domain auto`: it **fans
 out across all feature-enabled domains**, with the router verdict as a
 per-span annotation (NOT a gate — the 8-D structural centroids mis-routed
 fixtures, so gating starved the correct domain). Each domain is still
@@ -147,15 +147,15 @@ code; `--fix` CLI wiring is Phase 6.
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` (BuildKit's own linter) agreement oracle for the 4 rules whose incumbent is a check NAME, not a `DL` code. Stays opt-in on purpose: it needs a running daemon and a registry round-trip per non-`scratch` fixture (~1.3-2.2 s each), a strictly heavier dependency class than hadolint |
 | `dist` | **on** | — | Issue 085: shipped-artifact build-config advice over name-matched `Cargo.toml` manifests (suggest-only, never a manifest write). **DEFAULT-ON since 2026-09-13** — all four GOAT promotion conditions PASS (Bench 082 + §6 addendum: precision fixtures, score-bench #92 FLAT, router floor 74/101 measured at default+dist, real consumer cites; B1/B2 scanner extensions `759e209d`) and the owner pull arrived (the Issue-085 fix directive). Zero new deps (the second hand-written no-`syn` scanner after docker) |
 | `ruliology_search` | off | `clippy_lints` | L3 Pareto-front candidate search |
-| `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + `cargo refine --suggest`/`--fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
+| `latent_retrieval` | off | `dep:riir-rag`, `dep:riir-neuron-db` | Plan 005: span-level latent retrieval + the `cargo refine suggest`/`fix` CLI (Bench 018 G1–G4 + Bench 019; T3.5 operator-aware BM25 tokenizer, Bench 027) |
 | `clippy_verify` + `latent_retrieval` | off | — | T3.5.5 real-`cargo clippy` labeling oracle (`ClippyOracle`) + the uncontaminated G1 harness (`tests/uncontaminated_g1.rs`) |
 | `bonsai_retrieval` | off | `latent_retrieval`, `riir-rag/bonsai_embedder` | Plan 005 T3.5 option 3: 768-D Bonsai dense rerank. **HEAVY** — 6.7 GB GGUF, ~48 s/embed on CPU. Measurement-only (Bench 027) |
 | `self_evolve` | on | — | additive self-evolution loop (memory + EMA + `EvolveRecorder`; DEFAULT-ON since Issue 018, opt-out `RIIR_REFINE_SELF_EVOLVE=0`; BLAKE3-committed memory since T7.4; Beta-posterior selection since T9.3) |
-| `rustc_errors` | **ON** | — | **Plan 019**: `cargo refine --fix-compile` — oracle-driven compile-error repair (E0597/E0499/E0502 uncontested + the E0505 contested opening; delegated codes ship no template by the measured floor). GOAT at N=212: **105/105 uncontested fixed where `cargo fix` scores 0/105; 126/126 repaired cases behavior-green post-fix** (Bench 045). **PROMOTED DEFAULT-ON 2026-08-29 (owner call): driver-shaped (inert until invoked — zero runtime overhead), floor gate stands, dep-tree unchanged (`compile_oracle = []`)** |
+| `rustc_errors` | **ON** | — | **Plan 019**: `cargo refine fix-compile` — oracle-driven compile-error repair (E0597/E0499/E0502 uncontested + the E0505 contested opening; delegated codes ship no template by the measured floor). GOAT at N=212: **105/105 uncontested fixed where `cargo fix` scores 0/105; 126/126 repaired cases behavior-green post-fix** (Bench 045). **PROMOTED DEFAULT-ON 2026-08-29 (owner call): driver-shaped (inert until invoked — zero runtime overhead), floor gate stands, dep-tree unchanged (`compile_oracle = []`)** |
 | `ternary_inference` | off | `riir-engine`, `riir-gpu` | Bench 010: katgpt ternary generation on clippy prompts |
 | `groq_first` | off | `dep:ureq` | Issue 051: groq-first free-tier LLM routing (`src/groq.rs`) — the Groq chat client + the groq→CF provider ladder (`router`, also needs `cf_workers_ai`). The daily drain reasons on the free tier FIRST and falls back to metered CF on limit; either leg may be absent (`GROQ_API_KEY` absent → pure CF, byte-identical; CF creds absent → a groq-only window whose exhausted free tier ends it cleanly), both absent → refused. Hardened: split connect/call timeouts, single-allocation auth header, token scrubbed from server-controlled error strings. `kat_drain --preflight` checks the ladder on an empty backlog at zero metered cost. Usage lands on the cost ledger's `providers.groq` block → the ops dashboard's absorption card |
 | `compile_oracle` | off | — | Plan 019 T0.3: the real-`cargo` error-JSON capture plumbing for the `rustc_errors` domain (deliberately NOT implying `latent_retrieval` — a compile fixer must not grow a retrieval dep) |
-| `fix_verify` | off | `compile_oracle`, `latent_retrieval` | Issue 015: `--fix --verify` — the compile gate as tooling (apply → cargo-check → revert only offending edits; real-repo GOAT Bench 031) |
+| `fix_verify` | off | `compile_oracle`, `latent_retrieval` | Issue 015: the compile gate as tooling (fix applies → cargo-check → reverts only offending edits; real-repo GOAT Bench 031) |
 | `score_bench` | off | `clippy_verify`, `latent_retrieval`, `clippy_lints`, `rust_perf` | Plan 014: `cargo refine --score-bench` — the frozen real-code fix bench + the committed score curve
 | `margin_mining` | off | `score_bench`, `latent_retrieval` | Issue 077 T3: `e^{−2M}` margin-weighted carve order (`score_bench_mine_v6 --order margin` / `--ab`) — RECORDED DEMOTE (Bench 080: tie at every budget; retrieval-similarity margins don't select lint-bearing raw spans), stays opt-in, the carve default stays count-desc |
 | `l4_lora` | off | — | Plan 336 T4.4/T5.3: the L4 generative-fallback SEAM (`L4Fallback` trait + `DaemonL4` transport) — inert unless a fallback is installed; Plan 336 G1 measured 0/60, stays UNARMED (see [`.docs/10_self_evolve/l4_fallback.md`](.docs/10_self_evolve/l4_fallback.md)) |
@@ -279,11 +279,11 @@ cargo run --example ruliology_search_demo --features ruliology_search --release 
 cargo run --example self_evolve_real_world_demo --features "self_evolve clippy_verify" --release
 
 # Latent suggest over real files (Plan 005; opt-in — pulls riir-rag)
-cargo run --features latent_retrieval --bin cargo-refine -- --suggest src/
+cargo run --features latent_retrieval --bin cargo-refine -- suggest src/
 
-# Span-preserving fix (review mode, then write)
-cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet src/
-cargo run --features latent_retrieval --bin cargo-refine -- --fix --quiet --write src/
+# Span-preserving fix (dry run, then the real fix — writes + compile-gates)
+cargo run --features latent_retrieval --bin cargo-refine -- src/
+cargo run --features latent_retrieval --bin cargo-refine -- fix --quiet src/
 ```
 
 ## Contributing fixes (opt-in)
@@ -322,7 +322,7 @@ under your repo's `.refine/`; the machine-local account/identity state under
 `~/.config/` (deleted by `cargo refine leave --purge`, which is explicit and
 never the default).
 
-## Automatic rustfmt (`--fix --write`)
+## Automatic rustfmt (`cargo refine fix`)
 
 Fixed files are **rustfmt'd automatically** after the write — default-on,
 `--no-fmt` to disable. No manual post-fix formatting step, no SKILL
@@ -340,12 +340,12 @@ required — the discipline is built into the tool:
 - **Never fatal**: rustfmt missing from PATH or a parse failure warns and
   skips; the fixed file is always left as valid Rust.
 
-Dry runs (`--fix` without `--write`) report the **fmt plan** per file
+A dry run (bare `cargo refine`, no `fix`) reports the **fmt plan** per file
 (`fmt: would-format` / `skip (pre-existing drift)` / `skip (CRLF)`) plus a
 run summary:
 
 ```text
-$ cargo-refine --fix src/crate/
+$ cargo-refine src/crate/
 fix src/crate/foo.rs (12 edit(s)):
   [uninlined_format_args   ] line 41
   fmt: would-format
@@ -355,9 +355,9 @@ fix src/crate/bar.rs (3 edit(s)):
 scanned 2 file(s), ... fmt: 1 would-format, 1 skip pre-existing drift
 ```
 
-The same summary appears after `--write` (`fmt: 22 formatted, 70 skip
-pre-existing drift, 3 skip CRLF`). Under `--verify` the fmt pass applies
-after the compile gate, to files with kept edits only.
+The same summary appears after a real fix (`fmt: 22 formatted, 70 skip
+pre-existing drift, 3 skip CRLF`). Under the compile gate the fmt pass applies
+after the check, to files with kept edits only.
 
 ## clippy-bench — the frozen fix score + SVG curve (Plan 014)
 
@@ -401,7 +401,7 @@ engineering-iterative and the curve makes it honest.
 
 ## Watch mode (real use) — Plan 019 Phase 5
 
-`scripts/watch_heal.sh` wraps `cargo refine --fix-compile --write` in a watch
+`scripts/watch_heal.sh` wraps `cargo refine fix-compile --write` in a watch
 loop for real session use: your editor saves, the oracle repairs what it
 can, the miss queue collects what it can't.
 
@@ -415,7 +415,7 @@ HEAL_BIN="cargo run --features rustc_errors --bin cargo-refine --" ./scripts/wat
 Three recorded caveats are REQUIREMENTS of any wrapper — the script
 encodes them, and a hand-rolled variant must too:
 
-1. **Write semantics are clean by construction.** `--fix-compile` NEVER
+1. **Write semantics are clean by construction.** `fix-compile` NEVER
    writes without `--write` (pinned by test) and a reverted candidate is
    byte-identical to its pre-run content. There is no unconditional-write
    trap.
@@ -491,7 +491,7 @@ narratives live in git history (`git log -- .issues/044_*` /
 Over the N=212 known-inverse mutation corpus (12 committed anchors + 200
 generated; every seed carries a ground-truth behavior test):
 
-| error family | `cargo fix --broken-code` | `cargo refine --fix-compile` | verdict |
+| error family | `cargo fix --broken-code` | `cargo refine fix-compile` | verdict |
 |---|---|---|---|
 | E0597 (borrow outlives owner) | **0%** | **100%** | net-new (uncontested) |
 | E0499 (two `&mut` alive) | **0%** | **100%** | net-new (uncontested) |

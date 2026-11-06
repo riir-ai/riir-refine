@@ -2,7 +2,7 @@
 
 `src/recorder.rs`. The standalone consumer shape of the self-evolve layer:
 tools that apply fixes through a path OTHER than the `HealPipeline` (the
-`cargo refine --fix` proposers + edit emitter) still feed the same memory +
+`cargo refine fix` proposers + edit emitter) still feed the same memory +
 learning — with a **graceful oracle degradation** instead of a hard feature
 dependency.
 
@@ -24,13 +24,13 @@ EvolveRecorder::new()                 // learning = cfg!(feature = "clippy_verif
 EvolveRecorder::from_env()            // + RIIR_REFINE_SELF_EVOLVE opt-out
 EvolveRecorder::with_opt_out(bool)    // explicit (test-friendly)
 rec.record_applied(rule, buggy, fixed)          // memory only
-rec.record_reviewed(&[(rule, line, repl, restore)])  // the --fix review shape
+rec.record_reviewed(&[(rule, line, repl, restore)])  // the fix-lane review shape
 rec.record_outcome(rule, buggy, fixed, success) // memory stats always; EMA gated
 rec.disable_learning(reason)                    // runtime oracle failure
 rec.load(&path) / rec.save(&path)               // persistence (see latent_fix_memory.md)
 ```
 
-## The `cargo refine --fix` wiring
+## The `cargo refine fix` wiring
 
 - **Non-verify mode**: only WRITTEN edits are recorded
   (`record_reviewed`) — review-only runs record nothing.

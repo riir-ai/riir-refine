@@ -18,11 +18,11 @@ co-equal path.
 |---|---|---|
 | 01 | [`01_orientation/`](01_orientation/README.md) | Crate role, sibling layout, boundary rationale, build commands, KAT billing + TUNA surfaces |
 | 02 | [`02_corpus/`](02_corpus/README.md) | L0 rule distillation: `Corpus<D>` (generic) + BLAKE3 commitment + per-domain seed corpora |
-| 03 | [`03_drafter/`](03_drafter/README.md) | L1 ternary SIMD matvec drafter (`TernaryDrafter`, generic over `E: HealEntry`) + BLAKE3 modelless embedder + Plan 005 latent retrieval (`RuleIndex`/`DomainRouter`/`LatentMatcher`, `--suggest` MVP) |
+| 03 | [`03_drafter/`](03_drafter/README.md) | L1 ternary SIMD matvec drafter (`TernaryDrafter`, generic over `E: HealEntry`) + BLAKE3 modelless embedder + Plan 005 latent retrieval (`RuleIndex`/`DomainRouter`/`LatentMatcher`, the `suggest` MVP) |
 | 04 | [`04_pruner/`](04_pruner/README.md) | L2 `syn`-based syntax validator (domain-agnostic) |
 | 05 | [`05_clippy_verify/`](05_clippy_verify/README.md) | clippy lint resolution via real `cargo clippy` (opt-in) |
 | 06 | [`06_ruliology/`](06_ruliology/README.md) | L3 Pareto-front candidate search (opt-in) |
-| 07 | [`07_examples/`](07_examples/README.md) | The 8 in-tree examples + the `cargo-refine` bin (`cargo refine --suggest`) |
+| 07 | [`07_examples/`](07_examples/README.md) | The 8 in-tree examples + the `cargo-refine` bin (`cargo refine suggest`) |
 | 08 | [`08_benchmarks/`](08_benchmarks/README.md) | GOAT gate methodology + measured results |
 | 09 | [`09_lessons/`](09_lessons/README.md) | Canonical patterns + honest POC caveats |
 | 10 | [`10_self_evolve/`](10_self_evolve/README.md) | Issue 004 + Issue 008: latent-first self-evolution loop (G1–G7 ALL PASS) |
@@ -32,7 +32,7 @@ co-equal path.
 ## Pipeline overview
 
 ```text
-Real .rs files (Plan 005 — feature `latent_retrieval`, the --suggest MVP)
+Real .rs files (Plan 005 — feature `latent_retrieval`, the suggest MVP)
   AstChunker spans → ModellessEmbedder (8-D) → DomainRouter (annotation)
   → RuleIndex fan-out retrieve → ranked rules + pattern snippets   ← 03_drafter/latent_suggest.md
          │
@@ -67,7 +67,7 @@ L3 — RULIOLOGY SEARCH (opt-in)                      ← L3 (06_ruliology)
 
 The Plan 005 latent path is **suggest + fix** at the CLI — the Phase 4
 rust_perf `propose_fix` proposers + the T6.4 clippy emitter migration are
-wired into `cargo refine --fix` (span-preserving edits; the proposer visitor
+wired into `cargo refine fix` (span-preserving edits; the proposer visitor
 is the gate). See [`07_examples/cargo_refine.md`](07_examples/cargo_refine.md).
 
 ## Resolved validation

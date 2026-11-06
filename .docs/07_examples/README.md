@@ -15,7 +15,7 @@
 | [`ruliology_search_demo.md`](ruliology_search_demo.md) | `examples/ruliology_search_demo.rs` — L3 Pareto-front GOAT gate |
 | [`self_evolve_real_world_demo.md`](self_evolve_real_world_demo.md) | `examples/self_evolve_real_world_demo.rs` — self_evolve G6/G7 GOAT gate |
 | `stage2_tuning_demo.rs` | `examples/stage2_tuning_demo.rs` — Stage 2 adaptive drafter GOAT gate (Issue 010) |
-| [`cargo_refine.md`](cargo_refine.md) | `src/bin/heal.rs` — the `cargo-refine` bin: `cargo refine --suggest` over real files (Plan 005 Phase 2) |
+| [`cargo_refine.md`](cargo_refine.md) | `src/bin/heal.rs` — the `cargo-refine` bin: `cargo refine suggest` over real files (Plan 005 Phase 2) |
 
 ## Source
 
