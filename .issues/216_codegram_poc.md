@@ -1,6 +1,7 @@
 # Issue 216 — codegram POC: syntax-shape-keyed span dispatch (the grammar lever beyond issue 213's file mask)
 
-**Status:** OPEN — filed 2026-11-07 (Bench 141 T4); pre-registered BEFORE implementation; UNCLAIMED — the next lane appends `**Claimed:** <session>, <epoch>, expires <ISO-UTC>` under this line and pushes before implementing. Builds ON issue 213's `DomainMask` (consume, never fork).
+**Status:** OPEN — filed 2026-11-07 (Bench 141 T4); pre-registered BEFORE implementation; builds ON issue 213's `DomainMask` (consume, never fork).
+**Claimed:** zed-native-agent@m3, 1794052000, expires 2026-11-09T12:00:00Z
 
 ## Why
 
