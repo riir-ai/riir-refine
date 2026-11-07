@@ -73,14 +73,29 @@ Silicon, no pre-registered bar): 5 worktrees of a 525-crate workspace 33.6 GB �
 
 ## Pilot shape (pre-registered A/B — build-hygiene §2/§5 laws apply)
 
-- [ ] ONE box (m3), one workspace repo with a real dev loop; verify the uninstall
+- [x] ONE box (m3), one workspace repo with a real dev loop; verify the uninstall
       script first (restores the rustup proxy — the demote path is one command).
+      VERIFIED 2026-11-07 (zed-13afd776@m3): no uninstall script exists and none is
+      needed — the fork is side-by-side (`~/.cargo/bin/cargo-hc`, the kept Bench-138
+      state) and the rustup proxy at `~/.cargo/bin/cargo` was never replaced; the
+      demote path is `rm ~/.cargo/bin/cargo-hc` plus an optional
+      `rm -rf ~/.cargo/targets` (fork-GC-bounded, regenerable) — "uninstall = delete
+      the binary" per Bench 138 §Anomalies.
 - [ ] Pre-register the bars BEFORE install: edit→test-green p50 (interleaved A→B
       pairs), fresh-worktree build time, `du` over all target trees after 7 days,
       quick-gate time delta. Decision rule: adopt only if p50 improves ≥ 20% OR
       7-day disk halves, AND no gate premise breaks; otherwise uninstall.
 - [ ] Box-state provenance beside every number (`bench_preflight`).
-- [ ] Verify the binary-sha-changed law (a comment touch must not relink).
+- [x] Verify the binary-sha-changed law (a comment touch must not relink).
+      MEASURED 2026-11-07 (zed-13afd776@m3, hello-bin crate, dev profile, BOTH
+      postures): the law AS PINNED fails identically under both cargos — fork
+      (`cargo-hc`): comment touch → recompile + relink in 0.11 s, binary sha
+      4301d551… → 0d1b53d2…; plain-cargo control (scratch `CARGO_TARGET_DIR`): the
+      same rebuild in 0.08 s, sha 8037cab6… → e7de751a…. Cargo fingerprints are
+      mtime/size-based, so ANY source edit (even a comment) rebuilds; byte-stable
+      output is a content-hash/sccache property, not a cargo property. VERDICT: no
+      fork delta — the pilot-shape premise was mis-pinned; recorded
+      verified-negative, not an adoption blocker.
 - [x] Explicitly test the CARGO_TARGET_DIR posture: run a gate concurrent with a
       build and confirm the verdict stays valid (the shared-target hazard,
       reproduced on purpose, before trusting the fork's locking). DONE — Bench
@@ -140,7 +155,11 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
       is live: riir-refine has 18 `CARGO_BIN_EXE` files.
 - [x] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3) — **MEASURED, FAIL** (Bench 139 Part B, 2026-11-06, ran on bmo via the thunderbolt bridge — tailscale down, machine up, preflight PASSED both cells): blaze `0.20261027.0` cannot build either fleet workspace tried — sge's `coreaudio-sys` build script trips its MIR frontend (daemon cannot LOAD the workspace; every arm rc=101) and riir-kat's workspace panics its embedded rust-analyzer loader (`Unable to get FileSourceRootInput … this is a bug`); the plain-checkout control fails on blaze's own `unsupported: writable static __RUST_STD_INTERNAL_VAL` in test code and exits via its cargo fallback. **0/14 valid timed arms — the pre-registered correctness precondition unreachable → recorded, NOT adopted**; uninstalled from bmo + amo, `/tmp/blz*` scratch removed, the moot queued amo job `62549c83` cancelled (disclosed in Bench 139). Re-open triggers in Bench 139 (upstream build-script compilation + std-internal support, or a workspace it demonstrably loads+passes). Side note: the plain cargo loop it would have to beat is already 1.3-1.5 s on riir-kat and ~17 s on sge's feat-item lib (the 15 s test-run floor dominates).
 - [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
-      reproduce isolated or file upstream.
+      reproduce isolated or file upstream. DEFERRED 2026-11-07 (zed-13afd776@m3):
+      m3 was BUSY with a sibling measurement lane (esc_mammoth_items_fit) —
+      GB-scale first builds would have contaminated both lanes' numbers (the
+      box-state law); retry the isolated A/B at a quiet window BEFORE any upstream
+      filing.
 - [x] Hygiene residue the fork surfaced — riir-refine `b43a3c32` (the
       `cargo::unused_dependencies` hit was the TRAINER's edge to
       `riir-refine-fixer`, never used in code — dropped, BOUNDARY.md keeps it
