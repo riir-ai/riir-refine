@@ -29,6 +29,10 @@ The damp's claims hold on the real store: young-rule displacement compresses 3.8
 
 Cost posture: the damp is one multiply in the BATCH replay (`recompute_elo`, Issue 039's non-goal keeps Elo out of the hot path) + arms the report-only `regime:` readout; feature-off stays byte-identical (the standing pins). Promotion = quality-only — the owner law reads these numbers.
 
+## Production rollout (2026-11-07, post-promotion)
+
+The maintained binary (0.4.8, build `8f207986`, `elo-k-eff` compiled in) ran the first DAMPED `--recompute-elo` over the box's real store: **855 matches replayed · 35 rules + 371 spans rated · 398/405 rows updated** — exactly the mirror-anchor prediction (398 written). Second pass **0/405 (idempotent)** — the schedule is deterministic and the store stable. The one-time rating shift the verdict asked to record has landed; the frontier band (outcome counts) is unchanged by construction.
+
 ## Delegated-owner verdict (session 9a367fc9, claude_code channel, round 1): **AGREE — PROMOTE**
 
 Conditions carried: (a) the leg-5′ defined-population wording fixed to the exact n ≥ 16 count (7/7, spread ≤ 0.9) with the n=15 row separate — done in the table above; (b) the Cargo.toml promotion notes the damp takes effect only where `latent_retrieval` is on (default alone arms nothing at runtime; the release set carries it) + pulls `katgpt-core/step_noise` into the default closure; (c) the landing commit body records the ONE-TIME stored-rating shift the next `--recompute-elo` produces (leaders can shift by up to 63.8 while their order holds — never read as a regression). Verdict reading: legs 3/4 confirm the code does what it says (a smaller K moves a young rating less — near-true-by-construction); the DECIDING leg is 2′, which holds (τ 0.927 ≈ 2 swapped pairs over 55, overlap 8/8, ρ identical); the gain is insurance against noise the 99.5%-win organic store barely produces today, bought at one batch-replay multiply with a one-line revert.
