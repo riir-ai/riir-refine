@@ -117,6 +117,7 @@ PR onto it without an owner call. Recorded as the day-2 candidate.
 
 - **POLL 2026-11-04:** PR #2977 **OPEN** — head `903f0be` unchanged since the round-5 reply (2026-11-03 14:00Z); no maintainer activity since. Goodwill-only classification stands (owner verdict: outside the accept-rate denominator; the poller tracks it as a plain upstream contribution).
 - **CLOSE-OUT (plan 331 T8 executed):** `.raw/mozilla-heal/` (5 clones + target dirs, 16 GB) REMOVED — the sccache clone was verified at `903f0be` == fork/refine/cachedir-tag == the PR head before removal; the uniffi-rs/rca/supply-chain/mp4parse clones were clean (untracked artifacts only). Re-clone at the pin if the PR re-opens or the T6a #2968 lane claims. Post-mining intake landed: P113 (upstream-state check) + P114 (walk×strict-parse sec candidate) in `.distill/001`.
+- **MERGED (2026-11-07, verified via GitHub API):** PR #2977 merged by sylvestre at 12:31:11Z, merge commit `907230be` — six review rounds (2026-11-02..06), accepted. The campaign's first upstream accept, and the proposal-025 Traction/Team/self-grade texts updated the same day (owner report "pr merged"; API-verified before recording, per verify-before-claim).
 
 ## Post-mining intake (the lane coupling, 022 fusion lineage)
 
