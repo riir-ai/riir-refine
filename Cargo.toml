@@ -239,7 +239,7 @@ ed25519-dalek = "2"
 # the quiet bmo runner (added p50 0.086–0.170 / p95 0.798–0.973 ms/file, all
 # 3 interleaved rounds) + G3 PASS (applying domains rank-1 byte-identical).
 # sec stays opt-in (no file signal; Bench 140 axis unchanged).
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search", "shader_perf"]
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search", "shader_perf", "elo_k_eff"]
 
 # Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
 # capability frontier (unsolved-before / solved-after / regression-green /
@@ -415,6 +415,14 @@ set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 # latent_retrieval store's recompute (--recompute-elo); the readout rides
 # score_bench. Consume, never fork: katgpt-core/step_noise is the
 # primitive (PoC G1–G4 PASS at katgpt-rs 48fd0be4d).
+# Issue 190 — the evidence-damped Elo replay schedule (Bench 145, 2026-11-07:
+# PROMOTED to default via delegated-owner verdict, session 9a367fc9, AGREE —
+# quality legs pass on the real store; the deciding leg 2′ holds: leader order
+# τ 0.927, top-8 overlap 8/8, rating↔win-rate ρ identical). Takes effect at
+# runtime only where `latent_retrieval` is on (default alone arms nothing —
+# the store/damp live behind it; the release set carries it) and pulls
+# `katgpt-core/step_noise` (the report-only regime readout's primitive) into
+# the default closure. Feature-off stays byte-identical (the demote).
 elo_k_eff = ["katgpt-core/step_noise"]
 
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
@@ -1006,6 +1014,14 @@ required-features = ["clippy_lints", "seat_rerank"]
 [[example]]
 name = "plant_067_store"
 required-features = ["latent_retrieval"]
+
+# Bench 145 — the elo_k_eff promotion cell (Bench 141 queue A): paired
+# Elo-quality A/B over the real trajectory-store replay, read-only;
+# mirror-contract anchor vs production recompute_elo on a throwaway copy.
+# Run: cargo run --release --features elo_k_eff,latent_retrieval --example elo_damp_cell
+[[example]]
+name = "elo_damp_cell"
+required-features = ["elo_k_eff", "latent_retrieval"]
 
 # Phase 2: rust_perf domain demo. Validates the scaffold end-to-end.
 [[example]]

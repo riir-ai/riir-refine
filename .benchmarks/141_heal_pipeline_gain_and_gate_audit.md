@@ -69,8 +69,8 @@ Standing reading laws (from the report's own footer): name-keyed coverage is a L
 
 ## Improvement queue (the "so we can improve after" list)
 
-- [ ] A. elo_k_eff promotion cell — paired Elo-quality A/B (bar: monotone evidence-damping, no rating regression on the score-bench replay); owner gate after the numbers.
-- [ ] B. seat_rerank T5.2 — wire the armed manifest row into the production fix path, then the paired regate; release-set promotion only on measured gain.
+- [x] A. elo_k_eff promotion cell — DONE 2026-11-07 (Bench 145: paired cell on the real store, mirror-anchored; legs 2′/3/4 PASS, leg 5′ fail-as-registered with the premise-undefined subset diagnosed 7/7 on n≥16; delegated-owner verdict **AGREE — PROMOTED to default**; one-time rating-shift note in the landing commit).
+- [x] B. seat_rerank T5.2 — DONE 2026-11-01 (`2623f4d09`: the serve-boundary wiring + the owner-condition test — a wrong seat pick is compile-checked and rejected, the modelless answer stands in; the paired regate + release-set promotion stay their own owner gate, queue line unchanged otherwise).
 - [x] C. issue 213 G2 — DONE by the foreign lane (zed-2f171db9@m3): G2+G3 PASS, **shader_perf PROMOTED to default + release set** `9cc961530`, Bench 143; issue 213 closed; issue 214 (@compute needle) closed in the same wave.
 - [ ] D. codegram POC — issue 216: T1 LANDED (Bench 144: classifier + 6-row annotation table + filter + 5 test pins; clippy-green at default/feature/release-set); T4 G2 cost leg QUEUED on a quiet rig; promotion (T5) waits on the numbers.
 - [ ] E. coverage-debt authoring lane — stage the 2 dual-evidence rows first (`missing_errors_doc`, `missing_panics_doc`), then default-firing complexity/style/suspicious heads; Protocol-A dedup grep before EACH authoring; per the mining-batch discipline.

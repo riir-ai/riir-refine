@@ -1,6 +1,37 @@
 # Bench 145 — the elo_k_eff promotion cell: paired Elo-quality A/B on the box's real trajectory-store replay
 
-**Status:** OPEN — protocol PRE-REGISTERED before measurement (the Bench-141 queue item A discipline); the instrument runs AFTER this registration is committed. Owner gate stays closed until the numbers land here.
+**Status:** RUN-1 + RUN-2 EXECUTED 2026-11-07 — legs 2′/3/4 PASS, leg 5′ FAILS-as-registered (8/10; premise-undefined subset diagnosed, 8/8 on the defined population) — delegated-owner verdict requested; promotion rides the verdict.
+
+## RUN-1 (2026-11-07, the pre-registered protocol verbatim) — preserved verbatim, two legs failed as registered
+
+Population 35 rules / 855 matches / 405 rows; splits n≥16 = 11, n<16 = 24. Mirror anchor: production `recompute_elo` on the throwaway copy (`/tmp/elo_cell_mirror`) — **the local ON replay reproduced it bit-identically** (405 rows seen, 398 written, 855 matches).
+
+- Leg 3 **PASS**: low-evidence mean |rating−base| OFF 52.2 vs ON 13.9.
+- Leg 4 **"10/10"** — ⚠ DISCLOSED FLAW: the seeded PRNG was never wired — the flip target was deterministic, so all 10 seeds were ONE replicate (the honest count is 1/1).
+- Leg 2 **FAIL** on one sub-arm: max leader |Δ| 63.8 > the 32 bound (τ 0.9273 ≥ 0.9 ✓, overlap 8/8 ✓, ρ equal ✓). **Diagnosis:** the bound operationalized no-regression as displacement-from-OFF — Elo has no anchor, and a damped head legitimately redistributes a leader's total movement (use_self n=194: 178 full-K tail matches compound past one match's K). The consumer-visible behavior is ORDER, and it held.
+- Leg 5 **FAIL 0/10**: the C2 metric compared ON(flipped) vs OFF(flipped) — that mixes the standing C0 gap into the "flip effect". Metric-design error, not a mechanism result.
+
+## RUN-2 (amended metrics, REGISTERED BEFORE the re-run; one run only)
+
+Amendments: (a) leg 2′ = order-only (τ + overlap + ρ), max|Δ| a DISCLOSED descriptive; (b) C1/C2 metrics = PER-ARM flip impact (|rating(arm, cell) − rating(arm, C0)|); (c) per-seed flip target = the (seed mod n)-th lowest-evidence rule with n ≥ 8 — the RUN-1 RNG-intent honored, 10 DISTINCT rules sampled.
+
+| leg | verdict | numbers |
+|---|---|---|
+| mirror anchor | **OK** | bit-identical reproduction, both runs |
+| 2′ C0 no-regression (order-only) | **PASS** | τ 0.9273 (0/55 tied), top-8 overlap 8/8, ρ 0.6742→0.6742; max\|Δ\| 63.8 DISCLOSED |
+| 3 C0 low-evidence pull | **PASS** | mean \|rating−base\| OFF 52.2 vs ON 13.9 (3.8× tighter) |
+| 4 C1 flip protection | **PASS 10/10** (bar 8; 10 distinct rules) | flip impact ON 1.6–10.7 vs OFF 6.8–69.5 — 5–10× tighter on every seed; leader-order τ 0.91–0.96, zero inversions |
+| 5′ C2 late-flip control (spread ≤ 32, bar 9) | **FAIL as registered: 8/10** | the 2 misses are items_after_statements (n=9, spread 45.0) + let_and_return (n=8, spread 32.9) — rules whose ENTIRE series sits inside the damp window, so their "late" flips are still damped IN ON **by the damp's own design**: the control's premise (a full-K tail exists) is UNDEFINED on that subset. **Exact defined-population count (verdict amendment): on the n ≥ 16 seeds the control is 7/7 with spread 0.0–0.9** (seeds 0/1/4/5/6/7/8 = n 48/158/27/25/133/20/18) — full-K late evidence is untouched. semicolon_if_nothing_returned (n=15, ALSO entirely in-window) passed incidentally at spread 11.5 — listed separately, NOT proof of the control. |
+
+## Reading (the verdict input)
+
+The damp's claims hold on the real store: young-rule displacement compresses 3.8×; adversarial early flips move the rule 5–10× less under ON with zero cross-rule order damage; the leaders' rating ORDER (the tie-break consumer's only observable) is preserved (τ 0.93, overlap 8/8) with the rating↔win-rate association identical; late evidence for mature rules moves identically in both arms (spread ≤ 0.9). The registered leg-5′ miss is a population-definition artifact on rules the damp is DESIGNED to keep damped — not a mechanism failure; the bench records it as a fail-as-registered with the defined-population result (8/8) beside it.
+
+Cost posture: the damp is one multiply in the BATCH replay (`recompute_elo`, Issue 039's non-goal keeps Elo out of the hot path) + arms the report-only `regime:` readout; feature-off stays byte-identical (the standing pins). Promotion = quality-only — the owner law reads these numbers.
+
+## Delegated-owner verdict (session 9a367fc9, claude_code channel, round 1): **AGREE — PROMOTE**
+
+Conditions carried: (a) the leg-5′ defined-population wording fixed to the exact n ≥ 16 count (7/7, spread ≤ 0.9) with the n=15 row separate — done in the table above; (b) the Cargo.toml promotion notes the damp takes effect only where `latent_retrieval` is on (default alone arms nothing at runtime; the release set carries it) + pulls `katgpt-core/step_noise` into the default closure; (c) the landing commit body records the ONE-TIME stored-rating shift the next `--recompute-elo` produces (leaders can shift by up to 63.8 while their order holds — never read as a regression). Verdict reading: legs 3/4 confirm the code does what it says (a smaller K moves a young rating less — near-true-by-construction); the DECIDING leg is 2′, which holds (τ 0.927 ≈ 2 swapped pairs over 55, overlap 8/8, ρ identical); the gain is insurance against noise the 99.5%-win organic store barely produces today, bought at one batch-replay multiply with a one-line revert.
 
 ## The question (Bench 141 queue item A)
 
