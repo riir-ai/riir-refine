@@ -1,6 +1,7 @@
 # Issue 211 — fleet build-loop lever: the huacnlee/cargo fork + blaze (owner-gated pilot)
 
 **Status:** ACTIVE — owner directive 2026-11-06 ("it's about how we build and fix too... fast compile like blaze and lower target like huacnlee/cargo is a plus"); [Bench 138](../.benchmarks/138_build_loop_pilot_huacnlee_fork_sccache.md) + [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md) COMPLETE — the CARGO_TARGET_DIR hazard test is DONE and the fork FAILS it as a drop-in (worktree-per-lane is its only isolation); hygiene residue fixed; **blaze A/B MEASURED (via the bmo bridge) — FAIL, 0/14 valid arms, NOT adopted** (details in Bench 139 Part B); fleet fork adoption remains the owner call
+**Claimed:** zed-13afd776@m3, 1794011737, expires 2026-11-09T00:35:37Z
 
 ## Source
 

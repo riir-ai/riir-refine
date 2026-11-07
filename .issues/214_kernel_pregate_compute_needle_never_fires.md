@@ -1,6 +1,7 @@
 # Issue 214 — the kernel pregate's `@compute` needle has never fired (first-byte fold bug) — fix = a widened signal set, pre-registered
 
 **Status:** OPEN 2026-11-06 (katgpt-rs-18) — found while reading `src/kernel_pregate.rs` for Issue 213; bars pinned BEFORE any code change or measurement.
+**Claimed:** zed-13afd776@m3, 1794011737, expires 2026-11-09T00:35:37Z
 
 ## The defect
 
