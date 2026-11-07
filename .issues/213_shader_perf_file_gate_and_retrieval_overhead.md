@@ -38,18 +38,38 @@ The needle-set design below is SUPERSEDED. `DomainId::applies_to_path` (Issue 14
 
 - [x] T1 (amended) `DomainMask` (`src/draft/domain_router.rs`, re-exported) + `DomainMask::applying_to_path` over the Issue-145 contract — no new scanner
 - [x] T2 `LatentMatcher`: `kernel_allowed: bool` → per-span `DomainMask` (`span_allow`: path set ∩ pregate verdict, empty → ALL); `path_gate_tests` (3) + the kernel pregate tests green
-- [ ] T3 the G2 run (Bench, rig queue) + the citation-removal disclosure —
+- [x] T3 the G2 run (Bench, rig queue) + the citation-removal disclosure —
       QUEUED: Exclusive amo job `37f5c2b5` (full `01a1b372-8a98-771a-a37d-`
       `c10237f5c2b5`, worktree `riir-refine@206a9ebf1`, the pre-registered
-      script verbatim, 3 interleaved rounds). **THE RECORD MUST CITE
+      script verbatim, 3 interleaved rounds). **THE G2 RECORD MUST CITE
       `37f5c2b5` ONLY** — the stale duplicate entry `484ef998`
       (`/Users/kat/i213_g2.sh`, deleted from m3) was CANCELLED 2026-11-07 by
-      full UUID per verdict round 1. **G3 gate ADDED (verdict round 1, D2):**
-      promotion requires G2 ∧ G3 — G3 = the retention/disclosure diff
-      (`scripts/g5_shader_g3_diff.py`, `cf526c69`) + lib tests at
-      `latent_retrieval,shader_perf`, QUEUED as Exclusive amo job `01a1b3e9`
-      (PRE arm = revert of the three T1/T2 files only, SAME tree both arms;
-      the diff adjudicates zero non-shader rank-1 changes across the other
-      six domains and emits the citation-removal disclosure)
+      full UUID per verdict round 1. **G3 gate EXECUTED 2026-11-07 locally on
+      m3 (zed-2f171db9@m3; a diff+tests gate, load-tolerant — never a timing
+      claim): PASS.** Lib tests `latent_retrieval,shader_perf` 3724 passed /
+      0 failed / 5 ignored (isolated `CARGO_TARGET_DIR=/tmp/i213g3_m3`);
+      the retention diff PASS — 4359 spans over 608 EXTERNAL files (the
+      gate's own 3 source files `--skip`-ed on BOTH arms, the Issue-214
+      self-match precedent: their own chunking drifts with their content —
+      the first full-walk run measured 4420-vs-4422 spans and the script
+      refused as void, an instrument gap in cf526c69 fixed before any G3
+      verdict existed), applying domains (clippy 4359 / perf 4359 / kernel
+      670) rank-1 BYTE-IDENTICAL on every span, 0 gained, 0 survived;
+      disclosure: docker 4359 + dist 4359 + shader 4359 rank-1 citations
+      removed pre-gate → gated (every span carried one of each pre-gate —
+      the noise Bench 140 priced; absent post-gate = the amended design's
+      pinned shape "non-applying ones absent"). **Instrument amendments,
+      disclosed (one commit with this row):** (a) `kernel_goat_g5 --skip
+      <path>` (repeatable) + the `skipped` json key — the self-referential
+      exclusion; (b) the diff predicate completed to the amended design —
+      the LAWFUL removal set is ALL non-applying domains (docker, dist,
+      shader under the Issue-145 path contract), not shader alone, plus a
+      COMPLETENESS arm (a non-applying entry surviving POST = violation)
+      and a skip-list match check; (c) the original `--shader-domain
+      ShaderPerf` default could never have matched — `DomainId::label()`
+      emits LOWERCASE (`shader`) — found on the first real run, fixed
+      (default `docker,dist,shader`). Negative arms re-proven: walk drift
+      REFUSES, skip mismatch REFUSES. clippy `-D` clean (scoped example
+      run), rustfmt clean. T4 waits on G2 (`37f5c2b5`) only.
 - [ ] T4 promote `shader_perf` iff G2 passes **AND G3 passes** (verdict round 1: no owner gate if both pass — the GOAT gain is proven modellessly; either fails ⇒ stays opt-in with the failing check named)
 - [ ] T5 file the riir-neuron-db retrieval-overhead issue (per-query fixed cost; latent-leg-skip A/B at latent_weight 0 — Bench 027's refutation says top-1 is flat; pre-register floors across all 7 domains) — `sec`'s promotion path

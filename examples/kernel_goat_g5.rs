@@ -40,6 +40,14 @@
 //! cfg-derived `compiled_features` list (the build stamp) so the runner can
 //! prove the two binaries differ by exactly the feature under test —
 //! `scripts/g5_domain_cost.sh --feature <f>` is that runner.
+//!
+//! **`--skip <path>` (repeatable, Issue 213 G3).** Excludes a walked file from
+//! BOTH postures identically — for the gate-vs-ungated diff, whose PRE arm
+//! reverts the gate's own source files: their chunking drifts with their own
+//! content (4420 vs 4422 spans on the first full-walk run — the diff script
+//! refuses that as void), so the retention comparison runs on the EXTERNAL
+//! surface and the self-referential files are excluded BY CONSTRUCTION (the
+//! Issue-214 self-match precedent), disclosed rather than compared.
 
 use std::time::Instant;
 
@@ -53,17 +61,26 @@ fn main() {
     let mut out_path: Option<String> = None;
     let mut root = std::path::PathBuf::from("src");
     let mut top_k = 5usize;
+    let mut skip: Vec<std::path::PathBuf> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--out" => out_path = Some(args.next().unwrap_or_default()),
             "--root" => root = std::path::PathBuf::from(args.next().unwrap_or_default()),
+            "--skip" => {
+                let v = args.next().unwrap_or_default();
+                if v.is_empty() {
+                    eprintln!("--skip needs a path");
+                    std::process::exit(2);
+                }
+                skip.push(std::path::PathBuf::from(v));
+            }
             "--top-k" => {
                 top_k = args.next().and_then(|v| v.parse().ok()).unwrap_or(5);
             }
             other => {
                 eprintln!(
-                    "unknown arg {other}; usage: kernel_goat_g5 [--out <json>] [--root <dir>] [--top-k <n>]"
+                    "unknown arg {other}; usage: kernel_goat_g5 [--out <json>] [--root <dir>] [--top-k <n>] [--skip <path>]..."
                 );
                 std::process::exit(2);
             }
@@ -75,6 +92,7 @@ fn main() {
     collect_rs(&root, &mut files);
     files.sort();
     files.dedup();
+    files.retain(|f| !skip.iter().any(|s| s == f));
     if files.is_empty() {
         eprintln!("no .rs files under {}", root.display());
         std::process::exit(2);
@@ -99,6 +117,7 @@ fn main() {
         root.display().to_string(),
         build_ms,
         out_path.as_deref(),
+        &skip,
     );
 }
 
@@ -113,6 +132,7 @@ fn report_and_emit(
     root: String,
     build_ms: u64,
     out_path: Option<&str>,
+    skip: &[std::path::PathBuf],
 ) {
     use riir_refine::domains::kernel_opt::corpus::build_kernel_seed_corpus;
     use riir_refine::domains::kernel_opt::router::KernelExpertRouter;
@@ -213,6 +233,15 @@ fn report_and_emit(
     let root_json = root.replace(std::path::MAIN_SEPARATOR, "/");
     writeln!(json, "  \"corpus_root\": \"{root_json}\",").unwrap();
     writeln!(json, "  \"files\": {},", files.len()).unwrap();
+    writeln!(
+        json,
+        "  \"skipped\": [{}],",
+        skip.iter()
+            .map(|s| format!("\"{}\"", s.display()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+    .unwrap();
     writeln!(json, "  \"top_k\": {top_k},").unwrap();
     writeln!(json, "  \"matcher_build_ms\": {build_ms},").unwrap();
     writeln!(json, "  \"passes\": {PASSES},").unwrap();
@@ -300,6 +329,7 @@ fn report_and_emit(
     root: String,
     build_ms: u64,
     out_path: Option<&str>,
+    skip: &[std::path::PathBuf],
 ) {
     use std::fmt::Write as _;
     let mut per_pass: Vec<Vec<(String, u64)>> = vec![Vec::new(); PASSES];
@@ -346,6 +376,15 @@ fn report_and_emit(
     let root_json = root.replace(std::path::MAIN_SEPARATOR, "/");
     writeln!(json, "  \"corpus_root\": \"{root_json}\",").unwrap();
     writeln!(json, "  \"files\": {},", files.len()).unwrap();
+    writeln!(
+        json,
+        "  \"skipped\": [{}],",
+        skip.iter()
+            .map(|s| format!("\"{}\"", s.display()))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+    .unwrap();
     writeln!(json, "  \"top_k\": {top_k},").unwrap();
     writeln!(json, "  \"matcher_build_ms\": {build_ms},").unwrap();
     writeln!(json, "  \"passes\": {PASSES},").unwrap();
