@@ -16954,46 +16954,13 @@ fn main() {
             let Some(disp) = escalation_dispatch.as_mut() else {
                 continue;
             };
-            // The 1-based inclusive line range's byte span (lines beyond
-            // EOF close at the last byte; an out-of-range start → None).
-            fn line_span_bytes(
-                src: &str,
-                start_line: usize,
-                end_line: usize,
-            ) -> Option<(usize, usize)> {
-                let mut start_byte: Option<usize> = None;
-                let mut end_byte: usize = src.len();
-                let mut line_no = 0usize;
-                let mut offset = 0usize;
-                for line_text in src.split_inclusive('\n') {
-                    line_no += 1;
-                    if line_no == start_line {
-                        start_byte = Some(offset);
-                    }
-                    if line_no == end_line {
-                        end_byte = offset + line_text.len();
-                        break;
-                    }
-                    offset += line_text.len();
-                }
-                let start = start_byte?;
-                Some((start, end_byte.max(start)))
-            }
+            // The span → byte-range splice + the rule-book pool are the lib's
+            // (Issue 215 G0 factored them so the census measures THIS pool).
+            use riir_refine::draft::latent_matcher::line_span_bytes;
 
             let spans = matcher.suggest_file(&src, &display, args.top_k);
             'seat_spans: for s in &spans {
-                let mut pool: Vec<String> = Vec::new();
-                for (_, rules) in &s.by_domain {
-                    for r in rules {
-                        if let Some(info) = matcher.rule_book(&r.rule_id) {
-                            if !info.fixed_code.trim().is_empty()
-                                && !pool.contains(&info.fixed_code)
-                            {
-                                pool.push(info.fixed_code.clone());
-                            }
-                        }
-                    }
-                }
+                let pool: Vec<String> = matcher.seat_rule_book_pool(s);
                 if pool.len() < disp.row().target.min_pool_or_default() {
                     continue;
                 }

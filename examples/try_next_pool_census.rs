@@ -23,11 +23,15 @@
 //! - `score_bench` — the frozen v1 score-bench fixtures (healable only,
 //!   `expect_lints[0]` as the target).
 //!
+//! A SECOND pool source (Issue 215 G0 follow-up): the production seat-lane
+//! pool `bin/heal.rs` builds — `suggest_file` spans → `seat_rule_book_pool`
+//! (the shared lib builder) → candidates spliced over the span bytes.
+//!
 //! The pipeline is NOT memory-warmed between cases (fresh-install pool
 //! shape); Bench 114's HARVEST warmed it — the two are disclosed separately.
 //!
 //! ```text
-//! cargo run --release --features cf_workers_ai,score_bench \
+//! cargo run --release --features cf_workers_ai,score_bench,escalation_manifest \
 //!     --example try_next_pool_census -- [--data-dir ../riir-train/data] \
 //!     [--stride N] [--work-root /tmp/i215_g0/verify]
 //! ```
@@ -37,11 +41,15 @@ use std::time::Instant;
 
 use riir_refine::cf_workers_ai::{apply_edit, load_v2edit, RegateHarness, Sample, SampleSource};
 use riir_refine::domains::clippy_lints::proposers::propose_fix;
+use riir_refine::draft::latent_matcher::line_span_bytes;
+use riir_refine::escalation_manifest::DEFAULT_MIN_POOL;
 use riir_refine::score_bench::fixtures::fixtures;
 use riir_refine::ClippyVerifier;
 
 /// The K budget the issue pre-registers for the gated arm.
 const K_BUDGET: usize = 4;
+/// `bin/heal.rs`'s default `--top-k` (the seat lane's `suggest_file` width).
+const SEAT_TOP_K: usize = 3;
 /// Population floors — a census over fewer cases is a blind read.
 const MIN_V2EDIT: usize = 300;
 const MIN_FIXTURES: usize = 20;
@@ -79,19 +87,103 @@ fn percentile(sorted: &[f64], p: f64) -> (f64, usize) {
     }
 }
 
+/// Compile one candidate module (`None` = it never became a module —
+/// merge-fail / no-op splice — a FAIL at zero measured cost).
+fn compile_outcome(
+    verifier: &ClippyVerifier,
+    module: Option<String>,
+    lint: &str,
+    outcomes: &mut Vec<Outcome>,
+    cost_ms: &mut Vec<f64>,
+) {
+    let Some(module) = module else {
+        outcomes.push(Outcome::MergeFail);
+        cost_ms.push(0.0);
+        return;
+    };
+    let t = Instant::now();
+    let r = verifier.verify(&module, lint);
+    cost_ms.push(t.elapsed().as_secs_f64() * 1e3);
+    outcomes.push(match (r.ran, r.compiled) {
+        (false, _) => Outcome::Unseen,
+        (true, true) => Outcome::Compiles,
+        (true, false) => Outcome::CompileFail,
+    });
+}
+
+/// The production seat-lane pool (`bin/heal.rs` Plan 225 T5.2), built by
+/// the SAME lib builders: `suggest_file` spans → the FIRST span whose
+/// `seat_rule_book_pool` reaches the min-pool and whose byte span is
+/// valid (heal.rs consults ONE span per file). With no eligible span the
+/// row carries the first span's pool (size < min-pool), or 0 with none.
+/// Each candidate is spliced over the span bytes (heal.rs's
+/// `replace_range`); a splice equal to the module is a no-op FAIL
+/// (`FixVerifier` reports `kept_edits = 0` on an untouched file).
+fn seat_row(harness: &mut RegateHarness, verifier: &ClippyVerifier, sample: &Sample) -> PoolRow {
+    let src = &sample.module;
+    let lint = &sample.lints[0];
+    let spans = harness.matcher.suggest_file(src, "census.rs", SEAT_TOP_K);
+    let mut chosen: Option<(Vec<String>, usize, usize)> = None;
+    let mut fallback_pool = 0usize;
+    for (i, s) in spans.iter().enumerate() {
+        let pool = harness.matcher.seat_rule_book_pool(s);
+        if i == 0 {
+            fallback_pool = pool.len();
+        }
+        if pool.len() < DEFAULT_MIN_POOL {
+            continue;
+        }
+        let Some((b, e)) = line_span_bytes(src, s.start_line, s.end_line) else {
+            continue;
+        };
+        if e <= b || e > src.len() {
+            continue;
+        }
+        chosen = Some((pool, b, e));
+        break;
+    }
+    let Some((pool, b, e)) = chosen else {
+        return PoolRow {
+            pool: fallback_pool.min(DEFAULT_MIN_POOL - 1),
+            outcomes: Vec::new(),
+            cost_ms: Vec::new(),
+            proposer_idx: None,
+            served_idx: None,
+        };
+    };
+    let mut outcomes = Vec::with_capacity(pool.len());
+    let mut cost_ms = Vec::with_capacity(pool.len());
+    for cand in &pool {
+        let mut fixed = src.clone();
+        fixed.replace_range(b..e, cand);
+        let module = (fixed != *src).then_some(fixed);
+        compile_outcome(verifier, module, lint, &mut outcomes, &mut cost_ms);
+    }
+    PoolRow {
+        pool: pool.len(),
+        outcomes,
+        cost_ms,
+        proposer_idx: None,
+        served_idx: None,
+    }
+}
+
 fn run_case(
     harness: &mut RegateHarness,
     verifier: &ClippyVerifier,
     sample: &Sample,
     census: &mut Census,
+    seat: &mut Census,
 ) {
     census.cases += 1;
+    seat.cases += 1;
     let lint = &sample.lints[0];
     // Control: a module that does not compile as-is cannot carry a compile
     // contrast — excluded (counted), never folded into a pool row.
     let base = verifier.verify(&sample.module, lint);
     if !(base.ran && base.compiled) {
         census.baseline_fail += 1;
+        seat.baseline_fail += 1;
         return;
     }
     let outcome = harness.classify_outcome(lint, &sample.module);
@@ -106,19 +198,8 @@ fn run_case(
     let mut outcomes = Vec::with_capacity(outcome.pool.len());
     let mut cost_ms = Vec::with_capacity(outcome.pool.len());
     for cand in &outcome.pool {
-        let Some((merged, _)) = apply_edit(&sample.module, cand, false) else {
-            outcomes.push(Outcome::MergeFail);
-            cost_ms.push(0.0);
-            continue;
-        };
-        let t = Instant::now();
-        let r = verifier.verify(&merged, lint);
-        cost_ms.push(t.elapsed().as_secs_f64() * 1e3);
-        outcomes.push(match (r.ran, r.compiled) {
-            (false, _) => Outcome::Unseen,
-            (true, true) => Outcome::Compiles,
-            (true, false) => Outcome::CompileFail,
-        });
+        let merged = apply_edit(&sample.module, cand, false).map(|(m, _)| m);
+        compile_outcome(verifier, merged, lint, &mut outcomes, &mut cost_ms);
     }
     census.rows.push(PoolRow {
         pool: outcome.pool.len(),
@@ -127,6 +208,7 @@ fn run_case(
         proposer_idx,
         served_idx,
     });
+    seat.rows.push(seat_row(harness, verifier, sample));
 }
 
 fn report(name: &str, c: &Census, floor: usize) {
@@ -273,6 +355,17 @@ fn report(name: &str, c: &Census, floor: usize) {
          served fails compile {served_fails}"
     );
 
+    let mut first_ok = std::collections::BTreeMap::<String, usize>::new();
+    for r in &seen {
+        let key = r
+            .outcomes
+            .iter()
+            .position(|o| *o == Outcome::Compiles)
+            .map_or_else(|| "none".to_string(), |i| i.to_string());
+        *first_ok.entry(key).or_default() += 1;
+    }
+    println!("    first-compiling position (0-based, proposal order): {first_ok:?}");
+
     // (c) cost per pool (compile wall-clock only; merge-fail costs 0 here).
     let mut try_all: Vec<f64> = seen.iter().map(|r| r.cost_ms.iter().sum()).collect();
     let try_next_cost = |cap: usize| -> Vec<f64> {
@@ -380,9 +473,10 @@ fn main() {
         .step_by(stride)
         .collect();
     let mut c_v2 = Census::default();
+    let mut seat_v2 = Census::default();
     let n_v2 = v2.len();
     for (i, s) in v2.iter().enumerate() {
-        run_case(&mut harness, &verifier, s, &mut c_v2);
+        run_case(&mut harness, &verifier, s, &mut c_v2, &mut seat_v2);
         if (i + 1) % 25 == 0 {
             eprintln!(
                 "[census] v2edit {}/{n_v2} ({:.0}s)",
@@ -393,6 +487,7 @@ fn main() {
     }
 
     let mut c_fx = Census::default();
+    let mut seat_fx = Census::default();
     for f in fixtures().into_iter().filter(|f| !f.clean) {
         let Some(lint) = f.expect_lints.first() else {
             continue;
@@ -404,10 +499,20 @@ fn main() {
             expected: None,
             source: SampleSource::V2edit,
         };
-        run_case(&mut harness, &verifier, &s, &mut c_fx);
+        run_case(&mut harness, &verifier, &s, &mut c_fx, &mut seat_fx);
     }
 
     report("v2edit (labelled test chunks)", &c_v2, MIN_V2EDIT / stride);
     report("score_bench v1 fixtures (healable)", &c_fx, MIN_FIXTURES);
+    report(
+        "SEAT-LANE pool × v2edit (labelled test chunks)",
+        &seat_v2,
+        MIN_V2EDIT / stride,
+    );
+    report(
+        "SEAT-LANE pool × score_bench v1 fixtures (healable)",
+        &seat_fx,
+        MIN_FIXTURES,
+    );
     println!("wall {:.0}s", t0.elapsed().as_secs_f64());
 }

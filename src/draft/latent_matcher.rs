@@ -268,6 +268,31 @@ pub struct LatentMatcher {
     depth_policy: crate::demonstrability_gate::DepthPolicy,
 }
 
+/// A [`SpanSuggestion`]'s 1-based inclusive line range as a byte span of
+/// `src` (lines beyond EOF close at the last byte; an out-of-range start
+/// → `None`). The seat lane's splice site (factored out of `bin/heal.rs`
+/// for Issue 215 G0 — behaviour unchanged).
+#[must_use]
+pub fn line_span_bytes(src: &str, start_line: usize, end_line: usize) -> Option<(usize, usize)> {
+    let mut start_byte: Option<usize> = None;
+    let mut end_byte: usize = src.len();
+    let mut line_no = 0usize;
+    let mut offset = 0usize;
+    for line_text in src.split_inclusive('\n') {
+        line_no += 1;
+        if line_no == start_line {
+            start_byte = Some(offset);
+        }
+        if line_no == end_line {
+            end_byte = offset + line_text.len();
+            break;
+        }
+        offset += line_text.len();
+    }
+    let start = start_byte?;
+    Some((start, end_byte.max(start)))
+}
+
 impl LatentMatcher {
     /// Build from the corpora of every feature-enabled domain.
     ///
@@ -663,6 +688,27 @@ impl LatentMatcher {
 
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
         self.rule_book.get(rule_id)
+    }
+
+    /// The escalation seat lane's candidate pool for one span (Plan 225
+    /// T5.2, factored out of `bin/heal.rs` for Issue 215 G0): every matched
+    /// rule's non-blank corpus `fixed_code`, in `by_domain` then rank
+    /// order, deduped first-seen. This is the pool the seat reranks and the
+    /// `ServeCompileCheck` gates — one builder, so a census measures the
+    /// exact production pool.
+    #[must_use]
+    pub fn seat_rule_book_pool(&self, span: &SpanSuggestion) -> Vec<String> {
+        let mut pool: Vec<String> = Vec::new();
+        for (_, rules) in &span.by_domain {
+            for r in rules {
+                if let Some(info) = self.rule_book(&r.rule_id) {
+                    if !info.fixed_code.trim().is_empty() && !pool.contains(&info.fixed_code) {
+                        pool.push(info.fixed_code.clone());
+                    }
+                }
+            }
+        }
+        pool
     }
 
     /// The full rule book (id → buggy/fixed/domain) — Issue 126's trainer

@@ -2012,4 +2012,4 @@ required-features = ["fix_verify"]
 # the labelled v2edit chunks + the frozen score-bench fixtures.
 [[example]]
 name = "try_next_pool_census"
-required-features = ["cf_workers_ai", "score_bench"]
+required-features = ["cf_workers_ai", "score_bench", "escalation_manifest"]
