@@ -25710,6 +25710,7 @@ fn batch338_pseudocode_parses() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // batch ledger: one find+assert block per landed rule — ledger locality over the line lint
 fn batch339_rules_landed() {
     let corpus = build_kernel_seed_corpus();
 
@@ -25866,6 +25867,7 @@ fn batch339_pseudocode_parses() {
 }
 
 #[test]
+#[allow(clippy::too_many_lines)] // batch ledger: one find+assert block per landed rule — ledger locality over the line lint
 fn batch337_rules_landed() {
     let corpus = build_kernel_seed_corpus();
 

@@ -67,7 +67,9 @@ const SIGNAL_NEEDLES: [&str; 10] = [
 
 /// First-byte prefilter: the distinct lowercased first bytes of
 /// [`SIGNAL_NEEDLES`] — the single-pass scan tests a position against the
-/// needle list only when its byte lands in this set.
+/// needle list only when its byte lands in this set. `@` rides as itself
+/// (a raw 0x40): the scan fold is ASCII-letters-only (Issue 214), so no
+/// `| 0x20` ever moves it.
 const NEEDLE_FIRST_BYTES: [u8; 6] = *b"kwctd@";
 
 fn needle_first_byte_class(b: u8) -> bool {
@@ -84,8 +86,10 @@ fn is_wgsl_path(path: &str) -> bool {
 }
 
 /// Case-insensitive ASCII match of `needle` at `hay[pos..]` (both sides
-/// lowercased via `| 0x20` on ASCII letters; the needles are ASCII by
-/// construction).
+/// folded through the ASCII-LETTER-only case fold —
+/// `u8::eq_ignore_ascii_case`, clippy's spelling of the
+/// `to_ascii_lowercase` comparison — so `@` and backtick stay distinct;
+/// Issue 214. The needles are ASCII by construction).
 fn ci_matches(hay: &[u8], pos: usize, needle: &[u8]) -> bool {
     if pos + needle.len() > hay.len() {
         return false;
@@ -93,7 +97,7 @@ fn ci_matches(hay: &[u8], pos: usize, needle: &[u8]) -> bool {
     hay[pos..pos + needle.len()]
         .iter()
         .zip(needle.iter())
-        .all(|(a, b)| (a | 0x20) == (b | 0x20))
+        .all(|(a, b)| a.eq_ignore_ascii_case(b))
 }
 
 /// The 1-based lines (sorted, deduped) carrying any needle hit. `.wgsl`
@@ -112,10 +116,16 @@ pub fn signal_lines(src: &str, path: &str) -> Vec<u32> {
     let mut line: u32 = 1;
     let mut i = 0usize;
     while i < hay.len() {
-        let b = hay[i] | 0x20;
+        // ASCII-letters-only fold (Issue 214): `| 0x20` also moved `@`
+        // (0x40) onto backtick (0x60) — outside `NEEDLE_FIRST_BYTES` — so
+        // the `@compute` needle could never fire. Letters fold
+        // identically under both folds; only `@` changes class.
+        let b = hay[i].to_ascii_lowercase();
         if needle_first_byte_class(b) {
             for needle in SIGNAL_NEEDLES {
-                if needle.as_bytes()[0] | 0x20 == b && ci_matches(hay, i, needle.as_bytes()) {
+                if needle.as_bytes()[0].to_ascii_lowercase() == b
+                    && ci_matches(hay, i, needle.as_bytes())
+                {
                     if line > last {
                         lines.push(line);
                         last = line;
@@ -317,5 +327,24 @@ mod tests {
     fn off_plan_allows_every_span() {
         let plan = KernelPlan::Off;
         assert!(plan.span_allowed(1, usize::MAX));
+    }
+
+    // Issue 214 pins (pre-registered in the issue): the `@compute` needle's
+    // first byte must reach the needle loop, and a backtick must never
+    // signal (the old `| 0x20` fold mapped `@` (0x40) onto backtick
+    // (0x60), which is not in `NEEDLE_FIRST_BYTES` — the needle was dead).
+    #[test]
+    fn at_compute_needle_signals_alone() {
+        assert_eq!(signal_lines("fn main() {}\n@compute\n", "a.rs"), vec![2]);
+        // The fold stays letter-case-insensitive on the letters after `@`.
+        assert_eq!(signal_lines("fn main() {}\n@COMPUTE\n", "a.rs"), vec![2]);
+    }
+
+    #[test]
+    fn lone_backtick_never_signals() {
+        assert_eq!(signal_lines("let s = `tpl`;\n", "a.rs"), [] as [u32; 0]);
+        // A backtick is not an `@` — it must not match the `@compute` needle
+        // even with the rest of the needle following it.
+        assert_eq!(signal_lines("`compute\n", "a.rs"), [] as [u32; 0]);
     }
 }
