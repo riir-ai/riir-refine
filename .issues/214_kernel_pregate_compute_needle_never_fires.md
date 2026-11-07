@@ -28,5 +28,19 @@ Probably low-impact (WGSL `@compute` entry points nearly always carry `@workgrou
   - Instrument: `examples/kernel_pregate_census.rs` (kept as the standing report; exit 0; OLD `| 0x20` arm inlined byte-faithful, NEW arm = the crate's own `signal_lines` + `span_in_scope`). Spans measured at 1-line seats — `span_in_scope` is monotone in its range, so a real span flips iff it contains a flipped seat.
   - Result (final code state): registered walk (./src, 611 files) **0 signal OFF→ON flips / 0 ON→OFF / 72 span-seat flips across 2 files** — `src/domains/shader_perf/scanner.rs` new-only `@compute` lines 82+784 (61 seats) and `src/kernel_pregate.rs` itself (11 seats — the gate's own source self-matching, most of it this issue's pin strings/comments). `../riir-shader` 0/0 (127 files); `../seal-render` 0/0 (132 files); `../riir-gpu` **UNSEEN** (absent on this box — never zero). G1 holds by construction: only `@` changes class, letters fold identically → additions only.
   - **C0 > 0 on the registered walk** (span verdicts flip) → the G5 cost run is REQUIRED (T3, orchestrator queues the rig; never m3). T4 stays unchecked until the G5 verdict.
-- [ ] T3 G5 run iff C0 > 0 on the registered walk (rig queue; never m3)
+- [ ] T3 G5 run iff C0 > 0 on the registered walk (rig queue; never m3) —
+      QUEUED: Exclusive amo job `01a1b3da` (full `01a1b3da-f825-7060-`
+      `aaf4-ea09b1a77a88`, worktree `riir-refine@23e483743`): OLD-fold bin from
+      `git checkout 8e781fce0^ -- src/kernel_pregate.rs` vs NEW-fold bin at
+      HEAD, 3 interleaved rounds, `scripts/g5_cost_math.py --feature
+      kernel_compute_needle_fix` — the one protocol adaptation (the A/B axis
+      is the FOLD, not a feature flag) recorded here per the pre-registration.
+      **T4 close-path clarifications (verdict round 1, D3):** on G5 fail,
+      removing `@compute` from `SIGNAL_NEEDLES` MUST ALSO remove `b'@'` from
+      `NEEDLE_FIRST_BYTES` (else the prefilter byte is dead weight and the pin
+      still lies); the fold fix lands in either branch. Record: C0 = 72 is ALL
+      self-matches (61 scanner `@compute` strings + 11 pregate self-seats);
+      external consumers 0; `riir-gpu` ABSENT on m3 AND amo (probed) AND the
+      4090 (probed: NO) — UNSEEN, never zero, census re-run owed if it ever
+      lands on disk (non-blocking).
 - [ ] T4 record + close (HISTORY entry; Bench 131's needle table annotated with the corrected effective set)

@@ -139,7 +139,14 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
 - [ ] Owner call: adopt the fork on the ≥3-concurrent-worktree rigs (the
       git-workflow ticket lanes — amo/bmo heavy-ticket work) vs keep
       side-by-side. Decision input: Bench 138 + the fleet worktree-concurrency
-      census.
+      census. **RESOLVED 2026-11-07 — delegated-owner verdict round 1 (Claude,
+      session 4785a7a0, REVISE→resolved): DECLINE adoption** (the pre-registered
+      rule fails twice: the CARGO_TARGET_DIR premise broke — same-checkout
+      sessions get no isolation, and today's refine lane runs 3 concurrent
+      agents on ONE checkout; no win at fleet-typical N=2, crossover at the 3rd
+      worktree; sha-law no-delta). **`cargo-hc` UNINSTALLED per the verdict**
+      (rm the binary + `~/.cargo/targets` — reversible; Bench 138/139 keep the
+      ≥3-worktree dep-heavy data). Any FUTURE adoption is owner-gated.
 - [x] The CARGO_TARGET_DIR hazard reproduction test — [Bench 139](../.benchmarks/139_build_loop_target_dir_hazard_and_blaze_pilot.md)
       Part A (`c26f9690`, m3, 9 cells × 4 runs, deterministic 4/4). A concurrent
       re-uplift (`build --features variant`) or `cargo clean` flips/kills a
@@ -155,11 +162,12 @@ sccache 0.19.0 via brew; both postures pinned to the identical rustc 1.99.0):
       is live: riir-refine has 18 `CARGO_BIN_EXE` files.
 - [x] blaze pilot (dev-loop rung, build-hygiene §2 ladder rung 3) — **MEASURED, FAIL** (Bench 139 Part B, 2026-11-06, ran on bmo via the thunderbolt bridge — tailscale down, machine up, preflight PASSED both cells): blaze `0.20261027.0` cannot build either fleet workspace tried — sge's `coreaudio-sys` build script trips its MIR frontend (daemon cannot LOAD the workspace; every arm rc=101) and riir-kat's workspace panics its embedded rust-analyzer loader (`Unable to get FileSourceRootInput … this is a bug`); the plain-checkout control fails on blaze's own `unsupported: writable static __RUST_STD_INTERNAL_VAL` in test code and exits via its cargo fallback. **0/14 valid timed arms — the pre-registered correctness precondition unreachable → recorded, NOT adopted**; uninstalled from bmo + amo, `/tmp/blz*` scratch removed, the moot queued amo job `62549c83` cancelled (disclosed in Bench 139). Re-open triggers in Bench 139 (upstream build-script compilation + std-internal support, or a workspace it demonstrably loads+passes). Side note: the plain cargo loop it would have to beat is already 1.3-1.5 s on riir-kat and ~17 s on sge's feat-item lib (the 15 s test-run floor dominates).
 - [ ] Upstream question: the 2-3.3× first-build tax (Bench 138 anomaly) —
-      reproduce isolated or file upstream. DEFERRED 2026-11-07 (zed-13afd776@m3):
-      m3 was BUSY with a sibling measurement lane (esc_mammoth_items_fit) —
-      GB-scale first builds would have contaminated both lanes' numbers (the
-      box-state law); retry the isolated A/B at a quiet window BEFORE any upstream
-      filing.
+      reproduce isolated or file upstream. **Verdict round 1 REVISE (D4): do
+      NOT wait for a quiet m3 — the isolated A/B is QUEUED on amo** (Exclusive,
+      cargo-hc shipped to `amo:~/bin/cargo-hc` sha-verified, seal-game-editor
+      at amo's develop head; plain arm on scratch `CARGO_TARGET_DIR`, fork unit
+      reset per rep, 2 interleaved reps). File upstream ONLY if reproduced;
+      the posting act itself stays owner-reserved (outward-facing).
 - [x] Hygiene residue the fork surfaced — riir-refine `b43a3c32` (the
       `cargo::unused_dependencies` hit was the TRAINER's edge to
       `riir-refine-fixer`, never used in code — dropped, BOUNDARY.md keeps it
