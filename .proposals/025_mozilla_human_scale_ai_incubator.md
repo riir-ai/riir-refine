@@ -1,6 +1,6 @@
 # Proposal 025 — Mozilla Human-Scale AI Incubator application: cargo refine, the modelless code healer
 
-Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12 · 2026-11-06: draft answers filed (§Draft application answers) · **2026-11-07: `TUNA_WEIGHTS_V1` armed** (accrual weights + weekly epoch, §points plane; node-misbehavior ladder in Plan 335 P2.0(c))
+Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12 · 2026-11-06: draft answers filed (§Draft application answers) · **2026-11-07: `TUNA_WEIGHTS_V1` armed** (accrual weights + weekly epoch, §points plane; node-misbehavior ladder in Plan 335 P2.0(c)) · **2026-11-07: `TUNA_ANTISPAM_V1` armed** (rate limit + identity floor + refundable 1 TUNA deposit + node bond; `claim` re-enabled as the 100 TUNA starter allowance under the two-source rule)
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned (grant submitter = owner)
 Deadline: **2026-11-20 11:59 PM PST** · Info session: **2026-11-12 17:00 UTC** · Consult email: draft in [`../.docs/01_orientation/mozilla_grant_readiness.md`](../.docs/01_orientation/mozilla_grant_readiness.md) (v2 — credit-plane question added)
@@ -82,7 +82,7 @@ shipped binary 2026-11-03, owner v5):**
 
 **Compiled OUT of the public build (the frozen KAT lane):** `login` · `account`
 (keys/custody/migrate/totp/history) · `--mine`/`--unmine` (replaced by
-`join`/`leave`) · `sync` · `claim` · `stake`/`unstake` · `vote` · `pay` ·
+`join`/`leave`) · `sync` · `claim` (RE-ENABLED in Posture C as the 100 TUNA starter allowance — `TUNA_ANTISPAM_V1`; the KAT-era claim stays out) · `stake`/`unstake` · `vote` · `pay` ·
 `topup`/`buy` · `kat`/`tuna` · `get`/`send tuna` · `faucet` · `wetrun` ·
 `replay` · `corpus-pr` · `config adopt-state` · `--refill` · `update` (the
 corpus-lease refresh — the public `corpus` verb is its points-free face).
@@ -118,6 +118,15 @@ is the re-promotion path.
 | Node uptime, compute served, fix attempts | **0, by design** | — |
 
 Anti-farming: ≤ 200 base points (row 1) per identity per epoch; the same rule in the same repo counts once per epoch; a maintainer can opt a repo out of the upstream-merge row (the drive-by-PR harm to FOSS maintainers is the failure this row must never fund). Rank weight = Σ points × 2^(−age / 90 d) — the law-2 rank decay; the history it decays over is permanent. **Cadence:** weekly epoch, settle Monday 00:00 UTC — one batch does accrual + rank recompute + anchor (the Cost bar's once-per-epoch rule); row-1 points from epoch N settle at N+1 (a one-week review window). Weights are versioned and STORED AT ISSUE — a `V2` never re-prices points already accrued (the Proposal 006 D4a law). Public copy says "accrue", never "earn"/"reward" (law 3). Serving-cluster nodes post a **node bond** of their own accrued points (a lock, never a transfer; no yield ever; never KAT; a proven fault BURNS it into the existing expiry sink as a third counted door; self-host needs no bond) — the full misbehavior ladder lives in [Plan 335](../.plans/335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md) P2.0(c).
+
+**Anti-spam — `TUNA_ANTISPAM_V1` (owner-armed 2026-11-07; a deposit, never a fee — the T16.2 fair-use policy row it belongs to).** Protects honest contributors from spam and botnets without taxing them. Local `fix`, the dry run, `scan` and `corpus` NEVER touch points (law 1); only SENDING something to the service can require a deposit. Four layers, cheapest first:
+
+1. **Edge rate limit** per identity, checked before any compute or row write (the Cost bar — spam's real target is our Cloudflare budget, not rank).
+2. **Identity floor:** GitHub-joined, account ≥ 30 days old with public activity; the claim's existing per-IP (5/h) and per-ASN (100/h) limits + optional Turnstile.
+3. **Refundable submission deposit:** each fix record or miss report locks **1 TUNA**, REFUNDED on acceptance, BURNED on junk (fails the compile gate, duplicate, irreproducible miss). Honest contributors pay nothing net; spammers burn their own allowance.
+4. **Node bond** (50 TUNA, serving cluster only — Plan 335 P2.0(c)).
+
+**The starter allowance:** `claim` is RE-ENABLED in Posture C as a one-time **100 TUNA starter allowance** (the riir-dapps Proposal 006 B2 grant, `FREE_GRANT_MICRO_KAT` = 10⁸ µ: once per account LIFE, 30-day expiry, unspent allowance burns to the sink, 10 000-claim reservoir with its low-water alarm — a drained reservoir stops grants, refills are a dated operator act). It funds deposits so a newcomer with no contribution history can start immediately (100 honest attempts on day one). **Two-source rule:** every TUNA tranche carries its source — `TrialGrant` (the allowance) or `Contribution` (accrued from accepted work). Allowance TUNA pays deposits (and the later fair-use drain) but NEVER counts for rank and NEVER funds a node bond; only Contribution TUNA does both — so a fresh bot account starts at rank 0 and cannot post a bond. Public copy: "starter allowance" and "anti-spam deposit" — never "gas", "fee", "tokenomics", or any value word.
 
 **The ledger.** `riir-ledger` v1 = points service + optional anchoring, NOT a chain:
 balances in the riir-dapps service DB; Merkle-anchored epochs via the existing `anchor_root`
