@@ -113,7 +113,7 @@ is the re-promotion path.
 |---|---|---|
 | Contributed fix record accepted into corpus intake (compile-gated, secret-scanned, OSS-class target) | 1 | the fix's verify receipt + the intake row |
 | Reported miss that a landed rule later heals | 2, at heal time | the content-addressed miss row + the healing rule's commit |
-| Fix merged upstream into a public repo | 5, at most ONE per target repo per identity per epoch | the merge on the public repo; opened-but-unmerged PRs earn nothing |
+| Fix merged upstream into a public repo | 5, at most ONE per target repo per identity per epoch | the merge on the public repo; opened-but-unmerged PRs accrue nothing |
 | Rule landed in the community corpus (tests + gates passed) | 25 | the corpus commit |
 | Node uptime, compute served, fix attempts | **0, by design** | — |
 
