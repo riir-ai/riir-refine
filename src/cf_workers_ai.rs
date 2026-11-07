@@ -90,8 +90,12 @@ pub const REACHABLE: &[(&str, &str)] = &[
         // corpus entry, breaking this list's off-corpus premise — the assert's
         // own designed response: "the fixture must be re-picked"). Same vec
         // family, still off-corpus, real clippy lint.
+        // Plan 335 P0 (2026-11-08): the first pick NEVER FIRED (clippy
+        // 0.1.98 is silent on `drain(..)` through a `&mut Vec` param — a
+        // dead control, every arm's case unscoreable); the owned-Vec shape
+        // fires (probed with `-W clippy::clear_with_drain`).
         "clear_with_drain",
-        "pub fn f(v: &mut Vec<i32>) { v.drain(..); }",
+        "pub fn f(mut v: Vec<i32>) -> Vec<i32> { v.drain(..); v }",
     ),
     (
         "manual_strip",
@@ -110,8 +114,12 @@ pub const REACHABLE: &[(&str, &str)] = &[
         // breaking this list's off-corpus premise — the assert's own
         // designed response: "the fixture must be re-picked"). Same
         // signature-shape family, still off-corpus, real clippy lint.
+        // Plan 335 P0 (2026-11-08): the first pick NEVER FIRED — a `pub`
+        // method is exempt under clippy's default
+        // `avoid-breaking-exported-api` (a dead control, every arm's case
+        // unscoreable); a private method called from a pub fn fires.
         "unused_self",
-        "pub struct S;\nimpl S { pub fn f(&self) {} }",
+        "struct S;\nimpl S { fn f(&self) {} }\npub fn g() { S.f() }",
     ),
 ];
 

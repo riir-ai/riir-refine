@@ -166,6 +166,16 @@ struct Args {
     /// pick over the pool the seat saw. Off by default (the pre-registered
     /// T4 read is unchanged when absent).
     placebo: bool,
+    /// Plan 335 P0: the arms-A/B generation backend — `cf` (default,
+    /// Workers AI) or `local` (an OpenAI-compatible server at `--base`).
+    backend: String,
+    /// Plan 335 P0: the local server's base URL (everything before
+    /// `/chat/completions`, e.g. `http://127.0.0.1:8080/v1`).
+    base: Option<String>,
+    /// Plan 335 P0 window gate (b): retries on a length-with-null-content
+    /// overflow (each doubles the completion budget) before the case is
+    /// HARD-DECLINED (recorded unscoreable, never a guess).
+    overflow_retries: u32,
 }
 
 impl Args {
@@ -198,6 +208,9 @@ impl Args {
             frozen_split: None,
             a0_cost_sample: 0,
             placebo: false,
+            backend: "cf".into(),
+            base: None,
+            overflow_retries: 2,
         };
         let mut argv = std::env::args().skip(1);
         while let Some(arg) = argv.next() {
@@ -250,6 +263,13 @@ impl Args {
                     a.a0_cost_sample = val().parse().expect("--a0-cost-sample must be an integer")
                 }
                 "--placebo" => a.placebo = true,
+                "--backend" => a.backend = val(),
+                "--base" => a.base = Some(val()),
+                "--overflow-retries" => {
+                    a.overflow_retries = val()
+                        .parse()
+                        .expect("--overflow-retries must be an integer")
+                }
                 other => {
                     eprintln!("unknown arg: {other}");
                     std::process::exit(2);
@@ -684,6 +704,9 @@ fn main() {
 
     match args.arm.as_str() {
         "DRY" => run_dry(&args, &verifier, &prepared),
+        "A" | "B" | "G" | "G2" if args.backend == "local" => {
+            run_local(&args, &verifier, &prepared);
+        }
         "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
         "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
@@ -833,98 +856,22 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             std::process::exit(3);
         }
     };
-    let mut out = args
-        .out
-        .as_ref()
-        .and_then(|p| std::fs::File::create(p).ok());
-    let mut summary = ArmSummary::default();
-    let (mut lat_total, mut lat_max) = (0u128, 0u128);
-
-    for p in prepared {
-        let prompt = match args.arm.as_str() {
-            "G" => &p.prompt_growing,
-            "G2" => &p.prompt_growing_prime,
-            "B" => &p.prompt_prepass,
-            _ => &p.prompt_raw,
-        };
-        eprintln!("[{}] {} …", args.arm, p.sample.id);
-        let gen = match client.generate(prompt, args.max_new) {
-            Ok(g) => g,
-            Err(e) => {
-                eprintln!("  GEN FAILED (recorded unscoreable): {e}");
-                let score = cf_workers_ai::score_case(verifier, &p.sample, "", None);
-                summary.add(&score, p.reachable_miss, 0, 0, 0.0, 0.0);
-                record_case(
-                    &mut out,
-                    p,
-                    &args.arm,
-                    prompt,
-                    "",
-                    &GenStats::empty(),
-                    &score,
-                );
-                continue;
-            }
-        };
-        let score =
-            cf_workers_ai::score_case(verifier, &p.sample, &gen.text, Some(&args.behav_dir));
-        summary.add(
-            &score,
-            p.reachable_miss,
-            gen.prompt_tokens,
-            gen.completion_tokens,
-            args.price_in,
-            args.price_out,
-        );
-        lat_total += gen.latency_ms;
-        lat_max = lat_max.max(gen.latency_ms);
-        println!(
-            "  {:<28} miss={:<13} keep_o={} keep_s={} EM={:?} f {}→{} {}ms {}+{}tok",
-            p.sample.id,
-            format!("{:?}", p.miss),
-            score.keep_oracle,
-            score.keep_strict,
-            score.em,
-            score.findings_before,
-            if score.findings_after == usize::MAX {
-                -1
-            } else {
-                score.findings_after as isize
-            },
-            gen.latency_ms,
-            gen.prompt_tokens,
-            gen.completion_tokens,
-        );
-        record_case(
-            &mut out,
-            p,
-            &args.arm,
-            prompt,
-            &gen.text,
-            &GenStats {
-                latency_ms: gen.latency_ms,
-                prompt_tokens: gen.prompt_tokens,
-                completion_tokens: gen.completion_tokens,
-            },
-            &score,
-        );
-    }
-
-    println!("\n═ arm {} summary ═", args.arm);
-    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
-    println!("{}", summary.markdown_row(&args.arm));
-    println!(
-        "  tokens: {} prompt + {} completion · $/fix ≈ {:.5}",
-        summary.prompt_tokens,
-        summary.completion_tokens,
-        if summary.n > 0 {
-            summary.cost_usd / summary.n as f64
-        } else {
-            0.0
+    let (mut summary, lat_total, lat_max) = run_arm_cases(
+        args,
+        (args.price_in, args.price_out),
+        verifier,
+        prepared,
+        |prompt| {
+            client.generate(prompt, args.max_new).map(|g| GenOut {
+                text: g.text,
+                stats: GenStats {
+                    latency_ms: g.latency_ms,
+                    prompt_tokens: g.prompt_tokens,
+                    completion_tokens: g.completion_tokens,
+                },
+            })
         },
     );
-    println!("  latency: total {lat_total}ms, max {lat_max}ms");
-    println!("  {}", summary.verdict_vs_decline());
 
     // ── Cost track (Proposal 005 §cost-tracking; Issue 040 T3) ────────────
     // Two meters: the client token-meter above (response.usage × list price)
@@ -982,6 +929,187 @@ fn run_cf(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
         Some(client.spend_state()),
     );
     append_quality_history(&args.arm, client.model_id(), &summary);
+}
+
+/// One backend generation, projected for the shared case loop.
+struct GenOut {
+    text: String,
+    stats: GenStats,
+}
+
+/// The arms-A/B/G/G2 case loop, backend-agnostic (Plan 335 P0 — the CF and
+/// LOCAL backends share every scoring/recording line; only `gen` differs).
+/// A `gen` error records the case UNSCOREABLE (the hard-decline path —
+/// never a guess). Prints the per-case lines + the arm summary table and
+/// returns `(summary, latency_total_ms, latency_max_ms)`.
+fn run_arm_cases(
+    args: &Args,
+    (price_in, price_out): (f64, f64),
+    verifier: &ClippyVerifier,
+    prepared: &[Prepared],
+    mut gen: impl FnMut(&str) -> Result<GenOut, String>,
+) -> (ArmSummary, u128, u128) {
+    let mut out = args
+        .out
+        .as_ref()
+        .and_then(|p| std::fs::File::create(p).ok());
+    let mut summary = ArmSummary::default();
+    let (mut lat_total, mut lat_max) = (0u128, 0u128);
+
+    for p in prepared {
+        let prompt = match args.arm.as_str() {
+            "G" => &p.prompt_growing,
+            "G2" => &p.prompt_growing_prime,
+            "B" => &p.prompt_prepass,
+            _ => &p.prompt_raw,
+        };
+        eprintln!("[{}] {} …", args.arm, p.sample.id);
+        let g = match gen(prompt) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("  GEN FAILED (recorded unscoreable): {e}");
+                let score = cf_workers_ai::score_case(verifier, &p.sample, "", None);
+                summary.add(&score, p.reachable_miss, 0, 0, 0.0, 0.0);
+                record_case(
+                    &mut out,
+                    p,
+                    &args.arm,
+                    prompt,
+                    "",
+                    &GenStats::empty(),
+                    &score,
+                );
+                continue;
+            }
+        };
+        let score = cf_workers_ai::score_case(verifier, &p.sample, &g.text, Some(&args.behav_dir));
+        summary.add(
+            &score,
+            p.reachable_miss,
+            g.stats.prompt_tokens,
+            g.stats.completion_tokens,
+            price_in,
+            price_out,
+        );
+        lat_total += g.stats.latency_ms;
+        lat_max = lat_max.max(g.stats.latency_ms);
+        println!(
+            "  {:<28} miss={:<13} keep_o={} keep_s={} EM={:?} f {}→{} {}ms {}+{}tok",
+            p.sample.id,
+            format!("{:?}", p.miss),
+            score.keep_oracle,
+            score.keep_strict,
+            score.em,
+            score.findings_before,
+            if score.findings_after == usize::MAX {
+                -1
+            } else {
+                score.findings_after as isize
+            },
+            g.stats.latency_ms,
+            g.stats.prompt_tokens,
+            g.stats.completion_tokens,
+        );
+        record_case(&mut out, p, &args.arm, prompt, &g.text, &g.stats, &score);
+    }
+
+    println!("\n═ arm {} summary ═", args.arm);
+    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!("{}", summary.markdown_row(&args.arm));
+    println!(
+        "  tokens: {} prompt + {} completion · $/fix ≈ {:.5}",
+        summary.prompt_tokens,
+        summary.completion_tokens,
+        if summary.n > 0 {
+            summary.cost_usd / summary.n as f64
+        } else {
+            0.0
+        },
+    );
+    println!("  latency: total {lat_total}ms, max {lat_max}ms");
+    println!("  {}", summary.verdict_vs_decline());
+    (summary, lat_total, lat_max)
+}
+
+/// Plan 335 P0 — arms A/B/G/G2 against a LOCAL OpenAI-compatible server
+/// (our own `llama-server` on an operator node; $0 marginal, so no USD cap
+/// and no CF meters — the prices are forced to 0 so the `$` column cannot
+/// fabricate a cost). The Proposal 005 §window gates as serving params:
+/// (a) the completion budget is `--max-new`; (b) a length-with-null-content
+/// overflow retries with a DOUBLED budget up to `--overflow-retries`, then
+/// HARD-DECLINES (unscoreable); (c) the thinking off-switch is the server's
+/// (launch it with reasoning disabled) + the leaf's qwen3 `/no_think`;
+/// (d) a one-call smoke runs before any case — a failed smoke aborts.
+/// Egress: a non-loopback base sends code off the box, so it needs the
+/// shared `RIIR_REFINE_CODE_EGRESS=snippet` consent (refused otherwise).
+#[cfg(feature = "local_backend")]
+fn run_local(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+    use riir_refine::groq::{is_loopback_base, OaiClient, OaiError};
+    let Some(base) = args.base.as_deref() else {
+        eprintln!("--backend local needs --base http://127.0.0.1:PORT/v1");
+        std::process::exit(2);
+    };
+    let consent = std::env::var("RIIR_REFINE_CODE_EGRESS").is_ok_and(|v| v.trim() == "snippet");
+    if !is_loopback_base(base) && !consent {
+        eprintln!(
+            "REFUSED: --base {base} is not loopback — code would leave this box \
+             (set RIIR_REFINE_CODE_EGRESS=snippet to consent)"
+        );
+        std::process::exit(2);
+    }
+    let model = args.model.as_deref().unwrap_or("qwen3.8-27b");
+    let client = OaiClient::local(base, model);
+    let generate = |prompt: &str| -> Result<GenOut, String> {
+        let mut budget = args.max_new;
+        for attempt in 0..=args.overflow_retries {
+            match client.generate(prompt, budget) {
+                Ok(g) => {
+                    return Ok(GenOut {
+                        text: g.text,
+                        stats: GenStats {
+                            latency_ms: g.latency_ms,
+                            prompt_tokens: g.prompt_tokens,
+                            completion_tokens: g.completion_tokens,
+                        },
+                    })
+                }
+                Err(OaiError::Overflow(m)) if attempt < args.overflow_retries => {
+                    eprintln!("  overflow at budget {budget} (retry {}): {m}", attempt + 1);
+                    budget = budget.saturating_mul(2);
+                }
+                Err(e) => return Err(format!("hard-decline: {}", e.message())),
+            }
+        }
+        Err("hard-decline: overflow retries exhausted".to_string())
+    };
+    match generate("Reply with the single word OK.") {
+        Ok(g) if !g.text.trim().is_empty() => eprintln!(
+            "[local] smoke OK ({}ms, {}+{} tok): {:?}",
+            g.stats.latency_ms,
+            g.stats.prompt_tokens,
+            g.stats.completion_tokens,
+            g.text.trim()
+        ),
+        Ok(_) => {
+            eprintln!("SMOKE FAILED: empty content — fix the serving params before the harness");
+            std::process::exit(3);
+        }
+        Err(e) => {
+            eprintln!("SMOKE FAILED: {e}");
+            std::process::exit(3);
+        }
+    }
+    let (mut summary, lat_total, lat_max) =
+        run_arm_cases(args, (0.0, 0.0), verifier, prepared, generate);
+    summary.latency_ms_total = lat_total;
+    summary.latency_ms_max = lat_max;
+    append_quality_history(&args.arm, &format!("local:{model}"), &summary);
+}
+
+#[cfg(not(feature = "local_backend"))]
+fn run_local(_: &Args, _: &ClippyVerifier, _: &[Prepared]) {
+    eprintln!("--backend local requires --features local_backend");
+    std::process::exit(2);
 }
 
 /// Append one row to `.benchmarks/fixer_quality_history.jsonl` (Issue 044
@@ -2801,15 +2929,18 @@ struct FrozenInputs {
 /// the panics (the flags are arm-shared).
 #[cfg(feature = "escalation_manifest")]
 fn load_frozen_inputs(args: &Args, arm_label: &str) -> FrozenInputs {
-    let cases_path = args.frozen_cases.as_ref().unwrap_or_else(|| {
-        panic!("--arm {arm_label} needs --frozen-cases <cases.jsonl>")
-    });
-    let pools_path = args.frozen_pools.as_ref().unwrap_or_else(|| {
-        panic!("--arm {arm_label} needs --frozen-pools <pool_texts.jsonl>")
-    });
-    let split_path = args.frozen_split.as_ref().unwrap_or_else(|| {
-        panic!("--arm {arm_label} needs --frozen-split <split.json>")
-    });
+    let cases_path = args
+        .frozen_cases
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm {arm_label} needs --frozen-cases <cases.jsonl>"));
+    let pools_path = args
+        .frozen_pools
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm {arm_label} needs --frozen-pools <pool_texts.jsonl>"));
+    let split_path = args
+        .frozen_split
+        .as_ref()
+        .unwrap_or_else(|| panic!("--arm {arm_label} needs --frozen-split <split.json>"));
     let split: std::collections::BTreeMap<String, String> =
         serde_json::from_str(&std::fs::read_to_string(split_path).expect("split.json reads"))
             .expect("split.json parses");
@@ -3069,10 +3200,15 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
         // (worthy / below min pool) serves modelless in BOTH arms, so the
         // placebo's stand score is the modelless score.
         let placebo = if args.placebo {
-            let presented_len =
-                texts.len().min(riir_refine::escalation_manifest::PRESENTATION_CAP);
-            let trig =
-                riir_refine::escalation_placebo::triggered(modelless_conf, presented_len, pl_cap, pl_min_pool);
+            let presented_len = texts
+                .len()
+                .min(riir_refine::escalation_manifest::PRESENTATION_CAP);
+            let trig = riir_refine::escalation_placebo::triggered(
+                modelless_conf,
+                presented_len,
+                pl_cap,
+                pl_min_pool,
+            );
             let pidx = riir_refine::escalation_placebo::pick_idx(&id, presented_len);
             let score = if trig {
                 gold.get(pidx).copied().unwrap_or(false)
@@ -3329,7 +3465,9 @@ fn run_placebo(args: &Args) {
             .unwrap_or(false);
 
         let modelless_conf = row["modelless_score"].as_f64().unwrap_or(0.0) as f32;
-        let presented_len = texts.len().min(riir_refine::escalation_manifest::PRESENTATION_CAP);
+        let presented_len = texts
+            .len()
+            .min(riir_refine::escalation_manifest::PRESENTATION_CAP);
         let trig = riir_refine::escalation_placebo::triggered(
             modelless_conf,
             presented_len,

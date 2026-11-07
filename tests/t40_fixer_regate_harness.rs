@@ -46,6 +46,26 @@ fn reachable_set_is_off_corpus_and_declined() {
     }
 }
 
+/// Plan 335 P0: every reachable fixture must FIRE its own lint — a dead
+/// control makes that case unscoreable in every arm, so the "n=9" bar
+/// silently reads over n=7 (found live: the clear_with_drain + unused_self
+/// re-picks never fired on clippy 0.1.98). Scored as a noop echo: the
+/// control half is all this reads.
+#[test]
+fn every_reachable_fixture_fires_its_control() {
+    let verifier = ClippyVerifier::new();
+    let dir = behav_dir("controls");
+    let dead: Vec<String> = reachable_samples()
+        .iter()
+        .filter(|s| !cf_workers_ai::score_case(&verifier, s, &s.module, Some(&dir)).control_fires)
+        .map(|s| s.id.clone())
+        .collect();
+    assert!(
+        dead.is_empty(),
+        "dead reachable controls (re-pick the fixture shape): {dead:?}"
+    );
+}
+
 /// The planted-control battery: known-good fixes must `keep_strict`, and the
 /// three negative shapes (noop echo / destructive item-drop / garbage) must
 /// not. This is the instrument's positive AND negative validation — the
@@ -69,8 +89,10 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
     // `manual_strip` replaced `ptr_arg` here when the 2026-09-18 re-pick
     // (Batch 155) made ptr_arg a corpus entry — probe-checked to FIRE on its
     // fixture against this box's clippy before landing (the clear_with_drain
-    // and unused_self re-picks do NOT fire on their fixture shapes — they
-    // stay decline-only, never controls).
+    // and unused_self re-picks did NOT fire on their first fixture shapes;
+    // Plan 335 P0 repaired both — `every_reachable_fixture_fires_its_control`
+    // now walls a dead control, since a dead one silently shrinks every
+    // arm's n=9 bar to n=7 scoreable).
     for (id, gen) in [
         (
             "reachable:manual_strip",

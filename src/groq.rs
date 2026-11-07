@@ -230,6 +230,26 @@ impl OaiClient {
         Self::from_conf(INFRON_CONF, None)
     }
 
+    /// Plan 335 P0 — a LOCAL OpenAI-compatible leg (our own `llama-server`
+    /// on an operator node): same wire, same body builder, same overflow
+    /// classification, no bearer (a loopback server takes none). The
+    /// egress decision is the CALLER's: [`is_loopback_base`] is the
+    /// predicate a caller gates non-loopback bases on (code leaving the
+    /// box still needs the shared consent scope).
+    #[must_use]
+    pub fn local(base: &str, model: &str) -> Self {
+        Self {
+            leg: riir_llm::Leg {
+                label: "local".to_string(),
+                base: base.trim_end_matches('/').to_string(),
+                bearer: String::new(),
+                model: model.to_string(),
+                wire: riir_llm::Wire::OpenAi,
+            },
+            agent: riir_llm::transport::agent(),
+        }
+    }
+
     /// The shared builder over an [`EndpointConf`].
     ///
     /// # Errors
@@ -286,6 +306,53 @@ impl OaiClient {
             usage_reported: usage.reported,
             latency_ms: t0.elapsed().as_millis(),
         })
+    }
+}
+
+/// True when `base` is an `http://` URL whose host is loopback
+/// (`127.0.0.1`, `[::1]`, `localhost`) — the only local-leg posture that
+/// needs no egress consent (the code never leaves the box). Anything
+/// else (a LAN/tailscale host, https, a userinfo/port trick) is NOT
+/// loopback and the caller must require consent.
+#[must_use]
+pub fn is_loopback_base(base: &str) -> bool {
+    let Some(rest) = base.strip_prefix("http://") else {
+        return false;
+    };
+    let authority = rest.split('/').next().unwrap_or("");
+    if authority.contains('@') {
+        return false;
+    }
+    let host = match authority.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or(""),
+        None => authority.split(':').next().unwrap_or(""),
+    };
+    matches!(host, "127.0.0.1" | "::1" | "localhost")
+}
+
+#[cfg(test)]
+mod local_leg_tests {
+    use super::is_loopback_base;
+
+    #[test]
+    fn loopback_predicate_is_strict() {
+        for ok in [
+            "http://127.0.0.1:8080/v1",
+            "http://localhost:8080/v1",
+            "http://[::1]:8080/v1",
+        ] {
+            assert!(is_loopback_base(ok), "{ok}");
+        }
+        for no in [
+            "https://127.0.0.1:8080/v1",
+            "http://127.0.0.1.evil.com/v1",
+            "http://user@127.0.0.1/v1",
+            "http://192.168.10.2:8080/v1",
+            "http://localhost.example:8080/v1",
+            "127.0.0.1:8080",
+        ] {
+            assert!(!is_loopback_base(no), "{no}");
+        }
     }
 }
 

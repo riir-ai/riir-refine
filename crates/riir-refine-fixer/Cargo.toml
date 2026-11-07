@@ -41,6 +41,11 @@ score_bench = ["riir-refine/score_bench"]
 seat_rerank = ["riir-refine/seat_rerank"]
 escalation_manifest = ["riir-refine/escalation_manifest"]
 hosted_expert = ["riir-refine/hosted_expert"]
+# Plan 335 P0 — arms A/B against a LOCAL OpenAI-compatible server
+# (`--backend local --base http://127.0.0.1:PORT/v1`): reuses the core's
+# `OaiClient` (the groq_first seam — `riir-llm/transport`, already in the
+# cf_workers_ai graph), zero new deps.
+local_backend = ["riir-refine/groq_first"]
 
 # Issue 040 — the fixer re-gate POC runner (arms A/B = CF Workers AI, arm C =
 # the local Bonsai daemon; --dry-run = offline harness validation on planted
