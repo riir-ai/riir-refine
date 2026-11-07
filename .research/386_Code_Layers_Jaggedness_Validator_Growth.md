@@ -1,0 +1,65 @@
+# Research 386: Code layers are ours — jaggedness eval + the validator growth loop (the doubleAI CLRS-Text fusion, refine side)
+
+> **Source:** doubleAI blog "Can LLMs redesign themselves as they train?" (2026-11-06) §"Taking on jaggedness" + §"Nothing is frozen" — the CLRS-Text result (code layers 55%→84%; in-between input sizes 33%→79%; 2× training does not close the gap) and the code-layer mechanism (agent-written programs grown into the network behind zero-init gates, twin/sham raced). Full digest + the serving/training tracks: **riir-rethink Research 021** (serving — post-think arbitration probe, Issue 055) + **riir-train Plan 490** (adapter lanes — race harness, gate-zero insertion, demand maps, probe-gated rollouts). This note is the THIRD track the same blog owes: the rulewright/wasm surface (owner-directed).
+> **Date:** 2026-11-07
+> **Status:** Active — verdict in §4; §5 verdict record at the file end
+> **Related Research:** 168 (probe-gated verification — Silva et al.; the probe cousin; its spawned Issue 107 is closed/removed, the note is the living record), 233 (Percepta — the WASM validator lane's origin, Plan 199), 167 (RSI survey — cites the withheld-pair OOD axis), 108/154/156/158 (the score-bench entropy-gap OOD rows — a DIFFERENT axis, signal-diffed below), katgpt-rs Research 527 family (arXiv:2608.29530 TPR — the withheld-(role,filler) axis's own source)
+> **Related Plans:** 199 (the validator lane — landed), riir-train Plan 490 Phase 1 (the twin/sham race harness law this filing inherits)
+> **Cross-ref:** riir-refine Issue 217 (the filing — jaggedness eval + validator growth loop); riir-refine Issues 062 (CLOSED — the `withheld_pair_ood` module lives in `src/draft/`, T1/T2 landed), 213/216 (shape-keyed dispatch cousins — consume their vocabulary, never fork; 216 is UNCLAIMED sibling work), riir-rethink Issue 055, riir-train Plan 490
+> **Classification:** Private (riir-refine)
+
+---
+
+## TL;DR
+
+The user's read is correct and the code agrees: **the code-layers result is our architecture validated in someone else's blog.** The paper's thesis — programs apply the same rule at every input, so they generalize by construction where statistical learners jag (the short-program/MDL argument) — is the design principle of at least four shipped surfaces: the rulewright itself (mined corpus rules = the statistical half; fix-validators + the fix_verify compile gate = the code half), the game laws (`seal-combat`/`BuffLaw`/`CastLaw` installed INTO the riir-ai substrate — "none installed = no buff lands" is literally the g=0 posture), `riir-wasm`'s constraint validators (LEAP/MUSE), and `quest_grammar`'s program pipeline. What we do NOT have is the blog's two dynamic ingredients, and both arefillable here:
+
+1. **The jaggedness EVAL** — the paper measures accuracy on the sizes BETWEEN the trained sizes. Our `withheld_pair_ood` module (Issue 062 T1/T2, landed) withholds (rule, shape-class) COMBINATIONS; the **size-band cut** (in-between complexity bands, per-band accuracy curves) is a different withholding axis — and it needs a NEW ordered derivation, because the module's `ShapeClass` is an unordered 8-way text-matched enum (Macro / IteratorChain / Closure / Generic / ImplBlock / Loop / MultiItem / PlainFn) with no size, depth, or band notion. Research 168 already flagged the parent gap: "the withheld-pair OOD axis is unmeasured everywhere."
+2. **The validator GROWTH loop** — validators today are hand-authored static artifacts (Plan 199 store, report-only verify). The blog's loop grows code ON the system from observed failures (Voyager-class, published), admits it behind evidence gates, and the timing dynamic (grown-after-maturity > baked-in-from-start) is a testable A/B here. The twin/sham race law (Plan 490 Phase 1) is the admission protocol; the tier ladder is the gate.
+
+Filed as **riir-refine Issue 217** — Gain, GOAT upgrade gate named, **eval first, growth loop gated on the eval firing** (ungoat law). The wasm angle, honestly: Bench 105 (native ≈285× faster per verdict) keeps wasm OFF the fast path; wasm's role in this fusion is the **trust boundary** — fuel-bounded in-process execution of AGENT-AUTHORED validators (BLAKE3-committed store, active/revoked switches) is the reason grown code can enter the loop safely at all. The bench's own words: "the capability exists and is cheap; **whether a hot-swap CONSUMER materializes is T3.5's question, not a measurement**" (bench 105, the 358 µs hot-swap row) — the growth loop IS that consumer candidate, and the AGENTS.md "re-opens on a hot-swap consumer" row summarizes it. It fires only if T0's eval finds real jaggedness AND the growth loop earns its gate.
+
+## 1. The three code-layer findings we are fusing (digest)
+
+- **Jaggedness (CLRS-Text):** trained on some input sizes, the transformer solves those sizes and fails the in-between ones (33%); code layers grown during training close to 79% (overall 55%→84%); 2× training does not close it — the gap is structural, not sample-starvation. All numbers blog-reported.
+- **Why code:** gradient descent fits statistics and settles for shortcuts; a program applies the same rule at every input; shorter description ⇒ fewer examples to generalize (MDL). Published antecedents the blog itself builds on: Anil et al. 2022, Delétang et al. 2023; and the sharpest published form of the thesis is **arXiv:2310.16028** (Zhou et al., ~313 cites): transformers length-generalize on a task iff a SHORT PROGRAM (RASP) solves it for all lengths.
+- **The loop:** the agent diagnoses failures (phantom-gradient demand clusters, linear probes), writes candidate programs, races them against twins (layer off) and shams (same shape, scrambled info — sham-parity ⇒ capacity-only gain, refuse), and plants survivors behind zero-init gates the optimizer opens. Insertion timing matters: mid-training beats from-start (72% vs 55%) — early availability invites shortcut reliance.
+
+## 2. "Mostly us" — the shipped surfaces (the credit, with evidence)
+
+| Paper ingredient | Ships here as | Where |
+|---|---|---|
+| Code complementing the statistical learner | mined corpus rules (statistical) + fix-validators + the `fix_verify` compile gate (code) | `riir-refine` — the rulewright IS the hybrid |
+| Programs behind a zero-init gate ("none installed = nothing happens") | law-install seams: `BuffLaw`/`CastLaw`/`StrikeLaw` — none installed = no buff lands, no cast goes, no blow decided | `seal-rules` over the riir-ai substrate |
+| Agent-authored verified code in the loop | wasm validator lane: Rust→wasm32 fuel-bounded cdylibs, BLAKE3-committed store (version/blake3/active/revoked), report-only verify | `wasm_validator` feature (Plan 199; Bench 105 opt-in; run-status line under the "Plan 199 T3.5" comment anchor, `src/bin/heal.rs:18179`) |
+| Programs as the generalizing half of cognition | constraint validators LEAP/MUSE · `quest_grammar` pipeline | `riir-wasm` · quest lane |
+| Withheld-OOD eval infrastructure | `withheld_pair_ood` (withheld (rule, shape-class) combinations; shape-class derived deterministically from span text; synthetic population via `eval_synth`) | `src/draft/` — Issue 062 T1/T2 LANDED |
+| Evidence-gated admission (the g-gate analog) | tier ladder Withdrawn→Heuristic→Certified via `tier_guard` Lemma-4.2 (likelihood-ratio pricing) | `src/tier_guard.rs` |
+
+The two deltas we lack are exactly §TL;DR's items: the size-band cut of the OOD axis, and GROWTH (validators as an evolving artifact class authored from misses, admitted by racing, promoted by evidence) rather than hand-authored statics.
+
+## 3. Path 0, cousins, prior art (§4 searches run 2026-11-07)
+
+**Pinned claim:** the size-band jaggedness protocol applied to the rulewright corpus (extending the landed combination-level `withheld_pair_ood` axis), plus a miss-grown validator loop admitted through twin/sham racing + the tier ladder — the rulewright's own code-layer lane. Distinguished from Voyager by the admission protocol (twin/sham + likelihood-ratio tier gate vs embedding-indexed success-only admission), from the blog by requiring no NN training at all (validators are programs; the "network" is the corpus+drafter), and from Issue 216 by mechanism (artifact growth + eval, not span-dispatch cost masking).
+
+**§4 verdict: the class is published — Q1 NO → NOT Super-GOAT.**
+- Short-program length-generalization: **arXiv:2310.16028** (Zhou et al.) — the thesis itself, published; Delétang et al. 2023 (the blog's own cite); length-generalization surveys/frameworks (Huang et al. 2025, ~68 cites).
+- Agent-grown code skill libraries: **Voyager** (arXiv:2305.16291, ~4206 cites) — ever-growing executable skill library, embedding-indexed; **AGENTFORGE** (OpenReview, Oct 2026) — self-evolving tool synthesis with validation; self-evolving-agent surveys name the Voyager→AlphaEvolve lineage.
+- Probe-gated verification over agentic coding: Research 168 (Silva et al., arXiv:2607.05188) — already distilled HERE, spawned katgpt-rs 780 + riir-train 403.
+
+**Signal-diffs (§3.6) on the internal cousins — read, not name-matched:**
+- **`withheld_pair_ood` / Issue 062 (landed):** combination-level withholding — novel (rule × shape-class) pairs, coverage = binding generalization. The jaggedness cut withholds SIZE BANDS (in-between complexity) and measures a per-band accuracy CURVE. Neither axis consumes the other; T0 of Issue 217 extends the module with the band axis rather than forking it.
+- **Score-bench entropy-gap OOD rows (108/154/158: ref 3.840 vs ood 3.110 nats):** per-query corpus-distance anomaly signal on the score-bench. Jaggedness = per-band fix-accuracy profile on labeled fixtures. Different instruments, both live; T0's eval does not touch the entropy axis.
+- **Research 168 / Issue 107 (closed):** probes on latent states GATE THE ORACLE (skip/relax/run verification). The growth loop AUTHORS ARTIFACTS to close measured gaps. Fusion row (T7, report-only): the outcome-fit probe as the jaggedness detector that TRIGGERS validator growth — 168's gate vocabulary extended with a "grow" action, never wired without its own gate.
+- **Research 233 / Plan 199:** landed the validator lane as static hand-authored artifacts + report-only verify. Delta: growth (authoring from miss clusters) + admission (twin/sham) + tier promotion + the eval that decides any of it fires. 233's store is the substrate this loop grows into.
+- **Issue 216 (codegram, UNCLAIMED sibling):** span-shape DISPATCH cost masking (Bench 141 T4 lineage). Mine: artifact growth + admission + eval. Shared vocabulary only (shape classes derived from span structure); consume-never-fork, no dependency on 216 landing.
+
+**Audited discards:** (a) "insert code layers into a neural network mid-training" — already filed as riir-train Plan 490 Phase 2; not re-filed. (b) "phantom-gradient demand maps for the rulewright" — the serving analog already ships (misses queues + corpus-gap events = the demand signals; rethink 021 §2); no new filing. (c) Voyager-style embedding-indexed admission — rejected here in favor of racing + tier evidence (the sham arm is load-bearing: success-only admission cannot distinguish information from capacity — the blog's own sham-race lesson).
+
+## 4. Verdict
+
+**Gain** — adoption of two published classes (short-program length-generalization theory; Voyager-class skill-library growth) fused onto a landed substrate (`withheld_pair_ood` + the validator store + the tier ladder) with an admission protocol that is ours. GOAT upgrade gate named in Issue 217 T6: paired score-bench heal rate + withheld-band accuracy vs the no-validator incumbent, one frozen read, demote on fail. **MOAT gate:** refine's consumer-first moat row names "OOD generalization" verbatim — this filing is squarely on it. Envelope-fit: everything here is dev-time tooling inside the hot loop of the product's own improvement cycle — priority-ladder tier 1.
+
+## 5. Claude verdict record
+
+**PENDING — §5 ping-pong not yet run.** Filled only with the real outcome before any commit.
