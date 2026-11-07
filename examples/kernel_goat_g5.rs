@@ -129,6 +129,11 @@ fn report_and_emit(
     // pass) — the paired disclosure the runner script diffs across ON
     // postures (the rank-1 flip census: flat vs narrowed).
     let mut rank1_rule_ids: Vec<String> = Vec::new();
+    // Issue 213 G3 (verdict round 1, D2): per-span PER-DOMAIN rank-1 ids in
+    // walk order (last pass), one `label:rule_id` entry per domain that has
+    // a rank-1 — the retention comparator the shader-gate diff reads.
+    // ADDITIVE json only; every existing key keeps its shape.
+    let mut rank1_all: Vec<Vec<String>> = Vec::new();
     let mut kernel_spans = 0usize;
     let mut total_spans = 0usize;
 
@@ -149,6 +154,16 @@ fn report_and_emit(
             }
             total_spans += spans.len();
             for span in &spans {
+                // Issue 213 G3: collect every domain's rank-1 for this span
+                // (deterministic order = `by_domain`'s insertion order),
+                // BEFORE the kernel-only early-continue below.
+                let mut span_all: Vec<String> = Vec::new();
+                for (d, rules) in &span.by_domain {
+                    if let Some(top) = rules.first() {
+                        span_all.push(format!("{}:{}", d.label(), top.rule_id));
+                    }
+                }
+                rank1_all.push(span_all);
                 let Some((_, rules)) = span.by_domain.iter().find(|(d, _)| *d == DomainId::Kernel)
                 else {
                     continue;
@@ -236,6 +251,20 @@ fn report_and_emit(
         write!(json, "{sep}\"{id}\"").unwrap();
     }
     writeln!(json, "],").unwrap();
+    // Issue 213 G3: per-span per-domain rank-1 (`label:rule_id` entries,
+    // one inner array per span, walk order, last pass). ADDITIVE — the
+    // cost/utility scripts never read this key.
+    writeln!(json, "  \"rank1_all\": [").unwrap();
+    for (i, span_all) in rank1_all.iter().enumerate() {
+        let sep = if i == 0 { "" } else { "," };
+        write!(json, "{}  [", sep).unwrap();
+        for (j, id) in span_all.iter().enumerate() {
+            let isep = if j == 0 { "" } else { ", " };
+            write!(json, "{}\"{}\"", isep, id).unwrap();
+        }
+        writeln!(json, "]").unwrap();
+    }
+    writeln!(json, "],").unwrap();
     writeln!(
         json,
         "  \"total_rules\": {total_rules}, \"cited_rules\": {}, \"zero_match_rules\": {zero_match},",
@@ -274,18 +303,34 @@ fn report_and_emit(
 ) {
     use std::fmt::Write as _;
     let mut per_pass: Vec<Vec<(String, u64)>> = vec![Vec::new(); PASSES];
-    for pass in per_pass.iter_mut() {
+    // Issue 213 G3: the OFF posture carries the same per-span per-domain
+    // rank-1 census (the kernel domain is absent by cfg — its slot is
+    // missing on BOTH comparison arms, so the comparator is unaffected).
+    let mut rank1_all: Vec<Vec<String>> = Vec::new();
+    for (p, pass) in per_pass.iter_mut().enumerate() {
         for f in files {
             let Ok(src) = std::fs::read_to_string(f) else {
                 continue;
             };
             let started = Instant::now();
-            let _ = matcher.suggest_file(&src, &f.display().to_string(), top_k);
+            let spans = matcher.suggest_file(&src, &f.display().to_string(), top_k);
             let path = f
                 .display()
                 .to_string()
                 .replace(std::path::MAIN_SEPARATOR, "/");
             pass.push((path, started.elapsed().as_micros() as u64));
+            if p + 1 != PASSES {
+                continue; // census reads the LAST pass only
+            }
+            for span in &spans {
+                let mut span_all: Vec<String> = Vec::new();
+                for (d, rules) in &span.by_domain {
+                    if let Some(top) = rules.first() {
+                        span_all.push(format!("{}:{}", d.label(), top.rule_id));
+                    }
+                }
+                rank1_all.push(span_all);
+            }
         }
     }
     let mut json = String::new();
@@ -304,6 +349,19 @@ fn report_and_emit(
     writeln!(json, "  \"top_k\": {top_k},").unwrap();
     writeln!(json, "  \"matcher_build_ms\": {build_ms},").unwrap();
     writeln!(json, "  \"passes\": {PASSES},").unwrap();
+    // Issue 213 G3: same additive per-span per-domain rank-1 census as the
+    // ON-posture emit (keep both arms comparable).
+    writeln!(json, "  \"rank1_all\": [").unwrap();
+    for (i, span_all) in rank1_all.iter().enumerate() {
+        let sep = if i == 0 { "" } else { "," };
+        write!(json, "{}  [", sep).unwrap();
+        for (j, id) in span_all.iter().enumerate() {
+            let isep = if j == 0 { "" } else { ", " };
+            write!(json, "{}\"{}\"", isep, id).unwrap();
+        }
+        writeln!(json, "]").unwrap();
+    }
+    writeln!(json, "],").unwrap();
     writeln!(json, "  \"per_pass_us\": [").unwrap();
     for (p, pass) in per_pass.iter().enumerate() {
         write!(json, "    [").unwrap();
