@@ -2020,3 +2020,17 @@ required-features = ["fix_verify"]
 [[example]]
 name = "try_next_pool_census"
 required-features = ["cf_workers_ai", "score_bench", "escalation_manifest"]
+
+# Issue 217 T0 — the size-band jaggedness eval (the ordered OOD axis beside
+# withheld_pair_ood). Both draft-layer modules are `latent_retrieval`-gated;
+# without this row, auto-discovery would compile the examples at the DEFAULT
+# posture and red on the missing module (E0432) — the reader-protection law.
+[[example]]
+name = "band_ood_eval"
+required-features = ["latent_retrieval"]
+
+# Issue 217 T0 — the cost probe that pinned the BACKGROUND_CAP (build-cost
+# superlinearity measured; the full record lives in the issue).
+[[example]]
+name = "band_ood_cost"
+required-features = ["latent_retrieval"]

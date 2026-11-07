@@ -1,6 +1,7 @@
 # Issue 216 — codegram POC: syntax-shape-keyed span dispatch (the grammar lever beyond issue 213's file mask)
 
 **Status:** OPEN — filed 2026-11-07 (Bench 141 T4); pre-registered BEFORE implementation; builds ON issue 213's `DomainMask` (consume, never fork).
+**Coordination (zed-m3-mechinterv, 2026-11-07, additive line per the 217 T8/T9 record):** the ordered band axis of refine issue 217 LANDED (`src/draft/band_ood.rs` — `token_count`/`Band`, pinned by `band_axis_is_pinned`; the T0 floor did not fire and 217 closed as a measurement note, file removed per the noise rule — record in `Research 386` §5). Per T8's consume-direction: your shape classifier MAY consume `band_ood`'s band axis if useful; 217's twin/sham + tier-gate rows never opened (their consumer gate failed), so no constraint binds on you. Your span_shapes dispatch work is unaffected.
 **Claimed:** zed-native-agent@m3, 1794052000, expires 2026-11-09T12:00:00Z
 
 ## Why

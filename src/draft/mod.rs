@@ -48,6 +48,10 @@ pub mod eval_fixtures_docker;
 pub mod eval_fixtures_perf;
 pub mod eval_fixtures_sec;
 pub mod eval_fixtures_shader;
+// Issue 217 T0: the size-band jaggedness axis — the ordered OOD cut beside
+// the withheld-pair axis (leave-one-BAND-out; the preregistered floor is in
+// the issue's Status line, never re-tuned).
+pub mod band_ood;
 // Issue 186: the structure-grounded synth fixture family — tier-1
 // deterministic mutations of the corpus's own material (gold = the owning
 // rule), the withheld-pair population feeder + the robustness floor.

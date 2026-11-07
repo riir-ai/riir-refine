@@ -778,8 +778,9 @@ impl WithheldReport {
     }
 }
 
-/// Build the withheld index's patterns.
-fn build_index(items: &[&Binding]) -> RuleIndex {
+/// Build the withheld index's patterns. Shared with the band axis
+/// (`band_ood`) — one index builder, never two.
+pub(crate) fn build_index(items: &[&Binding]) -> RuleIndex {
     let patterns: Vec<(String, String)> = items
         .iter()
         .map(|b| (b.rule.clone(), b.text.clone()))
@@ -834,7 +835,8 @@ fn rank_of_set(
 }
 
 /// Rank of `rule` for `code`, plus its fused score (0.0 when unretrieved).
-fn rank_of(
+/// Shared with the band axis (`band_ood`) — one ranking pipeline, never two.
+pub(crate) fn rank_of(
     index: &RuleIndex,
     code: &str,
     rule: &str,
