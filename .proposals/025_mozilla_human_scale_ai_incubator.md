@@ -1,6 +1,6 @@
 # Proposal 025 — Mozilla Human-Scale AI Incubator application: cargo refine, the modelless code healer
 
-Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12 · 2026-11-06: draft answers filed (§Draft application answers)
+Status: **draft v4** — owner pivot 2026-10-31 (issue 192): **Refine open-src DECIDED (G1 resolved)**; posture becomes **public-goods points** (TUNA contribution points replace KAT/payment — no purchase, no token value; drain only as fair-use balance on hosted lanes); **Rethink = PoC research sibling** (sites drop pricing; commercial only post-trust); Refine = closed-beta for the contribution network + corpus stacking + Python/Go domains planned; **no more mainnet for refine** (proposal 023 DEFERRED-FROZEN, issue 175 removed → HISTORY). Websites: [Plan 324](../.plans/324_mozilla_web_alignment.md). Still gated on the consult + the T14/T14a/T14b artifact gates; nothing submits before 2026-11-12 · 2026-11-06: draft answers filed (§Draft application answers) · **2026-11-07: `TUNA_WEIGHTS_V1` armed** (accrual weights + weekly epoch, §points plane; node-misbehavior ladder in Plan 335 P2.0(c))
 Branch: `develop` (per global rule — no feature branches)
 Owner: unassigned (grant submitter = owner)
 Deadline: **2026-11-20 11:59 PM PST** · Info session: **2026-11-12 17:00 UTC** · Consult email: draft in [`../.docs/01_orientation/mozilla_grant_readiness.md`](../.docs/01_orientation/mozilla_grant_readiness.md) (v2 — credit-plane question added)
@@ -106,6 +106,18 @@ is the re-promotion path.
    docs — contribute / contribution / contributor / contribution points only (internal code
    identifiers rename only when touched; the T14 sweep's detector patterns keep the old
    words by design — they exist to catch the retired surface).
+
+**Accrual weights — `TUNA_WEIGHTS_V1` (owner-armed 2026-11-07; the weight table is an owner lever, never an agent one).** Accrual only — the drain stays out of v1 (law 1). Points are awarded for CHECKED OUTCOMES, never for compute, uptime, or attempts:
+
+| Contribution (GitHub-joined identity) | Points | Proof read by the operator batch |
+|---|---|---|
+| Contributed fix record accepted into corpus intake (compile-gated, secret-scanned, OSS-class target) | 1 | the fix's verify receipt + the intake row |
+| Reported miss that a landed rule later heals | 2, at heal time | the content-addressed miss row + the healing rule's commit |
+| Fix merged upstream into a public repo | 5, at most ONE per target repo per identity per epoch | the merge on the public repo; opened-but-unmerged PRs earn nothing |
+| Rule landed in the community corpus (tests + gates passed) | 25 | the corpus commit |
+| Node uptime, compute served, fix attempts | **0, by design** | — |
+
+Anti-farming: ≤ 200 base points (row 1) per identity per epoch; the same rule in the same repo counts once per epoch; a maintainer can opt a repo out of the upstream-merge row (the drive-by-PR harm to FOSS maintainers is the failure this row must never fund). Rank weight = Σ points × 2^(−age / 90 d) — the law-2 rank decay; the history it decays over is permanent. **Cadence:** weekly epoch, settle Monday 00:00 UTC — one batch does accrual + rank recompute + anchor (the Cost bar's once-per-epoch rule); row-1 points from epoch N settle at N+1 (a one-week review window). Weights are versioned and STORED AT ISSUE — a `V2` never re-prices points already accrued (the Proposal 006 D4a law). Public copy says "accrue", never "earn"/"reward" (law 3). The node-misbehavior ladder (no stake, no slashing — reputation and routing only) lives in [Plan 335](../.plans/335_local_cluster_fixer_lane_qwen_local_gate_and_cli_runway.md) P2.0(c).
 
 **The ledger.** `riir-ledger` v1 = points service + optional anchoring, NOT a chain:
 balances in the riir-dapps service DB; Merkle-anchored epochs via the existing `anchor_root`
