@@ -2,6 +2,18 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-07 — Issue 211 CLOSED + removed: the huacnlee/cargo fork DECLINED, blaze FAIL (Bench 138/139)
+
+Pilot measured: fork worktree amortization real only at dep-heavy scale (sge 6.95× on the 2nd worktree) with a 2.0×/3.3× first-build tax → crossover at the 3rd worktree; sccache no wall gain; the CARGO_TARGET_DIR hazard reproduced and NOT prevented by the fork (Bench 139 Part A `c26f9690`); blaze 0/14 valid arms (Part B); sha-law verified-negative on both cargos (`3f37c4a5`); hygiene residue `b43a3c32` + ndb `04fc3c8`. Delegated-owner verdict 4785a7a0: DECLINE, `cargo-hc` uninstalled. Moot rows (pre-registered adoption bars, 4090 install) dropped with the decline; the first-build-tax repro (amo `200b5b44`, curiosity-grade) moved to Bench 138 §Anomalies. Session: katgpt-rs-f5.
+
+## 2026-11-07 — Issue 209 CLOSED + removed: the c′ referee is a STANDING read, not a task (`.docs/10_self_evolve/corpus_referee.md`)
+
+T1–T5 landed `a6eb6be0` + `a7307895` (certificate + telemetry/DiD state machine + `corpus_diagnose --referee/--enroll`, case #1 `hashmap-with-capacity` @ ac280021 enrolled). T6 was the only open row and it is passive accrual (last read 2026-11-07: PENDING BelowSupport 2/30, batches 3/8, controls 8) — moved to the doc's enrolled-cases table with the operating runbook; a verdict (PASS/FAIL at n ≥ 30 or UNDECIDED-by-starvation at 8/8) is recorded there + here. Session: katgpt-rs-f5.
+
+## 2026-11-07 — Issue 200 CLOSED + removed: the root-package workspace + fixer/trainer tier crates landed; owner acts moved to Plan 335 P2.0
+
+C1 `4f2de6e80` (workspace + tier stub crates + Layer 5t + BOUNDARY tier law) + C2 `18ba1e644` (`fixer_regate` → fixer crate, `kat_drain` → trainer crate, surface repairs); tier KAT surfaces default-OFF. The three remaining rows were owner acts only (fixer bin name → Dist artifact under it; TUNA point-weight table, owner-armed per Proposal 025) — carried verbatim into Plan 335 as P2.0 with the design notes (onboarding UX, self-host runbook, native-only tier bins). Session: katgpt-rs-f5.
+
 ## 2026-11-06 — Issue 212 CLOSED + removed: `ruliology_search` promoted to default; `sec` + `shader_perf` FAIL the G5 cost leg and stay opt-in (Bench 140)
 
 T1 `5f985649` (generic `scripts/g5_domain_cost.sh` + shared `g5_cost_math.py`, `kernel_goat_g5` stamps `compiled_features`, G3 arm takes a feature), T5 `76b6af81` (elo_k_eff comment re-pointed to `280f15766`; shipped-binary inert EMA learning half disclosed), T2–T4 `615744da`: sec added p50 1.95–2.16 / p95 9.18–10.31 ms per file, shader_perf p50 1.10–1.28 / p95 5.30–5.92 (ceilings 1.0/5.0, all 3 interleaved rounds FAIL; G3 byte-stable both) — axis: the domain corpus joins every `.rs` span's matcher fan-out (lever: a pregate/scope, `.wgsl`-only for shader). Measured on amo under load (bmo offline, preflight REFUSED — disclosed in Bench 140); a quiet-rig re-run is the open confirmation if a scoping lever is attempted.

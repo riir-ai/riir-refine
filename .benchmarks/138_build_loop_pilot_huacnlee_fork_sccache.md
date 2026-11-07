@@ -79,6 +79,14 @@ fresh (`~/.cargo/targets` absent pre-bench); sccache stats zeroed pre-bench.
   interacting with the workspace's own `[profile.dev.package."*"] opt-level=3`,
   or build-script re-execution. Upstream-worthy question; do NOT quote the fork's
   first-build cost without reproducing it.
+  **Repro queued (Issue 211 closed 2026-11-07, the row moved here):** isolated
+  A/B as Exclusive amo job `200b5b44` (cargo-hc at `amo:~/bin/cargo-hc`
+  sha-verified, seal-game-editor at amo develop head, plain arm on a scratch
+  `CARGO_TARGET_DIR`, fork unit reset per rep, 2 interleaved reps). File
+  upstream ONLY if reproduced; the posting act is owner-reserved
+  (outward-facing). The fork itself is NOT adopted (delegated-owner verdict
+  4785a7a0: DECLINE; `cargo-hc` uninstalled from m3) — the repro is
+  curiosity-grade, it gates nothing.
 - Main-clone cells (A, C, S1, S3, S5) measured the working tree AS FOUND — sge's
   main clone carried a sibling ticket lane's WIP (branch `fix/sge-builds-the-world-relay`);
   worktree cells measured the clean commit. Compile surfaces were docs-identical
