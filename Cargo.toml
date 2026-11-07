@@ -299,6 +299,19 @@ kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
 # the scan path is byte-identical without this feature.
 kernel_pregate = ["kernel_opt"]
 
+# Issue 216 (the codegram POC, 2026-11-07): span-shape-keyed rule dispatch —
+# the categorical dispatch mask. Classifies each retrieval chunk (an
+# AstChunker item span) from the Issue-063 shared per-span syn parse + two
+# pinned body needles, then drops annotated rust_perf rules whose shape
+# cannot match (fail-open: parse-fail / RerankMode::Off / unparseable chunk
+# classify ALL — byte-identical to the ungated fan-out). Opt-in until the
+# Bench-144 G2 cost leg passes on a quiet rig (the kernel_pregate promotion
+# precedent: feature first, owner-law promotion only on measured gain).
+# Implies `latent_retrieval` + `rust_perf` — the mask is a retrieval-lane
+# filter over the rust_perf corpus's annotation table; the feature never
+# exists without the tree it filters or the corpus it annotates.
+span_shape_dispatch = ["latent_retrieval", "rust_perf"]
+
 # Issue 196: the route-narrowed kernel retrieval — 15 per-category
 # sub-indices + a bounded global tail; every query scores only its span's
 # routed expert slice + tail (the G5 cost-leg repair, Bench 125). OFF

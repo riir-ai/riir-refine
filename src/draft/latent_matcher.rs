@@ -11,8 +11,8 @@
 //! Phase 4/5 proposers). Composes riir-rag as-is; nothing here reimplements
 //! chunking, embedding, or retrieval.
 
-use riir_rag::ast_chunker::AstChunker;
 use riir_rag::Chunker;
+use riir_rag::ast_chunker::AstChunker;
 
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
@@ -881,6 +881,11 @@ impl LatentMatcher {
         } else {
             syn::parse_file(code).ok()
         };
+        // Issue 216 (codegram): the shape verdict for this chunk, read from
+        // the SAME shared parse (zero additional parse work). `None` (the
+        // RerankMode::Off posture) classifies ALL — the fail-open contract.
+        #[cfg(feature = "span_shape_dispatch")]
+        let shape_verdict = span_shape::classify(code, parsed.as_ref());
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
             // Issue 213: a domain outside the span's allow set skips its
@@ -948,6 +953,17 @@ impl LatentMatcher {
             if !self.active_exclusions.is_empty() {
                 let key = active_set_domain_key(domain);
                 rules.retain(|r| !self.active_exclusions.excludes(key, &r.rule_id));
+            }
+            // Issue 216 (codegram): shape-keyed dispatch — annotated rust_perf
+            // rules whose shape cannot match this chunk leave the fan-out
+            // BEFORE instantiation marking + rerank + truncate (the Issue-102
+            // active-set semantics: the surviving pool fills top_k). Fail-open
+            // by contract: `ALL` (parse skipped or failed) and every
+            // unannotated rule admit — non-Perf domains are untouched, so the
+            // default posture stays byte-identical.
+            #[cfg(feature = "span_shape_dispatch")]
+            if domain == DomainId::Perf && shape_verdict != span_shape::SpanShapeSet::ALL {
+                rules.retain(|r| span_shape::rule_admits(&r.rule_id, shape_verdict));
             }
             if let Some(file) = &parsed {
                 super::instantiation_rerank::mark_instantiation_with_file(
@@ -1636,10 +1652,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .position(|s| s.start_line == 4 && s.end_line == 4)
             .expect("synthesized line-span at the gap");
         let span = &sugg[pos];
-        assert!(span
-            .anchored_rules
-            .iter()
-            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
+        );
         assert!(
             span.by_domain.is_empty(),
             "no retrieval on a synthetic span"
@@ -1742,10 +1759,11 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             .iter()
             .find(|s| s.start_line <= 2 && s.end_line >= 2)
             .expect("a chunk covers line 2");
-        assert!(span
-            .anchored_rules
-            .iter()
-            .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return"));
+        assert!(
+            span.anchored_rules
+                .iter()
+                .any(|(d, id)| *d == DomainId::Clippy && id == "needless_return")
+        );
         assert_eq!(span.hot.len(), 1, "both oracles attach independently");
         assert!(!span.heuristic_only);
     }
@@ -1822,9 +1840,10 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
         let mut m = LatentMatcher::from_enabled_domains()
             .expect("build")
             .with_active_set(set);
-        assert!(m
-            .active_exclusions()
-            .excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top));
+        assert!(
+            m.active_exclusions()
+                .excludes(crate::active_set::CLIPPY_DOMAIN_KEY, &top)
+        );
         let (_, by_domain) = m.suggest_span(query, 3);
         // The domain ENTRY is not dropped — only the rule is gone, and the
         // freed top slot backfills from deeper ranks.
@@ -1883,10 +1902,232 @@ pub fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {
             "the demoted rule still anchors — oracle truth is not demotable"
         );
         // ...while the same rule left the similarity list of that span.
-        assert!(!span
-            .by_domain
+        assert!(
+            !span
+                .by_domain
+                .iter()
+                .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return"))
+        );
+    }
+}
+
+// Issue 216 (the codegram POC): the span-shape dispatch classifier — the
+// categorical half (issue 217 T0 owns the ordered band axis beside it; the
+// T8 ordering: this classifier landed first, T0 consumes it for the
+// categorical cut). Beside its only consumer: it reads the Issue-063 shared
+// per-span parse in `suggest_all_domains`, and the table beside the corpus
+// it annotates (the draft→domains import precedent: `instantiation_rerank`).
+#[cfg(feature = "span_shape_dispatch")]
+pub mod span_shape {
+    pub use crate::domain::{SpanShape, SpanShapeSet};
+    use crate::domains::rust_perf::corpus::span_shape_annotations;
+
+    /// Classify one retrieval chunk into its shape set.
+    ///
+    /// Reads the chunk's OWN root items from the shared parse (an
+    /// `AstChunker` chunk IS an item span, so the root kinds ARE the
+    /// chunk's shape) + two pinned body needles. Fail-open by contract:
+    /// no parse (the caller passes `None` under `RerankMode::Off`), a parse
+    /// failure, or a parse with no recognized root item all classify
+    /// [`SpanShapeSet::ALL`] — every rule admits, byte-identical to the
+    /// ungated fan-out.
+    #[must_use]
+    pub fn classify(code: &str, parsed: Option<&syn::File>) -> SpanShapeSet {
+        let Some(file) = parsed else {
+            return SpanShapeSet::ALL;
+        };
+        let mut set = SpanShapeSet::empty();
+        for item in &file.items {
+            set = match item {
+                syn::Item::Fn(f) => {
+                    let s = set.with(SpanShape::FnDecl);
+                    let s = if f.sig.asyncness.is_some() {
+                        s.with(SpanShape::AsyncFn)
+                    } else {
+                        s
+                    };
+                    if f.attrs.iter().any(attr_is_test) {
+                        s.with(SpanShape::TestFn)
+                    } else {
+                        s
+                    }
+                }
+                syn::Item::Impl(_) => set.with(SpanShape::ImplBlock),
+                syn::Item::Trait(_) => set.with(SpanShape::TraitDecl),
+                syn::Item::Struct(_) | syn::Item::Enum(_) | syn::Item::Union(_) => {
+                    set.with(SpanShape::TypeDecl)
+                }
+                syn::Item::Mod(_) => set.with(SpanShape::ModBlock),
+                syn::Item::Macro(_) => set.with(SpanShape::MacroItem),
+                _ => set,
+            };
+        }
+        // Body-level needles — the root items do not surface these without a
+        // deep walk. Substring hits over-admit (a `for ` inside a string or
+        // comment still says HotLoop), which is the fail-open direction: the
+        // mask is recall-biased by design.
+        if code.contains("for ") || code.contains("while ") || code.contains("loop {") {
+            set = set.with(SpanShape::HotLoop);
+        }
+        if code.contains("match ") {
+            set = set.with(SpanShape::MatchBlock);
+        }
+        if set == SpanShapeSet::empty() {
+            // Parsed but no recognized root item — fail-open.
+            SpanShapeSet::ALL
+        } else {
+            set
+        }
+    }
+
+    /// The dispatch decision: `true` keeps the rule in the fan-out.
+    /// Unannotated rules always admit (the safe default — the annotation
+    /// roll-out is gradual, never a cliff).
+    #[must_use]
+    pub fn rule_admits(rule_id: &str, verdict: SpanShapeSet) -> bool {
+        match span_shape_annotations()
             .iter()
-            .any(|(_, rules)| rules.iter().any(|r| r.rule_id == "needless_return")));
+            .find(|(id, _)| *id == rule_id)
+        {
+            None => true,
+            Some((_, shapes)) => shapes.intersects(verdict),
+        }
+    }
+
+    fn attr_is_test(attr: &syn::Attribute) -> bool {
+        attr.path().is_ident("test")
+    }
+}
+
+#[cfg(all(test, feature = "span_shape_dispatch"))]
+mod span_shape_tests {
+    use super::span_shape::{classify, rule_admits};
+    use crate::DomainId;
+    use crate::LatentMatcher;
+    use crate::domain::{SpanShape, SpanShapeSet};
+
+    const fn set(bits: &[SpanShape]) -> SpanShapeSet {
+        let mut acc = SpanShapeSet::empty();
+        let mut i = 0;
+        while i < bits.len() {
+            acc = acc.with(bits[i]);
+            i += 1;
+        }
+        acc
+    }
+
+    fn verdict_of(src: &str) -> SpanShapeSet {
+        classify(src, syn::parse_file(src).ok().as_ref())
+    }
+
+    /// The classifier pin (the kernel-pregate `pinned` test convention): each
+    /// golden asserts the EXACT set — a new shape bit or a widened needle
+    /// fails here loudly and must re-register (the Cargo.toml feature
+    /// comment) + re-run the G2 cost leg before promotion.
+    #[test]
+    fn span_shape_verdict_is_pinned() {
+        assert_eq!(
+            verdict_of("fn plain(v: u32) -> u32 { v }"),
+            set(&[SpanShape::FnDecl])
+        );
+        assert_eq!(
+            verdict_of("#[test]\nfn t() { assert_eq!(1, 1); }"),
+            set(&[SpanShape::FnDecl, SpanShape::TestFn])
+        );
+        assert_eq!(
+            verdict_of("async fn go() {}"),
+            set(&[SpanShape::FnDecl, SpanShape::AsyncFn])
+        );
+        assert_eq!(
+            verdict_of("impl Foo { fn x(&self) {} }"),
+            set(&[SpanShape::ImplBlock])
+        );
+        assert_eq!(
+            verdict_of("trait Speaker { fn speak(&self); }"),
+            set(&[SpanShape::TraitDecl])
+        );
+        assert_eq!(
+            verdict_of("struct P { a: u32 }"),
+            set(&[SpanShape::TypeDecl])
+        );
+        assert_eq!(verdict_of("enum E { A, B }"), set(&[SpanShape::TypeDecl]));
+        assert_eq!(
+            verdict_of("union U { a: u32, b: f32 }"),
+            set(&[SpanShape::TypeDecl])
+        );
+        assert_eq!(
+            verdict_of("mod inner { pub fn f() {} }"),
+            set(&[SpanShape::ModBlock])
+        );
+        assert_eq!(
+            verdict_of("macro_rules! make { () => {}; }"),
+            set(&[SpanShape::MacroItem])
+        );
+        assert_eq!(
+            verdict_of("fn sum(v: &[u32]) -> u32 { let mut s = 0; for x in v { s += x; } s }"),
+            set(&[SpanShape::FnDecl, SpanShape::HotLoop])
+        );
+        assert_eq!(
+            verdict_of("fn pick(c: u32) -> u32 { match c { 0 => 1, _ => 2 } }"),
+            set(&[SpanShape::FnDecl, SpanShape::MatchBlock])
+        );
+    }
+
+    /// The fail-open contract: no parse (`RerankMode::Off` — the caller
+    /// passes `None`), an unparseable chunk, and a parse with no recognized
+    /// root item all classify ALL.
+    #[test]
+    fn classify_fails_open_without_a_usable_parse() {
+        assert_eq!(classify("fn f() {}", None), SpanShapeSet::ALL);
+        assert_eq!(
+            classify(
+                "}} not rust {{",
+                syn::parse_file("}} not rust {{").ok().as_ref()
+            ),
+            SpanShapeSet::ALL
+        );
+        assert_eq!(
+            classify("", syn::parse_file("").ok().as_ref()),
+            SpanShapeSet::ALL
+        );
+    }
+
+    /// The dispatch decision: annotated rules admit only intersecting
+    /// verdicts; unannotated rules admit everything; ALL admits everything.
+    #[test]
+    fn rule_admits_masked_vs_unmasked() {
+        let type_decl = set(&[SpanShape::TypeDecl]);
+        let fn_only = set(&[SpanShape::FnDecl]);
+        let loop_fn = set(&[SpanShape::FnDecl, SpanShape::HotLoop]);
+        // layout-reorder: TypeDecl-only annotation.
+        assert!(rule_admits("layout-reorder", type_decl));
+        assert!(!rule_admits("layout-reorder", fn_only));
+        assert!(!rule_admits("layout-reorder", set(&[SpanShape::ImplBlock])));
+        assert!(rule_admits("layout-reorder", SpanShapeSet::ALL));
+        // simd-chunk: fn + loop.
+        assert!(rule_admits("simd-chunk", loop_fn));
+        assert!(!rule_admits("simd-chunk", type_decl));
+        // Unannotated rules admit every verdict.
+        assert!(rule_admits("o1-lookup", type_decl));
+        assert!(rule_admits("some-unknown-rule", fn_only));
+    }
+
+    /// End-to-end keep-side through the real walk: the exact
+    /// `layout-reorder` buggy pattern as the source — the struct chunk
+    /// classifies `TypeDecl`, the annotation admits, and the rule SURVIVES the
+    /// gated fan-out (G1's keep half; the drop half is pinned at
+    /// `rule_admits` level + byte-parity on the g5 rig lane).
+    #[test]
+    fn annotated_rule_survives_on_a_matching_shape_span() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "#[repr(C)]\nstruct Bad { a: u8, b: u64, c: u32 }";
+        let spans = m.suggest_file(src, "shape_probe.rs", 5);
+        let hit = spans.iter().any(|s| {
+            s.by_domain.iter().any(|(d, rules)| {
+                *d == DomainId::Perf && rules.iter().any(|r| r.rule_id == "layout-reorder")
+            })
+        });
+        assert!(hit, "the annotated rule must survive on its matching shape");
     }
 }
 

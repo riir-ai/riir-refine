@@ -12,8 +12,8 @@
 //! fit this shape NOW, but a fourth domain might not. Ship exactly 3 impls;
 //! do not speculatively add methods for hypothetical domains.
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 /// A corpus entry that the domain-agnostic core can read through.
 ///
@@ -86,4 +86,98 @@ pub trait HealDomain: Sized {
     /// adaptive drafter pool. clippy re-runs clippy (~130 ms), perf runs
     /// tests+bench (seconds), kernel runs numeric compare vs reference.
     fn validate(rule_id: &str, proposed_fix: &str) -> Self::Verdict;
+}
+
+/// The span-shape vocabulary for shape-keyed rule dispatch (Issue 216, the
+/// codegram POC — the categorical half; issue 217 T0 owns the ORDERED band
+/// axis beside it).
+///
+/// A [`SpanShapeSet`] classifies ONE retrieval chunk (an [`AstChunker`]
+/// fn/impl/struct span) so an annotated rule can leave the fan-out on spans
+/// whose shape cannot match. The set is a hand-rolled u16 bitflags — no dep,
+/// zero-alloc, `Copy`.
+///
+/// Shape bits live here (the neutral trait home) so the domain-side
+/// annotation table (`rust_perf::corpus::span_shape_annotations`) and the
+/// draft-side classifier (`draft::latent_matcher::span_shape`) can both
+/// name it without a domains→draft or draft→draft layer inversion. The
+/// draft→domains import direction is the established one
+/// (`instantiation_rerank`, `headroom_probe`).
+///
+/// [`AstChunker`]: https://docs.rs/riir-rag/latest/riir_rag/ast_chunker/struct.AstChunker.html
+#[cfg(feature = "span_shape_dispatch")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpanShapeSet(u16);
+
+#[cfg(feature = "span_shape_dispatch")]
+impl SpanShapeSet {
+    /// The fail-open verdict: no usable parse (`RerankMode::Off`) or an
+    /// unparseable/unrecognized chunk — every rule admits (byte-identical to
+    /// the ungated fan-out).
+    pub const ALL: Self = Self(u16::MAX);
+
+    /// The empty set (no shape bit set — never a verdict on its own; the
+    /// classifier folds `ALL` over an empty fold so no chunk classifies
+    /// empty).
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self(0)
+    }
+
+    /// Fold one shape into the set (the classifier's accumulator step).
+    #[must_use]
+    pub const fn with(mut self, shape: SpanShape) -> Self {
+        self.0 |= shape.bit();
+        self
+    }
+
+    /// True when any shape is shared. An empty annotated set never happens
+    /// (table rows carry >= 1 bit), so `ALL.intersects(anything non-empty)`
+    /// is true — the fail-open contract falls out of the algebra.
+    #[must_use]
+    pub const fn intersects(self, other: Self) -> bool {
+        (self.0 & other.0) != 0
+    }
+}
+
+/// One categorical span shape (Issue 216). The SYN-derived bits read the
+/// chunk's own ROOT items (an `AstChunker` chunk IS an item span, so the
+/// Issue-063 shared parse already holds them); the needle-derived bits read
+/// body-level signals the root items do not surface without a deep walk.
+/// Widening this enum = a new registration (the kernel pregate needle-set
+/// law): every widening re-pins the golden classifier test + re-runs the
+/// G2 cost leg before promotion.
+#[cfg(feature = "span_shape_dispatch")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SpanShape {
+    /// A root `fn` item.
+    FnDecl = 0,
+    /// A root `fn` carrying `#[test]`.
+    TestFn,
+    /// A root `async fn`.
+    AsyncFn,
+    /// A root `impl` block (inherent or trait — merged v1).
+    ImplBlock,
+    /// A root `trait` declaration.
+    TraitDecl,
+    /// A root `struct`/`enum`/`union` declaration (layout-rules' shape).
+    TypeDecl,
+    /// A root `mod` block.
+    ModBlock,
+    /// A root item-level macro (`macro_rules!`, derive-adjacent items).
+    MacroItem,
+    /// Body-level needle hit: `for ` / `while ` / `loop {` (over-admits —
+    /// a hit inside a string/comment still says `HotLoop`; the mask is
+    /// recall-biased by design).
+    HotLoop,
+    /// Body-level needle hit: `match ` (same over-admit discipline).
+    MatchBlock,
+}
+
+#[cfg(feature = "span_shape_dispatch")]
+impl SpanShape {
+    const fn bit(self) -> u16 {
+        1 << (self as u16)
+    }
 }

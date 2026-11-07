@@ -71,8 +71,8 @@ Standing reading laws (from the report's own footer): name-keyed coverage is a L
 
 - [ ] A. elo_k_eff promotion cell — paired Elo-quality A/B (bar: monotone evidence-damping, no rating regression on the score-bench replay); owner gate after the numbers.
 - [ ] B. seat_rerank T5.2 — wire the armed manifest row into the production fix path, then the paired regate; release-set promotion only on measured gain.
-- [ ] C. issue 213 G2 — the amo cost run (`37f5c2b5` is the only record it may cite) → shader_perf promotion on pass per the gate's own task list.
-- [ ] D. codegram POC — issue 216: span-shape-keyed rule dispatch (syntax shape from the L2 syn parse, no new parse); bars pinned there.
+- [x] C. issue 213 G2 — DONE by the foreign lane (zed-2f171db9@m3): G2+G3 PASS, **shader_perf PROMOTED to default + release set** `9cc961530`, Bench 143; issue 213 closed; issue 214 (@compute needle) closed in the same wave.
+- [ ] D. codegram POC — issue 216: T1 LANDED (Bench 144: classifier + 6-row annotation table + filter + 5 test pins; clippy-green at default/feature/release-set); T4 G2 cost leg QUEUED on a quiet rig; promotion (T5) waits on the numbers.
 - [ ] E. coverage-debt authoring lane — stage the 2 dual-evidence rows first (`missing_errors_doc`, `missing_panics_doc`), then default-firing complexity/style/suspicious heads; Protocol-A dedup grep before EACH authoring; per the mining-batch discipline.
 - [ ] F. standing re-open triggers (watch, never tasks-until-triggered): `kernel_route_narrow` at corpus ≥ ~32k rules (LSA knee); sec per-query overhead waits on issue 213 T5 (ndb score-only mode).
 

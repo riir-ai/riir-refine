@@ -948,3 +948,89 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_67::entries());
     Corpus::new(entries)
 }
+
+/// Widening or re-bitting any row = a new registration: re-verify the row's
+/// `buggy_code` shape claim + re-run the G2 cost leg before promotion.
+#[cfg(feature = "span_shape_dispatch")]
+use crate::domain::{SpanShape, SpanShapeSet};
+
+#[cfg(feature = "span_shape_dispatch")]
+const TYPE_DECL_ONLY: SpanShapeSet = SpanShapeSet::empty().with(SpanShape::TypeDecl);
+#[cfg(feature = "span_shape_dispatch")]
+const FN_AND_ASYNC: SpanShapeSet = SpanShapeSet::empty()
+    .with(SpanShape::FnDecl)
+    .with(SpanShape::AsyncFn);
+#[cfg(feature = "span_shape_dispatch")]
+const FN_AND_HOT_LOOP: SpanShapeSet = SpanShapeSet::empty()
+    .with(SpanShape::FnDecl)
+    .with(SpanShape::HotLoop);
+
+/// The span-shape annotation table (Issue 216, the codegram POC): `rule_id` →
+/// the [`SpanShapeSet`] a span must intersect for the rule to stay in the
+/// fan-out. The draft-side dispatch mask
+/// (`draft::latent_matcher::span_shape::rule_admits`) consults this table
+/// per Perf candidate; rules absent from the table are UNANNOTATED and admit
+/// every span (safe default — the annotation roll-out is gradual and never a
+/// cliff).
+///
+/// The draft→domains import direction is the established precedent
+/// (`instantiation_rerank`/`headroom_probe` import domain proposers), so the
+/// table lives beside the corpus it annotates — one home, no crosswalk copy.
+/// A `rule_id` here that drifts from the corpus fails the crosswalk test below
+/// loudly.
+///
+/// V1 rows (2026-11-07) are the SINGLE-SHAPE rules only — each row's
+/// `buggy_code` lives entirely inside one shape, so the mask is provably
+/// safe for it. Mixed-shape patterns (e.g. `usize-index-to-u32`: struct, fn
+/// and loop in one pattern) are deliberately NOT annotated until the
+/// multi-bit rows are justified by measured dispatch savings (the
+/// annotation-priority map is issue 217 T9(b)'s curve).
+///
+/// Widening or re-bitting any row = a new registration: re-verify the row's
+/// `buggy_code` shape claim + re-run the G2 cost leg before promotion.
+#[cfg(feature = "span_shape_dispatch")]
+#[must_use]
+pub fn span_shape_annotations() -> &'static [(&'static str, SpanShapeSet)] {
+    // layout: the pattern IS a type declaration — a fn/impl chunk cannot match.
+    // async: the pattern is an async fn — a sync-only chunk cannot match.
+    // hot-loop simd: the patterns are fns whose body is a for-loop — a chunk
+    // with no fn and no loop cannot match (a bare type decl).
+    SPAN_SHAPE_ANNOTATIONS
+}
+
+#[cfg(feature = "span_shape_dispatch")]
+static SPAN_SHAPE_ANNOTATIONS: &[(&str, SpanShapeSet)] = &[
+    ("layout-reorder", TYPE_DECL_ONLY),
+    ("repr-u8-enum", TYPE_DECL_ONLY),
+    ("box-large-enum-variant", TYPE_DECL_ONLY),
+    ("async-future-size", FN_AND_ASYNC),
+    ("simd-chunk", FN_AND_HOT_LOOP),
+    ("chunks-exact", FN_AND_HOT_LOOP),
+];
+
+#[cfg(all(test, feature = "span_shape_dispatch"))]
+mod span_shape_annotation_tests {
+    use super::span_shape_annotations;
+
+    /// The crosswalk pin: every annotated `rule_id` EXISTS in the seed corpus.
+    /// A rename that leaves a stale table row fails here loudly (the
+    /// corpus-binding crosswalk convention).
+    #[test]
+    fn every_annotated_rule_id_exists_in_the_seed_corpus() {
+        let corpus = super::build_perf_seed_corpus();
+        for (rule_id, shapes) in span_shape_annotations() {
+            let hit = corpus
+                .entries
+                .iter()
+                .find(|e| e.rule_id == *rule_id)
+                .unwrap_or_else(|| panic!("stale annotation: rule `{rule_id}` left the corpus"));
+            // The annotation must be non-empty (an empty set masks the rule
+            // EVERYWHERE — the algebra makes `intersects(empty)` false).
+            assert!(
+                shapes.intersects(*shapes),
+                "annotation for `{rule_id}` is the empty set"
+            );
+            assert_ne!(hit.fixed_code, "");
+        }
+    }
+}
