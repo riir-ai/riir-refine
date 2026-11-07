@@ -97,7 +97,7 @@ PR onto it without an owner call. Recorded as the day-2 candidate.
 
 | sent | of which evidence-bearing | merged | closed | open | accept rate |
 |---|---|---|---|---|---|
-| 1 (#2977, goodwill) | **0** | 0 | 0 | 1 | n/a (no evidence-bearing sends yet) |
+| 1 (#2977, goodwill) | **0** | **1** (2026-11-07) | 0 | 0 | n/a (no evidence-bearing sends yet; goodwill stays outside the denominator per the owner verdict) |
 
 **SEND #1 (T5 LANDED 2026-11-02 ~17:06Z, zed-m3-mozilla-wetrun):**
 - Fork: https://github.com/riir-ai/sccache (created; org repo-create rights confirmed for `katopz`)
