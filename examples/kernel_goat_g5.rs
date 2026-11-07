@@ -61,12 +61,14 @@ fn main() {
     let mut out_path: Option<String> = None;
     let mut root = std::path::PathBuf::from("src");
     let mut top_k = 5usize;
+    let mut latent_ab = false;
     let mut skip: Vec<std::path::PathBuf> = Vec::new();
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
             "--out" => out_path = Some(args.next().unwrap_or_default()),
             "--root" => root = std::path::PathBuf::from(args.next().unwrap_or_default()),
+            "--latent-ab" => latent_ab = true,
             "--skip" => {
                 let v = args.next().unwrap_or_default();
                 if v.is_empty() {
@@ -80,7 +82,7 @@ fn main() {
             }
             other => {
                 eprintln!(
-                    "unknown arg {other}; usage: kernel_goat_g5 [--out <json>] [--root <dir>] [--top-k <n>] [--skip <path>]..."
+                    "unknown arg {other}; usage: kernel_goat_g5 [--out <json>] [--root <dir>] [--top-k <n>] [--skip <path>]... [--latent-ab]"
                 );
                 std::process::exit(2);
             }
@@ -96,6 +98,16 @@ fn main() {
     if files.is_empty() {
         eprintln!("no .rs files under {}", root.display());
         std::process::exit(2);
+    }
+
+    if latent_ab {
+        latent_ab_emit(
+            files,
+            top_k,
+            root.display().to_string(),
+            out_path.as_deref(),
+        );
+        return;
     }
 
     let build_started = Instant::now();
@@ -413,6 +425,138 @@ fn report_and_emit(
     }
     writeln!(json, "  ]").unwrap();
     writeln!(json, "}}").unwrap();
+    println!("{json}");
+    if let Some(p) = out_path {
+        std::fs::write(p, &json).expect("write report");
+    }
+}
+
+/// Issue 643 — the latent-leg-skip A/B in ONE binary (the same-binary law).
+/// One untimed warmup pass (incumbent posture), then AB_PASSES interleaved
+/// walk passes with the toggle flipped per pass (`on,off,on,off` — two (a,b)
+/// pairs, the sequential-A/B law): per-pass per-file `suggest_file` timings
+/// per arm, plus the per-span per-domain rank-1 census read at the LAST pass
+/// of EACH arm (the quality verdict's frozen read; retrieval is deterministic
+/// — cache warmth moves timing, never results). The runner script / the
+/// adjudicator computes medians, the per-file skip−incumbent diff (p50/p95)
+/// and the floor verdict; this harness only measures and emits.
+fn latent_ab_emit(
+    files: Vec<std::path::PathBuf>,
+    top_k: usize,
+    root: String,
+    out_path: Option<&str>,
+) {
+    const AB_PASSES: usize = 4;
+    let build_started = Instant::now();
+    let mut matcher = LatentMatcher::from_enabled_domains().expect("matcher builds");
+    let build_ms = build_started.elapsed().as_millis() as u64;
+
+    // Warmup, untimed, incumbent posture: cold caches never skew a median.
+    riir_refine::draft::corpus_index::set_latent_scan_enabled(true);
+    for f in &files {
+        let Ok(src) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        let _ = matcher.suggest_file(&src, &f.display().to_string(), top_k);
+    }
+
+    // per arm → per pass → per file µs.
+    let mut timings: [Vec<Vec<(String, u64)>>; 2] = [Vec::new(), Vec::new()];
+    timings[0].resize_with(AB_PASSES / 2, Vec::new);
+    timings[1].resize_with(AB_PASSES / 2, Vec::new);
+    // per arm → the rank-1 census at that arm's LAST pass.
+    let mut rank1: [Option<Vec<Vec<String>>>; 2] = [None, None];
+
+    for p in 0..AB_PASSES {
+        let arm = p % 2; // 0 = incumbent (latent scan ON), 1 = skip (OFF)
+        riir_refine::draft::corpus_index::set_latent_scan_enabled(arm == 0);
+        let mut pass: Vec<(String, u64)> = Vec::with_capacity(files.len());
+        let mut spans_rank1: Vec<Vec<String>> = Vec::new();
+        for f in &files {
+            let Ok(src) = std::fs::read_to_string(f) else {
+                continue;
+            };
+            let started = Instant::now();
+            let spans = matcher.suggest_file(&src, &f.display().to_string(), top_k);
+            let path = f
+                .display()
+                .to_string()
+                .replace(std::path::MAIN_SEPARATOR, "/");
+            pass.push((path, started.elapsed().as_micros() as u64));
+            if p >= AB_PASSES - 2 {
+                // The last pass of each arm (passes AB_PASSES-2 and AB_PASSES-1)
+                // carries its arm's census.
+                for span in &spans {
+                    let mut span_all: Vec<String> = Vec::new();
+                    for (d, rules) in &span.by_domain {
+                        if let Some(top) = rules.first() {
+                            span_all.push(format!("{}:{}", d.label(), top.rule_id));
+                        }
+                    }
+                    spans_rank1.push(span_all);
+                }
+            }
+        }
+        timings[arm][p / 2] = pass;
+        if p >= AB_PASSES - 2 {
+            rank1[arm] = Some(spans_rank1);
+        }
+    }
+    riir_refine::draft::corpus_index::set_latent_scan_enabled(true);
+
+    let arm_json = |name: &str, passes: &[Vec<(String, u64)>], rank: &Option<Vec<Vec<String>>>| {
+        let mut s = String::new();
+        s.push_str(&format!("  \"{name}\": {{\n"));
+        let totals: Vec<String> = passes
+            .iter()
+            .map(|pass| pass.iter().map(|(_, us)| us).sum::<u64>().to_string())
+            .collect();
+        s.push_str(&format!(
+            "    \"pass_totals_us\": [{}],\n",
+            totals.join(", ")
+        ));
+        s.push_str("    \"per_file_us\": {\n");
+        let n_passes = passes.len();
+        if let Some(first) = passes.first() {
+            for (i, (path, _)) in first.iter().enumerate() {
+                let sep = if i == 0 { "" } else { "," };
+                let vals: Vec<String> = (0..n_passes).map(|p| passes[p][i].1.to_string()).collect();
+                s.push_str(&format!("{sep}      \"{path}\": [{}]\n", vals.join(", ")));
+            }
+        }
+        s.push_str("    },\n");
+        s.push_str("    \"rank1_all\": [\n");
+        if let Some(spans) = rank {
+            for (i, span_all) in spans.iter().enumerate() {
+                let sep = if i == 0 { "" } else { "," };
+                s.push_str(&format!("{sep}  ["));
+                for (j, id) in span_all.iter().enumerate() {
+                    let isep = if j == 0 { "" } else { ", " };
+                    s.push_str(&format!("{isep}\"{id}\""));
+                }
+                s.push_str("]\n");
+            }
+        }
+        s.push_str("    ]\n");
+        s.push_str("  }");
+        s
+    };
+
+    let mut json = String::new();
+    json.push_str("{\n");
+    json.push_str("  \"leg\": \"latent-leg-skip A/B (ndb Issue 643 T2)\",\n");
+    let features = riir_refine::build_stamp::COMPILED_FEATURES;
+    json.push_str(&format!("  \"compiled_features\": \"{features}\",\n"));
+    json.push_str(&format!("  \"corpus_root\": \"{root}\",\n"));
+    json.push_str(&format!("  \"files\": {},\n", files.len()));
+    json.push_str(&format!("  \"top_k\": {top_k},\n"));
+    json.push_str(&format!("  \"matcher_build_ms\": {build_ms},\n"));
+    json.push_str("  \"ab_passes\": 4,\n");
+    json.push_str("  \"interleaving\": \"on,off,on,off\",\n");
+    json.push_str(&arm_json("incumbent", &timings[0], &rank1[0]));
+    json.push_str(",\n");
+    json.push_str(&arm_json("skip", &timings[1], &rank1[1]));
+    json.push_str("\n}\n");
     println!("{json}");
     if let Some(p) = out_path {
         std::fs::write(p, &json).expect("write report");

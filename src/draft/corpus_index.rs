@@ -17,10 +17,33 @@
 //! (stable contract, documented in riir-rag retriever.rs).
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use riir_rag::{
     Embedder, LatentQuery, ModellessEmbedder, NeuronDbRetriever, NeuronDbRetrieverConfig, RawChunk,
 };
+
+/// Issue 643 — the process-global latent-leg-skip toggle (`true` = the
+/// incumbent). The production path only READS it (always true); the census
+/// A/B flips it around the interleaved walk passes via
+/// [`CorpusIndex::set_latent_scan_enabled`].
+static LATENT_SCAN: AtomicBool = AtomicBool::new(true);
+
+fn latent_scan_set(enabled: bool) {
+    LATENT_SCAN.store(enabled, Ordering::Relaxed);
+}
+
+fn latent_scan_get() -> bool {
+    LATENT_SCAN.load(Ordering::Relaxed)
+}
+
+/// Issue 643 — the process-global latent-leg-skip toggle (`true` = the
+/// incumbent). The production path only READS it (always true); the census
+/// A/B flips it around the interleaved walk passes. Pub so the census
+/// example can drive both arms in ONE binary (the same-binary law).
+pub fn set_latent_scan_enabled(enabled: bool) {
+    latent_scan_set(enabled);
+}
 
 /// A rule retrieved for a code span, with its relevance score.
 #[derive(Debug, Clone, PartialEq)]
@@ -757,11 +780,16 @@ impl RuleIndex {
                 self.diff_anchor.lambda,
             );
         }
-        let q = LatentQuery::from_direction(direction).with_text(text);
+        #[cfg_attr(not(feature = "bonsai_retrieval"), allow(unused_mut))]
+        // `mut` only under `bonsai_retrieval`
+        let mut q = LatentQuery::from_direction(direction)
+            .with_text(text)
+            .with_latent_scan(latent_scan_get());
         #[cfg(feature = "bonsai_retrieval")]
         if let Some(bonsai) = &self.dense {
             use riir_rag::DenseEmbedder;
-            return q.with_dense_direction(bonsai.embed_dense(text));
+            q = q.with_dense_direction(bonsai.embed_dense(text));
+            return q;
         }
         q
     }
