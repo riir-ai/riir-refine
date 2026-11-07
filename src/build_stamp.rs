@@ -99,6 +99,11 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // Implies kernel_opt — dep:regex enters the shipped license graph, so
     // the licenses job names the feature for cargo-about too.
     "kernel_pregate",
+    // Issue 213 / Bench 143 — shader_perf PROMOTED (G2 + G3 PASS): the
+    // DomainMask path gate keeps the WGSL render rules off .rs spans, so the
+    // domain costs added p95 < 1 ms/file. Zero deps (license graph unchanged;
+    // the licenses job names it anyway — one feature list, lockstep).
+    "shader_perf",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names

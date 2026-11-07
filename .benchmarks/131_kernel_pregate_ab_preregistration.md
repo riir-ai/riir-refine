@@ -51,3 +51,7 @@ No promotion claim. Promotion still requires BOTH fences (G2 GPU-host per Bench 
 ## Refs
 
 - Issue 208 (the lane + the pinned design), Bench 129 (lever (b) naming + the T7 attribution), Bench 125 (the instrument + floors), Bench 126 (the negative first attempt, mechanically distinct), Bench 130 (the disjoint T6 GPU leg), Issue 191 (the re-campaign sequence), riir-neuron-db Issue 642 (the substrate scratch twins, adopted by T7).
+
+---
+
+**Annotation 2026-11-07 (Issue 214 — appended, the registration above is unamended):** the pinned needle set's EFFECTIVE set until `8e781fce0` was the nine letter-initial needles — `@compute` never fired (the `| 0x20` first-byte fold mapped `@` to a backtick, outside the first-byte set). Fixed by an ASCII-letter-only fold; the widening was registered in Issue 214 (C0: 0 file flips / 72 span-seat self-matches on the walk) and cost-gated in [Bench 143](143_issue213_g2_and_issue214_g5_bmo_cost_runs.md) (PASS, all rounds) — the effective set now equals the pinned ten.

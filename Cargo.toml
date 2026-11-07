@@ -233,7 +233,13 @@ ed25519-dalek = "2"
 # its promotion gate is compile-only (default lib tests + clippy -D clean).
 # sec / shader_perf were measured in the same issue and FAILED the G5 cost
 # leg (Bench 140) — they stay opt-in, their comments name the axis.
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search"]
+# shader_perf joined default 2026-11-07 (Issue 213 / Bench 143): the
+# DomainMask path gate (the Issue-145 applies_to_path contract applied BEFORE
+# retrieval) drops the WGSL render rules from .rs fan-out; G2 re-run PASS on
+# the quiet bmo runner (added p50 0.086–0.170 / p95 0.798–0.973 ms/file, all
+# 3 interleaved rounds) + G3 PASS (applying domains rank-1 byte-identical).
+# sec stays opt-in (no file signal; Bench 140 axis unchanged).
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search", "shader_perf"]
 
 # Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
 # capability frontier (unsolved-before / solved-after / regression-green /
@@ -872,7 +878,8 @@ dist = []
 # 5.30–5.92 ms (ceiling 5.0), all 3 rounds, measured on a LOADED box
 # (disclosed). The AXIS: the WGSL render corpus is indexed into the .rs
 # matcher fan-out although it targets .wgsl only — scoping it to .wgsl
-# inputs is the named lever. Stays opt-in.
+# inputs is the named lever. PROMOTED 2026-11-07 (Issue 213 / Bench 143)
+# once the lever landed — see the `default` row.
 shader_perf = []
 
 # The shader_perf oracle tier: naga validation (in-process, pure Rust) of

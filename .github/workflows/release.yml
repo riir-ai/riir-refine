@@ -104,7 +104,7 @@ jobs:
       - name: Generate THIRD_PARTY_LICENSES.md (fails on any non-accepted license)
         run: |
           cargo about generate --config .github/about/about.toml \
-            --features latent_retrieval,points,net-mainnet,fix_verify,kernel_pregate .github/about/about.hbs \
+            --features latent_retrieval,points,net-mainnet,fix_verify,kernel_pregate,shader_perf .github/about/about.hbs \
             > THIRD_PARTY_LICENSES.md
 
       - uses: actions/upload-artifact@v4
@@ -228,7 +228,7 @@ jobs:
         run: |
           set -euo pipefail
           cargo auditable build --profile dist --target ${{ matrix.target }} \
-            --features latent_retrieval,points,net-mainnet,fix_verify,update_check,kernel_pregate --bin cargo-refine
+            --features latent_retrieval,points,net-mainnet,fix_verify,update_check,kernel_pregate,shader_perf --bin cargo-refine
 
       - uses: actions/upload-artifact@v4
         with:

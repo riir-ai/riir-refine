@@ -11,6 +11,13 @@ CLI (the generic runner's adjudication):
 Each (off, on) pair is one interleaved round; every round is a full
 instance of the pre-registered bar and the verdict is PASS only if EVERY
 round passes (conservative — the ceilings are never relaxed).
+
+    python3 scripts/g5_cost_math.py --code-axis LABEL off_1.json on_1.json [...]
+The CODE-axis form (Issue 214 T3): the A/B differs by a source change, not a
+feature, so the feature-delta guard inverts — the two build stamps must be
+IDENTICAL (a feature flip can never masquerade as a code change). The stamps
+cannot see the code delta itself; the caller discloses both binaries' digests
+beside the verdict.
 """
 from __future__ import annotations
 
@@ -67,8 +74,11 @@ def feature_delta(off, on):
 
 
 def main(argv):
-    if len(argv) < 4 or argv[0] != "--feature" or (len(argv) - 2) % 2:
-        raise SystemExit("usage: g5_cost_math.py --feature F off.json on.json [off.json on.json ...]")
+    if len(argv) < 4 or argv[0] not in ("--feature", "--code-axis") or (len(argv) - 2) % 2:
+        raise SystemExit(
+            "usage: g5_cost_math.py (--feature F | --code-axis LABEL) off.json on.json [off.json on.json ...]"
+        )
+    code_axis = argv[0] == "--code-axis"
     feature = argv[1]
     pairs = [(argv[i], argv[i + 1]) for i in range(2, len(argv), 2)]
     all_pass = True
@@ -77,9 +87,15 @@ def main(argv):
         off, on = load(off_p), load(on_p)
         check_walk(off, on)
         added, removed = feature_delta(off, on)
+        if code_axis:
+            if added or removed:
+                raise SystemExit(
+                    f"REFUSE: round {r} code-axis binaries differ by features "
+                    f"(ON-only {added}, OFF-only {removed}) — not a pure code A/B"
+                )
         # the build stamp spells features cargo's way (CARGO_FEATURE_* ->
         # lowercase, `_` -> `-`): compare on that normalisation
-        if feature.replace("_", "-") not in {f.replace("_", "-") for f in added} or removed:
+        elif feature.replace("_", "-") not in {f.replace("_", "-") for f in added} or removed:
             raise SystemExit(
                 f"REFUSE: round {r} binaries do not differ by {feature} "
                 f"(ON-only {added}, OFF-only {removed})"
