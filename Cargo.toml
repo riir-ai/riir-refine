@@ -2006,3 +2006,10 @@ required-features = ["points_drain"]
 [[test]]
 name = "fix_verify_failure_matrix"
 required-features = ["fix_verify"]
+
+# Issue 215 G0 — the try-next pool census (REPORT-ONLY): real heal_with_pool
+# pools (RegateHarness) × per-candidate ClippyVerifier compile outcomes over
+# the labelled v2edit chunks + the frozen score-bench fixtures.
+[[example]]
+name = "try_next_pool_census"
+required-features = ["cf_workers_ai", "score_bench"]
