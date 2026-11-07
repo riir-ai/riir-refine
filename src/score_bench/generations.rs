@@ -490,6 +490,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-clone_on_copy", &["clone_on_copy"]),  // k=1
     ("gen2-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1
     ("gen2-k1-collapsible_if", &["collapsible_if"]),  // k=1
+    ("gen2-k1-collapsible_match", &["collapsible_match"]),  // k=1
     ("gen2-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1
     ("gen2-k1-doc_markdown", &["doc_markdown"]),  // k=1
     ("gen2-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1
@@ -518,12 +519,11 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1
     ("gen2-k1-map_clone", &["map_clone"]),  // k=1
     ("gen2-k1-map_flatten", &["map_flatten"]),  // k=1
+    ("gen2-k1-map_or_identity", &["map_or_identity"]),  // k=1
     ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1
     ("gen2-k1-match_bool", &["match_bool"]),  // k=1
     ("gen2-k1-match_like_matches_macro", &["match_like_matches_macro"]),  // k=1
     ("gen2-k1-match_ref_pats", &["match_ref_pats"]),  // k=1
-    // P51a re-freeze (2026-10-14): the match_same_arms atom's k1 spec —
-    // measured fresh this run (union-identity PASS, label = the atom).
     ("gen2-k1-match_same_arms", &["match_same_arms"]),  // k=1
     ("gen2-k1-mem_replace_with_default", &["mem_replace_with_default"]),  // k=1
     ("gen2-k1-multiple_bound_locations", &["multiple_bound_locations"]),  // k=1
@@ -553,6 +553,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-unnecessary_cast", &["unnecessary_cast"]),  // k=1
     ("gen2-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1
     ("gen2-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1
+    ("gen2-k1-unnecessary_min_or_max", &["unnecessary_min_or_max"]),  // k=1
     ("gen2-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1
     ("gen2-k1-unused_unit", &["unused_unit"]),  // k=1
     ("gen2-k1-use_self", &["use_self"]),  // k=1
@@ -562,23 +563,24 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k2-byte_char_slices+bytes_count_to_len", &["byte_char_slices", "bytes_count_to_len"]),  // k=2
     ("gen2-k2-cast_abs_to_unsigned+clone_on_copy", &["cast_abs_to_unsigned", "clone_on_copy"]),  // k=2
     ("gen2-k2-collapsible_else_if+collapsible_if", &["collapsible_else_if", "collapsible_if"]),  // k=2
-    ("gen2-k2-doc_markdown+doc_overindented_list_items", &["doc_markdown", "doc_overindented_list_items"]),  // k=2
-    ("gen2-k2-double_parens+empty_line_after_doc_comments", &["double_parens", "empty_line_after_doc_comments"]),  // k=2
-    ("gen2-k2-from_str_radix_10+identity_op", &["from_str_radix_10", "identity_op"]),  // k=2
-    ("gen2-k2-into_iter_on_ref+io_other_error", &["into_iter_on_ref", "io_other_error"]),  // k=2
-    ("gen2-k2-items_after_statements+iter_next_loop", &["items_after_statements", "iter_next_loop"]),  // k=2
-    ("gen2-k2-iter_nth_zero+iter_skip_next", &["iter_nth_zero", "iter_skip_next"]),  // k=2
-    ("gen2-k2-manual_clamp+manual_let_else", &["manual_clamp", "manual_let_else"]),  // k=2
+    ("gen2-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2
+    ("gen2-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2
+    ("gen2-k2-filter_next+from_str_radix_10", &["filter_next", "from_str_radix_10"]),  // k=2
+    ("gen2-k2-identity_op+into_iter_on_ref", &["identity_op", "into_iter_on_ref"]),  // k=2
+    ("gen2-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2
+    ("gen2-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2
+    ("gen2-k2-manual_bit_width+manual_clamp", &["manual_bit_width", "manual_clamp"]),  // k=2
     ("gen2-k3-bool_comparison+byte_char_slices+bytes_count_to_len", &["bool_comparison", "byte_char_slices", "bytes_count_to_len"]),  // k=3
     ("gen2-k3-cast_abs_to_unsigned+clone_on_copy+collapsible_else_if", &["cast_abs_to_unsigned", "clone_on_copy", "collapsible_else_if"]),  // k=3
-    ("gen2-k3-doc_markdown+doc_overindented_list_items+double_parens", &["doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=3
-    ("gen2-k3-from_str_radix_10+identity_op+into_iter_on_ref", &["from_str_radix_10", "identity_op", "into_iter_on_ref"]),  // k=3
-    ("gen2-k3-io_other_error+items_after_statements+iter_next_loop", &["io_other_error", "items_after_statements", "iter_next_loop"]),  // k=3
-    ("gen2-k3-manual_clamp+manual_let_else+manual_map", &["manual_clamp", "manual_let_else", "manual_map"]),  // k=3
-    ("gen2-k3-manual_next_back+manual_ok_err+manual_range_contains", &["manual_next_back", "manual_ok_err", "manual_range_contains"]),  // k=3
+    ("gen2-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items"]),  // k=3
+    ("gen2-k3-filter_next+from_str_radix_10+identity_op", &["filter_next", "from_str_radix_10", "identity_op"]),  // k=3
+    ("gen2-k3-into_iter_on_ref+io_other_error+items_after_statements", &["into_iter_on_ref", "io_other_error", "items_after_statements"]),  // k=3
+    ("gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),  // k=3
+    ("gen2-k3-manual_bit_width+manual_clamp+manual_let_else", &["manual_bit_width", "manual_clamp", "manual_let_else"]),  // k=3
+    ("gen2-k3-manual_map+manual_next_back+manual_ok_err", &["manual_map", "manual_next_back", "manual_ok_err"]),  // k=3
     ("gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy", &["byte_char_slices", "bytes_count_to_len", "cast_abs_to_unsigned", "clone_on_copy"]),  // k=4
-    ("gen2-k4-doc_markdown+doc_overindented_list_items+double_parens+empty_line_after_doc_comments", &["doc_markdown", "doc_overindented_list_items", "double_parens", "empty_line_after_doc_comments"]),  // k=4
-    ("gen2-k4-into_iter_on_ref+io_other_error+items_after_statements+iter_next_loop", &["into_iter_on_ref", "io_other_error", "items_after_statements", "iter_next_loop"]),  // k=4
+    ("gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4
+    ("gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements", &["identity_op", "into_iter_on_ref", "io_other_error", "items_after_statements"]),  // k=4
 ];
 
 /// Spec ids the freeze run EXCLUDED (real-clippy labels ≠ union gold): the
@@ -602,26 +604,19 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k1-unreadable_literal",
     "gen2-k2-assert_is_empty+assign_op_pattern",
     "gen2-k2-block_scrutinee+bool_comparison",
-    "gen2-k2-deref_addrof+doc_lazy_continuation",
-    "gen2-k2-excessive_precision+filter_next",
-    "gen2-k2-legacy_numeric_constants+len_without_is_empty",
-    "gen2-k2-let_and_return+manual_bit_width",
+    "gen2-k2-collapsible_match+deref_addrof",
+    "gen2-k2-empty_line_after_doc_comments+excessive_precision",
+    "gen2-k2-iter_skip_next+legacy_numeric_constants",
+    "gen2-k2-len_without_is_empty+let_and_return",
     "gen2-k3-assert_is_empty+assign_op_pattern+block_scrutinee",
-    "gen2-k3-collapsible_else_if+collapsible_if+deref_addrof",
-    "gen2-k3-collapsible_if+deref_addrof+doc_lazy_continuation",
+    "gen2-k3-collapsible_if+collapsible_match+deref_addrof",
     "gen2-k3-double_parens+empty_line_after_doc_comments+excessive_precision",
-    "gen2-k3-empty_line_after_doc_comments+excessive_precision+filter_next",
-    "gen2-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
     "gen2-k3-legacy_numeric_constants+len_without_is_empty+let_and_return",
-    "gen2-k3-len_without_is_empty+let_and_return+manual_bit_width",
     "gen2-k4-assert_is_empty+assign_op_pattern+block_scrutinee+bool_comparison",
-    "gen2-k4-collapsible_else_if+collapsible_if+deref_addrof+doc_lazy_continuation",
-    "gen2-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
-    "gen2-k4-double_parens+empty_line_after_doc_comments+excessive_precision+filter_next",
-    "gen2-k4-excessive_precision+filter_next+from_str_radix_10+identity_op",
-    "gen2-k4-iter_nth_zero+iter_skip_next+legacy_numeric_constants+len_without_is_empty",
-    "gen2-k4-legacy_numeric_constants+len_without_is_empty+let_and_return+manual_clamp",
-    "gen2-k4-let_and_return+manual_bit_width+manual_clamp+manual_let_else",
+    "gen2-k4-collapsible_else_if+collapsible_if+collapsible_match+deref_addrof",
+    "gen2-k4-empty_line_after_doc_comments+excessive_precision+filter_next+from_str_radix_10",
+    "gen2-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
+    "gen2-k4-len_without_is_empty+let_and_return+manual_bit_width+manual_clamp",
 ];
 
 /// Freeze readiness for one generation: Ok(admitted count) when every spec
@@ -905,27 +900,20 @@ pub static EXCLUDED_IDS_V3: &[&str] = &[
     "gen3-k1-unreadable_literal",
     "gen3-k2-assert_is_empty+assign_op_pattern",
     "gen3-k2-block_scrutinee+bool_comparison",
-    "gen3-k2-deref_addrof+doc_lazy_continuation",
-    "gen3-k2-excessive_precision+filter_next",
-    "gen3-k2-legacy_numeric_constants+len_without_is_empty",
+    "gen3-k2-collapsible_match+deref_addrof",
+    "gen3-k2-empty_line_after_doc_comments+excessive_precision",
+    "gen3-k2-iter_skip_next+legacy_numeric_constants",
     "gen3-k2-persist_array_default+persist_comment_arm",
     "gen3-k3-block_scrutinee+bool_comparison+byte_char_slices",
-    "gen3-k3-collapsible_else_if+collapsible_if+deref_addrof",
     "gen3-k3-deref_addrof+doc_lazy_continuation+doc_markdown",
-    "gen3-k3-double_parens+empty_line_after_doc_comments+excessive_precision",
     "gen3-k3-excessive_precision+filter_next+from_str_radix_10",
     "gen3-k3-iter_skip_next+legacy_numeric_constants+len_without_is_empty",
-    "gen3-k3-legacy_numeric_constants+len_without_is_empty+let_and_return",
-    "gen3-k3-manual_bit_width+manual_clamp+manual_let_else",
     "gen3-k3-persist_array_default+persist_comment_arm+persist_comment_hoist",
     "gen3-k3-persist_useless_format+assert_is_empty+assign_op_pattern",
     "gen3-k4-assert_is_empty+assign_op_pattern+block_scrutinee+bool_comparison",
-    "gen3-k4-collapsible_else_if+collapsible_if+deref_addrof+doc_lazy_continuation",
-    "gen3-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
-    "gen3-k4-double_parens+empty_line_after_doc_comments+excessive_precision+filter_next",
-    "gen3-k4-excessive_precision+filter_next+from_str_radix_10+identity_op",
-    "gen3-k4-iter_nth_zero+iter_skip_next+legacy_numeric_constants+len_without_is_empty",
-    "gen3-k4-legacy_numeric_constants+len_without_is_empty+let_and_return+manual_clamp",
+    "gen3-k4-collapsible_else_if+collapsible_if+collapsible_match+deref_addrof",
+    "gen3-k4-empty_line_after_doc_comments+excessive_precision+filter_next+from_str_radix_10",
+    "gen3-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
     "gen3-k4-persist_array_default+persist_comment_arm+persist_comment_hoist+persist_useless_format",
 ];
 
@@ -943,6 +931,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-clone_on_copy", &["clone_on_copy"]),  // k=1
     ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]),  // k=1
     ("gen3-k1-collapsible_if", &["collapsible_if"]),  // k=1
+    ("gen3-k1-collapsible_match", &["collapsible_match"]),  // k=1
     ("gen3-k1-doc_lazy_continuation", &["doc_lazy_continuation"]),  // k=1
     ("gen3-k1-doc_markdown", &["doc_markdown"]),  // k=1
     ("gen3-k1-doc_overindented_list_items", &["doc_overindented_list_items"]),  // k=1
@@ -971,11 +960,11 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]),  // k=1
     ("gen3-k1-map_clone", &["map_clone"]),  // k=1
     ("gen3-k1-map_flatten", &["map_flatten"]),  // k=1
+    ("gen3-k1-map_or_identity", &["map_or_identity"]),  // k=1
     ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),  // k=1
     ("gen3-k1-match_bool", &["match_bool"]),  // k=1
     ("gen3-k1-match_like_matches_macro", &["match_like_matches_macro"]),  // k=1
     ("gen3-k1-match_ref_pats", &["match_ref_pats"]),  // k=1
-    // P51a re-freeze (2026-10-14): the match_same_arms atom's v3 k1 spec.
     ("gen3-k1-match_same_arms", &["match_same_arms"]),  // k=1
     ("gen3-k1-mem_replace_with_default", &["mem_replace_with_default"]),  // k=1
     ("gen3-k1-multiple_bound_locations", &["multiple_bound_locations"]),  // k=1
@@ -1008,6 +997,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-unnecessary_cast", &["unnecessary_cast"]),  // k=1
     ("gen3-k1-unnecessary_lazy_evaluations", &["unnecessary_lazy_evaluations"]),  // k=1
     ("gen3-k1-unnecessary_map_or", &["unnecessary_map_or"]),  // k=1
+    ("gen3-k1-unnecessary_min_or_max", &["unnecessary_min_or_max"]),  // k=1
     ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]),  // k=1
     ("gen3-k1-unused_unit", &["unused_unit"]),  // k=1
     ("gen3-k1-use_self", &["use_self"]),  // k=1
@@ -1017,21 +1007,22 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k2-byte_char_slices+bytes_count_to_len", &["byte_char_slices", "bytes_count_to_len"]),  // k=2
     ("gen3-k2-cast_abs_to_unsigned+clone_on_copy", &["cast_abs_to_unsigned", "clone_on_copy"]),  // k=2
     ("gen3-k2-collapsible_else_if+collapsible_if", &["collapsible_else_if", "collapsible_if"]),  // k=2
-    ("gen3-k2-doc_markdown+doc_overindented_list_items", &["doc_markdown", "doc_overindented_list_items"]),  // k=2
-    ("gen3-k2-double_parens+empty_line_after_doc_comments", &["double_parens", "empty_line_after_doc_comments"]),  // k=2
-    ("gen3-k2-from_str_radix_10+identity_op", &["from_str_radix_10", "identity_op"]),  // k=2
-    ("gen3-k2-into_iter_on_ref+io_other_error", &["into_iter_on_ref", "io_other_error"]),  // k=2
-    ("gen3-k2-items_after_statements+iter_next_loop", &["items_after_statements", "iter_next_loop"]),  // k=2
-    ("gen3-k2-iter_nth_zero+iter_skip_next", &["iter_nth_zero", "iter_skip_next"]),  // k=2
+    ("gen3-k2-doc_lazy_continuation+doc_markdown", &["doc_lazy_continuation", "doc_markdown"]),  // k=2
+    ("gen3-k2-doc_overindented_list_items+double_parens", &["doc_overindented_list_items", "double_parens"]),  // k=2
+    ("gen3-k2-filter_next+from_str_radix_10", &["filter_next", "from_str_radix_10"]),  // k=2
+    ("gen3-k2-identity_op+into_iter_on_ref", &["identity_op", "into_iter_on_ref"]),  // k=2
+    ("gen3-k2-io_other_error+items_after_statements", &["io_other_error", "items_after_statements"]),  // k=2
+    ("gen3-k2-iter_next_loop+iter_nth_zero", &["iter_next_loop", "iter_nth_zero"]),  // k=2
     ("gen3-k2-persist_comment_hoist+persist_useless_format", &["items_after_statements", "useless_format"]),  // k=2
     ("gen3-k3-bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy", &["bytes_count_to_len", "cast_abs_to_unsigned", "clone_on_copy"]),  // k=3
-    ("gen3-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items"]),  // k=3
-    ("gen3-k3-filter_next+from_str_radix_10+identity_op", &["filter_next", "from_str_radix_10", "identity_op"]),  // k=3
-    ("gen3-k3-into_iter_on_ref+io_other_error+items_after_statements", &["into_iter_on_ref", "io_other_error", "items_after_statements"]),  // k=3
-    ("gen3-k3-iter_next_loop+iter_nth_zero+iter_skip_next", &["iter_next_loop", "iter_nth_zero", "iter_skip_next"]),  // k=3
+    ("gen3-k3-collapsible_else_if+collapsible_if+collapsible_match", &["collapsible_else_if", "collapsible_if", "collapsible_match"]),  // k=3
+    ("gen3-k3-doc_overindented_list_items+double_parens+empty_line_after_doc_comments", &["doc_overindented_list_items", "double_parens", "empty_line_after_doc_comments"]),  // k=3
+    ("gen3-k3-identity_op+into_iter_on_ref+io_other_error", &["identity_op", "into_iter_on_ref", "io_other_error"]),  // k=3
+    ("gen3-k3-items_after_statements+iter_next_loop+iter_nth_zero", &["items_after_statements", "iter_next_loop", "iter_nth_zero"]),  // k=3
+    ("gen3-k3-let_and_return+manual_bit_width+manual_clamp", &["let_and_return", "manual_bit_width", "manual_clamp"]),  // k=3
     ("gen3-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy", &["byte_char_slices", "bytes_count_to_len", "cast_abs_to_unsigned", "clone_on_copy"]),  // k=4
-    ("gen3-k4-doc_markdown+doc_overindented_list_items+double_parens+empty_line_after_doc_comments", &["doc_markdown", "doc_overindented_list_items", "double_parens", "empty_line_after_doc_comments"]),  // k=4
-    ("gen3-k4-into_iter_on_ref+io_other_error+items_after_statements+iter_next_loop", &["into_iter_on_ref", "io_other_error", "items_after_statements", "iter_next_loop"]),  // k=4
+    ("gen3-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens", &["doc_lazy_continuation", "doc_markdown", "doc_overindented_list_items", "double_parens"]),  // k=4
+    ("gen3-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements", &["identity_op", "into_iter_on_ref", "io_other_error", "items_after_statements"]),  // k=4
 ];
 
 /// Freeze readiness for generation 3 — Err until the freeze e2e lands the

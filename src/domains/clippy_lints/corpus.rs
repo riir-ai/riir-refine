@@ -1274,6 +1274,40 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn uub(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }".to_string(),
             fixed_code: "fn uub(segs: &[String]) -> bool { let [_root, mod_name, c, m] = segs else { return false }; mod_name == \"clone\" && c == m }".to_string(),
         },
+        // ── P118 post-mining intake (2026-11-07, plan 353 — the outbound
+        // readiness re-scan's corpus gaps; the rca real-world diagnostics +
+        // the clippy-1.99.0 probe matrix) ──
+        ClippyFixEntry {
+            lint_name: "collapsible_match".to_string(),
+            lint_group: "style".to_string(),
+            // The plain-if-no-else arm collapses into the guard form (the
+            // rca cyclomatic.rs:120-127 shape); if-let arms diverge
+            // (pattern-merge needs binding-mode analysis), if-with-else is
+            // upstream-silent. The fixture keeps ALL arms unit-typed (the
+            // rca shape): a unit-typed if-arm among value-yielding arms is
+            // an E0308 the atom wrapper refuses.
+            buggy_code: "fn log(n: u8) {}\nfn f(n: u8, w: fn(u8) -> bool) { match n { 1 => log(1), 2 => { if w(n) { log(2) } }, _ => {} } }".to_string(),
+            fixed_code: "fn log(n: u8) {}\nfn f(n: u8, w: fn(u8) -> bool) { match n { 1 => log(1), 2 if w(n) => { log(2) }, _ => {} } }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "map_or_identity".to_string(),
+            lint_group: "complexity".to_string(),
+            // The identity closure folds into the terminal form (the rca
+            // main.rs:67 shape: `globset.build().map_or(GlobSet::empty(),
+            // |g| g)`); receivers proven Option/Result by the shared
+            // receiver_kind substrate.
+            buggy_code: "fn f(r: Result<u8, String>) -> u8 { r.map_or(0, |x| x) }".to_string(),
+            fixed_code: "fn f(r: Result<u8, String>) -> u8 { r.unwrap_or(0) }".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "unnecessary_min_or_max".to_string(),
+            lint_group: "complexity".to_string(),
+            // Int-literal min/max folds to the winning literal (the P116
+            // riir-infer residual: `100.min(97)` → `97`); floats/idents/
+            // const paths refuse (upstream-silent, mirrored).
+            buggy_code: "fn f() -> u32 { 100u32.min(97) }".to_string(),
+            fixed_code: "fn f() -> u32 { 97 }".to_string(),
+        },
     ])
 }
 
@@ -1426,6 +1460,10 @@ mod tests {
         // classes) added the four post-mining rows (unnecessary_get_then_check
         // + explicit_auto_deref + match_same_arms + used_underscore_binding)
         // = 112.
+        // P118 (2026-11-07, plan 353 — the outbound readiness re-scan's
+        // corpus gaps + the P116 residual) added the three rows
+        // (collapsible_match + map_or_identity + unnecessary_min_or_max)
+        // = 115.
         // plan 329 P1: MANIFEST-DERIVED — a red means the corpus moved
         // without `scripts/pins_manifest.py --write`; land the manifest
         // diff WITH the corpus change.

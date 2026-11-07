@@ -32,7 +32,7 @@ Every release ships 5 platform archives (aarch64/x86_64 macOS, x86_64 Windows, a
 ## 2. Internal usage evidence (tracked records)
 
 - **Heal-rate ledger**: `.benchmarks/score_history.jsonl` — **209 recorded score-bench runs** since the score-bench landed; latest entry (2026-10-29): **heal_rate 96.4%** of clippy findings auto-fixed, **parse_safety 1.0** (every write re-parses), **decline_correctness 1.0** (out-of-capability edits declined, never guessed), created-warning rate 1.8%.
-- **Corpus standing counts** (AGENTS.md §Role, 2026-10-31): clippy 112 lints · rust_perf 289 rules · kernel_opt 1,051 rules · sec 31 · docker 31 · shader_perf 8 · dist 7 — every rule standalone-compiled AND executed before entry.
+- **Corpus standing counts** (AGENTS.md §Role, 2026-11-07): clippy 115 lints · rust_perf 304 rules · kernel_opt 1,073 rules · sec 48 · docker 31 · shader_perf 8 · dist 8 — every rule standalone-compiled AND executed before entry (plan 353: clippy 112→115).
 - **Batch cadence**: rust_perf at Batch 300, kernel_opt at Batch 323 (both 2026-10-31) — a rule-mining batch lands on a sustained near-daily cadence (batch history: `HISTORY.md` ledger).
 - **Adoption verdict**: production default dev-loop tool since 2026-08-24 (AGENTS.md "Production adoption — GO", live trial); mechanical clippy findings across the workspace route to the rulewright FIRST, manual second — the convention is written into every consuming repo's AGENTS.md.
 - **Deployment scale**: the default lint-fixing tool across a **32-repo production workspace** (game runtime, chain, storage, training-methods, serving) — the consumers are private; the scale claim is attested by the workspace's tracked boundary contract (`katgpt-rs/AGENTS.md` repo roster).

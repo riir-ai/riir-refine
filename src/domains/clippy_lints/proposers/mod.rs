@@ -201,6 +201,7 @@ pub mod bit_width;
 pub mod block_scrutinee;
 pub mod bool_comparison;
 pub mod byte_char_slices;
+pub mod collapsible_match;
 pub mod bytes_count_to_len;
 pub mod cast_abs_to_unsigned;
 pub mod cast_lossless;
@@ -246,6 +247,7 @@ pub mod manual_string_new;
 pub mod manual_unwrap_or;
 pub mod map_clone;
 pub mod map_flatten;
+pub mod map_or_identity;
 pub mod map_unwrap_or;
 pub mod match_bool;
 pub mod match_like_matches_macro;
@@ -291,6 +293,7 @@ pub mod uninlined_format_args;
 pub mod unit_arg;
 pub mod unnecessary_cast;
 pub mod unnecessary_get_then_check;
+pub mod unnecessary_min_or_max;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_map_or;
 pub mod unnecessary_mut_passed;
@@ -917,6 +920,23 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // (unnecessary_get_then_check, explicit_auto_deref,
     // used_underscore_binding) ride the --verify tier below.
     "match_same_arms",
+    // ── P118 post-mining intake (2026-11-07, the outbound readiness re-scan
+    // of the Mozilla quartet — the rca real-world diagnostics + the probe
+    // matrix at clippy 1.99.0, plan 353) ──
+    // Match-arm plain-if-no-else → guard form (`P => { if C { B } }` →
+    // `P if C => B`) — the rca cyclomatic.rs:120-127 specimen; if-let arms
+    // (the pattern-merge class) DIVERGE (binding-mode analysis is typeck
+    // territory; the oracle lane covers when fed), if-with-else is
+    // upstream-silent (upstream-exact guard).
+    "collapsible_match",
+    // `.map_or(d, |x| x)` → `.unwrap_or(d)` — the rca main.rs:67 specimen;
+    // receiver proven Option/Result by the shared receiver_kind substrate
+    // (the unnecessary_map_or P15 precedent — type-blind is E0599-unsafe).
+    "map_or_identity",
+    // `min`/`max` between two int literals folds to the winning literal —
+    // the P116 residual (`100.min(97)` → `97`, riir-infer's gate sweep);
+    // floats/idents/const paths refuse (upstream-silent, mirrored).
+    "unnecessary_min_or_max",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1338,6 +1358,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "unnecessary_get_then_check" => unnecessary_get_then_check::collect_edits(source, file),
         "explicit_auto_deref" => explicit_auto_deref::collect_edits(source, file),
         "match_same_arms" => match_same_arms::collect_edits(source, file),
+        // ── P118 post-mining intake (2026-11-07, plan 353) ──
+        "collapsible_match" => collapsible_match::collect_edits(source, file),
+        "map_or_identity" => map_or_identity::collect_edits(source, file),
+        "unnecessary_min_or_max" => unnecessary_min_or_max::collect_edits(source, file),
         "used_underscore_binding" => used_underscore_binding::collect_edits(source, file),
         _ => Vec::new(),
     }
@@ -1498,15 +1522,15 @@ mod tests {
         // mismatched_bit_width_type + block_scrutinee +
         // nonnull_unchecked_on_box_ptr; the clone_on_copy UFCS rider is
         // count-neutral).
-        // + 1 P51a (2026-10-14, the batch-230 self-heal run's no-corpus-rule
-        // classes: match_same_arms — the execution-equivalent adjacent-arm
-        // merge; its three type-blind siblings ride VERIFY_LINTS).
-        assert_eq!(FIXABLE_LINTS.len(), 90);
+        // P118 (2026-11-07, plan 353 — the outbound re-scan's corpus gaps):
+        // + 3 (collapsible_match + map_or_identity + unnecessary_min_or_max
+        // — the rca real-world specimens + the P116 riir-infer residual;
+        // FIXABLE 90→93).
     }
 
     /// Every proposer lint round-trips through the shared dispatch (fires on
     /// its fixture + output re-parses — the L2 pruner check `--fix` runs).
-    /// 101-row fixture table — length is the point.
+    /// 104-row fixture table — length is the point.
     #[test]
     #[allow(clippy::too_many_lines)]
     fn all_lints_fire_and_parse() {
@@ -1757,6 +1781,22 @@ impl S {
                 "byte_char_slices",
                 "const SHARD_MAGIC: [u8; 4] = [b'S', b'H', b'R', b'D'];",
                 "*b\"SHRD\"",
+            ),
+            // ── P118 post-mining intake (2026-11-07, plan 353) ──
+            (
+                "collapsible_match",
+                "fn log(n: u8) {}\nfn f(n: u8, w: fn(u8) -> bool) { match n { 1 => log(1), 2 => { if w(n) { log(2) } }, _ => {} } }",
+                "2 if w(n)",
+            ),
+            (
+                "map_or_identity",
+                "fn f(r: Result<u8, String>) -> u8 { r.map_or(0, |x| x) }",
+                "r.unwrap_or(0)",
+            ),
+            (
+                "unnecessary_min_or_max",
+                "fn f() -> u32 { 100u32.min(97) }",
+                "{ 97 }",
             ),
             (
                 "manual_slice_fill",
@@ -2086,6 +2126,22 @@ impl S {
                 "used_underscore_binding",
                 "fn f(segs: &[String]) -> bool { let [_root, _mod_name, c, m] = segs else { return false }; _mod_name == \"clone\" && c == m }",
                 "mod_name == \"clone\"",
+            ),
+            // ── P118 post-mining intake (2026-11-07, plan 353) ──
+            (
+                "collapsible_match",
+                "fn log(n: u8) {}\nfn f(n: u8, w: fn(u8) -> bool) { match n { 1 => log(1), 2 => { if w(n) { log(2) } }, _ => {} } }",
+                "2 if w(n)",
+            ),
+            (
+                "map_or_identity",
+                "fn f(r: Result<u8, String>) -> u8 { r.map_or(0, |x| x) }",
+                "r.unwrap_or(0)",
+            ),
+            (
+                "unnecessary_min_or_max",
+                "fn f() -> u32 { 100u32.min(97) }",
+                "{ 97 }",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

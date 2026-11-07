@@ -876,7 +876,7 @@ mod tests {
     #[test]
     fn corpus_line_carries_the_pinned_counts() {
         let line = corpus_counts_line();
-        assert!(line.contains("clippy 112"), "{line}");
+        assert!(line.contains("clippy 115"), "{line}");
         assert!(line.contains("kernel 1073"), "{line}");
         assert!(line.contains("perf 304"), "{line}");
         assert!(line.contains("sec 48"), "{line}");
@@ -906,7 +906,7 @@ mod tests {
                 "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
             ]
         );
-        assert_eq!(rows[0].total, 1584); // Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381)
+        assert_eq!(rows[0].total, 1587); // Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
     }
 
     #[test]
