@@ -145,6 +145,19 @@ therefore kept at **1.0** — the pre-T3.5 value — so the promotion carries no
 gratuitous behaviour change. The knob survives only to keep this refutation
 reproducible.
 
+**POSTURE-SCOPED CORRECTION (2026-11-07, ndb Issue 643 T3; delegated-owner
+verdict round 1 AGREE, Claude session `c28e6ff2`).** The "never changes a
+ranking" finding above was true at THIS record's corpus size and index
+posture and does NOT generalize. At the current posture (`latent_k=16`,
+`bm25_k=16`, `two_stage=Some(4)`, corpus 1007+ rules incl. the sec/shader
+growth), the same one-binary interleaved A/B (`kernel_goat_g5 --latent-ab`,
+ndb `89eee32` + riir-refine `0ebe45185`) measures the fully-skipped latent
+leg changing 2.6% of clippy top-1s (115/4425), 5.8% of sec top-1s (256), and
+1 kernel top-1 — retention vs the pinned 1.0 floors FAILED ndb 643's
+promotion (the skip stays opt-in, default ON = incumbent). Read this record
+as posture-scoped, never as a standing law: quote it only beside the posture
+it was measured at, and re-run the A/B at any NEW posture before citing it.
+
 ### Promoted
 
 `RetrievalConfig::default()` = `{ tokenizer: OpAwareBigram, latent_weight: 1.0,
