@@ -1,6 +1,6 @@
 # Plan 353 — the P118 corpus-gap batch: collapsible_match + map_or_identity + unnecessary_min_or_max
 
-**Status:** Claimed: zed-m3, 1794154000, expires 2026-11-09T10:00:00Z — corpus-gap authoring from the 2026-11-07 outbound readiness re-scan (issue 198 post-merge poll, session zed-m3; P116's needless_borrow half already landed by a prior batch — only its unnecessary_min_or_max half remains, folded here) + the P116 residual.
+**Status:** LANDED 2026-11-07 (`5b969e37`, session zed-m3, claim 1794154000 discharged) — corpus 112→115, fixable 90→93; all gates green (lib 3540/0, clippy -D clean, freeze v2+v3 PASS with fresh tables + orphan prunes, score-bench gen-1/gen-3 appended, v2 admission refused-by-design). Intake P116+P118 folded to landed. Open residue: the gen6/gen7 fence relabel debt (P51a/B155/B160-era, disclosed in the landing) → filed as P119.
 
 Executing the post-mining intake rows P118 (`.distill/001` §Post-mining intake) and the P116 residual as ONE clippy_lints corpus batch — three bounded rules, each with REAL upstream diagnostic evidence captured at the source repos (the intake discipline: probe against real clippy before landing).
 
