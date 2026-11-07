@@ -51,6 +51,25 @@ G-PR1b hangs off G-PR1: local proof alone never cleared a PR.)
   a pinned reproducible harness committed to OUR bench record, box-state
   provenance beside every number (free RAM, 1-min load, AC/battery, host).
   Bench-then-PR, in that order — never PR a number you have not measured.
+- **Pin-staleness law (the 21-commit catch):** before ANY verification or
+  bench reuses an earlier pin, COUNT the drift — `git rev-list --count
+  <pin>..origin/main` — never eyeball "a couple commits" (the readiness
+  verdict caught "two commits" that were 21, several bench-load-bearing:
+  resolver swap, storage-creation refactor, jobserver passthrough). Name
+  the classes the drift commits touch; if any touches the bench's inputs
+  (the measured path, its client, the resolver, the dep graph), the bench
+  RE-RUNS at the new pin with a FRESH pristine-main baseline — "same 3
+  failures" is re-proven, never assumed (their test-suite rewrites move
+  the pre-existing failure set under you).
+- **Verified-real zero law:** a "0 warnings / 0 failures" claim carries its
+  completion marker — a `build-finished` line with `success:true` (or the
+  tool's equivalent), a non-empty capture, and stderr collected (never
+  `/dev/null`). An invalid command shape that dies before compiling reads
+  as a green zero (the live catch: `-A` lints placed before `--` made cargo
+  refuse the whole invocation; the empty JSON read as "clean"). Per-lint
+  classification beats count-matching: name WHICH lints fire and whether
+  each is in their posture (their CI's allowlist + their MSRV's lint set),
+  not just how many.
 - NotBenchable domains (sec, correctness, docker): the domain's own oracle
   is the proof — compile green, created-warnings ZERO (the external bar;
   the local 1.8% bar does not transfer), their test suite green. No
@@ -80,6 +99,21 @@ test was in a suite we never invoked (`--test system`). The harness, in order:
    of the cache tree (LRU init, preprocessor scan, debug dump) — we gated two,
    the third lived in a different crate file. Any hit you did not update is a
    finding: either fix it or write down why it is unaffected.
+   **Seam consumers (the multilevel-storage lesson, M3):** tree-walk greps do
+   not find CALL-GRAPH edges. Every wrapper, composite, or dispatch layer that
+   routes through a seam your diff modifies is a reader — the gate sat at
+   `storage.get` and the outer blast radius was `MultiLevelStorage`'s read
+   loop (healthy local-disk tiers get skipped by a gate meant for the remote
+   tier). The harness's seam-grep (step 3b) extracts modified `fn` names and
+   greps for call sites outside the diff; adjudicate every hit — per-level
+   handling in the diff, or a body disclosure + a test naming the composite
+   path.
+   **Their docs are a reader (M2, the FC10 class):** a new env knob, flag, or
+   config surface lands with its docs row in THEIR docs file in the SAME PR
+   (sccache's `docs/Configuration.md` documents the sibling knobs; ours were
+   missing — a near-certain review round). The harness's knob-grep (step 3c)
+   extracts `env::var`/`var_os` names from added lines and fails them against
+   `docs/`.
 3. **The OS matrix spot-check.** If their CI runs freebsd/windows/mac beyond
    linux, the failure class is usually OS-conditional (case sensitivity,
    path separators, entry ORDER). You cannot run their OSes — so after the fix,
@@ -92,6 +126,14 @@ test was in a suite we never invoked (`--test system`). The harness, in order:
    Maintain a per-repo `ci_surfaces.md` note in the campaign record listing
    every invocation their CI runs, so the next PR to the same repo starts from
    the map instead of re-deriving it.
+   **Fork-CI blindness (FC12):** first-contribution CI is maintainer-triggered
+   (`action_required`) — expect ZERO runs for days; the local harness is the
+   only proxy. When runs appear, EXPECT main's own pre-existing reds to ride
+   along (a repo's own broken tests land on main while your PR sits — run
+   41806194289 showed 13 red jobs, all ONE upstream test broken by their own
+   dep-info commit, fixed upstream via #2989→revert→#2990 while we waited).
+   Classify every red by grepping its log for YOUR artifact names (FC8) —
+   never by job name alone.
 
 G-PR1b failure = the fix is NOT ready, regardless of G-PR1's local green.
 
@@ -107,7 +149,25 @@ G-PR1b failure = the fix is NOT ready, regardless of G-PR1's local green.
 - REVISE loops back to fix-and-re-verdict. AGREE unlocks G-PR3.
 - Ask it to re-derive, not just review: the round-2 verdict caught a wrong
   root-cause diagnosis (the "unpinned dep" that was actually a hand-merged
-  inconsistent lock) by checking the registry manifests itself.
+  inconsistent lock) by checking the registry manifests itself. The HARD
+  pass (owner-directed, post-#2977) goes further — it attacks the frozen
+  artifact against the post-mortem classes AND the live upstream state, and
+  found five classes no local gate sees: **claimants** (M1: someone else
+  claimed the issue in a comment; the body acknowledges + offers to fold,
+  or takes the design-comment-first lane — opening over an open claim
+  unacknowledged reads as sniping), **their docs** (M2), **composite-layer
+  consumers** (M3), **workload-shape framing** (M4: say "sequential" when
+  the bench is sequential and the issue's repro is parallel — run their
+  shipped repro script if one exists, or state the parallel workload was
+  not measured), **issue-requirements sweep** (M5: every requirement the
+  issue states gets a body answer or an explicit "not addressed"). All
+  five are pre-verdict self-checks now.
+- **Ledger status is ruled per send, never assumed:** an issue-driven or
+  hand-written fix is goodwill-class (G-PR0) — it enters the accept-rate
+  denominator ONLY with an explicit owner exception, else it ships as
+  goodwill outside it. State the class in the send record; the
+  one-PR-per-repo exception is also an explicit owner ruling (the
+  maintainer-burden rationale applies to goodwill PRs equally).
 
 ### G-PR3 — SVG proof (benchable domains)
 
@@ -193,11 +253,23 @@ What it does (exit contract: 0 = READY, 1 = NOT READY (push waits), 2 = BLIND
    greps `src/` for OTHER code referencing it (excluding the diff's own
    files); each hit prints file:line. This is the #2977 round-4 catch: on the
    pre-fix tree the `commands.rs` debug-walk reference would have made the
-   harness NOT READY and stopped the push.
+   harness NOT READY and stopped the push. **Seam-grep (3b):** modified `fn`
+   names from the diff are extracted and grepped for call sites outside the
+   diff's files — the composite/wrapper consumers (the multilevel-storage
+   M3 class) that no tree-walk finds. **Knob-grep (3c):** `env::var`/`var_os`
+   names in added lines are checked against their `docs/` — an undocumented
+   knob fails the harness (M2).
 
-Verified on the live sccache campaign: pre-fix trees go NOT READY, the fixed
-tree goes READY, and the run surfaces the CI's own `--bins --tests` suite that
-caught the failure upstream.
+Self-test protocol (every harness change re-proves both directions on a live
+clone): apply the campaign's durable patch to a scratch branch — the
+pre-fix tree must go NOT READY on a real class (the seam-grep fired on the
+`get_cached_or_compile` call-site web and the knob-grep flagged both
+`SCCACHE_BACKEND_BACKOFF_*` knobs UNDOCUMENTED on the live #2968 fixture),
+the pristine baseline is adjudicated (pre-existing upstream reds recorded
+first: the env-dependent unix-socket lib pair + the env-dep test pair + the
+sccache_cargo integration suite fail identically on pristine main), then
+restore pristine. Never trust a harness change that only ever ran on a
+clean tree.
 
 Known limits (never hidden): OS-gated surfaces (freebsd/windows) are
 SKIP-classified — the OS-conditional read-through in G-PR1b step 3 covers
@@ -206,10 +278,22 @@ After the push, poll their CI once; an unpredicted red job is a finding about
 OUR gates — pull `--log-failed` and diagnose immediately. Keep a per-repo
 `ci_surfaces.md` note in the campaign record so the next PR to the same repo
 starts from the map.
+**Pre-existing main reds are the expected shape, not a surprise (FC12):**
+adjudicate the pristine-main baseline FIRST (same command on a clean
+checkout, failures named), then read the diff-tree run as a DELTA — a red
+that fails identically on pristine main is theirs, a red that appears only
+under the diff is ours. The 11-07 sccache adjudication: pristine main fails
+the same unix-socket lib pair + env-dep pair + the sccache_cargo suite that
+the harness flags — recorded as the baseline, never as a regression.
 
 State to encode from the #2977 rounds: the miss was `--test system` (a suite
 we never ran), the freebsd class was OS-conditional entry parsing, and the
-lockfile class needs `--locked` on the TARGET toolchain, not ours.
+lockfile class needs `--locked` on the TARGET toolchain, not ours. From the
+2026-11-07 round: the green-zero class (an invalid command shape dies before
+compiling and an empty capture reads as clean — completion marker + stderr
+capture or the claim is unproven), and the staleness class (count commits
+behind, never eyeball; the "two commits" that were 21 included the resolver
+swap + storage refactor + jobserver passthrough, all bench-load-bearing).
 
 ## Standing constraints
 

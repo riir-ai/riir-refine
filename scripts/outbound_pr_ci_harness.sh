@@ -114,7 +114,8 @@ done < "$INVOKE_FILE"
 rm -f "$INVOKE_FILE"
 
 # ── 3. Blast-radius grep ────────────────────────────────────────────────
-echo "== 3. Blast radius: other readers of the paths this diff writes =="
+# ── 3. Blast radius: other readers of the paths this diff writes ────────
+echo "== 3. Blast radius: readers of the diff's paths + callers of the diff's seams =="
 DIFF_PATHS=$(git diff --name-only "$BASE_REF...HEAD" 2>/dev/null)
 CREATED="${DIFF_WRITTEN_PATHS:-}"
 echo "diff vs $BASE_REF: $DIFF_PATHS${CREATED:+  + created: $CREATED}"
@@ -131,6 +132,49 @@ for name in $CREATED; do
         HITS=1
     fi
 done
+
+# 3b. Seam consumers: functions the diff MODIFIES are seams — every wrapper,
+# composite, or dispatch layer that calls them routes through the change
+# (the multilevel-storage lesson: the gate sat at storage.get; the outer-seam
+# blast radius was MultiLevelStorage's read loop, three files away, and no
+# tree-walk grep finds a call-graph edge). Extract modified fn names from
+# added/changed lines and grep for call sites outside the diff's own files.
+DIFF_FILES=$(echo "$DIFF_PATHS" | tr '\n' '|')
+SEAMS=$(git diff -U0 "$BASE_REF...HEAD" -- '*.rs' 2>/dev/null \
+    | grep -E '^\+.*\bfn [a-z_][a-z0-9_]*' \
+    | sed 's/^+.*\bfn \([a-z_][a-z0-9_]*\).*/\1/' \
+    | sort -u | head -12)
+if [ -n "$SEAMS" ]; then
+    echo "-- seam callers (functions the diff adds/modifies, called from outside the diff):"
+    for fn in $SEAMS; do
+        [ -n "$fn" ] || continue
+        CALLERS=$(grep -rn --include='*.rs' -E "\b$fn\s*\(" src/ 2>/dev/null \
+            | grep -vE "^($DIFF_FILES):" \
+            | grep -v "fn $fn" \
+            | head -5)
+        if [ -n "$CALLERS" ]; then
+            echo "   '$fn' called from:"
+            echo "$CALLERS" | sed 's/^/   /'
+            HITS=1
+        fi
+    done
+fi
+
+# 3c. Undocumented env knobs: new env::var/var_os names must land in their
+# docs in the SAME PR (the Configuration.md lesson: the sibling knobs were
+# documented at ~L203; ours weren't — a near-certain review round).
+KNOBS=$(git diff -U0 "$BASE_REF...HEAD" -- '*.rs' 2>/dev/null \
+    | grep -E '^\+.*(env::var|var_os)\("' \
+    | sed 's/^+.*env::var[a-z_]*("\([A-Z0-9_]*\)".*/\1/;s/^+.*var_os("\([A-Z0-9_]*\)".*/\1/' \
+    | sort -u)
+for knob in $KNOBS; do
+    [ -n "$knob" ] || continue
+    if ! grep -rqF "$knob" docs/ *.md 2>/dev/null; then
+        echo "UNDOCUMENTED KNOB: $knob — not found in docs/ or *.md (add it to their config docs in this PR)"
+        HITS=1
+    fi
+done
+
 [ "$HITS" -eq 0 ] && echo "(no unaccounted blast-radius hits)"
 
 # ── verdict ─────────────────────────────────────────────────────────────
