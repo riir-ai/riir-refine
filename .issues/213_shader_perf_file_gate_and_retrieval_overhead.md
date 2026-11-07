@@ -1,6 +1,6 @@
 # Issue 213 — the `shader_perf` file gate (generalize the kernel pregate) → re-gate promotion; the per-query retrieval overhead finding (sec's blocker)
 
-**Status:** OPEN — T1+T2 LANDED (design AMENDED pre-measurement, see below; gates: release-set lib 4151/0 + the 1 failure root-caused to a client_id temp-dir collision, fixed in its own commit; clippy -D clean at default / release set / release+sec+shader_perf; fmt clean); T3 run queued on amo. Filed 2026-11-06 (katgpt-rs-18), pre-registered BEFORE implementation or measurement; follow-up to Issue 212 (closed, Bench 140: sec + shader_perf FAIL the G5 cost leg).
+**Status:** OPEN — T1+T2 LANDED (design AMENDED pre-measurement, see below; gates: release-set lib 4151/0 + the 1 failure root-caused to a client_id temp-dir collision, fixed in its own commit; clippy -D clean at default / release set / release+sec+shader_perf; fmt clean); T3: **G3 PASS (executed locally on m3, `c56c11e6` — lib 3724/0 + retention diff PASS, see the T3 row), G2 cost run queued on amo (`37f5c2b5`, the only record it may cite)**; T4 waits on G2 only. Filed 2026-11-06 (katgpt-rs-18), pre-registered BEFORE implementation or measurement; follow-up to Issue 212 (closed, Bench 140: sec + shader_perf FAIL the G5 cost leg).
 **Claimed:** zed-2f171db9@m3, 1794020564, expires 2026-11-09T03:02:44Z
 
 ## Why
