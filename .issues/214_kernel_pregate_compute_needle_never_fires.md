@@ -1,6 +1,7 @@
 # Issue 214 — the kernel pregate's `@compute` needle has never fired (first-byte fold bug) — fix = a widened signal set, pre-registered
 
 **Status:** OPEN 2026-11-06 (katgpt-rs-18) — T1+T2 landed 2026-11-07 (8e781fce0); C0 > 0 on the registered walk (0 file flips / 72 span-seat flips across 2 files) → T3 G5 rig run required (orchestrator's lane); T4 open.
+**Claimed:** zed-2f171db9@m3, 1794020564, expires 2026-11-09T03:02:44Z
 **Lease closed:** zed-13afd776@m3, 1794011737 — T1(+T2) landed 8e781fce0: the ASCII-letter-only fold + pins + the census instrument; C0 = 0 file flips / 72 span-seat flips (shader_perf/scanner.rs 61, kernel_pregate.rs 11) on the registered walk → G5 required, T3/T4 open.
 
 ## The defect
