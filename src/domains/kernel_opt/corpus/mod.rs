@@ -1954,6 +1954,7 @@ mod entries_gpu_15;
 mod entries_gpu_150;
 mod entries_gpu_151;
 mod entries_gpu_152;
+mod entries_gpu_153;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
@@ -2169,6 +2170,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_150::entries());
     entries.extend(entries_gpu_151::entries());
     entries.extend(entries_gpu_152::entries());
+    entries.extend(entries_gpu_153::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2980,6 +2982,17 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // counted fallbacks (vllm-rlt 444638be; gpu_57 cites the LRU
             // amortization half).
             "graph-fallback-coverage-ladder",
+            // Batch 341 +2 (Plan 350 / Research 383): the graph-exec-LIFECYCLE
+            // pair -- replay-group-eligibility-excludes-mutable-surface (the
+            // typed-refusal admission classifier: patchable-field /
+            // unknown-resource-access arms, the REFUSE-AND-FALLBACK half;
+            // multi-node groups fall back until proven) +
+            // patch-validity-against-declared-resource-contract (binding !=
+            // contract: per-aspect patchability, declared ranges + grid
+            // ceilings, the four named refusals; robbiemu/metal-graph
+            // 0cd855b7 Apache-2.0).
+            "replay-group-eligibility-excludes-mutable-surface",
+            "patch-validity-against-declared-resource-contract",
             // Batch 323 +1 (Plan 323): the TensorFold banded launch order —
             // a pure permutation the kernel remaps so kGemmBand=4
             // consecutive row-blocks share one column tile's weights in L2;

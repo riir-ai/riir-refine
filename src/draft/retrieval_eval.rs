@@ -2200,8 +2200,21 @@ mod tests {
         // cross-pool-competition class again, no old-span content
         // change. Floor re-derives from the convention (measured − ONE
         // span) → 131/142, restoring the margin per the Issue-063 law.
+        // Batch 341 re-pin (2026-11-08, Plan 350 / Research 383, the
+        // metal-graph distill: +2 text-rich kernel dispatch rules
+        // (replay-group-eligibility + patch-validity-contract), NO new
+        // spans — labeled 217 UNCHANGED at the narrow lane). ATTRIBUTION:
+        // blended top-5 199/217 -> 198/217 -- ONE span demoted past 5th by
+        // legitimate corpus growth (the miss taxonomy: the perf-pool
+        // `dyn-to-enum` / `box-str-immutable` rows finish 6th — rank=5
+        // 0-based — with the two new kernel dispatch-contract entries
+        // competing in the blended pool; the B332 cross-pool-competition
+        // class, no old-span content change). Floor re-derives from the
+        // convention (measured - ONE span) -> 197/217, restoring the
+        // margin per the Issue-063 law. The flat lane held (29/0, NO
+        // re-pin; B332's flat floor 131/142 intact).
         #[cfg(feature = "kernel_route_narrow")]
-        pub const BLENDED_TOP5: f32 = 157.0 / 172.0;
+        pub const BLENDED_TOP5: f32 = 197.0 / 217.0;
         #[cfg(not(feature = "kernel_route_narrow"))]
         pub const BLENDED_TOP5: f32 = 131.0 / 142.0;
         // Issue 170 re-pin (2026-10-24): clippy top-1 MEASURED 42/48 (87.5%)
