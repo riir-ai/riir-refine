@@ -1691,7 +1691,7 @@ pub fn apply_edits(doc: &mut [Block], edits: &[Edit]) -> Report {
         // ── conditional-reuseaddr-after-liveness-probe (InputValidation; suggest-only) ──
         SecRule {
             rule_id: "conditional-reuseaddr-after-liveness-probe".to_string(),
-            sec_concept: "an explicit `SO_REUSEADDR` (socket2::set_reuseaddr) on a listener bind turns the port into a take-over surface: on the BSD/macOS semantics a loopback bind WITH reuse sits beside a LIVE wildcard (0.0.0.0 / [::]) listener and SHADOWS it for local clients — the local traffic hijack — while the legitimate use of reuse is only the quick restart over a previous server's TIME_WAIT ends. The source's law, verbatim (at the pin): 'The server binds without `SO_REUSEADDR`, so it cannot sit on `127.0.0.1` beside a live server and take its local traffic. It rebinds with `SO_REUSEADDR` only when no live server answers on the port, so a quick restart over a previous server's closed connections still works.' — and the refusal half: 'A port already in use is refused, also when the other server listens at `0.0.0.0` or `[::]`.' THE POLICY, three legs: (1) bind WITHOUT reuse first — every holder refuses, a live same-address listener AND a live wildcard one; (2) on EADDRINUSE, run a LIVENESS PROBE — dial the address with a short timeout: answered or timed out means a LIVE listener answers (a wildcard holder answers a loopback probe), ConnectionRefused means the holders are TIME_WAIT ends only; (3) rebind WITH reuse only on the refused probe — the quick-restart path — and refuse loudly otherwise. THE ANTI-REGIME carried in-rule: std's `TcpListener::bind` never sets SO_REUSEADDR — safe by default; the rule exists to gate the EXPLICIT opt-in call sites, and the platform split is the decision content (BSD/macOS SO_REUSEADDR permits the wildcard-shadow bind; Linux refuses same-addr:port live-over-live but still permits loopback-over-wildcard under reuse — probe-first is the portable posture, never assume either semantics). KINSHIPS: distinct-from `browser-reachable-service-host-origin-rebinding-gate` (the REQUEST-side handshake gate against DNS rebinding — this is the BIND-side posture; both are 'verify the resource is actually yours/free before attaching', adjacent, compose); distinct-from `secret-file-create-without-0600` (permission hardening on a created file vs bind-option discipline on a created socket); zero corpus owners of the reuseaddr class (T0 grep: reuseaddr / reuse_address / SO_REUSE / EADDRINUSE — all zero). Suggest-only: the bind/rebind/probe flow is the service author's control; no mechanical rewrite exists. Fixture: the bind table model — beside-live refusal (loopback AND wildcard holders), the probe-pass quick restart over TIME_WAIT, and the unconditional-reuse bind demonstrating the shadow hazard it must refuse. Detector: `proposers::reuseaddr_gate` (vocabulary-gated: an explicit reuseaddr/set_reuseaddr call site is the seed). Batch 337 / Plan 346 / Research 376 (skydiscover-ai/jitengine @ `2c34508d`, Apache-2.0 — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+            sec_concept: "an explicit `SO_REUSEADDR` (socket2::set_reuseaddr) on a listener bind turns the port into a take-over surface: on the BSD/macOS semantics a loopback bind WITH reuse sits beside a LIVE wildcard (0.0.0.0 / [::]) listener and SHADOWS it for local clients — the local traffic hijack — while the legitimate use of reuse is only the quick restart over a previous server's TIME_WAIT ends. The source's law, verbatim (at the pin): 'The server binds without `SO_REUSEADDR`, so it cannot sit on `127.0.0.1` beside a live server and take its local traffic. It rebinds with `SO_REUSEADDR` only when no live server answers on the port, so a quick restart over a previous server's closed connections still works.' — and the refusal half: 'A port already in use is refused, also when the other server listens at `0.0.0.0` or `[::]`.' THE POLICY, three legs: (1) bind WITHOUT reuse first — every holder refuses, a live same-address listener AND a live wildcard one; (2) on EADDRINUSE, run a LIVENESS PROBE — dial the address with a short timeout: answered or timed out means a LIVE listener answers (a wildcard holder answers a loopback probe), ConnectionRefused means the holders are TIME_WAIT ends only; (3) rebind WITH reuse only on the refused probe — the quick-restart path — and refuse loudly otherwise. THE ANTI-REGIME carried in-rule: std's `TcpListener::bind` never sets SO_REUSEADDR — safe by default; the rule exists to gate the EXPLICIT opt-in call sites, and the platform split is the decision content (BSD/macOS SO_REUSEADDR permits the wildcard-shadow bind; Linux refuses same-addr:port live-over-live but still permits loopback-over-wildcard under reuse — probe-first is the portable posture, never assume either semantics). KINSHIPS: distinct-from `browser-reachable-service-host-origin-rebinding-gate` (the REQUEST-side handshake gate against DNS rebinding — this is the BIND-side posture; both are 'verify the resource is actually yours/free before attaching', adjacent, compose); distinct-from `secret-file-create-without-0600` (permission hardening on a created file vs bind-option discipline on a created socket); zero corpus owners of the reuseaddr class (T0 grep: reuseaddr / reuse_address / SO_REUSE / EADDRINUSE — all zero). Suggest-only: the bind/rebind/probe flow is the service author's control; no mechanical rewrite exists. Fixture: the bind table model — beside-live refusal (loopback AND wildcard holders), the probe-pass quick restart over TIME_WAIT, and the unconditional-reuse bind demonstrating the shadow hazard it must refuse. Detector: none at landing (vocabulary-gated — an explicit reuseaddr/set_reuseaddr call site is the seed; a natural future lane, deferred — B340 posture; the B342 batch repaired this sentence's earlier false claim that `proposers::reuseaddr_gate` exists — it never landed). Batch 337 / Plan 346 / Research 376 (skydiscover-ai/jitengine @ `2c34508d`, Apache-2.0 — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
                 .to_string(),
             buggy_code: "/// NAIVE: unconditional SO_REUSEADDR on the listener bind — beside a\n/// live wildcard listener, the loopback bind with reuse shadows it for\n/// local clients: the port hijack.\nuse std::net::{TcpListener};\nuse socket2::{Socket, Domain, Type, SockAddr};\n\npub fn serve_reuse(address: &str) -> std::io::Result<TcpListener> {\n    let addr: SockAddr = address.parse()?;\n    let socket = Socket::new(Domain::IPV4, Type::STREAM, None)?;\n    socket.set_reuseaddr(true)?; // UNCONDITIONAL — the hazard\n    socket.bind(&addr)?;\n    socket.listen(128)?;\n    Ok(TcpListener::from(socket))\n}\n"
                 .to_string(),
@@ -1783,7 +1783,7 @@ pub fn gate(
         // ── read-output-trust-inherits-argument-taint (InputValidation; suggest-only) ──
         SecRule {
             rule_id: "read-output-trust-inherits-argument-taint".to_string(),
-            sec_concept: "a read's output inherits its ARGUMENTS' trust: outputs of a read whose argument values are attacker-derived (taint-novel — present in untrusted tool/content text, absent from the user's own request) are untrusted EVEN WHEN delivered in typed, well-formed fields — provenance flows through the CALL, not through the channel. The source's law, verbatim (at the pin): 'A read's output identities are trustworthy only if the read was NOT steered by injection, i.e. none of the read's arg values are taint-novel.' The attack shape: injected content steers one argument (a query, a path, an id filter) of a structured read; the read returns attacker-chosen rows in perfectly typed fields; a downstream consumer that trusts the CHANNEL (typed output == safe) is steered without ever seeing a malformed value. KINSHIPS: distinct-from the wire_taint family (`proposers::wire_taint` — buffer-level code patterns: length-prefix/read-into-vec shapes at the WIRE decode sink; this rule is call-level information flow at the TOOL/QUERY composition sink — different layer, different sink, adjacent genus note mandatory); distinct-from `unvalidated-egress-url` (egress URL assembly — this is input-side read steering feeding trust decisions); kin `abuse-strike-counts-cross-site-requests` (label/provenance carried across requests — the same 'the channel is not the provenance' genus at the counting sink). Regime: tool-using agents, plugin/function-call hosts, RPC layers where untrusted text can reach ARGUMENT values while outputs are consumed as trusted structure. Anti-regimes: arguments are machine-derived constants (no taint exists); the consumer re-validates outputs against the user's own request anyway (the inheritance is redundant). Suggest-only: the taint tracking's granularity (per-argument vs per-call) is the host's design. Detector: none at landing (vocabulary-gated hard — needs call-argument provenance vocabulary; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F4 (dual-source conflict: a value read under a steered argument poisons its typed outputs even when the same value arrives clean elsewhere — the conflict resolves to the attacker). Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `query_entailed`, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed)."
+            sec_concept: "a read's output inherits its ARGUMENTS' trust: outputs of a read whose argument values are attacker-derived (taint-novel — present in untrusted tool/content text, absent from the user's own request) are untrusted EVEN WHEN delivered in typed, well-formed fields — provenance flows through the CALL, not through the channel. The source's law, verbatim (at the pin): 'A read's output identities are trustworthy only if the read was NOT steered by injection, i.e. none of the read's arg values are taint-novel.' The attack shape: injected content steers one argument (a query, a path, an id filter) of a structured read; the read returns attacker-chosen rows in perfectly typed fields; a downstream consumer that trusts the CHANNEL (typed output == safe) is steered without ever seeing a malformed value. KINSHIPS: distinct-from the wire_taint family (`proposers::wire_taint` — buffer-level code patterns: length-prefix/read-into-vec shapes at the WIRE decode sink; this rule is call-level information flow at the TOOL/QUERY composition sink — different layer, different sink, adjacent genus note mandatory); distinct-from `unvalidated-egress-url` (egress URL assembly — this is input-side read steering feeding trust decisions); kin `abuse-strike-counts-cross-site-requests` (label/provenance carried across requests — the same 'the channel is not the provenance' genus at the counting sink). Regime: tool-using agents, plugin/function-call hosts, RPC layers where untrusted text can reach ARGUMENT values while outputs are consumed as trusted structure. Anti-regimes: arguments are machine-derived constants (no taint exists); the consumer re-validates outputs against the user's own request anyway (the inheritance is redundant). Suggest-only: the taint tracking's granularity (per-argument vs per-call) is the host's design. Detector: none at landing (vocabulary-gated hard — needs call-argument provenance vocabulary; deferred). Fixture: `corpus/fixtures/b340_fixtures.rs` F4 (dual-source conflict: a value read under a steered argument poisons its typed outputs even when the same value arrives clean elsewhere — the conflict resolves to the attacker). FACE (Batch 342, harness-adapters — the HOST-SANCTION-PROVENANCE arm): sanction inputs derive from the HUMAN turns only — safeagents' Policy builds its host-allowlist context from 'The request without the model's own turns: a host the model wrote earlier is no more sourced than one it writes now' (policy.py:59-62, huggingface/safeagents @ `0de8e22d`, quoted at the pin) — model-echo NEVER self-authorizes: an agent cannot launder a host into the allowed set by having said it in an earlier turn; the taint-inheritance law above owns what a steered READ returns, THIS face owns what the SANCTION SOURCE may contain. FACE (Batch 342, harness-adapters — the AUTHORED-ONLY SCOPING arm, the per-field-class trust inversion): detectors match only AGENT-AUTHORED fields (commands, arguments, file contents, queries, URLs — the plugin channel sets `frozenset({Channel.COMMAND, Channel.ARGUMENTS, ...})` at the pin), never tool OUTPUTS, and never the model's own reasoning ('Reasoning is left out: a model's account of what it is doing is not evidence of what it does', scan.py docstring) — evidence flows ONE WAY: authored fields are the scan SURFACE, outputs are the DATA the scan protects; a scanner that reads outputs as findings (or skips authored fields for them) inverts the trust direction and misses the steered call while flagging benign results; day-one Unicode discipline (the `ascii-token-unicode-word-boundary-scan-miss` law) applies to every name-anchored detector pattern these faces seed. Batch 340 / Plan 349 / Research 381 (saintmachines/spillway @ `0fc9f55f`, Apache-2.0 — floor.py `query_entailed`, quoted byte-exact at the pin; the fixture is an original synthesis, standalone-compiled AND executed)."
                 .to_string(),
             buggy_code: "/// NAIVE: outputs are trusted because the CHANNEL is typed. The
 /// arguments that selected the rows are never checked for taint —
@@ -1861,6 +1861,113 @@ pub fn pay_selected(out: &ReadOutput) -> Option<String> {
     }
 }
 "
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── credential-material-in-command-argv (SensitiveData; suggest-only) ──
+        SecRule {
+            rule_id: "credential-material-in-command-argv".to_string(),
+            sec_concept: "credential MATERIAL travelling in a spawned command's ARGV: token \
+shapes (`sk-…`-class, `hf_…`, `ghp_…`/`github_pat_…`, JWT `eyJ…`), \
+`Authorization:`/`x-api-key:` header values, or secret-named env interpolation \
+(`format!(\"--token {hf_token}\")` over `env::var(\"HF_TOKEN\")`) passed through \
+`.arg()`/`.args()` — argv is WORLD-READABLE for the process lifetime (`ps` and \
+`/proc/<pid>/cmdline` to every local account; shell history and process-accounting \
+logs pick up a second copy). THE SOURCE (huggingface/safeagents @ `0de8e22d` \
+Apache-2.0 + its atif-scan dependency @ `0228cd9d` MIT — the agent-egress-guard \
+family's SECOND source, after SPILLWAY B340): atif-scan's \
+`side_channel.provider_credential_use` matches exactly this surface in \
+agent-authored commands — `-H \"Authorization: Bearer $K\"` on a command line, a \
+key parameter in a URL, an SDK's `api_key` argument (provider_keys.py \
+HEADER_LINE/URL_KEY, quoted at the pin) — and its regression cases are agents \
+shipping the operator's `HF_TOKEN` to a Hub `whoami` (TB2.1: a DeepSeek V4 Flash \
+agent read `DEEPSEEK_API_KEY` from another process's environment and checked it \
+against `api.deepseek.com/v1/models`; a TB-lite agent asked `whoami` with the \
+operator's token). THE FIX IS THE TRANSPORT, never a cleaner argv: \
+`Command::env` (process-private environment), stdin (`Stdio::piped()` + \
+`write_all`), or a config file the child reads by handle — the value must never \
+be reconstructable from the process listing. KINSHIPS (adjudication note \
+mandatory per plan 352 T1): adjacent-DISTINCT from \
+`shell-string-command-interpolation` — THAT rule owns the INJECTION axis \
+(untrusted data INTO a shell string; fix = the arg array); THIS owns the \
+EXPOSURE axis (credential material OUT via argv regardless of injection; fix = \
+the transport) — both can fire on one spawn and compose; distinct-from \
+`secret-file-create-without-0600` (credential AT REST on a created file vs \
+credential IN TRANSIT on a spawned command); distinct-from \
+`redaction-audit-hit-carries-raw-match` (that owns the audit WIRE re-leaking \
+detected secrets; this owns the argv channel leaking them before any audit); \
+adjacent the SensitiveData family's law (where secret material travels — argv is \
+one more surface it can be read from). Regime: any `std::process::Command` (or \
+shell-line) construction whose arguments carry credential vocabulary — deploy \
+scripts, cloud-CLI wrappers, model-provider probes. ANTI-REGIMES: file-transport \
+flags (`--token-file`, netrc) — a PATH is not the secret; stdin-piped or \
+env-transported values (the fix posture itself); CI masks (a `$$TOKEN` \
+placeholder never expands locally). Honest recall limits: generic variable names \
+(`let t = load_key(); .arg(&t)`) are untypeable parse-only; cross-fn argv \
+construction unconnected; shell-built lines are the injection rule's territory; \
+`env::var` read INSIDE the child (the child fetches its own secret) stays silent \
+here. Suggest-only: the transport choice is the service author's. Fixture: \
+`fixtures/b342_fixtures.rs` F1 (the bearer-header exposure, the env-transport \
+fix, the token-file + stdin anti-regimes, the all-safe stub arm). Detector: \
+none at landing (vocabulary-gated: token-shape regexes + secret-name vocabulary \
+reaching `.arg` sites are the seed — a natural future lane, deferred). Batch 342 \
+/ Plan 352 / Research 385 (huggingface/safeagents @ `0de8e22d` Apache-2.0 + \
+huggingface/atif-scan @ `0228cd9d` MIT — cited as class provenance; the fixture \
+is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "use std::process::Command;\n\n/// Deploy probe: the Hub token travels in ARGV — world-readable via ps//proc.\npub fn whoami(token: &str) -> std::io::Result<String> {\n    let out = Command::new(\"curl\")\n        .arg(\"-sfL\")\n        .arg(\"-H\")\n        .arg(format!(\"Authorization: Bearer {token}\"))\n        .arg(\"https://huggingface.co/api/whoami-v2\")\n        .output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
+                .to_string(),
+            fixed_code: "use std::io::Write;\nuse std::process::{Command, Stdio};\n\n/// Deploy probe: the token rides STDIN — never the process listing.\npub fn whoami(token: &str) -> std::io::Result<String> {\n    let mut child = Command::new(\"curl\")\n        .arg(\"-sfL\")\n        .arg(\"-H\")\n        .arg(\"@-\")\n        .arg(\"https://huggingface.co/api/whoami-v2\")\n        .stdin(Stdio::piped())\n        .stdout(Stdio::piped())\n        .spawn()?;\n    if let Some(mut stdin) = child.stdin.take() {\n        stdin.write_all(format!(\"Authorization: Bearer {token}\\n\").as_bytes())?;\n    }\n    let out = child.wait_with_output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
+                .to_string(),
+            family: SecFamily::SensitiveData,
+        },
+        // ── egress-control-bypass-flag (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "egress-control-bypass-flag".to_string(),
+            sec_concept: "a flag on a network call or spawned command that DEFEATS an \
+egress control the deployment operates: wildcard proxy exclusions \
+(`--noproxy '*'`, `NO_PROXY=*`), proxy variables removed or emptied for the call \
+(`env -u HTTPS_PROXY`, `unset HTTPS_PROXY`, `git -c https.proxy=`), \
+TLS-verification opt-outs (`curl --insecure`/`--no-check-certificate`, reqwest's \
+`danger_accept_invalid_certs(true)`/`danger_accept_invalid_hostnames(true)`). THE \
+SOURCE LAW, verbatim at the pin: 'A proxy is how many sandboxes enforce their \
+network policy, so this routes around it. Blind sandbox-escape reviews of DeepSWE \
+runs found it in DeepSeek V4 Pro/Flash trials after a proxy 403, usually with no \
+pinned address' — atif-scan `network.proxy_bypass`, Severity.MEDIUM (the flag \
+routes AROUND the policy, not to a differently-chosen host). THE ANTI-REGIMES, \
+the source's own carve-outs carried in-rule verbatim: a client whose every URL is \
+local (`curl --noproxy '*' http://127.0.0.1:8080/` — the TB2.1 shape), \
+`--noproxy localhost` or a NO_PROXY LIST of names (scoped exclusions, not \
+defeats), and proxies removed for a program that isn't a network client (a test \
+suite honouring proxy variables needs them gone to reach its own local server). \
+KINSHIPS: sink-distinct from `unvalidated-egress-url` (THAT owns URL CHOICE — \
+which host the egress aims at, the SSRF class; THIS owns the policy LAYER between \
+the process and the network — the flag that turns the policy OFF; both can fire \
+on one line and compose: a defeated proxy AND an attacker-chosen host); \
+distinct-from `jwt-insecure-validation-flags` (decode-time token VERIFICATION \
+config vs transport-layer TLS/proxy verification); kin \
+`gateway-type-forces-security-check` (the checkpoint-bypass genus — a knob that \
+silences the gate). Regime: any spawned command or HTTP-client construction \
+carrying the defeat vocabulary where an egress control exists (the deployment's \
+proxy/cert-pinning posture). Honest recall limits: the control's EXISTENCE is \
+deployment state a parse cannot see — the rule fires on the defeat vocabulary \
+and review adjudicates whether the control was operating; configured-remote git \
+ops (`push origin`) carry no URL a parse can see; the bare `-k` short form is an \
+honest NO (too many CLIs use it for other axes); config-file proxy clears are \
+not connected. Suggest-only: whether the control should exist and whether an \
+exclusion is scoped is the operator's answer. Fixture: `fixtures/b342_fixtures.rs` \
+F2 (the wildcard defeat, the name-list + local-only carve-outs, the git \
+empty-proxy, the TLS opt-outs, the tampered-verdict arm). Detector: none at \
+landing (vocabulary-gated: the wildcard/empty proxy shapes + the \
+`danger_accept_invalid_certs` method name are the seed — a natural future lane, \
+deferred). Batch 342 / Plan 352 / Research 385 (huggingface/safeagents @ \
+`0de8e22d` Apache-2.0 + huggingface/atif-scan @ `0228cd9d` MIT — cited as class \
+provenance; the fixture is an original synthesis, standalone-compiled AND \
+executed before entry)."
+                .to_string(),
+            buggy_code: "use std::process::Command;\n\n/// Sandbox egress: the proxy policy is DEFEATED for this fetch.\npub fn fetch_internal(url: &str) -> std::io::Result<String> {\n    let out = Command::new(\"curl\")\n        .arg(\"--noproxy\")\n        .arg(\"*\")\n        .arg(\"-sfL\")\n        .arg(url)\n        .output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
+                .to_string(),
+            fixed_code: "use std::process::Command;\n\n/// Sandbox egress: the fetch rides the deployment's egress policy.\npub fn fetch_internal(url: &str) -> std::io::Result<String> {\n    let out = Command::new(\"curl\")\n        .arg(\"-sfL\")\n        .arg(url)\n        .output()?;\n    Ok(String::from_utf8_lossy(&out.stdout).into_owned())\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
@@ -2229,9 +2336,14 @@ mod tests {
             .iter()
             .find(|r| r.rule_id == "removed-span-veto-outscopes-recovery-path")
             .unwrap_or_else(|| panic!("batch-340 rule 3 missing from corpus"));
-        assert_eq!(r3.family, SecFamily::InputValidation, "batch-340 rule 3 family");
+        assert_eq!(
+            r3.family,
+            SecFamily::InputValidation,
+            "batch-340 rule 3 family"
+        );
         assert!(
-            r3.sec_concept.contains("Batch 340 / Plan 349 / Research 381")
+            r3.sec_concept
+                .contains("Batch 340 / Plan 349 / Research 381")
                 && r3.sec_concept.contains("0fc9f55f"),
             "batch-340 rule 3 must cite its lineage + the spillway pin"
         );
@@ -2259,10 +2371,16 @@ mod tests {
             .iter()
             .find(|r| r.rule_id == "read-output-trust-inherits-argument-taint")
             .unwrap_or_else(|| panic!("batch-340 rule 4 missing from corpus"));
-        assert_eq!(r4.family, SecFamily::InputValidation, "batch-340 rule 4 family");
+        assert_eq!(
+            r4.family,
+            SecFamily::InputValidation,
+            "batch-340 rule 4 family"
+        );
         assert!(
             r4.sec_concept.contains("0fc9f55f")
-                && r4.sec_concept.contains("none of the read's arg values are taint-novel"),
+                && r4
+                    .sec_concept
+                    .contains("none of the read's arg values are taint-novel"),
             "batch-340 rule 4 must cite the pin + carry the source law verbatim"
         );
         assert!(
@@ -2287,9 +2405,173 @@ mod tests {
             .unwrap_or_else(|| panic!("arc-refcount host missing"));
         assert!(
             r.sec_concept.contains("FACE (Batch 341, metal-graph")
-                && r.sec_concept.contains("owner callbacks require RETAIN_OWNER")
+                && r.sec_concept
+                    .contains("owner callbacks require RETAIN_OWNER")
                 && r.sec_concept.contains("write access requires MUTABLE"),
             "batch-341 wrap-custody face rider missing"
+        );
+    }
+
+    /// Batch 342 (the harness-adapters/safeagents sec distill, Plan 352 /
+    /// Research 385, huggingface/safeagents @ 0de8e22d Apache-2.0 + its
+    /// atif-scan dep @ 0228cd9d MIT — the agent-egress-guard family's
+    /// SECOND source) — presence, family, provenance discipline. TWO
+    /// suggest-only rules (the argv-exposure + control-defeat axes),
+    /// never `FIXABLE_SEC`; candidate 3 (`verifier-self-modification`)
+    /// honestly DROPPED at authoring per the plan's expected-drop
+    /// allowance (the runtime-vs-build mutation distinction is not
+    /// parse-provable — build lanes and fixtures legitimately write test
+    /// files).
+    #[test]
+    fn batch342_rules_present_families_and_provenance() {
+        let all = entries();
+        let r1 = all
+            .iter()
+            .find(|r| r.rule_id == "credential-material-in-command-argv")
+            .unwrap_or_else(|| panic!("batch-342 rule 1 missing from corpus"));
+        assert_eq!(
+            r1.family,
+            SecFamily::SensitiveData,
+            "batch-342 rule 1 family"
+        );
+        assert!(
+            r1.sec_concept
+                .contains("Batch 342 / Plan 352 / Research 385"),
+            "batch-342 rule 1 must cite its landing lineage"
+        );
+        assert!(
+            r1.sec_concept.contains("0de8e22d") && r1.sec_concept.contains("0228cd9d"),
+            "batch-342 rule 1 must cite both source pins"
+        );
+        // The mandatory adjacent-DISTINCT adjudication note (plan 352 T1).
+        assert!(
+            r1.sec_concept.contains("adjacent-DISTINCT from")
+                && r1
+                    .sec_concept
+                    .contains("shell-string-command-interpolation")
+                && r1.sec_concept.contains("INJECTION axis")
+                && r1.sec_concept.contains("EXPOSURE axis"),
+            "batch-342 rule 1 must carry the injection-vs-exposure adjudication"
+        );
+        // The source law needles (keyed after reading the landed text).
+        assert!(
+            r1.sec_concept.contains("HEADER_LINE") && r1.sec_concept.contains("URL_KEY"),
+            "batch-342 rule 1 must cite the provider_keys surfaces"
+        );
+        assert!(
+            r1.sec_concept.contains("the transport")
+                && r1.sec_concept.contains("never a cleaner argv"),
+            "batch-342 rule 1 must carry the transport law"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"credential-material-in-command-argv"),
+            "batch-342 rule 1 must stay suggest-only (never FIXABLE_SEC)"
+        );
+        let r2 = all
+            .iter()
+            .find(|r| r.rule_id == "egress-control-bypass-flag")
+            .unwrap_or_else(|| panic!("batch-342 rule 2 missing from corpus"));
+        assert_eq!(
+            r2.family,
+            SecFamily::InputValidation,
+            "batch-342 rule 2 family"
+        );
+        assert!(
+            r2.sec_concept
+                .contains("Batch 342 / Plan 352 / Research 385"),
+            "batch-342 rule 2 must cite its landing lineage"
+        );
+        // The source law needles (side_channel.py:698-703, quoted at the pin).
+        assert!(
+            r2.sec_concept
+                .contains("A proxy is how many sandboxes enforce their network policy"),
+            "batch-342 rule 2 must carry the source law verbatim"
+        );
+        assert!(
+            r2.sec_concept.contains("routes around it"),
+            "batch-342 rule 2 must carry the routes-around harm verbatim"
+        );
+        // The source's own anti-regime carve-outs, carried verbatim.
+        assert!(
+            r2.sec_concept.contains("http://127.0.0.1:8080/")
+                && r2.sec_concept.contains("NO_PROXY LIST of names"),
+            "batch-342 rule 2 must carry the local-only + name-list carve-outs"
+        );
+        // Sink-distinct adjudication vs the egress-url owner (plan 352 T1).
+        assert!(
+            r2.sec_concept.contains("sink-distinct from")
+                && r2.sec_concept.contains("unvalidated-egress-url")
+                && r2.sec_concept.contains("URL CHOICE"),
+            "batch-342 rule 2 must carry the egress-url adjudication"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC.contains(&"egress-control-bypass-flag"),
+            "batch-342 rule 2 must stay suggest-only (never FIXABLE_SEC)"
+        );
+    }
+
+    #[test]
+    fn batch342_rules_parse() {
+        // G1 for Batch 342: both rules' buggy AND fixed code must parse as
+        // valid Rust (the L2 pruner verdict, the batch333+ discipline).
+        for rid in [
+            "credential-material-in-command-argv",
+            "egress-control-bypass-flag",
+        ] {
+            let all = entries();
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-342 rule missing: {rid}"));
+            assert!(
+                syn::parse_file(&rule.buggy_code).is_ok(),
+                "batch-342 {rid}: buggy code must parse"
+            );
+            assert!(
+                syn::parse_file(&rule.fixed_code).is_ok(),
+                "batch-342 {rid}: fixed code must parse"
+            );
+        }
+    }
+
+    #[test]
+    fn batch342_faces_landed() {
+        // count-neutral faces on the B340 host: the HOST-SANCTION-
+        // PROVENANCE arm + the AUTHORED-ONLY SCOPING arm (the spillway
+        // family, the harness-adapters source).
+        let all = entries();
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == "read-output-trust-inherits-argument-taint")
+            .unwrap_or_else(|| panic!("batch-340 host missing"));
+        assert!(
+            r.sec_concept.contains("FACE (Batch 342, harness-adapters")
+                && r.sec_concept.contains("model-echo NEVER self-authorizes"),
+            "batch-342 host-sanction face rider missing"
+        );
+        assert!(
+            r.sec_concept.contains(
+                "a host the model wrote earlier is no more sourced than one it writes now"
+            ),
+            "batch-342 host-sanction face must carry the policy.py law verbatim"
+        );
+        assert!(
+            r.sec_concept.contains("AUTHORED-ONLY SCOPING arm")
+                && r.sec_concept.contains("Reasoning is left out"),
+            "batch-342 authored-only scoping face rider missing"
+        );
+        // En-route repair disclosure: the B337 prose drift is repaired.
+        let reuseaddr = all
+            .iter()
+            .find(|r| r.rule_id == "conditional-reuseaddr-after-liveness-probe")
+            .unwrap_or_else(|| panic!("batch-337 rule missing"));
+        assert!(
+            reuseaddr.sec_concept.contains("Detector: none at landing")
+                && !reuseaddr
+                    .sec_concept
+                    .contains("Detector: `proposers::reuseaddr_gate`"),
+            "the B337 reuseaddr prose must no longer claim a detector module that never landed"
         );
     }
 }
