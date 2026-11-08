@@ -964,7 +964,7 @@ the count) or CONSUMING (`Arc::from_raw` exactly once) — and any mix of the tw
 (from_raw-then-forget, double from_raw, an increment stacked on a from_raw consume) \
 double-frees or leaks. Detector: `proposers::arc_raw_boundary` (the `into_raw` \
 round-trip is the legitimate shape and suppresses). Batch 325 / Plan 327 / Research 361 \
-(mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class provenance, original fixture) FACE (Batch 341, metal-graph — the WRAP-CUSTODY-AGREEMENT arm): a foreign-buffer wrap (taking raw outside storage into managed custody) requires an EXPLICIT retention regime AND callback/flag agreement in BOTH directions: 'Metal buffer wrap requires retained buffer or owner lifetime' — no regime selected refuses at entry; a RETAIN_OWNER flag with missing callbacks refuses ('owner retention is invalid') AND callbacks present without the flag refuse the mirror way ('owner callbacks require RETAIN_OWNER') — and write-access demands the mutability flag ('Metal buffer wrap write access requires MUTABLE flag') (metal_backend.mm:778-801). The two-regime custody law above owns the Arc count algebra; THIS owns the AGREEMENT axis — flag⇄callback consistency and access⇄mutability pairing checked BOTH directions at the boundary, fail-closed."
+(mozilla/uniffi-rs @ ef9625b6, MPL-2.0 — class provenance, original fixture)."
                 .to_string(),
             buggy_code: "use std::sync::Arc;\n\n// waker-shaped custody bug: the borrowed handout (increment) and the consuming\n// path (from_raw) collapse into one fn, and the consume is forgotten — the\n// count is over-handed AND never retired (double-own → double-free or leak).\nstruct InstinctWaker;\n\nunsafe fn clone_waker(ptr: *const InstinctWaker) {\n    Arc::increment_strong_count(ptr);\n    let waker = unsafe { Arc::<InstinctWaker>::from_raw(ptr) };\n    std::mem::forget(waker);\n}\n"
                 .to_string(),
@@ -2273,23 +2273,6 @@ mod tests {
             !crate::domains::sec::proposers::FIXABLE_SEC
                 .contains(&"read-output-trust-inherits-argument-taint"),
             "batch-340 rule 4 must stay suggest-only (never FIXABLE_SEC)"
-        );
-    }
-
-    #[test]
-    fn batch341_face_wrap_custody_agreement_landed() {
-        // count-neutral face on the B325 host: the WRAP-CUSTODY-AGREEMENT arm
-        // (flag⇄callback + access⇄mutability, both directions, fail-closed).
-        let all = entries();
-        let r = all
-            .iter()
-            .find(|r| r.rule_id == "arc-refcount-across-raw-boundary")
-            .unwrap_or_else(|| panic!("arc-refcount host missing"));
-        assert!(
-            r.sec_concept.contains("FACE (Batch 341, metal-graph")
-                && r.sec_concept.contains("owner callbacks require RETAIN_OWNER")
-                && r.sec_concept.contains("write access requires MUTABLE"),
-            "batch-341 wrap-custody face rider missing"
         );
     }
 }

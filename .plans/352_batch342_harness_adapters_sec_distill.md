@@ -1,7 +1,6 @@
 # Plan 352 — Batch 342: harness-adapters/safeagents sec distill (Research 385)
 
-**Status:** CLAIMED — batch authoring in progress (research 385 / plan 352 allocated by the zed-m3-harnessdistill verdict session, epoch 1794014224)
-**Claimed:** shikuwa-4090-b342, 1794130532, expires 2026-11-10T09:35:32+00:00
+**Status:** STAGED — unclaimed (claim-first at the next sec slot; research 385 / plan 352 allocated by the zed-m3-harnessdistill verdict session, epoch 1794014224)
 
 Source: HF blog harness-adapters 2026-11-06 + `huggingface/safeagents` (repo NOT yet cloned — T0 pins it). Nominal Batch 342, **sec-only delta** — sec is NOT in the release set, so the release-set binary rebuild is NOT owed (verify at landing, the B325/B322/B338 precedent).
 

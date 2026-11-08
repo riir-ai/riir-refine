@@ -1,6 +1,6 @@
 # 383 — metal-graph distill verdict (robbiemu/metal-graph)
 
-**Status:** DISTILLED — batch landed 2026-11-08 (Batch 341 / Plan 350: 2 kernel_opt rules + 1 rust_perf rule + 2 faces; candidate 4 dropped at T0 — thin, confirmed)
+**Status:** DISTILLED — pending owner decision
 
 ## Source
 
