@@ -1,8 +1,7 @@
 # Plan 352 — Batch 342: harness-adapters/safeagents sec distill (Research 385)
 
 **Status:** COMPLETE — Batch 342 landed (research 385 / plan 352 allocated by the zed-m3-harnessdistill verdict session, epoch 1794014224)
-**Claimed:** shikuwa-4090-b342, 1794130532, expires 2026-11-10T09:35:32+00:00
-**Lease closed:** shikuwa-4090-b342, 1794130532, expiry 2026-11-10T09:35:32+00:00 — discharged by the Batch 342 landing commit (see `.research/385` §Landing record; the landing commit hash is in git log, a file cannot carry its own commit's hash)
+**Lease closed:** shikuwa-4090-b342, 1794130532, expiry 2026-11-10T09:35:32+00:00 — discharged by the Batch 342 landing commit (see `.research/385` §Landing record; the landing commit hash is in git log, a file cannot carry its own commit's hash) (claim record: shikuwa-4090-b342, epoch 1794130532, was expires 2026-11-10T09:35:32+00:00)
 
 Source: HF blog harness-adapters 2026-11-06 + `huggingface/safeagents` (repo NOT yet cloned — T0 pins it). Nominal Batch 342, **sec-only delta** — sec is NOT in the release set, so the release-set binary rebuild is NOT owed (verify at landing, the B325/B322/B338 precedent).
 
