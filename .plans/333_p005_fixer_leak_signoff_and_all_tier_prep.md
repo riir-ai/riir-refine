@@ -1,5 +1,7 @@
 # Plan 333 — Proposal 005 fixer unblock: the leak-posture sign-off package + all-tier prep for the Mozilla window
 
+**Claimed:** zed-1b3207ea@amo, 1794122137, expires 2026-11-10T07:15:37Z
+(scope: T4 only, per delegated-owner verdict f9e6b2c2 — wiring, no ENABLE flip)
 **Status:** ACTIVE 2026-11-03 — Phase A LANDED (T1, T1c, T2, T3, T5 done; T1b owner-gated; T4 = the opt-in-dark consent wiring, open); the memo is SIGNATURE-READY — OwnerGate target ≤ 2026-11-14; Phase B owner-gated (the signature IS the gate); spawned by the owner ask "how to unblock Proposal 005? we need to join Mozilla soon, prepare all tiers" — Proposal 025 window: G4 decide 2026-11-07, prose 2026-11-17–19, issue 190 deadline 2026-11-20
 
 **Verdict:** Claude AGREE 2026-11-03 (round 1, delegated-owner flow) with four fold-ins (landed in this revision) and the OwnerGate decisions: **CF-only fixer launch approved**; Groq deferred until T1b closes; **T3 memo target 2026-11-14** (ahead of the 11-17 prose window); T6/T7/T8 take effect on signature only, no partial launch; T4 consent wiring may land dark; **T9 approved to open now**; T10 DEFERRED.
