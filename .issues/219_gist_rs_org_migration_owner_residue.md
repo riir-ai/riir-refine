@@ -2,7 +2,7 @@
 
 **Status:** OPEN — §A items are owner acts (PAT/secret console + CF Touch-ID lane + 4090 disk approval); §B records what session zed-m3 2026-11-08 already landed and closed. No claim lease (nothing here is agent-implementable without owner auth).
 
-The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/cargo-refine/homebrew-tap/reflex-site) landed 2026-11-07 (pass 1 `5cce78ed`/pass 2 `8f033e4b` local, pushed as `e8385410` here). GitHub redirects keep every old URL working at both HTTP (308) and git-protocol (SSH) level — verified by a full 26-repo `SYNC DONE` on the 4090 over the old SSH paths AFTER the transfer (13:23Z). Nothing user-facing is broken today; this issue exists so the residue doesn't rot silent.
+The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/cargo-refine/homebrew-tap/reflex-site) landed 2026-11-07 (pass 1 `5cce78ed`/pass 2 `8f083e4b` local, pushed as `e8385410` here). GitHub redirects keep every old URL working at both HTTP (308) and git-protocol (SSH) level — verified by a full 26-repo `SYNC DONE` on the 4090 over the old SSH paths AFTER the transfer (13:23Z). Nothing user-facing is broken today; this issue exists so the residue doesn't rot silent.
 
 ## A. Owner acts (blocking, not agent-executable)
 
@@ -26,7 +26,7 @@ The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/carg
   - `gist-rs/scoop-bucket` `f876207db` — manifest download/checkbadger URLs → riir-ai releases (releases moved WITH the repos); bucket itself stays gist-rs, matching release.yml's `BUCKET_REPO: gist-rs/scoop-bucket` pin.
   - Deliberate keeps: both dist READMEs' `scoop bucket add gist-rs …/scoop-bucket` lines; `hf://gist-rs/*` artifact lanes (HF org untouched).
 - **riir-refine** `c15cabe6` — two stale workflow comments (release.yml's `gist-rs/cargo-heal` → `riir-ai/cargo-refine`; ops_dashboard.yml's `gist-rs/*` → `riir-ai/*` siblings).
-- **4090 hygiene:** 24 repo remotes flipped gist-rs → riir-ai (the moved set: riir-* + reflex-site; keps: seal-remake/ndb/scoop-bucket stay gist-rs, katgpt-rs/seal-game-editor stay katopz/maxion-game) — flipped via textual `.git/config` edit after `git remote set-url` failed on the full disk; 13 git + 6 ssh zombie processes (11-04…11-06 hangs, the Windows OpenSSH teardown family) killed; helper scripts removed from the box.
+- **4090 hygiene:** 24 repo remotes flipped gist-rs → riir-ai (the moved set: riir-* + reflex-site; keeps: seal-remake/ndb/scoop-bucket stay gist-rs, katgpt-rs/seal-game-editor stay katopz/maxion-game) — flipped via textual `.git/config` edit after `git remote set-url` failed on the full disk; 13 git + 6 ssh zombie processes (11-04…11-06 hangs, the Windows OpenSSH teardown family) killed; helper scripts removed from the box.
 - **gitsync verification posture:** remotes flipped + access proven (pack negotiation succeeds over the new URLs); the lane's remaining failure is purely A3 disk space. One transient `E:\git\riir-dapps\.git\index.lock` seen mid-run is the live self-heal's own lock, not stale.
 
 ## C. Observations for the record
