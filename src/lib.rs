@@ -349,6 +349,12 @@ pub mod hosted_expert;
 #[cfg(any(feature = "hosted_expert", feature = "seat_rerank"))]
 pub mod code_egress;
 
+// Plan 333 T4 — the per-repo consent scope (the hosted fix path's third
+// consent surface; the memo item-2/5 words). Pure std + blake3 + serde_json;
+// the dispatch consults the injected decision. DARK until the Phase B
+// ENABLE flip (`repo_consent::ENABLED`, the pin test holds it at false).
+pub mod repo_consent;
+
 // Plan 202 R3a — SeatRerankClient: the RERANK half of the escalation
 // chain (the candidates-exist arm). The L0–L3 candidates become the
 // seat's `options`; the hosted instinct `Ext` seat picks or abstains;

@@ -41,6 +41,9 @@ pub struct ServeParams<'a> {
     /// The shared code-egress consent (the `_checked_with` seam — no test
     /// races a process env).
     pub consent: &'a EgressConsent,
+    /// The Plan 333 T4 per-repo consent decision (the second injectable;
+    /// `Disabled` = the shipped dark posture — no gate, no prompt).
+    pub repo_consent: &'a crate::repo_consent::RepoConsentDecision,
     /// The serve-boundary compile gate — an `Answer` is served only when
     /// this returns `true` for the picked fix.
     pub compile_check: ServeCompileCheck<'a>,
@@ -63,9 +66,18 @@ pub fn serve_seat_rerank_checked_with(
         deadline,
         policy,
         consent,
+        repo_consent,
         compile_check,
     } = params;
-    match dispatch.escalate_rerank_checked_with(score, snippet, pool, deadline, policy, consent) {
+    match dispatch.escalate_rerank_checked_with(
+        score,
+        snippet,
+        pool,
+        deadline,
+        policy,
+        consent,
+        repo_consent,
+    ) {
         #[cfg(feature = "seat_rerank")]
         EscalatedFix::Answer {
             fix,
@@ -124,6 +136,9 @@ pub fn serve_seat_rerank(
     compile_check: ServeCompileCheck<'_>,
 ) -> EscalatedFix {
     let consent = EgressConsent::from_env();
+    // The per-repo decision is the caller's to compute (it owns the run's
+    // repo root); the serve boundary ships Disabled until arm H lands.
+    let repo_consent = crate::repo_consent::RepoConsentDecision::disabled();
     serve_seat_rerank_checked_with(
         dispatch,
         modelless_served,
@@ -133,6 +148,7 @@ pub fn serve_seat_rerank(
             deadline,
             policy,
             consent: &consent,
+            repo_consent: &repo_consent,
             compile_check,
         },
     )

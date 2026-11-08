@@ -39,7 +39,7 @@
 use std::time::{Duration, Instant};
 
 use crate::code_egress::EgressConsent;
-use crate::escalation_manifest::{EscalationManifest, EscalationRow, TargetKind, DEMOTE_ENV};
+use crate::escalation_manifest::{DEMOTE_ENV, EscalationManifest, EscalationRow, TargetKind};
 
 /// The suite every healing rerank rides (the R7 freeze: ONE suite for v1 —
 /// one seat lane hosts the healing rerank expert; per-domain lanes wait
@@ -364,6 +364,9 @@ impl EscalationDispatch {
     /// point. Worthiness → ceiling → `min_pool` (pre-socket) → readiness
     /// retry → contract. Every non-answer is
     /// [`EscalatedFix::StoodByModelless`].
+    // The T4 per-repo consult adds the run's repo root + the --yes arm to
+    // the env-reading entry (the production wiring's full signature).
+    #[allow(clippy::too_many_arguments, reason = "the rerank decision's full input set")]
     pub fn escalate_rerank(
         &mut self,
         modelless_score: f32,
@@ -371,8 +374,15 @@ impl EscalationDispatch {
         pool: &[String],
         deadline: Instant,
         policy: ReadinessPolicy,
+        repo_root: &std::path::Path,
+        yes_armed: bool,
     ) -> EscalatedFix {
         let consent = EgressConsent::from_env();
+        // The T4 consult (the ask-once-per-repo flow) — the account dir is
+        // the caller-resolution seam's own; Disabled while the lane is dark.
+        let dir = riir_kat::kat_mining_consent::default_dir();
+        let repo_consent =
+            crate::repo_consent::consult(&dir, repo_root, snippet.lines().count(), yes_armed);
         self.escalate_rerank_checked_with(
             modelless_score,
             snippet,
@@ -380,11 +390,16 @@ impl EscalationDispatch {
             deadline,
             policy,
             &consent,
+            &repo_consent,
         )
     }
 
     /// The consent-injectable core of [`Self::escalate_rerank`] (the
     /// `rerank_checked_with` seam pattern — no test races a process env).
+    /// `repo_consent` is the T4 per-repo decision (Plan 333) — consult
+    /// after the gate, before any transport; `Disabled` is the shipped
+    /// dark posture (no gate, byte-identical pre-T4 behavior).
+    #[allow(clippy::too_many_arguments, reason = "the rerank decision's full input set")]
     pub fn escalate_rerank_checked_with(
         &mut self,
         modelless_score: f32,
@@ -393,9 +408,10 @@ impl EscalationDispatch {
         deadline: Instant,
         policy: ReadinessPolicy,
         consent: &EgressConsent,
+        repo_consent: &crate::repo_consent::RepoConsentDecision,
     ) -> EscalatedFix {
         #[cfg(not(feature = "seat_rerank"))]
-        let _ = (snippet, deadline, policy, consent);
+        let _ = (snippet, deadline, policy, consent, repo_consent);
         if !matches!(self.row.target.kind.as_str(), "seat_rerank") {
             return EscalatedFix::StoodByModelless {
                 reason: StandReason::Declined(format!(
@@ -407,6 +423,15 @@ impl EscalationDispatch {
         match self.gate(modelless_score) {
             Gate::Stand(reason) => return EscalatedFix::StoodByModelless { reason },
             Gate::Proceed => {}
+        }
+        // Plan 333 T4: the per-repo consent — AFTER the gate (a gated-out
+        // case never spends the consult) and BEFORE any transport work
+        // (a refusal never becomes a metered call, the drain pre-check's
+        // law). `Disabled` falls through silently — the dark posture.
+        if let crate::repo_consent::RepoConsentDecision::Refused(vocab) = repo_consent {
+            return EscalatedFix::StoodByModelless {
+                reason: StandReason::Declined((*vocab).to_string()),
+            };
         }
         // The R7 freeze's enforcement consumer: BELOW the row's bound the
         // pool never becomes seat traffic (the client's empty-list refusal
@@ -497,18 +522,26 @@ impl EscalationDispatch {
         snippet: &str,
         deadline: Instant,
         max_tokens: u64,
+        repo_root: &std::path::Path,
+        yes_armed: bool,
     ) -> EscalatedFix {
         let consent = EgressConsent::from_env();
+        let dir = riir_kat::kat_mining_consent::default_dir();
+        let repo_consent =
+            crate::repo_consent::consult(&dir, repo_root, snippet.lines().count(), yes_armed);
         self.escalate_generate_checked_with(
             modelless_score,
             snippet,
             deadline,
             max_tokens,
             &consent,
+            &repo_consent,
         )
     }
 
-    /// The consent-injectable core of [`Self::escalate_generate`].
+    /// The consent-injectable core of [`Self::escalate_generate`] — the
+    /// same T4 per-repo consult as the rerank core (after the gate,
+    /// before the transport; `Disabled` = the dark shipped posture).
     pub fn escalate_generate_checked_with(
         &mut self,
         modelless_score: f32,
@@ -516,9 +549,10 @@ impl EscalationDispatch {
         deadline: Instant,
         max_tokens: u64,
         consent: &EgressConsent,
+        repo_consent: &crate::repo_consent::RepoConsentDecision,
     ) -> EscalatedFix {
         #[cfg(not(feature = "hosted_expert"))]
-        let _ = (snippet, deadline, max_tokens, consent);
+        let _ = (snippet, deadline, max_tokens, consent, repo_consent);
         if !matches!(self.row.target.kind.as_str(), "hosted_expert") {
             return EscalatedFix::StoodByModelless {
                 reason: StandReason::Declined(format!(
@@ -530,6 +564,13 @@ impl EscalationDispatch {
         match self.gate(modelless_score) {
             Gate::Stand(reason) => return EscalatedFix::StoodByModelless { reason },
             Gate::Proceed => {}
+        }
+        // Plan 333 T4: the per-repo consent — same placement as the rerank
+        // core (after the gate, before the transport).
+        if let crate::repo_consent::RepoConsentDecision::Refused(vocab) = repo_consent {
+            return EscalatedFix::StoodByModelless {
+                reason: StandReason::Declined((*vocab).to_string()),
+            };
         }
         #[cfg(feature = "hosted_expert")]
         if let Some(expert) = self.expert.as_mut() {
@@ -696,7 +737,7 @@ mod tests {
         use super::*;
         use std::io::{Read, Write};
         use std::net::TcpListener;
-        use std::sync::mpsc::{channel, Receiver};
+        use std::sync::mpsc::{Receiver, channel};
 
         const SNIPPET: &str = "fn foo() -> i32 { return 42; }";
         const BASE: &str = "http://127.0.0.1:9";
@@ -832,6 +873,7 @@ mod tests {
                 deadline,
                 128,
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             match fix {
                 EscalatedFix::StoodByModelless {
@@ -853,6 +895,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             assert_eq!(
                 fix,
@@ -875,6 +918,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             assert_eq!(
                 fix,
@@ -891,6 +935,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             assert_eq!(
                 fix,
@@ -929,6 +974,7 @@ mod tests {
                     backoff: Duration::from_millis(1),
                 },
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             match fix {
                 EscalatedFix::Answer { fix, source, .. } => {
@@ -961,6 +1007,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             match fix {
                 EscalatedFix::StoodByModelless {
@@ -996,6 +1043,7 @@ mod tests {
                     backoff: Duration::from_millis(50),
                 },
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             match fix {
                 EscalatedFix::StoodByModelless {
@@ -1030,6 +1078,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             assert_eq!(
                 fix,
@@ -1058,6 +1107,7 @@ mod tests {
                 deadline,
                 ReadinessPolicy::default(),
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             match fix {
                 EscalatedFix::StoodByModelless {
@@ -1093,6 +1143,7 @@ mod tests {
                     deadline,
                     policy,
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 if let EscalatedFix::StoodByModelless {
                     reason: StandReason::BelowMinPool,
@@ -1112,6 +1163,7 @@ mod tests {
                 deadline,
                 policy,
                 &EgressConsent::Allowed,
+                &crate::repo_consent::RepoConsentDecision::disabled(),
             );
             assert_eq!(
                 fix,
@@ -1180,6 +1232,7 @@ mod tests {
                     Instant::now() + Duration::from_secs(1),
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert_eq!(
                     fix,
@@ -1212,6 +1265,7 @@ mod tests {
                     Instant::now() + Duration::from_secs(1),
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert_eq!(
                     fix,
@@ -1250,6 +1304,7 @@ mod tests {
                         deadline,
                         ReadinessPolicy::default(),
                         &EgressConsent::Allowed,
+                        &crate::repo_consent::RepoConsentDecision::disabled(),
                     );
                 }
                 // The latched verdict, on a WORTHY score with a full pool:
@@ -1261,6 +1316,7 @@ mod tests {
                     deadline,
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert_eq!(
                     fix,
@@ -1293,6 +1349,7 @@ mod tests {
                     Instant::now() + Duration::from_secs(1),
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert_eq!(
                     fix,
@@ -1327,6 +1384,7 @@ mod tests {
                     Instant::now() + Duration::from_secs(1),
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert!(
                     matches!(
@@ -1367,6 +1425,7 @@ mod tests {
                     Instant::now() + Duration::from_secs(1),
                     ReadinessPolicy::default(),
                     &EgressConsent::Allowed,
+                    &crate::repo_consent::RepoConsentDecision::disabled(),
                 );
                 assert!(matches!(fix, EscalatedFix::Answer { .. }));
                 let snap = probe.test_snapshot().expect("injected state");
@@ -1429,6 +1488,7 @@ mod tests {
             deadline,
             ReadinessPolicy::default(),
             &EgressConsent::Allowed,
+            &crate::repo_consent::RepoConsentDecision::disabled(),
         );
         match fix {
             EscalatedFix::StoodByModelless {
@@ -1443,6 +1503,7 @@ mod tests {
             deadline,
             128,
             &EgressConsent::Refused(EgressRefusal::Unset),
+            &crate::repo_consent::RepoConsentDecision::disabled(),
         );
         match fix {
             EscalatedFix::StoodByModelless {
@@ -1457,6 +1518,7 @@ mod tests {
             deadline,
             128,
             &EgressConsent::Refused(EgressRefusal::Unset),
+            &crate::repo_consent::RepoConsentDecision::disabled(),
         );
         assert_eq!(
             fix,

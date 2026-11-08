@@ -139,6 +139,7 @@ fn wrong_seat_pick_is_rejected_and_the_modelless_answer_stands() {
             deadline,
             policy: ReadinessPolicy::default(),
             consent: &consent,
+            repo_consent: &riir_refine::repo_consent::RepoConsentDecision::disabled(),
             compile_check: &mut never_compiles,
         },
     );
@@ -181,6 +182,7 @@ fn passing_seat_pick_is_served_through_the_boundary() {
             deadline,
             policy: ReadinessPolicy::default(),
             consent: &consent,
+            repo_consent: &riir_refine::repo_consent::RepoConsentDecision::disabled(),
             compile_check: &mut compiles,
         },
     );
@@ -229,6 +231,7 @@ fn served_modelless_fix_stands_without_seat_traffic() {
             deadline,
             policy: ReadinessPolicy::default(),
             consent: &consent,
+            repo_consent: &riir_refine::repo_consent::RepoConsentDecision::disabled(),
             compile_check: &mut unused,
         },
     );
@@ -264,6 +267,7 @@ fn zero_cap_row_never_escalates_a_miss() {
             deadline,
             policy: ReadinessPolicy::default(),
             consent: &consent,
+            repo_consent: &riir_refine::repo_consent::RepoConsentDecision::disabled(),
             compile_check: &mut unused,
         },
     );
