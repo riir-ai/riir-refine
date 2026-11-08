@@ -9,7 +9,14 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 300 entries across 14 categories as of Batch 332 (+2: dispatch —
+//! 305 entries across 15 categories as of Batch 341 (+1: the new
+//! `measurement-honesty` category — `amortized-reuse-claim-break-even-artifact`,
+//! the metal-graph distill (Plan 350 / Research 383, `entries_68`); Batch 343:
+//! 305 -> 307 (+2: caching — `raw-bytes-with-hit-backfill-once` +
+//! `vanished-entry-tolerant-eviction-panic-else`, the sccache cache-layer
+//! RE-distill (Plan 355 / Research 387, `entries_69` — the tiered-hit
+//! backfill family, the files B324 did not mine); prior: 300 entries across
+//! 14 categories as of Batch 332 (+2: dispatch —
 //! `byte-flag-table-masked-run-scan` + `token-batch-cursor-handover`, the
 //! blazing-smtlib distill (Plan 340 / Research 370); prior: 298 at Batch 331
 //! (+1: concurrency —
@@ -739,6 +746,7 @@ mod entries_65;
 mod entries_66;
 mod entries_67;
 mod entries_68;
+mod entries_69;
 
 #[cfg(test)]
 mod tests;
@@ -948,6 +956,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_66::entries());
     entries.extend(entries_67::entries());
     entries.extend(entries_68::entries());
+    entries.extend(entries_69::entries());
     Corpus::new(entries)
 }
 

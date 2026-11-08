@@ -6,9 +6,9 @@
 //! paragraph parse). Fixtures are ORIGINAL plain-Rust stand-ins, never voxl
 //! source. Batch 329 / Plan 337 / Research 367.
 
+use crate::domains::rust_perf::PerfRule;
 #[cfg(feature = "rust_perf_bench")]
 use crate::domains::rust_perf::bench::BenchSpec;
-use crate::domains::rust_perf::PerfRule;
 
 /// Data table, not logic - grows with distillation batches.
 #[allow(clippy::too_many_lines)]
