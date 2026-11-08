@@ -1,6 +1,7 @@
 # Issue 218 — outbound PR #2977 failure classes: the six-round post-mortem + the fork-CI blind spot, standing pre-send checklist for PR #2
 
 **Status:** OPEN — the #2977 post-mortem consolidated from bench 127's round records + run 41806194289 forensics (2026-11-07, session zed-m3). Serves as the pre-send checklist binding PR #2 (sccache #2968 backend-backoff, bench 128) — every gate row below gets an explicit pass before the G-PR4 push. Closing requires: the checklist executed on the #2968 send + the verdict-arc outcome recorded.
+**Claimed:** zed-m3-i218, 1794100000, expires 2026-11-10T12:00:00+00:00
 
 Owner ask 2026-11-07: "summarize what we done wrong last PR into issues ... then ask claude to verdict hard on 2nd PR to ensure we not make bad PR again." PR #2977 took **six fix rounds + two owner corrections + two delegated verdict arcs** between open (11-02 ~17:06Z) and merge (11-07 12:31Z). Each class below is a distinct failure mode with a concrete pre-send defense; the classes are the issue, not the narrative.
 

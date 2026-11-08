@@ -3,8 +3,6 @@
 **Status:** LANDED — Batch 337 (all tasks [x]; the T0 five record corrections carried; C5/C7 adjudicated to faces, C9 dropped; verdict-ping-pong not owed — corpus-only lane per the standing precedent, the landing row is the record).
 **Lease closed:** zed-m3-b337, 1793973971, expires 2026-11-08T14:06:32+00:00 — discharged by the Batch 337 landing commit
 
-**Claimed:** zed-m3-b337, 1793973971, expires 2026-11-08T14:06:32+00:00
-
 **Source:** skydiscover-ai/jitengine @ `2c34508d617800ab7448a69e14a6dd551aec156e` (Apache-2.0). Verdict: YES B corpus — kernel_opt +3–4 own rules + 2–3 count-neutral faces, sec +1 own rule (drop-expected allowed on the sec candidate without hurting the verdict). Targets: kernel_opt 1056 → 1058–1060, sec 45 → 45–46.
 
 ## Context
