@@ -2,6 +2,10 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-08 — Issue 198 CLOSED + removed (noise rule): the outcome poller fired — #2977 MERGED, ledger updated, post-mortem lives in issue 218
+
+PR #2977 (the CACHEDIR.TAG goodwill PR) merged 2026-11-07 12:31:11Z by sylvestre (`907230be`, API-verified) — already recorded in the [bench 127](.benchmarks/127_mozilla_wetrun/README.md) ledger's MERGED poll row + the accept-rate table, and the failure-class post-mortem moved to issue 218 when it was filed the same day, so the file carried zero remaining obligations. The six-round arc stays in git history (the file's full life: `git log --follow -- .issues/198_mozilla_outbound_pr_wetrun.md`). Same commit: issue 190's stale T14 checkbox ticked (regular bar LANDED 2026-11-01 bench 123; strict bar owner-gated by the 2026-11-04 D3 verdict, status quo kept — no lane work remains).
+
 ## 2026-11-07 — Issue 214 CLOSED + removed: the kernel pregate's `@compute` needle fires (fold fix), KEPT after G5 PASS (Bench 143)
 
 T1 `8e781fce0` (ASCII-letter-only fold; `@` rides in `NEEDLE_FIRST_BYTES` as itself; pins `at_compute_needle_signals_alone` red-before/green-after + `lone_backtick_never_signals`), T2 census `examples/kernel_pregate_census.rs` (registered walk 0 file flips / 72 span-seat self-matches; riir-shader/seal-render 0/0; riir-gpu UNSEEN on m3/amo/4090), T3 G5 on bmo via the amo jump — OLD vs NEW fold, 3 interleaved rounds, added p50 ≤ 0.025 / p95 ≤ 0.403 ms/file, all PASS ⇒ `@compute` stays in `SIGNAL_NEEDLES`. Instrument: `g5_cost_math.py --code-axis` (the feature-delta guard INVERTS for a source A/B — stamps must be identical). Bench 131 annotated (appended) with the corrected effective set. Session: katgpt-rs-f5.
