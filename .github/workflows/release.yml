@@ -55,7 +55,7 @@ env:
   BIN: cargo-refine
   DIST_REPO: riir-ai/cargo-refine
   TAP_REPO: riir-ai/homebrew-tap
-  BUCKET_REPO: gist-rs/scoop-bucket
+  BUCKET_REPO: riir-ai/scoop-bucket
 
 jobs:
   # ── THIRD_PARTY_LICENSES.md from the shipping feature set ──────────────────
