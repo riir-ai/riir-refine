@@ -1,6 +1,6 @@
 # Issue 219 — gist-rs → riir-ai org migration: the owner-gated residue + the 4090 disk-full incident found en route
 
-**Status:** OPEN — §A items are owner acts (PAT/secret console + CF Touch-ID lane + 4090 disk approval); §B records what session zed-m3 2026-11-08 already landed and closed. No claim lease (nothing here is agent-implementable without owner auth).
+**Status:** OPEN — **A2 rethink + reflex-site redeploys LANDED 2026-11-08 (§D)**; remaining owner acts: A1 PAT/secret console rescoping + the kat-service prod ceremony (worker code ready at dapps `49a59d0`). A3 executed on the m3 local checkout (`2fca79279`, unpushed — that session pushes it). No claim lease (the residue here is owner-auth work; §D's agent lanes are landed and pushed).
 
 The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/cargo-refine/homebrew-tap/reflex-site) landed 2026-11-07 (pass 1 `5cce78ed`/pass 2 `8f083e4b` local, pushed as `e8385410` here). GitHub redirects keep every old URL working at both HTTP (308) and git-protocol (SSH) level — verified by a full 26-repo `SYNC DONE` on the 4090 over the old SSH paths AFTER the transfer (13:23Z). Nothing user-facing is broken today; this issue exists so the residue doesn't rot silent.
 
@@ -32,3 +32,16 @@ The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/carg
 - `refine.gist.rs` → `refine.riir.ai` 308 redirect confirmed live; canonical updated in the cargo-refine dist README.
 - Two stale 0-byte `index-*.tmp.lock` files in `E:\git\seal\.git` (non-fleet repo) — REMOVED during the 11-08 cleanup.
 - The local riir-refine checkout on m3 stays intentionally diverged (fleet convention; sibling corpus WIP in the worktree) — this issue's commit rides origin/develop via the detached-worktree cherry-pick, self-healing on next `pull --rebase`.
+
+## D. Landed 2026-11-08, session zed-m3 (the agent-executable halves of A1/A2)
+
+- **The scoop-bucket move to riir-ai (owner, same day) dissolved the RELEASE_PAT two-org span** — one fine-grained PAT (resource owner `riir-ai`) now covers all three dist repos. The stale pins it left behind all landed:
+  - riir-refine `3c0f8f94` — release.yml `BUCKET_REPO: gist-rs/scoop-bucket` → `riir-ai/scoop-bucket` (detached-worktree commit; the local checkout stays diverged by fleet convention).
+  - riir-dapps `49a59d0` — kat-service front-page scoop one-liner + front.rs assertion + the copy-contract exemption widened to org vocabulary (org name + tap + bucket URL — same public-org class as `riir-ai/tap`, private-repo-name law unchanged). 625 lib tests + clippy `-D warnings` green, `--locked` (sibling Cargo.lock untouched). **Prod deploy still pending the owner ceremony** — this commit is the worker code the ceremony ships.
+  - reflex-site `8b7d8ca` — index.html install one-liner (text + data-copy) + the served `skills/reflex-integration/SKILL.md`.
+  - dist READMEs: `cargo-refine e3ffc3a` · `reflex 54192b8` · `scoop-bucket e10eedc`.
+- **A2 storefront redeploys LANDED + probed:**
+  - **reflex-site** — Touch-ID `cf-deploy-reflex`, clean detached worktree at origin/main `8b7d8ca`, Version `84730a68-e01e-44db-921b-8dee3b8e9c00`. Probe: reflex.riir.ai went 20 gist-rs refs → **0**; all repo links `github.com/riir-ai/*`; `scoop bucket add riir-ai` ×2.
+  - **rethink** — Touch-ID `cf-deploy-rethink`, detached at `2fed0c6`, Version `2108dbd0-bbbc-499e-88fe-3d27cc5fa8e7`. The morning's `01bd70a` deploy predated org-move commit `047744c`, so the live page still named `gist-rs/riir-instinct` — probe now reads `github.com/riir-ai/riir-instinct`, **0 gist-rs refs** (foxfox twin: 0). Also carries the `2fed0c6` feed column (banking77 composed macro-F1; the 094-rerun gold-bearing cell folds when its lane lands).
+  - **kat-service** — NOT deployed (mainnet = owner ceremony only, the auth law). refine.riir.ai still serves the pre-migration copy (probed: 7× gist-rs/cargo-refine + 4× raw gist-rs URLs + 1 scoop gist-rs) until the owner runs the vault net-leg.
+- **Pre-existing flag (not this lane's):** reflex-site `scripts/public_copy_gate.cjs` FAILS on `/bench/ @390` sideways scroll (scrollWidth 422 vs 390, every `<details>` open) — fails at HEAD^ without the scoop change; belongs to the bench-feed lane (`1f029d1` or earlier).
