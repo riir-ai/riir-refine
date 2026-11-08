@@ -157,7 +157,7 @@ jobs:
           fi
           for repo in riir-ai riir-neuron-db riir-auth riir-kat riir-llm riir-infer riir-ledger; do
             git clone --depth 1 \
-              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/riir-ai/${repo}.git" \
               "sibling/${repo}"
           done
           echo "available=true" >> "$GITHUB_OUTPUT"

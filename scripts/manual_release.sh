@@ -102,14 +102,14 @@ echo "== publish (body from $NOTES)"
 # `v0.3.0 — corpus: +12 rust_perf rules`). Derived from the notes file so
 # title and body can never disagree.
 CORPUS_LINE="$(grep '^corpus:' "$NOTES" | head -1)"
-gh release create "$TAG" -R gist-rs/cargo-refine \
+gh release create "$TAG" -R riir-ai/cargo-refine \
     --title "cargo-refine $TAG — $CORPUS_LINE" \
     --notes-file "$NOTES" \
     "$DIST"/*
 
 echo "== tap/scoop manifest bumps (the CI pipeline opened PRs; manual mode edits main directly)"
-echo "   NOTE: bump gist-rs/homebrew-tap Formula/cargo-refine.rb (version + 4 sha256 from"
+echo "   NOTE: bump riir-ai/homebrew-tap Formula/cargo-refine.rb (version + 4 sha256 from"
 echo "   $DIST/SHA256SUMS) and gist-rs/scoop-bucket bucket/cargo-refine.json (version +"
 echo "   windows-gnu url + hash), commit + push each — or merge the CI PRs when billing"
 echo "   is fixed and CI ran instead."
-echo "DONE: https://github.com/gist-rs/cargo-refine/releases/tag/$TAG"
+echo "DONE: https://github.com/riir-ai/cargo-refine/releases/tag/$TAG"

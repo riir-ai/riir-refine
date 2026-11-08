@@ -272,8 +272,8 @@ also closes the "dryrun dirties state / enables attack" concern.
   scans the QR → web wallet → GitHub sign-in (the key-match finds the genesis
   root wallet, since the ceremony derived it from bar's SSH key) → **hold
   SEND 3 s** → foo sees the credit.
-- **foo (8.1):** `curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.sh | sh`
-  → mac-arm binary from the **gist-rs/cargo-refine releases** (the 003 public
+- **foo (8.1):** `curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh`
+  → mac-arm binary from the **riir-ai/cargo-refine releases** (the 003 public
   surface — NOT riir-clippy releases, see the corrected row in the verdict
   table; local uploads via `gh release create` are exactly what the runbook
   sanctions while CI budget is tight).

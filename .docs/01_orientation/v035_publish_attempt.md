@@ -1,6 +1,6 @@
 # v0.3.5 PUBLISHED — 2026-10-30 (the attempt record below is superseded; kept for the build-from-TAG lesson)
 
-**PUBLISHED 2026-10-30 ~22:3x +07:** <https://github.com/gist-rs/cargo-refine/releases/tag/v0.3.5>
+**PUBLISHED 2026-10-30 ~22:3x +07:** <https://github.com/riir-ai/cargo-refine/releases/tag/v0.3.5>
 via `kat-secret exec gh-release-pat --env GH_TOKEN -- gh release create` (the sealed-token
 lane; Touch ID, token never in context). Tap + scoop bumped to 0.3.5 from the release
 SHA256SUMS (`homebrew-tap a2902e4`, `scoop-bucket 3205185`, verified by fresh clone + asset 200).
@@ -56,7 +56,7 @@ Actions billing block refuses the tag-triggered pipeline):
 ## The one command that finishes this (owner, with a token)
 
 ```sh
-GH_TOKEN=<a PAT with gist-rs/cargo-refine contents:write> \
+GH_TOKEN=<a PAT with riir-ai/cargo-refine contents:write> \
   sh scripts/manual_release.sh v0.3.5
 ```
 
@@ -64,7 +64,7 @@ GH_TOKEN=<a PAT with gist-rs/cargo-refine contents:write> \
 the packaged set is still in `/tmp/manual_release_dist/` (reboot loses it):
 
 ```sh
-gh release create v0.3.5 -R gist-rs/cargo-refine \
+gh release create v0.3.5 -R riir-ai/cargo-refine \
   --title "cargo-refine v0.3.5 — corpus: kernel_opt 1022 (+2 since the v0.3.4 build) — rust_perf 278 (=) · sec 31 (=) · clippy_lints 112 (=) · dist 7 (=)" \
   --notes-file release/notes-v0.3.5.md \
   /tmp/manual_release_dist/*
@@ -123,13 +123,13 @@ same blocked budget — not retried.
    possible).
 2. **Tap/scoop bumps PRE-COMMITTED, NOT PUSHED** (pushing would point the
    manifests at 404 assets — the exact mistake reverted earlier today):
-   - gist-rs/homebrew-tap `9d457be` (fresh clone at `/tmp/homebrew-tap-stage`, 1 ahead of `origin/main`)
+   - riir-ai/homebrew-tap `9d457be` (fresh clone at `/tmp/homebrew-tap-stage`, 1 ahead of `origin/main`)
    - gist-rs/scoop-bucket `96482af` (fresh clone at `/tmp/scoop-bucket-stage`, 1 ahead of `origin/main`)
    - All 5 recorded hashes verified against the staged archives
      (`OK` × 5) — these are the hashes of THE BINARIES AT `0542da6c`
      uploaded as-is; no rebuild planned, so the table above stays true.
 3. **Token**: owner seals `gh-release-pat` (fine-grained PAT, repo
-   `gist-rs/cargo-refine`, Contents: Read and write) via
+   `riir-ai/cargo-refine`, Contents: Read and write) via
    `kat-secret seal gh-release-pat` in their own terminal.
 
 Finishing run once sealed (agent runs; Touch ID prompt for the owner):
@@ -137,7 +137,7 @@ Finishing run once sealed (agent runs; Touch ID prompt for the owner):
 ```sh
 ~/.kat/bin/kat-secret exec gh-release-pat --env GH_TOKEN \
   --why "publish cargo-refine v0.3.5 release (tag 0542da6c)" -- \
-  gh release create v0.3.5 -R gist-rs/cargo-refine \
+  gh release create v0.3.5 -R riir-ai/cargo-refine \
     --title "cargo-refine v0.3.5 — corpus: kernel_opt 1022 (+2 since the v0.3.4 build) — rust_perf 278 (=) · sec 31 (=) · clippy_lints 112 (=) · dist 7 (=)" \
     --notes-file release/notes-v0.3.5.md \
     /tmp/manual_release_dist/*

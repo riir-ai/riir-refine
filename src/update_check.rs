@@ -19,7 +19,7 @@
 //! The release surface is `.github/workflows/release.yml`'s package job:
 //! `cargo-refine-${TAG}-${target}.tar.gz` (unix) / `.zip` (windows) plus a
 //! `SHA256SUMS` over every dist file, published on the public dist repo
-//! `gist-rs/cargo-refine`. `update` (the T1.6 corpus lease refresh) is a
+//! `riir-ai/cargo-refine`. `update` (the T1.6 corpus lease refresh) is a
 //! different, pre-existing command — this module is `upgrade`, not `update`.
 
 use std::io::Read;
@@ -28,8 +28,8 @@ use std::time::Duration;
 
 /// The public distribution repo (Proposal 003 / Plan 105 — NEVER this source
 /// repo). The releases API + the releases page are both derived from it.
-pub const DIST_REPO: &str = "gist-rs/cargo-refine";
-const RELEASES_API: &str = "https://api.github.com/repos/gist-rs/cargo-refine/releases/latest";
+pub const DIST_REPO: &str = "riir-ai/cargo-refine";
+const RELEASES_API: &str = "https://api.github.com/repos/riir-ai/cargo-refine/releases/latest";
 
 const CLIENT_TIMEOUT: Duration = Duration::from_secs(4);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
@@ -787,7 +787,7 @@ impl StagedUpgrade<'_> {
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
                     UpdateError::Verify(
-                        "no `tar` on PATH — install via https://github.com/gist-rs/cargo-refine (install.sh / install.ps1) instead"
+                        "no `tar` on PATH — install via https://github.com/riir-ai/cargo-refine (install.sh / install.ps1) instead"
                             .to_string(),
                     )
                 } else {
@@ -873,7 +873,7 @@ mod tests {
         CachedRelease {
             version: version.to_string(),
             detail: detail.map(str::to_string),
-            url: "https://github.com/gist-rs/cargo-refine/releases/tag/v1.0.0".to_string(),
+            url: "https://github.com/riir-ai/cargo-refine/releases/tag/v1.0.0".to_string(),
             tag: format!("v{version}"),
         }
     }
@@ -902,7 +902,7 @@ mod tests {
             "tag_name": "v0.3.0",
             "name": "v0.3.0 — corpus: +12 rust_perf rules",
             "body": "## Highlights\n- faster drafter\n",
-            "html_url": "https://github.com/gist-rs/cargo-refine/releases/tag/v0.3.0",
+            "html_url": "https://github.com/riir-ai/cargo-refine/releases/tag/v0.3.0",
             "assets": [
                 {"name": "cargo-refine-v0.3.0-aarch64-apple-darwin.tar.gz",
                  "browser_download_url": "https://example/a.tar.gz"},

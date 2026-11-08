@@ -24,7 +24,7 @@ use std::path::{Path, PathBuf};
 
 /// The canonical base every install URL must sit under — declared in
 /// Proposal 003 §The canonical install one-liners.
-const CANONICAL_BASE: &str = "https://raw.githubusercontent.com/gist-rs/cargo-refine/main/";
+const CANONICAL_BASE: &str = "https://raw.githubusercontent.com/riir-ai/cargo-refine/main/";
 
 /// The two canonical URLs.
 fn canonical() -> [String; 2] {
@@ -109,7 +109,7 @@ fn the_audit_can_see_what_it_audits() {
 
     // Shapes it MUST match.
     assert_eq!(
-        installer_urls("`curl -fsSL https://raw.githubusercontent.com/gist-rs/cargo-refine/main/install.sh | sh`"),
+        installer_urls("`curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh`"),
         vec![canonical()[0].clone()],
         "the canonical macOS/Linux line must be recognised inside backticks"
     );
@@ -183,7 +183,7 @@ fn every_install_url_is_the_canonical_one() {
 /// at riir-refine's own releases.
 ///
 /// This is the corrected owner ask recorded in Issue 061 (*"8.1 →
-/// gist-rs/cargo-refine per 003"*). `riir-ai/riir-refine` is PRIVATE, so its
+/// riir-ai/cargo-refine per 003"*). `riir-ai/riir-refine` is PRIVATE, so its
 /// release assets need authentication and cannot be curl'd at all — and if
 /// it were ever flipped public to make them work, the entire source would
 /// leak. That is the failure this pins against.
@@ -215,14 +215,14 @@ fn the_copy_never_points_at_the_private_repos_releases() {
         offenders.is_empty(),
         "the install copy points at riir-ai/riir-refine's releases, which is PRIVATE — its \
          assets need auth (so the one-liner cannot work), and flipping the repo public to fix \
-         that would leak the whole source. The surface is gist-rs/cargo-refine (Proposal 003). \
+         that would leak the whole source. The surface is riir-ai/cargo-refine (Proposal 003). \
          Offending line(s):\n  {}",
         offenders.join("\n  ")
     );
     // And the canonical base must actually name that public repo, so this
     // test cannot pass by the copy pointing somewhere else entirely.
     assert!(
-        CANONICAL_BASE.contains("gist-rs/cargo-refine"),
+        CANONICAL_BASE.contains("riir-ai/cargo-refine"),
         "{CANONICAL_BASE}"
     );
 }

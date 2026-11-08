@@ -76,7 +76,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 |---|---|---|
 | Working, measured technology | GOAT benches, `.benchmarks/08_benchmarks/` book, score-bench history | ✅ shipped |
 | Production deployment (internal) | Default dev-loop tool across the workspace's 32 repos since 2026-08 | ✅ honest, but internal |
-| Public distribution surface | `gist-rs/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket | ✅ public |
+| Public distribution surface | `riir-ai/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket | ✅ public |
 | Open data commitment | Contributed fix-pairs publish under MIT (consent screen pins it) | ✅ shipped |
 | Installer downloads / repo stars / issues | GitHub releases API + repo pages | ⬜ collect (T3) |
 | External users | — | ❌ none yet — pilot soft launch (T4) + no-submit gate (T10) |
@@ -456,7 +456,7 @@ re-verified on submission day.
 
 ### 14.5 Links + video (owner acts)
 
-- **Repository/demo/website:** `refine.riir.ai` + `github.com/gist-rs/cargo-refine` (releases) +
+- **Repository/demo/website:** `refine.riir.ai` + `github.com/riir-ai/cargo-refine` (releases) +
   the public bench tables. ⛔ **Gate:** the gen2 de-tokenized deploy MUST be live before submission
   (probe 2026-11-05: still the pre-pivot copy — see §8 T6 row and issue 190 T6).
 - **Two-minute video (strongly encouraged):** owner act. Suggested script shape: 30s the problem

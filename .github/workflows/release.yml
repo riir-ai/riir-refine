@@ -53,8 +53,8 @@ concurrency:
 
 env:
   BIN: cargo-refine
-  DIST_REPO: gist-rs/cargo-refine
-  TAP_REPO: gist-rs/homebrew-tap
+  DIST_REPO: riir-ai/cargo-refine
+  TAP_REPO: riir-ai/homebrew-tap
   BUCKET_REPO: gist-rs/scoop-bucket
 
 jobs:
@@ -89,7 +89,7 @@ jobs:
           fi
           for repo in riir-ai riir-neuron-db riir-kat riir-auth riir-llm riir-infer; do
             git clone --depth 1 \
-              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/riir-ai/${repo}.git" \
               "sibling/${repo}"
           done
           mv sibling/* ..
@@ -194,7 +194,7 @@ jobs:
           fi
           for repo in riir-ai riir-neuron-db riir-kat riir-auth riir-llm riir-infer; do
             git clone --depth 1 \
-              "https://x-access-token:${SIBLING_TOKEN}@github.com/gist-rs/${repo}.git" \
+              "https://x-access-token:${SIBLING_TOKEN}@github.com/riir-ai/${repo}.git" \
               "sibling/${repo}"
           done
           mv sibling/* ..

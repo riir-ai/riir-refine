@@ -7,8 +7,8 @@
 
 | surface | URL | stars | forks | open issues | since |
 |---|---|---|---|---|---|
-| cargo-refine (releases + installers) | github.com/gist-rs/cargo-refine | 1 | 0 | 0 | 2026-09-07 |
-| homebrew-tap | github.com/gist-rs/homebrew-tap | 0 | 0 | 0 | 2026-09-07 |
+| cargo-refine (releases + installers) | github.com/riir-ai/cargo-refine | 1 | 0 | 0 | 2026-09-07 |
+| homebrew-tap | github.com/riir-ai/homebrew-tap | 0 | 0 | 0 | 2026-09-07 |
 | scoop-bucket | github.com/gist-rs/scoop-bucket | 0 | 0 | 0 | 2026-09-07 |
 | katgpt-rs (public upstream primitives) | github.com/katopz/katgpt-rs | 140 | 27 | 0 | 2026-05-04 |
 
@@ -39,8 +39,8 @@ Every release ships 5 platform archives (aarch64/x86_64 macOS, x86_64 Windows, a
 
 ## 3. Deployment story + links
 
-- One-command install on 3 OS families: `install.sh` / `install.ps1` + verified binary self-update (`cargo refine upgrade`, SHA256SUMS-checked) — github.com/gist-rs/cargo-refine.
-- Package-manager lanes: `brew tap gist-rs/tap` (github.com/gist-rs/homebrew-tap), scoop bucket (github.com/gist-rs/scoop-bucket).
+- One-command install on 3 OS families: `install.sh` / `install.ps1` + verified binary self-update (`cargo refine upgrade`, SHA256SUMS-checked) — github.com/riir-ai/cargo-refine.
+- Package-manager lanes: `brew tap riir-ai/tap` (github.com/riir-ai/homebrew-tap), scoop bucket (github.com/gist-rs/scoop-bucket).
 - The product is **local-first and offline in its fix path**: modelless drafter + corpus, no code egress without explicit consent, no account required to run (KAT contribution plane is opt-in).
 - Honest gap: **no public consumer repos** — the workspace consumers are private, so external verification today is the install surface + counters, not consumer code in the open.
 

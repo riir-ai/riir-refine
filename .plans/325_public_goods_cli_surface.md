@@ -96,7 +96,7 @@ deciding.
    arm64 smoke = 0.4.0 / build d2fbba094c91 / charitable set / verb help):
    ```sh
    kat-secret exec gh-release-pat --env GH_TOKEN --why "release cargo-refine v0.4.0" -- \
-     gh release create v0.4.0 -R gist-rs/cargo-refine \
+     gh release create v0.4.0 -R riir-ai/cargo-refine \
      --title "cargo-refine v0.4.0 — corpus: kernel_opt 1051 (+29) · rust_perf 293 (+15) · sec 38 (+7)" \
      --notes-file /Users/kat/git/riir-refine/release/notes-v0.4.0.md \
      /tmp/manual_release_dist/*
