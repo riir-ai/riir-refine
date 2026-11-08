@@ -158,7 +158,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-ai
+          repository: riir-ai/riir-ai
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-ai
@@ -168,7 +168,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-train
+          repository: riir-ai/riir-train
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-train
@@ -178,7 +178,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-neuron-db
+          repository: riir-ai/riir-neuron-db
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-neuron-db
@@ -188,7 +188,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-chain
+          repository: riir-ai/riir-chain
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-chain
@@ -198,7 +198,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-game-sdk
+          repository: riir-ai/riir-game-sdk
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-game-sdk
@@ -208,7 +208,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-mmorpg-examples
+          repository: riir-ai/riir-mmorpg-examples
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-mmorpg-examples
@@ -218,7 +218,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-viewbridge
+          repository: riir-ai/riir-viewbridge
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-viewbridge
@@ -228,7 +228,7 @@ jobs:
         continue-on-error: true
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-dapps
+          repository: riir-ai/riir-dapps
           ref: develop
           token: ${{ secrets.SIBLING_REPOS_TOKEN }}
           path: ${{ runner.temp }}/git/riir-dapps

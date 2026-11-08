@@ -87,7 +87,7 @@ use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_CORE};
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
 /// worker's own `KAT_MIGRATE_REPO_BASE` is authoritative when it sends the
 /// URL itself).
-pub const DEFAULT_MIGRATE_REPO_BASE: &str = "https://github.com/gist-rs/riir-dao-proposal";
+pub const DEFAULT_MIGRATE_REPO_BASE: &str = "https://github.com/riir-ai/riir-dao-proposal";
 
 /// How stale the burn book may be before a filing refuses (the E-3 bar).
 /// The gate is the PENDING DELTA (unsynced rows), never raw age — a
@@ -2040,7 +2040,7 @@ mod tests {
 
     fn draft() -> ProposalDraft {
         ProposalDraft::new(
-            "https://github.com/gist-rs/riir-dao-proposal",
+            "https://github.com/riir-ai/riir-dao-proposal",
             "account-migration proposal: dd".to_owned(),
             "body".to_owned(),
             "alice",
@@ -2051,7 +2051,7 @@ mod tests {
     fn the_draft_names_its_repo_and_the_only_author() {
         assert_eq!(
             draft_repo_slug(&draft()).as_deref(),
-            Some("gist-rs/riir-dao-proposal")
+            Some("riir-ai/riir-dao-proposal")
         );
         let mut bad = draft();
         bad.new_issue_url = "https://example.com/x/issues/new?title=t".to_owned();

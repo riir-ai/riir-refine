@@ -183,7 +183,7 @@ fn every_install_url_is_the_canonical_one() {
 /// at riir-refine's own releases.
 ///
 /// This is the corrected owner ask recorded in Issue 061 (*"8.1 →
-/// gist-rs/cargo-refine per 003"*). `gist-rs/riir-refine` is PRIVATE, so its
+/// gist-rs/cargo-refine per 003"*). `riir-ai/riir-refine` is PRIVATE, so its
 /// release assets need authentication and cannot be curl'd at all — and if
 /// it were ever flipped public to make them work, the entire source would
 /// leak. That is the failure this pins against.
@@ -200,7 +200,7 @@ fn the_copy_never_points_at_the_private_repos_releases() {
             // A release-asset URL on the PRIVATE repo. The proposal is
             // allowed to DISCUSS why that does not work, so a line must
             // carry an actual URL to offend.
-            let bad = line.contains("gist-rs/riir-refine/releases")
+            let bad = line.contains("riir-ai/riir-refine/releases")
                 || line.contains("riir-refine/releases/download");
             if bad {
                 offenders.push(format!(
@@ -213,7 +213,7 @@ fn the_copy_never_points_at_the_private_repos_releases() {
     }
     assert!(
         offenders.is_empty(),
-        "the install copy points at gist-rs/riir-refine's releases, which is PRIVATE — its \
+        "the install copy points at riir-ai/riir-refine's releases, which is PRIVATE — its \
          assets need auth (so the one-liner cannot work), and flipping the repo public to fix \
          that would leak the whole source. The surface is gist-rs/cargo-refine (Proposal 003). \
          Offending line(s):\n  {}",

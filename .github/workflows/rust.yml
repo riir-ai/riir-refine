@@ -140,7 +140,7 @@ jobs:
       - name: Check out riir-reflexer (public, develop)
         uses: actions/checkout@v6
         with:
-          repository: gist-rs/riir-reflexer
+          repository: riir-ai/riir-reflexer
           ref: develop
           path: sibling/riir-reflexer
 
@@ -203,13 +203,13 @@ jobs:
         if: steps.siblings.outputs.available != 'true'
         run: |
           MSG="riir-refine cannot load its workspace without katopz/katgpt-rs \
-          (public, checked out above) and gist-rs/riir-reflexer (public, \
-          Plan 202 R4) and gist-rs/riir-ai + gist-rs/riir-neuron-db, \
-          gist-rs/riir-auth (riir-kat's transitive), gist-rs/riir-kat \
-          (issue 088), gist-rs/riir-llm (issue 124, the LLM-transport \
-          leaf), gist-rs/riir-infer (the 09-22 carve — riir-ai Issue 998; \
+          (public, checked out above) and riir-ai/riir-reflexer (public, \
+          Plan 202 R4) and riir-ai/riir-ai + riir-ai/riir-neuron-db, \
+          riir-ai/riir-auth (riir-kat's transitive), riir-ai/riir-kat \
+          (issue 088), riir-ai/riir-llm (issue 124, the LLM-transport \
+          leaf), riir-ai/riir-infer (the 09-22 carve — riir-ai Issue 998; \
           riir-ai's riir-engine/riir-gpu escape to it transitively), \
-          gist-rs/riir-ledger (Plan 325 T3 / Proposal 026 P1 — the points \
+          riir-ai/riir-ledger (Plan 325 T3 / Proposal 026 P1 — the points \
           wire; remote LIVE since 2026-11-02 — ssh ls-remote verified \
           2026-11-03, develop + main). \
           Set/renew SIBLING_REPOS_TOKEN (a fine-grained PAT expires \

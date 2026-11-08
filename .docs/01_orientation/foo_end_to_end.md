@@ -45,7 +45,7 @@ different one. It used to: Proposal 005 served both installers from
 §8.1 used the `raw.githubusercontent.com` form. Two documents, two
 one-liners, one unrunnable.
 
-**Never** point this at `gist-rs/riir-refine`'s own releases. That repo is
+**Never** point this at `riir-ai/riir-refine`'s own releases. That repo is
 PRIVATE, so its assets need authentication and cannot be curl'd — and
 flipping it public to make them work would leak the entire source. Pinned by
 the same test.

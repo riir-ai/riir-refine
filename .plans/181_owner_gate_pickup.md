@@ -4,7 +4,7 @@
 
 Refs: `../riir-ai/.issues/1016_workspace_owner_gated_decisions_summary.md` (riir-ai `e8cbd91ff`) · pair issue `.issues/138_owner_gate_pickup.md` · owner direction 2026-09-28 (4 repos deferred; no mainnet).
 
-- [x] E3: remove the `gist-rs/riir-unity` checkout step from `ops_dashboard.yml`; mirror set = contract repos; one HISTORY row (evidence `HISTORY.md:671`). **DONE 2026-09-28 (HISTORY row landed; grep-verified zero script consumers).**
+- [x] E3: remove the `riir-ai/riir-unity` checkout step from `ops_dashboard.yml`; mirror set = contract repos; one HISTORY row (evidence `HISTORY.md:671`). **DONE 2026-09-28 (HISTORY row landed; grep-verified zero script consumers).**
 - [x] E4: delete the 4 targets gated on never-defined `crowd_attention_bench` / `crowd_coherence_bench`; note in the same HISTORY row (evidence `HISTORY.md:7045`). **STALE-NO-OP 2026-09-28 — the targets/names exist in NO commit (git log -S zero hits); all 37 required-features resolve against 46 defined features today; verification recorded in the HISTORY row.**
 - [x] E5: one-line disambiguator in `.research/083_omlx_external_distill_batch71.md`; no renumber — REC leave-as-is (evidence `.research/084_dirty_encoding_write_elision_batch72.md:127`). **DONE 2026-09-28.**
 - [x] E6: ~~retire the `browser` feature~~ — **STALE + MISATTRIBUTED, no action (2026-09-28)**: no `browser` feature exists in this repo (tracked grep); the feature is riir-ai's `riir-gpu`, and riir-ai Issue 958 CLOSED it 2026-09-15 as FIX-not-retire on an explicit owner verdict ("the lane is a keeper", landing `3bd441fdc`). A retire commit would contradict that call. No code task exists.

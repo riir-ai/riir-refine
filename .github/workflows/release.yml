@@ -7,12 +7,12 @@
 # identical build + scan + packaging, no publish, no PRs.
 #
 # Secrets (both must fail LOUD when absent — the expiry-alarm rule):
-#   SIBLING_REPOS_TOKEN — fine-grained PAT cloning gist-rs/riir-ai +
-#                         gist-rs/riir-neuron-db + gist-rs/riir-kat (a
+#   SIBLING_REPOS_TOKEN — fine-grained PAT cloning riir-ai/riir-ai +
+#                         riir-ai/riir-neuron-db + riir-ai/riir-kat (a
 #                         NON-optional root dep since the 09-10 issue-088
-#                         spin-out) + gist-rs/riir-auth (riir-kat's
-#                         transitive) + gist-rs/riir-llm (issue 124,
-#                         optional but resolved) + gist-rs/riir-infer (the
+#                         spin-out) + riir-ai/riir-auth (riir-kat's
+#                         transitive) + riir-ai/riir-llm (issue 124,
+#                         optional but resolved) + riir-ai/riir-infer (the
 #                         09-22 carve, riir-ai Issue 998 — riir-ai's
 #                         riir-engine/riir-gpu escape to it transitively;
 #                         cargo reads path-dep manifests even behind

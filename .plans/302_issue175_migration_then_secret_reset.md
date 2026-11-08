@@ -80,7 +80,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 ## Tasks
 
 - [x] **T1-pre — the live venue (2026-10-27):** proposal repo = PUBLIC
-      `gist-rs/riir-dao-proposal` (riir-dao is private; owner-created);
+      `riir-ai/riir-dao-proposal` (riir-dao is private; owner-created);
       `KAT_MIGRATE_ISSUES_TOKEN` set on the APEX by the owner. riir-dapps
       `db9e6dc` (repo-base var apex+devnet; label-free find-or-create — a
       silently dropped label would have duplicated issues per retry; reader
@@ -112,7 +112,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       `71615e8d` = the 2023 key `id_ed25519.retired-20261026` (M3
       `~/deprecated` + 4090) · `d54e39a8` = M3 now · `4f4623f3` = the 4090's
       new key (2026-10-26). **Filing #1** `c79c93b8 → d54e39a8` = request
-      `e518f563…`, proposal issue gist-rs/riir-dao-proposal#1 (created by the
+      `e518f563…`, proposal issue riir-ai/riir-dao-proposal#1 (created by the
       worker; author = katopz → the issues token is the OWNER's PAT, so GitHub
       sends no self-mention notification — ~~mint a BOT token before mainnet~~ SUPERSEDED 2026-10-28 by Issue 187: the filer authors the issue, the worker holds NO write token; mainnet promotion waits on 187 T5),
       owner 👍 (id 97060) at 14:15 UTC, window 15:14 UTC, the 16:00 cron tick
