@@ -1,6 +1,6 @@
 # Research 384 — Optimal Re-Ranking Depth (arXiv 2611.05908)
 
-**Status:** DISTILLED — **Gain** verdict, plan filed ([Plan 351](../.plans/351_adaptive_rerank_pool_depth.md)); Claude verdict **AGREE** round 2/3 (delegated-owner reviewer path, session `37108d48`, fallback channel per the Issue-1115-arc precedent); landed as `58b8c356`
+**Status:** DISTILLED — **Gain** verdict, plan filed ([Plan 351](../.plans/351_adaptive_rerank_pool_depth.md)); Claude verdict **AGREE** round 2/3 (delegated-owner reviewer path, session `37108d48`, fallback channel per the Issue-1115-arc precedent); landed as `58b8c356`. **UPDATE 2026-11-08: Plan 351 CLOSED-NEGATIVE at Phase 0 — the kill-gate tripped on real measurement (PoC Addendum below); the paper's premise does not transfer to the instantiation-rerank selection pool.**
 
 ## Source
 
@@ -46,3 +46,53 @@
 - **Ungoat discipline:** the proof path ships IN the plan — fixture (composite eval spans + headroom probe depths), falsification arm (QPP-family baselines must fail; instantiation-DCG must separate, else recorded negative + no wiring), pre-registered gate (top-1 parity at mean depth ≤ 12 = 37/3, paired non-inferiority; seat pick-parity at ≤ 1/3 mean submitted pool). No proof → demote in the same commit.
 - **Latent/raw note:** `inst_dcg` and predicted depths are local decision scalars — latent-family, never synced; calibration tables are deterministic percentile arithmetic (no RNG; identical re-runs). Stationary-surface discipline: the predictor is a LEVEL readout (per-campaign quality), not a dynamics signal; the calibration table is the mutated state, refreshed per calibration epoch like the ESC posture pins.
 - **Named weak point (pre-verdict):** fixture-population size. The paper calibrated on 1000 queries; our discriminating composite set is small (the single-lint 48 are rank-degenerate by construction — the module's own circularity lesson), and the Bench-119 read saw 296/1494 drifted rows. Phase 0 therefore MEASURES the depth distribution on real-file spans (fix_verify lane, blake3-pinned rows only) BEFORE any wiring, with an explicit kill-gate: if `d*(span)` barely varies (≥80% of spans within the top quartile of depths), the premise dies on real data and the plan closes negative without touching production depth. Phase 0 exists to keep a small-fixture overfit from shipping.
+
+## PoC Addendum — Plan 351 Phase 0 (2026-11-08): CLOSED-NEGATIVE
+
+**The census ran; the kill-gate tripped; the adaptive mechanism is dead. Nothing wired.**
+
+Instrument (landed in `src/draft/headroom_probe.rs`, `Plan 351 T0.1` section): per-span oracle-depth
+census over `HEADROOM_DEPTHS = [8,12,16,20,24,28,32,33,37,40]` at the shipped rerank posture —
+`d*(span)` = shallowest depth whose top-1 is an oracle pick (the paper's max-μ rule); unreachable
+spans (oracle never top-1 at ANY depth) counted separately, never binned. Populations: the 180
+labeled fixture spans (clippy/perf/kernel/docker/dist/shader, exact-label correctness) + the 28
+composite spans labeled by real `cargo clippy` (`lints_for_batch`, ONE run — 1 uncompilable
+excluded; correctness = top-1 ∈ the fired set). Kill-gates pre-registered in the plan: (a) ≥ 80%
+of reachable spans at `d* ≥ 0.75·RERANK_POOL = 27.75`; (b) IQR within one grid step (4).
+
+**Measured (release, shikuwa-4090-b351):**
+
+| population | scored | reachable | unreachable | histogram (reachable) | IQR | gate (a) | gate (b) |
+|---|---|---|---|---|---|---|---|
+| labeled fixtures | 180 | 162 | 18 | d8:162, all other rungs 0 | 0.0 | 0.0% full-depth (holds) | **TRIPS** |
+| composite (real-clippy oracle) | 27 | 25 | 2 | d8:25, all other rungs 0 | 0.0 | 0.0% (holds) | **TRIPS** |
+| UNION (primary gate read) | 207 | 187 (90.3%) | 20 | d8:187, all other rungs 0 | 0.0 | 0.0% (holds) | **TRIPS** |
+
+Median = q1 = q3 = p10 = p90 = 8.0 in every population.
+
+**Read (why the premise dies):** the depth knob does not move top-1 correctness AT ALL on this
+population. Every span whose oracle pick ever reaches top-1 does so already at depth 8 (the grid
+floor); the 20 unreachable spans are depth-invariant — the instantiation rerank cannot lift the
+oracle from ANY pool composition 8..40. There is no per-span depth structure for a predictor to
+calibrate against; `d*` is a constant, so the honest outcome per the plan's pinned gate-(b)
+language is "a constant repin (or keep), recorded negative for the adaptive mechanism" — and the
+mechanism (predictor + percentile calibration + seat-pool cap, Phases 1–4) never gets built.
+
+**No contradiction with the re-pin history:** `RERANK_POOL` 12→16→20→24→28→33→37 were pool-RECALL
+insurance — corpus growth crowded the oracle OUT of the shallow pool entirely, and a rule not in
+the pool can never be picked. That is a membership effect, not a ranking one. This census adds the
+other half: WHEN the oracle is in the pool, deeper is never better — the rerank's winner is
+pool-composition-invariant across 8..40 on all 207 spans. Deeper pools buy recall insurance, never
+top-1 recovery.
+
+**Not decided here (observation, no task):** a 37→8 repin. The census measures top-1, not pool
+recall; depth 8's pool recall is strictly lower than 37's by the probe's own `in_pool` data, and
+the re-pin history exists precisely because recall losses were observed in production shapes. Any
+repin needs its own pool-recall gate against the recoverable band.
+
+**What survives:** the census instrument (`depth_census_with_spans` / `depth_census_with_matcher` /
+`oracle_depth_census` / `print_oracle_depth_census` + the pure stats suite) stays in the tree —
+it is the cheap decisive census any future depth-side proposal runs FIRST (the plan's T0 shape is
+the reusable part, not the adaptive mechanism). The seat-pool submission cap (plan §Phase 3) dies
+with the calibration it depended on. The QPP-falsification arm (T1.2) is moot — Phase 0's kill
+precedes it. Commit: the CLOSE-NEGATIVE landing on develop (see `git log -- plan 351`).

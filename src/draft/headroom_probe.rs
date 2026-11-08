@@ -43,10 +43,12 @@
 //!   -p riir-refine --lib draft::headroom_probe -- --nocapture
 //! ```
 
+use std::collections::BTreeSet;
+
 use super::domain_router::DomainId;
 use super::instantiation_rerank::RERANK_POOL;
 use super::latent_matcher::LatentMatcher;
-use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, OwnedEvalSpan};
+use super::retrieval_eval::{OwnedEvalSpan, canonical_rank, domain_index, labeled_eval_spans};
 
 /// Candidate-pool depths probed, ascending. `RERANK_POOL` (the production
 /// depth) must be one of them — it is the recall@1 reference point.
@@ -635,6 +637,541 @@ pub fn print_headroom_decomposition(d: &HeadroomDecomposition) {
     );
 }
 
+// ── Plan 351 T0.1: per-span oracle-depth census ──────────────────────
+//
+// The adaptive-pool-depth premise (`.plans/351_adaptive_rerank_pool_depth.md`)
+// is a MEASUREMENT before it is a mechanism: is the oracle pick already at
+// top-1 at a shallow pool depth for most spans (adaptivity has room), or does
+// every span need the full `RERANK_POOL` (the paper's premise does not
+// transfer)? The census reads d* per span off the SAME per-depth machinery the
+// headroom probe uses (`ranked_ids_at` over [`HEADROOM_DEPTHS`]) — read-only
+// reuse, no new ranking surface. Kill-gates (pinned by the plan, evaluated in
+// [`print_oracle_depth_census`]): (a) ≥ 80% of reachable spans at
+// d* ≥ 0.75·RERANK_POOL → everything needs full depth, premise dead;
+// (b) IQR within one grid step → d* effectively constant, the honest outcome
+// is a constant repin (or keep), not adaptivity.
+
+/// The dominant [`HEADROOM_DEPTHS`] spacing — kill-gate (b)'s "one grid step".
+/// 32→33 and 37→40 are pin-history rungs (Batch 184 / P51a), not design
+/// steps: the array was built by appending each production re-pin plus one
+/// deeper rung, so only the interior spacing carries the design step.
+pub const DEPTH_GRID_STEP: usize = 4;
+
+/// Kill-gate (a) trip bar (Plan 351 T0.1, pre-registered): at least this
+/// FRACTION of reachable spans with `d* ≥ 0.75·RERANK_POOL` reads as
+/// "everything needs full depth" — the adaptive premise does not transfer.
+pub const DEPTH_CENSUS_GATE_A_TRIP: f64 = 0.80;
+
+/// Kill-gate (a)'s "full depth" threshold: `0.75 · RERANK_POOL` = 27.75, so
+/// on the grid the qualifying depths are 28, 32, 37, 40.
+#[allow(clippy::cast_precision_loss)]
+pub const DEPTH_CENSUS_GATE_A_DEPTH: f64 = 0.75 * RERANK_POOL as f64;
+
+/// One oracle-labeled census span (Plan 351 T0.1).
+///
+/// `oracle_picks` unifies the two label regimes the census measures: the
+/// fixture spans carry their single primary label (`{label}` — `acceptable`
+/// alternates are NOT credited, the shipped probe's exact-correctness
+/// semantics; the field is empty everywhere today), the composite spans carry
+/// real clippy's fired set (multi-label by design). An empty set means the
+/// span has NO oracle pick — counted separately, never a d\* = ∞ row.
+pub struct CensusSpan<'a> {
+    /// Span handle — the fixture label or the composite tag.
+    pub label: &'a str,
+    pub domain: DomainId,
+    pub code: &'a str,
+    /// Rule ids that count as a CORRECT top-1 answer for this span.
+    pub oracle_picks: &'a BTreeSet<String>,
+}
+
+/// Per-span per-depth census row (Plan 351 T0.1).
+#[derive(Debug, Clone)]
+pub struct SpanDepthRow {
+    /// Span handle — the fixture label or the composite tag.
+    pub label: String,
+    pub domain: DomainId,
+    /// Was the [`HEADROOM_DEPTHS`]`[i]` top-1 an oracle pick?
+    pub top1_oracle_at: [bool; HEADROOM_DEPTHS.len()],
+}
+
+impl SpanDepthRow {
+    /// d\*(span): the shallowest probed depth whose top-1 is an oracle pick
+    /// (the paper's max-μ rule, pinned by Plan 351 T0.1). `None` = the oracle
+    /// pick never reaches top-1 at ANY probed depth — unreachable, excluded
+    /// from the percentile bins (never a d\* = ∞ row).
+    #[must_use]
+    pub fn d_star(&self) -> Option<usize> {
+        self.top1_oracle_at
+            .iter()
+            .position(|&hit| hit)
+            .map(|i| HEADROOM_DEPTHS[i])
+    }
+}
+
+/// Plan 351 T0.1 census output over one span population.
+#[derive(Debug, Default)]
+pub struct DepthCensus {
+    /// Spans skipped because their domain's index is feature-off.
+    pub skipped: usize,
+    /// Spans excluded up front: the oracle set was EMPTY (nothing can be a
+    /// correct top-1). "No oracle pick exists" ≠ "the pick never surfaces" —
+    /// the two exclusions are never folded together.
+    pub excluded_no_oracle: usize,
+    /// Every scored span, in input order. Unreachable spans (no depth's
+    /// top-1 is an oracle pick) stay here with `d_star() == None`.
+    pub rows: Vec<SpanDepthRow>,
+}
+
+impl DepthCensus {
+    /// Reachable spans (a d\* exists).
+    #[must_use]
+    pub fn reachable_count(&self) -> usize {
+        self.rows.iter().filter(|r| r.d_star().is_some()).count()
+    }
+
+    /// Unreachable labels — the oracle pick never reached top-1 at any
+    /// probed depth. These are the probe's selection-miss class seen from
+    /// the depth axis: even the deepest pool cannot surface the oracle.
+    #[must_use]
+    pub fn unreachable_labels(&self) -> Vec<&str> {
+        self.rows
+            .iter()
+            .filter(|r| r.d_star().is_none())
+            .map(|r| r.label.as_str())
+            .collect()
+    }
+
+    /// Reachable d\* values, ascending.
+    #[must_use]
+    pub fn d_stars_sorted(&self) -> Vec<usize> {
+        let mut v: Vec<usize> = self.rows.iter().filter_map(SpanDepthRow::d_star).collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// Per-grid-index histogram over REACHABLE spans (unreachable excluded,
+    /// per the pinned d\* definition).
+    #[must_use]
+    pub fn histogram(&self) -> [usize; HEADROOM_DEPTHS.len()] {
+        let mut h = [0usize; HEADROOM_DEPTHS.len()];
+        for i in self.rows.iter().filter_map(SpanDepthRow::d_star) {
+            if let Some(slot) = HEADROOM_DEPTHS.iter().position(|&d| d == i) {
+                h[slot] += 1;
+            }
+        }
+        h
+    }
+
+    /// Linear-interpolation percentile over the reachable d\*s — the
+    /// `(n−1)·q` between-closest-ranks method (numpy's `linear`). Never the
+    /// `sorted[n·q]` spelling, which lands on the MAX for every
+    /// `n ≤ 1/(1−q)` (the percentile-index trap) and would read a p90 of 40
+    /// off a histogram whose true tail sits at 28.
+    #[must_use]
+    pub fn d_percentile(&self, q: f64) -> Option<f64> {
+        percentile_sorted(&self.d_stars_sorted(), q)
+    }
+
+    /// IQR of the reachable d\*s (`q75 − q25`); `None` when no span is
+    /// reachable (statistics undefined — never silently 0).
+    #[must_use]
+    pub fn d_iqr(&self) -> Option<f64> {
+        Some(self.d_percentile(0.75)? - self.d_percentile(0.25)?)
+    }
+
+    /// Kill-gate (a): share of REACHABLE spans needing (nearly) full depth.
+    /// `None` when no span is reachable.
+    #[allow(clippy::cast_precision_loss)]
+    #[must_use]
+    pub fn gate_a_full_depth_share(&self) -> Option<f64> {
+        let reachable = self.reachable_count();
+        if reachable == 0 {
+            return None;
+        }
+        let full = self
+            .rows
+            .iter()
+            .filter(|r| {
+                r.d_star()
+                    .is_some_and(|d| d as f64 >= DEPTH_CENSUS_GATE_A_DEPTH)
+            })
+            .count();
+        Some(full as f64 / reachable as f64)
+    }
+
+    /// Kill-gate (b): `Some(true)` = d\* effectively constant (IQR within one
+    /// grid step) — adaptivity has nothing to offer. `None` when undefined.
+    #[allow(clippy::cast_precision_loss)]
+    #[must_use]
+    pub fn gate_b_constant(&self) -> Option<bool> {
+        self.d_iqr().map(|iqr| iqr <= DEPTH_GRID_STEP as f64)
+    }
+
+    /// Merge two census populations (fixture + composite). The label space
+    /// is a HANDLE space, not an identity space — the same lint name can
+    /// label several fixture spans (measured: `labeled_eval_spans` carries 8
+    /// duplicate labels across its 180 rows), and a composite tag is "a human
+    /// handle for the report, not a label" (the fixture set's own doc law).
+    /// The census unit is the SPAN, so merging is row concatenation + counter
+    /// sums — no label-uniqueness assertion exists to violate.
+    #[must_use]
+    pub fn merged(a: &Self, b: &Self) -> Self {
+        Self {
+            skipped: a.skipped + b.skipped,
+            excluded_no_oracle: a.excluded_no_oracle + b.excluded_no_oracle,
+            rows: a
+                .rows
+                .iter()
+                .cloned()
+                .chain(b.rows.iter().cloned())
+                .collect(),
+        }
+    }
+}
+
+/// Linear-interpolation percentile over ASCENDING integer values — the
+/// `(n−1)·q` between-closest-ranks method. `None` on empty input.
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+#[must_use]
+fn percentile_sorted(sorted: &[usize], q: f64) -> Option<f64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    debug_assert!((0.0..=1.0).contains(&q), "q must be a probability");
+    let h = (sorted.len() as f64 - 1.0) * q;
+    let lo = h.floor() as usize;
+    let hi = h.ceil() as usize;
+    if lo == hi {
+        return Some(sorted[lo] as f64);
+    }
+    let frac = h - lo as f64;
+    Some(sorted[lo] as f64 * (1.0 - frac) + sorted[hi] as f64 * frac)
+}
+
+/// Per-depth top-1 oracle hits for ONE span — the census's inner probe. One
+/// query per depth: the pool IS the re-rank input, so depth is a
+/// configuration, not a slice of one deep list (the probe's own law).
+fn census_span_depths(
+    matcher: &mut LatentMatcher,
+    code: &str,
+    domain: DomainId,
+    oracle_picks: &BTreeSet<String>,
+) -> [bool; HEADROOM_DEPTHS.len()] {
+    let mut hits = [false; HEADROOM_DEPTHS.len()];
+    for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
+        let ids = ranked_ids_at(matcher, code, domain, k);
+        hits[i] = ids
+            .first()
+            .is_some_and(|id| oracle_picks.contains(id.as_str()));
+    }
+    hits
+}
+
+/// The Plan 351 T0.1 census over an explicit oracle-labeled span population.
+///
+/// This is the instrument; assembling the population is the caller's job (the
+/// fixture set + composite spans at [`oracle_depth_census`], `fix_verify`
+/// real-file rows at T0.2 — the same seam). Spans whose domain index is
+/// feature-off are SKIPPED (counted, never scored); spans with an empty
+/// oracle set are excluded up front (counted, never scored).
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains`] fails.
+#[must_use]
+pub fn depth_census_with_spans(
+    rerank: super::instantiation_rerank::RerankMode,
+    spans: &[CensusSpan<'_>],
+) -> DepthCensus {
+    let mut matcher = LatentMatcher::from_enabled_domains()
+        .expect("build matcher")
+        .with_rerank_mode(rerank);
+    depth_census_with_matcher(&mut matcher, spans)
+}
+
+/// [`depth_census_with_spans`] over a caller-built matcher — one index build
+/// serves several populations (the index embeds the whole rule corpus; the
+/// assembly at [`oracle_depth_census`] runs the fixture + composite
+/// populations through ONE build).
+///
+/// # Panics
+///
+/// Panics if the matcher carries no enabled domain.
+#[must_use]
+pub fn depth_census_with_matcher(
+    matcher: &mut LatentMatcher,
+    spans: &[CensusSpan<'_>],
+) -> DepthCensus {
+    let mut census = DepthCensus::default();
+    for span in spans {
+        if !matcher.has_domain(span.domain) {
+            census.skipped += 1;
+            continue;
+        }
+        if span.oracle_picks.is_empty() {
+            census.excluded_no_oracle += 1;
+            continue;
+        }
+        let top1_oracle_at = census_span_depths(matcher, span.code, span.domain, span.oracle_picks);
+        census.rows.push(SpanDepthRow {
+            label: span.label.to_string(),
+            domain: span.domain,
+            top1_oracle_at,
+        });
+    }
+    census
+}
+
+/// Plan 351 T0.1's assembled census: the labeled fixture set + the composite
+/// set labeled by the real-clippy oracle, both at the shipped re-rank posture,
+/// through ONE matcher index build. `clippy_verify`-gated (the oracle lane);
+/// the pure instruments ([`depth_census_with_spans`]) are not.
+///
+/// The composite spans are labeled by [`ClippyOracle::lints_for_batch`] (ONE
+/// clippy run over all spans — the batch/single never mix, per the oracle's
+/// own cross-module caveat). A span real clippy cannot type-check, or whose
+/// verdict did not run, is EXCLUDED and counted — unmeasurable is not a
+/// census row.
+#[cfg(feature = "clippy_verify")]
+#[derive(Debug, Default)]
+pub struct OracleDepthCensusReport {
+    /// Did the composite oracle run at all (cargo reachable)? `false` → the
+    /// composite arm is EMPTY and `composite_oracle`-related counters are 0.
+    pub oracle_ran: bool,
+    /// Composite spans whose verdict did not run (cargo/I/O failure).
+    pub oracle_unavailable: usize,
+    /// Composite spans real clippy cannot type-check (no usable labels).
+    pub uncompilable: usize,
+    /// The labeled fixture population.
+    pub labeled: DepthCensus,
+    /// The composite population (real-clippy oracle labels).
+    pub composite: DepthCensus,
+}
+
+/// The full Plan 351 T0.1 census assembly — see [`OracleDepthCensusReport`].
+///
+/// # Panics
+///
+/// Panics if [`LatentMatcher::from_enabled_domains`] fails.
+#[cfg(feature = "clippy_verify")]
+#[must_use]
+pub fn oracle_depth_census() -> OracleDepthCensusReport {
+    use super::clippy_oracle::ClippyOracle;
+    use super::instantiation_rerank::RerankMode;
+
+    // Fixture population: single primary label per span (exact-correctness,
+    // the probe's semantics — `acceptable` alternates not credited).
+    let labeled_spans = labeled_eval_spans();
+    let labeled_picks: Vec<BTreeSet<String>> = labeled_spans
+        .iter()
+        .map(|s| BTreeSet::from([s.label.clone()]))
+        .collect();
+    let labeled_census_spans: Vec<CensusSpan<'_>> = labeled_spans
+        .iter()
+        .zip(&labeled_picks)
+        .map(|(s, picks)| CensusSpan {
+            label: &s.label,
+            domain: s.domain,
+            code: &s.code,
+            oracle_picks: picks,
+        })
+        .collect();
+
+    let mut matcher = LatentMatcher::from_enabled_domains()
+        .expect("build matcher")
+        .with_rerank_mode(RerankMode::default());
+    let labeled = depth_census_with_matcher(&mut matcher, &labeled_census_spans);
+
+    let mut report = OracleDepthCensusReport {
+        oracle_ran: false,
+        oracle_unavailable: 0,
+        uncompilable: 0,
+        labeled,
+        composite: DepthCensus::default(),
+    };
+
+    let oracle = ClippyOracle::new();
+    if !oracle.is_available() {
+        // Composite arm empty; the fixture arm above is still measured.
+        return report;
+    }
+    report.oracle_ran = true;
+
+    let codes: Vec<&str> = super::eval_fixtures_composite::COMPOSITE_SPANS
+        .iter()
+        .map(|(_, code)| *code)
+        .collect();
+    let verdicts = oracle.lints_for_batch(&codes);
+    let mut picks: Vec<BTreeSet<String>> = Vec::with_capacity(verdicts.len());
+    let mut tags: Vec<&str> = Vec::with_capacity(verdicts.len());
+    let mut kept_codes: Vec<&str> = Vec::with_capacity(verdicts.len());
+    for ((tag, code), verdict) in super::eval_fixtures_composite::COMPOSITE_SPANS
+        .iter()
+        .zip(&verdicts)
+    {
+        if !verdict.ran {
+            report.oracle_unavailable += 1;
+            continue;
+        }
+        if !verdict.compiles {
+            report.uncompilable += 1;
+            continue;
+        }
+        picks.push(verdict.lints.clone());
+        tags.push(tag);
+        kept_codes.push(code);
+    }
+    let composite_census_spans: Vec<CensusSpan<'_>> = tags
+        .iter()
+        .enumerate()
+        .map(|(i, tag)| CensusSpan {
+            label: tag,
+            domain: DomainId::Clippy,
+            code: kept_codes[i],
+            oracle_picks: &picks[i],
+        })
+        .collect();
+    report.composite = depth_census_with_matcher(&mut matcher, &composite_census_spans);
+    report
+}
+
+/// Which Phase-0 kill-gates tripped, read over the UNION population (the
+/// plan's primary read; per-population rows are the disclosure).
+#[cfg(feature = "clippy_verify")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DepthCensusGates {
+    /// Gate (a) — everything needs full depth (≥ 80% at d\* ≥ 0.75·pool).
+    pub a_full_depth: bool,
+    /// Gate (b) — d\* effectively constant (IQR ≤ one grid step).
+    pub b_constant: bool,
+}
+
+#[cfg(feature = "clippy_verify")]
+impl DepthCensusGates {
+    /// Read the gates off the assembled census.
+    #[must_use]
+    pub fn of(report: &OracleDepthCensusReport) -> Self {
+        let union = DepthCensus::merged(&report.labeled, &report.composite);
+        Self {
+            a_full_depth: union
+                .gate_a_full_depth_share()
+                .is_some_and(|share| share >= DEPTH_CENSUS_GATE_A_TRIP),
+            b_constant: union.gate_b_constant().unwrap_or(false),
+        }
+    }
+
+    /// Either kill-gate tripped → the adaptive premise is dead (Phase 0
+    /// records the negative and stops).
+    #[must_use]
+    pub fn killed(&self) -> bool {
+        self.a_full_depth || self.b_constant
+    }
+}
+
+/// The `--nocapture` census report: per-population depth statistics + the
+/// pre-registered Phase-0 kill-gate verdicts.
+#[cfg(feature = "clippy_verify")]
+pub fn print_oracle_depth_census(report: &OracleDepthCensusReport) {
+    println!(
+        "== Plan 351 T0.1 — oracle-depth census (shipped posture, grid {HEADROOM_DEPTHS:?}) =="
+    );
+    print_depth_census_population("labeled fixture spans", &report.labeled);
+    if report.oracle_ran {
+        println!(
+            "  composite oracle: ran | verdict-unavailable {} | uncompilable {}",
+            report.oracle_unavailable, report.uncompilable
+        );
+        print_depth_census_population("composite spans (real-clippy oracle)", &report.composite);
+    } else {
+        println!("  composite oracle: UNAVAILABLE — composite arm empty (deferral, not a zero)");
+    }
+    let union = DepthCensus::merged(&report.labeled, &report.composite);
+    print_depth_census_population("UNION (primary gate read)", &union);
+    let gates = DepthCensusGates::of(report);
+    println!(
+        "  PHASE 0 KILL-GATES: (a) full-depth share trip ≥ {:.0} → {} | (b) IQR ≤ {DEPTH_GRID_STEP} → {} | verdict: {}",
+        DEPTH_CENSUS_GATE_A_TRIP * 100.0,
+        if gates.a_full_depth { "TRIPS" } else { "holds" },
+        if gates.b_constant { "TRIPS" } else { "holds" },
+        if gates.killed() {
+            "KILL — record the negative, CLOSE-NEGATIVE, stop"
+        } else {
+            "PROCEED — premise alive, T0.2 next"
+        }
+    );
+}
+
+/// One population's census table + its own gate read (disclosure, never the
+/// verdict — [`print_oracle_depth_census`] reads the gates on the union).
+#[cfg(feature = "clippy_verify")]
+fn print_depth_census_population(tag: &str, c: &DepthCensus) {
+    let scored = c.rows.len();
+    let reachable = c.reachable_count();
+    let unreachable = scored - reachable;
+    println!("\n  -- {tag} --");
+    println!(
+        "     scored {scored} | skipped {} | no-oracle excluded {} | reachable {reachable} | unreachable {unreachable}",
+        c.skipped, c.excluded_no_oracle,
+    );
+    let hist = c.histogram();
+    let cells: Vec<String> = HEADROOM_DEPTHS
+        .iter()
+        .zip(hist)
+        .map(|(&d, n)| format!("d{d}:{n}"))
+        .collect();
+    println!("     histogram (reachable): {}", cells.join(" "));
+    let (q10, q25, med, q75, q90) = (
+        c.d_percentile(0.10),
+        c.d_percentile(0.25),
+        c.d_percentile(0.50),
+        c.d_percentile(0.75),
+        c.d_percentile(0.90),
+    );
+    if let (Some(med), Some(iqr)) = (med, c.d_iqr()) {
+        println!(
+            "     median {med:.1} | q1 {:.1} | q3 {:.1} | IQR {iqr:.1} | p10 {:.1} | p90 {:.1}  (grid-honest: d* lives on the 10-point grid)",
+            q25.unwrap_or(0.0),
+            q75.unwrap_or(0.0),
+            q10.unwrap_or(0.0),
+            q90.unwrap_or(0.0),
+        );
+    } else {
+        println!("     statistics undefined — no reachable span");
+    }
+    match (c.gate_a_full_depth_share(), c.gate_b_constant()) {
+        (Some(share), Some(b)) => {
+            println!(
+                "     gates (population read): (a) d* ≥ {:.2} → {:.1}% (trip ≥ {:.0}%) {} | (b) {}",
+                DEPTH_CENSUS_GATE_A_DEPTH,
+                share * 100.0,
+                DEPTH_CENSUS_GATE_A_TRIP * 100.0,
+                if share >= DEPTH_CENSUS_GATE_A_TRIP {
+                    "TRIPS"
+                } else {
+                    "holds"
+                },
+                if b {
+                    "TRIPS (IQR within one grid step — constant)"
+                } else {
+                    "holds (IQR above one grid step)"
+                },
+            );
+        }
+        _ => println!("     gates: undefined — no reachable span"),
+    }
+    let misses = c.unreachable_labels();
+    if !misses.is_empty() {
+        println!(
+            "     unreachable (first 12): {}",
+            misses[..misses.len().min(12)].join(", ")
+        );
+    }
+}
+
 // Issue 090: these tests need clippy_lints AND rust_perf — the fixture
 // set is clippy+perf labeled spans and the probe scores per-domain rows in
 // the clippy/perf calibration order. A latent-only build (the matcher
@@ -887,6 +1424,253 @@ mod tests {
                 + decomp.unfixable.len()
                 + decomp.selector_addressable.len(),
             "every shipped selection miss must be attributed to exactly one cause"
+        );
+    }
+
+    /// Plan 351 T0.1: the oracle-depth census (report-only; the kill-gate
+    /// verdict is read off the printout and pinned in the plan's status
+    /// block — the assertions here are internal consistency, not gates).
+    /// Posture: `latent_retrieval,clippy_verify,rust_perf` (clippy_verify
+    /// implies clippy_lints). Skips loud when cargo is unavailable.
+    #[cfg(feature = "clippy_verify")]
+    #[test]
+    fn t0_oracle_depth_census_report() {
+        let report = oracle_depth_census();
+        print_oracle_depth_census(&report);
+
+        // Internal consistency — the fixture arm must score exactly the
+        // fixture set (skipped = domain feature-off, never silently dropped).
+        assert_eq!(
+            report.labeled.rows.len() + report.labeled.skipped,
+            labeled_eval_spans().len(),
+            "fixture census must cover exactly the fixture set"
+        );
+        if report.oracle_ran {
+            assert_eq!(
+                report.composite.rows.len() + report.oracle_unavailable + report.uncompilable,
+                crate::draft::eval_fixtures_composite::COMPOSITE_SPANS.len(),
+                "composite census must account for every composite span"
+            );
+        } else {
+            println!("  (composite arm skipped — cargo unavailable; deferral, not a zero)");
+        }
+    }
+}
+
+/// Plan 351 T0.1's statistics on synthetic rows — no matcher, no oracle, so
+/// these run at every latent_retrieval test posture and pin the ARITHMETIC
+/// (d* selection, the (n−1)·q percentile method, both kill-gates) before any
+/// measurement runs.
+#[cfg(test)]
+mod depth_census_stats {
+    use super::*;
+
+    fn row(label: &str, hits: &[bool]) -> SpanDepthRow {
+        let mut top1_oracle_at = [false; HEADROOM_DEPTHS.len()];
+        for (i, &hit) in hits.iter().enumerate() {
+            top1_oracle_at[i] = hit;
+        }
+        SpanDepthRow {
+            label: label.to_string(),
+            domain: DomainId::Clippy,
+            top1_oracle_at,
+        }
+    }
+
+    fn census_of(rows: Vec<SpanDepthRow>) -> DepthCensus {
+        DepthCensus {
+            skipped: 0,
+            excluded_no_oracle: 0,
+            rows,
+        }
+    }
+
+    #[test]
+    fn d_star_is_the_shallowest_oracle_depth() {
+        // hits at grid idx 1 (12) and idx 5 (24) → d* = 12.
+        let r = row(
+            "a",
+            &[
+                false, true, false, false, true, false, false, false, false, false,
+            ],
+        );
+        assert_eq!(r.d_star(), Some(12));
+
+        // hits only at the deepest rung → d* = 40.
+        let r = row(
+            "b",
+            &[
+                false, false, false, false, false, false, false, false, false, true,
+            ],
+        );
+        assert_eq!(r.d_star(), Some(40));
+
+        // no depth surfaces the oracle → unreachable (None, never ∞).
+        let r = row("c", &[false; HEADROOM_DEPTHS.len()]);
+        assert_eq!(r.d_star(), None);
+    }
+
+    #[test]
+    fn percentile_is_linear_interpolation_between_closest_ranks() {
+        let sorted = [8usize, 12, 16, 37];
+        assert_eq!(percentile_sorted(&sorted, 0.25), Some(11.0)); // h=0.75
+        assert_eq!(percentile_sorted(&sorted, 0.50), Some(14.0)); // h=1.5
+        assert_eq!(percentile_sorted(&sorted, 0.75), Some(21.25)); // h=2.25
+        assert_eq!(percentile_sorted(&sorted, 0.0), Some(8.0));
+        assert_eq!(percentile_sorted(&sorted, 1.0), Some(37.0));
+        // The percentile-index trap: p90 on n=2 must interpolate, not clamp
+        // to the max (sorted[n·q] would read 40 at q=0.9, n=2).
+        let two = [8usize, 40];
+        let p90 = percentile_sorted(&two, 0.9).expect("non-empty");
+        assert!((p90 - 36.8).abs() < 1e-9, "p90 must interpolate: {p90}");
+        assert_eq!(percentile_sorted(&[], 0.5), None);
+        let single = [12usize];
+        assert_eq!(percentile_sorted(&single, 0.95), Some(12.0));
+    }
+
+    #[test]
+    fn census_stats_and_gates_on_a_synthetic_population() {
+        // d*s: 8, 12, 16, 37 → reachable 4, histogram d8:1 d12:1 d16:1 d37:1.
+        let c = census_of(vec![
+            row(
+                "a",
+                &[
+                    true, false, false, false, false, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "b",
+                &[
+                    false, true, false, false, false, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "c",
+                &[
+                    false, false, true, false, false, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "d",
+                &[
+                    false, false, false, false, false, false, false, false, true, false,
+                ],
+            ),
+            row("u", &[false; HEADROOM_DEPTHS.len()]), // unreachable
+        ]);
+        assert_eq!(c.reachable_count(), 4);
+        assert_eq!(c.unreachable_labels(), ["u"]);
+        let hist = c.histogram();
+        assert_eq!(hist, [1, 1, 1, 0, 0, 0, 0, 0, 1, 0]);
+        assert_eq!(c.d_percentile(0.5), Some(14.0));
+        assert_eq!(c.d_iqr(), Some(10.25));
+        // Gate (a): only d*=37 clears 27.75 → 1/4 = 0.25 < 0.80 → holds.
+        assert_eq!(c.gate_a_full_depth_share(), Some(0.25));
+        // Gate (b): IQR 10.25 > one grid step (4) → holds (not constant).
+        assert_eq!(c.gate_b_constant(), Some(false));
+    }
+
+    #[test]
+    fn gate_boundaries_are_pinned() {
+        // Gate (a) boundary: d*=28 clears 27.75; d*=24 does not.
+        let at28 = census_of(vec![
+            row(
+                "a",
+                &[
+                    false, false, false, false, false, true, false, false, false, false,
+                ],
+            ),
+            row(
+                "b",
+                &[
+                    false, false, false, false, false, false, true, false, false, false,
+                ],
+            ),
+        ]);
+        assert_eq!(at28.gate_a_full_depth_share(), Some(1.0)); // both ≥ 27.75 → trips
+        let at24 = census_of(vec![
+            row(
+                "a",
+                &[
+                    false, false, false, false, true, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "b",
+                &[
+                    false, false, false, false, false, true, false, false, false, false,
+                ],
+            ),
+        ]);
+        assert!((at24.gate_a_full_depth_share().unwrap() - 0.5).abs() < 1e-9);
+        // Gate (b) boundary: IQR exactly one grid step (4) IS "constant".
+        // d*s 8,12,16,20: q25 = h=0.75 → 8+0.75·4 = 11; q75 = h=2.25 → 16+0.25·4 = 17 → IQR 6.
+        // d*s 8,12 only: q25 = h=0.25 → 9; q75 = h=0.75 → 11 → IQR 2 ≤ 4 → trips.
+        let tight = census_of(vec![
+            row(
+                "a",
+                &[
+                    true, false, false, false, false, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "b",
+                &[
+                    false, true, false, false, false, false, false, false, false, false,
+                ],
+            ),
+        ]);
+        assert_eq!(tight.d_iqr(), Some(2.0));
+        assert_eq!(tight.gate_b_constant(), Some(true));
+        // Empty-oracle exclusions count, never score.
+        let c = census_of(vec![]);
+        assert_eq!(c.gate_a_full_depth_share(), None);
+        assert_eq!(c.gate_b_constant(), None);
+    }
+
+    #[test]
+    fn merged_census_tolerates_duplicate_handle_labels() {
+        // Labels are HANDLES (the same lint name can label several spans —
+        // measured: labeled_eval_spans carries 8 duplicate labels), so the
+        // merge is row concatenation: the census unit is the span.
+        let a = census_of(vec![row(
+            "lint_x",
+            &[
+                true, false, false, false, false, false, false, false, false, false,
+            ],
+        )]);
+        let b = census_of(vec![
+            row(
+                "composite_tag",
+                &[
+                    false, true, false, false, false, false, false, false, false, false,
+                ],
+            ),
+            row(
+                "lint_x",
+                &[
+                    false, false, false, false, false, false, false, false, false, true,
+                ],
+            ),
+        ]);
+        let m = DepthCensus::merged(&a, &b);
+        assert_eq!(m.rows.len(), 3, "every span merges as its own row");
+        assert_eq!(m.skipped, 0);
+        let (sa, sb) = (
+            DepthCensus {
+                skipped: 2,
+                ..Default::default()
+            },
+            DepthCensus {
+                excluded_no_oracle: 5,
+                ..Default::default()
+            },
+        );
+        let m = DepthCensus::merged(&sa, &sb);
+        assert_eq!(
+            (m.skipped, m.excluded_no_oracle),
+            (2, 5),
+            "counters sum across populations"
         );
     }
 }
