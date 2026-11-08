@@ -13,7 +13,7 @@
 #   1. Settings → Secrets and variables → Actions → Variables:
 #        OPS_DASHBOARD_ENABLED = true
 #   2. Settings → Secrets and variables → Actions → Secrets:
-#        SIBLING_REPOS_TOKEN  — read-only PAT for the private gist-rs/* sibling
+#        SIBLING_REPOS_TOKEN  — read-only PAT for the private riir-ai/* sibling
 #                               checkouts (the SAME secret rust.yml uses; the
 #                               retired GH_PAT was a second, unrotated copy —
 #                               one read-only sibling token everywhere, 2026-10-25)

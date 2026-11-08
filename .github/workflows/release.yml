@@ -2,7 +2,7 @@
 # Proposal 003 / Plan 105 — binary-only release pipeline.
 #
 # Tag push `v*` → 5-target matrix build → leak scan → SHA256SUMS + license
-# doc → `gh release create` on the PUBLIC dist repo (gist-rs/cargo-heal) →
+# doc → `gh release create` on the PUBLIC dist repo (riir-ai/cargo-refine) →
 # Formula / scoop-manifest bump PRs. workflow_dispatch is a DRY RUN:
 # identical build + scan + packaging, no publish, no PRs.
 #
