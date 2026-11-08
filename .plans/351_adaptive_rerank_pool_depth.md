@@ -1,6 +1,7 @@
 # Plan 351 — Adaptive re-rank pool depth (instantiation-DCG predictor, outcome-calibrated)
 
 **Status:** Active — Phase 0 (premise measurement; nothing wires until T0 passes)
+**Claimed:** shikuwa-4090-b351, 1794146386, expires 2026-11-10T12:00:00Z
 **Date:** 2026-11-06
 **Research:** [riir-refine/.research/384_Optimal_ReRanking_Depth.md](../.research/384_Optimal_ReRanking_Depth.md)
 **Source paper:** [arXiv:2611.05908](https://arxiv.org/abs/2611.05908) — "Optimal Re-Ranking Depth" (Huo, Parry, Ganguly, Clarke; SIGIR '26)
