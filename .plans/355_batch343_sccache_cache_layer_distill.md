@@ -15,4 +15,4 @@
 - [ ] T8 — `.raw/mozilla-heal/sccache` lifecycle: SHARED with the #2968 campaign lane — leave in place until that lane closes (record the exception in the landing row; the B340 rm-at-landing law is waived HERE by the shared-pin disclosure)
 - [ ] T9 — outbound-PR: none (the laws are architectures, not bounded fix forms — no bounded self-contained fix exists; the B340 T9 precedent applies verbatim)
 
-**Claimed:** — (unclaimed; the next idle lane claims via the snapshot row)
+**Lease:** none — unclaimed; the next idle lane claims via the snapshot row (a `Claimed:`-shaped placeholder line blinded the read-time check here; reshaped to prose, the 355-fix reshape law).
