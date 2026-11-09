@@ -380,6 +380,14 @@ pub fn yellow(text: &str) -> String {
     colorize(&["33"], text)
 }
 
+/// BOLD+CYAN (the identity/heading accent — the account-render discipline:
+/// bold labels, bold+cyan headers). Escapes wrap the WHOLE token, never
+/// sit inside it, so greps on the plain text still match.
+#[must_use]
+pub fn bold_cyan(text: &str) -> String {
+    colorize(&["1", "36"], text)
+}
+
 /// Thousands-separated token count (`15080719` → `15,080,719`).
 #[must_use]
 pub fn fmt_tokens(n: u64) -> String {
