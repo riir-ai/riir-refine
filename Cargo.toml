@@ -457,6 +457,23 @@ set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 # the default closure. Feature-off stays byte-identical (the demote).
 elo_k_eff = ["katgpt-core/step_noise"]
 
+# katgpt-rs Plan 633 T1 / Issue 220 — the adoption/retention regression
+# gate's consumer intake: the (rule, fix verdict) outcome window (JSONL
+# sidecar, `.refine/adoption_outcomes.jsonl`), the active-set demote/
+# readmit gate (the challenger = the window minus the rule's rows), and
+# the seat head-swap watch (seat rows carry the receipt's build
+# fingerprint; a build change is the swap). Consume, never fork:
+# katgpt-core/adoption_gate is the primitive (score_adoption / decide —
+# the pinned f64 expression tree + tie rule); this feature only wires the
+# consumer seam + the two gate consults in the active-set CLI + the
+# outcome recorder in the fix lane. Decision policy: gate on evidence,
+# abstain otherwise (an operator command is never blocked by an empty
+# window); a Keep demote / repeated>0 readmit or swap refuses loud.
+# Feature-off is byte-identical by construction. Opt-in; the REAL-store
+# GOAT (plan 633 T3) opens with this consumer — no promotion talk before
+# it runs.
+adoption_gate = ["katgpt-core/adoption_gate"]
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1184,6 +1201,10 @@ required-features = ["nonergodic_driver"]
 [[test]]
 name = "escalation_serve_gates"
 required-features = ["escalation_manifest", "seat_rerank"]
+
+[[test]]
+name = "adoption_gate_gates"
+required-features = ["adoption_gate"]
 
 [[example]]
 name = "clippy_verify_demo"

@@ -179,6 +179,14 @@ pub mod active_set;
 // switches, ALL-EMPTY at ship. Opt-in (`escalation_manifest`).
 #[cfg(feature = "escalation_manifest")]
 pub mod escalation_manifest;
+// katgpt-rs Plan 633 T1 / Issue 220: the adoption/retention regression
+// gate's consumer seam — the outcome window (JSONL sidecar) + the
+// active-set demote/readmit gate + the seat head-swap watch, over the
+// SHARED katgpt-core adoption_gate primitive (consume, never fork).
+// Opt-in (`adoption_gate`); feature-off is byte-identical by construction
+// (the module compiles to nothing).
+#[cfg(feature = "adoption_gate")]
+pub mod adoption_gate;
 // Plan 202 R6: the escalation DISPATCH — armed manifest rows joined to their
 // shipped transports (the min-pool gate, the deadline-capped readiness
 // retry, the sticky cost-ceiling latch). Gated as the manifest AND any of

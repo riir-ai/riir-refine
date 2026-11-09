@@ -598,7 +598,7 @@ mod tests {
         );
         assert!(!src.exists(), "the original moved");
         let moved = std::fs::read_to_string(&dest).unwrap();
-        assert!(moved.contains("7"), "bytes survived the move: {moved}");
+        assert!(moved.contains('7'), "bytes survived the move: {moved}");
         let bak = std::fs::read_to_string(dest.with_extension("json.bak")).unwrap();
         assert_eq!(bak, moved, "the .bak copy carries the same bytes");
 
@@ -607,7 +607,7 @@ mod tests {
         std::fs::write(&src, r#"{"burn_kat_total":9}"#).unwrap();
         let dest2 = quarantine_state_file(&src, &root, "kat_burn_ack.json").unwrap();
         assert_ne!(dest2, dest, "the second move must not overwrite the first");
-        assert!(std::fs::read_to_string(&dest).unwrap().contains("7"));
+        assert!(std::fs::read_to_string(&dest).unwrap().contains('7'));
 
         // Subdirectory rels keep their shape under quarantine.
         std::fs::create_dir_all(dir.join("sub")).unwrap();

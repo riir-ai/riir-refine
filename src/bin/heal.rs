@@ -6916,6 +6916,26 @@ fn record_traj_fail(
     );
 }
 
+/// Issue 220 — record one fix outcome into the adoption window
+/// (best-effort: a load failure disables the window for the run with ONE
+/// loud line; an append failure warns once inside the window). The tag is
+/// the bare `rule_id` (seat picks ride [`crate::adoption_gate::SEAT_TAG`]
+/// via their existing `EditAtLine::rule_id` spelling); `build` is the seat
+/// receipt's build fingerprint on seat rows.
+#[cfg(feature = "adoption_gate")]
+fn adoption_window_for<'w>(
+    slot: &'w mut Option<riir_refine::adoption_gate::AdoptionWindow>,
+    root: &std::path::Path,
+) -> Option<&'w mut riir_refine::adoption_gate::AdoptionWindow> {
+    if slot.is_none() {
+        match riir_refine::adoption_gate::AdoptionWindow::load(root) {
+            Ok(w) => *slot = Some(w),
+            Err(e) => eprintln!("adoption-gate: window unavailable this run ({e})"),
+        }
+    }
+    slot.as_mut()
+}
+
 /// P12: the recorded consecutive-fail streak for one exact edit pair —
 /// the store row when the store backend is active, the envelope buckets
 /// otherwise (never both: one active backend per build, 038). Consumed by
@@ -10749,6 +10769,47 @@ fn run_active_set_cmd(args: &Args) {
             println!("active-set: `{domain}:{rule}` is already demoted");
             return;
         }
+        // Issue 220: the adoption gate — the challenger (the window minus
+        // the rule's rows) is scored by the katgpt-core adoption gate
+        // before the marker moves. Gate on evidence, abstain otherwise:
+        // an empty/foreign window never blocks an operator command.
+        #[cfg(feature = "adoption_gate")]
+        {
+            match riir_refine::adoption_gate::AdoptionWindow::load(&root)
+                .map(|w| w.demote_verdict(&rule, katgpt_core::adoption_gate::DEFAULT_ADOPTION_ALPHA))
+            {
+                Ok(riir_refine::adoption_gate::GateVerdict::Refuse(v)) => {
+                    eprintln!(
+                        "adoption-gate: demote REFUSED — the rule was carrying accepted \
+                         fixes (retained {:.4}, repeated {:.4}, score {:.4} vs the incumbent \
+                         window; decision {:?}); the marker is untouched. If the demotion is \
+                         deliberate, gather the rule's window rows first or clear stale \
+                         evidence: {}",
+                        v.retained,
+                        v.repeated,
+                        v.score,
+                        v.decision,
+                        root.join(riir_refine::adoption_gate::OUTCOMES_FILE).display()
+                    );
+                    std::process::exit(1);
+                }
+                Ok(riir_refine::adoption_gate::GateVerdict::Proceed(v)) => {
+                    println!(
+                        "adoption-gate: demote verdict ADOPT (retained {:.4}, repeated {:.4}, \
+                         score {:.4}) — proceeding",
+                        v.retained,
+                        v.repeated,
+                        v.score
+                    );
+                }
+                Ok(riir_refine::adoption_gate::GateVerdict::Abstain) => {
+                    println!("adoption-gate: no window evidence for `{rule}` — abstaining, proceeding");
+                }
+                Err(e) => {
+                    eprintln!("adoption-gate: window read failed ({e}) — proceeding ungated");
+                }
+            }
+        }
         set.demote(&domain, &rule);
         if let Err(e) = set.save(&path) {
             eprintln!("active-set: save failed: {e}");
@@ -10770,6 +10831,45 @@ fn run_active_set_cmd(args: &Args) {
                 std::process::exit(2);
             }
         };
+        // Issue 220: the adoption gate — the challenger (the rule's OWN
+        // historical rows) must not repeat known-rejected outputs. The
+        // binding axis is `repeated`; the composite decision is
+        // uninformative on the readmit direction (documented in-module).
+        // Consulted BEFORE the marker moves (a refusal leaves the file
+        // untouched, same as the demote arm).
+        #[cfg(feature = "adoption_gate")]
+        {
+            match riir_refine::adoption_gate::AdoptionWindow::load(&root)
+                .map(|w| w.readmit_verdict(&rule, katgpt_core::adoption_gate::DEFAULT_ADOPTION_ALPHA))
+            {
+                Ok(riir_refine::adoption_gate::GateVerdict::Refuse(v)) => {
+                    eprintln!(
+                        "adoption-gate: readmit REFUSED — the rule's history repeats known- \
+                         rejected outputs (repeated {:.4}, retained {:.4}, score {:.4}); the \
+                         marker file is untouched (re-run the fixes first or inspect {})",
+                        v.repeated,
+                        v.retained,
+                        v.score,
+                        root.join(riir_refine::adoption_gate::OUTCOMES_FILE).display()
+                    );
+                    std::process::exit(1);
+                }
+                Ok(riir_refine::adoption_gate::GateVerdict::Proceed(v)) => {
+                    println!(
+                        "adoption-gate: readmit verdict PROCEED (repeated {:.4}, retained {:.4}) \
+                         — no known-rejected output repeats",
+                        v.repeated,
+                        v.retained
+                    );
+                }
+                Ok(riir_refine::adoption_gate::GateVerdict::Abstain) => {
+                    println!("adoption-gate: no window evidence for `{rule}` — abstaining, proceeding");
+                }
+                Err(e) => {
+                    eprintln!("adoption-gate: window read failed ({e}) — proceeding ungated");
+                }
+            }
+        }
         if !set.readmit(&domain, &rule) {
             eprintln!("active-set: `{domain}:{rule}` is not demoted — nothing to re-admit");
             std::process::exit(1);
@@ -15419,6 +15519,19 @@ fn main() {
     let envelope_backend = traj_store.is_none();
     #[cfg(not(feature = "latent_retrieval"))]
     let envelope_backend = true;
+    // Issue 220: the adoption window — lazy-loaded on first verdict (the
+    // recorder helper); the slot rides the same scope as the verdict sites
+    // below. Gated on --write: a dry run produces no fix verdicts.
+    #[cfg(feature = "adoption_gate")]
+    let mut adoption_window: Option<riir_refine::adoption_gate::AdoptionWindow> = None;
+    #[cfg(feature = "adoption_gate")]
+    let adoption_root = resolve_heal_root(&args.paths);
+    // Issue 220: seat picks' build fingerprints — the serve site knows the
+    // receipt, the verdict bookkeeping (per file, later) records it into
+    // the window row. One entry per seat-served file, per run.
+    #[cfg(feature = "adoption_gate")]
+    let mut seat_build_by_path: std::collections::HashMap<PathBuf, String> =
+        std::collections::HashMap::new();
     if evolve_rec.is_enabled() && envelope_backend {
         match evolve_rec.load_verified(&memory_path) {
             Err(e) => eprintln!(
@@ -17030,16 +17143,65 @@ fn main() {
                 );
                 match decision {
                     riir_refine::escalation_dispatch::EscalatedFix::Answer {
-                        fix, source, ..
+                        fix,
+                        source,
+                        receipt,
+                        ..
                     } => {
-                        current.replace_range(b..e, &fix);
-                        all_edits.push((0, SEAT_RULE.to_string(), b, e, fix.clone()));
-                        eprintln!(
-                            "escalation: seat pick served on {display} (span {}-{}, \
-                             source {source}) — kept by the serve-boundary compile \
-                             check; the end-of-run gate re-verifies",
-                            s.start_line, s.end_line
-                        );
+                        // Issue 220: the head-swap watch — the receipt's
+                        // build fingerprint vs the window's seat rows. A
+                        // build whose history repeats known-rejected
+                        // outputs is stood down for the REST OF THIS RUN
+                        // (in-memory; the manifest is never written) and
+                        // THIS pick is demoted to stood-by (the modelless
+                        // answer stands). One consult per file is kept:
+                        // the stand-down falls through to the loop break.
+                        #[cfg(feature = "adoption_gate")]
+                        if let Some(build) = receipt.as_ref().and_then(|r| r.build.as_deref()) {
+                            let verdict = adoption_window_for(&mut adoption_window, &adoption_root)
+                                .map(|w| w.seat_swap_verdict(build));
+                            if let Some(riir_refine::adoption_gate::SeatSwapVerdict::StandDown {
+                                repeated_hits,
+                                rows,
+                            }) = verdict
+                            {
+                                let reason = format!(
+                                    "head-swap watch: build {build} repeats {repeated_hits} \
+                                     known-rejected output(s) over {rows} seat row(s)"
+                                );
+                                eprintln!("adoption-gate: {reason} — seat stood down for this run");
+                                if let Some(disp) = escalation_dispatch.as_mut() {
+                                    disp.stand_down(reason);
+                                }
+                            } else {
+                                current.replace_range(b..e, &fix);
+                                all_edits.push((0, SEAT_RULE.to_string(), b, e, fix.clone()));
+                                // Issue 220: the verdict bookkeeping tags
+                                // this pick's window row with the build.
+                                #[cfg(feature = "adoption_gate")]
+                                seat_build_by_path
+                                    .insert(path.clone(), build.to_string());
+                                eprintln!(
+                                    "escalation: seat pick served on {display} (span {}-{}, \
+                                     source {source}) — kept by the serve-boundary compile \
+                                     check; the end-of-run gate re-verifies",
+                                    s.start_line,
+                                    s.end_line
+                                );
+                            }
+                        }
+                        #[cfg(not(feature = "adoption_gate"))]
+                        {
+                            current.replace_range(b..e, &fix);
+                            all_edits.push((0, SEAT_RULE.to_string(), b, e, fix.clone()));
+                            eprintln!(
+                                "escalation: seat pick served on {display} (span {}-{}, \
+                                 source {source}) — kept by the serve-boundary compile \
+                                 check; the end-of-run gate re-verifies",
+                                s.start_line,
+                                s.end_line
+                            );
+                        }
                     }
                     riir_refine::escalation_dispatch::EscalatedFix::StoodByModelless { reason } => {
                         eprintln!(
@@ -17910,6 +18072,15 @@ fn main() {
                         &heal_run_id,
                         rejected_opt(&e.rejected),
                     );
+                    #[cfg(feature = "adoption_gate")]
+                    if let Some(w) = adoption_window_for(&mut adoption_window, &adoption_root) {
+                        let seat_build: Option<&str> =
+                            (e.rule_id == riir_refine::adoption_gate::SEAT_TAG)
+                                .then(|| seat_build_by_path.get(&b.path))
+                                .flatten()
+                                .map(String::as_str);
+                        w.record(&e.rule_id, false, &e.replacement, seat_build);
+                    }
                 }
                 continue;
             }
@@ -17981,6 +18152,21 @@ fn main() {
                     fail_signal.as_ref().map(riir_refine::component::classify),
                     rejected_opt(&e.rejected),
                 );
+                // Issue 220: the window records an ACCEPTED outcome only
+                // when the run has a verdict — a kept edit under a
+                // non-clean verify (P104 UNVERIFIED-KEPT) was never proven
+                // to compile and is NO evidence either way (skipped).
+                #[cfg(feature = "adoption_gate")]
+                if verify_ended_clean {
+                    if let Some(w) = adoption_window_for(&mut adoption_window, &adoption_root) {
+                        let seat_build: Option<&str> =
+                            (e.rule_id == riir_refine::adoption_gate::SEAT_TAG)
+                                .then(|| seat_build_by_path.get(&b.path))
+                                .flatten()
+                                .map(String::as_str);
+                        w.record(&e.rule_id, success, &e.replacement, seat_build);
+                    }
+                }
             }
             for e in b
                 .edits
@@ -18005,6 +18191,15 @@ fn main() {
                     &heal_run_id,
                     rejected_opt(&e.rejected),
                 );
+                #[cfg(feature = "adoption_gate")]
+                if let Some(w) = adoption_window_for(&mut adoption_window, &adoption_root) {
+                    let seat_build: Option<&str> =
+                        (e.rule_id == riir_refine::adoption_gate::SEAT_TAG)
+                            .then(|| seat_build_by_path.get(&b.path))
+                            .flatten()
+                            .map(String::as_str);
+                    w.record(&e.rule_id, false, &e.replacement, seat_build);
+                }
             }
             println!(
                 "fix {} ({} edit(s) {}):",

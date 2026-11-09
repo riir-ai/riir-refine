@@ -171,6 +171,13 @@ pub struct EscalationDispatch {
     /// call path (a gate without the seat transport is dead weight).
     #[cfg(all(feature = "points_drain", feature = "seat_rerank"))]
     drain: crate::points_drain::DrainGate,
+    /// Issue 220 — the adoption-gate's session-scoped stand-down (the
+    /// head-swap watch's regression verdict). IN-MEMORY ONLY, like the
+    /// rate latch: the manifest is never touched (nothing auto-demotes);
+    /// the next process re-arms from the manifest row. `Some(reason)` =
+    /// every later dispatch stands by the modelless answer naming it.
+    #[cfg(feature = "adoption_gate")]
+    adoption_stand_down: Option<String>,
 }
 
 impl std::fmt::Debug for EscalationDispatch {
@@ -308,7 +315,28 @@ impl EscalationDispatch {
             expert,
             #[cfg(all(feature = "points_drain", feature = "seat_rerank"))]
             drain,
+            #[cfg(feature = "adoption_gate")]
+            adoption_stand_down: None,
         }))
+    }
+
+    /// Issue 220 — the adoption-gate stand-down: every later dispatch on
+    /// this arm stands by the modelless answer naming `reason`, for the
+    /// REST OF THIS PROCESS (the rate latch's stickiness, session-scoped;
+    /// the manifest is never written — nothing auto-demotes). Called by
+    /// the fix lane when the head-swap watch's verdict is regression
+    /// evidence.
+    #[cfg(feature = "adoption_gate")]
+    pub fn stand_down(&mut self, reason: String) {
+        self.adoption_stand_down = Some(reason);
+    }
+
+    /// Issue 220 — whether the adoption-gate stand-down is armed (the
+    /// fix lane's loud-line predicate).
+    #[cfg(feature = "adoption_gate")]
+    #[must_use]
+    pub fn adoption_stand_down(&self) -> Option<&str> {
+        self.adoption_stand_down.as_deref()
     }
 
     /// The drain-injectable test seam (plan 326 T6): replace the
@@ -348,6 +376,12 @@ impl EscalationDispatch {
     /// over the ceiling still escalates (its miss was not known at entry);
     /// every case after stands.
     fn gate(&mut self, modelless_score: f32) -> Gate {
+        // Issue 220: the adoption-gate stand-down outranks everything —
+        // regression evidence stands the whole arm down for the session.
+        #[cfg(feature = "adoption_gate")]
+        if let Some(reason) = self.adoption_stand_down.clone() {
+            return Gate::Stand(StandReason::Declined(reason));
+        }
         let cap = self.row.modelless_cap;
         let miss = f64::from(modelless_score) < cap;
         self.latch.observe(miss);
@@ -366,7 +400,10 @@ impl EscalationDispatch {
     /// [`EscalatedFix::StoodByModelless`].
     // The T4 per-repo consult adds the run's repo root + the --yes arm to
     // the env-reading entry (the production wiring's full signature).
-    #[allow(clippy::too_many_arguments, reason = "the rerank decision's full input set")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the rerank decision's full input set"
+    )]
     pub fn escalate_rerank(
         &mut self,
         modelless_score: f32,
@@ -399,7 +436,10 @@ impl EscalationDispatch {
     /// `repo_consent` is the T4 per-repo decision (Plan 333) — consult
     /// after the gate, before any transport; `Disabled` is the shipped
     /// dark posture (no gate, byte-identical pre-T4 behavior).
-    #[allow(clippy::too_many_arguments, reason = "the rerank decision's full input set")]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the rerank decision's full input set"
+    )]
     pub fn escalate_rerank_checked_with(
         &mut self,
         modelless_score: f32,

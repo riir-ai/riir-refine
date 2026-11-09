@@ -10432,7 +10432,7 @@ fn batch343_rules_present() {
     }
 }
 
-/// Batch 345 rules present (Plan 357 / Research 389, the LocalSR distill):
+/// Batch 345 rules present (Plan 357 / Research 389, the `LocalSR` distill):
 /// FIVE own `rust_perf` rules in `entries_70` — the measurement-honesty pair
 /// (benchmark stability verdict + the macOS pressure-counter law), the
 /// slow-consumer coalescing law (the tokio-family +1), the download-
@@ -10483,7 +10483,13 @@ fn batch345_rules_present() {
             "batch-345 rule {id} buggy/fixed must both parse"
         );
     }
-    // the rule-specific law needles
+    batch345_rule_law_needles(&corpus, &ids);
+}
+
+/// The rule-specific law needles — split out of
+/// [`batch345_rules_present`] so each test stays under the line ceiling
+/// (the shared gate runs `-D warnings` over this target).
+fn batch345_rule_law_needles(corpus: &crate::corpus::Corpus<crate::domains::rust_perf::RustPerfDomain>, ids: &[&str; 5]) {
     let e1 = corpus.entries.iter().find(|e| e.rule_id == ids[0]).unwrap();
     for needle in [
         "rolling coefficient of variation",

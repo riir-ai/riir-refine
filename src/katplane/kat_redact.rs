@@ -2019,7 +2019,7 @@ mod tests {
             GateDecision::Redacted { payload, findings } => {
                 assert!(!payload.contains(secret));
                 assert!(payload.contains("[REDACTED:aws-access-key]"));
-                assert!(!findings.is_empty());
+                assert_ne!(findings, [] as [Finding; 0]);
             }
             other => panic!("expected Redacted, got {other:?}"),
         }
