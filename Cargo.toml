@@ -1,6 +1,6 @@
 [package]
 name = "riir-refine"
-version = "0.4.8"
+version = "0.4.9"
 edition = "2021"
 # Issue 221 P0(c): the repo is PUBLIC (MIT) — the crate licence is the root
 # LICENSE (SPDX MIT). The prebuilt binary archives keep shipping
