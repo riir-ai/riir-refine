@@ -48,9 +48,9 @@
 //! dropped per Research 341 (4 needs un-controlled address placement, 5 is
 //! a face on the owned PH rule, 6 thin, 7 owned).
 
-use crate::domains::rust_perf::PerfRule;
 #[cfg(feature = "rust_perf_bench")]
 use crate::domains::rust_perf::bench::BenchSpec;
+use crate::domains::rust_perf::PerfRule;
 
 /// Candidate 1 — the folded word compare. The verify step of any bounded-key
 /// lookup (perfect-hash slot verify, header-table lookup, opcode dispatch).

@@ -31,8 +31,8 @@
 
 use serde::Serialize;
 
-use super::KernelRule;
 use super::goat_g1::{self, G1Record};
+use super::KernelRule;
 
 /// Files in the tranche: GREEN `#[test]` token count per file, descending;
 /// tie-break file name ascending; truncated at [`TRANCHE_FILES`].
