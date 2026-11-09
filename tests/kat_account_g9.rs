@@ -26,7 +26,12 @@
 use riir_refine::kat_account::{
     account_id_for, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
 };
-use riir_refine::kat_meter::{ChargeState, KatCharge, KatMeter, FREE_TIER_GRANT_MICRO_KAT};
+use riir_refine::kat_meter::{ChargeState, KatCharge, KatMeter};
+// The grant constant rides the VENDORED kat_units (the same MicroKat world
+// the conversions below use; the dep re-export's copy is value-identical —
+// MicroKat(100_000_000) both sides — but a distinct type, the issue-221
+// --all-features seam class).
+use riir_refine::kat_units::FREE_TIER_GRANT_MICRO_KAT;
 
 // Issue 179 NOW-1: the ONE renderer file, included here by PATH so the
 // pinned suite tests the exact source the bins compile (the test target

@@ -18540,7 +18540,7 @@ fn main() {
             // local projection).
             eprintln!(
                 "kat-charge: 0 KAT remain of the {} grant projection — out-of-KAT",
-                kat(riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
+                kat(riir_refine::kat_units::FREE_TIER_GRANT_MICRO_KAT)
             );
             eprintln!(
                 "kat-charge: healing continues on the local corpus; the evolved-corpus \\
@@ -18569,7 +18569,7 @@ fn main() {
                 "kat-charge: warning — {} KAT remain of the {} grant projection; \\
                  healing continues offline (the server ledger is the authority)",
                 kat(remaining),
-                kat(riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT)
+                kat(riir_refine::kat_units::FREE_TIER_GRANT_MICRO_KAT)
             );
         }
     }
@@ -19062,7 +19062,7 @@ fn main() {
                         balance_micro: MicroKat(balance.max(0)),
                         // The trial scale mirrors the KAT grant projection
                         // until the server reports the real claim size (B2).
-                        grant_micro: riir_refine::kat_meter::FREE_TIER_GRANT_MICRO_KAT,
+                        grant_micro: riir_refine::kat_units::FREE_TIER_GRANT_MICRO_KAT,
                         expires_unix: expires,
                         now_unix: std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -19106,7 +19106,7 @@ fn main() {
             run_micro_kat: MicroKat::from(c.session_kat()),
             tuna: tuna_line,
             kat_balance_micro: kat_balance,
-            rate_micro_per_mtok: riir_refine::kat_meter::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
+            rate_micro_per_mtok: riir_refine::kat_units::CHARGE_MICRO_KAT_PER_MILLION_TOKENS,
             account_hex: account.as_ref().map(|a| a.state().account_id.as_str()),
             sync,
         };

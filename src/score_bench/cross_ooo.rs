@@ -88,7 +88,7 @@ use std::sync::OnceLock;
 use katgpt_core::ooo_audit::{
     cross_ooo, greedy_curate, ooo_score, AuditScratch, BankAudit, CurationResult, OooAuditConfig,
 };
-use riir_neuron_db::bm25::Tokenizer;
+use crate::ragplane::bm25::Tokenizer;
 use serde::{Deserialize, Serialize};
 
 use crate::draft::op_tokenizer::RustOpBigramTokenizer;

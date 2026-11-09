@@ -582,11 +582,19 @@ pub mod kat_pending_estimator;
 // law two agreeing verifiers depend on), and the step-0 canary hash check
 // over one leased item. Gated with the ORACLE's own gates (clippy_verify
 // for the instrument + latent_retrieval for the `draft` tree it lives in);
-// the wire types come from the riir-kat protocol tier (always compiled —
-// the root dep has no default features). The command orchestration
-// (`cargo refine replay`) lives in the bin and adds the kat_service +
-// kat_transport gates.
-#[cfg(all(feature = "clippy_verify", feature = "latent_retrieval"))]
+// the wire types come from the riir-kat protocol tier — WHICH NEEDS THE
+// OPTIONAL riir-kat DEP ACTIVE: `clippy_verify` + `latent_retrieval` alone
+// (the uncontaminated_g1 posture) activate no feature that pulls it, so
+// kat_service joins the gate (the minimal dep-activating conjunct,
+// `"riir-kat/client"`; kat_transport implies it — issue 221 P2b-gate
+// finding: the module failed to compile exactly where its test row
+// pointed). The command orchestration (`cargo refine replay`) lives in the
+// bin and adds the kat_transport gate on top.
+#[cfg(all(
+    feature = "clippy_verify",
+    feature = "latent_retrieval",
+    feature = "kat_service"
+))]
 pub mod kat_replay;
 
 // (issue 088: `kat_lease_client` moved to the riir-kat repo — see the
