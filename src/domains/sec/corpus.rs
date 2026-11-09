@@ -1971,6 +1971,18 @@ executed before entry)."
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ══ Batch 345 (2026-11-09, Plan 357 / Research 389): the LocalSR ══
+        // distill's sec half — the execution-artifact trust ladder. The
+        // source: HerRei/local-upscale (LocalSR) @ cf6f8b55f407b17141b338
+        // ba3955e337fc0f6d12 (main tip 2026-11-07, MIT).
+        SecRule {
+            rule_id: "execution-artifact-trust-ladder-before-deserialize".to_string(),
+            sec_concept: "an artifact handed to an EXECUTION-CAPABLE runtime (a deserializer whose format can run code on load — pickle, Marshal, Java serialization — or, the Rust face, a wasm module into wasmi/wasmtime, a dylib, a spawned interpreter) is gated through a TRUST LADDER evaluated BEFORE the loader is invoked: a data-only safe format loads without any opt-in; an execution-capable format without further proof is REFUSED with an error naming the explicit opt-in; an artifact the catalog names is admitted even in the execution-capable format ONLY when its bytes match the pinned size + digest (catalog-verified), and tampered bytes fail that check regardless of consent — and the gate is TWO-SIDED across the process boundary: the host re-derives the verdict from its own inputs and refuses independently, because neither end can see or trust the other's check. The gate sits AT THE SINK: the loader must never receive an unverified artifact, not merely be warned after. SOURCE, verbatim (at the pin, src/localsr/core/model_adapter.py::_checkpoint_trust): the catalog arm — 'failed its catalog SHA-256 check. LocalSR refused to deserialize it; remove the file and download it again'; the consent arm — 'LocalSR blocks unverified .pth, .pt, and .ckpt checkpoints because they may execute code while loading. Use a .safetensors checkpoint or, only for a checkpoint you have independently trusted, set {UNVERIFIED_CHECKPOINT_ENV}=1'; the ladder returns 'catalog-verified' / 'explicitly-trusted' / 'safe-format'. THE SINK PROOF (tests/test_checkpoint_security.py): 'Spandrel must not receive an unverified pickle checkpoint' — the test asserts the loader function is NEVER CALLED on the refusal path. THE TWO-SIDED GATE (desktop/src-tauri/src/commands.rs:1614): 'pickle-based checkpoints require the explicit unsafe checkpoint confirmation' — the Rust host refuses at its own boundary even though the Python worker re-checks independently. THE MANDATORY ADJUDICATION vs the recorded 0sec drop (corpus.rs, Batch 344 staging): THAT drop owns the deserialize-DATA class ('typed serde = fix by construction' — deserializing DATA into typed values needs no gate); THIS owns the execution-capable-ARTIFACT class — the runtime executes arbitrary semantics FROM the file — whose Rust instances are real (this repo's own wasm-validator store manifest: version + blake3 + active/revoked is the positive instance; the B294 wasmtime family proves executors are in-scope). KINSHIPS: sink-distinct from untrusted-archive-extract-paths (zip-slip owns the PATH axis of an extracted archive; THIS owns the EXECUTION axis of a loaded artifact); kin gateway-type-forces-security-check (the constructor-reachability bypass genus — THIS is the ladder that gateway must not be able to skip); the digest arm composes untrusted-download-verify-then-atomic-install (rust_perf, this batch — the download lane feeds the ladder's catalog half). Regime: any host loading artifacts into an execution-capable sink — ML checkpoints via a subprocess engine, wasm validators, plugin/dylib loading, serialized task graphs handed to an interpreter. Anti-regimes: pure-data formats end-to-end (typed serde both sides — the 0sec drop's exact posture); artifacts minted by the same process that consumes them (no trust boundary crossed). Suggest-only: the ladder's arm order (catalog first vs consent first) is the host's policy; the fixture pins THAT a ladder exists at the sink, not its order. Detector: none at landing (vocabulary-gated: a load-call co-occurrence with a consent vocabulary or a digest field — deferred). Fixture: fixtures/b345_fixtures.rs F1 (the safe-format arm, the pre-load refusal with the loader-never-ran proof, the catalog digest admit + tampered refuse incl. consent-does-not-rescue-tampered-bytes, the naive name-only check, the two-sided host/engine arm). Batch 345 / Plan 357 / Research 389 (HerRei/local-upscale @ cf6f8b55f407b17141b338ba3955e337fc0f6d12, MIT — cited as class provenance; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "use std::cell::Cell;\n\n/// The host hands ANY checkpoint the user picked straight to the\n/// execution-capable loader. A .pth downloaded from a forum runs code\n/// at load time; the host never asked, the worker never checked, and\n/// the only gate is a warning logged after the load returns.\npub fn load_model(path: &str, consent_seen: Cell<bool>) -> Result<Model, Error> {\n    let bytes = std::fs::read(path)?;\n    // the engine accepts anything; the format decides\n    let model = engine_load(&bytes)?; // pickle: arbitrary code runs HERE\n    consent_seen.set(true); // the warning, after the fact\n    Ok(model)\n}\n\nfn engine_load(bytes: &[u8]) -> Result<Model, Error> {\n    // accepts any bytes — the trust decision was never made\n    Ok(Model::from_untrusted(bytes))\n}\n\npub struct Model;\nimpl Model {\n    fn from_untrusted(_bytes: &[u8]) -> Self { Model }\n}\npub struct Error;\n".to_string(),
+            fixed_code: "use std::cell::Cell;\n\n/// The trust ladder, evaluated BEFORE the loader is invoked: catalog\n/// digest first, execution-capable formats need explicit consent,\n/// data-only formats load freely. The host re-derives the verdict and\n/// refuses independently of the engine's own check.\n#[derive(Clone, Copy, PartialEq)]\nenum Format { DataOnly, ExecutionCapable }\n\n#[derive(Debug, PartialEq)]\nenum TrustError { DigestMismatch, UnverifiedExecutionCapable }\n\npub fn load_model(\n    bytes: &[u8],\n    format: Format,\n    catalog_digest: Option<u64>,\n    explicit_consent: bool,\n    consent_seen: Cell<bool>,\n) -> Result<Model, TrustError> {\n    // the catalog arm: a named artifact must match its pinned digest —\n    // consent does NOT rescue tampered bytes\n    if let Some(expected) = catalog_digest {\n        if digest(bytes) != expected {\n            return Err(TrustError::DigestMismatch);\n        }\n    } else if format == Format::ExecutionCapable && !explicit_consent {\n        // refuse BEFORE the loader runs — the error names the opt-in\n        return Err(TrustError::UnverifiedExecutionCapable);\n    }\n    consent_seen.set(true);\n    Ok(engine_load(bytes))\n}\n\nfn digest(bytes: &[u8]) -> u64 {\n    let mut h: u64 = 0xcbf2_9ce4_8422_2325;\n    for &b in bytes {\n        h ^= u64::from(b);\n        h = h.wrapping_mul(0x1000_0000_01b3);\n    }\n    h\n}\n\nfn engine_load(_bytes: &[u8]) -> Model { Model }\n\npub struct Model;\npub enum Error {}\n\n#[test]\nfn the_ladder_refuses_before_the_loader_runs() {\n    let seen = Cell::new(false);\n    let err = load_model(b\"downloaded-from-a-forum\", Format::ExecutionCapable, None, false, seen);\n    assert_eq!(err, Err(TrustError::UnverifiedExecutionCapable));\n    assert!(!seen.get(), \"the refusal path never reached the loader\");\n}\n\n#[test]\nfn catalog_digest_gates_tampered_bytes_even_with_consent() {\n    let seen = Cell::new(false);\n    let err = load_model(b\"tampered\", Format::ExecutionCapable, Some(0xA1), true, seen);\n    assert_eq!(err, Err(TrustError::DigestMismatch));\n    assert!(!seen.get());\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -2571,7 +2583,70 @@ mod tests {
                 && !reuseaddr
                     .sec_concept
                     .contains("Detector: `proposers::reuseaddr_gate`"),
-            "the B337 reuseaddr prose must no longer claim a detector module that never landed"
+            "the B337 reuseaddr prose must no longer claim a detector"
+        );
+    }
+
+    /// Batch 345 (the `LocalSR` distill, Plan 357 / Research 389,
+    /// HerRei/local-upscale @ `cf6f8b55` MIT) — the execution-artifact trust
+    /// ladder: presence, family, provenance discipline, the mandatory
+    /// adjudication vs the 0sec deserialize-DATA drop, suggest-only.
+    #[test]
+    fn batch345_rules_present_families_and_provenance() {
+        let all = entries();
+        let r = all
+            .iter()
+            .find(|r| r.rule_id == "execution-artifact-trust-ladder-before-deserialize")
+            .unwrap_or_else(|| panic!("batch-345 rule missing from corpus"));
+        assert_eq!(r.family, SecFamily::InputValidation, "batch-345 family");
+        assert!(
+            r.sec_concept
+                .contains("Batch 345 / Plan 357 / Research 389"),
+            "batch-345 must cite its landing lineage"
+        );
+        assert!(
+            r.sec_concept
+                .contains("cf6f8b55f407b17141b338ba3955e337fc0f6d12"),
+            "batch-345 must cite the source pin"
+        );
+        // The mandatory adjudication note vs the 0sec drop.
+        assert!(
+            r.sec_concept.contains("deserialize-DATA")
+                && r.sec_concept.contains("execution-capable-ARTIFACT"),
+            "batch-345 must carry the 0sec-drop adjudication"
+        );
+        // The sink proof + the two-sided gate, quoted.
+        assert!(
+            r.sec_concept.contains("Spandrel must not receive")
+                && r.sec_concept.contains("pickle-based checkpoints require"),
+            "batch-345 must carry the sink + two-sided gate quotes"
+        );
+        // The in-house positive instance.
+        assert!(
+            r.sec_concept.contains("wasm-validator store manifest"),
+            "batch-345 must cite the in-house positive instance"
+        );
+        assert!(
+            !crate::domains::sec::proposers::FIXABLE_SEC
+                .contains(&"execution-artifact-trust-ladder-before-deserialize"),
+            "batch-345 must stay suggest-only (never FIXABLE_SEC)"
+        );
+    }
+
+    #[test]
+    fn batch345_rules_parse() {
+        let all = entries();
+        let rule = all
+            .iter()
+            .find(|r| r.rule_id == "execution-artifact-trust-ladder-before-deserialize")
+            .expect("batch-345 rule missing");
+        assert!(
+            syn::parse_file(&rule.buggy_code).is_ok(),
+            "batch-345: buggy code must parse"
+        );
+        assert!(
+            syn::parse_file(&rule.fixed_code).is_ok(),
+            "batch-345: fixed code must parse"
         );
     }
 }

@@ -1,6 +1,6 @@
 # Research 389 — Distill verdict: HerRei/local-upscale (LocalSR)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — LANDED as Batch 345 (Plan 357): rust_perf 307→312 (entries_70: R1, R2, R5, R6, R7), sec 50→51 (R3), kernel_opt 1075→1076 (entries_gpu_154: R4); R8 dropped at authoring; all gates green, retrieval floors HELD.
 
 ## Source
 

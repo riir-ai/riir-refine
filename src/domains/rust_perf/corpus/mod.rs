@@ -9,10 +9,15 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 305 entries across 15 categories as of Batch 341 (+1: the new
-//! `measurement-honesty` category — `amortized-reuse-claim-break-even-artifact`,
-//! the metal-graph distill (Plan 350 / Research 383, `entries_68`); Batch 343:
-//! 305 -> 307 (+2: caching — `raw-bytes-with-hit-backfill-once` +
+//! 312 entries across 15 categories as of Batch 345 (+5: two
+//! measurement-honesty (`benchmark-spread-above-threshold-reports-unstable`,
+//! `macos-pressure-reads-footprint-not-rss`), one concurrency
+//! (`slow-consumer-latest-value-single-slot`, the tokio family's latest-wins
+//! coalescing axis), two io (`untrusted-download-verify-then-atomic-install`,
+//! `ui-event-stream-sampled-gate-terminal-forward`); the `LocalSR` distill
+//! (Plan 357 / Research 389, `entries_70` — `HerRei/local-upscale` @
+//! `cf6f8b55`); prior: 307 at Batch 343 (+2: caching —
+//! `raw-bytes-with-hit-backfill-once` +
 //! `vanished-entry-tolerant-eviction-panic-else`, the sccache cache-layer
 //! RE-distill (Plan 355 / Research 387, `entries_69` — the tiered-hit
 //! backfill family, the files B324 did not mine); prior: 300 entries across
@@ -747,6 +752,7 @@ mod entries_66;
 mod entries_67;
 mod entries_68;
 mod entries_69;
+mod entries_70;
 
 #[cfg(test)]
 mod tests;
@@ -957,6 +963,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_67::entries());
     entries.extend(entries_68::entries());
     entries.extend(entries_69::entries());
+    entries.extend(entries_70::entries());
     Corpus::new(entries)
 }
 

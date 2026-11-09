@@ -89,7 +89,7 @@ use crate::domains::kernel_opt::KernelRule;
 #[must_use]
 pub fn expected_corpus_files() -> Vec<String> {
     let mut names = vec!["entries_popcorn".to_string()];
-    for n in 1..=153 {
+    for n in 1..=154 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -372,6 +372,7 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_151,
         entries_gpu_152,
         entries_gpu_153,
+        entries_gpu_154,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -676,8 +677,8 @@ pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::
 
 /// The parsed store, keyed by `rule_id` (digests live in the value). Built
 /// once per process; keys borrow the committed static text.
-fn status_table()
--> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
+fn status_table(
+) -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
     static TABLE: std::sync::OnceLock<
         std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>,
     > = std::sync::OnceLock::new();
@@ -1297,7 +1298,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 154); // popcorn + gpu_01..153 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continues)
+        assert_eq!(names.len(), 155); // popcorn + gpu_01..154 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));

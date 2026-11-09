@@ -254,6 +254,10 @@ demonstrability column at n=28, constant 1.000); freeze NOT owed
 verified live; the P30 confirm, sec-only delta); release-set binary
 rebuild + install executed (sec compiles into the default build).
 
+## Batch 345 (2026-11-09) — the `LocalSR` distill: the execution-artifact trust ladder
+
+corpus 50 -> 51, ONE suggest-only rule (`execution-artifact-trust-ladder-before-deserialize`, InputValidation; `HerRei/local-upscale` @ cf6f8b55 MIT, Plan 357 / Research 389): an artifact handed to an execution-capable runtime is gated through a trust ladder (safe format / catalog digest / explicit consent) evaluated BEFORE the loader is invoked, two-sided across the process boundary (the Rust host refuses independently at commands.rs:1614); adjudicated vs the 0sec verdict's deserialize-DATA drop -- THIS is the execution-capable-ARTIFACT class; the in-house positive instance = the wasm-validator store manifest; fixtures 5/5 executed pre-entry.
+
 ## Batch 342 (2026-11-08) — the harness-adapters/safeagents distill: the agent-egress-guard family's second source
 
 corpus 48 -> 50, TWO suggest-only rules (huggingface/safeagents @ 0de8e22d, Apache-2.0 + its atif-scan dependency @ 0228cd9d, MIT — Plan 352 / Research 385):

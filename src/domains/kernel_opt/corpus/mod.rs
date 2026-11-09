@@ -1955,6 +1955,7 @@ mod entries_gpu_150;
 mod entries_gpu_151;
 mod entries_gpu_152;
 mod entries_gpu_153;
+mod entries_gpu_154;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
@@ -2171,6 +2172,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_151::entries());
     entries.extend(entries_gpu_152::entries());
     entries.extend(entries_gpu_153::entries());
+    entries.extend(entries_gpu_154::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2959,6 +2961,12 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 345 +1 (Plan 357 / Research 389): the LocalSR
+            // accelerator-backend acceptance gate — the first real input is
+            // the gate (quality floor + speed margin vs the reference),
+            // verdict cached per machine identity, over-ceiling inputs keep
+            // the reference by policy, every failing arm keeps the reference.
+            "accelerator-backend-first-tile-acceptance-gate",
             // Batch 337 +1 (Plan 346 / Research 376): the jitengine
             // declared-input pacing — a call that declares the whole
             // expert stack crosses the commit watermark on its own;
