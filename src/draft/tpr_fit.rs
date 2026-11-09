@@ -50,13 +50,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 use katgpt_core::tpr::als::param_count;
 use katgpt_core::tpr::{
     als_fit, bic_select, bow_router, filler_role_spread, shuffled_role_control_with, AlsConfig,
     AlsInput, AlsReport, BicSelection, BowRouterReport, FillerRoleSpread, RoleShuffleMode,
     ShuffledRoleReport, TprArtifact, TprBindings, TprError, TprScheme,
 };
-use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
 use super::withheld_pair_ood::{normalized_tokens, Binding};
 

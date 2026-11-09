@@ -59,11 +59,11 @@
 //! restores the baseline merge order for a same-binary A/B (the
 //! `RIIR_CLIPPY_NO_TWO_STAGE` precedent).
 
+use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 use katgpt_core::set_admission::{
     admit_with_recovery_into, certify_set, AdmissionScratch, CertificateReport, FanScratch,
     RecoveryOutcome, SetAdmissionConfig, DIM,
 };
-use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;

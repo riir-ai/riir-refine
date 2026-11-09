@@ -421,14 +421,18 @@ include_block = (
     "\n"
     "# Issue 221 P2: tight package surface — internal docs, corpora-side\n"
     "# fixtures and the binaries-only lanes stay out of the .crate.\n"
+    "# Anchored patterns (issue 221 P2b gate finding): cargo's include uses\n"
+    "# gitignore glob semantics — a slash-less pattern matches its basename\n"
+    "# at ANY depth, so bare README.md pulled in every .docs/.benchmarks/\n"
+    "# cloudflare README in the tree. Root-anchor the basename rows.\n"
     'include = [\n'
     '    "src/**",\n'
     '    "build.rs",\n'
     '    "build_commit.rs",\n'
     '    "tests/fixtures/m2p_attention_postfix_701.wgsl",\n'
     '    ".benchmarks/pins_manifest.json",\n'
-    '    "README.md",\n'
-    '    "LICENSE",\n'
+    '    "/README.md",\n'
+    '    "/LICENSE",\n'
     ']\n'
     'autobins = false\n'
     'autotests = false\n'

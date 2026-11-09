@@ -361,8 +361,7 @@ impl DiffAnchor {
     /// Fit the mean-corpus anchor over every chunk the index embeds — the
     /// SAME texts `index_chunks` embeds, so ā lives in the index's space.
     fn fit(chunks: &[RawChunk]) -> Self {
-        let mut b =
-            katgpt_core::differential_anchor::AnchorBuilder::new(LATENT_DIM);
+        let mut b = katgpt_core::differential_anchor::AnchorBuilder::new(LATENT_DIM);
         for c in chunks {
             b.observe(&ModellessEmbedder.embed(&c.content));
         }
@@ -464,9 +463,8 @@ impl RuleIndex {
         // kill-switch had no posture to toggle and is retired with the knob.
         let mut retriever = match config.tokenizer {
             IndexTokenizer::CodeDefault => RuleRetriever::new(),
-            IndexTokenizer::OpAware => {
-                RuleRetriever::new().with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer))
-            }
+            IndexTokenizer::OpAware => RuleRetriever::new()
+                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
             IndexTokenizer::OpAwareBigram => RuleRetriever::new()
                 .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
         };

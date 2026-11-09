@@ -106,9 +106,9 @@ pub mod op_tokenizer;
 // Issue 221 P2b: the in-repo fused retrieval seam — the matcher path's ONE
 // retrieval primitive (replaced the substrate `NeuronDbRetriever`). Ungated:
 // the publish posture's matcher runs on it.
-pub mod retriever;
 #[cfg(feature = "latent_retrieval")]
 pub mod retrieval_eval;
+pub mod retriever;
 #[cfg(feature = "mattr_k_poc")]
 pub mod rule_embed_mattr;
 #[cfg(feature = "set_rerank")]

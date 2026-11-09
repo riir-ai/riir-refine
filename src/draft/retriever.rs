@@ -111,7 +111,10 @@ impl RuleRetriever {
     /// silently desyncs the postings from the queries (the substrate
     /// contract, restated: `with_bm25_tokenizer` there carried the same
     /// requirement).
-    pub(crate) fn with_bm25_tokenizer(mut self, tokenizer: Box<dyn Tokenizer + Send + Sync>) -> Self {
+    pub(crate) fn with_bm25_tokenizer(
+        mut self,
+        tokenizer: Box<dyn Tokenizer + Send + Sync>,
+    ) -> Self {
         self.bm25 = Bm25Index::with_tokenizer(tokenizer);
         self
     }
@@ -215,7 +218,9 @@ impl RuleRetriever {
                 scratch.cos.push((score, i));
             }
             // Score desc, row asc on ties — total order, no drift.
-            scratch.cos.sort_unstable_by(|a, b| desc(b.0, a.0).then(a.1.cmp(&b.1)));
+            scratch
+                .cos
+                .sort_unstable_by(|a, b| desc(b.0, a.0).then(a.1.cmp(&b.1)));
             for &(score, i) in scratch.cos.iter().take(LATENT_K) {
                 let row = &self.rows[i];
                 let pos = scratch.candidates.len();
@@ -404,8 +409,10 @@ mod tests {
     #[test]
     fn candidates_are_deterministic_across_calls() {
         let r = build();
-        let query = LatentQuery::from_direction(ModellessEmbedder.embed("fn area(w: f64, h: f64) -> f64 { return w * h; }"))
-            .with_text("return w * h;");
+        let query = LatentQuery::from_direction(
+            ModellessEmbedder.embed("fn area(w: f64, h: f64) -> f64 { return w * h; }"),
+        )
+        .with_text("return w * h;");
         let mut s1 = RetrievalScratch::default();
         let mut s2 = RetrievalScratch::default();
         let a = r.retrieve_for_scoring_into(&query, &mut s1).clone();
