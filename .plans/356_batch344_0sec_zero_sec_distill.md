@@ -1,0 +1,28 @@
+# Plan 356 — Batch 344: 0sec-labs/0 sec-corpus transcription batch
+
+**Status:** STAGED — verdict accepted (Research 388, YES B+), awaiting owner GO before any corpus edit
+
+Source: 0sec-labs/0 @ `f7020eb2c5a271d9f0a46896883487d336603f60` (MIT OR Apache-2.0) — Research 388 is the verdict of record; every quote re-verified at mine time against a fresh clone at the pin (`.raw/0`, deleted at close — the staged `.raw/0` from verdict day, if it still exists, is UNTRUSTED: delete and re-clone).
+
+- [ ] **Phase 0 — pre-mining checks.** `agent-mail rig status` (not needed for gates — sec is NotBenchable-by-domain, no benches); re-clone `.raw/0` at the pin + `rev-parse` HEAD-equal; dual_allocation gate at landing (0/0/0 expected); claim row appended to the queue snapshot BEFORE any corpus edit, 48 h expiry, push is the arbiter.
+- [ ] **Phase 1 — dedup re-verification at landing HEAD.** Re-run the six Research-388 greps (sql / rng / ecb / jwt-alg / ssti / prompt-mcp) under both vocabularies; a new sibling rule landing in between adjudicates BEFORE authoring (adjacent-distinct note or drop, recorded).
+- [ ] **Phase 2 — entry authoring (original fixtures ONLY — never source text verbatim; license hygiene + binary-only distribution rule).**
+  - [ ] R1 `sql-identifier-interpolation-unallowlisted` (A− lead): format!/push_str-built query + sql vocabulary; fix = identifier allowlist map; the in-rule two-regime note (value → `.bind()`, identifier → allowlist — "you can't bind an identifier"); adjudication note vs `unchecked-wire-arithmetic`.
+  - [ ] R2 `predictable-rng-for-secret-material` (B+): predictably-seeded PRNG feeding token/nonce/salt/key material; fix = `OsRng`/getrandom; security-context vocabulary gate (their `SECURITY_CONTEXT_RX` list transcribed as vocabulary, word-boundary aware).
+  - [ ] R3 `ecb-block-mode-selection` (B): `Ecb<Aes…>` type aliases / ECB-named consts; fix = AEAD (AesGcm/ChaCha20Poly1305) + random nonce; word-boundary the `ecb` vocabulary (substring hazard recorded in Research 388).
+  - [ ] R4 `jwt-alg-family-confusion-allowlist` (B−): multi-alg / HS-vs-RS allowlist confusion; **MANDATORY in-rule adjudication note vs `jwt-insecure-validation-flags`** (disabled-validation axis vs wrong-allowlist axis — both directions distinct).
+  - [ ] R5 SSTI `user-input-as-template-source` — DEFER-OR-DROP GATE: read `ssti-exploitation.yaml` at mine time first; drop if the tera/handlebars/minijinja vocabulary can't bound the class below the FP floor (word-boundary discipline: `tera` ⊂ "iteration").
+  - [ ] R6+R7 agent-family seed (`untrusted-content-interpolated-into-prompt` B− + `model-driven-tool-invoke-without-policy-gate` C+) — **CONJUNCTION-OR-DEMOTE**: adding the new `SecFamily` variant (APPEND-ONLY enum, schema change + gates) is justified only if BOTH rows survive falsification; otherwise fold R6 to InputValidation as a lone suggest-only row or drop both, recording the reason.
+  - [ ] Rider face (count-neutral): the weak-hash security-context co-occurrence gate folded onto `weak-hash-to-blake3`'s concept/notes — never a new rule.
+  - [ ] Recorded DROPS (transcribed into the landing note as evidence the gate worked): hardcoded-key (scanner-lane routing), pickle/deser + eval (language-absent in safe Rust), typosquat/install-script oracles (scan-lane screening), refusal-classifier + score-only-suppression (annotations).
+- [ ] **Phase 3 — falsification arms + proof path BEFORE first corpus edit.** Per-rule: original fixture + the tampered-verdict arm (the fixture must FAIL its detector when the guarded decision is flipped) + the all-safe stub arm; the four-arm discipline (b342 precedent).
+- [ ] **Phase 4 — gates at the isolated `/tmp/b344_target`.** default lib / sec / no-default / all-features postures; retrieval floors both lanes (sec self-variants top-1; router annotation re-pin if moved); clippy −D warnings at all postures; fmt gate.
+- [ ] **Phase 5 — standing state.** `pins_manifest.py --write` ONLY if the corpus genuinely moved (with the corpus change, same commit); score-bench run per P30 — sec delta expected FLAT, freeze tables NOT moved (verify against the standing rule); release-set binary rebuild NOT owed (sec is NOT in RELEASE_FEATURES — verify at landing); AGENTS.md sec rule count + `.docs/11_domains` rows + README if the corpus shape changed.
+- [ ] **Phase 6 — records.** Research 388 status → `DISTILLED — batch landed (Batch 344)`; queue snapshot landing row (discharges the claim); landing note carries the drop ledger + the foxguard/OWASP/promptfoo follow-up pool; `rm -rf .raw/0`.
+- [ ] **Phase 7 — commit + push, ONE feat: commit** (corpus + plan + research status + queue row + docs rows), Session line in the body.
+
+## Notes
+
+- Nominal batch number 344 = next after the Batch-343 landing (Plan 355); re-check the queue at claim time — a sibling batch landing first bumps it (the plan number stays 356 regardless).
+- Domain routing: `sec` ONLY. Nothing here routes rust_perf/clippy_lints/kernel_opt; the transcription law governs (source TS/Python — never a gate).
+- Yield estimate: 3–4 rules + 1 face after falsification (Research 388 §Queue slot).
