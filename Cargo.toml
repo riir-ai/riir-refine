@@ -18,6 +18,17 @@ homepage = "https://refine.riir.ai"
 description = "Clippy-healing drafter+pruner pipeline: modelless ternary drafter x rust-analyzer validator x additive self-evolution loop (LoRA fallback deferred)"
 publish = false
 
+# Issue 221 P2b: the ragplane vendoring carries the UPSTREAM feature
+# vocabulary (bm25_facet / dense_embed / embed_contextual — neuron-db/riir-rag
+# rows with no refine feature). Declared EXPECTED here (the cargo check-cfg
+# mechanism) so the undeclared-cfg lint stays meaningful for refine's own
+# code; the vendored branches compile OUT (undeclared here), which is the
+# vendoring's intent.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(feature, values("bm25_facet", "dense_embed", "embed_contextual"))',
+] }
+
 [lib]
 name = "riir_refine"
 path = "src/lib.rs"
@@ -217,6 +228,10 @@ riir-llm = { path = "../riir-llm", optional = true, default-features = false }
 libc = "0.2"
 
 [dev-dependencies]
+# Issue 221 P2b: the vendored ragplane/bm25.rs test module's perf benches
+# hash with foldhash (upstream dep of the same file — test-only here, zero
+# product cost; the publish surgery drops dev-deps wholesale).
+foldhash = "0.1"
 # Build-hygiene: the [dependencies] row runs katgpt-core with default-features
 # = false (4 named features instead of 83 defaults). Test-only modules are named
 # HERE so they unify only into test builds, never the shipped binary.

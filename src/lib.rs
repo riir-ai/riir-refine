@@ -465,6 +465,14 @@ pub mod kat_state_stamp;
 // apply/TOTP/signer arms stay riir-kat-side (their consumers are kat-gated).
 #[path = "katplane/kat_ua.rs"]
 pub mod kat_ua;
+// Issue 221 P2b: the modelless retrieval substrate the structural matcher
+// consumes — vendored from riir-neuron-db (bm25.rs — the production Bm25Index
+// the floors were pinned under) + riir-rag's modelless slices (embedder/
+// query/chunker/ast_chunker). UNGATED: the publish posture's matcher path
+// runs on this substrate; the private-dep extras (bonsai dense, traj_store)
+// keep their own feature gates and sibling imports.
+#[path = "ragplane/mod.rs"]
+pub mod ragplane;
 
 // Issue 003 T4 (the refine half): the `config adopt-state` engine — the
 // explicit, per-file migration command for pre-split network-blind state.
