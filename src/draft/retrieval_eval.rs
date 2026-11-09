@@ -413,7 +413,7 @@ pub const CLEAN_SPANS: &[(&str, &str)] = &[
     (
         "clean:suggest_scratch_capacity",
         r#"pub struct SuggestScratch {
-    retrieved: Vec<riir_rag::RetrievedChunk>,
+    retrieved: Vec<RetrievedChunk>,
     best: HashMap<String, f32>,
     ranked: Vec<ScoredRule>,
 }

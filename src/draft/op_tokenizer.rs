@@ -2,7 +2,7 @@
 //!
 //! ## The defect this exists to fix
 //!
-//! The substrate default, `riir_neuron_db::bm25::CodeTokenizer`, splits on
+//! The substrate default, `crate::ragplane::bm25::CodeTokenizer`, splits on
 //! `!c.is_ascii_alphanumeric() && c != '_'` — it keeps identifier tokens and
 //! **discards every punctuation character**. For identifier-rich corpora
 //! (`rust_perf`: `with_capacity`, `HashMap`, `Arc`; kernel: `CubeDim`, `launch`)
@@ -47,7 +47,7 @@
 //!
 //! Modelless: pure deterministic string scanning, no weights, no training.
 
-use riir_neuron_db::bm25::Tokenizer;
+use crate::ragplane::bm25::Tokenizer;
 
 /// Prefix marking a punctuation-run token.
 ///
@@ -55,7 +55,7 @@ use riir_neuron_db::bm25::Tokenizer;
 /// token and an identifier token can never collide.
 pub const OP_PREFIX: &str = "op:";
 
-/// Identifier tokens (as [`CodeTokenizer`](riir_neuron_db::bm25::CodeTokenizer))
+/// Identifier tokens (as [`CodeTokenizer`](crate::ragplane::bm25::CodeTokenizer))
 /// **plus** one token per maximal punctuation run.
 ///
 /// See the module docs for why this exists and why runs beat an operator table.
@@ -173,7 +173,7 @@ mod tests {
             .into_iter()
             .filter(|t| !t.starts_with(OP_PREFIX))
             .collect();
-        let expected = riir_neuron_db::bm25::CodeTokenizer.tokenize(text);
+        let expected = crate::ragplane::bm25::CodeTokenizer.tokenize(text);
         assert_eq!(idents, expected);
     }
 

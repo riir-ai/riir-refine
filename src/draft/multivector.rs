@@ -55,7 +55,7 @@ use super::domain_router::DomainId;
 use super::instantiation_rerank::{mark_instantiation_with_file, rerank, RerankMode, RERANK_POOL};
 use super::op_tokenizer::RustOpTokenizer;
 use super::retrieval_eval::{canonical_rank, domain_index, labeled_eval_spans, CLEAN_SPANS};
-use riir_neuron_db::bm25::Tokenizer;
+use crate::ragplane::bm25::Tokenizer;
 
 /// Probe depth — mirrors `retrieval_eval::PROBE_TOP_K` (private there;
 /// duplicated deliberately, one line, the `linking_confusion` precedent).

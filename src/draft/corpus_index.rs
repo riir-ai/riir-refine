@@ -1,10 +1,13 @@
 //! Per-domain latent rule index — the `--suggest` knowledge base (Plan 005 T1.2).
 //!
-//! Composes the riir-rag substrate as-is (DRY — zero retrieval code
-//! reimplemented here): each corpus rule's *pattern text* (clippy/perf:
-//! `buggy_code`; kernel: `ref_shape`) is embedded by [`ModellessEmbedder`]
-//! (BLAKE3+DFT+sigmoid, deterministic, no weights) and indexed into a
-//! [`NeuronDbRetriever`] (`ShardIndex` Clifford-wedge KNN + `Bm25Index`).
+//! Composes the vendored [`crate::ragplane`] substrate as-is (DRY — zero
+//! retrieval code reimplemented here): each corpus rule's *pattern text*
+//! (clippy/perf: `buggy_code`; kernel: `ref_shape`) is embedded by
+//! [`ModellessEmbedder`] (BLAKE3+DFT+sigmoid, deterministic, no weights) and
+//! indexed into the in-repo fused retriever [`super::retriever::RuleRetriever`]
+//! (exact cosine latent stage + the vendored `Bm25Index` fused query — issue
+//! 221 P2b replaced the substrate `NeuronDbRetriever` with this seam as the
+//! ONE retrieval path).
 //!
 //! Retrieval maps a real code span onto ranked rules:
 //!
@@ -13,15 +16,19 @@
 //! ```
 //!
 //! The `zone_hash → rule_id` sidecar is keyed by `BLAKE3(pattern_text)` —
-//! the exact key `NeuronDbRetriever::index_chunks` computes internally
-//! (stable contract, documented in riir-rag retriever.rs).
+//! the exact key the retriever computes internally (BLAKE3 of the chunk
+//! content, the substrate's stable contract, carried by the seam).
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use riir_rag::{
-    Embedder, LatentQuery, ModellessEmbedder, NeuronDbRetriever, NeuronDbRetrieverConfig, RawChunk,
-};
+use crate::ragplane::chunker::RawChunk;
+use crate::ragplane::embedder::{Embedder, ModellessEmbedder};
+#[cfg(feature = "differential_anchor")]
+use crate::ragplane::query::LATENT_DIM;
+use crate::ragplane::query::{ChunkSource, LatentQuery, RetrievedChunk};
+
+use super::retriever::{RetrievalScratch, RuleRetriever};
 
 /// Issue 643 — the process-global latent-leg-skip toggle (`true` = the
 /// incumbent). The production path only READS it (always true); the census
@@ -91,15 +98,15 @@ pub struct SuggestScratch {
     /// one suggest call (cleared per call; capacity persists). `pub(crate)`
     /// so the Issue-196 narrowed kernel index reuses the SAME scratch
     /// (one caller-owned buffer, the G4 discipline).
-    pub(crate) retrieved: Vec<riir_rag::RetrievedChunk>,
-    /// The substrate retrieval scratch (candidate `Vec` + `by_zone` map +
-    /// the two-stage scan buffers). Cleared at entry by every
-    /// `retrieve_for_scoring_into` call (no cross-call state — the
-    /// substrate's determinism contract), so one instance per `SuggestScratch`
-    /// is correct for the whole multi-scale loop. Byte-identical results to
-    /// the fresh-allocation path, pinned by riir-rag's
-    /// `retrieve_for_scoring_into_matches_plain` contract test.
-    pub(crate) retrieval: riir_rag::retriever::RetrievalScratch,
+    pub(crate) retrieved: Vec<RetrievedChunk>,
+    /// The substrate retrieval scratch (the candidate `Vec` + `by_zone` map +
+    /// the cosine/BM25 query buffers). Cleared at entry by every
+    /// `retrieve_for_scoring_into` call (no cross-call state — the seam's
+    /// determinism contract), so one instance per `SuggestScratch`
+    /// is correct for the whole multi-scale loop. Identical results to
+    /// the fresh-allocation path; the seam's scratch-reuse twin keeps the
+    /// per-line loop allocation-free.
+    pub(crate) retrieval: super::retriever::RetrievalScratch,
     /// Per-rule best score accumulator (cleared via `drain` per call — the
     /// owned keys move straight into `ranked`).
     pub(crate) best: HashMap<String, f32>,
@@ -170,7 +177,7 @@ pub(crate) fn query_text_within(text: &str, budget: Option<usize>) -> &str {
 pub(crate) fn merge_retrieved_best(
     zone_lookup: &HashMap<[u8; 32], String>,
     config: &RetrievalConfig,
-    retrieved: &[riir_rag::RetrievedChunk],
+    retrieved: &[RetrievedChunk],
     best: &mut HashMap<String, f32>,
 ) {
     best.clear();
@@ -181,9 +188,10 @@ pub(crate) fn merge_retrieved_best(
         let latent = config.latent_weight * chunk.latent_score;
         #[allow(unused_mut)] // `mut` is only exercised under `bonsai_retrieval`
         let mut score = chunk.exact_score.map_or(latent, |exact| latent + exact);
-        // `dense_score` only exists on RetrievedChunk under riir-rag's
-        // `bonsai_embedder` cfg — gate the read, not just the weight.
-        #[cfg(feature = "bonsai_retrieval")]
+        // `dense_score` exists on the vendored RetrievedChunk under the
+        // `dense_embed` feature (implied by `bonsai_retrieval`) — gate the
+        // read on the feature, the weight on the config.
+        #[cfg(feature = "dense_embed")]
         if config.dense_weight > 0.0 {
             if let Some(dense) = chunk.dense_score {
                 score += config.dense_weight * dense;
@@ -273,20 +281,6 @@ pub struct RetrievalConfig {
     /// entirely — no GGUF is loaded. Requires the `bonsai_retrieval` feature
     /// to have any effect; ignored (with the index built modellessly) without it.
     pub dense_weight: f32,
-    /// Two-stage latent KNN oversample factor (Issue 063) — forwarded to the
-    /// substrate's `NeuronDbRetrieverConfig::two_stage_oversample`.
-    ///
-    /// `Some(n)` switches the latent leg from the O(N·k) greedy
-    /// `retrieve_diverse` to the O(N + M·k) `retrieve_diverse_two_stage`
-    /// (M = min(k·n, N)) — pre-filtering candidates by query relevance before
-    /// diversification, the substrate's documented mode for query-time
-    /// retrieval. `None` keeps full-index diversity. **Measured default
-    /// (Issue 063)**: `Some(4)` at the shipped corpus sizes — the suggest
-    /// path is query-relevance-primary (rule suggestion, not ensemble
-    /// selection), and the greedy expansion was the dominant G2 latency
-    /// stage. Quality gated by the Issue 017 retrieval floors + the
-    /// composite G1 eval, both green at the switch.
-    pub two_stage_oversample: Option<usize>,
 }
 
 impl RetrievalConfig {
@@ -300,16 +294,6 @@ impl RetrievalConfig {
     /// behaviour change; the knob survives only to keep the sweep runnable
     /// and the refutation reproducible.
     pub const DEFAULT_LATENT_WEIGHT: f32 = 1.0;
-
-    /// The Issue 063-measured two-stage oversample default.
-    ///
-    /// 4 is the substrate's own documented recommendation (21× at N=10K,
-    /// k=100; preserving the diversity guarantee whenever `k·n ≥ N-1`). At
-    /// the shipped corpus sizes (80-640 chunks per domain) it halves the
-    /// dominant retrieval stage with the Issue 017 floors + composite G1
-    /// holding — see `.benchmarks/018_plan005_latent_suggest_goat.md`'s
-    /// Issue 063 addendum.
-    pub const DEFAULT_TWO_STAGE_OVERSAMPLE: Option<usize> = Some(4);
 }
 
 impl Default for RetrievalConfig {
@@ -318,7 +302,6 @@ impl Default for RetrievalConfig {
             tokenizer: IndexTokenizer::default(),
             latent_weight: Self::DEFAULT_LATENT_WEIGHT,
             dense_weight: 0.0,
-            two_stage_oversample: Self::DEFAULT_TWO_STAGE_OVERSAMPLE,
         }
     }
 }
@@ -329,7 +312,7 @@ impl Default for RetrievalConfig {
 /// ~155 rules) — each rule is one chunk, one modelless embedding. Built once
 /// per process at suggest time, not per query.
 pub struct RuleIndex {
-    retriever: NeuronDbRetriever,
+    retriever: RuleRetriever,
     /// The dense embedder, when the Bonsai rerank path is active. Held so
     /// query-side `embed_dense` uses the SAME model the index was built with.
     #[cfg(feature = "bonsai_retrieval")]
@@ -368,7 +351,7 @@ pub struct RuleIndex {
 #[derive(Debug, Clone, Copy)]
 struct DiffAnchor {
     /// Mean-corpus embedding over the indexed chunks (fit at build).
-    mean: [f32; riir_rag::query::LATENT_DIM],
+    mean: [f32; LATENT_DIM],
     /// Correction strength; `0.0` ⇒ no correction (the kill switch).
     lambda: f32,
 }
@@ -379,11 +362,11 @@ impl DiffAnchor {
     /// SAME texts `index_chunks` embeds, so ā lives in the index's space.
     fn fit(chunks: &[RawChunk]) -> Self {
         let mut b =
-            katgpt_core::differential_anchor::AnchorBuilder::new(riir_rag::query::LATENT_DIM);
+            katgpt_core::differential_anchor::AnchorBuilder::new(LATENT_DIM);
         for c in chunks {
             b.observe(&ModellessEmbedder.embed(&c.content));
         }
-        let mut mean = [0.0_f32; riir_rag::query::LATENT_DIM];
+        let mut mean = [0.0_f32; LATENT_DIM];
         b.finish_into(&mut mean);
         Self {
             mean,
@@ -421,8 +404,9 @@ impl RuleIndex {
     ///
     /// # Errors
     ///
-    /// Returns the substrate's indexing error (as a `String`) if
-    /// `NeuronDbRetriever::index_chunks` fails.
+    /// Infallible today (the in-repo seam's modelless indexing cannot fail;
+    /// the `Result` shape predates the issue-221 P2b seam swap and stays so
+    /// callers — and any future fallible path — do not churn).
     pub fn build(patterns: Vec<(String, String)>) -> Result<Self, String> {
         Self::build_with(patterns, RetrievalConfig::default())
     }
@@ -433,8 +417,7 @@ impl RuleIndex {
     ///
     /// # Errors
     ///
-    /// Returns the substrate's indexing error (as a `String`) if
-    /// `NeuronDbRetriever::index_chunks` fails.
+    /// Infallible today (see [`build`](Self::build)).
     pub fn build_with(
         patterns: Vec<(String, String)>,
         config: RetrievalConfig,
@@ -452,7 +435,7 @@ impl RuleIndex {
             }
             let push = |content: &str, chunks: &mut Vec<RawChunk>| {
                 chunks.push(RawChunk {
-                    source: riir_rag::ChunkSource::new(format!("rule:{rule_id}"), 0, 0),
+                    source: ChunkSource::new(format!("rule:{rule_id}"), 0, 0),
                     content: content.to_string(),
                 });
                 *blake3::hash(content.as_bytes()).as_bytes()
@@ -470,38 +453,21 @@ impl RuleIndex {
         }
         #[cfg(feature = "differential_anchor")]
         let diff_anchor = DiffAnchor::fit(&chunks);
-        // `with_bm25_tokenizer` MUST precede `index_chunks` — the tokenizer is
-        // used at both index and search time, and swapping it after indexing
-        // silently desyncs the postings from the queries (substrate contract).
+        // The seam's BM25 tokenizer choice MUST precede `index_chunks` — the
+        // tokenizer is used at both index and search time, and swapping it
+        // after indexing silently desyncs the postings from the queries
+        // (substrate contract, carried by the seam).
         //
-        // Issue 063 — two-stage latent KNN, surfaced as a `RetrievalConfig`
-        // knob (default `Some(4)`, see `DEFAULT_TWO_STAGE_OVERSAMPLE`).
-        // Measured record (e5ffe9c, kept verbatim from the first landing):
-        // `retrieve` is 92.1% of `suggest_span` (rank_into 2.3%, embedding
-        // 0.8%); median 0.806× over 11 interleaved A/B pairs, 10 of 11
-        // favouring two-stage; all 14 retrieval floors IDENTICAL, goat G1
-        // IDENTICAL (21/24, same miss list), uncontaminated_g1 8/8 with pool
-        // recall @12 100%; the one observable cost is t48 mrr 0.961 → 0.959
-        // (one item one rank below top-3, under every gated floor).
-        //
-        // `RIIR_CLIPPY_NO_TWO_STAGE=1` is the kill-switch and is what the
-        // e5ffe9c A/B toggled (the repo's feature-flag convention): it forces
-        // the pre-063 single-stage `retrieve_diverse`, overriding the config
-        // value for same-binary A/B.
-        let two_stage = if std::env::var("RIIR_CLIPPY_NO_TWO_STAGE").is_err() {
-            config.two_stage_oversample
-        } else {
-            None
-        };
-        let substrate_cfg = NeuronDbRetrieverConfig {
-            two_stage_oversample: two_stage,
-            ..NeuronDbRetrieverConfig::default()
-        };
-        let retriever = match config.tokenizer {
-            IndexTokenizer::CodeDefault => NeuronDbRetriever::new(substrate_cfg),
-            IndexTokenizer::OpAware => NeuronDbRetriever::new(substrate_cfg)
-                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
-            IndexTokenizer::OpAwareBigram => NeuronDbRetriever::new(substrate_cfg)
+        // Issue 063 note: the substrate's two-stage oversample knob has no
+        // analogue on the in-repo seam — the latent stage is already exact
+        // O(N) brute force (issue 221 P2b); the `RIIR_CLIPPY_NO_TWO_STAGE`
+        // kill-switch had no posture to toggle and is retired with the knob.
+        let mut retriever = match config.tokenizer {
+            IndexTokenizer::CodeDefault => RuleRetriever::new(),
+            IndexTokenizer::OpAware => {
+                RuleRetriever::new().with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer))
+            }
+            IndexTokenizer::OpAwareBigram => RuleRetriever::new()
                 .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
         };
         #[cfg(feature = "bonsai_retrieval")]
@@ -512,13 +478,7 @@ impl RuleIndex {
                 let bonsai = BonsaiEmbedder::load(&path, BonsaiEmbedStrategy::MeanPool)
                     .map_err(|e| format!("bonsai load ({}): {e}", path.display()))?;
                 let bonsai = std::sync::Arc::new(bonsai);
-                let dense_idx = std::sync::Arc::new(
-                    riir_neuron_db::dense_embed::DenseEmbedIndex::with_capacity(chunks.len()),
-                );
-                let retriever = retriever.with_dense_index(dense_idx);
-                retriever
-                    .index_chunks_dense(chunks, bonsai.as_ref())
-                    .map_err(|e| e.to_string())?;
+                retriever.index_chunks_dense(chunks, bonsai.as_ref());
                 return Ok(Self {
                     retriever,
                     config,
@@ -533,9 +493,7 @@ impl RuleIndex {
                 });
             }
         }
-        retriever
-            .index_chunks(chunks, &embedder)
-            .map_err(|e| e.to_string())?;
+        retriever.index_chunks(chunks, &embedder);
         Ok(Self {
             retriever,
             config,
@@ -586,7 +544,7 @@ impl RuleIndex {
     /// The fitted mean-corpus anchor ā (measurement observable).
     #[cfg(feature = "differential_anchor")]
     #[must_use]
-    pub fn differential_anchor_mean(&self) -> &[f32; riir_rag::query::LATENT_DIM] {
+    pub fn differential_anchor_mean(&self) -> &[f32; LATENT_DIM] {
         &self.diff_anchor.mean
     }
 
@@ -787,7 +745,9 @@ impl RuleIndex {
             .with_latent_scan(latent_scan_get());
         #[cfg(feature = "bonsai_retrieval")]
         if let Some(bonsai) = &self.dense {
-            use riir_rag::DenseEmbedder;
+            // The dep-side trait — what `BonsaiEmbedder` implements (the
+            // vendored trait set has no foreign impls).
+            use riir_rag::embedder::DenseEmbedder as _;
             q = q.with_dense_direction(bonsai.embed_dense(text));
             return q;
         }
@@ -806,7 +766,7 @@ impl RuleIndex {
     fn rank_into<'s>(
         &self,
         phi: Option<&[f32]>,
-        retrieved: &[riir_rag::RetrievedChunk],
+        retrieved: &[RetrievedChunk],
         top_k: usize,
         best: &'s mut HashMap<String, f32>,
         ranked: &'s mut Vec<ScoredRule>,
@@ -837,20 +797,18 @@ impl RuleIndex {
     /// Retrieve scored candidates for `text` into `out` (append) — the ONE
     /// retrieval primitive, shared by the flat suggest paths and the
     /// Issue-196 narrowed kernel index (which queries its per-category
-    /// sub-indices through this method, never the substrate directly).
+    /// sub-indices through this method, never the seam directly).
     /// Score-only packed path: no content/source loads (Issue 063 law).
     ///
-    /// Issue 191 T7: the substrate half of the call runs through the
-    /// scratch-reuse twin (`retrieve_for_scoring_into`) — `retrieval` carries
-    /// the candidate `Vec` + `by_zone` map + the two-stage scan buffers
-    /// across the per-line loop instead of reallocating them per call.
-    /// Byte-identical results (substrate contract test); the scratch is
-    /// cleared at entry, so no state crosses calls.
+    /// Issue 191 T7's scratch-reuse law carries over: `retrieval` carries the
+    /// candidate `Vec` + `by_zone` map across the per-line loop instead of
+    /// reallocating per call. Identical results; the scratch is cleared at
+    /// entry, so no state crosses calls.
     pub(crate) fn retrieve_scored_into(
         &self,
         text: &str,
-        out: &mut Vec<riir_rag::RetrievedChunk>,
-        retrieval: &mut riir_rag::retriever::RetrievalScratch,
+        out: &mut Vec<RetrievedChunk>,
+        retrieval: &mut RetrievalScratch,
     ) {
         let query = self.query_for(text);
         let retrieved = self.retriever.retrieve_for_scoring_into(&query, retrieval);

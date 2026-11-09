@@ -63,7 +63,7 @@ use katgpt_core::set_admission::{
     admit_with_recovery_into, certify_set, AdmissionScratch, CertificateReport, FanScratch,
     RecoveryOutcome, SetAdmissionConfig, DIM,
 };
-use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
 use super::corpus_index::ScoredRule;
 use super::domain_router::DomainId;

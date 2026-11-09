@@ -237,11 +237,13 @@ pub mod selection_entropic;
 pub mod selection_tether;
 pub mod self_evolve;
 
-// Plan 005: real-file span-level latent retrieval (`--suggest` MVP).
-// Composes riir-rag (AstChunker + ModellessEmbedder + NeuronDbRetriever) +
-// the katgpt-core routing primitive. Opt-in — pulls the riir-rag +
-// riir-neuron-db path deps (heavy; default build stays light).
-#[cfg(feature = "latent_retrieval")]
+// Plan 005: real-file span-level healing (`--suggest` MVP) — the draft
+// layer. Issue 221 P2b: the modelless CORE (the matcher pipeline on the
+// vendored `ragplane` substrate + the in-repo `retriever` seam) is ungated —
+// the crates.io publish posture carries the full suggest product with zero
+// private deps; the retrieval-lane extras gate module-by-module inside
+// (`latent_retrieval` now serves only those lanes + the `bonsai_retrieval`
+// dense arm).
 pub mod draft;
 
 // Issue 113: the auto-oracle — a scanning run over a cargo project lints it

@@ -805,7 +805,7 @@ fn rank_of_set(
     scratch: &mut katgpt_core::set_admission::AdmissionScratch,
     fan: &mut katgpt_core::set_admission::FanScratch,
 ) -> (Option<usize>, f32) {
-    use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+    use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
     let mut rules = index.suggest_deep(code, RERANK_POOL);
     super::instantiation_rerank::rerank(&mut rules);

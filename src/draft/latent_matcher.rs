@@ -1060,7 +1060,7 @@ impl LatentMatcher {
     /// merged order with its certificate (the same-binary A/B control).
     #[cfg(feature = "set_rerank")]
     pub fn suggest_set_slate(&mut self, code: &str, k: usize) -> super::set_rerank::SetSlate {
-        use riir_rag::Embedder as _;
+        use crate::ragplane::Embedder as _;
         let (_, by_domain) = self.suggest_span(code, super::instantiation_rerank::RERANK_POOL);
         let corpus = &self.rule_latents;
         let cfg = self.set_cfg;
@@ -1071,7 +1071,7 @@ impl LatentMatcher {
                 .ok()
                 .map(|i| cfg.latent.project(latents[i]))
         };
-        let query = riir_rag::ModellessEmbedder.embed(code);
+        let query = crate::ragplane::ModellessEmbedder.embed(code);
         let killed = std::env::var(super::set_rerank::NO_SET_RERANK_ENV).is_ok();
         if killed {
             super::set_rerank::baseline_slate(&cfg, &by_domain, lookup, k)

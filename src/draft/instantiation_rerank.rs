@@ -662,7 +662,10 @@ mod tests {
     /// deliberately top-1-independent, because whichever rule the
     /// deterministic retrieval surfaces, an oracle inside the winning
     /// family is never crowding.
-    #[cfg(feature = "clippy_lints")]
+    // latent_retrieval joins the gate: the composite fixtures live in the
+    // retrieval-lane eval_fixtures module (issue 221 P2b regated the draft
+    // layer module-by-module).
+    #[cfg(all(feature = "clippy_lints", feature = "latent_retrieval"))]
     #[test]
     fn a_real_composite_pool_with_the_oracle_inside_the_top_family_is_diverse() {
         let mut matcher =

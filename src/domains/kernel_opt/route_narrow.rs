@@ -460,8 +460,8 @@ mod tests {
             let mut hits = 0;
             for (rule_id, code) in &spans {
                 let routed = idx.router.route_top(code, k);
-                let mut retrieved: Vec<riir_rag::RetrievedChunk> = Vec::new();
-                let mut retrieval = riir_rag::retriever::RetrievalScratch::default();
+                let mut retrieved: Vec<crate::ragplane::RetrievedChunk> = Vec::new();
+                let mut retrieval = crate::draft::retriever::RetrievalScratch::default();
                 for slice_i in &routed {
                     let slice = &idx.slices[*slice_i];
                     if !slice.is_empty() {

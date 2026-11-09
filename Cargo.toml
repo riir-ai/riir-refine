@@ -789,11 +789,17 @@ allow-local = ["riir-kat/allow-local"]
 # is exactly the "old version with no update notice" this exists to end.
 
 # Plan 005 T3.5 option 3: 768-D Bonsai dense rerank on top of the 8-D
-# ShardIndex pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF
+# latent pre-filter. HEAVY — loads the ~6.7 GB Ternary-Bonsai-27B GGUF
 # and runs a CPU ternary forward pass per embedded text. NEVER default; the
 # modelless path is the permanent floor (riir-rag's own G5 rule). Exists so
 # the T3.5 contingency's third option is measurable, not assumed.
-bonsai_retrieval = ["latent_retrieval", "dep:riir-rag-bonsai"]
+# Issue 221 P2b: the vendored ragplane substrate compiles its dense half
+# (the `DenseEmbedder` trait + `RetrievedChunk::dense_score`) against THIS
+# crate's feature set — `bonsai_retrieval` now implies it so the dense
+# rerank arm resolves the vendored cfg spellings exactly as the old dep
+# unification did. `dense_embed` is never enabled on its own.
+dense_embed = []
+bonsai_retrieval = ["latent_retrieval", "dep:riir-rag-bonsai", "dense_embed"]
 
 # Kernel rule resolution verification via CubeCL compile (Phase 3).
 # **STUB** — currently delegates to the shared RustAnalyzerPruner (syntax

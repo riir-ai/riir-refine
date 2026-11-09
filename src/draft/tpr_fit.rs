@@ -56,7 +56,7 @@ use katgpt_core::tpr::{
     AlsInput, AlsReport, BicSelection, BowRouterReport, FillerRoleSpread, RoleShuffleMode,
     ShuffledRoleReport, TprArtifact, TprBindings, TprError, TprScheme,
 };
-use riir_rag::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
 
 use super::withheld_pair_ood::{normalized_tokens, Binding};
 
