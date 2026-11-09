@@ -1,6 +1,6 @@
 # Plan 357 — Batch 345: HerRei/local-upscale (LocalSR) distill batch
 
-**Status:** LANDED — Batch 345 (commit: see git log "batch 345"), rust_perf 307→312, sec 50→51, kernel_opt 1075→1076; verdict Research 389. All gates green (full-feature 3997/0 + default 3632/0 [1 pre-existing sibling kat_ua flake disclosed] + rust_perf_bench 3663/0 + retrieval floors HELD no re-pin + dual_allocation 0/0/0).
+**Status:** LANDED — Batch 345, carried by commit `a95e8c265` (the sibling 221 lane's commit swept this lane's staged set mid-flight — the shared-index race; content verified byte-identical post-landing, batch345 needles 3/3 green at the pushed HEAD; the batch's own `feat:` message was lost to the race and this plan + the snapshot row are the landing record), rust_perf 307→312, sec 50→51, kernel_opt 1075→1076; verdict Research 389. All gates green (full-feature 3997/0 + default 3632/0 [1 pre-existing sibling kat_ua flake disclosed] + rust_perf_bench 3663/0 + retrieval floors HELD no re-pin + dual_allocation 0/0/0).
 
 - [x] Re-clone + re-pin the source (v0.3.0-beta moves fast) and record the fresh sha + license in the entries headers — PIN UNCHANGED at re-clone (cf6f8b55, tip 2026-11-07): T0 by pin identity
 - [x] T0: re-verify every Research 389 quote at the fresh pin (spot-grep battery: 16/16 green)
