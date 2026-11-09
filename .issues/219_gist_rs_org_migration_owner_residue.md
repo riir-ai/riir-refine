@@ -28,6 +28,7 @@ The org move (24 riir-* + riir-dao-proposal + the public dist family reflex/carg
 
 ## C. Observations for the record
 
+- **2026-11-10 (amo idle lane): the AMO box's 24 local origin remotes flipped gist-rs → riir-ai** (the same keep set as B's 4090 pass; `remote set-url` + a fresh fetch over the NEW URLs on the three heaviest repos — refine/ai/infer — all green; this box's pushes had been riding the 308 git-protocol redirect, last seen on this lane's own `eb3716e5` push). No commit rides this row — a remote flip is machine-local state, and C's last line predates the flip's discovery.
 - **Debugging lesson (misdiagnosis corrected):** `git remote set-url` failing `failed to write new configuration file … config.lock` on every repo looked like an app-level write block (a manual zero-byte `[IO.File]::Open` lock-create succeeded) — root cause was the FULL DISK all along: create-succeeds/write-content-fails is the ENOSPC signature. Check disk before blaming AV/processes/ACLs on a wedged box.
 - `refine.gist.rs` → `refine.riir.ai` 308 redirect confirmed live; canonical updated in the cargo-refine dist README.
 - Two stale 0-byte `index-*.tmp.lock` files in `E:\git\seal\.git` (non-fleet repo) — REMOVED during the 11-08 cleanup.
