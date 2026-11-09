@@ -16,12 +16,12 @@
 | `KernelVerifier` (compile-only) | ✅ (behind `kernel_verify`) | Full numeric compare vs reference |
 | L4 LoRA fallback | | ✅ Deferred across all domains |
 
-## Promotion status: both fences measured (2026-11-05)
+## Promotion status: PROMOTED 2026-11-06 (both fences measured 2026-11-05 first)
 
-`kernel_opt` stays opt-in. Promotion requires BOTH fences; both were measured today:
+`kernel_opt` + `kernel_pregate` are **DEFAULT-ON + in the shipped release set since 2026-11-06** (owner call: "any gain no perf hurt must enabled by default, dont make good goat sad" — the rules are fixture-tested + staged-lead byte-verified, the pregate fence is measured; the real-corpus GOAT validator stays open as hygiene, not a blocker). The fence measurements that preceded the call:
 
 - **G2 (GPU-host leg)** — **PASSES** (Bench 135, the issue-191 T6 run of Bench 130's registration + Bench 133's sources pin): correctness 23/23 on CUDA, 23/23 measured, leg median **1.3774 ≥ 1.06** over per-pair medians; thermal clean; per-rule regressions recorded per-pair, never pooled. The CPU-host leg was closed earlier at tranche-median 1.0000 (the wins are structurally not CPU-demonstrable — disclosed, never re-run).
-- **G5 (added cost)** — **FAILS** (Bench 129 flat 33.127/37.306 ms added p50 vs the ≤ 1.0 ceiling; ceiling never re-registered per the 2026-11-04 D2 verdict). The clearing lane is Issue 208: the `kernel_pregate` file-gate + span-scope A/B (Bench 132) flipped the median leg green (0.191/0.036 ms) but the p95 leg still FAILs (122.5/92.4 vs ≤ 5.0) — the per-span cap lever is the active path.
+- **G5 (added cost)** — Bench 129's flat gate FAILed (33.127/37.306 ms added p50 vs the ≤ 1.0 ceiling) and the Issue-208 pregate ladder cleared it rung by rung: GATE 0.191 / GATE+SCOPE 0.036 ms added p50 (Bench 132), the line-cap pair cut the tail 2.2× (Benches 134/135), and the query-text cap closed the fence — the composed Bench-137 posture (GATE+SCOPE+LINE_CAP=2+QUERY_TEXT_CAP=2048) reaches added p95 **4.685 ms** (1.07× headroom, confirmed in an alone re-run; TC1024 → 3.366 ms, 1.49×), p50 green everywhere, utility floor 15/15 held in every arm. The cap is deterministic-lossy by paired rank-1 (109/664 flips at TC2048) — disclosed and accepted by the promotion call; the three envs are DEMOTE-ONLY (the exact literal `0` restores each axis's pre-promotion behavior byte-identically).
 
 ## Corpus
 
