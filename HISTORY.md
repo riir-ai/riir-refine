@@ -2,6 +2,10 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-10 — Issue 192 CLOSED + removed: the public-goods pivot is LANDED; the tracker's own header said it dies on completion
+
+All directives executed or housed: MIT on disk (`license = "MIT"` + LICENSE verified 2026-11-10); CLI surface SHIPS (join/leave/rank/info/upgrade verified live; `corpus`/`update` PARTIAL → issue 203, landed per AGENTS.md — every points-bearing build); GAP 10 vocabulary law landed 2026-11-06 (`--mine`/`--unmine` REMOVED, join/leave is the surface); GAP 11 crates.io = issue 221 (live lane); freeze residue + seal moat posture landed (T16.7/T16.8). Residue has named live homes: websites Phase 2/3 = Plan 324; page-prose class = riir-dapps 157; adoption-gate intake = issue 220. The durable model lives in Proposal 025 §"The points plane in full" — the file was the TASK TRACKER, removed per its own noise-reduction note; `mozilla_grant_readiness.md`'s inbound link repointed to HISTORY in the same commit. Claim (zed-riir-docs) expired 2026-11-03, folded. Session: amo-idle-i1191mid.
+
 ## 2026-11-08 — Issue 198 CLOSED + removed (noise rule): the outcome poller fired — #2977 MERGED, ledger updated, post-mortem lives in issue 218
 
 PR #2977 (the CACHEDIR.TAG goodwill PR) merged 2026-11-07 12:31:11Z by sylvestre (`907230be`, API-verified) — already recorded in the [bench 127](.benchmarks/127_mozilla_wetrun/README.md) ledger's MERGED poll row + the accept-rate table, and the failure-class post-mortem moved to issue 218 when it was filed the same day, so the file carried zero remaining obligations. The six-round arc stays in git history (the file's full life: `git log --follow -- .issues/198_mozilla_outbound_pr_wetrun.md`). Same commit: issue 190's stale T14 checkbox ticked (regular bar LANDED 2026-11-01 bench 123; strict bar owner-gated by the 2026-11-04 D3 verdict, status quo kept — no lane work remains).

@@ -5,7 +5,7 @@
 > consult email, and the timeline. Program digest (public-safe):
 > [katgpt-rs Research 642](../../../katgpt-rs/.research/642_Mozilla_Human_Scale_AI_Grant.md).
 > Working proposal: [`../../.proposals/025_mozilla_human_scale_ai_incubator.md`](../../.proposals/025_mozilla_human_scale_ai_incubator.md) (v4).
-> Task issues: [`../../.issues/190_…`](../../.issues/190_mozilla_grant_readiness_gaps.md) + [`../../.issues/192_…`](../../.issues/192_refine_public_goods_pivot.md) (the v4 pivot).
+> Task issues: [`../../.issues/190_…`](../../.issues/190_mozilla_grant_readiness_gaps.md) + the v4 pivot (issue 192 — CLOSED + removed 2026-11-10, record in `HISTORY.md`; the durable model lives in [`../../.proposals/025_mozilla_human_scale_ai_incubator.md`](../../.proposals/025_mozilla_human_scale_ai_incubator.md) §"The points plane in full").
 > **This file is grant strategy in a private repo — do not mirror, quote, or
 > link it from any public surface.**
 
