@@ -56,27 +56,21 @@ mod tests {
     use super::*;
 
     /// The value names the crate, the net posture, and a consumer slot —
-    /// the shape the server-side straggler count parses.
+    /// the shape the server-side straggler count parses. Also proves the
+    /// one-voice law: the second install in the SAME test is a no-op (the
+    /// slot is process-global, so tests must never race it with distinct
+    /// expectations — one test owns the slot's whole lifecycle).
     #[test]
-    fn header_value_names_consumer_version_and_net_slot() {
+    fn header_value_shape_and_first_wins() {
         install_consumer_tag("cargo-refine/0.4.8 (build test)");
         let v = header_value();
-        assert!(
-            v.starts_with("cargo-refine/0.4.8 (build test); riir-kat/"),
-            "{v}"
-        );
+        assert!(v.starts_with("cargo-refine/0.4.8 (build test); riir-kat/"), "{v}");
         let net = v.rsplit("net/").next().unwrap_or("");
         assert!(
             matches!(net, "mainnet" | "devnet" | "multi" | "conflict"),
             "net slot must be a bare word, got {net:?}"
         );
-    }
-
-    /// First install wins — the one-voice law.
-    #[test]
-    fn install_is_first_wins() {
-        install_consumer_tag("first");
-        install_consumer_tag("second");
-        assert!(header_value().starts_with("first;"));
+        install_consumer_tag("challenger-should-lose");
+        assert!(header_value().starts_with("cargo-refine/0.4.8 (build test);"));
     }
 }

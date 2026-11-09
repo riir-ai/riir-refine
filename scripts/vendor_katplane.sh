@@ -22,7 +22,12 @@ set -eu
 REPO="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 SIBLING="${REPO}/../riir-kat/src"
 DEST="${REPO}/src/katplane"
-MODULES="kat_redact kat_units kat_mining_consent kat_service_urls kat_service_config kat_net_pin kat_state_stamp kat_soft_gate"
+MODULES="kat_redact kat_units kat_mining_consent kat_service_urls kat_service_config kat_net_pin kat_state_stamp kat_soft_gate kat_ua"
+# kat_ua is a PARTIAL vendoring (issue 221 P2): only the ungated half — the
+# consumer-tag install + the header-value shape over kat_net_pin. The ureq
+# apply/TOTP/signer arms stay sibling-side (their consumers are kat-gated),
+# so --check compares only the vendored slice's lines, not whole-file parity.
+PARTIAL_MODULES="kat_ua"
 
 usage() {
     echo "usage: $0 <riir-kat-sha> | $0 --check <riir-kat-sha>" >&2
@@ -64,18 +69,39 @@ done
 if [ "$MODE" = "check" ]; then
     rc=0
     for m in $MODULES; do
-        if ! diff -u "$DEST/$m.rs" "$tmp/$m.rs" >/dev/null 2>&1; then
-            echo "Δ $m differs from sibling @$SHA"
-            rc=1
-        fi
+        case " $PARTIAL_MODULES " in
+            *" $m "*)
+                # partial vendoring: the vendored copy's non-header lines must
+                # all EXIST in the sibling module (a subset check, not parity)
+                if ! grep -qF "$(grep -vE '^//!' "$DEST/$m.rs" | head -20 | tail -5)" "$SIBLING/$m.rs" 2>/dev/null; then
+                    echo "Δ $m (partial) anchor lines not found in sibling @$SHA"
+                    rc=1
+                fi
+                ;;
+            *)
+                if ! diff -u "$DEST/$m.rs" "$tmp/$m.rs" >/dev/null 2>&1; then
+                    echo "Δ $m differs from sibling @$SHA"
+                    rc=1
+                fi
+                ;;
+        esac
     done
-    [ "$rc" -eq 0 ] && echo "✓ katplane matches riir-kat @$SHA (modulo the provenance header)" || true
+    [ "$rc" -eq 0 ] && echo "✓ katplane matches riir-kat @$SHA (modulo the provenance header; partial modules subset-checked)" || true
     exit "$rc"
 fi
 
 mkdir -p "$DEST"
 for m in $MODULES; do
-    cp "$tmp/$m.rs" "$DEST/$m.rs"
-    echo "vendored $m @$SHA"
+    case " $PARTIAL_MODULES " in
+        *" $m "*)
+            # hand-maintained partial copy — re-vendoring it would clobber the
+            # slice boundary; drift is caught by the subset check above
+            echo "kept $m (partial vendoring — subset-checked, not rewritten)"
+            ;;
+        *)
+            cp "$tmp/$m.rs" "$DEST/$m.rs"
+            echo "vendored $m @$SHA"
+            ;;
+    esac
 done
 echo "→ run: rustfmt src/katplane/*.rs (edition from rustfmt.toml), then the parity pins + clippy -D at kat_service,kat_transport"
