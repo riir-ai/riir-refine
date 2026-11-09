@@ -26,6 +26,12 @@
 //! - `with_capacity(ARG)` + a push loop whose derivable bound TEXT equals
 //!   `ARG` is exact — skip. (`with_capacity(count)` + `for i in 0..count`;
 //!   `with_capacity(items.len())` + `for x in &items`.)
+//! - `with_capacity(IDENT)` + a pushing loop whose HEADER names that ident
+//!   whole-word (`with_capacity(steps)` + `while i < steps`) is exact by the
+//!   same reading — skip (the P121 intake class: while bounds carry no
+//!   derivable-capacity text, so the text-equality guard above cannot see
+//!   them; the word gate does). Superstring idents (`steps_total`) are a
+//!   different bound and keep the fire.
 //! - `with_capacity(count * 2)` + `0..count` (over-provisioned) or
 //!   `with_capacity(4096)` + a data-driven loop (a guess) DO fire — the
 //!   excess is real.
@@ -54,7 +60,7 @@
 //!   gate, the `--verify` compile gate, and `rust_perf_verify` validate
 //!   semantics.
 
-use super::{line_indent, src, ProposerOpts, SourceEdit};
+use super::{ProposerOpts, SourceEdit, line_indent, src};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
 use syn::{Block, Expr, File, Ident, Local, Pat, Stmt, UnOp};
@@ -190,6 +196,7 @@ fn collect_block_edits(
         source,
         ident: tail_ident,
         cap_texts: Vec::new(),
+        header_texts: Vec::new(),
     };
     for stmt in &stmts[bind_idx + 1..] {
         if matches!(stmt, Stmt::Item(_)) {
@@ -235,6 +242,27 @@ fn collect_block_edits(
             .any(|t| matches!(t, Some((s, _)) if *s == arg_text))
         {
             return;
+        }
+    }
+
+    // G5b — a BARE-IDENT hint whose name bounds a pushing loop's HEADER is
+    // exact by the same reading G5 makes textual: `with_capacity(steps)` +
+    // `while i < steps` receives exactly `steps` pushes (the P121 misfire
+    // class — a while bound has no derivable-capacity text, so G5's
+    // text-equality cannot see it, and the inserted call is a provable
+    // no-op). Whole-word match only: `steps_total` is a different bound and
+    // keeps the fire. Expression hints (`n * 2`) are untouched — the
+    // over-provisioned arm still fires.
+    if let Some(Expr::Path(hint_path)) = info.cap_arg {
+        if let Some(hint) = hint_path.path.get_ident() {
+            let hint = hint.to_string();
+            let bounded = scan.header_texts.iter().any(|h| {
+                h.split(|c: char| !c.is_alphanumeric() && c != '_')
+                    .any(|w| w == hint)
+            });
+            if bounded {
+                return;
+            }
         }
     }
 
@@ -287,6 +315,9 @@ struct LoopPushScan<'a> {
     source: &'a str,
     ident: &'a Ident,
     cap_texts: Vec<Option<(String, bool)>>,
+    /// Raw header text of each pushing loop (for: the iterable; while: the
+    /// condition) — the G5b exact-hint word gate matches against it.
+    header_texts: Vec<String>,
 }
 
 impl<'a> Visit<'a> for LoopPushScan<'a> {
@@ -307,6 +338,13 @@ impl<'a> Visit<'a> for LoopPushScan<'a> {
             if probe.found {
                 self.cap_texts
                     .push(iterable.and_then(|it| derivable_capacity_text(self.source, it)));
+                let header = match e {
+                    Expr::ForLoop(f) => src(self.source, &f.expr),
+                    Expr::While(w) => src(self.source, &w.cond),
+                    _ => None,
+                }
+                .unwrap_or_default();
+                self.header_texts.push(header);
             }
         }
         visit::visit_expr(self, e);
@@ -380,6 +418,47 @@ mod tests {
              v\n}\n";
         let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
         assert!(out.contains("v.shrink_to_fit();\n    v\n}"), "{out}");
+        parses(&out);
+    }
+
+    /// The P121 misfire shape (riir-infer `Rig::greedy`): a bare-ident hint
+    /// bounded by a WHILE condition naming the same quantity — exactly
+    /// `steps` pushes, nothing to release. G5's text-equality cannot see it
+    /// (a while bound carries no derivable-capacity text); the word gate
+    /// declines.
+    #[test]
+    fn exact_hint_while_bounded_stays_silent() {
+        let code = "fn greedy(steps: usize) -> Vec<u32> {\n    \
+             let mut out = Vec::with_capacity(steps);\n    \
+             let mut i = 0;\n    \
+             while i < steps {\n        out.push(i as u32);\n        i += 1;\n    }\n    \
+             out\n}\n";
+        assert!(propose_fix("shrink-to-fit-after-build", code).is_none());
+    }
+
+    /// A superstring ident (`steps_total`) is a DIFFERENT bound — the word
+    /// gate must not decline, the fire stands.
+    #[test]
+    fn superstring_bound_still_fires() {
+        let code = "fn f(steps_total: usize, steps: usize) -> Vec<u32> {\n    \
+             let mut out = Vec::with_capacity(steps);\n    \
+             for i in 0..steps_total {\n        out.push(i as u32);\n    }\n    \
+             out\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("out.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// An unrelated `while` (its condition never names the hint) stays the
+    /// shrink regime — unknown bound, the fire is correct.
+    #[test]
+    fn unrelated_while_still_fires() {
+        let code = "fn f(steps: usize, it: &mut std::vec::IntoIter<u32>) -> Vec<u32> {\n    \
+             let mut out = Vec::with_capacity(steps);\n    \
+             while let Some(x) = it.next() {\n        out.push(x);\n    }\n    \
+             out\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("out.shrink_to_fit();"), "{out}");
         parses(&out);
     }
 
