@@ -2,9 +2,19 @@
 name = "riir-refine"
 version = "0.4.8"
 edition = "2021"
-# The shipped binary is proprietary freeware (binary-only distribution): the
-# EULA it ships with is its licence. The source is private.
-license-file = "release/LICENSE.md"
+# Issue 221 P0(c): the repo is PUBLIC (MIT) — the crate licence is the root
+# LICENSE (SPDX MIT). The prebuilt binary archives keep shipping
+# release/LICENSE.md (the binaries-only EULA) until the P4 deprecation
+# decides its fate; the manifest no longer points at it (license +
+# license-file are mutually exclusive, and the EULA is not the source
+# licence).
+license = "MIT"
+repository = "https://github.com/riir-ai/riir-refine"
+homepage = "https://refine.riir.ai"
+# Dev tree keeps publish = false deliberately: `cargo publish` is run only by
+# scripts/cratesio_publish.sh against its GENERATED stage manifest (issue 221
+# P2), never from this workspace — an accidental publish here would ship the
+# sibling path deps and fail loudly anyway, but the flag keeps intent honest.
 description = "Clippy-healing drafter+pruner pipeline: modelless ternary drafter x rust-analyzer validator x additive self-evolution loop (LoRA fallback deferred)"
 publish = false
 

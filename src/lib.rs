@@ -456,10 +456,15 @@ pub mod kat_soft_gate;
 // feature build).
 #[path = "katplane/kat_net_pin.rs"]
 pub mod kat_net_pin;
-#[path = "katplane/kat_state_stamp.rs"]
-pub mod kat_state_stamp;
 #[path = "katplane/kat_service_config.rs"]
 pub mod kat_service_config;
+#[path = "katplane/kat_state_stamp.rs"]
+pub mod kat_state_stamp;
+// Issue 221 P2: the UA's consumer-tag half — the one UNGATED `riir_kat` use
+// the P2a vendoring left (`main()` installs it at every posture). The ureq
+// apply/TOTP/signer arms stay riir-kat-side (their consumers are kat-gated).
+#[path = "katplane/kat_ua.rs"]
+pub mod kat_ua;
 
 // Issue 003 T4 (the refine half): the `config adopt-state` engine — the
 // explicit, per-file migration command for pre-split network-blind state.

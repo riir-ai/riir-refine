@@ -294,12 +294,10 @@ fn read_source(path: &std::path::Path) -> std::io::Result<String> {
 /// KAT meter: `RIIR_REFINE_TRAJ_ROOT` → else the first path arg's nearest
 /// `.git` ancestor (the repo-local semantic 038-T2 picked for the 037-A2
 /// per-repo adoption audit) → else cwd.
-#[cfg(any(
-    feature = "latent_retrieval",
-    feature = "kat_service",
-    feature = "points",
-    feature = "coverage_gap_event"
-))]
+/// Issue 221 P2: UNGATED — the body is std-only path logic; the old
+/// `any(latent_retrieval, kat_service, points, coverage_gap_event)` gate
+/// only served dead-code elimination and breaks the publish posture (its
+/// callers include ungated commands).
 fn resolve_heal_root(paths: &[PathBuf]) -> PathBuf {
     std::env::var("RIIR_REFINE_TRAJ_ROOT")
         .ok()
@@ -13006,7 +13004,9 @@ fn main() {
     // Issue 003 T15: the dials identify this binary — `cargo-refine/<v>
     // (build <hash>)` rides the UA the kat transports send (first install
     // wins; the server counts the shipped stragglers by its absence).
-    riir_kat::kat_ua::install_consumer_tag(format!(
+    // Issue 221 P2: the vendored half — the tag install is ungated; the
+    // transport `apply` seam stays riir-kat-side (kat-gated consumers).
+    riir_refine::kat_ua::install_consumer_tag(format!(
         "cargo-refine/{} (build {BUILD_COMMIT})",
         env!("CARGO_PKG_VERSION"),
         BUILD_COMMIT = riir_refine::build_stamp::BUILD_COMMIT,
@@ -16944,10 +16944,15 @@ fn main() {
         // end-of-run gate re-verifies it with the file like any edit.
         // v1 conservatism: ONE seat consult per file, the top eligible
         // span (matched rules ≥ the row's min_pool).
+        // Issue 221 P2: latent_retrieval added to the gate — the arm reads
+        // `draft::latent_matcher` + `traj_store` (latent-gated modules the
+        // dev tree reached through fix_verify's old implication; the
+        // publish posture's fix_verify is retrieval-free).
         #[cfg(all(
             feature = "escalation_manifest",
             feature = "seat_rerank",
-            feature = "fix_verify"
+            feature = "fix_verify",
+            feature = "latent_retrieval"
         ))]
         if args.write && all_edits.is_empty() && current == src {
             const SEAT_RULE: &str = "escalation_seat_pick";
