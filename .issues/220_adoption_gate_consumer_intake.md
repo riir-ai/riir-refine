@@ -1,6 +1,6 @@
 # Issue 220 — T1 consumer intake: adoption/retention regression gate (riir-refine side)
 
-**Status:** OPEN — intake issue for Plan 633 T1 (katgpt-rs). The gate primitive + fixture are LANDED katgpt-rs-side; this issue is the riir-refine consumer wiring, filed per katgpt-rs `.issues/987_cactus_neurips2026_follow_ups.md` priority-1 (AGCL form, Research 657 §A5) and katgpt-rs `.plans/633_adoption_retention_regression_gate.md`.
+**Status:** OPEN — intake issue for Plan 633 T1 (katgpt-rs). The gate primitive + fixture are LANDED katgpt-rs-side; this issue is the riir-refine consumer wiring, filed per katgpt-rs `.issues/987_cactus_neurips2026_follow_ups.md` priority-1 (AGCL form, Research 657 §A5) and katgpt-rs `.plans/633_adoption_retention_regression_gate.md`. **Claimed:** amo-idle-220-i1191cont, 1794259134, expires 2026-11-11T21:18:54+00:00
 
 ## What exists (producer side, landed `cf65c58a7` 2026-11-08)
 
