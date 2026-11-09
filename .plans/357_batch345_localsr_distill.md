@@ -1,6 +1,7 @@
 # Plan 357 — Batch 345: HerRei/local-upscale (LocalSR) distill batch
 
 **Status:** OPEN — verdict Research 389, YES B− / lane NONE / tokio family +1. Batch targets ~4-6 entries across rust_perf (measurement ×2, concurrency ×1, io ×2) + sec (×1-2) + kernel_opt (×1), all NotBenchable decision-content.
+**Claimed:** zed-m3-localsr-b345, epoch 1794201250, expires 2026-11-11T03:15:00Z
 
 - [ ] Re-clone + re-pin the source (v0.3.0-beta moves fast) and record the fresh sha + license in the entries headers
 - [ ] T0: re-verify every Research 389 quote at the fresh pin (model_adapter `_checkpoint_trust`, commands.rs:1614, benchmark_v2 docstring + constants, edit_guard `process_memory`, hardware `_system_memory`, live_preview docstring, worker.rs gate arms 31-145, downloads.rs flow, updates.rs 782-835, coreml_runtime docstring + constants)
