@@ -2426,29 +2426,17 @@ fn run_points_join() {
     );
     let (_token, identity) = {
         let transport = riir_kat::kat_recovery_client::UreqProviderTransport;
-        // The wait feedback: the loop polls at the SERVER-stated interval
-        // (GitHub says 5 s — polling faster trips `slow_down`, +5 s, so
-        // the honest fix is visibility, not cadence). stderr ticks once
-        // per poll and once per second of every wait; silent when stderr
-        // is not a tty (pipes stay clean), cleared when the flow ends.
+        // ONE line, then wait: the poll cadence is the server-stated
+        // interval (GitHub says 5 s — faster polls trip `slow_down`,
+        // +5 s), so the wait is what it is; a per-second redraw wraps on
+        // a narrow terminal and spams (owner call 2026-11-09) — one
+        // static line it is. Silent when stderr is not a tty (pipes stay
+        // clean).
         use std::io::IsTerminal as _;
-        let tick_tty = std::io::stderr().is_terminal();
-        let mut progress = |p: riir_kat::kat_recovery_client::PollProgress| {
-            if tick_tty {
-                eprint!(
-                    "\r\x1b[2K⏳ waiting for you to authorize in the browser… ({}s elapsed · polling every {}s)",
-                    p.elapsed_secs, p.interval_secs
-                );
-            }
-        };
-        let flow = riir_kat::kat_recovery_client::github_device_login_with_progress(
-            &transport,
-            &client_id,
-            &mut progress,
-        );
-        if tick_tty {
-            eprint!("\r\x1b[2K");
+        if std::io::stderr().is_terminal() {
+            eprintln!("⏳ waiting for you to authorize in the browser…");
         }
+        let flow = riir_kat::kat_recovery_client::github_device_login_with(&transport, &client_id);
         match flow {
             Ok(pair) => {
                 // The token is in-memory only, never persisted, never

@@ -11,12 +11,11 @@ corpus: kernel_opt 1076 (+15) — rust_perf 312 (+10) · sec 51 (+6) · clippy_l
 
 ## What changed since v0.4.8 (user-visible)
 
-- **`cargo refine join` now talks while it waits**: a live stderr line
-  ticks once a second during the GitHub device login (`⏳ waiting for you
-  to authorize in the browser… (Ns elapsed · polling every 5s)`) instead
-  of silence — the poll cadence is unchanged at the server-stated
-  interval (polling faster trips `slow_down`, +5 s). Tty-gated; pipes
-  stay clean.
+- **`cargo refine join` now says what it's doing**: one static `⏳ waiting
+  for you to authorize in the browser…` line during the GitHub device
+  login instead of silence — no redraws, no spam. The poll cadence is
+  unchanged at the server-stated interval (polling faster trips
+  `slow_down`, +5 s). Tty-gated; pipes stay clean.
 - **🎉 on the join terminal lines**: the bound path's `joined:` line and
   the local-record fallback line, whose GitHub login renders bold+cyan
   (plain text under `NO_COLOR` / non-tty — greps on the plain login
