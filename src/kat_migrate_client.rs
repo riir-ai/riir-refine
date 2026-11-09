@@ -108,9 +108,9 @@ pub struct CensusSurface {
 /// are the push's own wire-unit arithmetic, never micro — a raw `µKAT` label
 /// reads a 1 KAT delta as `1 µKAT`). One conversion, `MICRO_PER_KAT`.
 fn render_wire_kat(wire_kat: u64) -> String {
-    let micro = i64::try_from(wire_kat.saturating_mul(riir_kat::kat_units::MICRO_PER_KAT))
+    let micro = i64::try_from(wire_kat.saturating_mul(crate::kat_units::MICRO_PER_KAT))
         .unwrap_or(i64::MAX);
-    riir_kat::kat_units::render_units(micro, "KAT")
+    crate::kat_units::render_units(micro, "KAT")
 }
 
 /// The local census: every account-keyed surface this repo touches, read
@@ -138,7 +138,7 @@ pub fn census(
     let mut surfaces = Vec::new();
     let mut blockers = Vec::new();
 
-    let net_dir = riir_kat::kat_state_stamp::net_state_dir_for_url(root, base_url);
+    let net_dir = crate::kat_state_stamp::net_state_dir_for_url(root, base_url);
     let ack_path = net_dir.join(riir_kat::kat_protocol_burn::KatBurnAck::FILE_NAME);
     let (ack, ack_warning) = riir_kat::kat_burn_client::KatBurnAck::load_at(&ack_path);
     let ack_present = ack_path.exists();
@@ -194,7 +194,7 @@ pub fn census(
     // read RAW (the estimator module is latent_retrieval-gated; the census
     // must not widen its posture). Report-only: the burn delta is the
     // gate, never the watermark.
-    let wm_path = riir_kat::kat_state_stamp::net_state_dir_for_url(root, base_url)
+    let wm_path = crate::kat_state_stamp::net_state_dir_for_url(root, base_url)
         .join("kat_sync_state.json");
     let wm_text = std::fs::read_to_string(&wm_path).ok();
     let wm: Option<serde_json::Value> = wm_text
@@ -1725,7 +1725,7 @@ mod tests {
         let root = tempdir("ready");
         let acct = tempdir("ready_acct");
         let base = "https://mainnet.gist.rs";
-        let net = riir_kat::kat_state_stamp::net_state_dir_for_url(&root, base);
+        let net = crate::kat_state_stamp::net_state_dir_for_url(&root, base);
         std::fs::create_dir_all(&net).expect("netdir");
         // The ack: a settled baseline (base 5 KAT acknowledged at charge 5M µKAT).
         let ack = format!(
@@ -1763,7 +1763,7 @@ mod tests {
         let root = tempdir("stale");
         let acct = tempdir("stale_acct");
         let base = "https://mainnet.gist.rs";
-        let net = riir_kat::kat_state_stamp::net_state_dir_for_url(&root, base);
+        let net = crate::kat_state_stamp::net_state_dir_for_url(&root, base);
         std::fs::create_dir_all(&net).expect("netdir");
         let ack = format!(
             r#"{{"version":6,"burn_kat_total":5,"meter_watermark_tokens":0,"acked_unix":{},"charged_at_ack_micro":5000000}}"#,
@@ -1810,7 +1810,7 @@ mod tests {
         let root = tempdir("noack");
         let acct = tempdir("noack_acct");
         let base = "https://mainnet.gist.rs";
-        let net = riir_kat::kat_state_stamp::net_state_dir_for_url(&root, base);
+        let net = crate::kat_state_stamp::net_state_dir_for_url(&root, base);
         std::fs::create_dir_all(&net).expect("netdir");
         std::fs::write(
             net.join(riir_kat::kat_meter::KatCharge::FILE_NAME),
@@ -1834,7 +1834,7 @@ mod tests {
         let root = tempdir("corrupt");
         let acct = tempdir("corrupt_acct");
         let base = "https://mainnet.gist.rs";
-        let net = riir_kat::kat_state_stamp::net_state_dir_for_url(&root, base);
+        let net = crate::kat_state_stamp::net_state_dir_for_url(&root, base);
         std::fs::create_dir_all(&net).expect("netdir");
         std::fs::write(
             net.join(riir_kat::kat_protocol_burn::KatBurnAck::FILE_NAME),

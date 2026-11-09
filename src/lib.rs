@@ -401,14 +401,17 @@ pub mod scope_model;
 // member client tier; root kat_transport → member kat_transport tier;
 // refill/consent need BOTH). Keepers below (sync_payload, pending
 // estimator, promotion) stay healer-side: they import traj_store/score_bench.
-// Issue 088 re-export plane (see the block comment above). `kat_redact`
-// moved OUT of the kat_service-gated list (Issue 151 T1, verdict R1): the
-// secret scanner is std+blake3-only compute on riir-kat's own `redact` tier
-// (which this dep now enables at the BASE — never the client tier), so the
-// secret-blind surface is available at DEFAULT features and the
-// structural-admission reef scan consumes the ONE canonical table ungated.
-// Public path unchanged (`riir_refine::kat_redact`).
-pub use riir_kat::kat_redact;
+// Issue 088 re-export plane (see the block comment above). Issue 221 (the
+// crates.io lane): the UNGATED protocol tier is VENDORED in-repo
+// (`src/katplane/` — provenance headers name the riir-kat sha; golden pins
+// in tests/katplane_parity.rs) so the default build carries ZERO private
+// deps. Public paths unchanged (`riir_refine::kat_redact` etc. resolve to
+// the vendored modules). The GATED client tier below still rides the
+// optional `riir-kat` dep (`kat_service`/`kat_transport`/`points` imply
+// it); keepers (sync_payload, pending estimator, promotion) stay
+// healer-side: they import traj_store/score_bench.
+#[path = "katplane/kat_redact.rs"]
+pub mod kat_redact;
 #[cfg(feature = "kat_service")]
 pub use riir_kat::{
     kat_account, kat_account_client, kat_admin_client, kat_adoption, kat_burn_client,
@@ -417,8 +420,8 @@ pub use riir_kat::{
     kat_protocol_burn, kat_protocol_fixstat, kat_protocol_genesis, kat_protocol_lease,
     kat_protocol_migrate, kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq,
     kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2,
-    kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_service_config,
-    kat_stake_client, kat_tuna_admin_client, kat_vote_client, kat_wetrun,
+    kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_stake_client,
+    kat_tuna_admin_client, kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
 pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
@@ -430,23 +433,33 @@ pub use riir_kat::{kat_consent_client, kat_protocol_consent, kat_refill};
 #[cfg(all(feature = "points", not(feature = "kat_service")))]
 pub use riir_kat::kat_lease_client;
 // The unit vocabulary (MicroKat/WholeKat + the µ constants) is feature-free
-// by construction (kat_units' own module doc) — and the Plan 035 T3
-// newtype adoption makes the UNGATED footer a consumer, so the root
-// re-export is ungated too (the machine-local trio's posture).
-pub use riir_kat::kat_units;
-// The ungated machine-local trio + the free-tier protocol plumbing: the
-// member keeps them behind `client`, but riir-refine's contract is
-// UNGATED (--unmine must work in every feature build; the consent-module
-// rule) — the member compiles them for us at default features, and root
-// consumers reach them through these ungated re-exports.
-pub use riir_kat::{kat_mining_consent, kat_service_urls, kat_soft_gate};
+// by construction — vendored in-repo at issue 221 (see the katplane block
+// above); the Plan 035 T3 newtype adoption makes the UNGATED footer a
+// consumer, so the root module stays ungated (the machine-local trio's
+// posture).
+#[path = "katplane/kat_units.rs"]
+pub mod kat_units;
+// The ungated machine-local trio + the free-tier protocol plumbing:
+// vendored at issue 221 (see the katplane block above) — the consent-module
+// rule (`config`/`--info` work in every feature build) holds over the
+// in-repo copies.
+#[path = "katplane/kat_mining_consent.rs"]
+pub mod kat_mining_consent;
+#[path = "katplane/kat_service_urls.rs"]
+pub mod kat_service_urls;
+#[path = "katplane/kat_soft_gate.rs"]
+pub mod kat_soft_gate;
 // The state-stamp module (riir-kat Issue 003 T1/T2): feature-free protocol
-// tier — the per-net dir seam + the stamp judge are consumed by the ungated
-// consent plane (--unmine's outbox dir) and the gated money plane alike.
-// kat_net_pin rides the same ungated posture (Issue 003 T9 consumer half:
-// the pin is a BUILD property — the version stamp and the URL seam read it
-// in every feature build).
-pub use riir_kat::{kat_net_pin, kat_state_stamp};
+// tier — vendored at issue 221 (see the katplane block above). kat_net_pin
+// rides the same ungated posture (Issue 003 T9 consumer half: the pin is a
+// BUILD property — the version stamp and the URL seam read it in every
+// feature build).
+#[path = "katplane/kat_net_pin.rs"]
+pub mod kat_net_pin;
+#[path = "katplane/kat_state_stamp.rs"]
+pub mod kat_state_stamp;
+#[path = "katplane/kat_service_config.rs"]
+pub mod kat_service_config;
 
 // Issue 003 T4 (the refine half): the `config adopt-state` engine — the
 // explicit, per-file migration command for pre-split network-blind state.

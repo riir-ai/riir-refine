@@ -380,7 +380,7 @@ impl EscalationDispatch {
         let consent = EgressConsent::from_env();
         // The T4 consult (the ask-once-per-repo flow) — the account dir is
         // the caller-resolution seam's own; Disabled while the lane is dark.
-        let dir = riir_kat::kat_mining_consent::default_dir();
+        let dir = crate::kat_mining_consent::default_dir();
         let repo_consent =
             crate::repo_consent::consult(&dir, repo_root, snippet.lines().count(), yes_armed);
         self.escalate_rerank_checked_with(
@@ -526,7 +526,7 @@ impl EscalationDispatch {
         yes_armed: bool,
     ) -> EscalatedFix {
         let consent = EgressConsent::from_env();
-        let dir = riir_kat::kat_mining_consent::default_dir();
+        let dir = crate::kat_mining_consent::default_dir();
         let repo_consent =
             crate::repo_consent::consult(&dir, repo_root, snippet.lines().count(), yes_armed);
         self.escalate_generate_checked_with(

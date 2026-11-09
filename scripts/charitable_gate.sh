@@ -33,8 +33,14 @@
 #       features BY DESIGN (posture honesty). Exempt lines are printed
 #       verbatim, counted, and CAPPED — the class growing is a loud FAIL,
 #       never a silent pass.
-#   (2) `cargo tree -e features` — riir-kat resolves at its feature-free tier
-#       + `redact` ONLY; no client/transport/service feature resolved.
+#   (2) `cargo tree -e features` — riir-kat resolves at its redact + join
+#       identity-chain tier ONLY (Plan 325 T6 re-scope); no
+#       transport/service/billing feature resolved. Issue 221: the UNGATED
+#       protocol tier is vendored in-repo (src/katplane/), so the DEFAULT
+#       build resolves ZERO private deps — riir-kat re-enters only through
+#       points' identity chain, which is exactly the tier this bar blesses.
+#       Bar 3's machinery tokens stay zero: the linker strips the unused
+#       vendored soft_gate/mining_consent bodies (uses are kat-gated).
 #   (3) binary strings scan — hard-zero classes (X-Kat- headers, KAT host
 #       literals, /mining/ wire, soft-gate/burn/meter machinery tokens) plus
 #       two disclosed classes:
@@ -83,8 +89,13 @@ PATTERN='(^|[^A-Za-z])(kat|payout|lease|pack|usdc|wallet|topup)([^A-Za-z]|$)|epo
 # Bar-1 disclosure class (T14a's recorded carve-out): the build stamp's
 # release-set STALE disclosure + its rebuild hint. Anchored to the exact line
 # prefixes; anything else matching the wide pattern still fails.
-VERSION_EXEMPT='^release set: STALE|^rebuild: cargo build'
-VERSION_EXEMPT_CAP=2
+# Issue 221 second class: the `features:` census line names cargo's COMPILED
+# feature set verbatim — the optional dep's implicit feature (riir-kat, from
+# the `riir-kat/<feat>` feature rows) shows there in every posture that
+# resolves the identity chain. Honest metadata, gated by bar 2 (the tree);
+# disclosed + CAPPED at 1 (the line is one line — a second one is a lie).
+VERSION_EXEMPT='^release set: STALE|^rebuild: cargo build|^features: '
+VERSION_EXEMPT_CAP=3
 # Bar-3 hard-zero classes: transport wire · KAT-era machinery · mining path ·
 # DEVNET hosts. Token-shaped (never a bare `kat`) so the
 # katgpt-core dep tree cannot false-positive. Zero hits expected — any hit

@@ -40,7 +40,7 @@ pub const MARKER_FILE: &str = "offline";
 /// module shares).
 #[must_use]
 pub fn marker_path() -> PathBuf {
-    riir_kat::kat_mining_consent::default_dir().join(MARKER_FILE)
+    crate::kat_mining_consent::default_dir().join(MARKER_FILE)
 }
 
 /// `true` iff the marker file exists — the persistent firewall half.

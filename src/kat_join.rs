@@ -22,7 +22,7 @@
 //!   funded (the posture lines below name it); the fixing tier is logged
 //!   OUT and needs no account at all.
 //! - **Recorded through the EXISTING `service_url.json` writer** — the same
-//!   record `cargo refine config set` writes ([`riir_kat::kat_service_config::store`]),
+//!   record `cargo refine config set` writes ([`crate::kat_service_config::store`]),
 //!   never a second record format — so `config get` reports it and every
 //!   explicit money command ([`crate::kat_lease_client::service_url_for_command`])
 //!   resolves it.
@@ -36,7 +36,7 @@
 //!   no-config first-join path).
 //! - **testnet is never offered** (A2): the host was torn down 2026-10-03
 //!   and answers nothing. The alias stays VALID in
-//!   [`riir_kat::kat_service_config::validate_service_url`] (wire compat) —
+//!   [`crate::kat_service_config::validate_service_url`] (wire compat) —
 //!   a picker just must not offer hosts that do not answer (the
 //!   torn-down-env rule the site env dropdown already follows).
 //!
@@ -91,10 +91,10 @@ impl JoinEnv {
     pub fn url(self) -> &'static str {
         match self {
             #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
-            Self::Devnet => riir_kat::kat_service_urls::DEVNET_SERVICE_URL,
+            Self::Devnet => crate::kat_service_urls::DEVNET_SERVICE_URL,
             #[cfg(all(feature = "net-mainnet", not(feature = "net-devnet")))]
             Self::Devnet => "",
-            Self::Mainnet => riir_kat::kat_service_urls::MAINNET_SERVICE_URL,
+            Self::Mainnet => crate::kat_service_urls::MAINNET_SERVICE_URL,
         }
     }
 
@@ -349,8 +349,8 @@ pub fn join_lines(env: JoinEnv, had_account_key: bool) -> Vec<String> {
 ///
 /// The validation or write error, verbatim (the CLI prints it and exits).
 pub fn record(dir: &Path, env: JoinEnv) -> Result<PathBuf, String> {
-    let validated = riir_kat::kat_service_config::validate_service_url(env.alias())?;
-    riir_kat::kat_service_config::store(dir, &validated)
+    let validated = crate::kat_service_config::validate_service_url(env.alias())?;
+    crate::kat_service_config::store(dir, &validated)
 }
 
 /// The join-path entry (the `login` call sites): decides,
@@ -364,13 +364,13 @@ pub fn record(dir: &Path, env: JoinEnv) -> Result<PathBuf, String> {
 /// The refusal message to print (the call sites exit 2) or the
 /// validation/write error, verbatim.
 pub fn run(yes: bool) -> Result<(), String> {
-    let dir = riir_kat::kat_service_config::account_dir();
+    let dir = crate::kat_service_config::account_dir();
     // "An EXISTING config record (any source) → never prompt": the record
     // OR the env override. An env override with no record stays un-prompted
     // too — recording a file under it would manufacture the both-set state
     // `config get` warns about.
-    let configured = riir_kat::kat_service_config::read(&dir).is_some()
-        || riir_kat::kat_service_config::service_url_from_env().is_some();
+    let configured = crate::kat_service_config::read(&dir).is_some()
+        || crate::kat_service_config::service_url_from_env().is_some();
     let env_join = std::env::var(JOIN_ENV_ENV_VAR).ok();
     let env = match decide(env_join.as_deref(), yes, configured).map_err(|r| r.message())? {
         JoinDecision::AlreadyConfigured => return Ok(()),
@@ -439,8 +439,8 @@ mod tests {
         assert_eq!(JoinEnv::from_alias("testnet"), None);
         // …and since riir-dapps Plan 047 the alias itself is RETIRED too:
         // two networks, mainnet + devnet — the word resolves to nothing.
-        assert_eq!(riir_kat::kat_service_config::resolve_alias("testnet"), None);
-        assert!(riir_kat::kat_service_config::validate_service_url("testnet").is_err());
+        assert_eq!(crate::kat_service_config::resolve_alias("testnet"), None);
+        assert!(crate::kat_service_config::validate_service_url("testnet").is_err());
     }
 
     #[test]
@@ -455,7 +455,7 @@ mod tests {
         assert!(!account_key_present(&dir), "a fresh machine has no key");
         record(&dir, JoinEnv::Mainnet).expect("records");
         assert_eq!(
-            riir_kat::kat_service_config::read(&dir).as_deref(),
+            crate::kat_service_config::read(&dir).as_deref(),
             Some(JoinEnv::Mainnet.url())
         );
         // A brand-new machine's line carries the dialing law (the recorded
@@ -616,7 +616,7 @@ mod tests {
             other => panic!("a configured machine must never be re-asked: {other:?}"),
         }
         assert_eq!(
-            riir_kat::kat_service_config::read(&dir).as_deref(),
+            crate::kat_service_config::read(&dir).as_deref(),
             Some(seeded.url()),
             "the existing record is untouched"
         );
@@ -628,7 +628,7 @@ mod tests {
         let dir = scratch("env_mainnet");
         record(&dir, JoinEnv::Mainnet).expect("records");
         assert_eq!(
-            riir_kat::kat_service_config::read(&dir).as_deref(),
+            crate::kat_service_config::read(&dir).as_deref(),
             Some(JoinEnv::Mainnet.url())
         );
         let lines = join_lines(JoinEnv::Mainnet, false);
@@ -762,13 +762,13 @@ mod tests {
         // get` prints) and the resolver see it with no second format.
         let dir = scratch("roundtrip");
         record(&dir, JoinEnv::Devnet).expect("records");
-        let (url, warning) = riir_kat::kat_service_config::read_with_warning(&dir);
+        let (url, warning) = crate::kat_service_config::read_with_warning(&dir);
         assert!(warning.is_none(), "a fresh record reads clean: {warning:?}");
         assert_eq!(url.as_deref(), Some(JoinEnv::Devnet.url()));
         // …and validate_service_url accepts the stored value (the read
         // path re-validates; a record that fails reads as not-set).
         assert!(
-            riir_kat::kat_service_config::validate_service_url(url.as_deref().expect("url"))
+            crate::kat_service_config::validate_service_url(url.as_deref().expect("url"))
                 .is_ok()
         );
         let _ = std::fs::remove_dir_all(&dir);

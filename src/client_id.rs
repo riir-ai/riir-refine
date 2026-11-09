@@ -15,7 +15,7 @@
 //! timestamp leaks the install/reset moment for zero benefit).
 //!
 //! Storage: the machine-local account dir (the
-//! `riir_kat::kat_mining_consent::default_dir()` family — `RIIR_REFINE_KAT_ACCOUNT_DIR`
+//! `crate::kat_mining_consent::default_dir()` family — `RIIR_REFINE_KAT_ACCOUNT_DIR`
 //! override honored), file `client_id`, 0600 on creation. `config
 //! reset-client-id` (Plan 325 T1) mints a fresh one; old aggregate rows
 //! remain counts, nothing new links to the old token.

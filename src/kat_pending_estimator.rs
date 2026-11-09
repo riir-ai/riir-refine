@@ -222,7 +222,7 @@ impl SyncWatermark {
     /// everything by construction (the file simply is not there).
     #[must_use]
     pub fn net_path(root: &Path, url: &str) -> PathBuf {
-        riir_kat::kat_state_stamp::net_state_dir_for_url(root, url).join(Self::FILE_NAME)
+        crate::kat_state_stamp::net_state_dir_for_url(root, url).join(Self::FILE_NAME)
     }
 
     /// Exact-path loader (tests + the env-override pattern).

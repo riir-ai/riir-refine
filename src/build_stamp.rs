@@ -178,7 +178,7 @@ pub fn version_lines() -> Vec<String> {
         format!("cargo-refine {}", env!("CARGO_PKG_VERSION")),
         format!("features: {COMPILED_FEATURES}"),
         format!("build: {BUILD_COMMIT}"),
-        format!("net: {}", riir_kat::kat_net_pin::NET_PIN),
+        format!("net: {}", crate::kat_net_pin::NET_PIN),
     ];
     let missing = missing_release_features();
     if missing.is_empty() {

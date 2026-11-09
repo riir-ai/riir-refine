@@ -33,7 +33,7 @@ pub const SETTINGS_FILE: &str = "settings.toml";
 /// directory and the resolution cannot drift between modules.
 #[must_use]
 pub fn default_dir() -> PathBuf {
-    riir_kat::kat_mining_consent::default_dir()
+    crate::kat_mining_consent::default_dir()
 }
 
 /// The settings file's full path inside `dir`.

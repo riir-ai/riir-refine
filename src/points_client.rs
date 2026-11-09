@@ -125,7 +125,7 @@ pub fn service_url_checked() -> Result<String, String> {
         .unwrap_or_else(|| DEFAULT_SERVICE_URL.to_string())
         .trim_end_matches('/')
         .to_string();
-    riir_kat::kat_net_pin::ensure_net_allowed(&url)
+    crate::kat_net_pin::ensure_net_allowed(&url)
         .map(|canonical| canonical.trim_end_matches('/').to_string())
 }
 

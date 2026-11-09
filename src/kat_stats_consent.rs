@@ -135,7 +135,7 @@ struct StatsDoc {
 /// one home and the resolution cannot drift between them.
 #[must_use]
 pub fn default_dir() -> PathBuf {
-    riir_kat::kat_mining_consent::default_dir()
+    crate::kat_mining_consent::default_dir()
 }
 
 /// The consent record's full path inside `dir`.
@@ -389,7 +389,7 @@ mod tests {
         // asserted by calling both and comparing, without mutating the env.
         assert_eq!(
             default_dir(),
-            riir_kat::kat_mining_consent::default_dir(),
+            crate::kat_mining_consent::default_dir(),
             "the stats record must live beside the mining record"
         );
     }
@@ -414,7 +414,7 @@ mod tests {
         let dir = scratch("distinct");
         assert_ne!(
             consent_path(&dir),
-            riir_kat::kat_mining_consent::consent_path(&dir),
+            crate::kat_mining_consent::consent_path(&dir),
             "the two consent planes must never share a file"
         );
         let _ = std::fs::remove_dir_all(&dir);

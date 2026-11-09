@@ -24,13 +24,14 @@ retrieves ranked corpus rules for real code spans (GOAT G1–G4 PASS, Bench 018;
 `--fix` CLI wiring is Phase 6 — the Phase 4 rust_perf proposers landed as
 library code).
 
-> **Distribution & open posture:** today `cargo refine` ships as
-> checksum-verified prebuilt binaries via GitHub Releases on a small
+> **Distribution & open posture:** the repo is PUBLIC (MIT) and `cargo refine`
+> ships as checksum-verified prebuilt binaries via GitHub Releases on a
 > source-free dist repo (macOS/Linux `install.sh` + `curl | sh` + Homebrew
-> tap; Windows `install.ps1` + scoop). The community repair corpus is
-> **MIT open data today**; the core source has a **committed, dated plan to
-> open during the grant term (months 1–3)** — until then the binaries are
-> the supported surface.
+> tap; Windows `install.ps1` + scoop); the crates.io lane is planned
+> (issue 221 — the default build already resolves with ZERO private
+> deps: the protocol tier is vendored in-repo, `src/katplane/`). The
+> community repair corpus is **MIT open data today**; the binaries are
+> the supported install surface until the crates.io lane lands.
 >
 > **The charitable posture is the shipped posture** (v0.4.0+): the release
 > set carries the points plane (join/contribute/rank/corpus/update — the
