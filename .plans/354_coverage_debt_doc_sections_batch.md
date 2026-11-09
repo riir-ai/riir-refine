@@ -1,6 +1,7 @@
 # Plan 354 — the coverage-debt dual-evidence doc-section batch: missing_errors_doc + missing_panics_doc
 
 **Status:** Claimed: zed-native-agent, 1794063759, expires 2026-11-09T12:00:00Z — Bench 141 T3 improvement queue item E, first stage: the two dual-evidence coverage-debt heads (`missing_errors_doc` 90 + `missing_panics_doc` 78, Bench 141's only dual-evidence rows). SERIALIZED behind plan 353 (zed-m3's P118 corpus-gap batch, live lease): both batches edit `src/domains/clippy_lints/corpus.rs` + `scripts/pins_manifest.py --write` output + the AGENTS.md/README count lines + the retrieval floor pins — the sibling's dirty `pins_manifest.json`/`AGENTS.md`/`README.md` WIP is on this box right now. T0's rebase gate is the serialization proof.
+**Claimed:** zed-m3-issue120-gate, 1794232922, expires 2026-11-11T14:02:02+00:00 (supersedes the lapsed zed-native-agent claim — expiry 2026-11-09T12:00:00Z passed with zero corpus commits from that lane since 11-07, mtimes 12:48+07 predate expiry; re-claim is the documented normal path; the 18-file working-tree rustfmt churn is NOT this batch's surface — the batch lands ONLY the two doc-section rules + their count pins, and stages by name)
 
 ## The ask (Bench 141 T3, 2026-11-07)
 
