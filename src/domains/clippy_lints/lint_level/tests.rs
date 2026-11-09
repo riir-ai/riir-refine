@@ -94,6 +94,8 @@ fn allow_by_default_blast_radius_is_pinned_by_membership() {
         "map_unwrap_or",
         "match_bool",
         "match_same_arms",
+        "missing_errors_doc",
+        "missing_panics_doc",
         "needless_pass_by_ref_mut",
         "range_plus_one",
         "redundant_closure_for_method_calls",
@@ -484,8 +486,8 @@ fn gated_lints_honours_crate_level_and_group_opt_in() {
     );
     assert_eq!(
         all_gated.len(),
-        24,
-        "the pinned allow-by-default fix-set membership"
+        26,
+        "the pinned allow-by-default fix-set membership (plan 354: the doc-section pair joins — both pedantic, the same KIND as doc_markdown)"
     );
 
     let ped = gated_lints(&none, &["pedantic".to_string()]);

@@ -201,7 +201,6 @@ pub mod bit_width;
 pub mod block_scrutinee;
 pub mod bool_comparison;
 pub mod byte_char_slices;
-pub mod collapsible_match;
 pub mod bytes_count_to_len;
 pub mod cast_abs_to_unsigned;
 pub mod cast_lossless;
@@ -209,10 +208,12 @@ pub mod chunks_exact_to_as_chunks;
 pub mod clone_on_copy;
 pub mod collapsible_else_if;
 pub mod collapsible_if;
+pub mod collapsible_match;
 pub mod comparison_to_empty;
 pub mod deref_addrof;
 pub mod doc_lazy_continuation;
 pub mod doc_markdown;
+pub mod doc_sections;
 pub mod double_parens;
 pub mod empty_line_after_doc_comments;
 pub mod excessive_precision;
@@ -293,9 +294,9 @@ pub mod uninlined_format_args;
 pub mod unit_arg;
 pub mod unnecessary_cast;
 pub mod unnecessary_get_then_check;
-pub mod unnecessary_min_or_max;
 pub mod unnecessary_lazy_evaluations;
 pub mod unnecessary_map_or;
+pub mod unnecessary_min_or_max;
 pub mod unnecessary_mut_passed;
 pub mod unnecessary_sort_by;
 pub mod unnecessary_unwrap;
@@ -409,6 +410,24 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // and detection is a faithful port of clippy's own word predicates
     // (the module docs carry the context approximations).
     "doc_markdown",
+    // ── plan 354 (2026-11-09, Bench 141 item E — the two dual-evidence
+    // coverage-debt heads) ── doc-section APPEND for the pedantic doc-lint
+    // family: the insertion is comment-local (cannot change compilation)
+    // but the rule is VERIFY-class — the edit GENERATES content and the
+    // verify lane's real-clippy re-run is the only proof the section
+    // satisfied the lint (the fast-path parse gate cannot see
+    // section-presence). Fire scope parse-only-aligned: exported-at-site
+    // fns; missing_errors_doc needs a CONCRETE Result error type (a
+    // generic/opaque E refuses — prose naming a type parameter would be a
+    // lie); missing_panics_doc needs only RECOGNIZED literal-message panic
+    // sources (format-arg/todo-family refuse loud). The probe-pinned
+    // section-present predicate refuses compliant docs (`^#+\s+errors|
+    // panics` case-insensitive; `#Errors` without the space is NOT a
+    // section — measured). BOTH in one module (the Batch-151
+    // two-lints-one-module precedent), gated by the Issue-135 lint_level
+    // machinery like doc_markdown.
+    "missing_errors_doc",
+    "missing_panics_doc",
     // ── P31 post-mining intake (2026-09-17, the riir-chain 51b456f MISS
     // artifact): `0 | 1 | 2` → `0..=2`. Clippy's own algorithm ported
     // verbatim (rust-lang/rust@1.98.1) — the coverage walk admits
@@ -1277,7 +1296,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "partialeq_to_none" => partialeq_to_none::collect_edits(source, file),
         "cast_lossless" => cast_lossless::collect_edits(source, file),
         // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
-        "doc_markdown" => doc_markdown::collect_edits(source, file),
+            "doc_markdown" => doc_markdown::collect_edits(source, file),
+    // plan 354: the two doc-section lints share one module (Batch-151 precedent).
+    "missing_errors_doc" => doc_sections::collect_errors_edits(source, file),
+    "missing_panics_doc" => doc_sections::collect_panics_edits(source, file),
         // ── Batch 151 (the doc-line state-machine port, Plan 137) ──
         "doc_lazy_continuation" => doc_lazy_continuation::collect_edits(source, file),
         "doc_overindented_list_items" => {

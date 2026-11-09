@@ -361,6 +361,12 @@ mod tests {
         use crate::domains::rust_perf::proposers as perf;
 
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
+        // plan 354: the doc-section pair is a STRUCTURAL-ABSENCE family — it
+        // fires on any exported fn lacking the section, so an exported
+        // fixture carrying a Result/`.expect()` is genuinely non-compliant
+        // with it and the fire is true-positive, not cross-domain noise
+        // (the same reading as the TRUE_POSITIVE_FIRES allowlist below).
+        const STRUCTURAL_ABSENCE: &[&str] = &["missing_errors_doc", "missing_panics_doc"];
         for s in cross_domain_spans() {
             assert!(
                 propose_fix(s.clippy_lint, &s.code).is_some(),
@@ -369,7 +375,7 @@ mod tests {
                 s.clippy_lint
             );
             for &other in &structural {
-                if other != s.clippy_lint {
+                if other != s.clippy_lint && !STRUCTURAL_ABSENCE.contains(&other) {
                     assert!(
                         propose_fix(other, &s.code).is_none(),
                         "{}: perf constituent carries clippy lint {other}",
@@ -433,9 +439,15 @@ mod tests {
             ("iter-copied-deref-map", "map_clone"),
         ];
         let structural: Vec<&str> = FIXABLE_LINTS.iter().chain(VERIFY_LINTS).copied().collect();
+        // plan 354: the doc-section pair joins the true-positive class —
+        // a structural-absence lint legitimately fires on any exported
+        // fixture fn that lacks the section (e.g. ok-or-else's exported
+        // Result fn). Same adjudication as the allowlist above: a fire by
+        // the lint's own shape is not a leak.
+        const STRUCTURAL_ABSENCE: &[&str] = &["missing_errors_doc", "missing_panics_doc"];
         for &(rule, code) in PERF_SPANS {
             for &l in &structural {
-                if TRUE_POSITIVE_FIRES.contains(&(rule, l)) {
+                if TRUE_POSITIVE_FIRES.contains(&(rule, l)) || STRUCTURAL_ABSENCE.contains(&l) {
                     continue;
                 }
                 assert!(

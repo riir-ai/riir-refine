@@ -2620,6 +2620,18 @@ mod tests {
         // The falsifiable prediction: All-mode top-1 == pool recall @
         // RERANK_POOL, exactly. If it holds, the measured gain is not an
         // effect size and must not be reported as one.
+        //
+        // plan 354 (2026-11-09): the prediction's premise WEAKENED by the
+        // doc-section pair — a structural-absence family whose cross-fires
+        // are TRUE positives (an exported fixture fn lacking a section is
+        // genuinely non-compliant; see the STRUCTURAL_ABSENCE note in
+        // clippy_fixture_labels_verify_via_proposers). All-mode top-1 can
+        // now legitimately fall BELOW pool recall on spans where a
+        // doc-section rule outranks the label. The prediction inverts its
+        // direction accordingly: All-mode top-1 must never EXCEED pool
+        // recall (exceeding it would mean the re-ranker saw information
+        // beyond the fixture set — the contamination direction), and the
+        // deficit is bounded by the co-firing span count.
         use crate::draft::{RerankMode, RERANK_POOL};
         let mut matcher = LatentMatcher::from_enabled_domains()
             .expect("build matcher")
@@ -2663,9 +2675,12 @@ mod tests {
             }
         );
         assert!(
-            (all_top1 - pool_recall).abs() < 1e-6,
-            "the contamination prediction failed (all {all_top1:.4} vs pool {pool_recall:.4}) \
-             — re-examine the oracle before trusting either number"
+            all_top1 <= pool_recall + 1e-6,
+            "CONTAMINATION SIGNAL: All-mode top-1 ({all_top1:.4}) EXCEEDS pool recall \
+             ({pool_recall:.4}) — the re-ranker saw information beyond the fixture set; \
+             re-examine the oracle before trusting either number (plan 354: the prediction \
+             is now ≤, not == — the doc-section pair's true-positive co-fires may push \
+             All-mode BELOW pool recall on the spans they legitimately co-fire on)"
         );
     }
 
@@ -2900,13 +2915,25 @@ mod tests {
             "needless_borrow",
             "unnecessary_mut_passed",
         ]);
+        // plan 354: the doc-section pair (missing_errors_doc /
+        // missing_panics_doc) is a STRUCTURAL-ABSENCE family — it fires on
+        // any exported fn lacking the section, so an exported fixture
+        // carrying an `.unwrap()` (the unnecessary_unwrap fixture) is
+        // GENUINELY non-compliant with it and both lints are simultaneously
+        // true of the code. That is not matcher looseness (the
+        // contamination hazard this walk exists to catch is a proposer
+        // firing on ANOTHER lint's exact defect shape); co-firing is
+        // exempted for exactly these two, every other pair stays strict.
+        const STRUCTURAL_ABSENCE: &[&str] = &["missing_errors_doc", "missing_panics_doc"];
         for &(lint, code) in super::super::eval_fixtures_clippy::CLIPPY_SPANS {
             assert!(
                 propose_fix(lint, code).is_some(),
                 "fixture for {lint} does not fire its own proposer"
             );
             for &other in &all {
-                if other != lint {
+                if other != lint
+                    && !(STRUCTURAL_ABSENCE.contains(&other) || STRUCTURAL_ABSENCE.contains(&lint))
+                {
                     assert!(
                         propose_fix(other, code).is_none(),
                         "fixture for {lint} cross-fires {other}"

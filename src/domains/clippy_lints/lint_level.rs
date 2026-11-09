@@ -136,6 +136,8 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("match_same_arms", "pedantic"),
     ("mem_replace_with_default", "style"),
     ("mismatched_bit_width_type", "suspicious"),
+    ("missing_errors_doc", "pedantic"),
+    ("missing_panics_doc", "pedantic"),
     ("multiple_bound_locations", "style"),
     ("needless_bool", "complexity"),
     ("needless_bool_assign", "complexity"),

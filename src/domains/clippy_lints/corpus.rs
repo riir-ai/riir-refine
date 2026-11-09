@@ -1308,6 +1308,34 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "fn f() -> u32 { 100u32.min(97) }".to_string(),
             fixed_code: "fn f() -> u32 { 97 }".to_string(),
         },
+        // ── plan 354 (2026-11-09, Bench 141 item E — the two dual-evidence
+        // coverage-debt heads: local fired histogram AND kornel top-10) ──
+        // The pedantic doc-section family: an APPEND of the missing
+        // `# Errors` / `# Panics` section (the exporter's own doc prefix,
+        // after the last doc line). VERIFY-tier: the edit generates content
+        // and the verify lane's real-clippy re-run proves section presence.
+        // Concrete-E only (a generic E refuses — prose naming a type param
+        // would be a lie); panic sources are the RECOGNIZED literal-message
+        // class (format-arg/todo-family refuse loud). The probe-pinned
+        // predicate refuses compliant docs (`#  Errors`/`## errors` accepted
+        // by clippy; `#Errors` is NOT a section — measured).
+        ClippyFixEntry {
+            lint_name: "missing_errors_doc".to_string(),
+            lint_group: "pedantic".to_string(),
+            // Distinctive vocabulary (centroid-defensive): a config loader
+            // over a `ConfigError`, not the doc_markdown family's shapes.
+            buggy_code: "/// Reads the gateway config bytes.\npub fn gateway_config(path: &str) -> Result<u8, ConfigError> { gateway_decode(path) }\nfn gateway_decode(_: &str) -> Result<u8, ConfigError> { Ok(7) }\nstruct ConfigError;".to_string(),
+            fixed_code: "/// Reads the gateway config bytes.\n///\n/// # Errors\n///\n/// Returns an error when the operation fails (see `ConfigError`).\npub fn gateway_config(path: &str) -> Result<u8, ConfigError> { gateway_decode(path) }\nfn gateway_decode(_: &str) -> Result<u8, ConfigError> { Ok(7) }\nstruct ConfigError;".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "missing_panics_doc".to_string(),
+            lint_group: "pedantic".to_string(),
+            // The recognized-literal class: one expect with its message
+            // becoming the prose line. Distinctive vocabulary: a sampler
+            // reading a byte-slice head.
+            buggy_code: "/// Takes the sample head.\n#[must_use]\npub fn sample_head(samples: &[u8]) -> u8 { samples.first().copied().expect(\"empty sampler frame\") }".to_string(),
+            fixed_code: "/// Takes the sample head.\n///\n/// # Panics\n///\n/// Panics when empty sampler frame.\n#[must_use]\npub fn sample_head(samples: &[u8]) -> u8 { samples.first().copied().expect(\"empty sampler frame\") }".to_string(),
+        },
     ])
 }
 
