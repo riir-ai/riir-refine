@@ -8,11 +8,13 @@
 //!
 //! ZERO proposer code — the corpus `buggy_code`/`ref_shape` +
 //! `fixed_code`/`opt_pattern` texts ARE the suggestion (`--fix` needs the
-//! Phase 4/5 proposers). Composes riir-rag as-is; nothing here reimplements
-//! chunking, embedding, or retrieval.
+//! Phase 4/5 proposers). Composes the vendored [`crate::ragplane`]
+//! substrate as-is; nothing here reimplements chunking, embedding, or
+//! retrieval (the fused retrieval itself is the in-repo
+//! [`super::retriever`] seam, issue 221 P2b).
 
-use riir_rag::Chunker;
-use riir_rag::ast_chunker::AstChunker;
+use crate::ragplane::chunker::Chunker;
+use crate::ragplane::ast_chunker::AstChunker;
 
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match
