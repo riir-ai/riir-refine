@@ -485,6 +485,13 @@ done
 cd "$STAGE"
 export CARGO_TARGET_DIR="$STAGE/target"
 
+# The surgery changes the dep set, so the staged lock is stale by
+# construction — drop it here and let metadata/build regenerate a lock that
+# matches the GENERATED manifest (verdict round-2 fix 3: publish rides
+# --locked, which needs an existing, matching lock; this is where it gets
+# both).
+rm -f "$STAGE/Cargo.lock"
+
 # ── 3. metadata resolve + the ZERO path-dep assertion (registry mode) ───────
 cargo metadata --format-version 1 > "$STAGE/metadata.json" 2>/dev/null \
   || { echo "FAIL: cargo metadata could not resolve the generated manifest" >&2; exit 1; }
@@ -509,7 +516,14 @@ if ! cargo build --release --quiet > "$STAGE/build.log" 2>&1; then
 fi
 [ -x "$CARGO_TARGET_DIR/release/$NAME" ] || { echo "FAIL: bin not built" >&2; exit 1; }
 echo "   build ✓"
-"$CARGO_TARGET_DIR/release/$NAME" --version || true
+# Verdict round-2 fix 1: a binary that builds but won't run fails the gate —
+# never a silent pass (the --version leg exercises the build-stamp path).
+if ! "$CARGO_TARGET_DIR/release/$NAME" --version > "$STAGE/bin_version.log" 2>&1; then
+    echo "FAIL: the built bin refuses --version; tail:" >&2
+    tail -5 "$STAGE/bin_version.log" >&2
+    exit 1
+fi
+cat "$STAGE/bin_version.log"
 
 # ── 5. package surface audit ────────────────────────────────────────────────
 cargo package --list --allow-dirty > "$STAGE/pkglist.txt" 2>/dev/null \
@@ -527,11 +541,18 @@ if grep -qE '^\.benchmarks/' "$STAGE/pkglist.txt"; then
     fi
 fi
 echo "   package list ✓ ($(grep -c . "$STAGE/pkglist.txt") entries)"
+# Verdict round-2 fix 3b: a binary crate ships its lockfile so installs are
+# reproducible — assert the REGENERATED lock survived the include list (cargo
+# force-includes it for bin packages, but the assertion is the proof).
+if ! grep -q '^Cargo\.lock$' "$STAGE/pkglist.txt"; then
+    echo "FAIL: Cargo.lock not in the package (bin crates must ship it)" >&2
+    exit 1
+fi
 
 # ── 6. cargo publish --dry-run (registry mode; needs the P1 refresh live) ───
 if [ "$KC_SOURCE" = registry ]; then
-    echo "   cargo publish --dry-run…"
-    if cargo publish --dry-run > "$STAGE/publish_dry.log" 2>&1; then
+    echo "   cargo publish --dry-run (--locked)…"
+    if cargo publish --locked --dry-run > "$STAGE/publish_dry.log" 2>&1; then
         echo "   dry-run ✓"
     else
         echo "DRY-RUN RED (expected while P1's katgpt-core refresh is unpublished); tail:" >&2
@@ -544,8 +565,8 @@ fi
 
 # ── 7. the real publish — owner-gated (P3) ──────────────────────────────────
 if [ "${CARGO_REFINE_PUBLISH_CONFIRM:-}" = "yes" ] && [ "$KC_SOURCE" = registry ]; then
-    echo "   CARGO_REFINE_PUBLISH_CONFIRM=yes — publishing"
-    cargo publish
+    echo "   CARGO_REFINE_PUBLISH_CONFIRM=yes — publishing (--locked)"
+    cargo publish --locked
     echo "   published $NAME@$VERSION"
 else
     echo "   publish REFUSED (owner-gated P3): set CARGO_REFINE_PUBLISH_CONFIRM=yes to run"
@@ -554,4 +575,8 @@ fi
 if [ "$KEEP_STAGE" = 0 ] && [ -n "${CARGO_TARGET_DIR:-}" ]; then
     rm -rf "$CARGO_TARGET_DIR"
 fi
-echo "== VERDICT: green"
+if [ "$KC_SOURCE" = registry ]; then
+    echo "== VERDICT: green"
+else
+    echo "== VERDICT: green (sibling: dry-run UNSEEN)"
+fi

@@ -323,13 +323,29 @@ else
 fi
 
 # ── T6: the parallel-fleet leg (4090 over SSH, when reachable) ────────────
+# Verdict round-2 hardening: the host list reads env — new hosts stop landing
+# in a public repo. K4090_HOSTS="user@lan,user@tailscale" (comma-separated);
+# unset = the leg DEFERs loudly, never probes invented defaults. The
+# user@ shape carries the account too (was: hardcoded katop@).
 say "T6: concurrency — the 4090 leg pushes while M3 state holds"
 K4090=""
-for host in 192.168.1.33 100.85.179.44; do
-  if timeout 8 ssh -o ConnectTimeout=5 -o BatchMode=yes "katop@$host" hostname >/dev/null 2>&1; then K4090=$host; break; fi
-done
+if [ -n "${K4090_HOSTS:-}" ]; then
+  echo "$K4090_HOSTS" | tr ',' '\n' | while IFS= read -r dest; do
+    [ -n "$dest" ] || continue
+    if timeout 8 ssh -o ConnectTimeout=5 -o BatchMode=yes "$dest" hostname >/dev/null 2>&1; then
+      printf '%s' "$dest" > /tmp/.k4090_reached.$$; break
+    fi
+  done
+  [ -f /tmp/.k4090_reached.$$ ] && { K4090=$(cat /tmp/.k4090_reached.$$); rm -f /tmp/.k4090_reached.$$; }
+  unset K4090_HOSTS_LIST
+else
+  echo "  T6: K4090_HOSTS unset — the 4090 leg DEFERs (no host list to probe)"
+fi
 if [ -n "$K4090" ]; then
-  KOUT=$(ssh -o ConnectTimeout=8 "katop@$K4090" 'powershell -NoProfile -Command "& C:\Users\katop\.cargo\bin\cargo-refine.exe --version | Select-Object -Last 1"' 2>/dev/null || true)
+  # the remote path keeps the account in the env list (user@host), so this
+  # line derives the exe path from the HOME the login lands in — no hardcoded
+  # account in the repo
+  KOUT=$(ssh -o ConnectTimeout=8 "$K4090" 'powershell -NoProfile -Command "& $HOME\.cargo\bin\cargo-refine.exe --version | Select-Object -Last 1"' 2>/dev/null || true)
   if echo "$KOUT" | grep -q "release set: complete"; then
     verdict PASS "T6 4090 leg — release-set binary live at $K4090 (its own cycle drives its own test account)"
   else
