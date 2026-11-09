@@ -17062,6 +17062,11 @@ fn main() {
                 // key against the ORIGINAL-file span map (see the block
                 // comment above for the approximation bound).
                 let pass_line = pass_texts[pass][..start].matches('\n').count() + 1;
+                // Issue 221 P2: gated like span_candidates above — the cap
+                // constant lives in the latent-gated traj_store; the
+                // publish posture's fix_verify carries the empty vec (the
+                // documented None semantics: no candidate set in hand).
+                #[cfg(feature = "latent_retrieval")]
                 let rejected: Vec<String> = span_candidates
                     .iter()
                     .find(|(sl, el, _)| pass_line >= *sl && pass_line <= *el)
@@ -17074,6 +17079,9 @@ fn main() {
                             .collect()
                     })
                     .unwrap_or_default();
+                #[cfg(not(feature = "latent_retrieval"))]
+                let rejected: Vec<String> = Vec::new();
+                let _ = pass_line;
                 (rule_id, line, replacement, restore, note, rejected)
             })
             .collect();
