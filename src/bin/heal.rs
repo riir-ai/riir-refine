@@ -15533,8 +15533,23 @@ fn main() {
     let adoption_root = resolve_heal_root(&args.paths);
     // Issue 220: seat picks' build fingerprints — the serve site knows the
     // receipt, the verdict bookkeeping (per file, later) records it into
-    // the window row. One entry per seat-served file, per run.
+    // the window row. One entry per seat-served file, per run. The ONLY
+    // insert site rides the seat lane's cfg (escalation_manifest +
+    // seat_rerank + fix_verify + latent_retrieval); the readers at the
+    // verdict sites are unconditional — without the seat lane this map is
+    // never mutated, so the mut carries a matching allow (found live at the
+    // adoption_gate-without-seat_rerank accumulation build, issue 220
+    // pre-work; the workflow release posture never compiles it).
     #[cfg(feature = "adoption_gate")]
+    #[cfg_attr(
+        not(all(
+            feature = "escalation_manifest",
+            feature = "seat_rerank",
+            feature = "fix_verify",
+            feature = "latent_retrieval"
+        )),
+        allow(unused_mut)
+    )]
     let mut seat_build_by_path: std::collections::HashMap<PathBuf, String> =
         std::collections::HashMap::new();
     if evolve_rec.is_enabled() && envelope_backend {
