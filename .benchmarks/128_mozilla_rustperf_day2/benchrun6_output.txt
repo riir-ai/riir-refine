@@ -1,0 +1,16 @@
+uncached control (32 compiles, no sccache): 0.561s
+run arm=before rep=1 wall=33.748s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 58059 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=after rep=2 wall=33.583s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 58517 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=before rep=3 wall=33.516s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 58803 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=after rep=4 wall=33.593s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 59153 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=before rep=5 wall=33.568s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 59419 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=after rep=6 wall=33.651s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 59801 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+run arm=demote rep=7 wall=33.535s reqs=32 timeouts=32 writes=32 werrs=0 comps=32 backend_gets=32 backend_puts=32
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff.sh: line 128: 60105 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG"
+done
