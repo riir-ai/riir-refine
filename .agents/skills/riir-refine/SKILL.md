@@ -180,7 +180,13 @@ until the claims clear.
 2. **Dedup grep BEFORE proposing** — grep the existing corpus
    (`src/domains/kernel_opt/`, `src/domains/rust_perf/`) for each
    candidate concept. Batch 30 dropped 13 candidates as
-   duplicates/adjacent; that filter is load-bearing.
+   duplicates/adjacent; that filter is load-bearing. **Upstream-state
+   re-check at authoring (P113):** a fix-shaped lead ("the repo should
+   do X") re-runs its one-line proof — `git log -S<mechanism-token>` /
+   blame at the pin: ABSENT = open fix space (outbound-PR eligible),
+   PRESENT = their landed decision (mineable decision content ONLY,
+   never a PR) — even when the distill verdict already carried it (the
+   verdict and the authoring can be days apart).
 3. Spawn **2 parallel subagents** to read the target file(s) + propose
    rules (pattern, bounded fix-space, category, rationale, source
    quote). **Re-verify every quoted line against the real file** —

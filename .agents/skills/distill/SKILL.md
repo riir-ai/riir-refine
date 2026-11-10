@@ -50,6 +50,7 @@ Inspection checklist:
 - **Completeness signals** — README presence, `todo!()`/`unimplemented!()` density, `#![allow(unused)]`, commented-out impls. WIP *modules* are not mineable; *completed modules inside a WIP repo* are (thermite: `divider.rs` complete while `thermite-special` was mostly `todo!()`). Grade at MODULE level, not repo level.
 - **Provenance chain** — is it a port of a known technique? Cite BOTH the port and the upstream (thermite divider ← libdivide). The upstream often holds the deeper variant set; if mining the pattern, cite upstream for the math and the repo for the Rust shape.
 - **Maintenance** — stars/last commit matter only for the provenance note, never for the grade. Patterns are timeless; abandoned repos still mine fine.
+- **Upstream state (the P113 check)** — for each fix-shaped lead, one `git log -S<mechanism-token>` / blame at the pin BEFORE grading: ABSENT = open fix space (outbound-PR eligible); PRESENT = their landed decision (decision content only, never a PR). A fix-shaped lead graded without it is an ungraded lead.
 - **Unread files** — anything that timed out or wasn't read gets marked "unverified — re-read at mine time" in the verdict. Never grade an unread file.
 
 ### Full-source access — clone into `.raw/` (ephemeral, `rm` when done)
@@ -87,6 +88,7 @@ Every candidate must be a **named pattern with a bounded fix-space + regime cond
 - KEEP: placement decisions (fold-at-gather vs fold-at-upload; branchful vs branchfree).
 - KILL: ambient structure — type boilerplate, import organization, macro plumbing, "uses const fn", API surface area.
 - KILL: positive instances of existing rules (the file IS rule N) — that is not a new rule; it may be a hazard filing instead.
+- **FOLD — the upstream-state check (P113, the Research-362 founding miss):** every fix-shaped lead ("the repo should do X") grades ONLY with its one-line upstream-state proof at the pin — `git log -S<mechanism-token>` / blame in the `.raw` clone: **ABSENT** = open fix space (outbound-PR eligible) · **PRESENT** = their OWN landed decision (mineable decision content ONLY, never a PR). The miss: Research 362 graded sccache's `pre_exec`-disables-posix_spawn as the A-lead GOAT candidate — the mechanism was sccache's own landed fix at the pin (`mock_command.rs:269–282` + the `share_jobserver` opt-in flag), caught only because the wetrun lane re-derived the fix site in-source; the outbound-PR lane would have shipped a duplicate-of-their-own-code PR. Cost: one grep per lead at the already-open clone. The batch authoring step re-checks it (Protocol A, the riir-refine skill) — the verdict and the authoring can be days apart.
 - KILL/ANNOTATE: monitor-shaped candidates whose regime conditions presuppose a STATEFUL host (drifting rates, sloping values, oscillating selection) when the target surface is feed-forward/exact — a fixture must reproduce the REAL host posture; no mutated host state ⇒ unreachable-in-regime (the stationary-surface category error, rethink Issue 047 round 1, 2026-10-31).
 
 ## GOAT candidate identification
@@ -146,7 +148,7 @@ Do not let a lane-intel zero suppress a product-coverage YES; do not let product
 1. **Verdict line** — YES / NO / MARGINAL + letter grade, PLUS the lane-intel verdict when that axis fires (e.g. "MARGINAL C+ corpus / LEAGUE INTEL HIGH"), PLUS the product-coverage verdict when a famous-lib family is in play (e.g. "YES B− corpus / no lane mapping / seeds the tokio family").
 2. **Domain routing** — target corpus + category, explicitly naming the tempting WRONG domain (the CPU-SIMD-is-not-kernel_opt trap).
 3. **Lane mapping** — when the axis fires: mapped lane + issues, transferable vs not-transferable (each with its measured negative), follow-up offered. **Product-coverage** — when a famous-lib family is in play: the family's current size, the gap, and the follow-up source pool (this lives in the research note; the verdict line just names it).
-4. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency.
+4. **Ranked candidate table** — pattern | source file | grade | notes. Include the Drop rows (killed candidates) for transparency. Every fix-shaped row carries its upstream-state token (`UPSTREAM: absent/present at <pin>`) in notes — a fix-shaped row without one is an ungraded row (the P113 check).
 5. **Yield estimate** — expected rules landing after ~50% coordinator falsification.
 6. **Honest caveats** — WIP status, provenance, maintenance, consumer-base narrowness, unread files.
 7. **Bottom line** — "mine as one batch (next batch number), lead with `<GOAT rule>`" + offer to add to the mining queue; or the lane-intel follow-up when corpus-MARGINAL; or the family-seeding follow-up pool when product-coverage fires on a MARGINAL corpus grade.
