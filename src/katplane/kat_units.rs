@@ -8,12 +8,6 @@
 //! re-vendoring via `scripts/vendor_katplane.sh` — never hand-edit one
 //! side.
 
-// Vendored lint posture (issue 221): the canonical copy passes the sibling's
-// gate, not this crate's pedantic set; the µ↔whole conversions are pinned
-// by the golden tests, so the `as` forms stay VERBATIM (allow, never
-// rewrite money math).
-#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
-
 //! The KAT unit system — the network's shared money vocabulary: the
 //! lamport-law documentation every money-touching file references, the
 //! [`MicroKat`]-typed economics constants (free-tier grant, per-million-token
@@ -59,7 +53,7 @@
 //! text) lives in `tests/unit_registry.rs` (riir-dapps Plan 035 T0.2).
 //!
 //! ```
-//! use crate::kat_units::{MicroKat, WholeKat, MICRO_PER_KAT, render_kat};
+//! use riir_refine::kat_units::{MicroKat, WholeKat, MICRO_PER_KAT, render_kat};
 //!
 //! // the ONE conversion, pinned (LAMPORTS_PER_SOL is 10⁹ — same role,
 //! // different magnitude, on purpose)
@@ -76,10 +70,16 @@
 //! // the product semantics (Plan 035 T4): grant = price × free tokens
 //! assert_eq!(
 //!     grant,
-//!     crate::kat_units::CHARGE_MICRO_KAT_PER_MILLION_TOKENS
-//!         * crate::kat_units::FREE_TIER_TOKENS_MTOK
+//!     riir_refine::kat_units::CHARGE_MICRO_KAT_PER_MILLION_TOKENS
+//!         * riir_refine::kat_units::FREE_TIER_TOKENS_MTOK
 //! );
 //! ```
+
+// Vendored lint posture (issue 221): the canonical copy passes the sibling's
+// gate, not this crate's pedantic set; the µ↔whole conversions are pinned
+// by the golden tests, so the `as` forms stay VERBATIM (allow, never
+// rewrite money math).
+#![allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 
 /// Micro-KAT per KAT — the denomination every money amount crossing the
 /// service boundary carries (the dapps `MicroUnits` unit), and the ONLY
@@ -386,7 +386,7 @@ pub const CHARGE_MICRO_KAT_PER_MILLION_TOKENS: MicroKat = MicroKat(1_000_000);
 /// price where it was, crediting every account 10⁶× the intent):
 ///
 /// ```
-/// use crate::kat_units::{
+/// use riir_refine::kat_units::{
 ///     CHARGE_MICRO_KAT_PER_MILLION_TOKENS, FREE_TIER_GRANT_MICRO_KAT,
 ///     FREE_TIER_TOKENS_MTOK,
 /// };

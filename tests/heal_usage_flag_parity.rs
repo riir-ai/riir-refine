@@ -33,6 +33,27 @@ const NOT_HEAL_FLAGS: &[&str] = &[
     // `--message-format=json` invocation verbatim — it is the exact
     // command the user must run, not a flag heal's parser ever sees.
     "--message-format",
+    // The removed credit-plane flags (issue 190 T14b + the 2026-11-06
+    // vocabulary law): the mining onboarding surface was DELETED with the
+    // mining lane (join/leave is the contribution surface now), but the
+    // help pages still carry the historical mentions — the kat_service
+    // fragment blocks (the maintainer-reference copy T14a recorded), the
+    // issue-203 upgrade/corpus-charge notes, and the `--stats` prose that
+    // describes what --mine used to write. The parser arms are gone; what
+    // remains is PROSE ABOUT THE REMOVAL, not an advertised capability.
+    // Each mention sits on a page or fragment the charitable posture
+    // compiles out; the honest fix is these rows + the fragments' own
+    // retirement in the help-text maintenance lanes, never a parser arm
+    // resurrecting a removed surface.
+    "--mine",
+    "--unmine",
+    "--purge",
+    "--purge-server",
+    // The verb-first law's teaching line names the `--flag` SPELLING as
+    // the quiet alias FORM ("the `--flag` spelling stays parsed as a quiet
+    // alias") — the token is documentation of a grammar shape, not a flag
+    // any parser arm matches.
+    "--flag",
 ];
 
 fn heal_source() -> String {
@@ -138,15 +159,17 @@ fn the_audit_can_see_what_it_audits() {
     // `--dry-run` is the guarded-arm pin (`"--dry-run" if matches!(…) =>`) —
     // it is here because the extractor did not recognise that shape and
     // produced a false "advertised but unparsed" finding.
-    // `--unmine` is the plain-arm pin for the consent tier (owner mandate
-    // 2026-09-08): a tier the usage text stops advertising is a tier
-    // nobody can find.
+    // (The plain-arm pin was `--unmine` until 2026-11-06, when the
+    // vocabulary law deleted the credit-plane surface — the contribution
+    // verbs are bare WORDS (`join`/`leave`), never flags, so a
+    // consent-tier FLAG pin no longer exists. `--stats` carries the
+    // plain-arm pin now.)
     for f in [
         "--suggest",
         "--fix",
         "--history",
         "--dry-run",
-        "--unmine",
+        "--stats",
         "--help-all",
     ] {
         assert!(usage.contains(f), "usage extractor missed {f}");

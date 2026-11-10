@@ -1309,6 +1309,23 @@ manual semantic fixes (`manual_midpoint`, `assert_is_empty`). The referee is
 now the STANDING read — verdicts accrue passively as the stores grow; the next
 meaningful event is a read at n ≥ 30. The issue stays OPEN until then.
 
+## 2026-11-10 — Issue 219 REMOVED (done): the gist-rs → riir-ai org migration closes
+
+The issue file is removed per the noise-reduction rule; every residue it
+tracked is landed or owner-confirmed. A2 (prod redeploys: kat-service gen-2
+net-leg at `49a59d0`, reflex-site `84730a68`, rethink `2108dbd0`) CLOSED
+2026-11-08 with all five live surfaces probing 0 gist-rs org refs; A3 (the
+4090 disk-full incident) RESOLVED 2026-11-08 with the gitsync lane verified
+end-to-end over the flipped remotes; and A1 (the Actions PAT/secret rescoping)
+is recorded DONE by the later 221 session (issue 221 P4's deprecation
+sequencing: "issue 219's A1 PAT rescope already done"). The drift-ledger
+observations (amo's 2026-11-10 remote flip, the ENOSPC misdiagnosis lesson,
+the 308 redirect confirmation, the seal `.git` lock sweep) live on in git
+history (`git log -- .issues/219_gist_rs_org_migration_owner_residue.md`);
+the cross-repo landing records stay in dapps bench 018 (`c0fa14f`). Removed
+at HEAD `22666bfa8` lineage; the `.highwater` (223) is untouched — numbers
+are never reused.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

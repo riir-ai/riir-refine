@@ -322,6 +322,13 @@ fn line_is_clean(stripped_line: &str) -> bool {
 /// never a count (a count is green on a swap).
 const ALLOWED_PATHS: &[(&str, &str)] = &[
     (
+        "src/katplane/kat_units.rs",
+        "vendored riir-kat unit system: CHARGE_MICRO_KAT_PER_MILLION_TOKENS's \\
+         DEFINING million (the µ-per-Mtok price — TOKENS_PER_MTOK's money \\
+         sibling, unit-registry-row pinned in riir-kat); verbatim by the \\
+         vendoring law, golden-pinned by katplane_parity",
+    ),
+    (
         "src/domains/rust_perf/corpus/entries_",
         "mined perf-rule corpus: benchmark input-size ladders, not money",
     ),

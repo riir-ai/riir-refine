@@ -74,7 +74,7 @@ pub enum StampLaw {
     /// proven, their reset risk is covered by the same push's strict ack
     /// gate, and refusing would deadlock files that can only gain the id
     /// through the refused path. The id upgrades at the next stamped
-    /// write ([`crate::kat_state_stamp`]'s writers never clobber an
+    /// write ([`riir_refine::kat_state_stamp`]'s writers never clobber an
     /// existing id with absence).
     TransitionalId,
 }
