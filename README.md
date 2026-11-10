@@ -2,6 +2,16 @@
 
 > **Boundary contract:** [BOUNDARY.md](BOUNDARY.md) — what lives here, what may depend on it, known drift.
 
+> **TL;DR — release:** `scripts/release.sh v0.5.1` — one command, one
+> Touch ID fingerprint. It refuses unless the tree is clean, HEAD carries
+> exactly that tag, `Cargo.toml` matches, and `release/notes-<tag>.md`
+> carries a `corpus:` line; then it builds + packages + scans
+> (`manual_release.sh --no-publish`), smokes the built binary's
+> `--version`, and publishes via the sealed `gh-release-pat` token
+> (`kat-secret exec`) — the token is never on argv, in a file, or in a
+> log. Tap/scoop bumps stay manual (hashes in
+> `/tmp/manual_release_dist/SHA256SUMS`).
+
 **The code fixer that learns** — a multi-domain modelless framework behind the
 `HealDomain` trait that distills code rules into a ruliology-style search
 space, drafts fixes via a modelless ternary SIMD matvec, and validates with a
