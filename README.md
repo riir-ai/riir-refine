@@ -257,6 +257,35 @@ The primary path (L0–L3) is entirely modelless — no training, no backprop:
 The LoRA fallback (L4) is deferred to riir-train and is the conservative last
 resort, not a co-equal path.
 
+## Install
+
+macOS / Linux (Homebrew — `brew tap` resolves `github.com/riir-ai/homebrew-tap`):
+
+```sh
+brew tap riir-ai/tap
+brew install riir-ai/tap/cargo-refine
+```
+
+or the checksum-verified script (macOS/Linux):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+scoop bucket add riir-ai https://github.com/riir-ai/scoop-bucket
+scoop install cargo-refine
+# or the script:
+irm https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.ps1 | iex
+```
+
+Every install is checksum-verified against the release's `SHA256SUMS`; each
+release carries `THIRD_PARTY_LICENSES.md` + the EULA beside the binary. The
+crates.io lane (`cargo install cargo-refine`) is planned (issue 221 — the
+default build already resolves with ZERO private deps).
+
 ## Quick Start
 
 ```sh
