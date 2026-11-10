@@ -1,0 +1,7 @@
+# Trusted revisions to ignore in `git blame` (the katgpt-rs Issue-946 precedent).
+# Each entry is a whole-tree mechanical mass-change; uncommenting `git blame`
+# with `--ignore-revs-file .git-blame-ignore-revs` keeps history readable.
+
+# style(223): repo-wide rustfmt style-2024 convergence (issue 223 T3/T5;
+# rustfmt.toml style_edition=2024 pinned; exclusions per the issue's map)
+0d7c97eb
