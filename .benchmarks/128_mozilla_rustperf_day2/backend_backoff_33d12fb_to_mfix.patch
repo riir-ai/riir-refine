@@ -32,10 +32,10 @@ index 2836b3c..12a44a5 100644
  ### Via Environment Variables
 diff --git a/src/cache/backend_backoff.rs b/src/cache/backend_backoff.rs
 new file mode 100644
-index 0000000..067e541
+index 0000000..89db51d
 --- /dev/null
 +++ b/src/cache/backend_backoff.rs
-@@ -0,0 +1,1041 @@
+@@ -0,0 +1,1040 @@
 +// Copyright 2026 Mozilla Foundation
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
@@ -165,9 +165,8 @@ index 0000000..067e541
 +        state.open_until.is_some_and(|until| Instant::now() < until)
 +    }
 +
-+    /// Record a read that ran out of time. The multi-level chain calls this
-+    /// when its caller-owned per-level timeout fires (the wrapper's future
-+    /// is dropped and cannot record for itself).
++    /// Record a read that ran out of time. Called only by `ReadGuard::drop`
++    /// when a gated read is cancelled before it answers.
 +    pub(crate) fn record_timed_out(&self) {
 +        if self.threshold == 0 {
 +            return;
@@ -1108,7 +1107,7 @@ index accad04..66d7c8c 100644
  pub mod cache;
  pub mod cache_io;
 diff --git a/src/cache/multilevel.rs b/src/cache/multilevel.rs
-index c8031f7..fffc04b 100644
+index c8031f7..f780565 100644
 --- a/src/cache/multilevel.rs
 +++ b/src/cache/multilevel.rs
 @@ -44,6 +44,7 @@ struct AtomicLevelStats {
@@ -1219,7 +1218,7 @@ index c8031f7..fffc04b 100644
          }
      }
  
-@@ -565,27 +585,96 @@ impl MultiLevelStorage {
+@@ -565,27 +585,97 @@ impl MultiLevelStorage {
  #[async_trait]
  impl Storage for MultiLevelStorage {
      async fn get(&self, key: &str) -> Result<Cache> {
@@ -1297,8 +1296,9 @@ index c8031f7..fffc04b 100644
 +                        .is_some())
 +            {
 +                // This level ran out of its own budget: count the
-+                // timeout on the level (and move its gate, since the
-+                // caller-owned timeout never reaches the wrapper).
++                // timeout on the level's stats (the gate itself is moved
++                // by the wrapper's drop guard when this timer cancels
++                // the read).
 +                inc_stat!(self.atomic_stats.get(idx), timeouts, 1);
 +                warn!(
 +                    "Cache level {} timed out after {:?}, trying next level",
@@ -1321,7 +1321,7 @@ index c8031f7..fffc04b 100644
  
                      // Raw bytes obtained above are reused for backfilling;
                      // no second read is needed for a raw-capable level.
-@@ -618,17 +707,75 @@ impl Storage for MultiLevelStorage {
+@@ -618,17 +708,75 @@ impl Storage for MultiLevelStorage {
          }
          debug!("Cache miss at all levels");
  
@@ -1400,7 +1400,7 @@ index c8031f7..fffc04b 100644
                      self.backfill_raw_hit(key, &bytes, idx);
                      return Ok(Some(bytes));
                  }
-@@ -642,7 +789,10 @@ impl Storage for MultiLevelStorage {
+@@ -642,7 +790,10 @@ impl Storage for MultiLevelStorage {
              }
          }
  
