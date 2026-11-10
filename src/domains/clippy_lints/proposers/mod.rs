@@ -161,7 +161,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 88 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 118 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -192,7 +192,10 @@
 //! precedent and the `scalar_param_heads_over` signature-provenance
 //! substrate, both gate-proven since — and the 2 Batch 184 pack-XVI rules
 //! (`ptr_offset_with_cast` / `needless_borrowed_reference`, Plan 179 — the
-//! Plan-169 staged IOU pair); future lints drop in by extending
+//! Plan-169 staged IOU pair), and the 2 P118 rows (`collapsible_match` /
+//! `map_or_identity` + `unnecessary_min_or_max`, Plan 353), and plan 354's
+//! 2 doc-section rows, and the Batch 347 `let_unit_value` row (the P120
+//! rulewright-miss trio, plan 358); future lints drop in by extending
 //! the match.
 
 pub mod assert_is_empty;
@@ -233,6 +236,7 @@ pub mod iter_skip_next;
 pub mod legacy_numeric_constants;
 pub mod len_without_is_empty;
 pub mod let_and_return;
+pub mod let_unit_value;
 pub mod manual_checked_ops;
 pub mod manual_clamp;
 pub mod manual_is_multiple_of;
@@ -956,6 +960,16 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // the P116 residual (`100.min(97)` → `97`, riir-infer's gate sweep);
     // floats/idents/const paths refuse (upstream-silent, mirrored).
     "unnecessary_min_or_max",
+    // ── Batch 347 (the P120 rulewright-miss trio, plan 358) ──
+    // `let _ = <unit-expr>;` → `<unit-expr>;` — fires ONLY on the
+    // provably-unit shapes (unit std macro allowlist, unit-tail blocks,
+    // if-no-else, loops, unique same-scope file-local unit fns); named
+    // patterns gate on zero later references; the `writeln!`/`write!`
+    // io::Result class REFUSES (must_use suppression is a lint regression
+    // the compile gate cannot see). Real clippy's diagnostics are
+    // help-only (probed 1.99: sugg null) — this proposer is the only fix
+    // path for the class.
+    "let_unit_value",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1339,6 +1353,8 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_range_patterns" => manual_range_patterns::collect_edits(source, file),
         // ── Batch 155 (the frontier-lead mining pack, Plan 146) ──
         "let_and_return" => let_and_return::collect_edits(source, file),
+        // ── Batch 347 (the P120 rulewright-miss trio, plan 358) ──
+        "let_unit_value" => let_unit_value::collect_edits(source, file),
         "ptr_arg" => ptr_arg::collect_edits(source, file),
         "redundant_slicing" => redundant_slicing::collect_edits(source, file),
         "map_flatten" => map_flatten::collect_edits(source, file),
@@ -2194,6 +2210,12 @@ impl S {
                 "unnecessary_min_or_max",
                 "fn f() -> u32 { 100u32.min(97) }",
                 "{ 97 }",
+            ),
+            // ── Batch 347 (the P120 rulewright-miss trio, plan 358) ──
+            (
+                "let_unit_value",
+                "fn probe() { let _ = println!(\"hello\"); let _y = unit_fn(); }\nfn unit_fn() {}",
+                "println!(\"hello\")",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

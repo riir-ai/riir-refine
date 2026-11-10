@@ -453,6 +453,28 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             fixed_code: "fn f(n: u64) -> bool { n.is_multiple_of(4) }\nfn g(n: u64, d: u64) -> bool { n.is_multiple_of(d) }".to_string(),
         },
         ClippyFixEntry {
+            lint_name: "let_unit_value".to_string(),
+            lint_group: "style".to_string(),
+            // Batch 347 (the P120 rulewright-miss trio, plan 358 — the
+            // riir-grams wire-v3 lane's 0-edit class). FIXABLE: clippy's
+            // diagnostics are help-only (probed 1.99: sugg null — the
+            // "omit the let binding" child carries no replacement), so the
+            // oracle lane cannot heal the class and this proposer is the
+            // only fix path. Fires on the provably-unit shapes only (unit
+            // std macro allowlist, unit-tail blocks, if-no-else, loops,
+            // unique same-scope file-local unit fns); named patterns gate
+            // on zero later references; the writeln!/write! io::Result
+            // class REFUSES — the must_use suppression is a lint-behavior
+            // regression the compile gate cannot see (warnings are not
+            // errors). The intake's own bench shape (`let _ =
+            // sealed.verify().expect(..)`) is a METHOD CHAIN — the
+            // documented divergence (typeck-only), never fired here.
+            buggy_code: "fn probe() {\n    let _ = println!(\"hello\");\n    let _ = assert!(1 < 2);\n    let _y = unit_fn();\n}\nfn unit_fn() {}"
+                .to_string(),
+            fixed_code: "fn probe() {\n    println!(\"hello\");\n    assert!(1 < 2);\n    unit_fn();\n}\nfn unit_fn() {}"
+                .to_string(),
+        },
+        ClippyFixEntry {
             lint_name: "manual_range_patterns".to_string(),
             lint_group: "complexity".to_string(),
             // Post-mining P31 intake (2026-09-17, the riir-chain 51b456f
@@ -1492,6 +1514,9 @@ mod tests {
         // corpus gaps + the P116 residual) added the three rows
         // (collapsible_match + map_or_identity + unnecessary_min_or_max)
         // = 115.
+        // Batch 347 (2026-11-10, plan 358 — the P120 rulewright-miss
+        // trio) added `let_unit_value` = 118 (the intake's two slice-math
+        // rules verified EXISTING; only the let_unit_value gap was real).
         // plan 329 P1: MANIFEST-DERIVED — a red means the corpus moved
         // without `scripts/pins_manifest.py --write`; land the manifest
         // diff WITH the corpus change.

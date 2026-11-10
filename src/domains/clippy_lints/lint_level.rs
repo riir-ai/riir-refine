@@ -112,6 +112,7 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("legacy_numeric_constants", "style"),
     ("len_without_is_empty", "style"),
     ("let_and_return", "style"),
+    ("let_unit_value", "style"),
     ("manual_bit_width", "pedantic"),
     ("manual_checked_ops", "complexity"),
     ("manual_clamp", "complexity"),
