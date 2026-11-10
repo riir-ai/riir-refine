@@ -8,7 +8,7 @@
 //! producer's decide) **bit-identically to the producer fixture
 //! verdicts** — the exact f64 numbers from
 //! `katgpt_core::adoption_gate`'s `degraded_challenger_keeps_incumbent`
-//! and `genuine_improvement_adopts_and_ties_go_to_challenger` fixtures.
+//! and `genuine_improvement_adopts_and_ties_keep` fixtures.
 //! SYNTHETIC gate-mechanics only — never quotable as serving quality
 //! (the 976-corpus lesson).
 
@@ -343,20 +343,24 @@ fn from_rows_replay_matches_load_and_accessors_pin() {
     }
     // The flip premise: flipping a verdict bit changes the rings. After
     // the flip BOTH rows are rejected: every score is 0, the demote
-    // consult ties 0=0 and ties→challenger PROCEEDS — the exact
-    // tie-on-destructive-consult surface katgpt-rs issue 994 owns (pinned
-    // here so the rule's eventual change reds this test). The readmit
-    // consult carries no tie: the rule's own row is now rejection
-    // evidence → refused.
+    // consult ties 0=0 — and since katgpt-rs issue 994 landed (tie →
+    // incumbent, decline-first), the tie REFUSES. Correct, not a
+    // regression: the challenger also scores 0, so the window shows no
+    // improvement and an uninformative window keeps the incumbent — the
+    // all-rejected rule stays in place until evidence favors its removal.
+    // Demotes where the challenger strictly scores higher remain covered
+    // by `g1_demoting_a_pure_reject_adopts` (1.0 > incumbent, no tie).
+    // The readmit consult carries no tie: the rule's own row is now
+    // rejection evidence → refused.
     let mut flipped = loaded.rows().to_vec();
     flipped[1].accepted = false;
     let w = AdoptionWindow::from_rows(flipped);
     assert!(
         matches!(
             w.demote_verdict("a", DEFAULT_ADOPTION_ALPHA),
-            GateVerdict::Proceed(_)
+            GateVerdict::Refuse(_)
         ),
-        "the all-rejected tie demotes at 0=0 — issue 994's surface"
+        "the all-rejected tie now refuses (issue 994: ties keep the incumbent)"
     );
     assert!(
         matches!(

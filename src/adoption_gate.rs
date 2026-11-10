@@ -125,8 +125,9 @@ pub enum GateVerdict {
 
 impl GateVerdict {
     /// The refusal predicate — `Refuse` iff the producer said `Keep` (the
-    /// challenger scores strictly below the incumbent; a tie ADOPTS by the
-    /// producer's pinned tie rule).
+    /// challenger scores strictly below the incumbent, OR ties it — since
+    /// katgpt-rs issue 994 the pinned tie rule gives ties to the incumbent,
+    /// decline-first; a tie is a no-evidence window).
     #[must_use]
     pub fn refused(&self) -> bool {
         matches!(self, Self::Refuse(_))
