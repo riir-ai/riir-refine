@@ -1456,7 +1456,11 @@ name = "corpus_diagnose"
 path = "src/bin/corpus_diagnose.rs"
 # The store reader (traj_store → neuron-db Warm tier) rides latent_retrieval's
 # dep closure, same as every other `.refine/trajectories.kv` consumer.
-required-features = ["latent_retrieval"]
+# clippy_lints + rust_perf: the bin references both corpora's build_seed_*
+# UNCONDITIONALLY (a6eb6be0's c' referee + the 206 sweep arms) — both are
+# default features, so the no-default-features posture needs them named or
+# the target compiles to nothing it can't build (the guard layer caught it).
+required-features = ["clippy_lints", "rust_perf", "latent_retrieval"]
 
 # Plan 031 Phase A (A3) — the trainer-window LOCAL drain: MOVED to the
 # trainer tier crate (crates/riir-refine-trainer/src/bin/kat_drain.rs,
