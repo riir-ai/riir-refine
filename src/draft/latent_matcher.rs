@@ -13,8 +13,8 @@
 //! retrieval (the fused retrieval itself is the in-repo
 //! [`super::retriever`] seam, issue 221 P2b).
 
-use crate::ragplane::chunker::Chunker;
 use crate::ragplane::ast_chunker::AstChunker;
+use crate::ragplane::chunker::Chunker;
 
 // dead under thin feature sets (its consumers live in the clippy_lints +
 // rust_perf lanes and the gated tests module); gated to match

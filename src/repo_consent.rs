@@ -314,7 +314,12 @@ mod tests {
         // The deliberate tripwire: reds LOUD at the flip, forcing the
         // flipper to touch this pin (clippy's const-assert note is met
         // by the const-block form).
-        const { assert!(!ENABLED, "the ENABLE flip is an owner act (plan 333 Phase B) — flip this pin in the same commit as the signature") };
+        const {
+            assert!(
+                !ENABLED,
+                "the ENABLE flip is an owner act (plan 333 Phase B) — flip this pin in the same commit as the signature"
+            )
+        };
         let tmp = std::env::temp_dir().join(format!("repo_consent_dark_{}", std::process::id()));
         let dir = tmp.join("account");
         let repo = tmp.join("repo");

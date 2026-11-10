@@ -768,8 +768,7 @@ mod tests {
         // …and validate_service_url accepts the stored value (the read
         // path re-validates; a record that fails reads as not-set).
         assert!(
-            crate::kat_service_config::validate_service_url(url.as_deref().expect("url"))
-                .is_ok()
+            crate::kat_service_config::validate_service_url(url.as_deref().expect("url")).is_ok()
         );
         let _ = std::fs::remove_dir_all(&dir);
     }

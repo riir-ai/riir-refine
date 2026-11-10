@@ -68,20 +68,20 @@
 
 use crate::kat_account::KatAccount;
 use riir_kat::kat_protocol_migrate::{
-    attest_only_line, decode_pubkey, migrate_attest_message, migrate_attest_message_v2,
-    MigratePowAttestation,
+    MigrateAck, MigrateRequestState, MigrateStatusBody, PROPOSAL_LABEL, ProposalDraft,
+    proposal_issue_html_url,
+};
+use riir_kat::kat_protocol_migrate::{
+    MigratePowAttestation, attest_only_line, decode_pubkey, migrate_attest_message,
+    migrate_attest_message_v2,
 };
 #[cfg(feature = "kat_transport")]
 use riir_kat::kat_protocol_migrate::{
-    migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
-    migrate_release_message_v2, MigrateRequestBody,
-};
-use riir_kat::kat_protocol_migrate::{
-    proposal_issue_html_url, MigrateAck, MigrateRequestState, MigrateStatusBody, ProposalDraft,
-    PROPOSAL_LABEL,
+    MigrateRequestBody, migrate_claim_message, migrate_claim_message_v2, migrate_release_message,
+    migrate_release_message_v2,
 };
 use riir_kat::kat_protocol_migrate::{proposal_vote_rules, render_span};
-use riir_kat::kat_protocol_migrate_tally::{TallyTiming, TALLY_CORE};
+use riir_kat::kat_protocol_migrate_tally::{TALLY_CORE, TallyTiming};
 
 /// The migrate repo base the proposal-issue URL composes against when the
 /// status body carries only the issue NUMBER (`--repo-base` overrides; the
@@ -108,8 +108,8 @@ pub struct CensusSurface {
 /// are the push's own wire-unit arithmetic, never micro — a raw `µKAT` label
 /// reads a 1 KAT delta as `1 µKAT`). One conversion, `MICRO_PER_KAT`.
 fn render_wire_kat(wire_kat: u64) -> String {
-    let micro = i64::try_from(wire_kat.saturating_mul(crate::kat_units::MICRO_PER_KAT))
-        .unwrap_or(i64::MAX);
+    let micro =
+        i64::try_from(wire_kat.saturating_mul(crate::kat_units::MICRO_PER_KAT)).unwrap_or(i64::MAX);
     crate::kat_units::render_units(micro, "KAT")
 }
 
@@ -194,8 +194,8 @@ pub fn census(
     // read RAW (the estimator module is latent_retrieval-gated; the census
     // must not widen its posture). Report-only: the burn delta is the
     // gate, never the watermark.
-    let wm_path = crate::kat_state_stamp::net_state_dir_for_url(root, base_url)
-        .join("kat_sync_state.json");
+    let wm_path =
+        crate::kat_state_stamp::net_state_dir_for_url(root, base_url).join("kat_sync_state.json");
     let wm_text = std::fs::read_to_string(&wm_path).ok();
     let wm: Option<serde_json::Value> = wm_text
         .as_deref()
@@ -1960,10 +1960,12 @@ mod tests {
             &b_acct,
         );
         let sig = decode_sig64(&b.attest_signature_hex).expect("128 hex");
-        assert!(ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
-            .expect("vk")
-            .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
-            .is_ok());
+        assert!(
+            ed25519_dalek::VerifyingKey::from_bytes(&b_pk)
+                .expect("vk")
+                .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+                .is_ok()
+        );
         // Only public data travels: no field carries the private seed.
         let json = serde_json::to_string(&b).expect("serialize");
         assert!(!json.contains(&hex(&[0x42; 32])), "{json}");
