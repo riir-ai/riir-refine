@@ -390,10 +390,11 @@ pub fn run_jury_poc(matcher: &mut LatentMatcher, oracle: &ClippyOracle) -> JuryP
         });
     };
 
-    #[cfg(feature = "clippy_lints")]
+    #[cfg(feature = "latent_retrieval")]
     for (lint, code) in super::eval_fixtures_clippy::CLIPPY_SPANS {
         push(matcher, lint, DomainId::Clippy, lint, code, &mut rows);
     }
+    #[cfg(feature = "latent_retrieval")]
     for (tag, code) in super::eval_fixtures_composite::COMPOSITE_SPANS {
         push(matcher, tag, DomainId::Clippy, "composite", code, &mut rows);
     }
