@@ -294,3 +294,89 @@ fn digest_identity_and_first_verdict_wins() {
     assert_eq!(w.row_count(), 2);
     std::fs::remove_dir_all(&root).ok();
 }
+
+/// The G3 instrument's API pins (issue 220 (c), Bench 148):
+/// `load_file` is the explicit-path form of `load` (an absent file is the
+/// empty window, the NotFound contract), `from_rows` replays a loaded
+/// window byte-identically (the perturbation harness's premise — the
+/// instrument self-checks this on the real run), and `rows`/`tags` are
+/// the file-order / sorted population accessors the consult sweep feeds.
+#[test]
+fn from_rows_replay_matches_load_and_accessors_pin() {
+    let root = scratch_root("g3api");
+    let path = root.join(".refine").join("adoption_outcomes.jsonl");
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    std::fs::write(
+        &path,
+        concat!(
+            "{\"v\":1,\"tag\":\"b\",\"accepted\":false,\"digest_hex\":\"",
+            "0e337eff5ba67a01a4a33e6e05c724e6a0d41265cd6fbb3dc0891c31b41a548e\"}\n",
+            "{\"v\":1,\"tag\":\"a\",\"accepted\":true,\"digest_hex\":\"",
+            "3c383e91e835710839a0ddda22f1836177dd8516dd8a225acffe608d0fc0edfe\"}\n",
+        ),
+    )
+    .expect("write window");
+    let loaded = AdoptionWindow::load_file(path.clone()).expect("loads");
+    // File-order rows; sorted distinct tags.
+    assert_eq!(loaded.row_count(), 2);
+    assert_eq!(loaded.tags(), vec!["a", "b"]);
+    let rows = loaded.rows();
+    assert_eq!(rows[0].tag, "b");
+    assert_eq!(rows[1].tag, "a");
+    // The replay premise: from_rows(loaded.rows()) consults identically.
+    let replay = AdoptionWindow::from_rows(loaded.rows().to_vec());
+    for tag in loaded.tags() {
+        let l = loaded.demote_verdict(tag, DEFAULT_ADOPTION_ALPHA);
+        let r = replay.demote_verdict(tag, DEFAULT_ADOPTION_ALPHA);
+        assert_eq!(
+            shape_of(&l),
+            shape_of(&r),
+            "replay diverges on demote {tag}"
+        );
+        let l = loaded.readmit_verdict(tag, DEFAULT_ADOPTION_ALPHA);
+        let r = replay.readmit_verdict(tag, DEFAULT_ADOPTION_ALPHA);
+        assert_eq!(
+            shape_of(&l),
+            shape_of(&r),
+            "replay diverges on readmit {tag}"
+        );
+    }
+    // The flip premise: flipping a verdict bit changes the rings. After
+    // the flip BOTH rows are rejected: every score is 0, the demote
+    // consult ties 0=0 and ties→challenger PROCEEDS — the exact
+    // tie-on-destructive-consult surface katgpt-rs issue 994 owns (pinned
+    // here so the rule's eventual change reds this test). The readmit
+    // consult carries no tie: the rule's own row is now rejection
+    // evidence → refused.
+    let mut flipped = loaded.rows().to_vec();
+    flipped[1].accepted = false;
+    let w = AdoptionWindow::from_rows(flipped);
+    assert!(
+        matches!(
+            w.demote_verdict("a", DEFAULT_ADOPTION_ALPHA),
+            GateVerdict::Proceed(_)
+        ),
+        "the all-rejected tie demotes at 0=0 — issue 994's surface"
+    );
+    assert!(
+        matches!(
+            w.readmit_verdict("a", DEFAULT_ADOPTION_ALPHA),
+            GateVerdict::Refuse(_)
+        ),
+        "a rule whose own row is now rejection evidence must refuse readmit"
+    );
+    // An absent file is the empty window (the load() contract, explicit
+    // path form).
+    let absent = AdoptionWindow::load_file(root.join("nope.jsonl")).expect("absent is empty");
+    assert_eq!(absent.row_count(), 0);
+    assert!(absent.tags().is_empty());
+    std::fs::remove_dir_all(&root).ok();
+}
+
+fn shape_of(v: &GateVerdict) -> &'static str {
+    match v {
+        GateVerdict::Proceed(_) => "PROCEED",
+        GateVerdict::Refuse(_) => "REFUSE",
+        GateVerdict::Abstain => "ABSTAIN",
+    }
+}
