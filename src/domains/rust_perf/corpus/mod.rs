@@ -9,7 +9,13 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 312 entries across 15 categories as of Batch 345 (+5: two
+//! 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
+//! `deferred-integer-lane-pooling-per-row-exponent`, complexity +1
+//! `incremental-prefix-hash-wordpiece-scan` — the encoders distill
+//! (Plan 360 / Research 393, `entries_71` — `flowercomputers/encoders` @
+//! `d46c90e45f`; +1 count-neutral rider face on `ascii-run-swar-block-skip`,
+//! `entries_29` — the pretokenizer stage-fusion face, its atoms owned);
+//! prior: 312 entries across 15 categories as of Batch 345 (+5: two
 //! measurement-honesty (`benchmark-spread-above-threshold-reports-unstable`,
 //! `macos-pressure-reads-footprint-not-rss`), one concurrency
 //! (`slow-consumer-latest-value-single-slot`, the tokio family's latest-wins
@@ -753,6 +759,7 @@ mod entries_67;
 mod entries_68;
 mod entries_69;
 mod entries_70;
+mod entries_71;
 
 #[cfg(test)]
 mod tests;
@@ -964,6 +971,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_68::entries());
     entries.extend(entries_69::entries());
     entries.extend(entries_70::entries());
+    entries.extend(entries_71::entries());
     Corpus::new(entries)
 }
 

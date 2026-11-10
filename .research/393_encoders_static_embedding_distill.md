@@ -1,8 +1,7 @@
 # Research 393 — flowercomputers/encoders: the static-embedding toolkit as a rust_perf distill source
 
-**Status:** DISTILLED — pending owner decision (the mining-candidate filing; the batch is
-plan-gated as [Plan 360](../.plans/360_encoders_rust_perf_batch.md), STAGED behind the live
-queue claims). Claude verdict ping-pong: 2 rounds, AGREE round 2 (record: §7).
+**Status:** DISTILLED — batch LANDED (Batch 349, 2026-11-10, Plan 360: rust_perf 312 → 314 — the mining-candidate filing executed; see the landing addendum §8). Earlier posture: pending owner decision (the batch was
+plan-gated as [Plan 360](../.plans/360_encoders_rust_perf_batch.md), claimed + landed 2026-11-10). Claude verdict ping-pong: 2 rounds, AGREE round 2 (record: §7).
 
 > **Source:** `flowercomputers/encoders` @ `d46c90e45f89a52feb8e41720f63c3fda2b976e1`
 > (v3.0.0, tip 2026-11-08, Apache-2.0; model weights MIT/Apache-2.0 per the README table —
@@ -136,3 +135,55 @@ claims (P113 exp 2026-11-12; b347/P120 exp 2026-11-12); lead with
 question) is filed rethink-side: their bet is confirmed as substrate-for-a-pre-registered
 rung, with BOARD-DEAD-on-all-8 stated as the most-likely P0 outcome and the surviving value
 lanes named (ESC cost tier, riir-rag embedder tier, wasm semantic demo).
+
+## 8. Landing addendum (Batch 349, 2026-11-10 — Plan 360 executed)
+
+LANDED: rust_perf 312 → 314 (`entries_71`, TWO own rules) + 1 count-neutral rider face on
+`ascii-run-swar-block-skip` (entries_29). Yield 2-of-3 own + the pre-named fold — candidate
+3's atoms proved owned at T0.3 (the shift-AND boundary derivation by
+`shift-mask-adjacency-check` B245, generic stage fusion by `loop-fusion`, zero-copy view
+handover by `token-batch-cursor-handover`), so the rider-face fold FIRED exactly as the plan
+pre-named; the face cites the stage-fusion instance (classify+lowercase+word-boundary in one
+64-B block pass, tokens emitted from the block as (slice, hash) pairs) with the
+skip-then-resume shape named as the host's own law.
+
+- **MEASURED (rust_perf_bench validator, generated bench crates, m3 / Mac15,8, release
+  posture, 2026-11-10; first Pareto runs — the B334 re-run stability cell owed at the next
+  re-gate):**
+  - `deferred-integer-lane-pooling-per-row-exponent` (arithmetic): **ParetoDominant 3/0/0 —
+    9.35×/9.28×/15.9× at n=1K/16K/262K rows**; alloc axis n→0 (buggy 1000/16384/262144
+    allocs — one dequant temp per row — vs fixed 0/0/0).
+  - `incremental-prefix-hash-wordpiece-scan` (complexity): **ParetoDominant 3/0/0 —
+    1.73×/2.01×/4.30× at n=1K/16K/262K text bytes**, allocs 0/0 both arms (the timing axis
+    is the whole win); the growth with input size matches the law's shape (long in-vocab
+    words dominate bigger inputs). Bench lookup = a linear-probe table keyed on the FULL
+    hash (the PHF-verifier shape), disclosed in the harness — a SipHashed u64 key would
+    price the lookup, not the fold.
+- **Fixtures** (`corpus/fixtures/b349_fixtures.rs`): 9/9 standalone-compiled AND executed
+  BEFORE entry (`--test-threads=1`; also green in parallel — the alloc bracket is min-of-5).
+  THREE fixture defects caught by their own run (the discipline working): (1) the u16 lane
+  bound off-by-one — 257·255 == 65535 == u16::MAX exactly, the wrap point is 258 (the
+  drain-at-256 bound keeps headroom; the fixture asserts both directions); (2) the overlong
+  segmentation arm returned an empty vec instead of the single UNK token; (3) LLVM elided
+  the naive arm's per-row temp Vec entirely until `std::hint::black_box(&dq)` forced the
+  callee-boundary shape — the alloc census read ZERO on the wrong arm before the fix.
+- **Gates ALL GREEN** (isolated `CARGO_TARGET_DIR=/tmp/plan360`): batch349 needles + parse
+  1/1; rust_perf lib 178/0; default lib 3837/0; clippy `-D` ×3 postures ZERO (default /
+  rust_perf_bench / rust_perf+latent_retrieval — 6 doc_markdown en-route, all healed);
+  retrieval floors HELD both lanes 29/0 — NO re-pin (default+latent_retrieval 225.7 s,
+  rust_perf+latent_retrieval+rust_perf_bench 223.8 s); pins_manifest --write (rules 314,
+  benchable 130, notbenchable 184) + the kernel-side rust_perf witness 312→314 SAME-COMMIT
+  + health_views (perf 314, the compiled-trio total 1608) + the annotated pins 260→262 +
+  the hard 312 pins ×5 + the expected-message literals ×2; score-bench runs #238/#239
+  appended (heal 96.4% FLAT, parse 1.0 — the rust_perf delta doesn't move the clippy lane);
+  freeze NOT owed (zero clippy_lints delta, the P30 rule).
+- **Authoring-time notes:** our fold constants differ from the source's K (transcription
+  law — original fixtures, our own constants; DIM 16 / BLOCK 8 vs the source's 32-column
+  blocks — the law is scale-free); the source's own doc frames the naive WordPiece as
+  O(len³) UNCAPPED — the verdict round 2 restatement (constant factor under the cap) is
+  what the entry carries; the write_file JSON-escape class ATE the closing paren of BOTH
+  `Some(r##"…"##.to_string())` wrappers in the first entries_71 draft (the B332 precedent
+  verbatim — rustc reported it as an "unclosed delimiter" pointing at the raw string; the
+  fix was +1 char per line, caught by the compile gate pre-landing).
+- Claim `825afd9e4` discharged by the landing; `.raw/encoders` REMOVED at the landing
+  commit (batch-ephemeral again).
