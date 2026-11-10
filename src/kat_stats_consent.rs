@@ -96,9 +96,7 @@ impl StatsConsent {
     #[must_use]
     pub fn status_line(self) -> &'static str {
         match self {
-            Self::Unset => {
-                "stats consent: unset — default OFF; nothing is shared until you opt in"
-            }
+            Self::Unset => "stats consent: unset — default OFF; nothing is shared until you opt in",
             Self::OptedIn => {
                 "stats consent: opted IN — future `--fix` runs share {lane, rule, count} rows (never code)"
             }

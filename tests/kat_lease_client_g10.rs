@@ -31,8 +31,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use riir_refine::kat_lease_client::{
-    self, run_update_phase, HttpLeaseTransport, HttpResponse, LeaseCharge, LeaseManifest,
-    LeaseSegmentDesc, LeaseStage, LeaseStore, LeaseTransport as _, UpdateStatus,
+    self, HttpLeaseTransport, HttpResponse, LeaseCharge, LeaseManifest, LeaseSegmentDesc,
+    LeaseStage, LeaseStore, LeaseTransport as _, UpdateStatus, run_update_phase,
 };
 
 // ── the mock server (std TCP; the kat_stripe shape) ────────────────────────
@@ -412,7 +412,7 @@ fn g10b_interrupt_before_swap_leaves_the_old_epoch_intact() {
         .unwrap();
     let leased = stage.commit().unwrap();
     store.install_segments(&leased).unwrap(); // ← the interrupt point
-                                              // The next run sees E1 — the segments are inert without the pointer.
+    // The next run sees E1 — the segments are inert without the pointer.
     assert_eq!(store.current_epoch(), Some(1));
     let overlay_epoch =
         riir_refine::kat_lease_client::overlay_from_epoch(&store, None).map(|(e, _)| e);
@@ -582,10 +582,11 @@ fn sync_posts_the_ndjson_payload_and_the_wire_shape_is_captured() {
         .iter()
         .find(|r| r.method == "POST" && r.path == "/sync")
         .expect("the POST /sync arrived");
-    assert!(post
-        .body_prefix
-        .as_deref()
-        .is_some_and(|b| b.contains("payload_version")));
+    assert!(
+        post.body_prefix
+            .as_deref()
+            .is_some_and(|b| b.contains("payload_version"))
+    );
 }
 
 #[test]
@@ -603,10 +604,11 @@ fn claim_posts_the_composed_request() {
         .iter()
         .find(|r| r.path == "/claim")
         .expect("the POST /claim arrived");
-    assert!(post
-        .body_prefix
-        .as_deref()
-        .is_some_and(|b| b.contains("solana")));
+    assert!(
+        post.body_prefix
+            .as_deref()
+            .is_some_and(|b| b.contains("solana"))
+    );
 }
 
 #[test]

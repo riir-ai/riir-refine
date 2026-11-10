@@ -82,15 +82,15 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
+use riir_refine::EvidenceTier;
 use riir_refine::cf_workers_ai::{
-    self, ArmSummary, CaseScore, CfUsageToday, MissClass, RegateHarness, Sample, SampleSource,
-    REASONING_OVERFLOW,
+    self, ArmSummary, CaseScore, CfUsageToday, MissClass, REASONING_OVERFLOW, RegateHarness,
+    Sample, SampleSource,
 };
 use riir_refine::domain::HealEntry as _;
-use riir_refine::groq::router::{LlmRouter, Provider, FREE_TIER_EXHAUSTED};
+use riir_refine::groq::router::{FREE_TIER_EXHAUSTED, LlmRouter, Provider};
 use riir_refine::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
-use riir_refine::traj_store::{shape_hash, TrajRowDoc, TrajStore};
-use riir_refine::EvidenceTier;
+use riir_refine::traj_store::{TrajRowDoc, TrajStore, shape_hash};
 
 /// The daily smoke probe (caveat #18(d)): one call before any backlog burn —
 /// the 7.8k-neuron incident rule generalized from model-change probe to
@@ -944,9 +944,14 @@ fn main() {
             "complete"
         }
     );
-    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!(
+        "| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |"
+    );
     println!("{}", summary.markdown_row("DRAIN"));
-    println!("  queued {} · llm-scored {llm_scored} · declined {declines} (overflow {overflow_declines})", kept.len());
+    println!(
+        "  queued {} · llm-scored {llm_scored} · declined {declines} (overflow {overflow_declines})",
+        kept.len()
+    );
     let server = llm.cf().and_then(|c| c.fetch_usage_today().ok());
     if let Some(u) = &server {
         println!(

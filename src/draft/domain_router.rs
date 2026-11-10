@@ -46,7 +46,7 @@
 //! signal can achieve and splits a FAIL into "lexical signal insufficient"
 //! vs "the k-coefficient projection loses it".
 
-use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+use crate::ragplane::{Embedder, ModellessEmbedder, query::LATENT_DIM};
 
 /// The healing domains — index into the router's direction list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

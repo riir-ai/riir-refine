@@ -33,7 +33,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
 use super::helpers::byte_range;
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -99,11 +99,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "bytes_count_to_len",
-            "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.len() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "bytes_count_to_len",
+                "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.len() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -152,11 +154,13 @@ mod tests {
 
     #[test]
     fn chars_is_not_the_family() {
-        assert!(propose_fix(
-            "bytes_count_to_len",
-            "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.chars().count() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "bytes_count_to_len",
+                "fn n(s: &str, hits: &mut Vec<u8>) -> usize { hits.push(0); s.chars().count() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

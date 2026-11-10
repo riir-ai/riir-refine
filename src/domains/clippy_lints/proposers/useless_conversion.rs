@@ -27,7 +27,7 @@
 //! `--clippy-json` fed lane (clippy's typeck is the authority) remain the
 //! consumers.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::punctuated::Punctuated;
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprCall, ExprMethodCall, File, Local, Stmt, Token};

@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::diag::{parse_error_diags, RustcErrorDiag};
+use super::diag::{RustcErrorDiag, parse_error_diags};
 
 /// One minimal reproduction, declared with the code we EXPECT rustc to emit.
 ///

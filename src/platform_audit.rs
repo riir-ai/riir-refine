@@ -112,7 +112,7 @@ use std::path::{Path, PathBuf};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 
-use crate::config_audit::{attrs_cfg_test, attrs_test_fn, read_sources_walk, WalkMode};
+use crate::config_audit::{WalkMode, attrs_cfg_test, attrs_test_fn, read_sources_walk};
 
 /// cfg predicate keys that carry platform meaning. `feature`, `test`,
 /// `debug_assertions` and friends are deliberately absent — they are not

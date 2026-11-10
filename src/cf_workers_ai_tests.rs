@@ -813,9 +813,11 @@ fn same_rule_context_folds_rustc_code_family_and_excludes_withdrawn() {
     );
     assert!(patterns.iter().all(|p| p.rule.starts_with("E0502:")));
     assert!(!patterns.iter().any(|p| p.rule == "E0502:dead-strategy"));
-    assert!(patterns
-        .iter()
-        .any(|p| p.rule == "E0502:a-strategy" && p.kept == 1));
+    assert!(
+        patterns
+            .iter()
+            .any(|p| p.rule == "E0502:a-strategy" && p.kept == 1)
+    );
     let b = patterns
         .iter()
         .find(|p| p.rule == "E0502:b-strategy")

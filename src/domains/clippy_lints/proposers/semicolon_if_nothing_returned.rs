@@ -22,7 +22,7 @@
 //! by the ORIGINAL expression text plus `;`. Impl methods + nested inline
 //! mods are covered via `for_each_fn`.
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src};
 use syn::spanned::Spanned;
 use syn::{Expr, File, ReturnType, Stmt};
 

@@ -25,12 +25,12 @@
 
 #![cfg(feature = "shader_perf")]
 
-use riir_refine::domains::shader_perf::proposers::{
-    collect_all_edits, DEFAULT_GUARD_BOUND, FIXABLE_SHADER,
-};
-use riir_refine::domains::shader_perf::{refuses, ShaderPerfDomain, ShaderScanner};
-use riir_refine::edit_emitter::apply_edits;
 use riir_refine::HealDomain;
+use riir_refine::domains::shader_perf::proposers::{
+    DEFAULT_GUARD_BOUND, FIXABLE_SHADER, collect_all_edits,
+};
+use riir_refine::domains::shader_perf::{ShaderPerfDomain, ShaderScanner, refuses};
+use riir_refine::edit_emitter::apply_edits;
 
 fn rule_ids(src: &str) -> Vec<&'static str> {
     ShaderScanner

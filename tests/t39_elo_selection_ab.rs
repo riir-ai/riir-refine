@@ -395,7 +395,9 @@ fn promotion_gate(cells: &[GateCell]) -> GateVerdict {
 /// evo-noise regimes, all four arms. Determinism pinned by re-run.
 #[test]
 fn t39_real_sparsity_discovery_ab() {
-    println!("\n=== Issue 039 T5 — discovery at REAL pool sparsity (BUDGET {BUDGET}, TRIALS {TRIALS}) ===");
+    println!(
+        "\n=== Issue 039 T5 — discovery at REAL pool sparsity (BUDGET {BUDGET}, TRIALS {TRIALS}) ==="
+    );
     println!(
         "  pre-obs from REAL_ROW_COUNTS {{0:8106, 1:110, 2:9, 3:2, 4:1}} / 8228 — 98.5% unseen"
     );
@@ -518,7 +520,9 @@ fn t39_recorded_verdict_is_report_only() {
 /// platform drift (the margins are far from the threshold).
 #[test]
 fn t39_paired_mcnemar_vs_beta() {
-    println!("\n=== Issue 039 T5 — paired discovery vs BetaPosterior (common random numbers, {PAIRED_TRIALS} trials) ===");
+    println!(
+        "\n=== Issue 039 T5 — paired discovery vs BetaPosterior (common random numbers, {PAIRED_TRIALS} trials) ==="
+    );
     let mut live_cells: Vec<(Arm, [GateCell; 2])> = Vec::new();
     for &evo_noise in &[0.6f32, 0.2] {
         println!("  evo_noise = {evo_noise}:");
@@ -618,7 +622,9 @@ fn t39_paired_mcnemar_vs_beta() {
 #[test]
 fn t39_dense_rule_evidence_cells() {
     println!("\n=== Issue 039 T5 — dense rule evidence (the production form) ===");
-    println!("  rule popularity from REAL_RULE_MATCHES [86, 17, 15, 6, 2, 2, 2, 1]; Beta keeps thin per-fix counts");
+    println!(
+        "  rule popularity from REAL_RULE_MATCHES [86, 17, 15, 6, 2, 2, 2, 1]; Beta keeps thin per-fix counts"
+    );
     for &span_dev in &[0.2f32, 0.6] {
         for &evo_noise in &[0.6f32, 0.2] {
             let mut rng = Lcg::new(0x0D3E_0039);

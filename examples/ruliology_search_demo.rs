@@ -15,9 +15,8 @@
 
 #[cfg(feature = "ruliology_search")]
 use riir_refine::{
-    build_seed_corpus,
+    RuliologySearch, build_seed_corpus,
     ruliology_search::{ast_delta_size, pareto_front},
-    RuliologySearch,
 };
 
 #[cfg(feature = "ruliology_search")]

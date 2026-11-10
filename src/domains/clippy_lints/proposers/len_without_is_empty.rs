@@ -44,8 +44,8 @@ use std::collections::{BTreeSet, HashSet};
 use syn::visit::Visit;
 use syn::{File, ImplItem, ItemImpl, ReturnType, Type, Visibility};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// One admissible `len`-bearing inherent impl: where/how to insert.
 struct Candidate {

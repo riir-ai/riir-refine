@@ -40,10 +40,10 @@ mod rollout;
 mod spans;
 
 pub use rollout::{
-    state_hash, DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, PrefixNode, RolloutCtx,
-    SpanTree, TerminalJudge, VocabularyJudge,
+    DaemonEditGenerator, EditGenerator, FnGenerator, Outcome, PrefixNode, RolloutCtx, SpanTree,
+    TerminalJudge, VocabularyJudge, state_hash,
 };
-pub use spans::{extra_spans, fixture_spans, store_spans, PavSpan, SpanSource};
+pub use spans::{PavSpan, SpanSource, extra_spans, fixture_spans, store_spans};
 
 use std::collections::BTreeMap;
 use std::io::Write as _;
@@ -810,10 +810,11 @@ mod tests {
         assert!(ds.pairs.iter().any(|p| p.depth == 0));
         assert!(ds.pairs.iter().any(|p| p.state.contains("CLEAN")));
         // The DIAGNOSTIC column is still the plug-in of q_hat...
-        assert!(ds
-            .pairs
-            .iter()
-            .all(|p| (p.q_bo4_plugin - bok4(p.q_hat)).abs() < 1e-6));
+        assert!(
+            ds.pairs
+                .iter()
+                .all(|p| (p.q_bo4_plugin - bok4(p.q_hat)).abs() < 1e-6)
+        );
         // ...while the LABEL column is the unbiased U-statistic over the
         // raw counts (the clean-root anchor is definitional, n_mc == 0).
         assert!(ds.pairs.iter().all(|p| {

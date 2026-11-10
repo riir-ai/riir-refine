@@ -20,8 +20,8 @@
 #![cfg(feature = "nonergodic_driver")]
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use riir_refine::domains::rustc_errors::driver::{AttemptOutcome, AttemptRecord, CompileDriver};
 use riir_refine::domains::rustc_errors::nonergodic_order::NonergodicOrdering;

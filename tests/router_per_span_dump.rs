@@ -30,7 +30,7 @@
 //! `(false, false, true)` arm is pinned at.
 #![cfg(feature = "latent_retrieval")]
 
-use riir_refine::draft::{retrieval_eval, LatentMatcher};
+use riir_refine::draft::{LatentMatcher, retrieval_eval};
 
 #[test]
 fn router_per_span_dump() {
@@ -120,13 +120,13 @@ fn router_per_span_dump() {
 /// Measurement only — asserts nothing beyond the tokenizer self-check.
 #[test]
 fn vocab_membership_probe() {
+    use riir_refine::HealEntry;
     use riir_refine::domain::HealDomain;
     use riir_refine::domains::clippy_lints::ClippyLintDomain;
     use riir_refine::domains::dist::DistDomain;
     use riir_refine::domains::docker::DockerDomain;
     use riir_refine::domains::rust_perf::RustPerfDomain;
     use riir_refine::draft::{DomainId, SpectralOrder, SpectralVocab};
-    use riir_refine::HealEntry;
 
     // Same tokenizer contract as `for_each_token` (domain_router.rs):
     // runs of [A-Za-z0-9_], length >= 2, case-sensitive.

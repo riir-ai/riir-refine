@@ -47,7 +47,7 @@
 //!   heal on the next pass — never as overlapping edits.
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprPath, ExprUnsafe, File, Stmt};
 
@@ -191,11 +191,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(hits: &mut Vec<u8>, x: u8) -> u8 { hits.push(0); x }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(hits: &mut Vec<u8>, x: u8) -> u8 { hits.push(0); x }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -280,11 +282,13 @@ mod tests {
 
     #[test]
     fn semicolon_tail_refuses() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(x: Box<u8>) { unsafe { NonNull::new_unchecked(Box::into_raw(x)); } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(x: Box<u8>) { unsafe { NonNull::new_unchecked(Box::into_raw(x)); } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -299,11 +303,13 @@ mod tests {
 
     #[test]
     fn non_box_arg_refuses() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(r: *mut u8) -> NonNull<u8> { unsafe { NonNull::new_unchecked(r) } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(r: *mut u8) -> NonNull<u8> { unsafe { NonNull::new_unchecked(r) } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

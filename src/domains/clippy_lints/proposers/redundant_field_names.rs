@@ -7,7 +7,7 @@
 //! replaced by the member name alone. Fields carrying attributes are
 //! skipped — the replacement would drop them.
 
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use syn::visit::Visit;
 use syn::{Expr, ExprStruct, File};
 

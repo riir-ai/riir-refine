@@ -45,8 +45,7 @@ use crate::l4_fallback::L4Fallback;
 ///
 /// `pub` since Issue 040: the CF-Workers-AI re-gate harness builds its arm-A
 /// prompt from the same line so both arms share one instruction contract.
-pub const TRAINED_INSTRUCTION: &str =
-    "Fix all clippy lints in this Rust code. Output ONLY the corrected lines \
+pub const TRAINED_INSTRUCTION: &str = "Fix all clippy lints in this Rust code. Output ONLY the corrected lines \
      that differ from the input, no explanation:";
 
 /// An [`L4Fallback`] that talks to a long-lived `bonsai_clippy_l4_eval --serve`

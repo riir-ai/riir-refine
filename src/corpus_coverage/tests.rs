@@ -357,9 +357,10 @@ fn a_corpus_rule_the_driver_no_longer_ships_is_reported() {
     corpus.push("renamed_away_lint".into());
     let fixes = fix_set();
     let r = coverage(&inputs(full_surface(), &corpus, &fixes, &others, &[]));
-    assert!(r
-        .corpus_rules_not_in_surface
-        .contains(&"renamed_away_lint".to_string()));
+    assert!(
+        r.corpus_rules_not_in_surface
+            .contains(&"renamed_away_lint".to_string())
+    );
     assert!(r.render().contains("renamed/removed"));
 }
 

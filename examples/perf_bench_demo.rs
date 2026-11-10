@@ -31,7 +31,7 @@
 use riir_refine::domains::rust_perf::bench::ALLOC_AXIS_EXEMPT;
 #[cfg(feature = "rust_perf_bench")]
 use riir_refine::{
-    domain::HealDomain, domains::rust_perf::RustPerfDomain, PerfBenchValidator, SizeOutcome,
+    PerfBenchValidator, SizeOutcome, domain::HealDomain, domains::rust_perf::RustPerfDomain,
 };
 
 /// How many times each benchable rule's binary runs for the alloc-determinism
@@ -122,7 +122,9 @@ fn main() {
             nondeterministic.push(entry.rule_id.clone());
             println!("  \u{274c} ALLOC AXIS NONDETERMINISTIC across {DETERMINISM_REPEATS} runs");
         } else if ALLOC_AXIS_EXEMPT.contains(&entry.rule_id.as_str()) {
-            println!("  \u{26a0} ALLOC AXIS EXEMPT (platform: contended-mutex slow path allocates — see ALLOC_AXIS_EXEMPT)");
+            println!(
+                "  \u{26a0} ALLOC AXIS EXEMPT (platform: contended-mutex slow path allocates — see ALLOC_AXIS_EXEMPT)"
+            );
         }
 
         let faster_count = results

@@ -18,8 +18,8 @@
 //! min-delta on the generated corpus; a null result keeps the seam + this
 //! constructor shipped but unused by default (the `t48` verdict records it).
 
-use crate::embedder::{embed_into, EMBED_DIM};
-use crate::gp_acquisition::{GpAcquisition, DIM};
+use crate::embedder::{EMBED_DIM, embed_into};
+use crate::gp_acquisition::{DIM, GpAcquisition};
 
 use super::driver::OrderingFn;
 use super::playbooks::FixCandidate;

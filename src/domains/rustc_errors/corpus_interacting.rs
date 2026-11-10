@@ -169,16 +169,66 @@ fn e0502_e0499_head_first_copy(out: &mut Vec<InteractingCase>) {
 fn e0502_e0499_head_first_string(out: &mut Vec<InteractingCase>) {
     // (initial vec, pushes)
     const TABLE: [(&str, &str, &str, usize); 10] = [
-        ("vec![String::from(\"aa\"), String::from(\"bb\")]", "String::from(\"x\")", "String::from(\"y\")", 2),
-        ("vec![String::from(\"hello\")]", "String::from(\"w\")", "String::from(\"z\")", 1),
-        ("vec![String::from(\"m\"), String::from(\"n\"), String::from(\"o\")]", "String::from(\"p\")", "String::from(\"q\")", 3),
-        ("vec![String::from(\"first\"), String::from(\"second\")]", "String::from(\"third\")", "String::from(\"fourth\")", 2),
-        ("vec![String::from(\"\")]", "String::from(\"a\")", "String::from(\"b\")", 1),
-        ("vec![String::from(\"xx\"), String::from(\"yy\")]", "String::from(\"zz\")", "String::from(\"ww\")", 2),
-        ("vec![String::from(\"one\")]", "String::from(\"two\")", "String::from(\"three\")", 1),
-        ("vec![String::from(\"k1\"), String::from(\"k2\"), String::from(\"k3\"), String::from(\"k4\")]", "String::from(\"k5\")", "String::from(\"k6\")", 4),
-        ("vec![String::from(\"left\"), String::from(\"right\")]", "String::from(\"up\")", "String::from(\"down\")", 2),
-        ("vec![String::from(\"tok\")]", "String::from(\"a\")", "String::from(\"b\")", 1),
+        (
+            "vec![String::from(\"aa\"), String::from(\"bb\")]",
+            "String::from(\"x\")",
+            "String::from(\"y\")",
+            2,
+        ),
+        (
+            "vec![String::from(\"hello\")]",
+            "String::from(\"w\")",
+            "String::from(\"z\")",
+            1,
+        ),
+        (
+            "vec![String::from(\"m\"), String::from(\"n\"), String::from(\"o\")]",
+            "String::from(\"p\")",
+            "String::from(\"q\")",
+            3,
+        ),
+        (
+            "vec![String::from(\"first\"), String::from(\"second\")]",
+            "String::from(\"third\")",
+            "String::from(\"fourth\")",
+            2,
+        ),
+        (
+            "vec![String::from(\"\")]",
+            "String::from(\"a\")",
+            "String::from(\"b\")",
+            1,
+        ),
+        (
+            "vec![String::from(\"xx\"), String::from(\"yy\")]",
+            "String::from(\"zz\")",
+            "String::from(\"ww\")",
+            2,
+        ),
+        (
+            "vec![String::from(\"one\")]",
+            "String::from(\"two\")",
+            "String::from(\"three\")",
+            1,
+        ),
+        (
+            "vec![String::from(\"k1\"), String::from(\"k2\"), String::from(\"k3\"), String::from(\"k4\")]",
+            "String::from(\"k5\")",
+            "String::from(\"k6\")",
+            4,
+        ),
+        (
+            "vec![String::from(\"left\"), String::from(\"right\")]",
+            "String::from(\"up\")",
+            "String::from(\"down\")",
+            2,
+        ),
+        (
+            "vec![String::from(\"tok\")]",
+            "String::from(\"a\")",
+            "String::from(\"b\")",
+            1,
+        ),
     ];
     for (i, (init, x, y, n)) in TABLE.iter().enumerate() {
         // r = head.len() + v[0].len() after the pushes = 2 * v[0].len()
@@ -196,7 +246,9 @@ fn e0502_e0499_head_first_string(out: &mut Vec<InteractingCase>) {
         let head_use_fixed = "head + v[0].len()";
         let head_use_broken = "head.len() + v[0].len()";
         let wrap = |head: &str, pair: &str, usex: &str| {
-            format!("pub fn probe(v: &mut Vec<String>) -> usize {{\n    {head}\n    {pair}\n    {usex}\n}}\n{gt}")
+            format!(
+                "pub fn probe(v: &mut Vec<String>) -> usize {{\n    {head}\n    {pair}\n    {usex}\n}}\n{gt}"
+            )
         };
         push_case(
             out,
@@ -245,10 +297,18 @@ fn e0502_e0499_mid_read(out: &mut Vec<InteractingCase>) {
         // A's segment sits between the alias pair's two decls when broken;
         // after the pair's first use when fixed. B's fixed/broken forms are
         // the standard sequential/adjacent pair.
-        let a_fixed_b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let head = v[0];\n    let b = &mut *v;\n    b.push({y});");
-        let a_broken_b_fixed = format!("let a = &mut *v;\n    a.push({x});\n    let head = &v[0];\n    let b = &mut *v;\n    b.push({y});");
-        let a_fixed_b_broken = format!("let a = &mut *v;\n    let head = v[0];\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
-        let a_broken_b_broken = format!("let a = &mut *v;\n    let head = &v[0];\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});");
+        let a_fixed_b_fixed = format!(
+            "let a = &mut *v;\n    a.push({x});\n    let head = v[0];\n    let b = &mut *v;\n    b.push({y});"
+        );
+        let a_broken_b_fixed = format!(
+            "let a = &mut *v;\n    a.push({x});\n    let head = &v[0];\n    let b = &mut *v;\n    b.push({y});"
+        );
+        let a_fixed_b_broken = format!(
+            "let a = &mut *v;\n    let head = v[0];\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});"
+        );
+        let a_broken_b_broken = format!(
+            "let a = &mut *v;\n    let head = &v[0];\n    let b = &mut *v;\n    a.push({x});\n    b.push({y});"
+        );
         let wrap = |pair: &str, usex: &str| {
             format!("pub fn probe(v: &mut Vec<{ty}>) -> {ty} {{\n    {pair}\n    {usex}\n}}\n{gt}")
         };

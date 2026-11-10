@@ -18,7 +18,7 @@
 
 use riir_refine::selection_tether::TetherFit;
 use riir_refine::{
-    build_seed_corpus, HealPipeline, RustAnalyzerPruner, SelectionMode, TernaryDrafter,
+    HealPipeline, RustAnalyzerPruner, SelectionMode, TernaryDrafter, build_seed_corpus,
 };
 
 struct CountingAllocator;

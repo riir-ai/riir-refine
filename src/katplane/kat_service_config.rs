@@ -64,7 +64,7 @@ pub const SERVICE_URL_ENV_VAR: &str = "RIIR_REFINE_KAT_SERVICE_URL";
 #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
 pub use crate::kat_service_urls::DEVNET_SERVICE_URL;
 pub use crate::kat_service_urls::{
-    canonical_service_url, LEGACY_SERVICE_URLS, MAINNET_SERVICE_URL,
+    LEGACY_SERVICE_URLS, MAINNET_SERVICE_URL, canonical_service_url,
 };
 
 /// The PINNED alias map (Plan 023 g1; testnet retired by riir-dapps Plan
@@ -126,11 +126,7 @@ pub fn host_of(absolute: &str) -> Option<&str> {
         return Some(inner);
     }
     let host = host_port.split_once(':').map_or(host_port, |(h, _)| h);
-    if host.is_empty() {
-        None
-    } else {
-        Some(host)
-    }
+    if host.is_empty() { None } else { Some(host) }
 }
 
 /// Loopback = where plain `http://` is allowed (TLS is meaningless there —

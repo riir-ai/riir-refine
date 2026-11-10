@@ -48,8 +48,8 @@ use std::collections::BTreeSet;
 use syn::visit::Visit;
 use syn::{File, Generics, ImplItemFn, ItemFn, PredicateType, TraitItemFn, WherePredicate};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -124,7 +124,7 @@ impl Collector<'_> {
             };
             if tp.bounds.is_empty() {
                 continue; // inline-only never fires; where-only is the
-                          // single-location shape upstream is silent on
+                // single-location shape upstream is silent on
             }
             let ident_text = tp.ident.to_string();
             let Some(pt) = where_preds
@@ -231,21 +231,25 @@ mod tests {
     #[test]
     fn seed_is_clean() {
         // Inline-only is upstream-silent (probe mbl_inline_only).
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub fn f<T: Default>(t: T) -> T { t }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub fn f<T: Default>(t: T) -> T { t }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn where_only_is_clean() {
         // Where-only is upstream-silent (probe mbl_where_only).
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub fn f<T>(t: T) -> T where T: Default { t }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub fn f<T>(t: T) -> T where T: Default { t }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -343,20 +347,24 @@ mod tests {
         // The docs' mixed firing case: Debug inline, Sized where — the
         // sound fix is a merge (two-location insertion), refused v1
         // (documented narrower-than-clippy divergence).
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub fn ty<F: std::fmt::Debug>(a: F)\nwhere\n    F: Sized,\n{}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub fn ty<F: std::fmt::Debug>(a: F)\nwhere\n    F: Sized,\n{}",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn disjoint_other_direction_refuses() {
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub fn f<T: Default>(t: T) -> T\nwhere\n    T: Clone,\n{\n    t\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub fn f<T: Default>(t: T) -> T\nwhere\n    T: Clone,\n{\n    t\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -373,22 +381,26 @@ mod tests {
     #[test]
     fn struct_definition_refuses() {
         // Upstream-silent surface (probe mbl_struct).
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub struct S<T: Default>\nwhere\n    T: Default,\n{\n    t: T,\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub struct S<T: Default>\nwhere\n    T: Default,\n{\n    t: T,\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_ident_where_subject_refuses() {
         // A reference subject (`&'static T`) is not the plain-ident
         // subject this rule keys on.
-        assert!(propose_fix(
-            "multiple_bound_locations",
-            "pub fn f<T: Default>(t: T) -> T\nwhere\n    &'static T: Default,\n{\n    t\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "multiple_bound_locations",
+                "pub fn f<T: Default>(t: T) -> T\nwhere\n    &'static T: Default,\n{\n    t\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]

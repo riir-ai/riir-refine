@@ -64,7 +64,9 @@ fn freeze_and_measure_generation_v3() {
         }
     }
     if !bad_atoms.is_empty() {
-        println!("⚠ atoms that failed freeze verification (exclude from FROZEN_LABELS_V3): {bad_atoms:?}");
+        println!(
+            "⚠ atoms that failed freeze verification (exclude from FROZEN_LABELS_V3): {bad_atoms:?}"
+        );
     }
     let verified_ids: std::collections::BTreeSet<String> = atom_list
         .iter()

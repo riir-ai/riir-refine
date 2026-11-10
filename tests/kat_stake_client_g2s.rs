@@ -454,11 +454,12 @@ fn unstake_not_live_queues_and_still_discloses() {
         "{out}"
     );
     // The queue file exists (the unstake intent, distinct from stake intents).
-    assert!(root
-        .join(".refine")
-        .join("stake")
-        .join("unstake_pending.jsonl")
-        .exists());
+    assert!(
+        root.join(".refine")
+            .join("stake")
+            .join("unstake_pending.jsonl")
+            .exists()
+    );
     std::fs::remove_dir_all(&root).ok();
 }
 

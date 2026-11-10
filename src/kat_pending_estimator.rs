@@ -84,7 +84,7 @@ use std::path::{Path, PathBuf};
 
 use crate::kat_redact::{RedactionGate, SpanOrigin};
 use crate::kat_sync_payload::PayloadRow;
-use crate::traj_store::{shape_hash, TrajRowDoc};
+use crate::traj_store::{TrajRowDoc, shape_hash};
 
 // ── Version stamps (G9b — no silent shape/model change) ─────────────────────
 
@@ -437,8 +437,8 @@ fn thousands(n: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::kat_redact::{RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION};
-    use crate::kat_sync_payload::{golden_signer, SyncPayloadBuilder};
+    use crate::kat_redact::{REDACT_VERSION, RedactionGate, SpanOrigin, SyncPolicy};
+    use crate::kat_sync_payload::{SyncPayloadBuilder, golden_signer};
     use crate::traj_store::TrajRowDoc;
 
     fn allow_policy() -> SyncPolicy {
@@ -781,14 +781,18 @@ mod tests {
         for (v, _) in SYNC_STATE_CHANGELOG {
             assert!(*v <= SYNC_STATE_VERSION);
         }
-        assert!(SYNC_STATE_CHANGELOG
-            .iter()
-            .any(|(v, _)| *v == SYNC_STATE_VERSION));
+        assert!(
+            SYNC_STATE_CHANGELOG
+                .iter()
+                .any(|(v, _)| *v == SYNC_STATE_VERSION)
+        );
         for (v, _) in ESTIMATE_CHANGELOG {
             assert!(*v <= ESTIMATE_VERSION);
         }
-        assert!(ESTIMATE_CHANGELOG
-            .iter()
-            .any(|(v, _)| *v == ESTIMATE_VERSION));
+        assert!(
+            ESTIMATE_CHANGELOG
+                .iter()
+                .any(|(v, _)| *v == ESTIMATE_VERSION)
+        );
     }
 }

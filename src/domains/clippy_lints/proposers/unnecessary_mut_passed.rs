@@ -11,7 +11,7 @@
 //! either. The `self_evolve` loop (real `cargo clippy` verify) remains the
 //! consumer.
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src};
 use syn::visit::Visit;
 use syn::{Expr, File, Pat};
 

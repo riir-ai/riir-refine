@@ -63,10 +63,10 @@
 //! writes `<dir>/manifest.json` — per-file BLAKE3 + counts, the house data
 //! discipline (the 049_t01 stamped-manifest law).
 
-use riir_refine::domains::rustc_errors::corpus_gen::{generate_corpus, Territory};
+use riir_refine::domains::rustc_errors::corpus_gen::{Territory, generate_corpus};
 use riir_refine::domains::rustc_errors::floor::{
-    CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorOutcome, FloorReport, NullFixer,
-    MUTANT_CASES,
+    CargoFixBaseline, DriverFixer, FixVerdict, FloorHarness, FloorOutcome, FloorReport,
+    MUTANT_CASES, NullFixer,
 };
 use riir_refine::domains::rustc_errors::probe::PremiseProbe;
 
@@ -656,7 +656,9 @@ fn insight_ab_section() {
     use riir_refine::domains::rustc_errors::floor::DriverFixer;
     use riir_refine::domains::rustc_errors::insight_retry::{InsightConditioning, Mode};
 
-    println!("\n── 6. Issue 140 T3 — insight-conditioned retry A/B (static vs control vs insight vs raw) ──\n");
+    println!(
+        "\n── 6. Issue 140 T3 — insight-conditioned retry A/B (static vs control vs insight vs raw) ──\n"
+    );
     let harness = FloorHarness::new();
     if !harness.is_available() {
         println!("  SKIP — cargo not on PATH.");
@@ -774,7 +776,12 @@ fn insight_ab_section() {
         let st = pol.stats();
         println!(
             "    policy: recorded {} refused-admission {} families {} armed-now {} gate-arms {} gate-releases {}",
-            st.recorded, st.refused_admission, st.families, st.armed, st.gate_arms, st.gate_releases
+            st.recorded,
+            st.refused_admission,
+            st.families,
+            st.armed,
+            st.gate_arms,
+            st.gate_releases
         );
         out
     };
@@ -862,7 +869,7 @@ fn template_covered_pub<'a>(
 #[cfg(feature = "latent_retrieval")]
 fn ordering_ab_section() {
     use riir_refine::domains::rustc_errors::evolve::traj_key;
-    use riir_refine::traj_store::{shape_conditional_order, TrajStore};
+    use riir_refine::traj_store::{TrajStore, shape_conditional_order};
     use std::collections::HashMap;
     use std::sync::Arc;
 
@@ -1202,7 +1209,8 @@ fn ordering_ab_section() {
         println!(
             "  HEADROOM PREDICATE (Issue 093 T4 reopen trigger): multi-attempt runs across all arms = {multi} — {}",
             match multi {
-                0 => "ZERO ⇒ this corpus cannot measure ANY stateful ordering; the gain axis is UNMEASURABLE here, NOT null-by-refutation",
+                0 =>
+                    "ZERO ⇒ this corpus cannot measure ANY stateful ordering; the gain axis is UNMEASURABLE here, NOT null-by-refutation",
                 _ => "NON-ZERO ⇒ headroom exists; the gain axis is measurable on this corpus",
             }
         );

@@ -38,10 +38,10 @@
 // precedent, one module over).
 #![allow(clippy::cast_precision_loss)]
 
-use riir_refine::demonstrability::{eval_row, Row, T3_DOMAINS};
+use riir_refine::demonstrability::{Row, T3_DOMAINS, eval_row};
 use riir_refine::draft::instantiation_rerank::probeable;
 use riir_refine::draft::retrieval_eval::{
-    canonical_rank, classify_choice_span, labeled_eval_spans, ChoiceTaxonomy,
+    ChoiceTaxonomy, canonical_rank, classify_choice_span, labeled_eval_spans,
 };
 use riir_refine::draft::{DomainId, LatentMatcher};
 
@@ -220,7 +220,9 @@ fn main() {
             "VERDICT: PASS — the rank-agreement clears the 0.5 bar; promote per the standard rule."
         );
     } else {
-        println!("VERDICT: FAIL — keep measurement-only (T1 survives as instrumentation); record the negative.");
+        println!(
+            "VERDICT: FAIL — keep measurement-only (T1 survives as instrumentation); record the negative."
+        );
     }
 }
 

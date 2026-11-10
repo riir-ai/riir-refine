@@ -16,7 +16,7 @@
 //! uses `\xHH`.
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use syn::visit::Visit;
 use syn::{Expr, ExprArray, ExprLit, File, Lit};
 

@@ -62,7 +62,9 @@ fn main() {
             }
             other => {
                 eprintln!("unknown arg: {other}");
-                eprintln!("usage: kernel_goat_g1 [--full|--smoke] [--filter <substr>] [--limit N] [--out <path>] [--emit-status <path>]");
+                eprintln!(
+                    "usage: kernel_goat_g1 [--full|--smoke] [--filter <substr>] [--limit N] [--out <path>] [--emit-status <path>]"
+                );
                 std::process::exit(2);
             }
         }
@@ -83,7 +85,9 @@ fn main() {
         full = true;
     }
     if !full && !smoke && filter.is_none() {
-        eprintln!("one of --full / --smoke / --filter is required (default IS the dry review: this runner executes compiles, so it refuses to run uninvoked)");
+        eprintln!(
+            "one of --full / --smoke / --filter is required (default IS the dry review: this runner executes compiles, so it refuses to run uninvoked)"
+        );
         std::process::exit(2);
     }
     if smoke {
@@ -128,19 +132,17 @@ fn main() {
     }
 
     if let Some(path) = out {
-        let json = serde_json::to_string_pretty(&report)
-            .expect("report serializes");
+        let json = serde_json::to_string_pretty(&report).expect("report serializes");
         std::fs::write(&path, json).expect("write report");
         println!("report: {path}");
     }
 
     if let Some(path) = emit_status {
         let rows = goat_g1::status_rows(&report);
-        goat_g1::emit_status_table(&report, std::path::Path::new(&path))
-            .unwrap_or_else(|e| {
-                eprintln!("emit-status write failed: {e}");
-                std::process::exit(1);
-            });
+        goat_g1::emit_status_table(&report, std::path::Path::new(&path)).unwrap_or_else(|e| {
+            eprintln!("emit-status write failed: {e}");
+            std::process::exit(1);
+        });
         println!(
             "status store: {path} — {} row(s) (digest-keyed; the corpus annotation \
              channel fails closed to unverified on drift)",

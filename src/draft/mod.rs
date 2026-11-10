@@ -125,54 +125,53 @@ pub mod tpr_t6a_counterfactual;
 #[cfg(feature = "latent_retrieval")]
 pub mod withheld_pair_ood;
 
-pub use clippy_feed::{parse_clippy_feed, paths_ref_match, ClippyDiagnostic};
+pub use clippy_feed::{ClippyDiagnostic, parse_clippy_feed, paths_ref_match};
 #[cfg(feature = "clippy_verify")]
 pub use clippy_oracle::{ClippyOracle, OracleVerdict};
 pub use corpus_index::{IndexTokenizer, RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch};
 pub use domain_router::{
-    DomainId, DomainMask, DomainRouter, RoutingEmbedding, SpectralOrder, SpectralVocab,
-    SPECTRAL_DIM, SPECTRAL_K, SPECTRAL_VOCAB_N,
+    DomainId, DomainMask, DomainRouter, RoutingEmbedding, SPECTRAL_DIM, SPECTRAL_K,
+    SPECTRAL_VOCAB_N, SpectralOrder, SpectralVocab,
 };
 #[cfg(feature = "latent_retrieval")]
 pub use headroom_probe::{
-    decompose_headroom, decompose_headroom_with_spans, print_headroom_decomposition,
-    print_headroom_report, run_headroom_probe, run_headroom_probe_with,
-    run_headroom_probe_with_spans, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss,
-    HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, HEADROOM_DEPTHS,
-    HEADROOM_STOP_BAR_PP,
+    HEADROOM_DEPTHS, HEADROOM_STOP_BAR_PP, HeadroomDecomposition, HeadroomMetrics, HeadroomMiss,
+    HeadroomReport, HeadroomVerdict, MissKind, ResidualCause, decompose_headroom,
+    decompose_headroom_with_spans, print_headroom_decomposition, print_headroom_report,
+    run_headroom_probe, run_headroom_probe_with, run_headroom_probe_with_spans,
 };
 pub use instantiation_rerank::{
-    detect_collapse, detect_collapse_rule_ids, rule_family, CollapseVerdict, RerankMode,
-    RERANK_POOL,
+    CollapseVerdict, RERANK_POOL, RerankMode, detect_collapse, detect_collapse_rule_ids,
+    rule_family,
 };
 pub use latent_matcher::{LatentMatcher, RuleInfo, SpanSuggestion};
 #[cfg(feature = "latent_retrieval")]
 pub use margin_weight::{
-    concentration_fraction, contested_margin, margin_weight, span_margin, span_min_margin,
-    SpanMargin,
+    SpanMargin, concentration_fraction, contested_margin, margin_weight, span_margin,
+    span_min_margin,
 };
-pub use op_tokenizer::{RustOpBigramTokenizer, RustOpTokenizer, BIGRAM_SEP, OP_PREFIX};
+pub use op_tokenizer::{BIGRAM_SEP, OP_PREFIX, RustOpBigramTokenizer, RustOpTokenizer};
 #[cfg(feature = "set_rerank")]
 pub use retrieval_eval::VendiAxis;
 #[cfg(feature = "latent_retrieval")]
 pub use retrieval_eval::{
-    run_eval, run_eval_with, run_retrieval_sweep, run_router_eval, ChoiceTaxonomy,
-    DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan,
+    ChoiceTaxonomy, DomainMetrics as EvalDomainMetrics, EvalReport, OwnedEvalSpan, run_eval,
+    run_eval_with, run_retrieval_sweep, run_router_eval,
 };
 #[cfg(feature = "set_rerank")]
 pub use set_rerank::{
-    baseline_slate, counter_anchored_slate, merge_pool, AdmittedRule, LatentChoice,
-    RuleLatentCorpus, SetRerankConfig, SetSlate, DEFAULT_SLATE_K, NO_SET_RERANK_ENV,
+    AdmittedRule, DEFAULT_SLATE_K, LatentChoice, NO_SET_RERANK_ENV, RuleLatentCorpus,
+    SetRerankConfig, SetSlate, baseline_slate, counter_anchored_slate, merge_pool,
 };
 pub use span_source::{collect_source_files, collect_source_files_sorted};
 #[cfg(feature = "latent_retrieval")]
 pub use switch_cost::{
-    cross_domain_spans, print_switch_cost_report, run_switch_cost_eval, SwitchCostReport,
+    SwitchCostReport, cross_domain_spans, print_switch_cost_report, run_switch_cost_eval,
 };
 #[cfg(feature = "set_rerank")]
 pub use withheld_pair_ood::run_withheld_pair_set_admission;
 #[cfg(feature = "latent_retrieval")]
 pub use withheld_pair_ood::{
-    atomic_keys, classify_rustc_shape, classify_shape, normalized_tokens, run_withheld_pair,
-    ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport,
+    ArmRow, AtomicNull, Binding, ShapeClass, WithheldReport, atomic_keys, classify_rustc_shape,
+    classify_shape, normalized_tokens, run_withheld_pair,
 };

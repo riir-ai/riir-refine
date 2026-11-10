@@ -17,7 +17,7 @@
 //!    the token shape with the AST shape — a Paren wraps exactly one
 //!    expression by definition).
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprParen, File};
 

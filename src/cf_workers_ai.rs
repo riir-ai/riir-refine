@@ -51,6 +51,7 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::ClippyVerifier;
 use crate::behavioural_equivalence::{self, Verdict};
 use crate::domain::HealEntry;
 use crate::draft::{DomainId, LatentMatcher};
@@ -58,7 +59,6 @@ use crate::kat_footer::TOKENS_PER_MTOK;
 use crate::l4_daemon::TRAINED_INSTRUCTION;
 use crate::pruner::RustAnalyzerPruner;
 use crate::self_evolve::HealPipeline;
-use crate::ClippyVerifier;
 
 /// The clippy seed corpus type (the [`crate::build_seed_corpus`] return).
 pub type ClippyCorpus = crate::Corpus<crate::ClippyLintDomain>;
@@ -955,11 +955,7 @@ fn response_fn_name(block: &str) -> Option<&str> {
         .chars()
         .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
         .count();
-    if n == 0 {
-        None
-    } else {
-        Some(&rest[..n])
-    }
+    if n == 0 { None } else { Some(&rest[..n]) }
 }
 
 /// Whole-fn substitution (riir-train `rlvr_reward::substitute` semantics):

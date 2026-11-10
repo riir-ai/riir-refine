@@ -75,7 +75,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use riir_infer_core::deltanet::effective_rotary_dim;
-use riir_infer_core::gguf_loader::{load_qwen_deltanet_ternary_weights_gguf, GgufFile};
+use riir_infer_core::gguf_loader::{GgufFile, load_qwen_deltanet_ternary_weights_gguf};
 use riir_infer_core::rope::RopeFreqTable;
 use riir_infer_core::tokenizer::BpeTokenizer;
 

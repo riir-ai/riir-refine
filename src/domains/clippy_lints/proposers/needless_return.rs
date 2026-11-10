@@ -23,7 +23,7 @@
 //! wasm32 arm got promoted to an unguarded tail → `unreachable_code` on
 //! native, caught by the consumer's `-D warnings` clippy).
 
-use super::{delete_stmt_edit, edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, delete_stmt_edit, edit, for_each_fn, src};
 use syn::{Expr, File, Stmt};
 
 /// Collect the lint's edits against the original source. Empty = no match.

@@ -258,8 +258,7 @@ pub fn flags_conflict(mine: bool, unmine: bool) -> bool {
 
 /// The message the CLI prints when [`flags_conflict`] holds. Exit 2 (the
 /// usage-error code every other heal flag conflict uses).
-pub const CONFLICT_MESSAGE: &str =
-    "--mine and --unmine are opposites — pass exactly one (--mine opts IN to \
+pub const CONFLICT_MESSAGE: &str = "--mine and --unmine are opposites — pass exactly one (--mine opts IN to \
      contributing redacted batches, --unmine opts OUT)";
 
 #[cfg(test)]

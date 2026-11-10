@@ -67,7 +67,7 @@ use std::collections::BTreeSet;
 use proc_macro2::TokenStream;
 
 use super::instantiation_rerank::RerankMode;
-use super::withheld_pair_ood::{build_index, rank_of, Binding};
+use super::withheld_pair_ood::{Binding, build_index, rank_of};
 
 // ── the ordered band axis ────────────────────────────────────────────────
 

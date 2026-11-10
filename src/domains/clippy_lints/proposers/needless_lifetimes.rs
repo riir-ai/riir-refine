@@ -20,7 +20,7 @@
 //! Fns with a `where` clause or bounds on the lifetime param are skipped
 //! (both may reference `'a` in ways the splice cannot see).
 
-use super::{edit, for_each_fn, src, swallow_following_space, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src, swallow_following_space};
 use syn::{File, GenericParam, Signature, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.

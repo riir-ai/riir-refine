@@ -43,7 +43,7 @@
 //! refused.
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, File, Local, Pat, Stmt};
 

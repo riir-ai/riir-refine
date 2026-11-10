@@ -16,7 +16,7 @@
 //! refuses an empty binary under `--all-features`.
 
 use riir_refine::traj_store::TrajStore;
-use riir_refine::{tier_guard, EvidenceTier};
+use riir_refine::{EvidenceTier, tier_guard};
 
 fn tmp_root(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!(

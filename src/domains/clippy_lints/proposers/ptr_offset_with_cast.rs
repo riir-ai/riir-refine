@@ -47,7 +47,7 @@ use syn::visit::Visit;
 use syn::{Block, Expr, ExprCast, ExprMethodCall, File, ImplItemFn, ItemFn, Pat};
 
 use super::helpers::{body_rebinds, byte_range, drops_interior_comment};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The syntax-visible provenance of a bare ident: a raw pointer, or a
 /// `usize` scalar (upstream's own firing precondition, measured).
@@ -441,11 +441,13 @@ mod tests {
 
     #[test]
     fn literal_operand_refuses() {
-        assert!(propose_fix(
-            "ptr_offset_with_cast",
-            "pub fn f(b: &[u8]) -> u8 { let p = b.as_ptr(); unsafe { *p.offset(5 as isize) } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "ptr_offset_with_cast",
+                "pub fn f(b: &[u8]) -> u8 { let p = b.as_ptr(); unsafe { *p.offset(5 as isize) } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

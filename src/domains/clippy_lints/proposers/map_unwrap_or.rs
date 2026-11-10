@@ -41,8 +41,8 @@
 //! guard class, second member).
 
 use super::helpers::{bool_lit, byte_range, is_postfix_safe, macro_expr_args};
-use super::receiver_kind::{classify_receiver, collect_fn_rets, ReceiverKind, ScopeKinds};
-use super::{edit, src, SourceEdit};
+use super::receiver_kind::{ReceiverKind, ScopeKinds, classify_receiver, collect_fn_rets};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{
     Expr, ExprMacro, ExprMethodCall, File, Local, Macro, Pat, Signature, Stmt, StmtMacro, Type,

@@ -274,9 +274,11 @@ fn review_mode_plans_without_writing() {
     let report = driver.run(&[dir.join("src").join("lib.rs")], &playbooks, false);
     assert!(report.ran);
     assert_eq!(report.planned.len(), 1, "one plan line: {report:?}");
-    assert!(report.planned[0]
-        .replacement_head
-        .contains("let mut v = Vec::new();"));
+    assert!(
+        report.planned[0]
+            .replacement_head
+            .contains("let mut v = Vec::new();")
+    );
     assert_eq!(report.iterations, 0, "no loop in review mode");
     let on_disk = std::fs::read_to_string(dir.join("src").join("lib.rs")).unwrap();
     assert_eq!(on_disk, broken, "review mode never writes");

@@ -636,21 +636,22 @@ mod tests {
             vec![5.0, 5.0],
             vec![6.0, 6.0],
         ];
-        assert!(std::panic::catch_unwind(|| scaffold_value(
-            &ragged,
-            &ModelabilityConfig::default()
-        ))
-        .is_err());
-        assert!(std::panic::catch_unwind(|| {
-            scaffold_value(
-                &vec![vec![0.0, 0.0]; 20],
-                &ModelabilityConfig {
-                    k: 0,
-                    ..ModelabilityConfig::default()
-                },
-            )
-        })
-        .is_err());
+        assert!(
+            std::panic::catch_unwind(|| scaffold_value(&ragged, &ModelabilityConfig::default()))
+                .is_err()
+        );
+        assert!(
+            std::panic::catch_unwind(|| {
+                scaffold_value(
+                    &vec![vec![0.0, 0.0]; 20],
+                    &ModelabilityConfig {
+                        k: 0,
+                        ..ModelabilityConfig::default()
+                    },
+                )
+            })
+            .is_err()
+        );
     }
 
     #[test]

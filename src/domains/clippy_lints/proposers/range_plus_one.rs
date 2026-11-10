@@ -8,7 +8,7 @@
 //! fragments; an open-start range rewrites to `..=E`.
 
 use super::helpers::int_lit;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, ExprRange, File, RangeLimits};
 

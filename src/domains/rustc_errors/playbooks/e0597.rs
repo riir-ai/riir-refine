@@ -51,7 +51,7 @@ use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCall, ExprClosure, ItemFn, Pat, PatType, Stmt};
 
-use super::{anchor, binding_name, cand, CompileProposer, FixCandidate, Playbooks};
+use super::{CompileProposer, FixCandidate, Playbooks, anchor, binding_name, cand};
 use crate::domains::rustc_errors::diag::RustcErrorDiag;
 
 // ── shared syn helpers (closure + let extraction) ────────────────────
@@ -257,15 +257,17 @@ impl CompileProposer for MoveCapture {
         if source[..cap.byte_start].trim_end().ends_with("move") {
             return Vec::new(); // already a move closure — a second `move` parses nowhere
         }
-        vec![cand(
-            diag,
-            file,
-            cap.line_start,
-            (cap.byte_start, cap.byte_start),
-            "move ".to_string(),
-            self.name(),
-        )
-        .with_note("moves the capture into the closure — ownership leaves the enclosing scope")]
+        vec![
+            cand(
+                diag,
+                file,
+                cap.line_start,
+                (cap.byte_start, cap.byte_start),
+                "move ".to_string(),
+                self.name(),
+            )
+            .with_note("moves the capture into the closure — ownership leaves the enclosing scope"),
+        ]
     }
 }
 
@@ -461,15 +463,19 @@ impl CompileProposer for SharedOwnership {
             return Vec::new();
         };
         let repl = format!("{{ let {name} = {kind}(&{name}); move {text} }}");
-        vec![cand(
-            diag,
-            file,
-            cap.line_start,
-            (range.start, range.end),
-            repl,
-            self.name(),
-        )
-        .with_note("switches to shared ownership (Rc/Arc) — access is now shared, not exclusive")]
+        vec![
+            cand(
+                diag,
+                file,
+                cap.line_start,
+                (range.start, range.end),
+                repl,
+                self.name(),
+            )
+            .with_note(
+                "switches to shared ownership (Rc/Arc) — access is now shared, not exclusive",
+            ),
+        ]
     }
 }
 
@@ -595,15 +601,17 @@ impl CompileProposer for ScopeHoist {
         // line's indentation — the replacement starts at the statement
         // itself, and only the re-opened block line carries the indent.
         let repl = format!("{stmt_trimmed}\n{indent}{{");
-        vec![cand(
-            diag,
-            file,
-            bind.line_start,
-            (b.open, stmt_range.end),
-            repl,
-            self.name(),
-        )
-        .with_note("hoists the declaration out of the block — drop order changes")]
+        vec![
+            cand(
+                diag,
+                file,
+                bind.line_start,
+                (b.open, stmt_range.end),
+                repl,
+                self.name(),
+            )
+            .with_note("hoists the declaration out of the block — drop order changes"),
+        ]
     }
 }
 

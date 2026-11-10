@@ -976,12 +976,14 @@ fn git_walk_excludes_gitignored_keeps_untracked_and_tracked() {
     fs::write(tmp.join("y.gen.rs"), "pub fn g() {}").unwrap();
     // tracked-but-later-ignored stays: add BEFORE the ignore rule lands.
     fs::write(tmp.join("tbi.rs"), "pub fn b() {}").unwrap();
-    assert!(Command::new("git")
-        .arg("-C")
-        .arg(&tmp)
-        .args(["add", "tracked.rs", "tbi.rs"])
-        .output()
-        .is_ok_and(|o| o.status.success()));
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&tmp)
+            .args(["add", "tracked.rs", "tbi.rs"])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    );
     fs::write(tmp.join(".gitignore"), "ignored/\n*.gen.rs\ntbi.rs\n").unwrap();
     let walk = read_sources_walk(std::slice::from_ref(&tmp));
     assert_eq!(walk.mode, WalkMode::Git { roots: 1 });
@@ -1012,12 +1014,14 @@ fn nested_foreign_repo_is_not_scanned() {
     fs::write(tmp.join("own.rs"), "pub fn o() {}").unwrap();
     let nested = tmp.join("nested_repo");
     fs::create_dir_all(&nested).unwrap();
-    assert!(Command::new("git")
-        .arg("-C")
-        .arg(&nested)
-        .args(["init", "-q"])
-        .output()
-        .is_ok_and(|o| o.status.success()));
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&nested)
+            .args(["init", "-q"])
+            .output()
+            .is_ok_and(|o| o.status.success())
+    );
     fs::write(nested.join("foreign.rs"), "pub fn f() {}").unwrap();
     let walk = read_sources_walk(std::slice::from_ref(&tmp));
     assert_eq!(walk.mode, WalkMode::Git { roots: 1 });

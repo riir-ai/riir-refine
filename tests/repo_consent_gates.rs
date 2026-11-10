@@ -23,7 +23,7 @@ use riir_refine::code_egress::EgressConsent;
 use riir_refine::escalation_dispatch::{EscalatedFix, EscalationDispatch, ReadinessPolicy};
 use riir_refine::escalation_manifest::EscalationManifest;
 use riir_refine::repo_consent::{
-    read, write, RepoAnswer, RepoConsentDecision, REFUSAL_NEVER, REFUSAL_UNSET,
+    REFUSAL_NEVER, REFUSAL_UNSET, RepoAnswer, RepoConsentDecision, read, write,
 };
 
 fn manifest_row_armed() -> EscalationManifest {

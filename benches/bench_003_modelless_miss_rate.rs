@@ -46,7 +46,7 @@
 #![allow(clippy::pedantic)]
 
 use riir_refine::{
-    build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, HealPipeline, RustAnalyzerPruner,
+    ClippyFixEntry, ClippyTernaryDrafter, HealPipeline, RustAnalyzerPruner, build_seed_corpus,
 };
 use std::io::Write;
 
@@ -338,7 +338,11 @@ fn main() {
             r.miss_rate() * 100.0,
             r.em,
             r.total,
-            if r.total == 0 { 0.0 } else { r.em as f64 / r.total as f64 * 100.0 }
+            if r.total == 0 {
+                0.0
+            } else {
+                r.em as f64 / r.total as f64 * 100.0
+            }
         );
         println!();
         results.push((label.to_string(), r));

@@ -29,9 +29,9 @@ use std::path::PathBuf;
 
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::draft::latent_matcher::LatentMatcher;
-use riir_refine::draft::retrieval_eval::{labeled_eval_spans, run_split_eval, DomainMetrics};
+use riir_refine::draft::retrieval_eval::{DomainMetrics, labeled_eval_spans, run_split_eval};
 use riir_refine::draft::rule_embed::{
-    fixture_is_withheld, train, TrainConfig, TrainData, FEATURE_BUCKETS,
+    FEATURE_BUCKETS, TrainConfig, TrainData, fixture_is_withheld, train,
 };
 
 const DEFAULT_OUT: &str = "/tmp/rule_embed_frozen.bin";
@@ -316,7 +316,9 @@ fn eval_mode(path: &str, rest: Vec<String>) {
         rep.trained_withheld.labeled,
         pct(rep.trained_withheld),
     );
-    println!("\nmiss anatomy (either posture missed top-1): label, withheld?, baseline rank, trained rank");
+    println!(
+        "\nmiss anatomy (either posture missed top-1): label, withheld?, baseline rank, trained rank"
+    );
     for (label, withheld, b, t) in &rep.miss_detail {
         println!("  {label:<42} withheld={withheld} b={b:?} t={t:?}");
     }
@@ -368,11 +370,7 @@ fn eval_mode(path: &str, rest: Vec<String>) {
 }
 
 fn verdict(ok: bool) -> &'static str {
-    if ok {
-        "PASS"
-    } else {
-        "FAIL"
-    }
+    if ok { "PASS" } else { "FAIL" }
 }
 
 // Keep the matcher import referenced even though run_split_eval builds its

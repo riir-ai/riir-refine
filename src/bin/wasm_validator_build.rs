@@ -19,7 +19,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use riir_refine::validators::{ValidatorStore, DEFAULT_FUEL};
+use riir_refine::validators::{DEFAULT_FUEL, ValidatorStore};
 
 /// One validator in the authoring lane. Adding a validator = one row here +
 /// a crate under `validator_src/` compiling against the fixed ABI.

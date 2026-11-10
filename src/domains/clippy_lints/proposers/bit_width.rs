@@ -82,7 +82,7 @@ use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, File, ImplItemFn, ItemFn};
 
 use super::helpers::{body_rebinds, byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The bare unsigned-int type names (the scalar rows + the `NonZero` generic
 /// argument).
@@ -382,11 +382,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "manual_bit_width",
-            "fn f(hits: &mut Vec<u8>, w: u32) -> u32 { hits.push(0); w }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_bit_width",
+                "fn f(hits: &mut Vec<u8>, w: u32) -> u32 { hits.push(0); w }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

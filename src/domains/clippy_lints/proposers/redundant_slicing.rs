@@ -23,7 +23,7 @@
 //! where `v: Vec<T>` is the REAL clippy fix shape too — but type-blind for
 //! us) refuse via the resolver.
 
-use super::{edit, for_each_fn, src, SourceEdit};
+use super::{SourceEdit, edit, for_each_fn, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprIndex, ExprReference, File, RangeLimits, Signature, Type};
 

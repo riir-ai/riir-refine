@@ -22,7 +22,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::structural_admission::{
-    validate_artifact_hash, ChainState, ARTIFACTS_DIR, CHAIN_STATE_FILE,
+    ARTIFACTS_DIR, CHAIN_STATE_FILE, ChainState, validate_artifact_hash,
 };
 
 /// The structural chain store rooted at a repo root (the same root the
@@ -209,8 +209,8 @@ impl ChainStore {
 mod tests {
     use super::*;
     use crate::structural_admission::{
-        artifact_hash, canonical_artifact_bytes, BenchShape, ChainState, ProposalPayload,
-        StructuralProposal,
+        BenchShape, ChainState, ProposalPayload, StructuralProposal, artifact_hash,
+        canonical_artifact_bytes,
     };
     use std::sync::atomic::{AtomicU32, Ordering};
 

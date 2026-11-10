@@ -26,10 +26,10 @@
 #![cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 
 use riir_refine::kat_redact::{
-    scan_secrets, BlockReason, RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION,
+    BlockReason, REDACT_VERSION, RedactionGate, SpanOrigin, SyncPolicy, scan_secrets,
 };
 use riir_refine::kat_sync_payload::{
-    parse_rows, verify_payload, PayloadHeader, RowOutcome, SyncPayloadBuilder,
+    PayloadHeader, RowOutcome, SyncPayloadBuilder, parse_rows, verify_payload,
 };
 use riir_refine::traj_store::TrajRowDoc;
 

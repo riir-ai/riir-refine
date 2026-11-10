@@ -20,7 +20,7 @@
 //!   pre-network when missing, never echoed. A gen-2 worker answers
 //!   `401 owner_sig_required` to it.
 
-use crate::kat_admin_client::{ledger_id_for_owner, AdminAuth, OwnerAdminSigner};
+use crate::kat_admin_client::{AdminAuth, OwnerAdminSigner, ledger_id_for_owner};
 
 /// The owner signer for `url`: the account key, bound to the worker's
 /// ledger id and `totp`.
@@ -79,9 +79,13 @@ pub fn hint(code: Option<&str>) -> Option<&'static str> {
         "owner_sig_invalid" => Some(
             "the signature did not verify: the loaded account is not the pinned owner, or the request changed in flight",
         ),
-        "owner_sig_stale" => Some("the local clock is more than 600 s off the worker's — fix the clock and retry"),
+        "owner_sig_stale" => {
+            Some("the local clock is more than 600 s off the worker's — fix the clock and retry")
+        }
         "totp_replayed" => Some("that code was already used — wait for the next 30-second code"),
-        "totp_mismatch" => Some("the code did not match — check the authenticator entry for this worker"),
+        "totp_mismatch" => {
+            Some("the code did not match — check the authenticator entry for this worker")
+        }
         "totp_required" => Some("pass --totp <code> (the owner account's authenticator)"),
         _ => None,
     }
@@ -102,7 +106,9 @@ pub struct CallArgs<'a> {
 pub fn run(args: &CallArgs<'_>) -> ! {
     let method = args.method.to_ascii_uppercase();
     if !matches!(method.as_str(), "GET" | "POST") || !args.target.starts_with('/') {
-        eprintln!("admin call: usage — admin call <GET|POST> </path[?query]> [--body <file>] [--totp <code>]");
+        eprintln!(
+            "admin call: usage — admin call <GET|POST> </path[?query]> [--body <file>] [--totp <code>]"
+        );
         std::process::exit(2);
     }
     let target = crate::kat_admin_client::target_of(args.target);

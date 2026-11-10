@@ -29,4 +29,4 @@ pub mod query;
 pub use bm25::Tokenizer;
 pub use embedder::{Embedder, ModellessEmbedder};
 pub use math::{desc, sigmoid};
-pub use query::{ChunkSource, LatentQuery, RetrievedChunk, LATENT_DIM};
+pub use query::{ChunkSource, LATENT_DIM, LatentQuery, RetrievedChunk};

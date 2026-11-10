@@ -24,7 +24,7 @@
 #![cfg(feature = "kat_service")]
 
 use riir_refine::kat_account::{
-    account_id_for, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG, ACCOUNT_VERSION,
+    ACCOUNT_CHANGELOG, ACCOUNT_VERSION, AccountState, KatAccount, LoginOutcome, account_id_for,
 };
 use riir_refine::kat_meter::{ChargeState, KatCharge, KatMeter};
 // The grant constant rides the VENDORED kat_units (the same MicroKat world
@@ -95,10 +95,12 @@ fn g9d_grant_projection_never_moves_across_relogins() {
     // Issue 126 follow-up 3 (owner 2026-10-14): the grant line names the
     // TUNA trial credit — never a KAT figure (a KAT number reads as a mint
     // promise that does not exist).
-    assert!(first
-        .summary_lines()
-        .iter()
-        .any(|l| { l.contains("grant:") && l.contains("TUNA trial credit") }));
+    assert!(
+        first
+            .summary_lines()
+            .iter()
+            .any(|l| { l.contains("grant:") && l.contains("TUNA trial credit") })
+    );
 
     // Re-login: Existing — the record (incl. grant + created_at) is preserved
     // byte-for-byte semantics: "granted once per account key".

@@ -23,8 +23,8 @@
 
 #[cfg(all(feature = "self_evolve", feature = "clippy_verify"))]
 use riir_refine::{
-    build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, ClippyVerifier, HealPipeline,
-    RustAnalyzerPruner,
+    ClippyFixEntry, ClippyTernaryDrafter, ClippyVerifier, HealPipeline, RustAnalyzerPruner,
+    build_seed_corpus,
 };
 
 #[cfg(all(feature = "self_evolve", feature = "clippy_verify"))]
@@ -330,7 +330,9 @@ fn main() {
         println!(
             "✅ All gates PASS. The self-evolution loop generalizes to real cargo clippy feedback."
         );
-        println!("   The controlled G5 fixture result (oracle feedback) is confirmed by G7 (ground-truth feedback).");
+        println!(
+            "   The controlled G5 fixture result (oracle feedback) is confirmed by G7 (ground-truth feedback)."
+        );
     } else {
         println!("❌ Some gates FAILED. See details above.");
     }

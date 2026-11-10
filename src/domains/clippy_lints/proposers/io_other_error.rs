@@ -37,8 +37,8 @@
 use syn::visit::Visit;
 use syn::{Expr, File};
 
-use super::helpers::{byte_range, drops_interior_comment, file_shadows};
 use super::SourceEdit;
+use super::helpers::{byte_range, drops_interior_comment, file_shadows};
 
 /// Names whose file-level shadowing makes the rewrite meaning-changing.
 const SHADOW_NAMES: &[&str] = &["Error", "ErrorKind", "io"];

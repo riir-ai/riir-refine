@@ -27,7 +27,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use riir_refine::domain::{HealDomain, HealEntry};
-use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher, RerankMode, RERANK_POOL};
+use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher, RERANK_POOL, RerankMode};
 
 /// Corpus lint vocabulary — real clippy reports far more than we have rules
 /// for, and scoring against unknown lints would measure corpus coverage

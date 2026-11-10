@@ -23,7 +23,7 @@
 //! `log(b) → log2/log10` trade the general libm path for the dedicated
 //! routine (faster in debug; ulp-level differences possible).
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Lit};
 

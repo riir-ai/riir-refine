@@ -457,8 +457,7 @@ mod tests {
     /// `kat_account::write_private` shape) is silent.
     #[test]
     fn batch131_set_permissions_after_create_is_silent() {
-        let src =
-            "fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {\n    \
+        let src = "fn write_private(path: &std::path::Path, text: &str) -> Result<(), String> {\n    \
              std::fs::write(path, text).map_err(|e| format!(\"writing: {e}\"))?;\n    \
              #[cfg(unix)]\n    \
              {\n        \

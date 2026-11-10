@@ -40,8 +40,8 @@
 use syn::visit::Visit;
 use syn::{Expr, File};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 const BY_REF_ADAPTERS: [&str; 3] = ["iter", "values", "keys"];
 

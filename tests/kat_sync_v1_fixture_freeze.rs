@@ -55,5 +55,9 @@ fn sync_signing_message_v1_frozen() {
         msg.starts_with(SYNC_SIGNING_DOMAIN),
         "the -v2 domain spelling is load-bearing (Issue 103) — a rename is a wire break"
     );
-    assert_eq!(msg.as_slice(), FROZEN, "the sync signing-message composer drifted from the frozen pre-T12 bytes — if this is the T12 v2 cutover, freeze the v2 bytes in a NEW test beside this one");
+    assert_eq!(
+        msg.as_slice(),
+        FROZEN,
+        "the sync signing-message composer drifted from the frozen pre-T12 bytes — if this is the T12 v2 cutover, freeze the v2 bytes in a NEW test beside this one"
+    );
 }

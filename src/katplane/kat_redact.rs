@@ -1634,9 +1634,11 @@ mod tests {
     #[test]
     fn longer_aws_shaped_run_still_flags_fail_closed() {
         let span = "AKIAIOSFODNN7EXAMPLEXYZ";
-        assert!(scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::AwsAccessKey));
+        assert!(
+            scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::AwsAccessKey)
+        );
     }
 
     #[test]
@@ -1680,9 +1682,11 @@ mod tests {
     #[test]
     fn public_cert_headers_do_not_flag() {
         let span = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----";
-        assert!(!scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::PrivateKeyBlock));
+        assert!(
+            !scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::PrivateKeyBlock)
+        );
     }
 
     #[test]
@@ -1702,17 +1706,21 @@ mod tests {
     #[test]
     fn templated_conn_string_does_not_flag() {
         let span = "let url = format!(\"postgres://user:${{DB_PASS}}@host/db\");";
-        assert!(!scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::ConnStringCreds));
+        assert!(
+            !scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::ConnStringCreds)
+        );
     }
 
     #[test]
     fn bearer_token_flags() {
         let span = "Authorization: Bearer abcdef1234567890abcdef";
-        assert!(scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::BearerToken));
+        assert!(
+            scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::BearerToken)
+        );
     }
 
     #[test]
@@ -1736,9 +1744,11 @@ mod tests {
     #[test]
     fn non_secret_env_names_do_not_flag() {
         let span = "DATABASE_URL_HOST=localhost\nMAX_CONNECTIONS=32\nAUTHOR=bob";
-        assert!(!scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::EnvSecretAssign));
+        assert!(
+            !scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::EnvSecretAssign)
+        );
     }
 
     #[test]
@@ -1755,29 +1765,37 @@ mod tests {
     #[test]
     fn rust_secret_let_mut_flags() {
         let span = "let mut password = \"tr0ub4dor&3xyz\";";
-        assert!(scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::RustSecretLiteral));
+        assert!(
+            scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::RustSecretLiteral)
+        );
     }
 
     #[test]
     fn rust_typed_binding_without_literal_does_not_flag() {
         let span = "fn connect(api_key: &str) {}\nstruct C { password: String }";
-        assert!(!scan_secrets(span)
-            .iter()
-            .any(|f| f.kind == FindingKind::RustSecretLiteral));
+        assert!(
+            !scan_secrets(span)
+                .iter()
+                .any(|f| f.kind == FindingKind::RustSecretLiteral)
+        );
     }
 
     #[test]
     fn high_entropy_hex_and_b64_flag() {
         let hexish = "9f2c7a4e1b8d3f6a0c5e2b9d7f4a1c8e3b6d9f2c7a4e1b8d3f6";
         let b64ish = "qP7mZ2xQvN4kR9tLwY3jH6sD1fG5aX0bE8cU2iO4pT7nM9rK";
-        assert!(scan_secrets(hexish)
-            .iter()
-            .any(|f| f.kind == FindingKind::HighEntropyHex));
-        assert!(scan_secrets(b64ish)
-            .iter()
-            .any(|f| f.kind == FindingKind::HighEntropyB64));
+        assert!(
+            scan_secrets(hexish)
+                .iter()
+                .any(|f| f.kind == FindingKind::HighEntropyHex)
+        );
+        assert!(
+            scan_secrets(b64ish)
+                .iter()
+                .any(|f| f.kind == FindingKind::HighEntropyB64)
+        );
     }
 
     #[test]
@@ -1865,16 +1883,21 @@ mod tests {
             allow_redacted: false,
         };
         let gate = RedactionGate::from_policy(policy);
-        assert!(gate
-            .check(SpanOrigin::AuthoredFixture, None, "fn f() {}")
-            .is_syncable());
-        assert!(!gate
-            .check(SpanOrigin::External, None, "fn f() {}")
-            .is_syncable());
+        assert!(
+            gate.check(SpanOrigin::AuthoredFixture, None, "fn f() {}")
+                .is_syncable()
+        );
+        assert!(
+            !gate
+                .check(SpanOrigin::External, None, "fn f() {}")
+                .is_syncable()
+        );
         // Path not on the allowlist.
-        assert!(!gate
-            .check(SpanOrigin::OwnRepo, Some("secrets/prod.rs"), "fn f() {}")
-            .is_syncable());
+        assert!(
+            !gate
+                .check(SpanOrigin::OwnRepo, Some("secrets/prod.rs"), "fn f() {}")
+                .is_syncable()
+        );
         // Secrets block even allowed origins.
         let d = gate.check(
             SpanOrigin::OwnRepo,
@@ -2033,10 +2056,12 @@ mod tests {
         std::fs::write(&p, "{\"version\": 999, \"sync_enabled\": true}").unwrap();
         let loaded = RedactionGate::load(&p);
         assert!(loaded.warning.is_some());
-        assert!(!loaded
-            .gate
-            .check(SpanOrigin::OwnRepo, None, "fn f() {}")
-            .is_syncable());
+        assert!(
+            !loaded
+                .gate
+                .check(SpanOrigin::OwnRepo, None, "fn f() {}")
+                .is_syncable()
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 

@@ -18,9 +18,9 @@
 
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
-use riir_refine::draft::tpr_fit::{print_space_report, run, ProbeStatus, StateSpace};
+use riir_refine::draft::tpr_fit::{ProbeStatus, StateSpace, print_space_report, run};
 use riir_refine::draft::withheld_pair_ood::{
-    clippy_population, kernel_opt_population, rustc_errors_population, Binding,
+    Binding, clippy_population, kernel_opt_population, rustc_errors_population,
 };
 
 /// The Plan 049 T0.1 committed real-repo dataset — the only source of genuine

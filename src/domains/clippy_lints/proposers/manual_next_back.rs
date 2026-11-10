@@ -37,7 +37,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
 use super::helpers::byte_range;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -100,11 +100,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            RULE,
-            "fn t(vals: &[u32], sink: &mut Vec<u32>) { sink.push(vals.len()); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(vals: &[u32], sink: &mut Vec<u32>) { sink.push(vals.len()); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -149,21 +151,25 @@ mod tests {
     #[test]
     fn plain_next_refuses() {
         // SILENT upstream (probe-measured) — parity refusal.
-        assert!(propose_fix(
-            RULE,
-            "fn t(vals: &[u32]) -> Option<u32> { vals.iter().next().copied() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(vals: &[u32]) -> Option<u32> { vals.iter().next().copied() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn last_refuses() {
         // SILENT upstream (probe-measured) — parity refusal.
-        assert!(propose_fix(
-            RULE,
-            "fn t(vals: &[u32]) -> Option<u32> { vals.iter().last().copied() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(vals: &[u32]) -> Option<u32> { vals.iter().last().copied() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

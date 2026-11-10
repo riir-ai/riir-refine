@@ -39,8 +39,8 @@ use quote::ToTokens;
 use syn::visit::Visit;
 use syn::{File, ImplItem, ItemImpl, ReturnType, Type, Visibility};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// One admissible `new`-bearing inherent impl: the type to name in the
 /// inserted `impl Default for …` plus where/how to insert it.

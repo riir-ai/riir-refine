@@ -5,7 +5,7 @@
 //! the annotation is redundant. Span-preserving: the `'static` token is
 //! deleted together with ONE following space (`&'static str` → `&str`).
 
-use super::{edit, swallow_following_space, SourceEdit};
+use super::{SourceEdit, edit, swallow_following_space};
 use syn::visit::Visit;
 use syn::{File, ItemConst, ItemStatic, Type};
 

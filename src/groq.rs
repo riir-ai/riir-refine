@@ -1033,7 +1033,7 @@ mod tests {
     #[cfg(feature = "cf_workers_ai")]
     mod router_tests {
         use super::super::router::{
-            avoided_usd, providers_json, FreeTierStats, LlmRouter, FREE_TIER_EXHAUSTED,
+            FREE_TIER_EXHAUSTED, FreeTierStats, LlmRouter, avoided_usd, providers_json,
         };
 
         // ── prod-grade hardening (T10) ────────────────────────────────

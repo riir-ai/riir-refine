@@ -30,7 +30,7 @@
 //! (`use std::{u32::MAX, f64::EPSILON};`) are refused, and only the flat
 //! `use std::{T}::{CONST} [as X];` tree shape is rewritten.
 
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 use proc_macro2::TokenTree;
 use quote::ToTokens;
 use syn::spanned::Spanned;

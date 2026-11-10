@@ -25,7 +25,7 @@
 #![cfg(feature = "docker")]
 
 use riir_refine::domains::docker::rules::{
-    scan_source, scan_source_with, ScanContext, FIXABLE_DOCKER,
+    FIXABLE_DOCKER, ScanContext, scan_source, scan_source_with,
 };
 use riir_refine::domains::docker::scanner::{self, Scope};
 

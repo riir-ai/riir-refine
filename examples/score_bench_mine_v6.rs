@@ -79,7 +79,7 @@ use riir_refine::score_bench::{vocabulary, wrap};
 use riir_refine::score_bench::BenchFixture;
 
 #[cfg(feature = "margin_mining")]
-use riir_refine::draft::{margin_weight, span_min_margin, LatentMatcher};
+use riir_refine::draft::{LatentMatcher, margin_weight, span_min_margin};
 
 const CARVE_MAX_BYTES: usize = 8000;
 const CHUNK: usize = 15;

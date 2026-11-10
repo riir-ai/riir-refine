@@ -275,11 +275,7 @@ pub fn measure<E: HealEntry>(
 /// reports `NaN` on fresh stores would break the audit script's greps).
 #[allow(clippy::cast_precision_loss)] // small counts; exact in f32
 fn ratio(a: usize, b: usize) -> f32 {
-    if b == 0 {
-        0.0
-    } else {
-        a as f32 / b as f32
-    }
+    if b == 0 { 0.0 } else { a as f32 / b as f32 }
 }
 
 /// Rule-id histogram of one span's retrieved top-k (shared by the per-span

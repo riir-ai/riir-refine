@@ -49,7 +49,7 @@
 //!   next pass — one atomic edit per site, never overlapping edits.
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprBlock, ExprIf, ExprMatch, ExprWhile, File, MacroDelimiter, Stmt};
 
@@ -168,11 +168,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(hits: &mut Vec<u32>, x: u32) -> u32 { hits.push(0); match x { _ => x } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(hits: &mut Vec<u32>, x: u32) -> u32 { hits.push(0); match x { _ => x } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -292,11 +294,13 @@ mod tests {
 
     #[test]
     fn macro_scrutinee_refuses() {
-        assert!(propose_fix(
-            RULE,
-            "fn f(hits: &mut Vec<u32>) -> u32 { hits.push(0); match get_val!() { v => v } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn f(hits: &mut Vec<u32>) -> u32 { hits.push(0); match get_val!() { v => v } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

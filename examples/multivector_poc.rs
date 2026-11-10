@@ -20,12 +20,12 @@
 
 use std::time::Instant;
 
-use riir_refine::draft::latent_matcher::LatentMatcher;
-use riir_refine::draft::multivector::{run_arm, Integration, MultivectorIndex, QueryMode};
-use riir_refine::draft::retrieval_eval::{
-    canonical_rank, labeled_eval_spans, run_eval, EvalReport,
-};
 use riir_refine::draft::DomainId;
+use riir_refine::draft::latent_matcher::LatentMatcher;
+use riir_refine::draft::multivector::{Integration, MultivectorIndex, QueryMode, run_arm};
+use riir_refine::draft::retrieval_eval::{
+    EvalReport, canonical_rank, labeled_eval_spans, run_eval,
+};
 
 /// Probe depth — mirrors `retrieval_eval::PROBE_TOP_K` (private there;
 /// duplicated deliberately, one line, the linking_confusion precedent).

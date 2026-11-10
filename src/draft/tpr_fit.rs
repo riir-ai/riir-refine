@@ -50,15 +50,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+use crate::ragplane::{Embedder, ModellessEmbedder, query::LATENT_DIM};
 use katgpt_core::tpr::als::param_count;
 use katgpt_core::tpr::{
-    als_fit, bic_select, bow_router, filler_role_spread, shuffled_role_control_with, AlsConfig,
-    AlsInput, AlsReport, BicSelection, BowRouterReport, FillerRoleSpread, RoleShuffleMode,
-    ShuffledRoleReport, TprArtifact, TprBindings, TprError, TprScheme,
+    AlsConfig, AlsInput, AlsReport, BicSelection, BowRouterReport, FillerRoleSpread,
+    RoleShuffleMode, ShuffledRoleReport, TprArtifact, TprBindings, TprError, TprScheme, als_fit,
+    bic_select, bow_router, filler_role_spread, shuffled_role_control_with,
 };
 
-use super::withheld_pair_ood::{normalized_tokens, Binding};
+use super::withheld_pair_ood::{Binding, normalized_tokens};
 
 /// Bag width of the [`StateSpace::TokenBag256`] control.
 pub const TOKEN_BAG_DIM: usize = 256;

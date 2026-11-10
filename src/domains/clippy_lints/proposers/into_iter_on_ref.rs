@@ -75,8 +75,8 @@ use std::collections::BTreeSet;
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, ItemFn};
 
-use super::helpers::{body_rebinds, byte_range};
 use super::SourceEdit;
+use super::helpers::{body_rebinds, byte_range};
 
 /// The std containers whose `IntoIterator for (&|&mut) T` IS
 /// `iter()`/`iter_mut()` — the delegation law (std defines the impls by

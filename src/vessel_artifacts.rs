@@ -22,7 +22,7 @@
 //! artifact store half) is the R2 consumer's concern, not this seam's.
 
 use reflexer_vessel::{
-    ApplyRefusal, ApplyState, PinTable, VerifiedVessel, VesselError, MIN_ARTIFACT_VERSION,
+    ApplyRefusal, ApplyState, MIN_ARTIFACT_VERSION, PinTable, VerifiedVessel, VesselError,
 };
 use std::path::Path;
 
@@ -141,7 +141,7 @@ pub fn apply_monotonic(current: &mut ApplyState, v: &VerifiedVessel) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reflexer_vessel::{encode_public, ApplyRefusal, Class, FORMAT_VERSION, MAGIC};
+    use reflexer_vessel::{ApplyRefusal, Class, FORMAT_VERSION, MAGIC, encode_public};
 
     fn key(seed: u8) -> reflexer_vessel::ed25519_dalek::SigningKey {
         reflexer_vessel::ed25519_dalek::SigningKey::from_bytes(&[seed; 32])

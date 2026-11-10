@@ -44,7 +44,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Lit, LitStr};
 
 use super::helpers::byte_range;
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -122,11 +122,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "string_lit_as_bytes",
-            "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"abc\" }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "string_lit_as_bytes",
+                "fn raw(hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); b\"abc\" }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -207,11 +209,13 @@ mod tests {
 
     #[test]
     fn named_receiver_refuses() {
-        assert!(propose_fix(
-            "string_lit_as_bytes",
-            "fn n(s: &str, hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); s.as_bytes() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "string_lit_as_bytes",
+                "fn n(s: &str, hits: &mut Vec<u8>) -> &'static [u8] { hits.push(0); s.as_bytes() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

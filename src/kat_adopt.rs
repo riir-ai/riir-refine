@@ -394,7 +394,7 @@ pub fn adopt_into_net(root: &Path, file: &StateFile, net_url: &str) -> Result<Pa
     let inner = match &file.placement {
         Placement::FlatLegacy => file.rel.as_str(),
         Placement::NetDir { .. } => {
-            return Err("only flat legacy files adopt into a net dir".into())
+            return Err("only flat legacy files adopt into a net dir".into());
         }
     };
     let dest = kat_state_stamp::net_state_dir_for_url(root, net_url).join(inner);

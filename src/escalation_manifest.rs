@@ -55,7 +55,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use katgpt_core::escalation_guard::{demote_only_decode, RollingRateLatch, DEFAULT_WINDOW};
+use katgpt_core::escalation_guard::{DEFAULT_WINDOW, RollingRateLatch, demote_only_decode};
 
 /// The domain keys this manifest accepts — the exact
 /// `crate::draft::DomainId::label` spellings. Mirrored locally so the

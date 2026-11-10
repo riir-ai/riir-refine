@@ -56,11 +56,11 @@ use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::{canonical_rank, labeled_eval_spans, run_split_eval};
 use riir_refine::draft::rule_embed::{
-    decode_verified, embedded_tables, fixture_is_withheld, train, TrainConfig, TrainData, Trained,
-    TrainedTables,
+    TrainConfig, TrainData, Trained, TrainedTables, decode_verified, embedded_tables,
+    fixture_is_withheld, train,
 };
 use riir_refine::draft::rule_embed_mattr::{
-    train_spanwise, KBudget, MattrConfig, SpanRow, SpanTrainData,
+    KBudget, MattrConfig, SpanRow, SpanTrainData, train_spanwise,
 };
 use riir_refine::draft::{RerankMode, RetrievalConfig};
 
@@ -213,11 +213,7 @@ impl SplitCurves {
 
 /// JSONL-safe float: -1.0 stands for n/a (NaN never serializes).
 fn jf(x: f64) -> f64 {
-    if x.is_finite() {
-        x
-    } else {
-        -1.0
-    }
+    if x.is_finite() { x } else { -1.0 }
 }
 
 struct GoldPair {
@@ -1112,9 +1108,5 @@ fn main() {
 }
 
 fn verdict(ok: bool) -> &'static str {
-    if ok {
-        "PASS"
-    } else {
-        "FAIL"
-    }
+    if ok { "PASS" } else { "FAIL" }
 }

@@ -26,8 +26,8 @@ use std::time::Instant;
 
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS;
-use riir_refine::draft::set_rerank::{LatentChoice, SetRerankConfig, DEFAULT_SLATE_K};
-use riir_refine::draft::{ClippyOracle, LatentMatcher, RerankMode, RERANK_POOL};
+use riir_refine::draft::set_rerank::{DEFAULT_SLATE_K, LatentChoice, SetRerankConfig};
+use riir_refine::draft::{ClippyOracle, LatentMatcher, RERANK_POOL, RerankMode};
 
 fn vocabulary() -> BTreeSet<String> {
     riir_refine::domains::clippy_lints::ClippyLintDomain::build_corpus()

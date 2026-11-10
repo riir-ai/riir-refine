@@ -11,8 +11,8 @@
 #![cfg(feature = "self_evolve")]
 
 use riir_refine::{
-    memory::{LatentFixMemory, LatentQuery},
     ClippyFixEntry, ClippyTernaryDrafter, FixTrajectory, HealPipeline, RustAnalyzerPruner,
+    memory::{LatentFixMemory, LatentQuery},
 };
 use std::time::Instant;
 

@@ -28,7 +28,7 @@
 #![allow(clippy::pedantic)]
 
 use riir_refine::{
-    build_seed_corpus, ClippyFixEntry, ClippyTernaryDrafter, HealPipeline, RustAnalyzerPruner,
+    ClippyFixEntry, ClippyTernaryDrafter, HealPipeline, RustAnalyzerPruner, build_seed_corpus,
 };
 use std::io::Write;
 use std::time::Instant;

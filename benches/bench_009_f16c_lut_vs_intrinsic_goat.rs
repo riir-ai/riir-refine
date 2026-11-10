@@ -64,7 +64,7 @@ mod x86_goat {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::arch::is_x86_feature_detected;
     use std::arch::x86_64::{
-        _mm_cvtph_ps, _mm_cvtps_ph, _mm_cvtsi128_si32, _mm_cvtsi32_si128, _mm_cvtss_f32, _mm_set_ss,
+        _mm_cvtph_ps, _mm_cvtps_ph, _mm_cvtsi32_si128, _mm_cvtsi128_si32, _mm_cvtss_f32, _mm_set_ss,
     };
     use std::path::PathBuf;
     use std::process::Command;
@@ -171,8 +171,8 @@ mod x86_goat {
         let lo_bits = narrow_trunc(v) & 0x7FFF; // magnitude, <= 0x7BFF here
         let lo = f64::from(widen_soft(lo_bits)); // the toward-zero candidate
         let hi_bits = lo_bits + 1; // the away-from-zero candidate (grid-contiguous:
-                                   // 0x03FF -> 0x0400 spans subnormal->normal at the same 2^-24 step; at the
-                                   // top, x < 65520 already guarantees the answer is 0x7BFF when lo == 0x7BFF)
+        // 0x03FF -> 0x0400 spans subnormal->normal at the same 2^-24 step; at the
+        // top, x < 65520 already guarantees the answer is 0x7BFF when lo == 0x7BFF)
         if lo == x {
             return sign | lo_bits; // exactly representable (or x == 0) — no rounding
         }
@@ -457,8 +457,8 @@ mod x86_goat {
             }
         }
         say(&format!(
-        "G1 widen PASS — 65536/65536: every non-NaN pattern bit-identical (normals + subnormals + zeros + infs); NaN inputs {nan_inputs} (of which sNaN {snan_inputs}) all class-match, payload diffs {nan_payload_diffs} DISCLOSED (hardware NaN handling vs the manual payload-preserving form)"
-    ));
+            "G1 widen PASS — 65536/65536: every non-NaN pattern bit-identical (normals + subnormals + zeros + infs); NaN inputs {nan_inputs} (of which sNaN {snan_inputs}) all class-match, payload diffs {nan_payload_diffs} DISCLOSED (hardware NaN handling vs the manual payload-preserving form)"
+        ));
 
         // ══ G1 store: the deterministic f32 population ═══════════════════
         say("── G1 store: hardware intrinsic (imm 0 = RNE) vs the software RNE reference ──");
@@ -552,9 +552,10 @@ mod x86_goat {
             store_cases += 1;
         }
         say(&format!(
-        "G1 store PASS — {store_cases} cases: every non-NaN value bit-identical (RNE reference vs hardware, incl. {}/{} explicit ties + all exponent classes + edges); NaN cases {store_nan_cases} class-match, payload diffs {store_nan_payload_diffs} DISCLOSED",
-        256, pop.len()
-    ));
+            "G1 store PASS — {store_cases} cases: every non-NaN value bit-identical (RNE reference vs hardware, incl. {}/{} explicit ties + all exponent classes + edges); NaN cases {store_nan_cases} class-match, payload diffs {store_nan_payload_diffs} DISCLOSED",
+            256,
+            pop.len()
+        ));
 
         // ══ G4 — allocation-free (every measured arm) ═══════════════════
         say("── G4: zero allocations in every measured arm ──");
@@ -577,7 +578,9 @@ mod x86_goat {
             let (_, k) = alloc_armed(|| store_rne(&vs, &mut out_s));
             assert_eq!(k, 0, "G4 FAIL: store_rne allocates ({k})");
         }
-        say("G4 PASS — zero allocations, all five measured arms (the table + fixtures are setup, outside the measured paths)");
+        say(
+            "G4 PASS — zero allocations, all five measured arms (the table + fixtures are setup, outside the measured paths)",
+        );
 
         // ══ G2 dot: the interleaved best-of-N sweep ═════════════════════
         say("── G2 dot: LUT vs hardware-intrinsic vs soft (interleaved best-of-5 per cell) ──");
@@ -630,12 +633,12 @@ mod x86_goat {
                     lut_all_win = false;
                 }
                 say(&format!(
-                "  seed={seed:#06x} n={n:>6}  lut={:>8.3} ms  intr={:>8.3} ms  soft={:>8.3} ms  intr/lut={ratio:>5.2}x{}",
-                t_lut * 1e3,
-                t_intr * 1e3,
-                t_soft * 1e3,
-                if citable { "" } else { "  (PROVISIONAL)" }
-            ));
+                    "  seed={seed:#06x} n={n:>6}  lut={:>8.3} ms  intr={:>8.3} ms  soft={:>8.3} ms  intr/lut={ratio:>5.2}x{}",
+                    t_lut * 1e3,
+                    t_intr * 1e3,
+                    t_soft * 1e3,
+                    if citable { "" } else { "  (PROVISIONAL)" }
+                ));
             }
         }
 
@@ -675,34 +678,44 @@ mod x86_goat {
                     store_all_ok = false;
                 }
                 say(&format!(
-                "  seed={seed:#06x} n={n:>6}  intr={:>8.3} ms  soft={:>8.3} ms  soft/intr={ratio:>5.2}x{}",
-                t_intr * 1e3,
-                t_soft * 1e3,
-                if citable { "" } else { "  (PROVISIONAL)" }
-            ));
+                    "  seed={seed:#06x} n={n:>6}  intr={:>8.3} ms  soft={:>8.3} ms  soft/intr={ratio:>5.2}x{}",
+                    t_intr * 1e3,
+                    t_soft * 1e3,
+                    if citable { "" } else { "  (PROVISIONAL)" }
+                ));
             }
         }
 
         // the structural ledger (not a measurement — the per-element opcode
         // classes, the amortization axis the law claims)
-        say("ledger: naive dot pays per element 2 vpinsrw + 2 vcvtph2ps (chained INTO the accumulator register — the T0 asm) + 1 vmulss + 1 vaddss; LUT dot pays 2 table loads (fresh registers) + 1 vmulss + 1 vaddss; the table itself is 65536 f32 = 256 KiB, built once at setup (amortized over the whole run)");
+        say(
+            "ledger: naive dot pays per element 2 vpinsrw + 2 vcvtph2ps (chained INTO the accumulator register — the T0 asm) + 1 vmulss + 1 vaddss; LUT dot pays 2 table loads (fresh registers) + 1 vmulss + 1 vaddss; the table itself is 65536 f32 = 256 KiB, built once at setup (amortized over the whole run)",
+        );
 
         // ══ the verdict (pre-registered bar) ════════════════════════════
         say("── VERDICT ──");
         if lut_all_win && store_all_ok {
             say(&format!(
-            "PARETO-PASS — G1 exact (NaN diffs disclosed), G4 zero-alloc, the LUT strictly faster than the hardware-intrinsic dot at ALL {} cells AND the direct store no slower than software RNE at all {} cells{}",
-            SEEDS.len() * N_GRID.len(),
-            SEEDS.len() * N_GRID.len(),
-            if citable { "" } else { " (TIMING PROVISIONAL — quote the PROVENANCE line)" }
-        ));
+                "PARETO-PASS — G1 exact (NaN diffs disclosed), G4 zero-alloc, the LUT strictly faster than the hardware-intrinsic dot at ALL {} cells AND the direct store no slower than software RNE at all {} cells{}",
+                SEEDS.len() * N_GRID.len(),
+                SEEDS.len() * N_GRID.len(),
+                if citable {
+                    ""
+                } else {
+                    " (TIMING PROVISIONAL — quote the PROVENANCE line)"
+                }
+            ));
             std::process::exit(0);
         } else {
             if !lut_all_win {
-                say("PARETO-FAIL (dot) — the LUT lost or tied at least one cell (a real measured outcome; record the per-arm split)");
+                say(
+                    "PARETO-FAIL (dot) — the LUT lost or tied at least one cell (a real measured outcome; record the per-arm split)",
+                );
             }
             if !store_all_ok {
-                say("PARETO-FAIL (store) — the direct hardware narrowing lost to software RNE at at least one cell (a real measured outcome; record the split)");
+                say(
+                    "PARETO-FAIL (store) — the direct hardware narrowing lost to software RNE at at least one cell (a real measured outcome; record the split)",
+                );
             }
             std::process::exit(1);
         }

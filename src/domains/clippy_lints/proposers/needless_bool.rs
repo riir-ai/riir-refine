@@ -17,7 +17,7 @@
 //! else-child after the fact.
 
 use super::helpers::{bool_lit, contains_let, needs_logic_parens};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprIf, File, Stmt};

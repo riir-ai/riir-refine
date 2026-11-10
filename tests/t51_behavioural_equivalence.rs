@@ -7,7 +7,7 @@
 //! case MUST pass — a checker that rejects the 3 clean wins would be useless in
 //! the other direction.
 
-use riir_refine::behavioural_equivalence::{check, divergence_is_invisible_to_names, Verdict};
+use riir_refine::behavioural_equivalence::{Verdict, check, divergence_is_invisible_to_names};
 
 fn work(tag: &str) -> std::path::PathBuf {
     // Isolated under /tmp — never a shared target dir.

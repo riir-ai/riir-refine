@@ -35,7 +35,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
-use katgpt_core::gw_alignment::{gw_coupling, GwScratch, GW_MAX};
+use katgpt_core::gw_alignment::{GW_MAX, GwScratch, gw_coupling};
 use riir_refine::domain::HealDomain;
 use riir_refine::domains::clippy_lints::ClippyFixEntry;
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
@@ -518,9 +518,13 @@ fn score(
         BUDGET as f64 * hat_p
     );
     println!();
-    println!("base-rate sample: {rand_true}/{rand_n} stride pairs TRUE → p̂ = {hat_p:.3}, total-true est ≈ {total_true_est:.0}");
+    println!(
+        "base-rate sample: {rand_true}/{rand_n} stride pairs TRUE → p̂ = {hat_p:.3}, total-true est ≈ {total_true_est:.0}"
+    );
     if rand_n < 20 {
-        println!("⚠ small base-rate sample ({rand_n}) — recall estimates are weak; read precision first.");
+        println!(
+            "⚠ small base-rate sample ({rand_n}) — recall estimates are weak; read precision first."
+        );
     }
 
     // capability axis: GW-exclusive finds (baseline score 0)

@@ -61,7 +61,7 @@ use syn::visit::Visit;
 use syn::{ExprLit, File, Lit};
 
 use super::helpers::byte_range;
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -227,11 +227,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0.1f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0.1f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -270,20 +272,24 @@ mod tests {
     #[test]
     fn all_zero_fraction_refuses() {
         // Upstream is SILENT here (probe-pinned: only unreadable_literal).
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 1.0000000f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 1.0000000f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn integer_floated_refuses() {
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 7f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 7f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -300,11 +306,13 @@ mod tests {
     #[test]
     fn digit_separator_refuses() {
         // Upstream is SILENT here (unreadable_literal's territory).
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 1.000_000_1f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 1.000_000_1f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -323,20 +331,24 @@ mod tests {
         // The shortest form of 1e-5f32 is exponential; a decimal original
         // whose shortest form is exponential is UNPROBED — conservative
         // refusal.
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0.000010000f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 0.000010000f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn already_shortest_refuses() {
-        assert!(propose_fix(
-            "excessive_precision",
-            "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.1415927f32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "excessive_precision",
+                "fn f(hits: &mut Vec<u8>) -> f32 { hits.push(0); 2.1415927f32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

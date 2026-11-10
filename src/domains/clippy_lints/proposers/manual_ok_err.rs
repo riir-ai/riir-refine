@@ -49,7 +49,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Ident, Pat};
 
 use super::helpers::byte_range;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -191,11 +191,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            RULE,
-            "fn t(r: Result<u32, String>, sink: &mut Vec<u32>) { sink.push(r.unwrap_or(0)); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(r: Result<u32, String>, sink: &mut Vec<u32>) { sink.push(r.unwrap_or(0)); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

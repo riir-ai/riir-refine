@@ -865,7 +865,7 @@ pub use corpus::Corpus;
 pub use domain::{HealDomain, HealEntry};
 /// Back-compat: re-export drafter types at the old paths.
 pub use drafter::{DraftSource, DraftedFix, TernaryDrafter};
-pub use embedder::{embed, embed_into, Direction, EMBED_DIM};
+pub use embedder::{Direction, EMBED_DIM, embed, embed_into};
 pub use pruner::RustAnalyzerPruner;
 
 // ── Clippy domain re-exports (behind `clippy_lints` feature, default-on) ──
@@ -913,19 +913,19 @@ pub use domains::kernel_opt::corpus::build_kernel_seed_corpus;
 
 /// `kernel_opt` corpus category wiring (Plan 003) — category → `rule_ids` mapping + grouped corpus builder.
 #[cfg(feature = "kernel_opt")]
-pub use domains::kernel_opt::corpus::{build_corpus_categorized, KERNEL_CATEGORIES};
+pub use domains::kernel_opt::corpus::{KERNEL_CATEGORIES, build_corpus_categorized};
 
 /// `kernel_opt` expert router (behind `kernel_opt`).
 #[cfg(feature = "kernel_opt")]
 pub use domains::kernel_opt::router::{
-    build_activity, KernelExpertRouter, ACTIVITY_DIM, AXIS_DTYPE, AXIS_HW, AXIS_IS_ATTENTION,
-    AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM, AXIS_K, AXIS_M, AXIS_N, KERNEL_EXPERT_NAMES,
-    NUM_KERNEL_EXPERTS,
+    ACTIVITY_DIM, AXIS_DTYPE, AXIS_HW, AXIS_IS_ATTENTION, AXIS_IS_FUSION, AXIS_IS_IR_TRANSFORM,
+    AXIS_K, AXIS_M, AXIS_N, KERNEL_EXPERT_NAMES, KernelExpertRouter, NUM_KERNEL_EXPERTS,
+    build_activity,
 };
 
 // ── sec domain re-exports (behind `sec` feature, opt-in) ──────────────────
 #[cfg(feature = "sec")]
-pub use domains::sec::{count_unsafe, SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts};
+pub use domains::sec::{SecDomain, SecFamily, SecRule, SecVerdict, UnsafeCounts, count_unsafe};
 
 /// Back-compat: `build_sec_seed_corpus` (behind `sec`).
 #[cfg(feature = "sec")]
@@ -934,8 +934,8 @@ pub use domains::sec::corpus::build_sec_seed_corpus;
 // ── docker domain re-exports (behind `docker` feature, default since 2026-08-28) ────────────
 #[cfg(feature = "docker")]
 pub use domains::docker::{
-    refuses as docker_refusals, DockerDomain, DockerFamily, DockerRule, DockerVerdict,
-    SyntaxVersion,
+    DockerDomain, DockerFamily, DockerRule, DockerVerdict, SyntaxVersion,
+    refuses as docker_refusals,
 };
 
 /// The docker seed corpus (behind `docker`).
@@ -945,8 +945,8 @@ pub use domains::docker::corpus::build_docker_seed_corpus;
 // ── dist domain re-exports (behind `dist` feature, default since 2026-09-13) ─────────────────
 #[cfg(feature = "dist")]
 pub use domains::dist::{
-    refuses as dist_refusals, DistContext, DistDomain, DistFamily, DistRule, DistVerdict,
-    ProfileKnobs,
+    DistContext, DistDomain, DistFamily, DistRule, DistVerdict, ProfileKnobs,
+    refuses as dist_refusals,
 };
 
 /// The dist seed corpus (behind `dist`).
@@ -956,8 +956,8 @@ pub use domains::dist::corpus::build_dist_seed_corpus;
 // ── shader_perf domain re-exports (behind `shader_perf` feature, opt-in — Plan 134) ────────
 #[cfg(feature = "shader_perf")]
 pub use domains::shader_perf::{
-    entry_stages, refuses as shader_refusals, ShaderFamily, ShaderPerfDomain, ShaderRule,
-    ShaderVerdict, StageSet,
+    ShaderFamily, ShaderPerfDomain, ShaderRule, ShaderVerdict, StageSet, entry_stages,
+    refuses as shader_refusals,
 };
 
 /// The `shader_perf` seed corpus (behind `shader_perf`).
@@ -980,22 +980,22 @@ pub use memory::{
     CommitmentStatus, EvidenceTier, FixTrajectory, LatentFixMemory, LatentQuery, ScoredTrajectory,
 };
 pub use recorder::EvolveRecorder;
-pub use selection_entropic::{solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2};
+pub use selection_entropic::{KL_BUDGET_LN2, solve_beta, tilt_advantages_into, tilted_weights};
 pub use selection_tether::{
-    fit_rho, sse, TetherFit, TetherStats, DEFAULT_EMA_DECAY, DEFAULT_RHO, DEFAULT_WINDOW,
+    DEFAULT_EMA_DECAY, DEFAULT_RHO, DEFAULT_WINDOW, TetherFit, TetherStats, fit_rho, sse,
 };
 pub use self_evolve::{HealPipeline, HealResult, HealSource, SelectionMode, TuneReport};
 
 // Bench 669 consumer adoption (Plan 016).
 #[cfg(feature = "contrastive_scope")]
-pub use scope_model::{ScopeModel, KAPPA, OUT_OF_SCOPE_DOCS, THETA};
+pub use scope_model::{KAPPA, OUT_OF_SCOPE_DOCS, ScopeModel, THETA};
 
 // Proposal 005 Phase 0 T0.5/T0.6 (Plans 023 + 024): the KAT meter + charge surface.
 #[cfg(feature = "kat_service")]
 pub use kat_meter::{
-    count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
-    CHARGE_CHANGELOG, CHARGE_MICRO_KAT_PER_MILLION_TOKENS, CHARGE_VERSION,
-    FREE_TIER_GRANT_MICRO_KAT, KAT_WARN_REMAINING, METER_CHANGELOG, METER_VERSION,
+    CHARGE_CHANGELOG, CHARGE_MICRO_KAT_PER_MILLION_TOKENS, CHARGE_VERSION, ChargeState,
+    FREE_TIER_GRANT_MICRO_KAT, KAT_WARN_REMAINING, KatCharge, KatMeter, METER_CHANGELOG,
+    METER_VERSION, MeterState, count_word_tokens, kat_for_tokens,
 };
 
 // Issue 151: the secret-blind surface — scan, warn (suggest-only), blind.
@@ -1008,8 +1008,8 @@ pub mod secret_blind;
 // Proposal 005 Phase 0 T0.1 (Plan 025): the KAT account surface.
 #[cfg(feature = "kat_service")]
 pub use kat_account::{
-    account_id_for, short_id, AccountState, KatAccount, LoginOutcome, ACCOUNT_CHANGELOG,
-    ACCOUNT_VERSION,
+    ACCOUNT_CHANGELOG, ACCOUNT_VERSION, AccountState, KatAccount, LoginOutcome, account_id_for,
+    short_id,
 };
 
 // Proposal 005 Phase 0 T0.2 (Plan 026): the redaction-gate surface.
@@ -1020,9 +1020,9 @@ pub use kat_account::{
 // the ONE canonical table at default features. The path set is the
 // historical kat_service surface plus the ungated availability.
 pub use kat_redact::{
-    glob_match, redact, scan_secrets, BlockReason, Finding, FindingKind, GateDecision,
-    LoadedPolicy, RedactionGate, RedactionLog, SpanOrigin, SyncPolicy, DEFAULT_MAX_SPAN_BYTES,
-    POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
+    BlockReason, DEFAULT_MAX_SPAN_BYTES, Finding, FindingKind, GateDecision, LoadedPolicy,
+    POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION, RedactionGate, RedactionLog, SpanOrigin,
+    SyncPolicy, glob_match, redact, scan_secrets,
 };
 
 // Plan 005: latent retrieval surface (`--suggest` MVP).

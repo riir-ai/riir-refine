@@ -677,8 +677,8 @@ pub fn emit_status_table(report: &G1Report, path: &std::path::Path) -> std::io::
 
 /// The parsed store, keyed by `rule_id` (digests live in the value). Built
 /// once per process; keys borrow the committed static text.
-fn status_table(
-) -> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
+fn status_table()
+-> &'static std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)> {
     static TABLE: std::sync::OnceLock<
         std::collections::HashMap<&'static str, (G1Record, &'static str, &'static str)>,
     > = std::sync::OnceLock::new();

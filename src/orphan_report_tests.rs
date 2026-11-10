@@ -583,9 +583,10 @@ pub fn main() {
 fn decide() -> Verdict { Verdict::default() }
 "#;
     let wire = wire_of(src);
-    assert!(wire
-        .cleared
-        .contains(&("EpochSummary".to_string(), "advisory".to_string())));
+    assert!(
+        wire.cleared
+            .contains(&("EpochSummary".to_string(), "advisory".to_string()))
+    );
 }
 
 /// The riir-kat queue-writer shape (the 2026-09-16 fn-A/fn-B intake,
@@ -1068,9 +1069,11 @@ mod tests {
             .contains(&("Telemetry".to_string(), "session".to_string())),
         "production variable site clears; the test const site cannot arm wire-const"
     );
-    assert!(!wire
-        .wire_const
-        .contains(&("Telemetry".to_string(), "session".to_string())));
+    assert!(
+        !wire
+            .wire_const
+            .contains(&("Telemetry".to_string(), "session".to_string()))
+    );
 }
 
 /// A struct literal in a NON-serde fn is NOT wire evidence — the field
@@ -1468,10 +1471,11 @@ mod types {
 pub fn row() -> Node { Node { id: 7 } }
 ";
     let scan = scan_of(src);
-    assert!(scan
-        .fields
-        .iter()
-        .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id"));
+    assert!(
+        scan.fields
+            .iter()
+            .any(|f| f.candidate.struct_name == "Node" && f.candidate.field_name == "id")
+    );
 }
 
 // ── Issue 109 re-sight: the field-set closure ──
@@ -1658,9 +1662,11 @@ impl Default for BehaviorConfig {
             .any(|f| f.candidate.field_name == "calm"),
         "calm was never read — stillborn"
     );
-    assert!(report
-        .stillborn
-        .iter()
-        .all(|f| f.candidate.field_name != "alarm_radius"));
+    assert!(
+        report
+            .stillborn
+            .iter()
+            .all(|f| f.candidate.field_name != "alarm_radius")
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }

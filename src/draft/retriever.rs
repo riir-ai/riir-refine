@@ -52,7 +52,7 @@ use crate::ragplane::bm25::{Bm25Index, Tokenizer};
 use crate::ragplane::chunker::RawChunk;
 use crate::ragplane::embedder::Embedder;
 use crate::ragplane::math::desc;
-use crate::ragplane::query::{ChunkSource, LatentQuery, RetrievedChunk, LATENT_DIM};
+use crate::ragplane::query::{ChunkSource, LATENT_DIM, LatentQuery, RetrievedChunk};
 
 /// Top-K for the latent cosine stage. The substrate's `DEFAULT_LATENT_K`.
 const LATENT_K: usize = 16;
@@ -347,9 +347,18 @@ mod tests {
 
     fn corpus() -> Vec<(&'static str, &'static str)> {
         vec![
-            ("needless_return", "fn compute(x: i32) -> i32 { return x * 2; }"),
-            ("redundant_closure", "let names: Vec<String> = people.iter().map(|p| fmt(p)).collect();"),
-            ("lookup_loop", "fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}"),
+            (
+                "needless_return",
+                "fn compute(x: i32) -> i32 { return x * 2; }",
+            ),
+            (
+                "redundant_closure",
+                "let names: Vec<String> = people.iter().map(|p| fmt(p)).collect();",
+            ),
+            (
+                "lookup_loop",
+                "fn find_user(users: &Vec<User>, id: u32) -> Option<&User> {\n    for u in users {\n        if u.id == id { return Some(u); }\n    }\n    None\n}",
+            ),
         ]
     }
 

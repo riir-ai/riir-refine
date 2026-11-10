@@ -40,12 +40,12 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::compile_oracle::{
-    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict,
+    CheckRunner, CheckVerdict, check_verdict, owning_package_root, resolve_reported_path,
+    workspace_root,
 };
-use crate::span_embed::{span_embed as embed_shape, SPAN_EMBED_DIMS};
+use crate::span_embed::{SPAN_EMBED_DIMS, span_embed as embed_shape};
 
-use super::diag::{dedupe_by_site, parse_error_diags, RustcErrorDiag};
+use super::diag::{RustcErrorDiag, dedupe_by_site, parse_error_diags};
 use super::playbooks::{FixCandidate, Playbooks, SpanEdit};
 
 /// One attempt in the fix-compile loop's ORDERED sequence (Issue 91 T1.5 —

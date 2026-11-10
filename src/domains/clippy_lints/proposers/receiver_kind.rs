@@ -397,7 +397,9 @@ mod tests {
 
     #[test]
     fn safe_let_from_find_classifies_option() {
-        let k = kinds_of("fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); best.map_or(false, |x| *x > 2) }");
+        let k = kinds_of(
+            "fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); best.map_or(false, |x| *x > 2) }",
+        );
         assert_eq!(k.let_kinds.get("best"), Some(&ReceiverKind::OptionLike));
     }
 
@@ -420,13 +422,17 @@ mod tests {
 
     #[test]
     fn mutated_let_refused() {
-        let k = kinds_of("fn f(v: &[u8]) -> bool { let mut best = v.iter().find(|x| **x > 1); best.map_or(false, |x| *x > 2) }");
+        let k = kinds_of(
+            "fn f(v: &[u8]) -> bool { let mut best = v.iter().find(|x| **x > 1); best.map_or(false, |x| *x > 2) }",
+        );
         assert_eq!(k.let_kinds.get("best"), None);
     }
 
     #[test]
     fn reassigned_let_refused() {
-        let k = kinds_of("fn f(a: &[u8], b: &[u8]) -> bool { let best = a.iter().find(|x| **x > 1); let other = b.iter().find(|x| **x > 1); best = other; best.map_or(false, |x| *x > 2) }");
+        let k = kinds_of(
+            "fn f(a: &[u8], b: &[u8]) -> bool { let best = a.iter().find(|x| **x > 1); let other = b.iter().find(|x| **x > 1); best = other; best.map_or(false, |x| *x > 2) }",
+        );
         assert_eq!(k.let_kinds.get("best"), None);
         // `other` is fine (never reassigned) — the guard is per-name.
         assert_eq!(k.let_kinds.get("other"), Some(&ReceiverKind::OptionLike));
@@ -434,20 +440,26 @@ mod tests {
 
     #[test]
     fn shadowed_let_refused() {
-        let k = kinds_of("fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); let best = v.iter().find(|x| **x > 2); best.map_or(false, |x| *x > 3) }");
+        let k = kinds_of(
+            "fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); let best = v.iter().find(|x| **x > 2); best.map_or(false, |x| *x > 3) }",
+        );
         assert_eq!(k.let_kinds.get("best"), None);
     }
 
     #[test]
     fn let_shadowing_a_match_binding_refused() {
         // A match arm binding of the same name counts — soundness guard.
-        let k = kinds_of("fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); match v.first() { Some(best) => best > &1, None => false } }");
+        let k = kinds_of(
+            "fn f(v: &[u8]) -> bool { let best = v.iter().find(|x| **x > 1); match v.first() { Some(best) => best > &1, None => false } }",
+        );
         assert_eq!(k.let_kinds.get("best"), None);
     }
 
     #[test]
     fn param_collision_let_refused() {
-        let k = kinds_of("fn f(x: Result<u8, ()>) -> bool { let x = std::env::var(\"K\"); x.map_or(false, |v| v.len() > 1) }");
+        let k = kinds_of(
+            "fn f(x: Result<u8, ()>) -> bool { let x = std::env::var(\"K\"); x.map_or(false, |v| v.len() > 1) }",
+        );
         assert_eq!(k.let_kinds.get("x"), None);
         // The param kind still stands.
         assert_eq!(k.params.get("x"), Some(&ReceiverKind::ResultLike));
@@ -457,13 +469,17 @@ mod tests {
     fn unclassifiable_init_refused() {
         // `max_by_key` is not in the shape allowlist (evidence-driven set) —
         // Unknown init → no entry (conservative, same as a foreign call).
-        let k = kinds_of("fn f(v: &[u8]) -> bool { let best = v.iter().max_by_key(|x| *x); best.map_or(false, |x| *x > 2) }");
+        let k = kinds_of(
+            "fn f(v: &[u8]) -> bool { let best = v.iter().max_by_key(|x| *x); best.map_or(false, |x| *x > 2) }",
+        );
         assert_eq!(k.let_kinds.get("best"), None);
     }
 
     #[test]
     fn compound_assign_refused() {
-        let k = kinds_of("fn f(v: &[u8], n: &mut u32) -> bool { let best = v.iter().find(|x| **x > 1); *n += 1; best.map_or(false, |x| *x > 2) }");
+        let k = kinds_of(
+            "fn f(v: &[u8], n: &mut u32) -> bool { let best = v.iter().find(|x| **x > 1); *n += 1; best.map_or(false, |x| *x > 2) }",
+        );
         assert_eq!(k.let_kinds.get("best"), Some(&ReceiverKind::OptionLike));
         assert!(!k.let_kinds.contains_key("n"));
     }

@@ -765,7 +765,7 @@ mod tests {
     #[test]
     fn below_support_is_pending_with_the_reason() {
         let e = enrollment(9, 9); // pre rate 0.5
-                                  // post = (11,13) − (9,9) = (2 fails, 4 applied) = 6 attempts.
+        // post = (11,13) − (9,9) = (2 fails, 4 applied) = 6 attempts.
         let v = read(&e, &inputs(&tally(11, 13), &[]));
         assert_eq!(
             v,
@@ -887,8 +887,8 @@ mod tests {
     #[test]
     fn a_drop_that_does_not_exceed_the_era_drift_fails_the_bar() {
         let e = enrollment(18, 18); // pre rate 0.5
-                                    // The WHOLE era improved by ~0.175 — the control moved with the
-                                    // rule, so the drop is not attributable to the note.
+        // The WHOLE era improved by ~0.175 — the control moved with the
+        // rule, so the drop is not attributable to the note.
         let controls = [(
             "c1".to_string(),
             tally(20, 20), // pre rate 0.5

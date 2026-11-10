@@ -51,7 +51,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File};
 
 use super::helpers::byte_range;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -292,11 +292,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            RULE,
-            "fn t(s: &str, hits: &mut Vec<u8>) { hits.push(0); s.bytes().collect(); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(s: &str, hits: &mut Vec<u8>) { hits.push(0); s.bytes().collect(); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -392,53 +394,63 @@ mod tests {
     fn two_args_to_repeat_refuses() {
         // Does NOT compile (repeat takes 1 arg) but PARSES — the arity
         // guard is structural; propose_fix only parses.
-        assert!(propose_fix(
-            RULE,
-            "fn t(n: usize) -> Vec<u32> { std::iter::repeat(1u32, 2u32).take(n).collect() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(n: usize) -> Vec<u32> { std::iter::repeat(1u32, 2u32).take(n).collect() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn zero_args_refuses() {
-        assert!(propose_fix(
-            RULE,
-            "fn t(n: usize) -> Vec<u32> { std::iter::repeat().take(n).collect() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(n: usize) -> Vec<u32> { std::iter::repeat().take(n).collect() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn two_args_to_take_refuses() {
         // A method call with 2 args parses (and would not compile) — the
         // arity guard refuses it structurally.
-        assert!(propose_fix(
-            RULE,
-            "fn t(n: usize) -> Vec<u32> { std::iter::repeat(0u32).take(n, 5u32).collect() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(n: usize) -> Vec<u32> { std::iter::repeat(0u32).take(n, 5u32).collect() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn turbofish_qself_refuses() {
         // The generic args live on the callee path's last segment — not
         // the upstream firing shape (probe-measured silent).
-        assert!(propose_fix(
-            RULE,
-            "fn t(n: usize) -> Vec<u32> { std::iter::repeat::<u32>(0u32).take(n).collect() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(n: usize) -> Vec<u32> { std::iter::repeat::<u32>(0u32).take(n).collect() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn no_use_bare_repeat_refuses() {
         // Bare `repeat` with NO import — the spelling is unprovable (this
         // would not compile either, but the guard is structural).
-        assert!(propose_fix(
-            RULE,
-            "fn t(n: usize) -> Vec<u32> { repeat(0u32).take(n).collect() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                RULE,
+                "fn t(n: usize) -> Vec<u32> { repeat(0u32).take(n).collect() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

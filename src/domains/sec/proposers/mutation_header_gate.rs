@@ -240,7 +240,7 @@ impl FnLike for syn::ImplItemFn {
 
 #[cfg(test)]
 mod tests {
-    use super::{detect, ADVICE};
+    use super::{ADVICE, detect};
 
     fn findings(src: &str) -> Vec<super::MutationHeaderGateFinding> {
         let file = syn::parse_file(src).expect("fixture parses");

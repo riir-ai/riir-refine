@@ -28,7 +28,7 @@
 // Count→ratio casts over the fixture population (35); allowed with cause.
 #![allow(clippy::cast_precision_loss)]
 
-use riir_refine::draft::{concentration_fraction, margin_weight, span_margin, LatentMatcher};
+use riir_refine::draft::{LatentMatcher, concentration_fraction, margin_weight, span_margin};
 use riir_refine::score_bench::fixtures::fixtures;
 
 /// Spectrum buckets, ascending-margin order; the upper bound is INCLUSIVE

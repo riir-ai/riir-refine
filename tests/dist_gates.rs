@@ -8,9 +8,9 @@
 //! emit ([`refuses`]).
 #![cfg(feature = "dist")]
 
-use riir_refine::domains::dist::rules::{scan_source_with, DIST_RULES, FIXABLE_DIST};
-use riir_refine::domains::dist::{refuses, DistContext, DistDomain, ProfileKnobs};
 use riir_refine::HealDomain;
+use riir_refine::domains::dist::rules::{DIST_RULES, FIXABLE_DIST, scan_source_with};
+use riir_refine::domains::dist::{DistContext, DistDomain, ProfileKnobs, refuses};
 
 /// The suggest-only contract: the corpus, the detector table, and the
 /// fixable table agree, and Phase 1 ships NO bounded fix.
@@ -116,9 +116,11 @@ fn profiling_profile_assertions_rule_precision() {
 
     // inherits = "release" selects the OFF default — silent.
     let release_inherit = "[[bin]]\nname = \"s\"\n\n[profile.profiling]\ninherits = \"release\"\n";
-    assert!(findings_for(release_inherit)
-        .iter()
-        .all(|f| f.rule_id != D1));
+    assert!(
+        findings_for(release_inherit)
+            .iter()
+            .all(|f| f.rule_id != D1)
+    );
 
     // Vocabulary misses: dev/test-named profiles and a SUFFIXED name
     // (`profiling-fast` is an honest NO — exact-name match only).
@@ -215,7 +217,9 @@ fn canonical_repo_manifest_fires_three_and_completes_to_silence() {
         );
     }
 
-    let after = format!("{before}\n[profile.dist]\ninherits = \"release\"\nopt-level = \"s\"\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\nstrip = true\n");
+    let after = format!(
+        "{before}\n[profile.dist]\ninherits = \"release\"\nopt-level = \"s\"\nlto = \"fat\"\ncodegen-units = 1\npanic = \"abort\"\nstrip = true\n"
+    );
     let completed = scan_source_with(&after, DistContext::default());
     let ids: Vec<&str> = completed.iter().map(|f| f.rule_id).collect();
     // Batch 146: the complete profile silences the three ship-size rules —

@@ -62,9 +62,9 @@ use riir_rag::{Embedder, ModellessEmbedder};
 use riir_refine::domain::{HealDomain, HealEntry};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
 #[cfg(feature = "kernel_opt")]
-use riir_refine::domains::kernel_opt::corpus::build_kernel_seed_corpus;
-#[cfg(feature = "kernel_opt")]
 use riir_refine::domains::kernel_opt::KernelOptDomain;
+#[cfg(feature = "kernel_opt")]
+use riir_refine::domains::kernel_opt::corpus::build_kernel_seed_corpus;
 use riir_refine::domains::rust_perf::RustPerfDomain;
 use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;
 use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
@@ -73,7 +73,7 @@ use riir_refine::draft::retrieval_eval::mutate_shape;
 use riir_refine::draft::retrieval_eval::{canonical_rank, run_eval_with};
 use riir_refine::draft::{DomainId, IndexTokenizer, RetrievalConfig, RuleIndex};
 use riir_refine::modelability::{
-    rank_correlation, scaffold_value, ModelabilityConfig, ModelabilityReport,
+    ModelabilityConfig, ModelabilityReport, rank_correlation, scaffold_value,
 };
 
 /// Ranked-list depth (mirrors the eval's `PROBE_TOP_K`; top-1 only needs 1,
@@ -362,7 +362,9 @@ fn modelability_tracks_downstream_top1() {
     assert_eq!(rep1, rep2, "oracle must be deterministic");
 
     println!("== Issue 64 Phase 2 — modelability vs downstream top-1 ==");
-    println!("protocol: pre-registered Spearman gate >= 0.8 PASS / < 0.5 kill (verdict recorded, not CI-pinned)");
+    println!(
+        "protocol: pre-registered Spearman gate >= 0.8 PASS / < 0.5 kill (verdict recorded, not CI-pinned)"
+    );
     print_table(&points);
 
     let rho = rank_correlation(&xs, &ys).expect("non-constant by the asserts above");

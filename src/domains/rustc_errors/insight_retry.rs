@@ -69,7 +69,7 @@ use std::sync::{Arc, Mutex};
 
 use katgpt_core::best_belief_score;
 
-use super::driver::{order_candidates, AttemptOutcome, AttemptRecord, ObserverFn, OrderingFn};
+use super::driver::{AttemptOutcome, AttemptRecord, ObserverFn, OrderingFn, order_candidates};
 use super::playbooks::FixCandidate;
 use crate::insight::admit;
 

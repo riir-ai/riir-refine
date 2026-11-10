@@ -27,8 +27,8 @@
 use std::time::Instant;
 
 use riir_refine::domain::{HealDomain, HealEntry};
-use riir_refine::domains::clippy_lints::proposers::{propose_fix, FIXABLE_LINTS};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, propose_fix};
 use riir_refine::pruner::RustAnalyzerPruner;
 
 /// P11 — does L2 ever reject what `--fix` actually produces?

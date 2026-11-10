@@ -33,7 +33,7 @@
 //! (the annotation-pinned type could belong to a different binding than
 //! the cast site reads).
 
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprCast, File, FnArg, ItemFn, Local, Pat};
@@ -174,11 +174,7 @@ fn prim_ty_path(ty: &syn::Type) -> Option<String> {
     };
     let ident = p.path.get_ident()?;
     let name = ident.to_string();
-    if is_prim(&name) {
-        Some(name)
-    } else {
-        None
-    }
+    if is_prim(&name) { Some(name) } else { None }
 }
 
 /// Every `let x: T = …` binding with an explicit primitive-type

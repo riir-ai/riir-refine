@@ -84,8 +84,8 @@ use serde::Deserialize;
 // Re-exported here for back-compat — the bin and
 // the tests reach them through `fix_verify::`.
 pub use crate::compile_oracle::{
-    check_verdict, owning_package_root, resolve_reported_path, workspace_root, CheckRunner,
-    CheckVerdict, PackageGraph, CARGO_SPAWN_FAIL_PREFIX,
+    CARGO_SPAWN_FAIL_PREFIX, CheckRunner, CheckVerdict, PackageGraph, check_verdict,
+    owning_package_root, resolve_reported_path, workspace_root,
 };
 
 /// One edit, positioned for revert: its final-source line, its replacement
@@ -838,8 +838,8 @@ pub fn manifest_nondefault_feature_count(manifest_text: &str) -> usize {
 // existing call site — the bin's P43 arm, this suite, downstream paths —
 // keeps its stable path.
 pub use crate::manifest_gate::{
-    covering_targets, feature_set_from_args, manifest_feature_names, manifest_targets, AutoFlags,
-    FeatureSet, TargetRow,
+    AutoFlags, FeatureSet, TargetRow, covering_targets, feature_set_from_args,
+    manifest_feature_names, manifest_targets,
 };
 
 // ── the post-heal cfg audit (the 2026-09-10 intake) ─────────────────────
@@ -1113,11 +1113,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::True => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::True
-            }
+            if any_unknown { Tv::Unknown } else { Tv::True }
         }
         CfgExpr::Any(parts) => {
             let mut any_unknown = false;
@@ -1128,11 +1124,7 @@ fn eval_cfg(expr: &CfgExpr, set: &FeatureSet) -> Tv {
                     Tv::False => {}
                 }
             }
-            if any_unknown {
-                Tv::Unknown
-            } else {
-                Tv::False
-            }
+            if any_unknown { Tv::Unknown } else { Tv::False }
         }
     }
 }
@@ -3057,9 +3049,11 @@ mod tests {
             2,
             "every edit sits behind the file gate: {marks:?}"
         );
-        assert!(marks
-            .iter()
-            .all(|m| m.not_enabled == vec!["kat_migrate".to_string()]));
+        assert!(
+            marks
+                .iter()
+                .all(|m| m.not_enabled == vec!["kat_migrate".to_string()])
+        );
         assert!(marks.iter().all(|m| m.undecidable.is_empty()));
         assert!(
             marks

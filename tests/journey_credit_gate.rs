@@ -24,7 +24,7 @@
 #![cfg(all(feature = "rustc_errors", feature = "latent_retrieval"))]
 
 use riir_refine::domains::rustc_errors::driver::{
-    AttemptOutcome, AttemptRecord, JourneyCredit, JOURNEY_ALPHA, JOURNEY_RHO,
+    AttemptOutcome, AttemptRecord, JOURNEY_ALPHA, JOURNEY_RHO, JourneyCredit,
 };
 use riir_refine::journey::journey_factor;
 use riir_refine::traj_store::TrajStore;

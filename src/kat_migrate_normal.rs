@@ -21,8 +21,8 @@
 use crate::kat_migrate_client::{FileOutcome, FileParams};
 use riir_kat::kat_protocol_migrate::MigrateRequestState;
 use riir_kat::kat_recovery_client::{
-    bind_flow, compose_numeric_claim, nonce_flow, BindRequest, RecoveryFailure, RecoveryRefused,
-    RecoveryTransport,
+    BindRequest, RecoveryFailure, RecoveryRefused, RecoveryTransport, bind_flow,
+    compose_numeric_claim, nonce_flow,
 };
 use std::fmt::Write as _;
 use std::path::Path;

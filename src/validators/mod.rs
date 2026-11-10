@@ -27,16 +27,16 @@ pub mod interp;
 pub mod store;
 
 pub use interp::{
-    Outcome, Trap, Vm, ABI_FUNC, ABI_INPUT_ADDR, ABI_SCORE_ADDR, DEFAULT_FUEL, MEM_LEN,
+    ABI_FUNC, ABI_INPUT_ADDR, ABI_SCORE_ADDR, DEFAULT_FUEL, MEM_LEN, Outcome, Trap, Vm,
 };
 pub use store::{
-    advantage_certified, withdrawal_excludes, AdmittedValidator, StoreError, ValidatorManifest,
-    ValidatorRecord, ValidatorState, ValidatorStore, MANIFEST_FILE,
+    AdmittedValidator, MANIFEST_FILE, StoreError, ValidatorManifest, ValidatorRecord,
+    ValidatorState, ValidatorStore, advantage_certified, withdrawal_excludes,
 };
 
 use katgpt_percepta::wasm::{
-    check_basic_only, decode, lower_hard_ops, lower_i64_ops, DataSegment, DecodeError, ExportKind,
-    ImportKind, WasmInstr, OP_BLOCK, OP_ELSE, OP_END, OP_IF, OP_LOOP, VALTYPE_I32,
+    DataSegment, DecodeError, ExportKind, ImportKind, OP_BLOCK, OP_ELSE, OP_END, OP_IF, OP_LOOP,
+    VALTYPE_I32, WasmInstr, check_basic_only, decode, lower_hard_ops, lower_i64_ops,
 };
 use std::collections::HashMap;
 
@@ -347,7 +347,7 @@ fn build_ctrls(instrs: &[WasmInstr]) -> Result<Vec<Ctrl>, AdmissionError> {
                     other => {
                         return Err(AdmissionError::BlockTypeUnsupported(
                             other.copied().unwrap_or(-1),
-                        ))
+                        ));
                     }
                 };
                 open.push(Some(Open {

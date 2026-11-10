@@ -41,7 +41,7 @@
 use crate::kat_service_config::{host_of, is_loopback_host, validate_service_url};
 #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
 use crate::kat_service_urls::DEVNET_SERVICE_URL;
-use crate::kat_service_urls::{canonical_service_url, LEGACY_SERVICE_URLS, MAINNET_SERVICE_URL};
+use crate::kat_service_urls::{LEGACY_SERVICE_URLS, MAINNET_SERVICE_URL, canonical_service_url};
 
 /// The devnet host URL, posture-adaptive: `None` at a mainnet-only
 /// compilation (the const is cfg'd out there — compile-to-nothing), the

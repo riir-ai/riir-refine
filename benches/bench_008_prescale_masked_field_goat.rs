@@ -923,7 +923,9 @@ fn main() {
         let (_, n) = alloc_armed(|| gemv_masked2(&s2.rows, &s2.x, &mut s2.scratch));
         assert_eq!(n, 0, "G4 FAIL: the 2-bit OPT arm allocates ({n})");
     }
-    say("G4 PASS — zero allocations, both arms of all three swept faces, staging included (pre-allocated scratch)");
+    say(
+        "G4 PASS — zero allocations, both arms of all three swept faces, staging included (pre-allocated scratch)",
+    );
 
     // ══ G2 — the GEMV sweep, interleaved best-of-N ══
     say("── G2: GEMV sweep (rows x K), opt (masked+prescale) vs naive (shift-down) ──");
@@ -1081,11 +1083,17 @@ fn main() {
         say(&format!(
             "PARETO-PASS — G1 bit-identical, G4 zero-alloc, opt strictly faster at every one of {} shapes x all three swept faces{}",
             ROWS_GRID.len() * K_GRID.len(),
-            if citable { "" } else { " (TIMING PROVISIONAL — quote the PROVENANCE line)" }
+            if citable {
+                ""
+            } else {
+                " (TIMING PROVISIONAL — quote the PROVENANCE line)"
+            }
         ));
         std::process::exit(0);
     } else {
-        say("PARETO-FAIL — the opt arm lost or tied at least one shape (a real measured outcome; record the per-arm split)");
+        say(
+            "PARETO-FAIL — the opt arm lost or tied at least one shape (a real measured outcome; record the per-arm split)",
+        );
         std::process::exit(1);
     }
 }

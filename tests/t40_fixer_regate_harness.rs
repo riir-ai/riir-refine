@@ -16,8 +16,8 @@
 
 #![cfg(feature = "cf_workers_ai")]
 
-use riir_refine::cf_workers_ai::{self, reachable_samples, MissClass, RegateHarness, SampleSource};
 use riir_refine::ClippyVerifier;
+use riir_refine::cf_workers_ai::{self, MissClass, RegateHarness, SampleSource, reachable_samples};
 
 fn harness() -> RegateHarness {
     RegateHarness::new().expect("harness init (corpus verify + reachable premise)")
@@ -108,8 +108,14 @@ fn planted_controls_score_correctly_through_the_real_instrument() {
         ),
     ] {
         let s = score(id, gen);
-        assert!(s.keep_oracle, "{id}: positive control must pass the oracle filter: {s:?}");
-        assert!(s.keep_strict, "{id}: positive control must pass the strict filter: {s:?}");
+        assert!(
+            s.keep_oracle,
+            "{id}: positive control must pass the oracle filter: {s:?}"
+        );
+        assert!(
+            s.keep_strict,
+            "{id}: positive control must pass the strict filter: {s:?}"
+        );
     }
 
     // Negative: noop echo — findings unchanged, never kept.

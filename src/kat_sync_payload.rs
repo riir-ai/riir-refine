@@ -92,9 +92,9 @@
 //!   terminal-state rule): assert bytes-gone, not zero findings.
 
 use crate::kat_redact::{
-    BlockReason, Finding, GateDecision, RedactionGate, SpanOrigin, REDACT_VERSION,
+    BlockReason, Finding, GateDecision, REDACT_VERSION, RedactionGate, SpanOrigin,
 };
-use crate::traj_store::{shape_hash, TrajRowDoc};
+use crate::traj_store::{TrajRowDoc, shape_hash};
 use ed25519_dalek::{Signer as _, Verifier as _};
 
 /// The payload SCHEMA version (G9b). Bump ONLY when the wire shape changes
@@ -327,7 +327,7 @@ pub struct PayloadRow {
 // kat_service dep tree. Re-exported here — every historical path
 // (`kat_sync_payload::RuleDomains`, the sync builder, the pending
 // estimator, the fixstats fold) resolves unchanged.
-pub use crate::rule_domains::{RuleDomains, RUSTC_ERRORS_DOMAIN};
+pub use crate::rule_domains::{RUSTC_ERRORS_DOMAIN, RuleDomains};
 
 /// Per-row gate metadata — the "gate fingerprints are recorded in payload
 /// metadata" contract. Fingerprints only; never bytes.

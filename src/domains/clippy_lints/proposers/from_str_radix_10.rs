@@ -34,7 +34,7 @@ use syn::visit::Visit;
 use syn::{ExprCall, File};
 
 use super::helpers::{byte_range, drops_interior_comment, int_lit, is_postfix_safe};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The int primitives — exactly the types with BOTH a `from_str_radix`
 /// inherent assoc fn and a `FromStr` impl defined through it.
@@ -223,11 +223,13 @@ mod tests {
         )
         .is_none());
         // 1-arg / 3-arg calls.
-        assert!(propose_fix(
-            "from_str_radix_10",
-            "fn num(hits: &mut Vec<u32>) { hits.push(0); let _ = u32::from_str_radix(\"1\"); }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "from_str_radix_10",
+                "fn num(hits: &mut Vec<u32>) { hits.push(0); let _ = u32::from_str_radix(\"1\"); }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

@@ -34,8 +34,8 @@
 use syn::visit::Visit;
 use syn::{File, Pat, Stmt};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(_source: &str, file: &File) -> Vec<SourceEdit> {
@@ -93,11 +93,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64) -> String { let ref y = &a; y.to_string() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64) -> String { let ref y = &a; y.to_string() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -116,11 +118,13 @@ mod tests {
     fn match_shape_refused_match_ref_pats_owns_it() {
         // The co-fire class: match_ref_pats (landed, Batch 169) owns the
         // match-arm shape — this rule emits nothing there.
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub enum E { A, B }\npub fn f(r: &E) -> u8 { match r { &E::A => 1, &E::B => 2 } }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub enum E { A, B }\npub fn f(r: &E) -> u8 { match r { &E::A => 1, &E::B => 2 } }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -138,50 +142,60 @@ mod tests {
     fn ref_mut_inner_refuses() {
         // The mut inner binding is the unmeasured spelling — v1 stays
         // non-mut (narrower than clippy, documented).
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(mut a: u64) { let &mut ref mut y = &mut a; *y += 1; }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(mut a: u64) { let &mut ref mut y = &mut a; *y += 1; }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn outer_mut_refuses() {
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(mut a: u64) { let &mut ref y = &mut a; let _ = y; }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(mut a: u64) { let &mut ref y = &mut a; let _ = y; }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn plain_ref_binding_refuses() {
         // `ref y` WITHOUT the `&`-destructure is the owned-scrutinee
         // shape — upstream SILENT (probe nbr_ref_bind_owned).
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64) { let ref y = &a; let _ = y; }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64) { let ref y = &a; let _ = y; }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_ref_pattern_refuses() {
         // `&y` (move-out destructure) is a different shape entirely.
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64) -> u64 { let &y = &a; y }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64) -> u64 { let &y = &a; y }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn subpattern_refuses() {
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64) { let &ref y @ _ = &a; let _ = y; }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64) { let &ref y @ _ = &a; let _ = y; }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -189,20 +203,24 @@ mod tests {
         // Editing the pattern would birth an IRREFUTABLE let-else
         // (broken code — the else survives outside the edit span), so
         // the LocalInit.diverge guard refuses.
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64) -> u64 { let &ref y = &a else { return 0 }; *y }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64) -> u64 { let &ref y = &a else { return 0 }; *y }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn tuple_pattern_refuses() {
-        assert!(propose_fix(
-            "needless_borrowed_reference",
-            "pub fn f(a: u64, b: u64) -> u64 { let (&ref y, _) = (&a, &b); *y }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_borrowed_reference",
+                "pub fn f(a: u64, b: u64) -> u64 { let (&ref y, _) = (&a, &b); *y }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

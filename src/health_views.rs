@@ -902,7 +902,9 @@ mod tests {
         let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
         assert_eq!(
             labels,
-            vec!["kernel", "perf", "clippy", "sec", "docker", "dist", "shader"]
+            vec![
+                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
+            ]
         );
         assert_eq!(rows[0].total, 1603); // plan 354: clippy +2 (the doc-section pair, the Bench-141 dual-evidence heads); prior: Batch 345: perf +5 (entries_70, the LocalSR distill, Plan 357 / Research 389) + sec +1 (the execution-artifact trust ladder) + kernel +1 (entries_gpu_154, the backend acceptance gate); prior: Batch 343: perf +2 (entries_69, the sccache cache-layer pair, Plan 355 / Research 387); prior: Batch 342: sec +2 (the harness-adapters pair, Plan 352 / Research 385); prior: Batch 341: kernel +2 (entries_gpu_153) + perf +1 (entries_68, the metal-graph pair + the measurement-honesty rule, Plan 350 / Research 383); prior: Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
     }

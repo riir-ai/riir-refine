@@ -43,7 +43,7 @@
 #![allow(clippy::pedantic)]
 
 use riir_refine::validators::{
-    Outcome, StoreError, Trap, ValidatorStore, Vm, ABI_INPUT_ADDR, DEFAULT_FUEL, MEM_LEN,
+    ABI_INPUT_ADDR, DEFAULT_FUEL, MEM_LEN, Outcome, StoreError, Trap, ValidatorStore, Vm,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -318,7 +318,7 @@ fn preflight() -> (String, String) {
             return (
                 "UNAVAILABLE".to_string(),
                 format!("preflight spawn failed: {e}"),
-            )
+            );
         }
     };
     let text = String::from_utf8_lossy(&out.stdout).to_string();
@@ -724,7 +724,11 @@ fn main() {
                 say(&format!(
                     "cargo clippy (auto-oracle shape) over a {CLIPPY_PROBE_FNS}-finding scratch crate: {:?} wall · {findings} useless_format findings {}",
                     wall,
-                    if findings >= CLIPPY_PROBE_FNS { "✓" } else { "⚠ UNDER-COUNT — not a baseline" },
+                    if findings >= CLIPPY_PROBE_FNS {
+                        "✓"
+                    } else {
+                        "⚠ UNDER-COUNT — not a baseline"
+                    },
                 ));
                 say(&format!(
                     "per-run oracle cost vs the per-span pre-gate: the pre-gate filters at edit time ({wasm_mean} ns/span), the oracle at batch time"
@@ -740,7 +744,9 @@ fn main() {
     if prov_state != "PASSED"
         && std::env::var("WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE").is_ok_and(|v| v == "1")
     {
-        say("GATE POSTURE: provenance not PASSED and WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE=1 — exit 2");
+        say(
+            "GATE POSTURE: provenance not PASSED and WASM_VALIDATOR_BENCH_REQUIRE_PROVENANCE=1 — exit 2",
+        );
         std::process::exit(2);
     }
 }

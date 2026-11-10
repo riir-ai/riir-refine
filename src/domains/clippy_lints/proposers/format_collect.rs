@@ -55,7 +55,7 @@
 //! insertion restore = "").
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use std::collections::BTreeSet;
 use syn::spanned::Spanned;
 use syn::visit::Visit;

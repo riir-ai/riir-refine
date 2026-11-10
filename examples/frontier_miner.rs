@@ -49,8 +49,8 @@ use std::collections::BTreeSet;
 
 use riir_refine::draft::clippy_oracle::OracleVerdict;
 use riir_refine::frontier_miner::{
-    admit, append_rows, apply_solution, band_rows, generate, heal_under_view, load_known,
-    AdmittedRow, CorpusView, MinerRow, Mode, Rejection, Solution, MINER_ROWS_JSONL,
+    AdmittedRow, CorpusView, MINER_ROWS_JSONL, MinerRow, Mode, Rejection, Solution, admit,
+    append_rows, apply_solution, band_rows, generate, heal_under_view, load_known,
 };
 use riir_refine::frontier_pairs::PROVENANCE;
 use riir_refine::frontier_report;

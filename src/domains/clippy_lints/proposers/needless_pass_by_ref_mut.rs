@@ -41,7 +41,7 @@
 //! break). Wrong fixes on BOTH halves are check-visible compile errors
 //! (E0596/E0384) the `--verify` gate auto-reverts — the tier argument.
 
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, File, Item, Visibility};

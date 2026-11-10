@@ -44,7 +44,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprClosure, ExprMethodCall, File, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, file_shadows, slice_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// Names whose file-level shadowing makes the emit meaning-changing.
 const SHADOW_NAMES: &[&str] = &["String", "Vec", "HashMap", "HashSet"];

@@ -18,7 +18,7 @@
 //! with the ORIGINAL source text of the surviving operand.
 
 use super::helpers::int_lit;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, File};
 

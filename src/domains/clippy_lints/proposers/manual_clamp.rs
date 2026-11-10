@@ -39,7 +39,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The scalar annotations `manual_clamp` admits — the TOTAL-order set
 /// (ints + char). `f32`/`f64` refuse (the NaN divergence); `bool` refuses
@@ -349,22 +349,26 @@ mod tests {
     fn float_receiver_refuses() {
         // The NaN anti-regime witness: NaN.max(3.0).min(5.0) == 3.0 but
         // NaN.clamp(3.0, 5.0) == NaN — a real behavior change.
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn band(x: f64, hits: &mut Vec<f64>) -> f64 { hits.push(x); x.max(3.0).min(5.0) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_clamp",
+                "fn band(x: f64, hits: &mut Vec<f64>) -> f64 { hits.push(x); x.max(3.0).min(5.0) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn inverted_bounds_refuse() {
         // clamp asserts min <= max (release too); the manual chain never
         // panics — an inverted pair is a behavior change.
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(5).min(3) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_clamp",
+                "fn band(x: i32, hits: &mut Vec<i32>) -> i32 { hits.push(x); x.max(5).min(3) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -375,20 +379,24 @@ mod tests {
         )
         .is_none());
         // Unproven receiver (generic param — the derivation's soundness leg).
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn band<T: Ord>(x: T) -> T { x.max(3).min(5) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_clamp",
+                "fn band<T: Ord>(x: T) -> T { x.max(3).min(5) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_ident_receiver_refuses() {
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn at(v: Vec<i32>) -> i32 { v[0].max(3).min(5) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_clamp",
+                "fn at(v: Vec<i32>) -> i32 { v[0].max(3).min(5) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -414,10 +422,12 @@ mod tests {
 
     #[test]
     fn comment_in_glue_refuses() {
-        assert!(propose_fix(
-            "manual_clamp",
-            "fn band(x: i32) -> i32 { x.max(/* lo */ 3).min(5) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_clamp",
+                "fn band(x: i32) -> i32 { x.max(/* lo */ 3).min(5) }",
+            )
+            .is_none()
+        );
     }
 }

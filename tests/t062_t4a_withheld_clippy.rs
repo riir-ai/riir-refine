@@ -19,9 +19,9 @@
 #![cfg(all(feature = "tpr_structure", feature = "latent_retrieval"))]
 
 use riir_refine::draft::tpr_t4a_withheld::{
-    print_t4a, run_t4a, run_t4a_at, SkipReason, T4aVerdict, COALESCE_T, DS, T4A_MARGIN_PP,
+    COALESCE_T, DS, SkipReason, T4A_MARGIN_PP, T4aVerdict, print_t4a, run_t4a, run_t4a_at,
 };
-use riir_refine::draft::withheld_pair_ood::{clippy_population, Binding};
+use riir_refine::draft::withheld_pair_ood::{Binding, clippy_population};
 
 /// The Plan 049 T0.1 committed real-repo dataset — the only source of genuine
 /// shape diversity in the clippy population (Bench 062 §10). Absent → the run

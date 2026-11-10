@@ -16,7 +16,7 @@
 #![cfg(feature = "wasm_validator")]
 
 use katgpt_percepta::wasm::{OP_BR, OP_DROP, OP_END, OP_I32_CONST, OP_I32_STORE, OP_LOOP};
-use riir_refine::validators::{AdmissionError, Outcome, Trap, ValidatorModule, Vm, DEFAULT_FUEL};
+use riir_refine::validators::{AdmissionError, DEFAULT_FUEL, Outcome, Trap, ValidatorModule, Vm};
 
 /// `f32.const` — deliberately NOT in the decoder's re-export list (the lane
 /// never executes floats); the admission test uses the raw opcode byte.

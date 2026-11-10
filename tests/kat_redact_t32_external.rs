@@ -59,8 +59,8 @@
 #![cfg(feature = "kat_service")]
 
 use riir_refine::kat_redact::{
-    scan_secrets, BlockReason, Finding, FindingKind, GateDecision, RedactionGate, SpanOrigin,
-    SyncPolicy, REDACT_VERSION,
+    BlockReason, Finding, FindingKind, GateDecision, REDACT_VERSION, RedactionGate, SpanOrigin,
+    SyncPolicy, scan_secrets,
 };
 
 /// The SHIPPED policy shape (same as G4's — `external` absent by design).
@@ -201,17 +201,16 @@ fn attack_corpus() -> Vec<Attack> {
             exploits: "no long alnum run exists to scan — the value is decimal byte literals",
             span: format!(
                 "const K: [u8; 20] = [{}];\n",
-                k.bytes().map(|b| b.to_string()).collect::<Vec<_>>().join(", ")
+                k.bytes()
+                    .map(|b| b.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         },
         Attack {
             id: "concat-split",
             exploits: "documented gap: token-based scan; the prefix never abuts its body",
-            span: format!(
-                "let key = concat!(\"{}\", \"{}\");\n",
-                &k[..4],
-                &k[4..]
-            ),
+            span: format!("let key = concat!(\"{}\", \"{}\");\n", &k[..4], &k[4..]),
         },
         Attack {
             id: "line-split",
@@ -223,14 +222,19 @@ fn attack_corpus() -> Vec<Attack> {
             exploits: "arbitrary reversible transform — unbounded class, no pattern can enumerate it",
             span: format!(
                 "const K: [u8; 20] = [{}]; // xor 0x5a\n",
-                k.bytes().map(|b| (b ^ 0x5a).to_string()).collect::<Vec<_>>().join(", ")
+                k.bytes()
+                    .map(|b| (b ^ 0x5a).to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         },
         Attack {
             id: "reversed",
             exploits: "the prefix rule anchors on a literal prefix; reversal moves it to the tail",
-            span: format!("let key: String = \"{}\".chars().rev().collect();\n",
-                k.chars().rev().collect::<String>()),
+            span: format!(
+                "let key: String = \"{}\".chars().rev().collect();\n",
+                k.chars().rev().collect::<String>()
+            ),
         },
     ]
 }

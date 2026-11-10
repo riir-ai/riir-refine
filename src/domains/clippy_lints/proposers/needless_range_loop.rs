@@ -130,8 +130,8 @@
 //! the mirror guard (`clippy_feed::range_loop_len_proof` — clippy's own
 //! cross-binding length proofs are declined as untrustable there).
 
-use super::uninlined_format_args::{all_expr_args, post_template_expr_args, ExprMacroArg};
-use super::{apply_edits, edit, for_each_fn, src, SourceEdit};
+use super::uninlined_format_args::{ExprMacroArg, all_expr_args, post_template_expr_args};
+use super::{SourceEdit, apply_edits, edit, for_each_fn, src};
 use proc_macro2::TokenTree;
 use std::collections::BTreeSet;
 use syn::spanned::Spanned;
@@ -1267,8 +1267,7 @@ mod tests {
     /// non-slot body use (`v.len()`) was E0382 in the OUTPUT. Must refuse.
     #[test]
     fn mut_param_other_collection_use_refuses() {
-        let input =
-            "fn go(v: &mut Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i] + v.len() as u32; } s }";
+        let input = "fn go(v: &mut Vec<u32>) -> u32 { let mut s = 0; for i in 0..v.len() { s += v[i] + v.len() as u32; } s }";
         let out = propose_fix("needless_range_loop", input);
         assert!(
             out.is_none(),
@@ -1363,8 +1362,7 @@ mod tests {
     /// new descent makes the check load-bearing.
     #[test]
     fn templateless_macro_with_hidden_capture_refuses() {
-        let input =
-            "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {i}\", ); assert!(v[i] > 2); } }";
+        let input = "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {i}\", ); assert!(v[i] > 2); } }";
         let out = propose_fix("needless_range_loop", input);
         assert!(out.is_none(), "hidden capture must refuse: {out:?}");
     }
@@ -1374,8 +1372,7 @@ mod tests {
     /// fails Expr parsing harmlessly and the slot arg descends.
     #[test]
     fn tracing_named_target_slot_arg_heals() {
-        let input =
-            "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {}\", v[i]); } }";
+        let input = "fn go(v: &[u32], t: &str) { for i in 0..v.len() { log::info!(target: t, \"at {}\", v[i]); } }";
         let out = propose_fix("needless_range_loop", input).expect("matched");
         assert!(out.contains("\"at {}\", *item"), "{out}");
         syn::parse_file(&out).expect("re-parses");
@@ -1403,8 +1400,7 @@ mod tests {
     /// (dangling `i`). Found by clippy-bench run #1 (Issue 032).
     #[test]
     fn rewrite_is_one_atomic_whole_loop_edit() {
-        let input =
-            "pub fn total_damage(hits: &[u32]) -> u32 {\n    let mut total = 0;\n    for i in 0..hits.len() {\n        total += hits[i];\n    }\n    total\n}";
+        let input = "pub fn total_damage(hits: &[u32]) -> u32 {\n    let mut total = 0;\n    for i in 0..hits.len() {\n        total += hits[i];\n    }\n    total\n}";
         let file = syn::parse_file(input).expect("fixture parses");
         let edits = super::collect_edits(input, &file);
         assert_eq!(edits.len(), 1, "must be exactly one edit: {edits:?}");

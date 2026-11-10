@@ -44,7 +44,7 @@ use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, File, ImplItemFn, ItemFn, Lit};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -125,11 +125,7 @@ impl Collector<'_> {
         // (eq, lit) → bool algebra identity: == true / != false → x;
         // != true / == false → !x.
         let keep = eq == lit_val;
-        if keep {
-            Some(x)
-        } else {
-            Some(format!("!{x}"))
-        }
+        if keep { Some(x) } else { Some(format!("!{x}")) }
     }
 }
 
@@ -172,11 +168,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "bool_comparison",
-            "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "bool_comparison",
+                "fn flag(x: bool, hits: &mut Vec<bool>) -> bool { hits.push(x); x }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -243,11 +241,13 @@ mod tests {
     fn unproven_operand_refuses() {
         // A non-bool operand (the literal check is syntactic; the proven
         // map carries the type). `x` here is u32 — refuse.
-        assert!(propose_fix(
-            "bool_comparison",
-            "fn f(x: u32, hits: &mut Vec<bool>) -> bool { hits.push(false); x == true }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "bool_comparison",
+                "fn f(x: u32, hits: &mut Vec<bool>) -> bool { hits.push(false); x == true }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

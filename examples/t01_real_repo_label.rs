@@ -49,8 +49,8 @@
 use riir_rag::ast_chunker::AstChunker;
 use riir_rag::chunker::Chunker;
 use riir_refine::domain::{HealDomain, HealEntry};
-use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
 use riir_refine::domains::clippy_lints::ClippyLintDomain;
+use riir_refine::domains::clippy_lints::proposers::{FIXABLE_LINTS, VERIFY_LINTS};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{BufRead, BufReader};

@@ -64,7 +64,7 @@ use std::io::IsTerminal as _;
 // carries, the ONE µ↔KAT conversion (re-exported so the token-million
 // sites can name BOTH millions beside each other), and the token million
 // defined below (riir-dapps Plan 035 T3 + T10).
-pub use crate::kat_units::{MicroKat, MICRO_PER_KAT};
+pub use crate::kat_units::{MICRO_PER_KAT, MicroKat};
 
 /// Tokens per **million tokens (Mtok)** — the pricing axis's million, NOT
 /// the money one. Per-Mtok $ rates and µ-per-Mtok KAT billing
@@ -773,7 +773,9 @@ mod tests {
             ..footer_mixed()
         }
         .render(false);
-        assert!(unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 contribution batch(es) queued"));
+        assert!(
+            unsynced.contains("⚠ 0.0176 KAT unsynced (burn) · 1 contribution batch(es) queued")
+        );
         assert!(unsynced.contains("or `cargo refine sync`"));
 
         let logged_out = KatFooter {

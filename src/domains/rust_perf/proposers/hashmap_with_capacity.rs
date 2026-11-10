@@ -55,7 +55,7 @@
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprForLoop, File, Local, Pat, Path, Stmt};
 
-use super::{edit, span_range, src, SourceEdit};
+use super::{SourceEdit, edit, span_range, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut scan = BlockScan {
@@ -524,26 +524,30 @@ mod tests {
     #[test]
     fn range_loop_skips() {
         // No collection to len() — the count is not derivable.
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(n: u64) -> HashMap<u64, u64> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(n: u64) -> HashMap<u64, u64> {\n    \
              let mut m = HashMap::new();\n    for i in 0..n {\n        m.insert(i, i);\n    }\n    \
              m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn intervening_seed_insert_skips() {
         // First mention is a seed insert, not the loop — the len→capacity
         // association is muddied.
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::new();\n    m.insert(0, 0);\n    for &it in items {\n        \
              m.insert(it, it);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -559,45 +563,53 @@ mod tests {
 
     #[test]
     fn turbofish_form_skips() {
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::<u32, u32>::new();\n    for &it in items {\n        \
              m.insert(it, it);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn qualified_path_form_skips() {
         // The splice would have to rewrite the path — conservative skip.
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "fn f(items: &[u32]) -> std::collections::HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "fn f(items: &[u32]) -> std::collections::HashMap<u32, u32> {\n    \
              let mut m = std::collections::HashMap::new();\n    for &it in items {\n        \
              m.insert(it, it);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_mut_binding_skips() {
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(items: &[u32]) -> HashMap<u32, u32> {\n    \
              let m = HashMap::new();\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn shadowing_rebind_skips() {
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(items: &[u32]) -> usize {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(items: &[u32]) -> usize {\n    \
              let mut m = HashMap::new();\n    let m = 3;\n    let _ = m;\n    items.len()\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -629,13 +641,15 @@ mod tests {
 
     #[test]
     fn into_iter_skips() {
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f(items: Vec<u32>) -> HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f(items: Vec<u32>) -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::new();\n    for it in items.into_iter() {\n        \
              m.insert(it, 1);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -646,13 +660,15 @@ mod tests {
         // bomber_17_feedback_goat — three maps, `all_names` declared after,
         // looped over further down; unrelated-statement skipping had
         // sailed past its `let`.
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f() -> HashMap<String, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f() -> HashMap<String, u32> {\n    \
              let mut m = HashMap::new();\n    let names: Vec<String> = vec![\"a\".into()];\n    \
              for n in &names {\n        m.insert(n.clone(), 1);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -748,13 +764,15 @@ mod tests {
     fn len_base_bound_between_map_and_loop_stays() {
         // The opaque-init guard composes with the E0425 guard: even a
         // KNOWN-len init refuses when bound between the map and the loop.
-        assert!(propose_fix(
-            "hashmap-with-capacity",
-            "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "hashmap-with-capacity",
+                "use std::collections::HashMap;\nfn f() -> HashMap<u32, u32> {\n    \
              let mut m = HashMap::new();\n    let items = vec![1u32, 2];\n    \
              for it in &items {\n        m.insert(*it, 1);\n    }\n    m\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     /// Plan 097 T4 — the map at fn level, the insert loop one block deeper

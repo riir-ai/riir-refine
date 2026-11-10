@@ -27,7 +27,7 @@
 
 #![allow(clippy::cast_precision_loss)] // count/display fixtures
 
-use riir_refine::gp_acquisition::{GpAcquisition, DIM};
+use riir_refine::gp_acquisition::{DIM, GpAcquisition};
 
 /// Relative σ² range below which the surface is called FLAT (the T5 bar:
 /// (max−min)/mean under this = the ordering carries no signal beyond noise).
@@ -188,7 +188,7 @@ mod ordering_ab {
     use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
     use riir_refine::draft::latent_matcher::LatentMatcher;
     use riir_refine::embedder::embed;
-    use riir_refine::gp_acquisition::{GpAcquisition, DIM};
+    use riir_refine::gp_acquisition::{DIM, GpAcquisition};
 
     /// Pool probe depth per span (matches the harness's 12-deep pools).
     const POOL_K: usize = 12;

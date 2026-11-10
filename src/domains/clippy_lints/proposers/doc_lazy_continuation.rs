@@ -82,8 +82,8 @@
 //! - **`#[doc = "..."]` attribute form skipped** (the `+3` marker slicing
 //!   only holds for comment-style docs — the `doc_markdown` precedent).
 
-use super::helpers::{doc_lines, DocLine};
 use super::SourceEdit;
+use super::helpers::{DocLine, doc_lines};
 use syn::File;
 
 /// The doc-line state machine's cross-line state. One instance per doc

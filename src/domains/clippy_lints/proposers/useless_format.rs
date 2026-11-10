@@ -57,7 +57,7 @@
 //! (`x: String`) its own fix carries the same cascade — recorded as
 //! expected created-lint noise in the bench docs.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use proc_macro2::TokenTree;
 use syn::visit::Visit;
 use syn::{Expr, ExprMacro, File, LitStr};

@@ -169,7 +169,7 @@ impl PerfVerifier {
         let (crate_dir, source_changed) = match self.prepare_crate(code) {
             Ok(pair) => pair,
             Err(e) => {
-                return PerfVerifyResult::did_not_run(format!("temp crate setup failed: {e}"))
+                return PerfVerifyResult::did_not_run(format!("temp crate setup failed: {e}"));
             }
         };
 

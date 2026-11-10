@@ -313,7 +313,10 @@ impl fmt::Display for Refusal {
                 write!(f, "refused: malformed relative path {path:?} ({reason})")
             }
             Refusal::MalformedToken { field, value } => {
-                write!(f, "refused: malformed {field} {value:?} (single [A-Za-z0-9_-] token, <= 128 bytes)")
+                write!(
+                    f,
+                    "refused: malformed {field} {value:?} (single [A-Za-z0-9_-] token, <= 128 bytes)"
+                )
             }
             Refusal::MalformedJson { message } => {
                 write!(f, "refused: payload JSON does not parse ({message})")
@@ -986,11 +989,13 @@ mod tests {
 
     #[test]
     fn corpus_rule_admitted_with_bench_spec_or_not_benchable() {
-        assert!(admit(
-            &corpus_proposal(BenchShape::BenchSpec("matvec_g1".to_owned())),
-            &ctx()
-        )
-        .is_ok());
+        assert!(
+            admit(
+                &corpus_proposal(BenchShape::BenchSpec("matvec_g1".to_owned())),
+                &ctx()
+            )
+            .is_ok()
+        );
         assert!(admit(&corpus_proposal(BenchShape::NotBenchable), &ctx()).is_ok());
     }
 
@@ -1377,7 +1382,11 @@ mod tests {
             A,
             "current repointed to the checkpoint"
         );
-        assert_eq!(s.current.as_ref().unwrap().seq, 4, "rollback is a commit with a fresh allocation (1 advance, 2 checkpoint, 3 bad batch, 4 repoint)");
+        assert_eq!(
+            s.current.as_ref().unwrap().seq,
+            4,
+            "rollback is a commit with a fresh allocation (1 advance, 2 checkpoint, 3 bad batch, 4 repoint)"
+        );
         // history intact: checkpoint still A
         assert_eq!(s.checkpoint.as_ref().unwrap().artifact, A);
     }

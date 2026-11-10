@@ -85,10 +85,10 @@
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
 
-use katgpt_core::ooo_audit::{
-    cross_ooo, greedy_curate, ooo_score, AuditScratch, BankAudit, CurationResult, OooAuditConfig,
-};
 use crate::ragplane::bm25::Tokenizer;
+use katgpt_core::ooo_audit::{
+    AuditScratch, BankAudit, CurationResult, OooAuditConfig, cross_ooo, greedy_curate, ooo_score,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::draft::op_tokenizer::RustOpBigramTokenizer;

@@ -16,7 +16,7 @@
 #![cfg(feature = "docker")]
 
 use riir_refine::domains::docker::rules::{
-    scan_into, scan_source_with, DockerScratch, ScanContext,
+    DockerScratch, ScanContext, scan_into, scan_source_with,
 };
 
 const FILES: &[&str] = &[

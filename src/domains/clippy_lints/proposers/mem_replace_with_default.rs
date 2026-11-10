@@ -46,7 +46,7 @@ use syn::visit::Visit;
 use syn::{Expr, File};
 
 use super::helpers::byte_range;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.

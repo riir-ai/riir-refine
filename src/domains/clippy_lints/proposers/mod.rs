@@ -312,8 +312,8 @@ pub mod wildcard_in_or_patterns;
 pub mod wrong_self_convention;
 
 pub use crate::edit_emitter::{
-    apply_edits, delete_stmt_edit, edit, for_each_fn, src, swallow_following_space, RuleEdit,
-    SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, delete_stmt_edit, edit, for_each_fn, src,
+    swallow_following_space,
 };
 
 /// Lints whose proposers are `cargo refine --fix` eligible — detection is
@@ -971,35 +971,49 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // The Some-arm body moves into a NEW closure: ?/return/break/
         // continue/await/yield arms change propagation there and are
         // refused (the manual_map control-flow guard).
-        "manual_map" => Some("control-flow capture — the Some-arm body moves into a closure; ?/return/break/continue arms are refused"),
+        "manual_map" => Some(
+            "control-flow capture — the Some-arm body moves into a closure; ?/return/break/continue arms are refused",
+        ),
         // Borrow shape is resolved against fn params without a type
         // checker: indexed writes / address-of slots refuse, and the
         // iterable form (&v vs v) rides param-resolution.
-        "needless_range_loop" => Some("borrow shape — indexed writes and &v[i]/&mut v[i] slots refuse; the iterable form resolves against fn params, not types"),
+        "needless_range_loop" => Some(
+            "borrow shape — indexed writes and &v[i]/&mut v[i] slots refuse; the iterable form resolves against fn params, not types",
+        ),
         // Option-only short-circuit: rewrites `return None` shapes to
         // try; reference scrutinees re-emit via .as_ref() to satisfy the
         // by-value move the ? operator needs.
-        "question_mark" => Some("short-circuit scope — Option/None return shapes only; reference scrutinees re-emit via .as_ref()"),
+        "question_mark" => Some(
+            "short-circuit scope — Option/None return shapes only; reference scrutinees re-emit via .as_ref()",
+        ),
         // map_or infers U from BOTH args, so unsize coercions that fired
         // through unwrap_or's pre-fixed Option param no longer fire
         // (E0308 on trait-object/array-literal defaults) — those shapes
         // are skipped (the P9 divergence).
-        "map_unwrap_or" => Some("inference shape — map_or infers the default's type from both args; unsize-coercion defaults (trait-object/array literal) are refused"),
+        "map_unwrap_or" => Some(
+            "inference shape — map_or infers the default's type from both args; unsize-coercion defaults (trait-object/array literal) are refused",
+        ),
         // lazy twin -> eager twin (unwrap_or_else(|| x) -> unwrap_or(x)):
         // the default computes on EVERY path instead of only on
         // None/Err. Gated on a syntactically-pure closure body (no
         // calls/macros/indexing), so no behavior change — but an
         // expensive pure default now costs the hot path too.
-        "unnecessary_lazy_evaluations" => Some("evaluation timing — the default computes EAGERLY on every path (was: only on None/Err); pure-body-gated (no behavior change), an expensive default now costs the hot path"),
+        "unnecessary_lazy_evaluations" => Some(
+            "evaluation timing — the default computes EAGERLY on every path (was: only on None/Err); pure-body-gated (no behavior change), an expensive default now costs the hot path",
+        ),
         // The line is absorbed into the preceding quote/list item (Batch
         // 151). Render-stable in rustdoc, but if a SEPARATE paragraph was
         // intended, clippy's own help names the right fix — a blank line
         // (or the `\>` escape in quotes).
-        "doc_lazy_continuation" => Some("paragraph join — the line is absorbed into the preceding quote/list item; if it was meant as its own paragraph, add a blank line instead (in quotes, escape with \\>)"),
+        "doc_lazy_continuation" => Some(
+            "paragraph join — the line is absorbed into the preceding quote/list item; if it was meant as its own paragraph, add a blank line instead (in quotes, escape with \\>)",
+        ),
         // Dedent to the item's content col (Batch 151). A deliberately
         // indented code-block continuation would be dedented too — verify
         // the line is prose (clippy's MaybeIncorrect hedge, same standing).
-        "doc_overindented_list_items" => Some("indent dedent — the continuation joins the list item's paragraph; verify it is not a deliberately indented code block"),
+        "doc_overindented_list_items" => Some(
+            "indent dedent — the continuation joins the list item's paragraph; verify it is not a deliberately indented code block",
+        ),
         // Issue 149 T3 (2026-10-06, probed on clippy 0.1.98): the lint's live
         // firing surface narrowed to BOTH bounds LITERAL — variable bounds,
         // field-projection receivers, and every if/else clamp shape read
@@ -1007,25 +1021,41 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // --repo-posture run declines the proposer's wider shape family
         // there. The proposer stays pattern-based and still applies the
         // wider shapes under plain --fix.
-        "manual_clamp" => Some("clippy 0.1.98 firing surface — only `x.max(L).min(L)` chains with LITERAL bounds still fire; variable bounds and every if/else clamp shape are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)"),
+        "manual_clamp" => Some(
+            "clippy 0.1.98 firing surface — only `x.max(L).min(L)` chains with LITERAL bounds still fire; variable bounds and every if/else clamp shape are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)",
+        ),
         // Issue 149 T3 (2026-10-06, probed on clippy 0.1.98): fires iff the
         // receiver is a LOCAL IDENT and BOTH bounds are LITERAL; a variable
         // bound or a field-projection receiver (item.f >= a && item.f <= b)
         // is SILENT upstream — no oracle anchor, and --repo-posture declines
         // those shapes. The proposer stays pattern-based under plain --fix.
-        "manual_range_contains" => Some("clippy 0.1.98 firing surface — fires only with a local-ident receiver and BOTH bounds literal; variable bounds and field-projection receivers are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)"),
+        "manual_range_contains" => Some(
+            "clippy 0.1.98 firing surface — fires only with a local-ident receiver and BOTH bounds literal; variable bounds and field-projection receivers are SILENT upstream (no oracle anchor, and --repo-posture declines those shapes)",
+        ),
         // The rewrite TARGETS a newer std API: `iter::repeat_n` stabilized
         // in Rust 1.82 — on an older toolchain the fix fails to compile
         // (the fix_verify loop auto-reverts it there). Eq-by-construction
         // otherwise (the adapter is defined as the expansion).
-        "manual_repeat_n" => Some("MSRV floor — iter::repeat_n stabilized Rust 1.82; the rewrite needs a ≥1.82 toolchain (fix_verify auto-reverts on older)"),
+        "manual_repeat_n" => Some(
+            "MSRV floor — iter::repeat_n stabilized Rust 1.82; the rewrite needs a ≥1.82 toolchain (fix_verify auto-reverts on older)",
+        ),
         // ── Batch 230 (clippy-1.99-only lints — the pinned 1.98.1 driver
         // cannot fire any of these; see lint_level.rs AHEAD_OF_PIN_1_99) ──
-        "assert_is_empty" => Some("clippy 1.99 lint, pedantic group — fires only in crates enabling pedantic; the panic message CHANGES to print the asserted value (that difference is the lint's purpose)"),
-        "manual_bit_width" => Some("clippy 1.99 lint; bit_width() stabilized Rust 1.97 — clippy is MSRV-aware so the lint fires only where the fix compiles"),
-        "mismatched_bit_width_type" => Some("clippy 1.99 lint; the fix follows the RECEIVER's type kind — if the mismatched LHS type was intentional, decline the edit (the lint reads it as a probable bug)"),
-        "block_scrutinee" => Some("clippy 1.99 lint, help-only upstream; the un-brace is construction-identity — multi-statement blocks and unsafe/async wrappers refuse"),
-        "nonnull_unchecked_on_box_ptr" => Some("clippy 1.99 lint; same pointer value and leak-on-both-sides ownership, safe-replaces-unsafe — a SAFETY comment above the block refuses (orphaned justification)"),
+        "assert_is_empty" => Some(
+            "clippy 1.99 lint, pedantic group — fires only in crates enabling pedantic; the panic message CHANGES to print the asserted value (that difference is the lint's purpose)",
+        ),
+        "manual_bit_width" => Some(
+            "clippy 1.99 lint; bit_width() stabilized Rust 1.97 — clippy is MSRV-aware so the lint fires only where the fix compiles",
+        ),
+        "mismatched_bit_width_type" => Some(
+            "clippy 1.99 lint; the fix follows the RECEIVER's type kind — if the mismatched LHS type was intentional, decline the edit (the lint reads it as a probable bug)",
+        ),
+        "block_scrutinee" => Some(
+            "clippy 1.99 lint, help-only upstream; the un-brace is construction-identity — multi-statement blocks and unsafe/async wrappers refuse",
+        ),
+        "nonnull_unchecked_on_box_ptr" => Some(
+            "clippy 1.99 lint; same pointer value and leak-on-both-sides ownership, safe-replaces-unsafe — a SAFETY comment above the block refuses (orphaned justification)",
+        ),
         _ => None,
     }
 }
@@ -1296,10 +1326,10 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "partialeq_to_none" => partialeq_to_none::collect_edits(source, file),
         "cast_lossless" => cast_lossless::collect_edits(source, file),
         // ── Issue 120 intake (2026-09-16, the pedantic doc-lint family) ──
-            "doc_markdown" => doc_markdown::collect_edits(source, file),
-    // plan 354: the two doc-section lints share one module (Batch-151 precedent).
-    "missing_errors_doc" => doc_sections::collect_errors_edits(source, file),
-    "missing_panics_doc" => doc_sections::collect_panics_edits(source, file),
+        "doc_markdown" => doc_markdown::collect_edits(source, file),
+        // plan 354: the two doc-section lints share one module (Batch-151 precedent).
+        "missing_errors_doc" => doc_sections::collect_errors_edits(source, file),
+        "missing_panics_doc" => doc_sections::collect_panics_edits(source, file),
         // ── Batch 151 (the doc-line state-machine port, Plan 137) ──
         "doc_lazy_continuation" => doc_lazy_continuation::collect_edits(source, file),
         "doc_overindented_list_items" => {
@@ -1668,11 +1698,7 @@ fn f(x: Option<u8>) { match x { Some(v) => use_v(v), _ => () } }",
                 "fn f(name: &str) -> String { format!(\"{}\", name) }",
                 "format!(\"{name}\")",
             ),
-            (
-                "identity_op",
-                "fn f(x: u32) -> u32 { x * 1 }",
-                "{ x }",
-            ),
+            ("identity_op", "fn f(x: u32) -> u32 { x * 1 }", "{ x }"),
             (
                 "needless_bool",
                 "fn f(b: bool) -> bool { if b { true } else { false } }",
@@ -1875,7 +1901,11 @@ impl S {
                 "fn f(f: &mut String) { write!(f, \"line\\n\"); }",
                 "writeln!(f, \"line\")",
             ),
-            ("unreadable_literal", "fn f() { let pages = 1234567; }", "1_234_567"),
+            (
+                "unreadable_literal",
+                "fn f() { let pages = 1234567; }",
+                "1_234_567",
+            ),
             (
                 "legacy_numeric_constants",
                 "fn f() { let cap = std::u32::MAX; }",

@@ -12,7 +12,7 @@
 //! scrutinee position takes any expression, so no parens are needed.
 
 use super::helpers::is_unit_expr;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Pat};
 

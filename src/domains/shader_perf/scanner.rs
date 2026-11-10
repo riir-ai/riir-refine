@@ -773,9 +773,10 @@ mod tests {
         let a = ShaderScanner.scan(src);
         let b = ShaderScanner.scan(src);
         assert_eq!(a, b);
-        assert!(a
-            .windows(2)
-            .all(|w| (w[0].line, w[0].rule_id) <= (w[1].line, w[1].rule_id)));
+        assert!(
+            a.windows(2)
+                .all(|w| (w[0].line, w[0].rule_id) <= (w[1].line, w[1].rule_id))
+        );
     }
 
     #[test]

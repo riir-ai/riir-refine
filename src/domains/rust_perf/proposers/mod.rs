@@ -116,8 +116,8 @@ pub mod vec_with_capacity;
 // `rust_perf::proposers::{apply_edits, collect_edits, SourceEdit, ...}`
 // keeps compiling. The helpers stay `pub(crate)`-visible via the crate root.
 pub use crate::edit_emitter::{
-    apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent, span_range, src,
-    swallow_following_space, RuleEdit, SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, delete_stmt_edit, edit, for_each_fn, line_indent,
+    span_range, src, swallow_following_space,
 };
 
 /// Count word-boundary occurrences of `ident` in `source` (Rust ident
@@ -316,18 +316,24 @@ pub fn context_note(rule_id: &str) -> Option<&'static str> {
         // Return type String -> &'static str: callers expecting an owned
         // String must now clone/allocate at the call site (the module
         // caveat, "Signature-visible change").
-        "static-str" => Some("signature-visible — returns &'static str (borrowed literal), not an owned String; callers expecting String need .to_string()"),
+        "static-str" => Some(
+            "signature-visible — returns &'static str (borrowed literal), not an owned String; callers expecting String need .to_string()",
+        ),
         // &[bool] param -> packed &[u64]: callers must pass packed bits
         // (pack_bools at the boundary); fires only when the fn has no
         // live in-file caller (the caller gate).
-        "bool-to-bitpack" => Some("signature-visible — the &[bool] param becomes packed &[u64]; callers must pack at the boundary (fires only with no live in-file caller)"),
+        "bool-to-bitpack" => Some(
+            "signature-visible — the &[bool] param becomes packed &[u64]; callers must pack at the boundary (fires only with no live in-file caller)",
+        ),
         // NotBenchable + regime-fragile (the riir-dapps worker landing,
         // 2026-09-25: six request-scoped render Vecs got the shrink through
         // the posture-EXEMPT rust_perf lane with zero warning). The win
         // regime is LONG-LIVED Vecs (the corpus entry's own words); on
         // transient/request-scoped Vecs the realloc costs the build path
         // ~µs and the Vec drops before the freed capacity matters.
-        "shrink-to-fit-after-build" => Some("regime-fragile (NotBenchable) — the win is PEAK MEMORY on LONG-LIVED Vecs; on request-scoped/transient Vecs the realloc costs the build path and the Vec drops before the freed capacity matters (apply where the Vec outlives the build's caller)"),
+        "shrink-to-fit-after-build" => Some(
+            "regime-fragile (NotBenchable) — the win is PEAK MEMORY on LONG-LIVED Vecs; on request-scoped/transient Vecs the realloc costs the build path and the Vec drops before the freed capacity matters (apply where the Vec outlives the build's caller)",
+        ),
         _ => None,
     }
 }

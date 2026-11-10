@@ -65,8 +65,8 @@ pub const PROBE_Z95: f64 = 1.959_963_984_540_054;
 /// acceptance authority; the probe can only narrow, never admit).
 #[cfg(feature = "rescue_probe")]
 pub mod probe_gate {
-    use super::{StateRescueTally, KB_EPSILON, PROBE_Z95};
-    use katgpt_core::state_probe::{classify, probe, ProbeClass, ProbeInput};
+    use super::{KB_EPSILON, PROBE_Z95, StateRescueTally};
+    use katgpt_core::state_probe::{ProbeClass, ProbeInput, classify, probe};
 
     /// The state's probe estimate over its ACCUMULATED no-tool leg:
     /// `pass_count = b0_successes`, `n = b0_attempts`, answers-not-tracked

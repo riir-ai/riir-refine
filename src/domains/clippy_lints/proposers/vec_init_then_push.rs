@@ -33,7 +33,7 @@
 //! as the consecutive pushes did. Identical by construction.
 
 use super::helpers::drops_interior_comment;
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Block, Expr, File, Local, Pat, Stmt};

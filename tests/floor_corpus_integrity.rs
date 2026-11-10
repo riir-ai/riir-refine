@@ -19,7 +19,7 @@
 #![cfg(feature = "rustc_errors")]
 
 use riir_refine::domains::rustc_errors::floor::{
-    FixVerdict, FloorHarness, NullFixer, MUTANT_CASES,
+    FixVerdict, FloorHarness, MUTANT_CASES, NullFixer,
 };
 
 /// Every mutant must fail to compile, with the code it declares.

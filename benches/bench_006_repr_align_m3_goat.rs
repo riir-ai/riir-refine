@@ -366,7 +366,9 @@ fn main() {
     if prov_verdict != "PASSED"
         && std::env::var("REPR_ALIGN_BENCH_REQUIRE_PROVENANCE").is_ok_and(|v| v == "1")
     {
-        say("GATE POSTURE: provenance not PASSED and REPR_ALIGN_BENCH_REQUIRE_PROVENANCE=1 — exit 2");
+        say(
+            "GATE POSTURE: provenance not PASSED and REPR_ALIGN_BENCH_REQUIRE_PROVENANCE=1 — exit 2",
+        );
         std::process::exit(2);
     }
     let citable = prov_verdict == "PASSED";
@@ -407,7 +409,9 @@ fn main() {
                 "G1 FAIL: stored Cell fields diverge"
             );
         }
-        say("G1 PASS — cell_key + shape_f + shape_c bit-identical across the attribute (4096 fixtures, cells field-checked)");
+        say(
+            "G1 PASS — cell_key + shape_f + shape_c bit-identical across the attribute (4096 fixtures, cells field-checked)",
+        );
     }
 
     // ══ G4 — zero allocations in the measured loops ══
@@ -541,10 +545,16 @@ fn main() {
     if shapes_strict_win > 0 && shapes_behind == 0 {
         say(&format!(
             "REPRODUCED — G1 exact, G4 zero-alloc, align(8) strictly faster at {shapes_strict_win} shape(s), none behind{}",
-            if citable { "" } else { " (TIMING PROVISIONAL — quote the PROVENANCE line)" }
+            if citable {
+                ""
+            } else {
+                " (TIMING PROVISIONAL — quote the PROVENANCE line)"
+            }
         ));
     } else {
-        say("NOT-REPRODUCED-LOCALLY — the local fixtures do not exhibit the partition stall on this toolchain; a real measured outcome, recorded as such (the rule stays source-reported; its anti-regime clause stands: measure first)");
+        say(
+            "NOT-REPRODUCED-LOCALLY — the local fixtures do not exhibit the partition stall on this toolchain; a real measured outcome, recorded as such (the rule stays source-reported; its anti-regime clause stands: measure first)",
+        );
     }
     say(&format!("PROVENANCE: {prov_line}"));
     std::process::exit(0);

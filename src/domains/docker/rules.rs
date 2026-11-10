@@ -27,8 +27,8 @@
 //! adjacent update/install pair alone, and `tests/docker_refusal_gate.rs`
 //! pins that no other pair is ever merged.
 
-use super::scanner::{self, logical_args, DockerfileScan, Scope, Stanza};
 use super::SyntaxVersion;
+use super::scanner::{self, DockerfileScan, Scope, Stanza, logical_args};
 use crate::edit_emitter::SourceEdit;
 
 /// Evidence from outside the Dockerfile. Absent fields keep their rules

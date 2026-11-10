@@ -34,7 +34,7 @@
 use syn::spanned::Spanned;
 use syn::{Expr, ExprLit, File, Item, Lit, ReturnType, Stmt, Type};
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
@@ -297,30 +297,36 @@ mod tests {
         // The return-type ripple: a caller binding the result as owned
         // `String` breaks when the signature becomes `&'static str` — a
         // span-local edit cannot adapt the caller. Refuse.
-        assert!(propose_fix(
-            "static-str",
-            "fn label() -> String { \"ready\".to_string() }\nfn user() -> String { label() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "static-str",
+                "fn label() -> String { \"ready\".to_string() }\nfn user() -> String { label() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_literal_expr_unchanged() {
         // Runtime-built strings stay.
-        assert!(propose_fix(
-            "static-str",
-            "fn f(x: u32) -> String { format!(\"n={x}\") }"
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "static-str",
+                "fn f(x: u32) -> String { format!(\"n={x}\") }"
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn multi_stmt_body_unchanged() {
-        assert!(propose_fix(
-            "static-str",
-            "fn f() -> String { let s = \"a\".to_string(); s + \"b\" }"
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "static-str",
+                "fn f() -> String { let s = \"a\".to_string(); s + \"b\" }"
+            )
+            .is_none()
+        );
     }
 
     #[test]

@@ -38,8 +38,8 @@
 use riir_refine::domain::HealDomain;
 use riir_refine::domains::kernel_opt::KernelCategory;
 use riir_refine::{
-    build_activity, build_kernel_seed_corpus, KernelExpertRouter, KernelOptDomain, KernelRule,
-    KernelThermalRouter, TernaryDrafter,
+    KernelExpertRouter, KernelOptDomain, KernelRule, KernelThermalRouter, TernaryDrafter,
+    build_activity, build_kernel_seed_corpus,
 };
 
 /// A representative kernel signature for the demo.

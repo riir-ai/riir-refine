@@ -44,8 +44,8 @@
 use syn::visit::Visit;
 use syn::{Expr, File, Pat, Stmt};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -174,11 +174,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "needless_late_init",
-            "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x = 5u32; x + x }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_late_init",
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x = 5u32; x + x }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -233,11 +235,13 @@ mod tests {
     fn mut_binding_refuses() {
         // clippy is SILENT on `let mut x; x = v;` (probe: nli-mut) — the
         // fix would drop the mut, a different seam.
-        assert!(propose_fix(
-            "needless_late_init",
-            "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let mut x; x = 5u32; x + x }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_late_init",
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let mut x; x = 5u32; x + x }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -263,11 +267,13 @@ mod tests {
 
     #[test]
     fn ref_pattern_refuses() {
-        assert!(propose_fix(
-            "needless_late_init",
-            "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let ref x; x = &1u32; 3 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_late_init",
+                "fn late(hits: &mut Vec<u8>) -> u32 { hits.push(0); let ref x; x = &1u32; 3 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -294,11 +300,13 @@ mod tests {
     fn non_semi_assign_tail_refuses() {
         // An assignment as a block's TAIL (no semicolon) is not the
         // statement shape.
-        assert!(propose_fix(
-            "needless_late_init",
-            "fn late(hits: &mut Vec<u8>) { hits.push(0); let x; x = hits.len() as u32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "needless_late_init",
+                "fn late(hits: &mut Vec<u8>) { hits.push(0); let x; x = hits.len() as u32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

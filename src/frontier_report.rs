@@ -38,7 +38,7 @@ use std::collections::BTreeMap;
 use katgpt_core::best_belief_score;
 use serde::{Deserialize, Serialize};
 
-use crate::dispersion::{from_counts, frontier_order, PoolEntry, Regime};
+use crate::dispersion::{PoolEntry, Regime, from_counts, frontier_order};
 
 /// The frontier LCB ε — 0.05, the 95% lower bound (katgpt-core's documented
 /// `FRONTIER_EPSILON` convention; NOT the 0.32 strategy-ordering ε).

@@ -39,7 +39,7 @@ use syn::visit::Visit;
 use syn::{ExprMatch, File, Pat};
 
 use super::helpers::{bool_lit, byte_range};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -116,11 +116,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "match_like_matches_macro",
-            "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); x > 0 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "match_like_matches_macro",
+                "fn f(hits: &mut Vec<u8>, x: u32) -> bool { hits.push(0); x > 0 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

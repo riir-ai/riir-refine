@@ -28,8 +28,8 @@ use std::sync::{Arc, Mutex};
 
 use riir_refine::kat_lease_client::HttpResponse;
 use riir_refine::kat_vote_client::{
-    render_proposal, sign_vote, vote_confirm_line, vote_flow, vote_message, ProposalView, VoteAck,
-    VoteChoice, VoteOutcome, VoteTransport,
+    ProposalView, VoteAck, VoteChoice, VoteOutcome, VoteTransport, render_proposal, sign_vote,
+    vote_confirm_line, vote_flow, vote_message,
 };
 
 // ── the mock server (std TCP; the stake g2s shape) ───────────────────────

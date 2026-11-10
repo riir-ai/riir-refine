@@ -89,12 +89,12 @@
 
 use std::path::Path;
 
-use katgpt_core::regime_probe::{conditional_entropy_nats, entropy_gap_into, EntropyGapReport};
+use katgpt_core::regime_probe::{EntropyGapReport, conditional_entropy_nats, entropy_gap_into};
 use syn::spanned::Spanned;
 
-use riir_refine::draft::{collect_source_files_sorted, span_margin, LatentMatcher};
+use riir_refine::draft::{LatentMatcher, collect_source_files_sorted, span_margin};
 use riir_refine::score_bench::generations::generation_v6;
-use riir_refine::score_bench::ood::{rule_score_vector, GAP_REGIME_THRESHOLD_NATS};
+use riir_refine::score_bench::ood::{GAP_REGIME_THRESHOLD_NATS, rule_score_vector};
 
 /// OOD family A: absent from every known set (reference corpora come from
 /// katgpt-rs / riir-ai / riir-chain / riir-train states only).
@@ -262,10 +262,16 @@ fn artifact_hex(report: &EntropyGapReport) -> String {
 
 fn main() {
     println!("# issue 082 — OOD fresh-family pairing (composition-matched, provenance-disjoint)");
-    println!("# reference: gen6 (RAW_SPANS_V6, real pre-heal sibling states) | OOD-A: {NDB_ROOT} | OOD-B: {DAPPS_ROOT}");
+    println!(
+        "# reference: gen6 (RAW_SPANS_V6, real pre-heal sibling states) | OOD-A: {NDB_ROOT} | OOD-B: {DAPPS_ROOT}"
+    );
     println!("# PRE-REGISTERED (module doc carries the full text): gap = mean_ref − mean_ood;");
-    println!("#   R1 iff gap < 0 && |d| ≥ {D_THRESHOLD} on BOTH families; R2 iff |gap| < {GAP_REGIME_THRESHOLD_NATS} nats || gap > 0 on BOTH;");
-    println!("#   mixed ⇒ R3 inconclusive; < {MIN_CARVES_PER_FAMILY} fresh carves ⇒ R3 (the frozen 17-span gen6 reference is exempt); all parsed spans enter the entropy set.");
+    println!(
+        "#   R1 iff gap < 0 && |d| ≥ {D_THRESHOLD} on BOTH families; R2 iff |gap| < {GAP_REGIME_THRESHOLD_NATS} nats || gap > 0 on BOTH;"
+    );
+    println!(
+        "#   mixed ⇒ R3 inconclusive; < {MIN_CARVES_PER_FAMILY} fresh carves ⇒ R3 (the frozen 17-span gen6 reference is exempt); all parsed spans enter the entropy set."
+    );
 
     let mut matcher = LatentMatcher::from_enabled_domains().unwrap_or_else(|e| {
         eprintln!("matcher build failed: {e}");
@@ -293,7 +299,9 @@ fn main() {
         .collect();
     let gen6_skipped = gen6.len() - gen6_carves.len();
     if gen6_skipped > 0 {
-        println!("# WARNING: {gen6_skipped} gen6 fixture(s) produced no score vector (expected 0 — the set is parse-pinned)");
+        println!(
+            "# WARNING: {gen6_skipped} gen6 fixture(s) produced no score vector (expected 0 — the set is parse-pinned)"
+        );
     }
 
     // ── fresh families ──
@@ -386,7 +394,9 @@ fn main() {
         );
         arms.push((name, arm));
     }
-    println!("# (axis-convention note: ood.rs's mean_gap = mean_ood − mean_ref — the negation of the gap printed above)");
+    println!(
+        "# (axis-convention note: ood.rs's mean_gap = mean_ood − mean_ref — the negation of the gap printed above)"
+    );
 
     // ── the pre-registered combined verdict ──
     let both = |want: fn(&Arm) -> bool| arms.iter().all(|(_, a)| want(a));

@@ -59,7 +59,7 @@
 //! Issue 027/028/029 class).
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use std::collections::HashSet;
 use syn::visit::Visit;
 use syn::{Expr, File, Lit, Pat, PatOr, RangeLimits, UnOp};

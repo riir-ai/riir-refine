@@ -20,7 +20,7 @@
 //! unchanged: the compile gate reverts anything this guard's heuristics
 //! miss.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use std::collections::HashSet;
 use syn::visit::Visit;
 use syn::{Expr, ExprClosure, File};

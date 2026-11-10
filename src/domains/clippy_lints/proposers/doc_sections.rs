@@ -165,7 +165,7 @@ impl Visit<'_> for PanicVisitor {
                 // (E0782 on `parse_multi_expr` without a receiver).
                 let mut args: Vec<Expr> = Vec::new();
                 {
-                        let mut current = proc_macro2::TokenStream::new();
+                    let mut current = proc_macro2::TokenStream::new();
                     for tt in mac.tokens.clone() {
                         match tt {
                             proc_macro2::TokenTree::Punct(p) if p.as_char() == ',' => {
@@ -283,15 +283,9 @@ fn collect_one(source: &str, file: &File, which: &str) -> Vec<SourceEdit> {
         }
         for line in body.split('\n') {
             if line.is_empty() {
-                let _ = std::fmt::Write::write_fmt(
-                    &mut block,
-                    format_args!("{marker}\n"),
-                );
+                let _ = std::fmt::Write::write_fmt(&mut block, format_args!("{marker}\n"));
             } else {
-                let _ = std::fmt::Write::write_fmt(
-                    &mut block,
-                    format_args!("{marker} {line}\n"),
-                );
+                let _ = std::fmt::Write::write_fmt(&mut block, format_args!("{marker} {line}\n"));
             }
         }
         edits.push(SourceEdit {

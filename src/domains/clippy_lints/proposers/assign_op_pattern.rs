@@ -55,7 +55,7 @@ use syn::visit::{self, Visit};
 use syn::{BinOp, Expr, ExprAssign, File, ImplItemFn, ItemFn, Local};
 
 use super::helpers::{byte_range, drops_interior_comment};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The arithmetic scalars — every op in the assign-op set is builtin on
 /// these by construction (`bool` refuses: its `&`/`|`/`^` shapes are real
@@ -523,11 +523,13 @@ mod tests {
     #[test]
     fn unsuffixed_inits_refuse() {
         // `{integer}` ambiguity class — bare literals refuse.
-        assert!(propose_fix(
-            "assign_op_pattern",
-            "fn f(hits: &mut Vec<i32>) -> i32 { hits.push(0); let mut y = 0; y = y + 1; y }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "assign_op_pattern",
+                "fn f(hits: &mut Vec<i32>) -> i32 { hits.push(0); let mut y = 0; y = y + 1; y }",
+            )
+            .is_none()
+        );
         // Bare float can still unify with f32 through a later constraint.
         assert!(propose_fix(
             "assign_op_pattern",
@@ -544,11 +546,13 @@ mod tests {
         )
         .is_none());
         // bool: outside ARITH_SCALARS (the documented divergence).
-        assert!(propose_fix(
-            "assign_op_pattern",
-            "fn f(hits: &mut Vec<bool>) { hits.push(false); let mut b = true; b = b & true; }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "assign_op_pattern",
+                "fn f(hits: &mut Vec<bool>) { hits.push(false); let mut b = true; b = b & true; }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

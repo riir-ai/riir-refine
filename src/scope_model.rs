@@ -58,7 +58,7 @@
 use std::collections::HashMap;
 
 use katgpt_core::contrastive_scope::{
-    ContrastiveScoreBuilder, ContrastiveScoreTable, ScopeGate, ScopeVerdict, DEFAULT_ALPHA,
+    ContrastiveScoreBuilder, ContrastiveScoreTable, DEFAULT_ALPHA, ScopeGate, ScopeVerdict,
 };
 
 use crate::domain::HealEntry;
@@ -448,7 +448,9 @@ mod tests {
         let toks: Vec<&str> = tokenize("fn f(x: i32) -> i32 { x+1 }").collect();
         assert_eq!(
             toks,
-            vec!["fn", "f", "(", "x", ":", "i32", ")", "->", "i32", "{", "x", "+", "1", "}"]
+            vec![
+                "fn", "f", "(", "x", ":", "i32", ")", "->", "i32", "{", "x", "+", "1", "}"
+            ]
         );
     }
 

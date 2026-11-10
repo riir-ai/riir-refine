@@ -23,7 +23,7 @@
 //!   Finding 1 — the mean-sim skewness cannot move under a mean anchor).
 
 use katgpt_core::differential_anchor::{hubness_skewness, pick_lambda_by_eval};
-use riir_refine::draft::retrieval_eval::{labeled_eval_spans, run_eval_on, EvalReport};
+use riir_refine::draft::retrieval_eval::{EvalReport, labeled_eval_spans, run_eval_on};
 use riir_refine::draft::{DomainId, LatentMatcher, RetrievalConfig};
 use std::collections::HashMap;
 
@@ -198,11 +198,7 @@ fn g1_top1_flips_named() {
                 span.label,
                 if hb { "GAINED" } else { "LOST" }
             );
-            if hb {
-                gained += 1
-            } else {
-                lost += 1
-            }
+            if hb { gained += 1 } else { lost += 1 }
         }
     }
     println!("  flips: gained {gained}, lost {lost}");

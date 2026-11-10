@@ -133,7 +133,7 @@ pub fn vec_dot_scalar(xs: &[Q2Block], ys: &[Q8Block]) -> f32 {
 
 #[cfg(target_arch = "x86_64")]
 pub mod avx2 {
-    use super::{f16_bits_to_f32, Q2Block, Q8Block};
+    use super::{Q2Block, Q8Block, f16_bits_to_f32};
     use std::arch::x86_64::*;
 
     /// Four consecutive Q2_0 weights per byte spread into byte lanes:
@@ -710,11 +710,17 @@ fn main() {
         say(&format!(
             "PARETO-PASS — G1 exact, G4 zero-alloc, AVX2 strictly faster at every one of {} shapes{}",
             ROWS_GRID.len() * K_GRID.len(),
-            if citable { "" } else { " (TIMING PROVISIONAL — quote the PROVENANCE line)" }
+            if citable {
+                ""
+            } else {
+                " (TIMING PROVISIONAL — quote the PROVENANCE line)"
+            }
         ));
         std::process::exit(0);
     } else {
-        say("PARETO-FAIL — the AVX2 arm lost or tied at least one shape (a real measured outcome; record it)");
+        say(
+            "PARETO-FAIL — the AVX2 arm lost or tied at least one shape (a real measured outcome; record it)",
+        );
         std::process::exit(1);
     }
 }

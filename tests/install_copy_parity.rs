@@ -109,7 +109,9 @@ fn the_audit_can_see_what_it_audits() {
 
     // Shapes it MUST match.
     assert_eq!(
-        installer_urls("`curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh`"),
+        installer_urls(
+            "`curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh`"
+        ),
         vec![canonical()[0].clone()],
         "the canonical macOS/Linux line must be recognised inside backticks"
     );

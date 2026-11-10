@@ -418,7 +418,10 @@ fn resolver_issue_135_repro_crate_does_not_enable_doc_markdown() {
     let pkg = scratch("repro");
     write(&pkg.join("Cargo.toml"), &format!("{PKG}[workspace]\n"));
     let lib = pkg.join("src/lib.rs");
-    write(&lib, "//! Regen.\n//!\n//!   cargo run -p healrepro --bin gen_corpus\n\npub fn one() -> u32 { 1 }\n");
+    write(
+        &lib,
+        "//! Regen.\n//!\n//!   cargo run -p healrepro --bin gen_corpus\n\npub fn one() -> u32 { 1 }\n",
+    );
     let lv = resolve(&lib);
     assert!(!lv.enables("doc_markdown"));
     assert!(lv.enables("needless_return"));

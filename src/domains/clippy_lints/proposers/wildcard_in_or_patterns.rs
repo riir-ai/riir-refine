@@ -5,7 +5,7 @@
 //! wildcard — `_` subsumes every other case, so the whole or-pattern is
 //! replaced by `_`.
 
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use syn::visit::Visit;
 use syn::{File, Pat, PatOr};
 

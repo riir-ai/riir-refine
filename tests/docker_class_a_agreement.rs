@@ -14,7 +14,7 @@
 #![cfg(feature = "docker_verify")]
 
 use riir_refine::domains::docker::corpus::build_docker_seed_corpus;
-use riir_refine::domains::docker::verify::{available, class_a_agreement, hadolint, Agreement};
+use riir_refine::domains::docker::verify::{Agreement, available, class_a_agreement, hadolint};
 
 #[test]
 fn every_class_a_rule_agrees_with_hadolint() {

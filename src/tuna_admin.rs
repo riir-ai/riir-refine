@@ -44,11 +44,11 @@ use ed25519_dalek::{Signer as _, SigningKey};
 
 use crate::kat_admin_client::AdminAuth;
 use crate::kat_protocol_tuna_airdrop::{
-    account_from_hex, account_to_hex, canonical_table_bytes, sig_message, table_hash,
-    TunaAirdropRecipientWire, TunaAirdropRequestWire,
+    TunaAirdropRecipientWire, TunaAirdropRequestWire, account_from_hex, account_to_hex,
+    canonical_table_bytes, sig_message, table_hash,
 };
 use crate::kat_tuna_admin_client::{
-    fetch_mandates, resolve_mandate_by_hash, submit_airdrop, MandateMatch,
+    MandateMatch, fetch_mandates, resolve_mandate_by_hash, submit_airdrop,
 };
 
 /// The route's free-tier floor, mirrored locally (Proposal 009 §4.3 rev 3
@@ -169,7 +169,10 @@ fn parse_amount(args: &TunaAdminArgs<'_>) -> u64 {
         }
     };
     if !unit_word.eq_ignore_ascii_case("tuna") {
-        eprintln!("{0}: unknown unit {unit_word:?} — tuna (the marketing airdrop moves TUNA trial credit)", args.verb);
+        eprintln!(
+            "{0}: unknown unit {unit_word:?} — tuna (the marketing airdrop moves TUNA trial credit)",
+            args.verb
+        );
         std::process::exit(2);
     }
     let Some(micro) = crate::kat_payreq_client::parse_kat_amount(amount_word) else {
@@ -199,7 +202,9 @@ fn parse_amount(args: &TunaAdminArgs<'_>) -> u64 {
 fn resolve_recipient(args: &TunaAdminArgs<'_>) -> [u8; 16] {
     if args.verb == "get" {
         if args.target.is_some() {
-            eprintln!("get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>` for another account)");
+            eprintln!(
+                "get: takes no recipient — it targets your OWN account id (use `send <amt> tuna <account-id>` for another account)"
+            );
             std::process::exit(2);
         }
         expect(args.verb, own_account_id())
@@ -635,12 +640,16 @@ mod tests {
 
     #[test]
     fn refusal_hints_name_the_class() {
-        assert!(refusal_hints(Some("bad_signature"), "h")
-            .iter()
-            .any(|h| h.contains("TUNA_CAN_OPENER_KEY")));
-        assert!(refusal_hints(Some("ledger_refused"), "h")
-            .iter()
-            .any(|h| h.contains("once-per-life")));
+        assert!(
+            refusal_hints(Some("bad_signature"), "h")
+                .iter()
+                .any(|h| h.contains("TUNA_CAN_OPENER_KEY"))
+        );
+        assert!(
+            refusal_hints(Some("ledger_refused"), "h")
+                .iter()
+                .any(|h| h.contains("once-per-life"))
+        );
         assert_eq!(refusal_hints(None, "h").len(), 1);
     }
 

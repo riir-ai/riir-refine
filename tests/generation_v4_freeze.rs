@@ -42,7 +42,7 @@ fn freeze_and_verify_generation_v4_labels() {
     let mut drift: Vec<String> = Vec::new();
     // Per-k label-table counters (reported; no decay assertion — Plan 093).
     let mut per_k: BTreeMap<usize, (usize, usize)> = BTreeMap::new(); // k -> (ok, total)
-                                                                      // Family + territory coverage over verified specs.
+    // Family + territory coverage over verified specs.
     let mut family_specs: BTreeMap<String, usize> = BTreeMap::new();
     let mut terr_by_k: BTreeMap<usize, BTreeSet<&'static str>> = BTreeMap::new();
 

@@ -18,7 +18,7 @@
 //! the clean shape fires.
 
 use super::helpers::is_postfix_safe;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMatch, File, Pat};
 

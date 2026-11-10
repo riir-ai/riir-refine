@@ -58,11 +58,7 @@ fn one_fixture_rule_executes_end_to_end() {
         .census_check
         .as_ref()
         .expect("census equality binds even a sampled run");
-    let executed: Vec<_> = report
-        .rules
-        .iter()
-        .filter(|r| r.fixture_bearing)
-        .collect();
+    let executed: Vec<_> = report.rules.iter().filter(|r| r.fixture_bearing).collect();
     assert_eq!(
         executed.len(),
         1,

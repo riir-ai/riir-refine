@@ -43,7 +43,7 @@
 //! speaks plain HTTP; TLS belongs to a terminating proxy in front of
 //! the seat, never here.
 
-use crate::code_egress::{deadline_expired, EgressConsent, EgressRefusal};
+use crate::code_egress::{EgressConsent, EgressRefusal, deadline_expired};
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
@@ -117,11 +117,7 @@ impl SeatReceipt {
         // An envelope with NO receipt and NO timing is a seat older than
         // the receipt tier — `None`, not an empty record.
         let empty = Self::default();
-        if parsed == empty {
-            None
-        } else {
-            Some(parsed)
-        }
+        if parsed == empty { None } else { Some(parsed) }
     }
 }
 
@@ -371,7 +367,7 @@ impl SeatRerankClient {
                     return Err(SeatDecline::Wire(format!(
                         "endpoint {} did not resolve",
                         self.addr
-                    )))
+                    )));
                 }
             },
             Err(e) => return Err(SeatDecline::Wire(format!("resolve: {e}"))),
@@ -535,7 +531,7 @@ fn json_escape_into(s: &str, out: &mut String) {
 mod tests {
     use super::*;
     use std::net::TcpListener;
-    use std::sync::mpsc::{channel, Receiver};
+    use std::sync::mpsc::{Receiver, channel};
 
     /// A loopback one-shot seat server: accepts ONE connection, records
     /// the request bytes, answers `status`/`body` over HTTP. The

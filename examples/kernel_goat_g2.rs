@@ -63,7 +63,11 @@ fn goat_g1_rustc_version() -> String {
 
 fn chrono_now() -> String {
     std::process::Command::new("powershell")
-        .args(["-NoProfile", "-Command", "(Get-Date).ToUniversalTime().ToString(\"yyyy-MM-ddTHH:mm:ssZ\")"])
+        .args([
+            "-NoProfile",
+            "-Command",
+            "(Get-Date).ToUniversalTime().ToString(\"yyyy-MM-ddTHH:mm:ssZ\")",
+        ])
         .output()
         .ok()
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -91,14 +95,18 @@ fn main() {
             }
             other => {
                 eprintln!("unknown arg: {other}");
-                eprintln!("usage: kernel_goat_g2 [--full|--tranche] [--filter <substr>] [--out <path>]");
+                eprintln!(
+                    "usage: kernel_goat_g2 [--full|--tranche] [--filter <substr>] [--out <path>]"
+                );
                 std::process::exit(2);
             }
         }
         i += 1;
     }
     if !full && !tranche_only && filter.is_none() {
-        eprintln!("one of --full / --tranche / --filter is required (this runner spawns rustc compiles; it refuses to run uninvoked)");
+        eprintln!(
+            "one of --full / --tranche / --filter is required (this runner spawns rustc compiles; it refuses to run uninvoked)"
+        );
         std::process::exit(2);
     }
     println!("kernel_opt GOAT gate G2 harness (Issue 191 T5)");

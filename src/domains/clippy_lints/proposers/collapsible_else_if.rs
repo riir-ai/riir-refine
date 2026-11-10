@@ -21,7 +21,7 @@
 //! whitespace between `else` and `{` (the else-token ends before the block
 //! span starts).
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt};

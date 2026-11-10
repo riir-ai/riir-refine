@@ -98,11 +98,7 @@ pub fn features_from(v: Option<&str>) -> Option<Vec<String>> {
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
-    if list.is_empty() {
-        None
-    } else {
-        Some(list)
-    }
+    if list.is_empty() { None } else { Some(list) }
 }
 
 /// The live env read.

@@ -10,7 +10,7 @@
 use std::path::PathBuf;
 
 use riir_refine::validators::{
-    advantage_certified, StoreError, ValidatorState, ValidatorStore, MANIFEST_FILE,
+    MANIFEST_FILE, StoreError, ValidatorState, ValidatorStore, advantage_certified,
 };
 
 const ARTIFACT: &str = "assets/validators/useless_format_brace.wasm";

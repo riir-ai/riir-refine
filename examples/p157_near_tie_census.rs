@@ -39,10 +39,10 @@
 //!   --example p157_near_tie_census
 //! ```
 
+use riir_refine::draft::RetrievalConfig;
 use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::{canonical_rank, labeled_eval_spans};
-use riir_refine::draft::RetrievalConfig;
 
 /// Pre-registered near-tie fractions; index 1 (10%) is the PRIMARY readout.
 const MARGIN_FRACTIONS: [(&str, f32); 3] = [("5%", 0.05), ("10%", 0.10), ("25%", 0.25)];

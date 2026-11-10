@@ -68,10 +68,10 @@ use std::collections::HashMap;
 
 use super::router::{KernelExpertRouter, NUM_KERNEL_EXPERTS};
 use crate::draft::corpus_index::{
-    finalize_ranked, merge_retrieved_best, significant_lines, RetrievalConfig, RuleIndex,
-    ScoredRule, SuggestScratch,
+    RetrievalConfig, RuleIndex, ScoredRule, SuggestScratch, finalize_ranked, merge_retrieved_best,
+    significant_lines,
 };
-use crate::draft::domain_router::{SpectralOrder, SpectralVocab, SPECTRAL_VOCAB_N};
+use crate::draft::domain_router::{SPECTRAL_VOCAB_N, SpectralOrder, SpectralVocab};
 
 /// The pinned global-tail size (rules, not chunks): a stride subsample of
 /// the full corpus in build order, retrieved by EVERY query beside the

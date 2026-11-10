@@ -31,7 +31,7 @@
 use syn::visit::Visit;
 use syn::{Block, Expr, ExprLit, File, Lit, Local, Pat, Stmt};
 
-use super::{delete_stmt_edit, edit, span_range, src, SourceEdit};
+use super::{SourceEdit, delete_stmt_edit, edit, span_range, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut scan = BlockScan {
@@ -299,23 +299,27 @@ mod tests {
     #[test]
     fn cast_zero_skips() {
         // `0 as u8` parses as Expr::Cast — conservatively out of scope.
-        assert!(propose_fix(
-            "vec-macro-zero-fill",
-            "fn f(n: usize) -> Vec<u8> {\n    let mut v = Vec::new();\n    \
+        assert!(
+            propose_fix(
+                "vec-macro-zero-fill",
+                "fn f(n: usize) -> Vec<u8> {\n    let mut v = Vec::new();\n    \
              v.resize(n, 0 as u8);\n    v\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn intervening_push_skips() {
         // Incremental grow-then-size shape — vec-with-capacity's territory.
-        assert!(propose_fix(
-            "vec-macro-zero-fill",
-            "fn f(n: usize, x: u8) -> Vec<u8> {\n    let mut v = Vec::new();\n    \
+        assert!(
+            propose_fix(
+                "vec-macro-zero-fill",
+                "fn f(n: usize, x: u8) -> Vec<u8> {\n    let mut v = Vec::new();\n    \
              v.push(x);\n    v.resize(n, 0);\n    v\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -332,21 +336,25 @@ mod tests {
 
     #[test]
     fn shadowing_rebind_skips() {
-        assert!(propose_fix(
-            "vec-macro-zero-fill",
-            "fn f(n: usize) -> usize {\n    let mut v = Vec::new();\n    let v = 3;\n    \
+        assert!(
+            propose_fix(
+                "vec-macro-zero-fill",
+                "fn f(n: usize) -> usize {\n    let mut v = Vec::new();\n    let v = 3;\n    \
              let _ = v;\n    n\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn no_resize_no_fire() {
-        assert!(propose_fix(
-            "vec-macro-zero-fill",
-            "fn f() -> Vec<u8> {\n    let mut v = Vec::new();\n    v\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "vec-macro-zero-fill",
+                "fn f() -> Vec<u8> {\n    let mut v = Vec::new();\n    v\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]

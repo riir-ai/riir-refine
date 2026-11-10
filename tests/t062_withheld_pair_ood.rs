@@ -18,8 +18,8 @@
 #![cfg(all(feature = "latent_retrieval", feature = "clippy_lints"))]
 
 use riir_refine::draft::withheld_pair_ood::{
-    clippy_population, print_matrix, print_report, print_rows, run_withheld_pair, Binding,
-    WithheldReport,
+    Binding, WithheldReport, clippy_population, print_matrix, print_report, print_rows,
+    run_withheld_pair,
 };
 use riir_refine::draft::{DomainId, RerankMode};
 
@@ -186,11 +186,7 @@ fn t2_rustc_errors_withheld_pair_ood() {
 }
 
 fn verdict_word(held: bool) -> &'static str {
-    if held {
-        "HELD"
-    } else {
-        "REFUTED"
-    }
+    if held { "HELD" } else { "REFUTED" }
 }
 
 /// The preregistered verdict rule, applied to the pure-retrieval paired drop.

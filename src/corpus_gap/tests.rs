@@ -6,8 +6,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    canonical_path, classify, emit_events, events_dir, misses_section, stamp_clippy, GapLaneError,
-    GapPartition, SECTION,
+    GapLaneError, GapPartition, SECTION, canonical_path, classify, emit_events, events_dir,
+    misses_section, stamp_clippy,
 };
 use crate::corpus_coverage::{DefaultLevel, LintRow, LintSurface, MIN_DERIVED_LINTS};
 use katgpt_core::coverage_manifest::{CoverageManifest, SectionInput, StampPolicy};

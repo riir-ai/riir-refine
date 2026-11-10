@@ -19,7 +19,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use riir_refine::frontier_pairs::{construction_pairs, fence_sample, fence_verdicts, PairVerdict};
+use riir_refine::frontier_pairs::{PairVerdict, construction_pairs, fence_sample, fence_verdicts};
 
 /// Compile one source with plain rustc (the `behavioural_equivalence`
 /// house pattern — no cargo, no dep graph, no shared target dir) and

@@ -33,7 +33,7 @@
 //!    `S { .. }` literals, `S(..)`-callee multi-segment paths, and every
 //!    TYPE-position path are unambiguous and fire.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{File, ImplItem, Item, Pat, Path, PathArguments, Type, TypePath};
 

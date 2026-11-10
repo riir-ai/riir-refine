@@ -24,7 +24,7 @@
 
 #![cfg(feature = "rustc_errors")]
 
-use riir_refine::domains::rustc_errors::probe::{PremiseProbe, ProbeOutcome, PROBE_CASES};
+use riir_refine::domains::rustc_errors::probe::{PROBE_CASES, PremiseProbe, ProbeOutcome};
 
 /// Codes measured to have NO machine-applicable suggestion — the territory
 /// Plan 019 can own outright.

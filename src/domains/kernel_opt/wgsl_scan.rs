@@ -611,12 +611,16 @@ mod tests {
         assert!(rules(&found).contains(&"row-dot-split-inner-axis-block-reduce"));
 
         let healthy = "@compute @workgroup_size(16, 16, 1)\nfn main() { }";
-        assert!(!rules(&WgslScanner::default().scan(healthy))
-            .contains(&"row-dot-split-inner-axis-block-reduce"));
+        assert!(
+            !rules(&WgslScanner::default().scan(healthy))
+                .contains(&"row-dot-split-inner-axis-block-reduce")
+        );
 
         let one_d = "@compute @workgroup_size(64)\nfn main() { }";
-        assert!(!rules(&WgslScanner::default().scan(one_d))
-            .contains(&"row-dot-split-inner-axis-block-reduce"));
+        assert!(
+            !rules(&WgslScanner::default().scan(one_d))
+                .contains(&"row-dot-split-inner-axis-block-reduce")
+        );
     }
 
     /// P3 — the real m2p private arrays fire (128 + 256 are the corpus
@@ -634,12 +638,16 @@ mod tests {
         );
 
         let shared = "var<workgroup> tile: array<f32, 256>;\nfn k() { }";
-        assert!(!rules(&WgslScanner::default().scan(shared))
-            .contains(&"declared-max-array-taxed-per-thread-under-runtime-bound"));
+        assert!(
+            !rules(&WgslScanner::default().scan(shared))
+                .contains(&"declared-max-array-taxed-per-thread-under-runtime-bound")
+        );
 
         let small = "fn k() { var buf: array<f32, 16>; }";
-        assert!(!rules(&WgslScanner::default().scan(small))
-            .contains(&"declared-max-array-taxed-per-thread-under-runtime-bound"));
+        assert!(
+            !rules(&WgslScanner::default().scan(small))
+                .contains(&"declared-max-array-taxed-per-thread-under-runtime-bound")
+        );
     }
 
     /// P1 — the corpus let-binding restatement fires; a shared const and an
@@ -651,12 +659,16 @@ mod tests {
         assert!(rules(&found).contains(&"share-cube-size-const-between-kernel-and-launcher"));
 
         let fixed = "@compute @workgroup_size(64)\nfn k() {\n    let cube_size = CUBE_SIZE;\n}";
-        assert!(!rules(&WgslScanner::default().scan(fixed))
-            .contains(&"share-cube-size-const-between-kernel-and-launcher"));
+        assert!(
+            !rules(&WgslScanner::default().scan(fixed))
+                .contains(&"share-cube-size-const-between-kernel-and-launcher")
+        );
 
         let unrelated = "@compute @workgroup_size(64)\nfn k() {\n    let dim = 128u;\n}";
-        assert!(!rules(&WgslScanner::default().scan(unrelated))
-            .contains(&"share-cube-size-const-between-kernel-and-launcher"));
+        assert!(
+            !rules(&WgslScanner::default().scan(unrelated))
+                .contains(&"share-cube-size-const-between-kernel-and-launcher")
+        );
     }
 
     /// P4 — the naive fused out-projection (the Issue 701 H-C shape) fires
@@ -675,31 +687,41 @@ mod tests {
             "naive fused out-proj must fire under experimental, got {found:?}"
         );
         // Default scan: OFF (the pattern is not precision-vetted).
-        assert!(!rules(&WgslScanner::default().scan(naive))
-            .contains(&"multi-head-out-proj-consumes-head-concat"));
+        assert!(
+            !rules(&WgslScanner::default().scan(naive))
+                .contains(&"multi-head-out-proj-consumes-head-concat")
+        );
 
         // Correct: both operands indexed by the loop var (a real dot).
         let correct_dot = "fn dot(q: array<f32>, k: array<f32>, hd: u32) -> f32 {\n    var acc: f32 = 0.0;\n    for (var d = 0u; d < hd; d = d + 1u) {\n        for (var kk = 0u; kk < hd; kk = kk + 1u) {\n            acc += q[d] * k[d * hd + kk];\n        }\n    }\n    return acc;\n}";
-        assert!(!rules(&experimental.scan(correct_dot))
-            .contains(&"multi-head-out-proj-consumes-head-concat"));
+        assert!(
+            !rules(&experimental.scan(correct_dot))
+                .contains(&"multi-head-out-proj-consumes-head-concat")
+        );
 
         // Idiomatic constant scaling must NOT fire (numeric literal LHS).
         let const_scale = "fn s(x: array<f32>, n: u32) -> f32 {\n    var acc: f32 = 0.0;\n    for (var d = 0u; d < n; d = d + 1u) {\n        for (var k = 0u; k < n; k = k + 1u) {\n            acc += 2.0 * x[d * n + k];\n        }\n    }\n    return acc;\n}";
-        assert!(!rules(&experimental.scan(const_scale))
-            .contains(&"multi-head-out-proj-consumes-head-concat"));
+        assert!(
+            !rules(&experimental.scan(const_scale))
+                .contains(&"multi-head-out-proj-consumes-head-concat")
+        );
 
         // The correct two-phase out-projection: full-row matvec, both vary.
         let two_phase = "fn out_proj(attn: array<f32>, wo: array<f32>, h: u32) -> f32 {\n    var sum: f32 = 0.0;\n    for (var d = 0u; d < h; d = d + 1u) {\n        for (var k = 0u; k < h; k = k + 1u) {\n            sum = sum + attn[k] * wo[d * h + k];\n        }\n    }\n    return sum;\n}";
-        assert!(!rules(&experimental.scan(two_phase))
-            .contains(&"multi-head-out-proj-consumes-head-concat"));
+        assert!(
+            !rules(&experimental.scan(two_phase))
+                .contains(&"multi-head-out-proj-consumes-head-concat")
+        );
 
         // THE demotion evidence: the real layer_fuse lerp line — a legitimate
         // alpha-interpolation, textually identical to the bug — must stay
         // silent in the DEFAULT scan (it fires under experimental, which is
         // exactly why the pattern is not precision-vetted).
         let lerp = "fn fuse(alpha: f32, target: array<f32>, p: u32, j: u32, dim: u32) -> f32 {\n    var val: f32 = 0.0;\n    for (var i = 0u; i < p; i = i + 1u) {\n        for (var jj = 0u; jj < j; jj = jj + 1u) {\n            val = val + alpha * target[p * j + jj + dim];\n        }\n    }\n    return val;\n}";
-        assert!(!rules(&WgslScanner::default().scan(lerp))
-            .contains(&"multi-head-out-proj-consumes-head-concat"));
+        assert!(
+            !rules(&WgslScanner::default().scan(lerp))
+                .contains(&"multi-head-out-proj-consumes-head-concat")
+        );
     }
 
     /// P6 — single-slot staging (the Issue 686 H7 fix shape): the bare-load
@@ -726,8 +748,10 @@ fn covariance() {
         let fixed = "fn covariance() {
     accum += input_kv[pos_base + global_row] * input_kv[pos_base + global_col];
 }";
-        assert!(!rules(&WgslScanner::default().scan(fixed))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(fixed))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
 
         // Computed-write staging (the LIVE role_transport.wgsl): staging a
         // value computed once + reused by 16 threads IS reuse > 1 — silent.
@@ -736,8 +760,10 @@ fn k() {
     s_row[local_row] = val * role_emb[role_offset + global_row];
     accum += s_row[local_row] * s_col[local_col];
 }";
-        assert!(!rules(&WgslScanner::default().scan(computed))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(computed))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
 
         // Tree reduction: reads at [t] AND [t + stride] — multi-form — silent.
         let tree = "var<workgroup> row_sq: array<f32, 16>;
@@ -745,8 +771,10 @@ fn k() {
     row_sq[local_id] = partial_sq;
     row_sq[local_id] = row_sq[local_id] + row_sq[local_id + stride];
 }";
-        assert!(!rules(&WgslScanner::default().scan(tree))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(tree))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
 
         // Compound transpose index: unique slot per thread — the staging
         // exists to coalesce — silent.
@@ -755,8 +783,10 @@ fn k() {
     tile[local_row * 16u + local_col] = input[global_row * 16u + local_col];
     output[global_col * 16u + global_row] = tile[local_col * 16u + local_row];
 }";
-        assert!(!rules(&WgslScanner::default().scan(transpose))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(transpose))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
 
         // Loop-varying read index (the thread reads MANY slots) — silent.
         let loop_var = "var<workgroup> buf: array<f32, 64>;
@@ -766,8 +796,10 @@ fn k() {
         sum += buf[i];
     }
 }";
-        assert!(!rules(&WgslScanner::default().scan(loop_var))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(loop_var))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
 
         // Non-bare-load write (computed RHS via function call) — silent.
         let fn_write = "var<workgroup> tile: array<f32, 16>;
@@ -775,8 +807,10 @@ fn k() {
     tile[col] = f32(row);
     out[row * 16u + col] = tile[col] * 2.0;
 }";
-        assert!(!rules(&WgslScanner::default().scan(fn_write))
-            .contains(&"smem-staging-gated-by-cross-thread-reuse"));
+        assert!(
+            !rules(&WgslScanner::default().scan(fn_write))
+                .contains(&"smem-staging-gated-by-cross-thread-reuse")
+        );
     }
 
     /// P7 — serial-stride dual-index dot (the Issue 698 pre-fix cube body,
@@ -800,8 +834,10 @@ fn k() {
             "the 698-pre serial dot must fire under experimental, got {found:?}"
         );
         // Default scan: OFF (serial-K GEMV ambiguity — mining-only).
-        assert!(!rules(&WgslScanner::default().scan(buggy))
-            .contains(&"row-dot-split-inner-axis-block-reduce"));
+        assert!(
+            !rules(&WgslScanner::default().scan(buggy))
+                .contains(&"row-dot-split-inner-axis-block-reduce")
+        );
 
         // The 698-post form: lane-strided (PLANE_DIM) — silent.
         let fixed = "fn dot_per_row(u: &[f32], g: &[f32], h: u32) {
@@ -824,8 +860,10 @@ fn k() {
     }
     return sum;
 }";
-        assert!(rules(&experimental.scan(wgsl_buggy))
-            .contains(&"row-dot-split-inner-axis-block-reduce"));
+        assert!(
+            rules(&experimental.scan(wgsl_buggy))
+                .contains(&"row-dot-split-inner-axis-block-reduce")
+        );
     }
 
     /// Determinism + a clean control: a healthy tiled kernel fires nothing.

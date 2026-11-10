@@ -36,7 +36,7 @@
 
 use std::collections::BTreeMap;
 
-use katgpt_core::linking_fold::{detect_linking, LinkingDetectorConfig};
+use katgpt_core::linking_fold::{LinkingDetectorConfig, detect_linking};
 use riir_rag::{Embedder, ModellessEmbedder};
 use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::eval_fixtures_clippy::CLIPPY_SPANS;

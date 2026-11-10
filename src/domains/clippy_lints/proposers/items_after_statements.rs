@@ -53,7 +53,7 @@
 //!   scoping.
 
 use super::helpers::{byte_range, comment_marker_positions};
-use super::{src, SourceEdit};
+use super::{SourceEdit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Block, File, Item, Stmt};

@@ -30,8 +30,8 @@
 use std::sync::Mutex;
 
 use riir_refine::kat_promotion::{
-    parse_candidates, run_posthoc_sweep, run_promotion_gate, CandidateRow, PromotionRegistry,
-    RejectReason, Verdict, CANDIDATE_SCHEMA_VERSION, DOMAIN_CLIPPY,
+    CANDIDATE_SCHEMA_VERSION, CandidateRow, DOMAIN_CLIPPY, PromotionRegistry, RejectReason,
+    Verdict, parse_candidates, run_posthoc_sweep, run_promotion_gate,
 };
 use riir_refine::score_bench::fixtures::fixtures;
 use riir_refine::score_bench::{draft_oracle, report::HISTORY_JSONL};
@@ -120,10 +120,12 @@ fn promote_pass_then_both_regression_bars_with_history_isolation() {
         registry.promoted["net-benign"].tier,
         riir_refine::memory::EvidenceTier::Certified
     );
-    assert!(registry
-        .overlay_triples()
-        .iter()
-        .any(|t| t.0 == "net-benign"));
+    assert!(
+        registry
+            .overlay_triples()
+            .iter()
+            .any(|t| t.0 == "net-benign")
+    );
 
     // ── reject-on-heal-regression: parses, does not compile ────────────
     let (report, registry) = gate_one(

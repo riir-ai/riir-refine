@@ -14,7 +14,7 @@
 //! tighter than `.`.
 
 use super::helpers::{is_none_pat, is_postfix_safe, is_pure_expr};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Arm, Expr, ExprMatch, File, Pat};
 

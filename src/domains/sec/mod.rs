@@ -219,8 +219,8 @@ pub fn file_forbids_unsafe(file: &syn::File) -> bool {
 /// Count unsafe usage per the geiger taxonomy (see [`UnsafeCounts`]).
 #[must_use]
 pub fn count_unsafe(file: &syn::File) -> UnsafeCounts {
-    use syn::visit::Visit;
     use syn::ItemFn;
+    use syn::visit::Visit;
 
     struct Counter(UnsafeCounts);
 

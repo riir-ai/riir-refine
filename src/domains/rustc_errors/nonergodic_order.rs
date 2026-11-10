@@ -64,9 +64,9 @@ use std::sync::{Arc, Mutex};
 
 use katgpt_micro_belief::nonergodic::{ComponentModel, NonergodicFilter};
 
-use super::driver::{span_hash, AttemptOutcome, AttemptRecord, ObserverFn, OrderingFn, ReviveFn};
+use super::driver::{AttemptOutcome, AttemptRecord, ObserverFn, OrderingFn, ReviveFn, span_hash};
 use super::playbooks::FixCandidate;
-use crate::traj_store::{shape_conditional_score, TrajStore};
+use crate::traj_store::{TrajStore, shape_conditional_score};
 
 /// Components (rank rotations) — the `PoC`'s K.
 pub const K_COMPONENTS: usize = 4;

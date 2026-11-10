@@ -28,8 +28,8 @@
 #![cfg(feature = "kat_service")]
 
 use riir_refine::kat_redact::{
-    glob_match, redact, scan_secrets, BlockReason, FindingKind, GateDecision, RedactionGate,
-    RedactionLog, SpanOrigin, SyncPolicy, POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
+    BlockReason, FindingKind, GateDecision, POLICY_FILE_NAME, REDACT_CHANGELOG, REDACT_VERSION,
+    RedactionGate, RedactionLog, SpanOrigin, SyncPolicy, glob_match, redact, scan_secrets,
 };
 
 /// The shipped-repo policy shape (mirrors `riir-refine/.refine-sync-policy`
@@ -127,9 +127,11 @@ fn g4_aws_secret_via_env_shape_blocks() {
     let d = gate().check(SpanOrigin::MinedCorpus, None, span);
     assert!(!d.is_syncable(), "{d:?}");
     let findings = scan_secrets(span);
-    assert!(findings
-        .iter()
-        .any(|f| f.kind == FindingKind::EnvSecretAssign));
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.kind == FindingKind::EnvSecretAssign)
+    );
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
 }
@@ -137,9 +139,11 @@ fn g4_aws_secret_via_env_shape_blocks() {
 #[test]
 fn g4_github_token_blocks() {
     let span = "let hook = \"ghp_16C7eBAF1q9XZKL3m0yv8u2oF4R6tYhUwz\";";
-    assert!(!gate()
-        .check(SpanOrigin::OwnRepo, Some("src/a.rs"), span)
-        .is_syncable());
+    assert!(
+        !gate()
+            .check(SpanOrigin::OwnRepo, Some("src/a.rs"), span)
+            .is_syncable()
+    );
 }
 
 #[test]
@@ -165,13 +169,17 @@ fn g4_private_key_block_blocks_and_covers_whole_block() {
 #[test]
 fn g4_connection_string_password_blocks() {
     let span = "let db = \"postgres://svc_app:S3cretPass@db.prod.internal:5432/orders\";";
-    assert!(!gate()
-        .check(SpanOrigin::MinedCorpus, None, span)
-        .is_syncable());
+    assert!(
+        !gate()
+            .check(SpanOrigin::MinedCorpus, None, span)
+            .is_syncable()
+    );
     let findings = scan_secrets(span);
-    assert!(findings
-        .iter()
-        .any(|f| f.kind == FindingKind::ConnStringCreds));
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.kind == FindingKind::ConnStringCreds)
+    );
     let payload = redact(span, &findings);
     assert_g4_byte_exact(span, &findings, &payload);
 }
@@ -201,9 +209,11 @@ fn g4_credential_shaped_rust_literal_blocks() {
     let span = "const API_KEY: &str = \"live_sk_9f8e7d6c5b4a3210fedcba9876543210\";\n";
     let d = gate().check(SpanOrigin::AuthoredFixture, None, span);
     assert!(!d.is_syncable());
-    assert!(scan_secrets(span)
-        .iter()
-        .any(|f| f.kind == FindingKind::RustSecretLiteral));
+    assert!(
+        scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::RustSecretLiteral)
+    );
 }
 
 #[test]
@@ -224,12 +234,16 @@ fn g4_high_entropy_blobs_block() {
 #[test]
 fn g4_bearer_and_jwt_shaped_tokens_block() {
     let span = "req.header(\"Authorization\", \"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.sig\");";
-    assert!(!gate()
-        .check(SpanOrigin::OwnRepo, Some("src/api.rs"), span)
-        .is_syncable());
-    assert!(scan_secrets(span)
-        .iter()
-        .any(|f| f.kind == FindingKind::BearerToken));
+    assert!(
+        !gate()
+            .check(SpanOrigin::OwnRepo, Some("src/api.rs"), span)
+            .is_syncable()
+    );
+    assert!(
+        scan_secrets(span)
+            .iter()
+            .any(|f| f.kind == FindingKind::BearerToken)
+    );
 }
 
 // ── Mixed user-code spans ──────────────────────────────────────────────────
@@ -276,10 +290,12 @@ fn g4_no_policy_file_denies_all() {
     // Point at a policy path that does not exist → deny-all + warning.
     let loaded = RedactionGate::load(&dir.join(POLICY_FILE_NAME));
     assert!(loaded.warning.is_some());
-    assert!(!loaded
-        .gate
-        .check(SpanOrigin::OwnRepo, Some("src/a.rs"), "fn f() {}")
-        .is_syncable());
+    assert!(
+        !loaded
+            .gate
+            .check(SpanOrigin::OwnRepo, Some("src/a.rs"), "fn f() {}")
+            .is_syncable()
+    );
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -396,9 +412,11 @@ pub const GREETING: &str = "hello, world — have a nice day";
         Vec::new(),
         "clean Rust must not trip the scanner"
     );
-    assert!(gate()
-        .check(SpanOrigin::OwnRepo, Some("src/config.rs"), span)
-        .is_syncable());
+    assert!(
+        gate()
+            .check(SpanOrigin::OwnRepo, Some("src/config.rs"), span)
+            .is_syncable()
+    );
 }
 
 // ── The log ────────────────────────────────────────────────────────────────

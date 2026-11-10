@@ -363,7 +363,11 @@ mod tests {
                 } else {
                     cwd.join(path).exists()
                 };
-                assert!(exists, "watched path {p:?} does not exist in {} — cargo would recompile on EVERY build: {line}", cwd.display());
+                assert!(
+                    exists,
+                    "watched path {p:?} does not exist in {} — cargo would recompile on EVERY build: {line}",
+                    cwd.display()
+                );
             }
         }
     }

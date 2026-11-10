@@ -1430,8 +1430,8 @@ mod tests {
     /// Plan 351 T0.1: the oracle-depth census (report-only; the kill-gate
     /// verdict is read off the printout and pinned in the plan's status
     /// block — the assertions here are internal consistency, not gates).
-    /// Posture: `latent_retrieval,clippy_verify,rust_perf` (clippy_verify
-    /// implies clippy_lints). Skips loud when cargo is unavailable.
+    /// Posture: `latent_retrieval,clippy_verify,rust_perf` (`clippy_verify`
+    /// implies `clippy_lints`). Skips loud when cargo is unavailable.
     #[cfg(feature = "clippy_verify")]
     #[test]
     fn t0_oracle_depth_census_report() {
@@ -1458,7 +1458,7 @@ mod tests {
 }
 
 /// Plan 351 T0.1's statistics on synthetic rows — no matcher, no oracle, so
-/// these run at every latent_retrieval test posture and pin the ARITHMETIC
+/// these run at every `latent_retrieval` test posture and pin the ARITHMETIC
 /// (d* selection, the (n−1)·q percentile method, both kill-gates) before any
 /// measurement runs.
 #[cfg(test)]

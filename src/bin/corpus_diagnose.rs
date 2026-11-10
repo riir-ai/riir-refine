@@ -51,10 +51,10 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use riir_refine::corpus_binding::{
-    diagnose_with, CorpusBinding, RuleOutcomes, DEGENERACY_BAR, MIN_ATTEMPTS,
+    CorpusBinding, DEGENERACY_BAR, MIN_ATTEMPTS, RuleOutcomes, diagnose_with,
 };
 use riir_refine::corpus_referee::{
-    split_windows, AttemptRow, Enrollment, EnrollmentFile, RefereeInputs, Verdict, WindowTally,
+    AttemptRow, Enrollment, EnrollmentFile, RefereeInputs, Verdict, WindowTally, split_windows,
 };
 use riir_refine::traj_store::TrajStore;
 
@@ -325,7 +325,9 @@ fn main() {
             "--batches" => match argv.next().and_then(|v| v.parse::<u32>().ok()) {
                 Some(v) => batches = Some(v),
                 None => {
-                    eprintln!("--batches needs a number (the corpus epochs observed since the edit)");
+                    eprintln!(
+                        "--batches needs a number (the corpus epochs observed since the edit)"
+                    );
                     std::process::exit(2);
                 }
             },
@@ -363,9 +365,7 @@ fn main() {
                 history_rows += 0; // counted below from the file reads
                 println!(
                     "store {}: {} row(s) folded, {} corrupt",
-                    f.root,
-                    f.rows,
-                    f.bad_rows
+                    f.root, f.rows, f.bad_rows
                 );
                 referee_rows.extend(rows);
                 folds.push(f);
@@ -386,7 +386,11 @@ fn main() {
                     let rows: u32 = w.values().map(|(w, _)| *w).sum();
                     history_rows += usize::try_from(rows).unwrap_or(0);
                     if !w.is_empty() {
-                        println!("blueprint {}: {} rule row(s) (watch half)", hist.display(), w.len());
+                        println!(
+                            "blueprint {}: {} rule row(s) (watch half)",
+                            hist.display(),
+                            w.len()
+                        );
                     }
                 }
                 Err(e) => eprintln!("SKIP: {e}"),
@@ -417,10 +421,7 @@ fn main() {
         }
     }
 
-    let input: Vec<(&str, RuleOutcomes)> = merged
-        .iter()
-        .map(|(k, v)| (k.as_str(), *v))
-        .collect();
+    let input: Vec<(&str, RuleOutcomes)> = merged.iter().map(|(k, v)| (k.as_str(), *v)).collect();
     let diagnosed = diagnose_with(&input, MIN_ATTEMPTS, DEGENERACY_BAR);
 
     println!();
@@ -448,7 +449,11 @@ fn main() {
                 d.failures,
                 d.rate,
                 vintage,
-                if in_window { "" } else { "  [outside --recent-days]" }
+                if in_window {
+                    ""
+                } else {
+                    "  [outside --recent-days]"
+                }
             );
         }
     }
@@ -574,9 +579,16 @@ fn main() {
         let epoch_hex = |c: &[u8; 32]| c.iter().map(|b| format!("{b:02x}")).collect::<String>();
         // Both epochs computed eagerly — the two corpora are different
         // Corpus<D> instantiations and cannot share a binding.
-        let (clippy_epoch, perf_epoch) = (epoch_hex(&clippy_corpus.commitment), epoch_hex(&perf_corpus.commitment));
+        let (clippy_epoch, perf_epoch) = (
+            epoch_hex(&clippy_corpus.commitment),
+            epoch_hex(&perf_corpus.commitment),
+        );
         let live_epoch = |domain: &str| -> &str {
-            if domain == "clippy_lints" { &clippy_epoch } else { &perf_epoch }
+            if domain == "clippy_lints" {
+                &clippy_epoch
+            } else {
+                &perf_epoch
+            }
         };
         let mut any = false;
         for case in &mut file.cases {
@@ -638,7 +650,16 @@ fn main() {
                 println!("  snapshot population: {}", case.snapshot_population);
             }
             match &verdict {
-                Verdict::Pass { lcb_drop, drop, control_drift } | Verdict::Fail { lcb_drop, drop, control_drift } => {
+                Verdict::Pass {
+                    lcb_drop,
+                    drop,
+                    control_drift,
+                }
+                | Verdict::Fail {
+                    lcb_drop,
+                    drop,
+                    control_drift,
+                } => {
                     println!(
                         "  {}: drop {drop:.3} (LCB95 {lcb_drop:.3}) vs control drift {control_drift:.3} — \
                          pre {:.3} → post {:.3} (n={} post-edit attempts)",
@@ -655,7 +676,10 @@ fn main() {
                         riir_refine::corpus_referee::MIN_POST_ATTEMPTS,
                     );
                 }
-                Verdict::Starved { post_attempts, batches_observed } => {
+                Verdict::Starved {
+                    post_attempts,
+                    batches_observed,
+                } => {
                     println!(
                         "  UNDECIDED-BY-STARVATION — {post_attempts}/{} post-edit attempts \
                          over {batches_observed} observed corpus epochs",

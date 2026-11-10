@@ -43,7 +43,7 @@
 //! compiling form for both mutating and read-only bodies.
 
 use super::helpers::drops_interior_comment;
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprForLoop, ExprLit, ExprMethodCall, ExprParen, File, Lit};

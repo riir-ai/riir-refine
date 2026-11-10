@@ -665,9 +665,11 @@ mod tests {
             .collect();
         assert_eq!(notes.len(), 1, "only the degenerate rule emits a note");
         assert_eq!(notes[0].0, "map_clone");
-        assert!(notes[0]
-            .1
-            .starts_with("telemetry-context (corpus_binding v1"));
+        assert!(
+            notes[0]
+                .1
+                .starts_with("telemetry-context (corpus_binding v1")
+        );
     }
 
     #[test]
@@ -716,8 +718,10 @@ mod tests {
             failures: 5,
             rate: 0.5,
         };
-        assert!(binding
-            .compose_context_note(&["map_clone".to_string()], &other, &epoch(1), "x")
-            .is_err());
+        assert!(
+            binding
+                .compose_context_note(&["map_clone".to_string()], &other, &epoch(1), "x")
+                .is_err()
+        );
     }
 }

@@ -131,7 +131,7 @@ impl RuleDomains {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuleDomains, RUSTC_ERRORS_DOMAIN};
+    use super::{RUSTC_ERRORS_DOMAIN, RuleDomains};
 
     #[test]
     fn domain_attribution_is_table_membership_then_rustc_code() {

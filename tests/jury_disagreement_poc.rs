@@ -22,7 +22,7 @@
 #![cfg(all(feature = "latent_retrieval", feature = "clippy_verify"))]
 
 use riir_refine::draft::jury_disagreement::{
-    best_g2_threshold, print_jury_report, run_jury_poc, DisagreementSignals, FixOutcome,
+    DisagreementSignals, FixOutcome, best_g2_threshold, print_jury_report, run_jury_poc,
 };
 use riir_refine::draft::{ClippyOracle, DomainId, LatentMatcher};
 

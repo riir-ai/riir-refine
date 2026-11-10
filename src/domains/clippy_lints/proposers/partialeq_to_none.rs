@@ -25,7 +25,7 @@
 //! binds tighter than any binary operator, so the parenthesized form is
 //! always precedence-correct.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, File};
 

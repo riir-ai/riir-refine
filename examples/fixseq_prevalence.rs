@@ -37,11 +37,11 @@
 //!    and a revisit is structurally impossible: the zero in (1) is then a
 //!    consequence, not a sample.
 
-use riir_refine::domains::rustc_errors::corpus_gen::{generate_corpus, GeneratedCase};
+use riir_refine::domains::rustc_errors::corpus_gen::{GeneratedCase, generate_corpus};
 use riir_refine::domains::rustc_errors::driver::{AttemptOutcome, AttemptRecord};
 use riir_refine::domains::rustc_errors::evolve::dump_fixseq;
 use riir_refine::domains::rustc_errors::floor::{
-    DriverFixer, FloorHarness, HarnessCase, MutatorKind, MUTANT_CASES,
+    DriverFixer, FloorHarness, HarnessCase, MUTANT_CASES, MutatorKind,
 };
 
 /// Per-run flip verdict on the three keys.

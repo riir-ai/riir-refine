@@ -76,7 +76,7 @@ use std::path::{Path, PathBuf};
 use blake3::Hasher as B3;
 use ed25519_dalek::{Signer as _, SigningKey};
 use riir_kat::kat_net_intent::{
-    ensure_attested_intent, intended_net_for_url, ServiceAttestation, ServiceNet,
+    ServiceAttestation, ServiceNet, ensure_attested_intent, intended_net_for_url,
 };
 
 // ── the wire mirror (golden-pinned to riir-dapps src/kat/corpuspr.rs) ──────
@@ -1524,15 +1524,21 @@ mod tests {
 
     #[test]
     fn row_caps_refuse_early() {
-        assert!(row(&"x".repeat(MAX_LINT_KEY_BYTES + 1), "s", "f")
-            .validate()
-            .is_err());
-        assert!(row("r", &"x".repeat(MAX_FIELD_BYTES + 1), "f")
-            .validate()
-            .is_err());
-        assert!(row("r", "s", &"x".repeat(MAX_FIELD_BYTES + 1))
-            .validate()
-            .is_err());
+        assert!(
+            row(&"x".repeat(MAX_LINT_KEY_BYTES + 1), "s", "f")
+                .validate()
+                .is_err()
+        );
+        assert!(
+            row("r", &"x".repeat(MAX_FIELD_BYTES + 1), "f")
+                .validate()
+                .is_err()
+        );
+        assert!(
+            row("r", "s", &"x".repeat(MAX_FIELD_BYTES + 1))
+                .validate()
+                .is_err()
+        );
         assert!(row("r", "s", "f").validate().is_ok());
         let mut no_domain = row("r", "s", "f");
         no_domain.domain = None;
@@ -1567,14 +1573,16 @@ mod tests {
         save_pair_state(&pd, &st).expect("save");
         assert_eq!(load_pair_state(&pd).expect("reload").unwrap(), st);
         // Matching pass.
-        assert!(judge_pair_state(
-            &st,
-            "https://src.example",
-            "https://dst.example",
-            &[1; 32],
-            &[2; 32]
-        )
-        .is_ok());
+        assert!(
+            judge_pair_state(
+                &st,
+                "https://src.example",
+                "https://dst.example",
+                &[1; 32],
+                &[2; 32]
+            )
+            .is_ok()
+        );
         // A source reset refuses, naming the direction + the remedy.
         let err = judge_pair_state(
             &st,
@@ -1652,10 +1660,11 @@ mod tests {
             .map(|r| unhex_fixed::<32>(r.as_str().expect("hex")).expect("32 bytes"))
             .collect();
         let msg = envelope_message(&[1; 32], &[2; 32], 3, &top_root(&roots));
-        assert!(key
-            .verifying_key()
-            .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
-            .is_ok());
+        assert!(
+            key.verifying_key()
+                .verify(&msg, &ed25519_dalek::Signature::from_bytes(&sig))
+                .is_ok()
+        );
         // The chunk sig verifies over the recomputed chunk root at its
         // index.
         let chunk = &signed.chunks[0];
@@ -1664,10 +1673,11 @@ mod tests {
         let croot =
             unhex_fixed::<32>(chunk["chunk_root"].as_str().expect("root hex")).expect("32 bytes");
         let cmsg = chunk_message(&[1; 32], &[2; 32], 3, 0, &croot);
-        assert!(key
-            .verifying_key()
-            .verify(&cmsg, &ed25519_dalek::Signature::from_bytes(&csig))
-            .is_ok());
+        assert!(
+            key.verifying_key()
+                .verify(&cmsg, &ed25519_dalek::Signature::from_bytes(&csig))
+                .is_ok()
+        );
         // The rows ride the chunk body; the submitter must be a 16-byte
         // account id.
         assert_eq!(chunk["rows"].as_array().expect("rows").len(), 2);
@@ -1717,7 +1727,7 @@ mod wire_tests {
     use super::*;
     use crate::kat_lease_client::HttpResponse;
     use crate::kat_protocol_lease::{
-        CorpusPack, LeaseManifest, LeaseSegmentDesc, PatternEntry, CORPUS_PACK_VERSION,
+        CORPUS_PACK_VERSION, CorpusPack, LeaseManifest, LeaseSegmentDesc, PatternEntry,
     };
     use ed25519_dalek::Verifier as _;
     use std::cell::RefCell;
@@ -1963,14 +1973,15 @@ mod wire_tests {
             .iter()
             .map(|r| unhex_fixed::<32>(r.as_str().unwrap()).unwrap())
             .collect();
-        assert!(e
-            .key
-            .verifying_key()
-            .verify(
-                &envelope_message(&[1; 32], &[2; 32], 1, &top_root(&roots)),
-                &ed25519_dalek::Signature::from_bytes(&sig)
-            )
-            .is_ok());
+        assert!(
+            e.key
+                .verifying_key()
+                .verify(
+                    &envelope_message(&[1; 32], &[2; 32], 1, &top_root(&roots)),
+                    &ed25519_dalek::Signature::from_bytes(&sig)
+                )
+                .is_ok()
+        );
         let log = std::fs::read_to_string(pd.join("submissions.jsonl")).unwrap();
         assert!(log.contains("envelope_registered") && log.contains("chunk_ok"));
         let _ = std::fs::remove_dir_all(&e.root);

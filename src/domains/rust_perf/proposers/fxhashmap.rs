@@ -38,7 +38,7 @@
 use syn::visit::Visit;
 use syn::{File, Item, ItemUse, Path, UseTree, Visibility};
 
-use super::{line_indent, span_range, SourceEdit};
+use super::{SourceEdit, line_indent, span_range};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // Gate 0: the file must already import from `rustc_hash` — the splice
@@ -293,12 +293,14 @@ mod tests {
         // refs, but the crate has no `rustc-hash` dep (no import anywhere
         // in the file) — the splice cannot add the dependency, so the
         // rewrite must not fire.
-        assert!(propose_fix(
-            "fxhashmap",
-            "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
+        assert!(
+            propose_fix(
+                "fxhashmap",
+                "use std::collections::HashMap;\nfn lookup(map: &HashMap<u32, u32>, k: u32) \
                  -> Option<u32> {\n    map.get(&k).copied()\n}"
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -395,22 +397,26 @@ mod tests {
     #[test]
     fn no_use_unchanged() {
         // Body refs but no use item — out of scope (nothing to swap).
-        assert!(propose_fix(
-            "fxhashmap",
-            "use rustc_hash::FxHashSet;\nfn f() -> std::collections::HashMap<u32, u32> {\n    \
+        assert!(
+            propose_fix(
+                "fxhashmap",
+                "use rustc_hash::FxHashSet;\nfn f() -> std::collections::HashMap<u32, u32> {\n    \
                  std::collections::HashMap::new()\n}"
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn dead_use_unchanged() {
         // Use exists but zero body refs — swapping is noise.
-        assert!(propose_fix(
-            "fxhashmap",
-            "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn f() -> u32 { 42 }"
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "fxhashmap",
+                "use rustc_hash::FxHashSet;\nuse std::collections::HashMap;\nfn f() -> u32 { 42 }"
+            )
+            .is_none()
+        );
     }
 
     #[test]

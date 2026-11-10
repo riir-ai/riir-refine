@@ -33,8 +33,8 @@
 use syn::visit::Visit;
 use syn::{File, ImplItem, Item, TraitItem};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// Item-position `#[doc]` attribute byte ranges, source order. Item level
 /// only: statement-position stray docs and string-literal doc-shaped text
@@ -179,11 +179,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "/// Adds one.\nfn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 1 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "/// Adds one.\nfn f(hits: &mut Vec<u8>) -> u8 { hits.push(0); 1 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -216,40 +218,48 @@ mod tests {
     fn attr_after_gap_is_silent_probed_shape() {
         // The probe's measured upstream silence: `/// docs` + blank +
         // `#[derive]` never fires — mirrored, never invented.
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "/// Docs for bar.\n\n#[derive(Debug)]\nstruct B { y: u8 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "/// Docs for bar.\n\n#[derive(Debug)]\nstruct B { y: u8 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn second_doc_block_refuses() {
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "/// a\n\n/// b\nfn f() -> u8 { 1 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "/// a\n\n/// b\nfn f() -> u8 { 1 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn inner_doc_refuses() {
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "//! crate docs\n\nfn f() -> u8 { 1 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "//! crate docs\n\nfn f() -> u8 { 1 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn string_interior_doc_shape_invisible() {
         // Doc-shaped text inside a string literal is not a doc
         // (`doc_lines` reads real `#[doc]` attrs only).
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "fn s() {\n    let x = \"/// q\\n\\nfn z() {}\";\n    let _ = x;\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "fn s() {\n    let x = \"/// q\\n\\nfn z() {}\";\n    let _ = x;\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -259,20 +269,24 @@ mod tests {
 
     #[test]
     fn mid_block_empty_doc_line_is_not_a_fire() {
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "/// a\n///\n/// b\nfn f() -> u8 { 1 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "/// a\n///\n/// b\nfn f() -> u8 { 1 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn stray_doc_before_closing_brace_refuses() {
-        assert!(propose_fix(
-            "empty_line_after_doc_comments",
-            "fn g() -> u8 {\n    /// stray\n\n    1\n}",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "empty_line_after_doc_comments",
+                "fn g() -> u8 {\n    /// stray\n\n    1\n}",
+            )
+            .is_none()
+        );
     }
 
     #[test]

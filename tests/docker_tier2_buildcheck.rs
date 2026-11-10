@@ -21,9 +21,9 @@
 
 #![cfg(feature = "docker_buildcheck")]
 
-use riir_refine::domains::docker::buildcheck::{available, build_check, findings, CheckRun};
+use riir_refine::domains::docker::buildcheck::{CheckRun, available, build_check, findings};
 use riir_refine::domains::docker::corpus::build_docker_seed_corpus;
-use riir_refine::domains::docker::verify::{all_tier2_agreements, Agreement};
+use riir_refine::domains::docker::verify::{Agreement, all_tier2_agreements};
 
 /// Best-effort daemon identity for failure output — the issue-071 lesson:
 /// both sides of the agreement contract are version-locked to the installed

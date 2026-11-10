@@ -10,9 +10,7 @@
 //! and contracts the fresh seam + the floors DEPEND on, so a drift is a
 //! named failure, not a mystery rank regression.
 
-use riir_refine::ragplane::{
-    bm25, query, Embedder, ModellessEmbedder, Tokenizer, LATENT_DIM,
-};
+use riir_refine::ragplane::{Embedder, LATENT_DIM, ModellessEmbedder, Tokenizer, bm25, query};
 
 /// The latent dimension the whole matcher pipeline assumes —
 /// `NeuronShard.hla_moments`-shaped, `riir-agents`-matched. A drift here
@@ -30,7 +28,10 @@ pub fn modelless_embedder_is_deterministic_normalized_and_zero_on_empty() {
     let e = ModellessEmbedder;
 
     let empty = e.embed("");
-    assert_eq!(empty, [0.0; LATENT_DIM], "empty input must be the zero vector");
+    assert_eq!(
+        empty, [0.0; LATENT_DIM],
+        "empty input must be the zero vector"
+    );
 
     let a = e.embed("fn fix_capacity_in_loop(v: &mut Vec<u8>) { v.reserve(64); }");
     let b = e.embed("fn fix_capacity_in_loop(v: &mut Vec<u8>) { v.reserve(64); }");
@@ -52,7 +53,10 @@ pub fn modelless_embedder_discriminates_structures() {
     let x = e.embed("for i in 0..n { if xs[i] > max { max = xs[i]; } }");
     let y = e.embed("let config: Result<Config, Error> = serde_json::from_str(s);");
     let dot: f32 = x.iter().zip(y.iter()).map(|(a, b)| a * b).sum();
-    assert!(dot < 0.999, "distinct structures must not collapse: dot={dot}");
+    assert!(
+        dot < 0.999,
+        "distinct structures must not collapse: dot={dot}"
+    );
 }
 
 /// The BM25 index's contract the fusion relies on: search returns
@@ -61,17 +65,22 @@ pub fn modelless_embedder_discriminates_structures() {
 #[test]
 pub fn bm25_index_search_round_trip() {
     let idx = bm25::Bm25Index::new();
-    idx.index(b"rule:clippy:redundant_clone", "remove the redundant clone of the value");
+    idx.index(
+        b"rule:clippy:redundant_clone",
+        "remove the redundant clone of the value",
+    );
     idx.index(b"rule:perf:uninit_vec", "replace zeroed vec with uninit");
 
     let hits = idx.search("redundant clone", 5);
     assert!(!hits.is_empty(), "the indexed doc must surface");
     assert!(
-        hits.iter().any(|(k, _)| k.as_slice() == b"rule:clippy:redundant_clone"),
+        hits.iter()
+            .any(|(k, _)| k.as_slice() == b"rule:clippy:redundant_clone"),
         "the right key surfaces: {hits:?}"
     );
     assert!(
-        hits.iter().all(|(k, _)| k.as_slice() != b"rule:perf:uninit_vec"),
+        hits.iter()
+            .all(|(k, _)| k.as_slice() != b"rule:perf:uninit_vec"),
         "the non-matching doc must not outrank into the query's terms"
     );
 
@@ -87,7 +96,11 @@ pub fn ast_chunker_splits_at_item_boundaries() {
     use riir_refine::ragplane::chunker::Chunker as _;
     let src = "fn alpha() { let x = 1; }\nfn beta() { let y = 2; }\n";
     let chunks = riir_refine::ragplane::ast_chunker::AstChunker.chunk(src, "src/lib.rs");
-    assert!(chunks.len() >= 2, "two fns must chunk apart: {}", chunks.len());
+    assert!(
+        chunks.len() >= 2,
+        "two fns must chunk apart: {}",
+        chunks.len()
+    );
     assert!(
         chunks.iter().all(|c| !c.content.is_empty()),
         "no empty chunks"

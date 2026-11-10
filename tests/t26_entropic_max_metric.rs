@@ -27,7 +27,7 @@
 //! ```
 
 use riir_refine::selection_entropic::{
-    solve_beta, tilt_advantages_into, tilted_weights, KL_BUDGET_LN2,
+    KL_BUDGET_LN2, solve_beta, tilt_advantages_into, tilted_weights,
 };
 
 /// Harness-local arms: the three production modes plus the two principled
@@ -251,7 +251,7 @@ fn t26_max_metric_ab() {
         // Determinism pin: re-running the Ent-sigmoid cell reproduces it exactly.
         let rerun = run_cell(Arm::EntSigmoid, 0x5EED_0001, evo_noise);
         assert_eq!(
-            cells[2].1 .0.to_bits(),
+            cells[2].1.0.to_bits(),
             rerun.0.to_bits(),
             "Entropic cell must be deterministic across repeat runs"
         );

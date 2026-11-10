@@ -64,7 +64,10 @@ mod tests {
     fn header_value_shape_and_first_wins() {
         install_consumer_tag("cargo-refine/0.4.8 (build test)");
         let v = header_value();
-        assert!(v.starts_with("cargo-refine/0.4.8 (build test); riir-kat/"), "{v}");
+        assert!(
+            v.starts_with("cargo-refine/0.4.8 (build test); riir-kat/"),
+            "{v}"
+        );
         let net = v.rsplit("net/").next().unwrap_or("");
         assert!(
             matches!(net, "mainnet" | "devnet" | "multi" | "conflict"),

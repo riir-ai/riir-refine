@@ -52,7 +52,7 @@
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, File};
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut scan = CmpScan {
@@ -253,60 +253,72 @@ mod tests {
 
     #[test]
     fn nonsquare_product_skips() {
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(dx: f32, dy: f32, r: f32) -> bool { (dx * dy).sqrt() < r }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(dx: f32, dy: f32, r: f32) -> bool { (dx * dy).sqrt() < r }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn mixed_chain_skips() {
         // `a * b + c * c` — the `a * b` term is not a square.
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(a: f32, b: f32, c: f32, r: f32) -> bool { (a * b + c * c).sqrt() < r }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(a: f32, b: f32, c: f32, r: f32) -> bool { (a * b + c * c).sqrt() < r }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn method_call_threshold_skips() {
         // Double evaluation of a side-effecting call — never rewrite.
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(x: f32, y: f32) -> bool { (x * x + y * y).sqrt() < get_radius() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(x: f32, y: f32) -> bool { (x * x + y * y).sqrt() < get_radius() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn path_receiver_skips() {
         // No syntactic non-negativity proof for `d2`.
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(d2: f32, r: f32) -> bool { d2.sqrt() < r }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(d2: f32, r: f32) -> bool { d2.sqrt() < r }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn negative_literal_skips() {
         // `-1.0` parses as Expr::Unary — never a pure literal.
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(x: f32) -> bool { (x * x).sqrt() < -1.0 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(x: f32) -> bool { (x * x).sqrt() < -1.0 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn both_sides_sqrt_skips() {
-        assert!(propose_fix(
-            "distance-sq-no-sqrt",
-            "fn f(a: f32, b: f32) -> bool { (a * a).sqrt() < (b * b).sqrt() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "distance-sq-no-sqrt",
+                "fn f(a: f32, b: f32) -> bool { (a * a).sqrt() < (b * b).sqrt() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

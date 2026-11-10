@@ -46,14 +46,14 @@
 use std::collections::BTreeMap;
 
 use riir_rag::{Embedder, ModellessEmbedder};
+use riir_refine::draft::DomainId;
 use riir_refine::draft::latent_matcher::LatentMatcher;
 use riir_refine::draft::retrieval_eval::{canonical_rank, labeled_eval_spans};
-use riir_refine::draft::DomainId;
 use riir_refine::memory::EvidenceTier;
 use riir_refine::rule_domains::RuleDomains;
 
 use katgpt_core::basis_split::{
-    build_zca_whitener, held_out_leakage, split, PairDifferenceMoment, Verdict, Whitening,
+    PairDifferenceMoment, Verdict, Whitening, build_zca_whitener, held_out_leakage, split,
 };
 use katgpt_core::linalg::symmetric_eig::SymmetricEigScratch;
 
@@ -744,14 +744,18 @@ fn main() {
             },
             "--skip-fixtures" => skip_fixtures = true,
             other => {
-                eprintln!("unknown arg {other}; usage: formatting_flip --pairs <dump.jsonl>... [--tier-filter certified|success|all] [--skip-fixtures]");
+                eprintln!(
+                    "unknown arg {other}; usage: formatting_flip --pairs <dump.jsonl>... [--tier-filter certified|success|all] [--skip-fixtures]"
+                );
                 std::process::exit(2);
             }
         }
         i += 1;
     }
     if pairs_paths.is_empty() {
-        eprintln!("no --pairs files; run `cargo refine --dump-trajectories > /tmp/<repo>_trajs.jsonl` in each store repo first");
+        eprintln!(
+            "no --pairs files; run `cargo refine --dump-trajectories > /tmp/<repo>_trajs.jsonl` in each store repo first"
+        );
         std::process::exit(2);
     }
 

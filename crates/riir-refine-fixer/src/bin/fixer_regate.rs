@@ -91,14 +91,14 @@
 use std::io::Write as _;
 use std::path::PathBuf;
 
+use riir_refine::ClippyVerifier;
 use riir_refine::cf_workers_ai::{
-    self, reachable_samples, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass,
-    RegateHarness, Sample, SampleSource,
+    self, ArmSummary, CaseScore, CfClient, CfUsageToday, FewShot, MissClass, RegateHarness, Sample,
+    SampleSource, reachable_samples,
 };
 use riir_refine::kat_footer::TOKENS_PER_MTOK;
 use riir_refine::kat_redact::{GateDecision, RedactionGate, RedactionLog, SpanOrigin};
 use riir_refine::l4_daemon::DaemonL4;
-use riir_refine::ClippyVerifier;
 
 /// Default per-M USD pricing for the cost column — the Proposal 005 cost
 /// basis (qwen3.8-27b list). Overridable via `--price-in/--price-out`;
@@ -555,7 +555,11 @@ fn record_case(
 /// and NEGATIVE controls (noop echo, a destructive item-drop, garbage).
 fn planted_fixes() -> Vec<(&'static str, &'static str, bool)> {
     vec![
-        ("reachable:ptr_arg", "pub fn f(v: &[u8]) -> usize { v.len() }", true),
+        (
+            "reachable:ptr_arg",
+            "pub fn f(v: &[u8]) -> usize { v.len() }",
+            true,
+        ),
         (
             "reachable:or_fun_call",
             "pub fn f(opt: Option<u32>) -> u32 { opt.unwrap_or_else(expensive) }\npub fn expensive() -> u32 { 42 }",
@@ -572,9 +576,17 @@ fn planted_fixes() -> Vec<(&'static str, &'static str, bool)> {
             true,
         ),
         // Negative: noop echo must never be kept.
-        ("reachable:ptr_arg", "pub fn f(v: &Vec<u8>) -> usize { v.len() }", false),
+        (
+            "reachable:ptr_arg",
+            "pub fn f(v: &Vec<u8>) -> usize { v.len() }",
+            false,
+        ),
         // Negative: destructive item-drop resolves the lint but loses mk.
-        ("reachable:box_collection", "pub struct S { v: Vec<u8> }", false),
+        (
+            "reachable:box_collection",
+            "pub struct S { v: Vec<u8> }",
+            false,
+        ),
         // Negative: garbage never merges.
         ("reachable:ptr_arg", "}}}not rust{{{", false),
     ]
@@ -740,9 +752,21 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             &pre.to_string()[..12],
             &grow.to_string()[..12],
             &grow2.to_string()[..12],
-            if p.growing_channels_empty { "empty" } else { "live" },
-            if p.growing_prime_channels_empty { "empty" } else { "live" },
-            if p.modelless.is_some() { "served" } else { "declined" },
+            if p.growing_channels_empty {
+                "empty"
+            } else {
+                "live"
+            },
+            if p.growing_prime_channels_empty {
+                "empty"
+            } else {
+                "live"
+            },
+            if p.modelless.is_some() {
+                "served"
+            } else {
+                "declined"
+            },
         );
     }
 
@@ -783,7 +807,11 @@ fn run_dry(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
             score.merge_strategy.map(|m| m.name()),
             score.control_fires,
             score.findings_before,
-            if score.findings_after == usize::MAX { -1 } else { score.findings_after as isize },
+            if score.findings_after == usize::MAX {
+                -1
+            } else {
+                score.findings_after as isize
+            },
             score.contract_ok,
             score.behavioural,
         );
@@ -1014,7 +1042,9 @@ fn run_arm_cases(
     }
 
     println!("\n═ arm {} summary ═", args.arm);
-    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!(
+        "| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |"
+    );
     println!("{}", summary.markdown_row(&args.arm));
     println!(
         "  tokens: {} prompt + {} completion · $/fix ≈ {:.5}",
@@ -1044,7 +1074,7 @@ fn run_arm_cases(
 /// shared `RIIR_REFINE_CODE_EGRESS=snippet` consent (refused otherwise).
 #[cfg(feature = "local_backend")]
 fn run_local(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
-    use riir_refine::groq::{is_loopback_base, OaiClient, OaiError};
+    use riir_refine::groq::{OaiClient, OaiError, is_loopback_base};
     let Some(base) = args.base.as_deref() else {
         eprintln!("--backend local needs --base http://127.0.0.1:PORT/v1");
         std::process::exit(2);
@@ -1071,7 +1101,7 @@ fn run_local(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
                             prompt_tokens: g.prompt_tokens,
                             completion_tokens: g.completion_tokens,
                         },
-                    })
+                    });
                 }
                 Err(OaiError::Overflow(m)) if attempt < args.overflow_retries => {
                     eprintln!("  overflow at budget {budget} (retry {}): {m}", attempt + 1);
@@ -1296,7 +1326,9 @@ fn run_daemon(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
     }
 
     println!("\n═ arm C summary (daemon; tokens n/a) ═");
-    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!(
+        "| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |"
+    );
     println!("{}", summary.markdown_row("C"));
     println!("  latency: total {lat_total}ms, max {lat_max}ms");
     println!("  {}", summary.verdict_vs_decline());
@@ -1390,7 +1422,7 @@ struct Bt8Pair {
 /// id-adjacent predecessors). Recorded in the bench doc BEFORE the run.
 #[cfg(feature = "score_bench")]
 fn bt8_build_pairs(harness: &mut RegateHarness, few_shots: usize) -> Vec<Bt8Pair> {
-    use riir_refine::cf_workers_ai::{ident_mentioned, FixAnchors};
+    use riir_refine::cf_workers_ai::{FixAnchors, ident_mentioned};
 
     const ANCHOR: &str = "katgpt-rs-bench_ptrm_width_scaling-002";
     let mut fixtures = riir_refine::score_bench::fixtures::fixtures();
@@ -1818,11 +1850,7 @@ fn behavioural_pilot_verdict(
             }
         }
     }
-    if any_unsupported {
-        "unresolved"
-    } else {
-        "ok"
-    }
+    if any_unsupported { "unresolved" } else { "ok" }
 }
 
 fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
@@ -2219,7 +2247,9 @@ fn run_harvest(args: &Args, harness: &mut RegateHarness, samples: Vec<Sample>) {
         n_total + no_control,
         no_control
     );
-    println!("  pool≥2: {pool_ge2_total}   deciding: {deciding_total}   none-gold: {none_gold_total}   all-gold(unscored): {all_gold_total}");
+    println!(
+        "  pool≥2: {pool_ge2_total}   deciding: {deciding_total}   none-gold: {none_gold_total}   all-gold(unscored): {all_gold_total}"
+    );
     println!(
         "  behav pilot cases: {}   deciding_full among them: {deciding_full_total}",
         args.harvest_behavioural - behav_cases_left
@@ -2305,7 +2335,7 @@ fn run_hosted(
     store: Option<&riir_refine::traj_store::TrajStore>,
 ) {
     use riir_refine::escalation_dispatch::{
-        EscalatedFix, EscalationDispatch, ReadinessPolicy, PRESENTATION_CAP,
+        EscalatedFix, EscalationDispatch, PRESENTATION_CAP, ReadinessPolicy,
     };
     use riir_refine::escalation_manifest::EscalationManifest;
 
@@ -2597,7 +2627,9 @@ fn run_hosted(
         "\n═ arm H summary ({n} paired cases; kind={}) ═",
         dispatch.row().target.kind
     );
-    println!("| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |");
+    println!(
+        "| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |"
+    );
     println!("{}", modelless_summary.markdown_row("H-modelless"));
     println!("{}", escalated_summary.markdown_row("H-escalated"));
     println!(
@@ -2898,7 +2930,9 @@ fn run_pooltexts(args: &Args, harness: &mut RegateHarness) {
     // read enforces the pre-registered ≤5%-of-scored-test wall). Only a
     // total reproduction failure is fatal at this layer.
     if total == 0 || ok_rows * 10 < total {
-        eprintln!("FATAL: pool replay reproduced under 10% — the frozen pin does not hold at all; investigate before training or reading");
+        eprintln!(
+            "FATAL: pool replay reproduced under 10% — the frozen pin does not hold at all; investigate before training or reading"
+        );
         std::process::exit(1);
     }
     out.flush().ok();
@@ -3292,7 +3326,9 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
         none_n,
         none_n - none_wins - none_losses
     );
-    println!("seat: picks {n_pick} · abstains {n_abstain} · stood-other {n_stood_other} · wall p50 {seat_p50:.2} ms (budget ≤ 50 ms) max {seat_max:.2} ms");
+    println!(
+        "seat: picks {n_pick} · abstains {n_abstain} · stood-other {n_stood_other} · wall p50 {seat_p50:.2} ms (budget ≤ 50 ms) max {seat_max:.2} ms"
+    );
     if !seat_us.is_empty() {
         let mut us = seat_us.clone();
         us.sort_unstable();

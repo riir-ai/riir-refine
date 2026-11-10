@@ -11,7 +11,7 @@
 //! literal's byte range is replaced by `'<char>'` — the receiver, method,
 //! and any turbofish stay as untouched bytes.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprMethodCall, File, Lit};
 

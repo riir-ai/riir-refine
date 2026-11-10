@@ -73,12 +73,12 @@
 //!   readout is a prediction.
 
 use katgpt_core::tpr::{
-    als_fit, filler_role_spread, withheld_pair_top1, withheld_pair_top1_report, AlsConfig,
-    AlsInput, AtomicNull, FillerRoleSpread, ObservedPairs, TprBindings, TprScheme, TprScratch,
-    WithheldPairReport,
+    AlsConfig, AlsInput, AtomicNull, FillerRoleSpread, ObservedPairs, TprBindings, TprScheme,
+    TprScratch, WithheldPairReport, als_fit, filler_role_spread, withheld_pair_top1,
+    withheld_pair_top1_report,
 };
 
-use super::tpr_fit::{admissibility, build_corpus, coalesce_for, run, FitCorpus, StateSpace};
+use super::tpr_fit::{FitCorpus, StateSpace, admissibility, build_corpus, coalesce_for, run};
 use super::withheld_pair_ood::Binding;
 
 /// The bar, in percentage points, TPR must beat the atomic null by. Identical

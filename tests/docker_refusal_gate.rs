@@ -13,8 +13,8 @@
 #![cfg(feature = "docker")]
 
 use riir_refine::domains::docker::proposers::fix_all;
-use riir_refine::domains::docker::rules::{scan_source, ScanContext};
-use riir_refine::domains::docker::{refuses, SyntaxVersion};
+use riir_refine::domains::docker::rules::{ScanContext, scan_source};
+use riir_refine::domains::docker::{SyntaxVersion, refuses};
 
 fn run_count(src: &str) -> usize {
     riir_refine::domains::docker::scanner::scan(src)

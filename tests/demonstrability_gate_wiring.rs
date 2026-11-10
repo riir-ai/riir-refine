@@ -24,11 +24,11 @@
 
 use riir_refine::demonstrability::bench_row;
 use riir_refine::demonstrability_gate::DepthPolicy;
+use riir_refine::draft::LatentMatcher;
 use riir_refine::draft::corpus_index::ScoredRule;
 use riir_refine::draft::domain_router::DomainId;
 use riir_refine::draft::eval_fixtures_composite::COMPOSITE_SPANS;
 use riir_refine::draft::eval_fixtures_perf::PERF_SPANS;
-use riir_refine::draft::LatentMatcher;
 
 /// clippy 0.2 / rust_perf 1.0 → factors ≈ 0.571 / 1.429 (the
 /// `spread_constants_shallow_and_deepen` unit-test pin).

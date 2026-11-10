@@ -7,7 +7,7 @@
 //! reference's inner expr. The reversed order (`&*x`, a reborrow) never
 //! fires — it is a borrow of the pointee, not a cancellation.
 
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{Expr, ExprUnary, File, UnOp};
 

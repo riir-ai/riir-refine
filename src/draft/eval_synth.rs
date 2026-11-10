@@ -54,7 +54,7 @@
 //! retrieval stack. No weights, no training, no GPU.
 
 use super::domain_router::DomainId;
-use super::retrieval_eval::{canonical_rank, DomainMetrics};
+use super::retrieval_eval::{DomainMetrics, canonical_rank};
 use super::withheld_pair_ood::{Binding, RUST_KEYWORDS};
 
 /// How deep the per-domain ranked list is probed — the house probe depth
@@ -101,11 +101,7 @@ impl SynthMutation {
             Self::CommentStrip => strip_comments(code),
             Self::Reindent => reindent(code),
         };
-        if out == code {
-            None
-        } else {
-            Some(out)
-        }
+        if out == code { None } else { Some(out) }
     }
 }
 

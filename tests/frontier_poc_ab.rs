@@ -33,9 +33,9 @@
 use std::path::PathBuf;
 
 use riir_refine::dispersion::{
-    entropy_map, from_counts, frontier_order, outcome_entropy, PoolEntry, Regime,
+    PoolEntry, Regime, entropy_map, from_counts, frontier_order, outcome_entropy,
 };
-use riir_refine::elo::{default_elo, PairObservation};
+use riir_refine::elo::{PairObservation, default_elo};
 use riir_refine::frontier_pairs::construction_pairs;
 use riir_refine::traj_store::TrajStore;
 

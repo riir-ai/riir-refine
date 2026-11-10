@@ -37,7 +37,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprCall, File, Lit};
 
 use super::helpers::byte_range;
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 use crate::edit_emitter::drops_interior_comment;
 
 /// Collect the lint's edits against the original source. Empty = no match.
@@ -139,11 +139,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "manual_string_new",
-            "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::new() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_string_new",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::new() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -184,31 +186,37 @@ mod tests {
 
     #[test]
     fn non_empty_literal_refuses() {
-        assert!(propose_fix(
-            "manual_string_new",
-            "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"x\") }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_string_new",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); String::from(\"x\") }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn variable_arg_refuses() {
         // clippy is literal-arg-only (probe: String::from(s) SILENT).
-        assert!(propose_fix(
-            "manual_string_new",
-            "fn mk(s: &str, hits: &mut Vec<u8>) -> String { hits.push(0); String::from(s) }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_string_new",
+                "fn mk(s: &str, hits: &mut Vec<u8>) -> String { hits.push(0); String::from(s) }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn inferred_from_refuses() {
         // `From::from("")` could be Cow/Box/any From<&str> — not the family.
-        assert!(propose_fix(
-            "manual_string_new",
-            "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); From::from(\"\") }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_string_new",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); From::from(\"\") }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -224,11 +232,13 @@ mod tests {
     fn to_string_shape_refuses() {
         // Fires upstream (probe) but the seam is a method call — the
         // documented narrower-than-clippy divergence for v1.
-        assert!(propose_fix(
-            "manual_string_new",
-            "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); \"\".to_string() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "manual_string_new",
+                "fn mk(hits: &mut Vec<u8>) -> String { hits.push(0); \"\".to_string() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

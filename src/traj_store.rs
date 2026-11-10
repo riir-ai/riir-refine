@@ -80,7 +80,7 @@ use riir_neuron_db::bm25::Bm25Index;
 use riir_neuron_db::local_kv::LocalKvStore;
 
 use crate::elo::EloTable;
-use crate::embedder::{embed_into, EMBED_DIM};
+use crate::embedder::{EMBED_DIM, embed_into};
 use crate::memory::EvidenceTier;
 
 /// One durable trajectory row (JSON doc — numeric + text halves together).
@@ -1522,7 +1522,7 @@ impl TrajStore {
     /// KV put or JSON encode failure on a changed row.
     #[allow(clippy::float_cmp)] // bit-identity IS the idempotency gate (deterministic replay)
     pub fn recompute_elo(&self) -> Result<EloRecomputeSummary, String> {
-        use crate::elo::{elo_k_eff, ELO_K, ELO_K_EFF_FLOOR};
+        use crate::elo::{ELO_K, ELO_K_EFF_FLOOR, elo_k_eff};
         let rows = self.dump();
         let mut summary = EloRecomputeSummary {
             rows_seen: rows.len(),

@@ -36,7 +36,7 @@
 //! index sort, and writes results into a caller-provided slice. The only
 //! allocation is the `Vec<FixTrajectory>` growth on insert (amortized).
 
-use crate::embedder::{embed_into, Direction, EMBED_DIM};
+use crate::embedder::{Direction, EMBED_DIM, embed_into};
 use blake3::Hasher;
 use serde::{Deserialize, Serialize};
 

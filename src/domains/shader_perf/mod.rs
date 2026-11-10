@@ -289,7 +289,7 @@ pub fn refuses() -> &'static [&'static str] {
 /// docker/dist, so `    rule(` is the dashboard count needle — the
 /// `CORPUS_DOMAIN_TABLE` convention; a constructor-plumbing needle counts 2
 /// at every rev and lies about the corpus, Issue 066).
-pub use scanner::{entry_point_multiset, group_binding_multiset, ShaderFinding, ShaderScanner};
+pub use scanner::{ShaderFinding, ShaderScanner, entry_point_multiset, group_binding_multiset};
 
 // Plan 134 T2.1: the frame-time budget tier — this domain's measurement
 // VERDICT half (the rules are here; the sidecars are riir-shader's, issue

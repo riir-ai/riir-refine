@@ -118,8 +118,8 @@ fn t93_selection_regret_gate() {
             let cands: Vec<Cand> = (0..n_cands)
                 .map(|_| {
                     let p = rng.f32(); // true quality, uniform on [0,1)
-                                       // Each candidate has its own history depth — this is what
-                                       // creates the 1/1-vs-many asymmetry the rate cannot see.
+                    // Each candidate has its own history depth — this is what
+                    // creates the 1/1-vs-many asymmetry the rate cannot see.
                     let n = 1 + rng.below(max_attempts as usize) as u32;
                     let (s, f) = observe(&mut rng, p, n);
                     // Evolution score is a NOISY view of quality, not an

@@ -30,9 +30,9 @@
 #![cfg(feature = "pav_data")]
 
 use riir_refine::pav_data::{
-    curate, extra_spans, fixture_spans, ground_truth, store_spans, write_jsonl,
     DaemonEditGenerator, EditGenerator, FnGenerator, PavDataConfig, PavDataset, PavManifest,
-    PavSpan, RolloutCtx, VocabularyJudge,
+    PavSpan, RolloutCtx, VocabularyJudge, curate, extra_spans, fixture_spans, ground_truth,
+    store_spans, write_jsonl,
 };
 
 fn usage() -> ! {

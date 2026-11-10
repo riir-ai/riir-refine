@@ -38,7 +38,7 @@
 //! author's guard value is the natural continuation).
 
 use super::helpers::{byte_range, drops_interior_comment, int_lit, is_postfix_safe};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprIf, ExprParen, ExprPath, File, Stmt};
 

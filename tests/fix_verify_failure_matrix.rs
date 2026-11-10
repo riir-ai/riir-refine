@@ -37,7 +37,7 @@ use std::path::{Path, PathBuf};
 
 use riir_refine::compile_oracle::CheckRunner;
 use riir_refine::fix_verify::{
-    EditAtLine, FileEditSet, FixVerifier, RefusalTally, VerifyReport, CARGO_SPAWN_FAIL_PREFIX,
+    CARGO_SPAWN_FAIL_PREFIX, EditAtLine, FileEditSet, FixVerifier, RefusalTally, VerifyReport,
 };
 
 /// One compiler-artifact JSON line — the completion sentinel's trusted

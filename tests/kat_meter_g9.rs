@@ -29,11 +29,11 @@
 
 use riir_refine::kat_footer::TOKENS_PER_MTOK;
 use riir_refine::kat_meter::{
-    count_word_tokens, kat_for_tokens, ChargeState, KatCharge, KatMeter, MeterState,
-    CHARGE_CHANGELOG, CHARGE_VERSION, METER_CHANGELOG, METER_VERSION,
+    CHARGE_CHANGELOG, CHARGE_VERSION, ChargeState, KatCharge, KatMeter, METER_CHANGELOG,
+    METER_VERSION, MeterState, count_word_tokens, kat_for_tokens,
 };
-use riir_refine::kat_units::MicroKat;
 use riir_refine::kat_units::CHARGE_MICRO_KAT_PER_MILLION_TOKENS;
+use riir_refine::kat_units::MicroKat;
 
 // ── G9a: purity + determinism ──────────────────────────────────────────────
 

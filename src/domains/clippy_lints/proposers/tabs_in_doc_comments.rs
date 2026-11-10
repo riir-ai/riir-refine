@@ -35,8 +35,8 @@
 use syn::visit::Visit;
 use syn::{File, ImplItem, Item, TraitItem};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 const SPACES: &str = "    ";
 

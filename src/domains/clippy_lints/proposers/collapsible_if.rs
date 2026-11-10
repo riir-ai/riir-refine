@@ -15,7 +15,7 @@
 //! re-runs).
 
 use super::helpers::{contains_let, needs_logic_parens};
-use super::{edit, src, SourceEdit};
+use super::{SourceEdit, edit, src};
 use syn::spanned::Spanned;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, File, Stmt};

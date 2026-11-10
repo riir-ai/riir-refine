@@ -45,7 +45,7 @@ use syn::visit::Visit;
 use syn::{Expr, ExprCast, ExprMethodCall, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
@@ -188,11 +188,13 @@ mod tests {
 
     #[test]
     fn seed_is_clean() {
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: i64) -> i64 { hits.push(0); x.abs() }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i64) -> i64 { hits.push(0); x.abs() }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -287,70 +289,84 @@ mod tests {
     fn let_bound_receiver_refuses_v1() {
         // Annotated-LET provenance is the documented v1 divergence (params
         // only) — upstream fires here; we refuse until the let-collector.
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x: i32 = -5; x.abs() as u32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>) -> u32 { hits.push(0); let x: i32 = -5; x.abs() as u32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn unsigned_receiver_refuses() {
         // `u32` has no `.abs()` — the shape cannot compile, and the
         // provenance gate refuses it regardless.
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.abs() as u32 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: u32) -> u32 { hits.push(0); x.abs() as u32 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn float_receiver_refuses() {
         // `f64::abs` is a different method with a different fix seam.
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: f64) -> u64 { hits.push(0); x.abs() as u64 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: f64) -> u64 { hits.push(0); x.abs() as u64 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn signed_target_refuses() {
         // `i64` targets are other lints' territory.
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: i32) -> i64 { hits.push(0); x.abs() as i64 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i32) -> i64 { hits.push(0); x.abs() as i64 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn parenthesized_receiver_refuses() {
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); (x).abs() as u64 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); (x).abs() as u64 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_abs_method_refuses() {
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.wrapping_abs() as u64 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.wrapping_abs() as u64 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn argful_abs_refuses() {
         // `.abs()` is zero-arg; anything else is a different method call.
-        assert!(propose_fix(
-            "cast_abs_to_unsigned",
-            "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.abs(2) as u64 }",
-        )
-        .is_none());
+        assert!(
+            propose_fix(
+                "cast_abs_to_unsigned",
+                "fn f(hits: &mut Vec<u8>, x: i64) -> u64 { hits.push(0); x.abs(2) as u64 }",
+            )
+            .is_none()
+        );
     }
 
     #[test]

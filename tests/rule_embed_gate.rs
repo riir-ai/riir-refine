@@ -75,11 +75,16 @@ fn rule_embed_posture_holds_the_pinned_gates() {
     // corpus drift) reads its new values HERE, not from a panic message.
     eprintln!(
         "rule_embed gate: baseline train {}/{} withheld {}/{} | trained train {}/{} withheld {}/{} | clean fixable baseline {} trained {} | regressions {}",
-        rep.baseline_train.hits_at_1, rep.baseline_train.labeled,
-        rep.baseline_withheld.hits_at_1, rep.baseline_withheld.labeled,
-        rep.trained_train.hits_at_1, rep.trained_train.labeled,
-        rep.trained_withheld.hits_at_1, rep.trained_withheld.labeled,
-        rep.clean_top1_fixable_baseline, rep.clean_top1_fixable_trained,
+        rep.baseline_train.hits_at_1,
+        rep.baseline_train.labeled,
+        rep.baseline_withheld.hits_at_1,
+        rep.baseline_withheld.labeled,
+        rep.trained_train.hits_at_1,
+        rep.trained_train.labeled,
+        rep.trained_withheld.hits_at_1,
+        rep.trained_withheld.labeled,
+        rep.clean_top1_fixable_baseline,
+        rep.clean_top1_fixable_trained,
         rep.regressions_vs_baseline,
     );
 

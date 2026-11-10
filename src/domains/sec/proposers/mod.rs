@@ -259,7 +259,7 @@ pub(crate) mod wire_taint;
 
 // Shared emitter substrate (re-exported like rust_perf's proposers).
 pub use crate::edit_emitter::{
-    apply_edits, edit, line_indent, span_range, src, RuleEdit, SourceEdit,
+    RuleEdit, SourceEdit, apply_edits, edit, line_indent, span_range, src,
 };
 
 /// The `--fix`-eligible sec rules.

@@ -57,7 +57,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use super::corpus_index::{RetrievalConfig, RuleIndex};
 use super::domain_router::DomainId;
-use super::instantiation_rerank::{mark_instantiation, rerank, RerankMode, RERANK_POOL};
+use super::instantiation_rerank::{RERANK_POOL, RerankMode, mark_instantiation, rerank};
 
 // ── shape classes ───────────────────────────────────────────────────────
 
@@ -805,7 +805,7 @@ fn rank_of_set(
     scratch: &mut katgpt_core::set_admission::AdmissionScratch,
     fan: &mut katgpt_core::set_admission::FanScratch,
 ) -> (Option<usize>, f32) {
-    use crate::ragplane::{query::LATENT_DIM, Embedder, ModellessEmbedder};
+    use crate::ragplane::{Embedder, ModellessEmbedder, query::LATENT_DIM};
 
     let mut rules = index.suggest_deep(code, RERANK_POOL);
     super::instantiation_rerank::rerank(&mut rules);
@@ -1041,7 +1041,12 @@ pub fn print_report(r: &WithheldReport) {
     );
     println!(
         "  population {} bindings | {} roles | {} fillers | {} cells | {} ELIGIBLE cells | n={} queries",
-        r.population, r.n_rules, r.n_shapes, r.n_cells, r.eligible_cells, r.n()
+        r.population,
+        r.n_rules,
+        r.n_shapes,
+        r.n_cells,
+        r.eligible_cells,
+        r.n()
     );
     println!(
         "  role/filler-collinear roles (1 shape only): {}",

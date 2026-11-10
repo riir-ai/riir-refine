@@ -39,12 +39,12 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use riir_refine::cf_workers_ai::{apply_edit, load_v2edit, RegateHarness, Sample, SampleSource};
+use riir_refine::ClippyVerifier;
+use riir_refine::cf_workers_ai::{RegateHarness, Sample, SampleSource, apply_edit, load_v2edit};
 use riir_refine::domains::clippy_lints::proposers::propose_fix;
 use riir_refine::draft::latent_matcher::line_span_bytes;
 use riir_refine::escalation_manifest::DEFAULT_MIN_POOL;
 use riir_refine::score_bench::fixtures::fixtures;
-use riir_refine::ClippyVerifier;
 
 /// The K budget the issue pre-registers for the gated arm.
 const K_BUDGET: usize = 4;

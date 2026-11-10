@@ -21,10 +21,10 @@
 #![cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 
 use riir_refine::kat_pending_estimator::{
-    estimate_pending, PendingEstimate, SyncWatermark, ESTIMATE_VERSION,
-    PROVISIONAL_KAT_PER_PENDING_RECORD, SYNC_STATE_VERSION,
+    ESTIMATE_VERSION, PROVISIONAL_KAT_PER_PENDING_RECORD, PendingEstimate, SYNC_STATE_VERSION,
+    SyncWatermark, estimate_pending,
 };
-use riir_refine::kat_redact::{RedactionGate, SpanOrigin, SyncPolicy, REDACT_VERSION};
+use riir_refine::kat_redact::{REDACT_VERSION, RedactionGate, SpanOrigin, SyncPolicy};
 use riir_refine::kat_sync_payload::SyncPayloadBuilder;
 use riir_refine::traj_store::TrajRowDoc;
 

@@ -33,7 +33,7 @@
 use syn::visit::Visit;
 use syn::{Block, Expr, File, Local, Pat, Stmt};
 
-use super::{delete_stmt_edit, edit, span_range, src, SourceEdit};
+use super::{SourceEdit, delete_stmt_edit, edit, span_range, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut scan = BlockScan {
@@ -296,72 +296,84 @@ mod tests {
 
     #[test]
     fn intervening_use_skips() {
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
              c.iter().copied().collect();\n    staged.push(1);\n    \
              target.append(&mut staged);\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn later_read_after_append_skips() {
         // Legal original (append empties but leaves the binding alive); the
         // rewrite would drop the binding — skip.
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32]) -> usize {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32]) -> usize {\n    let mut staged = \
              c.iter().copied().collect();\n    target.append(&mut staged);\n    \
              staged.len()\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn same_name_elsewhere_in_file_skips() {
         // The single-use gate is file-scoped: a same-named binding in a
         // sibling fn makes the count 4 — conservative skip.
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
              c.iter().copied().collect();\n    target.append(&mut staged);\n}\nfn g() {\n    \
              let staged = 3;\n    let _ = staged;\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn shadowing_rebind_before_append_skips() {
         // The re-bind is the first mention — not an append stmt — scan stops.
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
              c.iter().copied().collect();\n    let staged = 3;\n    let _ = staged;\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn append_in_nested_block_skips() {
         // The let and the append must share a block.
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32], ok: bool) {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32], ok: bool) {\n    let mut staged = \
              c.iter().copied().collect();\n    if ok {\n        \
              target.append(&mut staged);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn non_mut_append_arg_skips() {
-        assert!(propose_fix(
-            "collect-append-to-extend",
-            "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
+        assert!(
+            propose_fix(
+                "collect-append-to-extend",
+                "fn f(target: &mut Vec<u32>, c: &[u32]) {\n    let mut staged = \
              c.iter().copied().collect();\n    let r = &mut staged;\n    let _ = r;\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]

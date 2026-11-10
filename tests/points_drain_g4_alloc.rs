@@ -10,7 +10,7 @@
 
 #![cfg(feature = "points_drain")]
 
-use riir_refine::points_drain::{allow_hosted, DayState, DrainGate, DrainVerdict};
+use riir_refine::points_drain::{DayState, DrainGate, DrainVerdict, allow_hosted};
 
 struct CountingAllocator;
 

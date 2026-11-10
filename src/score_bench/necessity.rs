@@ -73,13 +73,13 @@ use std::collections::BTreeMap;
 use serde::Deserialize;
 use serde::Serialize;
 
-use super::rule_outcomes;
-use super::run_bench_overridden;
-use super::wrap;
 use super::BenchFixture;
 use super::BenchScore;
 use super::ComponentOverride;
 use super::RuleOutcomeRead;
+use super::rule_outcomes;
+use super::run_bench_overridden;
+use super::wrap;
 use crate::draft::clippy_oracle::ClippyOracle;
 use crate::draft::clippy_oracle::OracleVerdict;
 
@@ -804,8 +804,7 @@ mod tests {
     #[test]
     fn disabled_rule_contributes_no_edits() {
         use crate::score_bench::heal_fixpoint_cfg;
-        let code =
-            "fn t(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v * 2), None => None, } }";
+        let code = "fn t(x: Option<u8>) -> Option<u8> { match x { Some(v) => Some(v * 2), None => None, } }";
         let mut ovr = ComponentOverride::default();
         ovr.disabled.insert("manual_map".to_string());
         let (healed, edits, _) = heal_fixpoint_cfg(code, &[], &ovr);

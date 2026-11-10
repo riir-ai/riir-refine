@@ -111,7 +111,7 @@ pub fn vec_dot_scalar(xs: &[Pq2Block], ys: &[Q8KBlock]) -> f32 {
 
 #[cfg(target_arch = "aarch64")]
 pub mod neon {
-    use super::{f16_bits_to_f32, Pq2Block, Q8KBlock};
+    use super::{Pq2Block, Q8KBlock, f16_bits_to_f32};
     use std::arch::aarch64::*;
 
     /// sdot (v8.2 asimddp — NOT i8mm) requires the dotprod feature at the
@@ -594,11 +594,17 @@ fn main() {
         say(&format!(
             "PARETO-PASS — G1 exact, G4 zero-alloc, NEON strictly faster at every one of {} shapes{}",
             ROWS_GRID.len() * K_GRID.len(),
-            if citable { "" } else { " (TIMING PROVISIONAL — quote the PROVENANCE line)" }
+            if citable {
+                ""
+            } else {
+                " (TIMING PROVISIONAL — quote the PROVENANCE line)"
+            }
         ));
         std::process::exit(0);
     } else {
-        say("PARETO-FAIL — the NEON arm lost or tied at least one shape (a real measured outcome; record it)");
+        say(
+            "PARETO-FAIL — the NEON arm lost or tied at least one shape (a real measured outcome; record it)",
+        );
         std::process::exit(1);
     }
 }

@@ -13,7 +13,7 @@
 #![cfg(feature = "contrastive_scope")]
 
 use riir_refine::scope_model::{ScopeModel, THETA};
-use riir_refine::{build_seed_corpus, HealPipeline, RustAnalyzerPruner, TernaryDrafter};
+use riir_refine::{HealPipeline, RustAnalyzerPruner, TernaryDrafter, build_seed_corpus};
 
 fn pipeline() -> HealPipeline {
     HealPipeline::new(TernaryDrafter::fallback(), RustAnalyzerPruner::new())

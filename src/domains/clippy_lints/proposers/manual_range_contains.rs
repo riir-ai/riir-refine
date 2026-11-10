@@ -47,7 +47,7 @@ use syn::visit::Visit;
 use syn::{BinOp, Expr, ExprBinary, File, ImplItemFn, ItemFn};
 
 use super::helpers::{byte_range, drops_interior_comment, scalar_param_heads_over};
-use super::{edit, SourceEdit};
+use super::{SourceEdit, edit};
 
 /// The scalar annotations `manual_range_contains` admits (the clean
 /// same-type `PartialOrd` set — no `&str`/`String`: cross-type str

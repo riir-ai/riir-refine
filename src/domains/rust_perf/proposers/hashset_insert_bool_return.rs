@@ -38,7 +38,7 @@ use quote::ToTokens;
 use syn::visit::Visit;
 use syn::{Expr, ExprIf, ExprMethodCall, File, Stmt, UnOp};
 
-use super::{delete_stmt_edit, edit, src, SourceEdit};
+use super::{SourceEdit, delete_stmt_edit, edit, src};
 
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     // The if-statement can nest anywhere (loop bodies, match arms, closures),
@@ -202,54 +202,64 @@ mod tests {
     #[test]
     fn derefd_receiver_field_skipped() {
         // `self.seen` parses as Expr::Field — conservatively skipped.
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "fn f(&self, k: u32) {\n    if !self.seen.contains(&k) {\n        \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "fn f(&self, k: u32) {\n    if !self.seen.contains(&k) {\n        \
              self.seen.insert(k);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn key_mismatch_skipped() {
         // Guard checks `a` but inserts `b` — merging would change semantics.
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, a: u32, b: u32) {\n    \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, a: u32, b: u32) {\n    \
              if !s.contains(&a) {\n        s.insert(b);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn mismatched_receivers_skipped() {
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "use std::collections::HashSet;\nfn f(a: &mut HashSet<u32>, b: &mut \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "use std::collections::HashSet;\nfn f(a: &mut HashSet<u32>, b: &mut \
              HashSet<u32>, k: u32) {\n    if !a.contains(&k) {\n        b.insert(k);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn two_arg_insert_skipped() {
         // Vec::insert(idx, val) shape — 2 args, different semantics.
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "fn f(v: &mut Vec<u32>, k: usize) {\n    if !v.contains(&k) {\n        \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "fn f(v: &mut Vec<u32>, k: usize) {\n    if !v.contains(&k) {\n        \
              v.insert(k, 0);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
     fn duplicate_matching_inserts_skipped() {
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, k: u32) {\n    \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, k: u32) {\n    \
              if !s.contains(&k) {\n        s.insert(k);\n        s.insert(k);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]
@@ -264,12 +274,14 @@ mod tests {
 
     #[test]
     fn positive_form_skipped() {
-        assert!(propose_fix(
-            "hashset-insert-bool-return",
-            "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, k: u32) {\n    \
+        assert!(
+            propose_fix(
+                "hashset-insert-bool-return",
+                "use std::collections::HashSet;\nfn f(s: &mut HashSet<u32>, k: u32) {\n    \
              if s.contains(&k) {\n        s.insert(k);\n    }\n}",
-        )
-        .is_none());
+            )
+            .is_none()
+        );
     }
 
     #[test]

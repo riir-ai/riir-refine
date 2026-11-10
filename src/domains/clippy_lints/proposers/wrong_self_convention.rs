@@ -38,8 +38,8 @@
 use syn::visit::Visit;
 use syn::{File, ImplItemFn, ItemImpl, Receiver, Visibility};
 
-use super::helpers::byte_range;
 use super::SourceEdit;
+use super::helpers::byte_range;
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {

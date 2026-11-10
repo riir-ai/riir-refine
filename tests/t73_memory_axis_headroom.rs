@@ -166,7 +166,10 @@ fn t73_memory_axis_headroom() {
         "  memory silent on a wrong top-1  : {memory_cannot}/{n} ({:.1}%)",
         pct(memory_cannot)
     );
-    println!("  memory would OVERRIDE a correct top-1 with a false rule: {memory_would_break}/{n} ({:.1}%)  <- the risk", pct(memory_would_break));
+    println!(
+        "  memory would OVERRIDE a correct top-1 with a false rule: {memory_would_break}/{n} ({:.1}%)  <- the risk",
+        pct(memory_would_break)
+    );
 
     println!(
         "\n  VERDICT: {}",

@@ -33,7 +33,7 @@ use std::time::Instant;
 use katgpt_core::conformal::{
     ConformalIntervalCalibrator, DecayUnit, PointForecaster, PredictiveInterval, ResidualMode,
 };
-use katgpt_core::poincare::{fit_poincare_adapter, poincare_navigate_into, FitConfig};
+use katgpt_core::poincare::{FitConfig, fit_poincare_adapter, poincare_navigate_into};
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic PRNG — no `rand` dep, reproducible across runs/machines.

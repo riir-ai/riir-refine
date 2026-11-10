@@ -24,8 +24,8 @@
 #![allow(clippy::pedantic)]
 
 use riir_refine::{
-    build_seed_corpus, ClippyTernaryDrafter, ClippyVerifier, HealPipeline, RustAnalyzerPruner,
-    TuneReport,
+    ClippyTernaryDrafter, ClippyVerifier, HealPipeline, RustAnalyzerPruner, TuneReport,
+    build_seed_corpus,
 };
 
 /** One held-out case (kept parallel to the bench fixture). */
