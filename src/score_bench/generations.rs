@@ -497,62 +497,63 @@ pub fn specs() -> Vec<GenSpec> {
 // a reachable API surface can never freeze-verify under this wrap — it
 // joins the exclusions by construction, exactly as the two above did.
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
+    ("gen2-k1-approx_constant", &["approx_constant"]), // k=1 (B348)
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]), // k=1
-    ("gen2-k1-bool_comparison", &["bool_comparison"]),     // k=1
-    ("gen2-k1-byte_char_slices", &["byte_char_slices"]),   // k=1
+    ("gen2-k1-bool_comparison", &["bool_comparison"]), // k=1
+    ("gen2-k1-byte_char_slices", &["byte_char_slices"]), // k=1
     ("gen2-k1-bytes_count_to_len", &["bytes_count_to_len"]), // k=1
     ("gen2-k1-cast_abs_to_unsigned", &["cast_abs_to_unsigned"]), // k=1
-    ("gen2-k1-clone_on_copy", &["clone_on_copy"]),         // k=1
+    ("gen2-k1-clone_on_copy", &["clone_on_copy"]),     // k=1
     ("gen2-k1-collapsible_else_if", &["collapsible_else_if"]), // k=1
-    ("gen2-k1-collapsible_if", &["collapsible_if"]),       // k=1
+    ("gen2-k1-collapsible_if", &["collapsible_if"]),   // k=1
     ("gen2-k1-collapsible_match", &["collapsible_match"]), // k=1
     ("gen2-k1-doc_lazy_continuation", &["doc_lazy_continuation"]), // k=1
-    ("gen2-k1-doc_markdown", &["doc_markdown"]),           // k=1
+    ("gen2-k1-doc_markdown", &["doc_markdown"]),       // k=1
     (
         "gen2-k1-doc_overindented_list_items",
         &["doc_overindented_list_items"],
     ), // k=1
-    ("gen2-k1-double_parens", &["double_parens"]),         // k=1
+    ("gen2-k1-double_parens", &["double_parens"]),     // k=1
     (
         "gen2-k1-empty_line_after_doc_comments",
         &["empty_line_after_doc_comments"],
     ), // k=1
-    ("gen2-k1-filter_next", &["filter_next"]),             // k=1
+    ("gen2-k1-filter_next", &["filter_next"]),         // k=1
     ("gen2-k1-from_str_radix_10", &["from_str_radix_10"]), // k=1
-    ("gen2-k1-identity_op", &["identity_op"]),             // k=1
-    ("gen2-k1-into_iter_on_ref", &["into_iter_on_ref"]),   // k=1
-    ("gen2-k1-io_other_error", &["io_other_error"]),       // k=1
+    ("gen2-k1-identity_op", &["identity_op"]),         // k=1
+    ("gen2-k1-into_iter_on_ref", &["into_iter_on_ref"]), // k=1
+    ("gen2-k1-io_other_error", &["io_other_error"]),   // k=1
     (
         "gen2-k1-items_after_statements",
         &["items_after_statements"],
     ), // k=1
-    ("gen2-k1-iter_next_loop", &["iter_next_loop"]),       // k=1
-    ("gen2-k1-iter_nth_zero", &["iter_nth_zero"]),         // k=1
-    ("gen2-k1-iter_skip_next", &["iter_skip_next"]),       // k=1
-    ("gen2-k1-let_and_return", &["let_and_return"]),       // k=1
-    ("gen2-k1-let_unit_value", &["let_unit_value"]),       // k=1
-    ("gen2-k1-manual_clamp", &["manual_clamp"]),           // k=1
-    ("gen2-k1-manual_let_else", &["manual_let_else"]),     // k=1
-    ("gen2-k1-manual_map", &["manual_map"]),               // k=1
-    ("gen2-k1-manual_next_back", &["manual_next_back"]),   // k=1
-    ("gen2-k1-manual_ok_err", &["manual_ok_err"]),         // k=1
+    ("gen2-k1-iter_next_loop", &["iter_next_loop"]),   // k=1
+    ("gen2-k1-iter_nth_zero", &["iter_nth_zero"]),     // k=1
+    ("gen2-k1-iter_skip_next", &["iter_skip_next"]),   // k=1
+    ("gen2-k1-let_and_return", &["let_and_return"]),   // k=1
+    ("gen2-k1-let_unit_value", &["let_unit_value"]),   // k=1
+    ("gen2-k1-manual_clamp", &["manual_clamp"]),       // k=1
+    ("gen2-k1-manual_let_else", &["manual_let_else"]), // k=1
+    ("gen2-k1-manual_map", &["manual_map"]),           // k=1
+    ("gen2-k1-manual_next_back", &["manual_next_back"]), // k=1
+    ("gen2-k1-manual_ok_err", &["manual_ok_err"]),     // k=1
     ("gen2-k1-manual_range_contains", &["manual_range_contains"]), // k=1
     ("gen2-k1-manual_range_patterns", &["manual_range_patterns"]), // k=1
-    ("gen2-k1-manual_repeat_n", &["manual_repeat_n"]),     // k=1
+    ("gen2-k1-manual_repeat_n", &["manual_repeat_n"]), // k=1
     ("gen2-k1-manual_slice_fill", &["manual_slice_fill"]), // k=1
     ("gen2-k1-manual_string_new", &["manual_string_new"]), // k=1
-    ("gen2-k1-manual_unwrap_or", &["manual_unwrap_or"]),   // k=1
-    ("gen2-k1-map_clone", &["map_clone"]),                 // k=1
-    ("gen2-k1-map_flatten", &["map_flatten"]),             // k=1
-    ("gen2-k1-map_or_identity", &["map_or_identity"]),     // k=1
-    ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),         // k=1
-    ("gen2-k1-match_bool", &["match_bool"]),               // k=1
+    ("gen2-k1-manual_unwrap_or", &["manual_unwrap_or"]), // k=1
+    ("gen2-k1-map_clone", &["map_clone"]),             // k=1
+    ("gen2-k1-map_flatten", &["map_flatten"]),         // k=1
+    ("gen2-k1-map_or_identity", &["map_or_identity"]), // k=1
+    ("gen2-k1-map_unwrap_or", &["map_unwrap_or"]),     // k=1
+    ("gen2-k1-match_bool", &["match_bool"]),           // k=1
     (
         "gen2-k1-match_like_matches_macro",
         &["match_like_matches_macro"],
     ), // k=1
-    ("gen2-k1-match_ref_pats", &["match_ref_pats"]),       // k=1
-    ("gen2-k1-match_same_arms", &["match_same_arms"]),     // k=1
+    ("gen2-k1-match_ref_pats", &["match_ref_pats"]),   // k=1
+    ("gen2-k1-match_same_arms", &["match_same_arms"]), // k=1
     (
         "gen2-k1-mem_replace_with_default",
         &["mem_replace_with_default"],
@@ -561,7 +562,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         "gen2-k1-multiple_bound_locations",
         &["multiple_bound_locations"],
     ), // k=1
-    ("gen2-k1-needless_bool", &["needless_bool"]),         // k=1
+    ("gen2-k1-needless_bool", &["needless_bool"]),     // k=1
     ("gen2-k1-needless_bool_assign", &["needless_bool_assign"]), // k=1
     (
         "gen2-k1-needless_borrowed_reference",
@@ -570,11 +571,11 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-needless_late_init", &["needless_late_init"]), // k=1
     ("gen2-k1-needless_lifetimes", &["needless_lifetimes"]), // k=1
     ("gen2-k1-needless_range_loop", &["needless_range_loop"]), // k=1
-    ("gen2-k1-needless_return", &["needless_return"]),     // k=1
+    ("gen2-k1-needless_return", &["needless_return"]), // k=1
     ("gen2-k1-print_with_newline", &["print_with_newline"]), // k=1
     ("gen2-k1-ptr_offset_with_cast", &["ptr_offset_with_cast"]), // k=1
-    ("gen2-k1-question_mark", &["question_mark"]),         // k=1
-    ("gen2-k1-range_plus_one", &["range_plus_one"]),       // k=1
+    ("gen2-k1-question_mark", &["question_mark"]),     // k=1
+    ("gen2-k1-range_plus_one", &["range_plus_one"]),   // k=1
     (
         "gen2-k1-redundant_closure_for_method_calls",
         &["redundant_closure_for_method_calls"],
@@ -590,7 +591,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         &["semicolon_if_nothing_returned"],
     ), // k=1
     ("gen2-k1-single_char_add_str", &["single_char_add_str"]), // k=1
-    ("gen2-k1-single_match", &["single_match"]),           // k=1
+    ("gen2-k1-single_match", &["single_match"]),       // k=1
     ("gen2-k1-single_match_else", &["single_match_else"]), // k=1
     ("gen2-k1-string_lit_as_bytes", &["string_lit_as_bytes"]), // k=1
     ("gen2-k1-tabs_in_doc_comments", &["tabs_in_doc_comments"]), // k=1
@@ -598,8 +599,8 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         "gen2-k1-to_string_in_format_args",
         &["to_string_in_format_args"],
     ), // k=1
-    ("gen2-k1-unit_arg", &["unit_arg"]),                   // k=1
-    ("gen2-k1-unnecessary_cast", &["unnecessary_cast"]),   // k=1
+    ("gen2-k1-unit_arg", &["unit_arg"]),               // k=1
+    ("gen2-k1-unnecessary_cast", &["unnecessary_cast"]), // k=1
     (
         "gen2-k1-unnecessary_lazy_evaluations",
         &["unnecessary_lazy_evaluations"],
@@ -610,50 +611,119 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         &["unnecessary_min_or_max"],
     ), // k=1
     ("gen2-k1-unnecessary_unwrap", &["unnecessary_unwrap"]), // k=1
-    ("gen2-k1-unused_unit", &["unused_unit"]),             // k=1
-    ("gen2-k1-use_self", &["use_self"]),                   // k=1
-    ("gen2-k1-useless_format", &["useless_format"]),       // k=1
+    ("gen2-k1-unused_unit", &["unused_unit"]),         // k=1
+    ("gen2-k1-use_self", &["use_self"]),               // k=1
+    ("gen2-k1-useless_format", &["useless_format"]),   // k=1
+    ("gen2-k1-useless_vec", &["useless_vec"]),         // k=1 (B348)
     (
         "gen2-k1-wildcard_in_or_patterns",
         &["wildcard_in_or_patterns"],
     ), // k=1
     ("gen2-k1-write_with_newline", &["write_with_newline"]), // k=1
     (
+        "gen2-k2-approx_constant+assert_is_empty",
+        &["approx_constant", "assert_is_empty"],
+    ),
+    (
+        "gen2-k2-assign_op_pattern+block_scrutinee",
+        &["assign_op_pattern", "block_scrutinee"],
+    ),
+    (
+        "gen2-k2-bool_comparison+byte_char_slices",
+        &["bool_comparison", "byte_char_slices"],
+    ),
+    (
         "gen2-k2-byte_char_slices+bytes_count_to_len",
         &["byte_char_slices", "bytes_count_to_len"],
     ), // k=2
+    (
+        "gen2-k2-bytes_count_to_len+cast_abs_to_unsigned",
+        &["bytes_count_to_len", "cast_abs_to_unsigned"],
+    ),
     (
         "gen2-k2-cast_abs_to_unsigned+clone_on_copy",
         &["cast_abs_to_unsigned", "clone_on_copy"],
     ), // k=2
     (
+        "gen2-k2-clone_on_copy+collapsible_else_if",
+        &["clone_on_copy", "collapsible_else_if"],
+    ),
+    (
         "gen2-k2-collapsible_else_if+collapsible_if",
         &["collapsible_else_if", "collapsible_if"],
     ), // k=2
+    (
+        "gen2-k2-collapsible_if+collapsible_match",
+        &["collapsible_if", "collapsible_match"],
+    ),
+    (
+        "gen2-k2-deref_addrof+doc_lazy_continuation",
+        &["deref_addrof", "doc_lazy_continuation"],
+    ),
     (
         "gen2-k2-doc_lazy_continuation+doc_markdown",
         &["doc_lazy_continuation", "doc_markdown"],
     ), // k=2
     (
+        "gen2-k2-doc_markdown+doc_overindented_list_items",
+        &["doc_markdown", "doc_overindented_list_items"],
+    ),
+    (
         "gen2-k2-doc_overindented_list_items+double_parens",
         &["doc_overindented_list_items", "double_parens"],
     ), // k=2
+    (
+        "gen2-k2-doc_overindented_list_items+double_parens",
+        &["doc_overindented_list_items", "double_parens"],
+    ),
+    (
+        "gen2-k2-double_parens+empty_line_after_doc_comments",
+        &["double_parens", "empty_line_after_doc_comments"],
+    ),
+    (
+        "gen2-k2-excessive_precision+filter_next",
+        &["excessive_precision", "filter_next"],
+    ),
     (
         "gen2-k2-filter_next+from_str_radix_10",
         &["filter_next", "from_str_radix_10"],
     ), // k=2
     (
+        "gen2-k2-from_str_radix_10+identity_op",
+        &["from_str_radix_10", "identity_op"],
+    ),
+    (
         "gen2-k2-identity_op+into_iter_on_ref",
         &["identity_op", "into_iter_on_ref"],
     ), // k=2
+    (
+        "gen2-k2-into_iter_on_ref+io_other_error",
+        &["into_iter_on_ref", "io_other_error"],
+    ),
     (
         "gen2-k2-io_other_error+items_after_statements",
         &["io_other_error", "items_after_statements"],
     ), // k=2
     (
+        "gen2-k2-items_after_statements+iter_next_loop",
+        &["items_after_statements", "iter_next_loop"],
+    ),
+    (
         "gen2-k2-iter_next_loop+iter_nth_zero",
         &["iter_next_loop", "iter_nth_zero"],
     ), // k=2
+    (
+        "gen2-k2-iter_nth_zero+iter_skip_next",
+        &["iter_nth_zero", "iter_skip_next"],
+    ),
+    (
+        "gen2-k2-legacy_numeric_constants+len_without_is_empty",
+        &["legacy_numeric_constants", "len_without_is_empty"],
+    ),
+    (
+        "gen2-k2-let_and_return+let_unit_value",
+        &["let_and_return", "let_unit_value"],
+    ),
     (
         "gen2-k2-let_unit_value+manual_bit_width",
         &["let_unit_value", "manual_bit_width"],
@@ -663,9 +733,29 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         &["manual_bit_width", "manual_clamp"],
     ), // k=2
     (
+        "gen2-k3-approx_constant+assert_is_empty+assign_op_pattern",
+        &["approx_constant", "assert_is_empty", "assign_op_pattern"],
+    ),
+    (
+        "gen2-k3-block_scrutinee+bool_comparison+byte_char_slices",
+        &["block_scrutinee", "bool_comparison", "byte_char_slices"],
+    ),
+    (
         "gen2-k3-bool_comparison+byte_char_slices+bytes_count_to_len",
         &["bool_comparison", "byte_char_slices", "bytes_count_to_len"],
     ), // k=3
+    (
+        "gen2-k3-bool_comparison+byte_char_slices+bytes_count_to_len",
+        &["bool_comparison", "byte_char_slices", "bytes_count_to_len"],
+    ),
+    (
+        "gen2-k3-bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
+        &[
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+        ],
+    ),
     (
         "gen2-k3-cast_abs_to_unsigned+clone_on_copy+collapsible_else_if",
         &[
@@ -675,6 +765,22 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         ],
     ), // k=3
     (
+        "gen2-k3-cast_abs_to_unsigned+clone_on_copy+collapsible_else_if",
+        &[
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+            "collapsible_else_if",
+        ],
+    ),
+    (
+        "gen2-k3-collapsible_else_if+collapsible_if+collapsible_match",
+        &["collapsible_else_if", "collapsible_if", "collapsible_match"],
+    ),
+    (
+        "gen2-k3-deref_addrof+doc_lazy_continuation+doc_markdown",
+        &["deref_addrof", "doc_lazy_continuation", "doc_markdown"],
+    ),
+    (
         "gen2-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
         &[
             "doc_lazy_continuation",
@@ -683,9 +789,37 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         ],
     ), // k=3
     (
+        "gen2-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
+        &[
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+        ],
+    ),
+    (
+        "gen2-k3-doc_overindented_list_items+double_parens+empty_line_after_doc_comments",
+        &[
+            "doc_overindented_list_items",
+            "double_parens",
+            "empty_line_after_doc_comments",
+        ],
+    ),
+    (
+        "gen2-k3-excessive_precision+filter_next+from_str_radix_10",
+        &["excessive_precision", "filter_next", "from_str_radix_10"],
+    ),
+    (
         "gen2-k3-filter_next+from_str_radix_10+identity_op",
         &["filter_next", "from_str_radix_10", "identity_op"],
     ), // k=3
+    (
+        "gen2-k3-filter_next+from_str_radix_10+identity_op",
+        &["filter_next", "from_str_radix_10", "identity_op"],
+    ),
+    (
+        "gen2-k3-identity_op+into_iter_on_ref+io_other_error",
+        &["identity_op", "into_iter_on_ref", "io_other_error"],
+    ),
     (
         "gen2-k3-into_iter_on_ref+io_other_error+items_after_statements",
         &[
@@ -695,122 +829,186 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         ],
     ), // k=3
     (
+        "gen2-k3-into_iter_on_ref+io_other_error+items_after_statements",
+        &[
+            "into_iter_on_ref",
+            "io_other_error",
+            "items_after_statements",
+        ],
+    ),
+    (
+        "gen2-k3-items_after_statements+iter_next_loop+iter_nth_zero",
+        &["items_after_statements", "iter_next_loop", "iter_nth_zero"],
+    ),
+    (
         "gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next",
         &["iter_next_loop", "iter_nth_zero", "iter_skip_next"],
     ), // k=3
+    (
+        "gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next",
+        &["iter_next_loop", "iter_nth_zero", "iter_skip_next"],
+    ),
+    (
+        "gen2-k3-iter_skip_next+legacy_numeric_constants+len_without_is_empty",
+        &[
+            "iter_skip_next",
+            "legacy_numeric_constants",
+            "len_without_is_empty",
+        ],
+    ),
+    (
+        "gen2-k3-let_and_return+let_unit_value+manual_bit_width",
+        &["let_and_return", "let_unit_value", "manual_bit_width"],
+    ),
     (
         "gen2-k3-let_unit_value+manual_bit_width+manual_clamp",
         &["let_unit_value", "manual_bit_width", "manual_clamp"],
     ), // k=3
     (
+        "gen2-k3-let_unit_value+manual_bit_width+manual_clamp",
+        &["let_unit_value", "manual_bit_width", "manual_clamp"],
+    ),
+    (
         "gen2-k3-manual_bit_width+manual_clamp+manual_let_else",
         &["manual_bit_width", "manual_clamp", "manual_let_else"],
     ), // k=3
     (
-        "gen2-k3-manual_map+manual_next_back+manual_ok_err",
-        &["manual_map", "manual_next_back", "manual_ok_err"],
-    ), // k=3
-    (
-        "gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
-        &[
-            "byte_char_slices",
-            "bytes_count_to_len",
-            "cast_abs_to_unsigned",
-            "clone_on_copy",
-        ],
-    ), // k=4
-    (
-        "gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
-        &[
-            "doc_lazy_continuation",
-            "doc_markdown",
-            "doc_overindented_list_items",
-            "double_parens",
-        ],
-    ), // k=4
-    (
-        "gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
-        &[
-            "identity_op",
-            "into_iter_on_ref",
-            "io_other_error",
-            "items_after_statements",
-        ],
-    ), // k=4
-    (
-        "gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
-        &[
-            "identity_op",
-            "into_iter_on_ref",
-            "io_other_error",
-            "items_after_statements",
-        ],
-    ),
-    (
-        "gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
-        &[
-            "doc_lazy_continuation",
-            "doc_markdown",
-            "doc_overindented_list_items",
-            "double_parens",
-        ],
-    ),
-    (
-        "gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
-        &[
-            "byte_char_slices",
-            "bytes_count_to_len",
-            "cast_abs_to_unsigned",
-            "clone_on_copy",
-        ],
+        "gen2-k3-manual_clamp+manual_let_else+manual_map",
+        &["manual_clamp", "manual_let_else", "manual_map"],
     ),
     (
         "gen2-k3-manual_let_else+manual_map+manual_next_back",
         &["manual_let_else", "manual_map", "manual_next_back"],
     ),
     (
-        "gen2-k3-let_unit_value+manual_bit_width+manual_clamp",
-        &["let_unit_value", "manual_bit_width", "manual_clamp"],
-    ),
+        "gen2-k3-manual_map+manual_next_back+manual_ok_err",
+        &["manual_map", "manual_next_back", "manual_ok_err"],
+    ), // k=3
     (
-        "gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next",
-        &["iter_next_loop", "iter_nth_zero", "iter_skip_next"],
-    ),
-    (
-        "gen2-k3-into_iter_on_ref+io_other_error+items_after_statements",
+        "gen2-k4-approx_constant+assert_is_empty+assign_op_pattern+block_scrutinee",
         &[
-            "into_iter_on_ref",
-            "io_other_error",
-            "items_after_statements",
+            "approx_constant",
+            "assert_is_empty",
+            "assign_op_pattern",
+            "block_scrutinee",
         ],
     ),
     (
-        "gen2-k3-filter_next+from_str_radix_10+identity_op",
-        &["filter_next", "from_str_radix_10", "identity_op"],
+        "gen2-k4-bool_comparison+byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned",
+        &[
+            "bool_comparison",
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+        ],
     ),
     (
-        "gen2-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
+        "gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
         &[
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+        ],
+    ), // k=4
+    (
+        "gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
+        &[
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+        ],
+    ),
+    (
+        "gen2-k4-clone_on_copy+collapsible_else_if+collapsible_if+collapsible_match",
+        &[
+            "clone_on_copy",
+            "collapsible_else_if",
+            "collapsible_if",
+            "collapsible_match",
+        ],
+    ),
+    (
+        "gen2-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
+        &[
+            "deref_addrof",
             "doc_lazy_continuation",
             "doc_markdown",
             "doc_overindented_list_items",
         ],
     ),
     (
-        "gen2-k3-cast_abs_to_unsigned+clone_on_copy+collapsible_else_if",
+        "gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
         &[
-            "cast_abs_to_unsigned",
-            "clone_on_copy",
-            "collapsible_else_if",
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+            "double_parens",
+        ],
+    ), // k=4
+    (
+        "gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
+        &[
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+            "double_parens",
         ],
     ),
     (
-        "gen2-k3-bool_comparison+byte_char_slices+bytes_count_to_len",
-        &["bool_comparison", "byte_char_slices", "bytes_count_to_len"],
+        "gen2-k4-double_parens+empty_line_after_doc_comments+excessive_precision+filter_next",
+        &[
+            "double_parens",
+            "empty_line_after_doc_comments",
+            "excessive_precision",
+            "filter_next",
+        ],
     ),
     (
-        "gen2-k2-doc_overindented_list_items+double_parens",
-        &["doc_overindented_list_items", "double_parens"],
+        "gen2-k4-from_str_radix_10+identity_op+into_iter_on_ref+io_other_error",
+        &[
+            "from_str_radix_10",
+            "identity_op",
+            "into_iter_on_ref",
+            "io_other_error",
+        ],
+    ),
+    (
+        "gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
+        &[
+            "identity_op",
+            "into_iter_on_ref",
+            "io_other_error",
+            "items_after_statements",
+        ],
+    ), // k=4
+    (
+        "gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
+        &[
+            "identity_op",
+            "into_iter_on_ref",
+            "io_other_error",
+            "items_after_statements",
+        ],
+    ),
+    (
+        "gen2-k4-items_after_statements+iter_next_loop+iter_nth_zero+iter_skip_next",
+        &[
+            "items_after_statements",
+            "iter_next_loop",
+            "iter_nth_zero",
+            "iter_skip_next",
+        ],
+    ),
+    (
+        "gen2-k4-legacy_numeric_constants+len_without_is_empty+let_and_return+let_unit_value",
+        &[
+            "legacy_numeric_constants",
+            "len_without_is_empty",
+            "let_and_return",
+            "let_unit_value",
+        ],
     ),
 ];
 
@@ -1159,62 +1357,63 @@ pub static EXCLUDED_IDS_V3: &[&str] = &[
 // specs (38 corpus atoms + 4 persist atoms, and all k>=2 composites),
 // oracle labels == union-of-atom gold 72/72 against real clippy.
 pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
+    ("gen3-k1-approx_constant", &["approx_constant"]), // k=1 (B348)
     ("gen3-k1-assign_op_pattern", &["assign_op_pattern"]), // k=1
-    ("gen3-k1-bool_comparison", &["bool_comparison"]),     // k=1
-    ("gen3-k1-byte_char_slices", &["byte_char_slices"]),   // k=1
+    ("gen3-k1-bool_comparison", &["bool_comparison"]), // k=1
+    ("gen3-k1-byte_char_slices", &["byte_char_slices"]), // k=1
     ("gen3-k1-bytes_count_to_len", &["bytes_count_to_len"]), // k=1
     ("gen3-k1-cast_abs_to_unsigned", &["cast_abs_to_unsigned"]), // k=1
-    ("gen3-k1-clone_on_copy", &["clone_on_copy"]),         // k=1
+    ("gen3-k1-clone_on_copy", &["clone_on_copy"]),     // k=1
     ("gen3-k1-collapsible_else_if", &["collapsible_else_if"]), // k=1
-    ("gen3-k1-collapsible_if", &["collapsible_if"]),       // k=1
+    ("gen3-k1-collapsible_if", &["collapsible_if"]),   // k=1
     ("gen3-k1-collapsible_match", &["collapsible_match"]), // k=1
     ("gen3-k1-doc_lazy_continuation", &["doc_lazy_continuation"]), // k=1
-    ("gen3-k1-doc_markdown", &["doc_markdown"]),           // k=1
+    ("gen3-k1-doc_markdown", &["doc_markdown"]),       // k=1
     (
         "gen3-k1-doc_overindented_list_items",
         &["doc_overindented_list_items"],
     ), // k=1
-    ("gen3-k1-double_parens", &["double_parens"]),         // k=1
+    ("gen3-k1-double_parens", &["double_parens"]),     // k=1
     (
         "gen3-k1-empty_line_after_doc_comments",
         &["empty_line_after_doc_comments"],
     ), // k=1
-    ("gen3-k1-filter_next", &["filter_next"]),             // k=1
+    ("gen3-k1-filter_next", &["filter_next"]),         // k=1
     ("gen3-k1-from_str_radix_10", &["from_str_radix_10"]), // k=1
-    ("gen3-k1-identity_op", &["identity_op"]),             // k=1
-    ("gen3-k1-into_iter_on_ref", &["into_iter_on_ref"]),   // k=1
-    ("gen3-k1-io_other_error", &["io_other_error"]),       // k=1
+    ("gen3-k1-identity_op", &["identity_op"]),         // k=1
+    ("gen3-k1-into_iter_on_ref", &["into_iter_on_ref"]), // k=1
+    ("gen3-k1-io_other_error", &["io_other_error"]),   // k=1
     (
         "gen3-k1-items_after_statements",
         &["items_after_statements"],
     ), // k=1
-    ("gen3-k1-iter_next_loop", &["iter_next_loop"]),       // k=1
-    ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),         // k=1
-    ("gen3-k1-iter_skip_next", &["iter_skip_next"]),       // k=1
-    ("gen3-k1-let_and_return", &["let_and_return"]),       // k=1
-    ("gen3-k1-let_unit_value", &["let_unit_value"]),       // k=1
-    ("gen3-k1-manual_clamp", &["manual_clamp"]),           // k=1
-    ("gen3-k1-manual_let_else", &["manual_let_else"]),     // k=1
-    ("gen3-k1-manual_map", &["manual_map"]),               // k=1
-    ("gen3-k1-manual_next_back", &["manual_next_back"]),   // k=1
-    ("gen3-k1-manual_ok_err", &["manual_ok_err"]),         // k=1
+    ("gen3-k1-iter_next_loop", &["iter_next_loop"]),   // k=1
+    ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),     // k=1
+    ("gen3-k1-iter_skip_next", &["iter_skip_next"]),   // k=1
+    ("gen3-k1-let_and_return", &["let_and_return"]),   // k=1
+    ("gen3-k1-let_unit_value", &["let_unit_value"]),   // k=1
+    ("gen3-k1-manual_clamp", &["manual_clamp"]),       // k=1
+    ("gen3-k1-manual_let_else", &["manual_let_else"]), // k=1
+    ("gen3-k1-manual_map", &["manual_map"]),           // k=1
+    ("gen3-k1-manual_next_back", &["manual_next_back"]), // k=1
+    ("gen3-k1-manual_ok_err", &["manual_ok_err"]),     // k=1
     ("gen3-k1-manual_range_contains", &["manual_range_contains"]), // k=1
     ("gen3-k1-manual_range_patterns", &["manual_range_patterns"]), // k=1
-    ("gen3-k1-manual_repeat_n", &["manual_repeat_n"]),     // k=1
+    ("gen3-k1-manual_repeat_n", &["manual_repeat_n"]), // k=1
     ("gen3-k1-manual_slice_fill", &["manual_slice_fill"]), // k=1
     ("gen3-k1-manual_string_new", &["manual_string_new"]), // k=1
-    ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]),   // k=1
-    ("gen3-k1-map_clone", &["map_clone"]),                 // k=1
-    ("gen3-k1-map_flatten", &["map_flatten"]),             // k=1
-    ("gen3-k1-map_or_identity", &["map_or_identity"]),     // k=1
-    ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),         // k=1
-    ("gen3-k1-match_bool", &["match_bool"]),               // k=1
+    ("gen3-k1-manual_unwrap_or", &["manual_unwrap_or"]), // k=1
+    ("gen3-k1-map_clone", &["map_clone"]),             // k=1
+    ("gen3-k1-map_flatten", &["map_flatten"]),         // k=1
+    ("gen3-k1-map_or_identity", &["map_or_identity"]), // k=1
+    ("gen3-k1-map_unwrap_or", &["map_unwrap_or"]),     // k=1
+    ("gen3-k1-match_bool", &["match_bool"]),           // k=1
     (
         "gen3-k1-match_like_matches_macro",
         &["match_like_matches_macro"],
     ), // k=1
-    ("gen3-k1-match_ref_pats", &["match_ref_pats"]),       // k=1
-    ("gen3-k1-match_same_arms", &["match_same_arms"]),     // k=1
+    ("gen3-k1-match_ref_pats", &["match_ref_pats"]),   // k=1
+    ("gen3-k1-match_same_arms", &["match_same_arms"]), // k=1
     (
         "gen3-k1-mem_replace_with_default",
         &["mem_replace_with_default"],
@@ -1223,7 +1422,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         "gen3-k1-multiple_bound_locations",
         &["multiple_bound_locations"],
     ), // k=1
-    ("gen3-k1-needless_bool", &["needless_bool"]),         // k=1
+    ("gen3-k1-needless_bool", &["needless_bool"]),     // k=1
     ("gen3-k1-needless_bool_assign", &["needless_bool_assign"]), // k=1
     (
         "gen3-k1-needless_borrowed_reference",
@@ -1232,14 +1431,14 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-needless_late_init", &["needless_late_init"]), // k=1
     ("gen3-k1-needless_lifetimes", &["needless_lifetimes"]), // k=1
     ("gen3-k1-needless_range_loop", &["needless_range_loop"]), // k=1
-    ("gen3-k1-needless_return", &["needless_return"]),     // k=1
+    ("gen3-k1-needless_return", &["needless_return"]), // k=1
     ("gen3-k1-persist_comment_arm", &["single_match_else"]), // k=1
     ("gen3-k1-persist_comment_hoist", &["items_after_statements"]), // k=1
     ("gen3-k1-persist_useless_format", &["useless_format"]), // k=1
     ("gen3-k1-print_with_newline", &["print_with_newline"]), // k=1
     ("gen3-k1-ptr_offset_with_cast", &["ptr_offset_with_cast"]), // k=1
-    ("gen3-k1-question_mark", &["question_mark"]),         // k=1
-    ("gen3-k1-range_plus_one", &["range_plus_one"]),       // k=1
+    ("gen3-k1-question_mark", &["question_mark"]),     // k=1
+    ("gen3-k1-range_plus_one", &["range_plus_one"]),   // k=1
     (
         "gen3-k1-redundant_closure_for_method_calls",
         &["redundant_closure_for_method_calls"],
@@ -1255,7 +1454,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         &["semicolon_if_nothing_returned"],
     ), // k=1
     ("gen3-k1-single_char_add_str", &["single_char_add_str"]), // k=1
-    ("gen3-k1-single_match", &["single_match"]),           // k=1
+    ("gen3-k1-single_match", &["single_match"]),       // k=1
     ("gen3-k1-single_match_else", &["single_match_else"]), // k=1
     ("gen3-k1-string_lit_as_bytes", &["string_lit_as_bytes"]), // k=1
     ("gen3-k1-tabs_in_doc_comments", &["tabs_in_doc_comments"]), // k=1
@@ -1263,8 +1462,8 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         "gen3-k1-to_string_in_format_args",
         &["to_string_in_format_args"],
     ), // k=1
-    ("gen3-k1-unit_arg", &["unit_arg"]),                   // k=1
-    ("gen3-k1-unnecessary_cast", &["unnecessary_cast"]),   // k=1
+    ("gen3-k1-unit_arg", &["unit_arg"]),               // k=1
+    ("gen3-k1-unnecessary_cast", &["unnecessary_cast"]), // k=1
     (
         "gen3-k1-unnecessary_lazy_evaluations",
         &["unnecessary_lazy_evaluations"],
@@ -1275,54 +1474,123 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         &["unnecessary_min_or_max"],
     ), // k=1
     ("gen3-k1-unnecessary_unwrap", &["unnecessary_unwrap"]), // k=1
-    ("gen3-k1-unused_unit", &["unused_unit"]),             // k=1
-    ("gen3-k1-use_self", &["use_self"]),                   // k=1
-    ("gen3-k1-useless_format", &["useless_format"]),       // k=1
+    ("gen3-k1-unused_unit", &["unused_unit"]),         // k=1
+    ("gen3-k1-use_self", &["use_self"]),               // k=1
+    ("gen3-k1-useless_format", &["useless_format"]),   // k=1
+    ("gen3-k1-useless_vec", &["useless_vec"]),         // k=1 (B348)
     (
         "gen3-k1-wildcard_in_or_patterns",
         &["wildcard_in_or_patterns"],
     ), // k=1
     ("gen3-k1-write_with_newline", &["write_with_newline"]), // k=1
     (
+        "gen3-k2-approx_constant+assert_is_empty",
+        &["approx_constant", "assert_is_empty"],
+    ),
+    (
+        "gen3-k2-assign_op_pattern+block_scrutinee",
+        &["assign_op_pattern", "block_scrutinee"],
+    ),
+    (
+        "gen3-k2-bool_comparison+byte_char_slices",
+        &["bool_comparison", "byte_char_slices"],
+    ),
+    (
         "gen3-k2-byte_char_slices+bytes_count_to_len",
         &["byte_char_slices", "bytes_count_to_len"],
     ), // k=2
+    (
+        "gen3-k2-bytes_count_to_len+cast_abs_to_unsigned",
+        &["bytes_count_to_len", "cast_abs_to_unsigned"],
+    ),
     (
         "gen3-k2-cast_abs_to_unsigned+clone_on_copy",
         &["cast_abs_to_unsigned", "clone_on_copy"],
     ), // k=2
     (
+        "gen3-k2-clone_on_copy+collapsible_else_if",
+        &["clone_on_copy", "collapsible_else_if"],
+    ),
+    (
         "gen3-k2-collapsible_else_if+collapsible_if",
         &["collapsible_else_if", "collapsible_if"],
     ), // k=2
+    (
+        "gen3-k2-collapsible_if+collapsible_match",
+        &["collapsible_if", "collapsible_match"],
+    ),
+    (
+        "gen3-k2-deref_addrof+doc_lazy_continuation",
+        &["deref_addrof", "doc_lazy_continuation"],
+    ),
     (
         "gen3-k2-doc_lazy_continuation+doc_markdown",
         &["doc_lazy_continuation", "doc_markdown"],
     ), // k=2
     (
+        "gen3-k2-doc_markdown+doc_overindented_list_items",
+        &["doc_markdown", "doc_overindented_list_items"],
+    ),
+    (
         "gen3-k2-doc_overindented_list_items+double_parens",
         &["doc_overindented_list_items", "double_parens"],
     ), // k=2
+    (
+        "gen3-k2-double_parens+empty_line_after_doc_comments",
+        &["double_parens", "empty_line_after_doc_comments"],
+    ),
+    (
+        "gen3-k2-excessive_precision+filter_next",
+        &["excessive_precision", "filter_next"],
+    ),
     (
         "gen3-k2-filter_next+from_str_radix_10",
         &["filter_next", "from_str_radix_10"],
     ), // k=2
     (
+        "gen3-k2-from_str_radix_10+identity_op",
+        &["from_str_radix_10", "identity_op"],
+    ),
+    (
         "gen3-k2-identity_op+into_iter_on_ref",
         &["identity_op", "into_iter_on_ref"],
     ), // k=2
+    (
+        "gen3-k2-into_iter_on_ref+io_other_error",
+        &["into_iter_on_ref", "io_other_error"],
+    ),
     (
         "gen3-k2-io_other_error+items_after_statements",
         &["io_other_error", "items_after_statements"],
     ), // k=2
     (
+        "gen3-k2-items_after_statements+iter_next_loop",
+        &["items_after_statements", "iter_next_loop"],
+    ),
+    (
         "gen3-k2-iter_next_loop+iter_nth_zero",
         &["iter_next_loop", "iter_nth_zero"],
     ), // k=2
     (
+        "gen3-k2-iter_nth_zero+iter_skip_next",
+        &["iter_nth_zero", "iter_skip_next"],
+    ),
+    (
         "gen3-k2-persist_comment_hoist+persist_useless_format",
         &["items_after_statements", "useless_format"],
     ), // k=2
+    (
+        "gen3-k3-assign_op_pattern+block_scrutinee+bool_comparison",
+        &["assign_op_pattern", "block_scrutinee", "bool_comparison"],
+    ),
+    (
+        "gen3-k3-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned",
+        &[
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+        ],
+    ),
     (
         "gen3-k3-bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
         &[
@@ -1332,9 +1600,25 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         ],
     ), // k=3
     (
+        "gen3-k3-clone_on_copy+collapsible_else_if+collapsible_if",
+        &["clone_on_copy", "collapsible_else_if", "collapsible_if"],
+    ),
+    (
         "gen3-k3-collapsible_else_if+collapsible_if+collapsible_match",
         &["collapsible_else_if", "collapsible_if", "collapsible_match"],
     ), // k=3
+    (
+        "gen3-k3-collapsible_match+deref_addrof+doc_lazy_continuation",
+        &["collapsible_match", "deref_addrof", "doc_lazy_continuation"],
+    ),
+    (
+        "gen3-k3-doc_markdown+doc_overindented_list_items+double_parens",
+        &[
+            "doc_markdown",
+            "doc_overindented_list_items",
+            "double_parens",
+        ],
+    ),
     (
         "gen3-k3-doc_overindented_list_items+double_parens+empty_line_after_doc_comments",
         &[
@@ -1344,13 +1628,41 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         ],
     ), // k=3
     (
+        "gen3-k3-empty_line_after_doc_comments+excessive_precision+filter_next",
+        &[
+            "empty_line_after_doc_comments",
+            "excessive_precision",
+            "filter_next",
+        ],
+    ),
+    (
+        "gen3-k3-from_str_radix_10+identity_op+into_iter_on_ref",
+        &["from_str_radix_10", "identity_op", "into_iter_on_ref"],
+    ),
+    (
         "gen3-k3-identity_op+into_iter_on_ref+io_other_error",
         &["identity_op", "into_iter_on_ref", "io_other_error"],
     ), // k=3
     (
+        "gen3-k3-io_other_error+items_after_statements+iter_next_loop",
+        &["io_other_error", "items_after_statements", "iter_next_loop"],
+    ),
+    (
         "gen3-k3-items_after_statements+iter_next_loop+iter_nth_zero",
         &["items_after_statements", "iter_next_loop", "iter_nth_zero"],
     ), // k=3
+    (
+        "gen3-k3-iter_nth_zero+iter_skip_next+legacy_numeric_constants",
+        &[
+            "iter_nth_zero",
+            "iter_skip_next",
+            "legacy_numeric_constants",
+        ],
+    ),
+    (
+        "gen3-k3-len_without_is_empty+let_and_return+let_unit_value",
+        &["len_without_is_empty", "let_and_return", "let_unit_value"],
+    ),
     (
         "gen3-k3-let_and_return+let_unit_value+manual_bit_width",
         &["let_and_return", "let_unit_value", "manual_bit_width"],
@@ -1359,6 +1671,28 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         "gen3-k3-let_and_return+manual_bit_width+manual_clamp",
         &["let_and_return", "manual_bit_width", "manual_clamp"],
     ), // k=3
+    (
+        "gen3-k3-persist_useless_format+approx_constant+assert_is_empty",
+        &["useless_format", "approx_constant", "assert_is_empty"],
+    ),
+    (
+        "gen3-k4-approx_constant+assert_is_empty+assign_op_pattern+block_scrutinee",
+        &[
+            "approx_constant",
+            "assert_is_empty",
+            "assign_op_pattern",
+            "block_scrutinee",
+        ],
+    ),
+    (
+        "gen3-k4-bool_comparison+byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned",
+        &[
+            "bool_comparison",
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+        ],
+    ),
     (
         "gen3-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
         &[
@@ -1369,6 +1703,24 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         ],
     ), // k=4
     (
+        "gen3-k4-clone_on_copy+collapsible_else_if+collapsible_if+collapsible_match",
+        &[
+            "clone_on_copy",
+            "collapsible_else_if",
+            "collapsible_if",
+            "collapsible_match",
+        ],
+    ),
+    (
+        "gen3-k4-deref_addrof+doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
+        &[
+            "deref_addrof",
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+        ],
+    ),
+    (
         "gen3-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
         &[
             "doc_lazy_continuation",
@@ -1378,6 +1730,24 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         ],
     ), // k=4
     (
+        "gen3-k4-double_parens+empty_line_after_doc_comments+excessive_precision+filter_next",
+        &[
+            "double_parens",
+            "empty_line_after_doc_comments",
+            "excessive_precision",
+            "filter_next",
+        ],
+    ),
+    (
+        "gen3-k4-from_str_radix_10+identity_op+into_iter_on_ref+io_other_error",
+        &[
+            "from_str_radix_10",
+            "identity_op",
+            "into_iter_on_ref",
+            "io_other_error",
+        ],
+    ),
+    (
         "gen3-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
         &[
             "identity_op",
@@ -1386,6 +1756,15 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
             "items_after_statements",
         ],
     ), // k=4
+    (
+        "gen3-k4-items_after_statements+iter_next_loop+iter_nth_zero+iter_skip_next",
+        &[
+            "items_after_statements",
+            "iter_next_loop",
+            "iter_nth_zero",
+            "iter_skip_next",
+        ],
+    ),
 ];
 
 /// Freeze readiness for generation 3 — Err until the freeze e2e lands the

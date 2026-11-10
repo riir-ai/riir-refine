@@ -161,7 +161,7 @@
 //!
 //! Each proposer handles ONE lint. Adding a new lint = adding a new proposer
 //! module + a row in `collect_rule_edits`'s match (and, when detection is
-//! structural, a row in [`FIXABLE_LINTS`]). 118 lints ship today (10 seed +
+//! structural, a row in [`FIXABLE_LINTS`]). 120 lints ship today (10 seed +
 //! 31 from the Issue 016 expansion and the post-mining P7 verify-tier row + the
 //! Batch 89/90/91 rows + the P10 post-mining intake pair + the P11 fold rule +
 //! the P12 nursery receiver rule + the P13 chain-root extension (same lint,
@@ -195,9 +195,11 @@
 //! Plan-169 staged IOU pair), and the 2 P118 rows (`collapsible_match` /
 //! `map_or_identity` + `unnecessary_min_or_max`, Plan 353), and plan 354's
 //! 2 doc-section rows, and the Batch 347 `let_unit_value` row (the P120
-//! rulewright-miss trio, plan 358); future lints drop in by extending
-//! the match.
+//! rulewright-miss trio, plan 358), and the 2 Batch 348 rows
+//! (`approx_constant` / `useless_vec`, plan 359 — the P111 + P112 corpus
+//! gaps); future lints drop in by extending the match.
 
+pub mod approx_constant;
 pub mod assert_is_empty;
 pub mod assign_op_pattern;
 pub mod bit_width;
@@ -310,6 +312,7 @@ pub mod use_self;
 pub mod used_underscore_binding;
 pub mod useless_conversion;
 pub mod useless_format;
+pub mod useless_vec;
 pub mod vec_init_then_push;
 pub mod while_let_on_iterator;
 pub mod wildcard_in_or_patterns;
@@ -970,6 +973,15 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // help-only (probed 1.99: sugg null) — this proposer is the only fix
     // path for the class.
     "let_unit_value",
+    // ── Batch 348 (the P111 + P112 corpus-gap pair, plan 359) ──
+    // Float literal → the bit-identical `std::fXX::consts::NAME` path.
+    // FIXABLE: the fire surface is parse-provable by construction — the
+    // suffix pins the type (suffixed literals fire anywhere), unsuffixed
+    // literals fire only inside a declared `: f64` annotation, and the
+    // bit-identity gate means every rewrite is value-preserving (clippy's
+    // tolerance-based surface is a SUPERSET — the truncated-literal class
+    // stays for clippy/manual, disclosed; negated literals refuse).
+    "approx_constant",
 ];
 
 /// One-line semantic-shift annotations for the fixable lints whose rewrite
@@ -1224,6 +1236,15 @@ pub const VERIFY_LINTS: &[&str] = &[
     // resolution-preserving; per-fn scoping keeps UNUSED `_x` bindings
     // untouched (renaming them would birth unused-var warnings).
     "used_underscore_binding",
+    // ── Batch 348 (the P111 + P112 corpus-gap pair, plan 359) ──
+    // `&vec![…]` → `&[…]` (the borrow-immediately shape; the interior
+    // splices verbatim, repeat lengths must be integer-literal tokens).
+    // VERIFY: type-blind consumer — a callee taking `&Vec<T>` exactly is
+    // E0308 (check-visible, the gate reverts; the ptr_arg precedent).
+    // Real clippy is type-aware and silent there; its own suggestion is
+    // MachineApplicable, so once this corpus rule exists the P21 oracle
+    // lane consumes the fed diagnostics too.
+    "useless_vec",
 ];
 
 /// Propose a fix for `(lint_name, buggy_code)` by applying the lint's
@@ -1353,6 +1374,9 @@ fn collect_rule_edits(lint_name: &str, source: &str, file: &syn::File) -> Vec<So
         "manual_range_patterns" => manual_range_patterns::collect_edits(source, file),
         // ── Batch 155 (the frontier-lead mining pack, Plan 146) ──
         "let_and_return" => let_and_return::collect_edits(source, file),
+        // ── Batch 348 (the P111 + P112 corpus-gap pair, plan 359) ──
+        "approx_constant" => approx_constant::collect_edits(source, file),
+        "useless_vec" => useless_vec::collect_edits(source, file),
         // ── Batch 347 (the P120 rulewright-miss trio, plan 358) ──
         "let_unit_value" => let_unit_value::collect_edits(source, file),
         "ptr_arg" => ptr_arg::collect_edits(source, file),
@@ -2216,6 +2240,17 @@ impl S {
                 "let_unit_value",
                 "fn probe() { let _ = println!(\"hello\"); let _y = unit_fn(); }\nfn unit_fn() {}",
                 "println!(\"hello\")",
+            ),
+            // ── Batch 348 (the P111 + P112 corpus-gap pair, plan 359) ──
+            (
+                "approx_constant",
+                "pub const GOLDEN: f64 = 1.618033988749895;",
+                "std::f64::consts::GOLDEN_RATIO",
+            ),
+            (
+                "useless_vec",
+                "fn take(x: &[i32]) -> i32 { x.iter().sum() }\nfn probe() -> i32 { take(&vec![1, 2, 3]) }",
+                "take(&[1, 2, 3])",
             ),
         ];
         let pruner = crate::pruner::RustAnalyzerPruner::new();

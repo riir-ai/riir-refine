@@ -76,6 +76,10 @@ pub const ALLOW_BY_DEFAULT_GROUPS: &[&str] = &["pedantic", "nursery", "restricti
 /// — re-derive on a toolchain bump (the `table_matches_installed_driver`
 /// test names every disagreement).
 pub const LINT_GROUPS: &[(&str, &str)] = &[
+    // Batch 348 (plan 359): the P111 intake row — deny-by-default, the
+    // group re-verified against the installed driver by
+    // `table_matches_installed_driver`.
+    ("approx_constant", "correctness"),
     ("assert_is_empty", "pedantic"),
     ("assign_op_pattern", "style"),
     ("block_scrutinee", "suspicious"),
@@ -186,6 +190,8 @@ pub const LINT_GROUPS: &[(&str, &str)] = &[
     ("use_self", "nursery"),
     ("used_underscore_binding", "pedantic"),
     ("useless_format", "complexity"),
+    // Batch 348 (plan 359): the P112 intake row — default-on perf.
+    ("useless_vec", "perf"),
     ("vec_init_then_push", "perf"),
     ("while_let_on_iterator", "style"),
     ("wildcard_in_or_patterns", "complexity"),

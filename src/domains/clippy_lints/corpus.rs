@@ -1358,6 +1358,41 @@ pub fn build_seed_corpus() -> Corpus<ClippyLintDomain> {
             buggy_code: "/// Takes the sample head.\n#[must_use]\npub fn sample_head(samples: &[u8]) -> u8 { samples.first().copied().expect(\"empty sampler frame\") }".to_string(),
             fixed_code: "/// Takes the sample head.\n///\n/// # Panics\n///\n/// Panics when empty sampler frame.\n#[must_use]\npub fn sample_head(samples: &[u8]) -> u8 { samples.first().copied().expect(\"empty sampler frame\") }".to_string(),
         },
+        // ── Batch 348 (2026-11-10, plan 359 — the P111 + P112 corpus-gap
+        // pair: the intake probe discipline applied, both gaps real) ──
+        ClippyFixEntry {
+            lint_name: "approx_constant".to_string(),
+            lint_group: "correctness".to_string(),
+            // The P111 intake (2026-10-31, the riir-shader idle sweep's
+            // oracle-anchored lane — `clipping.rs:62`'s golden-ratio
+            // literal; fixed manually for want of a rule). FIXABLE:
+            // clippy's diagnostics are help-only (probed 1.99: zero
+            // suggestion children), the suffix/annotation pins the type,
+            // and the bit-identity gate makes every rewrite
+            // value-preserving. Clippy's own surface is tolerance-based
+            // (the truncated PI shape fires upstream) — this lane fires a
+            // strict SUBSET (exact-bits literals only); negated literals
+            // and unsuffixed-in-untyped positions refuse (module docs).
+            // The intake's live shape: a typed const item.
+            buggy_code: "pub const GOLDEN: f64 = 1.618033988749895;".to_string(),
+            fixed_code: "pub const GOLDEN: f64 = std::f64::consts::GOLDEN_RATIO;".to_string(),
+        },
+        ClippyFixEntry {
+            lint_name: "useless_vec".to_string(),
+            lint_group: "perf".to_string(),
+            // The P112 intake (2026-11-01, the seal-render clippy sweep —
+            // `mip.rs:121/125`'s test-fixture `&vec![7_u8; N]`; fixed
+            // manually). VERIFY-tier: type-blind consumer (a callee taking
+            // `&Vec<T>` exactly is E0308 — check-visible, the gate
+            // reverts). The owned surface is the borrow-immediately shape
+            // only: clippy 1.99 stays silent on the let-bound-then-borrowed
+            // shape and on variable-length repeats (probed — the parity
+            // rule); the repeat length must be one integer-literal token;
+            // the interior splices verbatim (a `]` inside a string cannot
+            // derail it).
+            buggy_code: "fn take(x: &[i32]) -> i32 { x.iter().sum() }\nfn probe() -> i32 { take(&vec![1, 2, 3]) }".to_string(),
+            fixed_code: "fn take(x: &[i32]) -> i32 { x.iter().sum() }\nfn probe() -> i32 { take(&[1, 2, 3]) }".to_string(),
+        },
     ])
 }
 
