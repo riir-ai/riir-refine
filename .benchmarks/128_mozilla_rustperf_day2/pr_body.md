@@ -12,18 +12,18 @@ The workload below is sequential (32 distinct compiles one at a time), which iso
 
 Two cells, both against a WebDAV backend whose GETs stop answering while PUTs succeed, with `SCCACHE_CACHE_READ_TIMEOUT_SECS=1`, at the repo's MSRV (rustc 1.91.0):
 
-Standalone backend, 32 distinct compile requests through a fresh daemon per run (uncached control 0.7 s), medians of 3 alternating reps at main `33d12fb`:
+Standalone backend, 32 distinct compile requests through a fresh daemon per run (uncached control 0.5 s), medians of 3 alternating reps at main `33d12fb`:
 
-- before: 34.2 s — 32 timeouts, 32 successful writes, 32 backend GETs
-- after: 6.0 s — 32 timeouts reported, but 3 backend GETs; all 32 compiles and writes still succeed
-- with `SCCACHE_BACKEND_BACKOFF_THRESHOLD=0` (single run): 35.4 s, indistinguishable from before
+- before: 33.5 s — 32 timeouts, 32 successful writes, 32 backend GETs
+- after: 4.3 s — 32 timeouts reported, but 3 backend GETs; all 32 compiles and writes still succeed
+- with `SCCACHE_BACKEND_BACKOFF_THRESHOLD=0` (single run): 33.5 s, indistinguishable from before
 
 Multi-level chain `disk,webdav`, 48 compiles per run: 16 keys warmed through the chain while the backend was healthy, then the same backend turns unhealthy mid-run — 3 cold keys (the gate trips on the third), then the 16 warm keys, then 29 more cold keys:
 
-- before: 33.8 s — every cold lookup pays the 1 s wait on the stalled level; the 16 warm lookups keep hitting the disk tier throughout
-- after: 4.7 s — the disk tier serves the 16 warm keys while the remote level is skipped; 3 backend GETs during the outage instead of the before-arm's 32 stalled GETs; the cold compiles all still run and write
-- with `SCCACHE_BACKEND_BACKOFF_THRESHOLD=0` (single run): 33.8 s, indistinguishable from before
+- before: 33.7 s — every cold lookup pays the 1 s wait on the stalled level; the 16 warm lookups keep hitting the disk tier throughout
+- after: 4.6 s — the disk tier serves the 16 warm keys while the remote level is skipped; 3 backend GETs during the outage instead of the before-arm's 32 stalled GETs; the cold compiles all still run and write
+- with `SCCACHE_BACKEND_BACKOFF_THRESHOLD=0` (single run): 34.2 s, indistinguishable from before
 
 The win in one line: 29 of the 32 read-timeout waits avoided per workload, with the disk tier unaffected. The ratio depends on the build graph and timeout; for scale, this issue measured a stalled build at 11.7x a healthy warm one.
 
-This implements the per-level option from the comment; happy to collapse to a single global gate if that's preferred. The CI clippy invocation (from `ci.yml`) is clean on the branch, `cargo fmt --check` is clean, and `cargo check --no-default-features` shows only warnings that are already on unmodified main. Lib tests: 655 passed with 16 new tests for the module and the multi-level chain; the failing tests in the lib and integration suites (the unix-socket binding pair, the cache-hit-rate suite, the sccache_cargo suite) fail identically on unmodified main at this pin and are environment-dependent on this machine.
+This implements the per-level option from the comment; happy to collapse to a single global gate if that's preferred. The CI clippy invocation (from `ci.yml`) is clean on the branch, `cargo fmt --check` is clean, and `cargo check --no-default-features` shows only warnings that are already on unmodified main. Lib tests: 655 passed with 17 new tests for the module and the multi-level chain; the failing tests in the lib and integration suites (the unix-socket binding pair, the cache-hit-rate suite, the sccache_cargo suite) fail identically on unmodified main at this pin and are environment-dependent on this machine.
