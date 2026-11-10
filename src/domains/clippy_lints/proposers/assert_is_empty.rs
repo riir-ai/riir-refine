@@ -71,6 +71,13 @@
 //!   `&String` → `assert_eq!(s, "")`; `&[T]` → `assert_eq!(s, [])`;
 //!   `&Vec<T>` → `assert_eq!(s.as_slice(), [])`; owned `Vec<T>` →
 //!   `assert_eq!(v, [] as [T; 0])` (`T` spelled via canonical token text).
+//!   The three ARRAY-shaped families additionally require the element in
+//!   the unconditional-bounds allowlist (`elem_known_partial_eq`) — the
+//!   emitted comparison compiles only when the element implements
+//!   `PartialEq` and the macro's failure printout needs `Debug`, and
+//!   this file-local machinery has no trait facts (P123: a named element
+//!   without the impls emitted an E0369 `assert_ne!` under `--no-verify`;
+//!   the `--verify` compile gate is the backstop, never the guard).
 //!   Classification is STRUCTURAL on the syn type node — the conservative
 //!   reading of "exact source spelling": `&mut` anything, `&[T; N]`
 //!   arrays (a `[T; N] == [T; 0]` compare would not compile),
@@ -623,7 +630,7 @@ fn call_fact(func: &Expr, tables: &FileTables) -> Proven {
             if head == "Vec" && tail == "new" {
                 // `Vec::<T>::new()` spells T — the one sound turbofish.
                 if let Some(elem) = sole_type_argument(segs[0]) {
-                    if !contains_infer(elem) {
+                    if !contains_infer(elem) && elem_known_partial_eq(elem) {
                         return Proven {
                             family: Some(ParamType::VecOwned(type_text(elem))),
                             type_name: None,
@@ -708,15 +715,25 @@ fn classify_family(ty: &syn::Type) -> Option<ParamType> {
                 return None;
             }
             match &*r.elem {
-                syn::Type::Slice(_) => Some(ParamType::Slice),
+                syn::Type::Slice(s) => {
+                    // P123: the `[]` comparison needs `T: PartialEq + Debug`
+                    // on the element — facts this file-local machinery
+                    // cannot prove for a named type, so only the
+                    // unconditional-bounds set may cross.
+                    if !elem_known_partial_eq(&s.elem) {
+                        return None;
+                    }
+                    Some(ParamType::Slice)
+                }
                 syn::Type::Path(p) => {
                     let seg = sole_segment(p)?;
                     match seg.ident.to_string().as_str() {
                         "str" | "String" => Some(ParamType::Str),
                         "Vec" => {
-                            // Shape check only — exactly one type argument
-                            // must be present; the T text is not needed.
-                            sole_type_argument(seg)?;
+                            let elem = sole_type_argument(seg)?;
+                            if !elem_known_partial_eq(elem) {
+                                return None;
+                            }
                             Some(ParamType::VecRef)
                         }
                         _ => None,
@@ -734,12 +751,66 @@ fn classify_family(ty: &syn::Type) -> Option<ParamType> {
                     if contains_infer(elem) {
                         return None;
                     }
+                    if !elem_known_partial_eq(elem) {
+                        return None;
+                    }
                     Some(ParamType::VecOwned(type_text(elem)))
                 }
                 _ => None,
             }
         }
         _ => None,
+    }
+}
+
+/// The unconditional-bounds allowlist for the array-shaped rewrite
+/// families (P123): the emitted `assert_eq!`/`assert_ne!` compares the
+/// receiver against `[]` / `[] as [T; 0]`, which compiles only when the
+/// element implements `PartialEq` (the comparison) and `Debug` (the
+/// macro's failure printout) — both proven empirically at the incident
+/// (E0369 + E0277 on a named element). This file-local machinery has no
+/// trait facts, so only the types whose bounds are UNCONDITIONAL may
+/// cross: the primitive scalars, `String`, one reference hop to either,
+/// and tuples of known elements (the tuple impls require each field).
+/// A named element (`Vec<RouterEvalRow>`) refuses — exactly the class
+/// that emitted a non-compiling `assert_ne!` in the field.
+fn elem_known_partial_eq(t: &syn::Type) -> bool {
+    match t {
+        syn::Type::Reference(r) if r.mutability.is_none() => elem_known_partial_eq(&r.elem),
+        syn::Type::Tuple(tup) => tup.elems.iter().all(elem_known_partial_eq),
+        syn::Type::Path(p) => {
+            let Some(seg) = sole_segment(p) else {
+                return false;
+            };
+            // Generic arguments of any kind refuse: `Option<T>`-shaped
+            // elements carry bounds we cannot see (`Option<T>: Debug`
+            // needs `T: Debug`), and the bare-ident shapes are the
+            // allowlist itself.
+            if !seg.arguments.is_empty() {
+                return false;
+            }
+            matches!(
+                seg.ident.to_string().as_str(),
+                "u8" | "u16"
+                    | "u32"
+                    | "u64"
+                    | "u128"
+                    | "usize"
+                    | "i8"
+                    | "i16"
+                    | "i32"
+                    | "i64"
+                    | "i128"
+                    | "isize"
+                    | "f32"
+                    | "f64"
+                    | "bool"
+                    | "char"
+                    | "String"
+                    | "str"
+            )
+        }
+        _ => false,
     }
 }
 
@@ -1083,6 +1154,74 @@ mod tests {
             "fn-return local not rewritten: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn named_element_vec_must_not_rewrite() {
+        // P123 negative arm: a named element carries no file-local
+        // PartialEq/Debug fact — the emitted `assert_ne!` would be E0369
+        // exactly as surfaced in the field (the type-asymmetric
+        // Vec-vs-array comparison). Every provenance leg refuses.
+        for src in [
+            // annotated param (the incident's own shape)
+            "struct Row; fn f(rows: Vec<Row>) { assert!(!rows.is_empty()); }",
+            // std constructor (turbofish leg)
+            "struct Row; fn f() { let rows = Vec::<Row>::new(); assert!(rows.is_empty()); }",
+            // field leg
+            "struct Row; struct S { rows: Vec<Row> } fn f(s: S) { assert!(!s.rows.is_empty()); }",
+            // slice + shared-Vec families, same refusal
+            "struct Row; fn f(s: &[Row]) { assert!(s.is_empty()); }",
+            "struct Row; fn f(v: &Vec<Row>) { assert!(v.is_empty()); }",
+        ] {
+            assert!(
+                propose_fix(RULE, src).is_none(),
+                "named-element shape must not rewrite: {src}"
+            );
+        }
+    }
+
+    #[test]
+    fn unconditional_bounds_elements_still_fire() {
+        // The allowlist half of the P123 gate: primitives and String keep
+        // the array-shaped rewrites (their PartialEq/Debug are
+        // unconditional); the emitted forms compile.
+        let out = propose_fix(
+            RULE,
+            "fn f(a: Vec<u8>, b: Vec<i64>, c: Vec<String>) { assert!(!a.is_empty()); assert!(!b.is_empty()); assert!(!c.is_empty()); }",
+        )
+        .expect("matched");
+        assert!(out.contains("assert_ne!(a, [] as [u8; 0])"), "u8: {out}");
+        assert!(out.contains("assert_ne!(b, [] as [i64; 0])"), "i64: {out}");
+        assert!(
+            out.contains("assert_ne!(c, [] as [String; 0])"),
+            "String: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn reference_and_generic_elements_refuse() {
+        // &str / &String elements keep the fire (one ref hop onto the
+        // allowlist); nested generics and &mut refuse — bounds invisible
+        // file-locally (Option<T>: Debug needs T: Debug) or non-allowlist.
+        let out =
+            propose_fix(RULE, "fn f(a: Vec<&str>) { assert!(!a.is_empty()); }").expect("matched");
+        assert!(
+            out.contains("assert_ne!(a, [] as [& str; 0])"),
+            "&str: {out}"
+        );
+        syn::parse_file(&out).expect("re-parses");
+
+        for src in [
+            "fn f(a: Vec<Option<u8>>) { assert!(!a.is_empty()); }",
+            "fn f(a: Vec<&mut u8>) { assert!(!a.is_empty()); }",
+            "struct P; fn f(a: Vec<Vec<P>>) { assert!(!a.is_empty()); }",
+        ] {
+            assert!(
+                propose_fix(RULE, src).is_none(),
+                "unprovable-bounds element must not rewrite: {src}"
+            );
+        }
     }
 
     #[test]
