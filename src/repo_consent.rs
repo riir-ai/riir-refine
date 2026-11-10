@@ -318,7 +318,7 @@ mod tests {
             assert!(
                 !ENABLED,
                 "the ENABLE flip is an owner act (plan 333 Phase B) — flip this pin in the same commit as the signature"
-            )
+            );
         };
         let tmp = std::env::temp_dir().join(format!("repo_consent_dark_{}", std::process::id()));
         let dir = tmp.join("account");
