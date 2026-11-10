@@ -1,26 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1098" height="372" viewBox="0 0 1098 372" font-family="ui-monospace,Menlo,monospace">
-<rect width="1098" height="372" fill="#14161a"/>
-<text x="24" y="32" fill="#f2f2f2" font-size="19" font-weight="bold">sccache wall time, 32 compile requests against an unhealthy cache backend</text>
-<text x="24" y="54" fill="#9aa0a6" font-size="12">before: sccache main ba261b8 · after: backend-read-timeout backoff (this PR)</text>
-<text x="24" y="72" fill="#9aa0a6" font-size="12">blackhole WebDAV backend (GETs never answer) · SCCACHE_CACHE_READ_TIMEOUT_SECS=1 · medians of 3 alternating runs</text>
-<text x="24" y="90" fill="#9aa0a6" font-size="12">box: Apple M3 Max, AC power, load 3.14 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>
-<rect x="444" y="104" width="12" height="12" fill="#5b8def"/><text x="462" y="114" fill="#c9cdd3" font-size="12">before (main)</text>
-<rect x="594" y="104" width="12" height="12" fill="#3fbf7f"/><text x="612" y="114" fill="#c9cdd3" font-size="12">after (backoff)</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1078" height="582" viewBox="0 0 1078 582" font-family="ui-monospace,Menlo,monospace">
+<rect width="1078" height="582" fill="#14161a"/>
+<text x="24" y="32" fill="#f2f2f2" font-size="19" font-weight="bold">sccache wall time against an unhealthy cache backend — standalone and multilevel</text>
+<text x="24" y="54" fill="#9aa0a6" font-size="12">before: sccache main 33d12fb · after: per-level backend-read-timeout backoff (this PR)</text>
+<text x="24" y="72" fill="#9aa0a6" font-size="12">WebDAV GETs stop answering, PUTs succeed · SCCACHE_CACHE_READ_TIMEOUT_SECS=1 · medians of 3 alternating runs</text>
+<text x="24" y="90" fill="#9aa0a6" font-size="12">box: Apple M3 Max, AC power, load ~6 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>
+<rect x="454" y="104" width="12" height="12" fill="#5b8def"/><text x="472" y="114" fill="#c9cdd3" font-size="12">before (main)</text>
+<rect x="604" y="104" width="12" height="12" fill="#3fbf7f"/><text x="622" y="114" fill="#c9cdd3" font-size="12">after (backoff)</text>
 <text x="24" y="153" fill="#e8e8e8" font-size="13">uncached control (no sccache)</text>
-<rect x="444" y="130" width="7.038892865664536" height="34" fill="#6b7280" rx="3"/>
-<text x="459.03889286566454" y="162" fill="#c9cdd3" font-size="12">0.590 s</text>
-<text x="24" y="201" fill="#e8e8e8" font-size="13">before — pin ba261b8 (median of 3)</text>
-<rect x="444" y="178" width="399.98806967310907" height="34" fill="#5b8def" rx="3"/>
-<text x="851.9880696731091" y="200" fill="#9aa0a6" font-size="11">33.595 / 33.478 / 33.527</text>
-<text x="851.9880696731091" y="210" fill="#c9cdd3" font-size="12">33.527 s</text>
+<rect x="454" y="130" width="7.664194345909948" height="34" fill="#6b7280" rx="3"/>
+<text x="469.66419434590995" y="162" fill="#c9cdd3" font-size="12">0.713 s</text>
+<text x="24" y="201" fill="#e8e8e8" font-size="13">before — main 33d12fb (median of 3)</text>
+<rect x="454" y="178" width="367.7523379554982" height="34" fill="#5b8def" rx="3"/>
+<text x="829.7523379554982" y="200" fill="#9aa0a6" font-size="11">33.526 / 34.212 / 35.404</text>
+<text x="829.7523379554982" y="210" fill="#c9cdd3" font-size="12">34.212 s</text>
 <text x="24" y="249" fill="#e8e8e8" font-size="13">after — backend backoff (median of 3)</text>
-<rect x="444" y="226" width="52.6008112622286" height="34" fill="#3fbf7f" rx="3"/>
-<text x="504.6008112622286" y="248" fill="#9aa0a6" font-size="11">4.773 / 4.409 / 4.407</text>
-<text x="504.6008112622286" y="258" fill="#c9cdd3" font-size="12">4.409 s  7.60x faster</text>
-<text x="24" y="297" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0, 1 run)</text>
-<rect x="444" y="274" width="400.0" height="34" fill="#8a6d3b" rx="3"/>
-<text x="852.0" y="306" fill="#c9cdd3" font-size="12">33.528 s</text>
-<line x1="24" y1="328" x2="1074" y2="328" stroke="#2a2e35"/>
-<text x="24" y="350" fill="#c9cdd3" font-size="13">backend GETs: 32 before, 3 after (threshold 3 + skip window) — all 32 compiles and cache writes succeed on every arm</text>
-<text x="24" y="370" fill="#9aa0a6" font-size="12">setup: see PR description · workload = 32 distinct .c files, fresh daemon per run, uncached control 0.590 s</text>
+<rect x="454" y="226" width="64.47382564764052" height="34" fill="#3fbf7f" rx="3"/>
+<text x="526.4738256476405" y="248" fill="#9aa0a6" font-size="11">4.382 / 5.998 / 5.998</text>
+<text x="526.4738256476405" y="258" fill="#c9cdd3" font-size="12">5.998 s</text>
+<text x="24" y="297" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0)</text>
+<rect x="454" y="274" width="380.95238095238096" height="34" fill="#8a6d3b" rx="3"/>
+<text x="842.952380952381" y="306" fill="#c9cdd3" font-size="12">35.440 s</text>
+<line x1="24" y1="332" x2="1054" y2="332" stroke="#2a2e35"/>
+<text x="24" y="352" fill="#e8e8e8" font-size="13" font-weight="bold">multilevel chain disk,webdav — 48 compiles, backend unhealthy mid-run</text>
+<text x="24" y="385" fill="#e8e8e8" font-size="13">before — main 33d12fb (median of 3)</text>
+<rect x="454" y="362" width="380.95238095238096" height="34" fill="#5b8def" rx="3"/>
+<text x="842.952380952381" y="384" fill="#9aa0a6" font-size="11">35.019 / 33.815 / 33.810</text>
+<text x="842.952380952381" y="394" fill="#c9cdd3" font-size="12">33.815 s</text>
+<text x="24" y="433" fill="#e8e8e8" font-size="13">after — backend backoff (median of 3)</text>
+<rect x="454" y="410" width="53.21954894629744" height="34" fill="#3fbf7f" rx="3"/>
+<text x="515.2195489462974" y="432" fill="#9aa0a6" font-size="11">4.724 / 4.739 / 4.648</text>
+<text x="515.2195489462974" y="442" fill="#c9cdd3" font-size="12">4.724 s</text>
+<text x="24" y="481" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0)</text>
+<rect x="454" y="458" width="380.4904839357006" height="34" fill="#8a6d3b" rx="3"/>
+<text x="842.4904839357006" y="490" fill="#c9cdd3" font-size="12">33.774 s</text>
+<line x1="24" y1="512" x2="1054" y2="512" stroke="#2a2e35"/>
+<text x="24" y="534" fill="#c9cdd3" font-size="13">standalone: 29 of 32 waits avoided, 3 backend GETs instead of 32 · chain: the disk tier keeps serving hits while the remote level is skipped — 3 GETs instead of 32 cold lookups</text>
+<text x="24" y="554" fill="#9aa0a6" font-size="12">workload: sequential, fresh daemon per run · sequential shape — the issue's parallel cargo -j4 was not measured · cache_timeouts reads 32 on every arm</text>
 </svg>

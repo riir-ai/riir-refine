@@ -5,8 +5,9 @@ Shape follows the house renderer (scripts/fsearch_pr_bench_svg.py, Plan 224):
 dark bg, mono font, horizontal bars, provenance header, harness footer.
 No tool/site tagline anywhere (owner verdict 2026-11-02 — attribution ban).
 
-Data: bench 128 record run (benchrun2, 3 alternating reps per arm) + the
-demote arm. Linear scale — same units, 33.5 vs 4.4 reads honestly linear.
+Data: bench 128 record run 5 (2026-11-10, pin 33d12fb): the standalone cell
+(3 alternating reps per arm + demote) and the multilevel chain cell
+(disk,webdav with the backend going unhealthy mid-run). Linear scale.
 
 Usage: python3 render_pr_svg.py --out bench128_backend_backoff.svg
 """
@@ -14,22 +15,28 @@ Usage: python3 render_pr_svg.py --out bench128_backend_backoff.svg
 import sys
 from pathlib import Path
 
-# arm, median seconds, all three reps (for the label), color, is_before
+# (cell divider, label, median seconds, reps string, color)
 ROWS = [
-    ("uncached control (no sccache)", 0.590, "", "#6b7280"),
-    ("before — pin ba261b8 (median of 3)", 33.527, "33.595 / 33.478 / 33.527", "#5b8def"),
-    ("after — backend backoff (median of 3)", 4.409, "4.773 / 4.409 / 4.407", "#3fbf7f"),
-    ("after, backoff disabled (THRESHOLD=0, 1 run)", 33.528, "", "#8a6d3b"),
+    (False, "uncached control (no sccache)", 0.713, "", "#6b7280"),
+    (False, "before — main 33d12fb (median of 3)", 34.212, "33.526 / 34.212 / 35.404", "#5b8def"),
+    (False, "after — backend backoff (median of 3)", 5.998, "4.382 / 5.998 / 5.998", "#3fbf7f"),
+    (False, "after, backoff disabled (THRESHOLD=0)", 35.440, "", "#8a6d3b"),
+    (True, "multilevel chain disk,webdav — 48 compiles, backend unhealthy mid-run", 0, "", "#000000"),
+    (False, "before — main 33d12fb (median of 3)", 33.815, "35.019 / 33.815 / 33.810", "#5b8def"),
+    (False, "after — backend backoff (median of 3)", 4.724, "4.724 / 4.739 / 4.648", "#3fbf7f"),
+    (False, "after, backoff disabled (THRESHOLD=0)", 33.774, "", "#8a6d3b"),
 ]
 
+STANDALONE_PEAK = max(r[2] for r in ROWS[0:4])
+CHAIN_PEAK = max(r[2] for r in ROWS[5:9])
 TOP = 116
 BAR_H = 34
 BAR_GAP = 14
 FOOTER_H = 64
-LABEL_W = 420
-VALUE_W = 210
+LABEL_W = 430
+VALUE_W = 200
 LEFT = 24
-PLOT_W = 420
+PLOT_W = 400
 
 
 def esc(s):
@@ -42,12 +49,11 @@ def esc(s):
 
 
 def main():
-    peak = max(v for _, v, _, _ in ROWS)
-    height = TOP + len(ROWS) * (BAR_H + BAR_GAP) + FOOTER_H
+    height = TOP + len(ROWS) * (BAR_H + BAR_GAP) + FOOTER_H + 18
     width = LEFT + LABEL_W + PLOT_W + VALUE_W + 24
 
-    def x(ms):
-        return LEFT + LABEL_W + ms / (peak * 1.05) * PLOT_W
+    def x(v, peak):
+        return LEFT + LABEL_W + v / (peak * 1.05) * PLOT_W
 
     o = []
     o.append(
@@ -57,19 +63,19 @@ def main():
     o.append(f'<rect width="{width}" height="{height}" fill="#14161a"/>')
     o.append(
         '<text x="24" y="32" fill="#f2f2f2" font-size="19" font-weight="bold">'
-        "sccache wall time, 32 compile requests against an unhealthy cache backend</text>"
+        "sccache wall time against an unhealthy cache backend — standalone and multilevel</text>"
     )
     o.append(
         '<text x="24" y="54" fill="#9aa0a6" font-size="12">'
-        "before: sccache main ba261b8 · after: backend-read-timeout backoff (this PR)</text>"
+        "before: sccache main 33d12fb · after: per-level backend-read-timeout backoff (this PR)</text>"
     )
     o.append(
         '<text x="24" y="72" fill="#9aa0a6" font-size="12">'
-        "blackhole WebDAV backend (GETs never answer) · SCCACHE_CACHE_READ_TIMEOUT_SECS=1 · medians of 3 alternating runs</text>"
+        "WebDAV GETs stop answering, PUTs succeed · SCCACHE_CACHE_READ_TIMEOUT_SECS=1 · medians of 3 alternating runs</text>"
     )
     o.append(
         '<text x="24" y="90" fill="#9aa0a6" font-size="12">'
-        "box: Apple M3 Max, AC power, load 3.14 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>"
+        "box: Apple M3 Max, AC power, load ~6 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>"
     )
 
     ly = 104
@@ -82,22 +88,32 @@ def main():
         f'<text x="{LEFT+LABEL_W+168}" y="{ly+10}" fill="#c9cdd3" font-size="12">after (backoff)</text>'
     )
 
+    peak = STANDALONE_PEAK
     y = TOP + 14
-    for label, v, reps, color in ROWS:
+    for divider, label, v, reps, color in ROWS:
+        if divider:
+            y += 10
+            o.append(f'<line x1="24" y1="{y}" x2="{width-24}" y2="{y}" stroke="#2a2e35"/>')
+            y += 20
+            o.append(
+                f'<text x="{LEFT}" y="{y}" fill="#e8e8e8" font-size="13" font-weight="bold">{esc(label)}</text>'
+            )
+            peak = CHAIN_PEAK
+            y += 10
+            continue
         o.append(
             f'<text x="{LEFT}" y="{y + BAR_H - 11}" fill="#e8e8e8" font-size="13">{esc(label)}</text>'
         )
-        bar_w = max(x(v) - LEFT - LABEL_W, 2)
+        bar_w = max(x(v, peak) - LEFT - LABEL_W, 2)
         o.append(
             f'<rect x="{LEFT+LABEL_W}" y="{y}" width="{bar_w}" height="{BAR_H}" fill="{color}" rx="3"/>'
         )
         if reps:
             o.append(
-                f'<text x="{x(v)+8}" y="{y + BAR_H - 12}" fill="#9aa0a6" font-size="11">{esc(reps)}</text>'
+                f'<text x="{x(v,peak)+8}" y="{y + BAR_H - 12}" fill="#9aa0a6" font-size="11">{esc(reps)}</text>'
             )
-        tag = f"  {33.527 / 4.409:.2f}x faster" if v == 4.409 else ""
         o.append(
-            f'<text x="{x(v)+8}" y="{y + BAR_H - 2}" fill="#c9cdd3" font-size="12">{v:.3f} s{tag}</text>'
+            f'<text x="{x(v,peak)+8}" y="{y + BAR_H - 2}" fill="#c9cdd3" font-size="12">{v:.3f} s</text>'
         )
         y += BAR_H + BAR_GAP
 
@@ -106,12 +122,12 @@ def main():
     o.append(
         '<text x="24" y="'
         + str(y + 22)
-        + '" fill="#c9cdd3" font-size="13">backend GETs: 32 before, 3 after (threshold 3 + skip window) — all 32 compiles and cache writes succeed on every arm</text>'
+        + '" fill="#c9cdd3" font-size="13">standalone: 29 of 32 waits avoided, 3 backend GETs instead of 32 · chain: the disk tier keeps serving hits while the remote level is skipped — 3 GETs instead of 32 cold lookups</text>'
     )
     o.append(
         '<text x="24" y="'
         + str(y + 42)
-        + '" fill="#9aa0a6" font-size="12">setup: see PR description · workload = 32 distinct .c files, fresh daemon per run, uncached control 0.590 s</text>'
+        + '" fill="#9aa0a6" font-size="12">workload: sequential, fresh daemon per run · sequential shape — the issue\u0027s parallel cargo -j4 was not measured · cache_timeouts reads 32 on every arm</text>'
     )
     o.append("</svg>")
 

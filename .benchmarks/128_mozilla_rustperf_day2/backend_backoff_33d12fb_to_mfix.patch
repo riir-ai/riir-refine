@@ -32,10 +32,10 @@ index 2836b3c..9234f0b 100644
  ### Via Environment Variables
 diff --git a/src/cache/backend_backoff.rs b/src/cache/backend_backoff.rs
 new file mode 100644
-index 0000000..6f35e1d
+index 0000000..95fbc31
 --- /dev/null
 +++ b/src/cache/backend_backoff.rs
-@@ -0,0 +1,720 @@
+@@ -0,0 +1,723 @@
 +// Copyright 2026 Mozilla Foundation
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
@@ -247,6 +247,7 @@ index 0000000..6f35e1d
 +#[derive(Clone, Copy, Debug)]
 +pub(crate) enum TimeBudget {
 +    /// The level applies the full read timeout itself (a standalone backend).
++    #[cfg_attr(not(any_cache_remote), allow(dead_code))]
 +    Full,
 +    /// The caller applies the per-level timeout (a level of a multi-level
 +    /// chain, which shares the lookup deadline across levels).
@@ -279,7 +280,9 @@ index 0000000..6f35e1d
 +    }
 +
 +    /// Wrap a standalone (single) cache backend. The wrapper applies the
-+    /// full read timeout itself.
++    /// full read timeout itself. (No remote cache, no standalone backend —
++    /// the wrapper is chain-levels only in that posture.)
++    #[cfg_attr(not(any_cache_remote), allow(dead_code))]
 +    pub(crate) fn standalone(inner: Arc<dyn Storage>) -> Arc<dyn Storage> {
 +        Arc::new(Self {
 +            inner,
@@ -787,7 +790,7 @@ index accad04..66d7c8c 100644
  pub mod cache;
  pub mod cache_io;
 diff --git a/src/cache/multilevel.rs b/src/cache/multilevel.rs
-index c8031f7..f4e7549 100644
+index c8031f7..a48b19d 100644
 --- a/src/cache/multilevel.rs
 +++ b/src/cache/multilevel.rs
 @@ -44,6 +44,7 @@ struct AtomicLevelStats {
@@ -898,7 +901,7 @@ index c8031f7..f4e7549 100644
          }
      }
  
-@@ -565,27 +585,91 @@ impl MultiLevelStorage {
+@@ -565,27 +585,102 @@ impl MultiLevelStorage {
  #[async_trait]
  impl Storage for MultiLevelStorage {
      async fn get(&self, key: &str) -> Result<Cache> {
@@ -911,6 +914,11 @@ index c8031f7..f4e7549 100644
 +        let lookup_start = Instant::now();
 +        let level_count = self.levels.len();
 +        let mut probed = Vec::with_capacity(level_count);
++        // Whether any level this lookup could not actually check — a gate
++        // skip or a level that outlasted its budget. The lookup then ends as
++        // a timed-out lookup (the same reporting path the standalone backend
++        // uses), never as a clean miss: the backend was not proven to miss.
++        let mut unchecked = None;
 +
          for (idx, level) in self.levels.iter().enumerate() {
 +            let levels_left = (level_count - idx) as u32;
@@ -956,6 +964,9 @@ index c8031f7..f4e7549 100644
 +                    "Cache level {} is in backoff, skipping it for this lookup",
 +                    idx
 +                );
++                unchecked = unchecked.or(Some(anyhow::Error::new(
++                    crate::cache::backend_backoff::LevelSkipped,
++                )));
 +                continue;
 +            }
 +
@@ -982,6 +993,9 @@ index c8031f7..f4e7549 100644
 +                    idx,
 +                    start.elapsed()
 +                );
++                unchecked = unchecked.or(Some(anyhow::Error::new(
++                    crate::cache::backend_backoff::LevelTimedOut,
++                )));
 +                continue;
 +            }
 +
@@ -995,12 +1009,21 @@ index c8031f7..f4e7549 100644
  
                      // Raw bytes obtained above are reused for backfilling;
                      // no second read is needed for a raw-capable level.
-@@ -618,17 +702,63 @@ impl Storage for MultiLevelStorage {
+@@ -618,17 +713,81 @@ impl Storage for MultiLevelStorage {
          }
          debug!("Cache miss at all levels");
  
 -        self.record_all_read_misses();
 +        self.record_read_misses(&probed);
++
++        // A lookup that could not check every level reports the way a
++        // timed-out lookup reports (the caller maps the markers to
++        // `MissType::TimedOut`), so the stats keep counting the lookups the
++        // backend never answered — the pre-backoff behavior for a stalled
++        // chain.
++        if let Some(error) = unchecked {
++            return Err(error);
++        }
  
          Ok(Cache::Miss)
      }
@@ -1013,6 +1036,9 @@ index c8031f7..f4e7549 100644
 +        let lookup_start = Instant::now();
 +        let level_count = self.levels.len();
 +        let mut probed = Vec::with_capacity(level_count);
++        // Same contract as `get`: a lookup that could not actually check a
++        // level is a timed-out lookup, never a clean miss.
++        let mut unchecked = None;
 +
          for (idx, level) in self.levels.iter().enumerate() {
 +            let levels_left = (level_count - idx) as u32;
@@ -1040,6 +1066,9 @@ index c8031f7..f4e7549 100644
 +                        idx,
 +                        start.elapsed()
 +                    );
++                    unchecked = unchecked.or(Some(anyhow::Error::new(
++                        crate::cache::backend_backoff::LevelTimedOut,
++                    )));
 +                    continue;
 +                }
 +            };
@@ -1050,6 +1079,9 @@ index c8031f7..f4e7549 100644
 +                .is_some_and(|e| e.is::<crate::cache::backend_backoff::LevelSkipped>())
 +            {
 +                debug!("Cache level {} is in backoff, skipping its raw read", idx);
++                unchecked = unchecked.or(Some(anyhow::Error::new(
++                    crate::cache::backend_backoff::LevelSkipped,
++                )));
 +                continue;
 +            }
 +
@@ -1062,17 +1094,20 @@ index c8031f7..f4e7549 100644
                      self.backfill_raw_hit(key, &bytes, idx);
                      return Ok(Some(bytes));
                  }
-@@ -642,7 +772,7 @@ impl Storage for MultiLevelStorage {
+@@ -642,7 +801,10 @@ impl Storage for MultiLevelStorage {
              }
          }
  
 -        self.record_all_read_misses();
 +        self.record_read_misses(&probed);
++        if let Some(error) = unchecked {
++            return Err(error);
++        }
          Ok(None)
      }
  
 diff --git a/src/cache/multilevel_test.rs b/src/cache/multilevel_test.rs
-index ee9462f..6465b99 100644
+index ee9462f..11e0a23 100644
 --- a/src/cache/multilevel_test.rs
 +++ b/src/cache/multilevel_test.rs
 @@ -18,12 +18,14 @@ use crate::cache::disk::DiskCache;
@@ -1090,7 +1125,7 @@ index ee9462f..6465b99 100644
  use std::time::Duration;
  use tempfile::Builder as TempBuilder;
  use tokio::runtime::Builder as RuntimeBuilder;
-@@ -1863,3 +1865,259 @@ fn test_multilevel_put_raw_writes_to_all_levels() {
+@@ -1863,3 +1865,274 @@ fn test_multilevel_put_raw_writes_to_all_levels() {
          );
      });
  }
@@ -1237,8 +1272,12 @@ index ee9462f..6465b99 100644
 +#[test]
 +fn local_hits_keep_serving_while_the_remote_level_is_in_cooldown() {
 +    // THE multilevel case from the proposal: L0 (local) holds the entry,
-+    // L1 (remote) stalls. After the remote trips its gate, lookups must
-+    // still hit L0 — and must not pay the remote's timeout.
++    // L1 (remote) has tripped its gate. Lookups must still hit L0, the
++    // skipped remote must not be contacted, and a lookup that cannot check
++    // L1 reports as a timed-out lookup (the marker), never a clean miss.
++    // The gate state is seeded directly: the process-wide read deadline is
++    // 60 s by default, so no sleep-based stall inside a unit test can trip
++    // a gate through real timeouts.
 +    let runtime = RuntimeBuilder::new_multi_thread()
 +        .worker_threads(2)
 +        .enable_all()
@@ -1246,36 +1285,47 @@ index ee9462f..6465b99 100644
 +        .unwrap();
 +
 +    let l0 = ChainCountingLevel::new();
-+    let l1 = ChainSlowLevel::new(Duration::from_millis(300));
++    let l1 = ChainCountingLevel::new();
 +    l0.put_entry("hit_key");
 +
-+    let build_slow = |inner: Arc<dyn Storage>| -> Arc<dyn Storage> {
-+        Arc::new(crate::cache::backend_backoff::BackoffStorage::with_policy(
-+            inner,
-+            3,
-+            Duration::from_secs(60),
-+            crate::cache::backend_backoff::TimeBudget::CallerOwned,
-+        ))
-+    };
-+    let wrapped: Vec<Arc<dyn Storage>> = vec![
-+        build_slow(l0.clone() as Arc<dyn Storage>),
-+        build_slow(l1.clone() as Arc<dyn Storage>),
-+    ];
++    let build_slow =
++        |inner: Arc<dyn Storage>| -> Arc<crate::cache::backend_backoff::BackoffStorage> {
++            Arc::new(crate::cache::backend_backoff::BackoffStorage::with_policy(
++                inner,
++                3,
++                Duration::from_secs(60),
++                crate::cache::backend_backoff::TimeBudget::CallerOwned,
++            ))
++        };
++    let l1_wrapped = build_slow(l1.clone() as Arc<dyn Storage>);
++    // Seed the trip: three consecutive timed-out reads opened L1's gate.
++    for _ in 0..3 {
++        l1_wrapped.gate().record_timed_out();
++    }
++    let wrapped: Vec<Arc<dyn Storage>> =
++        vec![build_slow(l0.clone() as Arc<dyn Storage>), l1_wrapped];
 +    let storage = MultiLevelStorage::new(wrapped);
 +
 +    runtime.block_on(async {
-+        // Three missing keys: each lookup hits the fast L0 miss, then pays
-+        // the stalled L1's share. The third timeout trips L1's gate.
++        // Missing keys: L0 misses, L1 is skipped by its open gate — the
++        // lookup reports as a timed-out lookup (marker), never a clean miss.
 +        for i in 0..3 {
-+            match storage.get(&format!("missing_{i}")).await.unwrap() {
-+                Cache::Miss => {}
-+                _ => panic!("expected a miss for missing_{i}"),
++            match storage.get(&format!("missing_{i}")).await {
++                Err(error) if error.is::<crate::cache::backend_backoff::LevelSkipped>() => {}
++                other => panic!(
++                    "expected the skip marker for missing_{i}, got {:?}",
++                    other.map(|_| ()).map_err(|e| e.to_string())
++                ),
 +            }
 +        }
-+        assert_eq!(l1.reads(), 3, "the stalled remote was probed three times");
++        assert_eq!(
++            l1.reads.load(Ordering::SeqCst),
++            0,
++            "the gated remote was never contacted"
++        );
 +
-+        // The gate is now open: a HIT key must be served from L0 instantly,
-+        // with no probe reaching L1.
++        // A HIT key must be served from L0 instantly, with no probe
++        // reaching L1 behind it.
 +        let start = std::time::Instant::now();
 +        match storage.get("hit_key").await.unwrap() {
 +            Cache::Hit(_) => {}
@@ -1283,12 +1333,12 @@ index ee9462f..6465b99 100644
 +        }
 +        assert!(
 +            start.elapsed() < Duration::from_millis(50),
-+            "the hit must not wait behind the stalled remote: {:?}",
++            "the hit must not wait behind the gated remote: {:?}",
 +            start.elapsed()
 +        );
 +        assert_eq!(
-+            l1.reads(),
-+            3,
++            l1.reads.load(Ordering::SeqCst),
++            0,
 +            "the skipped remote level was not contacted again"
 +        );
 +    });

@@ -1,0 +1,129 @@
+== harness: /Users/kat/git/riir-refine/.raw/mozilla-heal/sccache ==
+toolchain: cargo +1.91.0
+== 1. CI inventory (their workflow files) ==
+cargo build --all-features
+cargo build -p randomize_readdir
+cargo check --no-default-features
+cargo clippy --version
+cargo test --locked --lib --bins --tests
+== 2. Executing runnable CI surfaces (failures collected, verdict at end) ==
+(skipped as not-locally-runnable: matrix-parameterized, cross-target, combinatorial, probes - review those by hand)
+SKIP (all-features: OS-gated deps; their CI runs it on their runners - review manually): cargo build --all-features
+--- cargo build -p randomize_readdir
+   Compiling randomize_readdir v0.1.0 (/Users/kat/git/riir-refine/.raw/mozilla-heal/sccache/tests/integration/randomize_readdir)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.24s
+--- cargo check --no-default-features
+warning: `sccache` (lib) generated 6 warnings (run `cargo fix --lib -p sccache` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 8.07s
+SKIP (probe): cargo clippy --version
+--- cargo test --locked --lib --bins --tests
+
+error: test failed, to rerun pass `--lib`
+HARNESS-FAIL (rc=101): cargo test --locked --lib --bins --tests
+== 3. Blast radius: readers of the diff's paths + callers of the diff's seams ==
+diff vs origin/main: docs/Configuration.md
+docs/MultiLevel.md
+src/cache/backend_backoff.rs
+src/cache/cache.rs
+src/cache/mod.rs
+src/cache/multilevel.rs
+src/cache/multilevel_test.rs
+src/cache/storage.rs
+src/compiler/compiler.rs
+-- seam callers (functions the diff adds/modifies, called from outside the diff):
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+(no unaccounted blast-radius hits)
+== harness verdict ==
+NOT READY: review the failures/hits above, fix or annotate, re-run.
