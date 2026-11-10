@@ -481,6 +481,21 @@ pub fn specs() -> Vec<GenSpec> {
 // none of the four is vec-shaped): RERANK_POOL 33→37 per the documented
 // ladder (34 measured + slack 3) + HEADROOM_DEPTHS appended 37. Retrieval
 // floors HELD (19/19 at the latent posture); router annotation floor HELD.
+// Batch-346 owed T7.5 regen (2026-11-10, `138e04ff` landed the corpus
+// 115→117 without this half and the coverage gate reded both lanes):
+// missing_errors_doc + missing_panics_doc join the EXCLUSION class in BOTH
+// tables — the ladder wrap() hosts every fixture in a PRIVATE `mod gen_N`
+// (standalone-parse contract), so nothing is API-reachable and the
+// reachable-surface doc lints fire NOTHING under the oracle (`oracle {}
+// ≠ union {lint}`, union-identity FAIL, the oracle-coverage class — not a
+// fixture or fixer defect). Composites untouched (the sorted insert sits
+// past the last stride-window index, the P51a shape). Labels byte-identical
+// both lanes. Tables: 99 v2 labels / 32 v2 exclusions, 100 v3 labels / 35
+// v3 exclusions. e2es: v2 verified, no drift, M4 PASS branch (A) (solve
+// 100.0% at every k over the labeled set); v3 verified, no drift,
+// stratification PASS. CAVEAT for future doc-lint atoms: a lint that needs
+// a reachable API surface can never freeze-verify under this wrap — it
+// joins the exclusions by construction, exactly as the two above did.
 pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-assign_op_pattern", &["assign_op_pattern"]), // k=1
     ("gen2-k1-bool_comparison", &["bool_comparison"]),     // k=1
@@ -727,6 +742,8 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k1-len_without_is_empty",
     "gen2-k1-manual_bit_width",
     "gen2-k1-mismatched_bit_width_type",
+    "gen2-k1-missing_errors_doc",
+    "gen2-k1-missing_panics_doc",
     "gen2-k1-needless_match",
     "gen2-k1-new_without_default",
     "gen2-k1-nonnull_unchecked_on_box_ptr",
@@ -1022,6 +1039,8 @@ pub static EXCLUDED_IDS_V3: &[&str] = &[
     "gen3-k1-len_without_is_empty",
     "gen3-k1-manual_bit_width",
     "gen3-k1-mismatched_bit_width_type",
+    "gen3-k1-missing_errors_doc",
+    "gen3-k1-missing_panics_doc",
     "gen3-k1-needless_match",
     "gen3-k1-new_without_default",
     "gen3-k1-nonnull_unchecked_on_box_ptr",
