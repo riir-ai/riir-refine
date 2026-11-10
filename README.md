@@ -259,10 +259,12 @@ resort, not a co-equal path.
 
 ## Install
 
-macOS / Linux (Homebrew — `brew tap` resolves `github.com/riir-ai/homebrew-tap`):
+macOS / Linux (Homebrew — `brew tap` resolves `github.com/riir-ai/homebrew-tap`;
+Homebrew 6+ refuses untrusted taps, so the trust step is part of the install):
 
 ```sh
 brew tap riir-ai/tap
+brew trust riir-ai/tap
 brew install riir-ai/tap/cargo-refine
 ```
 
