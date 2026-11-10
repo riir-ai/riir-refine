@@ -1,6 +1,8 @@
 # Issue 223 — repo-wide rustfmt style-2024 convergence: 392-file drift at the 1.99.0 toolchain, with byte-input exclusion map
 
 **Status:** OPEN — filed 2026-11-10 (takeover sweep, m3). Unclaimed; no lease taken.
+**Claimed:** zed-0b69b81d@amo, 1794285000, expires 2026-11-12T04:30:00Z
+(scope: T1 posture + T2 gen rename + T3 the per-file pass + T5 blame-ignore; T4 stays owner-gated. Coordination note for the live amo-idle-216 claim: the tree is CLEAN — no mid-flight WIP anywhere — and the sweep touches TRACKED files only; if the 216 lane resumes mid-sweep, its new PoC files are untracked and outside the pass, and any tracked-file edit it lands rebases on the formatted tree — the benign collision class.)
 **Found by:** the 11-10 takeover sweep — a dead m3 session (Nov 9, mtimes 12:48–19:54) had run the pass over 12 core files and never committed; salvage `refs/wip/refine-1110-fmt-regen-salvage` (m3-local). Its 11 formatable files landed on develop `style:` (4 files still differed post-pull; amo's 11-10 landings had already brought the other 7).
 
 ## The drift
