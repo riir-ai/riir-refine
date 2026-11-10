@@ -8,7 +8,11 @@
 # locally: same feature set, same packaging, same G2 leak scan, same SHA256
 # discipline — then `gh release create` + the tap/scoop manifest bumps.
 #
-# Usage:  scripts/manual_release.sh v0.1.3
+# Usage:  scripts/manual_release.sh v0.1.3 [--no-publish]
+#         --no-publish: build + package + scans only (assets in
+#         /tmp/manual_release_dist) — scripts/release.sh adds the
+#         touch-deploy publisher (kat-secret exec gh-release-pat, one
+#         fingerprint) on top of this pipeline.
 #
 # Prereqs (checked): gh auth, cargo-zigbuild, zig, rustup musl targets,
 # shasum. Windows builds via zig's gnu target (msvc needs CI — the release
@@ -27,7 +31,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -eu
 
-TAG="${1:?usage: $0 <tag>  (e.g. v0.1.3)}"
+TAG="${1:?usage: $0 <tag> [--no-publish]  (e.g. v0.1.3)}"
+PUBLISH=1
+[ "${2:-}" = "--no-publish" ] && PUBLISH=0
 case "$TAG" in
     v[0-9]*.[0-9]*.[0-9]*) ;;
     *) echo "tag must look like v0.1.3" >&2; exit 2 ;;
@@ -102,10 +108,14 @@ echo "== publish (body from $NOTES)"
 # `v0.3.0 — corpus: +12 rust_perf rules`). Derived from the notes file so
 # title and body can never disagree.
 CORPUS_LINE="$(grep '^corpus:' "$NOTES" | head -1)"
-gh release create "$TAG" -R riir-ai/cargo-refine \
-    --title "cargo-refine $TAG — $CORPUS_LINE" \
-    --notes-file "$NOTES" \
-    "$DIST"/*
+if [ "$PUBLISH" = 1 ]; then
+    gh release create "$TAG" -R riir-ai/cargo-refine \
+        --title "cargo-refine $TAG — $CORPUS_LINE" \
+        --notes-file "$NOTES" \
+        "$DIST"/*
+else
+    echo "   SKIPPED (--no-publish) — assets staged in $DIST for scripts/release.sh"
+fi
 
 echo "== tap/scoop manifest bumps (the CI pipeline opened PRs; manual mode edits main directly)"
 echo "   NOTE: bump riir-ai/homebrew-tap Formula/cargo-refine.rb (version + 4 sha256 from"
