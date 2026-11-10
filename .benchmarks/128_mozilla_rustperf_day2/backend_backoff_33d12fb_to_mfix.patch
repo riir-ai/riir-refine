@@ -14,7 +14,7 @@ index 6fc796c..48b4bc8 100644
  * `SCCACHE_CACHE_MULTIARCH` set (to any value, even `0`) to enable caching of builds with several different `-arch` flags, which are not cached by default. See [the caching doc](Caching.md#cc-compiler).
  * `SCCACHE_CACHE_ZSTD_LEVEL` to set zstd compression level of cache. the range is `1-22` and default is `3`.
 diff --git a/docs/MultiLevel.md b/docs/MultiLevel.md
-index 2836b3c..9234f0b 100644
+index 2836b3c..12a44a5 100644
 --- a/docs/MultiLevel.md
 +++ b/docs/MultiLevel.md
 @@ -116,6 +116,12 @@ SCCACHE_CACHE_SIZE="5G"  # Keep disk small
@@ -25,17 +25,17 @@ index 2836b3c..9234f0b 100644
 +
 +When a remote level stalls (reads that never answer rather than fast errors), every lookup would pay the full read timeout on that level before compiling locally. Each level has its own backoff: after `SCCACHE_BACKEND_BACKOFF_THRESHOLD` (default 3, `0` disables) consecutive timed-out reads, that level's reads are skipped for `SCCACHE_BACKEND_BACKOFF_COOLDOWN_SECS` (default 60) and reported the same way a timed-out lookup is. Faster levels keep serving while a remote level is skipped, and any read the level answers resets its counter. Reads only — writes never skip.
 +
-+The lookup deadline is also shared across levels (each level is tried with its share of the remaining `SCCACHE_CACHE_READ_TIMEOUT_SECS` time), so one stalled level cannot consume the whole budget before the later levels are tried, and a hung first level no longer starves the rest of the chain. Per-level timeouts are visible in `--show-stats` (`L<index> timeouts`).
++The lookup deadline is also shared across levels (each level is tried with its share of the remaining `SCCACHE_CACHE_READ_TIMEOUT_SECS` time — the first level's share is the deadline divided by the level count), so one stalled level cannot consume the whole budget before the later levels are tried, and a hung first level cannot starve the rest of the chain. Per-level timeouts are visible in `--show-stats` (`  L0 (LocalDisk) timeouts`-style rows, one per level).
 +
  ## Configuration
  
  ### Via Environment Variables
 diff --git a/src/cache/backend_backoff.rs b/src/cache/backend_backoff.rs
 new file mode 100644
-index 0000000..95fbc31
+index 0000000..067e541
 --- /dev/null
 +++ b/src/cache/backend_backoff.rs
-@@ -0,0 +1,723 @@
+@@ -0,0 +1,1041 @@
 +// Copyright 2026 Mozilla Foundation
 +//
 +// Licensed under the Apache License, Version 2.0 (the "License");
@@ -59,7 +59,7 @@ index 0000000..95fbc31
 +//!
 +//! The gate is per cache level, not per lookup. Each level wrapped in
 +//! [`BackoffStorage`] tracks its own consecutive timed-out reads; once a
-+//! level has timed out more than the threshold in a row, reads to that level
++//! level has timed out at least the threshold in a row, reads to that level
 +//! are skipped outright for a cooldown window (reported as a timed-out
 +//! lookup, so builds proceed without paying the wait), and any read the
 +//! level answers (hit, miss or fast error) resets its counter. In a
@@ -254,6 +254,28 @@ index 0000000..95fbc31
 +    CallerOwned,
 +}
 +
++/// Records a timeout if the read it guards is dropped before it answers.
++/// Every timer that can cancel a gated read — the wrapper's own (Full
++/// mode), a chain level's share of the lookup deadline, or the lookup-level
++/// timeout, which can land within microseconds of an inner deadline and
++/// win on poll order — drops this future mid-await, so the Drop impl is
++/// the one recording path that cannot lose a timeout to a timer race. A
++/// read cancelled for another reason (a client disconnect) also counts as
++/// a timeout; one answered read resets the counter, so the cost of that
++/// is one extra cooldown probe later, never a stuck gate.
++struct ReadGuard<'a> {
++    backoff: &'a BackendBackoff,
++    answered: bool,
++}
++
++impl Drop for ReadGuard<'_> {
++    fn drop(&mut self) {
++        if !self.answered {
++            self.backoff.record_timed_out();
++        }
++    }
++}
++
 +/// Wraps one cache level with the per-level backoff gate.
 +///
 +/// Reads only: every other operation is forwarded untouched, so a level in
@@ -266,6 +288,10 @@ index 0000000..95fbc31
 +    inner: Arc<dyn Storage>,
 +    backoff: BackendBackoff,
 +    budget: TimeBudget,
++    /// Test-only: replaces the process-wide read timeout in Full mode so a
++    /// test can reach the Elapsed arm without racing the LazyLock env read.
++    #[cfg(test)]
++    timeout_override: Option<Duration>,
 +}
 +
 +impl BackoffStorage {
@@ -276,6 +302,8 @@ index 0000000..95fbc31
 +            inner,
 +            backoff: BackendBackoff::from_env(),
 +            budget: TimeBudget::CallerOwned,
++            #[cfg(test)]
++            timeout_override: None,
 +        })
 +    }
 +
@@ -288,6 +316,8 @@ index 0000000..95fbc31
 +            inner,
 +            backoff: BackendBackoff::from_env(),
 +            budget: TimeBudget::Full,
++            #[cfg(test)]
++            timeout_override: None,
 +        })
 +    }
 +
@@ -302,11 +332,31 @@ index 0000000..95fbc31
 +            inner,
 +            backoff: BackendBackoff::new(threshold, cooldown),
 +            budget,
++            timeout_override: None,
 +        }
 +    }
 +
-+    /// The gate handle the multi-level chain uses to move this level's
-+    /// state when the caller-owned per-level timeout fires.
++    /// Full mode with an explicit read timeout, so a test can drive the
++    /// wrapper's own Elapsed arm deterministically.
++    #[cfg(test)]
++    pub(crate) fn with_full_policy_and_timeout(
++        inner: Arc<dyn Storage>,
++        threshold: u32,
++        cooldown: Duration,
++        timeout: Duration,
++    ) -> Self {
++        Self {
++            inner,
++            backoff: BackendBackoff::new(threshold, cooldown),
++            budget: TimeBudget::Full,
++            timeout_override: Some(timeout),
++        }
++    }
++
++    /// The gate handle, for tests and introspection only. The gate state is
++    /// moved by the wrapper's own read guard (a read that is dropped before
++    /// it answers records a timeout), never by a caller reaching in.
++    #[cfg(test)]
 +    pub(crate) fn gate(&self) -> &BackendBackoff {
 +        &self.backoff
 +    }
@@ -315,28 +365,41 @@ index 0000000..95fbc31
 +        if self.backoff.lookup_blocked() {
 +            return Err(anyhow::Error::new(LevelSkipped));
 +        }
-+        match self.budget {
++        // Any timer that cancels this read — this wrapper's own (Full mode),
++        // a chain level's share of the lookup deadline, or the lookup-level
++        // timeout, which can land within microseconds of the inner one and
++        // win on poll order — drops this future before it answers. The guard
++        // turns every such cancellation into a recorded timeout, so the
++        // gate's counter cannot miss one to a timer race. A read cancelled
++        // for another reason (a client disconnect) also counts as a timeout;
++        // one answered read resets the counter, so the cost of that is one
++        // extra cooldown probe later, not a stuck gate.
++        let mut guard = ReadGuard {
++            backoff: &self.backoff,
++            answered: false,
++        };
++        // `None` = the read ran out of its time budget (Full mode): the
++        // guard stays armed, so its Drop records the timeout and the
++        // counter is NOT reset. `Some` = the level answered (hit, miss or
++        // fast error): disarm and reset.
++        let outcome = match self.budget {
 +            TimeBudget::Full => {
-+                match tokio::time::timeout(read_timeout(), self.inner.get(key)).await {
-+                    Ok(result) => {
-+                        self.backoff.record_response();
-+                        result
-+                    }
-+                    Err(_elapsed) => {
-+                        self.backoff.record_timed_out();
-+                        Err(anyhow::Error::new(LevelTimedOut))
-+                    }
-+                }
++                #[cfg(test)]
++                let budget = self.timeout_override.unwrap_or_else(read_timeout);
++                #[cfg(not(test))]
++                let budget = read_timeout();
++                let outcome = tokio::time::timeout(budget, self.inner.get(key)).await;
++                outcome.ok()
 +            }
-+            TimeBudget::CallerOwned => {
-+                // The caller owns this level's timeout; a caller-owned
-+                // timeout drops this future without a result, so anything
-+                // that reaches here is a read the level answered (hit,
-+                // miss or fast error).
-+                let result = self.inner.get(key).await;
++            TimeBudget::CallerOwned => Some(self.inner.get(key).await),
++        };
++        match outcome {
++            Some(result) => {
++                guard.answered = true;
 +                self.backoff.record_response();
 +                result
 +            }
++            None => Err(anyhow::Error::new(LevelTimedOut)),
 +        }
 +    }
 +
@@ -344,25 +407,62 @@ index 0000000..95fbc31
 +        if self.backoff.lookup_blocked() {
 +            return Err(anyhow::Error::new(LevelSkipped));
 +        }
-+        match self.budget {
++        // See `gated_get` for the guard contract.
++        let mut guard = ReadGuard {
++            backoff: &self.backoff,
++            answered: false,
++        };
++        let outcome = match self.budget {
 +            TimeBudget::Full => {
-+                match tokio::time::timeout(read_timeout(), self.inner.get_with_raw(key)).await {
-+                    Ok(result) => {
-+                        self.backoff.record_response();
-+                        result
-+                    }
-+                    Err(_elapsed) => {
-+                        self.backoff.record_timed_out();
-+                        Err(anyhow::Error::new(LevelTimedOut))
-+                    }
-+                }
++                #[cfg(test)]
++                let budget = self.timeout_override.unwrap_or_else(read_timeout);
++                #[cfg(not(test))]
++                let budget = read_timeout();
++                let outcome = tokio::time::timeout(budget, self.inner.get_with_raw(key)).await;
++                outcome.ok()
 +            }
-+            TimeBudget::CallerOwned => {
-+                // See `gated_get`: anything that reaches here was answered.
-+                let result = self.inner.get_with_raw(key).await;
++            TimeBudget::CallerOwned => Some(self.inner.get_with_raw(key).await),
++        };
++        match outcome {
++            Some(result) => {
++                guard.answered = true;
 +                self.backoff.record_response();
 +                result
 +            }
++            None => Err(anyhow::Error::new(LevelTimedOut)),
++        }
++    }
++    async fn gated_get_raw(&self, key: &str) -> Result<Option<Bytes>> {
++        if self.backoff.lookup_blocked() {
++            return Err(anyhow::Error::new(LevelSkipped));
++        }
++        // Same contract as `gated_get`: the guard records a timeout when a
++        // timer (this wrapper's, a chain level's, or the lookup-level one)
++        // cancels the read before it answers, and one answered read resets
++        // the counter. Client-side mode serves compile lookups through this
++        // path, so a stalled standalone backend trips the gate here too.
++        let mut guard = ReadGuard {
++            backoff: &self.backoff,
++            answered: false,
++        };
++        let outcome = match self.budget {
++            TimeBudget::Full => {
++                #[cfg(test)]
++                let budget = self.timeout_override.unwrap_or_else(read_timeout);
++                #[cfg(not(test))]
++                let budget = read_timeout();
++                let outcome = tokio::time::timeout(budget, self.inner.get_raw(key)).await;
++                outcome.ok()
++            }
++            TimeBudget::CallerOwned => Some(self.inner.get_raw(key).await),
++        };
++        match outcome {
++            Some(result) => {
++                guard.answered = true;
++                self.backoff.record_response();
++                result
++            }
++            None => Err(anyhow::Error::new(LevelTimedOut)),
 +        }
 +    }
 +}
@@ -382,10 +482,7 @@ index 0000000..95fbc31
 +    }
 +
 +    async fn get_raw(&self, key: &str) -> Result<Option<Bytes>> {
-+        if self.backoff.lookup_blocked() {
-+            return Err(anyhow::Error::new(LevelSkipped));
-+        }
-+        self.inner.get_raw(key).await
++        self.gated_get_raw(key).await
 +    }
 +
 +    async fn put_raw(&self, key: &str, data: Bytes) -> Result<Duration> {
@@ -758,6 +855,227 @@ index 0000000..95fbc31
 +            None => panic!("write must reach a gated level"),
 +        }
 +    }
++
++    #[test]
++    fn a_full_mode_timeout_moves_the_gate_and_does_not_reset_it() {
++        // The wrapper's OWN Elapsed arm end-to-end: each timed-out read must
++        // move the gate counter (the guard stays armed on the None path) and
++        // must NOT reset it — a timeout is not an answer. This is the exact
++        // shape a regression broke: an earlier draft reset the counter on
++        // every timeout, so the gate never tripped.
++        let runtime = RuntimeBuilder::new_current_thread()
++            .enable_all()
++            .build()
++            .unwrap();
++        let level = SlowMissingLevel::new(Duration::from_millis(500));
++        let storage = BackoffStorage::with_full_policy_and_timeout(
++            level.clone() as Arc<dyn Storage>,
++            3,
++            Duration::from_secs(60),
++            Duration::from_millis(100),
++        );
++
++        runtime.block_on(async {
++            for round in 1..=3 {
++                let result = storage.get("k").await;
++                let err = result.unwrap_err();
++                assert!(
++                    err.is::<LevelTimedOut>(),
++                    "round {round}: the read outlasts the budget"
++                );
++                let state = storage.backoff.state.lock().unwrap();
++                assert_eq!(
++                    state.consecutive_timeouts, round,
++                    "each timeout moves the counter; a timeout never resets it"
++                );
++            }
++            // The gate is open: the next lookup skips without contact.
++            let start = Instant::now();
++            let err = storage.get("k").await.unwrap_err();
++            assert!(err.is::<LevelSkipped>());
++            assert!(start.elapsed() < Duration::from_millis(50));
++        });
++        assert_eq!(
++            level.reads(),
++            3,
++            "the skipped lookup never reached the level"
++        );
++    }
++
++    /// A level whose RAW reads stall for a fixed delay and return None
++    /// (the client-side fault shape), counting how many raw reads reached it.
++    struct SlowRawLevel {
++        delay: Duration,
++        reads: AtomicU32,
++    }
++
++    impl SlowRawLevel {
++        fn new(delay: Duration) -> Arc<Self> {
++            Arc::new(Self {
++                delay,
++                reads: AtomicU32::new(0),
++            })
++        }
++
++        fn reads(&self) -> u32 {
++            self.reads.load(Ordering::SeqCst)
++        }
++    }
++
++    #[async_trait]
++    impl Storage for SlowRawLevel {
++        async fn get(&self, _key: &str) -> Result<Cache> {
++            Ok(Cache::Miss)
++        }
++
++        async fn get_raw(&self, _key: &str) -> Result<Option<Bytes>> {
++            self.reads.fetch_add(1, Ordering::SeqCst);
++            tokio::time::sleep(self.delay).await;
++            Ok(None)
++        }
++
++        async fn put(&self, _key: &str, _entry: CacheWrite) -> Result<Duration> {
++            Ok(Duration::ZERO)
++        }
++
++        fn location(&self) -> String {
++            "slow-raw".to_owned()
++        }
++
++        async fn current_size(&self) -> Result<Option<u64>> {
++            Ok(None)
++        }
++
++        async fn max_size(&self) -> Result<Option<u64>> {
++            Ok(None)
++        }
++    }
++
++    #[test]
++    fn raw_reads_carry_the_same_gate_contract_as_cache_reads() {
++        // Client-side mode serves lookups through get_raw: the raw path must
++        // bound the read, move the gate on a timeout, reset on an answered
++        // read, and skip while the gate is open - the same contract the
++        // compile path has.
++        let runtime = RuntimeBuilder::new_current_thread()
++            .enable_all()
++            .build()
++            .unwrap();
++        let stalled = SlowRawLevel::new(Duration::from_millis(500));
++        let storage = BackoffStorage::with_full_policy_and_timeout(
++            stalled.clone() as Arc<dyn Storage>,
++            2,
++            Duration::from_secs(60),
++            Duration::from_millis(100),
++        );
++
++        runtime.block_on(async {
++            for round in 1..=2 {
++                let result = storage.get_raw("k").await;
++                let err = result.unwrap_err();
++                assert!(err.is::<LevelTimedOut>(), "raw round {round} times out");
++                let state = storage.backoff.state.lock().unwrap();
++                assert_eq!(state.consecutive_timeouts, round);
++            }
++            let err = storage.get_raw("k").await.unwrap_err();
++            assert!(
++                err.is::<LevelSkipped>(),
++                "the open gate skips raw reads too"
++            );
++        });
++        assert_eq!(
++            stalled.reads(),
++            2,
++            "the skipped raw read never reached the level"
++        );
++
++        // An answered raw read resets the counter.
++        let healthy = CountingLevel::new();
++        let storage2 = BackoffStorage::with_policy(
++            healthy.clone() as Arc<dyn Storage>,
++            2,
++            Duration::from_secs(60),
++            TimeBudget::CallerOwned,
++        );
++        storage2.gate().record_timed_out();
++        runtime.block_on(async {
++            let result = storage2.get_raw("k").await.unwrap();
++            assert_eq!(result, None);
++        });
++        assert!(
++            !storage2.gate().lookup_blocked(),
++            "one answered raw read resets"
++        );
++    }
++
++    /// A waker that does nothing: the cancelled-read test polls a future
++    /// once and drops it, so nothing ever needs waking.
++    struct NoopWake;
++
++    impl std::task::Wake for NoopWake {
++        fn wake(self: Arc<Self>) {}
++    }
++
++    #[test]
++    fn a_cancelled_read_records_a_timeout_and_can_trip_the_gate() {
++        // The timer-race fix, pinned deterministically: a gated read that is
++        // dropped before it answers (a caller-owned timeout winning on poll
++        // order, a client disconnect) must move the gate's counter. No sleep
++        // racing — the read is polled once, left pending, and dropped.
++        let runtime = RuntimeBuilder::new_current_thread()
++            .enable_all()
++            .build()
++            .unwrap();
++        let level = SlowMissingLevel::new(Duration::from_secs(60));
++        let wrapped = BackoffStorage::with_policy(
++            level.clone() as Arc<dyn Storage>,
++            3,
++            Duration::from_secs(60),
++            TimeBudget::CallerOwned,
++        );
++        let waker = std::task::Waker::from(Arc::new(NoopWake));
++        let mut cx = std::task::Context::from_waker(&waker);
++
++        runtime.block_on(async {
++            for round in 0..3 {
++                // The future is dropped at the end of this block; the guard
++                // inside it records the timeout (drop_non_drop fires on an
++                // explicit drop of the Pin<&mut>, but the boxed future under
++                // it is the Drop-able value and drops at scope end).
++                let fut = wrapped.get("k");
++                tokio::pin!(fut);
++                assert!(fut.as_mut().poll(&mut cx).is_pending());
++                assert_eq!(
++                    level.reads(),
++                    round + 1,
++                    "the read must have started before the drop"
++                );
++            }
++        });
++
++        assert!(
++            wrapped.gate().lookup_blocked(),
++            "three cancelled reads must trip the gate"
++        );
++
++        // A read the level answers resets the counter (the guard is
++        // disarmed, the answered-read path records the response).
++        let level2 = CountingLevel::new();
++        let wrapped2 = BackoffStorage::with_policy(
++            level2.clone() as Arc<dyn Storage>,
++            3,
++            Duration::from_secs(60),
++            TimeBudget::CallerOwned,
++        );
++        wrapped2.gate().record_timed_out();
++        wrapped2.gate().record_timed_out();
++        runtime.block_on(async {
++            let result = wrapped2.get("k").await.unwrap();
++            assert!(matches!(result, Cache::Miss));
++        });
++        assert!(!wrapped2.gate().lookup_blocked());
++        assert_eq!(level2.reads(), 1);
++    }
 +}
 diff --git a/src/cache/cache.rs b/src/cache/cache.rs
 index c0143ed..08f2c21 100644
@@ -790,7 +1108,7 @@ index accad04..66d7c8c 100644
  pub mod cache;
  pub mod cache_io;
 diff --git a/src/cache/multilevel.rs b/src/cache/multilevel.rs
-index c8031f7..a48b19d 100644
+index c8031f7..fffc04b 100644
 --- a/src/cache/multilevel.rs
 +++ b/src/cache/multilevel.rs
 @@ -44,6 +44,7 @@ struct AtomicLevelStats {
@@ -901,7 +1219,7 @@ index c8031f7..a48b19d 100644
          }
      }
  
-@@ -565,27 +585,102 @@ impl MultiLevelStorage {
+@@ -565,27 +585,96 @@ impl MultiLevelStorage {
  #[async_trait]
  impl Storage for MultiLevelStorage {
      async fn get(&self, key: &str) -> Result<Cache> {
@@ -982,12 +1300,6 @@ index c8031f7..a48b19d 100644
 +                // timeout on the level (and move its gate, since the
 +                // caller-owned timeout never reaches the wrapper).
 +                inc_stat!(self.atomic_stats.get(idx), timeouts, 1);
-+                let as_any: Arc<dyn std::any::Any + Send + Sync> = Arc::clone(level) as _;
-+                if let Ok(gated) =
-+                    as_any.downcast::<crate::cache::backend_backoff::BackoffStorage>()
-+                {
-+                    gated.gate().record_timed_out();
-+                }
 +                warn!(
 +                    "Cache level {} timed out after {:?}, trying next level",
 +                    idx,
@@ -1009,7 +1321,7 @@ index c8031f7..a48b19d 100644
  
                      // Raw bytes obtained above are reused for backfilling;
                      // no second read is needed for a raw-capable level.
-@@ -618,17 +713,81 @@ impl Storage for MultiLevelStorage {
+@@ -618,17 +707,75 @@ impl Storage for MultiLevelStorage {
          }
          debug!("Cache miss at all levels");
  
@@ -1055,12 +1367,6 @@ index c8031f7..a48b19d 100644
 +                Ok(result) => result,
 +                Err(_) => {
 +                    inc_stat!(self.atomic_stats.get(idx), timeouts, 1);
-+                    let as_any: Arc<dyn std::any::Any + Send + Sync> = Arc::clone(level) as _;
-+                    if let Ok(gated) =
-+                        as_any.downcast::<crate::cache::backend_backoff::BackoffStorage>()
-+                    {
-+                        gated.gate().record_timed_out();
-+                    }
 +                    warn!(
 +                        "Cache level {} timed out after {:?} on the raw read, trying next level",
 +                        idx,
@@ -1094,7 +1400,7 @@ index c8031f7..a48b19d 100644
                      self.backfill_raw_hit(key, &bytes, idx);
                      return Ok(Some(bytes));
                  }
-@@ -642,7 +801,10 @@ impl Storage for MultiLevelStorage {
+@@ -642,7 +789,10 @@ impl Storage for MultiLevelStorage {
              }
          }
  
@@ -1400,19 +1706,6 @@ index ee9462f..11e0a23 100644
 +        Ok(None)
 +    }
 +}
-diff --git a/src/cache/storage.rs b/src/cache/storage.rs
-index ad88014..3c4fcd1 100644
---- a/src/cache/storage.rs
-+++ b/src/cache/storage.rs
-@@ -40,7 +40,7 @@ pub enum GetPathResult {
- 
- /// An interface to cache storage.
- #[async_trait]
--pub trait Storage: Send + Sync {
-+pub trait Storage: Send + Sync + std::any::Any {
-     /// Get a cache entry by `key`.
-     ///
-     /// If an error occurs, this method should return a `Cache::Error`.
 diff --git a/src/compiler/compiler.rs b/src/compiler/compiler.rs
 index 6be1aa6..acd393b 100644
 --- a/src/compiler/compiler.rs
@@ -1449,3 +1742,24 @@ index 6be1aa6..acd393b 100644
              (Ok(Err(err)), duration) => {
                  error!(
                      "[{}]: Cache read error: {:?} in {}",
+diff --git a/src/server.rs b/src/server.rs
+index 86ee1cb..ad22b1e 100644
+--- a/src/server.rs
++++ b/src/server.rs
+@@ -1020,6 +1020,16 @@ where
+                     debug!("handle_client: storage_get_raw key={}", key);
+                     let resp = match me.storage.get_raw(&key).await {
+                         Ok(opt) => Response::StorageGetRaw(opt.map(|b| b.to_vec())),
++                        Err(e)
++                            if e.is::<crate::cache::backend_backoff::LevelSkipped>()
++                                || e.is::<crate::cache::backend_backoff::LevelTimedOut>() =>
++                        {
++                            // Expected while a level is in backoff or out of
++                            // budget: reported to the client as an absent
++                            // entry, not as a backend failure.
++                            debug!("storage_get_raw skipped/timed out: {e:#}");
++                            Response::StorageGetRaw(None)
++                        }
+                         Err(e) => {
+                             warn!("storage_get_raw error: {e:#}");
+                             Response::StorageGetRaw(None)
