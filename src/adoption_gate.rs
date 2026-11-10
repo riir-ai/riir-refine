@@ -181,7 +181,22 @@ impl AdoptionWindow {
     /// A read failure other than not-found, a row that is not the expected
     /// JSON shape, or a digest hex that does not round-trip.
     pub fn load(root: &Path) -> Result<Self, String> {
-        let path = root.join(OUTCOMES_FILE);
+        Self::load_file(root.join(OUTCOMES_FILE))
+    }
+
+    /// Load the window from an explicit sidecar path (the G3 cell
+    /// instrument's posture — the real windows live in sibling repos,
+    /// read-only to that run; [`load`](Self::load) roots at a repo root,
+    /// this takes the file itself). Read-only: a loaded window never
+    /// writes — only [`AdoptionWindow::record`] does.
+    ///
+    /// # Errors
+    ///
+    /// A read failure other than not-found (an absent file is the empty
+    /// window), a row that is not the expected JSON shape, or a digest hex
+    /// that does not round-trip — the corrupt-window LOUD refusal, never a
+    /// silently-empty gate.
+    pub fn load_file(path: PathBuf) -> Result<Self, String> {
         let text = match std::fs::read_to_string(&path) {
             Ok(text) => text,
             Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
@@ -236,10 +251,52 @@ impl AdoptionWindow {
         Ok(())
     }
 
+    /// The window's rows in file order (the perturbation harness's input —
+    /// flip verdict bits, rebuild with [`AdoptionWindow::from_rows`],
+    /// re-consult).
+    #[must_use]
+    pub fn rows(&self) -> &[OutcomeRow] {
+        &self.rows
+    }
+
+    /// The window's distinct tags, sorted (the consult sweep's population).
+    #[must_use]
+    pub fn tags(&self) -> Vec<&str> {
+        self.by_tag.keys().map(String::as_str).collect()
+    }
+
     /// The window's row count (file rows — the audit truth, pre-dedup).
     #[must_use]
     pub fn row_count(&self) -> usize {
         self.rows.len()
+    }
+
+    /// Build an in-memory window from rows in file order (the judge-noise
+    /// perturbation harness — replaying flipped verdicts never touches the
+    /// disk). Same decode + ingest-dedup as the load path. The digest hex
+    /// must round-trip: rows come from a loaded window or a fixture, and a
+    /// bad hex panics LOUD rather than silently skipping (the corrupt-line
+    /// law, constructor form).
+    ///
+    /// # Panics
+    ///
+    /// On a row whose `digest_hex` does not round-trip to 32 bytes — the
+    /// same corruption a [`AdoptionWindow::load_file`] would return as an
+    /// `Err`, panicked here because the constructor's callers feed it
+    /// already-validated rows (a perturbed copy of a loaded window's own
+    /// [`AdoptionWindow::rows`]).
+    #[must_use]
+    pub fn from_rows(rows: Vec<OutcomeRow>) -> Self {
+        let mut window = Self {
+            path: PathBuf::new(),
+            ..Self::default()
+        };
+        for row in rows {
+            if let Err(e) = window.push_row(row) {
+                panic!("adoption window from_rows: {e}");
+            }
+        }
+        window
     }
 
     /// Record one outcome: digest, dedup against the T rings (a repeat
