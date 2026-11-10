@@ -530,6 +530,7 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
     ("gen2-k1-iter_nth_zero", &["iter_nth_zero"]),         // k=1
     ("gen2-k1-iter_skip_next", &["iter_skip_next"]),       // k=1
     ("gen2-k1-let_and_return", &["let_and_return"]),       // k=1
+    ("gen2-k1-let_unit_value", &["let_unit_value"]),       // k=1
     ("gen2-k1-manual_clamp", &["manual_clamp"]),           // k=1
     ("gen2-k1-manual_let_else", &["manual_let_else"]),     // k=1
     ("gen2-k1-manual_map", &["manual_map"]),               // k=1
@@ -654,6 +655,10 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         &["iter_next_loop", "iter_nth_zero"],
     ), // k=2
     (
+        "gen2-k2-let_unit_value+manual_bit_width",
+        &["let_unit_value", "manual_bit_width"],
+    ), // k=2 — the Batch 347 atom joins manual_bit_width's window (the P119-era roster relabel, 2026-11-10)
+    (
         "gen2-k2-manual_bit_width+manual_clamp",
         &["manual_bit_width", "manual_clamp"],
     ), // k=2
@@ -694,6 +699,10 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
         &["iter_next_loop", "iter_nth_zero", "iter_skip_next"],
     ), // k=3
     (
+        "gen2-k3-let_unit_value+manual_bit_width+manual_clamp",
+        &["let_unit_value", "manual_bit_width", "manual_clamp"],
+    ), // k=3
+    (
         "gen2-k3-manual_bit_width+manual_clamp+manual_let_else",
         &["manual_bit_width", "manual_clamp", "manual_let_else"],
     ), // k=3
@@ -728,6 +737,81 @@ pub static FROZEN_LABELS: &[(&str, &[&str])] = &[
             "items_after_statements",
         ],
     ), // k=4
+    (
+        "gen2-k4-identity_op+into_iter_on_ref+io_other_error+items_after_statements",
+        &[
+            "identity_op",
+            "into_iter_on_ref",
+            "io_other_error",
+            "items_after_statements",
+        ],
+    ),
+    (
+        "gen2-k4-doc_lazy_continuation+doc_markdown+doc_overindented_list_items+double_parens",
+        &[
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+            "double_parens",
+        ],
+    ),
+    (
+        "gen2-k4-byte_char_slices+bytes_count_to_len+cast_abs_to_unsigned+clone_on_copy",
+        &[
+            "byte_char_slices",
+            "bytes_count_to_len",
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+        ],
+    ),
+    (
+        "gen2-k3-manual_let_else+manual_map+manual_next_back",
+        &["manual_let_else", "manual_map", "manual_next_back"],
+    ),
+    (
+        "gen2-k3-let_unit_value+manual_bit_width+manual_clamp",
+        &["let_unit_value", "manual_bit_width", "manual_clamp"],
+    ),
+    (
+        "gen2-k3-iter_next_loop+iter_nth_zero+iter_skip_next",
+        &["iter_next_loop", "iter_nth_zero", "iter_skip_next"],
+    ),
+    (
+        "gen2-k3-into_iter_on_ref+io_other_error+items_after_statements",
+        &[
+            "into_iter_on_ref",
+            "io_other_error",
+            "items_after_statements",
+        ],
+    ),
+    (
+        "gen2-k3-filter_next+from_str_radix_10+identity_op",
+        &["filter_next", "from_str_radix_10", "identity_op"],
+    ),
+    (
+        "gen2-k3-doc_lazy_continuation+doc_markdown+doc_overindented_list_items",
+        &[
+            "doc_lazy_continuation",
+            "doc_markdown",
+            "doc_overindented_list_items",
+        ],
+    ),
+    (
+        "gen2-k3-cast_abs_to_unsigned+clone_on_copy+collapsible_else_if",
+        &[
+            "cast_abs_to_unsigned",
+            "clone_on_copy",
+            "collapsible_else_if",
+        ],
+    ),
+    (
+        "gen2-k3-bool_comparison+byte_char_slices+bytes_count_to_len",
+        &["bool_comparison", "byte_char_slices", "bytes_count_to_len"],
+    ),
+    (
+        "gen2-k2-doc_overindented_list_items+double_parens",
+        &["doc_overindented_list_items", "double_parens"],
+    ),
 ];
 
 /// Spec ids the freeze run EXCLUDED (real-clippy labels ≠ union gold): the
@@ -765,6 +849,7 @@ pub static EXCLUDED_IDS: &[&str] = &[
     "gen2-k4-collapsible_else_if+collapsible_if+collapsible_match+deref_addrof",
     "gen2-k4-empty_line_after_doc_comments+excessive_precision+filter_next+from_str_radix_10",
     "gen2-k4-iter_next_loop+iter_nth_zero+iter_skip_next+legacy_numeric_constants",
+    "gen2-k4-len_without_is_empty+let_and_return+let_unit_value+manual_bit_width",
     "gen2-k4-len_without_is_empty+let_and_return+manual_bit_width+manual_clamp",
 ];
 
@@ -1107,6 +1192,7 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
     ("gen3-k1-iter_nth_zero", &["iter_nth_zero"]),         // k=1
     ("gen3-k1-iter_skip_next", &["iter_skip_next"]),       // k=1
     ("gen3-k1-let_and_return", &["let_and_return"]),       // k=1
+    ("gen3-k1-let_unit_value", &["let_unit_value"]),       // k=1
     ("gen3-k1-manual_clamp", &["manual_clamp"]),           // k=1
     ("gen3-k1-manual_let_else", &["manual_let_else"]),     // k=1
     ("gen3-k1-manual_map", &["manual_map"]),               // k=1
@@ -1265,6 +1351,10 @@ pub static FROZEN_LABELS_V3: &[(&str, &[&str])] = &[
         "gen3-k3-items_after_statements+iter_next_loop+iter_nth_zero",
         &["items_after_statements", "iter_next_loop", "iter_nth_zero"],
     ), // k=3
+    (
+        "gen3-k3-let_and_return+let_unit_value+manual_bit_width",
+        &["let_and_return", "let_unit_value", "manual_bit_width"],
+    ), // k=3 — the Batch 347 atom
     (
         "gen3-k3-let_and_return+manual_bit_width+manual_clamp",
         &["let_and_return", "manual_bit_width", "manual_clamp"],
@@ -2302,7 +2392,7 @@ pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
     sum / turns.len() as f32
 }
 "#,
-        expect: &["match_bool", "use_self"],
+        expect: &["match_bool", "match_same_arms", "use_self"],
     },
     // gen6-svr-fn6-001 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
     RawSpanV6 {
@@ -2594,7 +2684,7 @@ pub fn trajectory_reward(turns: &[SvrTurn], cfg: &SvrRewardConfig) -> f32 {
     sum / turns.len() as f32
 }
 "#,
-        expect: &["match_bool", "use_self"],
+        expect: &["match_bool", "match_same_arms", "use_self"],
     },
     // gen6-svr-fn7-002 | riir-train@a1197e06~1:crates/riir-train-engine/src/svr.rs
     RawSpanV6 {
@@ -2886,7 +2976,7 @@ pub fn turn_reward(t: usize, cur: &SvrTurn, prev: Option<&SvrTurn>, cfg: &SvrRew
     r_solve(t, cur, prev, cfg) + r_verify(cur, cfg) + cfg.lambda_fmt * r_fmt(cur)
 }
 "#,
-        expect: &["match_bool", "use_self"],
+        expect: &["match_bool", "match_same_arms", "use_self"],
     },
     // gen6-transposition-impl1-000 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/transposition.rs
     RawSpanV6 {
@@ -3363,7 +3453,7 @@ impl BridgeCap {
     }
 }
 ",
-        expect: &["match_bool"],
+        expect: &["match_bool", "missing_errors_doc"],
     },
     // gen6-economy-impl4-001 | riir-ai@1e050442a~1:crates/riir-engine/src/fourier/economy.rs
     RawSpanV6 {
@@ -3577,7 +3667,7 @@ pub fn pearson_correlation(a: &[f32], b: &[f32]) -> f32 {
     }
 }
 "#,
-        expect: &["match_bool"],
+        expect: &["doc_markdown", "match_bool", "match_same_arms"],
     },
     // gen6-resource_credits-impl1-002 | riir-chain@7421245a~1:src/economics/resource_credits.rs
     RawSpanV6 {
@@ -3853,19 +3943,34 @@ pub static FROZEN_LABELS_V6: &[(&str, &[&str])] = &[
     ("gen6-attn_match_head_budget-0", &["uninlined_format_args"]), // k=1
     ("gen6-bandit_01_basic-1", &["uninlined_format_args"]),        // k=1
     ("gen6-bandit_01_basic-2", &["uninlined_format_args"]),        // k=1
-    ("gen6-bridge_cap-impl5-001", &["match_bool"]),                // k=1
+    (
+        "gen6-bridge_cap-impl5-001",
+        &["match_bool", "missing_errors_doc"],
+    ), // k=2 — the P119 relabel: the plan-354 doc-section atom fires on the Result-returning pub fns (no # Errors sections in the mined span); territory single→multi
     ("gen6-channel_draft_generator-fn1-002", &["manual_let_else"]), // k=1
-    ("gen6-clr_minimal-3", &["uninlined_format_args"]),            // k=1
-    ("gen6-economy-impl3-000", &["use_self"]),                     // k=1
-    ("gen6-economy-impl4-001", &["match_bool"]),                   // k=1
-    ("gen6-mod-fn1-006", &["match_bool"]),                         // k=1
-    ("gen6-pruner_04_product_policy-12", &["map_unwrap_or"]),      // k=1
-    ("gen6-pruner_04_product_policy-13", &["map_unwrap_or"]),      // k=1
-    ("gen6-pruner_04_product_policy-8", &["map_unwrap_or"]),       // k=1
-    ("gen6-resource_credits-impl1-002", &["match_bool"]),          // k=1
-    ("gen6-svr-fn3-000", &["match_bool", "use_self"]),             // k=2
-    ("gen6-svr-fn6-001", &["match_bool", "use_self"]),             // k=2
-    ("gen6-svr-fn7-002", &["match_bool", "use_self"]),             // k=2
+    ("gen6-clr_minimal-3", &["uninlined_format_args"]),             // k=1
+    ("gen6-economy-impl3-000", &["use_self"]),                      // k=1
+    ("gen6-economy-impl4-001", &["match_bool"]),                    // k=1
+    (
+        "gen6-mod-fn1-006",
+        &["doc_markdown", "match_bool", "match_same_arms"],
+    ), // k=3 — the P119 relabel: the plan-354 doc_markdown atom + the P51a match_same_arms atom fire on the mined span
+    ("gen6-pruner_04_product_policy-12", &["map_unwrap_or"]), // k=1
+    ("gen6-pruner_04_product_policy-13", &["map_unwrap_or"]), // k=1
+    ("gen6-pruner_04_product_policy-8", &["map_unwrap_or"]),  // k=1
+    ("gen6-resource_credits-impl1-002", &["match_bool"]),     // k=1
+    (
+        "gen6-svr-fn3-000",
+        &["match_bool", "match_same_arms", "use_self"],
+    ), // k=3
+    (
+        "gen6-svr-fn6-001",
+        &["match_bool", "match_same_arms", "use_self"],
+    ), // k=3
+    (
+        "gen6-svr-fn7-002",
+        &["match_bool", "match_same_arms", "use_self"],
+    ), // k=3
     (
         "gen6-transposition-impl1-000",
         &["single_match_else", "use_self"],
@@ -4190,7 +4295,7 @@ const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ),
     (
         "gen7-flat-cif-smx",
-        &["collapsible_if", "single_match_else"],
+        &["collapsible_if", "let_and_return", "single_match_else"],
     ),
     ("gen7-flat-nrl-format", &["needless_range_loop"]),
     (
@@ -4207,7 +4312,7 @@ const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ),
     (
         "gen7-d2-smx-identity",
-        &["single_match_else", "identity_op"],
+        &["identity_op", "let_and_return", "single_match_else"],
     ),
     ("gen7-d2-mm-identity", &["manual_map", "identity_op"]),
     ("gen7-d2-nrl-nrl", &["needless_range_loop"]),
@@ -4218,7 +4323,10 @@ const EXPECTED_LINTS_V7: &[(&str, &[&str])] = &[
     ("gen7-d3-cif4", &["collapsible_if"]),
     ("gen7-d4-cif5", &["collapsible_if"]),
     ("gen7-cap-cif6", &["collapsible_if"]),
-    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]),
+    (
+        "gen7-cap-cif5-identity",
+        &["assign_op_pattern", "collapsible_if", "identity_op"],
+    ),
     ("gen7-ref-nrl-write", &["needless_range_loop"]),
 ];
 
@@ -4304,10 +4412,13 @@ pub static EXCLUDED_IDS_V7: &[&str] = &[];
 /// see the atom comments). 16 specs, 0 exclusions; chain 10 / flat 3 /
 /// capped 2 / refused 1.
 pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
-    ("gen7-cap-cif5-identity", &["collapsible_if", "identity_op"]), // depth=4
-    ("gen7-cap-cif6", &["collapsible_if"]),                         // depth=4
-    ("gen7-d2-cif3", &["collapsible_if"]),                          // depth=2
-    ("gen7-d2-mm-identity", &["identity_op", "manual_map"]),        // depth=2
+    (
+        "gen7-cap-cif5-identity",
+        &["assign_op_pattern", "collapsible_if", "identity_op"],
+    ), // depth=4
+    ("gen7-cap-cif6", &["collapsible_if"]), // depth=4
+    ("gen7-d2-cif3", &["collapsible_if"]),  // depth=2
+    ("gen7-d2-mm-identity", &["identity_op", "manual_map"]), // depth=2
     (
         "gen7-d2-nrl-dblparen",
         &["double_parens", "needless_range_loop"],
@@ -4316,28 +4427,28 @@ pub static FROZEN_LABELS_V7: &[(&str, &[&str])] = &[
         "gen7-d2-nrl-identity",
         &["identity_op", "needless_range_loop"],
     ), // depth=2
-    ("gen7-d2-nrl-nrl", &["needless_range_loop"]),                  // depth=2
+    ("gen7-d2-nrl-nrl", &["needless_range_loop"]), // depth=2
     (
         "gen7-d2-nrl-semi",
         &["needless_range_loop", "semicolon_if_nothing_returned"],
     ), // depth=2
-    ("gen7-d2-sme-distsq", &["single_match_else"]),                 // depth=2
+    ("gen7-d2-sme-distsq", &["single_match_else"]), // depth=2
     (
         "gen7-d2-smx-identity",
-        &["identity_op", "single_match_else"],
+        &["identity_op", "let_and_return", "single_match_else"],
     ), // depth=2
-    ("gen7-d3-cif4", &["collapsible_if"]),                          // depth=3
-    ("gen7-d4-cif5", &["collapsible_if"]),                          // depth=4
+    ("gen7-d3-cif4", &["collapsible_if"]),  // depth=3
+    ("gen7-d4-cif5", &["collapsible_if"]),  // depth=4
     (
         "gen7-flat-cif-smx",
-        &["collapsible_if", "single_match_else"],
+        &["collapsible_if", "let_and_return", "single_match_else"],
     ), // depth=1
-    ("gen7-flat-nrl-format", &["needless_range_loop"]),             // depth=1
+    ("gen7-flat-nrl-format", &["needless_range_loop"]), // depth=1
     (
         "gen7-flat-nrl-identity",
         &["identity_op", "needless_range_loop"],
     ), // depth=1
-    ("gen7-ref-nrl-write", &["needless_range_loop"]),               // depth=1
+    ("gen7-ref-nrl-write", &["needless_range_loop"]), // depth=1
 ];
 
 /// Freeze readiness for generation 7 — Err until the freeze e2e lands the
