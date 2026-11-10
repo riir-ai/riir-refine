@@ -374,6 +374,14 @@ pub struct OracleLane {
     /// proposer's file-local spelling is the fallback; else the manual
     /// path.
     pub path_scope_declined: usize,
+    /// P122: `identity_op` suggestions whose clippy text is fully
+    /// paren-wrapped (`(2 * 3)`) at an index-bracket position, stripped to
+    /// the bare form (`2 * 3`) — the parens are provably meaningless
+    /// around a whole index expression and were observed tripping
+    /// `unnecessary_parens` on the very next `-D warnings` run (the
+    /// self-churn loop). A TRANSFORM count, not a decline: the edit still
+    /// applies, minus the armor the position proves dead.
+    pub paren_stripped: usize,
 }
 
 /// Compute the oracle-anchored edits for ONE scanned file (P21).
@@ -431,8 +439,6 @@ pub fn oracle_edits(
 ) -> OracleLane {
     let mut candidates: Vec<(usize, usize, String, String)> = Vec::new();
     let mut dropped = 0usize;
-    let mut range_declined = 0usize;
-    let mut path_scope_declined = 0usize;
     // P104: the scope index is built lazily — only when a candidate
     // replacement actually carries a `::` path (the common suggestions —
     // method-call rewrites, doc backticks — never pay for the parse).
@@ -440,7 +446,7 @@ pub fn oracle_edits(
     // the skip arm is cfg'd out under thin feature sets; the counter stays
     // for the OracleLane shape
     #[cfg_attr(not(feature = "clippy_lints"), allow(unused_mut))]
-    let mut doc_command_declined = 0usize;
+    let mut counters = GuardCounters::default();
     for d in feed {
         if !lane_lints.contains(&d.lint.as_str()) {
             continue;
@@ -452,62 +458,33 @@ pub fn oracle_edits(
             continue;
         };
         match merged_suggestion_edit(sug, src) {
-            Some(edit) => {
-                // P23: refuse `useless_format` on escape-carrying literals.
-                // Any brace in a compiling no-args format! literal is an
-                // escape (`{{`/`}}` — a lone brace would not compile), and
-                // clippy's suggestion reuses the escaped literal verbatim,
-                // so consuming it freezes the doubled form — a behavior
-                // change on exactly the class the intake recorded (a JSON
-                // fixture corrupted 1 row -> 0). The proposer's own v1
-                // guard refuses the same shape at generation time; this is
-                // the oracle-door mirror. Conservative by construction:
-                // drops the edit, never produces a wrong one.
-                if d.lint == "useless_format"
-                    && src
-                        .get(edit.start..edit.end)
-                        .is_some_and(|cov| cov.contains(['{', '}']))
-                {
-                    dropped += 1;
+            Some(mut edit) => {
+                // The oracle-door drop guards (P23 / P34 / 135-T4 / P104):
+                // each is a DELIBERATE refusal of a well-formed suggestion,
+                // never staleness. Details live on the helper.
+                if oracle_drop_guard(&d.lint, src, &edit, &mut scope, &mut dropped, &mut counters) {
                     continue;
                 }
-                // P34 (riir-ai Issue 981, live evidence): a
-                // `needless_range_loop` suggestion DROPS the loop's range —
-                // the rewrite is mechanical only when the range end equals
-                // the iterated collection's length, and clippy proves that
-                // with cross-binding analysis this lane cannot see. Require
-                // a LOCAL SYNTACTIC proof (zero-arg `.len()` end, literal-0
-                // start, exclusive limits); every other bound shape is
-                // declined — the 981 corruption was exactly this rewrite
-                // over `let gs = &mut buf[h * sph..]` (a tail slice whose
-                // len > sph). Drops the edit, never produces a wrong one.
-                if d.lint == "needless_range_loop" && !range_loop_len_proof(src, edit.start) {
-                    range_declined += 1;
-                    continue;
-                }
-                // Issue 135 T4: the proposer's command-line skip, mirrored
-                // at the oracle door (clippy suggests the same argv-token
-                // backtick the proposer refuses). The skip mirrors a
-                // clippy_lints proposer rule, so the arm exists only under
-                // the domain's own feature (the latent_retrieval-only lane
-                // compiles this module with the domain configured out).
-                #[cfg(feature = "clippy_lints")]
-                if d.lint == "doc_markdown"
-                    && crate::domains::clippy_lints::proposers::doc_markdown::doc_source_line_is_command(
-                        src, edit.start,
-                    )
-                {
-                    doc_command_declined += 1;
-                    continue;
-                }
-                // P104: the replacement spells a crate-root path this file
-                // cannot resolve (the P98 E0433 class) — decline; details on
-                // scope_guard_declines. Doc-markdown exempt (comments).
-                if d.lint != "doc_markdown"
-                    && scope_guard_declines(&mut scope, src, &edit.replacement)
-                {
-                    path_scope_declined += 1;
-                    continue;
+                // P122 (the influence-ring lane's field evidence): an
+                // `identity_op` suggestion on an index-bracket operand is
+                // PAREN-WRAPPED by clippy itself (`m[2 * 3 + 0]` → suggest
+                // `(2 * 3)` — precedence armor for arbitrary contexts), and
+                // the parens are provably meaningless at an index position:
+                // the next `-D warnings` run fires `unnecessary_parens` on
+                // them (the observed self-churn loop). When the merged
+                // replacement is FULLY wrapped in one paren pair AND the
+                // replaced span sits directly inside `[` `]`, strip the
+                // pair — semantically null by construction (parens around
+                // the whole index expression), and the churn dies at the
+                // source instead of waiting for the next sweep. Index
+                // brackets ONLY: other positions keep clippy's text verbatim
+                // (the P21 trust anchor — the armor may be load-bearing
+                // somewhere this lane cannot prove).
+                if d.lint == "identity_op" {
+                    if let Some(bare) = index_wrapped_replacement(src, &edit) {
+                        edit.replacement = bare;
+                        counters.paren_stripped += 1;
+                    }
                 }
                 candidates.push((edit.start, edit.end, edit.replacement, d.lint.clone()));
             }
@@ -520,9 +497,10 @@ pub fn oracle_edits(
         return OracleLane {
             edits: Vec::new(),
             dropped,
-            range_declined,
-            doc_command_declined,
-            path_scope_declined,
+            range_declined: counters.range_declined,
+            doc_command_declined: counters.doc_command_declined,
+            path_scope_declined: counters.path_scope_declined,
+            paren_stripped: counters.paren_stripped,
         };
     }
     // The whole-file syntax gate: the oracle edits ALONE must leave the
@@ -540,9 +518,10 @@ pub fn oracle_edits(
         return OracleLane {
             edits: Vec::new(),
             dropped: dropped + kept.len(),
-            range_declined,
-            doc_command_declined,
-            path_scope_declined,
+            range_declined: counters.range_declined,
+            doc_command_declined: counters.doc_command_declined,
+            path_scope_declined: counters.path_scope_declined,
+            paren_stripped: counters.paren_stripped,
         };
     }
     let edits = edits
@@ -556,10 +535,142 @@ pub fn oracle_edits(
     OracleLane {
         edits,
         dropped,
-        range_declined,
-        doc_command_declined,
-        path_scope_declined,
+        range_declined: counters.range_declined,
+        doc_command_declined: counters.doc_command_declined,
+        path_scope_declined: counters.path_scope_declined,
+        paren_stripped: counters.paren_stripped,
     }
+}
+
+/// P122 arm body: is this `identity_op` suggestion's replacement a FULLY
+/// paren-wrapped `(X)` landing directly inside an index bracket `[` `]`?
+/// Returns `Some(X)` — the bare replacement to splice instead — only when
+/// every condition is provable from the file's own bytes:
+///
+/// - the replacement is at least one paren pair long (`(x)`-shaped),
+/// - the pair is balanced WITHIN the replacement (the first `(` closes at
+///   the last char — a multipart or nested-text replacement like
+///   `(a) + (b)` or `f((x))` keeps its text),
+/// - the byte before the replaced span is `[` and the byte after is `]`
+///   (whitespace skipped — the emitted source sits between them).
+fn index_wrapped_replacement(src: &str, edit: &crate::edit_emitter::SourceEdit) -> Option<String> {
+    let repl = edit.replacement.as_str();
+    let inner = repl.strip_prefix('(')?.strip_suffix(')')?;
+    if inner.is_empty() {
+        return None;
+    }
+    // The outer pair must CLOSE at the replacement's last byte: scan from
+    // the second char counting depth; if depth returns to 0 before the
+    // end, the first paren pair is not the whole form (`(a) + (b)`).
+    let bytes = repl.as_bytes();
+    let mut depth: usize = 1;
+    for &b in &bytes[1..bytes.len() - 1] {
+        match b {
+            b'(' => depth += 1,
+            b')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return None;
+                }
+            }
+            _ => {}
+        }
+    }
+    // The scan proved depth never hit 0 before the final byte, so the
+    // last byte closes the outer pair.
+    debug_assert_eq!(bytes[bytes.len() - 1], b')');
+    // Position proof: `[` before, `]` after, whitespace between allowed.
+    let before = src.get(..edit.start)?.trim_end();
+    let after = src.get(edit.end..)?.trim_start();
+    if !before.ends_with('[') || !after.starts_with(']') {
+        return None;
+    }
+    Some(inner.to_string())
+}
+
+/// The oracle-door DROP guards — one call per candidate suggestion, in
+/// landing order. Returns true when the suggestion must be dropped (the
+/// matching counter is bumped); false = proceed. Each guard is a
+/// DELIBERATE refusal of a well-formed suggestion, never staleness:
+///
+/// - **P23 `useless_format`**: refuse on escape-carrying literals. Any
+///   brace in a compiling no-args format! literal is an escape
+///   (`{{`/`}}` — a lone brace would not compile), and clippy's
+///   suggestion reuses the escaped literal verbatim, so consuming it
+///   freezes the doubled form — a behavior change on exactly the class
+///   the intake recorded (a JSON fixture corrupted 1 row -> 0). The
+///   proposer's own v1 guard refuses the same shape at generation time;
+///   this is the oracle-door mirror. Drops the edit, never produces a
+///   wrong one.
+/// - **P34 `needless_range_loop`** (riir-ai Issue 981, live evidence):
+///   the suggestion DROPS the loop's range — the rewrite is mechanical
+///   only when the range end equals the iterated collection's length,
+///   and clippy proves that with cross-binding analysis this lane cannot
+///   see. Require a LOCAL SYNTACTIC proof (zero-arg `.len()` end,
+///   literal-0 start, exclusive limits); every other bound shape is
+///   declined — the 981 corruption was exactly this rewrite over
+///   `let gs = &mut buf[h * sph..]` (a tail slice whose len > sph).
+/// - **Issue 135 T4 `doc_markdown`**: the proposer's command-line skip,
+///   mirrored at the oracle door (clippy suggests the same argv-token
+///   backtick the proposer refuses — backticking one argv token breaks
+///   copy-paste; the repair is to fence/indent the command, by hand).
+///   The skip mirrors a `clippy_lints` proposer rule, so the arm exists
+///   only under the domain's own feature (the latent_retrieval-only lane
+///   compiles this module with the domain configured out).
+/// - **P104**: the replacement spells a crate-root path this file cannot
+///   resolve (the P98 E0433 class) — decline; details on
+///   [`scope_guard_declines`]. Doc-markdown exempt (comments).
+fn oracle_drop_guard(
+    lint: &str,
+    src: &str,
+    edit: &crate::edit_emitter::SourceEdit,
+    scope: &mut Option<FileScopeIndex>,
+    dropped: &mut usize,
+    counters: &mut GuardCounters,
+) -> bool {
+    if lint == "useless_format"
+        && src
+            .get(edit.start..edit.end)
+            .is_some_and(|cov| cov.contains(['{', '}']))
+    {
+        *dropped += 1;
+        return true;
+    }
+    if lint == "needless_range_loop" && !range_loop_len_proof(src, edit.start) {
+        counters.range_declined += 1;
+        return true;
+    }
+    #[cfg(feature = "clippy_lints")]
+    if lint == "doc_markdown"
+        && crate::domains::clippy_lints::proposers::doc_markdown::doc_source_line_is_command(
+            src, edit.start,
+        )
+    {
+        counters.doc_command_declined += 1;
+        return true;
+    }
+    if lint != "doc_markdown" && scope_guard_declines(scope, src, &edit.replacement) {
+        counters.path_scope_declined += 1;
+        return true;
+    }
+    false
+}
+
+/// The decline/transform counters of the oracle door: each field names the
+/// guard that bumps it (the shape mirrors [`OracleLane`]'s report fields
+/// minus `dropped`, which stays a bare local of the loop).
+#[derive(Default)]
+struct GuardCounters {
+    /// P34: `needless_range_loop` candidates declined by the length proof.
+    range_declined: usize,
+    /// Issue 135 T4: `doc_markdown` suggestions declined on a shell-command
+    /// doc line.
+    doc_command_declined: usize,
+    /// P104: suggestions declined by the crate-root path scope guard.
+    path_scope_declined: usize,
+    /// P122: `identity_op` suggestions whose paren armor was stripped at
+    /// an index position.
+    paren_stripped: usize,
 }
 
 /// P104 arm body: does the SCOPE GUARD decline this replacement — i.e.
@@ -1261,6 +1372,85 @@ mod tests {
         // the lint is not in the lane (the corpus-gap signal).
         let refused = oracle_edits(&feed, "src/lib.rs", src, &["collapsible_if"]);
         assert_eq!(refused.edits, [] as [crate::edit_emitter::RuleEdit; 0]);
+    }
+
+    /// P122: clippy's own `identity_op` suggestion for an index-bracket
+    /// operand is paren-wrapped (`m[2 * 3 + 0]` → `(2 * 3)` — precedence
+    /// armor), and the armor trips `unnecessary_parens` on the next run
+    /// (the influence-ring lane's field evidence). At an index position
+    /// the lane strips the pair; the replacement still applies.
+    #[test]
+    fn identity_op_index_parens_stripped() {
+        let src = "fn f(m: &[i32]) -> i32 { m[2 * 3 + 0] }\n";
+        let off = src.find("2 * 3 + 0").unwrap();
+        let feed = vec![ClippyDiagnostic {
+            span: None,
+            file: "src/lib.rs".to_string(),
+            line: 1,
+            lint: "identity_op".to_string(),
+            suggestion: Some(FeedSuggestion {
+                parts: vec![(off, off + "2 * 3 + 0".len(), "(2 * 3)".to_string())],
+            }),
+        }];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["identity_op"]);
+        assert_eq!(lane.dropped, 0);
+        assert_eq!(lane.paren_stripped, 1);
+        assert_eq!(lane.edits.len(), 1);
+        assert_eq!(lane.edits[0].edit.replacement, "2 * 3");
+        let patched = splice_sorted(src, std::slice::from_ref(&lane.edits[0].edit));
+        assert!(patched.contains("m[2 * 3]"), "{patched}");
+        assert!(!patched.contains("[("), "armor survived: {patched}");
+        syn::parse_file(&patched).expect("re-parses");
+    }
+
+    /// P122 refusals: the strip is provable ONLY at an index position for
+    /// a FULLY wrapped replacement — every other shape keeps clippy's
+    /// text verbatim (the P21 trust anchor).
+    #[test]
+    fn identity_op_paren_strip_refusals() {
+        let feed_at = |src: &str, needle: &str, repl: &str| {
+            let off = src.find(needle).unwrap();
+            vec![ClippyDiagnostic {
+                span: None,
+                file: "src/lib.rs".to_string(),
+                line: 1,
+                lint: "identity_op".to_string(),
+                suggestion: Some(FeedSuggestion {
+                    parts: vec![(off, off + needle.len(), repl.to_string())],
+                }),
+            }]
+        };
+        // not an index position (statement context) — verbatim
+        let src = "fn f(n: i32) -> i32 { n + 0 }\n";
+        let lane = oracle_edits(
+            &feed_at(src, "n + 0", "(n)"),
+            "src/lib.rs",
+            src,
+            &["identity_op"],
+        );
+        assert_eq!(lane.paren_stripped, 0);
+        assert_eq!(lane.edits[0].edit.replacement, "(n)");
+        // partially wrapped text (`(a) + (b)`) — the first pair is not the
+        // whole form; verbatim
+        let src = "fn f(m: &[i32]) -> i32 { m[(1) + (2) + 0] }\n";
+        let lane = oracle_edits(
+            &feed_at(src, "(1) + (2) + 0", "(1) + (2)"),
+            "src/lib.rs",
+            src,
+            &["identity_op"],
+        );
+        assert_eq!(lane.paren_stripped, 0);
+        assert_eq!(lane.edits[0].edit.replacement, "(1) + (2)");
+        // index position but bare replacement — nothing to strip
+        let src = "fn f(m: &[i32]) -> i32 { m[1 * 2 + 0] }\n";
+        let lane = oracle_edits(
+            &feed_at(src, "1 * 2 + 0", "2"),
+            "src/lib.rs",
+            src,
+            &["identity_op"],
+        );
+        assert_eq!(lane.paren_stripped, 0);
+        assert_eq!(lane.edits[0].edit.replacement, "2");
     }
 
     #[test]
