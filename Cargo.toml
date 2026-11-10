@@ -49,7 +49,7 @@ exclude = ["validator_src", "vendor", ".refine", ".proofs"]
 
 [dependencies]
 # Public substrate: ConstraintPruner trait + ternary SIMD matvec
-katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", default-features = false, features = ["entropic_tilt", "rating", "best_belief", "plasma_path"] }
+katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", default-features = false, features = ["entropic_tilt"] }
 # Issue 093 T1: NonergodicFilter kernel (katgpt-rs Plan 592) for the
 # per-run strategy-posterior PoC. Already in the graph transitively via
 # katgpt-core's default features (bom_sampling -> micro_belief) — this row
@@ -235,7 +235,7 @@ foldhash = "0.1"
 # Build-hygiene: the [dependencies] row runs katgpt-core with default-features
 # = false (4 named features instead of 83 defaults). Test-only modules are named
 # HERE so they unify only into test builds, never the shipped binary.
-katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", default-features = false, features = ["poincare_navigator", "subspace_phase_gate"] }
+katgpt-core = { path = "../katgpt-rs/crates/katgpt-core", default-features = false, features = [] }
 # serde_json: already a main dep (zero new tree cost) — the 038 e2e parses
 # --dump-trajectories JSONL rows.
 serde_json = "1"
@@ -322,7 +322,7 @@ rust_perf_bench = ["rust_perf"]
 # Enables `variable_rank_domain_expert` on katgpt-core for the latent-MoE
 # expert router (`pick_domain`, Plan 558). Also gates `dep:regex` for the
 # Issue 025 T2 WGSL scanner (`kernel_opt::wgsl_scan`).
-kernel_opt = ["katgpt-core/variable_rank_domain_expert", "dep:regex"]
+kernel_opt = ["katgpt-core/committed_field_blend", "dep:regex"]
 
 # Issue 208 / Bench 131: the kernel pregate — detect kernel-bearing files
 # BEFORE the kernel matcher fans out, then scope the fan-out to the
@@ -373,7 +373,7 @@ escalation_manifest = ["katgpt-core/escalation_guard"]
 # `--misses` probe-b0 column. Augment-only: the advice can narrow the arm-H
 # escalation queue, never admit. Opt-in until the first ARMED arm-H run
 # produces the real-telemetry re-gate (Plan 621 T5.4).
-rescue_probe = ["katgpt-core/state_probe"]
+rescue_probe = []
 
 # Plan 202 R4 (2026-10-08): the vessel verify path — refine's runtime
 # artifacts verify through the SAME protocol the decision stack uses (sign /
@@ -481,7 +481,7 @@ adoption_gate = ["katgpt-core/adoption_gate"]
 # carries a large common-mode floor; the anchor subtracts it. λ=0 (the
 # default) is byte-identical — the correction is skipped entirely. Opt-in
 # pending the A/B verdict (tests/differential_anchor_ab.rs).
-differential_anchor = ["katgpt-core/differential_anchor", "latent_retrieval"]
+differential_anchor = ["latent_retrieval"]
 
 # Issue 139 T3 (katgpt-rs Issue 913 consumer): the censoring disclosure on the
 # `--frontier-report` band mass. band-mass is conditioned on a verdict having
@@ -567,7 +567,7 @@ mattr_k_poc = ["rule_embed_poc", "katgpt-core/exact_mass_admit"]
 # measures against) and forwards katgpt-core/maxsim for the scoring kernel —
 # PoC-scoped, never default (the T2 discipline: the feature rides the PoC
 # feature set only).
-multivector_poc = ["latent_retrieval", "katgpt-core/maxsim"]
+multivector_poc = ["latent_retrieval"]
 
 # Issue 097: linking↔retrieval-confusion PoC — does topological linking
 # (PCA-3D, katgpt-core's Issue-757-tuned detector) between two rules'
@@ -718,7 +718,7 @@ seat_rerank = []
 # ScopeGate) wrapped as `ScopeModel`. Opt-in like the L4 seam it guards: the
 # pipeline without a model installed is byte-identical to today. Forwards to
 # the katgpt-core feature (pure math + BLAKE3, no new deps).
-contrastive_scope = ["katgpt-core/contrastive_scope"]
+contrastive_scope = []
 
 # Proposal 005 Phase 0 (Plans 023/024/025): the KAT service client substrate —
 # the code-token meter + charge ledger (T0.5/T0.6, no deps) + the account key
