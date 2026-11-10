@@ -1317,6 +1317,26 @@ manual semantic fixes (`manual_midpoint`, `assert_is_empty`). The referee is
 now the STANDING read — verdicts accrue passively as the stores grow; the next
 meaningful event is a read at n ≥ 30. The issue stays OPEN until then.
 
+## 2026-11-10 — Issue 220 CLOSED: the adoption-gate REAL-store G3 cell executed (Bench 148)
+
+The G3 cell (katgpt-rs plan 633 T3) ran under lease `zed-m3-i220-g3cell`
+(epoch 1794335612, claim `ad0711680`, bars pre-registered BEFORE the run;
+instrument `4038536c6`; record `.benchmarks/148_issue220_g3_real_store_cell.md`).
+Verdict: honest split — G3-b (5 α-flips, all the zero-rejection tie class at
+the α=1 endpoint) and G3-c (3/5 dominant refusals below the 0.90 noise bar;
+1-row-evidence refusals flip at ≈p) FAIL as pre-registered; G3-d PASS; G3-a
+PASS as NOT-VACUOUS (16/17 destructive consults refused; the one divergence
+from the keep-incumbent default is the exact-tie PROCEED at the DEFAULT α —
+routed to katgpt-rs issue 994 with the tie-rule widening). `adoption_gate`
+stays opt-in; consult quotability is per-consult measured stability ≥ 0.90
+(today 2/34: instinct-vwc, auth-unngc); T4 deferred by the delegated owner
+(Claude REVISE verdict, session `3e68878e-6d79-42e1-88ad-71167e81eccf`, all
+four revisions applied); seat leg unmeasured (0 seat rows). The issue file is
+removed per the noise-reduction rule; its full life is `git log --follow --
+.issues/220_adoption_gate_consumer_intake.md`. Re-run triggers: the noise leg
+when dao/deployer/grams windows grow, the seat leg on armed seat traffic, the
+full cell after the issue-994 tie-rule decision lands.
+
 ## 2026-11-10 — Issue 219 REMOVED (done): the gist-rs → riir-ai org migration closes
 
 The issue file is removed per the noise-reduction rule; every residue it
