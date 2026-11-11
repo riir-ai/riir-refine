@@ -391,7 +391,11 @@ re-verified on submission day.
 **6. Challenges and biggest blockers right now**
 > Three, honestly. (a) Adoption signal: converting installer downloads into an active external
 > user and contributor base — the pilot cohort is the instrument, and it is the same evidence this
-> call weights (early product-community fit). (b) Receiving-entity paperwork: a self-funded team
+> call weights (early product-community fit). (a2) The technique itself is new and sits between
+> rules-based tools and large language models — distilled repair rules, a small fixed drafting
+> step, deterministic verification gates, no generative model anywhere — so the idea draws
+> skepticism from both camps; explaining that middle ground is real work, and the compile-gated,
+> published results are the answer. (b) Receiving-entity paperwork: a self-funded team
 > needs a fiscal-sponsor path to lawfully receive US 501(c)(3) grant funds; the research is done,
 > the decision lands with the shortlist stage. (c) Executing the dated open-core extraction
 > without slowing the product: opening the core in months 1–3 means restructuring a private
