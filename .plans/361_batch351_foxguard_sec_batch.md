@@ -1,6 +1,6 @@
 # Plan 361 — Batch 351: foxguard sec transcription batch
 
-**Status:** LANDED 2026-11-12 — T0–T7 all DONE in the amo-idle-i361-cargo lane (the lease folds on landing; the landing commit hash carries the record). Yield arc: the sibling amo-zed-b351 lane claimed 9074fb0a first, yielded unpushed to the later-pushed claim (e4289cff, the push-is-the-arbiter law) and recorded the correction 26ba5a93+2a1a51de.
+**Status:** LANDED 2026-11-12 — T0–T7 all DONE in the amo-idle-i361-cargo lane (the lease folds on landing; the landing commit `15cbe3a5` carries the record). Yield arc: the sibling amo-zed-b351 lane claimed 9074fb0a first, yielded unpushed to the later-pushed claim (e4289cff, the push-is-the-arbiter law) and recorded the correction 26ba5a93+2a1a51de.
 **Lease released:** amo-zed-b351@amo yielded unpushed-code within minutes of its 9074fb0a claim — the later-pushed claim (amo-idle-i361-cargo, e4289cff) is the arbiter and holds the batch (the push-is-the-arbiter law; provenance in prose, no claim-shaped residue).
 
 ## Source
