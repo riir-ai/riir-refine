@@ -76,7 +76,7 @@ def main():
     )
     o.append(
         '<text x="24" y="90" fill="#9aa0a6" font-size="12">'
-        "box: Apple M3 Max, AC power, load ~2 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>"
+        "box: Apple M3 Max, AC power, high power mode, load ~4 · rustc 1.91.0 (sccache MSRV) · lower is better · linear scale</text>"
     )
 
     ly = 104
@@ -123,12 +123,12 @@ def main():
     o.append(
         '<text x="24" y="'
         + str(y + 22)
-        + '" fill="#c9cdd3" font-size="13">standalone: 29 of 32 waits avoided, 3 backend GETs instead of 32 · chain: the disk tier keeps serving hits while the remote level is skipped — 3 GETs instead of 32 cold lookups</text>'
+        + '" fill="#c9cdd3" font-size="13">standalone: 33.6 → 4.4 s (7.6×), 29 of 32 waits avoided, 3 backend GETs instead of 32 · chain: 33.9 → 4.7 s (7.2×), the disk tier keeps serving hits while the remote level is skipped</text>'
     )
     o.append(
         '<text x="24" y="'
         + str(y + 42)
-        + '" fill="#9aa0a6" font-size="12">workload: sequential, fresh daemon per run · sequential shape — the issue\u0027s parallel cargo -j4 was not measured · cache_timeouts reads 32 on every arm</text>'
+        + '" fill="#9aa0a6" font-size="12">workload: sequential, fresh daemon per run · the issue\u0027s parallel cargo -j4 shape is measured separately (reproducer table in the body) · cache_timeouts reads 32 on every arm</text>'
     )
     o.append("</svg>")
 
