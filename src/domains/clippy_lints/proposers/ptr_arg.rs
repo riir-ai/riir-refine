@@ -23,29 +23,64 @@
 //! the surface minimal, the plain form is the fired histogram's shape);
 //! `&mut` forms refused (the family fixture is the shared-ref shape and the
 //! mut twin interacts with reborrow analysis).
+//!
+//! ⛔ Trait-impl refusal (2026-11-11, the neuron-db sweep's E0053 specimen):
+//! a method inside `impl Trait for Type` NEVER fires — the trait's declared
+//! signatures are coherence-bound and live anywhere (here: `LatentSpace` in
+//! katgpt-core, consumed in riir-neuron-db); rewriting only the impl side
+//! (`decode(&self, point: &Vec<f32>)` → `&[f32]`) desyncs it from the
+//! trait declaration = E0053, and the file-local parse cannot read the
+//! trait's own spellings to prove the rewrite sound. Real clippy also skips
+//! trait impls for exactly this reason. Inherent `impl Type` methods keep
+//! firing (the impl IS the definition — nothing to desync).
 
-use super::{SourceEdit, edit, for_each_fn, src};
+use super::{SourceEdit, edit, src};
+use syn::visit::Visit;
 use syn::{File, Signature, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
-    let mut edits = Vec::new();
-    for_each_fn(file, |sig: &Signature, _block| {
-        for input in &sig.inputs {
-            let syn::FnArg::Typed(arg) = input else {
-                continue; // receiver
-            };
-            if !arg.attrs.is_empty() {
-                continue;
-            }
-            let Some(replacement) = ptr_replacement(source, &arg.ty) else {
-                continue;
-            };
-            edits.push(edit(arg.ty.as_ref(), replacement));
+    let mut v = Collector {
+        source,
+        edits: Vec::new(),
+    };
+    v.visit_file(file);
+    v.edits
+}
+
+struct Collector<'a> {
+    source: &'a str,
+    edits: Vec<SourceEdit>,
+}
+
+impl<'ast> Visit<'ast> for Collector<'_> {
+    fn visit_item_impl(&mut self, imp: &'ast syn::ItemImpl) {
+        // Inherent impls only: `impl Trait for Type` methods are bound by
+        // the trait's declared signatures (coherence) — see the module's
+        // trait-impl refusal note.
+        if imp.trait_.is_none() {
+            syn::visit::visit_item_impl(self, imp);
         }
-    });
-    edits.shrink_to_fit();
-    edits
+    }
+
+    fn visit_item_trait(&mut self, tr: &'ast syn::ItemTrait) {
+        // Trait DECLARATIONS never fire either (same-file or not): an
+        // external `impl Trait for Type` may pin the current spellings —
+        // the parse cannot see external impls to prove the rewrite sound.
+        let _ = tr;
+    }
+
+    fn visit_fn_arg(&mut self, arg: &'ast syn::FnArg) {
+        let syn::FnArg::Typed(arg) = arg else {
+            return; // receiver
+        };
+        if !arg.attrs.is_empty() {
+            return;
+        }
+        if let Some(replacement) = ptr_replacement(self.source, &arg.ty) {
+            self.edits.push(edit(arg.ty.as_ref(), replacement));
+        }
+    }
 }
 
 /// `&Vec<T>` → `&[T]`, `&String` → `&str` — None for everything else. The
@@ -199,5 +234,33 @@ mod tests {
             "impl method param must narrow: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn trait_impl_method_declined() {
+        // The neuron-db sweep specimen (2026-11-11): `impl LatentSpace for
+        // KarcWoutSpace` — the trait lives in katgpt-core; rewriting only
+        // the impl's `&Vec<f32>` params desyncs the coherence-bound
+        // signatures (E0053). MUST NOT fire.
+        let input = concat!(
+            "struct K;\n",
+            "trait LatentSpace {\n",
+            "    fn decode(&self, point: &Vec<f32>) -> Vec<f32>;\n",
+            "}\n",
+            "impl LatentSpace for K {\n",
+            "    fn decode(&self, point: &Vec<f32>) -> Vec<f32> { point.clone() }\n",
+            "}\n",
+        );
+        let out = propose_fix("ptr_arg", input);
+        assert!(out.is_none(), "trait-impl method must decline: {out:?}");
+    }
+
+    #[test]
+    fn trait_declaration_declined() {
+        // A same-file trait DECLARATION never fires either — an external
+        // impl may pin the declared spellings; the parse cannot see it.
+        let input = "trait T {\n    fn push_all(&self, v: &Vec<u8>) -> usize;\n}";
+        let out = propose_fix("ptr_arg", input);
+        assert!(out.is_none(), "trait declaration must decline: {out:?}");
     }
 }
