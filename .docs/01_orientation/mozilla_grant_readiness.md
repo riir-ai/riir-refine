@@ -378,7 +378,9 @@ re-verified on submission day.
 > downloads across 5 OS targets (macOS Apple Silicon/Intel, Linux x86_64/aarch64 static, Windows), now on crates.io too;
 > a public benchmark history of 200+ scored runs at a 96%+ heal rate; deployed daily as the
 > default dev-loop tool across a 32-repo production workspace since August 2026 — the tool fixes
-> real code every working day, not in demos. First external upstream engagement is MERGED:
+> real code every working day, not in demos. The corpus grows about a hundred rules a week (562
+> when tracking began in late August; 1,602 across seven domains today), every source pinned,
+> deltas published in each release's notes. First external upstream engagement is MERGED:
 > a fix PR to Mozilla's own sccache (issue #2975) landed after six maintainer review rounds
 > (merge commit `907230be`, November 2026), and a second sccache PR — backend read backoff on a
 > maintainer-engaged issue whose author measured our prototype with their own reproducer — is open
