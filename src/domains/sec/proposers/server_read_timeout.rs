@@ -59,7 +59,7 @@ use std::ops::Range;
 
 use quote::ToTokens;
 use syn::spanned::Spanned;
-use syn::{Expr, File, Item};
+use syn::{File, Item};
 
 /// One detected deadline-less connection handler.
 #[derive(Debug, Clone)]
@@ -144,19 +144,13 @@ fn scan_fn(source: &str, block: &syn::Block, findings: &mut Vec<ReadTimeoutFindi
     }
     // The finding anchors on the accept-loop site (the for/if arms are
     // the handler's shape; the fn is the scope).
-    let span = block.span();
+    let byte_range = block.span().byte_range();
     findings.push(ReadTimeoutFinding {
-        site_span: span.start().column..span.end().column,
-        site_text: source
-            .get(span.start().column..span.end().column)
-            .unwrap_or("")
-            .to_string(),
+        site_span: byte_range.clone(),
+        site_text: source.get(byte_range).unwrap_or("").to_string(),
         advice: ADVICE,
     });
 }
-
-#[allow(dead_code)]
-fn scan_expr_unused(_e: &Expr, _source: &str) {}
 
 #[cfg(test)]
 mod tests {

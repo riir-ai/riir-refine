@@ -12,8 +12,10 @@
 //!   even when it carries a quote-craft (demonstrated on a toy SQL parser),
 //!   the interpolated value breaks out (the attack demonstrated), the
 //!   trusted-constant interpolation arm is SAFE (the anti-regime the rule
-//!   carries — B350's fixed fixture interpolates an allowlisted key), and
-//!   the tampered "binder" that actually concatenates disagrees.
+//!   carries — B350's fixed fixture interpolates an allowlisted key), the
+//!   tampered "binder" that actually concatenates disagrees, and the
+//!   identifier-vs-value DISAMBIGUATION pair shows the same interpolation
+//!   syntax demanding opposite defenses by position (Plan 361 T3).
 //! - F2 `quantum-vulnerable-primitive-selection`: the honest classifier
 //!   flags the classical primitives and passes the PQ-safe skip list with
 //!   the leading-word boundary law (`user_ed25519_key_id` NOT flagged,
@@ -77,7 +79,7 @@ mod f1_sql_value_bind {
     fn bound_value_is_data(value: &str) -> ToySql {
         // The statement text is fixed; the value never enters it.
         let stmt = "SELECT id FROM users WHERE name = ?1";
-        let mut p = ToySql::parse(stmt);
+        let p = ToySql::parse(stmt);
         let _ = value; // transmitted out-of-band as parameter 1
         p
     }
@@ -85,6 +87,14 @@ mod f1_sql_value_bind {
     /// NAIVE: the value is formatted into the statement text.
     fn interpolated_value(value: &str) -> ToySql {
         let stmt = format!("SELECT id FROM users WHERE name = '{value}'");
+        ToySql::parse(&stmt)
+    }
+
+    /// The IDENTIFIER axis: the sort key is formatted into the ORDER BY
+    /// slot — quote-free statement structure either way. The
+    /// disambiguation pair's other half (Plan 361 T3).
+    fn interpolated_identifier(key: &str) -> ToySql {
+        let stmt = format!("SELECT id FROM users ORDER BY {key}");
         ToySql::parse(&stmt)
     }
 
@@ -136,6 +146,44 @@ mod f1_sql_value_bind {
         assert_ne!(
             honest.outside_after_open, tampered.outside_after_open,
             "the concatenating 'binder' must disagree with the honest one"
+        );
+    }
+
+    /// The DISAMBIGUATION pair (Plan 361 T3): the same interpolation
+    /// syntax means opposite defenses by POSITION. A WHERE slot is VALUE
+    /// position — the slot lives INSIDE a quote, so injection requires
+    /// bytes that cross the quote boundary (the bind owns it: bound
+    /// bytes never reach the parser). An ORDER BY slot is IDENTIFIER
+    /// position — the interpolated name IS bare statement structure with
+    /// no quote to cross, so a hostile identifier injects outright (the
+    /// allowlist — the identifier rule — owns it; a bind is structurally
+    /// meaningless there).
+    #[test]
+    fn f1_identifier_vs_value_disambiguation() {
+        // VALUE axis: the craft crosses the quote boundary — escaped
+        // bytes become statement structure BETWEEN quotes.
+        let craft_value = interpolated_value(CRAFT);
+        assert!(
+            craft_value.outside_after_open >= 8,
+            "the value axis crosses the quote (the bind owns it)"
+        );
+        // IDENTIFIER axis, same craft: the quote-carrying craft is
+        // absorbed into one unclosed quote — zero escaped bytes (a bind
+        // would be meaningless here; nothing escapes).
+        let ident_axis = interpolated_identifier(CRAFT);
+        assert_eq!(
+            ident_axis.outside_after_open, 0,
+            "the quote-craft is absorbed on the identifier axis"
+        );
+        // IDENTIFIER axis, quote-FREE hostile identifier: it never
+        // touches the quote machinery at all (in_string stays false, zero
+        // quote toggles) — the payload rides as bare statement structure
+        // with no boundary to cross, which is why the allowlist (the
+        // identifier rule's defense), not a bind, owns this axis.
+        let bare_injection = interpolated_identifier("id; DROP TABLE users");
+        assert!(
+            !bare_injection.in_string && bare_injection.outside_after_open == 0,
+            "a quote-free identifier never crosses any boundary — pure statement structure"
         );
     }
 }

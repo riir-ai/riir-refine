@@ -49,6 +49,13 @@
 //! - Catastrophic shapes BEYOND nested quantifiers (evil-number
 //!   regressions, unicode-collation explosions) are out of class — the
 //!   source's own detector scopes to the nested-quantifier shape.
+//! - The gate is explicit-path precedence: a crate-prefixed
+//!   `regex::Regex::new` site is NEVER flagged (the anti-regime, precise
+//!   form), while a bare `Regex::new` in a file importing a backtracking
+//!   engine still fires — a parse-only scan cannot bind the bare name to
+//!   its crate across module scopes, so it fires and review decides.
+//!   Name the crate explicitly at the compile site to claim the
+//!   exemption.
 //! - Detector: `proposers::redos_engine_pattern`. Fixture:
 //!   `fixtures/b351_fixtures.rs` F3. Batch 351 / Plan 361 / Research 394
 //!   (0sec-labs/foxguard @ `fbeab16`, MIT OR Apache-2.0 — cited as class
@@ -143,9 +150,12 @@ fn collect_in_item(source: &str, item: &Item, import_text: &str, findings: &mut 
 fn scan_fn_text(source: &str, f: &syn::ItemFn, scope: &str, findings: &mut Vec<RedosFinding>) {
     // THE ENGINE GATE (the anti-regime): a backtracking-engine token in
     // the fn's scope (fn text + the file's `use` trees, whitespace-
-    // compacted — token streams render with spaces) — a plain
-    // `regex::Regex` fn is linear-time by construction and is NEVER
-    // flagged, whatever the pattern's shape.
+    // compacted — token streams render with spaces) arms the shape gate;
+    // the Call arm then applies explicit-path precedence, so an
+    // explicitly crate-prefixed `regex::Regex::new` site is NEVER
+    // flagged, whatever the file imports. A bare `Regex::new` in a
+    // fancy-importing file still fires (review decides — the bare name
+    // cannot be scope-bound parse-only).
     let compact: String = scope.chars().filter(|c| !c.is_whitespace()).collect();
     let engine_in_scope = BACKTRACKING_ENGINES.iter().any(|t| {
         let bare = t.replace('-', "_");
@@ -205,23 +215,32 @@ fn scan_expr_scoped(
             let func_ts = quote::ToTokens::to_token_stream(&c.func).to_string();
             let func_compact: String = func_ts.chars().filter(|ch| !ch.is_whitespace()).collect();
             let func_lower = func_compact.to_lowercase();
-            let engine_named = BACKTRACKING_ENGINES
+            // Explicit-path precedence (the anti-regime's precise
+            // form): the callee's FIRST path segment names the engine.
+            // A crate-prefixed path whose first segment is `regex`
+            // (`regex::Regex::new` — 3+ segments) is the linear engine
+            // named explicitly — exempt whatever the file imports. The
+            // bare `Regex::new` spelling is also first-segment "regex"
+            // but only 2 segments: it binds per file scope, so it keeps
+            // the import-scope gate (fires when a backtracking engine is
+            // imported anywhere; review decides — the honest limit).
+            let segs: Vec<&str> = func_compact.split("::").collect();
+            let first_seg = segs.first().copied().unwrap_or("").to_lowercase();
+            let explicit_backtracking = BACKTRACKING_ENGINES
                 .iter()
-                .any(|t| func_lower.contains(&t.replace('-', "_")))
-                || engine_in_scope;
+                .any(|t| first_seg == t.replace('-', "_"));
+            let explicit_linear = first_seg == "regex" && segs.len() > 2;
+            let engine_named = explicit_backtracking || (engine_in_scope && !explicit_linear);
             let is_new = func_lower.ends_with("::new");
             if engine_named && is_new {
                 if let Some(Expr::Lit(lit)) = c.args.first() {
                     if let syn::Lit::Str(s) = &lit.lit {
                         let pattern = s.value();
                         if nested_quantifier(&pattern) {
-                            let span = e.span();
+                            let byte_range = e.span().byte_range();
                             findings.push(RedosFinding {
-                                site_span: span.start().column..span.end().column,
-                                site_text: source
-                                    .get(span.start().column..span.end().column)
-                                    .unwrap_or("")
-                                    .to_string(),
+                                site_span: byte_range.clone(),
+                                site_text: source.get(byte_range).unwrap_or("").to_string(),
                                 advice: ADVICE,
                             });
                             return;
@@ -252,13 +271,10 @@ fn scan_expr_scoped(
             if name == "fancy_regex" || name == "pcre2" {
                 let pattern = m.mac.tokens.to_string();
                 if nested_quantifier(&pattern) {
-                    let span = e.span();
+                    let byte_range = e.span().byte_range();
                     findings.push(RedosFinding {
-                        site_span: span.start().column..span.end().column,
-                        site_text: source
-                            .get(span.start().column..span.end().column)
-                            .unwrap_or("")
-                            .to_string(),
+                        site_span: byte_range.clone(),
+                        site_text: source.get(byte_range).unwrap_or("").to_string(),
                         advice: ADVICE,
                     });
                 }

@@ -135,13 +135,10 @@ fn collect_in_item(source: &str, item: &Item, import_text: &str, findings: &mut 
                 if CRYPTO_VERBS.iter().any(|v| item_lower.contains(v))
                     && import_text_has_classical(import_text)
                 {
-                    let span = f.block.span();
+                    let byte_range = f.block.span().byte_range();
                     findings.push(PqFinding {
-                        site_span: span.start().column..span.end().column,
-                        site_text: source
-                            .get(span.start().column..span.end().column)
-                            .unwrap_or("")
-                            .to_string(),
+                        site_span: byte_range.clone(),
+                        site_text: source.get(byte_range).unwrap_or("").to_string(),
                         algorithm: "classical-import",
                         advice: ADVICE,
                     });
@@ -241,13 +238,10 @@ fn scan_expr_paths(e: &Expr, source: &str, findings: &mut Vec<PqFinding>) {
             else {
                 return;
             };
-            let span = e.span();
+            let byte_range = e.span().byte_range();
             findings.push(PqFinding {
-                site_span: span.start().column..span.end().column,
-                site_text: source
-                    .get(span.start().column..span.end().column)
-                    .unwrap_or("")
-                    .to_string(),
+                site_span: byte_range.clone(),
+                site_text: source.get(byte_range).unwrap_or("").to_string(),
                 algorithm,
                 advice: ADVICE,
             });

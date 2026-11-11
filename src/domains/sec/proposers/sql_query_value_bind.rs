@@ -104,19 +104,54 @@ const SQL_SINKS: &[&str] = &["query", "sql_query", "execute", "raw_sql"];
 #[must_use]
 pub fn detect(source: &str, file: &File) -> Vec<SqlValueFinding> {
     let mut findings = Vec::new();
+    // The constant-binding law (the source's `collect_constant_bindings`
+    // transcription): identifiers proven to hold only constant literals
+    // are not dynamic. File-level `const` names feed the suppression in
+    // `value_slot_finding`.
+    let mut const_names = std::collections::HashSet::new();
+    collect_const_names(&file.items, &mut const_names);
     for item in &file.items {
-        collect_in_item(source, item, &mut findings);
+        collect_in_item(source, item, &const_names, &mut findings);
     }
     findings
 }
 
-fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<SqlValueFinding>) {
+/// File-level `const` item names, including consts inside non-test
+/// modules (the same `#[cfg(test)]` guard the scan applies).
+fn collect_const_names(items: &[Item], names: &mut std::collections::HashSet<String>) {
+    for item in items {
+        match item {
+            Item::Const(c) => {
+                names.insert(c.ident.to_string());
+            }
+            Item::Mod(m) => {
+                if m.attrs.iter().any(|a| {
+                    a.path().is_ident("cfg")
+                        && a.meta.to_token_stream().to_string().contains("test")
+                }) {
+                    continue;
+                }
+                if let Some((_, nested)) = &m.content {
+                    collect_const_names(nested, names);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn collect_in_item(
+    source: &str,
+    item: &Item,
+    const_names: &std::collections::HashSet<String>,
+    findings: &mut Vec<SqlValueFinding>,
+) {
     match item {
-        Item::Fn(f) => scan_fn(source, &f.block, findings),
+        Item::Fn(f) => scan_fn(source, &f.block, const_names, findings),
         Item::Impl(imp) => {
             for ii in &imp.items {
                 if let syn::ImplItem::Fn(m) = ii {
-                    scan_fn(source, &m.block, findings);
+                    scan_fn(source, &m.block, const_names, findings);
                 }
             }
         }
@@ -130,7 +165,7 @@ fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<SqlValueFinding
             }
             if let Some((_, items)) = &m.content {
                 for nested in items {
-                    collect_in_item(source, nested, findings);
+                    collect_in_item(source, nested, const_names, findings);
                 }
             }
         }
@@ -138,7 +173,12 @@ fn collect_in_item(source: &str, item: &Item, findings: &mut Vec<SqlValueFinding
     }
 }
 
-fn scan_fn(source: &str, block: &syn::Block, findings: &mut Vec<SqlValueFinding>) {
+fn scan_fn(
+    source: &str,
+    block: &syn::Block,
+    const_names: &std::collections::HashSet<String>,
+    findings: &mut Vec<SqlValueFinding>,
+) {
     let fn_ts = quote::ToTokens::to_token_stream(block).to_string();
     // Token streams render with spaces — compact before the vocabulary
     // checks.
@@ -150,28 +190,84 @@ fn scan_fn(source: &str, block: &syn::Block, findings: &mut Vec<SqlValueFinding>
     // Suppression, fn-wide (the fix's own vocabulary): a `.bind(` call
     // means values already ride parameters — the mixed-statement case is
     // the B350 rule's (its identifier never binds), not this one's.
-    if compact.contains(".bind(") || compact.contains("bind(") {
+    if compact.contains(".bind(") {
         return;
     }
-    scan_stmts(&block.stmts, source, findings);
+    scan_stmts(&block.stmts, source, const_names, findings);
 }
 
-fn scan_stmts(stmts: &[syn::Stmt], source: &str, findings: &mut Vec<SqlValueFinding>) {
+fn scan_stmts(
+    stmts: &[syn::Stmt],
+    source: &str,
+    const_names: &std::collections::HashSet<String>,
+    findings: &mut Vec<SqlValueFinding>,
+) {
     for stmt in stmts {
         match stmt {
             syn::Stmt::Local(l) => {
                 if let Some(init) = &l.init {
-                    scan_expr(&init.expr, source, findings);
+                    scan_expr(&init.expr, source, const_names, findings);
                 }
             }
-            syn::Stmt::Item(Item::Fn(f)) => scan_stmts(&f.block.stmts, source, findings),
-            syn::Stmt::Expr(e, _) => scan_expr(e, source, findings),
+            syn::Stmt::Item(Item::Fn(f)) => {
+                scan_stmts(&f.block.stmts, source, const_names, findings);
+            }
+            // Block descent FIRST (issue 227 D1): a query site inside an
+            // if/match/block body is as reachable as a bare statement.
+            syn::Stmt::Expr(inner, _) if block_shaped(inner) => {
+                descend_block_expr(inner, source, const_names, findings);
+            }
+            syn::Stmt::Expr(e, _) => scan_expr(e, source, const_names, findings),
             _ => {}
         }
     }
 }
 
-fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<SqlValueFinding>) {
+/// The block-shaped expressions the descent visits.
+fn block_shaped(e: &Expr) -> bool {
+    matches!(
+        e,
+        Expr::If(_) | Expr::Match(_) | Expr::Block(_) | Expr::Unsafe(_) | Expr::Return(_)
+    )
+}
+
+/// Descend a block-shaped expression's statement bodies (the value-slot
+/// scan applies to the same statements a bare-expression walk would see).
+fn descend_block_expr(
+    e: &Expr,
+    source: &str,
+    const_names: &std::collections::HashSet<String>,
+    findings: &mut Vec<SqlValueFinding>,
+) {
+    match e {
+        Expr::If(eif) => {
+            scan_stmts(&eif.then_branch.stmts, source, const_names, findings);
+            if let Some((_, else_expr)) = &eif.else_branch {
+                scan_expr(else_expr, source, const_names, findings);
+            }
+        }
+        Expr::Match(m) => {
+            for arm in &m.arms {
+                scan_expr(&arm.body, source, const_names, findings);
+            }
+        }
+        Expr::Block(b) => scan_stmts(&b.block.stmts, source, const_names, findings),
+        Expr::Unsafe(u) => scan_stmts(&u.block.stmts, source, const_names, findings),
+        Expr::Return(r) => {
+            if let Some(ret) = &r.expr {
+                scan_expr(ret, source, const_names, findings);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scan_expr(
+    e: &Expr,
+    source: &str,
+    const_names: &std::collections::HashSet<String>,
+    findings: &mut Vec<SqlValueFinding>,
+) {
     match e {
         Expr::Macro(m) => {
             let name = m
@@ -182,7 +278,7 @@ fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<SqlValueFinding>) {
                 .map_or(String::new(), |s| s.ident.to_string());
             if name == "format" || name == "write" {
                 let lit = m.mac.tokens.to_string();
-                if let Some(finding) = value_slot_finding(source, &lit, e) {
+                if let Some(finding) = value_slot_finding(source, &lit, e, const_names) {
                     findings.push(finding);
                 }
             }
@@ -194,7 +290,7 @@ fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<SqlValueFinding>) {
             if right_is_literal {
                 return;
             }
-            if let Some(finding) = value_slot_finding(source, &left, e) {
+            if let Some(finding) = value_slot_finding(source, &left, e, const_names) {
                 findings.push(finding);
             }
         }
@@ -207,7 +303,12 @@ fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<SqlValueFinding>) {
 /// a bare `{}` adjacent to `= `), NOT an identifier position (ORDER BY /
 /// GROUP BY adjacency is the OTHER rule's finding), and carries at least
 /// one real placeholder (the source's `format_has_interpolation` law).
-fn value_slot_finding(source: &str, lit_text: &str, e: &Expr) -> Option<SqlValueFinding> {
+fn value_slot_finding(
+    source: &str,
+    lit_text: &str,
+    e: &Expr,
+    const_names: &std::collections::HashSet<String>,
+) -> Option<SqlValueFinding> {
     let t = lit_text.to_string();
     // No placeholder → a constant string → the source's own FP law.
     if !has_placeholder(&t) {
@@ -234,15 +335,60 @@ fn value_slot_finding(source: &str, lit_text: &str, e: &Expr) -> Option<SqlValue
     if !value_slot {
         return None;
     }
-    let span = e.span();
+    // The constant-binding law: every `{}`-slot operand a bare
+    // identifier naming a file-level `const` is the static posture —
+    // the interpolation cannot carry runtime data. Any dynamic operand
+    // (or any slot whose operand is not a declared const ident) keeps
+    // the finding.
+    if slots_all_const(&t, const_names) {
+        return None;
+    }
+    let byte_range = e.span().byte_range();
     Some(SqlValueFinding {
-        site_span: span.start().column..span.end().column,
-        site_text: source
-            .get(span.start().column..span.end().column)
-            .unwrap_or("")
-            .to_string(),
+        site_span: byte_range.clone(),
+        site_text: source.get(byte_range).unwrap_or("").to_string(),
         advice: ADVICE,
     })
+}
+
+/// Every `{name}` inline slot in the literal names a declared const AND
+/// the format!'s positional arguments are all const idents (the implicit
+/// `{}` face). A literal with no slots is handled by
+/// `has_placeholder` upstream.
+fn slots_all_const(lit_text: &str, const_names: &std::collections::HashSet<String>) -> bool {
+    let mut inline_slots = Vec::new();
+    let bytes = lit_text.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'{' {
+            if bytes.get(i + 1) == Some(&b'{') {
+                i += 2;
+                continue;
+            }
+            // Capture to the matching unescaped `}`.
+            let mut j = i + 1;
+            let mut inner = String::new();
+            while j < bytes.len() && bytes[j] != b'}' {
+                inner.push(bytes[j] as char);
+                j += 1;
+            }
+            // The spec tail (`{:?}`, `{name:?}`) rides after `:` — the
+            // operand name is the head.
+            let head = inner.split(':').next().unwrap_or("").trim();
+            inline_slots.push(head.to_string());
+            i = j + 1;
+            continue;
+        }
+        i += 1;
+    }
+    if inline_slots.is_empty() {
+        // No inline slots → the implicit-positional face; the positional
+        // args live in the macro text after the literal — every
+        // comma-separated tail token must be a const ident. Unverifiable
+        // text here is a NO (keep the finding).
+        return false;
+    }
+    inline_slots.iter().all(|name| const_names.contains(name))
 }
 
 /// The source's `format_has_interpolation`: at least one real
@@ -336,13 +482,53 @@ mod tests {
         );
     }
 
-    /// The bind suppression (the fix's own vocabulary).
+    /// The bind suppression (the fix's own vocabulary) — the buggy
+    /// query shape PLUS `.bind(` goes silent (the suppression actually
+    /// bites a real finding shape, not an empty fn).
     #[test]
     fn bind_suppresses() {
         let src_text = "pub fn lookup(name: &str) -> Vec<Row> {\n    \
-             let sql = \"SELECT id FROM users WHERE name = ?1\";\n    \
+             let sql = format!(\"SELECT id FROM users WHERE name = '{name}'\");\n    \
              sqlx::query(&sql).bind(name).fetch_all(&mut conn).unwrap()\n}\n";
-        assert!(findings(src_text).is_empty());
+        assert!(findings(src_text).is_empty(), "the .bind( shape suppresses");
+    }
+
+    /// The constant-binding law: every `{}` slot naming a file-level
+    /// const is the static posture — silent.
+    #[test]
+    fn const_operands_silent() {
+        let src_text = "const TRUSTED: &str = \"dashboard\";\n\npub fn q() -> Vec<Row> {\n    \
+             let sql = format!(\"SELECT id FROM pages WHERE slug = '{TRUSTED}'\");\n    \
+             sqlx::query(&sql).fetch_all(&mut conn).unwrap()\n}\n";
+        assert!(findings(src_text).is_empty(), "all-const slots are silent");
+    }
+
+    /// One dynamic operand beside a const keeps the finding (the
+    /// suppression requires EVERY slot to be const).
+    #[test]
+    fn mixed_const_dynamic_fires() {
+        let src_text = "const TRUSTED: &str = \"dashboard\";\n\npub fn q(name: &str) -> Vec<Row> {\n    \
+             let sql = format!(\"SELECT id FROM pages WHERE slug = '{TRUSTED}' AND owner = '{name}'\");\n    \
+             sqlx::query(&sql).fetch_all(&mut conn).unwrap()\n}\n";
+        assert_eq!(
+            findings(src_text).len(),
+            1,
+            "a dynamic slot keeps the finding"
+        );
+    }
+
+    /// The block-descent reachability: a site inside an `if` body fires.
+    #[test]
+    fn site_inside_if_block_fires() {
+        let src_text = "pub fn lookup(name: &str, verbose: bool) -> Vec<Row> {\n    \
+             if verbose {\n        \
+             let sql = format!(\"SELECT id FROM users WHERE name = '{name}'\");\n        \
+             sqlx::query(&sql).fetch_all(&mut conn).unwrap();\n    }\n    Vec::new()\n}\n";
+        assert_eq!(
+            findings(src_text).len(),
+            1,
+            "a query site inside an if block fires"
+        );
     }
 
     /// No SQL sink in the fn → silent (the sink gate).

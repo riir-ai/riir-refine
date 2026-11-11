@@ -80,10 +80,10 @@ const REDIRECT_TOKENS: &[&str] = &[
 /// controlled by construction).
 const ROUTE_BUILDERS: &[&str] = &[
     "url_for",
+    "url_for_external",
     "reverse",
+    "reverse_lazy",
     "get_absolute_url",
-    "route_to",
-    "path_for",
 ];
 
 /// Detect unvalidated redirect targets (suggest-only; no edits are
@@ -158,9 +158,48 @@ fn scan_stmts(stmts: &[syn::Stmt], source: &str, findings: &mut Vec<RedirectFind
                 }
             }
             syn::Stmt::Item(Item::Fn(f)) => scan_stmts(&f.block.stmts, source, findings),
+            // Block descent FIRST (issue 227 D1): a redirect site inside
+            // an if/match/block body is as reachable as a bare statement.
+            syn::Stmt::Expr(inner, _) if block_shaped(inner) => {
+                descend_block_expr(inner, source, findings);
+            }
             syn::Stmt::Expr(e, _) => scan_expr(e, source, findings),
             _ => {}
         }
+    }
+}
+
+/// The block-shaped expressions the descent visits.
+fn block_shaped(e: &Expr) -> bool {
+    matches!(
+        e,
+        Expr::If(_) | Expr::Match(_) | Expr::Block(_) | Expr::Unsafe(_) | Expr::Return(_)
+    )
+}
+
+/// Descend a block-shaped expression's bodies (the redirect scan applies
+/// to the same expressions a bare-expression walk would see).
+fn descend_block_expr(e: &Expr, source: &str, findings: &mut Vec<RedirectFinding>) {
+    match e {
+        Expr::If(eif) => {
+            scan_stmts(&eif.then_branch.stmts, source, findings);
+            if let Some((_, else_expr)) = &eif.else_branch {
+                scan_expr(else_expr, source, findings);
+            }
+        }
+        Expr::Match(m) => {
+            for arm in &m.arms {
+                scan_expr(&arm.body, source, findings);
+            }
+        }
+        Expr::Block(b) => scan_stmts(&b.block.stmts, source, findings),
+        Expr::Unsafe(u) => scan_stmts(&u.block.stmts, source, findings),
+        Expr::Return(r) => {
+            if let Some(ret) = &r.expr {
+                scan_expr(ret, source, findings);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -180,13 +219,10 @@ fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<RedirectFinding>) {
                 let vocab = path_ts.contains("Redirect") || path_ts.contains("HttpResponse");
                 let ctor = last == "to" || last == "redirect" || last == "temporary";
                 if vocab && ctor && !args_all_literal(&c.args) {
-                    let span = e.span();
+                    let byte_range = e.span().byte_range();
                     findings.push(RedirectFinding {
-                        site_span: span.start().column..span.end().column,
-                        site_text: source
-                            .get(span.start().column..span.end().column)
-                            .unwrap_or("")
-                            .to_string(),
+                        site_span: byte_range.clone(),
+                        site_text: source.get(byte_range).unwrap_or("").to_string(),
                         advice: ADVICE,
                     });
                     return;
@@ -204,13 +240,10 @@ fn scan_expr(e: &Expr, source: &str, findings: &mut Vec<RedirectFinding>) {
                 && redirect_vocab_present(mc)
                 && !args_all_literal(&mc.args)
             {
-                let span = e.span();
+                let byte_range = e.span().byte_range();
                 findings.push(RedirectFinding {
-                    site_span: span.start().column..span.end().column,
-                    site_text: source
-                        .get(span.start().column..span.end().column)
-                        .unwrap_or("")
-                        .to_string(),
+                    site_span: byte_range.clone(),
+                    site_text: source.get(byte_range).unwrap_or("").to_string(),
                     advice: ADVICE,
                 });
                 return;

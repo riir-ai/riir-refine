@@ -2287,7 +2287,7 @@ exists (CWE-327). THE PQ FAMILY SEED — zero prior corpus owners. THE \
 SOURCE LAWS carried whole (0sec-labs/foxguard rust_lang.rs \
 PqVulnerableCrypto + pq.rs): the vulnerable inventory (RSA/ECDSA/ECDH/ \
 DSA/Ed25519/X25519/P-256/P-384/P-521/k256); the PQ-safe skip list — \
-ml_dsa|ml_kem|slh_dsa|fn_dsa|hqc — \"recognised so early adopters of \
+ml_dsa|ml_kem|slh_dsa|fn_dsa|hqc — \"recognised here so early adopters of \
 those crates aren't flagged\" (plus the hybrid migration composite \
 x25519_ml_kem768); the boundary law (crypto_token_in_path) verbatim: \
 \"keeps rsa::RsaPrivateKey::new and ed25519_dalek::SigningKey::generate \
@@ -2429,7 +2429,7 @@ AND executed before entry)."
                 .to_string(),
             buggy_code: "use axum::response::Redirect;\n\n/// The bounce endpoint: the target comes off the query string and goes\n/// straight into the redirect — a crafted link bounces through this\n/// origin to an attacker-chosen destination.\npub async fn bounce(target: &str) -> Redirect {\n    Redirect::to(target)\n}\n"
                 .to_string(),
-            fixed_code: "use axum::response::Redirect;\n\n/// The bounce endpoint, relative-only: absolute and protocol-relative\n/// targets refuse; relative paths pass. The route-name builder is the\n/// other safe shape.\npub async fn bounce(target: &str) -> Result<Redirect, &'static str> {\n    if target.starts_with('/') && !target.starts_with(\"//\") {\n        Ok(Redirect::to(target))\n    } else {\n        Err(\"external redirect target refused\")\n    }\n}\n"
+            fixed_code: "use axum::response::Redirect;\n\n/// The bounce endpoint, the source's safe half: the target comes from\n/// the route-name builder — a safe, server-controlled URL from a route\n/// name; a redirect to its result is not user-controlled. (The\n/// relative-only + allowlist fix is the alternative posture; this\n/// fixture pins the route-builder shape the detector suppresses.)\npub async fn bounce() -> Redirect {\n    Redirect::to(url_for(\"dashboard\"))\n}\n"
                 .to_string(),
             family: SecFamily::InputValidation,
         },
