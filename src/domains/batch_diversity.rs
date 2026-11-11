@@ -41,7 +41,7 @@
 //!   measurable", not a perfect score). The scale anchor is the μ=π
 //!   identity: a batch spread across the graph reads ≈ 1.0 (the diffused
 //!   mass approaches the stationary measure); concentrated intake reads
-//!   well below (the katgpt-core fold fix `9fb45d922` — found BY this
+//!   well below (the katgpt-core fold fix `24aa43051` — found BY this
 //!   readout reading ~2.0 on spread batches — restored the documented
 //!   normalization; upstream spec pins: katgpt-core
 //!   `plan634_t14_div_normalization_spec`). Measured disclosure at the
