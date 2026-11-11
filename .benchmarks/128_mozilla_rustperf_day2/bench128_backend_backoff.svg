@@ -7,32 +7,32 @@
 <rect x="454" y="104" width="12" height="12" fill="#5b8def"/><text x="472" y="114" fill="#c9cdd3" font-size="12">before (main)</text>
 <rect x="604" y="104" width="12" height="12" fill="#3fbf7f"/><text x="622" y="114" fill="#c9cdd3" font-size="12">after (backoff)</text>
 <text x="24" y="153" fill="#e8e8e8" font-size="13">uncached control (no sccache)</text>
-<rect x="454" y="130" width="5.848028068259225" height="34" fill="#6b7280" rx="3"/>
-<text x="467.8480280682592" y="162" fill="#c9cdd3" font-size="12">0.514 s</text>
+<rect x="454" y="130" width="5.82835825126574" height="34" fill="#6b7280" rx="3"/>
+<text x="467.82835825126574" y="162" fill="#c9cdd3" font-size="12">0.514 s</text>
 <text x="24" y="201" fill="#e8e8e8" font-size="13">before — main 33d12fb (median of 3)</text>
 <rect x="454" y="178" width="380.95238095238096" height="34" fill="#5b8def" rx="3"/>
-<text x="842.952380952381" y="200" fill="#9aa0a6" font-size="11">33.355 / 33.559 / 33.483</text>
-<text x="842.952380952381" y="210" fill="#c9cdd3" font-size="12">33.483 s</text>
+<text x="842.952380952381" y="200" fill="#9aa0a6" font-size="11">33.591 / 33.596 / 33.598</text>
+<text x="842.952380952381" y="210" fill="#c9cdd3" font-size="12">33.596 s</text>
 <text x="24" y="249" fill="#e8e8e8" font-size="13">after — backend backoff (median of 3)</text>
-<rect x="454" y="226" width="48.91181452421483" height="34" fill="#3fbf7f" rx="3"/>
-<text x="510.91181452421483" y="248" fill="#9aa0a6" font-size="11">4.167 / 4.299 / 4.302</text>
-<text x="510.91181452421483" y="258" fill="#c9cdd3" font-size="12">4.299 s</text>
+<rect x="454" y="226" width="49.82452559545072" height="34" fill="#3fbf7f" rx="3"/>
+<text x="511.8245255954507" y="248" fill="#9aa0a6" font-size="11">4.394 / 4.383 / 4.398</text>
+<text x="511.8245255954507" y="258" fill="#c9cdd3" font-size="12">4.394 s</text>
 <text x="24" y="297" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0)</text>
-<rect x="454" y="274" width="380.94100346586674" height="34" fill="#8a6d3b" rx="3"/>
-<text x="842.9410034658667" y="306" fill="#c9cdd3" font-size="12">33.482 s</text>
+<rect x="454" y="274" width="380.68023971107675" height="34" fill="#8a6d3b" rx="3"/>
+<text x="842.6802397110768" y="306" fill="#c9cdd3" font-size="12">33.572 s</text>
 <line x1="24" y1="332" x2="1054" y2="332" stroke="#2a2e35"/>
 <text x="24" y="352" fill="#e8e8e8" font-size="13" font-weight="bold">multilevel chain disk,webdav — 48 compiles, backend unhealthy mid-run</text>
 <text x="24" y="385" fill="#e8e8e8" font-size="13">before — main 33d12fb (median of 3)</text>
-<rect x="454" y="362" width="374.81642953887103" height="34" fill="#5b8def" rx="3"/>
-<text x="836.816429538871" y="384" fill="#9aa0a6" font-size="11">33.658 / 33.620 / 33.906</text>
-<text x="836.816429538871" y="394" fill="#c9cdd3" font-size="12">33.658 s</text>
+<rect x="454" y="362" width="379.12851799945724" height="34" fill="#5b8def" rx="3"/>
+<text x="841.1285179994572" y="384" fill="#9aa0a6" font-size="11">33.770 / 33.883 / 34.379</text>
+<text x="841.1285179994572" y="394" fill="#c9cdd3" font-size="12">33.883 s</text>
 <text x="24" y="433" fill="#e8e8e8" font-size="13">after — backend backoff (median of 3)</text>
-<rect x="454" y="410" width="51.103232371319734" height="34" fill="#3fbf7f" rx="3"/>
-<text x="513.1032323713198" y="432" fill="#9aa0a6" font-size="11">4.513 / 4.605 / 4.589</text>
-<text x="513.1032323713198" y="442" fill="#c9cdd3" font-size="12">4.589 s</text>
+<rect x="454" y="410" width="52.55634533670133" height="34" fill="#3fbf7f" rx="3"/>
+<text x="514.5563453367013" y="432" fill="#9aa0a6" font-size="11">4.697 / 4.707 / 4.585</text>
+<text x="514.5563453367013" y="442" fill="#c9cdd3" font-size="12">4.697 s</text>
 <text x="24" y="481" fill="#e8e8e8" font-size="13">after, backoff disabled (THRESHOLD=0)</text>
 <rect x="454" y="458" width="380.95238095238096" height="34" fill="#8a6d3b" rx="3"/>
-<text x="842.952380952381" y="490" fill="#c9cdd3" font-size="12">34.209 s</text>
+<text x="842.952380952381" y="490" fill="#c9cdd3" font-size="12">34.046 s</text>
 <line x1="24" y1="512" x2="1054" y2="512" stroke="#2a2e35"/>
 <text x="24" y="534" fill="#c9cdd3" font-size="13">standalone: 29 of 32 waits avoided, 3 backend GETs instead of 32 · chain: the disk tier keeps serving hits while the remote level is skipped — 3 GETs instead of 32 cold lookups</text>
 <text x="24" y="554" fill="#9aa0a6" font-size="12">workload: sequential, fresh daemon per run · sequential shape — the issue's parallel cargo -j4 was not measured · cache_timeouts reads 32 on every arm</text>

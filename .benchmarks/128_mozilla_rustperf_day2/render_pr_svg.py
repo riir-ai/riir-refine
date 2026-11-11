@@ -5,9 +5,10 @@ Shape follows the house renderer (scripts/fsearch_pr_bench_svg.py, Plan 224):
 dark bg, mono font, horizontal bars, provenance header, harness footer.
 No tool/site tagline anywhere (owner verdict 2026-11-02 — attribution ban).
 
-Data: bench 128 record run 7 (2026-11-10, pin 33d12fb, after the R2 fix set): the standalone cell
+Data: bench 128 record run 8 re-run (2026-11-11, tip 2b18762 — the shipped binary, post single-probe recovery): the standalone cell
 (3 alternating reps per arm + demote) and the multilevel chain cell
 (disk,webdav with the backend going unhealthy mid-run). Linear scale.
+Run-7 freeze (pre-recovery tip 30f9af0-era): within 2.5% of every cell here (record README).
 
 Usage: python3 render_pr_svg.py --out bench128_backend_backoff.svg
 """
@@ -18,13 +19,13 @@ from pathlib import Path
 # (cell divider, label, median seconds, reps string, color)
 ROWS = [
     (False, "uncached control (no sccache)", 0.514, "", "#6b7280"),
-    (False, "before — main 33d12fb (median of 3)", 33.483, "33.355 / 33.559 / 33.483", "#5b8def"),
-    (False, "after — backend backoff (median of 3)", 4.299, "4.167 / 4.299 / 4.302", "#3fbf7f"),
-    (False, "after, backoff disabled (THRESHOLD=0)", 33.482, "", "#8a6d3b"),
+    (False, "before — main 33d12fb (median of 3)", 33.596, "33.591 / 33.596 / 33.598", "#5b8def"),
+    (False, "after — backend backoff (median of 3)", 4.394, "4.394 / 4.383 / 4.398", "#3fbf7f"),
+    (False, "after, backoff disabled (THRESHOLD=0)", 33.572, "", "#8a6d3b"),
     (True, "multilevel chain disk,webdav — 48 compiles, backend unhealthy mid-run", 0, "", "#000000"),
-    (False, "before — main 33d12fb (median of 3)", 33.658, "33.658 / 33.620 / 33.906", "#5b8def"),
-    (False, "after — backend backoff (median of 3)", 4.589, "4.513 / 4.605 / 4.589", "#3fbf7f"),
-    (False, "after, backoff disabled (THRESHOLD=0)", 34.209, "", "#8a6d3b"),
+    (False, "before — main 33d12fb (median of 3)", 33.883, "33.770 / 33.883 / 34.379", "#5b8def"),
+    (False, "after — backend backoff (median of 3)", 4.697, "4.697 / 4.707 / 4.585", "#3fbf7f"),
+    (False, "after, backoff disabled (THRESHOLD=0)", 34.046, "", "#8a6d3b"),
 ]
 
 STANDALONE_PEAK = max(r[2] for r in ROWS[0:4])
