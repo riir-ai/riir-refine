@@ -36,6 +36,13 @@
 ))]
 pub mod probe_witness;
 
+// Issue 222 T1 — the batch-intake diffusion-diversity readout
+// (REPORT-ONLY; katgpt-rs Plan 634 T1.4's Div_P^τ over the rule-embedding
+// kNN graph per mined batch). Never in the release set; feature-off
+// byte-identical (the whole module is cfg-gated).
+#[cfg(feature = "batch_diversity")]
+pub mod batch_diversity;
+
 #[cfg(feature = "clippy_lints")]
 pub mod clippy_lints;
 

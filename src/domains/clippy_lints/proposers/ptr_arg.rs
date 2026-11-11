@@ -36,7 +36,7 @@
 
 use super::{SourceEdit, edit, src};
 use syn::visit::Visit;
-use syn::{File, Signature, Type};
+use syn::{File, Type};
 
 /// Collect the lint's edits against the original source. Empty = no match.
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {

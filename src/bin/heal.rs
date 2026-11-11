@@ -11427,6 +11427,14 @@ fn finish_score_bench(
             println!("  absorption candidate: {a} <-> {b} : {c:.3}");
         }
     }
+    // Issue 222 T1 — the batch-intake diffusion-diversity readout
+    // (katgpt-rs Plan 634 T1.4's Div_P^τ over the rule-embedding kNN
+    // graph, one summary line per mined domain beside the strata
+    // cluster). REPORT-ONLY: no exit-code change; `RIIR_REFINE_BATCH_DIV_FULL=1`
+    // adds the full per-batch table. A build without the feature prints
+    // nothing (byte-identical tail).
+    #[cfg(feature = "batch_diversity")]
+    riir_refine::domains::batch_diversity::print_console();
     if let Err(e) = sb::report::append_history(jsonl, &rec) {
         eprintln!("score history append failed: {e}");
     }

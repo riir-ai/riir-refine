@@ -369,7 +369,7 @@ fn quote_markers(mut s: &str) -> usize {
 /// `\d{1,9}.`/`\d{1,9})` + space (`CommonMark` requires the space; the
 /// content col = indent + marker + 1). The ordinal is 0 for bullets, the
 /// parsed value for ordered markers — the dispatcher needs it for the
-/// CommonMark paragraph-interrupt rule (an ordered marker interrupts an
+/// `CommonMark` paragraph-interrupt rule (an ordered marker interrupts an
 /// open paragraph ONLY at ordinal 1; anything else is paragraph text,
 /// not a list start).
 fn list_content_col(trimmed: &str, indent: usize) -> Option<(usize, u64)> {

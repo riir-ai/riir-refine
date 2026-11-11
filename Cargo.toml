@@ -471,6 +471,15 @@ set_rerank = ["katgpt-core/set_admission", "latent_retrieval"]
 # the default closure. Feature-off stays byte-identical (the demote).
 elo_k_eff = ["katgpt-core/step_noise"]
 
+# Issue 222 T1 (katgpt-rs Plan 634 T1.4 consumer lane) — the batch-intake
+# diffusion-diversity readout: katgpt-core `SimGraph::build` + `div_tau`
+# (arXiv:2606.01861 Div_P^τ) over the rule-embedding kNN graph, one row per
+# mined batch. REPORT-ONLY (console line beside the score-bench strata
+# cluster, no exit-code change; `RIIR_REFINE_BATCH_DIV_FULL=1` adds the
+# full per-batch table); opt-in, never in the release set; feature-off
+# byte-identical by construction (the whole module is cfg-gated).
+batch_diversity = ["katgpt-core/diffusion_diversity"]
+
 # katgpt-rs Plan 633 T1 / Issue 220 — the adoption/retention regression
 # gate's consumer intake: the (rule, fix verdict) outcome window (JSONL
 # sidecar, `.refine/adoption_outcomes.jsonl`), the active-set demote/
