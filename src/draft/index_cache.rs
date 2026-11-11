@@ -468,6 +468,9 @@ fn encode_row(enc: &mut Enc, row: &IndexRow) {
     match &row.dense {
         Some(v) => {
             enc.u8(1);
+            // The dense vector is LATENT_DIM-bounded by construction —
+            // the cast cannot truncate on any 64-bit target.
+            #[allow(clippy::cast_possible_truncation)]
             enc.u32(v.len() as u32);
             enc.f32s(v);
         }
@@ -602,10 +605,10 @@ fn parse_row(dec: &mut Dec) -> Result<IndexRow, String> {
     for slot in &mut dir {
         *slot = dec.read_f32()?;
     }
-    /// The dense direction, when the dense path indexed one (feature-gated
-    /// the same way the retriever's `IndexedChunk` is; the cache lane
-    /// disarms under the dense posture, so this is always `None` in
-    /// practice — carried for wire completeness).
+    // The dense direction, when the dense path indexed one (feature-gated
+    // the same way the retriever's `IndexedChunk` is; the cache lane
+    // disarms under the dense posture, so this is always `None` in
+    // practice — carried for wire completeness).
     #[cfg(feature = "dense_embed")]
     let dense = {
         let has = dec.read_u8()?;
@@ -662,7 +665,7 @@ fn parse_domain(dec: &mut Dec) -> Result<DomainSnapshot, String> {
     #[cfg(feature = "differential_anchor")]
     let anchor_mean = {
         let mut a = [0.0_f32; LATENT_DIM];
-        for slot in a.iter_mut() {
+        for slot in &mut a {
             *slot = d.read_f32()?;
         }
         a

@@ -383,6 +383,10 @@ impl LatentMatcher {
         // (same sources + the same order as the index pass below) so the
         // cache lane can hash the RESOLVED entries — overlay or compiled-in
         // seed alike — before any index is built. ----
+        // Consumed only when >= 1 domain feature is enabled; the
+        // --no-default-features posture compiles every call site out, so
+        // the definition alone trips `unused_macros` there.
+        #[allow(unused_macros)]
         macro_rules! resolve_corpus {
             ($domain:expr, $build:path) => {
                 overlay_for($domain).unwrap_or_else(|| {
