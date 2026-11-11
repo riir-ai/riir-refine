@@ -2,7 +2,7 @@
 
 **Status:** IN FLIGHT — staged distill landed (Research 394, YES B−); T0 byte-verify + T1 dedup DONE 2026-11-12 (read-only beside the amo Exclusive; evidence in the checkboxes); the cargo half (T2–T5) awaits a free amo window (Exclusive sr1197 job live; Plan-337 law held — this plan's build-dependent tasks start only in a quiet window).
 **Claimed:** amo-idle-i361-cargo, 1794434221, expires 2026-11-13T21:57:00+00:00 — the sr1197 Exclusive cleared (amo QUIET, 04:52 +07); the cargo half starts now (claim pushed before authoring per the Notes).
-**Claimed:** amo-zed-b351@amo, 1794434154, expires 2026-11-11T23:55:54+00:00 — the cargo half (T2–T7), amo quiet window (released by zed-220383b0 post-overflow via zed-66d0f9af; the +2h batch lease per the handoff contract, extended before expiry if the gates overrun)
+**Lease released:** amo-zed-b351@amo yielded unpushed-code within minutes of its 9074fb0a claim — the later-pushed claim (amo-idle-i361-cargo, e4289cff) is the arbiter and holds the batch (the push-is-the-arbiter law; provenance in prose, no claim-shaped residue).
 
 ## Source
 
