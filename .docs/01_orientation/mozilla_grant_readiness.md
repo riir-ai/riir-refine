@@ -231,7 +231,7 @@ cost: built for developers without cloud-AI budgets, anywhere.
 | Problem-community clarity | Software teams lose hours every week to compiler, linter and review friction; the rulewright fixes the mechanical share of it in-loop, in seconds, for free — alpha targets Rust, the domain set expands by community demand. |
 | Product-community fit | One command, offline, no account; free for open-source repositories forever; pluggable domains (Rust alpha, Docker and shader domains shipped, Python/JS/Go roadmap); the people it serves build it — their contributions become the corpus. |
 | Impact and values | Community corpus MIT-licensed and live today, with a committed, dated open-core plan (the core source opens during the grant term); consent-first, no token, no payment, no speculation; works without cloud AI; keeps small hardware useful. |
-| Sustainability potential | Free for OSS forever; contribution points — non-transferable, expiring reputation, never payment — meter hosted lanes as fair use; later revenue from enterprise corpus licensing, hosted/support services, and additional language domains (Python/Go planned). |
+| Sustainability potential | Free for OSS forever; contribution points — non-transferable, expiring reputation, never payment — meter hosted lanes as fair use; later revenue from enterprise corpus licensing, hosted/support services, additional language domains (Python/Go planned), and the hosted decision-serving API (Rethink opens as funded work — the moat is the service, not code restriction; owner amendment 2026-11-11). |
 
 ### 13.4 The corpus / points / governance story (the sustainability paragraph, one form)
 
