@@ -1,5 +1,6 @@
 # Issue 224 — the matcher index rebuilds on EVERY run: ~1.3 s of a 1.37 s warm run (95%)
-**Status:** open — measured, unclaimed. Sequenced AFTER Issue 221 P2b (the retriever this caches is being replaced; cache the post-P2b index, never the retiring KNN).
+**Status:** open — measured, unclaimed. Sequenced AFTER Issue 221 P2b (the retriever this caches is being replaced; cache the post-P2b index, never the retiring KNN). — 2026-11-11: the P2b blocker is DISCHARGED (the vendored ragplane seam landed, the modelless matcher core is the default build's path, lib.rs P2b rows verified) — T1–T4 unblocked.
+**Claimed:** zed-amo-i224, 1794371604, expires 2026-11-13T04:33:00+00:00
 
 ## Measurement (release binary, quiet rig)
 `cargo-refine 0.5.0` (release tarball, sha256 `c3ebca55…` verified), sample crate =
