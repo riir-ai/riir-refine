@@ -1,6 +1,7 @@
 # Issue 228 — draft domain: the no-default/all-features posture failures are pre-existing and unfixed (clippy + 1 hard test failure + a parallel-env race class)
 
 **Lease closed:** zed-7423d19b@amo epoch 1794441423 (D-b + D-c landed 2026-11-12, same session; D-a/D-d UNCLAIMED — the next lane claims them fresh)
+**Claimed:** zed-7423d19b@amo, 1794441576, expires 2026-11-13T23:59:36+00:00 — the D-a row (the no-default test-expectation adjudication); D-d stays open after it
 **Status:** OPEN 2026-11-12 — found during the issue-227 gate battery (the sec fix lane), every row baseline-proven at the then-HEAD `59f8cf50` via a detached origin worktree (`/Users/katopz/git/.i227baseline-wt`, since removed): these failures exist WITHOUT any of the sec changes. The batch-351 landing note (`.docs/11_domains/sec.md`'s Batch-351 section) honestly disclosed the clippy half as pre-existing but no issue carried the cluster — filing it here so the draft lane (or any posture lane) can drive it closed. None of the rows are sec-scoped; nothing here blocks a sec-only posture (sec + default are green).
 
 ## The rows (fix order: D-a first — a genuinely failing test, not a lint)
