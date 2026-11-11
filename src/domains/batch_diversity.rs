@@ -84,6 +84,13 @@ pub struct BatchDivRow {
     /// `Div_P^τ` of the uniform intake distribution over the batch's kNN
     /// graph (0.0 for `n < 2` — no graph, no spread measurable).
     pub div: f32,
+    /// The T2-unblock axis (b): the batch's spread RELATIVE to its
+    /// domain's corpus spread — `div / corpus_div`. `Some` only where the
+    /// batch Div is honest (`n ≥ 3`; `n = 2` is 0.5 by construction and
+    /// `n < 2` has no graph) and `corpus_div > 0`; `> 1` spreads wider
+    /// than the domain, `< 1` is the cluster-local signal the paper's
+    /// `Div_P^τ` curriculum failure names.
+    pub div_ratio: Option<f32>,
 }
 
 /// One domain's full readout.
@@ -101,6 +108,25 @@ pub struct DomainReport {
     pub corpus_div: f32,
     /// Total entries in the domain corpus.
     pub total: usize,
+    /// Spread of `div_ratio` over the rows where it is honest (`n ≥ 3`) —
+    /// the T2-unblock variance answer: does the relative axis separate
+    /// batches at all? A spread pinned at the ratio's own 8-D saturation
+    /// floor keeps T2 closed; real separation re-opens the correlation
+    /// cell's pre-registration.
+    pub ratio_stats: RatioStats,
+}
+
+/// min/median/max of the honest `div_ratio` rows of one domain.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RatioStats {
+    /// How many rows carry an honest ratio (`n ≥ 3`, `corpus_div > 0`).
+    pub count: usize,
+    /// Smallest honest ratio (0.0 when `count = 0` — the honest zero).
+    pub min: f32,
+    /// Median honest ratio (0.0 when `count = 0`).
+    pub median: f32,
+    /// Largest honest ratio (0.0 when `count = 0`).
+    pub max: f32,
 }
 
 /// One intake entry: rule id, the tag haystack (the entry's own text
@@ -249,22 +275,55 @@ pub fn domain_report(
         let member_vecs: Vec<[f32; LATENT_DIM]> = members.iter().map(|&i| vecs[i]).collect();
         let edges = knn_edges(&member_vecs, k);
         let div = div_of(members.len(), &edges, tau);
-        rows.push(BatchDivRow {
+        let row = BatchDivRow {
             domain,
             batch: *batch,
             n: members.len(),
             edges: edges.len(),
             div,
-        });
+            div_ratio: None, // corpus_div is computed below; filled after
+        };
+        rows.push(row);
     }
     let corpus_edges = knn_edges(&vecs, k);
     let corpus_div = div_of(total, &corpus_edges, tau);
+    // Fill the relative axis now that corpus_div exists, then fold the
+    // honest rows into the domain's spread stats.
+    for row in &mut rows {
+        if row.n >= 3 && corpus_div > 0.0 {
+            row.div_ratio = Some(row.div / corpus_div);
+        }
+    }
+    let mut ratios: Vec<f32> = rows.iter().filter_map(|r| r.div_ratio).collect();
+    ratios.sort_by(f32::total_cmp);
+    let ratio_stats = if ratios.is_empty() {
+        RatioStats {
+            count: 0,
+            min: 0.0,
+            median: 0.0,
+            max: 0.0,
+        }
+    } else {
+        let mid = ratios.len() / 2;
+        let median = if ratios.len() % 2 == 1 {
+            ratios[mid]
+        } else {
+            f32::midpoint(ratios[mid - 1], ratios[mid])
+        };
+        RatioStats {
+            count: ratios.len(),
+            min: ratios[0],
+            median,
+            max: ratios[ratios.len() - 1],
+        }
+    };
     DomainReport {
         domain,
         rows,
         untagged,
         corpus_div,
         total,
+        ratio_stats,
     }
 }
 
@@ -372,6 +431,19 @@ pub fn render_summaries(reports: &[DomainReport]) -> String {
                 out.push_str(" · newest none\n");
             }
         }
+        // The T2-unblock axis (b): the honest-ratio spread answers the
+        // variance question without reading the full table.
+        if r.ratio_stats.count > 0 {
+            let _ = writeln!(
+                out,
+                "batch-div ratio spread (n>=3, div/corpus_div): {}: c={} min={:.4} med={:.4} max={:.4}",
+                r.domain,
+                r.ratio_stats.count,
+                r.ratio_stats.min,
+                r.ratio_stats.median,
+                r.ratio_stats.max
+            );
+        }
     }
     out
 }
@@ -392,11 +464,22 @@ pub fn render_full(reports: &[DomainReport]) -> String {
             r.corpus_div
         );
         for row in &r.rows {
-            let _ = writeln!(
-                out,
-                "  b{} n={} edges={} div={:.4}",
-                row.batch, row.n, row.edges, row.div
-            );
+            match row.div_ratio {
+                Some(ratio) => {
+                    let _ = writeln!(
+                        out,
+                        "  b{} n={} edges={} div={:.4} ratio={:.4}",
+                        row.batch, row.n, row.edges, row.div, ratio
+                    );
+                }
+                None => {
+                    let _ = writeln!(
+                        out,
+                        "  b{} n={} edges={} div={:.4} ratio=-",
+                        row.batch, row.n, row.edges, row.div
+                    );
+                }
+            }
         }
     }
     out
@@ -497,6 +580,84 @@ fn encode(w: &Wire) -> Vec<u8> { match w { Wire::Mint { amount, memo } => { let 
         assert_eq!(r.rows[0].div, 0.0);
         assert_eq!(r.rows[0].edges, 0);
         assert_eq!(r.untagged, 0);
+        // n < 3 carries no honest ratio and no spread.
+        assert_eq!(r.rows[0].div_ratio, None);
+        assert_eq!(r.ratio_stats.count, 0);
+        assert_eq!(r.ratio_stats.max, 0.0);
+    }
+
+    #[test]
+    fn ratio_is_honest_only_where_batch_div_is() {
+        // n = 2 (0.5-by-construction) and n = 3 (the first honest row) in
+        // one domain: the ratio must fire ONLY on the n >= 3 rows and the
+        // stats must count only those.
+        let mk = |id: &str, batch: u32, text: &str| IntakeEntry {
+            rule_id: id.to_string(),
+            tag_haystack: format!("Batch {batch} /"),
+            embed_text: text.to_string(),
+        };
+        let intake = vec![
+            mk("a", 10, "fn alpha() { let x: u8 = 1; x }"),
+            mk("b", 10, "fn beta() { let y: u16 = 2; y }"),
+            mk("c", 11, "fn gamma() { spawn(queue) }"),
+            mk("d", 11, "fn delta() { drain(pipe) }"),
+            mk("e", 11, "fn eps() { flush(handle) }"),
+        ];
+        let r = domain_report("rust_perf", &intake, DEFAULT_TAU, DEFAULT_KNN_K);
+        let b10 = r.rows.iter().find(|row| row.batch == 10).unwrap();
+        let b11 = r.rows.iter().find(|row| row.batch == 11).unwrap();
+        assert_eq!(b10.n, 2);
+        assert_eq!(b10.div_ratio, None, "n=2 is 0.5-by-construction: no ratio");
+        assert_eq!(b11.n, 3);
+        let ratio = b11.div_ratio.expect("n=3 carries the honest ratio");
+        assert!(ratio.is_finite() && ratio > 0.0);
+        assert_eq!(r.ratio_stats.count, 1);
+        assert_eq!(r.ratio_stats.min, ratio);
+        assert_eq!(r.ratio_stats.median, ratio);
+        assert_eq!(r.ratio_stats.max, ratio);
+        // ratio is the quotient, checked against the raw scalars.
+        assert!((ratio - b11.div / r.corpus_div).abs() < 1e-6);
+    }
+
+    #[test]
+    fn tighter_batch_reads_lower_ratio_than_spread_batch() {
+        // The axis discriminates exactly where the paper's failure lives:
+        // three near-duplicate rules of one idea vs three genuinely
+        // different shapes — same domain, one corpus anchor.
+        let dup_a = "fn accumulate_rows(rows: &[Row]) -> Vec<f32> { let mut out = vec![0.0; 32]; \
+for row in rows { for (c, v) in row.cols.iter().enumerate() { out[c] += *v as f32; } } out }";
+        let dup_b = "fn accumulate_rows_copy(rows: &[Row]) -> Vec<f32> { let mut acc = vec![0.0; 32]; \
+for row in rows { for (c, v) in row.cols.iter().enumerate() { acc[c] += *v as f32; } } acc }";
+        let dup_c = "fn accumulate_rows_into(rows: &[Row]) -> Vec<f32> { let mut acc = vec![0.0; 32]; \
+for row in rows { for (c, v) in row.cols.iter().enumerate() { acc[c] += *v as f32; } } acc }";
+        let spread_a = "async fn spawn_task(queue: &mut Queue) { queue.drain() }";
+        let spread_b = "struct PacketHeader { magic: u32, crc: u16 }";
+        let spread_c = "impl fmt::Display for Err { fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, \"{}\", self.code) } }";
+        let mk = |id: &str, batch: u32, text: &str| IntakeEntry {
+            rule_id: id.to_string(),
+            tag_haystack: format!("Batch {batch} /"),
+            embed_text: text.to_string(),
+        };
+        let intake = vec![
+            mk("a", 1, dup_a),
+            mk("b", 1, dup_b),
+            mk("c", 1, dup_c),
+            mk("d", 2, spread_a),
+            mk("e", 2, spread_b),
+            mk("f", 2, spread_c),
+        ];
+        let r = domain_report("kernel_opt", &intake, DEFAULT_TAU, DEFAULT_KNN_K);
+        let dup = r.rows.iter().find(|row| row.batch == 1).unwrap();
+        let spread = r.rows.iter().find(|row| row.batch == 2).unwrap();
+        let dup_ratio = dup.div_ratio.expect("dup batch is n=3");
+        let spread_ratio = spread.div_ratio.expect("spread batch is n=3");
+        assert!(
+            dup_ratio < spread_ratio,
+            "the near-duplicate batch must read a tighter corpus-relative ratio: {dup_ratio} vs {spread_ratio}"
+        );
+        assert_eq!(r.ratio_stats.count, 2);
+        assert_eq!(r.ratio_stats.min, dup_ratio);
+        assert_eq!(r.ratio_stats.max, spread_ratio);
     }
 
     #[test]
@@ -555,6 +716,39 @@ fn encode(w: &Wire) -> Vec<u8> { match w { Wire::Mint { amount, memo } => { let 
         assert!(s.contains("batch-div (issue 222 T1"));
         assert!(s.contains("kernel_opt"));
         assert!(s.contains("newest b42"));
+        // n=1 row → no honest ratio → the spread line is withheld (an
+        // honest absence, never a fabricated zero row).
+        assert!(!s.contains("ratio spread"));
+    }
+
+    #[test]
+    fn spread_line_renders_when_honest_ratios_exist() {
+        let mk = |id: &str, batch: u32, text: &str| IntakeEntry {
+            rule_id: id.to_string(),
+            tag_haystack: format!("Batch {batch} /"),
+            embed_text: text.to_string(),
+        };
+        let intake = vec![
+            mk("a", 1, "fn alpha() { let x: u8 = 1; x }"),
+            mk("b", 1, "fn beta() { let y: u16 = 2; y }"),
+            mk("c", 1, "fn gamma() { let z: u32 = 3; z }"),
+        ];
+        let reports = vec![domain_report(
+            "rust_perf",
+            &intake,
+            DEFAULT_TAU,
+            DEFAULT_KNN_K,
+        )];
+        let s = render_summaries(&reports);
+        assert!(
+            s.contains("ratio spread"),
+            "summary carries the spread line: {s}"
+        );
+        let full = render_full(&reports);
+        assert!(
+            full.contains("ratio="),
+            "full table carries per-batch ratio: {full}"
+        );
     }
 
     #[cfg(feature = "kernel_opt")]
@@ -584,5 +778,14 @@ fn encode(w: &Wire) -> Vec<u8> { match w { Wire::Mint { amount, memo } => { let 
             "majority of kernel_opt entries are batch-tagged: {tagged}/{}",
             kernel.total
         );
+        // T2-unblock axis (b) sanity: where honest ratios exist, they are
+        // finite, positive, ordered within the stats, and the count
+        // matches the honest rows exactly.
+        let honest: Vec<f32> = kernel.rows.iter().filter_map(|row| row.div_ratio).collect();
+        assert_eq!(honest.len(), kernel.ratio_stats.count);
+        if let (Some(&lo), Some(&hi)) = (honest.first(), honest.last()) {
+            assert!(kernel.ratio_stats.min <= lo + 1e-6);
+            assert!(kernel.ratio_stats.max + 1e-6 >= hi);
+        }
     }
 }
