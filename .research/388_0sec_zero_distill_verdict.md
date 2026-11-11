@@ -1,6 +1,6 @@
 # Research 388 — Distill verdict: 0sec-labs/0 (full-stack AI security harness)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — batch landed (Batch 350, Plan 356; the owner-GO wait discharged per the 2026-11-11 gating decree, delegated reviewer verdict AGREE — session 6a5380ae recorded in the plan). Landed: 5 suggest-only rules (sql-identifier-interpolation-unallowlisted A− lead + predictable-rng-for-secret-material B+ + ecb-block-mode-selection B + jwt-alg-family-confusion-allowlist B− + untrusted-content-interpolated-into-prompt B−, the R6+R7 conjunction's lone survivor folded to InputValidation — NO new SecFamily variant) + the weak-hash co-occurrence rider face + the R5 SSTI drop (the defer-or-drop gate: an ATTACK playbook, no bounded detector vocabulary) + R7 dropped (dispatch-gating has no bounded parse surface). sec 51→56; fixtures `b350_fixtures.rs` 16/16 standalone-compiled AND executed pre-entry; gates: default lib 3842/0, sec 4248/0, clippy -D ×4 postures clean, retrieval floors HELD 29/0 no re-pin, pins_manifest written WITH the corpus change, score-bench runs appended (clippy lane FLAT 96.4%), release-set binary NOT owed (sec not in RELEASE_FEATURES).
 
 ## Source + provenance
 

@@ -212,6 +212,32 @@
 //! | `luhn-validate-numeric-pii-candidates-before-redact` | `luhn_before_redact::detect` | the validator scheme + the rescan policy are the detector's design decisions (Luhn owns cards; other PII classes carry other schemes), and a compliance-first deployment deliberately over-redacts — that stance is legitimate; distinct-from `packed-field-silent-overflow-wrong-key` IN-RULE: a mask/checksum for overflow KEYS in packed fields (wire arithmetic), this checksum-before-substitute in PII DETECTION; `luhn|credit.card` have ZERO corpus owners (grep at authoring) |
 //! | `redaction-audit-hit-carries-raw-match` | `audit_hit_fingerprint::detect` | whether previews ship at all and the tier boundaries are compliance decisions, not physics — a fingerprint is derived data (first4+last4 of a 40-char token still leaks 8 chars) and a compliance-first deployment may want full masks or nothing; distinct-from `constant-time-secret-compare` IN-RULE (comparison TIMING vs emission CONTENT — different leak axis) and `secret-key-without-zeroize` (memory lifetime/erase vs the log copy); the `fingerprint` hits at authoring are entries_08's hash-table fingerprint SLOTS (a storage layout, not an emission mask) — zero owners of the preview/mask-emission class |
 
+//! ## Batch 350 (2026-11-11, Plan 356) — the 0sec-labs/0 distill joins
+//!
+//! Five detectors from the 0sec-labs/0 distill (Research 388, MIT OR
+//! Apache-2.0 @ `f7020eb2` — the full-stack AI security harness;
+//! cited as class provenance, fixtures are ORIGINAL syntheses), the
+//! corpus's first `SQLi` rule + the crypto-misuse family's `RNG`/`ECB`/`JWT`
+//! faces + the agent-family fold. ALL suggest-only, never `FIXABLE_SEC`:
+//!
+//! | Rule | Detector | Why suggest-only |
+//! |---|---|---|
+//! | `sql-identifier-interpolation-unallowlisted` | `sql_identifier_allowlist::detect` | the allowlist's CONTENT is the schema's answer (which columns are sortable is the data model); the two-regime law in-rule (values bind, identifiers cannot — the bind chain never suppresses); distinct-from `unchecked-wire-arithmetic` IN-RULE (arithmetic-overflow sink vs SQL-parser interpolation sink) |
+//! | `predictable-rng-for-secret-material` | `predictable_rng_secret::detect` | the `CSPRNG` choice is a dependency decision; the source's `SECURITY_CONTEXT_RX` transcribed as the fn-scope secret vocabulary (their `Math.random` animation law = the no-vocabulary silence); `from_entropy` deliberately not a gate token |
+//! | `ecb-block-mode-selection` | `ecb_mode_selection::detect` | the AEAD + nonce-discipline choice is deployment/interop policy; the source's no-context-gate law transfers whole (no suppression marker); the `Ecb` substring hazard bounded by exact-suffix + cipher-stem-anchored literal gates |
+//! | `jwt-alg-family-confusion-allowlist` | `jwt_alg_allowlist::detect` | the single algorithm to pin is the deployment's signing choice; MANDATORY in-rule adjudication vs `jwt-insecure-validation-flags` (DISABLED-validation axis vs WRONG-ALLOWLIST axis, both directions distinct); the source's no-allowlist face is an honest NO (jsonwebtoken's `Validation::new` defaults to the passed algorithm — the safe default) |
+//! | `untrusted-content-interpolated-into-prompt` | `untrusted_prompt_content::detect` | the fence/label vocabulary is the agent framework's wire decision; precision honestly POOR (Research 388's own words) — vocabulary-gated, review decides; the R6+R7 conjunction's LONE SURVIVOR (R7 dropped — dispatch-gating has no bounded parse surface), so NO new `SecFamily` variant (the APPEND-ONLY schema stays untouched) |
+//!
+//! Plus the count-neutral FACE on `weak-hash-to-blake3`: the source's
+//! security-context co-occurrence precision law ("we do NOT flag every
+//! MD5"), carried as a face, never a new rule. The recorded DROPS (the
+//! gate worked — the full ledger in the landing note): hardcoded-key
+//! (scanner-lane routing), pickle/deser + eval (language-absent in safe
+//! Rust), typosquat/install-script oracles (scan-lane screening),
+//! refusal-classifier + score-only suppression (annotations), R5 SSTI
+//! (the defer-or-drop gate: an ATTACK playbook, no bounded detector
+//! vocabulary), R7 (the conjunction gate).
+
 use syn::File;
 
 pub mod arc_raw_boundary;
@@ -223,10 +249,12 @@ pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
 pub mod cors_any_creds;
 pub mod drop_no_panic;
+pub mod ecb_mode_selection;
 pub mod egress_url;
 pub mod ffi_catch_unwind;
 pub mod gateway_ctor;
 pub mod ipv4_mapped_range;
+pub mod jwt_alg_allowlist;
 pub mod jwt_insecure_validation;
 pub mod keyed_state_cap;
 pub mod length_prefix_alloc;
@@ -238,6 +266,7 @@ pub mod outparam_init_contract;
 pub mod packed_field_wrong_key;
 pub mod panic_handler_guard;
 pub mod path_join_escape;
+pub mod predictable_rng_secret;
 pub mod ptr_deref_null_check;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
@@ -246,9 +275,11 @@ pub mod shell_string_command;
 pub mod sigmoid_minus_one;
 pub mod slice_len_guard;
 pub mod softmax_collapse;
+pub mod sql_identifier_allowlist;
 pub mod strike_cross_site;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;
+pub mod untrusted_prompt_content;
 pub mod webhook_raw_bytes;
 pub mod zeroize_secret;
 
