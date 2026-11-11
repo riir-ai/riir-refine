@@ -1,6 +1,6 @@
 # Research 394 — Distill verdict: 0sec-labs/foxguard (Rust SAST, 245 built-in rules)
 
-**Status:** DISTILLED — staged for the next sec batch (nominal Batch 351, Plan 361). Zero cargo, zero GPU at verdict time (amo Exclusive sr1197 job live — Plan-337 held). Verdict: **YES B− corpus / lane-intel NONE (product intel noted, no issue filed) / product-coverage YES — seeds FOUR new sec families (PQ/quantum-readiness, availability/slowloris, open-redirect, ReDoS) + the value-position half of the sqlx sink family.**
+**Status:** LANDED — Batch 351 shipped 2026-11-12 (Plan 361 T2–T7; 5 rules + 2 faces + 2 honest drops; fixtures 20/20 pre-entry; retrieval floors held; the landing commit carries the full ledger). Staged distill verdict below, preserved verbatim. Verdict: **YES B− corpus / lane-intel NONE (product intel noted, no issue filed) / product-coverage YES — seeds FOUR new sec families (PQ/quantum-readiness, availability/slowloris, open-redirect, ReDoS) + the value-position half of the sqlx sink family.**
 
 ## Source + provenance
 

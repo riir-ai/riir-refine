@@ -227,6 +227,10 @@
 //! | `ecb-block-mode-selection` | `ecb_mode_selection::detect` | the AEAD + nonce-discipline choice is deployment/interop policy; the source's no-context-gate law transfers whole (no suppression marker); the `Ecb` substring hazard bounded by exact-suffix + cipher-stem-anchored literal gates |
 //! | `jwt-alg-family-confusion-allowlist` | `jwt_alg_allowlist::detect` | the single algorithm to pin is the deployment's signing choice; MANDATORY in-rule adjudication vs `jwt-insecure-validation-flags` (DISABLED-validation axis vs WRONG-ALLOWLIST axis, both directions distinct); the source's no-allowlist face is an honest NO (jsonwebtoken's `Validation::new` defaults to the passed algorithm — the safe default) |
 //! | `untrusted-content-interpolated-into-prompt` | `untrusted_prompt_content::detect` | the fence/label vocabulary is the agent framework's wire decision; precision honestly POOR (Research 388's own words) — vocabulary-gated, review decides; the R6+R7 conjunction's LONE SURVIVOR (R7 dropped — dispatch-gating has no bounded parse surface), so NO new `SecFamily` variant (the APPEND-ONLY schema stays untouched) |
+//! | `sql-query-value-interpolation-unbound` | `sql_query_value_bind::detect` | the bind-parameter rewrite renumbers placeholders + changes the call's argument list — a crate-API decision; MANDATORY in-rule adjudication vs `sql-identifier-interpolation-unallowlisted` BOTH directions (value position vs identifier position — the ORDER BY/GROUP BY adjacency is refused here; a `.bind(` in the fn suppresses here, never there); the source's no-placeholder FP law + the trusted-constant anti-regime carried in-rule |
+//! | `quantum-vulnerable-primitive-selection` | `pq_primitive_selection::detect` | the PQ migration is a deployment decision (wire peers must agree; hybrid-vs-full-PQ is a compliance profile); the source's boundary law (`crypto_token_in_path` leading-word) + direct-call law + PQ-safe skip list carried whole; fires at home on the SSH Ed25519 account-key surface — honest, not wrong |
+//! | `regex-backtracking-engine-untrusted-pattern` | `redos_engine_pattern::detect` | the repair is a triple choice (linear engine / input bound / strip lookarounds-backrefs); THE ENGINE SPLIT is the decision content — the `regex` crate is linear-time by construction and is NEVER flagged on pattern shape (the in-rule anti-regime); the nested-quantifier shape gate carries the source's plain-alternation FP reduction |
+//! | `server-connection-without-read-timeout` | `server_read_timeout::detect` | the deadline VALUE is a protocol decision (long-poll = bounded-but-long) + the refusal shape is the error-path design; ADJACENT-DISTINCT from `untrusted-keyed-state-unbounded` IN-RULE (per-CONNECTION wait vs peer-KEYED table growth — different resource, fix, attacker cost); std sync shape only (the async face is future) |
 //!
 //! Plus the count-neutral FACE on `weak-hash-to-blake3`: the source's
 //! security-context co-occurrence precision law ("we do NOT flag every
@@ -244,6 +248,7 @@ pub mod arc_raw_boundary;
 pub mod archive_extract;
 pub mod audit_hit_fingerprint;
 pub mod auth_cookie_missing_flags;
+pub mod b351_faces;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
@@ -261,21 +266,26 @@ pub mod length_prefix_alloc;
 pub mod luhn_before_redact;
 pub mod mutation_header_gate;
 pub mod nan_safe_cmp;
+pub mod open_redirect_gate;
 pub mod origin_rebind_gate;
 pub mod outparam_init_contract;
 pub mod packed_field_wrong_key;
 pub mod panic_handler_guard;
 pub mod path_join_escape;
+pub mod pq_primitive_selection;
 pub mod predictable_rng_secret;
 pub mod ptr_deref_null_check;
+pub mod redos_engine_pattern;
 pub mod secret_ct_eq;
 pub mod secret_file_create;
 pub mod sensitive_data_boundary;
+pub mod server_read_timeout;
 pub mod shell_string_command;
 pub mod sigmoid_minus_one;
 pub mod slice_len_guard;
 pub mod softmax_collapse;
 pub mod sql_identifier_allowlist;
+pub mod sql_query_value_bind;
 pub mod strike_cross_site;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;

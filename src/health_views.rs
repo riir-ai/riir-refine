@@ -879,7 +879,7 @@ mod tests {
         assert!(line.contains("clippy 120"), "{line}");
         assert!(line.contains("kernel 1076"), "{line}");
         assert!(line.contains("perf 314"), "{line}");
-        assert!(line.contains("sec 56"), "{line}");
+        assert!(line.contains("sec 61"), "{line}");
         assert!(line.contains("docker 31"), "{line}");
         assert!(line.contains("dist 8"), "{line}");
         assert!(line.contains("shader 8"), "{line}");
@@ -906,7 +906,7 @@ mod tests {
                 "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
             ]
         );
-        assert_eq!(rows[0].total, 1613); // Batch 350: sec +5 (the 0sec distill, Plan 356 / Research 388); prior: Batch 349: rust_perf +2 (entries_71, Plan 360 / Research 393); prior: Batch 348: clippy +2 (approx_constant + useless_vec — the P111 + P112 corpus gaps, plan 359); prior: Batch 347: clippy +1 (let_unit_value — the P120 rulewright-miss trio, plan 358); prior: plan 354: clippy +2 (the doc-section pair, the Bench-141 dual-evidence heads); prior: Batch 345: perf +5 (entries_70, the LocalSR distill, Plan 357 / Research 389) + sec +1 (the execution-artifact trust ladder) + kernel +1 (entries_gpu_154, the backend acceptance gate); prior: Batch 343: perf +2 (entries_69, the sccache cache-layer pair, Plan 355 / Research 387); prior: Batch 342: sec +2 (the harness-adapters pair, Plan 352 / Research 385); prior: Batch 341: kernel +2 (entries_gpu_153) + perf +1 (entries_68, the metal-graph pair + the measurement-honesty rule, Plan 350 / Research 383); prior: Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
+        assert_eq!(rows[0].total, 1618); // Batch 351: sec +5 (the foxguard distill, Plan 361 / Research 394); prior: Batch 350: sec +5 (the 0sec distill, Plan 356 / Research 388); prior: Batch 349: rust_perf +2 (entries_71, Plan 360 / Research 393); prior: Batch 348: clippy +2 (approx_constant + useless_vec — the P111 + P112 corpus gaps, plan 359); prior: Batch 347: clippy +1 (let_unit_value — the P120 rulewright-miss trio, plan 358); prior: plan 354: clippy +2 (the doc-section pair, the Bench-141 dual-evidence heads); prior: Batch 345: perf +5 (entries_70, the LocalSR distill, Plan 357 / Research 389) + sec +1 (the execution-artifact trust ladder) + kernel +1 (entries_gpu_154, the backend acceptance gate); prior: Batch 343: perf +2 (entries_69, the sccache cache-layer pair, Plan 355 / Research 387); prior: Batch 342: sec +2 (the harness-adapters pair, Plan 352 / Research 385); prior: Batch 341: kernel +2 (entries_gpu_153) + perf +1 (entries_68, the metal-graph pair + the measurement-honesty rule, Plan 350 / Research 383); prior: Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
     }
 
     #[test]

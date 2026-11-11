@@ -349,7 +349,18 @@ no trailing boundary) — a bare content checksum over file bytes for a cache \
 key is deliberately NOT flagged; the co-occurrence gate is a refinement of \
 this rule's own name-and-dep scoping (the weak-hash trigger scope rides the \
 dep gate; the vocabulary scoping is the same precision axis their detector \
-models) — carried as a face, never a new rule"
+models) — carried as a face, never a new rule. FACE (Batch 351, foxguard — \
+the use-site-only + complete-segment laws): their weak-hash detector's \
+precision laws, verbatim at the pin (rust_lang.rs NoWeakHash): \"We \
+deliberately do NOT flag `use md5;` imports — a dead/unused import is not \
+itself a vulnerability and produced false positives\" (the use-site-only \
+scoping — the call site is the surface, never the import list) and \"the \
+algorithm name must appear as a complete `::`-separated path segment so \
+identifiers that merely contain it (e.g. a `sha1sum_path` helper) are not \
+matched\" (the leading-word boundary — the same precision family as the \
+PQ rule's crypto_token_in_path). Both laws refine this rule's existing \
+trigger scope (which already names the call-site constructors) — carried \
+as face text, never a behavior change"
                 .to_string(),
             buggy_code: "pub fn legacy_id(data: &[u8]) -> [u8; 20] {\n    use sha1::{Digest, Sha1};\n    let out: [u8; 20] = Sha1::digest(data).into();\n    out\n}\n".to_string(),
             fixed_code: "pub fn legacy_id(data: &[u8]) -> blake3::Hash {\n    blake3::hash(data)\n}\n".to_string(),
@@ -769,7 +780,15 @@ regime is a design decision. Honest recall limits: fires on the `sh`/`bash`/\
 (nmap, tlsx invoked directly) stays silent (argument injection there is a \
 different, narrower class); a STATIC `-c` script with no interpolation stays \
 silent; macro-token bodies are never descended into; cross-fn construction \
-undetected. Batch 292 / Plan 296 / Research 330 (hevnsnt/CVEngine @ \
+undetected. FACE (Batch 351, foxguard — the PROGRAM-IDENTITY layer): the \
+program axis the shell rule does not own — Command::new(<non-constant>) \
+where the program resolves from PATH or user choice is the binary-planting \
+class (CWE-426 untrusted search path / CWE-427 PATH hijack); the repair is \
+resolving against a fixed/allowlisted program set or an absolute path \
+BEFORE spawn. Recorded as the rescoped-drop of the Batch-351 R6 candidate \
+(foxguard flags every dynamic Command::new — dynamic program paths are \
+ubiquitous and legitimate, the FP pressure is structural): carried as \
+this face, never a rule. Batch 292 / Plan 296 / Research 330 (hevnsnt/CVEngine @ \
 `9dd9c441`, GPL-3.0 — cited as class provenance; the fixture is an original \
 synthesis)."
                 .to_string(),
@@ -2206,6 +2225,214 @@ original synthesis, standalone-compiled AND executed before entry)."
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ══ Batch 351 (2026-11-12, Plan 361 / Research 394): the       ══
+        // 0sec-labs/foxguard sec-corpus transcription — five rules +
+        // two faces + two honest drops. Source: 0sec-labs/foxguard @
+        // fbeab16e1eb0dd38c6b6ddd451415495aca2b7d8 (MIT OR Apache-2.0);
+        // FOUR new families seed here (PQ-readiness, ReDoS,
+        // slowloris, open-redirect) + the VALUE-position half of the
+        // SQL sink family; fixtures are ORIGINAL syntheses.
+        // ── sql-query-value-interpolation-unbound (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "sql-query-value-interpolation-unbound".to_string(),
+            sec_concept: "a DYNAMIC VALUE interpolated into a SQL string — \
+format!(\"SELECT … WHERE x = '{v}'\"), a `+` concat of a non-literal \
+operand — flowing into a SQL-method sink (query/execute/raw_sql/sql_query \
+vocabulary) rides statement TEXT instead of a bind parameter, so a crafted \
+value (a quote, a semicolon, a comment marker) becomes executable SQL — \
+the structural-SQLI CWE-89 VALUE face. THE IN-RULE ADJUDICATION vs \
+`sql-identifier-interpolation-unallowlisted` (Batch 350 — same sink \
+family, OPPOSITE position, the jwt-rules precedent): THAT owns the \
+IDENTIFIER position (ORDER BY {key}, SELECT {col} FROM — values bind, \
+identifiers cannot, the repair is the ALLOWLIST, bind never suppresses); \
+THIS owns the VALUE position (WHERE x = '{v}', VALUES ('{v}'), \
+LIKE '%{q}%' — values CAN bind, the repair is the BIND PARAMETER, and a \
+`.bind(` call in the fn suppresses HERE while an allowlist marker does \
+NOT: an allowlist on one column leaves the same statement's value slots \
+open). Cross-fire discipline in-rule: the identifier-position literal \
+(ORDER BY/GROUP BY adjacency) is refused — that rule's finding. THE \
+ANTI-REGIMES carried (the source's own FP law, verbatim at the pin: a \
+static format!(\"SELECT 1\") with no placeholder 'cannot inject anything \
+and was a false positive'; PLUS the trusted-constant arm — B350's fixed \
+fixture legitimately interpolates an allowlisted key, so only \
+non-literal operands count as flowing). THE BIND NOTE: a bind chain \
+covering one value does not cover an UNBOUND sibling value — the fn-wide \
+suppression is the fix's posture, review decides the mixed case. \
+Suggest-only: the bind rewrite renumbers placeholders and changes the \
+call's argument list — a crate-API decision. Honest recall limits: SQL \
+assembled across helpers is unconnected parse-only; typed query builders \
+(sea-query/diesel) never carry a SQL literal — an honest NO by \
+construction; an unquoted value position (WHERE x = {v}) fires too and \
+review decides. Detector: `proposers::sql_query_value_bind`. Fixture: \
+`fixtures/b351_fixtures.rs` F1. Batch 351 / Plan 361 / Research 394 \
+(0sec-labs/foxguard @ `fbeab16`, MIT OR Apache-2.0 — cited as class \
+provenance; the fixture is an original synthesis, standalone-compiled \
+AND executed before entry)."
+                .to_string(),
+            buggy_code: "use sqlx::Row;\n\n/// The lookup endpoint: the value comes off the request and is\n/// formatted into the statement TEXT — a quote in the value breaks the\n/// quoted slot.\npub async fn lookup_user(\n    conn: &mut sqlx::PgConnection,\n    name: &str,\n) -> Result<Vec<(i64, String)>, sqlx::Error> {\n    let sql = format!(\"SELECT id, name FROM users WHERE name = '{name}'\");\n    let rows = sqlx::query(&sql).fetch_all(conn).await?;\n    Ok(rows\n        .into_iter()\n        .map(|r| (r.get(\"id\"), r.get(\"name\")))\n        .collect())\n}\n"
+                .to_string(),
+            fixed_code: "use sqlx::Row;\n\n/// The bind parameter is the fix: the statement text is FIXED and the\n/// value rides a placeholder — a quote in the value is just data.\npub async fn lookup_user(\n    conn: &mut sqlx::PgConnection,\n    name: &str,\n) -> Result<Vec<(i64, String)>, sqlx::Error> {\n    let sql = \"SELECT id, name FROM users WHERE name = ?1\";\n    let rows = sqlx::query(&sql)\n        .bind(name)\n        .fetch_all(conn)\n        .await?;\n    Ok(rows\n        .into_iter()\n        .map(|r| (r.get(\"id\"), r.get(\"name\")))\n        .collect())\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── quantum-vulnerable-primitive-selection (CryptoHygiene; suggest-only) ──
+        SecRule {
+            rule_id: "quantum-vulnerable-primitive-selection".to_string(),
+            sec_concept: "a classical cryptographic primitive selected at a direct call \
+path — rsa::RsaPrivateKey::new, ed25519_dalek::SigningKey::generate, \
+p256::ecdsa, x25519_dalek::decapsulate — is quantum-vulnerable: a \
+harvest-now-decrypt-later adversary records today's ciphertexts and \
+signatures and breaks the primitive once a large enough quantum computer \
+exists (CWE-327). THE PQ FAMILY SEED — zero prior corpus owners. THE \
+SOURCE LAWS carried whole (0sec-labs/foxguard rust_lang.rs \
+PqVulnerableCrypto + pq.rs): the vulnerable inventory (RSA/ECDSA/ECDH/ \
+DSA/Ed25519/X25519/P-256/P-384/P-521/k256); the PQ-safe skip list — \
+ml_dsa|ml_kem|slh_dsa|fn_dsa|hqc — \"recognised so early adopters of \
+those crates aren't flagged\" (plus the hybrid migration composite \
+x25519_ml_kem768); the boundary law (crypto_token_in_path) verbatim: \
+\"keeps rsa::RsaPrivateKey::new and ed25519_dalek::SigningKey::generate \
+flagged while ignoring incidental matches like a user_ed25519_key_id\
+\" — the algorithm token must LEAD a ::-segment, never a buried \
+occurrence; the direct-call precision law verbatim: \"Only match direct \
+calls (scoped_identifier), not chained method calls\"; the CNSA 2.0 \
+migration table (signatures → ML-DSA-65 (FIPS 204) / FN-DSA (FIPS 206 \
+draft) with hybrid cert chains; key establishment → X25519MLKEM768 \
+hybrid (FIPS 203) / ML-KEM-1024, HQC the code-based diversity hedge; \
+the CNSA 2.0 web/cloud deadline class 2033). Suggest-only: primitive \
+migration is a deployment decision — wire-protocol peers must agree, \
+and hybrid-vs-full-PQ is a compliance profile. HONEST POSTURE: fires \
+at home (the account-key surface is SSH Ed25519) and the advice is the \
+migration table — honest, not wrong; the primitive claims the \
+mechanism, never a deadline. Verification paths flag too (the source \
+does not exempt them) and review decides. Detector: \
+`proposers::pq_primitive_selection`. Fixture: `fixtures/b351_fixtures.rs` \
+F2. Batch 351 / Plan 361 / Research 394 (0sec-labs/foxguard @ `fbeab16`, \
+MIT OR Apache-2.0 — cited as class provenance; the fixture is an \
+original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "use ed25519_dalek::{Signature, Signer, SigningKey};\n\n/// The account-key signer: a classical signature over session\n/// challenges — harvestable today, breakable post-PQC.\npub fn sign_challenge(sk: &SigningKey, challenge: &[u8]) -> Signature {\n    sk.sign(challenge)\n}\n"
+                .to_string(),
+            fixed_code: "use ml_dsa::{Signature, SigningKey};\n\n/// The account-key signer on the PQ primitive: ML-DSA (FIPS 204) —\n/// the same API shape, no harvest-now-decrypt-later exposure.\npub fn sign_challenge(sk: &SigningKey, challenge: &[u8]) -> Signature {\n    sk.sign(challenge)\n}\n"
+                .to_string(),
+            family: SecFamily::CryptoHygiene,
+        },
+        // ── regex-backtracking-engine-untrusted-pattern (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "regex-backtracking-engine-untrusted-pattern".to_string(),
+            sec_concept: "a regex pattern with a NESTED QUANTIFIER — a quantified group \
+that itself contains a quantifier, (a+)+ / (a*)* / (\\\\d+)+ — executed by a \
+BACKTRACKING engine over attacker-shaped input degrades catastrophically: \
+the engine splits candidates exponentially over a near-miss input \
+(aaaa…b) and pins the worker (CWE-1333, ReDoS). THE ENGINE SPLIT IS THE \
+DECISION CONTENT (the Rust-specific law): the `regex` crate (RE2-derived) \
+is LINEAR-TIME by construction — the in-rule ANTI-REGIME: never flag a \
+regex::Regex on pattern shape; the shape gate fires only where a \
+backtracking engine is selected (fancy_regex — the backtracking fallback \
+for lookarounds/backreferences — and pcre2). THE SOURCE SHAPE LAW, \
+verbatim at the pin (0sec-labs/foxguard js_redos_re): \"Only flag a \
+quantified group that itself contains a quantifier, i.e. a genuine nested \
+quantifier like (a+)+ / (a*)* / (\\\\d+)+. Plain alternation groups such as \
+(a|b)+ are not catastrophic on their own, so we no longer flag them \
+(false-positive reduction).\" The corpus carried fancy-regex only as a \
+fix spelling (ascii-token-unicode-word-boundary-scan-miss) — never \
+before as a hazard surface. Suggest-only: the repair is a triple choice \
+— prefer the linear engine for untrusted patterns, bound the input \
+length, or strip the backtracking features (no lookarounds/backrefs) \
+when the pattern is user-supplied — each a design + dependency decision. \
+Honest recall limits: the engine gate is fn-scope vocabulary (an aliased \
+import one module away is an honest NO); a nested-quantifier pattern on \
+a TRUSTED, length-bounded input fires and review decides (the shape is \
+the hazard's precondition, not its proof); catastrophic shapes BEYOND \
+nested quantifiers (evil-number regressions, unicode-collation \
+explosions) are out of class — the source's own detector scopes to the \
+nested-quantifier shape. Detector: `proposers::redos_engine_pattern`. \
+Fixture: `fixtures/b351_fixtures.rs` F3. Batch 351 / Plan 361 / \
+Research 394 (0sec-labs/foxguard @ `fbeab16`, MIT OR Apache-2.0 — cited \
+as class provenance; the fixture is an original synthesis, \
+standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "use fancy_regex::Regex;\n\n/// The tag scanner: a nested-quantifier pattern under a BACKTRACKING\n/// engine — a near-miss input (`aaaa…b`) explodes the candidate split.\npub fn scan_tag(input: &str) -> bool {\n    let re = Regex::new(\"^(a+)+$\").unwrap();\n    re.is_match(input).unwrap_or(false)\n}\n"
+                .to_string(),
+            fixed_code: "use regex::Regex;\n\n/// The tag scanner on the LINEAR engine: the same pattern shape, no\n/// backtracking — the cost is input-bounded by construction.\npub fn scan_tag(input: &str) -> bool {\n    let re = Regex::new(\"^(?:a+)+$\").unwrap();\n    re.is_match(input)\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── server-connection-without-read-timeout (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "server-connection-without-read-timeout".to_string(),
+            sec_concept: "a std TcpListener accept loop handing a stream to a \
+per-connection handler WITHOUT a set_read_timeout/set_write_timeout call \
+in the handler's scope: a client that opens a connection and trickles \
+(or never sends) the request pins the worker connection indefinitely — a \
+handful of stalled sockets exhausts the worker pool (slowloris, CWE-400 \
+resource exhaustion). THE SOURCE LAW, verbatim at the pin \
+(0sec-labs/foxguard go.rs NetHttpNoTimeout): \"http.ListenAndServe \
+without timeout configuration enables slowloris attacks\" — fix advice \
+verbatim: \"use http.Server with ReadTimeout/WriteTimeout to prevent \
+slowloris\". The Rust shape differs by API, not law: the class shape is \
+the std accept loop (our serve edges ARE this shape), the deadline \
+vocabulary is set_read_timeout/set_write_timeout. ADJACENT-DISTINCT \
+from `untrusted-keyed-state-unbounded` IN-RULE: that owns peer-KEYED \
+TABLE growth (unbounded map entries per attacker identity); THIS owns \
+per-CONNECTION WAIT (a worker pinned by one stalled stream) — different \
+resource (rows vs worker-seconds), different fix (a cap + eviction \
+policy vs a deadline), different attacker cost (many identities vs many \
+sockets). Suggest-only: the deadline VALUE is a protocol decision (an \
+interactive edge wants seconds; a long-poll/SSE endpoint wants \
+bounded-but-long) and the refusal shape (drop vs 408) is the error-path \
+design. THE DEADLINE IS A VALUE, NEVER A KILL: the class fires on the \
+ABSENCE of a deadline, never on a chosen long value. Honest recall \
+limits: the timeout vocabulary must be in the handler's scope (a \
+deadline set in a helper is an honest NO — the fn-level law); async \
+stacks carry the same class under different vocabulary — this detector \
+scopes to the std sync shape (the transcription law: the Rust shape \
+stated, the std surface); the async face is future. Detector: \
+`proposers::server_read_timeout`. Fixture: `fixtures/b351_fixtures.rs` \
+F4. Batch 351 / Plan 361 / Research 394 (0sec-labs/foxguard @ `fbeab16`, \
+MIT OR Apache-2.0 — cited as class provenance; the fixture is an \
+original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "use std::net::TcpListener;\n\n/// The serve edge: connections handled with NO deadline — a client\n/// that never completes the request pins the worker forever.\npub fn serve(listener: TcpListener) {\n    for stream in listener.incoming().flatten() {\n        std::thread::spawn(move || handle_connection(stream));\n    }\n}\n"
+                .to_string(),
+            fixed_code: "use std::net::TcpListener;\nuse std::time::Duration;\n\n/// The serve edge with deadlines: the stalled client is dropped AT the\n/// deadline; the value is bounded-but-long for the long-poll lanes.\npub fn serve(listener: TcpListener) {\n    for stream in listener.incoming().flatten() {\n        std::thread::spawn(move || {\n            let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));\n            let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));\n            handle_connection(stream);\n        });\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── open-redirect-unvalidated-target (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "open-redirect-unvalidated-target".to_string(),
+            sec_concept: "a redirect target built from caller-controlled input — \
+Redirect::to(&user_url) / a framework redirect whose argument is a \
+non-constant string — lets a crafted link bounce a user through YOUR \
+origin to an attacker-chosen destination (phishing that shows a \
+legitimate URL in the bar, OAuth return-token theft; CWE-601). THE \
+SOURCE'S SAFE HALF is explicit (0sec-labs/foxguard python.rs \
+NoOpenRedirect, verbatim at the pin): \"Framework helpers that build a \
+safe, server-controlled URL from a route/view name. A redirect to their \
+result is not user-controlled\" (the url_for / reverse / \
+get_absolute_url family) — plus the constant-binding law: \"Identifiers \
+proven to hold only constant literals are not dynamic.\" The Rust \
+fix-space transcribes: relative-only normalization (refuse absolute AND \
+protocol-relative // targets), the route-name builder, or an explicit \
+external-host allowlist. Suggest-only: the allowlist's CONTENT is the \
+deployment's route/host policy and the redirect API is \
+framework-specific. Honest recall limits: redirect vocabulary is \
+fn-scope (a redirect assembled across helpers is unconnected \
+parse-only); a DELIBERATE external redirect (an OAuth provider's hosted \
+pages, a documented partner URL) fires and review decides — the rule \
+flags the pattern class, never a policy decision; const-proven operands \
+are silent. Detector: `proposers::open_redirect_gate`. Fixture: \
+`fixtures/b351_fixtures.rs` F5. Batch 351 / Plan 361 / Research 394 \
+(0sec-labs/foxguard @ `fbeab16`, MIT OR Apache-2.0 — cited as class \
+provenance; the fixture is an original synthesis, standalone-compiled \
+AND executed before entry)."
+                .to_string(),
+            buggy_code: "use axum::response::Redirect;\n\n/// The bounce endpoint: the target comes off the query string and goes\n/// straight into the redirect — a crafted link bounces through this\n/// origin to an attacker-chosen destination.\npub async fn bounce(target: &str) -> Redirect {\n    Redirect::to(target)\n}\n"
+                .to_string(),
+            fixed_code: "use axum::response::Redirect;\n\n/// The bounce endpoint, relative-only: absolute and protocol-relative\n/// targets refuse; relative paths pass. The route-name builder is the\n/// other safe shape.\npub async fn bounce(target: &str) -> Result<Redirect, &'static str> {\n    if target.starts_with('/') && !target.starts_with(\"//\") {\n        Ok(Redirect::to(target))\n    } else {\n        Err(\"external redirect target refused\")\n    }\n}\n"
+                .to_string(),
+            family: SecFamily::InputValidation,
+        },
     ]
 }
 
@@ -2994,6 +3221,169 @@ mod tests {
             assert!(
                 syn::parse_file(&rule.fixed_code).is_ok(),
                 "batch-350 {rid}: fixed code must parse"
+            );
+        }
+    }
+
+    /// Batch 351 (the 0sec-labs/foxguard sec distill, Plan 361 /
+    /// Research 394, 0sec-labs/foxguard @ fbeab16, MIT OR Apache-2.0)
+    /// — presence, family, provenance discipline. FIVE suggest-only
+    /// rules (four NEW families + the SQL value-position half; NO new
+    /// SecFamily variant — the APPEND-ONLY schema untouched), never
+    /// `FIXABLE_SEC`.
+    #[test]
+    fn batch351_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            (
+                "sql-query-value-interpolation-unbound",
+                SecFamily::InputValidation,
+            ),
+            (
+                "quantum-vulnerable-primitive-selection",
+                SecFamily::CryptoHygiene,
+            ),
+            (
+                "regex-backtracking-engine-untrusted-pattern",
+                SecFamily::InputValidation,
+            ),
+            (
+                "server-connection-without-read-timeout",
+                SecFamily::InputValidation,
+            ),
+            (
+                "open-redirect-unvalidated-target",
+                SecFamily::InputValidation,
+            ),
+        ];
+        for (id, family) in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-351 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, family, "batch-351 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 351 / Plan 361 / Research 394"),
+                "batch-351 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("fbeab16"),
+                "batch-351 {id} must cite the foxguard pin"
+            );
+        }
+        // Suggest-only discipline: none of the batch ids may be
+        // --fix-eligible (the detector modules ship no collect_edits arm).
+        for id in [
+            "sql-query-value-interpolation-unbound",
+            "quantum-vulnerable-primitive-selection",
+            "regex-backtracking-engine-untrusted-pattern",
+            "server-connection-without-read-timeout",
+            "open-redirect-unvalidated-target",
+        ] {
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-351 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+    }
+
+    #[test]
+    fn batch351_rules_parse() {
+        for rid in [
+            "sql-query-value-interpolation-unbound",
+            "quantum-vulnerable-primitive-selection",
+            "regex-backtracking-engine-untrusted-pattern",
+            "server-connection-without-read-timeout",
+            "open-redirect-unvalidated-target",
+        ] {
+            let all = entries();
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == rid)
+                .unwrap_or_else(|| panic!("batch-351 rule missing: {rid}"));
+            assert!(
+                syn::parse_file(&rule.buggy_code).is_ok(),
+                "batch-351 {rid}: buggy code must parse"
+            );
+            assert!(
+                syn::parse_file(&rule.fixed_code).is_ok(),
+                "batch-351 {rid}: fixed code must parse"
+            );
+        }
+    }
+
+    /// Batch 351 faces: the weak-hash use-site-only + complete-segment
+    /// rider and the shell-rule program-identity rider (both
+    /// count-neutral — face text on the host concepts, never new rules).
+    #[test]
+    fn batch351_faces_landed() {
+        let all = entries();
+        let weak = all
+            .iter()
+            .find(|r| r.rule_id == "weak-hash-to-blake3")
+            .expect("weak-hash host present");
+        assert!(
+            weak.sec_concept.contains("FACE (Batch 351, foxguard")
+                && weak
+                    .sec_concept
+                    .contains("deliberately do NOT flag `use md5;` imports"),
+            "batch-351 weak-hash use-site-only face rider missing"
+        );
+        let shell = all
+            .iter()
+            .find(|r| r.rule_id == "shell-string-command-interpolation")
+            .expect("shell host present");
+        assert!(
+            shell
+                .sec_concept
+                .contains("FACE (Batch 351, foxguard — the PROGRAM-IDENTITY layer)"),
+            "batch-351 shell program-identity face rider missing"
+        );
+    }
+
+    /// The Batch-351 proposers self-fire on their own buggy fixtures and
+    /// stay silent on their own fixed fixtures (the five-arm detector
+    /// gate; the b350 precedent).
+    #[test]
+    fn batch351_proposers_self_fire_and_stay_silent() {
+        use crate::domains::sec::proposers::open_redirect_gate;
+        use crate::domains::sec::proposers::pq_primitive_selection;
+        use crate::domains::sec::proposers::redos_engine_pattern;
+        use crate::domains::sec::proposers::server_read_timeout;
+        use crate::domains::sec::proposers::sql_query_value_bind;
+        let all = entries();
+        let pairs: [(&str, fn(&str, &syn::File) -> usize); 5] = [
+            ("sql-query-value-interpolation-unbound", |s, f| {
+                sql_query_value_bind::detect(s, f).len()
+            }),
+            ("quantum-vulnerable-primitive-selection", |s, f| {
+                pq_primitive_selection::detect(s, f).len()
+            }),
+            ("regex-backtracking-engine-untrusted-pattern", |s, f| {
+                redos_engine_pattern::detect(s, f).len()
+            }),
+            ("server-connection-without-read-timeout", |s, f| {
+                server_read_timeout::detect(s, f).len()
+            }),
+            ("open-redirect-unvalidated-target", |s, f| {
+                open_redirect_gate::detect(s, f).len()
+            }),
+        ];
+        for (id, detect_len) in pairs {
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-351 rule missing: {id}"));
+            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+            assert!(
+                detect_len(&rule.buggy_code, &buggy) > 0,
+                "batch-351 {id}: detector must fire on its own buggy fixture"
+            );
+            let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+            assert!(
+                detect_len(&rule.fixed_code, &fixed) == 0,
+                "batch-351 {id}: detector must stay silent on its own fixed fixture"
             );
         }
     }
