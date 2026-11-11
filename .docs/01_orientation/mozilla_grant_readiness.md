@@ -389,18 +389,22 @@ re-verified on submission day.
 > lands, and we will report it openly either way.
 
 **6. Challenges and biggest blockers right now**
-> Three, honestly. (a) Adoption signal: converting installer downloads into an active external
-> user and contributor base — the pilot cohort is the instrument, and it is the same evidence this
-> call weights (early product-community fit). (a2) The technique itself is new and sits between
-> rules-based tools and large language models — distilled repair rules, a small fixed drafting
-> step, deterministic verification gates, no generative model anywhere — so the idea draws
-> skepticism from both camps; explaining that middle ground is real work, and the compile-gated,
-> published results are the answer. (b) Receiving-entity paperwork: a self-funded team
-> needs a fiscal-sponsor path to lawfully receive US 501(c)(3) grant funds; the research is done,
-> the decision lands with the shortlist stage. (c) Executing the dated open-core extraction
-> without slowing the product: opening the core in months 1–3 means restructuring a private
-> workspace into a public repository with public CI and a contribution guide — real engineering
-> capacity the grant directly funds.
+> The biggest blocker is trust: the tool works and is measured, but no external community uses it
+> yet, and trust in a repair tool must be earned one merge at a time. Four, honestly, after that:
+> (a) Adoption signal: converting installer downloads into an active external user and contributor
+> base — the pilot cohort is the instrument, and it is the same evidence this call weights (early
+> product-community fit). (a2) The technique itself is new and sits between rules-based tools and
+> large language models — distilled repair rules, a small fixed drafting step, deterministic
+> verification gates, no generative model anywhere — so the idea draws skepticism from both camps;
+> explaining that middle ground is real work, and the compile-gated, published results are the
+> answer. (b) Receiving-entity paperwork: a self-funded team needs a fiscal-sponsor path to
+> lawfully receive US 501(c)(3) grant funds; the research is done, the decision lands with the
+> shortlist stage. (c) Executing the dated open-core extraction without slowing the product:
+> opening the core in months 1–3 means restructuring a private workspace into a public repository
+> with public CI and a contribution guide — real engineering capacity the grant directly funds.
+> And this call is uniquely placed on the trust blocker: a Mozilla endorsement plus the cohort
+> platform is how an unknown tool meets its first real community — the exact compounding the grant
+> exists to buy.
 
 **7. Team**
 > A self-funded team of experienced Rust systems engineers who build and operate the entire stack
