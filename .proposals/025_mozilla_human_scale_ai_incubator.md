@@ -219,15 +219,15 @@ Budget shape (indicative): ~60% people (2–3 contributors), ~15% pilot + commun
 
 ## Draft application answers (source material — owner-voiced before submission; per §Compliance, agent text is source, never paste-ready prose)
 
-**Q: "Briefly describe the public benefit of this project and who will benefit from this work beyond your organization." (149 words)**
+**Q: "Briefly describe the public benefit of this project and who will benefit from this work beyond your organization." (150 words)**
 
 Public benefit. cargo refine keeps software development affordable, private, and accessible for developers the cloud-AI economy leaves out. Its repair engine is a small, inspectable corpus of open repair rules: zero parameters, sub-millisecond on ordinary CPUs, running offline on hardware people already own; no account, no subscription, no GPU. Code never leaves the developer’s machine without explicit, redacted, revocable consent.
 
-Who benefits beyond us. Rust developers without cloud-AI budgets: students and learners, indie and FOSS maintainers, educators, and developers in regions where subscriptions, reliable connectivity, or recent hardware cannot be assumed. Open-source repositories are free by policy. The grant opens the modelless core, fleet tooling, and the community-contributed repair corpus under MIT with authoring tools so communities build corpora for other languages, plus Rethink, a research-stage escalation tier: small encoders that abstain when uncertain. Benefit is measured: published benchmarks and a public pilot cohort reported openly at the Mozilla Festival.
+Who benefits beyond us. Rust developers without cloud-AI budgets: students and learners, indie and FOSS maintainers, educators, and developers in regions where subscriptions, reliable connectivity, or recent hardware cannot be assumed. Open-source repositories are free by policy. The grant opens core, corpus, tooling under MIT with authoring tools that make it language-general: Rust proves the pattern, Python, Go, JavaScript are named next, and every community governs its repair knowledge. Rethink adds research-stage encoders that abstain when uncertain. Benefit is measured: benchmarks and a pilot cohort reported openly at Mozilla Festival.
 
 **Short summary (50 words)**
 
-cargo refine fixes what clippy's autofix can't: compile errors, Dockerfiles, performance issues no lint catches. An offline corpus is the model; code never leaves your machine. Opt in and secret-scanned fix records teach a shared open corpus; every machine's Refine gets better. Rethink adds research-stage encoders that abstain when uncertain.
+cargo refine fixes what clippy's autofix can't: compile errors, Dockerfiles, performance traps, GPU kernels, shaders, and security issues. The model is an offline corpus; code never leaves your machine. Opt-in, secret-scanned fix records teach a shared open corpus; every machine gets better. Rethink adds research-stage encoders that abstain when uncertain.
 
 **Q: Project Details — what technology + how it addresses the cohort theme (199/200 words)**
 
