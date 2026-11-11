@@ -383,6 +383,12 @@ impl LatentMatcher {
         #[cfg_attr(not(feature = "clippy_lints"), allow(unused_macros))]
         macro_rules! index_domain {
             ($domain:expr, $corpus:expr, $index_ctor:expr) => {{
+                // Issue 224: env-gated phase-blame for the per-run matcher
+                // build (the same disclosure style as the CLI's ⏱ roll-up
+                // — stderr, one line per domain, off by default).
+                let matcher_timing =
+                    std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+                let t_domain = std::time::Instant::now();
                 let entries: Vec<_> = $corpus;
                 let mut pattern_texts = Vec::with_capacity(entries.len());
                 for (rule_id, buggy, fixed) in &entries {
@@ -405,7 +411,18 @@ impl LatentMatcher {
                 // (owned patterns) for the six flat domains, a borrowing
                 // closure over `KernelIndex::build` for kernel — which
                 // selects flat vs route-narrowed under Issue 196's feature.
-                Some(($index_ctor)(patterns, config)?)
+                let t_build = std::time::Instant::now();
+                let built = Some(($index_ctor)(patterns, config)?);
+                if matcher_timing {
+                    let build_ms = t_build.elapsed().as_secs_f64() * 1e3;
+                    eprintln!(
+                        "[matcher-timing] domain {:?}: corpus+book {:.1}ms index {:.1}ms",
+                        $domain,
+                        (t_domain.elapsed().as_secs_f64() * 1e3) - build_ms,
+                        build_ms
+                    );
+                }
+                built
             }};
         }
 
@@ -575,12 +592,22 @@ impl LatentMatcher {
             // the BLAKE3-baseline's 53.4%/48.3%, at 0.96µs vs 3.31µs per
             // span). GATING stays killed — 70% < the 85% kill-bar — so this
             // remains an annotation; retrieval stays fan-out.
-            router: DomainRouter::with_embedding(
-                &router_domains,
-                RoutingEmbedding::TfCosine {
-                    order: SpectralOrder::GlobalFreq,
-                },
-            ),
+            router: {
+                let t_router = std::time::Instant::now();
+                let router = DomainRouter::with_embedding(
+                    &router_domains,
+                    RoutingEmbedding::TfCosine {
+                        order: SpectralOrder::GlobalFreq,
+                    },
+                );
+                if std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1") {
+                    eprintln!(
+                        "[matcher-timing] router: {:.1}ms",
+                        t_router.elapsed().as_secs_f64() * 1e3
+                    );
+                }
+                router
+            },
             rerank_mode: super::instantiation_rerank::RerankMode::default(),
             clippy,
             perf,

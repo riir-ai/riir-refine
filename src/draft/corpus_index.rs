@@ -423,6 +423,8 @@ impl RuleIndex {
     ) -> Result<Self, String> {
         let embedder = ModellessEmbedder;
         let n_rules = patterns.len();
+        let matcher_timing = std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+        let t_chunks = std::time::Instant::now();
         let mut by_zone_hash = HashMap::with_capacity(n_rules);
         let mut rule_ids: Vec<String> = Vec::with_capacity(n_rules);
         let mut seen_ids: std::collections::HashSet<String> =
@@ -452,6 +454,7 @@ impl RuleIndex {
         }
         #[cfg(feature = "differential_anchor")]
         let diff_anchor = DiffAnchor::fit(&chunks);
+        let chunks_ms = t_chunks.elapsed().as_secs_f64() * 1e3;
         // The seam's BM25 tokenizer choice MUST precede `index_chunks` — the
         // tokenizer is used at both index and search time, and swapping it
         // after indexing silently desyncs the postings from the queries
@@ -492,6 +495,13 @@ impl RuleIndex {
             }
         }
         retriever.index_chunks(chunks, &embedder);
+        if matcher_timing {
+            eprintln!(
+                "[matcher-timing] build_with: chunks {:.1}ms index_chunks {:.1}ms",
+                chunks_ms,
+                t_chunks.elapsed().as_secs_f64() * 1e3 - chunks_ms
+            );
+        }
         Ok(Self {
             retriever,
             config,

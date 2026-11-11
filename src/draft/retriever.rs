@@ -127,9 +127,19 @@ impl RuleRetriever {
     /// call sites' `?` shape is kept so growing an error path later does not
     /// churn the corpus index.
     pub(crate) fn index_chunks(&mut self, chunks: Vec<RawChunk>, embedder: &dyn Embedder) -> usize {
+        // Issue 224: env-gated embed-vs-BM25 phase split (the matcher
+        // build's dominant-cost attribution — one stderr line per call).
+        let timing = std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+        let mut embed_us: u128 = 0;
+        let mut bm25_us: u128 = 0;
         for chunk in chunks {
+            let t0 = std::time::Instant::now();
             let zone_hash = *blake3::hash(chunk.content.as_bytes()).as_bytes();
             let dir = embedder.embed(&chunk.content);
+            if timing {
+                embed_us += t0.elapsed().as_micros();
+            }
+            let t1 = std::time::Instant::now();
             self.insert_row(IndexedChunk {
                 zone_hash,
                 dir,
@@ -138,6 +148,17 @@ impl RuleRetriever {
             });
             // Key = the raw zone-hash bytes (see the module's keying note).
             self.bm25.index(&zone_hash, &chunk.content);
+            if timing {
+                bm25_us += t1.elapsed().as_micros();
+            }
+        }
+        if timing {
+            eprintln!(
+                "[matcher-timing] index_chunks: embed {:.1}ms bm25+insert {:.1}ms rows {}",
+                embed_us as f64 / 1e3,
+                bm25_us as f64 / 1e3,
+                self.rows.len()
+            );
         }
         self.rows.len()
     }
