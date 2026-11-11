@@ -418,7 +418,9 @@ re-verified on submission day.
 
 ### 14.4 Impact and Openness — the five long answers
 
-**8. Success in 12 and 36 months + measurement**
+**REFRESHED 2026-11-11 — the finalized, count-verified versions (126/115/125/116/170 words) live in [`../../.proposals/025_mozilla_human_scale_ai_incubator.md`](../../.proposals/025_mozilla_human_scale_ai_incubator.md) §"Impact and Openness" (after the Team answer) — those are canonical now; the older drafts below are the pre-refresh source.** New facts woven in: crates.io live (0.5.1), the corpus growth rate (~100 rules/week), the measured corpus size (1,642 pattern classes / 13.4 MB), upstream merge acceptances as a public counter, and the language vision (Python/Go/JS) in the 36-month row.
+
+**8. Success in 12 and 36 months + measurement** (superseded — see the proposal)
 > 12 months: the modelless core open-sourced under MIT/Apache-2.0 with public CI and published
 > crates (downloads as the public counter); the pilot cohort complete with an openly published
 > report (heal rates, retention, offline usage, participant quotes); one community-built language
