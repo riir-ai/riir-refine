@@ -37,6 +37,9 @@
 //! - [`DEMOTE_ENV`] (`RIIR_REFINE_INDEX_CACHE`) — the exact-literal `0`
 //!   demote (DEMOTE-ONLY; at the opt-in stage the compile-time feature is
 //!   the only arm, per the env-switch law).
+//! - [`MAX_MB_ENV`] (`RIIR_REFINE_INDEX_CACHE_MAX_MB`) — the prune's byte
+//!   ceiling (issue 226 T3; unset = [`DEFAULT_MAX_CACHE_MB`], `0` =
+//!   uncapped, junk = the default).
 //!
 //! **Scope guards.** The lane disarms (never stores, never restores, the
 //! build path stays byte-identical) under `kernel_route_narrow` (16
@@ -78,8 +81,19 @@ pub const CACHE_DIR_ENV: &str = "RIIR_REFINE_INDEX_CACHE_DIR";
 pub const DEMOTE_ENV: &str = "RIIR_REFINE_INDEX_CACHE";
 
 /// LRU keep count: the newest [`KEEP_ENTRIES`] entries survive a prune.
-/// At ~20 MiB per entry this caps the dir at a few hundred MiB.
+/// At ~20 MiB per entry this alone caps the dir at a few hundred MiB;
+/// the byte ceiling ([`MAX_MB_ENV`]) bounds it independently of count.
 pub const KEEP_ENTRIES: usize = 8;
+
+/// Issue 226 T3: the byte-ceiling env (`RIIR_REFINE_INDEX_CACHE_MAX_MB`) —
+/// when the surviving entries exceed this many MiB, [`prune`] evicts
+/// oldest-first until they fit. Unset = [`DEFAULT_MAX_CACHE_MB`]; `0` =
+/// uncapped (the count cap alone); junk or MiB overflow = the default.
+pub const MAX_MB_ENV: &str = "RIIR_REFINE_INDEX_CACHE_MAX_MB";
+
+/// The default byte ceiling ([`MAX_MB_ENV`] unset) — 256 MiB, ~12 entries
+/// at the measured 18.8–20 MiB.
+pub const DEFAULT_MAX_CACHE_MB: u64 = 256;
 
 /// Maximum domains a container may carry (the [`DomainId`] set's size).
 const MAX_DOMAINS: u32 = 7;
@@ -245,6 +259,23 @@ impl Lane {
 #[must_use]
 pub fn armed() -> bool {
     std::env::var(DEMOTE_ENV).as_deref() != Ok("0")
+}
+
+/// Issue 226 T3: the effective byte ceiling in bytes (`None` = uncapped),
+/// resolved from [`MAX_MB_ENV`]. Forgiving by design — this is a tunable,
+/// not an arm switch: junk parses to the default, never to a surprise.
+fn max_cache_bytes() -> Option<u64> {
+    let parsed = match std::env::var(MAX_MB_ENV) {
+        Err(_) => return Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024),
+        Ok(v) => v.trim().parse::<u64>(),
+    };
+    match parsed {
+        Ok(0) => None,
+        Ok(mb) => mb
+            .checked_mul(1024 * 1024)
+            .or(Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024)),
+        Err(_) => Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024),
+    }
 }
 
 /// The cache base dir: `RIIR_REFINE_INDEX_CACHE_DIR` override, else the
@@ -879,7 +910,7 @@ pub fn prune(dir: &Path) {
         return;
     };
     let now = std::time::SystemTime::now();
-    let mut idx: Vec<(std::time::SystemTime, PathBuf)> = entries
+    let mut idx: Vec<(std::time::SystemTime, PathBuf, u64)> = entries
         .flatten()
         .filter_map(|e| {
             let path = e.path();
@@ -913,17 +944,60 @@ pub fn prune(dir: &Path) {
             if !name.as_bytes()[..64].iter().all(u8::is_ascii_hexdigit) {
                 return None;
             }
-            let mtime = e.metadata().ok()?.modified().ok()?;
-            Some((mtime, path))
+            let meta = e.metadata().ok()?;
+            let mtime = meta.modified().ok()?;
+            Some((mtime, path, meta.len()))
         })
         .collect();
-    if idx.len() <= KEEP_ENTRIES {
-        return;
+    // The count cap first: the newest [`KEEP_ENTRIES`] survive.
+    if idx.len() > KEEP_ENTRIES {
+        idx.sort_by_key(|&(t, _, _)| std::cmp::Reverse(t));
+        let excess = idx.split_off(KEEP_ENTRIES);
+        for (_, path, _) in &excess {
+            let _ = std::fs::remove_file(path);
+        }
     }
-    idx.sort_by_key(|&(t, _)| std::cmp::Reverse(t));
-    for (_, path) in idx.iter().skip(KEEP_ENTRIES) {
+    // Issue 226 T3: the byte cap, independent of count.
+    let Some(cap) = max_cache_bytes() else {
+        return;
+    };
+    for path in byte_cap_evictions(&idx, cap) {
         let _ = std::fs::remove_file(path);
     }
+}
+
+/// Issue 226 T3(a): the paths to evict when the surviving entries exceed
+/// `cap` bytes — oldest mtime first until they fit. LRU BY DECISION
+/// (issue 226 T3(b), recorded at implementation): mtime is last USE
+/// ([`touch`] bumps it on every hit), so the stale tail dies first and an
+/// entry pinned by constant use carries a fresh mtime and survives.
+/// LFU was REFUSED: it pins a hot-but-stale corpus state past its content
+/// epoch (the content key moved on; the old entry is worthless however
+/// often it was hit early) and needs a use-counter sidecar the wire does
+/// not carry. A fresh corpus state can never be starved: it arrives with
+/// the newest mtime, so under pressure it is the LAST candidate — and the
+/// newest entry is never evicted at all. A lone over-cap entry stays
+/// (raising [`MAX_MB_ENV`] is the operator's lever); evicting it would
+/// thrash (re-store → prune → re-store every run).
+fn byte_cap_evictions(idx: &[(std::time::SystemTime, PathBuf, u64)], cap: u64) -> Vec<PathBuf> {
+    let mut total: u64 = idx.iter().map(|(_, _, len)| len).sum();
+    if idx.len() < 2 || total <= cap {
+        return Vec::new();
+    }
+    let mut order: Vec<usize> = (0..idx.len()).collect();
+    order.sort_by_key(|&i| idx[i].0);
+    let mut out = Vec::new();
+    for &i in &order {
+        if idx.len() - out.len() <= 1 {
+            break; // never the last survivor (the newest, oldest-first walk)
+        }
+        out.push(idx[i].1.clone());
+        total = total.saturating_sub(idx[i].2);
+        if total <= cap {
+            break;
+        }
+    }
+    out
 }
 
 #[cfg(all(test, feature = "index_cache"))]
@@ -1198,6 +1272,157 @@ mod tests {
         }
         std::env::remove_var(DEMOTE_ENV);
         assert!(armed());
+    }
+
+    // ---- Issue 226 T3: the byte ceiling -------------------------------
+
+    #[test]
+    fn max_cache_mb_env_semantics() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        std::env::remove_var(MAX_MB_ENV);
+        assert_eq!(
+            max_cache_bytes(),
+            Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024),
+            "unset = the default ceiling"
+        );
+        std::env::set_var(MAX_MB_ENV, "0");
+        assert_eq!(max_cache_bytes(), None, "the exact 0 = uncapped");
+        std::env::set_var(MAX_MB_ENV, "16");
+        assert_eq!(max_cache_bytes(), Some(16 * 1024 * 1024));
+        std::env::set_var(MAX_MB_ENV, " 16 ");
+        assert_eq!(max_cache_bytes(), Some(16 * 1024 * 1024), "trim is friendly");
+        for junk in ["abc", "-4", "1.5", ""] {
+            std::env::set_var(MAX_MB_ENV, junk);
+            assert_eq!(
+                max_cache_bytes(),
+                Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024),
+                "junk {junk:?} = the default, never a silent 0 or a panic"
+            );
+        }
+        std::env::set_var(MAX_MB_ENV, "18446744073709551615");
+        assert_eq!(
+            max_cache_bytes(),
+            Some(DEFAULT_MAX_CACHE_MB * 1024 * 1024),
+            "MiB overflow = the default"
+        );
+        std::env::remove_var(MAX_MB_ENV);
+    }
+
+    /// T3(a): oldest-first eviction order, fit stops the walk, mtime order
+    /// (not vec order) decides, and the newest entry is never a candidate.
+    #[test]
+    fn byte_cap_evicts_oldest_first_never_the_newest() {
+        let mk = |i: usize, age: u64, len: u64| {
+            (
+                std::time::UNIX_EPOCH + std::time::Duration::from_secs(age),
+                PathBuf::from(format!("e{i}.idx")),
+                len,
+            )
+        };
+        // Four 100-unit entries, cap 250: e0 (→300), e1 (→200 ≤ 250).
+        let idx: Vec<_> = (0..4usize).map(|i| mk(i, i as u64, 100)).collect();
+        assert_eq!(
+            byte_cap_evictions(&idx, 250),
+            [PathBuf::from("e0.idx"), PathBuf::from("e1.idx")]
+        );
+        // Fits: nothing goes. (assert_eq! not assert!(is_empty) — the
+        // clippy::assert_is_empty law; Vec==Vec, never the broken
+        // Vec-vs-array [] spelling the rulewright once emitted, issue 223.)
+        assert_eq!(byte_cap_evictions(&idx, 400), Vec::<PathBuf>::new());
+        // mtime order, not vec order: same four entries, shuffled vec.
+        let mut shuffled: Vec<_> = (0..4usize).map(|i| mk(3 - i, i as u64, 100)).collect();
+        shuffled.reverse();
+        let evicted = byte_cap_evictions(&shuffled, 250);
+        assert!(evicted.contains(&PathBuf::from("e2.idx")));
+        assert!(evicted.contains(&PathBuf::from("e3.idx")));
+        assert!(
+            !evicted.contains(&PathBuf::from("e0.idx")),
+            "newest survives"
+        );
+        // A lone entry over the cap is never evicted (no thrash).
+        let lone = vec![mk(0, 0, 10_000)];
+        assert_eq!(byte_cap_evictions(&lone, 1), Vec::<PathBuf>::new());
+        // Two entries over the cap evict only the older one.
+        let two: Vec<_> = [(0u64, 9_000u64), (1, 9_000)]
+            .iter()
+            .enumerate()
+            .map(|(i, &(age, len))| mk(i, age, len))
+            .collect();
+        assert_eq!(byte_cap_evictions(&two, 1), [PathBuf::from("e0.idx")]);
+    }
+
+    /// T3(b), the verification the issue asks for: an entry pinned by
+    /// constant use ([`touch`] keeps its mtime fresh) survives byte-cap
+    /// pressure while staler entries die, and a fresh corpus state always
+    /// lands (newest mtime = last candidate). LRU over LFU is the recorded
+    /// decision (see [`byte_cap_evictions`]).
+    #[test]
+    fn pinned_by_use_survives_and_fresh_state_lands_under_byte_cap() {
+        let now = std::time::SystemTime::now();
+        let entry = |name: &str, age_secs: u64, len: u64| {
+            (
+                now - std::time::Duration::from_secs(age_secs),
+                PathBuf::from(format!("{name}.idx")),
+                len,
+            )
+        };
+        // hot = created old but touched seconds ago; the tail much staler.
+        let idx = vec![
+            entry("hot", 3_600, 100),
+            entry("stale_a", 3_600 * 24 * 30, 100),
+            entry("stale_b", 3_600 * 24 * 20, 100),
+            entry("fresh", 1, 100),
+        ];
+        // Cap forces two evictions: both stale entries die, hot + fresh stay.
+        let evicted = byte_cap_evictions(&idx, 250);
+        assert_eq!(evicted.len(), 2, "two evictions to fit 200 ≤ 250");
+        assert!(evicted.contains(&PathBuf::from("stale_a.idx")));
+        assert!(evicted.contains(&PathBuf::from("stale_b.idx")));
+        assert!(
+            !evicted.contains(&PathBuf::from("hot.idx")),
+            "pinned by use survives"
+        );
+        assert!(
+            !evicted.contains(&PathBuf::from("fresh.idx")),
+            "fresh state lands"
+        );
+    }
+
+    /// Integration: real files, real sizes, the env knob armed — prune
+    /// enforces the ceiling end to end. 4 × ~1.2 MiB vs a 2 MiB cap: the
+    /// three oldest go, only the newest survives (and the count cap is not
+    /// what bit: 4 ≤ [`KEEP_ENTRIES`]).
+    #[test]
+    fn prune_enforces_the_byte_cap() {
+        let _guard = ENV_LOCK.lock().expect("env lock");
+        let dir = temp_dir("byte_cap");
+        std::env::set_var(MAX_MB_ENV, "2");
+        std::fs::write(dir.join("fake.txt"), b"bystander").expect("write");
+        let body = vec![0u8; 1_258_291]; // ~1.2 MiB
+        for i in 0..4u32 {
+            let path = dir.join(format!("{i:064x}.idx"));
+            std::fs::write(&path, &body).expect("write");
+            let f = std::fs::File::options()
+                .write(true)
+                .open(&path)
+                .expect("open");
+            f.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(i.into()))
+                .expect("mtime");
+        }
+        prune(&dir);
+        let mut remaining: Vec<String> = std::fs::read_dir(&dir)
+            .expect("readdir")
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect();
+        remaining.sort();
+        assert_eq!(
+            remaining,
+            [format!("{:064x}.idx", 3u32), "fake.txt".to_string()],
+            "only the newest entry + the bystander survive the cap"
+        );
+        std::env::remove_var(MAX_MB_ENV);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// G1 (issue 224 T4): the cache path and the rebuild path must answer
