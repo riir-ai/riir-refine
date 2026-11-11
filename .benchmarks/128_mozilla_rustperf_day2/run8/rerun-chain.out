@@ -1,0 +1,15 @@
+rep arm=before rep=1 wall=33.770s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=48 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 36912 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=after rep=2 wall=4.697s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=19 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 38015 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=before rep=3 wall=33.883s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=48 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 38502 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=after rep=4 wall=4.707s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=19 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 39290 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=before rep=5 wall=34.379s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=48 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 39749 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=after rep=6 wall=4.585s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=19 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 40605 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+rep arm=demote rep=7 wall=34.046s reqs=64 hits=16 timeouts=32 writes=48 werrs=0 backend_gets=48 backend_puts=48
+/Users/kat/git/riir-refine/.benchmarks/128_mozilla_rustperf_day2/bench_backoff_chain.sh: line 152: 41042 Terminated: 15          python3 fake_webdav.py "$BACKEND_PORT" "$BACKEND_LOG" "$STALL_FLAG"
+done

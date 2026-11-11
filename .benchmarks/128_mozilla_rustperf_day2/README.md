@@ -114,7 +114,7 @@ Method: `RIIR_REFINE_AUTO_ORACLE=0 cargo refine --suggest <clone>` per repo — 
 
 - `bench_backoff.sh` — the pinned harness, verbatim (POSIX sh, self-contained).
 - `bench_backoff_chain.sh` — the MULTILEVEL cell harness (run 5): `SCCACHE_MULTILEVEL_CHAIN=disk,webdav`, one backend process per rep that is HEALTHY during the seed (serves previously-PUT entries) and flips to stalling via a flag file mid-run — the "backend goes unhealthy while the daemon runs" scenario; one daemon per rep, no stop->start transitions (the explicit-daemon transition was measured missing freshly seeded L0 entries — 2026-11-10 probes 4/8; the working posture: client-auto-spawned daemon, seed through the chain itself).
-- `backend_backoff_33d12fb_to_mfix.patch` — **the full fix as a patch (`33d12fb..e289bc6`, +1524/−20)** — the durable copy of the branch's diff at the round-3 tip `e289bc6`: per-level gate + shared deadline + docs + 17 tests + the marker fix (`74d2648`) + the round-2 must-fix set (drop-guard timer race, Full-mode reset fix, client-side `get_raw` gate) + the two round-3 comment fixes (`e289bc6` — comment-ONLY delta over the benched `30f9af0`, so the run-7 numbers stay valid). `git apply` on a fresh pin checkout reconstructs the branch (apply-verified clean 2026-11-10, re-verified after the comment fixes). (The old `backend_backoff_ba261b8_to_3fad121.patch` stays as the run-2 record.)
+- `backend_backoff_33d12fb_to_2b18762.patch` — **the full fix as a patch (`33d12fb..2b18762`, +1629/−20)** — the durable copy of the branch's diff at the round-5 tip `2b18762`: per-level gate + shared deadline + half-open single-probe recovery + docs + 19 tests + the marker fix (`74d2648`) + the round-2 must-fix set (drop-guard timer race, Full-mode reset fix, client-side `get_raw` gate) + the round-3 comment fixes (`e289bc6`) + the maintainer-reply recovery change (`2b18762`). `git apply` on a fresh pin checkout reconstructs the branch. (The old `backend_backoff_33d12fb_to_mfix.patch` (`..e289bc6`) was REMOVED 2026-11-11 — the stale-durable-copy finding from the amo arc; the new patch is the only reconstructable copy.)
 - `clippy_after.log` — **the real post-fix run at `3fad121`** (rc=0, ends `Finished`, zero warnings; captured full-output, verified to differ from the prefix log after the round-2 catch).
 - `bench_output.txt` — the raw per-run log of the record run (all 7 rows, verbatim).
 - `benchrun4_output.txt` / `benchrun5_output.txt` + `benchrun4_chain_output.txt` / `benchrun5_chain_output.txt` — run 4 (first per-level build) and run 5 (post-marker-fix); run 5 both cells were the record until run 7. **`benchrun7_output.txt` / `benchrun7_chain_output.txt` — run 7, THE FREEZE (post-R2-fix tip `30f9af0`, preflight PASSED load=1.96): the record.**
@@ -124,4 +124,40 @@ Method: `RIIR_REFINE_AUTO_ORACLE=0 cargo refine --suggest <clone>` per repo — 
 - `gpr1b_harness_run4.log` — the G-PR1b harness at the run-5 pin (`33d12fb..74d2648`): raw NOT READY solely from the 2 environmental lib failures (identical on pristine, adjudicated); blast radius + seam-grep clean; the knob-grep phase needs DIFF_WRITTEN_PATHS (vacuous here — no created files; knobs verified by hand, 3/3).
 - `sccache_day2_results.md` — the lane agent's full record (§1–§11 + §12 the G-PR2 round-1 verdict and the applied fixes).
 - `scan_sccache.md` · `scan_uniffi-rs.md` · `scan_mp4parse-rust.md` · `scan_rust-code-analysis.md` — the four complete scan stdout captures (Part 1's evidence).
-- Clone + branch state: `.raw/mozilla-heal/sccache` @ `refine/backend-backoff` `e289bc6` (ephemeral per the campaign law — re-clone at the pin + re-apply the patch if the send re-opens after close-out; the branch lives only on this box until G-PR4). Pristine baseline worktree: `.raw/mozilla-heal/sccache-pristine33` @ `33d12fb` (detached).
+- Clone + branch state: `.raw/mozilla-heal/sccache` @ `refine/backend-backoff` `2b18762` (ephemeral per the campaign law — re-clone at the pin + re-apply the patch if the send re-opens after close-out; the branch lives only on this box until G-PR4). Pristine baseline worktree: `.raw/mozilla-heal/sccache-pristine33` @ `33d12fb` (detached).
+
+## Run 8 (2026-11-11) — the maintainer-reply arc: the parallel reproducer + the burst metric + the run-7 cell re-run at the recovery tip
+
+Trigger: mitander's 2026-11-10 thread reply ratified the per-level shape and asked for (a) the read-budget division explained separately from backoff, (b) the threshold-0 semantics, (c) recovery that avoids a burst of concurrent probes at cooldown expiry, (d) the issue's parallel reproducer with repeated builds + recovery in the same daemon. Delegated verdict rounds 1–2 (session f0c8e944): REVISE (8 reasons) → **AGREE with two binding conditions** (exact try_admit state table — active cooldown REFUSES; the 1/N bound stated as approximate). The C1 recovery change landed as `2b18762` (amend of `9680780` + the restored `a_backend_response_resets_the_counter` test; the release binary is byte-identical across the amend — the restored test is `#[cfg(test)]` — so the run-8 cells measure exactly the round-5 tip, sha256 `592d9873…`).
+
+**The harness** (`run8/bench_run8.py`): mitander's reproduce.py (issue attachment 34127144) adapted for macOS (his script gates on Linux for /proc process discovery; everything else kept verbatim — the 4×8 chained-crate workspace, `cargo build --locked --offline -j 4`, fresh target per phase, his env set, stats polling) + the maintainer-reply additions: `stalled-repeat` (same daemon), a burst wave (8 concurrent sccache'd cc lookups fired at cooldown expiry, counted from per-request fixture timestamps in the first 100 ms), and `recovered` (GET service restored mid-run, same daemon). Cooldown 10 s (short, recorded; the run-7 cells keep 60), threshold 3. Three arms: pristine `33d12fb`, `e289bc6` (the gate WITHOUT single-probe recovery), tip `2b18762`. ⚠ **argv[0] lesson:** the first harness attempt hung all clients — sccache dispatches on the executable NAME (`bins/sccache-pristine-33d12fb` vs a copy named `sccache`); every harness must run a copy named exactly `sccache` (the run-8 arms did; the re-run initially passed the raw-named bins and wedged on `--stop-server` with orphan daemons piling `-vV` compiler-probe children).
+
+**Results (run8/work-*/; box: PROVENANCE power=AC Power load=3.94 swap=1408.50M canary=skipped powermode=2(high), 2026-11-11 ~09:5x+07):**
+
+| build | pristine `33d12fb` | `e289bc6` (no single-probe) | tip `2b18762` |
+|---|---|---|---|
+| uncached | 0.705 s | 0.657 s | 0.710 s |
+| healthy warm | 0.483 s, 32 hits | 0.522 s, 32 hits | 0.521 s, 32 hits |
+| stalled | 8.840 s, 32 timeouts, 32 held GETs | 1.798 s, 4 held GETs | 1.835 s, 4 held GETs |
+| stalled again, same daemon | 8.849 s | 0.814 s | 0.810 s |
+| **burst: 8 concurrent lookups at cooldown expiry** | **8 GETs (continuously)** | **8 GETs at once** | **1 GET** |
+| recovered, same daemon | 0.502 s, 32 hits | 0.538 s, 32 hits | 0.537 s, **29 hits + 3 skips** |
+
+The burst row is the maintainer ask, measured: expiry admitting every waiting lookup at once (e289) vs exactly one probe (tip). The tip's recovered row: the 3 timeouts are the lookups that RACED the admitted probe at build start — skipped once, reported through the timeout path (LevelSkipped shares it), wall unchanged vs e289 (0.537 vs 0.538); disclosed in the PR body. On a fully-stalled backend the probe times out and re-arms the window (the wave's probe did: held GETs 4→5).
+
+**Run-7 cell re-run at the recovery tip (MANDATORY per verdict round 2; raw: `run8/rerun-standalone.out`, `run8/rerun-chain.out`):**
+
+| cell | arm | walls | median | invariants |
+|---|---|---|---|---|
+| standalone | before | 33.591 / 33.596 / 33.598 | 33.596 (7.75×) | timeouts=32 gets=32 writes=32 werrs=0 |
+| standalone | after | 4.394 / 4.383 / 4.398 | **4.394** (7.64×) | timeouts=32 **gets=3** writes=32 ✓ |
+| standalone | demote (threshold=0) | 33.572 | — | gets=32 — ≈ incumbent wall-clock (the Q2 standalone answer, now measured) |
+| chain | before | 33.770 / 33.883 / 34.379 | 33.883 | gets=48 hits=16 |
+| chain | after | 4.697 / 4.707 / 4.585 | **4.697** (7.21×) | gets=**19** (16 seed + 3 outage) hits=16 ✓ |
+| chain | demote (threshold=0) | 34.046 | — | gets=48 ✓ |
+
+vs the run-7 freeze (33.483/4.299 standalone, 33.658/4.589 chain): deltas ≤ 2.5%, every invariant byte-identical, demote arms indistinguishable from before — **the run-7 numbers stand as the cited freeze; the re-run is the regime-proof that the recovery change did not move the frozen cells' paths** (the cells end ~4.6 s into a 60 s cooldown, so no expiry arm ever ran — the argument was backup, the measurement is the record).
+
+**Binding-condition compliance (round-5 checks):** try_admit is the exact state table (active cooldown refuses — pinned in `lookups_resume_after_the_cooldown_expires`'s full sequence: trip → refuse → expire → admit one → refuse the second → probe-timeout restarts the cooldown → answer admits all); the probe-deadline safety net (`PROBE_DEADLINE_MARGIN` = 10 s, owner-approved) pinned by `a_wedged_probe_window_admits_a_fresh_probe` (in-module state access); `an_answered_read_reopens_a_level_in_cooldown` pins the record_response-beyond-recovery behavior (stated in body ¶3 + both docs rows); the 1/N bound is stated as approximate (body ¶3) — `level_budget` divides the REMAINING deadline, so the guarantee is about 1/N, not exact; body + docs grepped for overclaims (`all reads`/`every read`/`any read` — the two docs hits are the write-failure policy's `any read-write level`, unrelated; the body's problem-statement and reset-semantics sentences are true of the gated compile-lookup paths, the ungated preprocessor path is unclaimed).
+
+**Binaries (run8/bins/, NOT committed):** pristine-33d12fb sha256 `5481826718641311…`, e289bc6 `368c88d351b21864…`, tip-2b18762-release `592d9873d4dabf55…` (byte-identical pre/post-amend, proven by hash).
