@@ -97,7 +97,7 @@ if [ -n "$BIN_AGE_MTIME" ] && [ -n "$BIN_AGE_LAST_CT" ]; then
     echo "  bin-age:   OK  (binary $(bin_age_fmt "$BIN_AGE_MTIME") >= last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"))"
   else
     echo "  bin-age:   STALE — binary $(bin_age_fmt "$BIN_AGE_MTIME") predates last src commit $BIN_AGE_LAST_H $(bin_age_fmt "$BIN_AGE_LAST_CT"); adoption runs serve a stale corpus"
-    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,kat_service,kat_transport,fix_verify,update_check --bin cargo-refine (the Issue-153 pinned release set, byte-identical to release.yml's build line — latent_retrieval alone compiles the refill/sync/burn-push surfaces to nothing, and a set missing update_check honestly self-reports STALE at --version)"
+    echo "             rebuild: cd $HEAL_REPO && cargo build --release --features latent_retrieval,points,net-mainnet,fix_verify,update_check,span_shape_dispatch,index_cache --bin cargo-refine (byte-identical to release.yml's build line minus the promoted-by-default kernel_pregate/shader_perf — kat_service dropped from the bin's required set at issue 190 T14a; the old latent_retrieval,kat_service,kat_transport hint built the charitable posture with the points/net-mainnet/index_cache surfaces compiled OUT, and a set missing update_check honestly self-reports STALE at --version)"
   fi
 else
   echo "  bin-age:   UNKNOWN (mtime/git comparison unavailable on this box — broken symlink? no git?)"
