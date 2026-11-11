@@ -13210,7 +13210,8 @@ fn main() {
     // epoch exists is the lease-refresh question — issue 203's migration;
     // until it lands the line is honest about what is known locally.
     #[cfg(feature = "points")]
-    if args.command.is_none() || args.fix || args.suggest {
+    // `--version` prints its own line 0 (build_stamp) — skip the duplicate.
+    if (args.command.is_none() || args.fix || args.suggest) && !args.version {
         let corpus_part = {
             let store =
                 riir_kat::kat_lease_client::LeaseStore::open(&resolve_heal_root(&args.paths));
@@ -13222,7 +13223,8 @@ fn main() {
         println!("cargo-refine {}{corpus_part}", env!("CARGO_PKG_VERSION"));
     }
     #[cfg(not(feature = "points"))]
-    if args.command.is_none() || args.fix || args.suggest {
+    // `--version` prints its own line 0 (build_stamp) — skip the duplicate.
+    if (args.command.is_none() || args.fix || args.suggest) && !args.version {
         println!("cargo-refine {}", env!("CARGO_PKG_VERSION"));
     }
 

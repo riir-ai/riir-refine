@@ -64,6 +64,15 @@ fn version_prints_the_compiled_feature_stamp() {
         first.starts_with("cargo-refine "),
         "line 0 must stay `cargo-refine <version>`, got {first:?}"
     );
+    // Issue 225: the always-on identity line must not ALSO print on
+    // `--version` — the version block's own line 0 is the only one.
+    assert_eq!(
+        text.lines()
+            .filter(|l| l.starts_with("cargo-refine "))
+            .count(),
+        1,
+        "`cargo-refine <version>` must print exactly once. output:\n{text}"
+    );
     assert!(
         text.contains("features: "),
         "the stamp must name the compiled set. output:\n{text}"
