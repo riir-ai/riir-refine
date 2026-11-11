@@ -1,5 +1,6 @@
 # Issue 226 — the index-cache G3 redesign: store after print, size cap, cheaper write
 **Status:** open — promotion blocker for `index_cache` (issue 224 T4), verdict-directed. — Delegated-owner verdict (b) 2026-11-11, session 98784e41: keep `index_cache` opt-in; this redesign is the ONLY blocker; G3 restated HERE, before re-measurement, as "time until results printed ≤ +5%".
+**Claimed:** katgpt-rs-33@amo (T1+T2), 1794387239, expires 2026-11-13T09:00Z
 
 ## Why (the verdict's reasoning)
 
