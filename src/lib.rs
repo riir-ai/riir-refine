@@ -43,7 +43,13 @@
 //! Cross-domain auto-routing ships behind the `latent_retrieval` feature
 //! (Plan 005): real-file span-level `--suggest` via the riir-rag latent
 //! substrate. Each domain is additionally selected by its feature flag for
-//! the non-latent paths.
+//! the non-latent paths. The `span_shape_dispatch` lane (issue 216, PROMOTED
+//! to the shipped release set by Bench 144's cost leg) rides that same
+//! surface: the Issue-063 shared per-span parse classifies each chunk's
+//! syntactic shape, and the six annotated `rust_perf` rules drop out of the
+//! fan-out where no shape can match — fail-open everywhere else. Kill-switch
+//! `RIIR_REFINE_SPAN_SHAPE=0` (the exact literal, DEMOTE-ONLY) restores the
+//! ungated fan-out byte-identically.
 //!
 //! ## Modelless-first mandate
 //!

@@ -11,9 +11,7 @@
 #![allow(clippy::pedantic)] // golden pins, not production code
 
 use riir_refine::kat_redact::FindingKind::*;
-use riir_refine::kat_service_urls::{
-    DEVNET_SERVICE_URL, GEN2_MAINNET_SERVICE_URL, MAINNET_SERVICE_URL,
-};
+use riir_refine::kat_service_urls::{GEN2_MAINNET_SERVICE_URL, MAINNET_SERVICE_URL};
 use riir_refine::kat_units::{
     CHARGE_MICRO_KAT_PER_MILLION_TOKENS, FREE_TIER_GRANT_MICRO_KAT, FREE_TIER_TOKENS_MTOK,
     MICRO_PER_KAT,
@@ -47,7 +45,16 @@ fn free_tier_grant_identity_is_pinned() {
 #[test]
 fn service_hosts_are_pinned() {
     assert_eq!(MAINNET_SERVICE_URL, "https://mainnet.riir.ai");
-    assert_eq!(DEVNET_SERVICE_URL, "https://devnet.gist.rs");
+    // The devnet host compiles to nothing under the shipped net-mainnet
+    // pin (the foreign-hosts compile-to-nothing discipline), so its pin
+    // rides the same cfg the source const does.
+    #[cfg(not(all(feature = "net-mainnet", not(feature = "net-devnet"))))]
+    {
+        assert_eq!(
+            riir_refine::kat_service_urls::DEVNET_SERVICE_URL,
+            "https://devnet.gist.rs"
+        );
+    }
     assert_eq!(GEN2_MAINNET_SERVICE_URL, MAINNET_SERVICE_URL);
 }
 

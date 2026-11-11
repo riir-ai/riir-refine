@@ -10783,10 +10783,10 @@ fn batch329_goat_damage_map() {
 }
 
 /// Batch 349 rules present (Plan 360 / Research 393, the encoders distill):
-/// TWO own `rust_perf` rules in `entries_71` — the deferred integer-lane
-/// pooling law (arithmetic) + the incremental prefix-hash WordPiece scan
+/// TWO own `rust_perf` rules in `entries_71` — the deferred `integer-lane`
+/// pooling law (arithmetic) + the incremental prefix-hash `WordPiece` scan
 /// law (complexity) — plus one count-neutral rider face on
-/// `ascii-run-swar-block-skip` (entries_29). All ANNOTATED, all parse,
+/// `ascii-run-swar-block-skip` (`entries_29`). All ANNOTATED, all parse,
 /// needles keyed after reading the landed text.
 #[test]
 fn batch349_rules_present() {

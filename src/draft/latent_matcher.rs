@@ -886,8 +886,16 @@ impl LatentMatcher {
         // Issue 216 (codegram): the shape verdict for this chunk, read from
         // the SAME shared parse (zero additional parse work). `None` (the
         // RerankMode::Off posture) classifies ALL — the fail-open contract.
+        // PROMOTED (T5, Bench 144): the release set carries the dispatch;
+        // `RIIR_REFINE_SPAN_SHAPE=0` (the exact demote literal) restores the
+        // pre-promotion fan-out — classify skipped, verdict ALL, the retain
+        // below early-outs on ALL (byte-identical incumbent).
         #[cfg(feature = "span_shape_dispatch")]
-        let shape_verdict = span_shape::classify(code, parsed.as_ref());
+        let shape_verdict = if span_shape::demoted() {
+            span_shape::SpanShapeSet::ALL
+        } else {
+            span_shape::classify(code, parsed.as_ref())
+        };
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
             // Issue 213: a domain outside the span's allow set skips its
@@ -1996,6 +2004,28 @@ pub mod span_shape {
         }
     }
 
+    /// The promotion kill-switch, DEMOTE-ONLY per the env-switch law:
+    /// `RIIR_REFINE_SPAN_SHAPE=0` (the exact literal) restores the
+    /// pre-promotion fan-out byte-identically — [`classify`] skipped,
+    /// verdict [`SpanShapeSet::ALL`], the `suggest_all_domains` retain
+    /// early-outs. Unset or ANY other value arms the promoted dispatch —
+    /// a demote-only env has no default-on posture to promote, so the
+    /// promote-shaped literals (`1`/`true`/`on`) are deliberate no-ops.
+    /// Read once per process (a `OnceLock` load on the hot path; zero-alloc).
+    #[must_use]
+    pub fn demoted() -> bool {
+        static DEMOTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *DEMOTED
+            .get_or_init(|| demote_parse(std::env::var("RIIR_REFINE_SPAN_SHAPE").ok().as_deref()))
+    }
+
+    /// The pure half of [`demoted`]: `Some("0")` — and nothing else — is
+    /// the demote literal (the scan lane's `!= "0"` spelling, inverted).
+    #[must_use]
+    pub fn demote_parse(raw: Option<&str>) -> bool {
+        raw == Some("0")
+    }
+
     fn attr_is_test(attr: &syn::Attribute) -> bool {
         attr.path().is_ident("test")
     }
@@ -2003,7 +2033,7 @@ pub mod span_shape {
 
 #[cfg(all(test, feature = "span_shape_dispatch"))]
 mod span_shape_tests {
-    use super::span_shape::{classify, rule_admits};
+    use super::span_shape::{classify, demote_parse, rule_admits};
     use crate::DomainId;
     use crate::LatentMatcher;
     use crate::domain::{SpanShape, SpanShapeSet};
@@ -2020,6 +2050,29 @@ mod span_shape_tests {
 
     fn verdict_of(src: &str) -> SpanShapeSet {
         classify(src, syn::parse_file(src).ok().as_ref())
+    }
+
+    /// The demote-literal pin (the env-switch law's demote-only half): the
+    /// exact `0` demotes; every other spelling — including the promote-shaped
+    /// `1`/`true`/`on` and the near-miss `00` — arms. A demote-only env has
+    /// no default-on posture, so promote-shaped literals are no-ops, never
+    /// a second kill-switch.
+    #[test]
+    fn demote_literal_is_exact_zero() {
+        assert!(demote_parse(Some("0")));
+        for armed in [
+            None,
+            Some(""),
+            Some("1"),
+            Some("true"),
+            Some("on"),
+            Some("false"),
+            Some("off"),
+            Some("00"),
+            Some("0 "),
+        ] {
+            assert!(!demote_parse(armed), "{armed:?} must not demote");
+        }
     }
 
     /// The classifier pin (the kernel-pregate `pinned` test convention): each

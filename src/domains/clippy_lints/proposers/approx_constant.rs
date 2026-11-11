@@ -303,7 +303,11 @@ mod tests {
     /// Every table entry's f64 bits AND derived f32 bits must equal the
     /// actual std constants — a wrong digit or a double-rounding
     /// discrepancy fails here, not in a consumer tree.
+    /// The `cast_possible_truncation` allow is fn-scoped because the f64
+    /// to f32 truncation IS the derivation under test (the statement-level
+    /// allow does not govern a macro's expansion).
     #[test]
+    #[allow(clippy::cast_possible_truncation)]
     fn table_matches_std_consts_bit_for_bit() {
         const TABLE: &[(&str, f64)] = &[
             ("E", std::f64::consts::E),
@@ -339,6 +343,8 @@ mod tests {
                 std_value.to_bits(),
                 "{name} f64 digits wrong"
             );
+            // The f64->f32 truncation IS the derivation under test - see
+            // the fn-scoped allow above.
             assert_eq!(
                 (entry.value as f32).to_bits(),
                 (*std_value as f32).to_bits(),

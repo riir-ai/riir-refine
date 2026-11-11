@@ -1,6 +1,6 @@
 # Bench 144 — codegram span-shape dispatch landing (issue 216 T1): classifier + annotation table + filter
 
-**Status:** OPEN — T1 LANDED 2026-11-07 (this record) · local gates GREEN (clippy `-D warnings` all-targets at THREE postures: default / `--features span_shape_dispatch` / release-set; tests 5/5) · T4 (G2 cost) QUEUED on a quiet rig, pre-registered protocol verbatim · promotion (T5) waits on the numbers
+**Status:** CLOSED — PROMOTED 2026-11-11 (T4 cost leg PASS on amo, both runs; release set carries `span_shape_dispatch`; demote `RIIR_REFINE_SPAN_SHAPE=0`). T1 LANDED 2026-11-07 (classifier + annotation table + filter + pins; local gates GREEN at default / feature / release-set postures; tests 9/9). T4 (G2 cost) RAN 2026-11-11 on a quiet amo per the pre-registered protocol — see the T4 section. T5 promotion landed the same day: RELEASE_FEATURES (build_stamp.rs) + release.yml + manual_release.sh in lockstep (the two `release_set_matches_*` tests pin the trio), lib.rs doc line, demote env, this record + issue 216 closed.
 
 ## What landed
 
@@ -43,13 +43,38 @@ Clippy lessons en route (all mechanical, fixed in the same commit): `return_self
 - **Feature on, Perf, annotated, non-matching shape:** the rule leaves the fan-out — the DESIGNED behavior (drop-side pinned at `rule_admits` level; end-to-end byte-parity = the g5 lane below).
 - **No parse available (`RerankMode::Off`):** verdict `ALL` → the retain early-outs — byte-identical.
 
-## T4 — the G2 cost leg (pre-registered protocol, verbatim from issue 216)
+## T4 — the G2 cost leg — RAN 2026-11-11, PASS ×2 (amo)
 
-`sh scripts/g5_domain_cost.sh --feature span_shape_dispatch --base latent_retrieval --rounds 3` on a QUIET RIG (m3 is BUSY this cycle — spindump — and takes no benchmark-class work). Bar: added ON-OFF scan latency per file, per-file medians, nearest-rank **p50 ≤ 1.0 ms AND p95 ≤ 5.0 ms**, all 3 interleaved rounds (the Issue-191 bar-5 form, shared with Benches 132/137/140/143).
+`sh scripts/g5_domain_cost.sh --feature span_shape_dispatch --base latent_retrieval --rounds 3 --out-dir /tmp/g5_216` on amo (Apple M5 Ultra, 30 cores, 96 GB, on AC; load 3.7→10.6 rising across run 1, 4.4→6.7 across run 2 — quiet-builder class, the orchestrator watchdog beside; the `agent-mail rig status` verdict at start: QUIET). Bar (Issue-191 bar-5 form, shared with Benches 132/137/140/143): added ON−OFF scan latency per file, per-file medians, nearest-rank **p50 ≤ 1.0 ms AND p95 ≤ 5.0 ms**, ALL 3 interleaved rounds. 651 files (this crate's `src/`), corpus = the compiled rule corpus; the runner's ON-only-features stamp guard confirms the ON arm differs by exactly `span_shape_dispatch` (engagement proof).
 
-Expected magnitude: the ON arm adds ONE u16 fold over the chunk's root items + one retain scan over the Perf pool per span — the parse both arms already pay; the OFF-vs-ON delta should be noise-level. The counter-press: masked rules LEAVE the pool, so the ON arm's marking/rerank work can only shrink for annotated-rule hits.
+**Run 1 — the T1 code as landed (11-07), executed 2026-11-11 ~03:11Z:**
 
-**Utility-floor disposition (disclosed, not gated):** `g5_utility_cost.sh`'s three postures are kernel-expert-flavored (flat/narrowed/off) and cannot parameterize this feature — running it would measure a posture without the mask. The floor carries BY CONSTRUCTION: the mask touches only the 6 annotated rust_perf rules; the kernel-expert census (Bench 125/137's 15/15) and every other domain are structurally untouched; the g5 ON run's harness census is the disclosure record. The annotation-priority feedback loop (annotate where fix accuracy is shape-concentrated) remains issue 217 T9(b)'s curve — currently unopened (217 closed as a measurement note; no consumer waiting).
+| round | added p50 ms/file (support 326) | added p95 ms/file (support 34) | verdict |
+|---|---|---|---|
+| 1 | −0.231 | 0.023 (217×) | PASS |
+| 2 | 0.006 | 0.432 (11.6×) | PASS |
+| 3 | −0.261 | 2.017 (2.5×, load spiked to 10.6 mid-round) | PASS |
+
+**Run 2 — the PROMOTED code (env latch in, the shipping posture), executed 2026-11-11 ~03:41Z:**
+
+| round | added p50 ms/file (support 326) | added p95 ms/file (support 34) | verdict |
+|---|---|---|---|
+| 1 | −0.153 | 0.390 (12.8×) | PASS |
+| 2 | −0.042 | 0.658 (7.6×) | PASS |
+| 3 | −0.134 | 0.144 (34.7×) | PASS |
+
+Verdict: the dispatcher is free at the serving posture — the ON arm reuses the Issue-063 shared per-span parse (zero added parse work) and `rule_admits` is a 6-row table lookup per Perf candidate; the ON-only work is one u16 fold + one 6-row retain scan per span. Negative p50s across run 2 = ON never slower than interleaving noise; masked rules LEAVING the pool can only shrink the ON arm's marking/rerank work (the counter-press, observed). Run 1 rode the pre-latch code (the lease holder's claimed lane produced nothing for 34h — closed by owner call, executed by the amo zed session; the claim line on issue 216 is folded below in the same commit). Run 2 re-ran the identical protocol on the promoted binary so the shipped posture is the measured one.
+
+**Utility-floor disposition (unchanged, disclosed):** `g5_utility_cost.sh`'s three postures are kernel-expert-flavored and cannot parameterize this feature — running it would measure a posture without the mask. The floor carries BY CONSTRUCTION: the mask touches only the 6 annotated rust_perf rules; the kernel-expert census (Bench 125/137's 15/15) and every other domain are structurally untouched; the g5 ON run's harness census is the disclosure record. The annotation-priority feedback loop remains issue 217 T9(b)'s curve — unopened (no consumer waiting).
+
+## T5 — promotion (landed 2026-11-11, one commit)
+
+- **The release set carries `span_shape_dispatch`** — `RELEASE_FEATURES` (src/build_stamp.rs, with the dated comment), `.github/workflows/release.yml`'s cargo-refine build line, and `scripts/manual_release.sh` FEATURES moved in lockstep (the `release_set_matches_workflow` + `release_set_matches_the_manual_script` tests pin the trio; 4/4 green post-landing). The cargo-about line is deliberately NOT extended: the feature implies `latent_retrieval` + `rust_perf` — BOTH already in the shipped graph — so the dep + license graphs are unchanged (the kernel_pregate precedent named it there only because dep:regex was NEW).
+- **Bare cargo default stays light BY DECISION** — the pre-registration's "Cargo default" surface is amended: `span_shape_dispatch` implies the `latent_retrieval` tree (dep:riir-rag), and the default build's lightness is a standing law. The owner-facing surface that ships the feature is the release set — the honest reading of "defaults ON" for a released binary.
+- **Demote env (the env-switch law):** `RIIR_REFINE_SPAN_SHAPE=0` (the exact literal, DEMOTE-ONLY — unset or any other value arms; promote-shaped literals are deliberate no-ops). Demoted = classify skipped + verdict `ALL` + the retain early-outs = the pre-promotion fan-out byte-identically. Read once per process (`OnceLock`, zero-alloc); pinned by `demote_literal_is_exact_zero` (the parse is a pure fn, no process-global env mutation in tests).
+- **Post-promotion gates (amo, 2026-11-11):** span_shape tests 10/10 (9 T1 + the new demote pin); release_set lockstep 4/4; `cargo clippy --all-targets -- -D warnings` GREEN at default AND at the full release set (all-targets — T1's release-set row was `cargo check`, which never compiled the test targets; see the en-route repairs below); katplane_parity 4/4 at BOTH net postures.
+- **En-route repairs (all in this commit, the T1 "fixed in the same commit" precedent):** the release-set all-targets clippy posture reds on 4 pre-existing mechanicals + 1 of mine — lib.rs doc backtick (`rust_perf`), corpus/tests.rs doc backticks (`WordPiece`, `entries_29`), approx_constant's intentional f64→f32 derivation casts (fn-scoped `#[allow(clippy::cast_possible_truncation)]` with the reason — the truncation IS the bit-exactness assertion; a statement-level allow does not govern a macro's expansion), and `tests/katplane_parity.rs` importing `DEVNET_SERVICE_URL` unconditionally — that const compiles to NOTHING under the shipped net-mainnet pin (the foreign-hosts compile-to-nothing discipline), so the target could not build at the release-set posture at all since the pivot; its devnet row now rides the same cfg (4/4 green at both net postures). The installed cargo-refine binary was STALE (pre-points-pivot build), so these went manual per the documented fallback; the release-set rebuild rides this landing.
+- **Lease:** the amo-idle-216 claim (epoch 1794238557, expiry 2026-11-11T15:35:57Z) never produced numbers in 34h — closed by owner call with the rig quiet; folded on issue 216 in the same commit.
 
 ## Coordination (T8, final)
 

@@ -125,6 +125,19 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // domain costs added p95 < 1 ms/file. Zero deps (license graph unchanged;
     // the licenses job names it anyway — one feature list, lockstep).
     "shader_perf",
+    // Issue 216 / Bench 144 — span_shape_dispatch PROMOTED (T4 cost PASS:
+    // 3 interleaved rounds, added p50 <= 0.01 ms AND p95 <= 2.02 ms per file
+    // against the 1.0/5.0 ceilings — the ON arm reuses the Issue-063 shared
+    // per-span parse and `rule_admits` is a 6-row table lookup). Shape-keyed
+    // dispatch over the Perf corpus's 6 annotated rows; fail-open everywhere
+    // else. Implies latent_retrieval + rust_perf — BOTH already shipped, so
+    // the dep + license graphs are unchanged (the cargo-about line needs no
+    // new name). Kill-switch `RIIR_REFINE_SPAN_SHAPE=0` (the exact literal,
+    // DEMOTE-ONLY). Bare cargo default stays light BY DECISION: the feature
+    // implies the latent_retrieval tree (dep:riir-rag), so promotion targets
+    // the release set only — the pre-registration's "Cargo default" surface
+    // is amended with that reason in Bench 144.
+    "span_shape_dispatch",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names
