@@ -1,8 +1,8 @@
 # Issue 222: Rule-Mining Batch-Intake Diversity Arm (Diffusion-Diversity Div)
 
 **Date:** 2026-11-09
-**Status:** Open — T1 claimed 2026-11-11
-**Claimed:** amo-idle-i222-t1, 1794451200, expires 2026-11-13T10:00:00+00:00
+**Status:** Open — T1 LANDED 2026-11-11 (amo idle lane); T2/T3 remain
+**Lease closed:** amo-idle-i222-t1, 1794451200, was expires 2026-11-13T10:00:00+00:00 — T1 landed in the window (module + wiring + upstream div_tau fix katgpt-rs `9fb45d922`; landing row below)
 **Origin:** katgpt-rs Research 660 ([arXiv:2606.01861](https://arxiv.org/abs/2606.01861)) — self-play curriculum-diversity distillation. Primitive: katgpt-rs Plan 634; siblings: riir-ai Plan 646, reflex Issue 115, riir-train Issue 680.
 
 ## Problem
