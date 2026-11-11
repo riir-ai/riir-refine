@@ -1,0 +1,13 @@
+# fmt_gate.py — the Issue 223 T4 DRAIN LIST: files still diverging from the
+# rustfmt.toml posture (edition 2021 parse + style_edition 2024), held here
+# only while a concurrent session may be mid-edit on them (reformatting under
+# one turns its next rebase into a conflict).
+#
+# Format:  <relpath> # reason        (a reasonless row is REFUSED)
+#
+# Reds in BOTH directions: a drifted file with no row (UNPINNED), and a row
+# whose file is now clean (STALE). Drain a row by formatting the file —
+# bare `rustfmt <file>` (the toml carries edition + style) — and deleting the
+# row in the SAME commit. NEVER add a row for new drift: format the file
+# instead. This list only shrinks. STARTED EMPTY at the landing: residual
+# drift on the gate population is 0.

@@ -31,6 +31,13 @@
 #                              compiled corpus + the live prose rows
 #                              (plan 329 P1, issue 197; --write is the
 #                              count-pin landing pass, never run-to-pass)
+#   8. fmt gate              → rustfmt-clean per scripts/fmt_gate.py (issue
+#                              223 T4): map-driven exclusions + tripwires
+#                              (scripts/fmt_exclusions.txt), batched
+#                              per-chunk rustfmt at the toml's edition+style,
+#                              drain list fmt_pending_expected.txt (empty,
+#                              only shrinks). Zero cargo; missing rustfmt =
+#                              loud NO VERDICT, never a silent skip.
 #
 # No Lean proof gate (this repo has no `.proofs/`).
 # No wasm32 gate (the `wasm_pruner` feature is deferred on rubrc maturity).
@@ -351,6 +358,15 @@ echo "=== Layer 7: corpus-pins manifest gate (plan 329 P1, issue 197) ==="
 # WITH the corpus change. The pins posture build is warm after Layers 2–5.
 python3 scripts/pins_manifest.py || exit 1
 echo "✓ pins manifest + prose agree with the compiled corpus"
+
+echo
+echo "=== Layer 8: fmt gate (issue 223 T4 — rustfmt-clean, map-driven exclusions + tripwires) ==="
+# Zero cargo, warm ~1 min on a quiet box (batched per-chunk rustfmt; the
+# per-file fallback only fires on a refusing chunk). Missing rustfmt = loud
+# NO VERDICT exit 2 — blocking, never a silent skip (condition 4). The gate
+# never writes: it flags; the fix is a bare `rustfmt <file>` + commit.
+python3 scripts/fmt_gate.py || exit 1
+echo "✓ fmt gate clean (drain list only shrinks — never pin new drift)"
 
 echo
 echo "=== All layers PASS ==="

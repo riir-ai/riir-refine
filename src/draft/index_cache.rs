@@ -1290,7 +1290,11 @@ mod tests {
         std::env::set_var(MAX_MB_ENV, "16");
         assert_eq!(max_cache_bytes(), Some(16 * 1024 * 1024));
         std::env::set_var(MAX_MB_ENV, " 16 ");
-        assert_eq!(max_cache_bytes(), Some(16 * 1024 * 1024), "trim is friendly");
+        assert_eq!(
+            max_cache_bytes(),
+            Some(16 * 1024 * 1024),
+            "trim is friendly"
+        );
         for junk in ["abc", "-4", "1.5", ""] {
             std::env::set_var(MAX_MB_ENV, junk);
             assert_eq!(

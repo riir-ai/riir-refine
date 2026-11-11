@@ -51,8 +51,6 @@ pub mod clippy_feed;
 pub mod clippy_oracle;
 pub mod corpus_index;
 pub mod domain_router;
-#[cfg(feature = "index_cache")]
-pub mod index_cache;
 #[cfg(feature = "latent_retrieval")]
 pub mod eval_fixtures_clippy;
 #[cfg(feature = "latent_retrieval")]
@@ -69,6 +67,8 @@ pub mod eval_fixtures_perf;
 pub mod eval_fixtures_sec;
 #[cfg(feature = "latent_retrieval")]
 pub mod eval_fixtures_shader;
+#[cfg(feature = "index_cache")]
+pub mod index_cache;
 // Issue 217 T0: the size-band jaggedness axis — the ordered OOD cut beside
 // the withheld-pair axis (leave-one-BAND-out; the preregistered floor is in
 // the issue's Status line, never re-tuned).

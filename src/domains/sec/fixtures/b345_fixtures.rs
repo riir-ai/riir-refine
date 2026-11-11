@@ -117,19 +117,13 @@ fn f1_risky_format_refuses_before_the_loader_runs() {
     }
     // the gate fires BEFORE the loader: an error path never deserializes
     let _ = load(untrusted); // the caller's load only runs on an Ok verdict
-    assert!(
-        loader_ran.get(),
-        "the caller's explicit load still works for trusted input"
-    );
+    assert!(loader_ran.get(), "the caller's explicit load still works for trusted input");
 }
 
 #[test]
 fn f1_catalog_digest_admits_risky_format_and_refuses_tampered_bytes() {
     let payload = b"catalog weights v1";
-    let entry = CatalogEntry {
-        expected_len: payload.len(),
-        expected_digest: digest(payload),
-    };
+    let entry = CatalogEntry { expected_len: payload.len(), expected_digest: digest(payload) };
     let ok = checkpoint_trust(payload, Format::ExecutionCapable, Some(entry), false);
     assert_eq!(ok, Ok(Trust::CatalogVerified));
 
@@ -137,7 +131,8 @@ fn f1_catalog_digest_admits_risky_format_and_refuses_tampered_bytes() {
     let bad = checkpoint_trust(tampered, Format::ExecutionCapable, Some(entry), false);
     assert_eq!(bad, Err(LadderError::DigestMismatch));
     // consent does NOT rescue tampered catalog bytes — the digest is the arm
-    let bad_with_consent = checkpoint_trust(tampered, Format::ExecutionCapable, Some(entry), true);
+    let bad_with_consent =
+        checkpoint_trust(tampered, Format::ExecutionCapable, Some(entry), true);
     assert_eq!(bad_with_consent, Err(LadderError::DigestMismatch));
 }
 
@@ -152,7 +147,7 @@ fn f1_naive_name_check_has_no_digest_arm() {
 
 /// The two-sided boundary: the HOST gates independently of the engine.
 mod host_side {
-    use super::{Format, LadderError, Trust, digest};
+    use super::{digest, Format, LadderError, Trust};
 
     /// the host's own pre-spawn check — the engine's ladder is NOT visible
     /// to the host, so the host re-derives the verdict from its own inputs.

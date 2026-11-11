@@ -385,6 +385,11 @@ Fixed files are **rustfmt'd automatically** after the write — default-on,
 `--no-fmt` to disable. No manual post-fix formatting step, no SKILL
 required — the discipline is built into the tool:
 
+> **This repo's own posture (issue 223 T4):** format every `.rs` you touch
+> with bare `rustfmt <file>` before committing — the repo is style-2024
+> gated (guard Layer 8, `scripts/fmt_gate.py`; never `cargo fmt --all` or
+> `cargo fmt -p X -- a.rs` here — see AGENTS.md §Formatting).
+
 - **fmt-clean-at-HEAD gate**: rustfmt only touches a fixed file when the
   *original* (pre-fix) content was already rustfmt-clean. Files with
   pre-existing formatting drift are fixed but **left unfmt'd** — a
