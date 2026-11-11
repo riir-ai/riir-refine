@@ -1,6 +1,9 @@
 # Issue 226 — the index-cache G3 redesign: store after print, size cap, cheaper write
 **Status:** open — promotion blocker for `index_cache` (issue 224 T4), verdict-directed. — Delegated-owner verdict (b) 2026-11-11, session 98784e41: keep `index_cache` opt-in; this redesign is the ONLY blocker; G3 restated HERE, before re-measurement, as "time until results printed ≤ +5%".
-**Claimed:** katgpt-rs-33@amo (T1+T2), 1794387239, expires 2026-11-13T09:00Z
+**Lease closed:** katgpt-rs-33@amo, epoch 1794387239, was expires 2026-11-13T09:00Z (the claimed scope T1+T2 landed `d386e935`; the writer-thread refinement WIP in the main checkout is that lane's continuation — untouched by this file's T3 claim)
+**Claimed:** zed-9050d127@amo (T3), 1794418100, expires 2026-11-13T17:00Z
+
+Lease notes: the T3 claim is worktree-isolated against `56a5e2a5` — the main checkout's dirty `corpus_index.rs`/`index_cache.rs`/`latent_matcher.rs`/`retriever.rs` (the DomainCapture writer-thread refinement, last touched 16:13) is the T1+T2 lane's live WIP; T4 stays open until T3 + that WIP both land.
 
 ## Why (the verdict's reasoning)
 
