@@ -1,0 +1,217 @@
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-dapps_adoption_outcomes.jsonl (48 rows: 41 accepted / 7 rejected; 6 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  demote   collapsible_match            α=0.50 REFUSE   retained=0.9375 repeated=0.1667 score=0.8854
+  [α-flip] demote   collapsible_match            crosses between α=0.80 and α=0.90: REFUSE → PROCEED — INTERIOR α*=0.8298 (Δr=-0.0625 Δp=-0.0128)
+  demote   doc_overindented_list_items  α=0.50 REFUSE   retained=0.9688 repeated=0.1842 score=0.8923
+  demote   redundant_closure            α=0.50 REFUSE   retained=0.9688 repeated=0.1842 score=0.8923
+  demote   shrink-to-fit-after-build    α=0.50 REFUSE   retained=0.9062 repeated=0.1944 score=0.8559
+  demote   unnecessary_get_then_check   α=0.50 REFUSE   retained=0.2500 repeated=0.1111 score=0.5694
+  [α-flip] demote   unnecessary_get_then_check   crosses between α=0.90 and α=1.00: REFUSE → PROCEED — INTERIOR α*=0.9164 (Δr=-0.7500 Δp=-0.0684)
+  demote   vec-with-capacity            α=0.50 REFUSE   retained=0.9688 repeated=0.1842 score=0.8923
+  readmit  collapsible_match            α=0.50 REFUSE   retained=0.0625 repeated=0.3333 score=0.3646
+  readmit  doc_overindented_list_items  α=0.50 PROCEED  retained=0.0312 repeated=0.0000 score=0.5156
+  readmit  redundant_closure            α=0.50 PROCEED  retained=0.0312 repeated=0.0000 score=0.5156
+  readmit  shrink-to-fit-after-build    α=0.50 PROCEED  retained=0.0938 repeated=0.0000 score=0.5469
+  readmit  unnecessary_get_then_check   α=0.50 REFUSE   retained=0.7500 repeated=0.2000 score=0.7750
+  readmit  vec-with-capacity            α=0.50 PROCEED  retained=0.0312 repeated=0.0000 score=0.5156
+  [leave-one-out] row 5 (collapsible_match, accepted=false) moves readmit collapsible_match: REFUSE → PROCEED
+  [leave-one-out] row 9 (collapsible_match, accepted=true) moves demote collapsible_match: REFUSE → PROCEED
+  [leave-one-out] row 16 (shrink-to-fit-after-build, accepted=true) moves readmit shrink-to-fit-after-build: PROCEED → REFUSE
+  [leave-one-out] row 19 (shrink-to-fit-after-build, accepted=true) moves readmit shrink-to-fit-after-build: PROCEED → REFUSE
+  [leave-one-out] row 20 (doc_overindented_list_items, accepted=true) moves demote doc_overindented_list_items: REFUSE → PROCEED
+  [leave-one-out] row 20 (doc_overindented_list_items, accepted=true) moves readmit doc_overindented_list_items: PROCEED → REFUSE
+  [leave-one-out] row 21 (redundant_closure, accepted=true) moves demote redundant_closure: REFUSE → PROCEED
+  [leave-one-out] row 21 (redundant_closure, accepted=true) moves readmit redundant_closure: PROCEED → REFUSE
+  [leave-one-out] row 32 (collapsible_match, accepted=true) moves demote collapsible_match: REFUSE → PROCEED
+  [leave-one-out] row 33 (vec-with-capacity, accepted=true) moves demote vec-with-capacity: REFUSE → PROCEED
+  [leave-one-out] row 33 (vec-with-capacity, accepted=true) moves readmit vec-with-capacity: PROCEED → REFUSE
+  [leave-one-out] row 34 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 35 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 36 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 37 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 38 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 39 (vec-with-capacity, accepted=true) moves demote vec-with-capacity: REFUSE → PROCEED
+  [leave-one-out] row 39 (vec-with-capacity, accepted=true) moves readmit vec-with-capacity: PROCEED → REFUSE
+  [leave-one-out] row 43 (shrink-to-fit-after-build, accepted=true) moves readmit shrink-to-fit-after-build: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.1 arm=acc→rej] consults below 0.90: 4 — readmit doc_overindented_list_items (27/32), readmit redundant_closure (24/32), readmit shrink-to-fit-after-build (26/32), readmit vec-with-capacity (27/32)
+  [noise p=0.1 arm=rej→acc seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.1 arm=rej→acc] consults below 0.90: 0
+  [noise p=0.2 arm=acc→rej seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.2 arm=acc→rej] consults below 0.90: 7 — demote collapsible_match (23/32), demote doc_overindented_list_items (25/32), demote redundant_closure (20/32), readmit doc_overindented_list_items (20/32), readmit redundant_closure (13/32), readmit shrink-to-fit-after-build (20/32), readmit vec-with-capacity (18/32)
+  [noise p=0.2 arm=rej→acc seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.2 arm=rej→acc] consults below 0.90: 2 — readmit collapsible_match (25/32), readmit redundant_closure (24/32)
+  [bar C] accepted-carrier refusal below bar: demote collapsible_match min-stability 0.719 (23 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote doc_overindented_list_items min-stability 0.781 (25 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote redundant_closure min-stability 0.625 (20 / 32 worst arm)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-neuron-db_adoption_outcomes.jsonl (21 rows: 17 accepted / 4 rejected; 10 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  [α-flip] demote   collapsible_match            crosses between α=0.40 and α=0.50: REFUSE → PROCEED — INTERIOR α*=0.4958 (Δr=-0.1429 Δp=-0.1453)
+  demote   collapsible_match            α=0.50 PROCEED  retained=0.8571 repeated=0.0769 score=0.8901
+  demote   doc_lazy_continuation        α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  demote   excessive_precision          α=0.50 REFUSE   retained=0.8571 repeated=0.2500 score=0.8036
+  demote   explicit_auto_deref          α=0.50 REFUSE   retained=0.8571 repeated=0.2000 score=0.8286
+  [α-flip] demote   explicit_auto_deref          crosses between α=0.80 and α=0.90: REFUSE → PROCEED — INTERIOR α*=0.8654 (Δr=-0.1429 Δp=-0.0222)
+  demote   manual_slice_fill            α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  demote   ptr_arg                      α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  demote   shrink-to-fit-after-build    α=0.50 REFUSE   retained=0.8571 repeated=0.2500 score=0.8036
+  demote   unnecessary_get_then_check   α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  demote   unnecessary_lazy_evaluations α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  demote   vec-with-capacity            α=0.50 REFUSE   retained=0.9286 repeated=0.2353 score=0.8466
+  readmit  collapsible_match            α=0.50 REFUSE   retained=0.1429 repeated=0.6000 score=0.2714
+  readmit  doc_lazy_continuation        α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  readmit  excessive_precision          α=0.50 PROCEED  retained=0.1429 repeated=0.0000 score=0.5714
+  readmit  explicit_auto_deref          α=0.50 REFUSE   retained=0.1429 repeated=0.3333 score=0.4048
+  readmit  manual_slice_fill            α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  readmit  ptr_arg                      α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  readmit  shrink-to-fit-after-build    α=0.50 PROCEED  retained=0.1429 repeated=0.0000 score=0.5714
+  readmit  unnecessary_get_then_check   α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  readmit  unnecessary_lazy_evaluations α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  readmit  vec-with-capacity            α=0.50 PROCEED  retained=0.0714 repeated=0.0000 score=0.5357
+  [leave-one-out] row 0 (excessive_precision, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 0 (excessive_precision, accepted=true) moves readmit excessive_precision: PROCEED → REFUSE
+  [leave-one-out] row 0 (excessive_precision, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → ABSTAIN
+  [leave-one-out] row 0 (excessive_precision, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 1 (collapsible_match, accepted=false) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 2 (shrink-to-fit-after-build, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 2 (shrink-to-fit-after-build, accepted=true) moves readmit shrink-to-fit-after-build: PROCEED → REFUSE
+  [leave-one-out] row 2 (shrink-to-fit-after-build, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → ABSTAIN
+  [leave-one-out] row 2 (shrink-to-fit-after-build, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 3 (shrink-to-fit-after-build, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 3 (shrink-to-fit-after-build, accepted=true) moves readmit shrink-to-fit-after-build: PROCEED → REFUSE
+  [leave-one-out] row 3 (shrink-to-fit-after-build, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → ABSTAIN
+  [leave-one-out] row 3 (shrink-to-fit-after-build, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 4 (collapsible_match, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → ABSTAIN
+  [leave-one-out] row 4 (collapsible_match, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 5 (collapsible_match, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → ABSTAIN
+  [leave-one-out] row 5 (collapsible_match, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 6 (collapsible_match, accepted=false) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 7 (unnecessary_get_then_check, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 7 (unnecessary_get_then_check, accepted=true) moves demote unnecessary_get_then_check: REFUSE → PROCEED
+  [leave-one-out] row 7 (unnecessary_get_then_check, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → REFUSE
+  [leave-one-out] row 7 (unnecessary_get_then_check, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 8 (explicit_auto_deref, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 8 (explicit_auto_deref, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 9 (doc_lazy_continuation, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 9 (doc_lazy_continuation, accepted=true) moves demote doc_lazy_continuation: REFUSE → PROCEED
+  [leave-one-out] row 9 (doc_lazy_continuation, accepted=true) moves readmit doc_lazy_continuation: PROCEED → REFUSE
+  [leave-one-out] row 9 (doc_lazy_continuation, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 10 (excessive_precision, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 10 (excessive_precision, accepted=true) moves readmit excessive_precision: PROCEED → REFUSE
+  [leave-one-out] row 10 (excessive_precision, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 11 (ptr_arg, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 11 (ptr_arg, accepted=true) moves demote ptr_arg: REFUSE → PROCEED
+  [leave-one-out] row 11 (ptr_arg, accepted=true) moves readmit ptr_arg: PROCEED → REFUSE
+  [leave-one-out] row 11 (ptr_arg, accepted=true) moves readmit vec-with-capacity: PROCEED → ABSTAIN
+  [leave-one-out] row 12 (ptr_arg, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 12 (ptr_arg, accepted=true) moves demote ptr_arg: REFUSE → PROCEED
+  [leave-one-out] row 12 (ptr_arg, accepted=true) moves readmit ptr_arg: PROCEED → REFUSE
+  [leave-one-out] row 14 (unnecessary_lazy_evaluations, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 14 (unnecessary_lazy_evaluations, accepted=true) moves demote unnecessary_lazy_evaluations: REFUSE → PROCEED
+  [leave-one-out] row 14 (unnecessary_lazy_evaluations, accepted=true) moves readmit unnecessary_lazy_evaluations: PROCEED → REFUSE
+  [leave-one-out] row 15 (manual_slice_fill, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 15 (manual_slice_fill, accepted=true) moves demote manual_slice_fill: REFUSE → PROCEED
+  [leave-one-out] row 15 (manual_slice_fill, accepted=true) moves readmit manual_slice_fill: PROCEED → REFUSE
+  [leave-one-out] row 17 (collapsible_match, accepted=false) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 18 (explicit_auto_deref, accepted=false) moves readmit explicit_auto_deref: REFUSE → PROCEED
+  [leave-one-out] row 19 (explicit_auto_deref, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 19 (explicit_auto_deref, accepted=true) moves demote explicit_auto_deref: REFUSE → PROCEED
+  [leave-one-out] row 20 (vec-with-capacity, accepted=true) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 20 (vec-with-capacity, accepted=true) moves demote vec-with-capacity: REFUSE → PROCEED
+  [leave-one-out] row 20 (vec-with-capacity, accepted=true) moves readmit vec-with-capacity: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej seeds=32] dominant refusal demote excessive_precision (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.1 arm=acc→rej] consults below 0.90: 10 — demote collapsible_match (15/32), demote ptr_arg (26/32), readmit doc_lazy_continuation (27/32), readmit excessive_precision (27/32), readmit manual_slice_fill (24/32), readmit ptr_arg (26/32), readmit shrink-to-fit-after-build (26/32), readmit unnecessary_get_then_check (21/32), readmit unnecessary_lazy_evaluations (27/32), readmit vec-with-capacity (23/32)
+  [noise p=0.1 arm=rej→acc seeds=32] dominant refusal demote excessive_precision (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.1 arm=rej→acc] consults below 0.90: 2 — demote collapsible_match (25/32), readmit explicit_auto_deref (27/32)
+  [noise p=0.2 arm=acc→rej seeds=32] dominant refusal demote excessive_precision (baseline REFUSE) stability 28/32 = 0.875
+  [noise p=0.2 arm=acc→rej] consults below 0.90: 16 — demote collapsible_match (4/32), demote doc_lazy_continuation (26/32), demote excessive_precision (28/32), demote manual_slice_fill (25/32), demote ptr_arg (26/32), demote unnecessary_get_then_check (27/32), demote unnecessary_lazy_evaluations (28/32), demote vec-with-capacity (25/32), readmit doc_lazy_continuation (22/32), readmit excessive_precision (21/32), readmit manual_slice_fill (16/32), readmit ptr_arg (26/32), readmit shrink-to-fit-after-build (18/32), readmit unnecessary_get_then_check (15/32), readmit unnecessary_lazy_evaluations (17/32), readmit vec-with-capacity (21/32)
+  [noise p=0.2 arm=rej→acc seeds=32] dominant refusal demote excessive_precision (baseline REFUSE) stability 32/32 = 1.000
+  [noise p=0.2 arm=rej→acc] consults below 0.90: 2 — demote collapsible_match (15/32), readmit explicit_auto_deref (23/32)
+  [bar C] accepted-carrier refusal below bar: demote doc_lazy_continuation min-stability 0.812 (26 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote excessive_precision min-stability 0.875 (28 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote manual_slice_fill min-stability 0.781 (25 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote ptr_arg min-stability 0.812 (26 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote unnecessary_get_then_check min-stability 0.844 (27 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote unnecessary_lazy_evaluations min-stability 0.875 (28 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote vec-with-capacity min-stability 0.781 (25 / 32 worst arm)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-viewbridge_adoption_outcomes.jsonl (3 rows: 3 accepted / 0 rejected; 3 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  demote   empty_line_after_doc_comments α=0.50 REFUSE   retained=0.6667 repeated=0.0000 score=0.8333
+  demote   missing_panics_doc           α=0.50 REFUSE   retained=0.6667 repeated=0.0000 score=0.8333
+  demote   semicolon_if_nothing_returned α=0.50 REFUSE   retained=0.6667 repeated=0.0000 score=0.8333
+  readmit  empty_line_after_doc_comments α=0.50 PROCEED  retained=0.3333 repeated=0.0000 score=0.6667
+  readmit  missing_panics_doc           α=0.50 PROCEED  retained=0.3333 repeated=0.0000 score=0.6667
+  readmit  semicolon_if_nothing_returned α=0.50 PROCEED  retained=0.3333 repeated=0.0000 score=0.6667
+  [leave-one-out] row 0 (missing_panics_doc, accepted=true) moves demote missing_panics_doc: REFUSE → PROCEED
+  [leave-one-out] row 0 (missing_panics_doc, accepted=true) moves readmit missing_panics_doc: PROCEED → REFUSE
+  [leave-one-out] row 1 (empty_line_after_doc_comments, accepted=true) moves demote empty_line_after_doc_comments: REFUSE → PROCEED
+  [leave-one-out] row 1 (empty_line_after_doc_comments, accepted=true) moves readmit empty_line_after_doc_comments: PROCEED → REFUSE
+  [leave-one-out] row 2 (semicolon_if_nothing_returned, accepted=true) moves demote semicolon_if_nothing_returned: REFUSE → PROCEED
+  [leave-one-out] row 2 (semicolon_if_nothing_returned, accepted=true) moves readmit semicolon_if_nothing_returned: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej seeds=32] dominant refusal demote empty_line_after_doc_comments (baseline REFUSE) stability 27/32 = 0.844
+  [noise p=0.1 arm=acc→rej] consults below 0.90: 2 — demote empty_line_after_doc_comments (27/32), readmit empty_line_after_doc_comments (27/32)
+  [noise p=0.1 arm=rej→acc] no eligible rows — skipped
+  [noise p=0.2 arm=acc→rej seeds=32] dominant refusal demote empty_line_after_doc_comments (baseline REFUSE) stability 22/32 = 0.688
+  [noise p=0.2 arm=acc→rej] consults below 0.90: 6 — demote empty_line_after_doc_comments (22/32), demote missing_panics_doc (25/32), demote semicolon_if_nothing_returned (27/32), readmit empty_line_after_doc_comments (22/32), readmit missing_panics_doc (25/32), readmit semicolon_if_nothing_returned (27/32)
+  [noise p=0.2 arm=rej→acc] no eligible rows — skipped
+  [bar C] accepted-carrier refusal below bar: demote empty_line_after_doc_comments min-stability 0.688 (22 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote missing_panics_doc min-stability 0.781 (25 / 32 worst arm)
+  [bar C] accepted-carrier refusal below bar: demote semicolon_if_nothing_returned min-stability 0.844 (27 / 32 worst arm)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-deployer_adoption_outcomes.jsonl (2 rows: 0 accepted / 2 rejected; 1 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  [α-flip] demote   explicit_auto_deref          crosses between α=0.00 and α=0.10: REFUSE → PROCEED — ENDPOINT-0 (Δr=0)
+  demote   explicit_auto_deref          α=0.50 PROCEED  retained=0.0000 repeated=0.0000 score=0.5000
+  readmit  explicit_auto_deref          α=0.50 REFUSE   retained=0.0000 repeated=1.0000 score=0.0000
+  [leave-one-out] row 0 (explicit_auto_deref, accepted=false) moves demote explicit_auto_deref: PROCEED → REFUSE
+  [leave-one-out] row 1 (explicit_auto_deref, accepted=false) moves demote explicit_auto_deref: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.1 arm=rej→acc] consults below 0.90: 1 — demote explicit_auto_deref (26/32)
+  [noise p=0.2 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.2 arm=rej→acc] consults below 0.90: 1 — demote explicit_auto_deref (18/32)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-kat_adoption_outcomes.jsonl (1 rows: 0 accepted / 1 rejected; 1 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  [α-flip] demote   collapsible_match            crosses between α=0.00 and α=0.10: REFUSE → PROCEED — ENDPOINT-0 (Δr=0)
+  demote   collapsible_match            α=0.50 PROCEED  retained=0.0000 repeated=0.0000 score=0.5000
+  readmit  collapsible_match            α=0.50 REFUSE   retained=0.0000 repeated=1.0000 score=0.0000
+  [leave-one-out] row 0 (collapsible_match, accepted=false) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 0 (collapsible_match, accepted=false) moves readmit collapsible_match: REFUSE → PROCEED
+  [noise p=0.1 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.1 arm=rej→acc] consults below 0.90: 0
+  [noise p=0.2 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.2 arm=rej→acc] consults below 0.90: 2 — demote collapsible_match (25/32), readmit collapsible_match (25/32)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-instinct_adoption_outcomes.jsonl (1 rows: 0 accepted / 1 rejected; 1 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  [α-flip] demote   collapsible_match            crosses between α=0.00 and α=0.10: REFUSE → PROCEED — ENDPOINT-0 (Δr=0)
+  demote   collapsible_match            α=0.50 PROCEED  retained=0.0000 repeated=0.0000 score=0.5000
+  readmit  collapsible_match            α=0.50 REFUSE   retained=0.0000 repeated=1.0000 score=0.0000
+  [leave-one-out] row 0 (collapsible_match, accepted=false) moves demote collapsible_match: PROCEED → REFUSE
+  [leave-one-out] row 0 (collapsible_match, accepted=false) moves readmit collapsible_match: REFUSE → PROCEED
+  [noise p=0.1 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.1 arm=rej→acc] consults below 0.90: 0
+  [noise p=0.2 arm=acc→rej] no eligible rows — skipped
+  [noise p=0.2 arm=rej→acc] consults below 0.90: 2 — demote collapsible_match (25/32), readmit collapsible_match (25/32)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-reflexer_adoption_outcomes.jsonl (1 rows: 1 accepted / 0 rejected; 1 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  demote   doc_lazy_continuation        α=0.50 REFUSE   retained=0.0000 repeated=0.0000 score=0.5000
+  readmit  doc_lazy_continuation        α=0.50 PROCEED  retained=1.0000 repeated=0.0000 score=1.0000
+  [leave-one-out] row 0 (doc_lazy_continuation, accepted=true) moves demote doc_lazy_continuation: REFUSE → PROCEED
+  [leave-one-out] row 0 (doc_lazy_continuation, accepted=true) moves readmit doc_lazy_continuation: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej seeds=32] dominant refusal demote doc_lazy_continuation (baseline REFUSE) stability 31/32 = 0.969
+  [noise p=0.1 arm=acc→rej] consults below 0.90: 0
+  [noise p=0.1 arm=rej→acc] no eligible rows — skipped
+  [noise p=0.2 arm=acc→rej seeds=32] dominant refusal demote doc_lazy_continuation (baseline REFUSE) stability 25/32 = 0.781
+  [noise p=0.2 arm=acc→rej] consults below 0.90: 2 — demote doc_lazy_continuation (25/32), readmit doc_lazy_continuation (25/32)
+  [noise p=0.2 arm=rej→acc] no eligible rows — skipped
+  [bar C] accepted-carrier refusal below bar: demote doc_lazy_continuation min-stability 0.781 (25 / 32 worst arm)
+== window .benchmarks/150_plan633_t33_crossover_alpha0_growth/windows/riir-rethink_adoption_outcomes.jsonl (1 rows: 1 accepted / 0 rejected; 1 tags; seat rows: 0 — seat leg unmeasured on real data (disclosed))
+  demote   unnecessary_get_then_check   α=0.50 REFUSE   retained=0.0000 repeated=0.0000 score=0.5000
+  readmit  unnecessary_get_then_check   α=0.50 PROCEED  retained=1.0000 repeated=0.0000 score=1.0000
+  [leave-one-out] row 0 (unnecessary_get_then_check, accepted=true) moves demote unnecessary_get_then_check: REFUSE → PROCEED
+  [leave-one-out] row 0 (unnecessary_get_then_check, accepted=true) moves readmit unnecessary_get_then_check: PROCEED → REFUSE
+  [noise p=0.1 arm=acc→rej seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 31/32 = 0.969
+  [noise p=0.1 arm=acc→rej] consults below 0.90: 0
+  [noise p=0.1 arm=rej→acc] no eligible rows — skipped
+  [noise p=0.2 arm=acc→rej seeds=32] dominant refusal demote unnecessary_get_then_check (baseline REFUSE) stability 25/32 = 0.781
+  [noise p=0.2 arm=acc→rej] consults below 0.90: 2 — demote unnecessary_get_then_check (25/32), readmit unnecessary_get_then_check (25/32)
+  [noise p=0.2 arm=rej→acc] no eligible rows — skipped
+  [bar C] accepted-carrier refusal below bar: demote unnecessary_get_then_check min-stability 0.781 (25 / 32 worst arm)
+
+[bar T3.3-A] α-flip classification over 8 windows × 48 consults: flips=7 endpoint0=3 interior=4 prediction-mismatches=0 tie-PROCEEDs=0 no-facts-flips=0 readmit-grid-flips=0 — PASS
+[bar T3.3-B] α=0 endpoint identity: endpoint0 flips=3 on-all-rejected-tags=3 shape-verified=3 on-accepted-carriers=0 (bar 0) — PASS
+[bar T3.3-C] accepted-carrier refusal stability: refusals=20 min-stability=0.625 (bar ≥ 0.90) below-bar=15 — FAIL — the below-bar refusals are named above
+[bar G3-c] dominant-carrier refusals: present 5/8 windows; min noise stability 0.688 (bar ≥ 0.90); leave-one-out survived: false — FAIL/DISCLOSE — below-threshold consults are not quotable as gate evidence
+[bar T3.3-D] windows=8 (≥8) tags=24 (≥17) demote-refusals=20 readmit-refusals=7 abstains=0 audit-only=0 ring-eviction=0 (bar audit-only ≥ 1) — FAIL — a green zero is not a measurement
+[disclosure] seat-swap leg: 0 seat rows across all windows — the real-store seat leg is UNMEASURED (fixture gates cover the mechanics)
