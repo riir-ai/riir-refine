@@ -764,23 +764,14 @@ impl LatentMatcher {
         #[cfg(not(feature = "shader_perf"))]
         let shader_perf = None;
 
-        // ---- Issue 224 T1: the store tail. Only reached on a miss (or a
-        // loud refusal) — the store arm is None after a hit. Atomic
-        // tmp+rename inside `store`; the LRU prune follows best-effort.
+        // ---- Issue 224 T1 / 226 T1: the store tail. Only reached on a miss
+        // (or a loud refusal) — the store arm is None after a hit. The
+        // store is DEFERRED off the critical path (encode + atomic
+        // tmp+rename + LRU prune on a writer thread); the binary joins it
+        // after printing via `index_cache::finish_pending_stores`. ----
         #[cfg(feature = "index_cache")]
         if let (super::index_cache::Lane::Armed(a), Some(snaps)) = (&lane, snapshots_to_store) {
-            let t_store = std::time::Instant::now();
-            match super::index_cache::store(&a.dir, &a.key, &config, &snaps) {
-                Ok(len) => eprintln!(
-                    "[index-cache] stored {} ({:.1} MiB, {} domains, write {:.0}ms)",
-                    a.hex,
-                    super::index_cache::mib(len),
-                    snaps.len(),
-                    t_store.elapsed().as_secs_f64() * 1e3
-                ),
-                Err(e) => eprintln!("[index-cache] store failed ({e}) — continuing uncached"),
-            }
-            super::index_cache::prune(&a.dir);
+            super::index_cache::store_deferred(a, config, snaps);
         }
 
         #[cfg(feature = "set_rerank")]

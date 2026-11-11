@@ -340,24 +340,36 @@ fn wire_len(n: usize) -> u32 {
 // Wire encoding
 // ---------------------------------------------------------------------------
 
-/// Streaming encoder: every byte lands in BOTH the buffer and the hasher,
-/// so the digest is a single pass over the payload (no second walk of the
-/// ~20 MiB entry at store time).
+/// Single-buffer encoder (issue 226 T2). Every section is written straight
+/// into ONE pre-sized buffer — a section's length prefix is reserved and
+/// patched in place once its payload lands — and the digest is ONE
+/// `blake3` pass over the finished buffer. (The 224 shape built each
+/// section in a temp buffer, hashed it there, then memcpy'd + re-hashed it
+/// into the outer one: two copies and two hashes of the ~20 MiB entry.)
+/// The wire bytes are unchanged.
 struct Enc {
     buf: Vec<u8>,
-    h: blake3::Hasher,
 }
 
 impl Enc {
-    fn new() -> Self {
+    fn with_capacity(cap: usize) -> Self {
         Self {
-            buf: Vec::with_capacity(1 << 20),
-            h: blake3::Hasher::new(),
+            buf: Vec::with_capacity(cap),
         }
     }
     fn bytes(&mut self, b: &[u8]) {
-        self.h.update(b);
         self.buf.extend_from_slice(b);
+    }
+    /// Reserve a u32 length prefix; returns its offset for [`Enc::patch_len`].
+    fn reserve_len(&mut self) -> usize {
+        let at = self.buf.len();
+        self.buf.extend_from_slice(&[0; 4]);
+        at
+    }
+    /// Patch the prefix reserved at `at` with the byte count written since.
+    fn patch_len(&mut self, at: usize) {
+        let len = wire_len(self.buf.len() - at - 4);
+        self.buf[at..at + 4].copy_from_slice(&len.to_le_bytes());
     }
     fn u8(&mut self, v: u8) {
         self.bytes(&[v]);
@@ -395,35 +407,52 @@ fn encode_row(enc: &mut Enc, row: &IndexRow) {
 
 fn encode_domain(enc: &mut Enc, snap: &DomainSnapshot) {
     enc.u8(domain_tag(snap.domain));
-    // The payload goes to a temp buffer for the length prefix — one extra
-    // memcpy of the payload at store time, the honest price of a
-    // self-describing frame.
-    let mut body = Enc::new();
-    body.u32(wire_len(snap.n_rules));
-    body.u32(wire_len(snap.rows.len()));
+    // The self-describing frame's length prefix is patched in place after
+    // the payload lands (issue 226 T2) — no temp buffer, no second copy.
+    let len_at = enc.reserve_len();
+    enc.u32(wire_len(snap.n_rules));
+    enc.u32(wire_len(snap.rows.len()));
     for row in &snap.rows {
-        encode_row(&mut body, row);
+        encode_row(enc, row);
     }
-    body.u32(wire_len(snap.by_zone_hash.len()));
+    enc.u32(wire_len(snap.by_zone_hash.len()));
     for (hash, rule_id) in &snap.by_zone_hash {
-        body.bytes(hash);
-        body.str(rule_id);
+        enc.bytes(hash);
+        enc.str(rule_id);
     }
-    body.u32(wire_len(snap.rule_ids.len()));
+    enc.u32(wire_len(snap.rule_ids.len()));
     for id in &snap.rule_ids {
-        body.str(id);
+        enc.str(id);
     }
-    body.u32(wire_len(snap.bm25.len()));
-    body.bytes(&snap.bm25);
+    enc.u32(wire_len(snap.bm25.len()));
+    enc.bytes(&snap.bm25);
     #[cfg(feature = "differential_anchor")]
-    body.f32s(&snap.anchor_mean);
-    enc.u32(wire_len(body.buf.len()));
-    enc.bytes(&body.buf);
+    enc.f32s(&snap.anchor_mean);
+    enc.patch_len(len_at);
+}
+
+/// An upper-ish estimate of the encoded size, so the one buffer is sized
+/// once (a doubling `Vec` would re-copy the ~20 MiB entry ~log2 times).
+/// Only a capacity hint — an under-estimate just grows the buffer.
+fn estimated_len(snapshots: &[DomainSnapshot]) -> usize {
+    let per_domain: usize = snapshots
+        .iter()
+        .map(|s| {
+            let strs: usize = s
+                .by_zone_hash
+                .iter()
+                .map(|(_, id)| 32 + 4 + id.len())
+                .chain(s.rule_ids.iter().map(|id| 4 + id.len()))
+                .sum();
+            1 + 4 * 6 + s.rows.len() * (ROW_MIN_RECORD + 1) + strs + s.bm25.len() + LATENT_DIM * 4
+        })
+        .sum();
+    HEADER_LEN + per_domain + DIGEST_LEN
 }
 
 /// Encode a full container (header + domains + digest trailer).
 fn encode(config: &RetrievalConfig, snapshots: &[DomainSnapshot]) -> Vec<u8> {
-    let mut enc = Enc::new();
+    let mut enc = Enc::with_capacity(estimated_len(snapshots));
     enc.bytes(MAGIC);
     enc.u32(CACHE_FORMAT_VERSION);
     enc.u32(RANKING_SEMANTICS_VERSION);
@@ -433,7 +462,7 @@ fn encode(config: &RetrievalConfig, snapshots: &[DomainSnapshot]) -> Vec<u8> {
     for s in snapshots {
         encode_domain(&mut enc, s);
     }
-    let digest = enc.h.finalize();
+    let digest = blake3::hash(&enc.buf);
     enc.buf.extend_from_slice(digest.as_bytes());
     enc.buf
 }
@@ -699,6 +728,95 @@ pub fn load(dir: &Path, key: &[u8; 32], config: &RetrievalConfig) -> LoadOutcome
     LoadOutcome::Hit(snaps, bytes.len() as u64)
 }
 
+/// A `.tmp-*` file older than this is a dead writer's litter (a live store
+/// of the ~20 MiB entry takes well under a second).
+const STALE_TMP_AGE: std::time::Duration = std::time::Duration::from_secs(3600);
+
+// ---------------------------------------------------------------------------
+// Issue 226 T1 — store after print
+// ---------------------------------------------------------------------------
+
+/// One deferred store: a running writer thread, or the loud line of a
+/// writer that could not be spawned (the entry is skipped; the next miss
+/// rewrites it).
+enum PendingStore {
+    Thread(std::thread::JoinHandle<String>),
+    Failed(String),
+}
+
+/// The process's deferred stores. Not a hot path (≤ 1 push per matcher
+/// build, 1 drain per process) — a plain `Mutex` is the right tool.
+static PENDING: std::sync::Mutex<Vec<PendingStore>> = std::sync::Mutex::new(Vec::new());
+
+/// Store + prune, returning the one disclosure line (G4's size report).
+fn store_and_prune(
+    dir: &Path,
+    key: &[u8; 32],
+    hex: &str,
+    config: &RetrievalConfig,
+    snapshots: &[DomainSnapshot],
+) -> String {
+    let t_store = std::time::Instant::now();
+    let line = match store(dir, key, config, snapshots) {
+        Ok(len) => format!(
+            "[index-cache] stored {hex} ({:.1} MiB, {} domains, write {:.0}ms, after results)",
+            mib(len),
+            snapshots.len(),
+            t_store.elapsed().as_secs_f64() * 1e3
+        ),
+        Err(e) => format!("[index-cache] store failed ({e}) — continuing uncached"),
+    };
+    prune(dir);
+    line
+}
+
+/// Issue 226 T1: hand the store OFF the critical path. Encoding, the
+/// digest, the atomic write and the prune run on a writer thread while the
+/// run scans and prints; [`finish_pending_stores`] joins it at process end,
+/// so the results never wait on the ~20 MiB write. Atomicity is unchanged
+/// (tmp then rename inside [`store`]); a run that dies before the join
+/// loses only the entry (the next miss rewrites it) and leaves tmp litter
+/// that [`prune`] sweeps.
+pub fn store_deferred(armed: &LaneArmed, config: RetrievalConfig, snapshots: Vec<DomainSnapshot>) {
+    let (dir, key, hex) = (armed.dir.clone(), armed.key, armed.hex.clone());
+    let pending = match std::thread::Builder::new()
+        .name("index-cache-store".into())
+        .spawn(move || store_and_prune(&dir, &key, &hex, &config, &snapshots))
+    {
+        Ok(h) => PendingStore::Thread(h),
+        Err(e) => PendingStore::Failed(format!(
+            "[index-cache] store skipped (writer thread: {e}) — continuing uncached"
+        )),
+    };
+    PENDING
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .push(pending);
+}
+
+/// Join every deferred store and print its disclosure line to stderr.
+/// Call once at the end of a run, AFTER the results and the roll-up.
+/// Returns the number of stores finished. Idempotent (a second call finds
+/// nothing pending).
+pub fn finish_pending_stores() -> usize {
+    let drained: Vec<PendingStore> = std::mem::take(
+        &mut *PENDING
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+    );
+    let n = drained.len();
+    for p in drained {
+        let line = match p {
+            PendingStore::Thread(h) => h.join().unwrap_or_else(|_| {
+                "[index-cache] store thread panicked — continuing uncached".to_string()
+            }),
+            PendingStore::Failed(line) => line,
+        };
+        eprintln!("{line}");
+    }
+    n
+}
+
 /// Touch an entry's mtime (the LRU is read-order, best-effort).
 pub fn touch(path: &Path) {
     let _ = std::fs::File::options()
@@ -714,11 +832,29 @@ pub fn prune(dir: &Path) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
+    let now = std::time::SystemTime::now();
     let mut idx: Vec<(std::time::SystemTime, PathBuf)> = entries
         .flatten()
         .filter_map(|e| {
             let path = e.path();
             let name = path.file_name()?.to_str()?;
+            // Issue 226 T1: a deferred store killed mid-write (a run that
+            // exits through `process::exit` before
+            // [`finish_pending_stores`]) leaves its `.tmp-<pid>-<nanos>`
+            // behind — never a corrupt ENTRY (the rename is the commit),
+            // only litter. Swept once it is older than any live write.
+            if name.starts_with(".tmp-") {
+                let stale = e
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .ok()
+                    .and_then(|t| now.duration_since(t).ok())
+                    .is_some_and(|age| age >= STALE_TMP_AGE);
+                if stale {
+                    let _ = std::fs::remove_file(&path);
+                }
+                return None;
+            }
             if name.len() != 68 {
                 return None;
             }
@@ -1050,6 +1186,11 @@ mod tests {
         let mut m =
             LatentMatcher::from_enabled_domains_with_overlay(overlay).expect("build (miss)");
         let cold = digests(&mut m);
+        // Issue 226 T1: the store is deferred — join it before reading the dir.
+        assert!(
+            finish_pending_stores() >= 1,
+            "the cold miss deferred a store"
+        );
         let stored: Vec<PathBuf> = std::fs::read_dir(&idx_dir)
             .expect("cache dir")
             .flatten()
@@ -1071,12 +1212,70 @@ mod tests {
         let mut m =
             LatentMatcher::from_enabled_domains_with_overlay(overlay).expect("rebuild (wiped)");
         let rebuilt = digests(&mut m);
+        finish_pending_stores();
         assert_eq!(
             cold, rebuilt,
             "the store path must change nothing observable"
         );
 
         std::env::remove_var(CACHE_DIR_ENV);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Issue 226 T1: the deferred store lands the SAME entry the inline
+    /// store would (byte-identical file), only after the join — and the
+    /// join is idempotent.
+    #[test]
+    fn deferred_store_lands_identical_entry_after_join() {
+        // PENDING is process-global: serialize with the G1 lane (which also
+        // drains it) so neither test joins the other's writer mid-read.
+        let _g = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let inline_dir = temp_dir("i226-inline");
+        let deferred_dir = temp_dir("i226-deferred");
+        let config = RetrievalConfig::default();
+        let snapshots = sample_snapshots();
+        let key = [7u8; 32];
+        store(&inline_dir, &key, &config, &snapshots).expect("inline store");
+        let armed = LaneArmed {
+            dir: deferred_dir.clone(),
+            key,
+            hex: hex(&key),
+        };
+        store_deferred(&armed, config, sample_snapshots());
+        assert!(finish_pending_stores() >= 1, "one store was pending");
+        let name = format!("{}.idx", hex(&key));
+        let a = std::fs::read(inline_dir.join(&name)).expect("inline entry");
+        let b = std::fs::read(deferred_dir.join(&name)).expect("deferred entry");
+        assert_eq!(a, b, "deferred store must write the identical entry");
+        assert!(matches!(
+            load(&deferred_dir, &key, &config),
+            LoadOutcome::Hit(..)
+        ));
+        let _ = std::fs::remove_dir_all(&inline_dir);
+        let _ = std::fs::remove_dir_all(&deferred_dir);
+    }
+
+    /// Issue 226 T1: a dead writer's `.tmp-*` is swept once stale; a fresh
+    /// one (a live concurrent writer) is never touched.
+    #[test]
+    fn prune_sweeps_only_stale_tmp_litter() {
+        let dir = temp_dir("i226-tmp");
+        std::fs::create_dir_all(&dir).expect("dir");
+        let stale = dir.join(".tmp-1-1");
+        let fresh = dir.join(".tmp-2-2");
+        std::fs::write(&stale, b"x").expect("stale");
+        std::fs::write(&fresh, b"x").expect("fresh");
+        let old = std::time::SystemTime::now() - STALE_TMP_AGE - std::time::Duration::from_secs(60);
+        std::fs::File::options()
+            .write(true)
+            .open(&stale)
+            .and_then(|f| f.set_modified(old))
+            .expect("age the stale tmp");
+        prune(&dir);
+        assert!(!stale.exists(), "stale tmp litter is swept");
+        assert!(fresh.exists(), "a live writer's tmp is never touched");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

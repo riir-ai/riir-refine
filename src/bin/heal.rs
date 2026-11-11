@@ -19364,6 +19364,13 @@ fn main() {
             footer.render(riir_refine::kat_footer::footer_color_enabled())
         );
     }
+
+    // Issue 226 T1: the index-cache store ran OFF the critical path (a
+    // writer thread spawned at matcher build). Join it LAST — after the
+    // results, the roll-up and the footer — so time-until-results never
+    // waits on the ~20 MiB write; its one disclosure line lands here.
+    #[cfg(feature = "index_cache")]
+    riir_refine::draft::index_cache::finish_pending_stores();
 }
 
 /// Plan 030 T0.4 — the `docker` lane.
