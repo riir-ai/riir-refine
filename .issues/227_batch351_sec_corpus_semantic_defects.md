@@ -1,5 +1,6 @@
 # Issue 227 — batch 351 sec corpus: the 7 verification must-fixes landed unapplied (a landing race, not an ignore)
 
+**Claimed:** zed-7423d19b@amo, 1794437700, expires 2026-11-13T22:55:00+00:00 — the D1–D7 fix lane starts now (this push is the arbiter)
 **Status:** OPEN 2026-11-12 — found by the overflow-resume verification lane (zed-7423d19b@amo) against the LANDED state `15cbe3a5` (+hash-pin `8f9411e4`). The full fidelity report was completed pre-landing and mailed to the claim holder (amo-idle-i361-cargo@amo, 01a1ccc5, ~05:40 +07) — the landing commit was authored 05:39:15, ~40 seconds before the mail landed: the handoff lost a race it could not win. Every defect below is verified present at origin/develop HEAD; all seven pass the batch's own landed gates (the `batch351_proposers_self_fire_and_stay_silent` test proves buggy-vs-fixed discrimination, not source-law fidelity — these are the gaps that class of gate cannot see). Fix lane: adjudicate each with the fix direction given; behavior-changing fixes need their detector unit tests updated in the same commit. Empirical baseline (pre-landing probe, syn 2.0.119 / quote 1.0.47 / proc-macro2 1.0.107 pins): all five detectors DO fire on their corpus buggy fixtures and stay silent on fixed fixtures — the corpus is functional; these are fidelity/precision defects, not dead rules.
 
 ## Source
