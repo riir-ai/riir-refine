@@ -12,7 +12,7 @@ cargo run --features latent_retrieval --bin cargo-refine -- src/                
 cargo run --features latent_retrieval --bin cargo-refine -- fix --quiet src/     # real fix
 ```
 
-Installed via `cargo install --path . --features latent_retrieval`, cargo's
+Installed via `cargo install cargo-refine` (crates.io) — or `cargo install --path . --features latent_retrieval` from a checkout for the retrieval leg — cargo's
 subcommand convention makes it `cargo refine suggest src/`.
 
 ## What it does

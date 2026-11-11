@@ -75,10 +75,14 @@ through the core's features.
 
 ## Standing invariants
 
-- **Source secrecy**: this repo's source never becomes public. Distribution is
-  prebuilt binaries only, via the 3 tiny source-free public repos
-  (Proposal 003). Never `cargo publish`; never ship dev builds or
-  `ternary_inference` in release artifacts.
+- **Distribution** (issue 221, live 2026-11-11 — supersedes the retired
+  "source secrecy" invariant; the repo is PUBLIC, MIT): (1) the crates.io crate
+  `cargo-refine`, published ONLY via `scripts/cratesio_publish.sh` — the
+  generated manifest carries ZERO private-sibling deps (never `cargo publish`
+  from the dev tree); (2) prebuilt binaries via the 3 source-free dist repos
+  (Proposal 003 — zero `.rs` there). Never ship dev builds or
+  `ternary_inference` in either artifact; private siblings stay
+  `publish = false`.
 
 ## Inherited boundaries (links)
 

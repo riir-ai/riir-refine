@@ -50,7 +50,7 @@ PRIVATE, so its assets need authentication and cannot be curl'd — and
 flipping it public to make them work would leak the entire source. Pinned by
 the same test.
 
-Until then: `cargo install --path . --features latent_retrieval`.
+From crates.io: `cargo install cargo-refine` (the code-fixing build, issue 221). From a checkout, with the retrieval leg: `cargo install --path . --features latent_retrieval`.
 
 ## 2. `cargo refine login` (§8.2) — zero configuration
 
