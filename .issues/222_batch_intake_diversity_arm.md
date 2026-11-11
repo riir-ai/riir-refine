@@ -1,7 +1,8 @@
 # Issue 222: Rule-Mining Batch-Intake Diversity Arm (Diffusion-Diversity Div)
 
 **Date:** 2026-11-09
-**Status:** Open
+**Status:** Open — T1 claimed 2026-11-11
+**Claimed:** amo-idle-i222-t1, 1794451200, expires 2026-11-13T10:00:00+00:00
 **Origin:** katgpt-rs Research 660 ([arXiv:2606.01861](https://arxiv.org/abs/2606.01861)) — self-play curriculum-diversity distillation. Primitive: katgpt-rs Plan 634; siblings: riir-ai Plan 646, reflex Issue 115, riir-train Issue 680.
 
 ## Problem
