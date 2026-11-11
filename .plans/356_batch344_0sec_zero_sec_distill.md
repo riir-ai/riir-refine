@@ -1,6 +1,6 @@
 # Plan 356 — Batch 344: 0sec-labs/0 sec-corpus transcription batch
 
-**Status:** STAGED — verdict accepted (Research 388, YES B+), awaiting owner GO before any corpus edit
+**Status:** CLAIMED 2026-11-11 (zed-m3-b350/m3, epoch 1794372400, expires 2026-11-13T07:00:00+00:00) — the former "awaiting owner GO" wait is DISCHARGED per the owner gating decree 2026-11-11 (the ONLY owner gate is a credential/secret touch to deploy; everything else decides via a Claude verdict, recorded in the plan — verdict session recorded at T0 landing). Nominal batch number at claim: **Batch 350** (345/347/348/349 landed since staging; the plan number stays 356 per the Notes row). Claim row rides the queue snapshot in the same commit; push is the arbiter.
 
 Source: 0sec-labs/0 @ `f7020eb2c5a271d9f0a46896883487d336603f60` (MIT OR Apache-2.0) — Research 388 is the verdict of record; every quote re-verified at mine time against a fresh clone at the pin (`.raw/0`, deleted at close — the staged `.raw/0` from verdict day, if it still exists, is UNTRUSTED: delete and re-clone).
 
