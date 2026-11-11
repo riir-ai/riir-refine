@@ -35,7 +35,7 @@
 | `clippy_lints` | ✅ on | — | clippy lint fixing |
 | `rust_perf` | ✅ on (since 2026-08-13) | — | rust perf fixing (Phase 2) |
 | `rust_perf_verify` | off | `rust_perf` | `cargo test` verifier |
-| `kernel_opt` | off | `katgpt-core/variable_rank_domain_expert` | GPU kernel opt (Phase 3) |
+| `kernel_opt` | off (✅ default via `kernel_pregate` since 2026-11-06) | `katgpt-core/committed_field_blend`, `dep:regex` | GPU kernel opt (Phase 3; 1076 rules) |
 | `kernel_verify` | off | `kernel_opt` | CubeCL compile verifier (STUB) |
 | `sec` | off | — | security-pattern fixing (Plan 018) |
 | `docker` | ✅ on (since 2026-08-28) | — | Dockerfile bounded-fix drafting (Plan 030) |

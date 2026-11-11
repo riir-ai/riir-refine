@@ -11,7 +11,8 @@
 ## Where it runs
 
 Always-on with the `score_bench` feature (no CLI flag): the feature forwards
-`katgpt-core/regime_probe`, and every score-bench run emits the axis twice —
+`katgpt-core/regime_probe` (spelled via the `diagnostics` umbrella since
+katgpt-rs Plan 635b), and every score-bench run emits the axis twice —
 as console lines in the report block and as the additive `ood` field of the
 appended `score_history.jsonl` row. The measurement is
 `OnceLock`-cached per process, so the printed numbers and the recorded row

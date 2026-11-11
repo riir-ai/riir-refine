@@ -451,7 +451,9 @@ Plan 003 — categories C and O were unreachable due to 5-dim rank deficiency).
 The `build_activity()` helper provides the consumer-facing constructor for
 constructing activity vectors from shape + operation-class flags.
 
-The `kernel_opt` feature enables `katgpt-core/variable_rank_domain_expert`
+The `kernel_opt` feature enables `katgpt-core/committed_field_blend`
+(the variable-rank domain expert's owning feature; spelled via the family
+umbrella since katgpt-rs Plan 635b, 2026-11-11)
 so `pick_domain` is reachable.
 
 **Composition example** (`examples/kernel_opt_demo.rs`): the router is
