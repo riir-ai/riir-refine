@@ -410,7 +410,9 @@ re-verified on submission day.
 > A self-funded team of experienced Rust systems engineers who build and operate the entire stack
 > themselves — the healing engine and its rule corpus, the benchmark infrastructure, the serving
 > tier, and the public sites — with production Rust across a 32-repository workspace where the
-> tool runs as the default dev-loop instrument every day. The dogfooding is the team's most
+> tool runs as the default dev-loop instrument every day. The engine is built on katgpt-rs, the
+> team's MIT-licensed public research substrate distilling recent AI papers into proven Rust
+> primitives (in-tree formal proofs, production game use). The dogfooding is the team's most
 > relevant experience: the tool is not a research prototype; it is infrastructure the team
 > depends on. [Owner: add names, roles, prior work links.]
 
