@@ -160,9 +160,7 @@ fn parse_args<I: Iterator<Item = String>>(mut it: I) -> Result<Args, String> {
     let mut alphas: Option<String> = None;
     let mut noises: Option<String> = None;
     while let Some(a) = it.next() {
-        let value = |it: &mut I, name: &str| {
-            it.next().ok_or(format!("{name} requires a value"))
-        };
+        let value = |it: &mut I, name: &str| it.next().ok_or(format!("{name} requires a value"));
         match a.as_str() {
             "--alpha" => alphas = Some(value(&mut it, "--alpha")?),
             "--alpha0" => {
@@ -277,8 +275,30 @@ fn run_window(path: &Path, args: &Args) -> Result<WindowCell, String> {
     for c in &population {
         let baseline = consult(&window, c, args.alpha0);
         let mut shapes = Vec::new();
+        let mut shape_history: Vec<GateVerdict> = Vec::new();
+        let mut history_alpha = 0.0f64;
         for &alpha in &args.alphas {
             let v = consult(&window, c, alpha);
+            if shape_history
+                .last()
+                .map(|prev: &GateVerdict| shape(prev) != shape(&v))
+                .unwrap_or(false)
+            {
+                println!(
+                    "  [α-flip] {:8} {:28} crosses between α={:.2} and α={:.2}: {} → {}",
+                    c.kind.name(),
+                    c.tag,
+                    history_alpha,
+                    alpha,
+                    shape_history
+                        .last()
+                        .map(|p: &GateVerdict| shape(p))
+                        .unwrap(),
+                    shape(&v)
+                );
+            }
+            history_alpha = alpha;
+            shape_history.push(v.clone());
             if alpha == args.alpha0 {
                 println!(
                     "  {:8} {:28} α={:.2} {:8} {}",
