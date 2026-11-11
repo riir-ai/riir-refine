@@ -147,6 +147,7 @@ code; `--fix` CLI wiring is Phase 6.
 
 | Feature | Default | Implies | Purpose |
 |---|---|---|---|
+| `batch_diversity` | off | `katgpt-core/diffusion_diversity` | Issue 222 (T1 landed 2026-11-11, axis (b) `e2d8744b`): the REPORT-ONLY batch-intake diversity readout (`Div_P^τ` per mined batch over the rule-embedding kNN graph) — one summary line per domain in the score-bench tail + `RIIR_REFINE_BATCH_DIV_FULL=1` the full table; never an exit-code change. Axis (b) MEASURED NEGATIVE: the corpus-relative ratio spans 0.9942–1.0065 (kernel_opt) / 0.9871–1.0055 (rust_perf) — the 8-D hashed embedding saturates at corpus granularity too; T2's correlation cell stays closed pending a richer rule embedding or batches ≥ 32. The axis stays standing as the future-corpus tripwire |
 | `clippy_lints` | ✅ on | — | clippy lint-fixing domain |
 | `clippy_verify` | off | `clippy_lints` | real `cargo clippy` lint resolution check |
 | `rust_perf` | ✅ on | — | rust perf-fixing domain (Plan 001 Phase 2; promoted 2026-08-13, Bench 013 G1+G5) |
