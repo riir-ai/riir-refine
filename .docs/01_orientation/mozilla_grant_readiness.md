@@ -76,7 +76,8 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 |---|---|---|
 | Working, measured technology | GOAT benches, `.benchmarks/08_benchmarks/` book, score-bench history | ✅ shipped |
 | Production deployment (internal) | Default dev-loop tool across the workspace's 32 repos since 2026-08 | ✅ honest, but internal |
-| Public distribution surface | `riir-ai/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket | ✅ public |
+| Public distribution surface | `riir-ai/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket, **crates.io** (`cargo-refine` 0.5.1, live 2026-11-11 — `cargo install cargo-refine`) | ✅ public |
+| Upstream acceptance | mozilla/sccache #2977 **MERGED** (2026-11-07, `907230be`, six review rounds); #3025 (backend read backoff) **open + full CI matrix green** (50 pass / 1 by-design skip), answering the issue author's ratified design with their own reproducer measured | ✅ public |
 | Open data commitment | Contributed fix-pairs publish under MIT (consent screen pins it) | ✅ shipped |
 | Installer downloads / repo stars / issues | GitHub releases API + repo pages | ⬜ collect (T3) |
 | External users | — | ❌ none yet — pilot soft launch (T4) + no-submit gate (T10) |
@@ -303,20 +304,21 @@ re-verified on submission day.
 > cargo refine — the modelless code healer: free, offline fixing for every Rust developer
 
 **Project Summary**
-> cargo refine is a local-first developer tool that fixes compiler warnings, lint findings and
-> performance problems in Rust code in-loop — on the developer's own machine, offline, with no AI
+> cargo refine is a local-first developer tool that fixes compiler warnings, lint findings, performance traps, GPU-kernel and shader hot spots, and security anti-patterns in Rust code in-loop — on the developer's own machine, offline, with no AI
 > service call. Its core is modelless: a reviewed, MIT-licensed corpus of repair patterns plus
 > deterministic drafters and a compile gate that keeps only fixes that still build. Where a case
 > needs more, a ≈0.4B-parameter escalation arm answers — roughly 17× smaller than the small-model
 > bar this call itself sets. It is free forever for open-source repositories, installable in one
-> command on five OS targets, and it improves by community contribution, never by retraining.
+> command on five OS targets and crates.io, and it improves by community contribution, never by retraining.
 
 **Public benefit (beyond the organization)**
 > Every Rust developer without a cloud-AI budget — students, FOSS maintainers, regional and
-> resource-constrained dev communities — gets lint/perf fixing that today requires paid cloud
+> resource-constrained dev communities — gets lint/perf/security fixing that today requires paid cloud
 > copilots or local 7B+ models they cannot run. The benefit is durable commons, not a free trial:
 > the repair corpus is MIT open data forever, the core source opens under MIT/Apache-2.0 in months
-> 1–3 of the term, and free-for-open-source-repositories is shipped product policy, not a promise.
+> 1–3 of the term, and free-for-open-source-repositories is shipped product policy, not a promise —
+> with authoring tools that make the framework language-general: Rust proves the pattern; Python,
+> Go, and JavaScript are the named next corpora.
 
 ### 14.3 Project Details — the seven long answers
 
@@ -335,7 +337,7 @@ re-verified on submission day.
 
 **2. Small — models, hardware, infrastructure, and why they fit**
 > The healer ships as a single binary with no model files on the hot path: its knowledge is a
-> curated corpus (~1,500 reviewed repair rules) plus the developer's own verified-fix history,
+> curated corpus (~1,602 reviewed repair rules across seven domains) plus the developer's own verified-fix history,
 > retrieved and applied deterministically. The escalation arm is one ≈0.4B encoder; its deployed
 > serving posture is measured at 484 MB end to end (Q8 checkpoint + seats), and the heavier
 > quantizations below that are a recorded quality negative we refuse to offer. The full decision
@@ -366,18 +368,20 @@ re-verified on submission day.
 > resource constraint: no cloud budget, sometimes no reliable network — hence offline-first, a
 > single static binary, five OS targets, and free-for-open-source-repositories as shipped policy.
 > The dialogue is structural: every contributed repair joins the reviewed MIT corpus, the public
-> bench history scores every change, and new domains (Dockerfiles and shaders shipped today;
+> bench history scores every change, and new domains (Dockerfiles, GPU kernels, and WGSL shaders shipped today;
 > Python, JavaScript, Go on the roadmap) are added when the community asks — healing improves by
 > what the community contributes, never by retraining.
 
 **5. Traction — early product-community fit evidence**
 > Working, shipped, measured: 13 public releases with checksum-verified installers and 200+
-> downloads across 5 OS targets (macOS Apple Silicon/Intel, Linux x86_64/aarch64 static, Windows);
+> downloads across 5 OS targets (macOS Apple Silicon/Intel, Linux x86_64/aarch64 static, Windows), now on crates.io too;
 > a public benchmark history of 200+ scored runs at a 96%+ heal rate; deployed daily as the
 > default dev-loop tool across a 32-repo production workspace since August 2026 — the tool fixes
-> real code every working day, not in demos. First external upstream engagement is open:
-> a fix PR to Mozilla's own sccache (issue #2975), maintainer-engaged through five review rounds
-> in November 2026. The pilot cohort (30–50 Rust developers from student groups, FOSS maintenance
+> real code every working day, not in demos. First external upstream engagement is MERGED:
+> a fix PR to Mozilla's own sccache (issue #2975) landed after six maintainer review rounds
+> (merge commit `907230be`, November 2026), and a second sccache PR — backend read backoff on a
+> maintainer-engaged issue whose author measured our prototype with their own reproducer — is open
+> with its full CI matrix green. The pilot cohort (30–50 Rust developers from student groups, FOSS maintenance
 > and regional communities) is being recruited now — the application window is when that evidence
 > lands, and we will report it openly either way.
 
@@ -456,7 +460,7 @@ re-verified on submission day.
 
 ### 14.5 Links + video (owner acts)
 
-- **Repository/demo/website:** `refine.riir.ai` + `github.com/riir-ai/cargo-refine` (releases) +
+- **Repository/demo/website:** `refine.riir.ai` + `github.com/riir-ai/cargo-refine` (releases) + `crates.io/crates/cargo-refine` (0.5.1 live 2026-11-11) +
   the public bench tables. ⛔ **Gate:** the gen2 de-tokenized deploy MUST be live before submission
   (probe 2026-11-05: still the pre-pivot copy — see §8 T6 row and issue 190 T6).
 - **Two-minute video (strongly encouraged):** owner act. Suggested script shape: 30s the problem
@@ -483,5 +487,7 @@ it true — do not submit before that pass.
    or contribution points exist today — §13.4's roadmap framing only.
 4. **Numbers.** Every figure in these drafts traces to the evidence pack; re-verify download and
    release counts on submission day (they grow — use the fresh ones).
-5. **No fabrication.** The pilot is recruiting, not run; partner names do not exist; the sccache
-   engagement is an open PR, not an accept. Say exactly that.
+5. **No fabrication.** The pilot is recruiting, not run; partner names do not exist. The sccache
+   record is one MERGED PR (#2977, `907230be`) plus one OPEN green PR (#3025) — say exactly that;
+   #3025 is an open PR, not an accept, and not a user. Coverage-bot reports (Codecov) are
+   telemetry, never cited as community engagement. Say exactly that.
