@@ -59,6 +59,38 @@ pub const COMPILED_PATHS: &[&str] = &[
     "tests/fixtures",
 ];
 
+/// Issue 225 — the crates.io LANE MARKER. `scripts/cratesio_publish.sh`
+/// writes this file into the staged package (and its include list ships it
+/// in the `.crate`); the dev tree never carries it. Its presence is the ONE
+/// deterministic signal a registry build has: `cargo install` from
+/// crates.io runs no script of ours and has no git, so neither an env var
+/// nor `capture_commit` can know the lane or the commit there.
+///
+/// Content: the published ref's commit, resolved at surgery time (one line,
+/// `<7..=40 hex>`). Any other content still marks the lane — the stamp just
+/// degrades to [`UNKNOWN`], never a guess.
+pub const LANE_MARKER: &str = "cratesio_lane.stamp";
+
+/// The lane value exported for a build with [`LANE_MARKER`] present.
+pub const LANE_CRATESIO: &str = "crates.io";
+/// The lane value for every other build (dev tree, release binaries).
+pub const LANE_SOURCE: &str = "source";
+
+/// Read the lane marker in `cwd`: `None` = no marker (the source lane,
+/// behaviour unchanged); `Some(stamp)` = the crates.io lane, with the
+/// marker's commit when it is well-formed hex, else [`UNKNOWN`].
+#[must_use]
+pub fn read_lane_marker(cwd: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(cwd.join(LANE_MARKER)).ok()?;
+    let hash = text.trim();
+    let valid = hash.len() >= 7 && hash.len() <= 40 && hash.chars().all(|c| c.is_ascii_hexdigit());
+    Some(if valid {
+        hash.to_string()
+    } else {
+        UNKNOWN.to_string()
+    })
+}
+
 /// Run `git <args>` in `cwd`; `Some(stdout)` on exit-0, else `None` (missing
 /// git, not a repo, refused). Stderr is deliberately discarded — the callers
 /// degrade to [`UNKNOWN`], they do not diagnose.
@@ -123,6 +155,11 @@ pub fn rerun_lines(cwd: &Path) -> Vec<String> {
         if cwd.join(p).exists() {
             out.push(format!("cargo:rerun-if-changed={p}"));
         }
+    }
+    // Issue 225: the lane marker moves both stamps (lane + commit) —
+    // existence-filtered like every other watch (absent in the dev tree).
+    if cwd.join(LANE_MARKER).exists() {
+        out.push(format!("cargo:rerun-if-changed={LANE_MARKER}"));
     }
     // What moves `rev-parse HEAD`, existence-filtered (see the module doc):
     // HEAD itself (branch switch), the reflog (appends on every commit),
@@ -370,6 +407,40 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Issue 225 — the lane marker, both postures: absent = `None` (the
+    /// source lane, byte-identical to pre-225), present = the crates.io
+    /// lane with its commit (or `unknown` for malformed content), and the
+    /// rerun list watches it only when it exists.
+    #[test]
+    fn lane_marker_absent_and_present() {
+        // The exported lane values — `build_stamp::LANE_CRATESIO` compares
+        // against the first by string, so it is pinned here too.
+        assert_eq!(LANE_CRATESIO, "crates.io");
+        assert_eq!(LANE_SOURCE, "source");
+        let repo = TempRepo::new("lane");
+        assert_eq!(read_lane_marker(&repo.dir), None, "no marker = source lane");
+        assert!(
+            !rerun_lines(&repo.dir)
+                .iter()
+                .any(|l| l.ends_with(LANE_MARKER)),
+            "an absent marker must not be watched (perpetual-dirty hazard)"
+        );
+        std::fs::write(repo.dir.join(LANE_MARKER), "0123456789ab\n").expect("write");
+        assert_eq!(read_lane_marker(&repo.dir).as_deref(), Some("0123456789ab"));
+        assert!(
+            rerun_lines(&repo.dir)
+                .iter()
+                .any(|l| l.ends_with(LANE_MARKER)),
+            "a present marker must be watched"
+        );
+        std::fs::write(repo.dir.join(LANE_MARKER), "not a hash\n").expect("write");
+        assert_eq!(
+            read_lane_marker(&repo.dir).as_deref(),
+            Some(UNKNOWN),
+            "malformed content keeps the lane, degrades the commit"
+        );
     }
 
     /// The filtering itself: a compiled path that does not exist in a

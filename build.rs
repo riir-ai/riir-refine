@@ -24,6 +24,10 @@
 //! everything that can move either stamp — the first `rerun-if-changed`
 //! line disables cargo's any-package-file default, so dropping a line freezes
 //! one of the stamps silently.
+//!
+//! Issue 225 adds the LANE stamp: `RIIR_REFINE_BUILD_LANE` is `crates.io`
+//! when the publish surgery's marker file (`build_commit::LANE_MARKER`) is
+//! in the package, else `source` (the dev tree + the prebuilt binaries).
 #[path = "build_commit.rs"]
 mod build_commit;
 
@@ -46,8 +50,16 @@ fn main() {
     for line in build_commit::rerun_lines(&cwd) {
         println!("{line}");
     }
-    println!(
-        "cargo:rustc-env=RIIR_REFINE_BUILD_COMMIT={}",
-        build_commit::capture_commit(&cwd)
-    );
+    // Issue 225: a crates.io build (the publish surgery wrote the lane
+    // marker into the package) stamps the marker's commit — a registry
+    // build has no git, so `capture_commit` could only say `unknown`.
+    let (lane, commit) = match build_commit::read_lane_marker(&cwd) {
+        Some(stamp) => (build_commit::LANE_CRATESIO, stamp),
+        None => (
+            build_commit::LANE_SOURCE,
+            build_commit::capture_commit(&cwd),
+        ),
+    };
+    println!("cargo:rustc-env=RIIR_REFINE_BUILD_COMMIT={commit}");
+    println!("cargo:rustc-env=RIIR_REFINE_BUILD_LANE={lane}");
 }

@@ -50,6 +50,27 @@ pub const COMPILED_FEATURES: &str = env!("RIIR_CLIPPY_COMPILED_FEATURES");
 /// outside any checkout; mismatch = a different tree.
 pub const BUILD_COMMIT: &str = env!("RIIR_REFINE_BUILD_COMMIT");
 
+/// The build LANE (Issue 225): `crates.io` when the publish surgery's lane
+/// marker was in the package (`cargo install cargo-refine`), else `source`
+/// (the dev tree and the prebuilt binaries). On the crates.io lane
+/// [`BUILD_COMMIT`] is the published ref's commit, resolved at surgery time.
+pub const BUILD_LANE: &str = env!("RIIR_REFINE_BUILD_LANE");
+
+/// The lane value the build script exports for a crates.io build.
+pub const LANE_CRATESIO: &str = "crates.io";
+
+/// The crates.io lane's release-set line. The registry crate is the
+/// intended code-fixing posture (issue 221 lane design): the release
+/// features it lacks do not EXIST in its manifest, so it is not stale and
+/// there is nothing to rebuild — the hosted surfaces ship in the binaries.
+pub const CRATESIO_RELEASE_LINE: &str = "release set: crates.io (code-fixing build — join/leaderboard/latent retrieval ship in the prebuilt binaries: brew or install.sh)";
+
+/// Is this the crates.io build ([`BUILD_LANE`])?
+#[must_use]
+pub fn is_cratesio_lane() -> bool {
+    BUILD_LANE == LANE_CRATESIO
+}
+
 /// Shape check for a stamp: `unknown`, or `<7..=40 hex>` with an optional
 /// single `-dirty` suffix. The one validator — the version block, the unit
 /// tests, and the process-boundary CLI test all share it, so a malformed
@@ -174,14 +195,28 @@ pub fn missing_release_features() -> Vec<&'static str> {
 /// cannot see the forwarded member features).
 #[must_use]
 pub fn version_lines() -> Vec<String> {
+    version_lines_for(
+        is_cratesio_lane(),
+        BUILD_COMMIT,
+        &missing_release_features(),
+    )
+}
+
+/// The pure half of [`version_lines`] — the lane, the commit stamp and the
+/// missing set are parameters so both lanes are testable from one build.
+/// The crates.io lane (Issue 225) never prints STALE or a rebuild line: the
+/// features the rebuild would name are not in the published manifest.
+#[must_use]
+pub fn version_lines_for(cratesio: bool, commit: &str, missing: &[&str]) -> Vec<String> {
     let mut out = vec![
         format!("cargo-refine {}", env!("CARGO_PKG_VERSION")),
         format!("features: {COMPILED_FEATURES}"),
-        format!("build: {BUILD_COMMIT}"),
+        format!("build: {commit}"),
         format!("net: {}", crate::kat_net_pin::NET_PIN),
     ];
-    let missing = missing_release_features();
-    if missing.is_empty() {
+    if cratesio {
+        out.push(CRATESIO_RELEASE_LINE.to_string());
+    } else if missing.is_empty() {
         out.push(format!(
             "release set: complete ({})",
             RELEASE_FEATURES.join(",")
@@ -206,13 +241,29 @@ pub fn version_lines() -> Vec<String> {
 /// a stale binary from a server outage.
 #[must_use]
 pub fn refusal_lines(command: &str, needed: &[&str]) -> Vec<String> {
+    refusal_lines_for(is_cratesio_lane(), command, needed)
+}
+
+/// The pure half of [`refusal_lines`]. On the crates.io lane (Issue 225)
+/// the third line points at the prebuilt binaries instead of a rebuild —
+/// the needed features are not in the published manifest, so the rebuild
+/// would fail.
+#[must_use]
+pub fn refusal_lines_for(cratesio: bool, command: &str, needed: &[&str]) -> Vec<String> {
+    let remedy = if cratesio {
+        format!(
+            "{command}: this is the crates.io build — `{command}` ships in the prebuilt binaries (brew or install.sh)"
+        )
+    } else {
+        format!("{command}: rebuild with: {}", rebuild_command_for(needed))
+    };
     vec![
         format!(
             "{command}: refused — this build has no {} (the command is compiled out, not broken)",
             needed.join(",")
         ),
         format!("{command}: this binary's features: {COMPILED_FEATURES}"),
-        format!("{command}: rebuild with: {}", rebuild_command_for(needed)),
+        remedy,
     ]
 }
 
@@ -339,13 +390,76 @@ mod tests {
         assert!(lines[0].starts_with("cargo-refine "));
         assert!(lines[1].starts_with("features: "));
         let joined = lines.join("\n");
-        if missing_release_features().is_empty() {
+        if is_cratesio_lane() {
+            assert!(joined.contains(CRATESIO_RELEASE_LINE), "{joined}");
+            assert!(!joined.contains("rebuild:"), "{joined}");
+        } else if missing_release_features().is_empty() {
             assert!(joined.contains("release set: complete"), "{joined}");
             assert!(!joined.contains("rebuild:"), "{joined}");
         } else {
             assert!(joined.contains("release set: STALE"), "{joined}");
             assert!(joined.contains(&rebuild_command()), "{joined}");
         }
+    }
+
+    /// Issue 225 — the SOURCE lane, both verdicts: byte-identical to the
+    /// pre-225 block (STALE + rebuild when incomplete, complete otherwise).
+    #[test]
+    fn source_lane_block_is_unchanged() {
+        let stale = version_lines_for(false, "abcdef123456", &["points", "net-mainnet"]).join("\n");
+        assert!(stale.contains("build: abcdef123456"), "{stale}");
+        assert!(
+            stale.contains("release set: STALE — missing points,net-mainnet"),
+            "{stale}"
+        );
+        assert!(
+            stale.contains(&format!("rebuild: {}", rebuild_command())),
+            "{stale}"
+        );
+        assert!(!stale.contains("crates.io"), "{stale}");
+        let complete = version_lines_for(false, "abcdef123456", &[]).join("\n");
+        assert!(complete.contains("release set: complete ("), "{complete}");
+        assert!(!complete.contains("rebuild:"), "{complete}");
+    }
+
+    /// Issue 225 — the CRATES.IO lane: the published commit is stamped, the
+    /// release line names the lane, and NO STALE verdict or rebuild line
+    /// appears even though the release features are absent (they do not
+    /// exist in the published manifest — following the advice would fail).
+    #[test]
+    fn cratesio_lane_block_names_the_lane_and_never_prescribes_a_rebuild() {
+        let lines = version_lines_for(true, "0123456789ab", RELEASE_FEATURES);
+        assert!(lines[0].starts_with("cargo-refine "));
+        assert!(lines[1].starts_with("features: "));
+        assert_eq!(lines[2], "build: 0123456789ab");
+        let joined = lines.join("\n");
+        assert!(joined.contains(CRATESIO_RELEASE_LINE), "{joined}");
+        assert!(joined.contains("brew or install.sh"), "{joined}");
+        assert!(!joined.contains("STALE"), "{joined}");
+        assert!(!joined.contains("rebuild:"), "{joined}");
+        assert!(!joined.contains("cargo build"), "{joined}");
+    }
+
+    /// Issue 225 — the refusal's remedy follows the lane: a rebuild recipe
+    /// on the source lane, the prebuilt binaries on the crates.io lane.
+    #[test]
+    fn refusal_remedy_follows_the_lane() {
+        let src = refusal_lines_for(false, "sync", &["points"]).join("\n");
+        assert!(src.contains(&rebuild_command_for(&["points"])), "{src}");
+        let reg = refusal_lines_for(true, "sync", &["points"]).join("\n");
+        assert!(reg.contains("sync: refused"), "{reg}");
+        assert!(reg.contains("prebuilt binaries"), "{reg}");
+        assert!(!reg.contains("cargo build"), "{reg}");
+    }
+
+    /// The lane stamp is one of exactly two values — a build script that
+    /// exported anything else would make `is_cratesio_lane` silently false.
+    #[test]
+    fn build_lane_is_a_known_value() {
+        assert!(
+            BUILD_LANE == LANE_CRATESIO || BUILD_LANE == "source",
+            "unexpected lane stamp {BUILD_LANE:?}"
+        );
     }
 
     /// The build line (Issue 150 option 3) rides after the feature line and
@@ -387,7 +501,7 @@ mod tests {
     /// recreates a half of the 00:21 diagnosis that had to be done by hand.
     #[test]
     fn refusal_carries_all_four_facts() {
-        let text = refusal_lines("sync", &["points"]).join("\n");
+        let text = refusal_lines_for(false, "sync", &["points"]).join("\n");
         assert!(text.contains("sync: refused"), "{text}");
         assert!(text.contains("points"), "{text}");
         assert!(text.contains(COMPILED_FEATURES), "{text}");
@@ -417,7 +531,7 @@ mod tests {
             assert!(cmd.contains(f), "{cmd} dropped the release feature {f}");
         }
         // And the refusal PRINTS that command, not the bare one.
-        let text = refusal_lines("replay", &needed).join("\n");
+        let text = refusal_lines_for(false, "replay", &needed).join("\n");
         assert!(text.contains(&cmd), "{text}");
     }
 

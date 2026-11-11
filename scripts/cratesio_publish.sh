@@ -17,6 +17,14 @@
 #                 build embeds, the pins manifest the health views embed,
 #                 README, LICENSE) + autodiscovery off (autobins/autotests/
 #                 autoexamples/autobenches = false).
+#                 The include list also ships the LANE MARKER (issue 225):
+#                 cratesio_lane.stamp, written into the stage root with the
+#                 --ref's 12-hex commit. build.rs reads it, so `cargo install`
+#                 from the registry (no git, no env of ours) still stamps
+#                 `build: <commit>` and prints `release set: crates.io (...)`
+#                 instead of STALE + a rebuild naming removed features. The
+#                 dev tree never carries the file (source-lane behaviour
+#                 unchanged).
 #   [lib]         kept as-is (name stays riir_refine).
 #   [workspace]   dropped (the stage package stands alone).
 #   [dependencies] katgpt-core -> registry row at --kc-version (the P1
@@ -98,6 +106,12 @@ echo "== cratesio_publish: name=$NAME version=$VERSION kc=$KC_VERSION@$KC_SOURCE
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 git -C "$REPO" archive "$REF" | tar -x -C "$STAGE"
+# Issue 225: the crates.io lane marker — the ref's commit, resolved NOW
+# (the registry build has no git to ask).
+REF_COMMIT=$(git -C "$REPO" rev-parse --short=12 "$REF^{commit}") \
+  || { echo "FAIL: --ref $REF does not resolve to a commit" >&2; exit 2; }
+printf '%s\n' "$REF_COMMIT" > "$STAGE/cratesio_lane.stamp"
+echo "   lane marker: cratesio_lane.stamp = $REF_COMMIT"
 # Nested workspaces / non-packaged dirs the stage must not carry (their
 # manifests reference the [workspace] table the surgery drops, or they are
 # excluded lanes with their own cargo projects).
@@ -429,6 +443,7 @@ include_block = (
     '    "src/**",\n'
     '    "build.rs",\n'
     '    "build_commit.rs",\n'
+    '    "/cratesio_lane.stamp",\n'
     '    "tests/fixtures/m2p_attention_postfix_701.wgsl",\n'
     '    ".benchmarks/pins_manifest.json",\n'
     '    "/README.md",\n'
@@ -528,6 +543,15 @@ if ! "$CARGO_TARGET_DIR/release/$NAME" --version > "$STAGE/bin_version.log" 2>&1
     exit 1
 fi
 cat "$STAGE/bin_version.log"
+# Issue 225: the built bin must report the crates.io lane + the ref's commit
+# — never STALE, never a rebuild line naming features the surgery removed.
+grep -qx "build: $REF_COMMIT" "$STAGE/bin_version.log" \
+  || { echo "FAIL: --version does not stamp the ref commit $REF_COMMIT" >&2; exit 1; }
+grep -q '^release set: crates.io' "$STAGE/bin_version.log" \
+  || { echo "FAIL: --version does not name the crates.io lane" >&2; exit 1; }
+if grep -qE '^rebuild:|STALE' "$STAGE/bin_version.log"; then
+    echo "FAIL: the crates.io build still prescribes a rebuild" >&2; exit 1
+fi
 
 # ── 5. package surface audit ────────────────────────────────────────────────
 cargo package --list --allow-dirty > "$STAGE/pkglist.txt" 2>/dev/null \
@@ -548,6 +572,10 @@ echo "   package list ✓ ($(grep -c . "$STAGE/pkglist.txt") entries)"
 # Verdict round-2 fix 3b: a binary crate ships its lockfile so installs are
 # reproducible — assert the REGENERATED lock survived the include list (cargo
 # force-includes it for bin packages, but the assertion is the proof).
+if ! grep -q '^cratesio_lane\.stamp$' "$STAGE/pkglist.txt"; then
+    echo "FAIL: the lane marker cratesio_lane.stamp is not in the package (issue 225)" >&2
+    exit 1
+fi
 if ! grep -q '^Cargo\.lock$' "$STAGE/pkglist.txt"; then
     echo "FAIL: Cargo.lock not in the package (bin crates must ship it)" >&2
     exit 1

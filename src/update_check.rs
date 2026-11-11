@@ -302,23 +302,58 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
 /// (old) version YELLOW — gated on the shared color gate (`NO_COLOR` / TERM
 /// =dumb / stdout TTY), and the escape codes wrap the WHOLE tokens, never
 /// sit inside them, so grep/regex on `0.4.5` still matches the plain text.
+///
+/// Issue 221 P4 step 5: the crates.io route rides the same line. A
+/// crates.io-lane build (Issue 225's lane stamp) LEADS with `cargo install
+/// cargo-refine` — cargo owns that binary, and `upgrade` refuses it; a
+/// source/binary-lane build keeps `cargo refine upgrade` and names the
+/// crates.io route as the parenthetical.
 #[must_use]
 pub fn alert_line(latest: &CachedRelease, installed: &str) -> Option<String> {
+    alert_line_for(latest, installed, crate::build_stamp::is_cratesio_lane())
+}
+
+/// The cargo command that upgrades a crates.io install.
+pub const CRATESIO_UPGRADE: &str = "cargo install cargo-refine";
+
+/// The pure half of [`alert_line`] — the lane is a parameter so both
+/// postures are testable from one build.
+#[must_use]
+pub fn alert_line_for(latest: &CachedRelease, installed: &str, cratesio: bool) -> Option<String> {
     if !version_newer(&latest.version, installed) {
         return None;
     }
+    let route = if cratesio {
+        format!("run `{CRATESIO_UPGRADE}`")
+    } else {
+        format!("run `cargo refine upgrade` (crates.io install: `{CRATESIO_UPGRADE}`)")
+    };
     if crate::kat_footer::color_enabled() {
         Some(format!(
-            "⬆️ update available: {} → {} — run `cargo refine upgrade`",
+            "⬆️ update available: {} → {} — {route}",
             crate::kat_footer::yellow(installed),
             crate::kat_footer::green(&latest.version)
         ))
     } else {
         Some(format!(
-            "⬆️ update available: {installed} → {} — run `cargo refine upgrade`",
+            "⬆️ update available: {installed} → {} — {route}",
             latest.version
         ))
     }
+}
+
+/// The `upgrade` refusal for a crates.io-lane build (Issue 221 P4 step 5):
+/// cargo owns a `cargo install`ed binary (its install ledger names the
+/// version), so the self-swap is refused — the same law as
+/// [`is_dev_build`] — and the message names the cargo route plus the
+/// prebuilt-binary route for the hosted surfaces.
+#[must_use]
+pub fn cratesio_upgrade_refusal(cratesio: bool) -> Option<UpdateError> {
+    cratesio.then(|| {
+        UpdateError::Verify(format!(
+            "this is the crates.io build — upgrade it with `{CRATESIO_UPGRADE}` (cargo owns this binary); the prebuilt binaries (join/leaderboard/latent retrieval): brew or https://github.com/{DIST_REPO}"
+        ))
+    })
 }
 
 // ── the fetcher (the one network seam) ──────────────────────────────────────
@@ -681,6 +716,9 @@ pub fn upgrade(
     downloader: &dyn Download,
     installed: &str,
 ) -> Result<UpgradeReport, UpdateError> {
+    if let Some(refusal) = cratesio_upgrade_refusal(crate::build_stamp::is_cratesio_lane()) {
+        return Err(refusal);
+    }
     let exe = std::env::current_exe().map_err(UpdateError::Io)?;
     if is_dev_build(&exe) {
         return Err(UpdateError::Verify(format!(
@@ -690,7 +728,7 @@ pub fn upgrade(
     }
     let (triple, abi_note) = release_target_triple_and_note().ok_or_else(|| {
         UpdateError::NoAsset(format!(
-            "no release asset for this platform ({}) — use the install script at https://github.com/{DIST_REPO}",
+            "no release asset for this platform ({}) — use the install script at https://github.com/{DIST_REPO}, or `{CRATESIO_UPGRADE}`",
             std::env::consts::ARCH
         ))
     })?;
@@ -1004,9 +1042,10 @@ mod tests {
     // ── the alert text ──
     #[test]
     fn alert_line_is_one_short_line_with_the_upgrade_command() {
-        let line = alert_line(
+        let line = alert_line_for(
             &release("0.3.0", Some("corpus: +12 rust_perf rules")),
             INSTALLED,
+            false,
         )
         .expect("newer alerts");
         // The owner's UX law: ONE line — versions + the upgrade command.
@@ -1019,6 +1058,41 @@ mod tests {
         assert!(!line.contains("https://"), "{line}");
         assert!(alert_line(&release(INSTALLED, None), INSTALLED).is_none());
         assert!(alert_line(&release("0.1.0", None), INSTALLED).is_none());
+        // Issue 221 P4 step 5: the binary lane keeps `upgrade` first and
+        // names the crates.io route beside it.
+        let upgrade_at = line.find("cargo refine upgrade").expect("upgrade named");
+        let cargo_at = line.find(CRATESIO_UPGRADE).expect("crates.io route named");
+        assert!(
+            upgrade_at < cargo_at,
+            "binary lane leads with upgrade: {line}"
+        );
+    }
+
+    /// Issue 221 P4 step 5: a crates.io-lane build leads with (and only
+    /// names) `cargo install cargo-refine` — `upgrade` refuses that build.
+    #[test]
+    fn cratesio_lane_alert_leads_with_cargo_install() {
+        let line = alert_line_for(&release("0.3.0", None), INSTALLED, true).expect("newer alerts");
+        assert!(!line.contains('\n'), "one line only: {line}");
+        assert!(line.contains("0.2.1 → 0.3.0"), "{line}");
+        assert!(
+            line.contains(&format!("run `{CRATESIO_UPGRADE}`")),
+            "{line}"
+        );
+        assert!(!line.contains("cargo refine upgrade"), "{line}");
+        assert!(alert_line_for(&release(INSTALLED, None), INSTALLED, true).is_none());
+    }
+
+    /// The `upgrade` refusal fires on the crates.io lane only, and names
+    /// both routes (cargo for this install, the dist repo for binaries).
+    #[test]
+    fn upgrade_refuses_a_cratesio_build_with_the_cargo_route() {
+        assert!(cratesio_upgrade_refusal(false).is_none());
+        let msg = cratesio_upgrade_refusal(true)
+            .expect("crates.io lane refuses")
+            .to_string();
+        assert!(msg.contains(CRATESIO_UPGRADE), "{msg}");
+        assert!(msg.contains(DIST_REPO), "{msg}");
     }
 
     // ── asset naming + triples ──
