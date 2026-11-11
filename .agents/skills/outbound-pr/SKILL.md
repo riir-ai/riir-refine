@@ -144,6 +144,13 @@ test was in a suite we never invoked (`--test system`). The harness, in order:
    uploads less than BASE" — 5 vs 14). The actionable number is patch
    coverage on the added lines (#3025: 88.62%, 90 missing — mostly the new
    module's logging/error arms); act on it only if a maintainer raises it.
+   **And the fork itself runs their push-event workflows** — secret-
+   dependent steps fail there (no CODECOV_TOKEN on the fork), and those
+   runs never appear on the PR's checks panel. After the branch push,
+   disable every fork workflow + cancel queued runs (`gh api -X PUT
+   repos/<org>/<repo>/actions/workflows/<name>/disable`), and note it in
+   the send record (#3025: both fork workflows `disabled_manually`, 4 runs
+   terminal).
 
 G-PR1b failure = the fix is NOT ready, regardless of G-PR1's local green.
 
