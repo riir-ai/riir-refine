@@ -1,4 +1,4 @@
-//! Vendored from `riir-neuron-db` (`90ab1ba`, vendored 2026-11-09, issue
+//! Vendored from `riir-neuron-db` (`658b3f5`, vendored 2026-11-09, issue
 //! 221 P2b — the publish posture's modelless retrieval substrate).
 //! std-only up to the crate's own deps (blake3 / papaya / quote — all
 //! already in refine's tree). The canonical copy stays in the private
@@ -15,31 +15,18 @@
 //! pinned vectors/floors), the doc-backtick and style classes are churn
 //! with zero behavior content. The parity pins + the upstream tests that
 //! ship inside each file are the correctness authority, not lint shape.
-#![allow(
-    clippy::doc_markdown,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap,
-    clippy::cast_lossless,
-    clippy::missing_const_for_fn,
-    clippy::missing_panics_doc,
-    clippy::missing_errors_doc,
-    clippy::missing_fields_in_debug,
-    clippy::module_name_repetitions,
-    clippy::must_use_candidate,
-    clippy::inline_always,
-    clippy::let_and_return,
-    clippy::manual_let_else,
-    clippy::explicit_iter_loop,
-    clippy::match_same_arms,
-    clippy::single_char_pattern,
-    clippy::format_push_string,
-    clippy::ignore_without_reason,
-    clippy::assertions_on_constants,
-    clippy::too_many_lines,
-    clippy::assert_is_empty
-)]
+#![allow(clippy::doc_markdown, clippy::cast_precision_loss,
+        clippy::cast_possible_truncation, clippy::cast_sign_loss,
+        clippy::cast_possible_wrap, clippy::cast_lossless,
+        clippy::missing_const_for_fn, clippy::missing_panics_doc,
+        clippy::missing_errors_doc, clippy::missing_fields_in_debug,
+        clippy::module_name_repetitions, clippy::must_use_candidate,
+        clippy::inline_always, clippy::let_and_return,
+        clippy::manual_let_else, clippy::explicit_iter_loop,
+        clippy::match_same_arms, clippy::single_char_pattern,
+        clippy::format_push_string, clippy::ignore_without_reason,
+        clippy::assertions_on_constants, clippy::too_many_lines,
+        clippy::assert_is_empty)]
 
 //! BM25 inverted index for full-text search over Warm tier text values.
 //!
@@ -1006,6 +993,583 @@ fn rank_top_k(mut entries: Vec<(&[u8], f32)>, limit: usize) -> Vec<(Vec<u8>, f32
     ranked
 }
 
+// ---------------------------------------------------------------------------
+// Snapshot / restore — the on-disk index-cache primitive (riir-refine Issue
+// 224 T1). The container is a fixed header + sequential payload + blake3
+// trailer. The tokenizer is deliberately NOT serialized: `index`/`search`
+// must share one tokenizer, so the restorer supplies it and owns that
+// pairing. `restore_snapshot` verifies the digest BEFORE parsing, then
+// revalidates every structural invariant — corrupt bytes refuse as a typed
+// [`SnapshotError`], never a panic and never a silently wrong index.
+// ---------------------------------------------------------------------------
+
+/// Snapshot container format version ([`Bm25Index::to_snapshot`] /
+/// [`Bm25Index::restore_snapshot`]).
+pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
+
+/// Snapshot container magic (`b"NDBM25S1"`).
+const SNAPSHOT_MAGIC: &[u8; 8] = b"NDBM25S1";
+
+/// Fixed snapshot header length in bytes.
+const SNAPSHOT_HEADER_LEN: usize = 60;
+
+/// blake3 digest trailer length in bytes.
+const SNAPSHOT_DIGEST_LEN: usize = 32;
+
+/// Minimum container size: header + digest (the empty index's snapshot).
+const SNAPSHOT_MIN_LEN: usize = SNAPSHOT_HEADER_LEN + SNAPSHOT_DIGEST_LEN;
+
+/// Why a snapshot could not be produced or restored.
+///
+/// Every variant is a loud refusal: the caller never receives a partial or
+/// silently-degraded index ([`Bm25Index::restore_snapshot`] returns `Err`
+/// instead of panicking or guessing).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnapshotError {
+    /// Fewer bytes than the fixed header + blake3 trailer.
+    TooSmall,
+    /// The leading magic is not `b"NDBM25S1"` — not a `Bm25Index` snapshot.
+    BadMagic,
+    /// The format version is not [`SNAPSHOT_FORMAT_VERSION`]; carries the
+    /// read value (a newer writer, or a corrupted header).
+    UnsupportedVersion(u32),
+    /// The blake3 trailer does not match the preceding bytes — the payload
+    /// is corrupt or truncated. Verified BEFORE any parsing.
+    DigestMismatch,
+    /// A structural invariant or bound check failed (distinct message per
+    /// check).
+    Malformed(&'static str),
+    /// `bm25_facet` builds only: the index holds facet state and snapshot
+    /// format v1 carries no facet encoding. Silent loss would be a wrong
+    /// index, so the caller decides instead.
+    FacetStateUnsupported,
+}
+
+impl std::fmt::Display for SnapshotError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooSmall => write!(f, "snapshot too small to contain a header + digest"),
+            Self::BadMagic => write!(f, "not a Bm25Index snapshot (bad magic)"),
+            Self::UnsupportedVersion(v) => write!(
+                f,
+                "unsupported snapshot format version {v} (supported: {SNAPSHOT_FORMAT_VERSION})"
+            ),
+            Self::DigestMismatch => {
+                write!(f, "snapshot digest mismatch — corrupt or truncated payload")
+            }
+            Self::Malformed(what) => write!(f, "malformed snapshot: {what}"),
+            Self::FacetStateUnsupported => write!(
+                f,
+                "index holds facet state (bm25_facet); snapshot format v1 carries no facet state"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotError {}
+
+impl Bm25Index {
+    /// Serialize the complete index state (postings, doc metadata, ordinals,
+    /// counters, k1/b). The tokenizer is NOT serialized — the restorer
+    /// supplies it (index/search must share one tokenizer; the caller owns
+    /// that pairing).
+    ///
+    /// Deterministic: the same index state always serializes to
+    /// byte-identical output (terms sorted lexicographically; doc_lengths +
+    /// key_to_terms sorted by dense ordinal). O(index size) time and memory.
+    ///
+    /// # Errors
+    ///
+    /// [`SnapshotError::FacetStateUnsupported`] on a `bm25_facet` build whose
+    /// facet maps are non-empty (v1 carries no facet state).
+    pub fn to_snapshot(&self) -> Result<Vec<u8>, SnapshotError> {
+        // Facet state has no v1 encoding — refusing beats silently dropping
+        // half the index (bm25_facet builds only).
+        #[cfg(feature = "bm25_facet")]
+        if !self.facet_postings.is_empty() || !self.key_to_facets.is_empty() {
+            return Err(SnapshotError::FacetStateUnsupported);
+        }
+
+        let n_keys = self.ordinals.len();
+
+        // ---- Keys table: `ordinals` inverted into a dense vec indexed by
+        // ordinal. A gap is an impossible internal state (ordinals are never
+        // removed) — panic like the ordinal-space assert rather than emit a
+        // wrong snapshot.
+        let ordinals_guard = self.ordinals.guard();
+        let mut keys_by_ord: Vec<Option<&[u8]>> = vec![None; n_keys];
+        for (key, &ord) in self.ordinals.iter(&ordinals_guard) {
+            assert!(
+                (ord as usize) < keys_by_ord.len(),
+                "Bm25Index::to_snapshot: ordinal {ord} outside the ordinal space {} — \
+                 impossible internal state",
+                keys_by_ord.len()
+            );
+            keys_by_ord[ord as usize] = Some(&key[..]);
+        }
+        let keys: Vec<&[u8]> = keys_by_ord
+            .into_iter()
+            .enumerate()
+            .map(|(ord, slot)| {
+                slot.unwrap_or_else(|| {
+                    panic!(
+                        "Bm25Index::to_snapshot: ordinal {ord} unassigned — impossible internal state"
+                    )
+                })
+            })
+            .collect();
+
+        // ---- Term table: postings keys ∪ key_to_terms terms, sorted
+        // lexicographically. Equal in practice; the union is defensive.
+        let postings_guard = self.postings.guard();
+        let kt_guard = self.key_to_terms.guard();
+        let mut terms: Vec<String> = Vec::with_capacity(self.postings.len());
+        for (term, _) in self.postings.iter(&postings_guard) {
+            terms.push(term.clone());
+        }
+        for (_, doc_terms) in self.key_to_terms.iter(&kt_guard) {
+            for term in doc_terms {
+                terms.push(term.clone());
+            }
+        }
+        terms.sort();
+        terms.dedup();
+        let term_ids: StdHashMap<&str, u32> = terms
+            .iter()
+            .enumerate()
+            .map(|(id, term)| (term.as_str(), id as u32))
+            .collect();
+
+        // ---- doc_lengths / key_to_terms rows keyed by dense ordinal.
+        let ord_of = |key: &[u8]| -> u32 {
+            match self.ordinals.get(key, &ordinals_guard) {
+                Some(&ord) => ord,
+                None => panic!(
+                    "Bm25Index::to_snapshot: key present in doc metadata but missing from \
+                     ordinals — impossible internal state"
+                ),
+            }
+        };
+        let dl_guard = self.doc_lengths.guard();
+        let mut dl_rows: Vec<(u32, u64)> = Vec::with_capacity(self.doc_lengths.len());
+        for (key, &len) in self.doc_lengths.iter(&dl_guard) {
+            dl_rows.push((ord_of(key), len as u64));
+        }
+        dl_rows.sort_unstable_by_key(|row| row.0);
+
+        let mut kt_rows: Vec<(u32, Vec<&str>)> = Vec::with_capacity(self.key_to_terms.len());
+        for (key, doc_terms) in self.key_to_terms.iter(&kt_guard) {
+            kt_rows.push((ord_of(key), doc_terms.iter().map(String::as_str).collect()));
+        }
+        // Sorted by ordinal; term ids sorted WITHIN each row — the stored
+        // reverse-entry order is iteration-order dependent and semantically
+        // irrelevant (remove_internal visits every term without early exit),
+        // so the snapshot canonicalizes it for byte-determinism.
+        kt_rows.sort_unstable_by_key(|row| row.0);
+        for (_, doc_terms) in &mut kt_rows {
+            doc_terms.sort_unstable();
+        }
+
+        // ---- Assemble.
+        let mut buf = Vec::new();
+        buf.extend_from_slice(SNAPSHOT_MAGIC);
+        put_u32(&mut buf, SNAPSHOT_FORMAT_VERSION);
+        put_u32(&mut buf, self.k1.to_bits());
+        put_u32(&mut buf, self.b.to_bits());
+        // next_ordinal is written as n_keys: the ordinal space is dense
+        // 0..n_keys-1 (restore enforces the equality), and a lost
+        // `ordinal_of` race can only inflate the in-memory counter, never
+        // change the key set — the snapshot carries the canonical dense
+        // truth, so a genuine round-trip is always restorable.
+        put_u32(&mut buf, n_keys as u32);
+        put_u64(
+            &mut buf,
+            self.total_length.load(std::sync::atomic::Ordering::Relaxed) as u64,
+        );
+        put_u64(
+            &mut buf,
+            self.doc_count.load(std::sync::atomic::Ordering::Relaxed) as u64,
+        );
+        put_u32(&mut buf, n_keys as u32);
+        put_u32(&mut buf, dl_rows.len() as u32);
+        put_u32(&mut buf, kt_rows.len() as u32);
+        put_u32(&mut buf, terms.len() as u32);
+        buf.extend_from_slice(&[0; 4]); // reserved — writers write zero.
+
+        for key in &keys {
+            put_len_bytes(&mut buf, key);
+        }
+        for term in &terms {
+            put_len_bytes(&mut buf, term.as_bytes());
+        }
+        // Postings: PER-TERM ORDER IS THE STORED DOCUMENT ORDER — search
+        // ranking is a total order over it, so sorting or deduping here
+        // would flip bit-identical results.
+        for term in &terms {
+            match self.postings.get(term, &postings_guard) {
+                Some(list) => {
+                    put_u32(&mut buf, list.len() as u32);
+                    for posting in list.iter() {
+                        put_u32(&mut buf, posting.ord);
+                        put_u32(&mut buf, posting.tf);
+                        put_u32(&mut buf, posting.dl.to_bits());
+                    }
+                }
+                None => put_u32(&mut buf, 0), // defensive-union term, no postings
+            }
+        }
+        for (ord, len) in &dl_rows {
+            put_u32(&mut buf, *ord);
+            put_u64(&mut buf, *len);
+        }
+        for (ord, doc_terms) in &kt_rows {
+            put_u32(&mut buf, *ord);
+            put_u32(&mut buf, doc_terms.len() as u32);
+            for term in doc_terms {
+                put_u32(&mut buf, term_ids[*term]);
+            }
+        }
+
+        buf.extend_from_slice(blake3::hash(&buf).as_bytes());
+        Ok(buf)
+    }
+
+    /// Rebuild an index from [`Bm25Index::to_snapshot`] bytes. Verifies the
+    /// blake3 digest BEFORE parsing (corrupt bytes never become structures),
+    /// then validates every structural invariant. Returns `Err` (never
+    /// panics, never a silently wrong index) on any mismatch. The supplied
+    /// tokenizer becomes the restored index's tokenizer.
+    ///
+    /// # Errors
+    ///
+    /// Every [`SnapshotError`] variant: size/magic/version, digest mismatch,
+    /// and one [`SnapshotError::Malformed`] message per failed structural
+    /// invariant (`n_keys == next_ordinal`, ord/term_id bounds,
+    /// `doc_count == n_dl`, `total_length == Σ doc lengths`, unique ords,
+    /// finite k1/b, well-formed UTF-8 terms, exact payload consumption).
+    pub fn restore_snapshot(
+        tokenizer: Box<dyn Tokenizer + Send + Sync>,
+        bytes: &[u8],
+    ) -> Result<Self, SnapshotError> {
+        // ---- Container shape, magic, version — in that order, so a foreign
+        // file answers BadMagic before anything else looks at it.
+        if bytes.len() < SNAPSHOT_MIN_LEN {
+            return Err(SnapshotError::TooSmall);
+        }
+        if &bytes[..SNAPSHOT_MAGIC.len()] != SNAPSHOT_MAGIC {
+            return Err(SnapshotError::BadMagic);
+        }
+        let version = header_u32(bytes, 8);
+        if version != SNAPSHOT_FORMAT_VERSION {
+            return Err(SnapshotError::UnsupportedVersion(version));
+        }
+
+        // ---- Digest FIRST: corrupt bytes never become structures.
+        let body_len = bytes.len() - SNAPSHOT_DIGEST_LEN;
+        if blake3::hash(&bytes[..body_len]).as_bytes() != &bytes[body_len..] {
+            return Err(SnapshotError::DigestMismatch);
+        }
+
+        // ---- Header.
+        let k1 = f32::from_bits(header_u32(bytes, 12));
+        let b = f32::from_bits(header_u32(bytes, 16));
+        let next_ordinal = header_u32(bytes, 20);
+        let total_length = header_u64(bytes, 24);
+        let doc_count = header_u64(bytes, 32);
+        let n_keys = header_u32(bytes, 40);
+        let n_dl = header_u32(bytes, 44);
+        let n_kt = header_u32(bytes, 48);
+        let n_terms = header_u32(bytes, 52);
+        // bytes[56..60] are reserved (writers write zero; readers ignore).
+
+        let mut cursor = SnapshotCursor {
+            data: &bytes[SNAPSHOT_HEADER_LEN..body_len],
+            pos: 0,
+        };
+
+        // ---- Structural validation that needs only the header. Every
+        // section-count bound runs BEFORE any allocation, so a hostile count
+        // can never become a hostile `with_capacity`.
+        if !k1.is_finite() || !b.is_finite() {
+            return Err(SnapshotError::Malformed("k1 and b must be finite"));
+        }
+        if n_keys != next_ordinal {
+            return Err(SnapshotError::Malformed(
+                "key count does not equal next ordinal",
+            ));
+        }
+        let payload_len = cursor.remaining();
+        let section_fits = |count: u32, min_record: u64| -> bool {
+            u64::from(count) * min_record <= payload_len as u64
+        };
+        if !section_fits(n_keys, 4) {
+            return Err(SnapshotError::Malformed(
+                "keys section overruns the payload",
+            ));
+        }
+        if !section_fits(n_terms, 4) {
+            return Err(SnapshotError::Malformed("term table overruns the payload"));
+        }
+        // Per-term minimum: the posting count field (each posting is
+        // bounds-checked as it is read).
+        if !section_fits(n_terms, 4) {
+            return Err(SnapshotError::Malformed(
+                "postings section overruns the payload",
+            ));
+        }
+        if !section_fits(n_dl, 12) {
+            return Err(SnapshotError::Malformed(
+                "doc-length section overruns the payload",
+            ));
+        }
+        if !section_fits(n_kt, 8) {
+            return Err(SnapshotError::Malformed(
+                "reverse-index section overruns the payload",
+            ));
+        }
+
+        // ---- Keys: one Arc per dense ordinal (postings clone the Arc — a
+        // refcount bump, no memcpy).
+        let mut keys: Vec<Arc<[u8]>> = Vec::with_capacity(n_keys as usize);
+        for _ in 0..n_keys {
+            let len = cursor.take_u32("key length")?;
+            let key_bytes = cursor.take_bytes("key bytes", len as usize)?;
+            keys.push(Arc::from(key_bytes));
+        }
+
+        // ---- Terms.
+        let mut terms: Vec<String> = Vec::with_capacity(n_terms as usize);
+        for _ in 0..n_terms {
+            let len = cursor.take_u32("term length")?;
+            let term_bytes = cursor.take_bytes("term bytes", len as usize)?;
+            let term = std::str::from_utf8(term_bytes)
+                .map_err(|_| SnapshotError::Malformed("term table entry is not UTF-8"))?
+                .to_owned();
+            terms.push(term);
+        }
+
+        // ---- Postings: per-term stored document order is preserved exactly
+        // (search ranking is a total order over it).
+        let mut local_postings: StdHashMap<String, Vec<Posting>> =
+            StdHashMap::with_capacity(n_terms as usize);
+        for term in &terms {
+            let count = cursor.take_u32("posting count")?;
+            if u64::from(count) * 12 > cursor.remaining() as u64 {
+                return Err(SnapshotError::Malformed(
+                    "postings section overruns the payload",
+                ));
+            }
+            let mut list = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                let ord = cursor.take_u32("posting ordinal")?;
+                if ord >= n_keys {
+                    return Err(SnapshotError::Malformed("posting ordinal out of range"));
+                }
+                let tf = cursor.take_u32("posting term frequency")?;
+                let dl_bits = cursor.take_u32("posting doc length")?;
+                list.push(Posting {
+                    key: Arc::clone(&keys[ord as usize]),
+                    tf,
+                    dl: f32::from_bits(dl_bits),
+                    ord,
+                });
+            }
+            local_postings.insert(term.clone(), list);
+        }
+
+        // ---- doc_lengths.
+        let mut local_dl: StdHashMap<Vec<u8>, usize> = StdHashMap::with_capacity(n_dl as usize);
+        let mut dl_ords: HashSet<u32> = HashSet::with_capacity(n_dl as usize);
+        let mut dl_sum: u64 = 0;
+        for _ in 0..n_dl {
+            let ord = cursor.take_u32("doc-length ordinal")?;
+            if ord >= n_keys {
+                return Err(SnapshotError::Malformed("doc-length ordinal out of range"));
+            }
+            let len = cursor.take_u64("doc-length value")?;
+            if len > usize::MAX as u64 {
+                return Err(SnapshotError::Malformed(
+                    "doc length exceeds the platform usize",
+                ));
+            }
+            if !dl_ords.insert(ord) {
+                return Err(SnapshotError::Malformed("duplicate doc-length ordinal"));
+            }
+            dl_sum = dl_sum
+                .checked_add(len)
+                .ok_or(SnapshotError::Malformed("doc-length sum overflows u64"))?;
+            local_dl.insert(keys[ord as usize].to_vec(), len as usize);
+        }
+
+        // ---- key_to_terms.
+        let mut local_kt: StdHashMap<Vec<u8>, Vec<String>> =
+            StdHashMap::with_capacity(n_kt as usize);
+        let mut kt_ords: HashSet<u32> = HashSet::with_capacity(n_kt as usize);
+        for _ in 0..n_kt {
+            let ord = cursor.take_u32("reverse-index ordinal")?;
+            if ord >= n_keys {
+                return Err(SnapshotError::Malformed(
+                    "reverse-index ordinal out of range",
+                ));
+            }
+            if !kt_ords.insert(ord) {
+                return Err(SnapshotError::Malformed("duplicate reverse-index ordinal"));
+            }
+            let count = cursor.take_u32("reverse-index term count")?;
+            if u64::from(count) * 4 > cursor.remaining() as u64 {
+                return Err(SnapshotError::Malformed(
+                    "reverse-index section overruns the payload",
+                ));
+            }
+            let mut doc_terms = Vec::with_capacity(count as usize);
+            for _ in 0..count {
+                let term_id = cursor.take_u32("reverse-index term id")?;
+                if term_id >= n_terms {
+                    return Err(SnapshotError::Malformed(
+                        "reverse-index term id out of range",
+                    ));
+                }
+                doc_terms.push(terms[term_id as usize].clone());
+            }
+            local_kt.insert(keys[ord as usize].to_vec(), doc_terms);
+        }
+
+        // ---- Remaining structural invariants.
+        if doc_count != u64::from(n_dl) {
+            return Err(SnapshotError::Malformed(
+                "doc count does not equal the doc-length entry count",
+            ));
+        }
+        if dl_sum != total_length {
+            return Err(SnapshotError::Malformed(
+                "total length does not equal the sum of doc lengths",
+            ));
+        }
+        if cursor.remaining() != 0 {
+            return Err(SnapshotError::Malformed(
+                "trailing bytes after the final section",
+            ));
+        }
+
+        // ---- Construct + install (mirror of `index_batch`'s vacant
+        // inserts: one insert per entry, no clone-extend-replace round trip).
+        let index = Self {
+            postings: HashMap::builder().build(),
+            doc_lengths: HashMap::builder().build(),
+            key_to_terms: HashMap::builder().build(),
+            ordinals: HashMap::builder().build(),
+            next_ordinal: std::sync::atomic::AtomicU32::new(next_ordinal),
+            total_length: std::sync::atomic::AtomicUsize::new(total_length as usize),
+            doc_count: std::sync::atomic::AtomicUsize::new(doc_count as usize),
+            k1,
+            b,
+            tokenizer,
+            #[cfg(feature = "bm25_facet")]
+            facet_postings: HashMap::builder().build(),
+            #[cfg(feature = "bm25_facet")]
+            key_to_facets: HashMap::builder().build(),
+        };
+        // Install (mirror of `index_batch`'s vacant inserts: one insert per
+        // entry, no clone-extend-replace round trip). The guards live in an
+        // inner scope — papaya guards borrow the maps, so they must drop
+        // before the index itself moves out to the caller.
+        {
+            let postings_guard = index.postings.guard();
+            for (term, list) in local_postings {
+                index.postings.insert(term, list, &postings_guard);
+            }
+            let dl_guard = index.doc_lengths.guard();
+            for (key, len) in local_dl {
+                index.doc_lengths.insert(key, len, &dl_guard);
+            }
+            let kt_guard = index.key_to_terms.guard();
+            for (key, doc_terms) in local_kt {
+                index.key_to_terms.insert(key, doc_terms, &kt_guard);
+            }
+            let ordinals_guard = index.ordinals.guard();
+            for (ord, key) in keys.iter().enumerate() {
+                index
+                    .ordinals
+                    .insert(key.to_vec(), ord as u32, &ordinals_guard);
+            }
+        }
+        Ok(index)
+    }
+}
+
+/// Sequential bounds-checked reader over a snapshot payload. Every read
+/// verifies the remaining length first — a truncated record is a typed
+/// error, never a panic and never partial data.
+struct SnapshotCursor<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> SnapshotCursor<'a> {
+    fn remaining(&self) -> usize {
+        self.data.len() - self.pos
+    }
+
+    fn take_bytes(&mut self, what: &'static str, len: usize) -> Result<&'a [u8], SnapshotError> {
+        let end = self
+            .pos
+            .checked_add(len)
+            .ok_or(SnapshotError::Malformed(what))?;
+        if end > self.data.len() {
+            return Err(SnapshotError::Malformed(what));
+        }
+        let slice = &self.data[self.pos..end];
+        self.pos = end;
+        Ok(slice)
+    }
+
+    fn take_u32(&mut self, what: &'static str) -> Result<u32, SnapshotError> {
+        Ok(u32::from_le_bytes(
+            self.take_bytes(what, 4)?.try_into().expect("4-byte slice"),
+        ))
+    }
+
+    fn take_u64(&mut self, what: &'static str) -> Result<u64, SnapshotError> {
+        Ok(u64::from_le_bytes(
+            self.take_bytes(what, 8)?.try_into().expect("8-byte slice"),
+        ))
+    }
+}
+
+fn put_u32(buf: &mut Vec<u8>, value: u32) {
+    buf.extend_from_slice(&value.to_le_bytes());
+}
+
+fn put_u64(buf: &mut Vec<u8>, value: u64) {
+    buf.extend_from_slice(&value.to_le_bytes());
+}
+
+/// A u32-length-prefixed byte string (keys and terms). The prefix bound is
+/// asserted, never truncated: a key that cannot round-trip must refuse the
+/// snapshot loudly.
+fn put_len_bytes(buf: &mut Vec<u8>, bytes: &[u8]) {
+    assert!(
+        u32::try_from(bytes.len()).is_ok(),
+        "Bm25Index::to_snapshot: key/term length exceeds the u32 length prefix"
+    );
+    put_u32(buf, bytes.len() as u32);
+    buf.extend_from_slice(bytes);
+}
+
+/// A fixed-offset header field. The caller has already verified the header
+/// length, so every offset below [`SNAPSHOT_HEADER_LEN`] is in bounds.
+fn header_u32(bytes: &[u8], at: usize) -> u32 {
+    let mut buf = [0u8; 4];
+    buf.copy_from_slice(&bytes[at..at + 4]);
+    u32::from_le_bytes(buf)
+}
+
+fn header_u64(bytes: &[u8], at: usize) -> u64 {
+    let mut buf = [0u8; 8];
+    buf.copy_from_slice(&bytes[at..at + 8]);
+    u64::from_le_bytes(buf)
+}
+
 impl Default for Bm25Index {
     fn default() -> Self {
         Self::new()
@@ -1766,5 +2330,265 @@ mod tests {
              (small={small_t:?}, large={large_t:?}). \
              Expected ~1× for O(doc_terms); ~2000× indicates an O(total_terms) regression."
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Snapshot / restore (riir-refine Issue 224 T1)
+    // -----------------------------------------------------------------------
+
+    /// Re-seal a patched snapshot: recompute the blake3 trailer over the body
+    /// so a hand-crafted mutation reaches structural validation (the point of
+    /// the invariant-break tests is a structurally-invalid container that is
+    /// still digest-valid).
+    fn reseal(bytes: &mut [u8]) {
+        let body = bytes.len() - 32;
+        let digest = blake3::hash(&bytes[..body]);
+        bytes[body..].copy_from_slice(digest.as_bytes());
+    }
+
+    fn patch_u32(bytes: &mut [u8], offset: usize, value: u32) {
+        bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    /// G1: a restored index answers `search` BIT-identically to the original
+    /// — same keys, same score bits, same order — across shared terms, a
+    /// repeated key (re-index upsert), an empty-text doc, multi-word +
+    /// unicode text, and a `remove()` performed BEFORE the snapshot.
+    #[test]
+    fn g1_snapshot_restore_round_trip_is_bit_identical() {
+        let index = Bm25Index::new();
+        index.index(b"doc1", "slay the dragon and the goblin horde");
+        index.index(b"doc2", "collect iron ore and iron swords");
+        index.index(b"doc3", ""); // empty-text doc: dl/kt carry it, postings don't
+        index.index(b"doc4", "héllo wörld café naïve ströhm"); // unicode, kept
+        index.index(b"doc5", "iron dragon fire"); // shares terms with doc1 + doc2
+        index.index(b"doc2", "collect iron ore only"); // repeated key → upsert
+        index.remove(b"doc1"); // removed BEFORE the snapshot
+
+        let queries = [
+            "iron",
+            "dragon",
+            "slay",
+            "héllo",
+            "café",
+            "collect iron",
+            "wörld",
+            "missing term",
+            "",
+        ];
+        let to_bits = |results: Vec<(Vec<u8>, f32)>| -> Vec<(Vec<u8>, u32)> {
+            results.into_iter().map(|(k, s)| (k, s.to_bits())).collect()
+        };
+        let expected: Vec<Vec<(Vec<u8>, u32)>> = queries
+            .iter()
+            .map(|q| to_bits(index.search(q, 10)))
+            .collect();
+
+        let snapshot = index.to_snapshot().expect("snapshot of a facet-free index");
+        let restored = Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &snapshot)
+            .expect("restore of a genuine snapshot");
+
+        assert_eq!(index.doc_count(), restored.doc_count());
+        assert_eq!(index.term_count(), restored.term_count());
+        for (query, expected_results) in queries.iter().zip(&expected) {
+            let got = to_bits(restored.search(query, 10));
+            assert_eq!(
+                &got, expected_results,
+                "query {query:?} diverged after restore"
+            );
+        }
+    }
+
+    /// Two identically-built indexes snapshot to BYTE-identical output: the
+    /// terms table is sorted, dl/kt rows are ordinal-sorted (and kt term ids
+    /// canonicalized), so no HashMap iteration order can leak into the bytes.
+    #[test]
+    fn snapshot_is_deterministic_across_builds() {
+        let build = || {
+            let idx = Bm25Index::new();
+            idx.index(b"k1", "alpha beta gamma");
+            idx.index(b"k2", "beta delta epsilon");
+            idx.index(b"k3", "gamma epsilon alpha");
+            idx.index(b"k2", "beta rewritten"); // upsert
+            idx.remove(b"k3");
+            idx
+        };
+        let a = build().to_snapshot().unwrap();
+        let b = build().to_snapshot().unwrap();
+        assert_eq!(a, b);
+    }
+
+    /// Corrupt / foreign containers refuse LOUD as typed errors — never Ok,
+    /// never a panic, never an OOM from a hostile count.
+    #[test]
+    fn snapshot_refuses_corrupt_bytes_loud() {
+        let index = Bm25Index::new();
+        index.index(b"k1", "alpha beta gamma delta epsilon");
+        index.index(b"k2", "beta gamma zeta");
+        index.index(b"k3", "alpha alpha eta");
+        let snap = index.to_snapshot().unwrap();
+        assert!(snap.len() > 92, "corpus too small to exercise truncation");
+
+        // Truncated below the minimum container size.
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &snap[..40]),
+            Err(SnapshotError::TooSmall)
+        ));
+        // Truncated tail: part of the digest is gone → mismatch.
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &snap[..snap.len() - 10]),
+            Err(SnapshotError::DigestMismatch)
+        ));
+        // Flipped byte mid-payload → digest mismatch.
+        let mut flipped = snap.clone();
+        let mid = 60 + (flipped.len() - 92) / 2; // strictly inside the payload
+        flipped[mid] ^= 0xff;
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &flipped),
+            Err(SnapshotError::DigestMismatch)
+        ));
+        // Bad magic (checked before the digest).
+        let mut magic = snap.clone();
+        magic[0..8].copy_from_slice(b"NDBM25S2");
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &magic),
+            Err(SnapshotError::BadMagic)
+        ));
+        // Bumped version (checked before the digest), carrying the read value.
+        let mut version = snap.clone();
+        patch_u32(&mut version, 8, 2);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &version),
+            Err(SnapshotError::UnsupportedVersion(2))
+        ));
+        // Header count patched huge — digest RE-SEALED so the mutation
+        // reaches the parser: a bound check refuses it before any allocation
+        // (no panic, no OOM).
+        let mut huge = snap.clone();
+        patch_u32(&mut huge, 52, u32::MAX);
+        reseal(&mut huge);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &huge),
+            Err(SnapshotError::Malformed(_))
+        ));
+    }
+
+    /// A restored index CONTINUES ordinally: a new doc indexes + searches;
+    /// a subsequent remove keeps the stats consistent with an equivalent
+    /// freshly-built index run through the same op sequence.
+    #[test]
+    fn restored_index_continues_ordinally() {
+        let build = |idx: &Bm25Index| {
+            idx.index(b"d1", "alpha beta");
+            idx.index(b"d2", "gamma delta");
+            idx.index(b"d3", "alpha gamma");
+            idx.index(b"d4", "epsilon");
+            idx.remove(b"d2");
+        };
+        let original = Bm25Index::new();
+        build(&original);
+        let snapshot = original.to_snapshot().unwrap();
+        let restored = Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &snapshot)
+            .expect("restore of a genuine snapshot");
+
+        // A NEW doc indexes into the restored index and is searchable.
+        restored.index(b"d5", "zeta theta");
+        let hits = restored.search("zeta", 10);
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].0, b"d5");
+
+        // Remove a RESTORED doc; the stats stay consistent with an
+        // equivalent freshly-built index after the same op sequence.
+        restored.remove(b"d3");
+        let fresh = Bm25Index::new();
+        build(&fresh);
+        fresh.index(b"d5", "zeta theta");
+        fresh.remove(b"d3");
+
+        assert_eq!(restored.doc_count(), fresh.doc_count());
+        for query in ["alpha", "gamma", "zeta", "epsilon"] {
+            let to_bits = |results: Vec<(Vec<u8>, f32)>| -> Vec<(Vec<u8>, u32)> {
+                results.into_iter().map(|(k, s)| (k, s.to_bits())).collect()
+            };
+            assert_eq!(
+                to_bits(restored.search(query, 10)),
+                to_bits(fresh.search(query, 10)),
+                "query {query:?} diverged from the freshly-built twin"
+            );
+        }
+    }
+
+    /// The empty index round-trips: a 92-byte container (header + digest,
+    /// empty payload) that restores to an empty, searchable, re-snapshot-
+    /// stable index.
+    #[test]
+    fn snapshot_round_trip_empty_index() {
+        let index = Bm25Index::new();
+        let snapshot = index.to_snapshot().unwrap();
+        assert_eq!(snapshot.len(), 92);
+
+        let restored = Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &snapshot)
+            .expect("restore of an empty snapshot");
+        assert_eq!(restored.doc_count(), 0);
+        assert!(restored.search("anything", 10).is_empty());
+
+        // Re-snapshotting the restored (still empty) index is byte-equal.
+        assert_eq!(restored.to_snapshot().unwrap(), snapshot);
+    }
+
+    /// Hand-crafted, digest-VALID containers that break internal invariants
+    /// refuse as Malformed — the digest re-seal is the point: structural
+    /// validation must catch what the digest cannot.
+    #[test]
+    fn restore_rejects_internal_invariant_breaks() {
+        // One-doc container, n_keys = n_dl = n_kt = n_terms = 1. Section
+        // layout for key b"k1" + term "alpha":
+        //   header 60 | keys 1×(4+2)=6 | terms 1×(4+5)=9 | postings 1×(4+12)=16
+        //   | dl 1×12 (at 91) | kt 1×(4+4+4) (at 103, term id at 111)
+        let one = Bm25Index::new();
+        one.index(b"k1", "alpha");
+        let snap = one.to_snapshot().unwrap();
+
+        // n_keys != next_ordinal.
+        let mut broken = snap.clone();
+        patch_u32(&mut broken, 20, 2); // next_ordinal = 2, n_keys = 1
+        reseal(&mut broken);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &broken),
+            Err(SnapshotError::Malformed(_))
+        ));
+
+        // dl ordinal >= n_keys.
+        let mut broken = snap.clone();
+        patch_u32(&mut broken, 91, 1); // ord 1 against n_keys 1
+        reseal(&mut broken);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &broken),
+            Err(SnapshotError::Malformed(_))
+        ));
+
+        // kt term_id >= n_terms.
+        let mut broken = snap.clone();
+        patch_u32(&mut broken, 111, 1); // term id 1 against n_terms 1
+        reseal(&mut broken);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &broken),
+            Err(SnapshotError::Malformed(_))
+        ));
+
+        // Duplicate dl ordinal: two docs sharing one term. Layout:
+        //   header 60 | keys 2×6=12 | terms 1×9 | postings 1×(4+24)=28
+        //   | dl 2×12 at 109 (second record's ord at 121)
+        let two = Bm25Index::new();
+        two.index(b"k1", "alpha");
+        two.index(b"k2", "alpha");
+        let snap2 = two.to_snapshot().unwrap();
+        let mut broken = snap2.clone();
+        patch_u32(&mut broken, 121, 0); // second dl ord = 0 (duplicate of the first)
+        reseal(&mut broken);
+        assert!(matches!(
+            Bm25Index::restore_snapshot(Box::new(WhitespaceTokenizer), &broken),
+            Err(SnapshotError::Malformed(_))
+        ));
     }
 }

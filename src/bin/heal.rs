@@ -2933,7 +2933,22 @@ fn maybe_auto_corpus() {
         return;
     }
     let root = resolve_heal_root(&[]);
-    let stamp_path = root.join(".refine").join("corpus_auto.json");
+    // Issue 224 T3: under `index_cache` the 12 h attempt stamp lives in the
+    // per-user cache dir, so a NEW crate on a machine that already checked
+    // the current epoch skips the ~0.6–1.3 s fetch. The crate-local
+    // `.refine/corpus_auto.json` is the ungated fallback (byte-identical
+    // posture).
+    let stamp_path = {
+        #[cfg(feature = "index_cache")]
+        {
+            riir_refine::draft::index_cache::auto_corpus_stamp_path()
+                .unwrap_or_else(|| root.join(".refine").join("corpus_auto.json"))
+        }
+        #[cfg(not(feature = "index_cache"))]
+        {
+            root.join(".refine").join("corpus_auto.json")
+        }
+    };
     #[derive(serde::Deserialize, serde::Serialize)]
     struct AutoStamp {
         last_attempt_unix: i64,

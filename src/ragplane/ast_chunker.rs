@@ -1,4 +1,4 @@
-//! Vendored from `riir-neuron-db` (`90ab1ba`, vendored 2026-11-09, issue
+//! Vendored from `riir-neuron-db` (`658b3f5`, vendored 2026-11-09, issue
 //! 221 P2b — the publish posture's modelless retrieval substrate).
 //! std-only up to the crate's own deps (blake3 / papaya / quote — all
 //! already in refine's tree). The canonical copy stays in the private

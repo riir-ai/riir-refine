@@ -51,6 +51,8 @@ pub mod clippy_feed;
 pub mod clippy_oracle;
 pub mod corpus_index;
 pub mod domain_router;
+#[cfg(feature = "index_cache")]
+pub mod index_cache;
 #[cfg(feature = "latent_retrieval")]
 pub mod eval_fixtures_clippy;
 #[cfg(feature = "latent_retrieval")]

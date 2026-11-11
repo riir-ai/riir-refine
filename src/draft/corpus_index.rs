@@ -28,6 +28,8 @@ use crate::ragplane::embedder::{Embedder, ModellessEmbedder};
 use crate::ragplane::query::LATENT_DIM;
 use crate::ragplane::query::{ChunkSource, LatentQuery, RetrievedChunk};
 
+#[cfg(feature = "index_cache")]
+use super::domain_router::DomainId;
 use super::retriever::{RetrievalScratch, RuleRetriever};
 
 /// Issue 643 — the process-global latent-leg-skip toggle (`true` = the
@@ -391,6 +393,20 @@ impl DiffAnchor {
 #[cfg(feature = "differential_anchor")]
 pub const DIFF_ANCHOR_LAMBDA_ENV: &str = "RIIR_CLIPPY_DIFF_ANCHOR_LAMBDA";
 
+/// The ONE mapping from a [`RetrievalConfig`]'s tokenizer discriminant to
+/// the BM25 tokenizer instance — shared by the build path and the Issue-224
+/// cache restore path, so a restored index tokenizes identically to a built
+/// one (index/search share one tokenizer by construction).
+pub(crate) fn bm25_tokenizer_for(
+    config: &RetrievalConfig,
+) -> Box<dyn crate::ragplane::bm25::Tokenizer + Send + Sync> {
+    match config.tokenizer {
+        IndexTokenizer::CodeDefault => Box::new(crate::ragplane::bm25::CodeTokenizer),
+        IndexTokenizer::OpAware => Box::new(super::op_tokenizer::RustOpTokenizer),
+        IndexTokenizer::OpAwareBigram => Box::new(super::op_tokenizer::RustOpBigramTokenizer),
+    }
+}
+
 impl RuleIndex {
     /// Index `patterns` — one chunk per `(rule_id, pattern_text)`, plus one
     /// chunk per significant LINE of multi-line patterns (multi-scale: corpus
@@ -464,13 +480,7 @@ impl RuleIndex {
         // analogue on the in-repo seam — the latent stage is already exact
         // O(N) brute force (issue 221 P2b); the `RIIR_CLIPPY_NO_TWO_STAGE`
         // kill-switch had no posture to toggle and is retired with the knob.
-        let mut retriever = match config.tokenizer {
-            IndexTokenizer::CodeDefault => RuleRetriever::new(),
-            IndexTokenizer::OpAware => RuleRetriever::new()
-                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpTokenizer)),
-            IndexTokenizer::OpAwareBigram => RuleRetriever::new()
-                .with_bm25_tokenizer(Box::new(super::op_tokenizer::RustOpBigramTokenizer)),
-        };
+        let mut retriever = RuleRetriever::new().with_bm25_tokenizer(bm25_tokenizer_for(&config));
         #[cfg(feature = "bonsai_retrieval")]
         {
             if config.dense_weight > 0.0 {
@@ -554,6 +564,83 @@ impl RuleIndex {
     #[must_use]
     pub fn differential_anchor_mean(&self) -> &[f32; LATENT_DIM] {
         &self.diff_anchor.mean
+    }
+
+    // ------------------------------------------------------------------
+    // Issue 224 T1 — the index-cache snapshot surface (feature
+    // `index_cache`). `to_snapshot` extracts the built state the cache
+    // stores; `from_snapshot` restores it. The pair is the ONLY sanctioned
+    // way a matcher skips the corpus build: every field that determines a
+    // ranking is carried, riders (`set_rule_embed` / active-set /
+    // `set_differential_anchor` overrides) stay constructor-external as
+    // before, and the cache lane disarms under every posture this pair
+    // cannot represent (route-narrowed kernel, Bonsai dense).
+    // ------------------------------------------------------------------
+
+    /// Extract the cache-wire snapshot of this built index.
+    #[cfg(feature = "index_cache")]
+    pub(crate) fn to_snapshot(
+        &self,
+        domain: DomainId,
+    ) -> Result<super::index_cache::DomainSnapshot, String> {
+        // Defense in depth: the lane refuses to arm under the dense
+        // posture (the embedder is not serializable state), but a future
+        // caller bypassing `Lane::resolve` must not store a dense index
+        // either — restoring one would silently drop query-side rerank.
+        #[cfg(feature = "bonsai_retrieval")]
+        if self.dense.is_some() {
+            return Err(
+                "dense-embedded index is not cacheable (the Bonsai embedder is not serialized)"
+                    .to_string(),
+            );
+        }
+        Ok(super::index_cache::DomainSnapshot {
+            domain,
+            rows: self.retriever.to_row_snaps(),
+            by_zone_hash: self
+                .by_zone_hash
+                .iter()
+                .map(|(h, r)| (*h, r.clone()))
+                .collect(),
+            rule_ids: self.rule_ids.clone(),
+            n_rules: self.n_rules,
+            bm25: self.retriever.bm25_snapshot()?,
+            #[cfg(feature = "differential_anchor")]
+            anchor_mean: self.diff_anchor.mean,
+        })
+    }
+
+    /// Rebuild an index from a cache snapshot. The BM25 restore is
+    /// self-validating (digest + structural invariants — a corrupt snapshot
+    /// refuses as a typed error, surfaced here as a `String`); everything
+    /// else is field-exact.
+    #[cfg(feature = "index_cache")]
+    pub(crate) fn from_snapshot(
+        snap: super::index_cache::DomainSnapshot,
+        config: RetrievalConfig,
+    ) -> Result<Self, String> {
+        let bm25 = crate::ragplane::bm25::Bm25Index::restore_snapshot(
+            bm25_tokenizer_for(&config),
+            &snap.bm25,
+        )
+        .map_err(|e| e.to_string())?;
+        let retriever = RuleRetriever::from_row_snaps(snap.rows, bm25);
+        Ok(Self {
+            retriever,
+            config,
+            #[cfg(feature = "bonsai_retrieval")]
+            dense: None,
+            by_zone_hash: snap.by_zone_hash.into_iter().collect(),
+            n_rules: snap.n_rules,
+            rule_ids: snap.rule_ids,
+            #[cfg(feature = "rule_embed_poc")]
+            trained: None,
+            #[cfg(feature = "differential_anchor")]
+            diff_anchor: DiffAnchor {
+                mean: snap.anchor_mean,
+                lambda: DiffAnchor::env_lambda(),
+            },
+        })
     }
 
     /// Project the query span through the frozen span tower, when the

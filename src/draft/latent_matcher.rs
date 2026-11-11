@@ -379,19 +379,68 @@ impl LatentMatcher {
         let mut rule_book: std::collections::HashMap<String, RuleInfo> =
             std::collections::HashMap::new();
 
-        // same lane discipline: unused when every consumer domain is off
-        #[cfg_attr(not(feature = "clippy_lints"), allow(unused_macros))]
-        macro_rules! index_domain {
-            ($domain:expr, $corpus:expr, $index_ctor:expr) => {{
-                // Issue 224: env-gated phase-blame for the per-run matcher
-                // build (the same disclosure style as the CLI's ⏱ roll-up
-                // — stderr, one line per domain, off by default).
-                let matcher_timing =
-                    std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
-                let t_domain = std::time::Instant::now();
-                let entries: Vec<_> = $corpus;
-                let mut pattern_texts = Vec::with_capacity(entries.len());
-                for (rule_id, buggy, fixed) in &entries {
+        // ---- Issue 224 T1: resolve every enabled domain's corpus FIRST
+        // (same sources + the same order as the index pass below) so the
+        // cache lane can hash the RESOLVED entries — overlay or compiled-in
+        // seed alike — before any index is built. ----
+        macro_rules! resolve_corpus {
+            ($domain:expr, $build:path) => {
+                overlay_for($domain).unwrap_or_else(|| {
+                    $build()
+                        .into_iter()
+                        .map(|e| {
+                            (
+                                e.rule_id().to_string(),
+                                e.buggy_code().to_string(),
+                                e.fixed_code().to_string(),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                })
+            };
+        }
+        #[cfg(feature = "clippy_lints")]
+        let clippy_entries = resolve_corpus!(
+            DomainId::Clippy,
+            crate::domains::clippy_lints::ClippyLintDomain::build_corpus
+        );
+        #[cfg(feature = "rust_perf")]
+        let perf_entries = resolve_corpus!(
+            DomainId::Perf,
+            crate::domains::rust_perf::RustPerfDomain::build_corpus
+        );
+        #[cfg(feature = "kernel_opt")]
+        let kernel_entries = resolve_corpus!(
+            DomainId::Kernel,
+            crate::domains::kernel_opt::KernelOptDomain::build_corpus
+        );
+        #[cfg(feature = "sec")]
+        let sec_entries =
+            resolve_corpus!(DomainId::Sec, crate::domains::sec::SecDomain::build_corpus);
+        #[cfg(feature = "docker")]
+        let docker_entries = resolve_corpus!(
+            DomainId::Docker,
+            crate::domains::docker::DockerDomain::build_corpus
+        );
+        #[cfg(feature = "dist")]
+        let dist_entries = resolve_corpus!(
+            DomainId::Dist,
+            crate::domains::dist::DistDomain::build_corpus
+        );
+        #[cfg(feature = "shader_perf")]
+        let shader_entries = resolve_corpus!(
+            DomainId::ShaderPerf,
+            crate::domains::shader_perf::ShaderPerfDomain::build_corpus
+        );
+
+        // The shared book pass (rule ids → display info + the router's
+        // per-domain pattern centroids). Same inserts, in the same domain
+        // order, as the historical interleaved pass.
+        #[allow(unused_macros)]
+        macro_rules! book_of {
+            ($domain:expr, $entries:expr) => {{
+                let mut pattern_texts = Vec::with_capacity($entries.len());
+                for (rule_id, buggy, fixed) in $entries.iter() {
                     pattern_texts.push(buggy.clone());
                     rule_book.insert(
                         rule_id.clone(),
@@ -403,16 +452,203 @@ impl LatentMatcher {
                     );
                 }
                 router_domains.push(($domain, pattern_texts));
-                let patterns: Vec<(String, String)> = entries
-                    .into_iter()
-                    .map(|(rule_id, buggy, _fixed)| (rule_id, buggy))
-                    .collect();
-                // The constructor tail is per-domain: `RuleIndex::build_with`
-                // (owned patterns) for the six flat domains, a borrowing
-                // closure over `KernelIndex::build` for kernel — which
-                // selects flat vs route-narrowed under Issue 196's feature.
+            }};
+        }
+        #[cfg(feature = "clippy_lints")]
+        book_of!(DomainId::Clippy, clippy_entries);
+        #[cfg(feature = "rust_perf")]
+        book_of!(DomainId::Perf, perf_entries);
+        #[cfg(feature = "kernel_opt")]
+        book_of!(DomainId::Kernel, kernel_entries);
+        #[cfg(feature = "sec")]
+        book_of!(DomainId::Sec, sec_entries);
+        #[cfg(feature = "docker")]
+        book_of!(DomainId::Docker, docker_entries);
+        #[cfg(feature = "dist")]
+        book_of!(DomainId::Dist, dist_entries);
+        #[cfg(feature = "shader_perf")]
+        book_of!(DomainId::ShaderPerf, shader_entries);
+
+        if router_domains.is_empty() {
+            // Single-domain-less feature combos (latent_retrieval alone):
+            // the config + overlay are only consumed inside the domain
+            // passes — reference them so the no-domain build stays
+            // warning-clean.
+            let _ = (&config, &overlay_for);
+            return Err(
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_opt/sec/docker/dist/shader_perf)"
+                    .to_string(),
+            );
+        }
+
+        // ---- Issue 224 T1/T2: the index-cache lane. Armed, it hashes the
+        // resolved entries into a content key and either restores every
+        // domain's built index from the user cache or — on a miss, a LOUD
+        // corrupt/refused read, or a posture refusal — builds exactly as
+        // before and stores the result atomically. Off (the default
+        // posture until the T4 GOAT verdict), every line below is dead and
+        // the build is byte-identical to the pre-224 path. ----
+        #[cfg(feature = "index_cache")]
+        #[allow(clippy::vec_init_then_push)]
+        // the cfg'd push list IS the domain set — no literal can span the feature combos
+        let domain_entries: Vec<(DomainId, &super::index_cache::CorpusEntries)> = {
+            let mut v = Vec::new();
+            #[cfg(feature = "clippy_lints")]
+            v.push((DomainId::Clippy, &clippy_entries));
+            #[cfg(feature = "rust_perf")]
+            v.push((DomainId::Perf, &perf_entries));
+            #[cfg(feature = "kernel_opt")]
+            v.push((DomainId::Kernel, &kernel_entries));
+            #[cfg(feature = "sec")]
+            v.push((DomainId::Sec, &sec_entries));
+            #[cfg(feature = "docker")]
+            v.push((DomainId::Docker, &docker_entries));
+            #[cfg(feature = "dist")]
+            v.push((DomainId::Dist, &dist_entries));
+            #[cfg(feature = "shader_perf")]
+            v.push((DomainId::ShaderPerf, &shader_entries));
+            v
+        };
+        #[cfg(feature = "index_cache")]
+        let lane = super::index_cache::Lane::resolve(&config, &domain_entries);
+        #[cfg(feature = "index_cache")]
+        let mut snap_by_domain: Option<
+            std::collections::HashMap<DomainId, super::index_cache::DomainSnapshot>,
+        > = match &lane {
+            super::index_cache::Lane::Armed(a) => {
+                match super::index_cache::load(&a.dir, &a.key, &config) {
+                    super::index_cache::LoadOutcome::Hit(mut snaps, size) => {
+                        // The content key already covers the domain set;
+                        // verify the container against the EXPECTED set
+                        // anyway (collision defense in depth).
+                        let expected: std::collections::HashSet<u8> = domain_entries
+                            .iter()
+                            .map(|(d, _)| super::index_cache::domain_tag(*d))
+                            .collect();
+                        let got: std::collections::HashSet<u8> = snaps
+                            .iter()
+                            .map(|s| super::index_cache::domain_tag(s.domain))
+                            .collect();
+                        if expected == got {
+                            super::index_cache::touch(&a.dir.join(format!("{}.idx", a.hex)));
+                            eprintln!(
+                                "[index-cache] hit {} ({:.1} MiB, {} domains)",
+                                a.hex,
+                                super::index_cache::mib(size),
+                                snaps.len()
+                            );
+                            let mut map = std::collections::HashMap::with_capacity(snaps.len());
+                            for s in snaps.drain(..) {
+                                let d = s.domain;
+                                map.insert(d, s);
+                            }
+                            Some(map)
+                        } else {
+                            eprintln!(
+                                "[index-cache] entry {} covers a different domain set — rebuilding",
+                                a.hex
+                            );
+                            None
+                        }
+                    }
+                    // Identical loud fall-through: both are "the entry gave
+                    // us nothing trustworthy — rebuild + rewrite".
+                    super::index_cache::LoadOutcome::Corrupt(msg)
+                    | super::index_cache::LoadOutcome::ReadFailed(msg) => {
+                        eprintln!("{msg}");
+                        None
+                    }
+                    super::index_cache::LoadOutcome::Miss => None,
+                }
+            }
+            super::index_cache::Lane::Off => None,
+        };
+        #[cfg(feature = "index_cache")]
+        // The store arm: Some only when the lane is armed AND nothing was
+        // restored (miss / corrupt / read-failed → the pass below builds).
+        // A failed per-domain snapshot drops it to None (all-or-nothing).
+        let mut snapshots_to_store: Option<Vec<super::index_cache::DomainSnapshot>> =
+            if matches!(lane, super::index_cache::Lane::Armed(_)) && snap_by_domain.is_none() {
+                Some(Vec::new())
+            } else {
+                None
+            };
+
+        // The per-domain index pass. The constructor tail is per-domain:
+        // `RuleIndex::build_with` (owned patterns) for the six flat
+        // domains, `KernelIndex::build` for kernel (explicit block below —
+        // it restores into the Flat variant).
+        #[cfg(feature = "index_cache")]
+        #[allow(unused_macros)]
+        macro_rules! index_domain {
+            ($domain:expr, $entries:expr, $index_ctor:expr) => {{
+                let matcher_timing =
+                    std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+                let t_domain = std::time::Instant::now();
+                book_of!($domain, $entries);
                 let t_build = std::time::Instant::now();
-                let built = Some(($index_ctor)(patterns, config)?);
+                let restored: Option<RuleIndex> = match (&lane, snap_by_domain.as_mut()) {
+                    (super::index_cache::Lane::Armed(_), Some(map)) => match map.remove(&$domain) {
+                        Some(s) => Some(RuleIndex::from_snapshot(s, config)?),
+                        None => None,
+                    },
+                    _ => None,
+                };
+                let built = if let Some(idx) = restored {
+                    if matcher_timing {
+                        eprintln!("[matcher-timing] domain {:?}: restored", $domain);
+                    }
+                    idx
+                } else {
+                    let patterns: Vec<(String, String)> = $entries
+                        .iter()
+                        .map(|(rule_id, buggy, _fixed)| (rule_id.clone(), buggy.clone()))
+                        .collect();
+                    let idx = ($index_ctor)(patterns, config)?;
+                    if matcher_timing {
+                        let build_ms = t_build.elapsed().as_secs_f64() * 1e3;
+                        eprintln!(
+                            "[matcher-timing] domain {:?}: corpus+book {:.1}ms index {:.1}ms",
+                            $domain,
+                            (t_domain.elapsed().as_secs_f64() * 1e3) - build_ms,
+                            build_ms
+                        );
+                    }
+                    idx
+                };
+                if snapshots_to_store.is_some() {
+                    match built.to_snapshot($domain) {
+                        Ok(s) => {
+                            if let Some(list) = snapshots_to_store.as_mut() {
+                                list.push(s);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[index-cache] snapshot of {:?} failed ({e}) — cache store skipped",
+                                $domain
+                            );
+                            snapshots_to_store = None;
+                        }
+                    }
+                }
+                Some(built)
+            }};
+        }
+        #[cfg(not(feature = "index_cache"))]
+        #[allow(unused_macros)]
+        macro_rules! index_domain {
+            ($domain:expr, $entries:expr, $index_ctor:expr) => {{
+                let matcher_timing =
+                    std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+                let t_domain = std::time::Instant::now();
+                book_of!($domain, $entries);
+                let t_build = std::time::Instant::now();
+                let patterns: Vec<(String, String)> = $entries
+                    .iter()
+                    .map(|(rule_id, buggy, _fixed)| (rule_id.clone(), buggy.clone()))
+                    .collect();
+                let built = ($index_ctor)(patterns, config)?;
                 if matcher_timing {
                     let build_ms = t_build.elapsed().as_secs_f64() * 1e3;
                     eprintln!(
@@ -422,159 +658,129 @@ impl LatentMatcher {
                         build_ms
                     );
                 }
-                built
+                Some(built)
             }};
         }
 
         #[cfg(feature = "clippy_lints")]
-        let clippy = index_domain!(
-            DomainId::Clippy,
-            overlay_for(DomainId::Clippy).unwrap_or_else(|| {
-                crate::domains::clippy_lints::ClippyLintDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let clippy = index_domain!(DomainId::Clippy, clippy_entries, RuleIndex::build_with);
         #[cfg(not(feature = "clippy_lints"))]
         let clippy = None;
 
         #[cfg(feature = "rust_perf")]
-        let perf = index_domain!(
-            DomainId::Perf,
-            overlay_for(DomainId::Perf).unwrap_or_else(|| {
-                crate::domains::rust_perf::RustPerfDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let perf = index_domain!(DomainId::Perf, perf_entries, RuleIndex::build_with);
         #[cfg(not(feature = "rust_perf"))]
         let perf = None;
 
+        // Kernel is an explicit block (not the flat macro): the cache
+        // restores into the FLAT variant only, and `Lane::resolve` disarms
+        // under `kernel_route_narrow` — the narrowed posture (16
+        // sub-indexes) never coexists with an armed lane.
         #[cfg(feature = "kernel_opt")]
-        let kernel = index_domain!(
-            DomainId::Kernel,
-            overlay_for(DomainId::Kernel).unwrap_or_else(|| {
-                crate::domains::kernel_opt::KernelOptDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            |patterns: Vec<(String, String)>, config| KernelIndex::build(&patterns, config)
-        );
+        let kernel = {
+            let matcher_timing = std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
+            let t_domain = std::time::Instant::now();
+            book_of!(DomainId::Kernel, kernel_entries);
+            let t_build = std::time::Instant::now();
+            #[cfg(feature = "index_cache")]
+            let flat_restored: Option<RuleIndex> = match (&lane, snap_by_domain.as_mut()) {
+                (super::index_cache::Lane::Armed(_), Some(map)) => {
+                    match map.remove(&DomainId::Kernel) {
+                        Some(s) => Some(RuleIndex::from_snapshot(s, config)?),
+                        None => None,
+                    }
+                }
+                _ => None,
+            };
+            #[cfg(not(feature = "index_cache"))]
+            let flat_restored: Option<RuleIndex> = None;
+            let built = if let Some(idx) = flat_restored {
+                if matcher_timing {
+                    eprintln!("[matcher-timing] domain Kernel: restored");
+                }
+                KernelIndex::Flat(Box::new(idx))
+            } else {
+                let patterns: Vec<(String, String)> = kernel_entries
+                    .iter()
+                    .map(|(rule_id, buggy, _fixed)| (rule_id.clone(), buggy.clone()))
+                    .collect();
+                let idx = KernelIndex::build(&patterns, config)?;
+                if matcher_timing {
+                    let build_ms = t_build.elapsed().as_secs_f64() * 1e3;
+                    eprintln!(
+                        "[matcher-timing] domain Kernel: corpus+book {:.1}ms index {:.1}ms",
+                        (t_domain.elapsed().as_secs_f64() * 1e3) - build_ms,
+                        build_ms
+                    );
+                }
+                idx
+            };
+            // The store arm (flat only — see the resolve guard above).
+            #[cfg(feature = "index_cache")]
+            if snapshots_to_store.is_some() {
+                match &built {
+                    KernelIndex::Flat(idx) => match idx.to_snapshot(DomainId::Kernel) {
+                        Ok(s) => {
+                            if let Some(list) = snapshots_to_store.as_mut() {
+                                list.push(s);
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[index-cache] snapshot of Kernel failed ({e}) — cache store skipped"
+                            );
+                            snapshots_to_store = None;
+                        }
+                    },
+                    #[cfg(feature = "kernel_route_narrow")]
+                    KernelIndex::Narrowed(_) => {
+                        snapshots_to_store = None;
+                    }
+                }
+            }
+            Some(built)
+        };
         #[cfg(not(feature = "kernel_opt"))]
         let kernel = None;
 
         #[cfg(feature = "sec")]
-        let sec = index_domain!(
-            DomainId::Sec,
-            overlay_for(DomainId::Sec).unwrap_or_else(|| {
-                crate::domains::sec::SecDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let sec = index_domain!(DomainId::Sec, sec_entries, RuleIndex::build_with);
         #[cfg(not(feature = "sec"))]
         let sec = None;
 
         #[cfg(feature = "docker")]
-        let docker = index_domain!(
-            DomainId::Docker,
-            overlay_for(DomainId::Docker).unwrap_or_else(|| {
-                crate::domains::docker::DockerDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let docker = index_domain!(DomainId::Docker, docker_entries, RuleIndex::build_with);
         #[cfg(not(feature = "docker"))]
         let docker = None;
 
         #[cfg(feature = "dist")]
-        let dist = index_domain!(
-            DomainId::Dist,
-            overlay_for(DomainId::Dist).unwrap_or_else(|| {
-                crate::domains::dist::DistDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let dist = index_domain!(DomainId::Dist, dist_entries, RuleIndex::build_with);
         #[cfg(not(feature = "dist"))]
         let dist = None;
 
         #[cfg(feature = "shader_perf")]
-        let shader_perf = index_domain!(
-            DomainId::ShaderPerf,
-            overlay_for(DomainId::ShaderPerf).unwrap_or_else(|| {
-                crate::domains::shader_perf::ShaderPerfDomain::build_corpus()
-                    .into_iter()
-                    .map(|e| {
-                        (
-                            e.rule_id().to_string(),
-                            e.buggy_code().to_string(),
-                            e.fixed_code().to_string(),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            }),
-            RuleIndex::build_with
-        );
+        let shader_perf =
+            index_domain!(DomainId::ShaderPerf, shader_entries, RuleIndex::build_with);
         #[cfg(not(feature = "shader_perf"))]
         let shader_perf = None;
 
-        if router_domains.is_empty() {
-            // Single-domain-less feature combos (latent_retrieval alone):
-            // the config + overlay are only consumed inside `index_domain!`
-            // — reference them so the no-domain build stays warning-clean.
-            let _ = (&config, &overlay_for);
-            return Err(
-                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_opt/sec/docker/dist/shader_perf)"
-                    .to_string(),
-            );
+        // ---- Issue 224 T1: the store tail. Only reached on a miss (or a
+        // loud refusal) — the store arm is None after a hit. Atomic
+        // tmp+rename inside `store`; the LRU prune follows best-effort.
+        #[cfg(feature = "index_cache")]
+        if let (super::index_cache::Lane::Armed(a), Some(snaps)) = (&lane, snapshots_to_store) {
+            let t_store = std::time::Instant::now();
+            match super::index_cache::store(&a.dir, &a.key, &config, &snaps) {
+                Ok(len) => eprintln!(
+                    "[index-cache] stored {} ({:.1} MiB, {} domains, write {:.0}ms)",
+                    a.hex,
+                    super::index_cache::mib(len),
+                    snaps.len(),
+                    t_store.elapsed().as_secs_f64() * 1e3
+                ),
+                Err(e) => eprintln!("[index-cache] store failed ({e}) — continuing uncached"),
+            }
+            super::index_cache::prune(&a.dir);
         }
 
         #[cfg(feature = "set_rerank")]

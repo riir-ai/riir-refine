@@ -228,6 +228,58 @@ impl RuleRetriever {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Issue 224 T1 — the index-cache snapshot surface. The cache lane
+    // (super::index_cache) serializes/restores a built RuleRetriever; the
+    // rows' ORDER is load-bearing (retrieval iterates `rows` and the rank
+    // total-order keeps tied scores in row order), so both halves preserve
+    // it exactly. `by_hash` is derived state — rebuilt on restore with the
+    // same first-insertion-wins semantics.
+    // ------------------------------------------------------------------
+
+    /// Snapshot the row table (build order preserved).
+    #[cfg(feature = "index_cache")]
+    pub(crate) fn to_row_snaps(&self) -> Vec<super::index_cache::IndexRow> {
+        self.rows
+            .iter()
+            .map(|r| super::index_cache::IndexRow {
+                zone_hash: r.zone_hash,
+                dir: r.dir,
+                #[cfg(feature = "dense_embed")]
+                dense: r.dense.clone(),
+            })
+            .collect()
+    }
+
+    /// Rebuild a retriever from restored rows + a restored BM25 index.
+    #[cfg(feature = "index_cache")]
+    pub(crate) fn from_row_snaps(rows: Vec<super::index_cache::IndexRow>, bm25: Bm25Index) -> Self {
+        let mut by_hash: HashMap<[u8; 32], usize> = HashMap::with_capacity(rows.len());
+        for (i, r) in rows.iter().enumerate() {
+            by_hash.entry(r.zone_hash).or_insert(i);
+        }
+        Self {
+            rows: rows
+                .into_iter()
+                .map(|r| IndexedChunk {
+                    zone_hash: r.zone_hash,
+                    dir: r.dir,
+                    #[cfg(feature = "dense_embed")]
+                    dense: r.dense,
+                })
+                .collect(),
+            by_hash,
+            bm25,
+        }
+    }
+
+    /// The BM25 index's snapshot container (the primitive self-digests;
+    /// errors are typed `SnapshotError`s surfaced as strings).
+    #[cfg(feature = "index_cache")]
+    pub(crate) fn bm25_snapshot(&self) -> Result<Vec<u8>, String> {
+        self.bm25.to_snapshot().map_err(|e| e.to_string())
+    }
+
     /// Retrieve scored candidates for `query` into `scratch` (cleared at
     /// entry) and return the candidate list. Score-only packed path: no
     /// content or source is populated (the corpus index reads

@@ -1,5 +1,5 @@
 # Issue 224 — the matcher index rebuilds on EVERY run: ~1.3 s of a 1.37 s warm run (95%)
-**Status:** open — measured, unclaimed. Sequenced AFTER Issue 221 P2b (the retriever this caches is being replaced; cache the post-P2b index, never the retiring KNN). — 2026-11-11: the P2b blocker is DISCHARGED (the vendored ragplane seam landed, the modelless matcher core is the default build's path, lib.rs P2b rows verified) — T1–T4 unblocked.
+**Status:** open — T1–T3 LANDED (opt-in `index_cache`, commit below); T4 verdict (b): promotion BLOCKED on issue 226 (the G3 redesign) — delegated-owner verdict 2026-11-11, session 98784e41; T5 pending the release that ships the promotion. — 2026-11-11: the P2b blocker was DISCHARGED (the vendored ragplane seam landed, the modelless matcher core is the default build's path) — T1–T4 unblocked and executed.
 **Claimed:** zed-amo-i224, 1794371604, expires 2026-11-13T04:33:00+00:00
 
 ## Measurement (release binary, quiet rig)
@@ -53,22 +53,11 @@ already holds the current epoch. Per-user (XDG cache) epoch storage would make
 that a stat.
 
 ## Proposal
-- [ ] T1 — content-addressed on-disk index cache: key = blake3(corpus overlay bytes
-      + leased epoch + embedder model id + compiled-domain set + index format
-      version); value = the built index (fixed-size Pod rows, mmap/zero-copy read);
-      location per-user (`$XDG_CACHE_HOME/riir-refine/index/<key>`), atomic
-      write (tmp + rename), stale keys pruned LRU. Miss = today's build + write.
-- [ ] T2 — corrupt/partial entry refuses LOUD and rebuilds (never a wrong index).
-- [ ] T3 — per-user epoch store for the auto-corpus lease (crate `.refine/` keeps
-      only the crate-local state); a new crate on a machine at the current epoch
-      skips the fetch.
-- [ ] T4 — GOAT gate behind `index_cache` (opt-in): G1 identical suggestions +
-      fixes vs the rebuild path on the score-bench corpus (bit-identical rankings);
-      G2 warm `cargo refine` on the sample crate ≤ 150 ms setup (from ~1300), measured
-      `--release` on a QUIET rig via `agent-mail rig run --exclusive`; G3 cold run
-      no slower than +5 %; G4 cache size reported. Promote to default if green.
-- [ ] T5 — re-capture the riir-dapps hero timeline (`gen_refine_timeline.py`) after
-      the release that ships it.
+- [x] T1 — content-addressed on-disk index cache — **LANDED 2026-11-11** (opt-in `index_cache`): key = blake3(resolved per-domain corpus entries + retrieval config + embedder model id + cache/ranking/bm25 format versions — the leased epoch NUMBER deliberately excluded: identical content under a fresh lease hits); value = per-domain snapshots (rows + zone map + rule ids + the ndb Bm25Index snapshot + anchor mean); `$XDG_CACHE_HOME/riir-refine/index/<key>.idx` (env `RIIR_REFINE_INDEX_CACHE_DIR`); atomic tmp+rename; LRU keeps 8 by mtime with touch-on-hit. Upstream primitive FIRST: ndb `Bm25Index::to_snapshot`/`restore_snapshot` (`7e98f4a` + the clippy-style fixes `bcd2c79`/`658b3f5`, digest-before-parse + full structural revalidation; re-vendored through the sanctioned lane, `--check` green @`658b3f5`). Disarms under `kernel_route_narrow` + the Bonsai dense posture.
+- [x] T2 — corrupt/partial entry refuses LOUD and rebuilds — **LANDED**: `LoadOutcome::Corrupt(msg)` prints `[index-cache] corrupt entry <path>: <reason> — rebuilding`; the digest verifies BEFORE any parse, then counts plausibility-capped + structurally revalidated (versions, config drift, domain-set match, duplicate tags, trailing bytes — 6 gate tests incl. six corruption arms).
+- [x] T3 — per-user epoch store for the auto-corpus lease — **LANDED** (rides `index_cache`): the 12 h attempt stamp lives at `<cache>/riir-refine/corpus_auto.json`; crate `.refine/` keeps only crate-local state; ungated fallback byte-identical.
+- [-] T4 — GOAT gate — **executed, verdict (b): keep opt-in**; promotion rides issue 226. G1 PASS (gate test: restored-vs-built suggest_span Debug-exact across cold/hit/wiped 6-domain runs; binary-level output diff identical after filtering the ON binary's own disclosure lines). G2 PASS (warm "leased rules→scan root" gap **118–120 ms** vs OFF 273–296, bar ≤150; warm total 171–174 vs 326–355 ms — ~2×). G4 PASS (18.8 MiB entry disclosed on store/hit; +85 KiB binary). G3 FAIL AS WRITTEN (cold 573–578 ms vs OFF ~340 = **+69%** — the one-time 18.8 MiB store costs ~233 ms on the exit path; ~2 misses/day at the 12 h window vs −170 ms every warm run). The delegated-owner verdict restated G3 (BEFORE re-measurement) as "time until results printed ≤ +5%" and directed the store-after-print + cheaper-write + size-cap redesign — filed as issue 226, the promotion blocker. Env law ready: `RIIR_REFINE_INDEX_CACHE=0` the exact-literal demote (DEMOTE-ONLY). Gates: default lib 3848/0 + clippy −D clean (byte-identical posture — the cache code compiles to nothing), ON lib 3854/0 (6 new tests), clippy −D ×2 postures (lib + all-targets), ragplane `--check` green. Numbers at HEAD `e8650c18`+tree, reproduced post-rebase at `c13513b5`+tree (amo QUIET AC, load 3.7–6.1/30, release binaries).
+- [ ] T5 — re-capture the riir-dapps hero timeline (`gen_refine_timeline.py`) after the release that ships the promotion.
 
 ## Sequencing
 Issue 221 P2b (claimed, `zed-352d06e6-m3-221`) replaces `NeuronDbRetriever`/KNN

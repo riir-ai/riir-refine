@@ -280,6 +280,18 @@ default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors",
 # clippy_lints (stock regression rows). Read-only over the seed corpus.
 frontier_miner = ["clippy_lints", "score_bench"]
 
+# Issue 224 (opt-in): the content-addressed on-disk matcher index cache +
+# the per-user auto-corpus epoch stamp (T3). Key = blake3(resolved per-domain
+# corpus entries + retrieval config + embedder model id + cache/ranking/
+# bm25-snapshot format versions); value = the per-domain index snapshots
+# (rows, zone map, rule ids, the ndb Bm25Index snapshot primitive, anchor
+# mean). Atomic tmp+rename writes; corrupt/stale entries refuse LOUD and
+# rebuild (digest verified before parse); LRU keeps 8 entries. Disarms under
+# kernel_route_narrow and the Bonsai dense posture. GOAT pending (issue 224
+# T4): G1 bit-identical suggestions (gate test), G2 warm setup ≤150 ms,
+# G3 cold ≤ +5%, G4 entry size reported.
+index_cache = []
+
 # Domain features (Plan 001 multi-domain framework refactor).
 # clippy_lints is the first domain; default-on. Phase 2 adds `rust_perf`
 # (promoted to default-on 2026-08-13 after the perf-bench Pareto validator
