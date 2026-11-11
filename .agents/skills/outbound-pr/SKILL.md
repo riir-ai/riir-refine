@@ -134,6 +134,16 @@ test was in a suite we never invoked (`--test system`). The harness, in order:
    dep-info commit, fixed upstream via #2989→revert→#2990 while we waited).
    Classify every red by grepping its log for YOUR artifact names (FC8) —
    never by job name alone.
+   **Coverage/CI bots are part of their CI surface (the Codecov class).**
+   The first response on a PR is usually a coverage bot, not a maintainer —
+   record the bot in the per-repo `ci_surfaces.md` note, classify the
+   comment by `author_association` (NONE + bot login = telemetry, never
+   reply), and expect the fork-PR artifact: the PR head uploads coverage
+   from fewer CI jobs than main, so the bot's project-coverage delta reads
+   as a large fake regression (#3025: "−6.77%" driven by "HEAD has 9
+   uploads less than BASE" — 5 vs 14). The actionable number is patch
+   coverage on the added lines (#3025: 88.62%, 90 missing — mostly the new
+   module's logging/error arms); act on it only if a maintainer raises it.
 
 G-PR1b failure = the fix is NOT ready, regardless of G-PR1's local green.
 

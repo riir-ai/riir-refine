@@ -58,9 +58,9 @@ Both red classes are **upstream-broken, pre-existing relative to our diff, and i
 
 ## Acceptance
 
-- [ ] The #2968 send executes the checklist above; each B-row checked in the send record (bench 128 send section or a successor row)
-- [ ] The delegated hard verdict arc recorded (session id + verdicts) beside the send
-- [ ] Post-send: first CI poll outcome + any reply posted recorded here (the FC8 log-grep rule was or was not needed)
+- [x] The #2968 send executed the checklist above; each B-row checked in the send record (bench 128 README, run-8 section + the send section; the full arc: B1–B4/B6/B7/B9/B11/B12 executed pre-send, B5/B8 rode the send — CI started within a minute, no `action_required` gate, and the first responder was the Codecov bot, classified telemetry by `author_association` NONE, never replied to — the new pr/outbound-pr rule)
+- [x] The delegated hard verdict arc recorded (sessions f0c8e944 rounds 1–3; 5df795fb rounds 1–3; 064eb1fc rounds 1–2 = round 7 AGREE + the send-gate AGREE with binding conditions C1–C4, all satisfied: C1 rebase clean (range-diff all `=`, diffstat identical), C2 harness run-9 at the rebased tip adjudicated against pristine ceedf48 (delta EMPTY, `gpr1b_harness_run9.log`), C3 chart SHA-pinned + render-verified via `gh api markdown`, C4 comment numbers copied from README run 8 + the base/rebase disclosure)
+- [x] Post-send: first CI poll outcome + any reply posted recorded here — **PR #3025 created 2026-11-11 ~04:0xZ** (https://github.com/mozilla/sccache/pull/3025, OPEN, MERGEABLE, not draft, head a62c4c3 on riir-ai/sccache), comment **issuecomment-6786819655** posted second citing the PR; CI auto-ran (no maintainer gate), first responder = the Codecov bot (telemetry, classified per the new rule); the FC8 log-grep rule was not needed (no red jobs attributable to the diff — early matrix greens: build, loongarch64/i686 musl; rest pending at record time)
 - [ ] On merge/close: this issue closes with the bench 128 ledger row update in the same commit
 
 ## The maintainer-reply arc (2026-11-11, session zed-m3-i218-mr, lease 18e3641d)

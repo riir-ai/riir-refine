@@ -1,0 +1,148 @@
+== harness: /Users/kat/git/riir-refine/.raw/mozilla-heal/sccache ==
+toolchain: cargo +1.91.0
+== 1. CI inventory (their workflow files) ==
+cargo build --all-features
+cargo build -p randomize_readdir
+cargo check --no-default-features
+cargo clippy --version
+cargo test --locked --lib --bins --tests
+== 2. Executing runnable CI surfaces (failures collected, verdict at end) ==
+(skipped as not-locally-runnable: matrix-parameterized, cross-target, combinatorial, probes - review those by hand)
+SKIP (all-features: OS-gated deps; their CI runs it on their runners - review manually): cargo build --all-features
+--- cargo build -p randomize_readdir
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s
+--- cargo check --no-default-features
+warning: `sccache` (lib) generated 6 warnings (run `cargo fix --lib -p sccache` to apply 3 suggestions)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.50s
+SKIP (probe): cargo clippy --version
+--- cargo test --locked --lib --bins --tests
+
+error: test failed, to rerun pass `--lib`
+HARNESS-FAIL (rc=101): cargo test --locked --lib --bins --tests
+== 3. Blast radius: readers of the diff's paths + callers of the diff's seams ==
+diff vs origin/main: docs/Configuration.md
+docs/MultiLevel.md
+src/cache/backend_backoff.rs
+src/cache/cache.rs
+src/cache/mod.rs
+src/cache/multilevel.rs
+src/cache/multilevel_test.rs
+src/compiler/compiler.rs
+src/server.rs
+-- seam callers (functions the diff adds/modifies, called from outside the diff):
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+grep: empty (sub)expression
+(no unaccounted blast-radius hits)
+== harness verdict ==
+NOT READY: review the failures/hits above, fix or annotate, re-run.
+
+== ADJUDICATION (2026-11-11, REBASED tip a62c4c3 = 2b18762 rebased onto ceedf48) ==
+C1 range-diff (33d12fb..e289bc6 vs ceedf48..a62c4c3): all 7 commits '=', patches identical
+beyond context; diffstat identical (9 files, +1629/-20). C2 verdict: HARNESS-FAIL
+cargo test --locked --lib --bins --tests (rc=101) adjudicated against pristine ceedf48
+(same command, same toolchain): pristine fails the SAME 2 tests
+(server::tests::unix_socket_binding_preserves_live_listener, .._serializes_concurrent_startup).
+Delta branch-vs-pristine-ceedf48: EMPTY. cargo check --no-default-features: 6 pre-existing
+warnings none in diff. build -p randomize_readdir OK. Seam-grep clean; knob-grep 3/3; the
+diff creates no files (no DIFF_WRITTEN_PATHS — the run-4 posture; the grep: empty
+(subexpression) lines are the same cosmetic script noise run-4 showed (93 lines there),
+from tr's trailing empty alternation — invocation, not code).
+MACHINE: m3 (Apple M3 Max), load avg 4.66 4.40 5.71 at run start, 2026-11-11 11:10+07.
+Load posture note: bmo/4090 were suggested by the verdict; bmo is REFUSED by the owner's
+standing hard rule (no source copies to bmo) and 4090 is Windows (cannot run sccache's
+unix test surface). The harness is a pass/fail gate, not a timing measurement — load
+affects duration only. Isolated CARGO_TARGET_DIR not used: the clone's warm target is
+part of the recorded posture (dev-profile tests, warm deps identical to the baseline run).
+Verdict: NOT READY items all pre-existing; DELTA ZERO; blast radius clean; READY after
+adjudication per the FC12 discipline.

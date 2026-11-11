@@ -16,9 +16,10 @@ Per outbound-pr G-PR1b #4: the per-repo CI map so the next PR starts from the ma
 
 ## Post-send discipline
 
-- First-contribution CI may sit in `action_required` until a maintainer approves the workflow run — say so in the reply, never re-push to trigger.
+- First-contribution CI may sit in `action_required` until a maintainer approves the workflow run — say so in the reply, never re-push to trigger. (#3025 auto-ran instead: fork-PR checks started within a minute — the repo's `pull_request` workflows fire on fork heads.)
 - Poll the first CI run once; an unpredicted red is a finding about OUR gates — `gh run view --log-failed` immediately.
 - The macOS env-failures above are the known false-red set when a maintainer reads CI green/Linux vs our local red — preempt in the PR body when relevant (the bench-128 body already carries the sentence).
+- **Codecov bot is the first responder on this repo** (worked example #3025, 04:15Z, ~30 min after the send): `codecov-commenter`, author_association NONE — telemetry, never a review, never replied to. Its project-coverage delta is an artifact on fork PRs (HEAD uploaded 5 coverage reports vs BASE's 14 — "HEAD has 9 uploads less than BASE" — so #3025 read "−6.77% project" while the real signal was patch coverage 88.62% / 90 lines missing, mostly the new module's `info!`/`debug!` arms and error paths). Read the report's own uploads note before quoting any delta; act on patch-coverage gaps only if a maintainer raises them. Added to the `pr` + `outbound-pr` skills 2026-11-11.
 
 ## Campaign state on this repo
 
