@@ -144,6 +144,45 @@ pub struct DomainSnapshot {
     pub anchor_mean: [f32; LATENT_DIM],
 }
 
+/// A domain captured at build time, finished into a [`DomainSnapshot`] on
+/// the writer thread (issue 226). The capture is the cheap half (rows +
+/// sidecars copied, the BM25 index shared by handle); [`DomainCapture::finish`]
+/// is the expensive half — the canonical BM25 encode and the zone-map sort
+/// — and runs off the critical path. The index is immutable after build,
+/// so the handle reads exactly what was built.
+pub struct DomainCapture {
+    /// Every field final except `bm25` (empty until [`DomainCapture::finish`])
+    /// and `by_zone_hash` (unsorted until then).
+    snap: DomainSnapshot,
+    bm25: std::sync::Arc<crate::ragplane::bm25::Bm25Index>,
+}
+
+impl DomainCapture {
+    pub(crate) fn new(
+        snap: DomainSnapshot,
+        bm25: std::sync::Arc<crate::ragplane::bm25::Bm25Index>,
+    ) -> Self {
+        Self { snap, bm25 }
+    }
+
+    /// Serialize the shared BM25 index and canonicalize the zone map.
+    ///
+    /// # Errors
+    ///
+    /// The BM25 snapshot refusing (e.g. facet state it has no encoding for).
+    pub fn finish(self) -> Result<DomainSnapshot, String> {
+        let Self { mut snap, bm25 } = self;
+        snap.bm25 = bm25.to_snapshot().map_err(|e| e.to_string())?;
+        // The zone map comes from a HashMap — sort it so one content key
+        // always encodes to the same bytes. Restore rebuilds the map, so
+        // order never changed an answer; unsorted, every cold store was a
+        // different file (measured: ~2 MB of the 18.8 MiB entry differed
+        // run to run). Hash keys are unique, so the order is total.
+        snap.by_zone_hash.sort_unstable_by_key(|(h, _)| *h);
+        Ok(snap)
+    }
+}
+
 /// Why a cache read produced no index. `Miss` is the quiet fast path; the
 /// other two non-hit arms are loud (the caller prints the reason) and fall
 /// through to a full rebuild + rewrite.
@@ -777,12 +816,19 @@ fn store_and_prune(
 /// (tmp then rename inside [`store`]); a run that dies before the join
 /// loses only the entry (the next miss rewrites it) and leaves tmp litter
 /// that [`prune`] sweeps.
-pub fn store_deferred(armed: &LaneArmed, config: RetrievalConfig, snapshots: Vec<DomainSnapshot>) {
+pub fn store_deferred(armed: &LaneArmed, config: RetrievalConfig, captures: Vec<DomainCapture>) {
     let (dir, key, hex) = (armed.dir.clone(), armed.key, armed.hex.clone());
     let pending = match std::thread::Builder::new()
         .name("index-cache-store".into())
-        .spawn(move || store_and_prune(&dir, &key, &hex, &config, &snapshots))
-    {
+        .spawn(move || {
+            // All-or-nothing: one domain refusing skips the whole entry.
+            let snapshots: Result<Vec<DomainSnapshot>, String> =
+                captures.into_iter().map(DomainCapture::finish).collect();
+            match snapshots {
+                Ok(s) => store_and_prune(&dir, &key, &hex, &config, &s),
+                Err(e) => format!("[index-cache] snapshot failed ({e}) — cache store skipped"),
+            }
+        }) {
         Ok(h) => PendingStore::Thread(h),
         Err(e) => PendingStore::Failed(format!(
             "[index-cache] store skipped (writer thread: {e}) — continuing uncached"
@@ -899,6 +945,12 @@ mod tests {
     }
 
     fn sample_snapshot(domain: DomainId) -> DomainSnapshot {
+        sample_capture(domain).finish().expect("finish capture")
+    }
+
+    /// The build-time capture shape: BM25 shared by handle, the zone map
+    /// deliberately UNSORTED (finish canonicalizes it).
+    fn sample_capture(domain: DomainId) -> DomainCapture {
         let bm25 = crate::ragplane::bm25::Bm25Index::new();
         bm25.index(
             b"doc-a",
@@ -906,7 +958,7 @@ mod tests {
         );
         bm25.index(b"doc-b", "match value { Some(v) => v, None => 0 }");
         bm25.index(b"doc-c", "");
-        DomainSnapshot {
+        let snap = DomainSnapshot {
             domain,
             rows: vec![
                 IndexRow {
@@ -923,15 +975,16 @@ mod tests {
                 },
             ],
             by_zone_hash: vec![
-                ([1u8; 32], "rule_one".to_string()),
                 ([2u8; 32], "rule_two".to_string()),
+                ([1u8; 32], "rule_one".to_string()),
             ],
             rule_ids: vec!["rule_one".to_string(), "rule_two".to_string()],
             n_rules: 2,
-            bm25: bm25.to_snapshot().expect("bm25 snapshot"),
+            bm25: Vec::new(),
             #[cfg(feature = "differential_anchor")]
             anchor_mean: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
-        }
+        };
+        DomainCapture::new(snap, std::sync::Arc::new(bm25))
     }
 
     fn sample_snapshots() -> Vec<DomainSnapshot> {
@@ -1243,7 +1296,11 @@ mod tests {
             key,
             hex: hex(&key),
         };
-        store_deferred(&armed, config, sample_snapshots());
+        let captures = sample_snapshots()
+            .iter()
+            .map(|s| sample_capture(s.domain))
+            .collect();
+        store_deferred(&armed, config, captures);
         assert!(finish_pending_stores() >= 1, "one store was pending");
         let name = format!("{}.idx", hex(&key));
         let a = std::fs::read(inline_dir.join(&name)).expect("inline entry");
@@ -1255,6 +1312,24 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&inline_dir);
         let _ = std::fs::remove_dir_all(&deferred_dir);
+    }
+
+    /// Issue 226: one content key must encode to ONE byte string — the
+    /// HashMap-ordered zone map is canonicalized by `finish` (the measured
+    /// pre-fix drift was ~2 MB of the 18.8 MiB entry between cold runs).
+    #[test]
+    fn capture_finish_canonicalizes_zone_map_order() {
+        let snap = sample_capture(DomainId::Clippy).finish().expect("finish");
+        let hashes: Vec<[u8; 32]> = snap.by_zone_hash.iter().map(|(h, _)| *h).collect();
+        assert_eq!(
+            hashes,
+            vec![[1u8; 32], [2u8; 32]],
+            "zone map sorted by hash"
+        );
+        let config = RetrievalConfig::default();
+        let a = encode(&config, &[snap]);
+        let b = encode(&config, &[sample_snapshot(DomainId::Clippy)]);
+        assert_eq!(a, b, "same content, same bytes");
     }
 
     /// Issue 226 T1: a dead writer's `.tmp-*` is swept once stale; a fresh

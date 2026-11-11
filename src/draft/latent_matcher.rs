@@ -567,7 +567,7 @@ impl LatentMatcher {
         // The store arm: Some only when the lane is armed AND nothing was
         // restored (miss / corrupt / read-failed → the pass below builds).
         // A failed per-domain snapshot drops it to None (all-or-nothing).
-        let mut snapshots_to_store: Option<Vec<super::index_cache::DomainSnapshot>> =
+        let mut snapshots_to_store: Option<Vec<super::index_cache::DomainCapture>> =
             if matches!(lane, super::index_cache::Lane::Armed(_)) && snap_by_domain.is_none() {
                 Some(Vec::new())
             } else {
@@ -617,7 +617,7 @@ impl LatentMatcher {
                     idx
                 };
                 if snapshots_to_store.is_some() {
-                    match built.to_snapshot($domain) {
+                    match built.capture($domain) {
                         Ok(s) => {
                             if let Some(list) = snapshots_to_store.as_mut() {
                                 list.push(s);
@@ -719,7 +719,7 @@ impl LatentMatcher {
             #[cfg(feature = "index_cache")]
             if snapshots_to_store.is_some() {
                 match &built {
-                    KernelIndex::Flat(idx) => match idx.to_snapshot(DomainId::Kernel) {
+                    KernelIndex::Flat(idx) => match idx.capture(DomainId::Kernel) {
                         Ok(s) => {
                             if let Some(list) = snapshots_to_store.as_mut() {
                                 list.push(s);
@@ -912,6 +912,7 @@ impl LatentMatcher {
         &self.depth_policy
     }
 
+    #[must_use]
     pub fn rule_book(&self, rule_id: &str) -> Option<&RuleInfo> {
         self.rule_book.get(rule_id)
     }

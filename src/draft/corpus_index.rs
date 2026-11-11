@@ -577,12 +577,18 @@ impl RuleIndex {
     // cannot represent (route-narrowed kernel, Bonsai dense).
     // ------------------------------------------------------------------
 
-    /// Extract the cache-wire snapshot of this built index.
+    /// Capture this built index for the cache store. Cheap by design
+    /// (issue 226): the BM25 index is captured as a shared handle and only
+    /// serialized on the writer thread ([`super::index_cache::DomainCapture`]),
+    /// so the critical path pays the row copy, not the canonical BM25 encode.
     #[cfg(feature = "index_cache")]
-    pub(crate) fn to_snapshot(
+    // The only error arm is the cfg'd Bonsai dense refusal — without
+    // `bonsai_retrieval` the `Result` is always `Ok`, by posture not design.
+    #[allow(clippy::unnecessary_wraps)]
+    pub(crate) fn capture(
         &self,
         domain: DomainId,
-    ) -> Result<super::index_cache::DomainSnapshot, String> {
+    ) -> Result<super::index_cache::DomainCapture, String> {
         // Defense in depth: the lane refuses to arm under the dense
         // posture (the embedder is not serializable state), but a future
         // caller bypassing `Lane::resolve` must not store a dense index
@@ -594,20 +600,25 @@ impl RuleIndex {
                     .to_string(),
             );
         }
-        Ok(super::index_cache::DomainSnapshot {
-            domain,
-            rows: self.retriever.to_row_snaps(),
-            by_zone_hash: self
-                .by_zone_hash
-                .iter()
-                .map(|(h, r)| (*h, r.clone()))
-                .collect(),
-            rule_ids: self.rule_ids.clone(),
-            n_rules: self.n_rules,
-            bm25: self.retriever.bm25_snapshot()?,
-            #[cfg(feature = "differential_anchor")]
-            anchor_mean: self.diff_anchor.mean,
-        })
+        Ok(super::index_cache::DomainCapture::new(
+            super::index_cache::DomainSnapshot {
+                domain,
+                rows: self.retriever.to_row_snaps(),
+                // Unordered here; `DomainCapture::finish` sorts it into the
+                // canonical order on the writer thread.
+                by_zone_hash: self
+                    .by_zone_hash
+                    .iter()
+                    .map(|(h, r)| (*h, r.clone()))
+                    .collect(),
+                rule_ids: self.rule_ids.clone(),
+                n_rules: self.n_rules,
+                bm25: Vec::new(),
+                #[cfg(feature = "differential_anchor")]
+                anchor_mean: self.diff_anchor.mean,
+            },
+            self.retriever.bm25_shared(),
+        ))
     }
 
     /// Rebuild an index from a cache snapshot. The BM25 restore is
@@ -656,6 +667,7 @@ impl RuleIndex {
     /// The query carries the code text alongside the latent direction so the
     /// substrate's BM25 hybrid stage can boost on identifier overlap — the
     /// designed retrieval path, not a bolt-on.
+    #[must_use]
     pub fn suggest(&self, code: &str, top_k: usize) -> Vec<ScoredRule> {
         let mut scratch = SuggestScratch::default();
         self.suggest_into(code, top_k, &mut scratch).to_vec()
@@ -706,6 +718,7 @@ impl RuleIndex {
     /// surfaces that rule, even when the item-scale embedding is distant.
     /// Query count = 1 + significant lines — fine for suggest mode (not a
     /// hot path; each query ~µs at corpus scale, Bench 575).
+    #[must_use]
     pub fn suggest_deep(&self, code: &str, top_k: usize) -> Vec<ScoredRule> {
         let mut scratch = SuggestScratch::default();
         self.suggest_deep_into(code, top_k, &mut scratch).to_vec()

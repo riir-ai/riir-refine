@@ -76,7 +76,26 @@ pub(crate) struct RuleRetriever {
     /// `zone_hash → row index` (first insertion wins; identical content
     /// hashes to the identical zone hash, so this is the substrate's upsert).
     by_hash: HashMap<[u8; 32], usize>,
-    bm25: Bm25Index,
+    bm25: Bm25Slot,
+}
+
+/// The retriever's BM25 slot. Under `index_cache` it is shared (`Arc`) so a
+/// cache store can CAPTURE the built index in O(1) and serialize it on the
+/// writer thread, off the critical path (issue 226); the index is immutable
+/// after build (every mutator runs inside `index_chunks*`). Off, it is the
+/// plain owned index — the default posture compiles exactly as before.
+#[cfg(feature = "index_cache")]
+type Bm25Slot = std::sync::Arc<Bm25Index>;
+#[cfg(not(feature = "index_cache"))]
+type Bm25Slot = Bm25Index;
+
+#[cfg(feature = "index_cache")]
+fn bm25_slot(index: Bm25Index) -> Bm25Slot {
+    std::sync::Arc::new(index)
+}
+#[cfg(not(feature = "index_cache"))]
+fn bm25_slot(index: Bm25Index) -> Bm25Slot {
+    index
 }
 
 /// Caller-owned scratch for the scoring loop (the substrate
@@ -102,7 +121,7 @@ impl RuleRetriever {
         Self {
             rows: Vec::new(),
             by_hash: HashMap::new(),
-            bm25: Bm25Index::new(),
+            bm25: bm25_slot(Bm25Index::new()),
         }
     }
 
@@ -115,7 +134,7 @@ impl RuleRetriever {
         mut self,
         tokenizer: Box<dyn Tokenizer + Send + Sync>,
     ) -> Self {
-        self.bm25 = Bm25Index::with_tokenizer(tokenizer);
+        self.bm25 = bm25_slot(Bm25Index::with_tokenizer(tokenizer));
         self
     }
 
@@ -269,15 +288,15 @@ impl RuleRetriever {
                 })
                 .collect(),
             by_hash,
-            bm25,
+            bm25: bm25_slot(bm25),
         }
     }
 
-    /// The BM25 index's snapshot container (the primitive self-digests;
-    /// errors are typed `SnapshotError`s surfaced as strings).
+    /// A shared handle to the built BM25 index — the O(1) capture the
+    /// deferred store serializes later, off the critical path (issue 226).
     #[cfg(feature = "index_cache")]
-    pub(crate) fn bm25_snapshot(&self) -> Result<Vec<u8>, String> {
-        self.bm25.to_snapshot().map_err(|e| e.to_string())
+    pub(crate) fn bm25_shared(&self) -> std::sync::Arc<Bm25Index> {
+        std::sync::Arc::clone(&self.bm25)
     }
 
     /// Retrieve scored candidates for `query` into `scratch` (cleared at
