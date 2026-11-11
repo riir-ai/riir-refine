@@ -337,7 +337,8 @@ re-verified on submission day.
 
 **2. Small — models, hardware, infrastructure, and why they fit**
 > The healer ships as a single binary with no model files on the hot path: its knowledge is a
-> curated corpus (~1,602 reviewed repair rules across seven domains) plus the developer's own verified-fix history,
+> curated corpus (1,642 pattern classes in 13.4 MB of rule text across six domains — measured on
+> the shipped buckets, 2026-11-10) plus the developer's own verified-fix history,
 > retrieved and applied deterministically. The escalation arm is one ≈0.4B encoder; its deployed
 > serving posture is measured at 484 MB end to end (Q8 checkpoint + seats), and the heavier
 > quantizations below that are a recorded quality negative we refuse to offer. The full decision
