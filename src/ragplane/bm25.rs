@@ -1,4 +1,4 @@
-//! Vendored from `riir-neuron-db` (`a020ace2a6ee`, vendored 2026-11-09, issue
+//! Vendored from `riir-neuron-db` (`90ab1ba`, vendored 2026-11-09, issue
 //! 221 P2b — the publish posture's modelless retrieval substrate).
 //! std-only up to the crate's own deps (blake3 / papaya / quote — all
 //! already in refine's tree). The canonical copy stays in the private
@@ -416,6 +416,127 @@ impl Bm25Index {
     /// configured [`Tokenizer`], updates the postings list + document
     /// metadata. Re-indexing a key removes old postings first (upsert
     /// semantics — the latest text wins).
+    /// Batch-index `docs` — the FRESH-BUILD fast path (issue 224: the
+    /// rulewright matcher's per-run corpus build was dominated by this
+    /// index's per-document postings update, which clones each affected
+    /// term's full posting list on every document (papaya values are
+    /// replaced, not mutated in place on this papaya line). For common
+    /// terms whose posting lists grow to thousands of entries, a batch
+    /// build pays that clone once per (document, common term) — quadratic
+    /// total work that measured 862–1008 ms for a 17.5k-document corpus.
+    ///
+    /// The batch path prebuilds every posting list in LOCAL std maps with
+    /// O(1) pushes, then installs each term's complete list with ONE
+    /// vacant insert — the clone-extend-replace round trip never runs.
+    /// Within-batch duplicate keys replay [`Self::remove_internal`]
+    /// semantics against the LOCAL maps first (the upsert contract is
+    /// preserved exactly); postings order per term stays document order,
+    /// so search results are bit-identical to N sequential [`index`](Self::index)
+    /// calls on a fresh index.
+    ///
+    /// On an index that already holds documents (`doc_count() > 0`) the
+    /// call falls back to N sequential [`index`](Self::index) calls —
+    /// correct, just not accelerated (the prebuild's vacant-install
+    /// contract requires fresh keys; merging into existing posting lists
+    /// is the clone path this method exists to avoid).
+    ///
+    /// Returns the number of documents processed (a repeated key counts
+    /// once per occurrence, matching the fallback's per-call count).
+    pub fn index_batch<'a, I>(&self, docs: I) -> usize
+    where
+        I: IntoIterator<Item = (&'a [u8], &'a str)>,
+    {
+        if self.doc_count.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+            let mut n = 0;
+            for (key, text) in docs {
+                self.index(key, text);
+                n += 1;
+            }
+            return n;
+        }
+
+        // ---- Local prebuild (std maps, in-place pushes) ----
+        let mut local_postings: StdHashMap<String, Vec<Posting>> = StdHashMap::new();
+        let mut local_dl: StdHashMap<Vec<u8>, usize> = StdHashMap::new();
+        let mut local_kt: StdHashMap<Vec<u8>, Vec<String>> = StdHashMap::new();
+        let mut local_total_len: usize = 0;
+        let mut n_docs = 0usize;
+        let mut items = 0usize;
+
+        for (key, text) in docs {
+            // Upsert contract: a repeated key first removes its prior
+            // LOCAL postings (mirrors remove_internal; on this fresh path
+            // the key cannot exist in the papaya maps yet).
+            if let Some(terms) = local_kt.remove(key) {
+                if let Some(old_len) = local_dl.remove(key) {
+                    local_total_len -= old_len;
+                }
+                for term in &terms {
+                    if let Some(list) = local_postings.get_mut(term) {
+                        list.retain(|p| &*p.key != key);
+                        if list.is_empty() {
+                            local_postings.remove(term);
+                        }
+                    }
+                }
+                n_docs -= 1;
+            }
+
+            let mut tokens: Vec<String> = Vec::new();
+            self.tokenizer.tokenize_into(text, &mut tokens);
+            items += 1;
+            let doc_len = tokens.len();
+
+            let mut tf_map: StdHashMap<String, u32> = StdHashMap::with_capacity(tokens.len());
+            for token in &tokens {
+                if let Some(tf) = tf_map.get_mut(token) {
+                    *tf += 1;
+                } else {
+                    tf_map.insert(token.clone(), 1);
+                }
+            }
+
+            let key_rc: Arc<[u8]> = Arc::from(key);
+            let dl = doc_len as f32;
+            let ord = self.ordinal_of(key);
+
+            let mut reverse_entry: Vec<String> = Vec::with_capacity(tf_map.len());
+            for (term, tf) in tf_map {
+                reverse_entry.push(term.clone());
+                local_postings.entry(term).or_default().push(Posting {
+                    key: Arc::clone(&key_rc),
+                    tf,
+                    dl,
+                    ord,
+                });
+            }
+
+            local_kt.insert(key.to_vec(), reverse_entry);
+            local_dl.insert(key.to_vec(), doc_len);
+            local_total_len += doc_len;
+            n_docs += 1;
+        }
+
+        // ---- Install (one vacant insert per term; no clones) ----
+        let guard = self.postings.guard();
+        for (term, list) in local_postings {
+            self.postings.insert(term, list, &guard);
+        }
+        let kt_guard = self.key_to_terms.guard();
+        for (key, terms) in local_kt {
+            self.key_to_terms.insert(key, terms, &kt_guard);
+        }
+        let dl_guard = self.doc_lengths.guard();
+        for (key, len) in local_dl {
+            self.doc_lengths.insert(key, len, &dl_guard);
+        }
+        self.total_length
+            .fetch_add(local_total_len, std::sync::atomic::Ordering::Relaxed);
+        self.doc_count
+            .fetch_add(n_docs, std::sync::atomic::Ordering::Relaxed);
+        items
+    }
+
     pub fn index(&self, key: &[u8], text: &str) {
         // If this key was previously indexed, remove its old postings first.
         self.remove_internal(key);
@@ -894,6 +1015,86 @@ impl Default for Bm25Index {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue 224: `index_batch` on a fresh index must be bit-identical to N
+    /// sequential [`Bm25Index::index`] calls — same postings, same doc
+    /// state, same search results, same ordinals.
+    #[test]
+    fn g1_index_batch_is_bit_identical_to_sequential_index() {
+        let docs: Vec<(&[u8], &str)> = vec![
+            (b"d1".as_slice(), "fn my_func() { let x = compute(x); }"),
+            (b"d2".as_slice(), "fn other() { self.fn_call(fn_arg) }"),
+            (b"d3".as_slice(), "slay the dragon and the goblin horde"),
+            (b"d4".as_slice(), "fn my_func() { let y = compute(y); }"),
+            (b"d5".as_slice(), "collect iron ore and iron swords"),
+            // Duplicate key: the batch path must replay the upsert
+            // (remove-then-add) semantics locally.
+            (b"d5".as_slice(), "collect iron ore only"),
+        ];
+
+        let sequential = Bm25Index::new();
+        for (key, text) in &docs {
+            sequential.index(key, text);
+        }
+
+        let batched = Bm25Index::new();
+        let n = batched.index_batch(docs.iter().copied());
+        assert_eq!(n, docs.len());
+
+        // Same doc state.
+        assert_eq!(
+            sequential
+                .doc_count
+                .load(std::sync::atomic::Ordering::Relaxed),
+            batched.doc_count.load(std::sync::atomic::Ordering::Relaxed)
+        );
+        assert_eq!(
+            sequential
+                .total_length
+                .load(std::sync::atomic::Ordering::Relaxed),
+            batched
+                .total_length
+                .load(std::sync::atomic::Ordering::Relaxed)
+        );
+
+        // Same postings per term (same keys, same order, same tf/dl/ord).
+        let s_guard = sequential.postings.guard();
+        let b_guard = batched.postings.guard();
+        let s_terms: Vec<(&String, &Vec<Posting>)> = sequential.postings.iter(&s_guard).collect();
+        assert_eq!(s_terms.len(), batched.postings.pin().len());
+        for (term, s_list) in s_terms {
+            let b_list = batched
+                .postings
+                .get(term, &b_guard)
+                .unwrap_or_else(|| panic!("term {term} missing from the batched index"));
+            assert_eq!(s_list.len(), b_list.len(), "term {term}: posting count");
+            for (sp, bp) in s_list.iter().zip(b_list.iter()) {
+                assert_eq!(&*sp.key, &*bp.key, "term {term}: posting key");
+                assert_eq!(sp.tf, bp.tf, "term {term}: posting tf");
+                assert_eq!(sp.dl, bp.dl, "term {term}: posting dl");
+                assert_eq!(sp.ord, bp.ord, "term {term}: posting ordinal");
+            }
+        }
+
+        // Same search results on several queries (cross the dup key + the
+        // common-term postings).
+        for query in ["fn", "iron", "slay", "compute", "collect"] {
+            let s_results = sequential.search(query, 10);
+            let b_results = batched.search(query, 10);
+            assert_eq!(s_results, b_results, "query {query}");
+        }
+
+        // The non-fresh fallback: a second batch on a non-empty index must
+        // also match sequential indexing.
+        let more: Vec<(&[u8], &str)> = vec![(b"d6".as_slice(), "another fn body here")];
+        sequential.index(b"d6", "another fn body here");
+        let n2 = batched.index_batch(more.iter().copied());
+        assert_eq!(n2, 1);
+        assert_eq!(
+            sequential.search("another", 10),
+            batched.search("another", 10)
+        );
+    }
 
     #[test]
     fn g1_bm25_index_search_roundtrip() {

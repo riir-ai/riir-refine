@@ -130,34 +130,45 @@ impl RuleRetriever {
         // Issue 224: env-gated embed-vs-BM25 phase split (the matcher
         // build's dominant-cost attribution — one stderr line per call).
         let timing = std::env::var("RIIR_REFINE_MATCHER_TIMING").as_deref() == Ok("1");
-        let mut embed_us: u128 = 0;
-        let mut bm25_us: u128 = 0;
-        for chunk in chunks {
-            let t0 = std::time::Instant::now();
-            let zone_hash = *blake3::hash(chunk.content.as_bytes()).as_bytes();
+        let mut embed_ms: f64 = 0.0;
+        let mut bm25_ms: f64 = 0.0;
+        // Hash each chunk ONCE — the same zone_hash keys both the BM25 doc
+        // set and this seam's own row table (the module's keying note).
+        let hashes: Vec<[u8; 32]> = chunks
+            .iter()
+            .map(|c| *blake3::hash(c.content.as_bytes()).as_bytes())
+            .collect();
+        // Issue 224: ONE batch call — the BM25 fresh-build fast path
+        // (local std prebuild + vacant-only install) replaces the per-chunk
+        // `bm25.index` whose postings clone-replace is quadratic for common
+        // terms (862–1008 ms of the measured ~1.3 s matcher build).
+        let t_bm25 = std::time::Instant::now();
+        self.bm25.index_batch(
+            chunks
+                .iter()
+                .zip(hashes.iter())
+                .map(|(c, h)| (&h[..], c.content.as_str())),
+        );
+        if timing {
+            bm25_ms += t_bm25.elapsed().as_secs_f64() * 1e3;
+        }
+        let n_rows = chunks.len();
+        for (chunk, zone_hash) in chunks.into_iter().zip(hashes) {
+            let t_embed = std::time::Instant::now();
             let dir = embedder.embed(&chunk.content);
             if timing {
-                embed_us += t0.elapsed().as_micros();
+                embed_ms += t_embed.elapsed().as_secs_f64() * 1e3;
             }
-            let t1 = std::time::Instant::now();
             self.insert_row(IndexedChunk {
                 zone_hash,
                 dir,
                 #[cfg(feature = "dense_embed")]
                 dense: None,
             });
-            // Key = the raw zone-hash bytes (see the module's keying note).
-            self.bm25.index(&zone_hash, &chunk.content);
-            if timing {
-                bm25_us += t1.elapsed().as_micros();
-            }
         }
         if timing {
             eprintln!(
-                "[matcher-timing] index_chunks: embed {:.1}ms bm25+insert {:.1}ms rows {}",
-                embed_us as f64 / 1e3,
-                bm25_us as f64 / 1e3,
-                self.rows.len()
+                "[matcher-timing] index_chunks: embed {embed_ms:.1}ms bm25(batch) {bm25_ms:.1}ms rows {n_rows}"
             );
         }
         self.rows.len()

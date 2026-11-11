@@ -1,4 +1,4 @@
-//! Vendored from `riir-neuron-db` (`a020ace2a6ee`, vendored 2026-11-09, issue
+//! Vendored from `riir-neuron-db` (`90ab1ba`, vendored 2026-11-09, issue
 //! 221 P2b — the publish posture's modelless retrieval substrate).
 //! std-only up to the crate's own deps (blake3 / papaya / quote — all
 //! already in refine's tree). The canonical copy stays in the private
@@ -15,31 +15,18 @@
 //! pinned vectors/floors), the doc-backtick and style classes are churn
 //! with zero behavior content. The parity pins + the upstream tests that
 //! ship inside each file are the correctness authority, not lint shape.
-#![allow(
-    clippy::doc_markdown,
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    clippy::cast_possible_wrap,
-    clippy::cast_lossless,
-    clippy::missing_const_for_fn,
-    clippy::missing_panics_doc,
-    clippy::missing_errors_doc,
-    clippy::missing_fields_in_debug,
-    clippy::module_name_repetitions,
-    clippy::must_use_candidate,
-    clippy::inline_always,
-    clippy::let_and_return,
-    clippy::manual_let_else,
-    clippy::explicit_iter_loop,
-    clippy::match_same_arms,
-    clippy::single_char_pattern,
-    clippy::format_push_string,
-    clippy::ignore_without_reason,
-    clippy::assertions_on_constants,
-    clippy::too_many_lines,
-    clippy::assert_is_empty
-)]
+#![allow(clippy::doc_markdown, clippy::cast_precision_loss,
+        clippy::cast_possible_truncation, clippy::cast_sign_loss,
+        clippy::cast_possible_wrap, clippy::cast_lossless,
+        clippy::missing_const_for_fn, clippy::missing_panics_doc,
+        clippy::missing_errors_doc, clippy::missing_fields_in_debug,
+        clippy::module_name_repetitions, clippy::must_use_candidate,
+        clippy::inline_always, clippy::let_and_return,
+        clippy::manual_let_else, clippy::explicit_iter_loop,
+        clippy::match_same_arms, clippy::single_char_pattern,
+        clippy::format_push_string, clippy::ignore_without_reason,
+        clippy::assertions_on_constants, clippy::too_many_lines,
+        clippy::assert_is_empty)]
 
 //! AST chunker — Rust-code-specific chunking via `syn`.
 //!
