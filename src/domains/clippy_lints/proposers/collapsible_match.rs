@@ -20,6 +20,17 @@
 //! false, the guard form falls through to LATER arms where the body-if form
 //! consumed the value (an arm-body `{}` of unit type is benign; anything
 //! else is observable) — clippy ships the exact same shift; we mirror.
+//! ⛔ Fall-through SAFETY guard (2026-11-11, the neuron-db sweep
+//! specimens): the transform fires ONLY when a later arm is a COVERING
+//! NO-OP WILDCARD — a `_`/bare-binding pattern with an empty `{}` body.
+//! Later SPECIFIC-pattern arms never cover the target arm's pattern
+//! (match arms are disjoint), so guard-failure reaches a compile E0004
+//! (lifecycle.rs `(&Some, &Some)` uncovered — 482-test repo broken at
+//! `--all-features`; the sweep posture had the file cfg-gated out) or, on
+//! a no-op specific arm like `Exhausted => {}`, an E0004 the same way; a
+//! non-empty wildcard body shifts observable behavior (`_ => 0` yields
+//! where the original arm produced nothing). Both specimen classes
+//! declined now; the fixture set pins the decline.
 //! Guards cannot be fallible: a COND carrying the `?` token compiles in
 //! body position but NOT as a guard (E0001-class) — refused. `.await` in
 //! the cond is refused conservatively (guard-await legality is contextual;
@@ -58,8 +69,8 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 
     fn visit_expr_match(&mut self, m: &'ast syn::ExprMatch) {
         syn::visit::visit_expr_match(self, m);
-        for arm in &m.arms {
-            if let Some(replacement) = self.try_guard_form(arm) {
+        for (i, arm) in m.arms.iter().enumerate() {
+            if let Some(replacement) = self.try_guard_form(arm, &m.arms[i + 1..]) {
                 self.edits.push(edit(arm, replacement));
             }
         }
@@ -67,8 +78,17 @@ impl<'ast> Visit<'ast> for Collector<'_> {
 }
 
 impl Collector<'_> {
-    /// `P => { if COND { B } }` → `P if COND => B`.
-    fn try_guard_form(&self, arm: &syn::Arm) -> Option<String> {
+    /// `P => { if COND { B } }` → `P if COND => B` — ONLY when a later arm
+    /// is a covering no-op wildcard (see the module's fall-through SAFETY
+    /// guard note: guard-failure falls to the later arms, and anything but
+    /// a covering `{}`-bodied wildcard is E0004 or observable-shift).
+    fn try_guard_form(&self, arm: &syn::Arm, later: &[syn::Arm]) -> Option<String> {
+        let covered_noop_wildcard = later
+            .iter()
+            .any(|a| Self::is_covering_wildcard(&a.pat) && Self::is_empty_unit_body(&a.body));
+        if !covered_noop_wildcard {
+            return None;
+        }
         if !arm.attrs.is_empty() {
             return None; // attrs would be lost by the whole-arm rewrite
         }
@@ -113,6 +133,22 @@ impl Collector<'_> {
             out.push(',');
         }
         Some(out)
+    }
+
+    /// A pattern that covers EVERYTHING the guard-failure could fall to:
+    /// `_`, or a bare binding (`other =>`) with no @-subpattern.
+    fn is_covering_wildcard(pat: &syn::Pat) -> bool {
+        match pat {
+            syn::Pat::Wild(_) => true,
+            syn::Pat::Ident(pi) => pi.subpat.is_none(),
+            _ => false,
+        }
+    }
+
+    /// An empty unit block body — the only fall-through receiver whose
+    /// observable behavior matches the consumed-value form.
+    fn is_empty_unit_body(body: &Expr) -> bool {
+        matches!(body, Expr::Block(b) if b.label.is_none() && b.block.stmts.is_empty())
     }
 }
 
@@ -253,24 +289,100 @@ mod tests {
 
     #[test]
     fn trailing_comma_reemitted() {
+        // Unit-typed statement-position match with the covering no-op
+        // wildcard after (the sound domain — the old `_ => 0` spelling was
+        // both compile-broken E0308 and behavior-shifting, declined now).
         let input = concat!(
             "fn f(n: u8, w: fn(u8) -> bool) -> u8 {\n",
+            "    let mut out = 0u8;\n",
             "    match n {\n",
             "        2 => {\n",
             "            if w(n) {\n",
-            "                1\n",
+            "                out += 1;\n",
             "            }\n",
             "        },\n",
-            "        _ => 0,\n",
+            "        _ => {},\n",
             "    }\n",
+            "    out\n",
             "}\n",
         );
         let out = propose_fix("collapsible_match", input).expect("matched");
         assert!(out.contains("=> {"), "shape: {out}");
         assert!(
-            out.contains("2 if w(n) => {\n                1\n            },"),
+            out.contains("2 if w(n) => {\n                out += 1;\n            },"),
             "comma lost: {out}"
         );
         syn::parse_file(&out).expect("re-parses");
+    }
+
+    #[test]
+    fn no_wildcard_later_arm_declined() {
+        // The kg_axiom sweep specimen (2026-11-11): the later arm is a
+        // SPECIFIC pattern (`Exhausted => {}`) that never covers the
+        // target's `Truncated` — guard-failure is E0004 non-exhaustive.
+        // MUST NOT fire.
+        let input = concat!(
+            "enum PathOutcome { Truncated, Exhausted }\n",
+            "fn f(x: PathOutcome, seen: &mut Vec<u32>, p: u32) {\n",
+            "    match x {\n",
+            "        PathOutcome::Truncated => {\n",
+            "            if !seen.contains(&p) {\n",
+            "                seen.push(p);\n",
+            "            }\n",
+            "        }\n",
+            "        PathOutcome::Exhausted => {}\n",
+            "    }\n",
+            "}\n",
+        );
+        let out = propose_fix("collapsible_match", input);
+        assert!(out.is_none(), "specific-later-arm must decline: {out:?}");
+    }
+
+    #[test]
+    fn tuple_pattern_later_arm_declined() {
+        // The lifecycle.rs sweep specimen (2026-11-11): the later arms are
+        // specific tuple patterns and NO wildcard follows — the guard-
+        // failure shape `(&Some, &Some)` is uncovered (E0004). MUST NOT
+        // fire.
+        let input = concat!(
+            "fn f(best: Option<(f32, [f32; 8])>, second: Option<(f32, [f32; 8])>, dot: f32) {\n",
+            "    match (&best, &second) {\n",
+            "        (Some((bd, _)), Some((sd, _))) => {\n",
+            "            if dot > *sd {\n",
+            "                let _ = (bd, sd);\n",
+            "            }\n",
+            "        }\n",
+            "        (Some(_), None) => {}\n",
+            "        (None, Some(_)) => {}\n",
+            "        (None, None) => {}\n",
+            "    }\n",
+            "}\n",
+        );
+        let out = propose_fix("collapsible_match", input);
+        assert!(out.is_none(), "specific-later-arms must decline: {out:?}");
+    }
+
+    #[test]
+    fn nonempty_wildcard_body_declined() {
+        // A wildcard whose body has effects shifts observable behavior
+        // (guard-failure yields where the original arm produced nothing).
+        let input = concat!(
+            "fn f(n: u8, w: fn(u8) -> bool) {\n",
+            "    match n {\n",
+            "        2 => {\n",
+            "            if w(n) {\n",
+            "                log(n);\n",
+            "            }\n",
+            "        }\n",
+            "        _ => { log(9); }\n",
+            "    }\n",
+            "}\n",
+            "fn log(n: u8) {}\n",
+        );
+        let out = propose_fix("collapsible_match", input);
+        assert!(
+            out.is_none(),
+            "non-empty wildcard body must decline: {out:?}"
+        );
     }
 }

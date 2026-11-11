@@ -269,8 +269,27 @@ fn run(source: &str, file: &File) -> Vec<(Fire, SourceEdit)> {
             m.blank_line();
         } else if trimmed.starts_with('>') {
             m.quote_marker_line(trimmed);
-        } else if let Some(content_col) = list_content_col(trimmed, indent) {
-            m.list_marker_line(content_col, indent);
+        } else if let Some((content_col, ordinal)) = list_content_col(trimmed, indent) {
+            // CommonMark ordinal discipline (the neuron-db shard_compactor
+            // specimen, 2026-11-11 sweep): a wrapped sentence's `003)` tail
+            // must NOT open a phantom list item — its content col then armed
+            // a lazy-continuation insert into the NEXT line. Three cases:
+            // - SIBLING (a list is open and the marker sits left of its
+            //   content col): any ordinal continues the open list.
+            // - NESTED candidate (marker at/inside the content col) with
+            //   the item's paragraph open: ordered markers interrupt a
+            //   paragraph only at ordinal 1 — otherwise text.
+            // - FRESH list under an open paragraph: ordinal 1 only.
+            // Bullets (ordinal 0) are never blocked; a blank line closes
+            // the paragraph, freeing every ordinal.
+            let in_open_list = m.list_stack.last().is_some();
+            let nested_candidate = in_open_list && indent >= *m.list_stack.last().expect("checked");
+            let ordinal_blocked = ordinal > 1 && m.para_open && (nested_candidate || !in_open_list);
+            if ordinal_blocked {
+                m.list_plain_line(&line, indent, &mut fires);
+            } else {
+                m.list_marker_line(content_col, indent);
+            }
         } else if is_block_start(trimmed)
             || (indent >= 4 && m.list_stack.is_empty() && m.quote_depth == 0)
         {
@@ -346,19 +365,27 @@ fn quote_markers(mut s: &str) -> usize {
 }
 
 /// Is this trimmed line a list marker, and if so what is the item's content
-/// column? Marker forms: `- `/`* `/`+ ` and `\d{1,9}.`/`\d{1,9})` + space
-/// (`CommonMark` requires the space; the content col = indent + marker + 1).
-fn list_content_col(trimmed: &str, indent: usize) -> Option<usize> {
+/// column and ordinal? Marker forms: `- `/`* `/`+ ` and
+/// `\d{1,9}.`/`\d{1,9})` + space (`CommonMark` requires the space; the
+/// content col = indent + marker + 1). The ordinal is 0 for bullets, the
+/// parsed value for ordered markers — the dispatcher needs it for the
+/// CommonMark paragraph-interrupt rule (an ordered marker interrupts an
+/// open paragraph ONLY at ordinal 1; anything else is paragraph text,
+/// not a list start).
+fn list_content_col(trimmed: &str, indent: usize) -> Option<(usize, u64)> {
     let bytes = trimmed.as_bytes();
-    let marker_len = match bytes.first()? {
-        b'-' | b'*' | b'+' => 1usize,
+    let (marker_len, ordinal) = match bytes.first()? {
+        b'-' | b'*' | b'+' => (1usize, 0u64),
         b'0'..=b'9' => {
             let n = bytes.iter().take_while(|b| b.is_ascii_digit()).count();
             if n > 9 {
                 return None;
             }
             match bytes.get(n) {
-                Some(b'.' | b')') => n + 1,
+                Some(b'.' | b')') => {
+                    let ordinal: u64 = trimmed[..n].parse().ok()?;
+                    (n + 1, ordinal)
+                }
                 _ => return None,
             }
         }
@@ -366,7 +393,7 @@ fn list_content_col(trimmed: &str, indent: usize) -> Option<usize> {
     };
     // The space after the marker (or end-of-line for an empty item).
     match bytes.get(marker_len) {
-        None | Some(b' ') => Some(indent + marker_len + 1),
+        None | Some(b' ') => Some((indent + marker_len + 1, ordinal)),
         _ => None,
     }
 }
@@ -450,6 +477,48 @@ mod tests {
         }
     }
 
+    #[test]
+    fn wrapped_sentence_ordinal_tail_is_not_a_list_marker() {
+        // The neuron-db shard_compactor sweep specimen (2026-11-11): a
+        // wrapped sentence's `003)` tail line is PARAGRAPH TEXT under
+        // CommonMark (an ordered marker interrupts a paragraph only at
+        // ordinal 1) — the old machine pushed a phantom list item whose
+        // content col (8) armed a lazy-continuation insert into the NEXT
+        // line (`///   mode ...` → 8 spaces, the over-indent clippy then
+        // warned on the fix's own output). The real fix inserts nothing.
+        let buggy = concat!(
+            "/// - **`< 0.0`** (default): **auto** — uses\n",
+            "///   the default at every query count. The ridge suppresses the\n",
+            "///   amplification: 200× spikes in multi-query mode (Issue\n",
+            "///   003) and a ~3-6e-3 relative leak in single-query\n",
+            "///   mode (Issue 598, Bench 483 §Findings 1).\n",
+            "fn g() {}\n",
+        );
+        assert_eq!(lazy(buggy), None, "phantom ordinal must not fire");
+        assert_eq!(over(buggy), None);
+    }
+
+    #[test]
+    fn ordinal_one_still_interrupts_a_paragraph() {
+        // The CommonMark control: `1)` CAN interrupt a paragraph — the
+        // list opens and the lazy continuation fires as before.
+        let buggy = concat!(
+            "/// paragraph text open.\n",
+            "/// 1) real list item\n",
+            "/// lazy continuation.\n",
+            "fn g() {}\n",
+        );
+        assert_eq!(
+            lazy(buggy).as_deref(),
+            Some(concat!(
+                "/// paragraph text open.\n",
+                "/// 1) real list item\n",
+                "///    lazy continuation.\n",
+                "fn g() {}\n",
+            )),
+            "ordinal-1 interrupt must still fire"
+        );
+    }
     #[test]
     fn overindent_fires_on_every_probe_shape() {
         // (buggy, fixed) — the dedent sets the indent to exactly the
