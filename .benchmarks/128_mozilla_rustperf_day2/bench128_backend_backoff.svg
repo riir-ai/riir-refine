@@ -7,8 +7,8 @@
 <rect x="454" y="104" width="12" height="12" fill="#5b8def"/><text x="472" y="114" fill="#c9cdd3" font-size="12">before (main)</text>
 <rect x="604" y="104" width="12" height="12" fill="#3fbf7f"/><text x="622" y="114" fill="#c9cdd3" font-size="12">after (backoff)</text>
 <text x="24" y="153" fill="#e8e8e8" font-size="13">uncached control (no sccache)</text>
-<rect x="454" y="130" width="5.82835825126574" height="34" fill="#6b7280" rx="3"/>
-<text x="467.82835825126574" y="162" fill="#c9cdd3" font-size="12">0.514 s</text>
+<rect x="454" y="130" width="7.3364742968267365" height="34" fill="#6b7280" rx="3"/>
+<text x="469.33647429682674" y="162" fill="#c9cdd3" font-size="12">0.647 s</text>
 <text x="24" y="201" fill="#e8e8e8" font-size="13">before — main 33d12fb (median of 3)</text>
 <rect x="454" y="178" width="380.95238095238096" height="34" fill="#5b8def" rx="3"/>
 <text x="842.952380952381" y="200" fill="#9aa0a6" font-size="11">33.591 / 33.596 / 33.598</text>

@@ -25,7 +25,7 @@ The burst row is the recovery behavior this patch adds: at cooldown expiry the e
 
 Two cells, both against a WebDAV backend whose GETs stop answering while PUTs succeed, with `SCCACHE_CACHE_READ_TIMEOUT_SECS=1`, at the repo's MSRV (rustc 1.91.0):
 
-Standalone backend, 32 distinct compile requests through a fresh daemon per run (uncached control 0.5 s), medians of 3 alternating reps (main `33d12fb` vs this branch):
+Standalone backend, 32 distinct compile requests through a fresh daemon per run (uncached control 0.6 s), medians of 3 alternating reps (main `33d12fb` vs this branch):
 
 - before: 33.6 s — 32 timeouts, 32 successful writes, 32 backend GETs
 - after: 4.4 s — 32 timeouts reported, but 3 backend GETs; all 32 compiles and writes still succeed

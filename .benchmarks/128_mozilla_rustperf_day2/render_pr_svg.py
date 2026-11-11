@@ -18,7 +18,7 @@ from pathlib import Path
 
 # (cell divider, label, median seconds, reps string, color)
 ROWS = [
-    (False, "uncached control (no sccache)", 0.514, "", "#6b7280"),
+    (False, "uncached control (no sccache)", 0.647, "", "#6b7280"),
     (False, "before — main 33d12fb (median of 3)", 33.596, "33.591 / 33.596 / 33.598", "#5b8def"),
     (False, "after — backend backoff (median of 3)", 4.394, "4.394 / 4.383 / 4.398", "#3fbf7f"),
     (False, "after, backoff disabled (THRESHOLD=0)", 33.572, "", "#8a6d3b"),
