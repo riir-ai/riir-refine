@@ -29,6 +29,15 @@ Every release ships 5 platform archives (aarch64/x86_64 macOS, x86_64 Windows, a
 
 **Undercount note (honest):** brew/scoop installs bypass release assets (no telemetry anywhere), so 201 is a floor on installs. Windows v0.1.4 (6) + v0.2.1/v0.3.x archives show the multi-OS spread is real, not one platform.
 
+### crates.io registry lane (issue 192 GAP 11 → issue 221; added 2026-11-11)
+
+| crate | first published | version | downloads at publish (baseline) | docs.rs |
+|---|---|---|---|---|
+| [`cargo-refine`](https://crates.io/crates/cargo-refine) | 2026-11-11 | 0.5.0 | 0 | built ✓ |
+| [`katgpt-core`](https://crates.io/crates/katgpt-core) (the public upstream primitives) | 2026-08-22 (0.4.1); 0.5.0 on 2026-11-11 | 0.5.0 | — | built ✓ |
+
+Provenance: `https://crates.io/api/v1/crates/<name>` (`crate.downloads`, `crate.max_version`) and `https://docs.rs/crate/<name>/<version>/status.json`, read 2026-11-11 right after the uploads. The 0 is the baseline, not a result — re-read at the T10 gate (2026-11-17) and report the delta with the read date; crates.io counts are cumulative per crate and include CI/mirror fetches, so quote them as "downloads", never "users".
+
 ## 2. Internal usage evidence (tracked records)
 
 - **Heal-rate ledger**: `.benchmarks/score_history.jsonl` — **209 recorded score-bench runs** since the score-bench landed; latest entry (2026-10-29): **heal_rate 96.4%** of clippy findings auto-fixed, **parse_safety 1.0** (every write re-parses), **decline_correctness 1.0** (out-of-capability edits declined, never guessed), created-warning rate 1.8%.
