@@ -3,6 +3,30 @@
 **Claimed:** zed-amo-i224, 1794371604, expires 2026-11-13T04:33:00+00:00
 
 ## Measurement (release binary, quiet rig)
+
+**— 2026-11-11 UPDATE (zed-amo-i224, the attribution + root-cause fix):** the
+phase instrument (`RIIR_REFINE_MATCHER_TIMING=1`, landed `7227dd56`) split the
+build: **kernel bm25+insert 862–1008 ms of the ~1.3 s build (75%)**, perf
+201–223 ms, embed ~13 ms TOTAL (1%), router ~21 ms. The cost was never the
+embedding — it was `Bm25Index::index`'s per-document postings update, which
+CLONES each affected term's full posting list (papaya values are replaced, not
+mutated in place, on the 0.2 line) — quadratic for common terms (`fn`, `self`
+in thousands of the 17,552 kernel rows = gigabytes of Posting memcpys).
+ROOT CAUSE FIXED upstream: riir-neuron-db `90ab1ba` adds `index_batch` (local
+std prebuild with O(1) pushes + one vacant insert per term; within-batch dups
+replay remove semantics; non-fresh indexes fall back to sequential; postings
+stay doc-ordered — bit-identity test `g1_index_batch_is_bit_identical_to_sequential_index`);
+refine `f325d1ec` re-vendors @90ab1ba + switches the seam to ONE batch call.
+Measured after: kernel 123–142 ms, perf 59–75 ms, warm e2e **1.37 s → 0.34 s
+(~4×)**. Gates: ragplane pins 7/7, vendored tests 31/31, retrieval floors
+29/0, latent_retrieval 3982/0, default lib 3842/0, clippy −D ×3 postures,
+ndb lib 476/0. The matcher build now stands at ~250 ms of the 340 ms warm run
+— T1's cache targets the REMAINING rebuild: a snapshot/restore surface on the
+batch primitive (deserialize + vacant-install ≈ tens of ms) can take warm
+setup under the 150 ms G2 bar; the bar gets re-adjudicated at the T4 verdict
+with these numbers as the new floor.
+
+Original measurement (pre-fix, kept for the record):
 `cargo-refine 0.5.0` (release tarball, sha256 `c3ebca55…` verified), sample crate =
 riir-dapps `cloudflare/kat-service/scripts/sample_crate` (2 source files, 5 clippy
 shapes), amo (Apple M5 Ultra, AC, load 1.5–1.8/30, exclusive rig-queue lane),
