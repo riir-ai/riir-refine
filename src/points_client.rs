@@ -403,9 +403,13 @@ impl<'a> PointsClient<'a> {
     /// (issue 204; the owner's auto-send law: join turns the push ON).
     /// The outcomes fold + name-sort BEFORE signing (the canonical-order
     /// law); empty/absent outcomes never dial (nothing to share).
+    /// `covered_findings`/`uncovered_findings` ride the issue-162
+    /// coverage census — the run's anchored anchors the compiled corpus
+    /// spoke to vs had no rule for (counts only; blind runs pass 0/0).
     ///
     /// # Errors
     /// [`PointsError`] — typed; the tail renders the one line.
+    #[allow(clippy::too_many_arguments)]
     pub fn contribute(
         &self,
         signing: &ed25519_dalek::SigningKey,
@@ -414,6 +418,8 @@ impl<'a> PointsClient<'a> {
         toolchain: &str,
         files_touched: u32,
         outcomes: &[ContributeOutcome],
+        covered_findings: u32,
+        uncovered_findings: u32,
     ) -> Result<ContributeResponse, PointsError> {
         // Canonical order: sorted + deduplicated by name (the counts of a
         // duplicate fold — the client's own maps are already unique, the
@@ -441,6 +447,8 @@ impl<'a> PointsClient<'a> {
             toolchain: toolchain.to_string(),
             files_touched,
             rules,
+            covered_findings,
+            uncovered_findings,
         };
         let body =
             serde_json::to_string(&request).map_err(|e| PointsError::Protocol(e.to_string()))?;
@@ -769,6 +777,8 @@ mod tests {
                 "rustc 1.99.0",
                 4,
                 &outcomes,
+                7,
+                2,
             )
             .unwrap_or_else(|e| panic!("{e:?}"));
         assert!(response.recorded_new);
@@ -784,6 +794,9 @@ mod tests {
             .find("needless_return")
             .expect("needless_return present");
         assert!(mc < nr, "the body must be name-sorted");
+        // The issue-162 coverage census rides the same signed body.
+        assert!(seen[0].contains(r#"covered_findings\":7"#));
+        assert!(seen[0].contains(r#"uncovered_findings\":2"#));
     }
 
     #[test]
@@ -805,6 +818,8 @@ mod tests {
                     written: 1,
                     declined: 0,
                 }],
+                0,
+                0,
             )
             .unwrap_err();
         let line = err.line();

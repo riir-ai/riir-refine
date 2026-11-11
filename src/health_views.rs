@@ -677,7 +677,7 @@ pub fn render_stats(root: &Path, network_line: Option<&str>) -> String {
             let _ = writeln!(
                 out,
                 "  {}",
-                crate::kat_footer::colorize(&["2"], "coverage gate pending (dapps #160)")
+                crate::kat_footer::colorize(&["2"], "coverage feed pending (dapps #162)")
             );
         }
         None => {

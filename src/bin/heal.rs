@@ -16045,6 +16045,10 @@ fn main() {
     };
     let mut n_oracle_spans = 0usize;
     let mut n_anchored_missing = 0usize;
+    // Issue 162: the coverage census's COVERED half — anchored anchors
+    // the compiled corpus DID have a rule for (the uncovered half is
+    // n_anchored_missing; the feed tail carries both to the network).
+    let mut n_anchored_covered = 0usize;
     // Plan 165 (`--repo-posture`): a posture run with NO feed cannot
     // verify anything — applying everything would be the unverified bulk
     // apply wearing the mode's name. REFUSE (exit 2), naming both
@@ -17491,6 +17495,7 @@ fn main() {
                 }
                 if !s.anchored_rules.is_empty() || !s.anchored_missing.is_empty() {
                     n_oracle_spans += 1;
+                    n_anchored_covered += s.anchored_rules.len();
                     n_anchored_missing += s.anchored_missing.len();
                     if !s.anchored_missing.is_empty() {
                         missing_by_span.push(s.anchored_missing.clone());
@@ -18482,8 +18487,10 @@ fn main() {
         "suggestions"
     };
     let oracle_note = if clippy_feed.is_some() {
-        let mut s =
-            format!(" · {n_oracle_spans} oracle-anchored · {n_anchored_missing} no-corpus-rule");
+        let mut s = format!(
+            " · {n_oracle_spans} oracle-anchored · {n_anchored_covered} corpus-covered · \
+             {n_anchored_missing} no-corpus-rule"
+        );
         // P21: the fix lane's consumed suggestions. Zero in suggest-only
         // runs stays silent — the count names fix-lane behavior only.
         if n_oracle_edits > 0 {
@@ -19117,6 +19124,8 @@ fn main() {
                 &toolchain,
                 u32::try_from(n_fixed_files).unwrap_or(u32::MAX),
                 &outcomes,
+                u32::try_from(n_anchored_covered).unwrap_or(u32::MAX),
+                u32::try_from(n_anchored_missing).unwrap_or(u32::MAX),
             );
             match pushed {
                 Ok(ack) => println!(
