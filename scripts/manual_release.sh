@@ -45,7 +45,7 @@ command -v cargo-zigbuild > /dev/null || { echo "cargo-zigbuild missing (cargo i
 command -v zig > /dev/null || { echo "zig missing (brew install zig)" >&2; exit 2; }
 command -v shasum > /dev/null || command -v sha256sum > /dev/null || { echo "shasum missing" >&2; exit 2; }
 
-FEATURES="latent_retrieval,points,net-mainnet,fix_verify,update_check,kernel_pregate,shader_perf,span_shape_dispatch"
+FEATURES="latent_retrieval,points,net-mainnet,fix_verify,update_check,kernel_pregate,shader_perf,span_shape_dispatch,index_cache"
 
 echo "== release body (required: the corpus: line per Issue 153 T5 + the T15 exposure-bound note)"
 NOTES="release/notes-$TAG.md"

@@ -287,9 +287,11 @@ frontier_miner = ["clippy_lints", "score_bench"]
 # (rows, zone map, rule ids, the ndb Bm25Index snapshot primitive, anchor
 # mean). Atomic tmp+rename writes; corrupt/stale entries refuse LOUD and
 # rebuild (digest verified before parse); LRU keeps 8 entries. Disarms under
-# kernel_route_narrow and the Bonsai dense posture. GOAT pending (issue 224
-# T4): G1 bit-identical suggestions (gate test), G2 warm setup ≤150 ms,
-# G3 cold ≤ +5%, G4 entry size reported.
+# kernel_route_narrow and the Bonsai dense posture. PROMOTED to the release
+# set (issue 226 T4): G1 binary-identical output, G2 warm results -46%, G3
+# (restated: time until results <= +5%) +1.4%, G4 18.8 MiB disclosed. Bare
+# cargo default stays off (the cached matcher needs latent_retrieval).
+# Demote: RIIR_REFINE_INDEX_CACHE=0.
 index_cache = []
 
 # Domain features (Plan 001 multi-domain framework refactor).

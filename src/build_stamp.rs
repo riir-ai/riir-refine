@@ -138,6 +138,16 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // the release set only — the pre-registration's "Cargo default" surface
     // is amended with that reason in Bench 144.
     "span_shape_dispatch",
+    // Issue 224 / 226 T4 — index_cache PROMOTED (G1 binary-identical output,
+    // G2 warm results -46%, G3 restated "time until results <= +5%" PASS at
+    // +1.4% over 15 interleaved rounds, G4 18.8 MiB disclosed): the matcher
+    // index restores from a content-addressed per-user cache; the store runs
+    // on a writer thread joined after results. Zero deps (license graph
+    // unchanged). Kill-switch `RIIR_REFINE_INDEX_CACHE=0` (the exact literal,
+    // DEMOTE-ONLY). Release set only, same reason as span_shape_dispatch: the
+    // matcher it caches lives under latent_retrieval, which bare cargo
+    // default does not compile.
+    "index_cache",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names
