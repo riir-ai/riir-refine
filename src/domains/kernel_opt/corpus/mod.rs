@@ -1957,6 +1957,7 @@ mod entries_gpu_152;
 mod entries_gpu_153;
 mod entries_gpu_154;
 mod entries_gpu_155;
+mod entries_gpu_156;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
@@ -2175,6 +2176,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_153::entries());
     entries.extend(entries_gpu_154::entries());
     entries.extend(entries_gpu_155::entries());
+    entries.extend(entries_gpu_156::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -2963,6 +2965,23 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::Dispatch,
         "D: dispatch",
         &[
+            // Batch 354 +2 (Plan 364 / Research 398): the sgl-muse-mega
+            // code-cache pair — launch-time-code-as-data-l2-warm (the GOAT
+            // lead: the kernel's OWN TEXT made L2-hot from the DATA side at
+            // launch, one 4-B probe load per 128-B line at the evict_last
+            // policy, loads only, re-warm EVERY launch, readers spread never
+            // split, the host-bound ELF-relocation range, __noinline__
+            // behind-the-body placement; the ELF-retype portability caveat
+            // + the same-L2-backing anti-regime carried in-rule) + the
+            // dry-pass FINE arm — dry-pass-icache-warm-before-real (the
+            // same instruction addresses executed effects-skipped on
+            // garbage inside an existing wait window, so the real first
+            // pass finds its lines in the icache; rolled-loop load-bearing;
+            // the code-footprint arm lives HERE, gpu_110 keeps the kin
+            // pointer; MANDATORY in-rule compose adjudication vs K1 —
+            // coarse L2 arm vs fine SM-icache arm).
+            "launch-time-code-as-data-l2-warm",
+            "dry-pass-icache-warm-before-real",
             // Batch 345 +1 (Plan 357 / Research 389): the LocalSR
             // accelerator-backend acceptance gate — the first real input is
             // the gate (quality floor + speed margin vs the reference),
@@ -3665,6 +3684,22 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
         KernelCategory::MoeDispatchBackward,
         "H: MoE dispatch + backward",
         &[
+            // Batch 354 +1 (Plan 364 / Research 398): the sgl-muse-mega
+            // expert-weight L2 prefetch — one otherwise-idle warp per CTA
+            // reads the PREVIOUS step's routing ids (the binding's last
+            // top-k, read once with acquire), histograms, and
+            // fire-and-forget prefetches the most-routed experts' shard
+            // packs under a POLICY budget (48 MiB wide / 4-expert narrow
+            // per the post-attention window's measured cost) during the
+            // attention phase, before the router runs; L2-resident experts
+            // go FIRST in the tile list; the router stays authoritative.
+            // C+ on the narrowed claim (the host-HBM tier is published:
+            // arXiv:2312.17238 / MoE-Infinity arXiv:2401.14361 — the GPU-L2
+            // no-structure form is the delta); the four-family
+            // consecutive-step-reuse adjudication set in-rule (gpu_31 tier
+            // + signal, gpu_39 enumeration axis, gpu_79/B94/entries_35
+            // cache-structure pole, gpu_87 kin).
+            "speculative-expert-prefetch-prev-step-routing",
             // Batch 337 +1 (Plan 346 / Research 376): the jitengine
             // compute-ahead — expert compute submitted on a device-side
             // slot snapshot before the host lookup finishes; keep on

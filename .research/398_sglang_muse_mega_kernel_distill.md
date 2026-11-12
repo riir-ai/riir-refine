@@ -1,6 +1,6 @@
 # 398 — SGLang Muse Mega kernel distill (LMSYS Muse Spark Open ultrafast)
 
-**Status:** DISTILLED — verdict AGREE (3 rounds: REVISE addressed with evidence, AGREE, final close; claude_code channel, session a7040e01, 2026-11-12)
+**Status:** DISTILLED-BATCH-LANDED — Batch 354 / Plan 364 landed 2026-11-13 (3 rules entries_gpu_156 + the gpu_30 per-dtype face; the C+ stamp entry dropped at authoring — no category slot; the Research-345 ANE/host rust_perf five stay staged for the first rust_perf slot) (3 rounds: REVISE addressed with evidence, AGREE, final close; claude_code channel, session a7040e01, 2026-11-12)
 
 ## Source
 
