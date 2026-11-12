@@ -1,5 +1,6 @@
 # Issue 229: SelectionMode::Puct — prior×evidence candidate ordering (the crossover cell)
 **Status:** Open — GOAT(fusion)-class claim, opt-in, pre-registered cell; verdict AGREE (claude-sub-agent-verdict round 2); parent note `../.research/396_puct_selection_grammar_fusion.md`
+**Claimed:** amo-idle-i229, 1794492600, expires 2026-11-14T14:10:00+00:00
 
 ## Claim
 
