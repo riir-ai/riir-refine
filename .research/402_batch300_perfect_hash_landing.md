@@ -1,4 +1,4 @@
-# Research 359 — Batch 300 landing addendum: the ConstexprCore/perfect_hash rust_perf micro-layer
+# Research 402 — Batch 300 landing addendum: the ConstexprCore/perfect_hash rust_perf micro-layer
 
 **Status:** LANDED (Batch 300, 2026-10-31, Plan 305) — converts the YES B− verdict into two benchable `rust_perf` rules (`entries_57`, corpus 287 → 289); Research 341 stays the verdict record, this is the landing delta.
 
