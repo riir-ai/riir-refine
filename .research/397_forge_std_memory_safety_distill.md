@@ -1,6 +1,6 @@
 # Research 397 — FORGE Lab "Memory Safety Bugs in Rust Standard Library" distill verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — batch-353-landed (Plan 363; 4 of 4 graded candidates converted, 2 honest drops recorded in the landing note)
 
 ## Source
 

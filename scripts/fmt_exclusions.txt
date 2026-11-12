@@ -70,3 +70,4 @@ validator_src/** # workspace-excluded no_std sources; own rules, separate toolch
 #   also fmt-clean and 21/21 standalone-executed, git history is the
 #   post-entry detector.
 src/domains/sec/fixtures/b351_fixtures.rs notripwire # measured entry-clean at 15cbe3a56 (git-verified rc=0); same class as the b342 exemption
+src/domains/sec/fixtures/b352_fixtures.rs notripwire # measured entry-clean at 6f6e0363 (git-verified rc=0 at the B352 landing head AND byte-identical to it — the b352 lane formatted pre-entry; same class as the b351/b342 exemption; added 2026-11-13 by the b353 lane whose fmt gate reds on the unrowed clean-inverted record at the shared head)

@@ -1,7 +1,6 @@
 # Issue 224 — the matcher index rebuilds on EVERY run: ~1.3 s of a 1.37 s warm run (95%)
 **Status:** open — T1–T4 DONE: `index_cache` PROMOTED to the release set 2026-11-11 via issue 226 (G3 restated PASS +1.4%); T5 pending the release that ships it. Was: T1–T3 LANDED; T4 verdict (b): promotion BLOCKED on issue 226 (the G3 redesign) — delegated-owner verdict 2026-11-11, session 98784e41; T5 pending the release that ships the promotion. — 2026-11-11: the P2b blocker was DISCHARGED (the vendored ragplane seam landed, the modelless matcher core is the default build's path) — T1–T4 unblocked and executed.
-**Claimed:** zed-amo-b352-lone, 1794516560, expires 2026-11-15T20:56:00+00:00
-Takeover of the expired zed-amo-i224 lease (exp 2026-11-13T04:33Z, no Lease-closed row; T5 stays release-gated). Scope THIS lease: the maintained-binary rebuild at current HEAD (the T5-adjacent bin-age debt — the installed binary's build hash is 4 commits behind develop; the feature-set staleness the 2026-11-12 finding named is ALREADY repaired, release set: complete).
+**Claimed:** zed-amo-b352-lone, 1794516560, expires 2026-11-15T20:56:00+00:00 — takeover of the expired zed-amo-i224 lease (exp 2026-11-13T04:33Z, no Lease-closed row; T5 stays release-gated). Scope THIS lease: the maintained-binary rebuild at current HEAD (the T5-adjacent bin-age debt — the installed binary's build hash is 4 commits behind develop; the feature-set staleness the 2026-11-12 finding named is ALREADY repaired, release set: complete).
 
 ## Measurement (release binary, quiet rig)
 
