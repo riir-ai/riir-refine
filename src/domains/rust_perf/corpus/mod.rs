@@ -9,7 +9,19 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
+//! 318 entries across 15 categories as of Batch 356 (+4: allocation +2
+//! `mem-take-field-checkout-empty-window` + `clone-before-mutating-loop-borrow-appeasement`,
+//! concurrency +1 `thread-spawn-per-call-pool-reuse` (BENCHABLE, the
+//! batch lead), layout +1 `dense-id-domain-hashmap-to-slot-array`
+//! (BENCHABLE) — the r/rust AI borrow-checker-appeasement case study
+//! (Plan 366 / Research 400, `entries_72`; post-only source,
+//! decision-content-only transcription; +1 count-neutral rider face on
+//! `bounded-batch-buffer-pool`, `entries_06` — the cross-thread
+//! return-ring enforcement form; the batch's R4
+//! `cross-thread-buffer-return-ring` DROPPED at authoring on that
+//! adjudication, the drop recorded in the `entries_72` header);
+//! Batches 350–355 added zero `rust_perf` rules (`kernel_opt`/sec lanes);
+//! prior: 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
 //! `deferred-integer-lane-pooling-per-row-exponent`, complexity +1
 //! `incremental-prefix-hash-wordpiece-scan` — the encoders distill
 //! (Plan 360 / Research 393, `entries_71` — `flowercomputers/encoders` @
@@ -760,6 +772,7 @@ mod entries_68;
 mod entries_69;
 mod entries_70;
 mod entries_71;
+mod entries_72;
 
 #[cfg(test)]
 mod tests;
@@ -972,6 +985,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_69::entries());
     entries.extend(entries_70::entries());
     entries.extend(entries_71::entries());
+    entries.extend(entries_72::entries());
     Corpus::new(entries)
 }
 

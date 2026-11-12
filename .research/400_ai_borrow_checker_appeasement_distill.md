@@ -1,6 +1,6 @@
 # Research 400 — AI borrow-checker appeasement patterns (r/rust case-study transcription)
 
-**Status:** DISTILLED — batch staged as plan 366 (nominal Batch 356, unclaimed); owner directive 2026-11-12 ("better catch if not yet"). Numbering note: 399/365 + nominal Batch 355 were INDEPENDENTLY allocated by the landed sglang unified-memory verdict (`b706f9ed3`) while this note was in flight — renumbered 400/366/356 per first-allocation; theirs untouched, on-disk duplicates resolved before commit.
+**Status:** DISTILLED-batch-landed — Batch 356 landed 2026-11-12 (plan 366, `entries_72`: 4 rules + 1 face + R4 dropped at authoring; fixtures 16/16; ParetoDominant both benchable; retrieval floors held 29/0). Numbering note: 399/365 + nominal Batch 355 were INDEPENDENTLY allocated by the landed sglang unified-memory verdict (`b706f9ed3`) while this note was in flight — renumbered 400/366/356 per first-allocation; theirs untouched, on-disk duplicates resolved before commit.
 
 ## Source
 

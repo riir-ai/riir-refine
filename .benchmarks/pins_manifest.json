@@ -1,25 +1,25 @@
 {
- "clippy_lints": {
-  "rules": 120
- },
- "dist_rules": 8,
- "docker_rules": 31,
- "kernel_opt": {
-  "rules": 1078,
-  "witness": {
-   "activity_dim": 8,
-   "experts": 15,
-   "kernel_categories": 15
-  }
- },
- "rust_perf": {
-  "benchable": 130,
-  "categories": 15,
-  "notbenchable": 184,
-  "rules": 314
- },
- "sec": {
-  "rules": 61
- },
- "shader_perf_rules": 8
+  "clippy_lints": {
+    "rules": 120
+  },
+  "dist_rules": 8,
+  "docker_rules": 31,
+  "kernel_opt": {
+    "rules": 1078,
+    "witness": {
+      "activity_dim": 8,
+      "experts": 15,
+      "kernel_categories": 15
+    }
+  },
+  "rust_perf": {
+    "benchable": 132,
+    "categories": 15,
+    "notbenchable": 186,
+    "rules": 318
+  },
+  "sec": {
+    "rules": 61
+  },
+  "shader_perf_rules": 8
 }
