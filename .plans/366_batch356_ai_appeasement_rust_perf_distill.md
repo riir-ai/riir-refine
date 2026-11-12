@@ -1,6 +1,8 @@
 # Plan 366 — Batch 356: AI borrow-checker-appeasement rust_perf distill (r/rust case study)
 
-**Status:** STAGED UNCLAIMED — verdict YES B+ (Research 400); owner directive 2026-11-12 ("better catch if not yet"). Numbering note: plan 365 + nominal Batch 355 were taken by the landed `b706f9ed3` (sglang unified-memory) while this plan was in flight — renumbered 366/356 per first-allocation.
+**Status:** STAGED UNCLAIMED → **CLAIMED 2026-11-12** — verdict YES B+ (Research 400); owner directive 2026-11-12 ("better catch if not yet"). Numbering note: plan 365 + nominal Batch 355 were taken by the landed `b706f9ed3` (sglang unified-memory) while this plan was in flight — renumbered 366/356 per first-allocation.
+
+**Claimed:** zed-m3-b356-appease, 1794489505, expires 2026-11-14T13:18:25Z
 
 Source: r/rust discussion, post-only, no repo (decision-content-only transcription — ORIGINAL Rust fixtures mandatory, never post code). Five candidates ranked in Research 399; every entry adjudicates in-rule against its named kin (the dedup table) at authoring. Nominal entries file `entries_72.rs` (71 highest at plan time — RE-DERIVE at landing, the B341/343 precedent).
 
