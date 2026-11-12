@@ -3103,8 +3103,8 @@ mod tests {
     /// Batch 350 (the 0sec-labs/0 sec distill, Plan 356 / Research 388,
     /// 0sec-labs/0 @ f7020eb2, MIT OR Apache-2.0) — presence, family,
     /// provenance discipline. FIVE suggest-only rules (the R6+R7
-    /// conjunction's lone survivor folds to InputValidation; NO new
-    /// SecFamily variant — the APPEND-ONLY schema untouched), never
+    /// conjunction's lone survivor folds to `InputValidation`; NO new
+    /// `SecFamily` variant — the APPEND-ONLY schema untouched), never
     /// `FIXABLE_SEC`.
     #[test]
     fn batch350_rules_present_families_and_provenance() {
@@ -3229,7 +3229,7 @@ mod tests {
     /// Research 394, 0sec-labs/foxguard @ fbeab16, MIT OR Apache-2.0)
     /// — presence, family, provenance discipline. FIVE suggest-only
     /// rules (four NEW families + the SQL value-position half; NO new
-    /// SecFamily variant — the APPEND-ONLY schema untouched), never
+    /// `SecFamily` variant — the APPEND-ONLY schema untouched), never
     /// `FIXABLE_SEC`.
     #[test]
     fn batch351_rules_present_families_and_provenance() {

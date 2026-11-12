@@ -62,3 +62,11 @@ validator_src/** # workspace-excluded no_std sources; own rules, separate toolch
 #   edition 2021 + style 2024); the file was formatted and now walks like any
 #   other source file. The row is deliberately absent; re-adding it needs a
 #   NEW measured reason.
+
+# — b351 measured entry-CLEAN (2026-11-12, git-verified: rustfmt --check rc=0
+#   at its own entry commit 15cbe3a56 — the author formatted BEFORE executing,
+#   the b342/b337/b349 class the notripwire row documents) — exempted below;
+#   the post-227 delta (7aa938d11, +54 lines, the D6 disambiguation arm) is
+#   also fmt-clean and 21/21 standalone-executed, git history is the
+#   post-entry detector.
+src/domains/sec/fixtures/b351_fixtures.rs notripwire # measured entry-clean at 15cbe3a56 (git-verified rc=0); same class as the b342 exemption

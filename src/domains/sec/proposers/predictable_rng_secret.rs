@@ -202,6 +202,7 @@ fn name_segments(name: &str) -> Vec<String> {
     if !cur.is_empty() {
         segs.push(cur);
     }
+    segs.shrink_to_fit();
     segs
 }
 
@@ -287,10 +288,8 @@ fn collect_local_idents(block: &syn::Block) -> Vec<String> {
 fn collect_prng_sites(stmts: &[syn::Stmt], source: &str, out: &mut Vec<Range<usize>>) {
     for stmt in stmts {
         match stmt {
-            syn::Stmt::Local(l) => {
-                if let Some(init) = &l.init {
-                    scan_prng_expr(&init.expr, source, out);
-                }
+            syn::Stmt::Local(l) if let Some(init) = &l.init => {
+                scan_prng_expr(&init.expr, source, out);
             }
             syn::Stmt::Expr(e, _) => scan_prng_expr(e, source, out),
             syn::Stmt::Item(Item::Fn(f)) => {
@@ -368,7 +367,7 @@ mod tests {
         assert_eq!(f[0].advice, super::ADVICE);
     }
 
-    /// The fixed posture — OsRng — suppresses fn-wide.
+    /// The fixed posture — `OsRng` — suppresses fn-wide.
     #[test]
     fn osrng_marker_suppresses() {
         let src = "pub fn issue_token() -> String {\n    \
@@ -401,7 +400,7 @@ mod tests {
         assert_eq!(findings(src).len(), 1);
     }
 
-    /// A StepRng counter construction in a secret-named fn fires.
+    /// A `StepRng` counter construction in a secret-named fn fires.
     #[test]
     fn step_rng_fires() {
         let src = "use rand::rngs::mock::StepRng;\n\n\

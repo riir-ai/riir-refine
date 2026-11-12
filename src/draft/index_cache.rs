@@ -989,7 +989,7 @@ fn byte_cap_evictions(idx: &[(std::time::SystemTime, PathBuf, u64)], cap: u64) -
     }
     let mut order: Vec<usize> = (0..idx.len()).collect();
     order.sort_by_key(|&i| idx[i].0);
-    let mut out = Vec::new();
+    let mut out = Vec::with_capacity(order.len());
     for &i in &order {
         if idx.len() - out.len() <= 1 {
             break; // never the last survivor (the newest, oldest-first walk)
@@ -1000,6 +1000,7 @@ fn byte_cap_evictions(idx: &[(std::time::SystemTime, PathBuf, u64)], cap: u64) -
             break;
         }
     }
+    out.shrink_to_fit();
     out
 }
 
