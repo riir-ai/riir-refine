@@ -2,6 +2,18 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-13 — Batches 352 + 353 + 358 LANDED: the LoNE ANE-numerics sec distill, the FORGE Lab std memory-safety sec distill, and the splash lane-B ANE/host rust_perf transcription (6f6e0363 / 5c0dddcf / bc2e6655)
+
+**352.** LoNE ANE-numerics (Apache-2.0, Research 395): sec 61→65 — four suggest-only Numerics-family rules (fp16-subnormal rescale, wide-reduction precision split, fused-activation expansion with the mandatory GLU-fusion adjudication, position-keyed cache mask), fixtures 15/15.
+
+**353.** FORGE Lab std memory-safety post (CC BY 4.0, Research 397): sec 65→69 — `unsafe-invariant-panic-exposed` (PanicSafety, the lead) + two NEW TrustedImpl-family rules (call-once-keep-result, derived-property-validate) + `process-global-write-under-shared-lock` (ProcessState family); fixtures 17/17. The both-landings rebase repair `199843a1` + the issue-224 reshape incident arc (`2223646e` → revert `4d4248bf` → clean-worktree redo `391f73cb` — the shared-checkout law re-proven).
+
+**358.** splash lane-B ANE/host rust_perf five (incoai/splash @ `cabbad27`, Research 345 lane B, Plan 369): rust_perf 322→327 (entries_74 — the memory-layout, split-calibration, lost-breaker, writeclass-partition, spin-degrade laws, all suggestion-NotBenchable); fixtures 5/5.
+
+## 2026-11-13 — guard Layer 9 LANDED: the bin-target feature-combo compile gate (issue 231, `3c6359ea`) + housekeeping repairs
+
+**231.** The Layer-9 gate (two scripts + guard wiring): every bin target's `required-features` set compiles under the DEFAULT posture — a required-features row naming features the bin's own build never enables compiles the binary to nothing; a narrower-than-workspace feature set downgrades the shared artifact. Allocated + closed in-commit. En-route: the run-250 frontier-snapshot row recovered (`f0d93666`), the plans checkbox hygiene pass (`e2623335`), the pins-file gate re-verified post-revert by the integrity-check lane.
+
 ## 2026-11-12 — Issue 229 CLOSED MEASURED-NEGATIVE + removed: PUCT selection withdrawn per the pre-registered decision rule (`66721278`, plan 368)
 
 T1–T5 executed to the full pre-registration (verdict AGREE ×2 + round-1 REVISE, session a8204575). The cell: dose-response monotone (c=2.0 catastrophic +84.7% even at the oracle prior — c=0.2 the only measured-good dose, now the named hard ceiling); thin-phase regret crossover located (bar first clears at ρ* ≈ 0.544, linear interpolation); falsifiers with teeth (shuffled-prior control +103%, Entropic separation clean). The raw G2 read (+39.6%) was a forking-paths read the verdict refused; the round-1 folds (the ρ̂ instrument `examples/rho_real_stream` — Spearman +0.24 / Pearson +0.31 at N≥3, selection-bias-inflated UPPER bound; locator cells ρ ∈ {0.4,0.5,0.6}) resolved ρ̂_upper ≈ 0.31 < ρ* 0.544 ⇒ **NOT PROMOTED, §8 WITHDRAWN** — variant, scoring path, builder, constants, both harness binaries removed; BetaPosterior stays default; no zombie mode. **Re-open = a real prior ≥ ρ* ≈ 0.54 on the deployment stream (the named candidate: the seat-rerank head, Bench 119), in a NEW pre-registered cell at the c=0.2 dose ceiling — never a re-flag.** Durable: the crossover-law pricing + the ρ̂ instrument (kept as the re-open's first read). Goat-audit row RECORDED NEGATIVE (Research 396 §7). Lease folded: amo-idle-i229.
