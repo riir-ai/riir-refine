@@ -1633,6 +1633,11 @@ mod tests {
         }]
     }
 
+    // The doc-command decline arm is `#[cfg(feature = "clippy_lints")]`-
+    // gated (issue 135 T4 mirrors a proposer rule, so the arm exists only
+    // under the domain's own feature). Each posture asserts its OWN true
+    // expectation — the feature-gated-count law.
+    #[cfg(feature = "clippy_lints")]
     #[test]
     fn oracle_edits_decline_doc_markdown_on_command_lines() {
         // Issue 135 T4: clippy's own suggestion for the reflex-site line is
@@ -1657,6 +1662,36 @@ mod tests {
         assert_eq!(lane.dropped, 0, "a decline is not staleness");
         assert_eq!(lane.edits.len(), 1);
         assert_eq!(lane.edits[0].edit.replacement, "`shader_perf`");
+    }
+
+    /// The arm-compiled-out posture: the decline path is ABSENT, so both
+    /// diagnostics flow to edits and the counter stays zero — the
+    /// documented gating, asserted loudly instead of failing as a count
+    /// mismatch (issue 228 D-a).
+    #[cfg(not(feature = "clippy_lints"))]
+    #[test]
+    fn oracle_edits_doc_markdown_arm_compiled_out_flows_through() {
+        let src = "//! Regen the shader_perf corpus.\n//!   cargo run --bin gen_corpus\npub fn one() {}\n";
+        let diag = |word: &str| {
+            let at = src.find(word).expect("marker");
+            ClippyDiagnostic {
+                span: Some((at, at + word.len())),
+                file: "src/lib.rs".to_string(),
+                line: 1,
+                lint: "doc_markdown".to_string(),
+                suggestion: Some(FeedSuggestion {
+                    parts: vec![(at, at + word.len(), format!("`{word}`"))],
+                }),
+            }
+        };
+        let feed = vec![diag("shader_perf"), diag("gen_corpus")];
+        let lane = oracle_edits(&feed, "src/lib.rs", src, &["doc_markdown"]);
+        assert_eq!(
+            lane.doc_command_declined, 0,
+            "the decline arm is compiled out at this posture"
+        );
+        assert_eq!(lane.dropped, 0, "a decline is not staleness");
+        assert_eq!(lane.edits.len(), 2, "both diagnostics flow through");
     }
 
     #[test]
