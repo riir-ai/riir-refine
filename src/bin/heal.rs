@@ -19635,7 +19635,6 @@ fn fix_domain_scopes(domain: Option<DomainId>) -> (bool, bool, bool) {
 /// domains' corpora. `pin` selects a stored epoch (`--corpus-epoch`) instead
 /// of the current pointer. Unknown pack domains warn + skip (never abort —
 /// a future domain string must not brick an old client).
-#[cfg(all(feature = "kat_service", feature = "latent_retrieval"))]
 /// T2.4 (Plan 042): merge the PROMOTION registry's Certified triples into
 /// the run overlay (leased-or-compiled-in per domain — the pure merge lives
 /// in `kat_promotion::promotion_run_overlay`). Skipped under a `--corpus-epoch`

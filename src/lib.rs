@@ -648,8 +648,14 @@ pub mod kat_replay;
 // with trial runs strictly isolated from the score history. Behind BOTH
 // kat_service (the candidate channel's surface) AND score_bench (the
 // frozen bench + oracle); both are opt-in — the default build is
-// untouched.
-#[cfg(all(feature = "kat_service", feature = "score_bench"))]
+// untouched. Widened to the points posture with its run-overlay consumer
+// (issue 203's lease-to-points migration completed — the producer cfg the
+// consumer widening missed; the points+score_bench combo posture did not
+// compile from 2026-11-05 until this fix).
+#[cfg(all(
+    any(feature = "kat_service", feature = "points"),
+    feature = "score_bench"
+))]
 pub mod kat_promotion;
 
 // Plan 019 T4.3: the neuron-db trajectory store — the DURABLE backend for
