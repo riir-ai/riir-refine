@@ -9,7 +9,23 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 318 entries across 15 categories as of Batch 356 (+4: allocation +2
+//! 327 entries across 15 categories as of Batch 358 (+5: layout +1
+//! `one-program-many-functions-accelerator-service-memory`, measurement +1
+//! `ane-split-calibration-fit-bandwidth-interference-term`, caching +1
+//! `accelerator-lost-breaker-forgets-calibration`, concurrency +1
+//! `writeclass-share-partition-inflight-writes`, thermal +1
+//! `spin-keep-awake-checked-capability-degrade-loud` — ALL suggestion-only
+//! NotBenchable-by-domain: the splash lane-B ANE/host residue staged since
+//! 2026-10-28 whose release-set-binary pin-block lifted under the B355
+//! precedent (Plan 369 / Research 345 lane B, `entries_74`; incoai/splash @
+//! `cabbad27` Apache-2.0, T0 re-verified at the pin); prior: 322 entries
+//! across 15 categories as of Batch 355 (+4: layout +1
+//! `co-lifecycle-rows-pack-one-entry-strided-views` (BENCHABLE, the batch
+//! lead), concurrency +1 `logical-free-immediate-physical-reuse-waits-settle`,
+//! measurement +1 `joint-demand-admission-single-pool-free-bytes-logs-only`,
+//! caching +1 `fixed-ratio-pool-partition-strands-demand` — the sglang
+//! unified-memory distill (Plan 365 / Research 399, `entries_73`);
+//! prior: 318 entries across 15 categories as of Batch 356 (+4: allocation +2
 //! `mem-take-field-checkout-empty-window` + `clone-before-mutating-loop-borrow-appeasement`,
 //! concurrency +1 `thread-spawn-per-call-pool-reuse` (BENCHABLE, the
 //! batch lead), layout +1 `dense-id-domain-hashmap-to-slot-array`
@@ -20,8 +36,8 @@
 //! return-ring enforcement form; the batch's R4
 //! `cross-thread-buffer-return-ring` DROPPED at authoring on that
 //! adjudication, the drop recorded in the `entries_72` header);
-//! Batches 350–355 added zero `rust_perf` rules (`kernel_opt`/sec lanes);
-//! prior: 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
+//! prior: Batches 350–354 added zero `rust_perf` rules (`kernel_opt`/sec
+//! lanes); prior: 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
 //! `deferred-integer-lane-pooling-per-row-exponent`, complexity +1
 //! `incremental-prefix-hash-wordpiece-scan` — the encoders distill
 //! (Plan 360 / Research 393, `entries_71` — `flowercomputers/encoders` @
@@ -774,6 +790,7 @@ mod entries_70;
 mod entries_71;
 mod entries_72;
 mod entries_73;
+mod entries_74;
 
 #[cfg(test)]
 mod tests;
@@ -988,6 +1005,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_71::entries());
     entries.extend(entries_72::entries());
     entries.extend(entries_73::entries());
+    entries.extend(entries_74::entries());
     Corpus::new(entries)
 }
 
