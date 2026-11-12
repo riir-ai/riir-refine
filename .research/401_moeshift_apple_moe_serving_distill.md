@@ -1,6 +1,6 @@
 # 401 — MoEShift Apple-Silicon MoE serving distill (llama.cpp-omni fork: resident/missing phase split, demand-LRFU protected cache, GPU keepalive)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED-batch-landed — Batch 357 / Plan 367 landed 2026-11-12 (K1 + K2 + 2 faces; see the queue landing row for the landing commit).
 
 ## Source
 

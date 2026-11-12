@@ -1956,6 +1956,7 @@ mod entries_gpu_151;
 mod entries_gpu_152;
 mod entries_gpu_153;
 mod entries_gpu_154;
+mod entries_gpu_155;
 mod entries_gpu_16;
 mod entries_gpu_17;
 mod entries_gpu_18;
@@ -2173,6 +2174,7 @@ pub fn build_kernel_seed_corpus() -> Corpus<KernelOptDomain> {
     entries.extend(entries_gpu_152::entries());
     entries.extend(entries_gpu_153::entries());
     entries.extend(entries_gpu_154::entries());
+    entries.extend(entries_gpu_155::entries());
     entries.extend(entries_gpu_37::entries());
     entries.extend(entries_gpu_36::entries());
     entries.extend(entries_gpu_01::entries());
@@ -3223,6 +3225,15 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             "cross-run-profiles-key-on-content-not-stat-triplets",
             "fill-gate-speculation-until-working-set-resident",
             "decayed-frequency-eviction-recency-tiebreak-route-protection",
+            // Batch 357 +1 (Plan 367 / Research 401): the moeshift
+            // two-tier admission gate — a recent victim demotes into the
+            // protected tier ONLY if its decayed score beats the weakest
+            // protected entry; refusal reuses the recent slot in place;
+            // promotion/demotion are metadata flips over ONE physical
+            // slot set (zero bytes moved). The decayed-demand core is a
+            // B94 positive instance (the rule above) — the gate + the
+            // no-move economy are the claim. DROP-ALLOWED grade.
+            "protected-tier-score-gated-admission",
             "defer-promoted-write-to-first-consumer-dispatch",
             "rollback-snapshot-covers-all-mutable-state",
             "scratch-bank-isolates-one-shot-operands-from-hot-cache",
@@ -3659,6 +3670,18 @@ pub const KERNEL_CATEGORIES: [(KernelCategory, &str, &[&str]); 15] = [
             // slot snapshot before the host lookup finishes; keep on
             // agree, miss-only row rebuild, never the whole layer.
             "compute-experts-before-router-lookup-fixup",
+            // Batch 357 +1 (Plan 367 / Research 401): the moeshift
+            // readiness split — selected experts split by READINESS (the
+            // scheduler owns the reads, so pending is KNOWN at submit):
+            // resident pass submits now, pending ids travel as negative
+            // sentinels the kernel self-gates on, the phase rides the sign
+            // of one scalar arg, the first threadgroup zero-fills the
+            // inactive column, the missing pass dispatches only after the
+            // demand-read completion; pending bytes never computed early.
+            // The KNOWN-PENDING pole of the readiness-trust axis (B337's
+            // rule above is the OPTIMISTIC-SNAPSHOT pole) — compose, never
+            // merge.
+            "readiness-partitioned-expert-resident-missing-submit",
             // Batch 335 +1 (Plan 344 / Research 373): the one-kernel
             // counting-sort route permute — histogram + prefix sums +
             // fetch-add slots emit (pos, tok, esorted, off, tstart) in
