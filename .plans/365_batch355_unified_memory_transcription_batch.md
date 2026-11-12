@@ -1,6 +1,8 @@
 # 365 — Batch 355: SGLang unified-memory transcription batch (rust_perf)
 
-**Status:** OPEN — verdict staged (Research 399, queue row 2026-11-12c); cargo half unclaimed
+**Status:** OPEN — cargo lane claimed (authoring begins)
+
+**Claimed:** zed-amo-b355-unimem, 1794506633, expires 2026-11-14T18:03:53+00:00
 
 Executes the distill verdict for the LMSYS SGLang unified-memory blog (2026-11-11): one GPU arena replacing fixed sub-pool partitioning for hybrid-model state; per-token entry packing; joint admission; the logical-free/physical-reuse page lifecycle. Source graded YES B− corpus / lane-intel MEDIUM-HIGH (riir-infer 1201/1203/742) / product-coverage YES (deferred-reuse family seed). Full record: `.research/399_sglang_unified_memory_distill.md`.
 
