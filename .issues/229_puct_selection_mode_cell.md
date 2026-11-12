@@ -1,0 +1,34 @@
+# Issue 229: SelectionMode::Puct — prior×evidence candidate ordering (the crossover cell)
+**Status:** Open — GOAT(fusion)-class claim, opt-in, pre-registered cell; verdict AGREE (claude-sub-agent-verdict round 2); parent note `../.research/396_puct_selection_grammar_fusion.md`
+
+## Claim
+
+A PUCT-shaped selection mode for `select_best_candidate`, consuming **Q** (the incumbent evidence score) and **P** (the modelless prior) with a visit-count exploration bonus: `score(cand) = Q(cand) + c_puct·P(cand)·√(ΣN_pool)/(1+N(cand))` where `Q(cand) = W_EVO·evo + W_RATE·reliability` is today's incumbent combined score (reliability per the incumbent mode) and `P(cand)` is the prior normalized to [0,1] within the pool. Distinguished from the incumbent modes (`BetaPosterior`/`LinearBlend`/`Tether` — exploitation-only; `Entropic` — pool tilt, no counts) by a bonus that is largest at thin evidence and decays per candidate as `N(cand)` grows, so selection shifts from prior-driven to record-driven per candidate — the per-candidate crossover. Class prior art acknowledged (AlphaZero PUCT; `PUCBSelector` paper defaults c=0.2/K=64): the claim is composition + framing, not mechanism novelty.
+
+## Live-state verified this session (2026-11-12)
+
+- `SelectionMode` enum + `with_selection_mode` builder ship (`src/self_evolve.rs` L153+ / L388); `BetaPosterior` is `#[default]` (L180) — at `c_puct = 0` the new mode's score reduces EXACTLY to the incumbent combined score, so flag-off (and c=0) byte-identical is structural, not a promise.
+- `W_EVO=0.6`/`W_RATE=0.4` consts (L132-138); `Entropic` = KL-budgeted Boltzmann tilt (L182-185, Issue 026); `Tether` = adaptive global blend (`selection_tether.rs`, Issue 033).
+- **`select_best_candidate` is single-pick** (returns one `(usize, f32)`, `src/self_evolve.rs` ~L495); the caller validates that one pick and a miss goes to `resolve_miss` → L4. **No ranked retry-loop exists.** This cell does NOT add one — the L4/miss path is untouched, recorded as deliberate scope; any future retry loop is a separate task with its own cost axis.
+- `BetaPosterior` carries a **documented crossover** (L172-179): regret advantage −23.8% / −14.4% / −6.8% / −1.9% at max attempts 1 / 3 / 5 / 10, reversing to +2.9% at 30 — a known large-N reversal a PUCT arm must be separated from (T3's LinearBlend arm).
+- **Bench 028** (`.benchmarks/028_t93_selection_regret.md`) is the gate precedent: mean selection regret over ≥20,000 randomized trials, 1–5-attempt regime, promoted BetaPosterior at −8.4% mean / −23.8% single-attempt. T3 mirrors this harness shape.
+- `traj_store::shape_conditional_score(store, code, strategy_id, shape)` (L2162) — the evidence axis has a shape-conditional read already.
+- `katgpt-pruners::state_source::PUCBSelector` — generic `(id, score, visits)` selector, **zero riir-\* consumers** (grep this session; only riir-ai Plan 141's dependency graph names it) — the goat-audit stall this filing closes either by consumption or by recorded negative.
+- Standing priors: rustc_errors nonergodic ordering lane **CLOSED NEGATIVE** (Issue 093, `nonergodic_order.rs` — rotation-style exploration ordering); `Entropic` shipped, never displaced the default.
+
+## Tasks
+
+- [ ] T1: implement `SelectionMode::Puct` — `score(cand) = Q(cand) + c_puct·P(cand)·√(ΣN_pool)/(1+N(cand))`; `Q` = the incumbent combined score (`W_EVO·evo + W_RATE·reliability`, reliability per the incumbent mode so c=0 ≡ incumbent bit-identically); `P` = the prior normalized to [0,1] within the pool — **disclosed: P is derived from evo, which Q already consumes, so the evolution signal is counted twice by design; the bonus axis must earn its keep beyond that double-count, adjudicated by the ρ sweep and T4a** (when the escalation seat is armed, the seat-head score may supply P instead — a later task, never a requirement); `N(cand)` = the candidate's recorded outcome count (S+F) under its (rule, shape, strategy) key. Opt-in via `with_selection_mode` only; `BetaPosterior` stays the default. Refine-local adaptation of the `PUCBSelector` shape for the streaming store — the katgpt-rs primitive is consumed as a shape, never forked.
+- [ ] T2: dose-response arm — `c_puct ∈ {0 (must EQUAL the incumbent ordering, byte-identical — the G1 anchor), 0.2 (paper default), 2.0}`; exploration (out-of-Q-order picks) monotone in c on the replay harness.
+- [ ] T3: paired cell on a **sequential replay harness** (Bench 028's shape: ≥20,000 randomized trials; counts update after each episode — a frozen store cannot see exploration's payoff, since the bonus is only worth its cost if later episodes learn from the exploratory picks). **P construction: the Bench 028 harness may carry no prior signal at all, so P is SYNTHESIZED with a known, adjustable correlation ρ to true reliability and swept (ρ ∈ {0, 0.3, 0.7, 1.0}; ρ=0 is the no-prior control — without the sweep T4a has nothing to tell apart and the cell can only come out negative).** Primary axis: **mean selection regret** vs the incumbent in the 1–5-attempt regime. Arms: `BetaPosterior` incumbent, `LinearBlend` (separates any PUCT gain from BetaPosterior's known large-N crossover reversal, L172-179), `Puct` at the T2 doses × the ρ sweep. Pool-size stratification kept: n=1 (report-only), 2–3, ≥4.
+- [ ] T4: falsifier arms (both inside the replay) — (a) shuffled-prior control (permute P across the pool): any gain must vanish, proving the prior (not exploration noise) drives it; (b) Entropic comparison arm: if Puct ≈ Entropic at these pool sizes, the crossover framing adds nothing measurable — record honestly.
+- [ ] T5: verdict + demotion-law execution per note §8; close the goat-audit row (consumption or recorded stall).
+
+## Pre-registered GOAT gate
+
+- **G1 correctness:** `c_puct = 0` produces byte-identical ordering to the incumbent mode (structural: the bonus vanishes and Q IS the incumbent score); selection deterministic given store state; default untouched; tests pin N=0 candidates ordered by Q + full bonus.
+- **G2 perf (the pass bar):** ≥10% relative reduction in mean selection regret vs the `BetaPosterior` incumbent over the 1–5-attempt regime on the replay harness (≥20k trials, Bench 028 shape). Below bar ⇒ demote per §8. Report-only: the ≥30-attempt end, where the bonus is exhausted.
+- **G3 no regression:** at the ≥30-attempt end, Puct stays within the incumbent's own documented crossover band (the LinearBlend-vs-BetaPosterior envelope, L172-179) — a PUCT "win" that is just the known large-N reversal fails here; LinearBlend arm adjudicates. Untouched-behavior sweep clean; L4/resolve_miss path untouched.
+- **G4 alloc:** selection path alloc-free (bounded scratch; no per-candidate heap).
+
+**Honest expectation, pre-registered:** pools are often small and the neighboring exploration lane (Issue 093) measured negative — "no measurable gain at small n" is a likely outcome and is the pre-registered demotion, not a failure of the filing.
