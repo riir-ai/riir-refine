@@ -1,6 +1,9 @@
 # 364 — Batch 354: SGLang Muse Mega kernel_opt distill (code-cache + expert-prefetch subfamilies)
 
-**Status:** OPEN — unclaimed
+**Status:** OPEN — cargo lane claimed (authoring begins)
+
+**Claimed:** zed-amo-b354-muse, 1794504458, expires 2026-11-14T17:27:38+00:00
+
 **Source:** `.research/398_sglang_muse_mega_kernel_distill.md` · `facebookresearch/sgl-muse-mega` @ `f009237dfc56ee130c1637352ff356093a870ecc` (MIT) + LMSYS blog 2026-11-05. Verdict YES B− / lane-intel HIGH / product-coverage YES.
 
 - [ ] T0 — re-clone at the pin into `.raw/sgl-muse-mega`; re-verify EVERY Research-398 quote byte-for-byte (layer.cu :33-88, moe.cuh :443-445/:1532/:1557/:2474-2481/:2833-2853, next_layer.cuh :444/:163/:711, kernels/README.md text-size + rolled-loop + schedule-keep passages); re-read the B333 landed set (`fail-stop-deadline-trap-bounded-cross-rank-wait`, `peer-mailbox-rotation-depth-reader-residency-plus-one`, gpu_20/gpu_52 faces) against this repo's surface so no sub-mechanism double-lands.
