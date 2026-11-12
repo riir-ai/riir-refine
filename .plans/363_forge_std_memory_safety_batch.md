@@ -1,6 +1,7 @@
 # Plan 363 — Batch 353: FORGE std memory-safety transcription (sec)
 
 **Status:** OPEN — staged (verdict: YES B, Research 397, nominal Batch 353; no corpus edit before this plan)
+**Claimed:** zed-amo-b353-forge, 1794514228, expires 2026-11-14T20:10:28Z
 
 ## Summary
 
