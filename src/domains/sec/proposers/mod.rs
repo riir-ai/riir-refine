@@ -244,11 +244,13 @@
 
 use syn::File;
 
+pub mod activation_expansion;
 pub mod arc_raw_boundary;
 pub mod archive_extract;
 pub mod audit_hit_fingerprint;
 pub mod auth_cookie_missing_flags;
 pub mod b351_faces;
+pub mod cache_mask_key;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
@@ -287,10 +289,12 @@ pub mod softmax_collapse;
 pub mod sql_identifier_allowlist;
 pub mod sql_query_value_bind;
 pub mod strike_cross_site;
+pub mod subnormal_rescale;
 pub mod unbounded_read;
 pub mod unchecked_wire_arithmetic;
 pub mod untrusted_prompt_content;
 pub mod webhook_raw_bytes;
+pub mod wide_reduction_split;
 pub mod zeroize_secret;
 
 /// The shared wire-taint walker (Batch 165) — one walker, the

@@ -1,6 +1,6 @@
 # Research 395 — LoNE (Liquid on Neural Engine) distill verdict
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED-BATCH-LANDED — Batch 352 / Plan 362 landed 2026-11-13 (4 rules into the sec Numerics family, all suggest-only `NotBenchable-by-domain`: the subnormal rescale + the wide precision split + the activation expansion + the position-keyed cache mask; T0 re-verified at the disclosed newer pin `afb99463` — tip moved `4806171d`→`afb99463` on ring-cache plumbing only, all four mechanism sites byte-identical)
 
 **Source:** https://github.com/AJ-Gonzalez/LoNE @ `4806171daa1af35333d9bc291d8fc5f478984bf8` (main tip, 2026-11-09) — **Apache-2.0**. Inspection date 2026-11-12 (amo, user-directed distill lane). Clone inspected in `.raw/LoNE` (shallow), removed after recording per the `.raw` lifecycle; the pin above is the provenance for every quote.
 

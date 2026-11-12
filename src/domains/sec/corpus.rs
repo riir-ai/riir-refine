@@ -2433,6 +2433,126 @@ AND executed before entry)."
                 .to_string(),
             family: SecFamily::InputValidation,
         },
+        // ══ Batch 352 (2026-11-13) — the LoNE numerics family (Numerics). ══
+        // ══ Four suggest-only backend-parity detectors; the Issue-185    ══
+        // ══ precedent: numeric hazard with a bounded repair, here the    ══
+        // ══ backend-arithmetic-parity axis (no kernel we author).        ══
+        // ── fp16-subnormal-product-power-of-two-rescale (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "fp16-subnormal-product-power-of-two-rescale".to_string(),
+            sec_concept: "an fp16/NE-class linear core loses accumulated precision when \
+input×weight products fall into fp16's subnormal band — per-term mantissa bits drop \
+with magnitude and the smallest products flush entirely, so a wide reduction loses \
+measurable mass against the f32 reference (measured, AJ-Gonzalez/LoNE @ `4806171d` \
+Apache-2.0, verbatim at the pin: \"operator cosine 0.99916 -> 0.9999998 on real \
+activations\"). Scale the WEIGHTS by a power of two (2^4) at prepare time and divide \
+the output by the same factor — exact in real arithmetic (the f16 encoding moves the \
+exponent, mantissa untouched; the f32 undo is a power-of-two divide), so the rewrite \
+changes no representable value and only lifts the accumulation out of the subnormal \
+band. Gate on the wide reductions (k > 1024 in the source's `_WIDE`; narrow reductions \
+stay in band and need no rescale). REGIME: fp16/NE-class arithmetic — NOT needed on \
+f32 hosts, and an f32 accumulator over f16 products already escapes the per-term band. \
+DISTINCT-FROM rust_perf entries_25 (the F16 lane-merge widening — a conversion impl \
+detail cites `subnormal`, nobody owns the weights-side rescale decision) and the GPU \
+accumulator contexts (gpu_106/97/50). Suggest-only: whether the deployed backend \
+exhibits the loss is per-device/per-generation, and k is a per-model calibration. \
+Honest recall limits: weights-prep vocabulary is fn-scope; a deliberate unscaled site \
+(f32 accumulator, a verified subnormal-free backend) fires and review decides. \
+Detector: `proposers::subnormal_rescale`. Fixture: `fixtures/b352_fixtures.rs` F1. \
+Batch 352 / Plan 362 / Research 395 (AJ-Gonzalez/LoNE @ `4806171d`, Apache-2.0 — \
+cited as class provenance; the fixture is an original synthesis, standalone-compiled \
+AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn scale_weights_for_ane(w: &[f16]) -> Vec<f16> {\n    let plane: Vec<f16> = w.to_vec();\n    let dot_k = plane.len(); // the reduction width for the matvec\n    if dot_k > 1024 {\n        plane // wide reduction, f16 products — no rescale applied\n    } else {\n        plane\n    }\n}\n".to_string(),
+            fixed_code: "fn scale_weights_for_ane(w: &[f16]) -> (Vec<f16>, f32) {\n    const SCALE: f32 = 16.0; // 2^4 — the power-of-two lift\n    let dot_plane: Vec<f16> = w.to_vec();\n    if dot_plane.len() > 1024 {\n        let scaled: Vec<f16> = dot_plane\n            .iter()\n            .map(|v| f16(v.to_f32() * SCALE))\n            .collect();\n        (scaled, 1.0 / SCALE) // the 2^-4 undo, exact in f32\n    } else {\n        (w.to_vec(), 1.0)\n    }\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── wide-reduction-precision-split (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "wide-reduction-precision-split".to_string(),
+            sec_concept: "ONE wide output projection measures worse parity than TWO \
+half-width ones summed at the output, at equal total work (measured, LoNE @ \
+`4806171d`, verbatim at the pin: \"k=6656 measured at 0.997 cosine versus torch, \
+k=3328 at 0.99999\"). Split the reduction at the measured threshold (FFN fan-in > \
+4096, LM head hidden > 1024 in the source), compute the halves INDEPENDENTLY, and \
+sum AT THE END — never interleaved. ⛔ ADJUDICATION vs the split-K family \
+(kernel_opt gpu_127-class, BOTH directions): split-K partitions the reduction across \
+workers for THROUGHPUT and re-reduces partials mid-kernel; THIS rule splits for \
+PARITY, sums the halves at the END, and carries no work-partition content — a split \
+installed to win latency is split-K's, a split installed because the wide single \
+reduction measured worse cosine is this rule's. The compounding caveat rides the \
+admission context: per-op parity does not compose — graph DEPTH is the compounding \
+axis (24 layers fall 0.999995 -> 0.99958 with every rule applied). REGIME: \
+fp16/NE-class arithmetic with a finite internal accumulate. Suggest-only: the \
+threshold is model-family-measured and the parity gate decides whether the split \
+is wanted at all. Honest recall limits: compute-site vocabulary is fn-scope; an \
+f32-accumulator projection escapes the band and fires only for review. Detector: \
+`proposers::wide_reduction_split`. Fixture: `fixtures/b352_fixtures.rs` F2. Batch \
+352 / Plan 362 / Research 395 (AJ-Gonzalez/LoNE @ `4806171d`, Apache-2.0 — cited \
+as class provenance; the fixture is an original synthesis, standalone-compiled AND \
+executed before entry)."
+                .to_string(),
+            buggy_code: "fn ffn_out_proj(x: &[f16], w: &[f16]) -> Vec<f16> {\n    let mut acc_proj = f16(0.0);\n    for (wi, xi) in w.iter().zip(x.iter()) {\n        acc_proj = acc_proj + *wi * *xi;\n    }\n    vec![acc_proj]\n}\n".to_string(),
+            fixed_code: "fn ffn_out_proj(x: &[f16], w: &[f16]) -> Vec<f16> {\n    const WIDE: usize = 4096;\n    if w.len() > WIDE {\n        let half = w.len() / 2;\n        let (w2a, w2b) = (&w[..half], &w[half..]);\n        let (xa, xb) = (&x[..half], &x[half..]);\n        let mut acc_a = f16(0.0);\n        for (wi, xi) in w2a.iter().zip(xa.iter()) {\n            acc_a = acc_a + *wi * *xi;\n        }\n        let mut acc_b = f16(0.0);\n        for (wi, xi) in w2b.iter().zip(xb.iter()) {\n            acc_b = acc_b + *wi * *xi;\n        }\n        return vec![acc_a + acc_b]; // the sum lands AT THE END\n    }\n    let mut acc = f16(0.0);\n    for (wi, xi) in w.iter().zip(x.iter()) {\n        acc = acc + *wi * *xi;\n    }\n    vec![acc]\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── fused-activation-approximation-expansion (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "fused-activation-approximation-expansion".to_string(),
+            sec_concept: "when the backend runtime substitutes an APPROXIMATE fused \
+activation for the composed form (~1e-3 relative error measured — LoNE @ `4806171d`, \
+verbatim at the pin: \"Core ML maps `aten::silu` (and `x * sigmoid(x)`) to an NE \
+activation with ~1e-3 relative error; the exp form keeps the activation off that \
+path (measured 0.99935 -> 0.999991 on a real LFM3 FFN)\"), expand the activation to \
+its primitive composition in parity-critical paths — silu as x / (1 + exp(-x)), \
+gelu in its erf form. ⛔ ADJUDICATION vs the GLU-fusion family (kernel_opt \
+fuse-gate-up-gemv-activation + gpu_96/35/126/147, BOTH directions): THOSE fuse \
+sibling GEMVs and their activation into one dispatch for THROUGHPUT (dispatch \
+economy); THIS rule EXPANDS a fused activation into primitive ops for PARITY when \
+a backend substitutes an approximation — the axes are opposite and never merge \
+(fusing the projections and expanding the activation COMPOSE; the source itself \
+does both). Suggest-only: the expansion costs extra backend ops, so it is wanted \
+only where parity is the goal (a parity/calibration/golden-gate path), never in a \
+throughput-only serving path. Honest recall limits: parity vocabulary is fn-scope; \
+a deliberate approximate activation in a throughput path fires and review decides. \
+Detector: `proposers::activation_expansion`. Fixture: `fixtures/b352_fixtures.rs` \
+F3. Batch 352 / Plan 362 / Research 395 (AJ-Gonzalez/LoNE @ `4806171d`, Apache-2.0 \
+— cited as class provenance; the fixture is an original synthesis, \
+standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn silu(x: f32) -> f32 {\n    // the mul-composition spelling — the backend maps this to the\n    // approximate fused NE activation (~1e-3 relative error)\n    x * sigmoid(x)\n}\n\nfn parity_check(gate: &[f32], up: &[f32], golden: &[f32]) -> bool {\n    let row: Vec<f32> = gate.iter().zip(up.iter())\n        .map(|(g, u)| silu(*g) * u).collect();\n    row.iter().zip(golden.iter())\n        .all(|(a, b)| (a - b).abs() < 1.0e-4) // tolerance gate\n}\n".to_string(),
+            fixed_code: "fn silu(x: f32) -> f32 {\n    // the exp form keeps the op off the approximate fused path\n    x / (1.0 + (-x).exp())\n}\n\nfn parity_check(gate: &[f32], up: &[f32], golden: &[f32]) -> bool {\n    let row: Vec<f32> = gate.iter().zip(up.iter())\n        .map(|(g, u)| silu(*g) * u).collect();\n    row.iter().zip(golden.iter())\n        .all(|(a, b)| (a - b).abs() < 1.0e-4) // tolerance gate\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── position-keyed-additive-cache-mask (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "position-keyed-additive-cache-mask".to_string(),
+            sec_concept: "a KV cache preallocated to full context holds EMPTY rows past \
+the written cursor; an additive mask over `past || new` keys that bounds validity by \
+BUFFER INDEX (`i < past_len`) is right only while the buffer stays compact — the \
+first ring rotation makes row i a slot whose absolute position is NOT i, and the \
+mask admits rows the query must never see or silences the query's own token (the \
+rotated newest row lands in slot 0, where the index form's window floor refuses \
+it). THE LAW, verbatim at the pin (LoNE @ `4806171d`): \"Past rows are valid only \
+up to `pos`; the rest of the preallocated buffer is empty, and the new block is \
+causal within itself. Mask by absolute position, never by buffer index.\" Carry the \
+per-slot ABSOLUTE position (the write position when the slot was filled) and bound \
+validity by `slot_pos <= query_pos` plus the sliding-window floor; the additive \
+sentinel is fp16's -65504 (finite — the mask buffer stays an fp16 buffer), never \
+-inf. REGIME: preallocated/ring caches — an append-only buffer compacted by \
+construction happens to agree, which is exactly why the bug is silent until the \
+first rotation. Suggest-only: whether the buffer is compacted-by-construction is a \
+design property the detector cannot see, and the mask dtype/sentinel is a wire \
+decision. Honest recall limits: mask-building vocabulary is fn-scope. Detector: \
+`proposers::cache_mask_key`. Fixture: `fixtures/b352_fixtures.rs` F4. Batch 352 / \
+Plan 362 / Research 395 (AJ-Gonzalez/LoNE @ `4806171d`, Apache-2.0 — cited as \
+class provenance; the fixture is an original synthesis, standalone-compiled AND \
+executed before entry)."
+                .to_string(),
+            buggy_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for i in 0..CTX {\n        // validity keyed by BUFFER INDEX — wrong after the first rotation\n        if i < n_seen && i <= query_pos as usize && i >= floor as usize {\n            mask[i] = f16(0.0);\n        }\n    }\n    mask\n}\n".to_string(),
+            fixed_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let _ = n_seen; // the count no longer bounds validity\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for (i, slot) in cache.slots.iter().enumerate() {\n        // validity keyed by the slot's ABSOLUTE position\n        if let Some(pos) = slot {\n            if *pos <= query_pos && *pos >= floor {\n                mask[i] = f16(0.0);\n            }\n        }\n    }\n    mask\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
     ]
 }
 
@@ -3384,6 +3504,90 @@ mod tests {
             assert!(
                 detect_len(&rule.fixed_code, &fixed) == 0,
                 "batch-351 {id}: detector must stay silent on its own fixed fixture"
+            );
+        }
+    }
+
+    /// Batch 352 (the LoNE numerics family): FOUR suggest-only rules,
+    /// all `Numerics` (the Issue-185 family, the backend-parity axis),
+    /// provenance-pinned to the LoNE sha, never `FIXABLE_SEC`.
+    #[test]
+    fn batch352_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            "fp16-subnormal-product-power-of-two-rescale",
+            "wide-reduction-precision-split",
+            "fused-activation-approximation-expansion",
+            "position-keyed-additive-cache-mask",
+        ];
+        for id in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-352 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, SecFamily::Numerics, "batch-352 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 352 / Plan 362 / Research 395"),
+                "batch-352 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("4806171d"),
+                "batch-352 {id} must cite the LoNE pin"
+            );
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-352 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+    }
+
+    /// Batch 352 detectors: fire on their own buggy fixture, stay
+    /// silent on their own fixed fixture (the parse half is covered by
+    /// `every_fixture_parses`).
+    #[test]
+    fn batch352_detectors_fire_on_buggy_stay_silent_on_fixed() {
+        let all = entries();
+        let pairs: [(&str, fn(&str, &syn::File) -> usize); 4] = [
+            (
+                "fp16-subnormal-product-power-of-two-rescale",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::subnormal_rescale::detect(s, f).len()
+                },
+            ),
+            (
+                "wide-reduction-precision-split",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::wide_reduction_split::detect(s, f).len()
+                },
+            ),
+            (
+                "fused-activation-approximation-expansion",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::activation_expansion::detect(s, f).len()
+                },
+            ),
+            (
+                "position-keyed-additive-cache-mask",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::cache_mask_key::detect(s, f).len()
+                },
+            ),
+        ];
+        for (id, detect_len) in pairs {
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-352 rule '{id}' missing from corpus"));
+            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+            assert!(
+                detect_len(&rule.buggy_code, &buggy) > 0,
+                "batch-352 {id}: detector must fire on its own buggy fixture"
+            );
+            let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+            assert!(
+                detect_len(&rule.fixed_code, &fixed) == 0,
+                "batch-352 {id}: detector must stay silent on its own fixed fixture"
             );
         }
     }
