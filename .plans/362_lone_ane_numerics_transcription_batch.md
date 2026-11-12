@@ -1,7 +1,8 @@
 # Plan 362 — Batch 352: the LoNE ANE numerics transcription (Research 395)
 
 **Status:** PROPOSED 2026-11-12 — the corpus half of the LoNE distill verdict (Research 395, YES B− corpus / LEAGUE INTEL HIGH).
-**Claimed:** zed-amo-b352-lone, 1794509819, expires 2026-11-14T18:56:59Z Source: https://github.com/AJ-Gonzalez/LoNE @ `4806171daa1af35333d9bc291d8fc5f478984bf8` (Apache-2.0). Domain: `sec` / Numerics family (the Issue-185 precedent), all suggest-only, all `NotBenchable-by-domain` (parity win metric — no validator hosts logits cosine). No clippy-lint surface → freeze regen NOT owed; score-bench expected FLAT; release binary NOT owed (sec not in RELEASE_FEATURES).
+**Claimed:** zed-amo-b352-lone, 1794509819, expires 2026-11-14T18:56:59Z
+Source: https://github.com/AJ-Gonzalez/LoNE @ `4806171daa1af35333d9bc291d8fc5f478984bf8` (Apache-2.0). Domain: `sec` / Numerics family (the Issue-185 precedent), all suggest-only, all `NotBenchable-by-domain` (parity win metric — no validator hosts logits cosine). No clippy-lint surface → freeze regen NOT owed; score-bench expected FLAT; release binary NOT owed (sec not in RELEASE_FEATURES).
 
 - [ ] T0 re-clone at the pin into `.raw/LoNE` (`git clone --depth 1` + `rev-parse` == `4806171d…` or a disclosed newer pin) and re-verify every Research-395 quote at it (`torch_model.py` `_SCALE`/`scaled_weight`/`silu`/`ffn_split`/`Head.split`; `layout.py` `attention_mask`; README precision-rules table). `rm -rf .raw/LoNE` at landing.
 - [ ] T1 dedup re-verification at landing HEAD (the greps moved since the verdict): `subnormal` / `silu|swish` / `reduction split|split reduction` / `position-keyed.*mask` over `src/domains/` — the three known LEAD families (entries_25 F16-widening, the GLU-fusion silu family, the split-K family) get explicit in-rule adjudication rows; a NEW hit re-grades the candidate before authoring.
