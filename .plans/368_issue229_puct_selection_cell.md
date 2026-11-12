@@ -88,8 +88,12 @@ Protocol A law.
   (101766 == 101766 == 101766) · score-bench ×3 appended (heal_rate
   0.96428573 byte-stable across 4 runs) — bench files REVERTED (selection
   code, not corpus; no history lane consumed).
-- [ ] Commit `feat:` + push; update `.issues/229` (task rows + landing) in
-  the same commit.
+- [x] Commit `feat:` + push; update `.issues/229` (task rows + landing) in
+  the same commit. — LANDED `66721278d`: that commit IS this row (it carried
+  the issue's landing + withdrawal rows); the issue file then folded to
+  HISTORY.md by `9ab640dc5`, so the literal "update .issues/229" half resolved
+  as remove-at-close. Box reconciled 2026-11-13 (checkbox-hygiene sweep; the
+  Status line was already authoritative).
 
 ## Files
 

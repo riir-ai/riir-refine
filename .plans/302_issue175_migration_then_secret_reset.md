@@ -171,7 +171,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       fixtures + T1-live's 409 cells, unreachable from an agent without an
       owner act (device flow / token / key listing). The µKAT→render_units
       display follow-up landed with it.**
-- [ ] **T2 — T-MIGRATE prep (agent):** the key-crossing decision — the
+- [-] **T2 — T-MIGRATE prep (agent):** the key-crossing decision — the
       dual-sign needs BOTH keys on ONE box (the CLI loads the old key via
       `--old-key <path>`; the claim side rides the record's own key).
       ⛔ **CORRECTED 2026-10-27 (measured):** the 4090's
@@ -188,13 +188,13 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       the same session — prefer exposing the old key (it dies at tombstone
       anyway) over spreading the M3's long-lived identity key to the 4090.
       Pre-file: `account migrate --census` green on BOTH boxes.
-- [ ] **T3 — FILE + the window (owner-adjacent):**
+- [-] **T3 — FILE + the window (owner-adjacent):**
       `cargo refine account migrate --github katopz --old-key <temp>`;
       record the request id. DURING the window: owner mints T-KEYS items
       2/3/4/6/7/9/10 per 169's scope tables. Owner votes 👎 on any
       objection (polarity FIXED 2026-10-26: 👎 = REJECT the objection →
       release proceeds). NO worker deploys mid-window.
-- [ ] **T4 — release + T-POST (agent):** close (lazy status read or the
+- [-] **T4 — release + T-POST (agent):** close (lazy status read or the
       explicit `POST /account/migrate/close`) → sweep → tombstone →
       github binding move; census zero; `account --history` + a ledger
       snapshot as the continuity receipt; 4090 re-login under `d54e39a8`
@@ -215,7 +215,7 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
       `--live` (all refusal legs hold) → `cargo refine account` + `tuna`
       reads → the item-6/7 CI dispatches (feature-guard, release dry-run);
       record every roll date in 169's table (the freshness bar).
-- [ ] **T6 — the e2e deployment test with all-new secrets (owner + agent):**
+- [-] **T6 — the e2e deployment test with all-new secrets (owner + agent):**
       the origin-vault WETRUN: `scripts/codesign_origin_vault.sh`
       (Developer ID) → a mainnet manifest → `origin-vault --dest <mainnet>
       --reason` → boundary gate → TOTP → Touch ID → the digest-pinned
@@ -239,13 +239,18 @@ riir-deployer Plan 008 (origin-vault), riir-dao Proposal 001 (the rotation lane)
 
 ## Acceptance
 
-- [ ] T1 green on devnet; both owner calls recorded (mining ephemera,
+> All rows below FROZEN 2026-10-28 at T1 per owner decision D1 (mainnet
+> RE-GENESIS, riir-dapps Proposal 010) — the Status line is authoritative;
+> `- [-]` markers added 2026-11-13 (checkbox hygiene) so no lane mistakes the
+> frozen scope for open work.
+
+- [-] T1 green on devnet; both owner calls recorded (mining ephemera,
       `kat_migrate` promote).
-- [ ] T-MIGRATE filed → window clean (or objections 👎'd) → release →
+- [-] T-MIGRATE filed → window clean (or objections 👎'd) → release →
       census zero.
-- [ ] 169's table fully dated; every post-roll verifier green (after the
+- [-] 169's table fully dated; every post-roll verifier green (after the
       016 re-baseline).
-- [ ] The wetrun completion line recorded (the fingerprint acceptance row).
-- [ ] No drained row lost, no watermark replayed (issue 175's continuity
+- [-] The wetrun completion line recorded (the fingerprint acceptance row).
+- [-] No drained row lost, no watermark replayed (issue 175's continuity
       acceptance); corpus lease + contribution planes intact post-release
       (the per-family conservation receipt).
