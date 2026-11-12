@@ -2,7 +2,7 @@
 
 **Status:** LANDED 2026-11-13 — Batch 354 complete (T0–T8; claim discharged by the landing commit; slot re-derived entries_gpu_154 → entries_gpu_156 at authoring — B345 LocalSR took 154, B357 moeshift took 155 per the re-derive law). Yield: 3 own rules + 1 count-neutral face + 1 honest drop (the C+ self-stamp entry — no category slot, the %globaltimer deadline axis is B333/gpu_118's). kernel_opt 1078 → 1081; the B356 same-evening clobber of the AGENTS/README kernel rows (B357's 1078@357 reverted to 1076@345) REPAIRED in this landing.
 
-**Claimed:** zed-amo-b354-muse, 1794504458, expires 2026-11-14T17:27:38+00:00
+**Lease closed:** zed-amo-b354-muse, 1794504458, was expires 2026-11-14T17:27:38+00:00 — the landing commit carries the record (Batch 354 landed 2026-11-13 in the window)
 
 **Source:** `.research/398_sglang_muse_mega_kernel_distill.md` · `facebookresearch/sgl-muse-mega` @ `f009237dfc56ee130c1637352ff356093a870ecc` (MIT) + LMSYS blog 2026-11-05. Verdict YES B− / lane-intel HIGH / product-coverage YES.
 
