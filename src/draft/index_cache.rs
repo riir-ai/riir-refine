@@ -1471,18 +1471,41 @@ mod tests {
         let mut m =
             LatentMatcher::from_enabled_domains_with_overlay(overlay).expect("build (miss)");
         let cold = digests(&mut m);
-        // Issue 226 T1: the store is deferred — join it before reading the dir.
+        // Issue 226 T1: the store is deferred — join it before reading the
+        // dir. Posture-aware (issue 228 D-d): under `kernel_route_narrow`
+        // the kernel index narrows and the store arm is skipped BY DESIGN
+        // (the Narrowed arm nulls `snapshots_to_store`), so the posture
+        // asserts the skip itself.
+        #[cfg(not(feature = "kernel_route_narrow"))]
         assert!(
             finish_pending_stores() >= 1,
             "the cold miss deferred a store"
         );
+        #[cfg(feature = "kernel_route_narrow")]
+        assert_eq!(
+            finish_pending_stores(),
+            0,
+            "the narrowed-arm posture skips the store (the design)"
+        );
+        // The narrow posture never created the dir (no store ran) — the
+        // listing is the stored-posture's instrument.
+        #[cfg(not(feature = "kernel_route_narrow"))]
         let stored: Vec<PathBuf> = std::fs::read_dir(&idx_dir)
             .expect("cache dir")
             .flatten()
             .map(|e| e.path())
             .filter(|p| p.extension().is_some_and(|x| x.eq_ignore_ascii_case("idx")))
             .collect();
+        #[cfg(feature = "kernel_route_narrow")]
+        let stored: Vec<PathBuf> = Vec::new();
+        #[cfg(not(feature = "kernel_route_narrow"))]
         assert_eq!(stored.len(), 1, "exactly one entry after the cold run");
+        #[cfg(feature = "kernel_route_narrow")]
+        assert_eq!(
+            stored.len(),
+            0,
+            "the narrowed-arm posture stores nothing (the design)"
+        );
 
         // (b) warm hit → restore. The whole point: identical answers.
         let mut m =

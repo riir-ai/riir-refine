@@ -698,6 +698,13 @@ mod tests {
         ed25519_dalek::SigningKey::from_bytes(&[9u8; 32])
     }
 
+    // Any NET PIN invalidates these tests: the pinned builds only allow
+    // that pin's hosts while the tests construct clients over the DEFAULT
+    // multi-net host, and the both-nets posture empties the allowed set
+    // entirely by the overlap guard's own semantics (issue 228 D-d —
+    // measured at both postures). The tests' designed posture is the
+    // UNPINNED build; skip under either pin.
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     #[test]
     fn typed_server_refusal_surfaces_code_and_message() {
         let fake = FakeTransport::new(vec![(
@@ -722,6 +729,13 @@ mod tests {
         assert!(line.contains("local healing is unaffected"), "{line}");
     }
 
+    // Any NET PIN invalidates these tests: the pinned builds only allow
+    // that pin's hosts while the tests construct clients over the DEFAULT
+    // multi-net host, and the both-nets posture empties the allowed set
+    // entirely by the overlap guard's own semantics (issue 228 D-d —
+    // measured at both postures). The tests' designed posture is the
+    // UNPINNED build; skip under either pin.
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     #[test]
     fn join_sends_the_signed_wire_and_parses_the_answer() {
         let _env = SERVICE_URL_ENV_LOCK.lock().unwrap();
@@ -743,6 +757,13 @@ mod tests {
         assert!(seen[0].contains("583231"));
     }
 
+    // Any NET PIN invalidates these tests: the pinned builds only allow
+    // that pin's hosts while the tests construct clients over the DEFAULT
+    // multi-net host, and the both-nets posture empties the allowed set
+    // entirely by the overlap guard's own semantics (issue 228 D-d —
+    // measured at both postures). The tests' designed posture is the
+    // UNPINNED build; skip under either pin.
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     #[test]
     fn contribute_sends_the_folded_sorted_signed_body() {
         let _env = SERVICE_URL_ENV_LOCK.lock().unwrap();
@@ -799,6 +820,13 @@ mod tests {
         assert!(seen[0].contains(r#"uncovered_findings\":2"#));
     }
 
+    // Any NET PIN invalidates these tests: the pinned builds only allow
+    // that pin's hosts while the tests construct clients over the DEFAULT
+    // multi-net host, and the both-nets posture empties the allowed set
+    // entirely by the overlap guard's own semantics (issue 228 D-d —
+    // measured at both postures). The tests' designed posture is the
+    // UNPINNED build; skip under either pin.
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     #[test]
     fn contribute_surfaces_the_typed_not_joined_refusal() {
         let fake = FakeTransport::new(vec![(
@@ -835,6 +863,13 @@ mod tests {
         let _ = fresh_contribute_run_id("seeded");
     }
 
+    // Any NET PIN invalidates these tests: the pinned builds only allow
+    // that pin's hosts while the tests construct clients over the DEFAULT
+    // multi-net host, and the both-nets posture empties the allowed set
+    // entirely by the overlap guard's own semantics (issue 228 D-d —
+    // measured at both postures). The tests' designed posture is the
+    // UNPINNED build; skip under either pin.
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     #[test]
     fn service_url_env_overrides_the_default() {
         let _guard = SERVICE_URL_ENV_LOCK.lock().unwrap();
