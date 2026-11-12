@@ -255,6 +255,20 @@ pub enum SelectionMode {
     TetherBlend,
 }
 
+// Issue 229 (Research 396 §8, verdict round-1 REVISE 2026-11-12): the
+// `SelectionMode::Puct` prior×evidence mode was implemented, pre-registered
+// and executed — G1 byte-identical anchors green at mirror AND pipeline
+// seams, G3 dense-end clean, G4 alloc-free — but the pre-registered
+// decision rule read the replay's ρ-grid against the MEASURED real-stream
+// prior quality (`examples/rho_real_stream`: ρ̂ upper bound ≈ 0.24–0.31,
+// selection-bias-inflated) and the bar crossing sat at ρ* ≈ 0.54: the
+// bonus axis regresses at ρ ≤ 0.4 (+18% to +61%) and wins only at
+// synthesized ρ ≥ 0.6. The rule fired NOT PROMOTED; the mode is WITHDRAWN
+// (no zombie mode) and the crossover-law pricing is the lane's
+// contribution. Re-open only where a real prior ≥ ρ* exists (the named
+// candidate: the seat-rerank head, Bench 119) — a NEW cell, never a
+// re-flag of this one.
+
 /// One-time loud degradation notice when `Entropic` is scored per-candidate
 /// (no candidate pool at the call site) — mirrors the `self_evolve`
 /// oracle-degradation pattern: exactly one line, never silent (Issue 026 T2).

@@ -1,6 +1,5 @@
 # Issue 229: SelectionMode::Puct — prior×evidence candidate ordering (the crossover cell)
-**Status:** Open — GOAT(fusion)-class claim, opt-in, pre-registered cell; verdict AGREE (claude-sub-agent-verdict round 2); parent note `../.research/396_puct_selection_grammar_fusion.md`
-**Claimed:** amo-idle-i229, 1794492600, expires 2026-11-14T14:10:00+00:00
+**Status:** CLOSED MEASURED-NEGATIVE 2026-11-12 (amo idle lane, plan 368) — T1–T5 executed per the pre-registration (verdict AGREE ×2 + verdict round-1 REVISE, session a8204575); the round-1 decision rule fired NOT PROMOTED (ρ̂_upper 0.31 < ρ* 0.544) and §8 withdrew the mode — no zombie mode. Re-open conditions priced in T5. **Lease closed:** amo-idle-i229, 1794492600, was expires 2026-11-14T14:10:00+00:00 — landed in the window.
 
 ## Claim
 
@@ -19,11 +18,57 @@ A PUCT-shaped selection mode for `select_best_candidate`, consuming **Q** (the i
 
 ## Tasks
 
-- [ ] T1: implement `SelectionMode::Puct` — `score(cand) = Q(cand) + c_puct·P(cand)·√(ΣN_pool)/(1+N(cand))`; `Q` = the incumbent combined score (`W_EVO·evo + W_RATE·reliability`, reliability per the incumbent mode so c=0 ≡ incumbent bit-identically); `P` = the prior normalized to [0,1] within the pool — **disclosed: P is derived from evo, which Q already consumes, so the evolution signal is counted twice by design; the bonus axis must earn its keep beyond that double-count, adjudicated by the ρ sweep and T4a** (when the escalation seat is armed, the seat-head score may supply P instead — a later task, never a requirement); `N(cand)` = the candidate's recorded outcome count (S+F) under its (rule, shape, strategy) key. Opt-in via `with_selection_mode` only; `BetaPosterior` stays the default. Refine-local adaptation of the `PUCBSelector` shape for the streaming store — the katgpt-rs primitive is consumed as a shape, never forked.
-- [ ] T2: dose-response arm — `c_puct ∈ {0 (must EQUAL the incumbent ordering, byte-identical — the G1 anchor), 0.2 (paper default), 2.0}`; exploration (out-of-Q-order picks) monotone in c on the replay harness.
-- [ ] T3: paired cell on a **sequential replay harness** (Bench 028's shape: ≥20,000 randomized trials; counts update after each episode — a frozen store cannot see exploration's payoff, since the bonus is only worth its cost if later episodes learn from the exploratory picks). **P construction: the Bench 028 harness may carry no prior signal at all, so P is SYNTHESIZED with a known, adjustable correlation ρ to true reliability and swept (ρ ∈ {0, 0.3, 0.7, 1.0}; ρ=0 is the no-prior control — without the sweep T4a has nothing to tell apart and the cell can only come out negative).** Primary axis: **mean selection regret** vs the incumbent in the 1–5-attempt regime. Arms: `BetaPosterior` incumbent, `LinearBlend` (separates any PUCT gain from BetaPosterior's known large-N crossover reversal, L172-179), `Puct` at the T2 doses × the ρ sweep. Pool-size stratification kept: n=1 (report-only), 2–3, ≥4.
-- [ ] T4: falsifier arms (both inside the replay) — (a) shuffled-prior control (permute P across the pool): any gain must vanish, proving the prior (not exploration noise) drives it; (b) Entropic comparison arm: if Puct ≈ Entropic at these pool sizes, the crossover framing adds nothing measurable — record honestly.
-- [ ] T5: verdict + demotion-law execution per note §8; close the goat-audit row (consumption or recorded stall).
+- [x] T1: implement `SelectionMode::Puct` — **EXECUTED then WITHDRAWN per
+  the demotion law (see T5)**. The mode existed through the full
+  pre-registered cell (G1 byte-identical anchors at mirror AND pipeline
+  seams; dose-response monotone; two-pass scoring over reused scratch;
+  pool ≤ 1 loud degradation) and was removed by §8 after the round-1
+  REVISE decision rule fired. `BetaPosterior` stays the default; the
+  enum site carries the withdrawal note + the re-open conditions.
+- [x] T2: dose-response arm — **EXECUTED**: c ∈ {0 (EQUAL — G1 anchor
+  green over 80,000 replay episodes + the 360-answer pipeline seam), 0.2
+  (PUCB default), 2.0}; exploration rate 0.0000 / 0.115 / 0.509 —
+  monotone in c as pre-registered. **The dose finding: c=2.0 is
+  catastrophic at every ρ (+84.7% worse than the incumbent even at the
+  oracle prior) — any future re-open carries a hard dose ceiling, c=0.2
+  the only measured-good dose.**
+- [x] T3: paired cell on a **sequential replay harness** — **EXECUTED**
+  (2,500 instances × 80,000 episodes: thin 20k + dense 60k; common random
+  numbers; counts update per episode; P synthesized at known correlation
+  `ρ·p + (1−ρ)·z`, swept). Thin-phase mean regret vs BetaPosterior
+  (0.03412) at c=0.2: ρ=0.0 −60.8% · 0.3 −30.8% · 0.4 −18.3% · 0.5 +3.4%
+  · 0.6 +18.3% · 0.7 +27.8% · 1.0 +39.6% — the +10% bar first clears at
+  **ρ* ≈ 0.544** (linear interpolation). The replay passed its raw bars
+  at ρ ≥ 0.7 and regressed below 0.4 — the forking-paths shape the
+  verdict round-1 REVISE refused to read as a pass.
+- [x] T4: falsifier arms — **EXECUTED, both have teeth**: (a) shuffled-
+  prior control: honest ρ=0.7 regret 0.02465 vs shuffled 0.06915 (+103%
+  vs beta) — the gain vanishes without prior information (the mechanism
+  is the prior, not exploration noise); (b) Entropic comparison:
+  separated (0.03415 vs best-PUCT 0.02061) — the crossover framing is
+  not an Entropic re-skin.
+- [x] T5: verdict + demotion-law execution — **NOT PROMOTED, §8
+  WITHDRAWN (2026-11-12, verdict round-1 REVISE + the pre-registered
+  decision rule)**. Chain: the raw G2 bar (+39.6% ≥ 10%) was a
+  forking-paths read (the verdict rejected taking the best ρ cell);
+  the round-1 folds — the real-stream ρ̂ instrument
+  (`examples/rho_real_stream`, this box's durable store: **Spearman
+  +0.24 / Pearson +0.31 at N≥3, an inflated UPPER bound** — only picked
+  candidates get outcomes; the shipped binary's learning half is
+  memory-only so the fresh-process prior is the neutral 0.5), the
+  ρ ∈ {0.4, 0.5, 0.6} locator cells at the fixed dose, the
+  pre-registered rule (upper < ρ* ⇒ withdraw; lower ≥ ρ* ⇒ pin;
+  straddle ⇒ withdraw) — resolved to **ρ̂_upper 0.31 < ρ* 0.544 ⇒
+  NOT PROMOTED**. `SelectionMode::Puct` withdrawn (variant, scoring
+  path, builder, constants, both harness binaries removed; the ρ̂
+  instrument kept as the re-open's first read). **Re-open conditions
+  (Research 396 §8 as priced by this cell): a real prior ≥ ρ* ≈ 0.54
+  on the deployment stream — the named candidate is the seat-rerank
+  head (Bench 119) — with a NEW pre-registered cell at the hard dose
+  ceiling (c=0.2), never a re-flag of this one.** The lane's durable
+  contribution is the crossover-law pricing + the ρ̂ instrument. The
+  goat-audit row closes RECORDED NEGATIVE (Research 396 §7's
+  consumption-or-negative satisfied).
 
 ## Pre-registered GOAT gate
 

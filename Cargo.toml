@@ -1076,6 +1076,13 @@ harness = false
 name = "heal_demo"
 required-features = ["clippy_lints"]
 
+# Issue 229 / plan 368 — the real-stream prior-quality instrument (the ρ̂
+# the withdrawn PUCT cell's decision rule reads; report-only, store-read-only).
+# Run: cargo run --release --features latent_retrieval --example rho_real_stream
+[[example]]
+name = "rho_real_stream"
+required-features = ["latent_retrieval"]
+
 # Issue 185 T4 — the softmax-collapse family's read-only workspace sweep.
 [[example]]
 name = "softmax_collapse_sweep"
