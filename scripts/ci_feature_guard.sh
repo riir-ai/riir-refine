@@ -38,6 +38,21 @@
 #                              drain list fmt_pending_expected.txt (empty,
 #                              only shrinks). Zero cargo; missing rustfmt =
 #                              loud NO VERDICT, never a silent skip.
+#   9. bin-target combos     → clippy --bins at the pinned PAIR/trio matrix
+#                              (scripts/bin_target_combo_gate.sh, issue
+#                              231): the cfg-union blind spot Layers 3–5
+#                              share — a union consumer (any(A,B)) whose
+#                              producer stayed on one arm breaks only at a
+#                              posture with the widened side ON and the
+#                              producer's arm OFF; --all-features masks it
+#                              through the extra arm, singles compile the
+#                              consumer out. The fix(230) break
+#                              (points+score_bench in bin/heal.rs) sat six
+#                              days across green gates; the gate's first
+#                              run caught its second instance live (the
+#                              adoption decls, 2026-11-12). Refuses a
+#                              required-features-hidden no-op combo (the
+#                              green-zero defence).
 #
 # No Lean proof gate (this repo has no `.proofs/`).
 # No wasm32 gate (the `wasm_pruner` feature is deferred on rubrc maturity).
@@ -367,6 +382,15 @@ echo "=== Layer 8: fmt gate (issue 223 T4 — rustfmt-clean, map-driven exclusio
 # never writes: it flags; the fix is a bare `rustfmt <file>` + commit.
 python3 scripts/fmt_gate.py || exit 1
 echo "✓ fmt gate clean (drain list only shrinks — never pin new drift)"
+
+echo
+echo "=== Layer 9: bin-target feature-combo gate (issue 231) ==="
+# The cfg-union blind spot: Layers 3 (singles) and 4/5a/5c (--all-features)
+# share it — a union consumer whose producer stayed on one arm breaks only
+# at the pair posture this layer compiles. Warm after Layers 2–5 (each combo
+# ~2–13 s incremental on the dev target). --canary proves the floor fires.
+sh scripts/bin_target_combo_gate.sh || exit 1
+echo "✓ bin-target combos compile (matrix: scripts/bin_target_combos.txt)"
 
 echo
 echo "=== All layers PASS ==="

@@ -1,0 +1,25 @@
+# Layer 9 combo matrix — scripts/bin_target_combo_gate.sh (issue 231).
+# One combo per line:  <comma-separated features> | <reason>
+# Lines starting with '#' and blank lines are skipped; every named feature
+# must exist in the ROOT [features] table (a renamed/removed feature reds its
+# stale row — never a silent skip).
+#
+# THE RULE: a commit that widens a cfg to a union (any(A, B)) adds the
+# breakable-arm row HERE in the SAME commit — the posture that turns the
+# widened side ON while the strict producer's other requirements stay OFF
+# (the fix(230) shape: consumer any(kat_service, points) + producer
+# all(kat_service, latent_retrieval) breaks only at points+score_bench,
+# masked by --all-features through the kat_service arm and compiled out at
+# default/singles). A row earns its place when the posture carries a NEGATIVE
+# arm (some feature OFF that --all-features turns ON) or reproduces a
+# historical break.
+#
+# EVERY ROW NAMES latent_retrieval: the root bins' required-features demand
+# it (cargo-refine + corpus_diagnose), and a posture without it compiles no
+# bin at all — cargo skips the targets silently and the combo is a green
+# no-op (the gate reds that shape too, but the rows are pinned correct so
+# the gate's compile half always reaches real bins).
+points,score_bench | issue-231 regression pin: the fix(230) break posture — score_bench-gated bin call sites widened to any(kat_service, points) while run_overlay_with_promotion stayed all(kat_service, latent_retrieval); breaks only with kat_service OFF (latent_retrieval + clippy_verify ride score_bench transitively)
+latent_retrieval,seat_rerank,escalation_manifest | escalation_dispatch's SEAT arm at its real posture — compiled only when escalation_manifest AND any(seat_rerank, hosted_expert); hosted_expert OFF here (negative space vs --all-features), singles compile the dispatch out; latent_retrieval satisfies the bins' required-features
+latent_retrieval,hosted_expert,escalation_manifest | escalation_dispatch's HOSTED arm at its real posture — seat_rerank OFF here; the hosted transport (groq_first dep shape, code-egress consent, llm_spend) compiles only in this union; latent_retrieval satisfies the bins' required-features
+latent_retrieval,adoption_gate,escalation_manifest,seat_rerank | the adoption head-swap watch rides EscalationDispatch::stand_down (issue 220) — its real compile posture; outcome window + stand-down never compile at singles; latent_retrieval satisfies the bins' required-features

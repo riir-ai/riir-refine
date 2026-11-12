@@ -6939,7 +6939,11 @@ fn record_traj_fail(
 /// the bare `rule_id` (seat picks ride [`crate::adoption_gate::SEAT_TAG`]
 /// via their existing `EditAtLine::rule_id` spelling); `build` is the seat
 /// receipt's build fingerprint on seat rows.
-#[cfg(feature = "adoption_gate")]
+/// cfg = adoption_gate AND fix_verify: every use site rides the verify path
+/// (the kept-edit verdict loops) or the seat lane's quadruple (which itself
+/// requires fix_verify) — an adoption-only posture compiles no use, and the
+/// issue-231 combo gate caught the dead-decl break live (2026-11-12).
+#[cfg(all(feature = "adoption_gate", feature = "fix_verify"))]
 fn adoption_window_for<'w>(
     slot: &'w mut Option<riir_refine::adoption_gate::AdoptionWindow>,
     root: &std::path::Path,
@@ -15552,20 +15556,23 @@ fn main() {
     // Issue 220: the adoption window — lazy-loaded on first verdict (the
     // recorder helper); the slot rides the same scope as the verdict sites
     // below. Gated on --write: a dry run produces no fix verdicts.
-    #[cfg(feature = "adoption_gate")]
+    // cfg carries fix_verify too: the verdict sites are all inside
+    // fix_verify-gated regions — adoption-without-fix_verify compiles no
+    // use (the issue-231 combo gate's live first catch, 2026-11-12).
+    #[cfg(all(feature = "adoption_gate", feature = "fix_verify"))]
     let mut adoption_window: Option<riir_refine::adoption_gate::AdoptionWindow> = None;
-    #[cfg(feature = "adoption_gate")]
+    #[cfg(all(feature = "adoption_gate", feature = "fix_verify"))]
     let adoption_root = resolve_heal_root(&args.paths);
     // Issue 220: seat picks' build fingerprints — the serve site knows the
     // receipt, the verdict bookkeeping (per file, later) records it into
     // the window row. One entry per seat-served file, per run. The ONLY
     // insert site rides the seat lane's cfg (escalation_manifest +
-    // seat_rerank + fix_verify + latent_retrieval); the readers at the
-    // verdict sites are unconditional — without the seat lane this map is
-    // never mutated, so the mut carries a matching allow (found live at the
-    // adoption_gate-without-seat_rerank accumulation build, issue 220
-    // pre-work; the workflow release posture never compiles it).
-    #[cfg(feature = "adoption_gate")]
+    // seat_rerank + fix_verify + latent_retrieval); the readers sit in the
+    // fix_verify-gated verdict loops, so without the verify path this map
+    // is never mutated nor read — the mut carries a matching allow (found
+    // live at the adoption_gate-without-seat_rerank accumulation build,
+    // issue 220 pre-work; the workflow release posture never compiles it).
+    #[cfg(all(feature = "adoption_gate", feature = "fix_verify"))]
     #[cfg_attr(
         not(all(
             feature = "escalation_manifest",
