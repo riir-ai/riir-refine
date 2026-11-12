@@ -242,32 +242,6 @@
 //! (the defer-or-drop gate: an ATTACK playbook, no bounded detector
 //! vocabulary), R7 (the conjunction gate).
 
-//! ## Batch 353 (2026-11-13, Plan 363) — the FORGE Lab std memory-safety post
-//!
-//! Four detectors from the FORGE Lab post (Research 397, CC BY 4.0,
-//! forge-blog.github.io — no repo pin; cited as class provenance, fixtures
-//! are ORIGINAL syntheses), the soundness-of-consumer-unsafe surface: the
-//! invariant-across-user-call-unwind class, the trusted-impl consistency
-//! and derived-property classes, and the process-global write tier. ALL
-//! suggest-only, never `FIXABLE_SEC`:
-//!
-//! | Rule | Detector | Why suggest-only |
-//! |---|---|---|
-//! | `unsafe-invariant-panic-exposed` | `invariant_panic_exposed::detect` | the fix is a per-site design decision (`ManuallyDrop` until written / an invariant-restoring drop guard / reorder); the armed destructor's reach is invisible per-fn |
-//! | `user-impl-call-once-keep-result` | `call_once_keep_result::detect` | the call-once rewrite rebinds locals and reshapes borrow scopes; WHICH call is authoritative is semantic; per-(receiver, method) counting keeps distinct receivers silent |
-//! | `user-impl-derived-property-validate` | `derived_property_validate::detect` | the fix ladder (validate / re-type / unsafe trait) is an API-design decision; a by-construction derivation fires as the question |
-//! | `process-global-write-under-shared-lock` | `global_write_read_lock::detect` | the fix is a locking-TIER decision; the static-swap generalization needs alias analysis; the env family is the bounded shape |
-//!
-//! Family placement (Plan 363 T1): the lead rides `PanicSafety` (doc
-//! widened to the exception-safety axis — no `UnwindSafety` synonym-shard
-//! variant); rules 2+3 seed the APPEND-ONLY `TrustedImpl` variant; rule 4
-//! seeds `ProcessState`. The two recorded drops (the gate worked): the
-//! `process::exit` altstack bug (#161018 — the consumer shape
-//! teardown-mutating-another-thread's-registered-state is too thin to
-//! bound, std-specific mechanism) and the `Allocator` no-unwind contract
-//! (a trait CONTRACT for implementors, not a consumer fix pattern —
-//! annotation material in the lead's context).
-
 use syn::File;
 
 pub mod activation_expansion;
@@ -277,19 +251,15 @@ pub mod audit_hit_fingerprint;
 pub mod auth_cookie_missing_flags;
 pub mod b351_faces;
 pub mod cache_mask_key;
-pub mod call_once_keep_result;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
 pub mod client_ip_forwarded;
 pub mod cors_any_creds;
-pub mod derived_property_validate;
 pub mod drop_no_panic;
 pub mod ecb_mode_selection;
 pub mod egress_url;
 pub mod ffi_catch_unwind;
 pub mod gateway_ctor;
-pub mod global_write_read_lock;
-pub mod invariant_panic_exposed;
 pub mod ipv4_mapped_range;
 pub mod jwt_alg_allowlist;
 pub mod jwt_insecure_validation;

@@ -44,17 +44,9 @@ pub enum SecFamily {
     UnsafeHygiene,
     /// Crypto-API hygiene (Phase 2 — none shipped yet).
     CryptoHygiene,
-    /// Panic/exception safety — the unwind axis: a user call
-    /// (comparator, `clone`, `drop`, closure) unwinding through code that
-    /// trusts an invariant, and panic paths that must stay contained.
-    /// Members: the P8 comparator contract (a comparator violating the
+    /// Sort/ordering panic safety (P8 — a comparator violating the
     /// total-order contract makes the std sorts PANIC since 1.81 and
-    /// silently mis-orders NaN otherwise), the error-reporting handler
-    /// self-guard, and — since Batch 353 (the FORGE Lab post, Research
-    /// 397) — the exception-safety-of-unsafe-code axis: a foreign panic
-    /// exposing a broken invariant under an armed destructor. Doc WIDENED
-    /// appends-only (label unchanged); no `UnwindSafety` synonym-shard
-    /// variant was added.
+    /// silently mis-orders NaN otherwise).
     PanicSafety,
     /// Input-validation safety (Batch 131 — untrusted lengths/sizes flowing
     /// into allocations, secret files created without permission hardening).
@@ -76,21 +68,6 @@ pub enum SecFamily {
     /// process's own stores/logs, the sink is the stored text itself.
     /// Added APPEND-ONLY.
     SensitiveData,
-    /// Trusting caller-provided VALUE implementations to be correct or
-    /// consistent (Batch 353 — the FORGE Lab post, Research 397): unsafe
-    /// or invariant-carrying code calling a trait method the CALLER
-    /// implements twice and assuming the results agree, or deriving a
-    /// property from a caller-provided value without validating it before
-    /// an unchecked constructor. Distinct from `UnsafeHygiene`'s marker
-    /// axis (`unsafe impl Send/Sync` promising thread-safety): THIS owns
-    /// the value-impl axis. Added APPEND-ONLY.
-    TrustedImpl,
-    /// Process-global state at the OS/libc boundary (Batch 353 — the
-    /// FORGE Lab post, Research 397, the post's Pattern 3 "trusting the
-    /// underlying system"): the environment, exit paths, signal stacks —
-    /// state other threads, C libraries, or the kernel touch without any
-    /// application lock. Added APPEND-ONLY.
-    ProcessState,
 }
 
 impl SecFamily {
@@ -106,8 +83,6 @@ impl SecFamily {
             Self::InputValidation => "input-validation",
             Self::Numerics => "numerics",
             Self::SensitiveData => "sensitive-data",
-            Self::TrustedImpl => "trusted-impl",
-            Self::ProcessState => "process-state",
         }
     }
 }
