@@ -225,13 +225,31 @@ has an exact default.
 1. Read every inline comment + the issue comment + CI state before touching
    anything. Respect the review: their reading of their codebase outranks
    ours, always (the preprocessor-cache catch beat our root-path "fix").
-2. Fix what they asked, nothing else. Shorten comments when asked. Drop
+2. **G-PR2 verdict BEFORE the fix and the reply (owner directive 2026-11-12,
+   #3025).** Send the diagnosis + the planned fix design + the reply drafts
+   to the delegated verdict FIRST — before implementing — then the
+   implemented diff + final reply drafts for a second round before push.
+   The verdict has caught design-level issues no local gate sees (the
+   #3025 round-1 pass flagged the reply missing the record_response
+   asymmetry, wall-clock bars too tight for shared CI, and the missing
+   superseded-probe test — all fixed before a line was written).
+3. Fix what they asked, nothing else. Shorten comments when asked. Drop
    redundant tests when asked. Their preference between two correct shapes
-   wins even when ours is prettier.
-3. **Re-verify at THEIR toolchain (tests, clippy at their CI flags, fmt) and
+   wins even when ours is prettier. **Stale-event rule:** every async
+   completion path (timeout / cancel / drop guard / late response) that
+   clears shared gate state must carry the identity it belongs to — an
+   older read's completion must not clear a newer reservation; ship the
+   overlap regression in the same commit (the #3025 catch).
+4. **Re-verify at THEIR toolchain (tests, clippy at their CI flags, fmt) and
    run the CI harness (`scripts/outbound_pr_ci_harness.sh`) — THEN request the
-   G-PR2 verdict on the response commit + reply draft.**
-4. Root-cause claims get VERIFIED before they are written: registry
+   G-PR2 verdict on the response commit + reply draft.** Baseline counts are
+   re-measured, never assumed: run pristine MAIN AT THE MERGE BASE (a
+   detached worktree) before quoting "N passed / M new tests" in a body
+   PATCH — the rebase moves the baseline under you (the #3025 body said 657
+   from the pre-rebase measurement; the rebase made HEAD 658; the patched
+   body now says the measured 661/22, confirmed against pristine ceedf48's
+   measured 639).
+5. Root-cause claims get VERIFIED before they are written: registry
    manifests, `git log -S`, their CI runs on main. One wrong diagnosis in a
    reply burns the account's credibility (the round-2 lockfile failure).
    ⛔ The round-4 corollary: before replying "that failure reproduces on
@@ -240,12 +258,17 @@ has an exact default.
    round-3 reply blamed main while the freebsd log contained the literal
    string `preprocessor/CACHEDIR.TAG` — the evidence was in the log we
    already had, unread.
-5. Reply in short, plain sentences — human voice: no exclamation openers, no
+6. Reply IN THE REVIEWER'S INLINE THREAD — `POST /repos/{repo}/pulls/{n}/
+   comments` with `in_reply_to: <their comment id>`, one reply per comment,
+   never a top-level issue comment for an inline ask (the #3025 lesson:
+   replying to the main discussion orphaned the threads and read wrong).
+   Short, plain sentences — human voice: no exclamation openers, no
    "Fixed all four:" ledgers, no three-paragraph structure on a small fix.
-   Name the commit sha, use their vocabulary. If main's CI is broken,
+   Name the commit sha ONCE per reply, use their vocabulary. If main's CI
+   is broken,
    say so plainly with the reproducing fact, one sentence, and leave their
    bug alone unless asked.
-6. Patch the existing comment (PATCH API) rather than posting duplicates.
+7. Patch the existing comment (PATCH API) rather than posting duplicates.
 
 ## The pre-push harness script (mechanized G-PR1b — `scripts/outbound_pr_ci_harness.sh`)
 
