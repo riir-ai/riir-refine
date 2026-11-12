@@ -2552,6 +2552,7 @@ executed before entry)."
             buggy_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for i in 0..CTX {\n        // validity keyed by BUFFER INDEX — wrong after the first rotation\n        if i < n_seen && i <= query_pos as usize && i >= floor as usize {\n            mask[i] = f16(0.0);\n        }\n    }\n    mask\n}\n".to_string(),
             fixed_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let _ = n_seen; // the count no longer bounds validity\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for (i, slot) in cache.slots.iter().enumerate() {\n        // validity keyed by the slot's ABSOLUTE position\n        if let Some(pos) = slot {\n            if *pos <= query_pos && *pos >= floor {\n                mask[i] = f16(0.0);\n            }\n        }\n    }\n    mask\n}\n".to_string(),
             family: SecFamily::Numerics,
+        },
         // ══ Batch 353 (2026-11-13) — the FORGE Lab std memory-safety ══
         // ══ transcription (sec). FOUR suggest-only soundness rules on ══
         // ══ the consumer-unsafe surface; the source is the Microsoft ══
@@ -3745,6 +3746,60 @@ mod tests {
             assert!(
                 !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
                 "batch-352 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+    }
+
+    /// Batch 352 detectors: fire on their own buggy fixture, stay
+    /// silent on their own fixed fixture (the parse half is covered by
+    /// `every_fixture_parses`).
+    #[test]
+    fn batch352_detectors_fire_on_buggy_stay_silent_on_fixed() {
+        let all = entries();
+        let pairs: [(&str, fn(&str, &syn::File) -> usize); 4] = [
+            (
+                "fp16-subnormal-product-power-of-two-rescale",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::subnormal_rescale::detect(s, f).len()
+                },
+            ),
+            (
+                "wide-reduction-precision-split",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::wide_reduction_split::detect(s, f).len()
+                },
+            ),
+            (
+                "fused-activation-approximation-expansion",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::activation_expansion::detect(s, f).len()
+                },
+            ),
+            (
+                "position-keyed-additive-cache-mask",
+                |s: &str, f: &syn::File| {
+                    crate::domains::sec::proposers::cache_mask_key::detect(s, f).len()
+                },
+            ),
+        ];
+        for (id, detect_len) in pairs {
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-352 rule '{id}' missing from corpus"));
+            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+            assert!(
+                detect_len(&rule.buggy_code, &buggy) > 0,
+                "batch-352 {id}: detector must fire on its own buggy fixture"
+            );
+            let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+            assert!(
+                detect_len(&rule.fixed_code, &fixed) == 0,
+                "batch-352 {id}: detector must stay silent on its own fixed fixture"
+            );
+        }
+    }
+
     /// Batch 353 (the FORGE Lab std memory-safety post distill, Plan 363 /
     /// Research 397, CC BY 4.0, no repo pin) — presence, family,
     /// provenance discipline. FOUR suggest-only soundness rules: the lead
@@ -3836,37 +3891,6 @@ mod tests {
         }
     }
 
-    /// Batch 352 detectors: fire on their own buggy fixture, stay
-    /// silent on their own fixed fixture (the parse half is covered by
-    /// `every_fixture_parses`).
-    #[test]
-    fn batch352_detectors_fire_on_buggy_stay_silent_on_fixed() {
-        let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 4] = [
-            (
-                "fp16-subnormal-product-power-of-two-rescale",
-                |s: &str, f: &syn::File| {
-                    crate::domains::sec::proposers::subnormal_rescale::detect(s, f).len()
-                },
-            ),
-            (
-                "wide-reduction-precision-split",
-                |s: &str, f: &syn::File| {
-                    crate::domains::sec::proposers::wide_reduction_split::detect(s, f).len()
-                },
-            ),
-            (
-                "fused-activation-approximation-expansion",
-                |s: &str, f: &syn::File| {
-                    crate::domains::sec::proposers::activation_expansion::detect(s, f).len()
-                },
-            ),
-            (
-                "position-keyed-additive-cache-mask",
-                |s: &str, f: &syn::File| {
-                    crate::domains::sec::proposers::cache_mask_key::detect(s, f).len()
-                },
-            ),
     /// The Batch-353 proposers self-fire on their own buggy fixtures and
     /// stay silent on their own fixed fixtures (the detector gate; the
     /// b350/b351 precedent).
@@ -3895,11 +3919,6 @@ mod tests {
             let rule = all
                 .iter()
                 .find(|r| r.rule_id == id)
-                .unwrap_or_else(|| panic!("batch-352 rule '{id}' missing from corpus"));
-            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
-            assert!(
-                detect_len(&rule.buggy_code, &buggy) > 0,
-                "batch-352 {id}: detector must fire on its own buggy fixture"
                 .unwrap_or_else(|| panic!("batch-353 rule missing: {id}"));
             let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
             assert!(
@@ -3909,7 +3928,6 @@ mod tests {
             let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
             assert!(
                 detect_len(&rule.fixed_code, &fixed) == 0,
-                "batch-352 {id}: detector must stay silent on its own fixed fixture"
                 "batch-353 {id}: detector must stay silent on its own fixed fixture"
             );
         }

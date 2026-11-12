@@ -61,7 +61,12 @@ byte-level.
 - **Coexistence:** authored in the detached `/tmp/wt-b353` worktree at
   origin/develop (the shared checkout carried zed-amo-b352-lone's
   UNCOMMITTED B352 sec WIP — corpus.rs/proposers/mod.rs are in both
-  write-sets; hunk-level rebase at push, the B358 precedent). En-route
+  write-sets; hunk-level rebase at push, the B358 precedent). Their WIP
+  LANDED mid-session (`6f6e0363`, sec 61→65): the rebase carried BOTH
+  landings — their Numerics block + my memory-safety block, the tests
+  regions rebuilt sequential (B352 then B353), counts re-derived 65→69
+  (pins_manifest --write re-run at the rebased head), health pins
+  consolidated sec 69 / total 1644. En-route
   repairs: the E0392 unused-lifetime on `CallVisitor`, 2 doc_markdown
   mechanicals, the corpus fixed_code's unstable `transpose()` replaced with
   the stable `assume_init_read` form (fixtures + corpus), the origin-issue
