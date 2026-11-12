@@ -1,6 +1,6 @@
 # 399 — SGLang Unified Memory distill (LMSYS blog, the one-arena hybrid-state design)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED-BATCH-LANDED — Batch 355 / Plan 365 landed 2026-11-13 (4 rules entries_73: R1 BENCHABLE + R2/R3/R4 suggestion-NotBenchable; T0 executed at the pin `daa171846f`; the lane feeds above stay named for the 1201/1203 holder)
 
 ## Source
 
