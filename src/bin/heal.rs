@@ -7433,6 +7433,10 @@ USAGE:
                     the same epoch queues nothing; unknown lints (rustc/tool lints) are
                     counted loud, never bucketed. The canonical manifest persists at
                     .refine/coverage_manifest/clippy.canonical (digest-cross-checked).
+    --half-split-report  Issue 232 T2: the half-split agreement readout (the
+                    corpus-is-the-model scorer per corpus view — trigger A =
+                    buggy_code, resolution Q = fixed_code — over neutral probe
+                    spans; report-only, feature half_split_agreement).
                     Report-only, exit unchanged; needs an oracle feed for anchors.
     --coverage-report
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
@@ -8329,6 +8333,13 @@ struct Args {
     /// emits nothing. Report-only: writes the canonical manifest +
     /// `.refine/misses/corpus-gap/` rows; exits unchanged.
     corpus_gap: bool,
+    /// Issue 232 T2 (`half_split_agreement` feature): `--half-split-report`
+    /// runs the half-split agreement readout (the corpus-is-the-model
+    /// scorer per corpus view — trigger A = buggy_code, resolution Q =
+    /// fixed_code — over neutral probe spans) — report-only, BLAKE3 digest
+    /// last. Refuses exit 2 on a build without the feature (the corpus-gap
+    /// shape).
+    half_split_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -8475,6 +8486,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         coverage_report: false,
         corpus_delta: false,
         corpus_gap: false,
+        half_split_report: false,
         feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
@@ -8673,6 +8685,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--coverage-report" => args.coverage_report = true,
             "--corpus-delta" => args.corpus_delta = true,
             "--corpus-gap" => args.corpus_gap = true,
+            "--half-split-report" => args.half_split_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -10045,6 +10058,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.misses
         || args.misses_report
         || args.recompute_elo
+        || args.half_split_report
         || args.collapse_report
         || args.corpus_stats
         || args.import_series
@@ -13173,6 +13187,19 @@ fn main() {
         std::process::exit(2);
     }
 
+    // Issue 232 T2: `--half-split-report` is feature-gated — a build
+    // without `half_split_agreement` refuses LOUD (exit 2, naming the
+    // rebuild) instead of silently doing nothing (the corpus-gap shape).
+    // Checked before any dispatch so the refusal never wastes a walk.
+    #[cfg(not(feature = "half_split_agreement"))]
+    if args.half_split_report {
+        eprintln!(
+            "half-split-report: this build lacks the half_split_agreement feature — rebuild with: \
+             cargo build --features half_split_agreement"
+        );
+        std::process::exit(2);
+    }
+
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
     // below (`login`, `claim`, …) runs before the mode-flag section ever
@@ -14489,6 +14516,33 @@ fn main() {
         let cross = riir_refine::downstream_hint::downstream_consumers_hint(&targets);
         if !cross.is_empty() {
             println!("{cross}");
+        }
+        return;
+    }
+
+    // ── Issue 232 T2: --half-split-report — the half-split agreement
+    // readout ────────────────────────────────────────────────────
+    // Report-first, gates nothing (the frontier-report law): the corpus's
+    // trigger view (buggy_code) vs resolution view (fixed_code) over
+    // neutral probe spans (fixed line windows over the given paths). Exits
+    // 0 on a real read; exits 1 on a BLIND read (no compiled domain / no
+    // probe spans) — a confident green zero is the failure mode this lane
+    // refuses to print. Digest line last (machine-greppable). The flag
+    // itself is refused pre-dispatch on feature-less builds (the
+    // corpus-gap shape above); this whole arm is feature-gated with it.
+    #[cfg(feature = "half_split_agreement")]
+    if args.half_split_report {
+        let targets: Vec<PathBuf> = if args.paths.is_empty() {
+            vec![std::path::PathBuf::from(".")]
+        } else {
+            args.paths.clone()
+        };
+        match riir_refine::half_split::cli_report(&targets) {
+            Ok(text) => print!("{text}"),
+            Err(msg) => {
+                eprintln!("{msg}");
+                std::process::exit(1);
+            }
         }
         return;
     }
@@ -20518,6 +20572,10 @@ mod mode_flag_tests {
             ("--version", Box::new(|m| m.version = true)),
             ("-V", Box::new(|m| m.version = true)),
             ("--recompute-elo", Box::new(|m| m.recompute_elo = true)),
+            (
+                "--half-split-report",
+                Box::new(|m| m.half_split_report = true),
+            ),
             ("--collapse-report", Box::new(|m| m.collapse_report = true)),
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),
             ("--import-series", Box::new(|m| m.import_series = true)),

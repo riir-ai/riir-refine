@@ -1492,6 +1492,58 @@ byte-identical by construction. Landing commit: the T1 row in `.issues/232`
 names it; the issue stays OPEN with T2–T5 unchecked (the correlation cell
 is the next gate per the proof-path ledger; no promotion talk before it).
 
+## 2026-11-14 — Issue 232 T2 LANDED: the half-split agreement readout (the
+T³ ⟨∇L_A,∇L_Q⟩ gradient-free analog, report-only first)
+
+Feature `half_split_agreement` (opt-in, default-OFF, no implies — std +
+blake3 only) ships `src/half_split.rs`. The reading was adjudicated at
+design time: an entry-level random rule split was REFUSED (two scorers
+over disjoint rule sets cannot agree on a rule id by construction — a
+dead readout), so the corpus's A/Q split is realized as the corpus's two
+text surfaces — the A half = each rule's trigger exemplar (`buggy_code`),
+the Q half = the resolution exemplar (`fixed_code`); pick-agreement =
+both views name the same rule over a shared neutral probe set. T³'s L2
+lesson is encoded: a probe confirmed only by the surface that produced it
+is self-confirming — agreement requires BOTH views. Class honesty:
+query-by-committee / ensemble disagreement is the cousin; the delta is
+ONE predictor class over two corpus views (disagreement localizes the
+PROBE — view-ambiguity — never predictor diversity). The scorer is
+exact-integer cosine over the `span_embed` i8 vectors (Issue-940 family:
+canonical rule-id walk, sequential folds, one strict tie rule = equal
+score → lexicographically smaller id; BLAKE3 digest over the canonical
+encoding with f32 scores as exact bit patterns). Calibration by
+construction (both views share the embedder + scale — no transform, no
+softmax); no T³ constant imported; no decision threshold exists (rates +
+mean gap only) — T3's multiplicity predicate owns any arming. The CLI
+lane `--half-split-report [PATHS…]` probes fixed 12-line windows (window
+= stride), refuses BLIND reads exit 1 (no compiled domain / zero probe
+spans — never a green zero) and refuses feature-less builds exit 2 (the
+corpus-gap shape; the positive dispatch is feature-gated WITH the flag
+refusal so the bin compiles at every posture). Real-tree smoke: 1574
+rules, 34807 windows over src/, pick-agreement 9.7%, mean |top1 gap|
+0.0293 — the lane runs; what the signal predicts is the correlation
+cell's question. G1 `tests/half_split_g1.rs`: the digest pin (df6ea53e…,
+re-pin only with a recorded reason), view-mapping self-match pins
+(integer-exact 1.0 on the owning view — engagement proof), the agree
+axis (both-surfaces concat → both views name the rule), the flip axis
+(crossed concat → A=iterator_push, Q=read_exact — the close call being
+priced is read_exact's one-token-different buggy/fixed cousin), the
+honest tie row (zero vector → 0.0 everywhere, reported never declined),
+input-order independence, refusal-vocabulary absence, and the CLI lane
+end to end (window partition, content sensitivity, same tree → same
+digest, blindness refusals). Posture gates: clippy `-D warnings` lib ×4
++ bin ×3 postures, lib tests 3890 default / 4037 feature+latent / 3897
+lone feature, fixture 5/5, fmt clean, pins_manifest PASS, numbering gate
+PASSED, bin mode-flag pins pass. Pre-existing disclosure: at HEAD
+e9934610, `corpus_stats_needle_tests` FAILS (kernel_opt needle 1097 vs
+runtime 1081 — Batch-357/360 kernel corpus growth vs the needle; the
+zed-m3-b357-moeshift lane's accounting, plan 367 lease live — yielded,
+not fixed here) and `cf_workers_ai.rs` cannot parse under edition-2024
+rustfmt (`gen` as an identifier — the gate's skip_children invocation
+still reads lib.rs clean; noted, not fixed). The issue stays OPEN with
+T3–T5 unchecked (the correlation cell is the next gate; no promotion
+talk before it).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

@@ -509,6 +509,20 @@ adoption_gate = ["katgpt-core/compute_control"]
 # issue's proof-path ledger; promotion talk waits for the correlation cell.
 consumed_window_ledger = []
 
+# Issue 232 T2 (Research 495, the T³ holdout-epistemology extraction): the
+# half-split agreement readout — the corpus-is-the-model scorer built once
+# per corpus view (trigger A = buggy_code, resolution Q = fixed_code) and
+# read over a neutral probe set: pick-agreement / flip-rate + the
+# same-scale top-1 confidence gap (calibration by construction — both
+# views share the embedder; no transform, no softmax). Report-only: the
+# correlation cell (this signal vs later measured holdout deltas,
+# repeated-consultation vs 1-pass surfaces) is the issue's next gate;
+# T3's multiplicity predicate owns any arming; no T³ constant is imported
+# and no decision threshold exists. No implies: the readout is std +
+# blake3 only. Feature-off is byte-identical by construction (no
+# shared-path edits — new gated code only).
+half_split_agreement = []
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1258,6 +1272,14 @@ required-features = ["adoption_gate"]
 [[test]]
 name = "consumed_window_g1"
 required-features = ["consumed_window_ledger", "latent_retrieval"]
+
+# Issue 232 T2 — the G1 fixture: the half-split agreement readout over a
+# synthetic corpus (view-mapping self-match pins, agree + flip axes, the
+# honest tie row, determinism across corpus input order, refusal-vocabulary
+# absence in the report, CLI probe-window partitioning).
+[[test]]
+name = "half_split_g1"
+required-features = ["half_split_agreement"]
 
 [[example]]
 name = "clippy_verify_demo"

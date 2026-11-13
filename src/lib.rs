@@ -673,6 +673,13 @@ pub mod traj_store;
 #[cfg(feature = "consumed_window_ledger")]
 pub mod consumed_window;
 
+// Issue 232 T2 (Research 495): the half-split agreement readout — the
+// corpus-is-the-model scorer built once per corpus view (trigger A =
+// buggy_code, resolution Q = fixed_code) over a neutral probe set;
+// report-only (T3's multiplicity predicate owns any arming).
+#[cfg(feature = "half_split_agreement")]
+pub mod half_split;
+
 // Issue 089 T1+T2: the learnability-frontier band report — per-rule
 // r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
 // outcome counters (store-free, ungated so lib tests cover it at default
