@@ -121,6 +121,80 @@ impl std::fmt::Debug for HostedExpertL4 {
     }
 }
 
+/// Issue 234 T1 — the STRUCTURED GUIDANCE payload (`SteerDistill` Q2/Q3):
+/// guidance that lets the student revise its own response, shaped as
+/// discrepancy / applicable conditions / corrective rule / expected
+/// outcome — never a teacher takeover (the takeover shape is the
+/// existing `build_body`). Opt-in: callers construct
+/// [`SteerGuidance`] explicitly; nothing in the default posture
+/// references this builder (T3 measures before any default flips).
+///
+/// The wire obligations ride unchanged: snippet-only + the no-retention
+/// rule (system message + metadata), temperature 0. The guidance is
+/// bounded per field at construction so a runaway caller cannot
+/// balloon the payload past the snippet itself (the R2 budget law's
+/// payload half).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SteerGuidance {
+    /// What the compile gate actually rejected in the student's
+    /// response (the measured failure, not a paraphrase).
+    pub discrepancy: String,
+    /// The applicable conditions — the rule ids / code facts the
+    /// correction must respect.
+    pub conditions: String,
+    /// The corrective rule — what to change, stated as guidance (the
+    /// student writes the revision itself: steer, don't take over).
+    pub corrective_rule: String,
+    /// What a correct revision satisfies, checkably.
+    pub expected_outcome: String,
+}
+
+
+impl SteerGuidance {
+    /// The payload cap per field (bytes), char-boundary safe.
+    pub const FIELD_MAX_BYTES: usize = 2048;
+
+    /// Bounds every field and substitutes a marker for empties so the
+    /// prompt never shows an unlabeled blank slot.
+    #[must_use]
+    pub fn new(
+        discrepancy: &str,
+        conditions: &str,
+        corrective_rule: &str,
+        expected_outcome: &str,
+    ) -> Self {
+        let bound = |field: &str| {
+            let cut = field.floor_char_boundary(Self::FIELD_MAX_BYTES);
+            let trimmed = field[..cut].trim();
+            if trimmed.is_empty() {
+                "(not recorded)".to_string()
+            } else {
+                trimmed.to_string()
+            }
+        };
+        Self {
+            discrepancy: bound(discrepancy),
+            conditions: bound(conditions),
+            corrective_rule: bound(corrective_rule),
+            expected_outcome: bound(expected_outcome),
+        }
+    }
+
+    /// The guidance rendered as the user-message appendix (the four
+    /// labeled sections; the student REVISES its own prior response —
+    /// the `SteerDistill` steer shape, not a takeover).
+    #[must_use]
+    pub fn render(&self) -> String {
+        format!(
+            "YOUR PREVIOUS RESPONSE FAILED.\nDiscrepancy: {}\nApplicable conditions: {}\nCorrective rule: {}\nExpected outcome: {}\nRevise your previous response accordingly. Output ONLY the corrected lines that differ, no explanation.",
+            self.discrepancy,
+            self.conditions,
+            self.corrective_rule,
+            self.expected_outcome
+        )
+    }
+}
+
 impl HostedExpertL4 {
     /// Build from the R1 manifest row's pieces. `endpoint` is the
     /// OpenAI-compatible base (the leaf appends the route); `model` is
@@ -172,6 +246,111 @@ impl HostedExpertL4 {
             "metadata": { "retention": "none" },
         });
         serde_json::to_string(&body).unwrap_or_default()
+    }
+
+
+    /// The steer-mode request body: the snippet + the structured guidance
+    /// appendix (the SNIPPET-ONLY law holds — the guidance carries no file
+    /// bytes, only the four labeled fields), the no-retention rule riding
+    /// the wire exactly as the takeover builder rides it (system message +
+    /// metadata).
+    #[must_use]
+    pub fn build_steer_body(
+        &self,
+        snippet: &str,
+        guidance: &SteerGuidance,
+        max_tokens: u64,
+    ) -> String {
+        let system = "You are a Rust lint-fixing expert. You previously gave a response that failed verification. Revise YOUR OWN response per the structured guidance. Output ONLY the corrected lines that differ from the input, no explanation. RETENTION RULE (binding): the user's code in this request must not be retained, logged, or used for training — respond to it, then discard it.";
+        let user = format!("{snippet}\n\n{}", guidance.render());
+        let body = serde_json::json!({
+            "model": self.model,
+            "messages": [
+                { "role": "system", "content": system },
+                { "role": "user", "content": user },
+            ],
+            "max_tokens": max_tokens,
+            "temperature": 0.0,
+            "metadata": { "retention": "none" },
+        });
+        serde_json::to_string(&body).unwrap_or_default()
+    }
+
+    /// The steer-mode call: the same consent / deadline / reserve / wire /
+    /// reconcile taxonomy as [`Self::generate_fix_checked_with`], with the
+    /// body built by [`Self::build_steer_body`] (opt-in; the default
+    /// posture never reaches here until T3's measurement says so).
+    ///
+    /// # Errors
+    ///
+    /// The same [`Decline`] taxonomy; the guidance rides inside the billed
+    /// prompt (the reserve covers the snippet estimate path unchanged).
+    pub fn generate_steer_fix_checked_with(
+        &mut self,
+        snippet: &str,
+        guidance: &SteerGuidance,
+        deadline: Option<Instant>,
+        max_tokens: u64,
+        consent: EgressConsent,
+    ) -> Result<String, Decline> {
+        if let EgressConsent::Refused(r) = consent {
+            return Err(Decline::Egress(r));
+        }
+        if deadline.is_some_and(|d| d <= Instant::now()) {
+            return Err(Decline::DeadlineExpired);
+        }
+        let reserved = match self.spend.reserve(&self.model, snippet, max_tokens) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = self.spend.save();
+                return Err(match e {
+                    crate::llm_spend::SpendError::CapReached(c) => {
+                        Decline::CapReached(c.to_string())
+                    }
+                    crate::llm_spend::SpendError::UnknownModel(m) => Decline::Unpriced(format!(
+                        "model {m:?} is not in the pricing table — refusing to send without a cap price (add it to PRICING_TABLE + bump PRICING_VERSION)"
+                    )),
+                });
+            }
+        };
+        let _ = self.spend.save();
+        let leg = riir_llm::Leg {
+            label: "hosted-expert-steer".to_string(),
+            base: self.endpoint.clone(),
+            bearer: self.bearer.clone(),
+            model: self.model.clone(),
+            wire: riir_llm::Wire::OpenAi,
+        };
+        let body = self.build_steer_body(snippet, guidance, max_tokens);
+        let sent = match riir_llm::transport::post_chat_on(&self.agent, &leg, &body) {
+            Ok(raw) => raw,
+            Err(f) => {
+                self.spend.release(reserved);
+                let _ = self.spend.save();
+                return Err(Decline::Wire(f.message().to_string()));
+            }
+        };
+        let (text, usage) = match riir_llm::parse(riir_llm::Wire::OpenAi, &sent) {
+            Ok(pair) => pair,
+            Err(f) => {
+                self.spend.reconcile(reserved, &self.model, 0, 0, false);
+                let _ = self.spend.save();
+                return Err(Decline::Wire(f.message().to_string()));
+            }
+        };
+        self.spend.reconcile(
+            reserved,
+            &self.model,
+            usage.prompt_tokens,
+            usage.completion_tokens,
+            usage.reported,
+        );
+        let _ = self.spend.save();
+        let fix = text.trim();
+        if fix.is_empty() {
+            return Err(Decline::Wire("expert returned an empty fix".to_string()));
+        }
+        Ok(fix.to_string())
     }
 
     /// The full call: consent โ’ deadline โ’ reserve โ’ wire โ’ reconcile.
@@ -559,5 +738,102 @@ mod tests {
         let e = expert("http://secret-host:9".into(), 1.0);
         let rendered = format!("{e:?}");
         assert!(!rendered.contains("secret-host"), "{rendered}");
+    }
+
+    // ── Issue 234 T1: the steer-guidance builder ────────────────────────
+
+    #[test]
+    fn steer_body_carries_the_guidance_and_the_no_retention_rule() {
+        let e = expert("http://127.0.0.1:1".into(), 1.0);
+        let g = SteerGuidance::new(
+            "borrow of moved value: `v`",
+            "clippy::move_and_deref; the value is moved into the closure",
+            "borrow before the move, or clone at the capture site",
+            "the snippet compiles and the lint stays fixed",
+        );
+        let body = e.build_steer_body("fn f() { v }", &g, 512);
+        // The no-retention rule rides the wire exactly as the takeover
+        // builder rides it (system message + metadata).
+        assert!(body.contains("must not be retained"), "{body}");
+        assert!(body.contains("\"retention\":\"none\"") || body.contains("retention\": \"none"), "{body}");
+        // All four labeled sections are present.
+        for section in [
+            "Discrepancy: borrow of moved value",
+            "Applicable conditions: clippy::move_and_deref",
+            "Corrective rule: borrow before the move",
+            "Expected outcome: the snippet compiles",
+        ] {
+            assert!(body.contains(section), "missing {section:?} in {body}");
+        }
+        // The snippet rides too (snippet-only law: no file bytes, but the
+        // snippet itself is the payload).
+        assert!(body.contains("fn f() { v }"), "{body}");
+    }
+
+    #[test]
+    fn steer_guidance_bounds_fields_and_marks_empties() {
+        let long = "w".repeat(SteerGuidance::FIELD_MAX_BYTES + 500);
+        let g = SteerGuidance::new(&long, "", "  ", "ok");
+        assert!(g.discrepancy.len() <= SteerGuidance::FIELD_MAX_BYTES);
+        assert_eq!(g.conditions, "(not recorded)");
+        assert_eq!(g.corrective_rule, "(not recorded)");
+        assert_eq!(g.expected_outcome, "ok");
+        // Char-boundary safety: a multibyte tail never splits mid-character.
+        let mb = "é".repeat(SteerGuidance::FIELD_MAX_BYTES);
+        let g2 = SteerGuidance::new(&mb, "a", "b", "c");
+        assert!(g2.discrepancy.chars().all(|c| c == 'é'));
+    }
+
+    #[test]
+    fn steer_call_declines_before_the_socket_on_egress_and_deadline() {
+        // Egress refused (env unset in tests): decline, nothing sent.
+        let mut e = priced_expert("http://127.0.0.1:1".into(), 1.0);
+        let g = SteerGuidance::new("d", "c", "r", "e");
+        let verdict = e.generate_steer_fix_checked_with(
+            "fn f() { 0 }",
+            &g,
+            Some(Instant::now() + std::time::Duration::from_secs(60)),
+            512,
+            EgressConsent::from_env(),
+        );
+        assert!(
+            matches!(verdict, Err(Decline::Egress(_))),
+            "unset env must refuse the steer call like the takeover call"
+        );
+        // Expired deadline: declined pre-socket.
+        let verdict = e.generate_steer_fix_checked_with(
+            "fn f() { 0 }",
+            &g,
+            Some(Instant::now() - std::time::Duration::from_secs(1)),
+            512,
+            EgressConsent::Allowed,
+        );
+        assert!(matches!(verdict, Err(Decline::DeadlineExpired)));
+    }
+
+    #[test]
+    fn steer_call_happy_path_sends_the_guided_body() {
+        let (addr, rx) = fake_expert(OK_BODY);
+        let mut e = priced_expert(addr, 1.0);
+        let g = SteerGuidance::new(
+            "the borrow is moved",
+            "the closure captures by move",
+            "clone at the capture site",
+            "it compiles",
+        );
+        let fix = e
+            .generate_steer_fix_checked_with(
+                "fn f() { v }",
+                &g,
+                Some(Instant::now() + std::time::Duration::from_secs(60)),
+                512,
+                EgressConsent::Allowed,
+            )
+            .expect("the happy path returns the expert's fix");
+        assert_eq!(fix, "fn f() -> i32 { 1 }");
+        let sent = String::from_utf8(rx.recv().expect("request captured")).expect("utf8");
+        assert!(sent.contains("hosted-expert-steer") || sent.contains("Revise YOUR OWN response"));
+        assert!(sent.contains("Corrective rule: clone at the capture site"), "{sent}");
+        assert!(sent.contains("must not be retained"), "{sent}");
     }
 }
