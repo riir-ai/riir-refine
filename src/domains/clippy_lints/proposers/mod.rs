@@ -56,7 +56,7 @@
 //! | `manual_map` | exact `match`/`Some`/`None` shape (structural) |
 //! | `unnecessary_unwrap` | exact `is_some`/`unwrap`/else shape (structural, receiver-matched) |
 //! | `needless_range_loop` | `0..v.len()` + index-only usage (exact AST analysis) |
-//! | `needless_lifetimes` | single elidable lifetime (elision-rule verified) |
+//! | `needless_lifetimes` | single elidable lifetime (elision-rule verified; FN signatures only — the impl-header sibling `elidable_lifetime_names` is a DOCUMENTED DIVERGENCE, typeck-adjacent multi-site rewrite, P124) |
 //! | `semicolon_if_nothing_returned` | unit fn + bare non-block tail stmt → append `;` (41,601× in kornel's 100K-crate run — the most frequent structural lint) |
 //! | `collapsible_if` | outer if, no else, single-if then-block → `if a && b` (structural; logic-paren reconstruction) |
 //! | `collapsible_else_if` | `else { if .. }` single-stmt block → `else if` (structural) |

@@ -5,6 +5,24 @@
 //! params' ORIGINAL source text; each `'a` annotation is deleted together
 //! with ONE following space (`&'a u8` → `&u8`).
 //!
+//! ## DOCUMENTED DIVERGENCE — `elidable_lifetime_names` (the impl-header
+//! sibling lint, post-mining P124 2026-11-13)
+//!
+//! Clippy's newer `elidable_lifetime_names` fires on IMPL headers
+//! (`impl<'a, 'ast> Collector<'a, 'ast>` → `impl<'ast> Collector<'_,
+//! 'ast>`): the rewrite removes a generic param AND rewrites the
+//! self-type's lifetime args — a typeck-adjacent multi-site edit (the
+//! elided form's remaining-arg inference is bound-graph work, the same
+//! class that DEFERRED `extra_unused_lifetimes`, plan 230). This
+//! proposer deliberately does NOT cover it: it walks fn signatures only
+//! ([`for_each_fn`]), an impl header never matches, and the miss is
+//! SILENT (the fixer roll-up reports the file as fixed while the
+//! impl-header findings stand — the issue-235 session missed ×3 this
+//! way and landed them manually). Manual-only by design; recorded here
+//! and in the plan-230 thin-tail row instead of a half-bounded rule.
+//! Re-open on a bound-graph read landing (the `extra_unused_lifetimes`
+//! trigger, never before).
+//!
 //! ## Detection (tightened for `--fix` eligibility)
 //!
 //! Old behavior fired on "exactly one declared lifetime" alone — which is
