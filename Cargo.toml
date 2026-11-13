@@ -2286,3 +2286,6 @@ required-features = ["latent_retrieval"]
 [[example]]
 name = "band_ood_cost"
 required-features = ["latent_retrieval"]
+
+[[example]]
+name = "read_episode_census"
