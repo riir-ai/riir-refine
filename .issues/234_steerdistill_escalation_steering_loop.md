@@ -1,6 +1,7 @@
 # Issue 234: SteerDistill steering loop for the escalation chain (steer, don't take over)
 
 **Status:** Open — unclaimed
+**Claimed:** amo-idle-i234-t2, 1794613727, expires 2026-11-15T23:48:47+00:00
 **Source:** arXiv:2611.13410 SteerDistill via [riir-rethink/.research/025](../riir-rethink/.research/025_SteerDistill_Closed_Loop_Teacher_Steering.md)
 **Related:** `src/hosted_expert.rs` (R2 payload: snippet + no-retention system message — GENERATE/takeover shape), `src/seat_rerank.rs`, opt-in `ternary_inference`, `fix_verify` compile gate, corpus-gap intake lane
 
