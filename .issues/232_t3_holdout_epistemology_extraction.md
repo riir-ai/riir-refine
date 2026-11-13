@@ -1,6 +1,8 @@
 # Issue 232: T³ holdout-epistemology extraction — consumed-window ledger + half-split agreement readout
 **Status:** Open — fusion-idea tranche, novelty TBD (class-level prior art exists; the deltas are surface-specific) — report-only first, no plan until a fixture lands
-**Claimed:** amo-idle-i232-t1, 1794592159, expires 2026-11-15T17:49:19+00:00 — scope: T1 (consumed-window ledger + re-validation refusal) only
+**Lease closed:** amo-idle-i232-t1, 1794592159 — T1 LANDED 2026-11-14 (was expires 2026-11-15T17:49:19+00:00, scope: T1 only)
+**Claimed:** amo-idle-i232-t2, 1794594886, expires 2026-11-16T18:34:46+00:00
+(scope: T2, the half-split agreement readout, only)
 **Source:** riir-train/.research/495_T3_Training_Time_Testing_Data_Constrained.md (dang2026t3, blog post 2026-11-12); three-track panel outcome, No-GD advocate items 1/2/3/4/5
 **Priority rationale:** self-evolve product stack = fusion priority #1; filed as an ISSUE per the ungoat discipline (fusion idea → one issue, never a GOAT note/plan without a proof path)
 
