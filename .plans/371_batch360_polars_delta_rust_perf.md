@@ -1,6 +1,7 @@
 # Plan 371 — Batch 360: polars revisit #2 delta (rust_perf)
 
 > Status: OPEN — staged plan-first per the standing discipline (adopted Batch 60); executes Research 405 (`.research/405_polars_2x_streaming_delta_distill.md`). Verdict YES B− corpus-delta / lane-intel NONE / product-coverage YES. Source `pola-rs/polars` @ `61fdb30fa49c467cf50facfd894aaefe140979fa` (MIT; RE-CLONE + RE-PIN at mine time — fast-moving master). The cargo half awaits a free window; the claim row lands when the lane starts, the push is the arbiter.
+**Claimed:** zed-amo-b360-polars, 1794587562, expires 2026-11-15T16:32:42Z
 
 ## Scope
 
