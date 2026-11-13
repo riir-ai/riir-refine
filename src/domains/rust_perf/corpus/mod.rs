@@ -9,7 +9,18 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 327 entries across 15 categories as of Batch 358 (+5: layout +1
+//! 332 entries across 15 categories as of Batch 359 (+5: io +2
+//! `named-outputs-lazy-handles-partial-decode` (BENCHABLE, the batch's
+//! GOAT lead) + `pack-store-gc-decides-by-recovered-index`, caching +3
+//! `derived-cache-throwaway-version-reset-recovery` +
+//! `persisted-interner-assignments-checkpoint-with-refering-values` +
+//! `scope-scoped-memo-release-idle-holds-no-decoded-state` — the FIRST
+//! persistent-incremental-computation family (salsa-shaped memoization
+//! made durable, 0 prior owners), one BENCHABLE + four suggestion-only
+//! NotBenchable-by-domain (Plan 370 / Research 403, `entries_75`;
+//! rust-glancer/ajika @ `70c1e26d` MIT OR Apache-2.0 + the handwritten
+//! persistent-incrementality blog, tip unmoved at T0); prior: 327 entries
+//! across 15 categories as of Batch 358 (+5: layout +1
 //! `one-program-many-functions-accelerator-service-memory`, measurement +1
 //! `ane-split-calibration-fit-bandwidth-interference-term`, caching +1
 //! `accelerator-lost-breaker-forgets-calibration`, concurrency +1
@@ -791,14 +802,32 @@ mod entries_71;
 mod entries_72;
 mod entries_73;
 mod entries_74;
+mod entries_75;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 300 entries
-/// (Batch 332, 2026-11-05, Plan 340 / Research 370: +2 -- the blazing-smtlib
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 332 entries
+/// (Batch 359, 2026-11-13, Plan 370 / Research 403: +5 -- the ajika
+/// persistent-incrementality distill, `entries_75`: the FIRST
+/// persistent-incremental-computation family (salsa-shaped memoization
+/// made durable, 0 prior owners) -- `named-outputs-lazy-handles-partial-
+/// decode` (io, BENCHABLE -- the batch's GOAT lead, the partial-decode read
+/// path, MEASURED `ParetoDominant` at [8, 64, 256] fields) +
+/// `pack-store-gc-decides-by-recovered-index` (io) +
+/// `derived-cache-throwaway-version-reset-recovery` (caching) +
+/// `persisted-interner-assignments-checkpoint-with-refering-values`
+/// (caching) + `scope-scoped-memo-release-idle-holds-no-decoded-state`
+/// (caching), rust-glancer/ajika @ `70c1e26d` MIT OR Apache-2.0 + the
+/// handwritten persistent-incrementality blog, tip unmoved at T0; PRIOR-
+/// STATE NOTE: this fn doc's re-pin was MISSED by every lane from Batch 334
+/// through Batch 358 (nine landings updated the module header only) --
+/// repaired en-route here, the missed-pin class the Batch-288/B316 rows
+/// record; prior: Batch 358, 2026-11-13, Plan 369 / Research 345 lane B:
+/// +5, `entries_74`, the splash lane-B ANE/host residue; prior: Batch 332,
+/// 2026-11-05, Plan 340 / Research 370: +2 -- the blazing-smtlib
 /// distill, `entries_65`: the `byte-flag-table-masked-run-scan` law
 /// (dispatch, BENCHABLE -- a const-eval 256-entry u8 class-flag table + a
 /// masked-prefix run scan replaces the per-byte predicate chain; the
@@ -1006,6 +1035,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_72::entries());
     entries.extend(entries_73::entries());
     entries.extend(entries_74::entries());
+    entries.extend(entries_75::entries());
     Corpus::new(entries)
 }
 
