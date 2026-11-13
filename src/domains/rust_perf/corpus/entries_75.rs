@@ -482,7 +482,8 @@ impl DurableRecord {
 /// one (the named-outputs contract). The anti-regime read-all posture is
 /// re-measured by `batch359_goat_named_outputs` on demand.
 #[cfg(feature = "rust_perf_bench")]
-fn named_outputs_lazy_handles_partial_decode_bench_spec() -> crate::domains::rust_perf::bench::BenchSpec {
+fn named_outputs_lazy_handles_partial_decode_bench_spec()
+-> crate::domains::rust_perf::bench::BenchSpec {
     crate::domains::rust_perf::bench::BenchSpec {
         sizes: vec![8, 64, 256],
         harness: r#"

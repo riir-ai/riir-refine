@@ -942,8 +942,9 @@ pub const FIXABLE_LINTS: &[&str] = &[
     // same union of values) — the conservative subset of upstream's
     // overlap-analysis merge (non-adjacent runs, typed body equality,
     // same-guard merges, and the wildcard-DELETE suggestion all refuse).
-    // Pedantic group. The three P51a siblings that are type-blind
-    // (unnecessary_get_then_check, explicit_auto_deref,
+    // Pedantic group. The three P51a siblings that cannot fully
+    // type-check (unnecessary_get_then_check — parse-time receiver
+    // classification only, issue 235; explicit_auto_deref;
     // used_underscore_binding) ride the --verify tier below.
     "match_same_arms",
     // ── P118 post-mining intake (2026-11-07, the outbound readiness re-scan
@@ -1215,11 +1216,13 @@ pub const VERIFY_LINTS: &[&str] = &[
     // ── P51a post-mining intake (2026-10-14, the batch-230 self-heal run's
     // no-corpus-rule classes; the specimens are the healer's own proposers) ──
     // `m.get(k).is_none()` → `!m.contains_key(k)` (+ the `is_some` twin).
-    // VERIFY: the receiver is type-blind (clippy type-checks for the four
-    // std map/set types and stays SILENT on `&map` receivers — probe-
-    // verified; we fire wider, the divergences disclosed in the module
-    // doc: slice/Vec/set receivers are E0599 the compile gate reverts,
-    // the custom-get-vs-contains_key class is the pathological residual).
+    // VERIFY: the receiver carries PARSE-TIME type evidence only (clippy
+    // type-checks for the four std map/set types and stays SILENT on `&map`
+    // receivers — probe-verified; we classify map-like/index-like/unknown
+    // from in-file bindings and heal the index family as the BOUNDS-CHECK
+    // form, issue 235 R1 — the E0599-on-Vec casualty). The unknown class
+    // declines; the `…Map`-without-contains_key residual is what the gate
+    // still reverts.
     "unnecessary_get_then_check",
     // `f(&*e)` → `f(&e` / `f(&**e)` → `f(e)` (argument position only; the
     // deref-COUNT selects the splice — both MachineApplicable upstream,

@@ -3074,6 +3074,50 @@ mod tests {
     }
 
     #[test]
+    fn module_decl_gate_partial_verify_args_names_the_missing_feature() {
+        // Issue 235 R2, the riir-rethink decstat casualty (2026-11-11): the
+        // fix landed under `--features serve-encoder` while the edited file
+        // is gated by its parent's `#[cfg(feature = "decstat")] mod …;` —
+        // the gate compiled the wrong posture and the gated code compiled
+        // to nothing. The audit must mark the edit AND the rendered re-run
+        // must name the missing feature even when --verify-args carried
+        // ANOTHER posture (the P13 partial-args shape).
+        let fixed = "pub fn keep(r: &String) -> bool { r.starts_with('v') }\n";
+        let files = vec![FileEditSet {
+            path: PathBuf::from("src/decstat_verify.rs"),
+            original: fixed.to_string(),
+            fixed: fixed.to_string(),
+            edits: vec![EditAtLine {
+                rule_id: "needless_return".to_string(),
+                final_line: 1,
+                replacement: String::new(),
+                restore: String::new(),
+                rejected: Vec::new(),
+            }],
+        }];
+        let mut parents = std::collections::HashMap::new();
+        parents.insert(
+            PathBuf::from("src/decstat_verify.rs"),
+            vec![ParentSource {
+                path: PathBuf::from("src/lib.rs"),
+                content: "#[cfg(feature = \"decstat\")]\npub mod decstat_verify;\n".to_string(),
+            }],
+        );
+        let manifest = "[features]\ndefault = []\nserve-encoder = []\ndecstat = []\n";
+        let set = feature_set_from_args(manifest, Some("--features serve-encoder"));
+        let marks = cfg_unverified_edits_with_parents(&files, &set, &parents);
+        assert_eq!(marks.len(), 1, "{marks:?}");
+        assert_eq!(marks[0].not_enabled, vec!["decstat".to_string()]);
+        // The rendered re-run AUGMENTS the given posture with the missing
+        // feature — the exact command the operator should have run.
+        let rendered = render_cfg_audit(&marks, Some("--features serve-encoder"));
+        assert!(
+            rendered.contains("--verify-args \"--features serve-encoder --features decstat\""),
+            "{rendered}"
+        );
+    }
+
+    #[test]
     fn module_decl_gate_enabled_child_is_clean() {
         let parent = "#[cfg(feature = \"kat_migrate\")]\npub mod migrate_sweep;\n";
         let files = vec![gated_child_batch()];

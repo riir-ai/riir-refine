@@ -2,6 +2,14 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-13 — Issue 235 CLOSED LANDED + removed: the wrong-heal class repaired — the `unnecessary_get_then_check` proposer now classifies the receiver before it splices (R1) and the gate-posture lesson is verified-covered (R2)
+
+**R1** (the rule): the proposer gained a bounded parse-time type census (fn params, typed `let`s, consts/statics, in-file struct fields + aliases, impl `Self`) and picks the output form from it — map-like (`…Map`) heals to `contains_key` verbatim; index-like (`Vec`/`VecDeque`/slice/array) heals as the BOUNDS comparison (`i >= recv.len()` / `i < recv.len()`, complex args parenthesized, borrowed args decline); `String`/`&str` decline (`str::get` is also a char-boundary check — the comparison is not equivalent); every unresolvable receiver (the decstat casualty class) DECLINES to manual repair. 21 tests (the issue's evidence fixture `Vec<String>` + `get(usize).is_none()` never produces `contains_key`). The corpus entry is typed and unchanged; the gen-1 score re-run is byte-identical to run 252 (heal_rate 0.96428573 — corpus atoms unaffected, no regression); freeze statuses loud-and-green. The divergence is recorded in the cargo-refine skill table.
+
+**R2** (the gate lesson, verified — the P20 disclosure already names the missing feature): the decstat file is gated by its PARENT's `#[cfg(feature = "decstat")] mod decstat_verify;` — the issue-182 module-decl spelling the audit already covers; the render augments the given `--verify-args` with the missing feature. Pinned by `module_decl_gate_partial_verify_args_names_the_missing_feature` (the exact incident shape, re-run line asserting `--features serve-encoder --features decstat`). The lesson recorded: the disclosure is report-only and was disregarded in the incident — the audit line is the pre-landing bar, not a suggestion.
+
+En-route: the rulewright's own fix lane missed `elidable_lifetime_names` ×3 on the touched file (fixed manually) — filed to the post-mining intake. Removed per the noise-reduction rule; full life `git log --follow -- .issues/235_refine_heal_contains_key_on_vec_wrong_class.md`.
+
 ## 2026-11-13 — Batches 352 + 353 + 358 LANDED: the LoNE ANE-numerics sec distill, the FORGE Lab std memory-safety sec distill, and the splash lane-B ANE/host rust_perf transcription (6f6e0363 / 5c0dddcf / bc2e6655)
 
 **352.** LoNE ANE-numerics (Apache-2.0, Research 395): sec 61→65 — four suggest-only Numerics-family rules (fp16-subnormal rescale, wide-reduction precision split, fused-activation expansion with the mandatory GLU-fusion adjudication, position-keyed cache mask), fixtures 15/15.
