@@ -7444,6 +7444,14 @@ USAGE:
                     counts) — the measured knee + the fence verdict
                     (report-only, features multiplicity_gate,latent_retrieval;
                     L1's ordering law: 1-pass surfaces never arm).
+    --source-case-report
+                    Issue 232 T4: the source-case gate's confusion readout
+                    over the lived store — what the gate WOULD have declined
+                    against what actually happened (report-only, features
+                    source_case_gate,latent_retrieval; L3's law: a candidate
+                    that does not improve on the data that generated it
+                    carries no held-out value; the preregistered G2 bar owns
+                    any wiring).
     --coverage-report
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
                     lint surface, DERIVED from the installed driver
@@ -8352,6 +8360,13 @@ struct Args {
     /// verdict, report-only. Refuses exit 2 on a build without the features
     /// (the corpus-gap shape; the store half needs latent_retrieval too).
     multiplicity_report: bool,
+    /// Issue 232 T4 (`source_case_gate` feature): `--source-case-report`
+    /// runs the source-case confusion readout over the lived store (the
+    /// NoOp/Uphill decline classes vs lived outcomes, weighted by the
+    /// rows' outcome counts). Refuses exit 2 on a build without the
+    /// feature (the corpus-gap shape); the store half needs
+    /// latent_retrieval (in the bin's required-features).
+    source_case_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -8500,6 +8515,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         corpus_gap: false,
         half_split_report: false,
         multiplicity_report: false,
+        source_case_report: false,
         feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
@@ -8700,6 +8716,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--corpus-gap" => args.corpus_gap = true,
             "--half-split-report" => args.half_split_report = true,
             "--multiplicity-report" => args.multiplicity_report = true,
+            "--source-case-report" => args.source_case_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -10074,6 +10091,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.recompute_elo
         || args.half_split_report
         || args.multiplicity_report
+        || args.source_case_report
         || args.collapse_report
         || args.corpus_stats
         || args.import_series
@@ -13230,6 +13248,20 @@ fn main() {
         std::process::exit(2);
     }
 
+    // Issue 232 T4: `--source-case-report` is feature-gated — same shape
+    // as T3's refusal (the corpus-gap law: a build without the feature
+    // refuses LOUD instead of silently doing nothing). The store half
+    // composes latent_retrieval (the bin's required-features carry it, so
+    // the composed posture is the only dispatchable one).
+    #[cfg(not(feature = "source_case_gate"))]
+    if args.source_case_report {
+        eprintln!(
+            "source-case-report: this build lacks the source_case_gate feature — rebuild with: \
+             cargo build --features source_case_gate,latent_retrieval"
+        );
+        std::process::exit(2);
+    }
+
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
     // below (`login`, `claim`, …) runs before the mode-flag section ever
@@ -14635,6 +14667,39 @@ fn main() {
                     }
                 }
             }
+            Err(msg) => {
+                eprintln!("{msg}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // ── Issue 232 T4: --source-case-report — the source-case gate's
+    // confusion readout over the lived store ──────────
+    // Report-first, gates nothing (the frontier-report law): the NoOp/
+    // Uphill decline classes (mechanical, exact-integer, no thresholds)
+    // measured against the store's own outcome law, weighted by the rows'
+    // outcome counts. Exits 0 on a real read; exits 1 on a blind surface
+    // (no compiled domain / no outcome-bearing rows / corrupt rows) —
+    // never a green zero. The flag is refused pre-dispatch without the
+    // feature (above); this whole arm is gated with it.
+    #[cfg(all(feature = "source_case_gate", feature = "latent_retrieval"))]
+    if args.source_case_report {
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        let kv = root.join(".refine").join("trajectories.kv");
+        if !kv.exists() {
+            eprintln!(
+                "source-case-report: no store at {} — run any fix in this repo first",
+                kv.display()
+            );
+            std::process::exit(1);
+        }
+        match riir_refine::source_case::cli_readout(&root) {
+            Ok(text) => print!("{text}"),
             Err(msg) => {
                 eprintln!("{msg}");
                 std::process::exit(1);
@@ -20675,6 +20740,10 @@ mod mode_flag_tests {
             (
                 "--multiplicity-report",
                 Box::new(|m| m.multiplicity_report = true),
+            ),
+            (
+                "--source-case-report",
+                Box::new(|m| m.source_case_report = true),
             ),
             ("--collapse-report", Box::new(|m| m.collapse_report = true)),
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),

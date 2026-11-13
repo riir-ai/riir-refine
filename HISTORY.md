@@ -1586,6 +1586,45 @@ unparseable under edition-2024 rustfmt (the `gen` issue). The issue
 stays OPEN with T4–T5 unchecked; the correlation cell stays the
 standing gate.
 
+## 2026-11-14 — Issue 232 T4 LANDED + CLOSED MEASURED-NEGATIVE: the
+source-case-first gate (L3's law)
+
+Feature `source_case_gate` (opt-in, default-OFF, std only) +
+`src/source_case.rs` + `--source-case-report`. Two mechanical decline
+classes only: NoOp (fix byte-equals the trigger or is empty) and
+Uphill (cos(fix,buggy) > cos(fix,fixed), SIGNED + EXACT integer —
+sign quadrant first, then the squared cross-multiplication, i64 with
+~67× headroom; strict > so ties pass and the near-identical-exemplar
+cousin resolves epsilon-free). No distance floor — the random axis is
+a continuous reported metric (mean max-cosine), never a decline class.
+The confusion readout weighs verdicts by the rows' outcome counts;
+no-rule and zero-outcome rows disclosed; the T1 hygiene line consults
+the ledger READ-ONLY (never saves). The G2 bar was PREREGISTERED in
+the claim commit `709a521d` before any measurement: recall ≥ 50% AND
+false-decline ≤ 10%, else the gate closes with the numbers.
+**The lived-store readout on amo (126 rows, win 182 / fail 15):
+recall 20.0% (3/15), false-decline 23.6% (43/182) — MISS on BOTH
+legs; the wiring cell does NOT open; the gate closes
+measured-negative.** The structural confound (the finding): a winning
+fix is typically a minimal edit of its trigger text, so it embeds
+closer to the rule's buggy exemplar than to the fixed exemplar — the
+Uphill class mis-declines ~93% of the time on lived data. The
+comparator itself is fixture-proven correct (role inversion flips the
+verdict); what failed is the signal's lived alignment, not the
+arithmetic. Re-open condition: a store that durably splits verified
+from compile-only wins could re-read the false-decline axis against
+pure lint-resolution truth — a NEW pre-registration, never a silent
+retry. G1 `tests/source_case_g1.rs` 7/7 + module tests 7/7 (the bar's
+MISS and PASS shapes both demonstrated on fixtures). The feat+latent
+counts now RECONCILE: each session's number is feature-set-relative
+(shared baseline 4030; T2's 7 + T3's 8 + T4's 7 gated module tests
+each measured with their own feature + latent) — the T3-era "−7
+discrepancy" was the T2-vs-T3 test-count difference, no stale-target
+artifact. The issue stays OPEN with T5 unchecked; T5's premise (a lone
+held-out signal never reverses an armed lane alone) is unchanged — its
+composition reads T3's arming + T1's window verdict, not T4's declined
+signal.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

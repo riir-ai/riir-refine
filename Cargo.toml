@@ -538,6 +538,26 @@ half_split_agreement = []
 # Feature-off is byte-identical by construction (new gated code only).
 multiplicity_gate = []
 
+# Issue 232 T4 (Research 495, the T³ holdout-epistemology extraction): the
+# source-case-first gate — L3's law. A drafted fix must improve on the
+# data that generated it (the trigger + the rule's exemplar pair) BEFORE
+# the compile gate spends the Q half (the workspace recompile): NoOp
+# declines (fix byte-equals the trigger or is empty — the zero-length
+# step class) and Uphill declines (signed EXACT-integer cosine: the fix
+# resembles the buggy exemplar more than the fixed one; no epsilon — the
+# near-identical-exemplar cousin resolves by exactness, ties pass).
+# NO distance floor: the random axis stays a continuous reported metric —
+# a floor would be a threshold, and the preregistered G2 bar (issue row,
+# written before any measurement) owns any future decline class. The
+# confusion readout (verdict x lived outcome, weighted by the rows'
+# outcome counts) measures the gate against the fixer's own outcome law;
+# the win class folds oracle-verified + compile-only passes (disclosed).
+# Report-only first; no wiring exists. No implies: std only; the CLI lane
+# composes all(source_case_gate, latent_retrieval) (+
+# consumed_window_ledger for the read-only window-hygiene line).
+# Feature-off is byte-identical by construction (new gated code only).
+source_case_gate = []
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1303,6 +1323,14 @@ required-features = ["half_split_agreement"]
 [[test]]
 name = "multiplicity_gate_g1"
 required-features = ["multiplicity_gate", "latent_retrieval"]
+
+# Issue 232 T4: the source-case gate's G1 fixture (the NoOp classes, the
+# engagement pair — own resolution improves / near-bug uphill, the signed
+# exact uphill comparison incl. the flip-axis cousin, the confusion
+# readout's count weighting + thin-denominator UNDECIDABLE, the store e2e).
+[[test]]
+name = "source_case_g1"
+required-features = ["source_case_gate", "latent_retrieval"]
 
 [[example]]
 name = "clippy_verify_demo"

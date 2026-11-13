@@ -689,6 +689,15 @@ pub mod half_split;
 #[cfg(feature = "multiplicity_gate")]
 pub mod multiplicity_gate;
 
+// Issue 232 T4 (Research 495): the source-case-first gate — L3's law: a
+// candidate that does not improve on the data that generated it carries
+// no held-out value. NoOp + Uphill declines (mechanical, exact-integer,
+// no thresholds); the confusion readout weighs verdicts against lived
+// outcomes; report-only (the preregistered G2 bar owns any wiring).
+// The store/corpus feed composes `latent_retrieval`.
+#[cfg(feature = "source_case_gate")]
+pub mod source_case;
+
 // Issue 089 T1+T2: the learnability-frontier band report — per-rule
 // r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
 // outcome counters (store-free, ungated so lib tests cover it at default
