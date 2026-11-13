@@ -10696,9 +10696,8 @@ fn batch334_rules_present() {
 
 /// Batch 334 GOAT (the single-entry cache lead is the batch's benchable
 /// rule): run the validator and print the verdict. SLOW (spawns a cargo
-/// build + run): run explicitly with `cargo test -p riir-refine --lib
-/// --features rust_perf_bench batch334_goat_single_entry_cache --
-/// --ignored --nocapture --release`.
+/// build + run): run explicitly with
+/// `cargo test -p riir-refine --lib --features rust_perf_bench batch334_goat_single_entry_cache -- --ignored --nocapture --release`.
 #[cfg(feature = "rust_perf_bench")]
 #[test]
 #[ignore = "slow: spawns cargo build+run (temp bench crate)"]
@@ -10727,9 +10726,8 @@ fn batch334_goat_single_entry_cache() {
 
 /// Batch 332 GOAT (the byte-flag-table lead is the batch's benchable rule):
 /// run the validator and print the verdict. SLOW (spawns a cargo build +
-/// run): run explicitly with `cargo test -p riir-refine --lib --features
-/// rust_perf_bench batch332_goat_byte_flag_table -- --ignored --nocapture
-/// --release`.
+/// run): run explicitly with
+/// `cargo test -p riir-refine --lib --features rust_perf_bench batch332_goat_byte_flag_table -- --ignored --nocapture --release`.
 #[cfg(feature = "rust_perf_bench")]
 #[test]
 #[ignore = "slow: spawns cargo build+run (temp bench crate)"]
@@ -11504,7 +11502,7 @@ fn batch356_pareto_benches() {
 /// Batch 360 — the polars revisit #2 delta (Plan 371 / Research 405): the
 /// two new BENCHABLE rules present, parsing, category-pinned, carrying
 /// their bench specs + the source/quote needles; the B244 face landed
-/// count-neutral (entries_30's context_notes carries the char-count
+/// count-neutral (`entries_30`'s `context_notes` carries the char-count
 /// identity + both mask faces + the anti-regime + the G1 preflight ref).
 #[test]
 fn batch360_rules_present_and_parse() {
@@ -11523,58 +11521,77 @@ fn batch360_rules_present_and_parse() {
             true,
         ),
     ] {
-        let e = corpus
-            .entries
-            .iter()
-            .find(|e| e.rule_id == rid)
-            .unwrap_or_else(|| panic!("batch-360 rule '{rid}' missing from corpus"));
-        assert_eq!(
-            e.category, category,
-            "batch-360 rule '{rid}' must be {category}"
-        );
+        batch360_assert_rule(&corpus, rid, category, &needles, spec_expected);
+    }
+    batch360_assert_char_count_face_absent(&corpus);
+    batch360_assert_b244_face(&corpus);
+    batch360_assert_entries_76_header();
+}
+
+/// One batch-360 rule's corpus presence + parse + (gated) bench-spec pins.
+fn batch360_assert_rule(
+    corpus: &Corpus<RustPerfDomain>,
+    rid: &str,
+    category: &str,
+    needles: &[&str],
+    spec_expected: bool,
+) {
+    let e = corpus
+        .entries
+        .iter()
+        .find(|e| e.rule_id == rid)
+        .unwrap_or_else(|| panic!("batch-360 rule '{rid}' missing from corpus"));
+    assert_eq!(
+        e.category, category,
+        "batch-360 rule '{rid}' must be {category}"
+    );
+    assert!(
+        syn::parse_file(&e.buggy_code)
+            .and_then(|_| syn::parse_file(&e.fixed_code))
+            .is_ok(),
+        "batch-360 '{rid}' buggy/fixed must both parse"
+    );
+    #[cfg(feature = "rust_perf_bench")]
+    {
         assert!(
-            syn::parse_file(&e.buggy_code)
-                .and_then(|_| syn::parse_file(&e.fixed_code))
-                .is_ok(),
-            "batch-360 '{rid}' buggy/fixed must both parse"
+            e.bench_spec.is_some() == spec_expected,
+            "batch-360 '{rid}' bench_spec presence mismatch"
         );
-        #[cfg(feature = "rust_perf_bench")]
-        {
+        if let Some(spec) = e.bench_spec.as_ref() {
             assert!(
-                e.bench_spec.is_some() == spec_expected,
-                "batch-360 '{rid}' bench_spec presence mismatch"
+                spec.harness.contains("make_input")
+                    && spec.harness.contains("run_buggy")
+                    && spec.harness.contains("run_fixed"),
+                "batch-360 '{rid}' harness must define the three fns"
             );
-            if let Some(spec) = e.bench_spec.as_ref() {
-                assert!(
-                    spec.harness.contains("make_input")
-                        && spec.harness.contains("run_buggy")
-                        && spec.harness.contains("run_fixed"),
-                    "batch-360 '{rid}' harness must define the three fns"
-                );
-                assert!(
-                    !spec.harness.contains("fn main()"),
-                    "batch-360 '{rid}' harness must NOT define its own main (the validator wraps)"
-                );
-                assert!(
-                    spec.sizes.contains(&1_024)
-                        && spec.sizes.contains(&16_384)
-                        && spec.sizes.contains(&262_144),
-                    "batch-360 '{rid}' must sweep the pinned ladder [1K, 16K, 256K]"
-                );
-            }
-        }
-        let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
-        for needle in needles {
             assert!(
-                text.contains(needle),
-                "batch-360 {rid} concept {needle:?} missing"
+                !spec.harness.contains("fn main()"),
+                "batch-360 '{rid}' harness must NOT define its own main (the validator wraps)"
             );
-        }
-        #[cfg(not(feature = "rust_perf_bench"))]
-        {
-            let _ = spec_expected;
+            assert!(
+                spec.sizes.contains(&1_024)
+                    && spec.sizes.contains(&16_384)
+                    && spec.sizes.contains(&262_144),
+                "batch-360 '{rid}' must sweep the pinned ladder [1K, 16K, 256K]"
+            );
         }
     }
+    let text = format!("{}\n{}\n{}", e.name, e.buggy_code, e.fixed_code);
+    for needle in needles {
+        assert!(
+            text.contains(needle),
+            "batch-360 {rid} concept {needle:?} missing"
+        );
+    }
+    #[cfg(not(feature = "rust_perf_bench"))]
+    {
+        let _ = spec_expected;
+    }
+}
+
+/// The T2 face adjudication pin: the char-count identity landed as a FACE
+/// on B244, never a standalone rule.
+fn batch360_assert_char_count_face_absent(corpus: &Corpus<RustPerfDomain>) {
     assert!(
         !corpus
             .entries
@@ -11582,6 +11599,11 @@ fn batch360_rules_present_and_parse() {
             .any(|e| e.rule_id.contains("char-count")),
         "batch-360: the char-count law must NOT be a standalone rule (the T2 face adjudication)"
     );
+}
+
+/// The B244 face's provenance + content needles, and its `bench_spec`
+/// neutrality (the face adds notes, never touches the spec).
+fn batch360_assert_b244_face(corpus: &Corpus<RustPerfDomain>) {
     let b244 = corpus
         .entries
         .iter()
@@ -11610,6 +11632,11 @@ fn batch360_rules_present_and_parse() {
         b244.bench_spec.is_some(),
         "B244 keeps its own bench_spec (the face must not touch it)"
     );
+}
+
+/// The `entries_76` header's provenance pins (the plan/research refs + the
+/// never-pasted-source law).
+fn batch360_assert_entries_76_header() {
     let hdr = include_str!("entries_76.rs");
     for needle in [
         "437948302e11e15d47fc8b2882f9edb0848e5ebc",
