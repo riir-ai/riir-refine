@@ -1460,6 +1460,38 @@ emitted-class residue is 0 in both dense lanes). Issue file removed per the
 noise-reduction rule; full life: `git log --follow --
 .issues/236_shrink_to_fit_wrong_heal_exact_fill_builders.md`.
 
+## 2026-11-14 — Issue 232 T1 LANDED: the consumed-window ledger (the T³
+holdout-epistemology extraction's strongest item, report-only first)
+
+Feature `consumed_window_ledger` (opt-in, default-OFF, no implies) ships
+`src/consumed_window.rs`: the ledger of WHICH outcome windows each selection
+consumed (BLAKE3 digest over the canonical traj-row encoding, store key
+order) + the per-window REUSE counter + the per-selection index + the
+per-event log; versioned JSON persistence (atomic tmp+rename, cold-start on
+missing, loud refusal on unknown format_version). The verdict law is
+report-only end to end: `WindowRead::Consumed{reuse}` names the re-judgment
+UNDECIDABLE, the report line pins the word, and NOTHING refuses — the
+replay runs byte-identical to the ungated call. The traj-store hook
+(`consumed_window_digest` + `recompute_elo_with_ledger`) composes with
+`latent_retrieval`; the CLI lane (`--recompute-elo`) consults the persisted
+`.refine/window_ledger.json` and prints the line (smoke-verified: FRESH →
+reuse=1 UNDECIDABLE → ledger persisted, replay idempotent both runs).
+G1 fixture `tests/consumed_window_g1.rs` ([[test]] required-features row:
+consumed_window_ledger + latent_retrieval — the green-zero trap fenced):
+own-window flags, disjoint-window proceeds, the k-th-reuse probe pinned at
+k=2, and the synthetic-truth degradation over an 8-round self-confirming
+append loop (truth = the PL conversion of the seeded win probabilities;
+deterministic integer-arithmetic sampling — no RNG, the global-rng-gate
+discipline). Class honesty: reusable-holdout / adaptive data analysis
+(Dwork et al., Science 2015) + Bai et al. arXiv:2010.05843 are the known
+classes; the delta is the surface ledger, never a novel mechanism; NO T³
+constant imported (the knee, if a cell ever arms one, is measured here
+first). Posture gates: clippy ×4 postures (lib + bin), lib tests 3890
+default / 4035 feature+latent / 3895 lone-feature, fmt, feature-off
+byte-identical by construction. Landing commit: the T1 row in `.issues/232`
+names it; the issue stays OPEN with T2–T5 unchecked (the correlation cell
+is the next gate per the proof-path ledger; no promotion talk before it).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

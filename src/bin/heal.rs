@@ -14686,7 +14686,36 @@ fn main() {
                     if bad > 0 {
                         eprintln!("recompute-elo: {bad} corrupt row(s) skipped");
                     }
-                    match store.recompute_elo() {
+                    // Issue 232 T1: at the consumed-window-ledger posture the
+                    // consult rides BEFORE the replay and the read's report
+                    // line lands on stderr — UNDECIDABLE, never a refusal.
+                    let (outcome, cw_line) = {
+                        #[cfg(feature = "consumed_window_ledger")]
+                        {
+                            let ledger_path = root.join(".refine").join("window_ledger.json");
+                            let mut ledger =
+                                riir_refine::consumed_window::WindowLedger::load(&ledger_path);
+                            let epoch = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .map_or(0, |d| d.as_secs());
+                            match store.recompute_elo_with_ledger(&mut ledger, "recompute-elo-cli", epoch) {
+                                Ok((s, read, digest)) => {
+                                    let line = ledger.report_line(&digest, &read);
+                                    ledger.save(&ledger_path);
+                                    (Ok(s), Some(line))
+                                }
+                                Err(e) => (Err(e), None),
+                            }
+                        }
+                        #[cfg(not(feature = "consumed_window_ledger"))]
+                        {
+                            (store.recompute_elo(), None)
+                        }
+                    };
+                    if let Some(line) = cw_line {
+                        eprintln!("{line}");
+                    }
+                    match outcome {
                         Ok(s) => println!(
                             "elo: {} match(es) replayed | {} rule(s) + {} span(s) rated | {}/{} row(s) updated{}",
                             s.matches,

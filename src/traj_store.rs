@@ -1581,6 +1581,64 @@ impl TrajStore {
         Ok(summary)
     }
 
+    /// Issue 232 T1 — the consumed-window digest: BLAKE3 over the canonical
+    /// row encoding (`lint_key \u{1f} shape \u{1f} success \u{1f} fail` per
+    /// row, store key order) — the window identity the ledger keys on. Any
+    /// verdict mutation (a new outcome recorded, counters moved) changes
+    /// the digest; an unchanged store re-derives it byte-identically.
+    #[cfg(feature = "consumed_window_ledger")]
+    #[must_use]
+    pub fn consumed_window_digest(&self) -> String {
+        use blake3::Hasher;
+        let mut h = Hasher::new();
+        for row in self.dump() {
+            h.update(row.lint_key.as_bytes());
+            h.update(&[0x1f]);
+            h.update(row.shape.as_bytes());
+            h.update(&[0x1f]);
+            h.update(&row.success_count.to_le_bytes());
+            h.update(&[0x1f]);
+            h.update(&row.fail_count.to_le_bytes());
+            h.update(&[0x0a]);
+        }
+        h.finalize().to_hex().to_string()
+    }
+
+    /// Issue 232 T1 — [`Self::recompute_elo`] at the consumed-window
+    /// ledger's posture: consult + record the window consumption BEFORE the
+    /// replay (the reuse count at read time), then replay verbatim — the
+    /// summary is bit-identical to the ungated call (the ledger reports,
+    /// never refuses; the replay's verdict on a reused window is
+    /// UNDECIDABLE, not blocked).
+    ///
+    /// `selection` names the reading selection (provenance in the ledger
+    /// and its report line); `epoch` stamps the consumption (the fixture
+    /// passes pinned epochs; the CLI passes now). Returns the window
+    /// digest too — the identity the report line names.
+    ///
+    /// # Errors
+    ///
+    /// Same as [`Self::recompute_elo`].
+    #[cfg(feature = "consumed_window_ledger")]
+    pub fn recompute_elo_with_ledger(
+        &self,
+        ledger: &mut crate::consumed_window::WindowLedger,
+        selection: &str,
+        epoch: u64,
+    ) -> Result<
+        (
+            EloRecomputeSummary,
+            crate::consumed_window::WindowRead,
+            String,
+        ),
+        String,
+    > {
+        let digest = self.consumed_window_digest();
+        let read = ledger.consult(&digest, selection, epoch);
+        let summary = self.recompute_elo()?;
+        Ok((summary, read, digest))
+    }
+
     /// Issue 039 T4 — the store→table bridge T3 deferred to its caller:
     /// load the PERSISTED ratings into an [`EloTable`] without replaying
     /// any match (batch-on-load design — this returns the table the last

@@ -497,6 +497,18 @@ batch_diversity = ["katgpt-core/diffusion_diversity"]
 # it runs.
 adoption_gate = ["katgpt-core/compute_control"]
 
+# Issue 232 T1 (Research 495, the T³ holdout-epistemology extraction): the
+# consumed-window ledger — WHICH outcome windows each selection consumed +
+# a per-window REUSE counter, report-only (a reused window's re-validation
+# verdict is UNDECIDABLE, never folded into a refusal — the reuse count is
+# the poison variable, a non-monotone valid→poisoned curve, so a boolean
+# "burnt" flag would miss it). No implies: the ledger type is std + blake3
+# only; the traj-store hook composes all(consumed_window_ledger,
+# latent_retrieval). Feature-off is byte-identical by construction (no
+# shared-path edits — new gated code only). Report-only first per the
+# issue's proof-path ledger; promotion talk waits for the correlation cell.
+consumed_window_ledger = []
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1239,6 +1251,13 @@ required-features = ["escalation_manifest", "seat_rerank"]
 [[test]]
 name = "adoption_gate_gates"
 required-features = ["adoption_gate"]
+
+# Issue 232 T1 — the G1 fixture: synthetic outcome store + pinned selection
+# replay (own-window flags, disjoint window proceeds, k-th-reuse probe +
+# synthetic-truth degradation under the self-confirming append loop).
+[[test]]
+name = "consumed_window_g1"
+required-features = ["consumed_window_ledger", "latent_retrieval"]
 
 [[example]]
 name = "clippy_verify_demo"

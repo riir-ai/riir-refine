@@ -666,6 +666,13 @@ pub mod kat_promotion;
 #[cfg(feature = "latent_retrieval")]
 pub mod traj_store;
 
+// Issue 232 T1 (Research 495): the consumed-window ledger — which outcome
+// windows each selection consumed + the reuse counter, report-only (a
+// reused window's re-validation verdict is UNDECIDABLE, never a refusal).
+// The traj-store hook composes this with `latent_retrieval`.
+#[cfg(feature = "consumed_window_ledger")]
+pub mod consumed_window;
+
 // Issue 089 T1+T2: the learnability-frontier band report — per-rule
 // r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
 // outcome counters (store-free, ungated so lib tests cover it at default
