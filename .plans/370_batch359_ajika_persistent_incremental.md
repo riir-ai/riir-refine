@@ -1,6 +1,7 @@
 # Plan 370 — Batch 359: the ajika persistent-incrementality rust_perf batch
 
 **Status:** OPEN — staged plan-first (zed-amo-ajika-distill, 2026-11-13, Research 403); the cargo half awaits a free window; the `**Claimed:**` lease row lands when the batch lane starts (48 h expiry; the push is the arbiter).
+**Claimed:** zed-amo-b359-ajika/amo, 1794551120, expires 2026-11-15T06:25:20Z
 
 Source: `rust-glancer/ajika` @ `70c1e26df847d3da10d2a59a5a6aefe37db2bf55` (0.1.7, MIT OR Apache-2.0) + the blog <https://rust-glancer.github.io/blog/persistent-incrementality-in-rust/>. Verdict: YES B− (Research 403). Nominal landing: rust_perf 327 → 330–332.
 
