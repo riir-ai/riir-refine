@@ -1544,6 +1544,48 @@ still reads lib.rs clean; noted, not fixed). The issue stays OPEN with
 T3–T5 unchecked (the correlation cell is the next gate; no promotion
 talk before it).
 
+## 2026-11-14 — Issue 232 T3 LANDED: the multiplicity-gated arming
+predicate (L1's ordering law)
+
+Feature `multiplicity_gate` (opt-in, default-OFF, no implies — std
+only) + `src/multiplicity_gate.rs` + `--multiplicity-report`. The
+fence: a surface failing reuse-dominance (`total < 2·units`, exact
+integer) refuses `OnePassSurface` — 1-pass surfaces (the chain/quorum
+shape) never arm at any multiplicity, and the refusal is structural
+(no bypass constructor). The knee = the encounter-mass median (largest
+m with `2·mass_above(m) ≥ total`; exact-half ties arm LATE) — measured
+per surface from the histogram, nothing imported (T³'s 4-pass knee is
+training-surface). The gate = `σ(1.0·(m − knee))` over the unit's OWN
+counter — sigmoid never softmax (the fixture's same-knee
+different-shape bit-identity row is the discriminator);
+`armed ⟺ gate ≥ 0.5 ⟺ m ≥ knee`, `gate(knee)` bit-exactly 0.5, no
+second threshold anywhere. Issue-940 reclassification recorded at the
+site: the knee integer-exact, the gate VALUE an f64 exp render — local
+report-only, never a sync crossing. The real surface (the fixer's
+per-rule outcome encounters in `.refine/trajectories.kv`, folded per
+`lint_key`) measures on this box: 18 units / 229 encounters / repeat
+share 92.1% → REUSE_DOMINANT, **knee 51**. The real-surface finding:
+the store legitimately carries zero-outcome rows (seed/pending tier-1
+rows — 21 of 144 here); the feeder excludes them with a named count
+(`excluded_zero_outcome_rows` + one stderr disclosure line) and
+measures encounters (verdicts, not row existence), while the module
+`MalformedZero` law stays for true histogram input. Blind/corrupt
+refuse exit 1; ONE_PASS is a measured verdict (exit 0). G1
+`tests/multiplicity_gate_g1.rs` 7/7 (truth table with byte-identical
+unarmed vocabulary, per-surface knee measurement + order independence,
+the [2,2,4]→4 tie row, the fence incl. the exact `total == 2·units`
+boundary pass, never-softmax bits, blind/malformed discrimination, the
+store e2e seeded [6,2,1,1] → knee 6). Posture gates: clippy `-D
+warnings` lib ×4 + bin ×3, lib tests 3890 default (byte-identical to
+the T2-era baseline) / 4038 feature+latent / 3897 lone feature, mode
+pins pass, pins_manifest PASS, numbering gate PASSED, lease lint
+clean. Pre-existing disclosures (not mine, routed): the fmt gate reds
+on unpinned `.plans/b360_g1_preflight.rs` (committed unformatted by
+the Batch-360 lane at `2276a6c2`) and `cf_workers_ai.rs` still
+unparseable under edition-2024 rustfmt (the `gen` issue). The issue
+stays OPEN with T4–T5 unchecked; the correlation cell stays the
+standing gate.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

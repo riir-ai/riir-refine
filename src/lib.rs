@@ -680,6 +680,15 @@ pub mod consumed_window;
 #[cfg(feature = "half_split_agreement")]
 pub mod half_split;
 
+// Issue 232 T3 (Research 495): the multiplicity-gated arming predicate —
+// L1's ordering law: arms fire only past a locally measured knee
+// (encounter-mass median, integer-exact), sigmoid over the unit's own
+// counter (never softmax); 1-pass surfaces (the chain/quorum shape) never
+// arm — the fence is the same law's negative direction. Report-only; the
+// traj-store surface feed composes `latent_retrieval`.
+#[cfg(feature = "multiplicity_gate")]
+pub mod multiplicity_gate;
+
 // Issue 089 T1+T2: the learnability-frontier band report — per-rule
 // r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
 // outcome counters (store-free, ungated so lib tests cover it at default

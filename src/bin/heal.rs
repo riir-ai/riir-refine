@@ -7438,6 +7438,12 @@ USAGE:
                     buggy_code, resolution Q = fixed_code — over neutral probe
                     spans; report-only, feature half_split_agreement).
                     Report-only, exit unchanged; needs an oracle feed for anchors.
+    --multiplicity-report
+                    Issue 232 T3: the multiplicity-gate readout over the real
+                    fixer surface (.refine/trajectories.kv per-rule encounter
+                    counts) — the measured knee + the fence verdict
+                    (report-only, features multiplicity_gate,latent_retrieval;
+                    L1's ordering law: 1-pass surfaces never arm).
     --coverage-report
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
                     lint surface, DERIVED from the installed driver
@@ -8340,6 +8346,12 @@ struct Args {
     /// last. Refuses exit 2 on a build without the feature (the corpus-gap
     /// shape).
     half_split_report: bool,
+    /// Issue 232 T3 (`multiplicity_gate` feature): `--multiplicity-report`
+    /// measures the arming knee over the real fixer surface (the traj store's
+    /// per-rule encounter counts) — the encounter-mass median + the fence
+    /// verdict, report-only. Refuses exit 2 on a build without the features
+    /// (the corpus-gap shape; the store half needs latent_retrieval too).
+    multiplicity_report: bool,
 }
 
 fn parse_args() -> Args {
@@ -8487,6 +8499,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         corpus_delta: false,
         corpus_gap: false,
         half_split_report: false,
+        multiplicity_report: false,
         feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
@@ -8686,6 +8699,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--corpus-delta" => args.corpus_delta = true,
             "--corpus-gap" => args.corpus_gap = true,
             "--half-split-report" => args.half_split_report = true,
+            "--multiplicity-report" => args.multiplicity_report = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -10059,6 +10073,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.misses_report
         || args.recompute_elo
         || args.half_split_report
+        || args.multiplicity_report
         || args.collapse_report
         || args.corpus_stats
         || args.import_series
@@ -13200,6 +13215,21 @@ fn main() {
         std::process::exit(2);
     }
 
+    // Issue 232 T3: `--multiplicity-report` is feature-gated — a build
+    // without `multiplicity_gate` refuses LOUD (exit 2, naming the
+    // rebuild), before any dispatch. The store half composes
+    // `latent_retrieval` (the traj store IS the measured surface); the bin
+    // carries it in its required-features, so the composed posture is the
+    // only one that can ever reach the dispatch arm below.
+    #[cfg(not(feature = "multiplicity_gate"))]
+    if args.multiplicity_report {
+        eprintln!(
+            "multiplicity-report: this build lacks the multiplicity_gate feature — rebuild with: \
+             cargo build --features multiplicity_gate,latent_retrieval"
+        );
+        std::process::exit(2);
+    }
+
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
     // below (`login`, `claim`, …) runs before the mode-flag section ever
@@ -14539,6 +14569,72 @@ fn main() {
         };
         match riir_refine::half_split::cli_report(&targets) {
             Ok(text) => print!("{text}"),
+            Err(msg) => {
+                eprintln!("{msg}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
+
+    // ── Issue 232 T3: --multiplicity-report — the arming-knee measure
+    // over the real fixer surface ────────────────────────────────
+    // Report-first, gates nothing (the frontier-report law): the traj
+    // store's per-rule encounter counts → the measured knee
+    // (encounter-mass median) + the fence verdict. Exits 0 on a real
+    // measure (including an honest ONE_PASS fence verdict — the fence is
+    // the ANSWER for that surface, not a refusal); exits 1 on a blind or
+    // malformed surface (never a green zero). The flag is refused
+    // pre-dispatch without both features (above); this whole arm is
+    // gated with them.
+    #[cfg(all(feature = "multiplicity_gate", feature = "latent_retrieval"))]
+    if args.multiplicity_report {
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        let kv = root.join(".refine").join("trajectories.kv");
+        if !kv.exists() {
+            eprintln!(
+                "multiplicity-report: no store at {} — run any fix in this repo first",
+                kv.display()
+            );
+            std::process::exit(1);
+        }
+        match riir_refine::multiplicity_gate::measure_store_surface(&root) {
+            Ok(m) => {
+                // The zero-outcome-row disclosure: named, never folded —
+                // the histogram reads ENCOUNTERS (verdicts), and these
+                // seed/pending rows carry none yet.
+                if m.excluded_zero_outcome_rows > 0 {
+                    eprintln!(
+                        "multiplicity-gate: {} row(s) with zero recorded outcomes excluded \
+                         from the histogram (seed/pending rows — the encounter count reads \
+                         verdicts, not row existence)",
+                        m.excluded_zero_outcome_rows
+                    );
+                }
+                match m.verdict {
+                    Ok(gate) => {
+                        print!(
+                            "{}",
+                            gate.render(riir_refine::multiplicity_gate::SURFACE_NAME)
+                        )
+                    }
+                    Err(refusal) => {
+                        eprintln!("{}", refusal.line());
+                        // ONE_PASS is a measured verdict (exit 0); blind
+                        // and malformed are refusals (exit 1).
+                        if matches!(
+                            refusal,
+                            riir_refine::multiplicity_gate::KneeRefusal::OnePassSurface { .. }
+                        ) {
+                            return;
+                        }
+                        std::process::exit(1);
+                    }
+                }
+            }
             Err(msg) => {
                 eprintln!("{msg}");
                 std::process::exit(1);
@@ -20575,6 +20671,10 @@ mod mode_flag_tests {
             (
                 "--half-split-report",
                 Box::new(|m| m.half_split_report = true),
+            ),
+            (
+                "--multiplicity-report",
+                Box::new(|m| m.multiplicity_report = true),
             ),
             ("--collapse-report", Box::new(|m| m.collapse_report = true)),
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),

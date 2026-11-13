@@ -523,6 +523,21 @@ consumed_window_ledger = []
 # shared-path edits — new gated code only).
 half_split_agreement = []
 
+# Issue 232 T3 (Research 495, the T³ holdout-epistemology extraction): the
+# multiplicity-gated arming predicate — L1's ordering law. A holdout-flavored
+# arm fires only when the surface's per-unit encounter multiplicity has
+# passed a LOCALLY MEASURED knee (the encounter-mass median, integer-exact;
+# exact-half ties arm late), sigmoid-gated over the unit's own counter —
+# never softmax — and the fence is the same law's negative direction: a
+# surface failing reuse-dominance (1-pass; the chain/quorum shape) never
+# arms at any multiplicity. No T³ constant is imported (the 4-pass knee is
+# training-surface). Report-only first; the correlation cell is the issue's
+# standing gate. No implies: the gate is std only (integer measurement, no
+# hashing); the CLI lane composes all(multiplicity_gate, latent_retrieval)
+# to measure the real fixer-encounter surface in .refine/trajectories.kv.
+# Feature-off is byte-identical by construction (new gated code only).
+multiplicity_gate = []
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1280,6 +1295,14 @@ required-features = ["consumed_window_ledger", "latent_retrieval"]
 [[test]]
 name = "half_split_g1"
 required-features = ["half_split_agreement"]
+
+# Issue 232 T3: the arming predicate's truth-table fixture (below knee →
+# byte-identical unarmed; at/above knee → armed; the sigmoid-half
+# equivalence; the never-softmax discriminator; the tie rule; the OnePass
+# fence; blind/malformed refusals; the store-surface CLI measure).
+[[test]]
+name = "multiplicity_gate_g1"
+required-features = ["multiplicity_gate", "latent_retrieval"]
 
 [[example]]
 name = "clippy_verify_demo"
