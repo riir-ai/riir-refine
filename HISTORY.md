@@ -1430,6 +1430,36 @@ the cross-repo landing records stay in dapps bench 018 (`c0fa14f`). Removed
 at HEAD `22666bfa8` lineage; the `.highwater` (223) is untouched — numbers
 are never reused.
 
+## 2026-11-14 — Issue 236 LANDED/REMOVED: the shrink-to-fit exact-fill guard (G5c)
+
+The live wrong-heal from riir-infer's int_ref lane (six dead
+`shrink_to_fit()` heals on exact-fill builders, hand-reverted at riir-infer
+`7340300`) is closed at the root: the proposer's new G5c refuses the fire
+when the hint is a pure product (`m * n`) AND the push structure PROVES the
+exact fill — a single unconditional chain (`for 0..m { for 0..n { push } }`
+shape: every non-leaf level pushes only through its unique top-level child,
+leaf = exactly one unconditional top-level push, no `break`/`continue`/
+`return`/`?`, no shadow re-let, no other len-mutator in or beside the chain,
+every bound derivable) whose bounds multiset equals the factors multiset.
+Anything unprovable keeps the incumbent fire (`n * 2` + one loop is the
+shipped over-provisioned arm; a guessed hint still fires) — the miss costs
+nothing, the wrong heal costs a revert. Two bound-extraction fixes came with
+it (same admission logic): inclusive ranges (`0..=n` iterates n+1) and
+non-zero-literal starts (`2..n`) are now UNRESOLVABLE bounds instead of
+matching the end text. 13 new tests (the I236 class silent; sibling loops,
+conditional leaf/child, outer direct push, straight-line push after the
+chain, break, inclusive inner, shadow, mismatched factors all still fire);
+3890 lib tests green; clippy `-D warnings` ×3 postures; real-lane screens
+post-guard: riir-infer int_ref ops+tensor 0 emitted, riir-games (230 files,
+2102 spans) 0 emitted. Score-bench run 254 appended (no floor movement).
+Binary rebuilt + installed at the release set before push (bin-age law).
+Residue: the full workspace compile screen was NOT run (cycle budget — the
+tier-1 grep counts ~30 hand-authored `shrink_to_fit` sites in riir-games,
+none healer-emitted; the rule's suggest screen over that lane is 0, so the
+emitted-class residue is 0 in both dense lanes). Issue file removed per the
+noise-reduction rule; full life: `git log --follow --
+.issues/236_shrink_to_fit_wrong_heal_exact_fill_builders.md`.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

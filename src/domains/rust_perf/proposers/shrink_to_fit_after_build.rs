@@ -32,6 +32,22 @@
 //!   derivable-capacity text, so the text-equality guard above cannot see
 //!   them; the word gate does). Superstring idents (`steps_total`) are a
 //!   different bound and keep the fire.
+//! - `with_capacity(m * n)` + a PROVEN exact-fill push nest (`for 0..m {`
+//!   `for 0..n { push } }`) is EXACT-FILL by construction — the factor
+//!   multiset equals the chain's bound multiset, so `len == capacity` on
+//!   every path and the inserted call is a dead no-op (the I236 wrong-heal
+//!   class: six dead heals on riir-infer's `int_ref` lane, all reverted by
+//!   hand). The proof bar is strict: one pushing chain, every non-leaf
+//!   level pushes only through its unique UNCONDITIONAL child (top-level
+//!   stmt), the leaf carries exactly one unconditional top-level push, no
+//!   early exit (`break`/`continue`/`return`/`?`) anywhere in the chain,
+//!   no shadow re-let, no other len-mutator on the ident in or beside the
+//!   chain, and every level's bound derivable (an inclusive range
+//!   `0..=n` or a non-zero start `2..n` is unresolvable — the count is
+//!   not the bound text). Anything unprovable keeps the fire: a
+//!   mismatched product (`n * 2` + one loop) is the shipped
+//!   over-provisioned win, and the miss costs nothing while the wrong
+//!   heal costs a revert.
 //! - `with_capacity(count * 2)` + `0..count` (over-provisioned) or
 //!   `with_capacity(4096)` + a data-driven loop (a guess) DO fire — the
 //!   excess is real.
@@ -63,7 +79,7 @@
 use super::{ProposerOpts, SourceEdit, line_indent, src};
 use syn::spanned::Spanned;
 use syn::visit::{self, Visit};
-use syn::{Block, Expr, File, Ident, Local, Pat, Stmt, UnOp};
+use syn::{BinOp, Block, Expr, File, Ident, Lit, Local, Pat, RangeLimits, Stmt, UnOp};
 
 /// Byte range of any node's span.
 fn byte_range<T: Spanned>(t: &T) -> std::ops::Range<usize> {
@@ -132,6 +148,34 @@ fn local_bound_ident(local: &Local) -> Option<(Ident, bool)> {
     Some((pat.ident.clone(), pat.mutability.is_some()))
 }
 
+/// G2 — the single `let mut` Vec-ctor binding of `tail_ident` in the block:
+/// `Some((stmt index, ctor info))`. `None` — the refusal cases included —
+/// when the ident is bound twice (shadowing ambiguity), bound immutably
+/// (`shrink_to_fit` needs `&mut`), or bound to something other than a
+/// `Vec::new` / `Vec::with_capacity` call this rule proves.
+fn find_vec_binding<'a>(stmts: &'a [Stmt], tail_ident: &Ident) -> Option<(usize, CtorInfo<'a>)> {
+    let mut binding: Option<(usize, CtorInfo<'a>)> = None;
+    for (i, stmt) in stmts.iter().enumerate() {
+        let Stmt::Local(local) = stmt else { continue };
+        let Some((id, is_mut)) = local_bound_ident(local) else {
+            continue;
+        };
+        if id != *tail_ident {
+            continue;
+        }
+        if binding.is_some() {
+            return None; // a second binding of the same ident = shadowing ambiguity
+        }
+        if !is_mut {
+            return None; // shrink_to_fit needs &mut
+        }
+        let init = local.init.as_ref().map(|i| &*i.expr)?;
+        let info = vec_ctor(init)?; // bound, but not a Vec ctor this rule proves
+        binding = Some((i, info));
+    }
+    binding
+}
+
 fn collect_block_edits(
     source: &str,
     block: &Block,
@@ -149,30 +193,7 @@ fn collect_block_edits(
     };
 
     // G2 — exactly one `let mut` Vec-ctor binding of that ident in the block.
-    let mut binding: Option<(usize, CtorInfo<'_>)> = None;
-    for (i, stmt) in stmts.iter().enumerate() {
-        let Stmt::Local(local) = stmt else { continue };
-        let Some((id, is_mut)) = local_bound_ident(local) else {
-            continue;
-        };
-        if id != *tail_ident {
-            continue;
-        }
-        if binding.is_some() {
-            return; // a second binding of the same ident = shadowing ambiguity
-        }
-        if !is_mut {
-            return; // shrink_to_fit needs &mut
-        }
-        let Some(init) = local.init.as_ref().map(|i| &*i.expr) else {
-            return;
-        };
-        let Some(info) = vec_ctor(init) else {
-            return; // bound, but not a Vec ctor this rule proves
-        };
-        binding = Some((i, info));
-    }
-    let Some((bind_idx, info)) = binding else {
+    let Some((bind_idx, info)) = find_vec_binding(stmts, tail_ident) else {
         return;
     };
 
@@ -195,8 +216,7 @@ fn collect_block_edits(
     let mut scan = LoopPushScan {
         source,
         ident: tail_ident,
-        cap_texts: Vec::new(),
-        header_texts: Vec::new(),
+        loops: Vec::new(),
     };
     for stmt in &stmts[bind_idx + 1..] {
         if matches!(stmt, Stmt::Item(_)) {
@@ -204,9 +224,12 @@ fn collect_block_edits(
         }
         scan.visit_stmt(stmt);
     }
-    if scan.cap_texts.is_empty() {
+    if scan.loops.is_empty() {
         return; // no push loop — straight-line builds are the loss regime
     }
+    let cap_texts: Vec<Option<(String, bool)>> =
+        scan.loops.iter().map(|l| l.cap_text.clone()).collect();
+    let header_texts: Vec<String> = scan.loops.iter().map(|l| l.header.clone()).collect();
 
     // Len-convention delegation: a push loop whose iterable is a
     // len-convention shape (`for &x in items`, `items.iter()`, …) makes the
@@ -217,7 +240,7 @@ fn collect_block_edits(
     // too. Range-bound loops keep ONLY the vwc-overlap gate: when vwc
     // declines the range (a u8 bound fails its usize gate), shrink is the
     // correct fallback.
-    if info.cap_arg.is_none() && scan.cap_texts.iter().any(|t| matches!(t, Some((_, true)))) {
+    if info.cap_arg.is_none() && cap_texts.iter().any(|t| matches!(t, Some((_, true)))) {
         return;
     }
 
@@ -236,8 +259,7 @@ fn collect_block_edits(
         let Some(arg_text) = src(source, arg) else {
             return;
         };
-        if scan
-            .cap_texts
+        if cap_texts
             .iter()
             .any(|t| matches!(t, Some((s, _)) if *s == arg_text))
         {
@@ -256,7 +278,7 @@ fn collect_block_edits(
     if let Some(Expr::Path(hint_path)) = info.cap_arg {
         if let Some(hint) = hint_path.path.get_ident() {
             let hint = hint.to_string();
-            let bounded = scan.header_texts.iter().any(|h| {
+            let bounded = header_texts.iter().any(|h| {
                 h.split(|c: char| !c.is_alphanumeric() && c != '_')
                     .any(|w| w == hint)
             });
@@ -264,6 +286,23 @@ fn collect_block_edits(
                 return;
             }
         }
+    }
+
+    // G5c — a pure-product hint (`m * n`) over a PROVEN exact-fill push
+    // chain (`for 0..m { for 0..n { push } }`) leaves nothing to release:
+    // the chain provably receives exactly the product of its bounds, so
+    // `len == capacity` on every path and the call would be a dead no-op
+    // (the I236 wrong-heal class). The proof bar is strict — see the
+    // module doc — and anything unprovable keeps the incumbent fire:
+    // `n * 2` + one loop is the shipped over-provisioned arm.
+    if product_hint_is_exact_fill(
+        &scan,
+        info.cap_arg,
+        source,
+        tail_ident,
+        &stmts[bind_idx + 1..],
+    ) {
+        return;
     }
 
     // Zero-width insertion at the tail start; the tail keeps its own line.
@@ -281,14 +320,30 @@ fn collect_block_edits(
 /// delegate without a type gate). `None` for while/loop bodies and unknown
 /// iterators (exactly the shrink regime). Range bounds are NOT
 /// len-convention: their type is unknown to a parse-only scan (the u8-bound
-/// case where vec-with-capacity declines and shrink must fire).
+/// case where vec-with-capacity declines and shrink must fire). An INCLUSIVE
+/// range end (`0..=n` iterates n+1 times) and a non-zero literal start
+/// (`2..n` iterates end-start times) are also `None` — the iteration count
+/// is not the bound text, and the exact-fill guards must match provable
+/// counts only (I236; the fire is the safe default for unresolvable bounds).
 fn derivable_capacity_text(source: &str, iterable: &Expr) -> Option<(String, bool)> {
     match iterable {
-        Expr::Range(r) => r
-            .end
-            .as_ref()
-            .and_then(|e| src(source, e))
-            .map(|s| (s, false)),
+        Expr::Range(r) => {
+            if matches!(r.limits, RangeLimits::Closed(_)) {
+                return None;
+            }
+            let non_zero_start = match r.start.as_deref() {
+                None => false,
+                Some(Expr::Lit(l)) => !matches!(&l.lit, Lit::Int(i) if i.to_string() == "0"),
+                Some(_) => true,
+            };
+            if non_zero_start {
+                return None;
+            }
+            r.end
+                .as_ref()
+                .and_then(|e| src(source, e))
+                .map(|s| (s, false))
+        }
         Expr::Unary(u) if matches!(u.op, UnOp::Deref(_)) => match &*u.expr {
             Expr::Path(p) => src(source, p).map(|s| (format!("{s}.len()"), true)),
             _ => None,
@@ -308,25 +363,34 @@ fn derivable_capacity_text(source: &str, iterable: &Expr) -> Option<(String, boo
     }
 }
 
-/// Collects the derivable-capacity text of every loop (for/while/loop) whose
-/// body pushes onto `ident`. `None` entries = while/loop (no derivable bound
-/// — exactly the regime the shrink fix is for).
-struct LoopPushScan<'a> {
-    source: &'a str,
-    ident: &'a Ident,
-    cap_texts: Vec<Option<(String, bool)>>,
-    /// Raw header text of each pushing loop (for: the iterable; while: the
-    /// condition) — the G5b exact-hint word gate matches against it.
-    header_texts: Vec<String>,
+/// One pushing loop discovered in the block: its derivable bound (if any),
+/// header text, spans, and its body — the raw material for the G5/G5b text
+/// matches and the G5c exact-fill chain proof.
+struct PushingLoop<'a> {
+    cap_text: Option<(String, bool)>,
+    header: String,
+    expr_span: std::ops::Range<usize>,
+    body_span: std::ops::Range<usize>,
+    body: &'a Block,
 }
 
-impl<'a> Visit<'a> for LoopPushScan<'a> {
+/// Collects every loop (for/while/loop) whose body pushes onto `ident`,
+/// nested or not — nested pushing loops are recorded too (the outer loop
+/// pushes through them). `None` `cap_text` entries = while/loop (no derivable
+/// bound — exactly the regime the shrink fix is for).
+struct LoopPushScan<'a, 'b> {
+    source: &'b str,
+    ident: &'b Ident,
+    loops: Vec<PushingLoop<'a>>,
+}
+
+impl<'a> Visit<'a> for LoopPushScan<'a, '_> {
     fn visit_expr(&mut self, e: &'a Expr) {
-        let (body, iterable): (Option<&Block>, Option<&Expr>) = match e {
-            Expr::ForLoop(f) => (Some(&f.body), Some(&f.expr)),
-            Expr::While(w) => (Some(&w.body), None),
-            Expr::Loop(l) => (Some(&l.body), None),
-            _ => (None, None),
+        let (body, iterable, cond): (Option<&Block>, Option<&Expr>, Option<&Expr>) = match e {
+            Expr::ForLoop(f) => (Some(&f.body), Some(&f.expr), None),
+            Expr::While(w) => (Some(&w.body), None, Some(&w.cond)),
+            Expr::Loop(l) => (Some(&l.body), None, None),
+            _ => (None, None, None),
         };
         if let Some(body) = body {
             let mut probe = PushProbe {
@@ -336,15 +400,16 @@ impl<'a> Visit<'a> for LoopPushScan<'a> {
             };
             probe.visit_block(body);
             if probe.found {
-                self.cap_texts
-                    .push(iterable.and_then(|it| derivable_capacity_text(self.source, it)));
-                let header = match e {
-                    Expr::ForLoop(f) => src(self.source, &f.expr),
-                    Expr::While(w) => src(self.source, &w.cond),
-                    _ => None,
-                }
-                .unwrap_or_default();
-                self.header_texts.push(header);
+                self.loops.push(PushingLoop {
+                    cap_text: iterable.and_then(|it| derivable_capacity_text(self.source, it)),
+                    header: iterable
+                        .and_then(|it| src(self.source, it))
+                        .or_else(|| cond.and_then(|c| src(self.source, c)))
+                        .unwrap_or_default(),
+                    expr_span: byte_range(e),
+                    body_span: byte_range(body),
+                    body,
+                });
             }
         }
         visit::visit_expr(self, e);
@@ -382,6 +447,273 @@ impl<'a> Visit<'a> for PushProbe<'a> {
         }
         visit::visit_expr(self, e);
     }
+}
+
+// ── G5c — the exact-fill proof helpers (I236) ────────────────────────────
+
+/// Len-mutating methods on the binding ident that break an exact-fill
+/// count: any of these in or beside the push chain means the count is not
+/// the product of the loop bounds (`extend`/`insert` add, `clear`/
+/// `truncate` remove — either way the proof is gone).
+const LEN_MUTATORS: &[&str] = &[
+    "push",
+    "insert",
+    "append",
+    "extend",
+    "extend_from_slice",
+    "resize",
+    "resize_with",
+    "splice",
+    "clear",
+    "truncate",
+    "drain",
+];
+
+/// Whitespace-insensitive text form used for factor/bound multiset
+/// comparison (`m * n` vs `m*n` spellings must match).
+fn normalize_text(s: &str) -> String {
+    s.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+/// Factor texts of a pure multiplication chain (paren/group unwrapped),
+/// normalized. `None` when the hint is anything else — a bare ident, a
+/// literal, a call, an addition — which is the incumbent arms' regime
+/// (G5/G5b text matches, the over-provisioned fire).
+fn product_factors(source: &str, arg: Option<&Expr>) -> Option<Vec<String>> {
+    let mut out = Vec::new();
+    if !mul_walk(source, arg?, &mut out) {
+        return None;
+    }
+    Some(out)
+}
+
+fn mul_walk(source: &str, e: &Expr, out: &mut Vec<String>) -> bool {
+    let e = match e {
+        Expr::Paren(p) => &p.expr,
+        Expr::Group(g) => &g.expr,
+        other => other,
+    };
+    match e {
+        Expr::Binary(b) if matches!(b.op, BinOp::Mul(_)) => {
+            mul_walk(source, &b.left, out) && mul_walk(source, &b.right, out)
+        }
+        other => match src(source, other) {
+            Some(t) => {
+                out.push(normalize_text(&t));
+                true
+            }
+            None => false,
+        },
+    }
+}
+
+fn multiset_eq(a: &[String], b: &[String]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut x: Vec<_> = a.iter().collect();
+    let mut y: Vec<_> = b.iter().collect();
+    x.sort_unstable();
+    y.sort_unstable();
+    x == y
+}
+
+/// `true` when `l` is not nested inside another pushing loop's body.
+fn is_root_loop(l: &PushingLoop, loops: &[PushingLoop]) -> bool {
+    !loops
+        .iter()
+        .any(|o| o.body_span.start <= l.expr_span.start && l.expr_span.end <= o.body_span.end)
+}
+
+/// Mutation probe over a body that skips whole sub-trees by exact span
+/// (the nested pushing loops are the chain's children, not this level's
+/// own pushes). Records push spans, other len-mutator calls, early exits,
+/// and shadow re-lets of the ident.
+struct MutationScan<'i> {
+    ident: &'i Ident,
+    skips: Vec<std::ops::Range<usize>>,
+    pushes: Vec<std::ops::Range<usize>>,
+    other_mutations: bool,
+    early_exits: bool,
+    shadowed: bool,
+}
+
+impl<'i> MutationScan<'i> {
+    fn new(ident: &'i Ident, skips: Vec<std::ops::Range<usize>>) -> Self {
+        Self {
+            ident,
+            skips,
+            pushes: Vec::new(),
+            other_mutations: false,
+            early_exits: false,
+            shadowed: false,
+        }
+    }
+}
+
+impl<'a> Visit<'a> for MutationScan<'_> {
+    fn visit_local(&mut self, i: &'a Local) {
+        if let Some((id, _)) = local_bound_ident(i) {
+            if id == *self.ident {
+                self.shadowed = true;
+            }
+        }
+        visit::visit_local(self, i);
+    }
+
+    fn visit_expr(&mut self, e: &'a Expr) {
+        let r = byte_range(e);
+        if self.skips.contains(&r) {
+            return; // a chain child — its internals are the child level's
+        }
+        match e {
+            Expr::Break(_) | Expr::Continue(_) | Expr::Return(_) | Expr::Try(_) => {
+                self.early_exits = true;
+            }
+            Expr::MethodCall(m) if !self.shadowed => {
+                if let Expr::Path(p) = &*m.receiver {
+                    if p.path.get_ident().is_some_and(|i| i == self.ident) {
+                        let method = m.method.to_string();
+                        if method == "push" {
+                            self.pushes.push(r);
+                        } else if LEN_MUTATORS.contains(&method.as_str()) {
+                            self.other_mutations = true;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        visit::visit_expr(self, e);
+    }
+}
+
+/// `true` when `span` is a top-level statement expression of `body` —
+/// unconditional reachability within the body (no `if`/`match` wrapper).
+fn span_is_top_level_stmt(body: &Block, span: &std::ops::Range<usize>) -> bool {
+    body.stmts
+        .iter()
+        .any(|s| matches!(s, Stmt::Expr(e, _) if byte_range(e) == *span))
+}
+
+/// The exact-fill proof for a push chain rooted at a loop's BODY: `Some
+/// (bounds)` iff the body provably receives exactly `product(bounds)`
+/// pushes onto the ident. Each level must carry exactly one child loop as
+/// an unconditional top-level statement (a child wrapped in `if` runs
+/// zero-or-more times — the count is unprovable), push only through it,
+/// and end at a leaf of exactly one unconditional top-level push. Early
+/// exits, shadows, other len-mutators, ambiguous nests, and unresolvable
+/// bounds all refuse the proof (`None` → the incumbent fire).
+fn chain_bounds_from_body(body: &Block, ident: &Ident, source: &str) -> Option<Vec<String>> {
+    // Direct children only: pushing loops of this body that are not nested
+    // inside ANOTHER pushing loop of the same body (a doubly-nested loop is
+    // the child's child, found by the recursion — counting it here would
+    // refuse every three-deep chain).
+    let all = pushing_loops_in_body(body, ident, source);
+    let children: Vec<&PushingLoop> = all.iter().filter(|l| is_root_loop(l, &all)).collect();
+    let skips: Vec<_> = children.iter().map(|c| c.expr_span.clone()).collect();
+    let mut scan = MutationScan::new(ident, skips);
+    scan.visit_block(body);
+    if scan.shadowed || scan.early_exits || scan.other_mutations {
+        return None;
+    }
+    match children.len() {
+        0 => {
+            // Leaf: exactly one push, unconditional (top-level stmt).
+            if scan.pushes.len() == 1 && span_is_top_level_stmt(body, &scan.pushes[0]) {
+                Some(Vec::new())
+            } else {
+                None
+            }
+        }
+        1 => {
+            // A non-leaf level must push ONLY through its child: any direct
+            // push here adds pushes the product does not count.
+            if !scan.pushes.is_empty() {
+                return None;
+            }
+            let child = &children[0];
+            if !span_is_top_level_stmt(body, &child.expr_span) {
+                return None; // conditional child: zero-or-more executions
+            }
+            let bound = child.cap_text.as_ref().map(|(s, _)| normalize_text(s))?;
+            let mut rest = chain_bounds_from_body(child.body, ident, source)?;
+            let mut out = Vec::with_capacity(rest.len() + 1);
+            out.push(bound);
+            out.append(&mut rest);
+            Some(out)
+        }
+        _ => None, // ambiguous nest (sibling pushing loops at one level)
+    }
+}
+
+/// The G5c verdict: `true` when the hint is a pure product AND the block
+/// provably fills the Vec to exactly that product (the module doc's strict
+/// bar — single unconditional chain, no early exits, no shadows, no other
+/// len-mutators, every bound derivable). Anything unprovable returns
+/// `false` and the rule keeps its incumbent fire.
+fn product_hint_is_exact_fill(
+    scan: &LoopPushScan<'_, '_>,
+    cap_arg: Option<&Expr>,
+    source: &str,
+    ident: &Ident,
+    region: &[Stmt],
+) -> bool {
+    let Some(factors) = product_factors(source, cap_arg) else {
+        return false;
+    };
+    let roots: Vec<&PushingLoop> = scan
+        .loops
+        .iter()
+        .filter(|l| is_root_loop(l, &scan.loops))
+        .collect();
+    let [root] = roots.as_slice() else {
+        return false;
+    };
+    let root_is_top = region
+        .iter()
+        .any(|s| matches!(s, Stmt::Expr(e, _) if byte_range(e) == root.expr_span));
+    if !root_is_top {
+        return false;
+    }
+    let mut outside = MutationScan::new(ident, vec![root.expr_span.clone()]);
+    for stmt in region {
+        if matches!(stmt, Stmt::Item(_)) {
+            continue;
+        }
+        outside.visit_stmt(stmt);
+    }
+    let outside_clean = outside.pushes.is_empty()
+        && !outside.other_mutations
+        && !outside.early_exits
+        && !outside.shadowed;
+    if !outside_clean {
+        return false;
+    }
+    let Some(mut bounds) = chain_bounds_from_body(root.body, ident, source) else {
+        return false;
+    };
+    let Some((rb, _)) = root.cap_text.as_ref() else {
+        return false;
+    };
+    bounds.insert(0, normalize_text(rb));
+    multiset_eq(&factors, &bounds)
+}
+
+/// Every loop whose body pushes onto `ident`, found anywhere inside
+/// `body` (nested loops included).
+fn pushing_loops_in_body<'a, 'b>(
+    body: &'a Block,
+    ident: &'b Ident,
+    source: &'b str,
+) -> Vec<PushingLoop<'a>> {
+    let mut scan = LoopPushScan {
+        source,
+        ident,
+        loops: Vec::new(),
+    };
+    scan.visit_block(body);
+    scan.loops
 }
 
 #[cfg(test)]
@@ -531,6 +863,186 @@ mod tests {
              v\n}\n";
         let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
         assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    // ── G5c — the exact-fill proof (I236 wrong-heal class) ──────────────
+
+    /// THE I236 class: a pure-product hint over a nested push chain is
+    /// exact-fill by construction (`m * n` capacity, `m*n` unconditional
+    /// pushes) — the inserted call would be a dead no-op. Stays silent.
+    #[test]
+    fn product_hint_nested_exact_stays_silent() {
+        let code = "fn gemm(m: usize, n: usize) -> Vec<i32> {\n    \
+             let mut y = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            y.push(1);\n        }\n    }\n    \
+             y\n}\n";
+        assert!(propose_fix("shrink-to-fit-after-build", code).is_none());
+    }
+
+    /// Paren and whitespace spellings normalize to the same factors.
+    #[test]
+    fn product_hint_paren_whitespace_stays_silent() {
+        let code = "fn gemm(m: usize, n: usize) -> Vec<i32> {\n    \
+             let mut y = Vec::with_capacity((m)*n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            y.push(1);\n        }\n    }\n    \
+             y\n}\n";
+        assert!(propose_fix("shrink-to-fit-after-build", code).is_none());
+    }
+
+    /// Three-deep nest, three-factor product — the same proof, deeper.
+    #[test]
+    fn product_hint_three_deep_stays_silent() {
+        let code = "fn f(m: usize, n: usize, k: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n * k);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            \
+             for q in 0..k {\n                v.push(1);\n            }\n        }\n    }\n    \
+             v\n}\n";
+        assert!(propose_fix("shrink-to-fit-after-build", code).is_none());
+    }
+
+    /// A len-convention outer bound joins the product
+    /// (`items.len() * n` over `for x in items { for j in 0..n }`).
+    #[test]
+    fn product_hint_len_convention_outer_stays_silent() {
+        let code = "fn f(items: &[u8], n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(items.len() * n);\n    \
+             for x in items {\n        \
+             for j in 0..n {\n            v.push(*x);\n        }\n    }\n    \
+             v\n}\n";
+        assert!(propose_fix("shrink-to-fit-after-build", code).is_none());
+    }
+
+    /// SIBLING loops sum their pushes (`m + n`, not `m * n`) — the proof
+    /// refuses and the rule fires (the capacity product is a real guess).
+    #[test]
+    fn product_hint_sibling_loops_fire() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        v.push(1);\n    }\n    \
+             for j in 0..n {\n        v.push(2);\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A conditional push at the leaf (`if` inside the inner loop) breaks
+    /// the exact count — fires.
+    #[test]
+    fn product_hint_conditional_leaf_fires() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            \
+             if j > 0 {\n                v.push(1);\n            }\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A conditionally-reached child loop (nested inside an `if`) runs
+    /// zero-or-more times — the count is unprovable — fires.
+    #[test]
+    fn product_hint_conditional_child_fires() {
+        let code = "fn f(m: usize, n: usize, flag: bool) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             if flag {\n            \
+             for j in 0..n {\n                v.push(1);\n            }\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A direct push beside the nested chain at one level adds pushes the
+    /// product does not count — fires.
+    #[test]
+    fn product_hint_outer_direct_push_fires() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        v.push(0);\n        \
+             for j in 0..n {\n            v.push(1);\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A straight-line push after the chain adds one more — fires.
+    #[test]
+    fn product_hint_straight_line_push_after_chain_fires() {
+        let code = "fn f(m: usize, n: usize, last: u8) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            v.push(1);\n        }\n    }\n    \
+             v.push(last);\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// An early exit inside the chain (`break`) shortens the count — fires.
+    #[test]
+    fn product_hint_break_in_chain_fires() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             if i > 2 {\n            break;\n        }\n        \
+             for j in 0..n {\n            v.push(1);\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// An inclusive inner bound (`0..=n` iterates n+1 times) is not the
+    /// bound text — the count exceeds the product and the excess is real —
+    /// fires.
+    #[test]
+    fn product_hint_inclusive_inner_fires() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..=n {\n            v.push(1);\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A shadow re-let inside the leaf (after the credited push) makes the
+    /// remaining pushes ambiguous — the chain proof refuses — fires.
+    #[test]
+    fn product_hint_shadow_in_leaf_fires() {
+        let code = "fn f(m: usize, n: usize) -> Vec<u8> {\n    \
+             let mut v = Vec::with_capacity(m * n);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            v.push(1);\n            \
+             let mut v = Vec::new();\n        }\n    }\n    \
+             v\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("v.shrink_to_fit();"), "{out}");
+        parses(&out);
+    }
+
+    /// A mismatched product (`m * k` for an `m*n` nest) is a real guess —
+    /// fires (the over-provisioned arm at product arity).
+    #[test]
+    fn product_hint_mismatched_factors_fire() {
+        let code = "fn gemm(m: usize, n: usize, k: usize) -> Vec<i32> {\n    \
+             let mut y = Vec::with_capacity(m * k);\n    \
+             for i in 0..m {\n        \
+             for j in 0..n {\n            y.push(1);\n        }\n    }\n    \
+             y\n}\n";
+        let out = propose_fix("shrink-to-fit-after-build", code).expect("pattern matched");
+        assert!(out.contains("y.shrink_to_fit();"), "{out}");
         parses(&out);
     }
 
