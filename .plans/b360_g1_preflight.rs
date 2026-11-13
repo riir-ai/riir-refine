@@ -44,7 +44,11 @@ fn funnel_matches_reference_on_all_shifts_and_boundary_pairs() {
         }
     }
     // a chained 3-word stream drains bit-exactly through the funnel
-    let w = [0xDEAD_BEEF_CAFE_0001u64, 0x0F0F_0F0F_0000_000F, 0x8000_0000_0000_0000];
+    let w = [
+        0xDEAD_BEEF_CAFE_0001u64,
+        0x0F0F_0F0F_0000_000F,
+        0x8000_0000_0000_0000,
+    ];
     for s in 1u32..64 {
         let expect = (w[0] >> s) | (w[1] << (64 - s));
         assert_eq!(combine_funnel(w[0], w[1], s), expect);
@@ -93,7 +97,10 @@ fn flag_guard_leaves_aux_structure_bit_identical() {
     for &(slot, ref rows) in &hits {
         mark_flagged(&mut state_flag, &mut seen_flag, slot, rows);
     }
-    assert_eq!(seen_naive, seen_flag, "G1: the marked set must be bit-identical");
+    assert_eq!(
+        seen_naive, seen_flag,
+        "G1: the marked set must be bit-identical"
+    );
     // distinct hits still mark through the guard
     let mut seen2 = vec![0u64; 1];
     let mut state2 = vec![0u32; 4];
@@ -109,10 +116,7 @@ fn flag_guard_leaves_aux_structure_bit_identical() {
 
 // ── R2 face identity: char count = byte len - continuation-byte count (valid UTF-8) ──
 fn continuation_count(bytes: &[u8]) -> usize {
-    bytes
-        .iter()
-        .filter(|&&b| (b & 0xC0) == 0x80)
-        .count()
+    bytes.iter().filter(|&&b| (b & 0xC0) == 0x80).count()
 }
 
 #[test]
