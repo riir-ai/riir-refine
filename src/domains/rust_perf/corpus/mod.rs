@@ -9,7 +9,14 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 332 entries across 15 categories as of Batch 359 (+5: io +2
+//! 334 entries across 15 categories as of Batch 360 (+2: caching +1
+//! `first-hit-flag-guards-aux-structure` — the batch's GOAT lead,
+//! BENCHABLE `ParetoDominant` 3/0/0 two-run stable + arithmetic +1
+//! `u128-funnel-shift-combine` — BENCHABLE measured Mixed two-run,
+//! landed correctness-first (the s=0 UB + the %64 periodicity) + 1
+//! count-neutral FACE on B244 (the char-count identity, `entries_30`);
+//! Plan 371 / Research 405, `entries_76`, pola-rs/polars @ `437948302`
+//! MIT; PRIOR: 332 entries across 15 categories as of Batch 359 (+5: io +2
 //! `named-outputs-lazy-handles-partial-decode` (BENCHABLE, the batch's
 //! GOAT lead) + `pack-store-gc-decides-by-recovered-index`, caching +3
 //! `derived-cache-throwaway-version-reset-recovery` +
@@ -803,14 +810,23 @@ mod entries_72;
 mod entries_73;
 mod entries_74;
 mod entries_75;
+mod entries_76;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 332 entries
-/// (Batch 359, 2026-11-13, Plan 370 / Research 403: +5 -- the ajika
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 334 entries
+/// (Batch 360, 2026-11-13, Plan 371 / Research 405: +2 -- the polars
+/// revisit #2 delta, `entries_76`: `first-hit-flag-guards-aux-structure`
+/// (caching, BENCHABLE `ParetoDominant` 3/0/0 two-run stable, the flag
+/// transition gating the side-structure write, the bit-steal face) +
+/// `u128-funnel-shift-combine` (arithmetic, BENCHABLE measured Mixed
+/// two-run, correctness-first: the s=0 UB trap + the %64 periodicity) +
+/// 1 count-neutral FACE on B244 (the char-count identity); pola-rs/
+/// polars @ `437948302` MIT; PRIOR: Batch 359, 2026-11-13, Plan 370 /
+/// Research 403: +5 -- the ajika
 /// persistent-incrementality distill, `entries_75`: the FIRST
 /// persistent-incremental-computation family (salsa-shaped memoization
 /// made durable, 0 prior owners) -- `named-outputs-lazy-handles-partial-
@@ -1036,6 +1052,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_73::entries());
     entries.extend(entries_74::entries());
     entries.extend(entries_75::entries());
+    entries.extend(entries_76::entries());
     Corpus::new(entries)
 }
 

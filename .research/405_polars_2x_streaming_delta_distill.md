@@ -1,6 +1,6 @@
 # Batch 360 candidate pool — polars revisit #2: the 2.0 streaming-engine delta (distill verdict)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — batch-360-landed (Plan 371 executed T0–T8: pin re-verified `437948302`, T2 face-resolve resolved FACE-on-B244 per the B66 float-sum precedent, R1 `first-hit-flag-guards-aux-structure` BENCHABLE MEASURED ParetoDominant 3/0/0 two-run stable, R4 `u128-funnel-shift-combine` BENCHABLE measured Mixed two-run landed correctness-first, R3/R5/R6/R7/R8 deferred to the snapshot as staged leads with their grades; landing = the corpus + pins + docs commit, the push is the arbiter)
 
 ## Source
 
