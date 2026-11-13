@@ -14689,7 +14689,10 @@ fn main() {
                     // Issue 232 T1: at the consumed-window-ledger posture the
                     // consult rides BEFORE the replay and the read's report
                     // line lands on stderr — UNDECIDABLE, never a refusal.
-                    let (outcome, cw_line) = {
+                    let (outcome, cw_line): (
+                        Result<riir_refine::traj_store::EloRecomputeSummary, String>,
+                        Option<String>,
+                    ) = {
                         #[cfg(feature = "consumed_window_ledger")]
                         {
                             let ledger_path = root.join(".refine").join("window_ledger.json");
@@ -14698,7 +14701,11 @@ fn main() {
                             let epoch = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .map_or(0, |d| d.as_secs());
-                            match store.recompute_elo_with_ledger(&mut ledger, "recompute-elo-cli", epoch) {
+                            match store.recompute_elo_with_ledger(
+                                &mut ledger,
+                                "recompute-elo-cli",
+                                epoch,
+                            ) {
                                 Ok((s, read, digest)) => {
                                     let line = ledger.report_line(&digest, &read);
                                     ledger.save(&ledger_path);
