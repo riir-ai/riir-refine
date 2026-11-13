@@ -47,3 +47,14 @@ scripts/__pycache__/
 # per-case evidence is regenerable run output (Bench 114 harvest, 1afd5d15)
 .benchmarks/114_issue161_pool_widened_harvest/behav/
 .benchmarks/114_issue161_pool_widened_harvest/cases.jsonl
+
+# Bench 128 run 8 (2026-11-11, the mitander-reply arc) raw run artifacts —
+# the record (a58aa306e) committed the harness + summaries (run8/bench_run8.py,
+# run8/rerun-*.out) and the README pins the binaries by sha256 ("run8/bins/,
+# NOT committed"); the work-*/rerun-* fixture trees + per-phase logs are
+# regenerable by bench_run8.py (same Bench 114 precedent).
+.benchmarks/128_mozilla_rustperf_day2/run8/bins/
+.benchmarks/128_mozilla_rustperf_day2/run8/bin-*/
+.benchmarks/128_mozilla_rustperf_day2/run8/work-*/
+.benchmarks/128_mozilla_rustperf_day2/run8/rerun-chain/
+.benchmarks/128_mozilla_rustperf_day2/run8/rerun-standalone/
