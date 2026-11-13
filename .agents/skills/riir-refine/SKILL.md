@@ -116,6 +116,7 @@ Housekeeping findings (hung processes killed, worktrees removed, repos
 ff'd) are reportable work — name them in the cycle summary — but they are
 NOT a queue unit and never substitute for one: after housekeeping, proceed
 to queue item 1.
+Cycle summaries end with the standard `## Summary` - its five sections are the machine-read surface (auto-prompt and the boss parse them). "Nothing actionable left" is legal only when it quotes derived counts (`agent-mail rig status` issue counts / `fleet-cache.json.issues`) showing zero open unclaimed units fleet-wide; box-scoped emptiness says "from this box", and every open unclaimed unit found is listed in (3) with path + routed-to. An issue without a `**Claimed:**` line is unowned: claim it (lease) or mail the owning lane - filing is not routing (owner decree 2026-11-13, incident: an m3 lane wrote "Nothing actionable left" over seal-sprints' 17 actionable items).
 
 ## The idle priority queue
 
