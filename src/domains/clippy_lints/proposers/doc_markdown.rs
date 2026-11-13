@@ -56,10 +56,18 @@
 //! - **Indented code** — 4+ spaces after the marker skipped (`CommonMark`
 //!   indented code block).
 //! - **Inline code spans** — segments between backtick pairs skipped.
+//! - **Multi-line inline spans (P125)** — the span state crosses lines:
+//!   a line's odd backtick count OPENS a span that keeps following
+//!   backtick-free lines inside code until the closing tick. The b360
+//!   incident (the fixer wrapped words on the middle lines of a giant
+//!   `cargo test …` span, clippy then flagged the words it had just
+//!   "fixed") is the regression this carrier closes.
 //! - **Unbalanced ticks** — a line with an ODD raw backtick count is
 //!   skipped whole (clippy suppresses word checks for the entire
 //!   paragraph and fires the help-only "backticks are unbalanced" shape,
-//!   which has no suggestion to consume).
+//!   which has no suggestion to consume); with P125 the state CARRIES
+//!   into the next line, and a span-closing line is skipped whole too
+//!   (a missed cosmetic wrap on its trailing prose — never a wrong edit).
 //! - **Blockquotes** — lines starting `>` skipped (clippy skips words at
 //!   `blockquote_level > 0`).
 //! - **Link-shaped tokens** — a raw token containing `](` or `][` is
@@ -198,15 +206,31 @@ const DOC_VALID_IDENTS: &[&str] = &[
 pub(crate) fn collect_edits(source: &str, file: &File) -> Vec<SourceEdit> {
     let mut edits = Vec::new();
     let mut in_fence = false;
+    // P125: inline code spans cross lines — a backtick that opened on an
+    // earlier line keeps every following backtick-free line INSIDE code
+    // until the closing tick. Without this carrier, a span's middle lines
+    // scan as outside-backtick prose and the word pass backticks words that
+    // are already inside a span — breaking the span early (the b360
+    // incident: `cargo test …` opened on line 3, the fixer wrapped words on
+    // line 4, clippy then flagged the words it had just "fixed").
+    let mut in_span = false;
     for line in super::helpers::doc_lines(source, file) {
         if line.new_block {
             // A gap between doc attrs = a new doc block: unbalanced-fence
             // state from the previous block must not leak (an unbalanced
             // fence is already broken markdown; suppressing later
-            // unrelated docs for it would be a false skip).
+            // unrelated docs for it would be a false skip). A span does
+            // not cross a doc block either — same reset law.
             in_fence = false;
+            in_span = false;
         }
-        process_doc_line(line.text, line.base, &mut in_fence, &mut edits);
+        process_doc_line(
+            line.text,
+            line.base,
+            &mut in_fence,
+            &mut in_span,
+            &mut edits,
+        );
     }
     edits
 }
@@ -261,8 +285,18 @@ pub fn doc_source_line_is_command(src: &str, offset: usize) -> bool {
 
 /// Process one doc line's text (`base` = byte offset of `text[0]` in the
 /// file). Skips code/quote contexts, then applies clippy's word logic to
-/// every outside-backtick segment.
-fn process_doc_line(text: &str, base: usize, in_fence: &mut bool, edits: &mut Vec<SourceEdit>) {
+/// every outside-backtick segment. `in_span` carries the multi-line inline
+/// code-span state ACROSS lines (P125): a span opened on an earlier line
+/// keeps this whole line inside code; a line's odd backtick count opens a
+/// span that survives into the next line. Single-line balanced pairs keep
+/// the old per-line split semantics exactly.
+fn process_doc_line(
+    text: &str,
+    base: usize,
+    in_fence: &mut bool,
+    in_span: &mut bool,
+    edits: &mut Vec<SourceEdit>,
+) {
     let indent = text.len() - text.trim_start_matches(' ').len();
     let t = &text[indent..];
     // Fence toggle / fenced-content skip.
@@ -286,10 +320,25 @@ fn process_doc_line(text: &str, base: usize, in_fence: &mut bool, edits: &mut Ve
     if doc_line_is_command(t) {
         return;
     }
+    let tick_count = text.matches('`').count();
+    // P125: inside a span opened on an earlier line — the whole line is
+    // code (clippy's pulldown walk checks no words in a Code event). The
+    // span's parity toggles on this line's ticks; the whole-line skip is
+    // the same conservative posture as the unbalanced-tick arm below (a
+    // missed cosmetic wrap on a span-closing line, never a wrong edit).
+    if *in_span {
+        if tick_count % 2 == 1 {
+            *in_span = false;
+        }
+        return;
+    }
     // Per-line unbalanced-tick approximation: an odd raw backtick count
-    // suppresses the paragraph in clippy (help-only fire). Balanced pairs
-    // are inline code spans — handled by segment splitting below.
-    if text.matches('`').count() % 2 == 1 {
+    // suppresses the paragraph in clippy (help-only fire). With P125 the
+    // state now CARRIES: the next line resumes inside the span instead of
+    // scanning as prose. Balanced pairs are inline code spans — handled by
+    // segment splitting below.
+    if tick_count % 2 == 1 {
+        *in_span = true;
         return;
     }
     // Outside-backtick segments only (even indices after splitting on '`').
@@ -692,6 +741,68 @@ mod tests {
     #[test]
     fn unbalanced_tick_line_skipped() {
         let src = "/// A stray ` tick then shader_perf.\nfn go() {}";
+        assert!(propose_fix("doc_markdown", src).is_none());
+    }
+
+    /// P125: the b360 incident shape — a multi-line inline code span (one
+    /// backtick on the opener, one on the closer). The span's middle lines
+    /// carry bare `snake_case` words; the span-blind per-line model wrapped
+    /// them, breaking the span early so real clippy then flagged the very
+    /// words the fixer had just "fixed". The cross-line carrier keeps the
+    /// whole span silent.
+    #[test]
+    fn multiline_span_keeps_middle_lines_silent_p125() {
+        let src = "/// Batch GOAT. SLOW: run explicitly with `cargo test -p x --lib\n/// --features rust_perf_bench batch334_cache --\n/// --ignored --nocapture --release`.\nfn go() {}";
+        assert!(propose_fix("doc_markdown", src).is_none());
+    }
+
+    /// P125: the LITERAL b360 incident text (pre-fixer), replayed — the
+    /// old per-line model wrapped `rust_perf_bench` and
+    /// `batch334_goat_single_entry_cache` on the span's middle line here,
+    /// which broke the span early and made real clippy flag the words the
+    /// fixer had just "fixed" (the `--features rust_perf_bench --tests`
+    /// posture, the only lane that compiles cfg(bench) docs).
+    #[test]
+    fn b360_incident_replay_stays_silent() {
+        let src = concat!(
+            "/// Batch 334 GOAT (the single-entry cache lead is the batch's benchable\n",
+            "/// rule): run the validator and print the verdict. SLOW (spawns a cargo\n",
+            "/// build + run): run explicitly with `cargo test -p riir-refine --lib\n",
+            "/// --features rust_perf_bench batch334_goat_single_entry_cache --\n",
+            "/// --ignored --nocapture --release`.\n",
+            "#[cfg(feature = \"rust_perf_bench\")]\n",
+            "#[test]\n",
+            "fn batch334_goat_single_entry_cache() {}"
+        );
+        assert!(propose_fix("doc_markdown", src).is_none());
+    }
+
+    /// P125: the state must not stick — a span that OPENS on line 1 (odd
+    /// tick) and CLOSES on line 2 leaves later prose scanning exactly as
+    /// before.
+    #[test]
+    fn prose_resumes_after_multiline_span_closes() {
+        let src = "/// Run the pinned cell: `cargo test --release --ignored\n/// --nocapture`.\n/// Then the shader_perf stage runs.\nfn go() {}";
+        let out = propose_fix("doc_markdown", src).expect("fires after the span closes");
+        assert!(out.contains("`shader_perf`"), "edit: {out}");
+    }
+
+    /// P125: a doc-block gap resets the span state — an unbalanced opener
+    /// in one comment must not suppress the NEXT comment's scanning.
+    #[test]
+    fn doc_block_gap_resets_span_state() {
+        let src = "/// A stray ` opens a span here.\nfn first() {}\n\n/// The shader_perf stage runs.\nfn second() {}";
+        let out = propose_fix("doc_markdown", src).expect("the second block scans");
+        assert!(out.contains("`shader_perf`"), "edit: {out}");
+    }
+
+    /// P125: a span-closing line's trailing prose is skipped whole (the
+    /// same conservative posture as the unbalanced-tick arm) — disclosed,
+    /// never a wrong edit. Line 1 opens (odd), line 2 closes (odd) with
+    /// trailing prose that stays unwrapped.
+    #[test]
+    fn span_closing_line_skipped_whole() {
+        let src = "/// Run the stage `cargo test --release\n/// --nocapture`. Then shader_perf stays bare.\nfn go() {}";
         assert!(propose_fix("doc_markdown", src).is_none());
     }
 

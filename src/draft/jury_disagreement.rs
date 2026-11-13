@@ -313,6 +313,17 @@ impl Contingency {
     }
 }
 
+/// The T3 report: ρ per signal + the threshold sweeps, computed over the
+/// fixture population — reachability-scoped to the fixture-armed postures
+/// (the population lives behind them); the bare posture compiles this
+/// module's plumbing dead.
+#[cfg_attr(
+    not(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    )),
+    allow(dead_code)
+)]
 fn contingency_at(
     rows: &[&JuryRow],
     flagged: impl Fn(&JuryRow) -> bool,
@@ -363,11 +374,28 @@ pub struct JuryPocReport {
 /// single label; they join purely through their top-1 fix outcome.
 #[must_use]
 pub fn run_jury_poc(matcher: &mut LatentMatcher, oracle: &ClippyOracle) -> JuryPocReport {
+    // Every fixture loop below needs `latent_retrieval` (the fixtures live
+    // behind it in `draft::mod`) — the same 223-sweep lesson as the clippy
+    // loops' gate. With NO fixture feature on, the population is empty and
+    // the closure is never built (an unused-variable E0699-class red at
+    // that posture otherwise); the report is the honest empty one.
+    #[cfg(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    ))]
     let mut rows: Vec<JuryRow> = Vec::new();
 
     // Tags repeat across fixtures (multiple spans pin the same rule); the
     // occurrence suffix keeps the unstable-row listing unambiguous.
+    #[cfg(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    ))]
     let mut seen: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    #[cfg(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    ))]
     let mut push = |matcher: &mut LatentMatcher,
                     tag: &str,
                     domain: DomainId,
@@ -398,14 +426,39 @@ pub fn run_jury_poc(matcher: &mut LatentMatcher, oracle: &ClippyOracle) -> JuryP
     for (tag, code) in super::eval_fixtures_composite::COMPOSITE_SPANS {
         push(matcher, tag, DomainId::Clippy, "composite", code, &mut rows);
     }
-    #[cfg(feature = "rust_perf")]
+    #[cfg(all(feature = "rust_perf", feature = "latent_retrieval"))]
     for (rule, code) in super::eval_fixtures_perf::PERF_SPANS {
         push(matcher, rule, DomainId::Perf, rule, code, &mut rows);
     }
 
+    // The no-fixture-feature posture: nothing ran, the empty report says
+    // so (and `matcher`/`oracle` stay unused — named, not underscore-aliased,
+    // so an ARMED posture never loses the compile check).
+    #[cfg(not(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    )))]
+    {
+        let _ = (matcher, oracle);
+        JuryPocReport::default()
+    }
+
+    #[cfg(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    ))]
     finalize_report(rows)
 }
 
+/// Compute the full report from the collected rows (same reachability
+/// scope as [`contingency_at`]).
+#[cfg_attr(
+    not(any(
+        feature = "latent_retrieval",
+        all(feature = "rust_perf", feature = "latent_retrieval")
+    )),
+    allow(dead_code)
+)]
 fn finalize_report(rows: Vec<JuryRow>) -> JuryPocReport {
     let verdict_rows = rows.iter().filter(|r| r.outcome.is_verdict()).count();
     let unstable_rows = rows.iter().filter(|r| r.outcome.is_unstable()).count();
