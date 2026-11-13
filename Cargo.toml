@@ -558,6 +558,25 @@ multiplicity_gate = []
 # Feature-off is byte-identical by construction (new gated code only).
 source_case_gate = []
 
+# Issue 232 T5 (Research 495, the T³ holdout-epistemology extraction): the
+# two-signal composition — L5's law: a lone held-out window must never
+# single-handedly reverse an armed lane. A reversal commits only when BOTH
+# landed signals agree: the window half is FRESH (T1's ledger; a consumed
+# window's signal is UNDECIDABLE and corroborates nothing) AND the arming
+# half corroborates (T3's own consult says the premise failed below the
+# knee, or the surface refused on the OnePass fence — no new threshold, no
+# new constant: the composition only ANDs two landed predicates). The
+# committed decision is ONE artifact carrying every fact that produced it;
+# candidate probes evaluate on side state (T³'s φ is throwaway) and the
+# serving artifact mutates ONLY through the committed write path. No
+# implies: the core composes its own evidence types (std only, decoupled
+# from the producer modules — conversions live behind their features); the
+# CLI lane composes all(two_signal_composition, multiplicity_gate,
+# consumed_window_ledger, latent_retrieval). Report-only first; the
+# correlation cell stays the issue's standing gate. Feature-off is
+# byte-identical by construction (new gated code only).
+two_signal_composition = []
+
 # katgpt-rs Issue 882 P0 rider (Research 586): differential-anchor query
 # correction on the 8-D latent leg — `q̂ = q − λ·ā` with ā the per-domain
 # mean-CORPUS embedding (katgpt-core `differential_anchor`). The 8-D
@@ -1331,6 +1350,21 @@ required-features = ["multiplicity_gate", "latent_retrieval"]
 [[test]]
 name = "source_case_g1"
 required-features = ["source_case_gate", "latent_retrieval"]
+
+# Issue 232 T5: the two-signal composition's G1 fixture (the lone-window
+# refusal row + the corroborated commit row — both through the one write
+# path — the side-state probe seam, the consumed-window UNDECIDABLE on the
+# real ledger, the store-surface e2e, the pure-function + one-committing-
+# row truth-table pin). The core is std-only, but the store/ledger halves
+# compose the producers.
+[[test]]
+name = "two_signal_g1"
+required-features = [
+    "two_signal_composition",
+    "multiplicity_gate",
+    "consumed_window_ledger",
+    "latent_retrieval",
+]
 
 [[example]]
 name = "clippy_verify_demo"

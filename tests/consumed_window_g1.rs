@@ -154,7 +154,7 @@ fn kth_reuse_probe_fires_and_truth_degrades_under_self_confirmation() {
         // window — the poison event the ledger exists to name (the
         // score-bench re-run on the window the selection shaped). The
         // second read of round 1 is the overall k = 2 pass.
-        let (_, read_report, digest) = store
+        let (_, read_report, _) = store
             .recompute_elo_with_ledger(&mut ledger, "sim", pass * 10)
             .expect("report replay");
         let _ = read_report;

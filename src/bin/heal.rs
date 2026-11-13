@@ -7452,7 +7452,20 @@ USAGE:
                     that does not improve on the data that generated it
                     carries no held-out value; the preregistered G2 bar owns
                     any wiring).
-    --coverage-report
+    --composition-report
+                    Issue 232 T5: the two-signal composition over the real
+                    fixer surface — the arming consult (the measured knee
+                    over the traj store) + the window read (the ledger
+                    state over the store's canonical digest, read-only)
+                    composed into ONE decision artifact (report-only,
+                    features two_signal_composition,multiplicity_gate,
+                    consumed_window_ledger,latent_retrieval; L5's law: a
+                    lone held-out signal never reverses an armed lane
+                    alone).
+    --propose-reversal
+                    With --composition-report: compose a HYPOTHETICAL
+                    reversal proposal against the real evidence state
+                    (disclosed on stderr; records nothing).
                     Print the corpus coverage-debt report (Issue 119): clippy's LIVE
                     lint surface, DERIVED from the installed driver
                     (`clippy-driver -W help` — never a hand-typed list, so the debt
@@ -8367,6 +8380,19 @@ struct Args {
     /// feature (the corpus-gap shape); the store half needs
     /// latent_retrieval (in the bin's required-features).
     source_case_report: bool,
+    /// Issue 232 T5 (`two_signal_composition` feature):
+    /// `--composition-report` composes the arming consult (T3's measured
+    /// gate over the traj store) with the window read (T1's ledger state
+    /// over the store's canonical digest, READ-ONLY — the report never
+    /// records) into ONE decision artifact. Refuses exit 2 on a build
+    /// without the full composition feature set (the corpus-gap shape);
+    /// the store halves need latent_retrieval (in the bin's
+    /// required-features).
+    composition_report: bool,
+    /// `--composition-report` modifier: compose a HYPOTHETICAL reversal
+    /// proposal against the real evidence state (disclosed on stderr;
+    /// records nothing). Requires --composition-report.
+    propose_reversal: bool,
 }
 
 fn parse_args() -> Args {
@@ -8516,6 +8542,8 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         half_split_report: false,
         multiplicity_report: false,
         source_case_report: false,
+        composition_report: false,
+        propose_reversal: false,
         feature_flags: Vec::new(),
     };
     // `cargo refine <args>` executes this binary with the SUBCOMMAND NAME as
@@ -8717,6 +8745,8 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--half-split-report" => args.half_split_report = true,
             "--multiplicity-report" => args.multiplicity_report = true,
             "--source-case-report" => args.source_case_report = true,
+            "--composition-report" => args.composition_report = true,
+            "--propose-reversal" => args.propose_reversal = true,
             "--misses" => args.misses = true,
             "--report" => args.misses_report = true,
             "--limit" => {
@@ -10016,6 +10046,10 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         eprintln!("--no-verify requires --fix");
         usage();
     }
+    if args.propose_reversal && !args.composition_report {
+        eprintln!("--propose-reversal requires --composition-report");
+        usage();
+    }
     if args.paths.is_empty()
         && !args.suggest
         && !args.fix
@@ -10092,6 +10126,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.half_split_report
         || args.multiplicity_report
         || args.source_case_report
+        || args.composition_report
         || args.collapse_report
         || args.corpus_stats
         || args.import_series
@@ -10149,6 +10184,13 @@ fn validate_mode_flags(args: &Args) -> Result<(), &'static str> {
     // posture flag already implies.
     if args.repo_posture && !args.fix {
         return Err("--repo-posture requires --fix (it gates the fix lane's edits)");
+    }
+    // Issue 232 T5: `--propose-reversal` is a `--composition-report`
+    // modifier — without the mode there is nothing to compose, and the
+    // message must name the requirement before "no mode given" muddies
+    // it (the repo-posture ordering law).
+    if args.propose_reversal && !args.composition_report {
+        return Err("--propose-reversal requires --composition-report");
     }
     // P39: the override names the posture lane's decline — without the
     // mode there is nothing to override, and a silently-inert flag is the
@@ -13262,6 +13304,26 @@ fn main() {
         std::process::exit(2);
     }
 
+    // Issue 232 T5: `--composition-report` is feature-gated — a build
+    // without the FULL composition set refuses LOUD (exit 2, naming the
+    // rebuild), before any dispatch. The real-surface lane composes
+    // all(two_signal_composition, multiplicity_gate,
+    // consumed_window_ledger, latent_retrieval); the bin's
+    // required-features carry latent, so the lib-feature trio is what a
+    // partial build can miss.
+    #[cfg(not(all(
+        feature = "two_signal_composition",
+        feature = "multiplicity_gate",
+        feature = "consumed_window_ledger"
+    )))]
+    if args.composition_report {
+        eprintln!(
+            "composition-report: this build lacks the composition feature set — rebuild with: \
+             cargo build --features two_signal_composition,multiplicity_gate,consumed_window_ledger,latent_retrieval"
+        );
+        std::process::exit(2);
+    }
+
     // `--yes` arms every y/N prompt (the flag form of `RIIR_REFINE_YES`) —
     // set the run-global HERE, before every dispatch: the subcommand arm
     // below (`login`, `claim`, …) runs before the mode-flag section ever
@@ -14705,6 +14767,122 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        return;
+    }
+
+    // ── Issue 232 T5: --composition-report — the two-signal composition
+    // over the real fixer surface ─────────────────────────────
+    // Report-first, gates nothing (the frontier-report law): the arming
+    // consult (T3's measured gate over the traj store) + the window read
+    // (T1's ledger state over the store's canonical digest, READ-ONLY —
+    // the report never records a consumption) composed into ONE decision
+    // artifact. `--propose-reversal` evaluates the HYPOTHETICAL reversal
+    // proposal against the real evidence state (disclosed on stderr) —
+    // the L5 law read on lived data. Exits 0 on any composed verdict (a
+    // verdict is an answer, including UPHOLD and UNDECIDABLE); exits 1
+    // on a blind surface (no store / corrupt open / a blind or malformed
+    // measure) — never a green zero. The flag is refused pre-dispatch
+    // without the full feature set (above); this whole arm is gated with
+    // them.
+    #[cfg(all(
+        feature = "two_signal_composition",
+        feature = "multiplicity_gate",
+        feature = "consumed_window_ledger",
+        feature = "latent_retrieval"
+    ))]
+    if args.composition_report {
+        let root = std::env::var("RIIR_REFINE_TRAJ_ROOT")
+            .map(PathBuf::from)
+            .or_else(|_| std::env::current_dir())
+            .unwrap_or_default();
+        let kv = root.join(".refine").join("trajectories.kv");
+        if !kv.exists() {
+            eprintln!(
+                "composition-report: no store at {} — run any fix in this repo first",
+                kv.display()
+            );
+            std::process::exit(1);
+        }
+        if args.propose_reversal {
+            eprintln!(
+                "composition-report: --propose-reversal composes a HYPOTHETICAL reversal \
+                 proposal against the real evidence state — the report records nothing"
+            );
+        }
+        // The arming half: the measured store surface (T3's feeder — the
+        // zero-outcome disclosure rides along; blind and malformed
+        // compose NOTHING — a blind readout is exit 1, never a verdict).
+        let arming = match riir_refine::multiplicity_gate::measure_store_surface(&root) {
+            Ok(m) => {
+                if m.excluded_zero_outcome_rows > 0 {
+                    eprintln!(
+                        "multiplicity-gate: {} row(s) with zero recorded outcomes excluded \
+                         from the histogram (seed/pending rows — the encounter count reads \
+                         verdicts, not row existence)",
+                        m.excluded_zero_outcome_rows
+                    );
+                }
+                match &m.verdict {
+                    Ok(gate) => {
+                        // The surface-level consult: the measured knee IS the
+                        // surface's arming posture (gate(knee) = 0.5 — the
+                        // median unit arms by construction).
+                        riir_refine::two_signal::ArmingEvidence::from_consult(gate, gate.knee())
+                    }
+                    Err(refusal) => {
+                        // The fence is a measured verdict (it corroborates —
+                        // the premise never held); blind/malformed refuse.
+                        match riir_refine::two_signal::ArmingEvidence::from_refusal(refusal) {
+                            Ok(a) => {
+                                eprintln!("{}", refusal.line());
+                                a
+                            }
+                            Err(msg) => {
+                                eprintln!("composition-report: {msg}");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                }
+            }
+            Err(msg) => {
+                eprintln!("composition-report: {msg}");
+                std::process::exit(1);
+            }
+        };
+        // The window half: the store's canonical digest against the REAL
+        // ledger, READ-ONLY (reuse_of never records; the report never
+        // saves — T4's hygiene law). Corrupt rows are disclosed, never
+        // silent: they change the window identity the ledger keys on.
+        let (store, bad) = match riir_refine::traj_store::TrajStore::open(&root) {
+            Ok(pair) => pair,
+            Err(msg) => {
+                eprintln!("composition-report: {msg}");
+                std::process::exit(1);
+            }
+        };
+        if bad > 0 {
+            eprintln!(
+                "composition-report: {bad} corrupt row(s) — the digest reads the good \
+                 rows only; the window identity is theirs, disclosed"
+            );
+        }
+        let digest = store.consumed_window_digest();
+        drop(store);
+        let ledger_path = root.join(".refine").join("window_ledger.json");
+        let ledger = riir_refine::consumed_window::WindowLedger::load(&ledger_path);
+        let reuse = ledger.reuse_of(&digest);
+        let read = if reuse == 0 {
+            riir_refine::consumed_window::WindowRead::Fresh
+        } else {
+            riir_refine::consumed_window::WindowRead::Consumed { reuse }
+        };
+        eprintln!("{}", ledger.report_line(&digest, &read));
+        let window =
+            riir_refine::two_signal::WindowEvidence::from_reuse(reuse, args.propose_reversal);
+        let decision = riir_refine::two_signal::compose(&arming, &window);
+        println!("{}", decision.render());
+        println!("{}", decision.line());
         return;
     }
 
@@ -20745,6 +20923,10 @@ mod mode_flag_tests {
                 "--source-case-report",
                 Box::new(|m| m.source_case_report = true),
             ),
+            (
+                "--composition-report",
+                Box::new(|m| m.composition_report = true),
+            ),
             ("--collapse-report", Box::new(|m| m.collapse_report = true)),
             ("--corpus-stats", Box::new(|m| m.corpus_stats = true)),
             ("--import-series", Box::new(|m| m.import_series = true)),
@@ -20839,6 +21021,45 @@ mod mode_flag_tests {
             ..Args::default()
         };
         assert!(v(&ok).is_ok(), "--fix --repo-posture must validate");
+    }
+
+    /// Issue 232 T5: `--propose-reversal` is a `--composition-report`
+    /// MODIFIER, not a mode — it refuses alone with its own message
+    /// (BEFORE the no-mode error — the repo-posture ordering law), and
+    /// it must never join the standalone table (a lone modifier is not
+    /// an early-return lane). The mode itself IS an early-return lane:
+    /// its dispatch arm returns before validate, so validate's remaining
+    /// verdict for the valid pair is the scan-mode no-mode error —
+    /// pinned here as the discharge proof, never as the runtime path.
+    #[test]
+    fn propose_reversal_requires_composition_report() {
+        let m = Args {
+            propose_reversal: true,
+            ..Args::default()
+        };
+        assert_eq!(
+            v(&m),
+            Err("--propose-reversal requires --composition-report")
+        );
+        let ok = Args {
+            propose_reversal: true,
+            composition_report: true,
+            ..Args::default()
+        };
+        assert_eq!(
+            v(&ok),
+            Err("no mode given — use fix, suggest, fix-compile, or --dump-trajectories"),
+            "the modifier guard discharged; the mode's real path is its dispatch arm"
+        );
+        // The mode itself is standalone; the modifier alone is not.
+        assert!(super::standalone_mode(&Args {
+            composition_report: true,
+            ..Args::default()
+        }));
+        assert!(!super::standalone_mode(&Args {
+            propose_reversal: true,
+            ..Args::default()
+        }));
     }
 
     /// Named-field construction keeps each matrix row self-describing —

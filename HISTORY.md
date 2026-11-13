@@ -1625,6 +1625,71 @@ held-out signal never reverses an armed lane alone) is unchanged — its
 composition reads T3's arming + T1's window verdict, not T4's declined
 signal.
 
+## 2026-11-14 — Issue 232 T5 LANDED: the two-signal composition (L5's law)
+
+Feature `two_signal_composition` (opt-in, default-OFF, no implies — std
+only) + `src/two_signal.rs` + `--composition-report` (+
+`--propose-reversal`). The law: a lone held-out window must never
+single-handedly reverse an armed lane (L5: the holdout signal ALONE was
++0.021 WORSE than nothing). A reversal COMMITS only when BOTH landed
+signals agree — the window half is FRESH (T1's ledger; a consumed
+window's signal is UNDECIDABLE and corroborates nothing, independent of
+the arming side) AND the arming half corroborates (T3's OWN consult says
+the premise failed below the knee, or the surface refused on the
+`OnePass` fence — no new threshold, no new constant: the composition
+only ANDs two landed predicates). Blind and malformed surfaces yield NO
+composition at all (exit 1 — a blind readout composes nothing, never a
+verdict). The truth table is 2×2×2 (consult × freshness × proposal) and
+exactly ONE row commits — the fixture pins the whole table. The
+committed decision is ONE artifact carrying every fact that produced it
+(versioned render, v1); candidate probes evaluate on side state
+(`SideState::fork` — T³'s φ is throwaway) and the serving artifact
+mutates ONLY through `commit`, which applies its closure ONLY for a
+Commit verdict — no bypass constructor, the discipline is structural.
+Report vocabulary only: UPHOLD/COMMIT/UNDECIDABLE are verdicts, never
+phrased refusals (the banned word family greps clean). T4's closure is
+respected: the composition reads T3's arming + T1's window verdict, not
+T4's declined signal. **Real-store smoke on amo:** the live traj store
+(24 zero-outcome rows excluded, disclosed) measures reuse-dominant →
+consult at the knee HOLDS; the canonical digest `3691a6472d82` reads
+FRESH in the ledger (reuse=0, READ-ONLY — the report never records);
+no proposal → UPHOLD/no-proposal (the standing state); the hypothetical
+proposal → UPHOLD/lone-window — the L5 law demonstrated on lived data.
+Refusals: the charitable posture (latent only) refuses `--composition-
+report` exit 2 naming the rebuild; `--propose-reversal` alone refuses
+exit 2 (a modifier guard in BOTH parse_args and the pinned
+validate_mode_flags matrix, BEFORE the no-mode error — the ordering
+law; the mode is standalone, the modifier alone is not, and the mode's
+dispatch arm returns before validate — the valid pair's remaining
+validate verdict is the scan-mode no-mode error, pinned as the
+discharge proof). **G1** `tests/two_signal_g1.rs` 6/6 (required-
+features the full composition set): the lone-window refusal row (write
+path shut, serving byte-identical), the corroborated commit row (the
+one write path fires), the side-state probe seam (fork mutations never
+touch the serving artifact), the consumed-window UNDECIDABLE on the
+real ledger (poison independent of the arming side), the store-surface
+e2e (measured knee 6; the ledger read stays read-only — the file never
+appears), and the pure-function + one-committing-row truth-table pin.
+Module tests 8 pure + 1 producer-gated. Gates: clippy `-D warnings` lib
+×6 postures (default / no-default / lone / +latent / +ledger / the
+full composition set) + bin ×3 (default trio / full / no-default), lib
+tests 3890 default (byte-identical) / 3898 lone (+8 pure) / 4038
+(+latent) / 4052 full posture, fixture 6/6, bin tests 37 passed + the
+PRE-EXISTING `corpus_stats_needle_tests` failure (kernel_opt needle
+1097 vs runtime 1081 — the disclosed zed-m3-b357-moeshift lane's
+accounting, plan 367 lease live, yielded), mode-flag pins pass (the
+standalone table row + the modifier guard row), fmt clean on touched
+files (the pre-existing b360 + cf_workers_ai disclosures unchanged),
+pins_manifest PASS, numbering gate PASSED, lease lint clean. En-route
+repair (disclosed): `tests/consumed_window_g1.rs:157` — a PRE-EXISTING
+unused `digest` warning from T1's landing (the test target was outside
+that cycle's lib+bin clippy gate) silenced; `src/two_signal.rs` took
+the rulewright's 5 mechanical edits (doc backticks, the writeln
+newline law) + 1 manual residual (a backtick site the fixer missed).
+The issue stays OPEN with nothing checked remaining — T1–T5 all
+landed; the correlation/utility cell (each signal vs later measured
+holdout deltas) is the standing gate before any promotion talk.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.

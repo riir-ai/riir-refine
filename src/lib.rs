@@ -698,6 +698,17 @@ pub mod multiplicity_gate;
 #[cfg(feature = "source_case_gate")]
 pub mod source_case;
 
+// Issue 232 T5 (Research 495): the two-signal composition — L5's law: a
+// lone held-out window never reverses an armed lane alone. A commit
+// needs BOTH the fresh window (T1) AND a failed arming premise (T3's
+// own consult — no new threshold); probes evaluate on side state and
+// the serving artifact mutates ONLY through the committed write path.
+// Report-only; the real-surface lane composes
+// all(two_signal_composition, multiplicity_gate,
+// consumed_window_ledger, latent_retrieval).
+#[cfg(feature = "two_signal_composition")]
+pub mod two_signal;
+
 // Issue 089 T1+T2: the learnability-frontier band report — per-rule
 // r/f/n/p̂/LCB₅ + band-mass + saturation candidates, PURE arithmetic over
 // outcome counters (store-free, ungated so lib tests cover it at default
