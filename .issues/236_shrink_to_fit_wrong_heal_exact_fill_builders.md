@@ -2,6 +2,7 @@
 
 **Date:** 2026-11-13
 **Status:** OPEN — wrong-heal class observed live (the gate worked; the rule's admission needs an exact-fill guard)
+**Claimed:** amo-idle-i236, 1794590181, expires 2026-11-15T17:16:21+00:00
 
 ## The observation
 
