@@ -358,6 +358,15 @@ kernel_pregate = ["kernel_opt"]
 # exists without the tree it filters or the corpus it annotates.
 span_shape_dispatch = ["latent_retrieval", "rust_perf"]
 
+# Issue 233 T3 — the calibrated acquisition-config variant of the dispatch:
+# per (domain x span-shape) group, narrowing applies only where oracle-labeled
+# evidence clears the floor (Wilson-LCB >= tau, n >= MIN_LABELED); every
+# other group falls back to the FULL fan-out (the paper's law: never
+# silently relaxes). Opt-in; never in the release set until the GOAT gate
+# (recall@k >= full at the floor + the G2 cost leg) passes. Implies
+# span_shape_dispatch: it gates the SAME retain, never duplicates it.
+calibrated_dispatch = ["span_shape_dispatch"]
+
 # Issue 196: the route-narrowed kernel retrieval — 15 per-category
 # sub-indices + a bounded global tail; every query scores only its span's
 # routed expert slice + tail (the G5 cost-leg repair, Bench 125). OFF
@@ -1162,6 +1171,16 @@ required-features = ["clippy_lints"]
 [[example]]
 name = "rho_real_stream"
 required-features = ["latent_retrieval"]
+
+# Issue 233 T3 — the calibrated-dispatch census: per (domain x span-shape)
+# Wilson-LCB floor verdicts over the oracle-labeled eval fixtures + the
+# narrowed-vs-full recall A/B. Report-only, exit 0; the re-run lane before
+# any table pin. Run:
+#   cargo run --release --features calibrated_dispatch,latent_retrieval,clippy_lints,rust_perf \
+#     --example calibrated_dispatch_census
+[[example]]
+name = "calibrated_dispatch_census"
+required-features = ["calibrated_dispatch", "latent_retrieval", "clippy_lints", "rust_perf"]
 
 # Issue 185 T4 — the softmax-collapse family's read-only workspace sweep.
 [[example]]

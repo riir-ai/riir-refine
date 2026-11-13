@@ -110,6 +110,11 @@ pub mod op_tokenizer;
 // the publish posture's matcher runs on it.
 #[cfg(feature = "latent_retrieval")]
 pub mod retrieval_eval;
+// Issue 233 T3: the evidence-gated variant of the span-shape dispatch —
+// narrowing arms only where the pinned per-group evidence clears the
+// Wilson-LCB floor; empty table = fail-open to the full fan-out.
+#[cfg(feature = "calibrated_dispatch")]
+pub mod calibrated_dispatch;
 pub mod retriever;
 #[cfg(feature = "mattr_k_poc")]
 pub mod rule_embed_mattr;

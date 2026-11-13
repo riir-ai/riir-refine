@@ -1125,6 +1125,17 @@ impl LatentMatcher {
         } else {
             span_shape::classify(code, parsed.as_ref())
         };
+        // Issue 233 T3: the calibrated gate on the SAME retain — narrowing
+        // arms only where the pinned evidence table clears the floor for
+        // EVERY shape the span carries. Feature-off compiles `true` (the
+        // promoted hand-registered dispatch, byte-identical); feature-on
+        // with the empty landing table never arms (fail-open to the full
+        // fan-out — the paper's law), which is also the demote posture the
+        // verdict's `ALL` already folds to.
+        #[cfg(all(feature = "span_shape_dispatch", feature = "calibrated_dispatch"))]
+        let shape_narrowing_armed = super::calibrated_dispatch::narrowing_applies(shape_verdict);
+        #[cfg(all(feature = "span_shape_dispatch", not(feature = "calibrated_dispatch")))]
+        let shape_narrowing_armed = true;
         let mut out = Vec::with_capacity(DomainId::ALL.len());
         for domain in DomainId::ALL {
             // Issue 213: a domain outside the span's allow set skips its
@@ -1201,7 +1212,10 @@ impl LatentMatcher {
             // unannotated rule admit — non-Perf domains are untouched, so the
             // default posture stays byte-identical.
             #[cfg(feature = "span_shape_dispatch")]
-            if domain == DomainId::Perf && shape_verdict != span_shape::SpanShapeSet::ALL {
+            if domain == DomainId::Perf
+                && shape_verdict != span_shape::SpanShapeSet::ALL
+                && shape_narrowing_armed
+            {
                 rules.retain(|r| span_shape::rule_admits(&r.rule_id, shape_verdict));
             }
             if let Some(file) = &parsed {
