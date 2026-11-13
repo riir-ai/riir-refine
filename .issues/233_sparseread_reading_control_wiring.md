@@ -1,6 +1,7 @@
 # Issue 233 — SparseRead reading-control wiring for the rulewright read lane
 
-**Status:** open — T1 CLOSED MEASURED-NEGATIVE 2026-11-14 (the T1.0 cost-weighted census; record under T1); T2 open but its exposure premise carries the measured 0.3–1.1% ceiling (its own bars own its fate); T3 (calibrated dispatch) is the issue's live lane — unaffected by the content-repeat census
+**Status:** open — T1 CLOSED MEASURED-NEGATIVE 2026-11-14 (the T1.0 cost-weighted census; record under T1); T2 open but its exposure premise carries the measured 0.3–1.1% ceiling (its own bars own its fate); T3 (calibrated dispatch) is the issue's live lane — claimed, substrate + census instrument in progress
+**Claimed:** zed-amo-i233-t3, 1794609327, expires 2026-11-15T22:35:27Z
 
 - **Date:** 2026-11-13 (m3)
 - **Research:** [`.research/404_SparseRead_Reading_Control_Layer.md`](../.research/404_SparseRead_Reading_Control_Layer.md) — arXiv:2608.22237 (SparseRead, MIT, `Liuzedooong/SparseReading @ d30f75f8`)
