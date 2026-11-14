@@ -1,7 +1,7 @@
 # Issue 237: Selection → composition descent — the rating-energized candidate landscape cell
 
-> **Status:** OPEN — filed 2026-11-14
-> **Claimed:** zed-07a26ed5@amo, 1794710000, expires 2026-11-17T03:00:00+00:00
+> **Status:** CLOSED-NEGATIVE 2026-11-15 (bench 151 `4a35b11b`, zed-07a26ed5@amo — the cell ran; **NO-GO**: arm-a compose-all 0.9643 = arm-b order-only 0.9643 byte-identical (the ordering axis is a measured NO-OP); arm-c fitted-level subset 0.3929 (Δ−32 resolutions to save one created lint); falsification HOLDS; the damage concentrates in the 24 multi-target fixtures — composition breadth is the fixpoint's fuel, not over-composition; `K_ij` = 0 disclosed, re-open only on a pair-effect-pricing consumer). Instrumentation stays report-only (`--composition-ab`, bench-only behind `score_bench`; default heal path byte-identical). The lease folded with the verdict.
+> **Lease closed:** zed-07a26ed5@amo, 1794710000, expired 2026-11-17T03:00:00+00:00 — folded 2026-11-15 with the NO-GO verdict (bench 151)
 > **Research:** katgpt-rs [Research 670](../../katgpt-rs/.research/670_CRAM_Pseudolikelihood_Energy_Descent.md) + [Issue 1211](../../katgpt-rs/.issues/1211_cram_score_landscape_descent.md) (the primitive)
 > **Source:** arXiv:2611.17309 "CRAM"; the owner-directed fusion: "Elo score while bandit MCTS adjusts up/down trajectory at test time"
 
@@ -24,3 +24,7 @@
 ## Echo (no new file)
 
 riir-dao's G5 re-open requires "a v2 candidate set or a ledger-side rule change" — a descent-composer GENERATES candidates instead of ranking proposals; if dao adopts, it files its own plan.
+
+## Verdict (2026-11-15, bench 151 — the cell ran; NO-GO)
+
+See `.benchmarks/151_issue237_composition_descent_cell.md` for the rows. The short form: the CRAM composition shape does not transfer from cell-to-value assignment (where Issue 1211's `descent` earned best-of-K) to rule-composition over a fixpoint — compose-all dominates the ordering axis (byte-identical) and the fitted-level axis (−57% resolutions for one created lint). Named prior (Bench 042's within-blend negative) confirmed one level up, on the SHAPE. The never-wrong property (falsification arm) holds. Closed negative; noise-reduction removal rides the next HISTORY sweep.
