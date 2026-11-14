@@ -3,7 +3,7 @@
 Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all revisions APPLIED (§0)
 Branch: `develop`
 
-- [ ] Owner: pick the VO lane (A: record own voice — recommended / B: Kokoro TTS / C: ElevenLabs) — §7
+- [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
 - [ ] Owner: capture the 7 screen assets — §9 (re-capture LIVE pins on recording day, §2)
 - [ ] Agent: scaffold the fframes project + build S01–S13 + end card per §4/§8
 - [ ] Agent: captions track (word-timed JSON) + loudness gate + export per §6/§7/§8
@@ -34,6 +34,10 @@ revision below is applied in this revision of the brief:
   **≤ 290 words**.
 - **§7**: TTS options demoted to **scratch-track only** (timing the cut before the owner
   records); any TTS reaching the shipping cut must be disclosed on the end card.
+  → **Owner decision 2026-11-14 (later same day): the owner PICKED the TTS lane for the
+  shipping voice** (non-native English speaker; easier listening for reviewers). The
+  disclosure is therefore REQUIRED, not conditional — it ships on the end card (§4 END).
+  Option A (owner-recorded) becomes the alternate, not the recommendation.
 - Testimonial: "3 friends adopted it" stays CUT — Proposal 025 states "no external users
   yet" twice; the only compliant revival is a named person + public repo + consent, which
   would also change the written answers.
@@ -173,7 +177,7 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` (+ chip `#3025 CI 50 ✓ 0 ✗` only if P15 provenance gets pinned) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only, and only after the provenance pin. |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
-| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` (+ `narration: [owner name]` — or a TTS disclosure line if Option B ever ships) | Quiet end card, one fade, nothing else moves. |
+| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + `narration: AI-generated voice` (REQUIRED — owner picked the TTS lane) | Quiet end card, one fade, nothing else moves. |
 
 ## 5. Full VO script (the transcription — 295 words, hard 2:00)
 
@@ -288,38 +292,46 @@ Today it's one engineer — and no external users yet; we say so. The grant fund
 
 (12 cues — S07 carries no VO; shift all timings to the real VO after recording.)
 
-## 7. Voiceover — recommendation + pipeline
+## 7. Voiceover — TTS SELECTED (owner decision 2026-11-14) + pipeline
 
-**Recommendation: Option A — the owner records it.** The reviewer brief says *"hear directly
-from the team"*; Proposal 025's Team answer says the project is built by one principal
-engineer — so "the team's voice" IS the owner's voice, and TTS in the shipping cut defeats
-the stated purpose of the video. Phone-memo quality is explicitly fine ("does not need to be
-polished"). Record per scene (12 short takes, not one long read — retakes stay cheap), quiet
-room, phone 20 cm away, read the §5 lines as written. Name the files `vo_s01.wav` …
-`vo_s13.wav` (S07 has none).
+**The shipping voice is GENERATED.** The owner is a non-native English speaker and wants
+easier listening for reviewers — a fair call, and the disclosure (end card:
+`narration: AI-generated voice`) turns it into one more transparency beat instead of a
+gotcha. The §5 script text stays the source of truth; the written application prose stays
+owner-voiced per Proposal 025 §Compliance (Mozilla's AI policy governs the written answers,
+not the video's narration voice).
 
-Fallbacks — **scratch-track only** (for timing the cut before the owner records; never the
-shipping voice):
-- **Option B — Kokoro-82M** (open weights, Apache-2.0, runs CPU via onnx; HF:
-  hexgrad/Kokoro-82M). Free, offline, decent.
-- **Option C — ElevenLabs** (best quality, paid, cloud; send the script text only — no code).
-- ⚠ If TTS ever reached the shipping cut anyway, it MUST be disclosed on the end card or in
-  the link description — undisclosed synthetic narration in a video about trustworthy AI is
-  an unpriced credibility risk for zero gain. macOS `say`: not at all.
+**Engine pick (in order of naturalness):**
+1. **ElevenLabs** (recommended for the shipping cut) — most natural, easiest listening;
+   multilingual v2, ONE fixed voice for all 12 takes, moderate stability. A 295-word script
+   is trivial cost on the cheapest tier. Cloud — send only the script text, never code.
+2. **OpenAI TTS** (`gpt-4o-mini-tts`-class) — cheaper, decent, slightly less natural.
+3. **Kokoro-82M** (free, offline, Apache-2.0, CPU via onnx; HF: hexgrad/Kokoro-82M) — the
+   fully-offline posture; good quality, less natural than 1–2.
 
-**Pipeline (either option):**
-1. Produce the 13 VO files → drop into `media/`.
-2. Word timestamps: run the final VO through whisper with word timestamps
-   (`whisperx` or `openai-whisper --word_timestamps True`) → emit `media/captions.json`
-   in the skill's cue format (§6). One clock, absolute seconds.
-3. Scene timing: each scene's `duration()` = its VO length + 0.6 s settle; the audio map
-   places each `vo_sNN.wav` at its scene start with `.voice()`.
-4. Music bed (owner picks; suggest ~100–110 BPM so cuts land):
-   `AudioTrack::new("music.mp3", Second(0.)..Eof).gain_db(-18.).fade_in(1.).fade_out(2.).duck_under_voice()`.
-   Minimal SFX: stamp thuds on S04/S11/S12, ticks on counters — `.gain_db(-8.)`, times from
-   the same constants that drive the animations.
-5. Gate: `audio analyze` ≈ **−14 LUFS** integrated, true peak < −1 dBTP, no unintended
-   silence; listen once in `preview`.
+**Generation rules:**
+- Same engine + same voice + same settings for ALL takes — never mix engines across scenes.
+- Generate per scene (12 files, `vo_s01.wav` … `vo_s13.wav`, S07 none) — per-scene takes keep
+  retakes cheap and give each scene its own timing.
+- The §5 script already spells every number as words ("five hundred eighty", "one
+  sixty-one", "sixteen sixty-nine") — that is deliberate: TTS reads number words far more
+  reliably than digits. Test-generate S06 first (the longest, densest line) and listen once
+  before batch-generating the rest; adjust spelling (e.g. "twenty-seven-billion-parameter")
+  only if the engine stumbles, and keep the §5 text as the canonical record of what changed.
+- **Word timestamps for captions**: run the FINAL generated audio (not the script text)
+  through whisper with word timestamps (`whisperx` or `openai-whisper
+  --word_timestamps True`) → emit `media/captions.json` in the skill's cue format (§6).
+  ⛔ Never synthesize timings from the text.
+- **Pipeline after generation:** scene `duration()` = VO length + 0.6 s settle; audio map
+  places each wav at its scene start with `.voice()`; music bed
+  `AudioTrack::new("music.mp3", Second(0.)..Eof).gain_db(-18.).fade_in(1.).fade_out(2.).duck_under_voice()`
+  (owner picks; ~100–110 BPM so cuts land); minimal SFX — stamp thuds on S04/S11/S12, ticks
+  on counters — `.gain_db(-8.)`, times from the same constants that drive the animations.
+- **Gate:** `audio analyze` ≈ **−14 LUFS** integrated, true peak < −1 dBTP, no unintended
+  silence; listen once in `preview`.
+- Option A (the owner records some or all takes) remains open as an alternate — any human
+  take simply replaces that scene's wav; the end-card disclosure line drops if EVERY take is
+  human.
 
 ## 8. Build notes for the fframes agent
 
