@@ -1,6 +1,7 @@
 # Issue 237: Selection → composition descent — the rating-energized candidate landscape cell
 
-> **Status:** OPEN — filed 2026-11-14; no lease (claim before implementing)
+> **Status:** OPEN — filed 2026-11-14
+> **Claimed:** zed-07a26ed5@amo, 1794710000, expires 2026-11-17T03:00:00+00:00
 > **Research:** katgpt-rs [Research 670](../../katgpt-rs/.research/670_CRAM_Pseudolikelihood_Energy_Descent.md) + [Issue 1211](../../katgpt-rs/.issues/1211_cram_score_landscape_descent.md) (the primitive)
 > **Source:** arXiv:2611.17309 "CRAM"; the owner-directed fusion: "Elo score while bandit MCTS adjusts up/down trajectory at test time"
 
