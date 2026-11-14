@@ -312,7 +312,10 @@ impl ProbeTable {
         }
     }
     fn probe_all_per_key(&self, keys: &[u64]) -> u64 {
-        keys.iter().map(|&k| self.resolve(k)).sum()
+        // wrapping: the miss sentinel is u64::MAX — the SUM is not the claim,
+        // the per-key equality between arms is (G1 compares arms, not totals)
+        keys.iter()
+            .fold(0u64, |a, &k| a.wrapping_add(self.resolve(k)))
     }
     /// The fixed shape: hash the block + prefetch the addresses, THEN resolve.
     /// "Smaller tables fit in the cache and aren't prefetched" — the gate.
@@ -331,7 +334,7 @@ impl ProbeTable {
                 *prefetches += 1;
             }
             for &k in block {
-                acc += self.resolve(k);
+                acc = acc.wrapping_add(self.resolve(k));
             }
         }
         acc
@@ -353,7 +356,7 @@ impl ProbeTable {
                 *prefetches += 1;
             }
             for &k in block {
-                acc += self.resolve(k);
+                acc = acc.wrapping_add(self.resolve(k));
             }
         }
         acc
@@ -489,27 +492,45 @@ impl TwoTier {
 }
 
 /// TAMPERED: the promotion that LOSES the moved count (placement overwrites
-/// it) — the union diverges from the single-table truth. G1's catch.
-struct TwoTierLossy(TwoTier);
+/// it) — the union diverges from the single-table truth. G1's catch. Fires
+/// POSITIONALLY (every 128th add) so the demonstration is deterministic —
+/// a key-value trigger depends on the draw shape (the vacuous-demo class
+/// the held execution gate exists to catch).
+struct TwoTierLossy {
+    tier: TwoTier,
+    adds: usize,
+}
 
 impl TwoTierLossy {
+    fn new() -> Self {
+        TwoTierLossy {
+            tier: TwoTier::new(),
+            adds: 0,
+        }
+    }
     fn add(&mut self, k: u64) {
-        self.0.add(k);
+        self.tier.add(k);
+        self.adds += 1;
+        if self.adds % 128 == 0 {
+            self.promote_lossy();
+        }
     }
     fn promote_lossy(&mut self) {
         let pick = self
-            .0
+            .tier
             .main
             .iter()
             .map(|(&k, &c)| (k, c))
             .max_by_key(|(_, c)| *c);
-        if let Some((k, _)) = pick {
-            self.0.main.remove(&k);
-            self.0.hot.insert(k, 0); // the count dropped on the move
+        if let Some((k, c)) = pick {
+            if c >= 1 {
+                self.tier.main.remove(&k);
+                self.tier.hot.insert(k, 0); // the count dropped on the move
+            }
         }
     }
     fn merged(&self) -> HashMap<u64, u64> {
-        self.0.merged()
+        self.tier.merged()
     }
 }
 
@@ -556,12 +577,9 @@ fn r8_g1_streams_identical_and_bound_holds() {
 fn r8_tampered_count_loss_caught() {
     let stream = skew_stream(1024, 0xC0FFEE);
     let truth = count_single(&stream);
-    let mut lossy = TwoTierLossy(TwoTier::new());
+    let mut lossy = TwoTierLossy::new();
     for &k in &stream {
         lossy.add(k);
-        if k % 97 == 0 {
-            lossy.promote_lossy(); // fires during the stream
-        }
     }
     let merged = lossy.merged();
     let total_truth: u64 = truth.values().sum();
