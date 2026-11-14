@@ -12,8 +12,8 @@ plan-gated as [Plan 360](../.plans/360_encoders_rust_perf_batch.md), claimed + l
 >
 > **Related:** [Plan 360](../.plans/360_encoders_rust_perf_batch.md) (the batch, staged) ·
 > riir-rethink [Research 023](../../riir-rethink/.research/023_encoders_l2_surface_rung_candidate.md)
-> + [Issue 061](../../riir-rethink/.issues/061_static_l2_p0_admission.md) (the serving-lane
-> half — this note is the corpus half only) · seal-game-editor Bench 010 (the honest negative
+> + Issue 061 (the serving-lane
+> half — this note is the corpus half only; the issue file was removed in the rethink six-issue close-out `65e32b8` — git history holds it) · seal-game-editor Bench 010 (the honest negative
 > prior for static-embed QUALITY on one workspace surface) · reflex `--bekko` lane (a DIFFERENT
 > bekko — the bekko-system-one transformer teacher; lane-name collision only).
 
