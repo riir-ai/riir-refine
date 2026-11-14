@@ -18,6 +18,7 @@
 - A/B on the existing score-bench (the vehicle exists): incumbent one-shot vs composition-descent at equal verify budget; per-family results, never pooled; seeded + deterministic fold order.
 - Falsification arm: a mis-fitted stop threshold → abstains, never wrong certifications (the P104 posture: unverified output is never certified).
 - The primitive lands in katgpt-rs first (Issue 1211) as a `katgpt-assign` EXTENSION — the local-search driver already ships (Research 607/Plan 620); this repo consumes, never forks (goat-audit watches the edge).
+- **Win base (owner reframe 2026-11-14):** this cell extends the DEFAULT-WINNING selection stack (BetaPosterior beat every measured alternative — Bench 042's own sweep verdict), Pillar 1's Fourier MCTS, Pillar 4's MCTS/Bandit frame bridge, and the conformal-UQ candidate's search-termination gap — not a long shot against them. Tracked as the rating-energized-descent candidate: `../riir-ai/.docs/04_supergoat_candidates/rating_energized_descent.md`.
 
 ## Echo (no new file)
 
