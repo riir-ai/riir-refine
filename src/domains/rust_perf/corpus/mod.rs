@@ -811,14 +811,29 @@ mod entries_73;
 mod entries_74;
 mod entries_75;
 mod entries_76;
+mod entries_77;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 334 entries
-/// (Batch 360, 2026-11-13, Plan 371 / Research 405: +2 -- the polars
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 337 entries
+/// (Batch 361, 2026-11-14, Plan 372 / Research 405 residue: +3 -- the
+/// polars staged-leads conversion, `entries_77`: `map-inplace-same-size-
+/// transmute` (layout, BENCHABLE `ParetoDominant` 2/0/1 two-run stable,
+/// the alloc axis 1→0, the size/align gate + the consume contract) +
+/// `thread-local-codec-context-reuse` (caching, suggestion-only — the
+/// size-admission two-regime IS the constant's doc) +
+/// `batch-hash-probe-prefetch-two-pass` (io, decision-content-only on
+/// aarch64 — the positive arm of `software-prefetch-storage-bound`, the
+/// regime gate `MIN_PREFETCH_BUCKETS` the decision content) + 1
+/// count-neutral FACE on the B4-era `previous-row-group-check` (the
+/// SORTED pole of the run-locality law) + 1 honest DROP (R8
+/// `hot-key-skew-split-table`: the pre-registered bars failed two-run
+/// stable — skew 0.465-0.467x, uniform 0.001x, the sort-based promote
+/// dominates; the drop IS the record); pola-rs/polars @ `5c36cdd75` MIT;
+/// PRIOR: Batch 360, 2026-11-13, Plan 371 / Research 405: +2 -- the polars
 /// revisit #2 delta, `entries_76`: `first-hit-flag-guards-aux-structure`
 /// (caching, BENCHABLE `ParetoDominant` 3/0/0 two-run stable, the flag
 /// transition gating the side-structure write, the bit-steal face) +
@@ -1053,6 +1068,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_74::entries());
     entries.extend(entries_75::entries());
     entries.extend(entries_76::entries());
+    entries.extend(entries_77::entries());
     Corpus::new(entries)
 }
 
