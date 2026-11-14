@@ -33,7 +33,7 @@ Every release ships 5 platform archives (aarch64/x86_64 macOS, x86_64 Windows, a
 
 | crate | first published | version | downloads at publish (baseline) | docs.rs |
 |---|---|---|---|---|
-| [`cargo-refine`](https://crates.io/crates/cargo-refine) | 2026-11-11 | 0.5.0 | 0 | built ✓ |
+| [`cargo-refine`](https://crates.io/crates/cargo-refine) | 2026-11-11 | 0.5.0 | 0 → **23 by 2026-11-14** (0.5.0=11, 0.5.1=12; [bench 152](../../.benchmarks/152_i190_t10_signal_receipt_refresh.md)) | built ✓ |
 | [`katgpt-core`](https://crates.io/crates/katgpt-core) (the public upstream primitives) | 2026-08-22 (0.4.1); 0.5.0 on 2026-11-11 | 0.5.0 | — | built ✓ |
 
 Provenance: `https://crates.io/api/v1/crates/<name>` (`crate.downloads`, `crate.max_version`) and `https://docs.rs/crate/<name>/<version>/status.json`, read 2026-11-11 right after the uploads. The 0 is the baseline, not a result — re-read at the T10 gate (2026-11-17) and report the delta with the read date; crates.io counts are cumulative per crate and include CI/mirror fetches, so quote them as "downloads", never "users".
