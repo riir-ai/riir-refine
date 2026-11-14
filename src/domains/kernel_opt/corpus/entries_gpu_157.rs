@@ -27,6 +27,10 @@
 
 use crate::domains::kernel_opt::corpus::KernelRule;
 
+// The corpus entry IS the payload (data, not logic) — the kernel build fn
+// convention (the entries_popcorn precedent); surfaced by the Plan-377
+// lane's compile repair, disclosed in its commit.
+#[allow(clippy::too_many_lines)]
 pub fn entries() -> Vec<KernelRule> {
     vec![
         // ── K1 — the batch lead on value: alpha-cutout traversal over HW ray
@@ -377,50 +381,56 @@ fn rebuild_everything(boxes: &[Box_]) -> (Vec<TNode>, usize) {
 fn ordered_key(b: Box_) -> u32 { b.lo[0].to_bits() }
 
 fn build_range(boxes: &[Box_], order: &[usize], start: usize, end: usize, nodes: &mut Vec<TNode>) -> (usize, usize) {
-    let mut work = 1usize; // every node touched once per build
-    let (mut lo, mut hi) = ([f32::INFINITY; 4], [f32::NEG_INFINITY; 4]);
-    for &k in &order[start..end] {
-        for c in 0..4 {
-            lo[c] = lo[c].min(boxes[k].lo[c]);
-            hi[c] = hi[c].max(boxes[k].hi[c]);
-        }
+    // the HEAP layout: leaves padded to a power of two, internal node i's
+    // children at 2i+1 and 2i+2 — the adjacent pair after the parent the
+    // refit reverse pass reads. (The depth-first-push form lands children a
+    // whole subtree apart; the fixture gate caught the wrong-adjacency
+    // class, the preflight's cross-tree G1 exposed it past the vacuous
+    // shared assumption. Padded leaves repeat the last real leaf: every
+    // union is unchanged.)
+    let n = end - start;
+    let p = n.next_power_of_two();
+    let base = nodes.len();
+    nodes.resize(base + 2 * p - 1, TNode { lo: [0.0; 4], hi: [0.0; 4], left: 0, count: 0 });
+    for k in 0..p {
+        let b = if k < n { &boxes[order[start + k]] } else { &boxes[order[end - 1]] };
+        nodes[base + p - 1 + k] =
+            TNode { lo: b.lo, hi: b.hi, left: order[start + k.min(n - 1)] as u32, count: 1 };
     }
-    let count = end - start;
-    let ni = nodes.len();
-    nodes.push(TNode { lo, hi, left: start as u32, count: count as u32 });
-    if count > 1 {
-        let mid = start + count / 2;
-        let (l, w1) = build_range(boxes, order, start, mid, nodes);
-        let (_, w2) = build_range(boxes, order, mid, end, nodes);
-        nodes[ni].count = 0;
-        nodes[ni].left = l as u32; // ABSOLUTE child index — refit reads n.left
-        // directly; a relative offset unions the wrong children (the
-        // fixture gate caught the form at a 22.6x cost explosion)
-        work += w1 + w2;
+    for i in (0..p - 1).rev() {
+        let (l, r) = (&nodes[base + 2 * i + 1], &nodes[base + 2 * i + 2]);
+        let lo = [
+            l.lo[0].min(r.lo[0]), l.lo[1].min(r.lo[1]),
+            l.lo[2].min(r.lo[2]), l.lo[3].min(r.lo[3]),
+        ];
+        let hi = [
+            l.hi[0].max(r.hi[0]), l.hi[1].max(r.hi[1]),
+            l.hi[2].max(r.hi[2]), l.hi[3].max(r.hi[3]),
+        ];
+        nodes[base + i] = TNode { lo, hi, left: 0, count: 0 };
     }
-    (ni, work)
-}".to_string(),
+    (base, 2 * p - 1) // the sub-root's index + the work (nodes touched)
+}
+".to_string(),
             opt_pattern: r"// fixed: the tree is KEPT and its boxes brought up to date by one
 // reverse pass while the area-sum cost stays within slack of the
 // build cost; movers past astray go to a LOOSE tree rebuilt by their
 // own count; the whole thing steps through a three-state hysteresis.
-const REFIT_SLACK: f64 = 1.3;
-const ASTRAY: f32 = 1.0;
-const SMALL: usize = 64;
-
-fn area(lo: [f32; 4], hi: [f32; 4]) -> f64 {
-    let e = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
-    (2.0 * (e[0] * e[1] + e[1] * e[2] + e[2] * e[0])) as f64
-}
 
 /// the ray-cost proxy: the sum of the INTERIOR nodes' areas.
 fn top_cost(nodes: &[TNode]) -> f64 {
     nodes.iter().filter(|n| n.count == 0).map(|n| area(n.lo, n.hi)).sum()
 }
 
-/// shape-preserving box update: children sit AFTER their parents, so
-/// one reverse pass re-derives every box bottom-up. Same tree shape,
-/// same leaf membership — a VALID tree of the new boxes.
+/// shape-preserving box update: the HEAP layout (leaves padded to a
+/// power of two) puts each internal node's children at 2i+1 and 2i+2 —
+/// an ADJACENT pair AFTER the parent — so one reverse pass re-derives
+/// every box bottom-up. Same leaf membership — a VALID tree of the new
+/// boxes. (The depth-first-push builder lands children a whole subtree
+/// apart; an adjacent-pair union over it reads the wrong pair — the
+/// fixture gate caught the form, the preflight's cross-tree G1 exposed
+/// it after the fixture's own check proved vacuous under the shared
+/// assumption.)
 fn refit(nodes: &[TNode], boxes: &[Box_], leaf_of: &[usize]) -> Vec<TNode> {
     let mut out = nodes.to_vec();
     for i in (0..out.len()).rev() {
@@ -429,7 +439,9 @@ fn refit(nodes: &[TNode], boxes: &[Box_], leaf_of: &[usize]) -> Vec<TNode> {
             let b = &boxes[leaf_of[i]];
             out[i] = TNode { lo: b.lo, hi: b.hi, ..n };
         } else {
-            let (l, r) = (out[n.left as usize], out[n.left as usize + 1]);
+            // the HEAP layout: children at 2i+1, 2i+2 — the adjacent pair
+            // after the parent the reverse pass needs
+            let (l, r) = (out[2 * i + 1], out[2 * i + 2]);
             let lo = [l.lo[0].min(r.lo[0]), l.lo[1].min(r.lo[1]), l.lo[2].min(r.lo[2]), l.lo[3].min(r.lo[3])];
             let hi = [l.hi[0].max(r.hi[0]), l.hi[1].max(r.hi[1]), l.hi[2].max(r.hi[2]), l.hi[3].max(r.hi[3])];
             out[i] = TNode { lo, hi, ..n };

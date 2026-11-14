@@ -784,7 +784,8 @@ fn refit(nodes: &[TNode], boxes: &[Box_], leaf_of: &[usize]) -> Vec<TNode> {
                 ..n
             };
         } else {
-            let (l, r) = (out[n.left as usize], out[n.left as usize + 1]);
+            // the HEAP layout: children at 2i+1, 2i+2
+            let (l, r) = (out[2 * i + 1], out[2 * i + 2]);
             let lo = [
                 l.lo[0].min(r.lo[0]),
                 l.lo[1].min(r.lo[1]),
@@ -863,70 +864,101 @@ fn maintain(
 }
 
 fn rebuild_everything_boxes(boxes: &[Box_]) -> Vec<TNode> {
-    let mut nodes = Vec::new();
-    let mut order: Vec<usize> = (0..boxes.len()).collect();
+    let n = boxes.len();
+    let mut order: Vec<usize> = (0..n).collect();
     order.sort_by_key(|&k| boxes[k].lo[0].to_bits());
-    let _ = build_range(boxes, &order, 0, boxes.len(), &mut nodes);
+    let p = n.next_power_of_two();
+    let mut nodes = vec![
+        TNode {
+            lo: [0.0; 4],
+            hi: [0.0; 4],
+            left: 0,
+            count: 0
+        };
+        2 * p - 1
+    ];
+    build_heap(boxes, &order, &mut nodes);
     nodes
 }
 
 fn rebuild_just(boxes: &[Box_], which: &[usize]) -> (Vec<TNode>, f64) {
-    let mut nodes = Vec::new();
+    // the loose tree is rebuilt by ITS count; the work unit is the number
+    // of nodes the build touches (2 * count - 1 in the heap layout).
+    let n = which.len();
     let mut order = which.to_vec();
     order.sort_by_key(|&k| boxes[k].lo[0].to_bits());
-    let (_, w) = build_range(boxes, &order, 0, which.len(), &mut nodes);
-    (nodes, w as f64)
+    let p = n.next_power_of_two();
+    let mut nodes = vec![
+        TNode {
+            lo: [0.0; 4],
+            hi: [0.0; 4],
+            left: 0,
+            count: 0
+        };
+        2 * p - 1
+    ];
+    build_heap(boxes, &order, &mut nodes);
+    (nodes, (2 * p - 1) as f64)
 }
 
-fn build_range(
-    boxes: &[Box_],
-    order: &[usize],
-    start: usize,
-    end: usize,
-    nodes: &mut Vec<TNode>,
-) -> (usize, usize) {
-    let mut work = 1usize;
-    let (mut lo, mut hi) = ([f32::INFINITY; 4], [f32::NEG_INFINITY; 4]);
-    for &k in &order[start..end] {
-        for c in 0..4 {
-            lo[c] = lo[c].min(boxes[k].lo[c]);
-            hi[c] = hi[c].max(boxes[k].hi[c]);
-        }
+fn build_heap(boxes: &[Box_], order: &[usize], nodes: &mut [TNode]) {
+    // the HEAP layout: leaves padded to a power of two; internal node i's
+    // children sit at 2i+1 and 2i+2 — an ADJACENT pair AFTER their parent,
+    // so refit's one reverse pass re-derives every box. The preflight's
+    // cross-tree G1 caught the depth-first-push form this fixture
+    // originally carried: its children land a whole subtree apart, refit's
+    // adjacent union read the wrong pair, and THIS fixture's own G1 was
+    // VACUOUS under it (refit and the checker shared the assumption, so
+    // they agreed on garbage — the fixture gate can miss a shared-
+    // assumption class; the preflight's second tree exposed it). Padded
+    // leaves carry the last real leaf's box: every union is unchanged.
+    let n = order.len();
+    let p = n.next_power_of_two();
+    debug_assert_eq!(nodes.len(), 2 * p - 1);
+    for k in 0..p {
+        let b = if k < n {
+            &boxes[order[k]]
+        } else {
+            &boxes[order[n - 1]]
+        };
+        nodes[p - 1 + k] = TNode {
+            lo: b.lo,
+            hi: b.hi,
+            left: order[k.min(n - 1)] as u32,
+            count: 1,
+        };
     }
-    let count = end - start;
-    let ni = nodes.len();
-    nodes.push(TNode {
-        lo,
-        hi,
-        left: start as u32,
-        count: count as u32,
-    });
-    if count > 1 {
-        let mid = start + count / 2;
-        let (l, w1) = build_range(boxes, order, start, mid, nodes);
-        let (_, w2) = build_range(boxes, order, mid, end, nodes);
-        nodes[ni].count = 0;
-        nodes[ni].left = l as u32; // ABSOLUTE child index — the fixture gate
-        // caught the relative-offset form: refit reads n.left directly, so
-        // a relative offset unions the wrong children (a 22.6x cost
-        // explosion, caught pre-landing).
-        work += w1 + w2;
+    for i in (0..p - 1).rev() {
+        let (l, r) = (&nodes[2 * i + 1], &nodes[2 * i + 2]);
+        let lo = [
+            l.lo[0].min(r.lo[0]),
+            l.lo[1].min(r.lo[1]),
+            l.lo[2].min(r.lo[2]),
+            l.lo[3].min(r.lo[3]),
+        ];
+        let hi = [
+            l.hi[0].max(r.hi[0]),
+            l.hi[1].max(r.hi[1]),
+            l.hi[2].max(r.hi[2]),
+            l.hi[3].max(r.hi[3]),
+        ];
+        nodes[i] = TNode {
+            lo,
+            hi,
+            left: 0,
+            count: 0,
+        };
     }
-    (ni, work)
 }
 
-/// node index -> box index for leaves (the leaf stores its ORDER position).
-fn leaf_map(nodes: &[TNode], order: &[usize]) -> Vec<usize> {
-    nodes
-        .iter()
-        .map(|n| {
-            if n.count > 0 {
-                order[n.left as usize]
-            } else {
-                usize::MAX
-            }
-        })
-        .collect()
+/// NODE-indexed leaf map for the heap layout.
+fn heap_leaf_map(n: usize, order: &[usize]) -> Vec<usize> {
+    let p = n.next_power_of_two();
+    let mut map = vec![usize::MAX; 2 * p - 1];
+    for k in 0..p {
+        map[p - 1 + k] = if k < n { order[k] } else { order[n - 1] };
+    }
+    map
 }
 
 fn assert_valid_tree(nodes: &[TNode], boxes: &[Box_], leaf_of: &[usize]) {
@@ -936,7 +968,8 @@ fn assert_valid_tree(nodes: &[TNode], boxes: &[Box_], leaf_of: &[usize]) {
             assert_eq!(n.lo, b.lo, "leaf {i} box drifted");
             assert_eq!(n.hi, b.hi, "leaf {i} box drifted");
         } else {
-            let (l, r) = (&nodes[n.left as usize], &nodes[n.left as usize + 1]);
+            // the HEAP layout: children at 2i+1, 2i+2
+            let (l, r) = (&nodes[2 * i + 1], &nodes[2 * i + 2]);
             for c in 0..4 {
                 assert_eq!(n.lo[c], l.lo[c].min(r.lo[c]), "interior {i} lo axis {c}");
                 assert_eq!(n.hi[c], l.hi[c].max(r.hi[c]), "interior {i} hi axis {c}");
@@ -962,9 +995,18 @@ fn f4_refit_output_is_a_valid_tree_over_the_same_leaves() {
         .collect();
     let mut order: Vec<usize> = (0..boxes.len()).collect();
     order.sort_by_key(|&k| boxes[k].lo[0].to_bits());
-    let mut nodes = Vec::new();
-    let _ = build_range(&boxes, &order, 0, boxes.len(), &mut nodes);
-    let leaf_of = leaf_map(&nodes, &order);
+    let p = boxes.len().next_power_of_two();
+    let mut nodes = vec![
+        TNode {
+            lo: [0.0; 4],
+            hi: [0.0; 4],
+            left: 0,
+            count: 0
+        };
+        2 * p - 1
+    ];
+    build_heap(&boxes, &order, &mut nodes);
+    let leaf_of = heap_leaf_map(boxes.len(), &order);
     let built_cost = top_cost(&nodes);
 
     // jitter three boxes slightly (the movers stay near their placed box)
@@ -994,9 +1036,18 @@ fn f4_hysteresis_loose_movers_and_small_scene_rebuild() {
         .collect();
     let mut order: Vec<usize> = (0..boxes.len()).collect();
     order.sort_by_key(|&k| boxes[k].lo[0].to_bits());
-    let mut nodes = Vec::new();
-    let _ = build_range(&boxes, &order, 0, boxes.len(), &mut nodes);
-    let leaf_of = leaf_map(&nodes, &order);
+    let p = boxes.len().next_power_of_two();
+    let mut nodes = vec![
+        TNode {
+            lo: [0.0; 4],
+            hi: [0.0; 4],
+            left: 0,
+            count: 0
+        };
+        2 * p - 1
+    ];
+    build_heap(&boxes, &order, &mut nodes);
+    let leaf_of = heap_leaf_map(boxes.len(), &order);
     let built_cost = top_cost(&nodes);
 
     // a teleporting unit: its box left the box it was placed with, widened
