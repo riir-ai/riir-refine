@@ -4,7 +4,7 @@ Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all re
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
-- [ ] Owner: capture the 7 screen assets — §9 (re-capture LIVE pins on recording day, §2)
+- [ ] Owner: run the two commands once and save the output TEXT + supply the board URL — §9 (no video recording needed)
 - [ ] Agent: scaffold the fframes project + build S01–S13 + end card per §4/§8
 - [ ] Agent: captions track (word-timed JSON) + loudness gate + export per §6/§7/§8
 - [ ] Owner review (`preview` + strips) → final render → attach link to the application
@@ -149,9 +149,15 @@ recording day (the corpus and board move weekly).
   both font files in `media/`.
 - **The before/after device:** every act opens on a red-tinted "before" card and resolves to
   the dark "after" state. Diagonal wipe between them, once per act — not on every beat.
+- **100% fframes-drawn — no screen recordings.** Every scene is vector motion graphics
+  (the fframes.studio look): terminals, tables, charts, PR cards, the board — all redrawn
+  as SVG. The honesty does not come from pixels, it comes from DATA: terminals type REAL
+  captured output text (§9), every number comes from §2, charts re-plot real pinned values,
+  and on-screen chips link the live pages (board URL, crates.io) so a reviewer can verify
+  anything in one click. Nothing on screen is invented; some of it is beautifully re-typeset.
 - **Motion:** springs/ease-out 300–600 ms in, 200–300 ms out, 60–120 ms staggers; counters
-  tick in mono; one accent element per scene; screen captures sit in a subtle window frame
-  with a slow 1.02× scale-in. No beat-spam, no full-frame zooms, nothing fades up 40 px with
+  tick in mono; one accent element per scene; cards get a subtle window frame and a slow
+  1.02× scale-in. No beat-spam, no full-frame zooms, nothing fades up 40 px with
   the same easing everywhere (the skill's no-slop list is binding).
 - **Text discipline:** ≤ 8 words per line, ≤ 3 lines per card; the VO carries the story,
   on-screen text only anchors numbers and names.
@@ -166,12 +172,12 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 |---|---|---|---|---|
 | S01 | 0:00–0:09 | hook | `BEFORE: subscription · datacenter · your code uploaded` / `AFTER: offline · free · code stays` | Diagonal split. Left card red-tinted: cloud, `$` and upload-arrow icons drop in staggered; right card dark: unplugged-plug icon springs in. Wipe resolves left→right on "We built the opposite." |
 | S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
-| S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Live capture: README GOAT-table slow scroll (or crates.io katgpt-core page). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
+| S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Vector redraw of real GOAT-table rows scrolling (lane names + verdicts lifted verbatim from the katgpt-rs README — the agent greps 3–4 rows, never invents). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
 | S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram: query card slides in → fast lane (stopwatch icon spins to `0.4 ms`) → amber `abstain` branch lights on "doesn't know". Labels `choice / score / noul` under the wire. |
-| S06 | 0:41–0:53 | board beat | Live board + chip `board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` | Live capture of the board page, Rethink row highlighted with the accent. Bars grow on the numbers (log axis like the site); dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the board's own gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
+| S06 | 0:41–0:53 | board beat | Vector board redraw + chip `live board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` | fframes redraws the board (radar + footprint bars + latency bars, log axis like the live page) from the P7 pins — real numbers, our own layout; the URL chip invites verification. Dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the real gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
 | S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
-| S08 | 0:57–1:05 | refine production | `cargo refine` terminal + `13 of our own repos name it the default` | Live capture: `cargo refine` dry-run scrolling findings in a terminal frame. A constellation of 13 repo chips lights up around it, one per beat. |
+| S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
 | S09 | 1:05–1:15 | flywheel | `scan → retrieve → draft → compile-gate → record → learn` + `opt-in share · secret-scanned` | Redraw of the site's flywheel as 6 nodes on a ring, rotating slowly; the compile-gate node flashes ✓ and once ✗→revert; the share branch (dashed, dimmer) unlocks only when an `opt-in` toggle flips. |
 | S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` (+ chip `#3025 CI 50 ✓ 0 ✗` only if P15 provenance gets pinned) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only, and only after the provenance pin. |
@@ -344,10 +350,12 @@ not the video's narration voice).
 3. One scene struct per §4 row (`S01`–`S13` + `EndCard`), `Overlap::Previous(0.4)` on the
    scene transitions that carry an element across the cut (S03→S04 table scroll, S05→S06 wire).
    Replace every template leftover — the starter layout/colors are the first thing to go.
-4. Media: `media/` gets the 13 VO wavs, music, the 2 fonts, `captions.json`, and the screen
-   captures (§9) as trimmed MP4 clips played through `Clip::new(file, a..b)` inside their
-   scenes — one scene per spoken segment, `fn audio` places that segment's VO so picture and
-   voice move together. ⛔ No ffmpeg/shell cutting scripts — everything through the crate.
+4. Media: `media/` gets the 12 VO wavs, music, the 2 fonts, and `captions.json`. There are
+   NO screen-recording clips in the default build — every "terminal"/"table"/"board" is
+   drawn in SVG, driven by REAL text/values (§9). If the owner later supplies the optional
+   real terminal capture, play it through `Clip::new(file, a..b)` inside S08 — `fn audio`
+   places that segment's VO so picture and voice move together. ⛔ No ffmpeg/shell cutting
+   scripts — everything through the crate.
 5. Every number on screen comes from §2. If a LIVE pin moved on recording day (corpus count,
    heal rate, board numbers), update the pin table here first, then the code — never hardcode
    from memory.
@@ -356,22 +364,58 @@ not the video's narration voice).
    `inspect --pops` → `audio analyze` → `preview` for the owner. Then `render -o mozilla.mp4`
    and verify with `ffprobe -v error -show_entries
    stream=codec_type,width,height,nb_frames,duration mozilla.mp4`.
-7. Deliverables: `mozilla.mp4` (≤ 2:12, 1080p30, H.264 + AAC), `captions.srt` (§6, shifted to
-   the real VO), and the strip contact sheets for the owner's review.
+7. Deliverables: `mozilla.mp4` (≤ 2:00 hard, 1080p30, H.264 + AAC), `captions.srt` (§6,
+   shifted to the real VO), and the strip contact sheets for the owner's review.
 
-## 9. Screen assets to capture (owner, before the build — dark theme, 1920×1080 or 2× retina)
+### The terminal typing recipe (S04's gate line · S08 · S12's equation — all typed text)
 
-1. `cargo refine` dry run in a real repo — findings list scrolling (S08).
-2. `cargo refine fix` — a fix applying + one compile-gate revert moment if easy (S09 backup).
-3. The live board page (the screenshot the owner pasted: Rethink / Clef-flash / mammoth-1,
-   radar + footprint + latency) — 🔴 republish first if the numbers moved (S06).
-4. refine.riir.ai hero — the flywheel section + live counters (S09 reference for the redraw).
-5. katgpt-rs README GOAT table slow scroll (S03) — or the crates.io katgpt-core page.
-6. `cargo test -p katgpt-core --lib` tail + `scripts/proof_gate.sh` pass line (S04 backup).
-7. mozilla/sccache PR #2977 (merged, six rounds) + #3025 CI green (S11).
+Three scenes type text as if a machine were writing it. One shared Rust component does it:
 
-Capture tips: `just capture` exists for editor windows but these are terminal/browser —
-use `ffmpeg -f avfoundation` or OBS, cursor hidden, and keep each take ≥ the scene length.
+- **Typewriter slicing** — map scene-local `frame.seconds()` (linear easing) to a character
+  count, then slice with `.chars().take(count)` — never byte-slicing (multi-byte UTF-8:
+  `Σ`, `→`, `✓` panic on char boundaries). Speed: ~25–40 chars/sec reads as human typing.
+- **Blinking cursor** — a block `<rect>` (or `█`) toggled by `(frame.number / 15) % 2 == 0`
+  (0.5 s blink at 30 fps); park it at the end of the typed text, hide during holds.
+- **Staggered log lines** — reveal output lines sequentially once the command finishes:
+  each line carries a `line_start_time`; render `<text>` elements only when
+  `time_sec >= line_start_time`. S08's dry-run output reveals ~2–3 lines per beat so the
+  VO's rhythm drives the pace, not a fixed clock.
+- **Syntax highlighting** — wrap flags, paths and strings in separate `<tspan fill="…">`
+  tags once typed (accent `#FFB454` for the command, muted grey for timing lines, green
+  `#3DD68C` for `✓`/fixed rows) — a real shell theme, drawn once and reused.
+- **Keystroke SFX (sparse)** — short key-click wavs in `media/`, mapped in `fn audio` at
+  character timestamps. ⛔ One sound PER character is busy slop — tick every 3–4 chars
+  (or only on line reveals), `.gain_db(-12.)` under the VO, times derived from the SAME
+  constants that drive the slicing so audio and picture never drift.
+- **Long output scrolling** — if the real dry-run text exceeds the window, translate the
+  line group upward with a linear timeline so the newest lines stay in view; never fade
+  lines out mid-read.
+- Keep the terminal FLAT (no `fframes::three_d` tilt here) — 3D is for product shots, not
+  for text a reviewer must read.
+
+## 9. Real data to run once (TEXT, not video — the only owner input the build needs)
+
+The video is 100% fframes-drawn. What it needs from the owner is REAL DATA, not footage:
+
+1. **`cargo refine` dry run** in a real workspace repo → save the stdout TEXT to
+   `mozilla-video/media/refine_dryrun.txt` (S08's terminal types it verbatim — real
+   findings, real paths, nothing scripted by the agent).
+2. **`cargo refine fix`** once on a scratch branch → save the transcript, ideally including
+   one compile-gate revert moment if a broken fix shows up naturally (optional; feeds S09's
+   ✓/✗ beats with real labels).
+3. **Board URL** — the live page link for S06's `live board:` chip (owner supplies; numbers
+   come from pin P7, re-measured on recording day).
+4. **Nothing else** — GOAT-table rows (S03) are lifted verbatim from the katgpt-rs README by
+   the agent; PR cards (S11) draw from pin P15; the flywheel (S09) is the redraw of the
+   site's flow; the conservation equation (S12) is in pin P16.
+
+Optional authenticity lane (never blocking): if the owner wants the texture of a real
+terminal — cursor drift, theme, font — one OBS/`ffmpeg -f avfoundation` recording of the
+dry run replaces S08's vector terminal (deliverable an MP4; everything else stays drawn).
+Capture tips if used: cursor hidden, dark theme, ≥ scene length.
+
+🔴 Re-run items 1–3 on recording day if the corpus/board moved — update the §2 pins first,
+then regenerate.
 
 ## 10. Sources
 
