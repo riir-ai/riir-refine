@@ -1,8 +1,10 @@
 # 11 — Multi-domain architecture (Plan 001)
 
 > **Purpose:** the domain-pluggable framework behind the `HealDomain` trait
-> (Plan 001). Three domains ship: `clippy_lints` (default), `rust_perf`
-> (Phase 2 opt-in), `kernel_opt` (Phase 3 opt-in, absorbs Proposal 012). Each
+> (Plan 001). Eight domains ship: `clippy_lints` (default), `rust_perf`
+> (default since 2026-08-13), `kernel_opt` (default-on via `kernel_pregate`
+> since 2026-11-06), `sec` (opt-in), `docker` (default), `dist` (default),
+> `shader_perf` (default-on since 2026-11-07), `ane` (opt-in, Plan 377). Each
 > domain owns its corpus + validator; the domain-agnostic core (drafter +
 > pruner + ruliology + self-evolve) operates on the corpus entries this trait
 > produces.
@@ -18,6 +20,7 @@
 | [`docker.md`](docker.md) | Plan 030: `DockerDomain` + `DockerRule` + the stanza scanner (no `syn`) + the hadolint oracle tier (incl. the Tier-2 `docker build --check` oracle) + the DL3059-refusal gate + 31 rules (14 bounded fixes) |
 | [`dist.md`](dist.md) | Issue 085: `DistDomain` + `DistRule` + the section-aware manifest scanner (no `syn`, no `toml`) + the refuses gate + 6 suggest-only rules (release-profile size knobs + the workspace-member profile trap + the Batch-143 large-API dependency hint + the Batch-146 PGO training-set hint) |
 | [`shader_perf.md`](shader_perf.md) | Plan 134 / Proposal 014: `ShaderPerfDomain` + `ShaderRule` + the block-aware WGSL render-stage scanner (no `syn`, no `regex`) + the naga oracle tier + the refusal gate + 8 rules (1 bounded: the loop-guard proposer; the negative control pins ZERO findings on the 190-file vgpu port corpus) |
+| [`ane.md`](ane.md) | Plan 377: the 8th domain `DomainId::Ane` (`DomainMask` u8 bit 7) + the `ane_pregate` needle gate (± 24 spans, `RIIR_ANE_PREGATE=0` demote) + 6 suggestion-only seed rules (Research 409 liquidcodec-ane distill; `NotBenchable-by-domain`, zero new deps, no proposers) |
 | [`cross_domain_routing.md`](cross_domain_routing.md) | Why cross-domain auto-routing is NOT in scope (Proposal 001) |
 
 ## Source
@@ -27,6 +30,7 @@
 - [`src/domains/clippy_lints/`](../../src/domains/clippy_lints/) — clippy domain (default)
 - [`src/domains/rust_perf/`](../../src/domains/rust_perf/) — rust_perf domain (Phase 2)
 - [`src/domains/kernel_opt/`](../../src/domains/kernel_opt/) — kernel_opt domain (Phase 3)
+- [`src/domains/ane/`](../../src/domains/ane/) — ane domain (Plan 377, opt-in)
 
 ## Feature gates
 
@@ -42,6 +46,8 @@
 | `docker_verify` | off | `docker` | hadolint agreement oracle |
 | `docker_buildcheck` | off | `docker_verify` | Tier-2 `docker build --check` agreement oracle |
 | `dist` | ✅ on (since 2026-09-13) | — | shipped-artifact build-config advice (Issue 085; promoted on Bench 082 + §6 evidence + owner pull) |
+| `ane` | off | — | Apple Neural Engine host-orchestration decisions (Plan 377; 6 suggestion-only rules, parse-only validator) |
+| `ane_pregate` | off | `ane` | the recall-biased ANE needle gate (± 24 spans; `RIIR_ANE_PREGATE=0` demote-only) |
 
 ## Status
 
