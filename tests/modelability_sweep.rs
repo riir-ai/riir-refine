@@ -211,8 +211,8 @@ fn slice(patterns: &[(String, String)], even: bool) -> Vec<(String, String)> {
 }
 
 /// `DomainId::ALL` order (clippy, perf, kernel, sec, docker, dist,
-/// shader) — mirrors `retrieval_eval::domain_index` for the eval-report
-/// rows used here (shader sits at index 6, matching the eval's arm).
+/// shader, ane) — mirrors `retrieval_eval::domain_index` for the eval-report
+/// rows used here (shader sits at index 6, ane at 7, matching the eval's arm).
 fn eval_domain_index(d: DomainId) -> usize {
     match d {
         DomainId::Clippy => 0,
@@ -222,6 +222,7 @@ fn eval_domain_index(d: DomainId) -> usize {
         DomainId::Docker => 4,
         DomainId::Dist => 5,
         DomainId::ShaderPerf => 6,
+        DomainId::Ane => 7,
     }
 }
 

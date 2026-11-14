@@ -9,12 +9,13 @@
 //!  "rust_perf": {"rules": N, "categories": N, "benchable": N, "notbenchable": N},
 //!  "kernel_opt": {"rules": N, "witness": {"kernel_categories": 15, "experts": 15, "activity_dim": 8}},
 //!  "sec": {"rules": N},
-//!  "docker_rules": N, "dist_rules": N, "shader_perf_rules": N}
+//!  "docker_rules": N, "dist_rules": N, "shader_perf_rules": N, "ane_rules": N}
 //! ```
 //!
 //! The four nested domains are the prose-gated ones (live rows in
-//! AGENTS.md / README.md); the three flat keys are the also-compiled trio
-//! (docker / dist / `shader_perf` — counted, no prose rows gated on them).
+//! AGENTS.md / README.md); the four flat keys are the also-compiled quartet
+//! (docker / dist / `shader_perf` / `ane` — counted, no prose rows gated on
+//! them; the `ane` prose lives in AGENTS.md's feature table, Plan 377).
 //!
 //! The numbers are DERIVED, never hand-typed: `scripts/pins_manifest.py`
 //! runs [`dump::dump_pins_manifest`] (this module, under `cargo test`) with
@@ -157,8 +158,8 @@ fn dump_pins_manifest() {
 
     // The also-compiled trio rides FLAT top-level keys — counted, but not
     // prose-gated nested domains (this is `corpus_counts_line`'s own reader
-    // shape, pre-seamed). docker + dist are default-on; `shader_perf` is
-    // opt-in and joins the script's build posture.
+    // shape, pre-seamed). docker + dist are default-on; `shader_perf` and
+    // `ane` (Plan 377) are opt-in and join the script's build posture.
     dump_also_compiled_trio(&mut root);
 
     for required in [
@@ -169,6 +170,7 @@ fn dump_pins_manifest() {
         "docker_rules",
         "dist_rules",
         "shader_perf_rules",
+        "ane_rules",
         "rust_perf_bench",
     ] {
         let present = match required {
@@ -191,16 +193,21 @@ fn dump_pins_manifest() {
     std::fs::write(&path, json + "\n").expect("pins dump write");
 }
 
-/// The also-compiled trio (docker / dist / `shader_perf`) as flat top-level
-/// keys — extracted from [`dump_pins_manifest`] so the test stays under the
-/// line budget; each insert keeps its own feature gate, so the flag-off
-/// posture is byte-identical (the B331 en-route-repair class, disclosed in
-/// the Batch-338 landing row).
-// `root` is unused when all three trio features are off (the flag-off test
+/// The also-compiled quartet (docker / dist / `shader_perf` / `ane`) as
+/// flat top-level keys — extracted from [`dump_pins_manifest`] so the test
+/// stays under the line budget; each insert keeps its own feature gate, so
+/// the flag-off posture is byte-identical (the B331 en-route-repair class,
+/// disclosed in the Batch-338 landing row).
+// `root` is unused when every quartet feature is off (the flag-off test
 // posture keeps the shape compiled — the allow is the shape, not a lint
 // suppression of live code).
 #[cfg_attr(
-    not(any(feature = "docker", feature = "dist", feature = "shader_perf")),
+    not(any(
+        feature = "docker",
+        feature = "dist",
+        feature = "shader_perf",
+        feature = "ane"
+    )),
     allow(unused_variables)
 )]
 fn dump_also_compiled_trio(root: &mut serde_json::Map<String, serde_json::Value>) {
@@ -229,6 +236,16 @@ fn dump_also_compiled_trio(root: &mut serde_json::Map<String, serde_json::Value>
         "shader_perf_rules".to_string(),
         serde_json::json!(
             crate::domains::shader_perf::corpus::build_shader_seed_corpus()
+                .entries
+                .len()
+        ),
+    );
+
+    #[cfg(feature = "ane")]
+    root.insert(
+        "ane_rules".to_string(),
+        serde_json::json!(
+            crate::domains::ane::corpus::build_ane_seed_corpus()
                 .entries
                 .len()
         ),

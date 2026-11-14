@@ -1,6 +1,6 @@
 # Plan 376 — Batch 362: the ANE conversion/host-placement family (liquidcodec-ane + beshkenadze corroboration)
 
-**Status:** OPEN — filed 2026-11-14 from Research 409 (verdict YES B− / lane-intel HIGH). Nominal Batch 362. Deep-dive + lane execution: riir-infer Research 029 / Plan 633 (the measured cells this batch's fixtures cite).
+**Status:** OPEN — REDIRECTED 2026-11-14 (owner call): the six candidates are LANDED as the SEED of the new `ane` retrieval domain (Plan 377, `src/domains/ane/` — suggestion-only, in-corpus fixture arms, pins manifest 6); this plan's REMAINING scope is the measured-cell hardening — the regime conditions in the landed seed cite source quotes; Plan 633's cells (riir-infer) harden them into OUR measurements, and those cells ride back into the domain corpus as fixture/regime updates under THIS plan (not a kernel_opt batch — the domain home moved). Filed 2026-11-14 from Research 409 (verdict YES B− / lane-intel HIGH).
 
 ## Pre-batch gates
 

@@ -70,7 +70,7 @@ pub const MIN_PER_RULE_N: u32 = 20;
 /// The T3 qualifying-set candidates (the retrieval/compile domain ids, in
 /// the `RuleDomains`/registry spelling — the one spelling both formulas
 /// key on, so the eval and bench halves of the column can be joined).
-pub const T3_DOMAINS: [&str; 8] = [
+pub const T3_DOMAINS: [&str; 9] = [
     "clippy",
     "rust_perf",
     "rustc_errors",
@@ -79,6 +79,7 @@ pub const T3_DOMAINS: [&str; 8] = [
     "docker",
     "dist",
     "shader_perf",
+    "ane",
 ];
 
 /// The canonical (`RuleDomains`/registry) spelling for a `DomainId::label()`

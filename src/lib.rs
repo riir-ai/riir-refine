@@ -108,6 +108,11 @@ pub mod edit_emitter;
 // arms only behind `kernel_pregate` — off, `KernelPlan::for_file` returns
 // `Off` without scanning and the scan path is byte-identical.
 pub mod kernel_pregate;
+// Plan 377 — the ANE pregate (the owner's two-pass ask): the same shape as
+// kernel_pregate applied to the CoreML/ANE surface. Always compiled; the
+// gate arms only behind `ane_pregate` — off, `AnePlan::for_file` returns
+// `Off` without scanning and the scan path is byte-identical.
+pub mod ane_pregate;
 // Issue 134 T1 — the standing demonstrability column (measurement only,
 // no behavior change; Research 585 / SAT arXiv:2609.22682). Pure over its
 // inputs; the eval half of its API is cfg(latent_retrieval) and the bench
@@ -1029,6 +1034,15 @@ pub use domains::shader_perf::{
 /// The `shader_perf` seed corpus (behind `shader_perf`).
 #[cfg(feature = "shader_perf")]
 pub use domains::shader_perf::corpus::build_shader_seed_corpus;
+
+// ── ane domain re-exports (behind `ane` feature, opt-in — Plan 377) ────────────
+#[cfg(feature = "ane")]
+pub use domains::ane::{AneDomain, AneFamily, AneRule, AneVerdict};
+
+/// The `ane` seed corpus (behind `ane`) — the `RuleDomains` registry consumes
+/// this path spelling (the `corpus_domain`! macro convention).
+#[cfg(feature = "ane")]
+pub use domains::ane::corpus::build_ane_seed_corpus;
 
 /// `kernel_opt` thermal router (behind `kernel_opt`).
 #[cfg(feature = "kernel_opt")]

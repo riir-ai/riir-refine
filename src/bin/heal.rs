@@ -15825,6 +15825,11 @@ fn main() {
     if args.domain.is_some_and(|d| d == DomainId::Kernel) {
         riir_refine::kernel_pregate::arm_domain_bypass();
     }
+    // Plan 377: the ane pregate's explicit-ask bypass — the same contract as
+    // the kernel arm above (the gate never refuses an explicit ask).
+    if args.domain.is_some_and(|d| d == DomainId::Ane) {
+        riir_refine::ane_pregate::arm_domain_bypass();
+    }
 
     // IIFE because the kat_service arm returns early from inside a
     // cfg-gated block — a plain let-chain would need the same cfg pair
@@ -20128,6 +20133,7 @@ fn run_overlay_with_promotion(
                 "docker" => Some(DomainId::Docker),
                 "dist" => Some(DomainId::Dist),
                 "shader" => Some(DomainId::ShaderPerf),
+                "ane" => Some(DomainId::Ane),
                 _ => None,
             }?;
             Some((id, triples))

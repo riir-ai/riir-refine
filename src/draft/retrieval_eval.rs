@@ -850,6 +850,15 @@ pub fn labeled_eval_spans() -> Vec<OwnedEvalSpan> {
             acceptable: Vec::new(),
         });
     }
+    #[cfg(feature = "ane")]
+    for (rule, code) in super::eval_fixtures_ane::ANE_SPANS {
+        spans.push(OwnedEvalSpan {
+            label: rule.to_string(),
+            domain: DomainId::Ane,
+            code: code.to_string(),
+            acceptable: Vec::new(),
+        });
+    }
     spans
 }
 
@@ -862,6 +871,7 @@ pub(crate) fn domain_index(d: DomainId) -> usize {
         DomainId::Docker => 4,
         DomainId::Dist => 5,
         DomainId::ShaderPerf => 6,
+        DomainId::Ane => 7,
     }
 }
 
@@ -1537,6 +1547,14 @@ fn router_eval_domains() -> Vec<(DomainId, Vec<String>)> {
     out.push((
         DomainId::Kernel,
         crate::domains::kernel_opt::KernelOptDomain::build_corpus()
+            .into_iter()
+            .map(|e| e.buggy_code().to_string())
+            .collect::<Vec<_>>(),
+    ));
+    #[cfg(feature = "ane")]
+    out.push((
+        DomainId::Ane,
+        crate::domains::ane::AneDomain::build_corpus()
             .into_iter()
             .map(|e| e.buggy_code().to_string())
             .collect::<Vec<_>>(),
@@ -3023,6 +3041,23 @@ mod tests {
             assert!(
                 corpus.contains(rule),
                 "dist fixture label {rule} is not a corpus rule id"
+            );
+        }
+    }
+
+    #[cfg(feature = "ane")]
+    #[test]
+    fn ane_fixture_labels_verify() {
+        use crate::domain::HealDomain;
+        let corpus: std::collections::BTreeSet<String> =
+            crate::domains::ane::AneDomain::build_corpus()
+                .into_iter()
+                .map(|e| e.rule_id().to_string())
+                .collect();
+        for &(rule, _code) in super::super::eval_fixtures_ane::ANE_SPANS {
+            assert!(
+                corpus.contains(rule),
+                "ane fixture label {rule} is not a corpus rule id"
             );
         }
     }

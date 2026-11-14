@@ -44,7 +44,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = REPO / ".benchmarks" / "pins_manifest.json"
-FEATURES = "kernel_opt,sec,rust_perf_bench,shader_perf"
+FEATURES = "kernel_opt,sec,rust_perf_bench,shader_perf,ane"
 DUMP_TEST = "dump_pins_manifest"
 REQUIRED_DOMAINS = (
     "clippy_lints",
@@ -54,6 +54,7 @@ REQUIRED_DOMAINS = (
     "docker_rules",
     "dist_rules",
     "shader_perf_rules",
+    "ane_rules",
 )
 
 

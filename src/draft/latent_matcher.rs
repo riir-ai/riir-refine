@@ -240,6 +240,7 @@ pub struct LatentMatcher {
     docker: Option<RuleIndex>,
     dist: Option<RuleIndex>,
     shader_perf: Option<RuleIndex>,
+    ane: Option<RuleIndex>,
     rule_book: std::collections::HashMap<String, RuleInfo>,
     /// G4 scratch — reused across every span + domain query.
     scratch: super::corpus_index::SuggestScratch,
@@ -436,6 +437,9 @@ impl LatentMatcher {
             DomainId::ShaderPerf,
             crate::domains::shader_perf::ShaderPerfDomain::build_corpus
         );
+        #[cfg(feature = "ane")]
+        let ane_entries =
+            resolve_corpus!(DomainId::Ane, crate::domains::ane::AneDomain::build_corpus);
 
         // The shared book pass (rule ids → display info + the router's
         // per-domain pattern centroids). Same inserts, in the same domain
@@ -472,6 +476,8 @@ impl LatentMatcher {
         book_of!(DomainId::Dist, dist_entries);
         #[cfg(feature = "shader_perf")]
         book_of!(DomainId::ShaderPerf, shader_entries);
+        #[cfg(feature = "ane")]
+        book_of!(DomainId::Ane, ane_entries);
 
         if router_domains.is_empty() {
             // Single-domain-less feature combos (latent_retrieval alone):
@@ -480,7 +486,7 @@ impl LatentMatcher {
             // warning-clean.
             let _ = (&config, &overlay_for);
             return Err(
-                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_opt/sec/docker/dist/shader_perf)"
+                "LatentMatcher: no domains enabled (need at least one of clippy_lints/rust_perf/kernel_opt/sec/docker/dist/shader_perf/ane)"
                     .to_string(),
             );
         }
@@ -511,6 +517,8 @@ impl LatentMatcher {
             v.push((DomainId::Dist, &dist_entries));
             #[cfg(feature = "shader_perf")]
             v.push((DomainId::ShaderPerf, &shader_entries));
+            #[cfg(feature = "ane")]
+            v.push((DomainId::Ane, &ane_entries));
             v
         };
         #[cfg(feature = "index_cache")]
@@ -768,6 +776,11 @@ impl LatentMatcher {
         #[cfg(not(feature = "shader_perf"))]
         let shader_perf = None;
 
+        #[cfg(feature = "ane")]
+        let ane = index_domain!(DomainId::Ane, ane_entries, RuleIndex::build_with);
+        #[cfg(not(feature = "ane"))]
+        let ane = None;
+
         // ---- Issue 224 T1 / 226 T1: the store tail. Only reached on a miss
         // (or a loud refusal) — the store arm is None after a hit. The
         // store is DEFERRED off the critical path (encode + atomic
@@ -817,6 +830,7 @@ impl LatentMatcher {
             docker,
             dist,
             shader_perf,
+            ane,
             rule_book,
             scratch: super::corpus_index::SuggestScratch::default(),
             #[cfg(feature = "set_rerank")]
@@ -844,6 +858,7 @@ impl LatentMatcher {
             &mut self.docker,
             &mut self.dist,
             &mut self.shader_perf,
+            &mut self.ane,
         ]
         .into_iter()
         .flatten()
@@ -967,6 +982,7 @@ impl LatentMatcher {
             &mut self.docker,
             &mut self.dist,
             &mut self.shader_perf,
+            &mut self.ane,
         ]
         .into_iter()
         .flatten()
@@ -1021,6 +1037,7 @@ impl LatentMatcher {
             DomainId::Docker => self.docker.is_some(),
             DomainId::Dist => self.dist.is_some(),
             DomainId::ShaderPerf => self.shader_perf.is_some(),
+            DomainId::Ane => self.ane.is_some(),
         }
     }
 
@@ -1058,16 +1075,22 @@ impl LatentMatcher {
 
     /// The per-span fan-out allow set (Issue 213). `applying` is the file's
     /// Issue-145 path set; the kernel pregate's span verdict removes the
-    /// kernel bit. When NO allowed domain applies (an unusual extension, or
+    /// kernel bit; the ane pregate's (Plan 377) removes the ane bit the
+    /// same way. When NO allowed domain applies (an unusual extension, or
     /// a `.cu` span the pregate denied), every domain runs — exactly the
     /// display's `fits_any` fallback (`heal.rs`), so the shown list is
     /// unchanged; only retrieval the display would discard is skipped.
-    fn span_allow(applying: DomainMask, kernel_allowed: bool) -> DomainMask {
+    fn span_allow(applying: DomainMask, kernel_allowed: bool, ane_allowed: bool) -> DomainMask {
         let gate = |m: DomainMask| {
-            if kernel_allowed {
+            let m = if kernel_allowed {
                 m
             } else {
                 m.without(DomainId::Kernel)
+            };
+            if ane_allowed {
+                m
+            } else {
+                m.without(DomainId::Ane)
             }
         };
         match gate(applying) {
@@ -1180,6 +1203,7 @@ impl LatentMatcher {
                     DomainId::Docker => self.docker.as_ref(),
                     DomainId::Dist => self.dist.as_ref(),
                     DomainId::ShaderPerf => self.shader_perf.as_ref(),
+                    DomainId::Ane => self.ane.as_ref(),
                     DomainId::Kernel => unreachable!("handled above"),
                 };
                 let Some(index) = index else {
@@ -1274,6 +1298,7 @@ impl LatentMatcher {
                 DomainId::Docker => self.docker.as_ref(),
                 DomainId::Dist => self.dist.as_ref(),
                 DomainId::ShaderPerf => self.shader_perf.as_ref(),
+                DomainId::Ane => self.ane.as_ref(),
                 DomainId::Kernel => unreachable!("handled above"),
             }?;
             index
@@ -1424,6 +1449,11 @@ impl LatentMatcher {
         // feature-off posture and the explicit `--domain kernel` bypass)
         // allows every span: byte-identical pre-gate behavior.
         let kernel_plan = crate::kernel_pregate::KernelPlan::for_file(src, path);
+        // Plan 377: the ane pregate — the same per-file/per-span shape as
+        // the kernel gate above. `Off` (the feature-off posture, the demote
+        // env, and the explicit `--domain ane` bypass) allows every span:
+        // byte-identical pre-gate behavior.
+        let ane_plan = crate::ane_pregate::AnePlan::for_file(src, path);
         // Issue 213: the Issue-145 path contract, resolved ONCE per file —
         // the domains whose rules can touch this file kind.
         let applying = DomainMask::applying_to_path(path, |d| self.has_domain(d));
@@ -1431,7 +1461,8 @@ impl LatentMatcher {
         for chunk in chunks {
             let kernel_allowed =
                 kernel_plan.span_allowed(chunk.source.start_line, chunk.source.end_line);
-            let allow = Self::span_allow(applying, kernel_allowed);
+            let ane_allowed = ane_plan.span_allowed(chunk.source.start_line, chunk.source.end_line);
+            let allow = Self::span_allow(applying, kernel_allowed, ane_allowed);
             let (routed_domain, by_domain) = self.suggest_span_gated(&chunk.content, top_k, allow);
             out.push(SpanSuggestion {
                 path: chunk.source.path.clone(),
@@ -2475,6 +2506,121 @@ mod kernel_pregate_tests {
     }
 }
 
+// Plan 377: the ane pregate's scan-path wiring — the same two-pass shape as
+// the kernel gate above. The gate DENIES the ane domain on non-signaling
+// files and KEEPS it on signaling ones (content needles AND the path-word
+// signal), through the real `suggest_file` walk. Gated: the gate only arms
+// under `ane_pregate` (which implies `ane` — the matcher always has the
+// domain in this posture) and `latent_retrieval`.
+#[cfg(all(test, feature = "ane_pregate", feature = "latent_retrieval"))]
+mod ane_pregate_tests {
+    use super::*;
+
+    #[test]
+    fn the_gate_denies_ane_on_non_signaling_files() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "fn main() { println!(\"hi\"); }\nstruct S { a: u32 }\n";
+        let spans = m.suggest_file(src, "plain.rs", 3);
+        assert_ne!(spans, []);
+        for span in &spans {
+            assert!(
+                !span.by_domain.iter().any(|(d, _)| *d == DomainId::Ane),
+                "ane must be ABSENT (the ane-disabled shape) on a non-signaling file"
+            );
+        }
+    }
+
+    #[test]
+    fn the_gate_keeps_ane_on_content_signaling_files() {
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "use objc2_core_ml::MLModel;\nfn load_ane_graph() { }\n";
+        let spans = m.suggest_file(src, "coreml_host.rs", 3);
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.by_domain.iter().any(|(d, _)| *d == DomainId::Ane)),
+            "ane must be PRESENT on a content-signaling file"
+        );
+    }
+
+    #[test]
+    fn the_path_word_signal_admits_whole_file() {
+        // A signal-free SOURCE but an ane-named path: the whole file is the
+        // ANE surface (the path signal), so the domain runs everywhere.
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "fn pure_logic(x: u32) -> u32 { x + 1 }\n";
+        let spans = m.suggest_file(src, "crates/riir-infer-ane/src/lib.rs", 3);
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.by_domain.iter().any(|(d, _)| *d == DomainId::Ane)),
+            "the path-word signal must admit the whole file"
+        );
+    }
+
+    #[test]
+    fn other_domains_untouched_by_the_ane_gate() {
+        // The gate removes ONLY the ane bit — every other applicable domain
+        // keeps its fan-out on a non-signaling file (the kernel gate's own
+        // promise, held for the second gate).
+        let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let src = "fn double(x: u32) -> u32 { x * 2 }\n";
+        let spans = m.suggest_file(src, "plain.rs", 5);
+        assert!(
+            spans
+                .iter()
+                .any(|s| s.by_domain.iter().any(|(d, _)| *d != DomainId::Ane)),
+            "non-ane domains must stay present on a non-signaling file"
+        );
+    }
+
+    #[test]
+    fn span_allow_two_gate_fallback_matches_the_kernel_contract() {
+        // Each gate removes its own bit; an emptied set falls back to
+        // ALL-minus-both-denied (never an empty fan-out, never a widened
+        // denial).
+        let full = DomainMask::applying_to_path("a.rs", |_| true);
+        assert_eq!(
+            LatentMatcher::span_allow(full, true, true),
+            full,
+            "both gates open: byte-identical"
+        );
+        assert_eq!(
+            LatentMatcher::span_allow(full, false, true),
+            full.without(DomainId::Kernel),
+            "kernel denied only"
+        );
+        assert_eq!(
+            LatentMatcher::span_allow(full, true, false),
+            full.without(DomainId::Ane),
+            "ane denied only"
+        );
+        assert_eq!(
+            LatentMatcher::span_allow(full, false, false),
+            full.without(DomainId::Kernel).without(DomainId::Ane),
+            "both denied on a non-empty remainder: the remainder stands"
+        );
+        // The FALLBACK fires only when the gates EMPTY the set: a mask
+        // holding only the two gated domains, both denied → ALL-minus-both
+        // (never an empty fan-out, never a widened denial).
+        let only_gated = DomainMask::NONE.with(DomainId::Kernel).with(DomainId::Ane);
+        assert_eq!(
+            LatentMatcher::span_allow(only_gated, false, false),
+            DomainMask::ALL
+                .without(DomainId::Kernel)
+                .without(DomainId::Ane),
+            "both denied on a kernel+ane-only set: fallback to ALL-minus-denied"
+        );
+        // A set holding ONLY the denied domain falls back — never empty.
+        let only_ane = DomainMask::NONE.with(DomainId::Ane);
+        assert_eq!(
+            LatentMatcher::span_allow(only_ane, true, false),
+            DomainMask::ALL.without(DomainId::Ane),
+            "the ane-only set with ane denied falls back to the others"
+        );
+    }
+}
+
 // Issue 213: the per-span allow set — the Issue-145 path contract applied
 // BEFORE retrieval. Parity is pinned against the ungated fan-out
 // (`suggest_span`, `DomainMask::ALL`) on the same chunk text.
@@ -2510,7 +2656,13 @@ mod path_gate_tests {
                 );
             }
             for (domain, _) in &ungated {
-                if domain.applies_to_path("plain.rs") && *domain != DomainId::Kernel {
+                // Both pregated domains are excluded — kernel (Issue 208) and
+                // ane (Plan 377): each gate's deny-on-plain-file posture is
+                // the domain-disabled shape, byte-identical to its own
+                // feature-off walk.
+                if domain.applies_to_path("plain.rs")
+                    && !matches!(domain, DomainId::Kernel | DomainId::Ane)
+                {
                     assert!(
                         span.by_domain.iter().any(|(d, _)| d == domain),
                         "{domain:?} applies to .rs and must stay present"
@@ -2523,12 +2675,12 @@ mod path_gate_tests {
     #[test]
     fn an_unclaimed_extension_keeps_every_present_domain() {
         // The display's `fits_any` fallback: no domain claims `.txt`, so the
-        // fan-out stays full (kernel still rides its own pregate).
+        // fan-out stays full (kernel and ane still ride their own pregates).
         let mut m = LatentMatcher::from_enabled_domains().expect("build matcher");
         let spans = m.suggest_file(SRC, "notes.txt", 3);
         for span in &spans {
             for d in DomainId::ALL {
-                if d != DomainId::Kernel && m.has_domain(d) {
+                if !matches!(d, DomainId::Kernel | DomainId::Ane) && m.has_domain(d) {
                     assert!(
                         span.by_domain.iter().any(|(x, _)| *x == d),
                         "{d:?} must stay"
@@ -2542,12 +2694,15 @@ mod path_gate_tests {
     fn span_allow_falls_back_when_the_pregate_empties_the_set() {
         let only_kernel = DomainMask::NONE.with(DomainId::Kernel);
         assert_eq!(
-            LatentMatcher::span_allow(only_kernel, false),
+            LatentMatcher::span_allow(only_kernel, false, true),
             DomainMask::ALL.without(DomainId::Kernel)
         );
-        assert_eq!(LatentMatcher::span_allow(only_kernel, true), only_kernel);
         assert_eq!(
-            LatentMatcher::span_allow(DomainMask::NONE, true),
+            LatentMatcher::span_allow(only_kernel, true, true),
+            only_kernel
+        );
+        assert_eq!(
+            LatentMatcher::span_allow(DomainMask::NONE, true, true),
             DomainMask::ALL
         );
     }

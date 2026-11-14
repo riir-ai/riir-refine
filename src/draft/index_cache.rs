@@ -320,6 +320,7 @@ pub(crate) fn domain_tag(domain: DomainId) -> u8 {
         DomainId::Docker => 4,
         DomainId::Dist => 5,
         DomainId::ShaderPerf => 6,
+        DomainId::Ane => 7,
     }
 }
 
@@ -332,6 +333,7 @@ fn domain_from_tag(tag: u8) -> Option<DomainId> {
         4 => Some(DomainId::Docker),
         5 => Some(DomainId::Dist),
         6 => Some(DomainId::ShaderPerf),
+        7 => Some(DomainId::Ane),
         _ => None,
     }
 }

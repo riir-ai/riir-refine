@@ -67,6 +67,9 @@ pub mod dist;
 #[cfg(feature = "shader_perf")]
 pub mod shader_perf;
 
+#[cfg(feature = "ane")]
+pub mod ane;
+
 // ── The domain-wiring registry (plan 329 P3 / issue 197) ───────────────────
 //
 // ONE static table wiring the three vocabularies a domain ships under: the
@@ -136,6 +139,12 @@ pub(crate) const DOMAIN_REGISTRY: &[DomainRow] = &[
         feature: "shader_perf",
         label: Some("shader"),
         canonical: Some("shader_perf"),
+    },
+    DomainRow {
+        dir: "ane",
+        feature: "ane",
+        label: Some("ane"),
+        canonical: Some("ane"),
     },
 ];
 

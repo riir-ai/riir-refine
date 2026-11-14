@@ -345,6 +345,25 @@ kernel_opt = ["katgpt-core/committed_field_blend", "dep:regex"]
 # the scan path is byte-identical without this feature.
 kernel_pregate = ["kernel_opt"]
 
+# Plan 377 (2026-11-14, owner call): the ANE (Apple Neural Engine)
+# host-orchestration domain — suggestion-only seed corpus distilled from
+# liquidcodec-ane (Research 409 R1–R6; two-source convergence kept).
+# Zero new deps; the retrieval surface + demonstrability column the
+# kernel_opt ANE family was drowning in. NOT default, NOT the release set
+# until the pregate's measured cost leg lands (the kernel_pregate
+# promotion precedent).
+ane = []
+
+# Plan 377: the ANE pregate — the owner's two-pass ask ("code scan for ane
+# first pass before apply second pass like kernel"): ONE recall-biased
+# needle scan (pinned CoreML/ANE vocabulary + the boundary word ANE + the
+# path-word signal) detects ANE-bearing files BEFORE the ane matcher fans
+# out, then scopes the fan-out to the signal lines ± window (the
+# kernel_pregate shape, Issue 208 / Bench 131). Inert without `ane`; the
+# scan path is byte-identical without this feature. `RIIR_ANE_PREGATE=0`
+# (exact literal) is the DEMOTE-only env from birth.
+ane_pregate = ["ane"]
+
 # Issue 216 (the codegram POC, 2026-11-07): span-shape-keyed rule dispatch —
 # the categorical dispatch mask. Classifies each retrieval chunk (an
 # AstChunker item span) from the Issue-063 shared per-span syn parse + two

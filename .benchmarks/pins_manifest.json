@@ -1,4 +1,5 @@
 {
+  "ane_rules": 6,
   "clippy_lints": {
     "rules": 120
   },

@@ -52,6 +52,8 @@ pub mod clippy_oracle;
 pub mod corpus_index;
 pub mod domain_router;
 #[cfg(feature = "latent_retrieval")]
+pub mod eval_fixtures_ane;
+#[cfg(feature = "latent_retrieval")]
 pub mod eval_fixtures_clippy;
 #[cfg(feature = "latent_retrieval")]
 pub mod eval_fixtures_composite;

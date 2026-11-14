@@ -45,6 +45,8 @@ pub fn corpus_counts_line() -> String {
         dist_rules: Option<u64>,
         #[serde(default)]
         shader_perf_rules: Option<u64>,
+        #[serde(default)]
+        ane_rules: Option<u64>,
     }
     #[derive(serde::Deserialize)]
     struct DomainCount {
@@ -64,7 +66,7 @@ pub fn corpus_counts_line() -> String {
     };
     let fmt = |v: Option<u64>| v.map_or_else(|| "-".to_string(), |n| n.to_string());
     format!(
-        "corpus: clippy {} · perf {} ({} benchable) · kernel {} · sec {} · docker {} · dist {} · shader {}",
+        "corpus: clippy {} · perf {} ({} benchable) · kernel {} · sec {} · docker {} · dist {} · shader {} · ane {}",
         fmt(m.clippy_lints.map(|d| d.rules)),
         fmt(m.rust_perf.as_ref().map(|d| d.rules)),
         fmt(m.rust_perf.as_ref().and_then(|d| d.benchable)),
@@ -73,6 +75,7 @@ pub fn corpus_counts_line() -> String {
         fmt(m.docker_rules),
         fmt(m.dist_rules),
         fmt(m.shader_perf_rules),
+        fmt(m.ane_rules),
     )
 }
 
@@ -756,8 +759,8 @@ fn render_corpus_growth(growth: &CorpusGrowth, out: &mut String) {
 
 /// One corpus row for the 🧬 block: emoji + count + label + the share
 /// denominator. Counts from the pins manifest (the ONE source of truth);
-/// the nested domains are the prose-gated four, the also-compiled trio
-/// (docker/dist/shader) rides flat `*_rules` keys.
+/// the nested domains are the prose-gated four, the also-compiled quartet
+/// (docker/dist/shader/ane) rides flat `*_rules` keys.
 struct CorpusRow {
     emoji: &'static str,
     label: &'static str,
@@ -766,6 +769,7 @@ struct CorpusRow {
 }
 
 #[must_use]
+#[allow(clippy::too_many_lines)] // repetitive row pushes — the data-table shape
 fn corpus_rows() -> Vec<CorpusRow> {
     // Same embedded manifest corpus_counts_line reads.
     #[derive(serde::Deserialize)]
@@ -784,12 +788,14 @@ fn corpus_rows() -> Vec<CorpusRow> {
         dist_rules: Option<u64>,
         #[serde(default)]
         shader_perf_rules: Option<u64>,
+        #[serde(default)]
+        ane_rules: Option<u64>,
     }
     #[derive(serde::Deserialize)]
     struct Count {
         rules: u64,
     }
-    let (clippy, perf, kernel, sec, docker, dist, shader) =
+    let (clippy, perf, kernel, sec, docker, dist, shader, ane) =
         match serde_json::from_str::<Manifest>(include_str!("../.benchmarks/pins_manifest.json")) {
             Ok(m) => (
                 m.clippy_lints
@@ -800,10 +806,11 @@ fn corpus_rows() -> Vec<CorpusRow> {
                 m.docker_rules.map(|n| usize::try_from(n).unwrap_or(0)),
                 m.dist_rules.map(|n| usize::try_from(n).unwrap_or(0)),
                 m.shader_perf_rules.map(|n| usize::try_from(n).unwrap_or(0)),
+                m.ane_rules.map(|n| usize::try_from(n).unwrap_or(0)),
             ),
-            Err(_) => (None, None, None, None, None, None, None),
+            Err(_) => (None, None, None, None, None, None, None, None),
         };
-    let sum = [clippy, perf, kernel, sec, docker, dist, shader]
+    let sum = [clippy, perf, kernel, sec, docker, dist, shader, ane]
         .into_iter()
         .flatten()
         .sum::<usize>();
@@ -864,6 +871,14 @@ fn corpus_rows() -> Vec<CorpusRow> {
             total: sum,
         });
     }
+    if let Some(n) = ane {
+        rows.push(CorpusRow {
+            emoji: "🧠",
+            label: "ane",
+            rules: n,
+            total: sum,
+        });
+    }
     // Biggest first (the roll-up's convention) — the owner's sort call.
     rows.sort_by_key(|r| std::cmp::Reverse(r.rules));
     rows
@@ -877,12 +892,13 @@ mod tests {
     fn corpus_line_carries_the_pinned_counts() {
         let line = corpus_counts_line();
         assert!(line.contains("clippy 120"), "{line}");
-        assert!(line.contains("kernel 1089"), "{line}"); // Batch 362: +8 (entries_gpu_157, the ThreeRT wgpu-RT distill, Plan 373 / Research 406)
-        assert!(line.contains("perf 338"), "{line}"); // Batch 362: +1 (entries_78, the ThreeRT sealed driver pipeline cache, Plan 373 / Research 406 R6); prior: Batch 361: +3 (entries_77, the polars staged-leads conversion, Plan 372 / Research 405 residue); prior: Batch 360: +2 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 358: +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399)
+        assert!(line.contains("kernel 1089"), "{line}"); // Batch 362: +8 (entries_gpu_157, the ThreeRT wgpu-RT distill, Plan 373 / Research 406); prior: Batch 361: 1081 standing (the 07-30i+07-30j staged leads, entries_gpu_146-147 lineage)
+        assert!(line.contains("perf 338"), "{line}"); // Batch 362: +1 (entries_78, the ThreeRT sealed driver pipeline cache, Plan 373 / Research 406 R6); prior: Batch 361: 337 (entries_77, the polars staged-leads conversion, Plan 372 / Research 405 residue); prior: Batch 360: 334 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 358: +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399)
         assert!(line.contains("sec 69"), "{line}"); // Batch 353: +4 (the FORGE Lab std memory-safety transcription, Plan 363 / Research 397: the lead rides PanicSafety, TrustedImpl x2, ProcessState x1); prior: Batch 352: +4 (the LoNE ANE-numerics four, the sec Numerics family, Plan 362 / Research 395); prior: Batch 351: +5 (the foxguard distill, Plan 361 / Research 394)
         assert!(line.contains("docker 31"), "{line}");
         assert!(line.contains("dist 8"), "{line}");
         assert!(line.contains("shader 8"), "{line}");
+        assert!(line.contains("ane 6"), "{line}"); // Plan 377: the Research-409 seed
     }
 
     #[test]
@@ -897,16 +913,17 @@ mod tests {
         assert_eq!(by_label("docker"), 31);
         assert_eq!(by_label("dist"), 8);
         assert_eq!(by_label("shader"), 8);
-        // Biggest first, ties stable (dist before shader): the seven
+        assert_eq!(by_label("ane"), 6); // Plan 377: the Research-409 seed (R1–R6)
+        // Biggest first, ties stable (dist before shader): the eight
         // compiled domains, no unnumbered survivors in the bars.
         let labels: Vec<&str> = rows.iter().map(|r| r.label).collect();
         assert_eq!(
             labels,
             vec![
-                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader"
+                "kernel", "perf", "clippy", "sec", "docker", "dist", "shader", "ane"
             ]
         );
-        assert_eq!(rows[0].total, 1654); // Batch 361: rust_perf +3 (entries_77, the polars staged-leads conversion, Plan 372 / Research 405 residue); prior: Batch 360: rust_perf +2 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: rust_perf +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 353: sec +4 (the FORGE Lab std memory-safety transcription, Plan 363 / Research 397); prior: Batch 352: sec +4 (the LoNE ANE-numerics four, Plan 362 / Research 395); prior: Batch 358: rust_perf +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: rust_perf +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399); prior: Batch 354: kernel +3 (the sgl-muse-mega code-cache + cross-step-routing distill, Plan 364 / Research 398); prior: Batch 356: rust_perf +4 (entries_72, the r/rust AI-appeasement quartet, Plan 366 / Research 400); prior: Batch 357: kernel +2 (the moeshift distill, Plan 367 / Research 401); prior: Batch 351: sec +5 (the foxguard distill, Plan 361 / Research 394); prior: Batch 350: sec +5 (the 0sec distill, Plan 356 / Research 388); prior: Batch 349: rust_perf +2 (entries_71, Plan 360 / Research 393); prior: Batch 348: clippy +2 (approx_constant + useless_vec — the P111 + P112 corpus gaps, plan 359); prior: Batch 347: clippy +1 (let_unit_value — the P120 rulewright-miss trio, plan 358); prior: plan 354: clippy +2 (the doc-section pair, the Bench-141 dual-evidence heads); prior: Batch 345: perf +5 (entries_70, the LocalSR distill, Plan 357 / Research 389) + sec +1 (the execution-artifact trust ladder) + kernel +1 (entries_gpu_154, the backend acceptance gate); prior: Batch 343: perf +2 (entries_69, the sccache cache-layer pair, Plan 355 / Research 387); prior: Batch 342: sec +2 (the harness-adapters pair, Plan 352 / Research 385); prior: Batch 341: kernel +2 (entries_gpu_153) + perf +1 (entries_68, the metal-graph pair + the measurement-honesty rule, Plan 350 / Research 383); prior: Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
+        assert_eq!(rows[0].total, 1669); // Plan 377: +6 (ane seed, Research 409 R1–R6) + Batch 362: +8 kernel (entries_gpu_157) +1 perf (entries_78) over 1654 — Batch 361: rust_perf +3 (entries_77, the polars staged-leads conversion, Plan 372 / Research 405 residue); prior: Batch 360: rust_perf +2 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: rust_perf +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 353: sec +4 (the FORGE Lab std memory-safety transcription, Plan 363 / Research 397); prior: Batch 352: sec +4 (the LoNE ANE-numerics four, Plan 362 / Research 395); prior: Batch 358: rust_perf +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: rust_perf +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399); prior: Batch 354: kernel +3 (the sgl-muse-mega code-cache + cross-step-routing distill, Plan 364 / Research 398); prior: Batch 356: rust_perf +4 (entries_72, the r/rust AI-appeasement quartet, Plan 366 / Research 400); prior: Batch 357: kernel +2 (the moeshift distill, Plan 367 / Research 401); prior: Batch 351: sec +5 (the foxguard distill, Plan 361 / Research 394); prior: Batch 350: sec +5 (the 0sec distill, Plan 356 / Research 388); prior: Batch 349: rust_perf +2 (entries_71, Plan 360 / Research 393); prior: Batch 348: clippy +2 (approx_constant + useless_vec — the P111 + P112 corpus gaps, plan 359); prior: Batch 347: clippy +1 (let_unit_value — the P120 rulewright-miss trio, plan 358); prior: plan 354: clippy +2 (the doc-section pair, the Bench-141 dual-evidence heads); prior: Batch 345: perf +5 (entries_70, the LocalSR distill, Plan 357 / Research 389) + sec +1 (the execution-artifact trust ladder) + kernel +1 (entries_gpu_154, the backend acceptance gate); prior: Batch 343: perf +2 (entries_69, the sccache cache-layer pair, Plan 355 / Research 387); prior: Batch 342: sec +2 (the harness-adapters pair, Plan 352 / Research 385); prior: Batch 341: kernel +2 (entries_gpu_153) + perf +1 (entries_68, the metal-graph pair + the measurement-honesty rule, Plan 350 / Research 383); prior: Batch 340: perf +2 (entries_67) + sec +2 (the SPILLWAY pair, Plan 349 / Research 381); P118: clippy +3 (plan 353)
     }
 
     #[test]

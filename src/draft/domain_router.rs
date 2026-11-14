@@ -67,6 +67,11 @@ pub enum DomainId {
     /// / Proposal 014; `@compute` stays `kernel_opt` — the entry-point
     /// routing split).
     ShaderPerf,
+    /// `ane` — Apple Neural Engine host-orchestration patterns (Plan 377,
+    /// the owner's 2026-11-14 call): CoreML/ANE placement, streaming,
+    /// numerics, graph-lowering, palette-retention decisions. Suggest-only
+    /// seed; pregated by `ane_pregate` (the `kernel_pregate` two-pass shape).
+    Ane,
 }
 
 /// A set of [`DomainId`]s (one bit per domain, `ALL` order) — the per-span
@@ -74,9 +79,27 @@ pub enum DomainId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DomainMask(u8);
 
+// The mask is a u8 — the 9th domain needs a wider mask, never a silent
+// truncation of `ALL` (Plan 377 landed the 8th bit).
+const _: () = assert!(
+    DomainId::ALL.len() <= 8,
+    "DomainMask is a u8: a 9th domain needs a wider mask"
+);
+
 impl DomainMask {
-    /// Every domain allowed — the path-less / pre-213 fan-out.
-    pub const ALL: Self = Self((1 << DomainId::ALL.len()) - 1);
+    /// Every domain allowed — the path-less / pre-213 fan-out. Built by a
+    /// const fold over [`DomainId::ALL`] (no cast: the u32-intermediate
+    /// spelling trips `cast_possible_truncation`, and the fold stays exact
+    /// for every domain count the compile-time guard below admits).
+    pub const ALL: Self = {
+        let mut mask = Self::NONE;
+        let mut i = 0;
+        while i < DomainId::ALL.len() {
+            mask = mask.with(DomainId::ALL[i]);
+            i += 1;
+        }
+        mask
+    };
     /// No domain allowed.
     pub const NONE: Self = Self(0);
 
@@ -121,7 +144,7 @@ impl DomainMask {
 
 impl DomainId {
     /// All domains, in router order.
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 8] = [
         Self::Clippy,
         Self::Perf,
         Self::Kernel,
@@ -129,6 +152,7 @@ impl DomainId {
         Self::Docker,
         Self::Dist,
         Self::ShaderPerf,
+        Self::Ane,
     ];
 
     /// Stable label (feature-independent).
@@ -142,6 +166,7 @@ impl DomainId {
             Self::Docker => "docker",
             Self::Dist => "dist",
             Self::ShaderPerf => "shader",
+            Self::Ane => "ane",
         }
     }
 
@@ -156,7 +181,7 @@ impl DomainId {
         let name = p.rsplit('/').next().unwrap_or(&p);
         let ext = |e: &str| name.ends_with(e);
         match self {
-            Self::Clippy | Self::Perf | Self::Sec => ext(".rs"),
+            Self::Clippy | Self::Perf | Self::Sec | Self::Ane => ext(".rs"),
             Self::Kernel => ext(".rs") || ext(".wgsl") || ext(".cu") || ext(".metal"),
             Self::ShaderPerf => ext(".wgsl"),
             Self::Docker => {
@@ -185,6 +210,7 @@ impl DomainId {
             Self::Docker => cfg!(feature = "docker"),
             Self::Dist => cfg!(feature = "dist"),
             Self::ShaderPerf => cfg!(feature = "shader_perf"),
+            Self::Ane => cfg!(feature = "ane"),
         }
     }
 

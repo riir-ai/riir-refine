@@ -71,7 +71,7 @@ pub const CLIPPY_DOMAIN_KEY: &str = "clippy";
 /// router without a row here fails that test instead of silently
 /// rejecting its operator ids at the CLI.
 pub const KNOWN_DOMAIN_KEYS: &[&str] = &[
-    "clippy", "perf", "kernel", "sec", "docker", "dist", "shader",
+    "clippy", "perf", "kernel", "sec", "docker", "dist", "shader", "ane",
 ];
 
 /// The on-disk marker shape — what [`ActiveSet::save`] writes and
