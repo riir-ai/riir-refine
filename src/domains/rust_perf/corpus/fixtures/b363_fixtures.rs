@@ -64,7 +64,12 @@ impl SimCache {
     /// past capacity the older lines are gone (coarse flush — directional,
     /// never a claim about real LRU policy).
     fn new(capacity: usize) -> Self {
-        Self { lines: HashMap::new(), capacity, hits: 0, misses: 0 }
+        Self {
+            lines: HashMap::new(),
+            capacity,
+            hits: 0,
+            misses: 0,
+        }
     }
     fn touch(&mut self, addr: u64) {
         let line = addr / 64;
@@ -95,7 +100,12 @@ fn walk_sequential(table: &[u64], ops: &mut OpCount, cache: &mut SimCache) -> u6
 /// pointer-chase walk: the SAME number of loads/adds (equal modeled
 /// icount), but every hop lands on a scattered address — layout, not
 /// instruction count, decides the cache outcome.
-fn walk_pointer_chase(table: &[u64], hops: &[usize], ops: &mut OpCount, cache: &mut SimCache) -> u64 {
+fn walk_pointer_chase(
+    table: &[u64],
+    hops: &[usize],
+    ops: &mut OpCount,
+    cache: &mut SimCache,
+) -> u64 {
     let mut acc = 0u64;
     let mut idx = 0usize;
     for _ in 0..table.len() {
@@ -119,7 +129,9 @@ fn f1_icount_equal_while_locality_diverges() {
     let mut x = 0x9E3779B9u64;
     let hops: Vec<usize> = (0..8192)
         .map(|_| {
-            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            x = x
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             (x >> 33) as usize
         })
         .collect();
@@ -137,7 +149,10 @@ fn f1_icount_equal_while_locality_diverges() {
     let _ = walk_pointer_chase(&table, &hops, &mut ops_chase, &mut cache_chase);
 
     // THE LAW'S WITNESS: equal modeled instruction count …
-    assert_eq!(ops_seq.loads, ops_chase.loads, "the pair must be icount-equal by construction");
+    assert_eq!(
+        ops_seq.loads, ops_chase.loads,
+        "the pair must be icount-equal by construction"
+    );
     assert_eq!(ops_seq.adds, ops_chase.adds);
     // … while the cache outcome diverges: the sequential walk touches each
     // line once (misses = lines, hits ≈ 0 with a cold cache and no reuse);
@@ -165,7 +180,10 @@ fn f1_instruction_bound_anti_regime() {
     assert!(acc != 0 && adds == 100_000);
     // a "blindness-aware" gate: no loads modeled → no caveat owed
     let loads = 0usize;
-    assert_eq!(loads, 0, "instruction-bound workload: the cache caveat is inapplicable");
+    assert_eq!(
+        loads, 0,
+        "instruction-bound workload: the cache caveat is inapplicable"
+    );
 }
 
 #[test]
@@ -183,9 +201,19 @@ fn f1_tampered_icount_only_gate_still_reports_zero_delta() {
     let wall_b = 133.04f64;
     let wall_delta_pct = (wall_b - wall_a) / wall_a * 100.0;
     let _ = (icount_a, icount_b);
-    let blind_verdict = if icount_delta_pct.abs() < 0.1 { "no-regression" } else { "regression" };
-    assert_eq!(blind_verdict, "no-regression", "the icount-only gate is blind by construction");
-    assert!(wall_delta_pct > 1000.0, "the wall context shows the divergence the icount gate missed: {wall_delta_pct}%");
+    let blind_verdict = if icount_delta_pct.abs() < 0.1 {
+        "no-regression"
+    } else {
+        "regression"
+    };
+    assert_eq!(
+        blind_verdict, "no-regression",
+        "the icount-only gate is blind by construction"
+    );
+    assert!(
+        wall_delta_pct > 1000.0,
+        "the wall context shows the divergence the icount gate missed: {wall_delta_pct}%"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -251,11 +279,41 @@ impl<A: Future<Output = u64>, B: Future<Output = u64>> Future for Join2<A, B> {
     }
 }
 
-async fn twin1() -> u64 { Join2 { a: leaf(), b: leaf() }.await }
-async fn twin2() -> u64 { Join2 { a: twin1(), b: twin1() }.await }
-async fn twin3() -> u64 { Join2 { a: twin2(), b: twin2() }.await }
-async fn twin4() -> u64 { Join2 { a: twin3(), b: twin3() }.await }
-async fn twin5() -> u64 { Join2 { a: twin4(), b: twin4() }.await }
+async fn twin1() -> u64 {
+    Join2 {
+        a: leaf(),
+        b: leaf(),
+    }
+    .await
+}
+async fn twin2() -> u64 {
+    Join2 {
+        a: twin1(),
+        b: twin1(),
+    }
+    .await
+}
+async fn twin3() -> u64 {
+    Join2 {
+        a: twin2(),
+        b: twin2(),
+    }
+    .await
+}
+async fn twin4() -> u64 {
+    Join2 {
+        a: twin3(),
+        b: twin3(),
+    }
+    .await
+}
+async fn twin5() -> u64 {
+    Join2 {
+        a: twin4(),
+        b: twin4(),
+    }
+    .await
+}
 
 /// the hand-written linear alternative: ONE wrapper type parameterized by
 /// the inner future — the composed type stores the inner future ONCE per
@@ -320,7 +378,9 @@ fn f2_composed_size_exponential_vs_linear() {
 
     ALLOCS.store(0, Ordering::SeqCst);
     let leaf_f2 = Box::pin(async { 42u64 });
-    let mut linear = Box::pin(linear_chain(linear_chain(linear_chain(linear_chain(leaf_f2)))));
+    let mut linear = Box::pin(linear_chain(linear_chain(linear_chain(linear_chain(
+        leaf_f2,
+    )))));
     let linear_poll = match linear.as_mut().poll(&mut cx) {
         Poll::Ready(v) => v,
         Poll::Pending => panic!("linear chain must be immediately ready"),
@@ -330,11 +390,16 @@ fn f2_composed_size_exponential_vs_linear() {
     // both chains complete through the same one-poll path; the census is
     // recorded, never asserted unequal — the size law above carries the
     // verdict.
-    assert!(composed_poll_allocs + linear_poll_allocs >= 2, "each Box::pin allocates once — the census is live");
+    assert!(
+        composed_poll_allocs + linear_poll_allocs >= 2,
+        "each Box::pin allocates once — the census is live"
+    );
 }
 
 fn noop_waker() -> Waker {
-    fn noop_clone(p: *const ()) -> RawWaker { RawWaker::new(p, &NOOP_VTABLE) }
+    fn noop_clone(p: *const ()) -> RawWaker {
+        RawWaker::new(p, &NOOP_VTABLE)
+    }
     fn noop_drop(_: *const ()) {}
     fn noop_wake(_: *const ()) {}
     fn noop_wake_by_ref(_: *const ()) {}
@@ -404,8 +469,14 @@ fn f3_alloc_up_while_work_down_is_an_inversion() {
 
     assert_eq!(a, b, "both shapes dedup identically (correctness first)");
     assert_eq!(allocs_a, 0, "the scan shape allocates nothing at this size");
-    assert!(allocs_b > allocs_a, "the hash shape allocates MORE — the alloc-only verdict would call the hash form a REGRESSION");
-    assert!(work_b < work_a, "the hash shape does LESS work ({work_b} probes vs {work_a} comparisons) — the alloc verdict inverted against the work axis");
+    assert!(
+        allocs_b > allocs_a,
+        "the hash shape allocates MORE — the alloc-only verdict would call the hash form a REGRESSION"
+    );
+    assert!(
+        work_b < work_a,
+        "the hash shape does LESS work ({work_b} probes vs {work_a} comparisons) — the alloc verdict inverted against the work axis"
+    );
 }
 
 #[test]
@@ -422,7 +493,12 @@ fn f3_gate_requires_paired_read_before_calling_alloc_a_win() {
     let gate = AllocOnly;
     assert_eq!(gate.verdict(0, 5), "refused-needs-paired-axis");
 
-    struct Paired { alloc_a: usize, alloc_b: usize, work_a: usize, work_b: usize }
+    struct Paired {
+        alloc_a: usize,
+        alloc_b: usize,
+        work_a: usize,
+        work_b: usize,
+    }
     impl Paired {
         fn verdict(&self) -> &'static str {
             if self.alloc_b > self.alloc_a && self.work_b < self.work_a {
@@ -432,7 +508,12 @@ fn f3_gate_requires_paired_read_before_calling_alloc_a_win() {
             }
         }
     }
-    let paired = Paired { alloc_a: 0, alloc_b: 5, work_a: 32640, work_b: 256 };
+    let paired = Paired {
+        alloc_a: 0,
+        alloc_b: 5,
+        work_a: 32640,
+        work_b: 256,
+    };
     assert_eq!(paired.verdict(), "win-with-alloc-regression-disclosed");
 }
 
@@ -451,8 +532,8 @@ struct Run {
 }
 
 struct Policy {
-    noise_floor_icount_pct: f64,   // derived from the empty-change baseline
-    min_percent_total: f64,        // trivial-share floor
+    noise_floor_icount_pct: f64, // derived from the empty-change baseline
+    min_percent_total: f64,      // trivial-share floor
 }
 
 impl Policy {
@@ -467,7 +548,10 @@ impl Policy {
                 worst = spread;
             }
         }
-        Self { noise_floor_icount_pct: worst.ceil() + 1.0, min_percent_total: 0.5 }
+        Self {
+            noise_floor_icount_pct: worst.ceil() + 1.0,
+            min_percent_total: 0.5,
+        }
     }
 
     /// wall-clock NEVER judges; icount judges above the derived floor;
@@ -495,9 +579,21 @@ impl Policy {
 fn f4_timing_noise_cannot_flip_a_judged_verdict() {
     // empty-change baseline: 3 runs, icount wiggles <0.2%, wall swings 3x
     let baseline = vec![
-        Run { icount: 4_247_997_37, alloc_bytes: 2_425_213, wall_ms: 35.0 },
-        Run { icount: 4_247_403_25, alloc_bytes: 2_425_213, wall_ms: 68.3 },
-        Run { icount: 4_248_017_54, alloc_bytes: 2_425_213, wall_ms: 98.0 },
+        Run {
+            icount: 4_247_997_37,
+            alloc_bytes: 2_425_213,
+            wall_ms: 35.0,
+        },
+        Run {
+            icount: 4_247_403_25,
+            alloc_bytes: 2_425_213,
+            wall_ms: 68.3,
+        },
+        Run {
+            icount: 4_248_017_54,
+            alloc_bytes: 2_425_213,
+            wall_ms: 98.0,
+        },
     ];
     let policy = Policy::from_empty_baseline(&baseline);
     let base = &baseline[0];
@@ -506,11 +602,20 @@ fn f4_timing_noise_cannot_flip_a_judged_verdict() {
     // the timing-only arm would scream "improvement"; the policy must
     // answer no-regression, and the wall number stays in the report as
     // context (never judged).
-    let cand = Run { icount: 424_750_000, alloc_bytes: 2_425_213, wall_ms: 32.0 };
+    let cand = Run {
+        icount: 424_750_000,
+        alloc_bytes: 2_425_213,
+        wall_ms: 32.0,
+    };
     let (verdict, wall_ratio) = policy.verdict(base, &cand, 90.0);
-    assert_eq!(verdict, "no-regression",
-        "wall noise must not flip the judged verdict — icount within the derived floor");
-    assert!(wall_ratio < 1.0, "the wall context rides the report ({wall_ratio}x) — visible, never judged");
+    assert_eq!(
+        verdict, "no-regression",
+        "wall noise must not flip the judged verdict — icount within the derived floor"
+    );
+    assert!(
+        wall_ratio < 1.0,
+        "the wall context rides the report ({wall_ratio}x) — visible, never judged"
+    );
     // the alloc context too: identical bytes across the pair, never judged
     assert_eq!(base.alloc_bytes, cand.alloc_bytes);
 }
@@ -518,16 +623,44 @@ fn f4_timing_noise_cannot_flip_a_judged_verdict() {
 #[test]
 fn f4_floor_skips_trivial_share_and_catches_real_regressions() {
     let baseline = vec![
-        Run { icount: 1_000_000, alloc_bytes: 100, wall_ms: 10.0 },
-        Run { icount: 1_000_000, alloc_bytes: 100, wall_ms: 11.0 },
-        Run { icount: 1_000_000, alloc_bytes: 100, wall_ms: 12.0 },
+        Run {
+            icount: 1_000_000,
+            alloc_bytes: 100,
+            wall_ms: 10.0,
+        },
+        Run {
+            icount: 1_000_000,
+            alloc_bytes: 100,
+            wall_ms: 11.0,
+        },
+        Run {
+            icount: 1_000_000,
+            alloc_bytes: 100,
+            wall_ms: 12.0,
+        },
     ];
     let policy = Policy::from_empty_baseline(&baseline);
 
     // a real +10% icount regression on a 90%-share function: judged
-    let (v, _) = policy.verdict(&baseline[0], &Run { icount: 1_100_000, alloc_bytes: 100, wall_ms: 10.0 }, 90.0);
+    let (v, _) = policy.verdict(
+        &baseline[0],
+        &Run {
+            icount: 1_100_000,
+            alloc_bytes: 100,
+            wall_ms: 10.0,
+        },
+        90.0,
+    );
     assert_eq!(v, "regression");
     // the same delta on a 0.2%-share helper: skipped by the floor
-    let (v, _) = policy.verdict(&baseline[0], &Run { icount: 1_100_000, alloc_bytes: 100, wall_ms: 10.0 }, 0.2);
+    let (v, _) = policy.verdict(
+        &baseline[0],
+        &Run {
+            icount: 1_100_000,
+            alloc_bytes: 100,
+            wall_ms: 10.0,
+        },
+        0.2,
+    );
     assert_eq!(v, "skipped-trivial-share");
 }

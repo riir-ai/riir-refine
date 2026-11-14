@@ -9,7 +9,7 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 342 entries across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the kernel_opt warming family + the #143684 rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`; PRIOR: 338 entries
+//! 342 entries across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the `kernel_opt` warming family + the `#143684` rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`; PRIOR: 338 entries
 //! across 15 categories as of Batch 362 (+1: io —
 //! `driver-pipeline-cache-sealed-adapter-keyed`, suggestion-NotBenchable,
 //! the `ThreeRT` sealed driver pipeline cache: a compile-artifact cache whose
@@ -842,7 +842,7 @@ mod tests;
 /// cannot adjudicate a locality-divergent pair) +
 /// `async-wrapper-future-size-exponential-nesting` (layout -- the
 /// benchable lead; the standalone preflight is the instrument of record
-/// per the pre-registered entries_77 fallback) +
+/// per the pre-registered `entries_77` fallback) +
 /// `wall-clock-ungated-shared-ci-noise-floor` (measurement-honesty;
 /// carries the folded `ci-gate-policy-shape` composite) +
 /// `alloc-proxy-inversion-work-ratio-caveat` (measurement-honesty);
@@ -855,7 +855,7 @@ mod tests;
 /// pid-suffixed rename, hard-capped, and a save of unchanged data writes
 /// nothing); prior: Batch 361, 2026-11-14, Plan 372 / Research 405 residue: +3 -- the
 /// polars staged-leads conversion, `entries_77` (the full B361 record:
-/// `map-inplace-same-size-transmute` BENCHABLE ParetoDominant two-run
+/// `map-inplace-same-size-transmute` BENCHABLE `ParetoDominant` two-run
 /// stable + `thread-local-codec-context-reuse` +
 /// `batch-hash-probe-prefetch-two-pass` + 1 count-neutral FACE + 1
 /// honest DROP (R8)); pola-rs/polars @ `5c36cdd75` MIT;

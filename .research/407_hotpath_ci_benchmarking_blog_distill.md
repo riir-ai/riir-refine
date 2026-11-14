@@ -1,6 +1,6 @@
 # 407 — hotpath.rs CI-benchmarking blog distill (the FOURTH hotpath-family pass)
 
-**Status:** DISTILLED — pending owner decision · queue slot BEHIND Batch 362 (landing pending) → nominal Batch 363 · plan 374 filed · verdict HEAD `2a1a7875b`
+**Status:** DISTILLED — batch-363-landed 2026-11-14 (plan 374 complete; authoring 7509d651, landing = the T8 commit; rust_perf 338→342: 4 rules + the folded ci-gate-policy-shape + the dropped cpu-model-per-run-metadata; T4 two-run stable, T5 floors HELD 29/0; blog source — no pin)
 
 ## Source
 

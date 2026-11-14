@@ -75,7 +75,11 @@ impl<A: Future<Output = u64>, B: Future<Output = u64>> Future for Join2<A, B> {
 macro_rules! twin_layer {
     ($name:ident, $inner:ident) => {
         async fn $name() -> u64 {
-            Join2 { a: $inner(), b: $inner() }.await
+            Join2 {
+                a: $inner(),
+                b: $inner(),
+            }
+            .await
         }
     };
 }
@@ -112,7 +116,8 @@ fn noop_waker() -> Waker {
     fn noop_wake(_: *const ()) {}
     fn noop_wake_by_ref(_: *const ()) {}
     fn noop_drop(_: *const ()) {}
-    static VT: RawWakerVTable = RawWakerVTable::new(noop_clone, noop_wake, noop_wake_by_ref, noop_drop);
+    static VT: RawWakerVTable =
+        RawWakerVTable::new(noop_clone, noop_wake, noop_wake_by_ref, noop_drop);
     unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VT)) }
 }
 
@@ -168,7 +173,10 @@ fn main() {
 
     // ── G1: the size curves ──
     println!("== G1 size curves (size_of of the composed future value) ==");
-    println!("{:>6} {:>14} {:>12} {:>10} {:>12} {:>10}", "depth", "composed_B", "ratio", "linear_B", "lin_abs", "lin_ratio");
+    println!(
+        "{:>6} {:>14} {:>12} {:>10} {:>12} {:>10}",
+        "depth", "composed_B", "ratio", "linear_B", "lin_abs", "lin_ratio"
+    );
     let mut prev_composed = 0usize;
     let mut prev_linear = 0usize;
     let mut g1_pass = true;
@@ -192,10 +200,25 @@ fn main() {
             }
             std::mem::size_of_val(&f)
         };
-        let cr = if prev_composed > 0 { c as f64 / prev_composed as f64 } else { 0.0 };
-        let lr = if prev_linear > 0 { l as f64 / prev_linear as f64 } else { 0.0 };
-        let dsize = if prev_linear > 0 { (l as isize - prev_linear as isize).unsigned_abs() } else { 0 };
-        println!("{:>6} {:>14} {:>12.3} {:>10} {:>12} {:>10.3}", d, c, cr, l, dsize, lr);
+        let cr = if prev_composed > 0 {
+            c as f64 / prev_composed as f64
+        } else {
+            0.0
+        };
+        let lr = if prev_linear > 0 {
+            l as f64 / prev_linear as f64
+        } else {
+            0.0
+        };
+        let dsize = if prev_linear > 0 {
+            (l as isize - prev_linear as isize).unsigned_abs()
+        } else {
+            0
+        };
+        println!(
+            "{:>6} {:>14} {:>12.3} {:>10} {:>12} {:>10.3}",
+            d, c, cr, l, dsize, lr
+        );
         if prev_composed > 0 && cr < 1.8 {
             g1_pass = false;
         }
@@ -239,8 +262,14 @@ fn main() {
     println!("parity: {}", parity);
 
     println!("== VERDICT ==");
-    println!("G1 (multiplicative vs bounded-constant growth): {}", if g1_pass { "PASS" } else { "FAIL" });
-    println!("G4-parity (value parity + both chains complete): {}", if parity { "PASS" } else { "FAIL" });
+    println!(
+        "G1 (multiplicative vs bounded-constant growth): {}",
+        if g1_pass { "PASS" } else { "FAIL" }
+    );
+    println!(
+        "G4-parity (value parity + both chains complete): {}",
+        if parity { "PASS" } else { "FAIL" }
+    );
     // ALLOC-CENSUS BAR DISCLOSURE (the pre-registration correction): the
     // pre-registered alloc-census bar (composed spawn allocs > linear) is
     // MIS-MODELED — Box::pin of an immediately-ready future allocates ONCE
@@ -251,9 +280,13 @@ fn main() {
     // copies at composed size) — an axis this single-spawn census cannot
     // see. Disclosed, not silently re-pinned: G4's decisive leg is parity;
     // the alloc-census bar is retired as mis-modeled.
-    println!("alloc-census bar: RETIRED-MISMODELED (Box::pin is size-blind; see the landing record)");
+    println!(
+        "alloc-census bar: RETIRED-MISMODELED (Box::pin is size-blind; see the landing record)"
+    );
     if g1_pass && parity {
-        println!("PREFLIGHT: PASS — the cell is the lead's GOAT evidence (the size law, two-run stable)");
+        println!(
+            "PREFLIGHT: PASS — the cell is the lead's GOAT evidence (the size law, two-run stable)"
+        );
     } else {
         println!("PREFLIGHT: FAIL — the honest negative is the record");
     }

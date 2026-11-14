@@ -16,8 +16,8 @@
   "rust_perf": {
     "benchable": 136,
     "categories": 15,
-    "notbenchable": 202,
-    "rules": 338
+    "notbenchable": 206,
+    "rules": 342
   },
   "sec": {
     "rules": 69
