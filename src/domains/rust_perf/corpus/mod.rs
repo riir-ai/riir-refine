@@ -9,7 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 338 entries across 15 categories as of Batch 362 (+1: io —
+//! 342 entries across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the kernel_opt warming family + the #143684 rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`; PRIOR: 338 entries
+//! across 15 categories as of Batch 362 (+1: io —
 //! `driver-pipeline-cache-sealed-adapter-keyed`, suggestion-NotBenchable,
 //! the `ThreeRT` sealed driver pipeline cache: a compile-artifact cache whose
 //! consumer is a DRIVER is sealed (magic + length + digest BEFORE the
@@ -827,33 +828,37 @@ mod entries_75;
 mod entries_76;
 mod entries_77;
 mod entries_78;
+mod entries_79;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 338 entries
-/// (Batch 362, 2026-11-14, Plan 373 / Research 406: +1 -- the `ThreeRT` sealed
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 342 entries
+/// (Batch 363, 2026-11-14, Plan 374 / Research 407: +4 -- the hotpath.rs
+/// CI-benchmarking blog distill, `entries_79`: `instruction-count-cache-
+/// blindness` (measurement-honesty, suggestion-only -- an icount gate
+/// cannot adjudicate a locality-divergent pair) +
+/// `async-wrapper-future-size-exponential-nesting` (layout -- the
+/// benchable lead; the standalone preflight is the instrument of record
+/// per the pre-registered entries_77 fallback) +
+/// `wall-clock-ungated-shared-ci-noise-floor` (measurement-honesty;
+/// carries the folded `ci-gate-policy-shape` composite) +
+/// `alloc-proxy-inversion-work-ratio-caveat` (measurement-honesty);
+/// `cpu-model-per-run-metadata` DROPPED at authoring); prior: Batch 362,
+/// 2026-11-14, Plan 373 / Research 406: +1 -- the `ThreeRT` sealed
 /// driver pipeline cache, `entries_78`: `driver-pipeline-cache-sealed-
 /// adapter-keyed` (io, suggestion-NotBenchable-by-domain -- a compile-
 /// artifact cache whose consumer is a DRIVER is sealed (magic + length +
 /// digest BEFORE the payload), adapter-keyed, atomically installed by
 /// pid-suffixed rename, hard-capped, and a save of unchanged data writes
 /// nothing); prior: Batch 361, 2026-11-14, Plan 372 / Research 405 residue: +3 -- the
-/// polars staged-leads conversion, `entries_77`: `map-inplace-same-size-
-/// transmute` (layout, BENCHABLE `ParetoDominant` 2/0/1 two-run stable,
-/// the alloc axis 1→0, the size/align gate + the consume contract) +
-/// `thread-local-codec-context-reuse` (caching, suggestion-only — the
-/// size-admission two-regime IS the constant's doc) +
-/// `batch-hash-probe-prefetch-two-pass` (io, decision-content-only on
-/// aarch64 — the positive arm of `software-prefetch-storage-bound`, the
-/// regime gate `MIN_PREFETCH_BUCKETS` the decision content) + 1
-/// count-neutral FACE on the B4-era `previous-row-group-check` (the
-/// SORTED pole of the run-locality law) + 1 honest DROP (R8
-/// `hot-key-skew-split-table`: the pre-registered bars failed two-run
-/// stable — skew 0.465-0.467x, uniform 0.001x, the sort-based promote
-/// dominates; the drop IS the record); pola-rs/polars @ `5c36cdd75` MIT;
+/// polars staged-leads conversion, `entries_77` (the full B361 record:
+/// `map-inplace-same-size-transmute` BENCHABLE ParetoDominant two-run
+/// stable + `thread-local-codec-context-reuse` +
+/// `batch-hash-probe-prefetch-two-pass` + 1 count-neutral FACE + 1
+/// honest DROP (R8)); pola-rs/polars @ `5c36cdd75` MIT;
 /// PRIOR: Batch 360, 2026-11-13, Plan 371 / Research 405: +2 -- the polars
 /// revisit #2 delta, `entries_76`: `first-hit-flag-guards-aux-structure`
 /// (caching, BENCHABLE `ParetoDominant` 3/0/0 two-run stable, the flag
@@ -1091,6 +1096,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_76::entries());
     entries.extend(entries_77::entries());
     entries.extend(entries_78::entries());
+    entries.extend(entries_79::entries());
     Corpus::new(entries)
 }
 
