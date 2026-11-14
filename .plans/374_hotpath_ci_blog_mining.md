@@ -1,6 +1,7 @@
 # Plan 374 — Batch 363: hotpath.rs CI-benchmarking blog mining (rust_perf)
 
-**Status:** QUEUED — behind Batch 362 (ThreeRT, landing pending); claim per the queue discipline at conversion · verdict Research 407 (YES B−)
+**Status:** BATCH 363 — claimed 2026-11-14T16:12Z (Batch 362 LANDED 02cf52f5/486978a2 wave; this plan is first in queue); verdict Research 407 (YES B−)
+**Claimed:** zed-amo-b363-hotpath@amo, 1794672735, expires 2026-11-16T16:12Z
 
 Source: <https://hotpath.rs/blog/rust-performance-benchmarking> (Paweł Urbanek, 2026-11-10) — the FOURTH hotpath-family pass (R032 → R081/B65 → R234 → R235 lineage), the CI-regression residue. Yield estimate 2–4 rules after falsification: lead `instruction-count-cache-blindness` (suggestion-only) + `async-wrapper-future-size-exponential-nesting` (the BENCHABLE GOAT lead) + `wall-clock-ungated-shared-ci-noise-floor` (+ composite/fold gates below).
 
