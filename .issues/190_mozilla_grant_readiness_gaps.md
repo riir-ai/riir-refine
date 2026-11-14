@@ -5,7 +5,9 @@
 **Lease closed:** zed-m3-t14-bar, 1793484917, was expires 2026-11-03T07:35:17+00:00 — the T14 regular-bar run landed in the window (gate script `dd3efe8c`, bench 123); the strict bar + the public README push remain outside the lease (owner-gated / owner-act).
 **Lease closed:** zed-m3-idle-ev190, 1793459837, expires 2026-11-02T15:17:17Z — T3 evidence pack landed in the lease window
 **Lease closed:** zed-m3-i190-t14b, 1793477157, was expires 2026-11-02T20:05:57Z — T14b (`a96a293f`) + T14a-min (`e7cf72ea`) landed in the window; the strict bar + T14's bar-run adjudications are recorded owner-gated above (no agent lane left to lease).
-**Claimed:** amo-idle-i190-signal@amo, 1794690276, expires 2026-11-17T05:00:00+00:00 — the T10 signal-receipt refresh (crates.io/GitHub axes measured 2026-11-14T21:0x UTC) + T4 staged-copy prep; publish act routed to owner (credentialed channels absent on this box)
+**Claimed:** amo-idle-i190-signal@amo, 1794690276, expires 2026-11-17T05:00:00+00:00
+
+(the lease's scope: the T10 signal-receipt refresh — crates.io/GitHub axes measured 2026-11-14T21:0x UTC — + T4 staged-copy prep; the publish act itself routes to the owner, credentialed channels absent on this box)
 
 > **Lease closed:** amo-idle-i190-signal@amo, 1794690276, was expires 2026-11-17T05:00:00+00:00 — folded 2026-11-14T21:2x UTC with the receipt refresh landed same session (bench 152 + T10/T4/Status rows)
 **Owner gates:** T1, T2, T5 are owner decisions — **T1/T2 DECIDED/RECORDED (see the rows); T5 DEFERRED 2026-11-04 to the shortlist stage** (the owner's critical path: IPP doc prep → website registration before **2026-11-20 11:59 PM PST** — Mozilla reviews at the IPP stage and only shortlists invite the full application). The rest are executable prep.
