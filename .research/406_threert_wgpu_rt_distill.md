@@ -1,6 +1,6 @@
 # Batch 362 candidate pool — meshy-dev/ThreeRT: the Rust+wgpu real-time path tracer (distill verdict)
 
-**Status:** DISTILLED — pending owner decision
+**Status:** DISTILLED — batch-362-landed (2026-11-14, Plan 373 complete: kernel_opt 1081 → 1089 entries_gpu_157 + rust_perf 337 → 338 entries_78; T0 re-pin 10fdc773 → 0a190f83 with cd6ca30/0a190f8 graded as K7/K8; fixtures 25/25 + 6/6 standalone pre-entry, the gate catching 5 arm defects + the literal-newline raw-string class; the T5 K4 cell PARETO-DOMINANT two-run stable (2.455×/9.264×/15.822× then 2.347×/9.116×/12.900×, allocs 3→1 per frame) — the vacuous-G1 shared-assumption class exposed en route and the HEAP layout synced into fixture + entry arms; landing commits 31f5ad56 + a9298b00)
 
 ## Source
 
