@@ -34,7 +34,9 @@ unsafe impl GlobalAlloc for Counting {
 static A: Counting = Counting;
 
 fn rng(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     *state >> 33
 }
 
@@ -75,8 +77,9 @@ fn r3_bench() {
     let mut wins = 0usize;
     for &n in &[1_024usize, 16_384, 262_144] {
         let mut s = 0x5EED_u64 ^ n as u64;
-        let src: Vec<f32> =
-            (0..n).map(|_| ((rng(&mut s) % 4001) as i64 - 2000) as i32 as f32).collect();
+        let src: Vec<f32> = (0..n)
+            .map(|_| ((rng(&mut s) % 4001) as i64 - 2000) as i32 as f32)
+            .collect();
         // G1
         let want = r3_buggy(&src);
         let got = r3_fixed(src.clone());
@@ -143,7 +146,11 @@ struct TwoTier {
 
 impl TwoTier {
     fn new() -> Self {
-        TwoTier { hot: HashMap::new(), main: HashMap::new(), since_check: 0 }
+        TwoTier {
+            hot: HashMap::new(),
+            main: HashMap::new(),
+            since_check: 0,
+        }
     }
     fn add(&mut self, k: u64) {
         if let Some(c) = self.hot.get_mut(&k) {
@@ -158,8 +165,7 @@ impl TwoTier {
         }
     }
     fn promote_top(&mut self) {
-        let mut rows: Vec<(u64, u64)> =
-            self.main.iter().map(|(&k, &c)| (k, c)).collect();
+        let mut rows: Vec<(u64, u64)> = self.main.iter().map(|(&k, &c)| (k, c)).collect();
         rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
         for (k, c) in rows.into_iter().take(HOT_MAX) {
             if self.hot.len() >= HOT_MAX {
@@ -197,11 +203,7 @@ fn skew_stream(n: usize, seed: u64) -> Vec<u64> {
     (0..n)
         .map(|_| {
             let r = rng(&mut s);
-            if r % 100 < 99 {
-                r % 8
-            } else {
-                8 + r % 4096
-            }
+            if r % 100 < 99 { r % 8 } else { 8 + r % 4096 }
         })
         .collect()
 }
@@ -243,7 +245,9 @@ fn r8_bench() {
         let ratio = ms as f64 / mt as f64;
         println!("{name}: single {ms}ns vs two-tier {mt}ns = {ratio:.3}x");
     }
-    println!("R8 bars: uniform ≥0.95x (no regression) AND skew >1.05x — else demote to suggestion-only");
+    println!(
+        "R8 bars: uniform ≥0.95x (no regression) AND skew >1.05x — else demote to suggestion-only"
+    );
 }
 
 fn main() {

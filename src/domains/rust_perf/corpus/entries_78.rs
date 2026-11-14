@@ -1,16 +1,16 @@
-//! Batch 362 — the ThreeRT sealed driver pipeline-cache `rust_perf` rule
+//! Batch 362 — the `ThreeRT` sealed driver pipeline-cache `rust_perf` rule
 //! (Plan 373 / Research 406 R6): a compile-artifact cache handed to a
 //! DRIVER is sealed, identity-keyed, atomically installed, and hard-capped
-//! before the driver sees it. The kernel_opt half of this batch is
+//! before the driver sees it. The `kernel_opt` half of this batch is
 //! `entries_gpu_157` (8 rules). File number 78 (not 77) deliberately: the
-//! live b361 polars lane (zed-amo-b361-polars, amo) takes entries_77 for its
+//! live b361 polars lane (zed-amo-b361-polars, amo) takes `entries_77` for its
 //! rows — the gap avoids the same-name collision at push, the B353
 //! coexistence discipline.
 //!
 //! Source: `meshy-dev/ThreeRT` @ `0a190f83c559d1dec33ee70b763433593dd67de3`
 //! (main tip 2026-11-14T15:49+08:00, MIT © Meshy LLC; T0 re-pin — the
 //! verdict pin `10fdc773` moved two commits the same day; every quote below
-//! byte-verified at the NEW pin this session; the pipeline_cache.rs module
+//! byte-verified at the NEW pin this session; the `pipeline_cache.rs` module
 //! was untouched by both new commits). ORIGINAL Rust fixtures
 //! (`corpus/fixtures/b362_fixtures.rs`, standalone-compiled AND executed
 //! before entry — rustc --edition 2021 --test), never pasted source.
@@ -175,6 +175,15 @@ fn a_damaged_file_counts_as_no_file() {
 
 #[test]
 fn an_adapter_keyed_cache_path_names_the_target() {
+    // Repair (Plan 377 landing, 2026-11-14, disclosed): the helper this arm
+    // asserts lived only inside the raw-string corpus shapes above — the
+    // lib-test target never compiled (the authoring session's "compiles
+    // clean" ran cargo check, not --all-targets). The helper here is the
+    // FIXED shape's identity law verbatim:
+    // dir.join(format!("{adapter_key}.bin")).
+    fn cache_path(dir: &std::path::Path, adapter_key: &str) -> std::path::PathBuf {
+        dir.join(format!("{adapter_key}.bin"))
+    }
     let a = cache_path(std::path::Path::new("/tmp"), "vulkan-5143-43050a01");
     let b = cache_path(std::path::Path::new("/tmp"), "vulkan-5143-43050a02");
     assert_ne!(a, b, "two GPUs never read each other's file");

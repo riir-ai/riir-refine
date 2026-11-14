@@ -212,5 +212,3 @@ fn probe_all_blocked(keys: &[K], table: &Table) -> u64 {
         },
     ]
 }
-
-

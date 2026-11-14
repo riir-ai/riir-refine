@@ -877,8 +877,8 @@ mod tests {
     fn corpus_line_carries_the_pinned_counts() {
         let line = corpus_counts_line();
         assert!(line.contains("clippy 120"), "{line}");
-        assert!(line.contains("kernel 1081"), "{line}");
-        assert!(line.contains("perf 337"), "{line}"); // Batch 361: +3 (entries_77, the polars staged-leads conversion: the same-size in-place conversion + the codec-ctx size-admission + the prefetch regime gate, Plan 372 / Research 405 residue); prior: Batch 360: +2 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 358: +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399)
+        assert!(line.contains("kernel 1089"), "{line}"); // Batch 362: +8 (entries_gpu_157, the ThreeRT wgpu-RT distill, Plan 373 / Research 406)
+        assert!(line.contains("perf 338"), "{line}"); // Batch 362: +1 (entries_78, the ThreeRT sealed driver pipeline cache, Plan 373 / Research 406 R6); prior: Batch 361: +3 (entries_77, the polars staged-leads conversion, Plan 372 / Research 405 residue); prior: Batch 360: +2 (entries_76, the polars revisit #2 delta, Plan 371 / Research 405); prior: Batch 359: +5 (the ajika persistent-incrementality family, entries_75, Plan 370 / Research 403); prior: Batch 358: +5 (the splash lane-B ANE/host five, entries_74, Plan 369 / Research 345 lane B); prior: Batch 355: +4 (the sglang unified-memory distill, entries_73, Plan 365 / Research 399)
         assert!(line.contains("sec 69"), "{line}"); // Batch 353: +4 (the FORGE Lab std memory-safety transcription, Plan 363 / Research 397: the lead rides PanicSafety, TrustedImpl x2, ProcessState x1); prior: Batch 352: +4 (the LoNE ANE-numerics four, the sec Numerics family, Plan 362 / Research 395); prior: Batch 351: +5 (the foxguard distill, Plan 361 / Research 394)
         assert!(line.contains("docker 31"), "{line}");
         assert!(line.contains("dist 8"), "{line}");

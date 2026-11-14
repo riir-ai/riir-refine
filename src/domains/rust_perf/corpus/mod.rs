@@ -9,134 +9,148 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 334 entries across 15 categories as of Batch 360 (+2: caching +1
-//! `first-hit-flag-guards-aux-structure` — the batch's GOAT lead,
-//! BENCHABLE `ParetoDominant` 3/0/0 two-run stable + arithmetic +1
-//! `u128-funnel-shift-combine` — BENCHABLE measured Mixed two-run,
-//! landed correctness-first (the s=0 UB + the %64 periodicity) + 1
-//! count-neutral FACE on B244 (the char-count identity, `entries_30`);
-//! Plan 371 / Research 405, `entries_76`, pola-rs/polars @ `437948302`
-//! MIT; PRIOR: 332 entries across 15 categories as of Batch 359 (+5: io +2
-//! `named-outputs-lazy-handles-partial-decode` (BENCHABLE, the batch's
-//! GOAT lead) + `pack-store-gc-decides-by-recovered-index`, caching +3
-//! `derived-cache-throwaway-version-reset-recovery` +
-//! `persisted-interner-assignments-checkpoint-with-refering-values` +
-//! `scope-scoped-memo-release-idle-holds-no-decoded-state` — the FIRST
-//! persistent-incremental-computation family (salsa-shaped memoization
-//! made durable, 0 prior owners), one BENCHABLE + four suggestion-only
-//! NotBenchable-by-domain (Plan 370 / Research 403, `entries_75`;
-//! rust-glancer/ajika @ `70c1e26d` MIT OR Apache-2.0 + the handwritten
-//! persistent-incrementality blog, tip unmoved at T0); prior: 327 entries
-//! across 15 categories as of Batch 358 (+5: layout +1
-//! `one-program-many-functions-accelerator-service-memory`, measurement +1
-//! `ane-split-calibration-fit-bandwidth-interference-term`, caching +1
-//! `accelerator-lost-breaker-forgets-calibration`, concurrency +1
-//! `writeclass-share-partition-inflight-writes`, thermal +1
-//! `spin-keep-awake-checked-capability-degrade-loud` — ALL suggestion-only
-//! NotBenchable-by-domain: the splash lane-B ANE/host residue staged since
-//! 2026-10-28 whose release-set-binary pin-block lifted under the B355
-//! precedent (Plan 369 / Research 345 lane B, `entries_74`; incoai/splash @
-//! `cabbad27` Apache-2.0, T0 re-verified at the pin); prior: 322 entries
-//! across 15 categories as of Batch 355 (+4: layout +1
-//! `co-lifecycle-rows-pack-one-entry-strided-views` (BENCHABLE, the batch
-//! lead), concurrency +1 `logical-free-immediate-physical-reuse-waits-settle`,
-//! measurement +1 `joint-demand-admission-single-pool-free-bytes-logs-only`,
-//! caching +1 `fixed-ratio-pool-partition-strands-demand` — the sglang
-//! unified-memory distill (Plan 365 / Research 399, `entries_73`);
-//! prior: 318 entries across 15 categories as of Batch 356 (+4: allocation +2
-//! `mem-take-field-checkout-empty-window` + `clone-before-mutating-loop-borrow-appeasement`,
-//! concurrency +1 `thread-spawn-per-call-pool-reuse` (BENCHABLE, the
-//! batch lead), layout +1 `dense-id-domain-hashmap-to-slot-array`
-//! (BENCHABLE) — the r/rust AI borrow-checker-appeasement case study
-//! (Plan 366 / Research 400, `entries_72`; post-only source,
-//! decision-content-only transcription; +1 count-neutral rider face on
-//! `bounded-batch-buffer-pool`, `entries_06` — the cross-thread
-//! return-ring enforcement form; the batch's R4
-//! `cross-thread-buffer-return-ring` DROPPED at authoring on that
-//! adjudication, the drop recorded in the `entries_72` header);
-//! prior: Batches 350–354 added zero `rust_perf` rules (`kernel_opt`/sec
-//! lanes); prior: 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
-//! `deferred-integer-lane-pooling-per-row-exponent`, complexity +1
-//! `incremental-prefix-hash-wordpiece-scan` — the encoders distill
-//! (Plan 360 / Research 393, `entries_71` — `flowercomputers/encoders` @
-//! `d46c90e45f`; +1 count-neutral rider face on `ascii-run-swar-block-skip`,
-//! `entries_29` — the pretokenizer stage-fusion face, its atoms owned);
-//! prior: 312 entries across 15 categories as of Batch 345 (+5: two
-//! measurement-honesty (`benchmark-spread-above-threshold-reports-unstable`,
-//! `macos-pressure-reads-footprint-not-rss`), one concurrency
-//! (`slow-consumer-latest-value-single-slot`, the tokio family's latest-wins
-//! coalescing axis), two io (`untrusted-download-verify-then-atomic-install`,
-//! `ui-event-stream-sampled-gate-terminal-forward`); the `LocalSR` distill
-//! (Plan 357 / Research 389, `entries_70` — `HerRei/local-upscale` @
-//! `cf6f8b55`); prior: 307 at Batch 343 (+2: caching —
-//! `raw-bytes-with-hit-backfill-once` +
-//! `vanished-entry-tolerant-eviction-panic-else`, the sccache cache-layer
-//! RE-distill (Plan 355 / Research 387, `entries_69` — the tiered-hit
-//! backfill family, the files B324 did not mine); prior: 300 entries across
-//! 14 categories as of Batch 332 (+2: dispatch —
-//! `byte-flag-table-masked-run-scan` + `token-batch-cursor-handover`, the
-//! blazing-smtlib distill (Plan 340 / Research 370); prior: 298 at Batch 331
-//! (+1: concurrency —
-//! `batch-retry-ladder-classifies-failure-before-permanent-state`, the
-//! vectorize-io/hindsight round-2 pool (Plan 339 / Research 368 + addendum);
-//! prior: 297 at Batch 330 (+1: concurrency —
-//! `fanout-first-error-leaves-siblings-running`, the vectorize-io/hindsight
-//! distill (Plan 338 / Research 368, `entries_63`); prior: 296 at Batch 329
-//! (+2: dispatch +1
-//! `event-damage-map-selective-partition-skip-with-consumer-hints` +
-//! concurrency +1 `online-cost-fit-thread-ladder-reopen-hysteresis`, the
-//! tembo/voxl distill (Plan 337 / Research 367, `entries_61` + `entries_62`);
-//! prior: 294 at Batch 326 (+1: layout —
-//! `adaptive-sparse-blocked-table-encoding`, the rust-lang/rust #164484
-//! distill (Plan 330 / Research 363, `entries_60`); prior: 293 at Batch 327
-//! (+1: concurrency — `batch-reserve-monotonic-counters-offload-bulk`, the
-//! firezone/sanstun distill (Plan 332 / Research 364, `entries_59`)); prior:
-//! 292 at Batch 324 (+3: io — the sccache distill (Plan 328 / Research 362,
-//! `entries_58`); prior: 289 at Batch 318 (+2: concurrency
-//! +1 `generation-counter-stale-timer-invalidation` + io +1
-//! `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
-//! impeccable io stretch-tier remainder (plan 316's `- [-]` rows),
-//! Plan 318 / Research 356, upstream pbakaus/impeccable @
-//! `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, both ANNOTATED
-//! `NotBenchable` `bench_spec` `None`) on the prior state: Batch 316
-//! (+5: io +4,
-//! concurrency +1, `entries_55` -- the impeccable io/process robustness
-//! pool, Plan 316 / Research 356, upstream pbakaus/impeccable @
-//! `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, all ANNOTATED
-//! `NotBenchable` `bench_spec` `None` + ONE count-neutral rider face: the
-//! box-filter area-average face on `prefix-sum-2d` (`entries_01`, the
-//! same 2D-window-sum family -- the source's resize is area-averaging
-//! down, bilinear up)) -- prior: Batch 308 (+2: caching +2, `entries_54`
-//! -- the 10-29b staged serving pool + `rust_perf` row: the cross-tier
-//! LRU-recency law + the refusal-quarantine verdict law, Plan 313 /
-//! Research 352) -- prior: Batch 305 (+3: concurrency +2,
-//! allocation +1, `entries_53` -- the bbtree ordered-structure-internals
-//! distill COMPLETION, Plan 289 / Research 322: `batch-miss-interleave-tiny-executor`
-//! (concurrency, BENCHABLE latency bar — N independent dependent-chain
-//! lookups interleaved through a no-alloc bit-mask round-robin executor,
-//! one chain's miss overlaps the other lanes' work; 10.7-11.3x measured on
-//! the landing box) + `seqlock-copy-read-unlatched` (concurrency, ANNOTATED
-//! `NotBenchable` — a `Copy` value under optimistic concurrency is read by
-//! copy-then-version-check, never by taking the shared latch; sound ONLY
-//! for Copy values) + `page-self-aligned-hot-node` (allocation, ANNOTATED
-//! `NotBenchable` — hot >=512 B nodes (`>=512 B` hot floor) sized to
-//! power-of-two page multiples,
-//! self-aligned: one TLB entry, the prefetcher streams the node; the
-//! source's own 1 KB sweep is the measured basis, bigger is not better);
-//! Plus the two rider faces the partial landing promised: the compile-time
-//! hand-specialization face (dtolnay typeid trick) folded as a citation on
-//! the `entries_52` window rule, the D28 kinship cite on
-//! `loop-invariant-dispatch-resolution-hoist` (`entries_48`) — upstream
-//! XiangpengHao/bbtree @ `8adae97a`) — prior: Batch 298 (+1: caching,
-//! `entries_52` — the bbtree ordered-structure-internals distill, Plan 289 /
-//! Research 322: `order-preserving-inline-key-encoding` (the fences-route,
-//! windows-rank law); the batch's SECOND candidate
-//! `count-based-simd-sorted-slot-search` DROPPED AT MEASUREMENT —
-//! `ParetoDominated` 0/4/1 on the `PerfBenchValidator` + a standalone large-n
-//! probe (the O(n) count never recovers; the negative lives in the
-//! `entries_52` header), upstream XiangpengHao/bbtree @ `8adae97a`) — prior:
-//! Batch 288 (+1: complexity, `entries_51`
-//! — the grammar rejection recursion-to-explicit-stack law, upstream llama.cpp
+//! 338 entries across 15 categories as of Batch 362 (+1: io —
+//! `driver-pipeline-cache-sealed-adapter-keyed`, suggestion-NotBenchable,
+//! the `ThreeRT` sealed driver pipeline cache: a compile-artifact cache whose
+//! consumer is a DRIVER is sealed (magic + length + digest BEFORE the
+//! payload), adapter-keyed, atomically installed by pid-suffixed rename,
+//! hard-capped, no-op saves; Plan 373 / Research 406, `entries_78`,
+//! meshy-dev/ThreeRT @ `0a190f83` MIT; PRIOR: 337 entries across 15
+//! categories as of Batch 361 (+3: the polars staged-leads conversion
+//! — `map-inplace-same-size-transmute` (the batch's GOAT lead, BENCHABLE
+//! `ParetoDominant` 2/0/1 two-run stable) + `thread-local-codec-context-reuse`
+//! and `batch-hash-probe-prefetch-two-pass`, + 1 count-neutral FACE on B244;
+//!   Plan 372 / Research 405, `entries_77`, pola-rs/polars @ `5c36cdd75`
+//!   MIT; the B361 landing MISSED this head (stale at 334) — repaired to
+//!   measured truth here with the miss disclosed, the B341/B355 class);
+//!   PRIOR: 334 entries across 15 categories as of Batch 360 (+2: caching +1
+//!   `first-hit-flag-guards-aux-structure` — the batch's GOAT lead,
+//!   BENCHABLE `ParetoDominant` 3/0/0 two-run stable + arithmetic +1
+//!   `u128-funnel-shift-combine` — BENCHABLE measured Mixed two-run,
+//!   landed correctness-first (the s=0 UB + the %64 periodicity) + 1
+//!   count-neutral FACE on B244 (the char-count identity, `entries_30`);
+//!   Plan 371 / Research 405, `entries_76`, pola-rs/polars @ `437948302`
+//!   MIT; PRIOR: 332 entries across 15 categories as of Batch 359 (+5: io +2
+//!   `named-outputs-lazy-handles-partial-decode` (BENCHABLE, the batch's
+//!   GOAT lead) + `pack-store-gc-decides-by-recovered-index`, caching +3
+//!   `derived-cache-throwaway-version-reset-recovery` +
+//!   `persisted-interner-assignments-checkpoint-with-refering-values` +
+//!   `scope-scoped-memo-release-idle-holds-no-decoded-state` — the FIRST
+//!   persistent-incremental-computation family (salsa-shaped memoization
+//!   made durable, 0 prior owners), one BENCHABLE + four suggestion-only
+//!   NotBenchable-by-domain (Plan 370 / Research 403, `entries_75`;
+//!   rust-glancer/ajika @ `70c1e26d` MIT OR Apache-2.0 + the handwritten
+//!   persistent-incrementality blog, tip unmoved at T0); prior: 327 entries
+//!   across 15 categories as of Batch 358 (+5: layout +1
+//!   `one-program-many-functions-accelerator-service-memory`, measurement +1
+//!   `ane-split-calibration-fit-bandwidth-interference-term`, caching +1
+//!   `accelerator-lost-breaker-forgets-calibration`, concurrency +1
+//!   `writeclass-share-partition-inflight-writes`, thermal +1
+//!   `spin-keep-awake-checked-capability-degrade-loud` — ALL suggestion-only
+//!   NotBenchable-by-domain: the splash lane-B ANE/host residue staged since
+//!   2026-10-28 whose release-set-binary pin-block lifted under the B355
+//!   precedent (Plan 369 / Research 345 lane B, `entries_74`; incoai/splash @
+//!   `cabbad27` Apache-2.0, T0 re-verified at the pin); prior: 322 entries
+//!   across 15 categories as of Batch 355 (+4: layout +1
+//!   `co-lifecycle-rows-pack-one-entry-strided-views` (BENCHABLE, the batch
+//!   lead), concurrency +1 `logical-free-immediate-physical-reuse-waits-settle`,
+//!   measurement +1 `joint-demand-admission-single-pool-free-bytes-logs-only`,
+//!   caching +1 `fixed-ratio-pool-partition-strands-demand` — the sglang
+//!   unified-memory distill (Plan 365 / Research 399, `entries_73`);
+//!   prior: 318 entries across 15 categories as of Batch 356 (+4: allocation +2
+//!   `mem-take-field-checkout-empty-window` + `clone-before-mutating-loop-borrow-appeasement`,
+//!   concurrency +1 `thread-spawn-per-call-pool-reuse` (BENCHABLE, the
+//!   batch lead), layout +1 `dense-id-domain-hashmap-to-slot-array`
+//!   (BENCHABLE) — the r/rust AI borrow-checker-appeasement case study
+//!   (Plan 366 / Research 400, `entries_72`; post-only source,
+//!   decision-content-only transcription; +1 count-neutral rider face on
+//!   `bounded-batch-buffer-pool`, `entries_06` — the cross-thread
+//!   return-ring enforcement form; the batch's R4
+//!   `cross-thread-buffer-return-ring` DROPPED at authoring on that
+//!   adjudication, the drop recorded in the `entries_72` header);
+//!   prior: Batches 350–354 added zero `rust_perf` rules (`kernel_opt`/sec
+//!   lanes); prior: 314 entries across 15 categories as of Batch 349 (+2: arithmetic +1
+//!   `deferred-integer-lane-pooling-per-row-exponent`, complexity +1
+//!   `incremental-prefix-hash-wordpiece-scan` — the encoders distill
+//!   (Plan 360 / Research 393, `entries_71` — `flowercomputers/encoders` @
+//!   `d46c90e45f`; +1 count-neutral rider face on `ascii-run-swar-block-skip`,
+//!   `entries_29` — the pretokenizer stage-fusion face, its atoms owned);
+//!   prior: 312 entries across 15 categories as of Batch 345 (+5: two
+//!   measurement-honesty (`benchmark-spread-above-threshold-reports-unstable`,
+//!   `macos-pressure-reads-footprint-not-rss`), one concurrency
+//!   (`slow-consumer-latest-value-single-slot`, the tokio family's latest-wins
+//!   coalescing axis), two io (`untrusted-download-verify-then-atomic-install`,
+//!   `ui-event-stream-sampled-gate-terminal-forward`); the `LocalSR` distill
+//!   (Plan 357 / Research 389, `entries_70` — `HerRei/local-upscale` @
+//!   `cf6f8b55`); prior: 307 at Batch 343 (+2: caching —
+//!   `raw-bytes-with-hit-backfill-once` +
+//!   `vanished-entry-tolerant-eviction-panic-else`, the sccache cache-layer
+//!   RE-distill (Plan 355 / Research 387, `entries_69` — the tiered-hit
+//!   backfill family, the files B324 did not mine); prior: 300 entries across
+//!   14 categories as of Batch 332 (+2: dispatch —
+//!   `byte-flag-table-masked-run-scan` + `token-batch-cursor-handover`, the
+//!   blazing-smtlib distill (Plan 340 / Research 370); prior: 298 at Batch 331
+//!   (+1: concurrency —
+//!   `batch-retry-ladder-classifies-failure-before-permanent-state`, the
+//!   vectorize-io/hindsight round-2 pool (Plan 339 / Research 368 + addendum);
+//!   prior: 297 at Batch 330 (+1: concurrency —
+//!   `fanout-first-error-leaves-siblings-running`, the vectorize-io/hindsight
+//!   distill (Plan 338 / Research 368, `entries_63`); prior: 296 at Batch 329
+//!   (+2: dispatch +1
+//!   `event-damage-map-selective-partition-skip-with-consumer-hints` +
+//!   concurrency +1 `online-cost-fit-thread-ladder-reopen-hysteresis`, the
+//!   tembo/voxl distill (Plan 337 / Research 367, `entries_61` + `entries_62`);
+//!   prior: 294 at Batch 326 (+1: layout —
+//!   `adaptive-sparse-blocked-table-encoding`, the rust-lang/rust #164484
+//!   distill (Plan 330 / Research 363, `entries_60`); prior: 293 at Batch 327
+//!   (+1: concurrency — `batch-reserve-monotonic-counters-offload-bulk`, the
+//!   firezone/sanstun distill (Plan 332 / Research 364, `entries_59`)); prior:
+//!   292 at Batch 324 (+3: io — the sccache distill (Plan 328 / Research 362,
+//!   `entries_58`); prior: 289 at Batch 318 (+2: concurrency
+//!   +1 `generation-counter-stale-timer-invalidation` + io +1
+//!   `exclusive-mkdir-temp-resource-reservation`, `entries_56` -- the
+//!   impeccable io stretch-tier remainder (plan 316's `- [-]` rows),
+//!   Plan 318 / Research 356, upstream pbakaus/impeccable @
+//!   `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, both ANNOTATED
+//!   `NotBenchable` `bench_spec` `None`) on the prior state: Batch 316
+//!   (+5: io +4,
+//!   concurrency +1, `entries_55` -- the impeccable io/process robustness
+//!   pool, Plan 316 / Research 356, upstream pbakaus/impeccable @
+//!   `02523aec3e4c4580102d996d1b6a71fbe062e03f`, Apache-2.0, all ANNOTATED
+//!   `NotBenchable` `bench_spec` `None` + ONE count-neutral rider face: the
+//!   box-filter area-average face on `prefix-sum-2d` (`entries_01`, the
+//!   same 2D-window-sum family -- the source's resize is area-averaging
+//!   down, bilinear up)) -- prior: Batch 308 (+2: caching +2, `entries_54`
+//!   -- the 10-29b staged serving pool + `rust_perf` row: the cross-tier
+//!   LRU-recency law + the refusal-quarantine verdict law, Plan 313 /
+//!   Research 352) -- prior: Batch 305 (+3: concurrency +2,
+//!   allocation +1, `entries_53` -- the bbtree ordered-structure-internals
+//!   distill COMPLETION, Plan 289 / Research 322: `batch-miss-interleave-tiny-executor`
+//!   (concurrency, BENCHABLE latency bar — N independent dependent-chain
+//!   lookups interleaved through a no-alloc bit-mask round-robin executor,
+//!   one chain's miss overlaps the other lanes' work; 10.7-11.3x measured on
+//!   the landing box) + `seqlock-copy-read-unlatched` (concurrency, ANNOTATED
+//!   `NotBenchable` — a `Copy` value under optimistic concurrency is read by
+//!   copy-then-version-check, never by taking the shared latch; sound ONLY
+//!   for Copy values) + `page-self-aligned-hot-node` (allocation, ANNOTATED
+//!   `NotBenchable` — hot >=512 B nodes (`>=512 B` hot floor) sized to
+//!   power-of-two page multiples,
+//!   self-aligned: one TLB entry, the prefetcher streams the node; the
+//!   source's own 1 KB sweep is the measured basis, bigger is not better);
+//!   Plus the two rider faces the partial landing promised: the compile-time
+//!   hand-specialization face (dtolnay typeid trick) folded as a citation on
+//!   the `entries_52` window rule, the D28 kinship cite on
+//!   `loop-invariant-dispatch-resolution-hoist` (`entries_48`) — upstream
+//!   XiangpengHao/bbtree @ `8adae97a`) — prior: Batch 298 (+1: caching,
+//!   `entries_52` — the bbtree ordered-structure-internals distill, Plan 289 /
+//!   Research 322: `order-preserving-inline-key-encoding` (the fences-route,
+//!   windows-rank law); the batch's SECOND candidate
+//!   `count-based-simd-sorted-slot-search` DROPPED AT MEASUREMENT —
+//!   `ParetoDominated` 0/4/1 on the `PerfBenchValidator` + a standalone large-n
+//!   probe (the O(n) count never recovers; the negative lives in the
+//!   `entries_52` header), upstream XiangpengHao/bbtree @ `8adae97a`) — prior:
+//!   Batch 288 (+1: complexity, `entries_51`
+//!   — the grammar rejection recursion-to-explicit-stack law, upstream llama.cpp
 //! #31153 @ `48c9f08b7`, Research 327) — prior: Batch 284 (+2: measurement + caching, `entries_50` — the burn/cubek autotune-family laws: `timed-zero-refuses-round-stop` + `tune-cache-keyed-by-spelled-variant-names`, Research 321; +1 NEW category: measurement, the instrument-validity family) — prior: Batch 283 (+1: caching, `entries_49`
 //! — the certifying-identity-token revalidation skip, `PrismML` #393) — prior:
 //! Batch 282 (+3: arithmetic, dispatch,
@@ -819,8 +833,14 @@ mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 337 entries
-/// (Batch 361, 2026-11-14, Plan 372 / Research 405 residue: +3 -- the
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 338 entries
+/// (Batch 362, 2026-11-14, Plan 373 / Research 406: +1 -- the `ThreeRT` sealed
+/// driver pipeline cache, `entries_78`: `driver-pipeline-cache-sealed-
+/// adapter-keyed` (io, suggestion-NotBenchable-by-domain -- a compile-
+/// artifact cache whose consumer is a DRIVER is sealed (magic + length +
+/// digest BEFORE the payload), adapter-keyed, atomically installed by
+/// pid-suffixed rename, hard-capped, and a save of unchanged data writes
+/// nothing); prior: Batch 361, 2026-11-14, Plan 372 / Research 405 residue: +3 -- the
 /// polars staged-leads conversion, `entries_77`: `map-inplace-same-size-
 /// transmute` (layout, BENCHABLE `ParetoDominant` 2/0/1 two-run stable,
 /// the alloc axis 1→0, the size/align gate + the consume contract) +
