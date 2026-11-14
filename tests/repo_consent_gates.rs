@@ -17,7 +17,10 @@
 //!    behaviorally identical to the pre-T4 seam.
 //! 4. **The record is per-repo** (two repos, two records; one repo's
 //!    answer never leaks to the other).
-#![cfg(any(feature = "seat_rerank", feature = "hosted_expert"))]
+#![cfg(all(
+    feature = "escalation_manifest",
+    any(feature = "seat_rerank", feature = "hosted_expert")
+))]
 
 use riir_refine::code_egress::EgressConsent;
 use riir_refine::escalation_dispatch::{EscalatedFix, EscalationDispatch, ReadinessPolicy};

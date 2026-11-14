@@ -825,6 +825,18 @@ hosted_expert = ["l4_lora", "riir-llm/transport"]
 # (the R6 wiring); never in the release set.
 seat_rerank = []
 
+# Issue 234 T2 — the steer-retry loop (steer, don't take over). The
+# SteerDistill shape: the student generates, the verifier rejects, the
+# failure CATEGORY becomes structured guidance (T1's SteerGuidance), and
+# the student REVISES ITS OWN RESPONSE conditioned on the guidance — at
+# most STEER_RETRY_ROUNDS (3) steered rounds, a budget below the paper's
+# R=4. The daemon student impl composes all(steer_retry, l4_lora); the
+# modelless drafter is never touched. Measurement-only, never the release
+# set (T3's fixer_regate arm prices it before any posture talk). Core is
+# std + syn + blake3 (the intake row identity); implies hosted_expert for
+# the SteerGuidance payload builder (the T1 law rides, never duplicated).
+steer_retry = ["hosted_expert"]
+
 # Bench 669 consumer adoption (Plan 016): the input-scope gate at the heal()
 # seam — katgpt-core's `contrastive_scope` primitive (ContrastiveScoreTable +
 # ScopeGate) wrapped as `ScopeModel`. Opt-in like the L4 seam it guards: the

@@ -149,7 +149,6 @@ pub struct SteerGuidance {
     pub expected_outcome: String,
 }
 
-
 impl SteerGuidance {
     /// The payload cap per field (bytes), char-boundary safe.
     pub const FIELD_MAX_BYTES: usize = 2048;
@@ -187,10 +186,7 @@ impl SteerGuidance {
     pub fn render(&self) -> String {
         format!(
             "YOUR PREVIOUS RESPONSE FAILED.\nDiscrepancy: {}\nApplicable conditions: {}\nCorrective rule: {}\nExpected outcome: {}\nRevise your previous response accordingly. Output ONLY the corrected lines that differ, no explanation.",
-            self.discrepancy,
-            self.conditions,
-            self.corrective_rule,
-            self.expected_outcome
+            self.discrepancy, self.conditions, self.corrective_rule, self.expected_outcome
         )
     }
 }
@@ -247,7 +243,6 @@ impl HostedExpertL4 {
         });
         serde_json::to_string(&body).unwrap_or_default()
     }
-
 
     /// The steer-mode request body: the snippet + the structured guidance
     /// appendix (the SNIPPET-ONLY law holds — the guidance carries no file
@@ -755,7 +750,10 @@ mod tests {
         // The no-retention rule rides the wire exactly as the takeover
         // builder rides it (system message + metadata).
         assert!(body.contains("must not be retained"), "{body}");
-        assert!(body.contains("\"retention\":\"none\"") || body.contains("retention\": \"none"), "{body}");
+        assert!(
+            body.contains("\"retention\":\"none\"") || body.contains("retention\": \"none"),
+            "{body}"
+        );
         // All four labeled sections are present.
         for section in [
             "Discrepancy: borrow of moved value",
@@ -801,10 +799,13 @@ mod tests {
             "unset env must refuse the steer call like the takeover call"
         );
         // Expired deadline: declined pre-socket.
+        let expired = Instant::now()
+            .checked_sub(std::time::Duration::from_secs(1))
+            .expect("clock before 1970");
         let verdict = e.generate_steer_fix_checked_with(
             "fn f() { 0 }",
             &g,
-            Some(Instant::now() - std::time::Duration::from_secs(1)),
+            Some(expired),
             512,
             EgressConsent::Allowed,
         );
@@ -833,7 +834,10 @@ mod tests {
         assert_eq!(fix, "fn f() -> i32 { 1 }");
         let sent = String::from_utf8(rx.recv().expect("request captured")).expect("utf8");
         assert!(sent.contains("hosted-expert-steer") || sent.contains("Revise YOUR OWN response"));
-        assert!(sent.contains("Corrective rule: clone at the capture site"), "{sent}");
+        assert!(
+            sent.contains("Corrective rule: clone at the capture site"),
+            "{sent}"
+        );
         assert!(sent.contains("must not be retained"), "{sent}");
     }
 }

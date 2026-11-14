@@ -358,6 +358,17 @@ pub mod llm_spend;
 #[cfg(feature = "hosted_expert")]
 pub mod hosted_expert;
 
+// Issue 234 T2 — the steer-retry loop (steer, don't take over): the
+// promptable-student seam + the failure-category guidance derivation + the
+// budgeted revise-own-response loop + the content-addressed intake routing
+// for verified pairs. Scoped to the opt-in promptable arms (the ternary
+// daemon student behind `l4_lora`); the modelless drafter is never touched.
+// Measurement-only, never the release set. Core is std + syn (+ blake3 for
+// the intake row identity); the `SteerGuidance` builder rides `hosted_expert`
+// (T1) — so the feature implies it rather than duplicating the payload law.
+#[cfg(feature = "steer_retry")]
+pub mod steer_retry;
+
 // Plan 202 R3a — the code-egress consent scope moved here from
 // `hosted_expert` (R2): the seat-rerank client joins as the second
 // consumer of the SAME scope (one env, one spelling, one taxonomy —
