@@ -94,6 +94,37 @@ recording day (the corpus and board move weekly).
 - ~~binary size in MB for reflex~~ — unmeasured; say "one static binary".
 - ~~"we win every suite"~~ — the 11 open gaps are published on purpose; keep them visible.
   That disclosure IS the goodwill.
+- ~~"no AI" / "not AI"~~ — Mozilla's FAQ takes a BROAD view of AI, explicitly including
+  "small models and traditional machine learning techniques", and requires AI as a core part
+  of the solution. Our corpus-as-model IS the AI (latent retrieval, Elo/Beta posterior
+  selection, sigmoid calibration, self-evolve). Frame the contrast as **no giant model / no
+  cloud / no neural net in the hot path** — never as no-AI. The VO says "learned rules".
+
+## 0b. FAQ alignment (checked 2026-11-14, mozillafoundation.org call-for-proposals FAQ)
+
+- **AI-core eligibility** — per the DO-NOT-SAY bullet above: S02 now reads "learned rules,
+  not a giant model". Eligibility satisfied by the ML core; the escalation tier's larger
+  model is opt-in and justified ("escalates sparingly" — the FAQ asks large-model users to
+  justify necessity; the abstain-or-escalate gate IS the justification).
+- **Product-community fit = early evidence, not achievement** — the FAQ: "you don't need to
+  have achieved it, but you do need early evidence of it", listing "community involvement in
+  shaping the project" and "partners who want to pilot or fund the work" as valid evidence.
+  Our beats qualify: six review rounds of maintainer engagement with the design ratified
+  on-thread (community shaping), the merged upstream fix (downstream acceptance), 13-repo
+  daily production (returning use), the recruiting pilot. The S13 honesty chips are EVIDENCE
+  framing — keep them.
+- **The "3 friends adopted it" testimonial has a compliant revival lane** (owner-gated): if
+  any of the three consents to be NAMED (with a public repo), or better, JOINS the W3 pilot
+  cohort, the claim converts into the FAQ's "partners who want to pilot the work" evidence.
+  Until one of those happens, it stays cut — the application says "no external users yet".
+- **"Small" reference** — the FAQ's own example bar: models "as small as 7B work great for
+  text applications". Our escalation arm is ~0.4B-class at 0.48 GB installed — far under it.
+  The video shows the contrast (0.48 GB vs 55.6 GB, 1.6 ms vs 2506 ms); it never quotes
+  Mozilla's bar back at them.
+- **Team/entity/mechanics** — FAQ permits small team structures, fiscal sponsorship, and
+  ≤10% indirect costs: all already resolved in Proposal 025 G4 (fiscal sponsor DECIDED,
+  runway PROCEED). The video's "one engineer today" is safe. Deadline 2026-11-20 11:59 PM
+  PST — the video link must exist before submission; the hard 2:00 stands.
 
 ## 3. Creative direction
 
@@ -130,7 +161,7 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | id | t (target) | VO (see §5) | On-screen | Graphics + motion prompt |
 |---|---|---|---|---|
 | S01 | 0:00–0:09 | hook | `BEFORE: subscription · datacenter · your code uploaded` / `AFTER: offline · free · code stays` | Diagonal split. Left card red-tinted: cloud, `$` and upload-arrow icons drop in staggered; right card dark: unplugged-plug icon springs in. Wipe resolves left→right on "We built the opposite." |
-| S02 | 0:09–0:15 | corpus-is-model | `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
+| S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
 | S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Live capture: README GOAT-table slow scroll (or crates.io katgpt-core page). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
 | S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram: query card slides in → fast lane (stopwatch icon spins to `0.4 ms`) → amber `abstain` branch lights on "doesn't know". Labels `choice / score / noul` under the wire. |
@@ -144,12 +175,13 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
 | END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` (+ `narration: [owner name]` — or a TTS disclosure line if Option B ever ships) | Quiet end card, one fade, nothing else moves. |
 
-## 5. Full VO script (the transcription — 297 words, hard 2:00)
+## 5. Full VO script (the transcription — 295 words, hard 2:00)
 
 > S01 — Cloud AI fixes your code — for a subscription, on a datacenter, with your source
 > leaving the machine. We built the opposite.
 >
-> S02 — cargo refine heals code with no model in the hot path. The corpus is the model.
+> S02 — cargo refine heals code with learned rules, not a giant model — the corpus is the
+> model.
 >
 > S03 — katgpt-rs — public, MIT — studied five hundred eighty papers; ninety-plus survived
 > the gates as Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
@@ -157,8 +189,8 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 > S04 — Each lane earns default-on through a GOAT gate — correctness, speed, no regressions,
 > zero allocations. One sixty-one features on; fifty-seven theorems machine-checked in Lean.
 >
-> S05 — That substrate also powers our decision stack — reflex, instinct, Rethink. It
-> answers in under a millisecond, and abstains when it doesn't know.
+> S05 — That substrate also powers our decision stack — reflex, instinct, Rethink:
+> sub-millisecond answers that abstain when they don't know.
 >
 > S06 — Where it abstains, it escalates sparingly. Our board is public: this half-gigabyte
 > stack outscores a twenty-seven-billion-parameter teacher — over a hundred times smaller,
@@ -211,7 +243,7 @@ Cloud AI fixes your code — for a subscription, on a datacenter, with your sour
 
 2
 00:00:09,400 --> 00:00:14,800
-cargo refine heals code with no model in the hot path. The corpus is the model.
+cargo refine heals code with learned rules, not a giant model — the corpus is the model.
 
 3
 00:00:15,400 --> 00:00:23,800
@@ -223,7 +255,7 @@ Each lane earns default-on through a GOAT gate — correctness, speed, no regres
 
 5
 00:00:33,400 --> 00:00:40,800
-That substrate also powers our decision stack — reflex, instinct, Rethink. It answers in under a millisecond, and abstains when it doesn't know.
+That substrate also powers our decision stack — reflex, instinct, Rethink: sub-millisecond answers that abstain when they don't know.
 
 6
 00:00:41,400 --> 00:00:52,800
