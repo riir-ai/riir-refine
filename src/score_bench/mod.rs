@@ -43,6 +43,7 @@
 //!   toolchains — the oracle's caveat). Disagreement with the frozen
 //!   `expect_lints` prints a loud drift warning; the fresh verdict wins.
 
+pub mod composition;
 pub mod corruption;
 pub mod corruption_corpus_v9;
 pub mod cross_ooo;
@@ -591,7 +592,29 @@ pub fn heal_fixpoint_cfg(
     candidates: &[(&str, &str)],
     ovr: &ComponentOverride,
 ) -> (String, usize, usize) {
+    heal_fixpoint_lane(source, candidates, ovr, None)
+}
+
+/// [`heal_fixpoint_cfg`] with an explicit CLIPPY-LANE composition order
+/// (Issue 237): `None` = the incumbent frozen order (every rule —
+/// byte-identical); `Some(plan)` = ONLY the named rules' edits apply, in
+/// plan order (the composition-descent arms' per-fixture plan — an EMPTY
+/// plan is the abstain posture: no clippy-lane edits at all). The perf
+/// lane (`FIXABLE_RULES`) and the candidate textual lane are NOT governed
+/// by the plan — held constant across arms so the A/B isolates the
+/// clippy-composition axis.
+#[must_use]
+pub fn heal_fixpoint_lane(
+    source: &str,
+    candidates: &[(&str, &str)],
+    ovr: &ComponentOverride,
+    lane: Option<&[String]>,
+) -> (String, usize, usize) {
     const MAX_FIX_PASSES: usize = 4;
+    let clippy_order: Vec<&str> = match lane {
+        Some(plan) => plan.iter().map(String::as_str).collect(),
+        None => FIXABLE_LINTS.to_vec(),
+    };
     let mut current = source.to_string();
     let mut edits_applied = 0usize;
     let mut passes = 0usize;
@@ -629,7 +652,7 @@ pub fn heal_fixpoint_cfg(
                 &parsed,
             ));
         }
-        for lint in FIXABLE_LINTS {
+        for lint in &clippy_order {
             let Some(dispatch_id) = ovr.dispatch(lint) else {
                 continue;
             };
@@ -722,6 +745,7 @@ pub fn run_bench_with(
         candidates,
         &ComponentOverride::default(),
         None,
+        &composition::LaneMode::All,
     )
 }
 
@@ -738,7 +762,36 @@ pub fn run_bench_overridden(
     ovr: &ComponentOverride,
     before_cache: &BTreeMap<String, OracleVerdict>,
 ) -> BenchScore {
-    run_bench_inner(oracle, fixture_list, &[], ovr, Some(before_cache))
+    run_bench_inner(
+        oracle,
+        fixture_list,
+        &[],
+        ovr,
+        Some(before_cache),
+        &composition::LaneMode::All,
+    )
+}
+
+/// One bench run under an explicit composition lane (Issue 237's A/B
+/// arms): the caller derives the before cache once (the Issue-108 shape —
+/// a before verdict is a fixture property) and shares it across arms, so
+/// the composition policy adds ZERO oracle calls — equal verify budget by
+/// construction.
+#[must_use]
+pub fn run_bench_lane(
+    oracle: &ClippyOracle,
+    fixture_list: &[BenchFixture],
+    before_cache: &BTreeMap<String, OracleVerdict>,
+    lane: &composition::LaneMode,
+) -> BenchScore {
+    run_bench_inner(
+        oracle,
+        fixture_list,
+        &[],
+        &ComponentOverride::default(),
+        Some(before_cache),
+        lane,
+    )
 }
 
 /// The shared bench body: the candidate lane (Proposal 005 T2.4) and the
@@ -753,8 +806,10 @@ fn run_bench_inner(
     candidates: &[(&str, &str)],
     ovr: &ComponentOverride,
     before_cache: Option<&BTreeMap<String, OracleVerdict>>,
+    lane: &composition::LaneMode,
 ) -> BenchScore {
     let vocab = vocabulary();
+    let lane_plan = composition::plan_fixture(lane, FIXABLE_LINTS);
     let mut score = BenchScore {
         n_total: fixture_list.len(),
         vocab_size: vocab.len(),
@@ -788,7 +843,8 @@ fn run_bench_inner(
         let vocab_before: BTreeSet<String> = before.lints.intersection(&vocab).cloned().collect();
         let drifted = warn_label_drift(fx, &vocab_before);
 
-        let (healed, edits, passes) = heal_fixpoint_cfg(fx.code, candidates, ovr);
+        let (healed, edits, passes) =
+            heal_fixpoint_lane(fx.code, candidates, ovr, lane_plan.as_deref());
         let (after_lints, output_ok, vocab_persist, created) =
             after_verdict(oracle, &healed, &vocab, &vocab_before, &before.lints);
 

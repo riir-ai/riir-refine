@@ -7219,7 +7219,7 @@ fn usage_text() -> String {
     #[cfg(not(feature = "fix_verify"))]
     let verify_help = String::new();
     #[cfg(feature = "score_bench")]
-    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8|9>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold); 9 = the CRB corruption ladder (Issue 137: compile-clean/test-failing known-position localization + the DLM remask arming gate — own runner, no clippy oracle, never appended to the heal score history). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n";
+    let score_help = "    --score-bench   Run the frozen clippy-bench (real-code fixtures, real clippy ground\n                    truth — Plan 014), append to .benchmarks/score_history.jsonl,\n                    re-render .benchmarks/score_history.svg. No paths needed.\n    --generation <1|2|3|4|5|6|7|8|9>  Which bench generation (Plan 092 M5): 1 = the frozen v1 set\n                    (default); 2 = the construction-built k-ladder (issue 072 T5);\n                    3 = the persist-stratified ladder (Bench 069 reopen #1); 4 = the\n                    rustc-errors k-ladder (Plan 093, --fix-compile driver vs rustc\n                    ground truth); 5 = the rust_perf vocabulary ladder (Plan 094, the\n                    mechanical shape oracle over the FIXABLE perf vocabulary); 6 = the\n                    real-repo shape ladder (Plan 095, spans carved from pre-heal\n                    sibling states); 7 = the overlap-edit-chain ladder (Plan 096,\n                    manufactured drop-and-refire overlap, depth rungs 1–5); 8 = the\n                    shaped-verdict ladder (Issue 089 T7, atoms whose heal clears the\n                    target AND leaves new diagnostics — the 0.5 half-win priced into\n                    the shaped axis + the frontier half-count fold); 9 = the CRB corruption ladder (Issue 137: compile-clean/test-failing known-position localization + the DLM remask arming gate — own runner, no clippy oracle, never appended to the heal score history). A NEW\n                    generation's first append is admitted ONLY if it measures harder\n                    than v1 (gen 8: only if the run measures ≥1 shaped verdict).\n    --score-report  Re-render the score-history SVG from the existing JSONL (no run).\n    --composition-ab  Issue 237 — the composition-descent cell over the frozen v1 set\n                    (arm-a compose-all → arm-b ranked → arm-c fitted-level subset →\n                    falsification; ONE shared before pass; never appended to score\n                    history; exit 1 on a violated falsification row).\n";
     #[cfg(not(feature = "score_bench"))]
     let score_help = String::new();
     // Issue 190 T14b + the 2026-11-06 vocabulary law: the credit-plane
@@ -7937,6 +7937,12 @@ struct Args {
     generation: Option<u8>,
     /// `--score-report`: re-render the SVG from the existing history JSONL.
     score_report: bool,
+    /// Issue 237: `--composition-ab` — the composition-descent cell (the
+    /// rating-energized lane over the fixpoint's rule composition; three
+    /// arms + falsification over the frozen v1 set, one shared before
+    /// pass, never appended to score history). Needs
+    /// `--features score_bench`.
+    composition_ab: bool,
     /// Issue 108 T2: `--necessity-bench` — the component-necessity
     /// flip-rate harness (per-rule disable + matched-swap arms over the
     /// frozen v1 set, real-clippy oracle, two-sided canaries, JSONL out).
@@ -8442,6 +8448,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
         score_bench: false,
         generation: None,
         score_report: false,
+        composition_ab: false,
         necessity_bench: false,
         necessity_top: None,
         necessity_random: None,
@@ -8639,6 +8646,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "--no-verify" => args.no_verify = true,
             "--score-bench" => args.score_bench = true,
             "--score-report" => args.score_report = true,
+            "--composition-ab" => args.composition_ab = true,
             "--necessity-bench" => args.necessity_bench = true,
             "--necessity-smoke" => args.necessity_smoke = true,
             "--necessity-rule" => {
@@ -10116,6 +10124,7 @@ fn standalone_mode(args: &Args) -> bool {
         || args.info
         || args.score_bench
         || args.score_report
+        || args.composition_ab
         || args.necessity_bench
         || args.memory_stats
         || args.stats_flag
@@ -11459,6 +11468,38 @@ fn admission_gate(
         score.heal_rate, v1_rate
     );
     Ok(())
+}
+
+/// Issue 237 — the composition-descent cell over the frozen v1 set (the
+/// `--composition-ab` lane): three measured arms + falsification, ONE
+/// shared before pass, never appended to score history. Exit 1 only on a
+/// violated falsification row (the lane emitted above its level); the
+/// measurement itself is report-only (the gen-9 shape).
+#[cfg(feature = "score_bench")]
+fn run_composition_ab() {
+    use riir_refine::score_bench as sb;
+
+    let oracle = sb::draft_oracle();
+    if !oracle.is_available() {
+        eprintln!("composition-ab: cargo not on PATH — cannot derive ground truth");
+        std::process::exit(1);
+    }
+    let fixture_list = sb::fixtures::fixtures();
+    println!(
+        "composition-ab: {} frozen v1 fixture(s) — arm-a (all) → arm-b (ranked) → arm-c (subset) → falsification…",
+        fixture_list.len()
+    );
+    let (arm_a, arm_b, arm_c, arm_falsify, beliefs, level) =
+        sb::composition::run_composition_ab(&oracle, &fixture_list);
+    sb::composition::print_report(&arm_a, &arm_b, &arm_c, &arm_falsify, &beliefs, level);
+    let falsify_resolved: usize = arm_falsify
+        .outcomes
+        .iter()
+        .map(|o| o.resolved())
+        .sum::<usize>();
+    if falsify_resolved > 0 {
+        std::process::exit(1);
+    }
 }
 
 /// The shared post-measurement tail: append the row, dual-write the store,
@@ -13930,9 +13971,16 @@ fn main() {
         run_score_bench(args.generation.unwrap_or(1));
         return;
     }
+    #[cfg(feature = "score_bench")]
+    if args.composition_ab {
+        run_composition_ab();
+        return;
+    }
     #[cfg(not(feature = "score_bench"))]
-    if args.score_bench || args.score_report {
-        eprintln!("--score-bench / --score-report require a build with --features score_bench");
+    if args.score_bench || args.score_report || args.composition_ab {
+        eprintln!(
+            "--score-bench / --score-report / --composition-ab require a build with --features score_bench"
+        );
         std::process::exit(2);
     }
     #[cfg(feature = "score_bench")]
@@ -20912,6 +20960,7 @@ mod mode_flag_tests {
             ("--misses --report", Box::new(|m| m.misses_report = true)),
             ("--score-bench", Box::new(|m| m.score_bench = true)),
             ("--score-report", Box::new(|m| m.score_report = true)),
+            ("--composition-ab", Box::new(|m| m.composition_ab = true)),
             ("--necessity-bench", Box::new(|m| m.necessity_bench = true)),
             ("--memory-stats", Box::new(|m| m.memory_stats = true)),
             ("--version", Box::new(|m| m.version = true)),
