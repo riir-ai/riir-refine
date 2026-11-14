@@ -1,6 +1,7 @@
 # Plan 373 — Batch 362: the ThreeRT wgpu-RT mining batch (Research 406)
 
 **Status:** STAGED — plan-first; cargo half awaits a free batch window (the claim row lands when the lane starts; `- [ ]` open, `- [x]` done, `- [-]` defer with reason)
+**Claimed:** zed-m3-b362-threert/m3, 1794643107, expires 2026-11-16T07:58:27Z (authoring half now; T5 GOAT + the T7 gate battery hold for a quiet read; queue-snapshot row is the live claim)
 
 ## Source + scope
 
