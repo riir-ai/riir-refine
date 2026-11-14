@@ -7,8 +7,9 @@
 
 ## Scope
 
-- [ ] T0 — re-clone `.raw/polars` shallow at the moved tip; record the landing sha + date as the NEW pin of record (if the tip moved past `5c36cdd75`, that newer tip is the pin — the clone's HEAD is the arbiter). Re-verify ALL FIVE staged leads' quote sites byte-exact at the moved pin; a changed site re-grades in-file with disclosure (the B360 T0 precedent: pin moved ~2.5 h past the distill pin, all nine sites still byte-exact). Sites: R3 `polars-compute/src/arity.rs` `prim_unary_values` (~L45-72, "May reuse the memory of the array if possible" + the size/align gate + `arr.transmute::<O>()`) and the binary form (~L92-96); R5 `polars-core/src/frame/group_by/into_groups.rs` `create_groups_from_sorted` (~L67-69, "group_by keys are sorted; running sorted key fast path") + the #29673 hot-run-start site (locate at re-read); R6 `polars-utils/src/compression/zstd.rs` (~L12-21, thread_local CCTX/DCTX + `MAX_CACHED_CONTEXT_BYTES = 2 * 1000 * 1000` + the two-regime doc "for those the cost of creating a context is small relative to the work"); R7 `polars-expr/src/hash_keys.rs` (~L29-32, `BLOCK_SIZE = 256` "Keys are hashed and prefetched in blocks of this many" + `MIN_PREFETCH_BUCKETS = 1 << 15` "Smaller tables fit in the cache and aren't prefetched") + `idx_table/single_key.rs` (~L94-95 the block-probe comment); R8 `polars-stream/src/nodes/group_by/sink.rs` (~L34-76 the two hot-table grow comments) + the `polars-expr/src/hot_groups/` file set (mod/single_key/binview/row_encoded/key_rows/fixed_index_table). PLUS the three NOT-LOCATED-AT-GRADE rows carried as re-read obligations: #30276 is_in-single-needle scan, #29849 arg_min/arg_max with nulls, #29175 row-encoding cache — locate + read each at the moved pin; thin-expected, honest drop rows if nothing bounds.
-- [ ] T1 — dedup re-verification at landing HEAD (the greps are dated — B359/B360 landed since the 11-13 distill): vocab set per lead over `src/domains/rust_perf/corpus/` + `src/domains/kernel_opt/corpus/`: `transmute|cast_vec|in.place|same.size` (R3), `sorted.run|adjacent.run|run.group` (R5), `thread_local|codec|context.reuse|CCTX` (R6), `prefetch` (R7 — expect the software-prefetch-storage-bound owner + entries_05), `hot.tier|two.tier|skew|hot.table` (R8). Every hit read and ruled in-row; the four standing adjudications carried IN-RULE (R3 ↔ `bitflag-pack-when-footprint-dominates` footprint-vs-probe axis + B334 streak memo; R7 ↔ `software-prefetch-storage-bound` — it NAMED the positive regime without owning it, BOTH-directions adjudication mandatory or face-resolve; R8 ↔ B334 `single-entry-last-key-lookup-cache-hash-avoidance` — N=1 sequential streak vs N-slot statistical skew; R5 ↔ none / B66-pool only). Grep BUGGY/FIXED BODIES too, not just concepts (the B66 kill lesson).
+- [x] T0 — DONE 2026-11-14 (zed-amo-b361-polars): re-cloned at master tip `5c36cdd75a30a8ab12a9f70e251c0f267235b2a7` (2026-11-13T21:53Z — the tip moved ~6h past B360's pin `437948302`; the clone HEAD IS the new pin of record). ALL FIVE leads' primary quote sites verified byte-exact at the moved pin: R3 arity.rs "May reuse the memory of the array if possible." + the size/align gate + "SAFETY: checked same size & alignment I/O, NativeType is always Pod." + `arr.transmute::<O>()` + the binary form "May reuse the memory of one of its arguments if possible."; R5 into_groups.rs "group_by keys are sorted; running sorted key fast path"; R6 zstd.rs the module doc pair + the MAX_CACHED_CONTEXT_BYTES doc quartet + `2 * 1000 * 1000` + the thread_local CCTX/DCTX block; R7 hash_keys.rs BLOCK_SIZE=256 + MIN_PREFETCH_BUCKETS=1<<15 with their doc lines + single_key.rs "Probes the keys in blocks, first hashing (and prefetching) the whole"; R8 sink.rs the grow/stop comment set (SIX conditions, L42–62, richer than the distill's two) + the hot_groups/ file set (6 files, unchanged names). DISCLOSED drift: (a) R5's #29673 site RE-WORDED upstream — the old "Insert keys that start a run of equal keys into the hot group-by table right away" is now hot_groups/mod.rs L48-52 "A missed key that is followed by a key with the same hash is inserted even if that evicts another key ... This keeps sorted keys from first going cold." — the run-start law GENERALIZED to hash-locality; content unchanged, evidence row re-quoted at the new wording. (b) R7 gained a SECOND in-source instance — single_key.rs ~L245-251 the INSERT-side prefetch arm ("// Reserve up front so the table doesn't move after prefetching." + `let prefetch = self.table.num_buckets() >= MIN_PREFETCH_BUCKETS;` + `self.table.prefetch_insert(*hash)`); carried in-rule. Re-read obligations resolved: #30276 is_in single-needle — SITE FOUND (polars-ops/src/series/ops/is_in/mod.rs ~L788-808, "For a single needle, scanning the haystack is cheaper than building a lookup of it." — the build-vs-scan flip at cardinality 1, both-lengths-1 gate + the dtype/no-nulls guards); graded C, STAGED as a lead in the snapshot (NOT landed this batch — the five main leads own the yield budget). #29849 arg_min/arg_max nulls — SITE FOUND (polars-core/src/chunked_array/arg_min_max.rs `arg_min_physical_generic`: the all-null early-out + `IsSorted::Ascending => ca.first_non_null()` / `Descending => ca.last_non_null()` / Not => scan — the SORTED-FLAG fast path for order statistics); graded C+/B−, STAGED (adjacent to B66's sortedness-check-branchless-accumulate — face-or-rule at a future slot). #29175 row-encoding cache trashing — SITE NOT FOUND at this pin (grep cache/trash over polars-row/src = 0 hits; likely reworked upstream since the PR) — honest NOT-FOUND row, dropped from the pool.
+- [x] T1 — DONE 2026-11-14, dedup at landing HEAD `baa7bc16` (greps over `src/domains/rust_perf/corpus/` entries_*.rs, concepts AND bodies): R3 ZERO owners of same-size-transmute/in-place-conversion-reuse (`transmute.*reuse|bytemuck|cast_slice` → entries_06's bytemuck GPU-upload rule = SKIP-conversion-when-layout-equals-target, adjacent-DISTINCT; `retain-inplace` entries_02 = filter semantics, borrow-based, no consume) — RULE, both adjudications in-rule. R5 **LIVE ADJACENT OWNER FOUND**: entries_04.rs:384 `previous-row-group-check` ("no hash on sorted-run hit, hash fallback on miss") OWNS the run-locality pole (unsorted input, per-row pre-check); R5's distinct content is the SORTED pole (no hash structure at all) → **FACE on that host** (the B360 R2 precedent; the statement-sequence kill risk resolves WITH the face — a parse-only proposer could never prove sort+group adjacency anyway; the host is already suggestion-only). R6 ZERO owners of thread_local-context/size-admission (`thread_local` hits = entries_06's thread_local SCRATCH-BUFFER rule — data scratch vs stateful handle, and entries_02/39 fixture/negative notes; `logical-free-immediate-physical-reuse-waits-settle` entries_73 = deferred MEMORY reuse timing, a different axis; `CCTX|zstd|codec.*context` = 0) — RULE, suggestion-only NotBenchable-by-domain, adjudications in-rule. R7 `software-prefetch-storage-bound` confirmed the owner of the NEGATIVE arm (entries_05.rs:222-233) + it NAMED the positive regime without owning it → RULE with BOTH-directions in-rule adjudication (the regime gate `MIN_PREFETCH_BUCKETS` is the decision content), NotBenchable ON THIS BOX (aarch64; x86 `_mm_prefetch` dep-gated — the entries_17/05 decision-content-only precedent). R8 ZERO owners of miss-rate-keyed two-tier (`hot.tier|two.tier|miss.rate|promote` → no owner; the `skew` hits are the dispatch-deopt rule's branch-skew arms, unrelated) — RULE candidate (the swing), B334 `single-entry-last-key-lookup-cache-hash-avoidance` (entries_66) = the N=1 sequential-streak pole, both-directions adjudication in-rule; benchable; DROP gate stays at authoring.
+- [ ] T1-RESIDUAL — none (T1 complete at claim HEAD; re-run the five vocab greps AT LANDING HEAD in case another batch lands in between — the B358/B359 interleave lesson).
 - [ ] T2 — authoring, order = grade, with the DROP gates at authoring (yield 2–4 rules after falsification; drops are honest rows, never forced):
   - **R3 `map-inplace-same-size-transmute` (B+)** — category: layout (in-place kernel + representability gate). Buggy: `v.iter().map(|&x| x as O).collect::<Vec<_>>()` between same-size/same-align primitives. Fixed: in-place loop + reuse (`bytemuck::cast_vec` form; the CONSUME caveat is load-bearing: cast_vec consumes the source — the rule text carries the dead-after-collect precondition as the detection contract; the first-mention scope class named in-rule). Benchable (T4). QUOTE BANK @ pin: arity.rs L46-47 + the size/align gate lines.
   - **R5 `sorted-run-grouping-vs-hash` (B−, HIGHEST kill risk — drop allowed)** — category: dispatch/regime (sorted-input fast path). Buggy: `sort_unstable()` + `Entry`-based `HashMap<K, Vec<_>>` grouping. Fixed: adjacent-run scan (group ids advance only at value changes). Detection = statement-sequence (a sort call + a grouping loop over the sorted result) — if the bounded detector is too thin at authoring, DROP with the honest row (the plan's expected-drop allowance). Benchable if it survives (T4: sort+group vs run-scan on pre-sorted data + the UNSORTED anti-regime arm — run-scan must not fire on unsorted input; upstream presence ×2 strengthens the content).
@@ -21,6 +22,107 @@
 - [ ] T6 — count pins ONE-LANDING at the landing HEAD: pins_manifest `--write` + bare manifest-vs-prose AGREE; health_views perf/total re-derived (the pre-flight numbers go STALE between claim and landing — B353/B359 re-derivation precedent, re-derive AT landing); the five rust_perf count literals + mod.rs narrative head + fn doc + AGENTS/README/.docs prose heads; kernel-side rust_perf witness same-commit; the annotated-census trio if a NotBenchable row lands. Score-bench: owed only if the clippy_lints surface moved (expected NOT owed — rust_perf-only delta; ASSERT either way). Release-set binary rebuild disclosed OWED at the i224 lane (rust_perf rides the shipped set — the B359 precedent).
 - [ ] T7 — Research 405 Status → RECORD — batch-361-landed (or the honest partial row naming what dropped and why); snapshot landing row SAME UNIT (claim discharged by the landing, the landing commit is the arbiter); queue-after line re-derived.
 - [ ] T8 — ONE feat commit + push develop + `rm -rf .raw/polars` at close (cleanup is part of the batch — a landed batch with a live .raw entry is an unfinished batch). dual_allocation 0/0/0 + numbering gate in the allocation commit (this plan's birth) and re-run at landing.
+
+## T2/T3 staged authoring (2026-11-14 — drafts only; context_notes finalize AFTER T4's measured verdicts, NOTHING INVENTED)
+
+**T2 authoring decisions at claim HEAD** — yield revised to **3 rules + 1 face + 1 honest swing-gate**: R3 RULE (benchable), R6 RULE (suggestion-only), R7 RULE (decision-content-only on this box), R5 FACE on the entries_04 host (resolved: the statement-sequence kill risk dies with the face — the sorted pole rides a host that already owns the run-locality pole), R8 SWING — final call AT the fixture draft: the bounded form below is clean of the machinery vocabulary, so the default is RULE-benchable with the drop gate live. Entries file: **entries_77** (77 = next after B360's 76, confirmed by ls). Fixtures: `b361_fixtures.rs` (four-arm per rule; R5's face needs none).
+
+**R3 `map-inplace-same-size-transmute`** — category: layout. Category check: corpus layout family owns buffer/table shapes; this is the in-place CONVERSION axis (same-size+same-align representability gate → the buffer IS the output; the consume precondition is the detection contract).
+```rust
+// buggy (same-size map+collect: allocates a fresh Vec, the source dies right after)
+pub fn f32_vals_to_i32(v: Vec<f32>) -> Vec<i32> {
+    v.iter().map(|&x| x as i32).collect()
+}
+// fixed (size_of::<I>() == size_of::<O>() && align_of equal → in-place kernel + buffer
+// reuse; bytemuck::cast_vec CONSUMES the source — the rule's precondition names the
+// dead-after-call scope, the borrowed-source posture is the anti-regime)
+pub fn f32_vals_to_i32_inplace(mut v: Vec<f32>) -> Vec<i32> {
+    const { assert!(size_of::<f32>() == size_of::<i32>() && align_of::<f32>() == align_of::<i32>()) }
+    for x in &mut v { *x = *x as i32; }
+    bytemuck::cast_vec(v) // dep-gated: fire only when the manifest declares bytemuck
+}
+```
+G1: outputs bit-identical to map+collect on the value-cast ladder (same-size pairs f32↔i32, i64↔f64, u32↔i32; the size-MISMATCH pair i64→i32 is the negative arm — collect stays). Bench (T4): sizes [1K, 16K, 256K] × same-size pairs; bar = ParetoDominant ≥2 of 3 sizes + alloc axis 2→1; the borrowed-source arm = the disclosed anti-regime (never measured as a win posture). QUOTE BANK @ `5c36cdd75` (byte-verified): arity.rs "/// May reuse the memory of the array if possible." · "// Reuse memory if possible." · "if size_of::<I>() == size_of::<O>() && align_of::<I>() == align_of::<O>() {" · "// SAFETY: checked same size & alignment I/O, NativeType is always Pod." · "return arr.transmute::<O>();" · binary form "/// May reuse the memory of one of its arguments if possible." + "// Reuse memory if possible." + "if size_of::<L>() == size_of::<O>() && align_of::<L>() == align_of::<O>() {".
+
+**R6 `thread-local-codec-context-reuse`** — category: caching (stateful-handle reuse with a size admission; the admission IS the two-regime).
+```rust
+// buggy (stateful codec/handle constructed per call — every call re-pays init)
+fn compress_chunk(data: &[u8], level: i32) -> Vec<u8> {
+    let mut ctx = CodecCtx::new(level); // alloc + init internal state per call
+    ctx.compress(data)
+}
+// fixed (thread_local slot + SIZE ADMISSION: handles configured beyond the
+// byte bound are drop-on-return — their init is cheap relative to the work)
+thread_local! { static CCTX: RefCell<Option<CodecCtx>> = const { RefCell::new(None) }; }
+const MAX_CACHED_CONTEXT_BYTES: usize = 2 * 1000 * 1000;
+fn compress_chunk(data: &[u8], level: i32) -> Vec<u8> {
+    CCTX.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        let oversize = level_exceeds_bytes(level, MAX_CACHED_CONTEXT_BYTES);
+        let mut ctx = if oversize { CodecCtx::new(level) } else {
+            slot.get_or_insert_with(|| CodecCtx::new(level)).clone_config(level)
+        };
+        let out = ctx.compress(data);
+        if oversize { drop(ctx); } else { slot.replace(ctx); }
+        out
+    })
+}
+```
+Annotation: suggestion-only, NotBenchable-by-domain (the metric is codec throughput; a stubbed-std fixture erases the win — the fixture proves the reuse ARM FIRES, never a speed). Adjudications in-rule: entries_06's thread_local scratch-buffer rule (DATA buffer reuse vs a STATEFUL handle; no admission axis there) · logical-free-immediate-physical-reuse-waits-settle entries_73 (deferred MEMORY reuse across a settle boundary vs immediate HANDLE reuse). QUOTE BANK @ `5c36cdd75` (byte-verified): zstd.rs "//! zstd compression and decompression using state that is reused per thread." · "//! Creating a zstd context allocates and initializes its internal state, which" + "//! can cost more than compressing or decompressing a small buffer." · "/// Upper bound on the size of each zstd context kept per thread between calls." + "/// Contexts for high compression levels or large windows exceed it and are not" + "/// kept, but for those the cost of creating a context is small relative to the" + "/// work." · "const MAX_CACHED_CONTEXT_BYTES: usize = 2 * 1000 * 1000;" · the thread_local CCTX/DCTX block.
+
+**R7 `batch-hash-probe-prefetch-two-pass`** — category: io (memory-latency hiding in a probe loop; sibling of the prefetch owner).
+```rust
+// buggy (probe-per-key: hash then immediately probe — the bucket load stalls
+// before the next hash can issue)
+fn probe_all(keys: &[K], table: &Table) -> u64 {
+    keys.iter().map(|k| table.probe(hash(k))).sum()
+}
+// fixed (two passes per BLOCK: hash the block + prefetch the bucket addresses,
+// THEN resolve — several lookups in flight; cache-resident tables skip the arm)
+const BLOCK_SIZE: usize = 256;
+const MIN_PREFETCH_BUCKETS: usize = 1 << 15;
+fn probe_all_blocked(keys: &[K], table: &Table) -> u64 {
+    if table.num_buckets() < MIN_PREFETCH_BUCKETS {
+        return keys.iter().map(|k| table.probe(hash(k))).sum();
+    }
+    let mut acc = 0u64;
+    for block in keys.chunks(BLOCK_SIZE) {
+        let addrs: SmallVec<[Addr; BLOCK_SIZE]> =
+            block.iter().map(|k| table.bucket_addr(hash(k))).collect();
+        for &a in &addrs { table.prefetch(a); } // x86 _mm_prefetch; core::arch only
+        for (i, k) in block.iter().enumerate() { acc += table.resolve(addrs[i], k); }
+    }
+    acc
+}
+```
+Annotation: NotBenchable ON THIS BOX (aarch64 — the intrinsic arm is x86 `core::arch`; the entries_17 decision-content-only posture; an x86 GOAT re-gate rides the 4090 if ever owed). Adjudication in-rule BOTH directions vs `software-prefetch-storage-bound` (entries_05): THAT owns the bandwidth/storage-bound NEGATIVE arm (prefetch buys nothing, harmful at decode scale); THIS owns the compute/latency-bound POSITIVE arm and the regime gate is the decision content (2^15 buckets — cache-resident tables skip). QUOTE BANK @ `5c36cdd75` (byte-verified): hash_keys.rs "/// Keys are hashed and prefetched in blocks of this many." + "pub(crate) const BLOCK_SIZE: usize = 256;" · "/// Smaller tables fit in the cache and aren't prefetched." + "pub(crate) const MIN_PREFETCH_BUCKETS: usize = 1 << 15;" · single_key.rs "/// Probes the keys in blocks, first hashing (and prefetching) the whole" · SECOND instance "// Reserve up front so the table doesn't move after prefetching." + "let prefetch = self.table.num_buckets() >= MIN_PREFETCH_BUCKETS;" + "self.table.prefetch_insert(*hash);".
+
+**R8 `hot-key-skew-split-table`** — category: caching (the swing; bounded form below is clean of the engine machinery — default RULE-benchable, drop gate live).
+```rust
+// buggy (one table for every key: the hot minority pays the same
+// cache-hostile probe as the cold tail)
+let mut counts: HashMap<u64, u64> = HashMap::new();
+for k in stream { *counts.entry(k).or_insert(0) += 1; }
+// fixed (a small HOT table checked first; repeat misses promote into it; the
+// hot tier stays cache-resident, the main table absorbs the tail; a stream
+// whose misses are NOT skew-dominated runs the plain table unchanged —
+// the miss-rate key is the regime gate, the two stop conditions are its bound)
+struct TwoTier { hot: HashMap<u64, u64>, main: HashMap<u64, u64>, hot_misses: u64 }
+impl TwoTier {
+    fn add(&mut self, k: u64) {
+        if let Some(c) = self.hot.get_mut(&k) { *c += 1; return; }
+        *self.main.entry(k).or_insert(0) += 1;
+        self.hot_misses += 1;
+        if self.hot_misses >= PROMOTE_CHECK_EVERY { self.promote_top(); self.hot_misses = 0; }
+    }
+}
+```
+G1: the logical count map identical either way (hot ∪ main is one map; the split is placement only). Bench (T4): zipf-ish skew vs uniform streams × sizes; bar = no regression at uniform (the hot-check tax) + ParetoDominant at skew. Adjudication in-rule BOTH directions vs B334 (entries_66): B334 = ONE slot for SAME-KEY STREAKS (sequential locality, adjacency); R8 = a BOUNDED SET for STATISTICAL SKEW (frequency over arbitrary order). A streak is the degenerate one-key pole of the skew law — named, never merged. QUOTE BANK @ `5c36cdd75` (byte-verified): sink.rs L42 "/// The hot tables only grow if the frequently missed keys were missed at least this" · L46-47 "/// The hot tables only grow if the frequently missed keys make up at least this" + "/// fraction of the missed rows." · L50 "/// The hot tables grow to hold this many slots per key they should hold, if the" · L54-55 "/// The hot tables only grow if the keys they should hold fill at most this fraction" + "/// of the slots after growing." · L58/L62 the two stop conditions · hot_groups/mod.rs "/// A HotGrouper maps keys to groups, such that duplicate keys map to the same" + "/// group. Unlike a Grouper it has a fixed size and will cause evictions rather" + "/// than growing." · the RE-WORDED #29673 site L48-52 ("A missed key that is followed by a key with the same hash is inserted even if that evicts another key, as is every missed key with `force_hot`. This keeps sorted keys from first going cold.") — disclosed drift, quoted at the new wording.
+
+**R5 FACE on entries_04 `previous-row-group-check`** (count-neutral, rides the host):
+> SORTED-POLE FACE: when the keys are already sorted (just sorted by this code, or carried sorted — the sorted flag), the previous-row check NEVER misses and the hash fallback NEVER fires; the hash structure can go entirely — group ids advance only at value changes (polars create_groups_from_sorted: "group_by keys are sorted; running sorted key fast path"; upstream ×2: the in-memory fast path AND the streaming hot-table's generalized run-start insertion "This keeps sorted keys from first going cold"). The host rule owns the run-LOCALITY pole (unsorted input, per-row pre-check); this face is its limit case — at perfect locality the pre-check IS the grouping.
+
+**Snapshot staged-lead rows owed at landing (T7):** #30276 single-needle build-vs-scan flip (C — polars-ops is_in/mod.rs "For a single needle, scanning the haystack is cheaper than building a lookup of it.", the both-lengths-1 + dtype + no-nulls gate) · #29849 arg_min/max sorted-flag fast path (C+/B− — polars-core arg_min_max.rs `IsSorted::Ascending => ca.first_non_null()`; adjacent to B66's sortedness-check-branchless-accumulate, face-or-rule at a future slot) · #29175 row-encoding cache — NOT-FOUND at pin `5c36cdd75` (dropped from the pool).
 
 ## Non-goals
 
