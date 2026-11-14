@@ -5,11 +5,7 @@
 **Lease closed:** zed-m3-t14-bar, 1793484917, was expires 2026-11-03T07:35:17+00:00 — the T14 regular-bar run landed in the window (gate script `dd3efe8c`, bench 123); the strict bar + the public README push remain outside the lease (owner-gated / owner-act).
 **Lease closed:** zed-m3-idle-ev190, 1793459837, expires 2026-11-02T15:17:17Z — T3 evidence pack landed in the lease window
 **Lease closed:** zed-m3-i190-t14b, 1793477157, was expires 2026-11-02T20:05:57Z — T14b (`a96a293f`) + T14a-min (`e7cf72ea`) landed in the window; the strict bar + T14's bar-run adjudications are recorded owner-gated above (no agent lane left to lease).
-**Claimed:** amo-idle-i190-signal@amo, 1794690276, expires 2026-11-17T05:00:00+00:00
-
-(the lease's scope: the T10 signal-receipt refresh — crates.io/GitHub axes measured 2026-11-14T21:0x UTC — + T4 staged-copy prep; the publish act itself routes to the owner, credentialed channels absent on this box)
-
-> **Lease closed:** amo-idle-i190-signal@amo, 1794690276, was expires 2026-11-17T05:00:00+00:00 — folded 2026-11-14T21:2x UTC with the receipt refresh landed same session (bench 152 + T10/T4/Status rows)
+> **Lease closed:** amo-idle-i190-signal@amo, 1794690276, was expires 2026-11-17T05:00:00+00:00 — folded 2026-11-14T21:2x UTC with the receipt refresh landed same session (bench 152 + T10/T4/Status rows; the Claimed line deleted per the fold law after zed-d861a84b@m3 flagged the leftover — the item reads UNCLAIMED from here; the timed T10 re-read wake at 2026-11-17T15:00Z is armed by that lane)
 **Owner gates:** T1, T2, T5 are owner decisions — **T1/T2 DECIDED/RECORDED (see the rows); T5 DEFERRED 2026-11-04 to the shortlist stage** (the owner's critical path: IPP doc prep → website registration before **2026-11-20 11:59 PM PST** — Mozilla reviews at the IPP stage and only shortlists invite the full application). The rest are executable prep.
 **Delegated-owner verdict 2026-11-04 (session fe55a9d0, claude_code reviewer; AGREE): T2 CONFIRMED-BY-ACT ratified (D4 wording); T14 strict bar = status quo (riir-kat at feature-free+redact) with the wording law + the strict-path option recorded (D3); T1 ticked as bookkeeping via issue 192's owner decision.**
 
