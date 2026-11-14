@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO (production blocked on VO lane pick + screen captures)
+Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all revisions APPLIED (§0)
 Branch: `develop`
 
 - [ ] Owner: pick the VO lane (A: record own voice — recommended / B: Kokoro TTS / C: ElevenLabs) — §7
@@ -9,6 +9,34 @@ Branch: `develop`
 - [ ] Agent: captions track (word-timed JSON) + loudness gate + export per §6/§7/§8
 - [ ] Owner review (`preview` + strips) → final render → attach link to the application
 - [ ] Re-verify the LIVE fact pins on recording day (§2, rows marked 🔴)
+
+## 0. Verdict record
+
+Claude delegated-owner verdict r1 (2026-11-14, session `0ab6f11f`): **REVISE** — every
+revision below is applied in this revision of the brief:
+
+- **S06 re-anchored**: "one-fourteenth the disk" compared against the WRONG model (that
+  ratio is vs the 9B); vs the 27B teacher the sentence names it is 55.62/0.48 ≈ **116×** →
+  VO now says "over a hundred times smaller"; "a thousand times faster" scoped **"at the
+  median"** (p50 geomean; the escalated path is far below that — own-encoder multiple
+  21×–36×); board URL on screen; evaluation regime scoped ("on the public classification
+  suites"); suite-count reconciliation pinned (P6–P8).
+- **S08**: "thirteen of our own repos" (was ambiguous external-sounding); private-game
+  clause dropped (unverifiable, adds nothing).
+- **S11**: "written by hand" added (kills the by-juxtaposition "the AI wrote it" read);
+  "a second PR" demoted to on-screen chip pending the #3025 provenance pin.
+- **S03**: "studied 580 papers; ninety-plus survived the gates" (the honest form is the
+  stronger form); ★141 star chip added; 201-download floor stays off the video.
+- **S04**: unit fix — 161 is default-on **features**, not lanes.
+- **S13**: "two to three contributors"; "one engineer today" said on camera; "no external
+  users yet" said out loud (naming the decisive risk = the same honesty as publishing gaps).
+- **S07**: VO removed — the method pipeline is on-screen only; hard **2:00** target,
+  **≤ 290 words**.
+- **§7**: TTS options demoted to **scratch-track only** (timing the cut before the owner
+  records); any TTS reaching the shipping cut must be disclosed on the end card.
+- Testimonial: "3 friends adopted it" stays CUT — Proposal 025 states "no external users
+  yet" twice; the only compliant revival is a named person + public repo + consent, which
+  would also change the written answers.
 
 ## 1. What this is
 
@@ -39,16 +67,16 @@ recording day (the corpus and board move weekly).
 | P3 | "161 shipped default-on" | 668 feature flags, 161 default-on — repo's own count gate PASS | `katgpt-rs/scripts/count_features.py` |
 | P4 | "57 theorems machine-checked in Lean" | `EXPECTED_THEOREMS=57`, 7 modules, axiom budget + sorry-refusal enforced | `katgpt-rs/.proofs/KatgptProof/`, `scripts/proof_gate.sh:72` |
 | P5 | MIT + crates.io (substrate) | katgpt-rs MIT, github.com/katopz/katgpt-rs; **katgpt-core 0.5.0 live on crates.io** | `katgpt-rs/LICENSE`, crates.io API 2026-11-11 |
-| P6 | "answers in under a millisecond" | G2 gate p99 ≤ 1 ms per decision set; measured p50 0.024–0.762 ms across 13 suites; cheap-lane p50 84–391 µs | `riir-reflex/benches/decision_set_goat.rs`, `riir-reflex/.benchmarks/137_modelless_timing_quiet/RECORD.md` |
-| P7 | Board beat: "outscores a 27B teacher" | **Aggregate index: Rethink 73.1% (areas) / 76.4% (benchmarks) vs mammoth-1 27B 67.4% / 70.6% vs Clef-flash 9B 60.6% / 65.1%**; disk **0.48 GB vs 6.80 vs 55.62 GB** ("14× smaller"); latency p50 geomean **1.6 ms vs 681 ms vs 2506 ms** ("faster 6/6, own encoder 21×–36×"); Rethink serves **6/8 suites, 2 fallback** | 🔴 LIVE board page (the owner's screenshot; republish before capture) + `riir-rethink/AGENTS.md` sizing FAQ (Q8 447.7 MB ≈ 0.48 GB) |
-| P8 | Per-suite gaps published | 11 suites still trail (worst: hellaswag −57.7, winogrande −23.4; closest: ag_news −0.2) — shown on the board on purpose | same board; `riir-rethink/.benchmarks/096`, `086`, `087` |
+| P6 | "answers in under a millisecond" | G2 gate p99 ≤ 1 ms per decision set; measured p50 0.024–0.762 ms across 13 reflex harness suites (its own suite set); cheap-lane p50 84–391 µs | `riir-reflex/benches/decision_set_goat.rs`, `riir-reflex/.benchmarks/137_modelless_timing_quiet/RECORD.md` |
+| P7 | Board beat: "outscores a 27B teacher" | **Aggregate index: Rethink 73.1% (areas) / 76.4% (benchmarks) vs mammoth-1 27B 67.4% / 70.6% vs Clef-flash 9B 60.6% / 65.1%**; disk **0.48 GB vs 6.80 vs 55.62 GB** → vs the 27B = **~116× smaller**, vs the 9B = 14× (never swap the two ratios); latency p50 geomean **1.6 ms vs 681 ms vs 2506 ms** → ~1567× **at the median only** (escalated-path multiple is far lower — own-encoder 21×–36×; never quote >1000× without "at the median"); Rethink serves **6/8 board spokes, 2 fallback**. ⚠ **Evaluation regime UNPINNED** — confirm from rethink bench records how the teacher was run (zero-/few-shot) before recording; the VO scopes the claim to "the public classification suites" and names datasets on screen | 🔴 LIVE board page (owner's screenshot; republish before capture; capture the URL for the on-screen chip) + `riir-rethink/AGENTS.md` sizing FAQ (Q8 447.7 MB ≈ 0.48 GB) |
+| P8 | Per-suite gaps published | **Two suite sets — never mix them on screen:** the board = 8 benchmark spokes (ag_news, massive_intent_en, banking77, sst5, emotion, xnli_en, prompt_injections, typed_decisions); the wider record set trails on 11 suites (worst hellaswag −57.7, winogrande −23.4; closest ag_news −0.2, incl. thai_wisesight/thai_sib200 + the JDI suites). On-screen gap table = the board's own per-spoke display only | same board; `riir-rethink/.benchmarks/096`, `086`, `087` |
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
 | P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
 | P12 | Corpus: "1,669 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,669 rules / 8 domains** (clippy 120 + rust_perf 338 + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + ane-preview 6); history first row **2026-08-28: 562**; growth ≈ **99–100 rules/week** | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
 | P13 | Heal rate: "85% then, 96 now, 254 runs" | 🔴 score-bench `heal_rate`: first recorded run **84.6%** (2026-08-19) → latest **96.4%**, parse-safety 1.0, **254 recorded runs**; say the trend, never "increases each day" | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
 | P14 | Distribution | **crates.io `cargo-refine` 0.5.1 (2026-11-11)**; GitHub releases + Homebrew tap + Scoop bucket (Sept 2026) | `riir-refine/AGENTS.md` §Open posture, issue 221 |
-| P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — say "our first upstream fix was merged", NEVER "the AI wrote it" (owner verdict: goodwill class); **#3025 open, CI 50 pass / 0 fail** | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
+| P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — **written by hand** (owner verdict: goodwill class; say "our first upstream fix, written by hand", NEVER "the AI wrote it"); **#3025 open, CI 50 pass / 0 fail** — ⚠ **provenance UNPINNED (tool-found vs hand-written)**: confirm before any "a second" VO line; until pinned it stays an ON-SCREEN CHIP ONLY | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
 | P16 | Transparency sentence | contribution points non-transferable, expiring, no cash value; **not a blockchain**: per-op conservation invariant `Σ balances + healed + expired == reservoir + topups` (test-pinned + Lean-proven `Kat/Tuna.lean`), per-epoch Merkle anchor roots published hourly (`GET /points/anchor` 200-verified); resettable client UUID, hardware fingerprinting refused | Proposal 025 §points plane; `riir-dapps/AGENTS.md`, `.proofs/RiirDappsProof/Kat/Tuna.lean` |
 | P17 | The ask | $300K: ~60% people (2–3 contributors), ~15% pilot, ~15% infra+audit, ~10% contingency; GPU spend = training the decision tier (W7) + our corpus production lane; fleet tooling opens MIT; never imply paid "fixer nodes" (uptime earns 0 points by design) | Proposal 025 §Year-1 workplan |
 
@@ -73,6 +101,13 @@ recording day (the corpus and board move weekly).
 - **Structure = before/after, three acts, 1-2-3 + close:** (1) the substrate that distills
   papers into proven small primitives, (2) the decision stack that beats bigger models on the
   public board, (3) the product already in daily production — then the ask.
+- **Cohort fit (silent, for the owner's confidence — not spoken):** the three preselected
+  anchor projects (Tiles: small local models + offline installers + open governance;
+  Family Intelligence: local-first memory you can export and verify; DAIR: shared
+  values-aligned compute + published operator guides) are all the same species as cargo
+  refine — local-first, small, community-governed, open. The video's beats (offline binary,
+  local repair memory you can inspect and purge, MIT corpus + authoring/governance guides)
+  speak the anchors' language without naming them.
 - **Style:** near-black blue field `#0B0E14`, paper-white text `#E8ECF3`, ONE accent amber
   `#FFB454`; red `#E5484D` reserved for "before"/loss, green `#3DD68C` for "after"/pass.
   Grotesk for prose (Inter, OFL), mono for every number and terminal (JetBrains Mono, OFL) —
@@ -95,67 +130,64 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | id | t (target) | VO (see §5) | On-screen | Graphics + motion prompt |
 |---|---|---|---|---|
 | S01 | 0:00–0:09 | hook | `BEFORE: subscription · datacenter · your code uploaded` / `AFTER: offline · free · code stays` | Diagonal split. Left card red-tinted: cloud, `$` and upload-arrow icons drop in staggered; right card dark: unplugged-plug icon springs in. Wipe resolves left→right on "We built the opposite." |
-| S02 | 0:09–0:16 | corpus-is-model | `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
-| S03 | 0:16–0:26 | katgpt-rs | `katgpt-rs · MIT · github.com/katopz/katgpt-rs` + ticker `580+ papers` | Live capture: README GOAT-table slow scroll (or crates.io katgpt-core page). Ticker counts 0→580+ in mono. Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
-| S04 | 0:26–0:36 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
-| S05 | 0:36–0:45 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram: query card slides in → fast lane (stopwatch icon spins to `0.4 ms`) → amber `abstain` branch lights on "doesn't know". Labels `choice / score / noul` under the wire. |
-| S06 | 0:45–0:58 | board beat | Live board + side bars: `0.48 GB vs 6.8 vs 55.6` · `1.6 ms vs 681 ms vs 2506 ms` | Live capture of the board page, Rethink row highlighted with the accent. Bars grow on the numbers (log axis like the site); footnote chip: `per-suite gaps: published ↓` and the 11-row gap table ghosts in small at the bottom for 2 s. |
-| S07 | 0:58–1:06 | method | `pre-register → commit → one frozen read → Wilson bounds` | Horizontal pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). |
-| S08 | 1:06–1:15 | refine production | `cargo refine` terminal + `13 repos name it the default` | Live capture: `cargo refine` dry-run scrolling findings in a terminal frame. A constellation of 13 repo chips lights up around it, one per beat. |
-| S09 | 1:15–1:26 | flywheel | `scan → retrieve → draft → compile-gate → record → learn` + `opt-in share · secret-scanned` | Redraw of the site's flywheel as 6 nodes on a ring, rotating slowly; the compile-gate node flashes ✓ and once ✗→revert; the share branch (dashed, dimmer) unlocks only when an `opt-in` toggle flips. |
-| S10 | 1:26–1:37 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
-| S11 | 1:37–1:46 | upstream | `mozilla/sccache #2977 MERGED · 6 review rounds` · `#3025 CI 50 ✓ 0 ✗` + `crates.io · brew · scoop` | Two PR cards slide in; a green `MERGED` stamp hits #2977; #3025 shows a green CI row typing `50 passed, 0 failed`. Three installer badges underline at the end. |
-| S12 | 1:46–1:55 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
-| S13 | 1:55–2:08 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + `GPU: decision tier + corpus` | Donut segments sweep in; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
-| END | 2:08–2:12 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` | Quiet end card, one fade, nothing else moves. |
+| S02 | 0:09–0:15 | corpus-is-model | `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
+| S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Live capture: README GOAT-table slow scroll (or crates.io katgpt-core page). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
+| S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
+| S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram: query card slides in → fast lane (stopwatch icon spins to `0.4 ms`) → amber `abstain` branch lights on "doesn't know". Labels `choice / score / noul` under the wire. |
+| S06 | 0:41–0:53 | board beat | Live board + chip `board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` | Live capture of the board page, Rethink row highlighted with the accent. Bars grow on the numbers (log axis like the site); dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the board's own gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
+| S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
+| S08 | 0:57–1:05 | refine production | `cargo refine` terminal + `13 of our own repos name it the default` | Live capture: `cargo refine` dry-run scrolling findings in a terminal frame. A constellation of 13 repo chips lights up around it, one per beat. |
+| S09 | 1:05–1:15 | flywheel | `scan → retrieve → draft → compile-gate → record → learn` + `opt-in share · secret-scanned` | Redraw of the site's flywheel as 6 nodes on a ring, rotating slowly; the compile-gate node flashes ✓ and once ✗→revert; the share branch (dashed, dimmer) unlocks only when an `opt-in` toggle flips. |
+| S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
+| S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` (+ chip `#3025 CI 50 ✓ 0 ✗` only if P15 provenance gets pinned) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only, and only after the provenance pin. |
+| S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
+| S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
+| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` (+ `narration: [owner name]` — or a TTS disclosure line if Option B ever ships) | Quiet end card, one fade, nothing else moves. |
 
-## 5. Full VO script (the transcription — 331 words, target ≤ 2:08)
+## 5. Full VO script (the transcription — 297 words, hard 2:00)
 
 > S01 — Cloud AI fixes your code — for a subscription, on a datacenter, with your source
 > leaving the machine. We built the opposite.
 >
 > S02 — cargo refine heals code with no model in the hot path. The corpus is the model.
 >
-> S03 — Our substrate, katgpt-rs — public, MIT — distills five hundred eighty published
-> papers into ninety-plus gated Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
+> S03 — katgpt-rs — public, MIT — studied five hundred eighty papers; ninety-plus survived
+> the gates as Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
 >
-> S04 — Every lane earns default-on through a GOAT gate: correctness, measured speed, no
-> regressions, zero allocations. One sixty-one shipped on. Fifty-seven theorems
-> machine-checked in Lean.
+> S04 — Each lane earns default-on through a GOAT gate — correctness, speed, no regressions,
+> zero allocations. One sixty-one features on; fifty-seven theorems machine-checked in Lean.
 >
-> S05 — The same substrate powers our decision stack — reflex, instinct, and the trained
-> tier, Rethink. The modelless lane answers in under a millisecond — and abstains when it
-> doesn't know.
+> S05 — That substrate also powers our decision stack — reflex, instinct, Rethink. It
+> answers in under a millisecond, and abstains when it doesn't know.
 >
-> S06 — Where it abstains, it escalates sparingly. On our public board, this half-gigabyte
-> stack outscores a twenty-seven-billion-parameter teacher — one-fourteenth the disk, a
-> thousand times faster — and the gaps we haven't closed are published too.
+> S06 — Where it abstains, it escalates sparingly. Our board is public: this half-gigabyte
+> stack outscores a twenty-seven-billion-parameter teacher — over a hundred times smaller,
+> a thousand times faster at the median — gaps published.
 >
-> S07 — Every number is a paired A-B on one frozen read, pre-registered and Wilson-bounded.
-> Levers that miss the bar are demoted — in public.
+> S07 — (no VO — the method pipeline plays on screen over music)
 >
-> S08 — That discipline became cargo refine: our default lint fixer in daily production
-> since August — thirteen repos' contracts name it, including a private game in production.
+> S08 — That discipline became cargo refine: the default lint fixer in daily production
+> since August — thirteen of our own repos name it.
 >
-> S09 — It writes a fix only if your crate still compiles, learns what worked, and — only
-> if you opt in — shares secret-scanned fix records that improve every machine.
+> S09 — It writes a fix only if your crate still compiles, learns what worked — and only if
+> you opt in, shares secret-scanned fixes that improve every machine.
 >
 > S10 — The corpus: sixteen sixty-nine rules, eight domains — from five sixty-two in August,
-> a hundred new rules a week. Bench heal rate: eighty-five percent then, ninety-six now.
+> a hundred new a week. Bench heal rate: eighty-five then, ninety-six now.
 >
-> S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream fix — to Mozilla's
-> own sccache — merged after six review rounds; a second is green today.
+> S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream fix — written by
+> hand, to Mozilla's own sccache — merged after six review rounds.
 >
-> S12 — Contribution points are reputation — never payment. No blockchain: every point is
-> conserved per operation and anchored in public Merkle roots. Hardware fingerprinting?
-> Refused by design.
+> S12 — Contribution points are reputation — never payment. No blockchain: every point
+> conserved per operation, anchored in public Merkle roots. Fingerprinting? Refused by
+> design.
 >
-> S13 — The grant funds three contributors, a pilot for developers the cloud economy leaves
-> out, and the GPU behind it — the decision tier and the corpus. Small by design. Yours by
-> default.
+> S13 — Today it's one engineer — and no external users yet; we say so. The grant funds two
+> to three contributors, a recruiting pilot, and the GPU behind the decision tier. Small by
+> design. Yours by default.
 
-Trim candidates if VO runs long: S06 "a thousand times faster" → "fifteen hundred times
-faster" is wrong direction — cut "too" at the end; S13 cut "and the corpus".
+If VO still runs past 2:00: cut S13 "and the GPU behind the decision tier" last — never
+restore the S07 VO.
 
 ## 6. Captions (subtitle-ready)
 
@@ -178,69 +210,70 @@ faster" is wrong direction — cut "too" at the end; S13 cut "and the corpus".
 Cloud AI fixes your code — for a subscription, on a datacenter, with your source leaving the machine. We built the opposite.
 
 2
-00:00:09,400 --> 00:00:15,200
+00:00:09,400 --> 00:00:14,800
 cargo refine heals code with no model in the hot path. The corpus is the model.
 
 3
-00:00:16,400 --> 00:00:25,200
-Our substrate, katgpt-rs — public, MIT — distills 580 published papers into 90-plus gated Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
+00:00:15,400 --> 00:00:23,800
+katgpt-rs — public, MIT — studied 580 papers; 90-plus survived the gates as Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
 
 4
-00:00:26,400 --> 00:00:35,200
-Every lane earns default-on through a GOAT gate: correctness, measured speed, no regressions, zero allocations. 161 shipped on. 57 theorems machine-checked in Lean.
+00:00:24,400 --> 00:00:32,800
+Each lane earns default-on through a GOAT gate — correctness, speed, no regressions, zero allocations. 161 features on; 57 theorems machine-checked in Lean.
 
 5
-00:00:36,400 --> 00:00:44,200
-The same substrate powers our decision stack — reflex, instinct, and the trained tier, Rethink. The modelless lane answers in under a millisecond — and abstains when it doesn't know.
+00:00:33,400 --> 00:00:40,800
+That substrate also powers our decision stack — reflex, instinct, Rethink. It answers in under a millisecond, and abstains when it doesn't know.
 
 6
-00:00:45,400 --> 00:00:57,200
-Where it abstains, it escalates sparingly. On our public board, this half-gigabyte stack outscores a 27-billion-parameter teacher — one-fourteenth the disk, a thousand times faster — and the gaps we haven't closed are published too.
+00:00:41,400 --> 00:00:52,800
+Where it abstains, it escalates sparingly. Our board is public: this half-gigabyte stack outscores a 27-billion-parameter teacher — over a hundred times smaller, a thousand times faster at the median — gaps published.
 
 7
-00:00:58,400 --> 00:01:05,200
-Every number is a paired A/B on one frozen read, pre-registered and Wilson-bounded. Levers that miss the bar are demoted — in public.
+00:00:57,400 --> 00:01:04,800
+That discipline became cargo refine: the default lint fixer in daily production since August — 13 of our own repos name it.
 
 8
-00:01:06,400 --> 00:01:14,200
-That discipline became cargo refine: our default lint fixer in daily production since August — 13 repos' contracts name it, including a private game in production.
+00:01:05,400 --> 00:01:14,800
+It writes a fix only if your crate still compiles, learns what worked — and only if you opt in, shares secret-scanned fixes that improve every machine.
 
 9
-00:01:15,400 --> 00:01:25,200
-It writes a fix only if your crate still compiles, learns what worked, and — only if you opt in — shares secret-scanned fix records that improve every machine.
+00:01:15,400 --> 00:01:23,800
+The corpus: 1,669 rules, 8 domains — from 562 in August, a hundred new a week. Bench heal rate: 85 then, 96 now.
 
 10
-00:01:26,400 --> 00:01:36,200
-The corpus: 1,669 rules, 8 domains — from 562 in August, a hundred new rules a week. Bench heal rate: 85 percent then, 96 now.
+00:01:24,400 --> 00:01:31,800
+It's on crates.io, Homebrew, and Scoop. Our first upstream fix — written by hand, to Mozilla's own sccache — merged after six review rounds.
 
 11
-00:01:37,400 --> 00:01:45,200
-It's on crates.io, Homebrew, and Scoop. Our first upstream fix — to Mozilla's own sccache — merged after six review rounds; a second is green today.
+00:01:32,400 --> 00:01:39,800
+Contribution points are reputation — never payment. No blockchain: every point conserved per operation, anchored in public Merkle roots. Fingerprinting? Refused by design.
 
 12
-00:01:46,400 --> 00:01:54,200
-Contribution points are reputation — never payment. No blockchain: every point is conserved per operation and anchored in public Merkle roots. Hardware fingerprinting? Refused by design.
-
-13
-00:01:55,400 --> 00:02:07,400
-The grant funds three contributors, a pilot for developers the cloud economy leaves out, and the GPU behind it — the decision tier and the corpus. Small by design. Yours by default.
+00:01:40,400 --> 00:01:51,800
+Today it's one engineer — and no external users yet; we say so. The grant funds two to three contributors, a recruiting pilot, and the GPU behind the decision tier. Small by design. Yours by default.
 ```
+
+(12 cues — S07 carries no VO; shift all timings to the real VO after recording.)
 
 ## 7. Voiceover — recommendation + pipeline
 
 **Recommendation: Option A — the owner records it.** The reviewer brief says *"hear directly
-from the team"*; a real voice is also the honest answer to "who is behind this". Phone-memo
-quality is explicitly fine ("does not need to be polished"). Record per scene (13 short takes,
-not one long read — retakes stay cheap), quiet room, phone 20 cm away, read the §5 lines as
-written. Name the files `vo_s01.wav` … `vo_s13.wav`.
+from the team"*; Proposal 025's Team answer says the project is built by one principal
+engineer — so "the team's voice" IS the owner's voice, and TTS in the shipping cut defeats
+the stated purpose of the video. Phone-memo quality is explicitly fine ("does not need to be
+polished"). Record per scene (12 short takes, not one long read — retakes stay cheap), quiet
+room, phone 20 cm away, read the §5 lines as written. Name the files `vo_s01.wav` …
+`vo_s13.wav` (S07 has none).
 
-Fallbacks:
+Fallbacks — **scratch-track only** (for timing the cut before the owner records; never the
+shipping voice):
 - **Option B — Kokoro-82M** (open weights, Apache-2.0, runs CPU via onnx; HF:
-  hexgrad/Kokoro-82M). Free, offline, decent. Disclose nothing (TTS narration is normal for
-  product videos; Mozilla's AI policy governs the written application prose, which stays
-  owner-voiced per Proposal 025 §Compliance).
+  hexgrad/Kokoro-82M). Free, offline, decent.
 - **Option C — ElevenLabs** (best quality, paid, cloud; send the script text only — no code).
-- Not recommended: macOS `say` (robotic).
+- ⚠ If TTS ever reached the shipping cut anyway, it MUST be disclosed on the end card or in
+  the link description — undisclosed synthetic narration in a video about trustworthy AI is
+  an unpriced credibility risk for zero gain. macOS `say`: not at all.
 
 **Pipeline (either option):**
 1. Produce the 13 VO files → drop into `media/`.
