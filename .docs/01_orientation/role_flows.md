@@ -40,7 +40,7 @@ flowchart LR
 |---|---|
 | **Does** | install (prebuilt binary → `~/.cargo/bin`) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine fix` (compile-gated writes; divergence classes stay manual). Optional: login — creates the account + the TUNA trial grant. |
 | **Gets** | healed code across the domains: clippy lints + compile errors, perf, security, Dockerfiles, kernel/rust-perf rules, dist advice. Plus the local self-evolve loop (memory always; learning when the oracle is present). |
-| **Pays** | **lite: nothing** — anonymous, free forever, outside the economy (nothing is uploaded, nothing is billed). **Logged in:** the burn meter — 1 KAT-equivalent per million code-word tokens, TUNA trial credit first. Depleted + never contributed → the 075 soft gate refuses scanning until you contribute or top up. |
+| **Pays** | **lite: nothing** — anonymous, free forever, outside the economy (nothing is uploaded, nothing is billed). **Logged in:** hosted-lane metering — 1 KAT-equivalent per million code words, TUNA trial credit first; the heal path itself stays free. Depleted + never contributed → the 075 soft gate refuses scanning until you contribute or top up. |
 
 The miner tab's join step upgrades the same install to **pro** — one
 binary, two postures.
@@ -82,7 +82,7 @@ title = "Fixed code"; body = "clippy · perf · docker · dist + compile errors"
 status = "live"
 [[step]]
 id = "meter"; n = "4b"; lane = "bill"; col = 3
-title = "The burn meter"; body = "1 KAT-equiv / 1M tokens; TUNA first where funded"
+title = "Hosted-lane metering"; body = "1 KAT-equiv / 1M code words; TUNA first where funded"
 status = "live"
 
 [[edge]]
@@ -111,8 +111,8 @@ title = "What you get"
 text  = "Healed code across the shipped domains — clippy lints, compile errors, Rust perf, Dockerfiles, release profiles — plus the local self-evolve loop: memory always records, learning runs when the oracle is present."
 steps = ["get"]
 [[walk]]
-title = "What a logged-in run costs"
-text  = "The meter counts code-word tokens and bills one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed burn report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code."
+title = "What a logged-in run reports"
+text  = "Hosted-lane metering counts code words at one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed run report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code."
 steps = ["meter"]
 ```
 
@@ -124,7 +124,7 @@ flowchart LR
     RUN --> PUSH["sync — rule verdicts + counters<br/>never source · never paths · signed"]
     PUSH --> PROOF["proof queue<br/>verified at a real clippy re-run"]
     PROOF --> SETTLE["GET — KAT at the epoch settle<br/>70% of every KAT the network burns<br/>≤ 7 days from a push"]
-    RUN -.-> COST["COST — your own fix burn<br/>+ consent: redacted verdicts leave the machine"]
+    RUN -.-> COST["COST — your own hosted-lane metering<br/>+ consent: redacted verdicts leave the machine"]
     SETTLE -.-> LIFT["contributed = never re-gated<br/>while depleted"]
     PROOF --> GROW["fleet corpus grows"]
     GROW -.->|"leased back"| RUN
@@ -132,9 +132,9 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | `cargo refine join` once (the contribution surface; `--mine` was removed 2026-11-06 per the vocabulary law). The consent record + `sync` push the redacted batch; the burn reports automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
-| **Gets** | mining KAT — the only earn class that settles today: rows enter the proof queue on push, are verified at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a miner. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
-| **Pays** | your own fix burn (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. a persisted opt-out record (historically `--unmine`, removed 2026-11-06; `cargo refine offline` is the firewall) stops the push half (the lease pull half still runs — a read is not a contribution); fixing was always local. |
+| **Does** | `cargo refine join` once (the contribution surface; `--mine` was removed 2026-11-06 per the vocabulary law). The consent record + `sync` push the redacted batch; the run report posts automatically after each run (accounting, not a consent gate) and offline runs stack locally. |
+| **Gets** | contribution KAT — the only earn class that settles today: rows enter the proof queue on push, are verified at the proof pass (a real clippy re-run), and pay at the epoch settle, funded by **70% of every KAT the network burns**. Every leaderboard row is a contributor. Contributed accounts are never re-gated while depleted. And the fleet corpus leases back — the network's observed pattern classes improve your own healer's retrieval. |
+| **Pays** | your own hosted-lane metering (same meter as the coder) · consent: only `sync` uploads, and only a redacted batch — rule verdicts and counters, never source, never paths — signed with your account key. a persisted opt-out record (historically `--unmine`, removed 2026-11-06; `cargo refine offline` is the firewall) stops the push half (the lease pull half still runs — a read is not a contribution); fixing was always local. |
 
 ### The miner render source (renders `role_miner_flow.svg`)
 
@@ -381,7 +381,7 @@ is the full spec):
   tokens at a fixed µ rate. The SERVER decides which tank pays, always
   in the same order: TUNA trial credit first (heals only, expires), then
   KAT. A depleted TUNA tank hands off mid-report automatically.
-- **Offline: nothing is debited anywhere.** The burn is a local commit;
+- **Offline: nothing is debited anywhere.** The run report is a local commit;
   the next run (or `cargo refine sync`) pushes the full cumulative total,
   and the server decides the plane then. The monotone watermark makes
   replays no-ops.
@@ -515,8 +515,8 @@ steps = ["lease"]
 | role | tier | does | gets | pays | status |
 |---|---|---|---|---|---|
 | coder | lite | dry run + fix, anonymous | fixed code (clippy · perf · docker · dist · compile errors; sec is preview, not in the release) | nothing — free forever | shipped |
-| coder | pro (login) | same install, logged in | + the TUNA trial grant, the balance surfaces | the burn meter (TUNA first) | shipped |
-| miner | pro | `join` + `sync`; auto-push redacted batches | 70% pool share at the epoch settle · never re-gated · corpus lease-back | own burn + consent | shipped |
+| coder | pro (login) | same install, logged in | + the TUNA trial grant, the balance surfaces | hosted-lane metering (TUNA first) | shipped |
+| miner | pro | `join` + `sync`; auto-push redacted batches | 70% pool share at the epoch settle · never re-gated · corpus lease-back | own metering + consent | shipped |
 | fixer | max | operator drain lane over the unproven queue | settles through the miner rows | CPU box + free-leg API / CF cap | operator lane live · replay designed (P015), does **not** settle |
 | trainer | ultra | stake 1K KAT; host the daily window | endorsements + epoch pool share (designed) | rig + run-window billing + stake | **ours only at launch** |
 

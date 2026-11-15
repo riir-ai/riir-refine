@@ -542,17 +542,48 @@ takes get the measured silence-trim pass, and the gate re-measures.
 → gate ≈ 123.2 s pessimistic; fresh-rate scaling says ≈ 105 s VO → ≈ 114.7 s optimistic;
 the measured trim pass (−2.2 s) applies to either. **Emergency ladder (pre-approved with
 this draft — applied in order, only while the measured gate is over 120 s; regeneration
-per rung, no further approval round-trip):**
+per rung, no further approval round-trip):** E1 + E2 APPLIED 2026-11-15 (v3 retakes: s10 10.59 s, s13 12.49 s). **GATE CLOSED (r12, 2026-11-15): v2+v3 takes total 111.91 s raw → 109.96 s after the measured silence-trim (0.25 s keep) → gate total 119.66 s ≤ 120 ✓.** Owner direction r12 applied in the same batch: the points beat minimized (S12 VO = "Contribution points are reputation, no cash value, never payment. Fingerprinting: refused." — conservation/Merkle ride the visuals), fix+train emphasized (S09 keeps "remembers what worked", S10 keeps "a hundred new a week"); final script = 216 words + E1/E2. E3–E5 remain the standing reserve if any retake re-opens the gate.
 
-- **E1** — S10: drop "held since August" (−1.4 s) → chip `96.4% · held since August` carries it
-- **E2** — S13: "The grant funds" → "It funds" (−1.1 s) → the donut + honesty chips carry the ask
-- **E3** — S06: drop "It escalates sparingly" (−1.4 s) → S05's abstain beat + S06's escalation visuals carry it; ⚠ the FAQ large-model justification then rides the on-screen chip — if E3 fires, add `escalates sparingly` as an S06 chip in the build
-- **E4** — S04: drop "machine-checked" (−0.6 s) → screen `57 Lean theorems ✓`
-- **E5** — S02: drop "no giant model" (−1.6 s) → screen `not a giant model`
+### r13 — BUILD LANDED + the no-gates decree (2026-11-15 late evening)
 
-E1+E2 alone cover the pessimistic tail (123.2 − 2.2 trim − 2.5 = 118.5 ✓). E3–E5 are the
-reserve. If the owner restores any dropped line (e.g. S11's channel list), name which E-rung
-pre-spends to keep the gate.
+**Owner decree (in-session, verbatim intent): no more owner gates — everything already
+approved ("lgtm since start"); anything that would have been owner-gated goes to a Claude
+verdict instead; owner asleep, expects the FINISHED video on wake.** Under that decree:
+
+- **§9 inputs resolved agent-side:** S08's terminal text = a REAL `cargo refine crates/`
+  run on seal-std @ develop (m3, 2026-11-15, isolated target dir), lines VERBATIM from
+  the raw output (command + one finding block + the five summary lines; order rearranged
+  for the scene, content untouched); provenance disclosed here — the owner can re-run and
+  swap `assets/refine_dryrun.txt` 1:1. Board chip = `rethink.riir.ai` (real public
+  domain; the republish/screenshot step stays a recording-day task). S13 stays TTS.
+- **Video built:** fframes 1.4 project at `~/git/mozilla-video/` (14 scenes, one per §4
+  row + end card; every number = a §2 pin: P1 580, P2 90+, P3 161, P4 57, P6 <1 ms +
+  p50 24–762 µs, P7's 0.48/6.80/55.62 GB + 73.1/76.4 vs 67.4/70.6 vs 60.6/65.1 +
+  ~116×/~1500× median + gaps row, P8 spokes, P11's 17-repo grep, P12 1,673/8 + ~100/wk,
+  P13 96.4% FLAT + n=35, P14 badges, P15 #2977 MERGED + #3025 chip, P16 equation +
+  hourly anchors + fingerprinting refused, P17 donut 60/15/15/10, P18 0 LLM calls).
+  inspect CLEAN; strips reviewed per scene; audio −14.6 LUFS, true peak −0.9 dBTP,
+  0 clipped, silence only in S07's breather + end tail; captions.srt written (12
+  scene-level cues, times measured from the takes — no synthesized word timing).
+- **Encode gate:** the prebuilt ffmpeg dist links x264_encoder_open_165 vs homebrew's
+  164 → videotoolbox tried first (fails mid-render at random chunks, two tries, two
+  different chunks) → building ffmpeg + libx264 from source (FFMPEG_FORCE_BUILD,
+  compiles against homebrew's current x264 = one ABI). Render command ready.
+- **Banned-word sweep (pre-ship gate i) PARTIAL:** live sites swept — refine.riir.ai
+  carried the old "burn meter" flow figure (rendered from role_flows.md's gfflow
+  block); role_flows.md migrated to the v4 points posture ("hosted-lane metering"),
+  figures re-rendered into riir-dapps' assets (commit pending THERE by a dapps-side
+  session — the .svg/.walk.json changes sit uncommitted in riir-dapps' tree).
+  The site FAQ's one "mining" question + legal.rs metering prose left as-is
+  (user-quoted vocabulary / careful legal framing — flagged for the owner, not
+  video-blocking). NOT yet swept: the four sites' subpages + public doc deep pages
+  (post-render task).
+- **Build/link arc (for the next session reading this):** fframes-media pinned =1.4.0
+  (1.4.1 breaks fframes 1.4.0's types); include_media_dir! indexes TOP-LEVEL files only
+  (no subdirs) and rejects .txt (the dry-run text lives at assets/refine_dryrun.txt);
+  AudioTimestamp::Eof needs Preloaded audio the static provider doesn't give — use
+  explicit Second(start)..Second(end); videotoolbox encode fails mid-render on this
+  box; libx264 needs the source-built ffmpeg (FFMPEG_FORCE_BUILD=1) on homebrew r3108.
 
 ## 6. Captions (subtitle-ready)
 
