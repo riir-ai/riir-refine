@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1 = bmo + mlx-community 4-bit) · r3 CFP-comparison verdict = **REVISE** — all edits applied (§0; verdict session capped at 3 rounds) · r4 owner direction 2026-11-15: **neuro-symbolic positioning** (alongside tools/LLMs, never a replacement; humans + AI agents; zero-token cost beat) + #3025 provenance pinned (found by cargo refine, fixed by AI llm) — S02/S08/S09/S10/S11 updated, ranked cut 1 pre-applied
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1 = bmo + mlx-community 4-bit) · r3 CFP-comparison verdict = **REVISE** — all edits applied (§0; verdict session capped at 3 rounds) · r4 owner direction 2026-11-15: **neuro-symbolic positioning** (alongside tools/LLMs, never a replacement; humans + AI agents; zero-token cost beat) + #3025 provenance pinned (found by cargo refine, fixed by AI llm) — S02/S08/S09/S10/S11 updated, ranked cut 1 pre-applied · r4.1: cost claim made DIRECT (cost saving at every step — 0 tokens, 0 agent calls; zero spend needs no baseline) · r4.2: recent-git coverage pass — P12 1,669 → **1,673** (Batch 363 rust_perf +4), ane = the opt-in 8th domain, P13/P15/P14 re-verified current
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -90,6 +90,19 @@ These VO edits are owner-directed (pre-approved). Owner clarification (same day)
 claim is DIRECT — every fix is cost saving by construction, because no online agent is called
 at any step; no number is needed or wanted (zero spend IS the number).
 
+**r4.2 — recent-git coverage pass** (2026-11-15, owner warning "beware the ane domain, ensure
+all new in git recently is covered"): every pin re-derived from its source of truth TODAY.
+Moved: **P12 1,669 → 1,673** (rust_perf 338 → 342, Batch 363 `009394b7`; the manifest pins
+"health total 1673") + the 8th domain's label corrected to **ane** (`ane_rules: 6`, Plan 377,
+opt-in — NOT default, NOT in the shipped release set; the video never implies otherwise).
+Re-verified CURRENT (no change): P13 — exactly **254** recorded score-bench runs, first
+84.6% → last **96.4%** (2026-11-13, parse_safety 1.0); P15 — #3025 still clean **CI 50 ✓ 0 ✗**
+(outcome poll `ffaaeb9e`, 11-15); P14 — crates.io 0.5.1 stands. Also on the radar from the
+recent log: issue 190's T10 no-submit signal re-read is owed at the **11-17 gate** — the same
+day as this plan's P7 degrade-rule deadline (one combined fact-freshness pass that day);
+issues 234 (steer_retry) and 233 (calibrated_dispatch) are opt-in features outside every video
+claim; issue 237 closed negative (bench-only lane, no video surface).
+
 ## 1. What this is
 
 The two-minute video for the Mozilla Human-Scale AI Incubator application
@@ -126,7 +139,7 @@ recording day (the corpus and board move weekly).
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
 | P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
-| P12 | Corpus: "1,669 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,669 rules / 8 domains** (clippy 120 + rust_perf 338 + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + ane-preview 6); history first row **2026-08-28: 562**; growth ≈ **99–100 rules/week** | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
+| P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377, OPT-IN: never imply it is default or in the shipped release set); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15) | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
 | P13 | Heal rate: "85% then, 96 now, 254 runs" | 🔴 score-bench `heal_rate`: first recorded run **84.6%** (2026-08-19) → latest **96.4%**, parse-safety 1.0, **254 recorded runs**; say the trend, never "increases each day" | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
 | P14 | Distribution | **crates.io `cargo-refine` 0.5.1 (2026-11-11)**; GitHub releases + Homebrew tap + Scoop bucket (Sept 2026) | `riir-refine/AGENTS.md` §Open posture, issue 221 |
 | P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — **written by hand** (owner verdict: goodwill class; say "our first upstream fix, written by hand", NEVER "the AI wrote it"); **#3025 open, CI 50 pass / 0 fail** — **provenance PINNED (owner, 2026-11-15): found by cargo refine, fixed by AI (llm)** — the S11 #3025 chip carries exactly that wording and doubles as the positioning proof (the tool finds; AI fixes; the alongside story in one Mozilla artifact). #2977 stays HAND-written — never "the AI wrote it" (owner verdict stands) | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
@@ -253,7 +266,7 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
 | S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` + chip `no LLM · no GPU · no account · no network at heal time` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. The real output's roll-up line ("findings by domain: clippy · perf · sec …") carries the perf + security analysis on screen (§3 positioning). Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
 | S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` + chip `for humans and AI agents alike` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
-| S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` · big counter `0 tokens · 0 agent calls` + subline `cost saving at every step` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
+| S10 | 1:15–1:24 | numbers | `562 → 1,673 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` · big counter `0 tokens · 0 agent calls` + subline `cost saving at every step` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` + chip `#3025: found by cargo refine · fixed by AI (llm) · CI 50 ✓ 0 ✗` (PINNED 2026-11-15) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only — and it is the positioning PROOF: the tool finds, AI fixes (§3). |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` · `built for: FOSS maintainers · students · devs without cloud budgets` · `sustainable: fiscal sponsor · MIT core` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
@@ -288,7 +301,7 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 > S09 — It writes a fix only if your crate still compiles, learns what worked — and only if
 > you opt in, shares secret-scanned fixes that improve every machine.
 >
-> S10 — The corpus: sixteen sixty-nine rules, eight domains — from five sixty-two in August,
+> S10 — The corpus: sixteen seventy-three rules, eight domains — from five sixty-two in August,
 > a hundred new a week. Bench heal rate: eighty-five then, ninety-six now.
 >
 > S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream fix — written by
@@ -366,7 +379,7 @@ It writes a fix only if your crate still compiles, learns what worked — and on
 
 9
 00:01:15,400 --> 00:01:23,800
-The corpus: 1,669 rules, 8 domains — from 562 in August, a hundred new a week. Bench heal rate: 85 then, 96 now.
+The corpus: 1,673 rules, 8 domains — from 562 in August, a hundred new a week. Bench heal rate: 85 then, 96 now.
 
 10
 00:01:24,400 --> 00:01:31,800
