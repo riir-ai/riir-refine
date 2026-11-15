@@ -1,5 +1,6 @@
 # Issue 232: T³ holdout-epistemology extraction — consumed-window ledger + half-split agreement readout
 **Status:** Open — fusion-idea tranche, novelty TBD (class-level prior art exists; the deltas are surface-specific) — T1–T5 all LANDED (report-only); the correlation/utility cell is the standing gate before any promotion talk
+**Claimed:** amo-idle-i232-cell-gate, 1794731000, expires 2026-11-16T15:30:00+00:00 (scope: the cell's feasibility read — accrual baseline + gate-state record; NOT the cell run itself)
 **Lease closed:** amo-idle-i232-t5, 1794605196 — T5 LANDED 2026-11-14 (was expires 2026-11-15T21:26:36+00:00, scope: T5 only)
 **Lease closed:** amo-idle-i232-t4, 1794602834 — T4 LANDED + CLOSED MEASURED-NEGATIVE 2026-11-14 (was expires 2026-11-17T20:47:14+00:00, scope: T4 only)
 **Lease closed:** amo-idle-i232-t3, 1794599383 — T3 LANDED 2026-11-14 (was expires 2026-11-17T19:49:43+00:00, scope: T3 only)
