@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes · r8 FINAL = **AGREE** (`602d8d7d`, round 3, checked at `4ea202ad`) · r9 owner direction + fact-check: the proposal subject is cargo REFINE (~32 MB binary + ~13.4 MB rule corpus — P20), not the 0.48 GB Rethink stack (mostly the LAYA Q8 checkpoint); S08/S06/§3 re-scoped, stale-size bans added · **r10 FINAL = AGREE** (`8c18bab0`, round 2, checked at `44ea7866`): dist binary re-pinned MEASURED (17.8 MB decimal / 6.48 MB archive, sha `ed181a66…`, reproduced independently by the reviewer) · **r10 probe DONE: lane 1 (amo mlx-audio) VERIFIED — S06 take on disk (18.72 s, rev `2b0c8028…`), §7 lane table finalized; owner listen-gate before batch** — nothing in the r9/r10 delta blocks owner GO · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed · **r10 RE-PINNED on m3: 17.8 MB binary / 6.48 MB archive (sha `ed181a66…`)** · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed — nothing blocks owner GO · **r11 (2026-11-15 evening): owner approved the probe voice; batch DONE 12/12 (amo job `01a1dfc9`, VO 152.36 s, gate ≈162 s vs hard 120 — pace levers measured DEAD, §5 gate note); deep-cut §5 draft v1 + pre-approved emergency ladder FILED (§5 last subsection) — awaiting owner line approval, then regenerate → trim → gate → captions → build per schedule**
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes · r8 FINAL = **AGREE** (`602d8d7d`, round 3, checked at `4ea202ad`) · r9 owner direction + fact-check: the proposal subject is cargo REFINE (~32 MB binary + ~13.4 MB rule corpus — P20), not the 0.48 GB Rethink stack (mostly the LAYA Q8 checkpoint); S08/S06/§3 re-scoped, stale-size bans added · **r10 FINAL = AGREE** (`8c18bab0`, round 2, checked at `44ea7866`): dist binary re-pinned MEASURED (17.8 MB decimal / 6.48 MB archive, sha `ed181a66…`, reproduced independently by the reviewer) · **r10 probe DONE: lane 1 (amo mlx-audio) VERIFIED — S06 take on disk (18.72 s, rev `2b0c8028…`), §7 lane table finalized; owner listen-gate before batch** — nothing in the r9/r10 delta blocks owner GO · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed · **r10 RE-PINNED on m3: 17.8 MB binary / 6.48 MB archive (sha `ed181a66…`)** · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed — nothing blocks owner GO · **r11 (2026-11-15 evening): owner approved the probe voice; batch DONE 12/12 (amo job `01a1dfc9`, VO 152.36 s, gate ≈162 s vs hard 120 — pace levers measured DEAD, §5 gate note); deep-cut §5 draft v1 + pre-approved emergency ladder FILED (§5 last subsection) — awaiting owner line approval, then regenerate → trim → gate → captions → build per schedule** · **r14 (2026-11-15 night): owner no-gates decree EXECUTED — video BUILT + RENDERED (`~/git/mozilla-video` mozilla.mp4 119.53 s, verdict REVISE blockers fixed, Claude verdict `6e494f36` recorded §5/r14); status EXECUTING under the decree, not DRAFT**
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -584,6 +584,41 @@ verdict instead; owner asleep, expects the FINISHED video on wake.** Under that 
   AudioTimestamp::Eof needs Preloaded audio the static provider doesn't give — use
   explicit Second(start)..Second(end); videotoolbox encode fails mid-render on this
   box; libx264 needs the source-built ffmpeg (FFMPEG_FORCE_BUILD=1) on homebrew r3108.
+
+  ### r14 — Claude verdict REVISE applied; render fixed + FINAL (2026-11-15 night)
+
+  **Claude verdict (session `6e494f36`, round 1): REVISE** — decisions 3 (music skip), 4
+  (scene-level captions), 5 (r12 script) AGREE; 1 (agent-run dry run) + 2 (board chip)
+  AGREE in principle with conditions. The reviewer pulled frames from the rendered mp4 and
+  found real blockers; ALL FIXED and re-rendered (mozilla-video `9bb2ae3`):
+
+  - S08 typed text never completed (34 cps × 8.6 s ≈ 275 of 1052 chars) + long lines
+    overflowed the box → replaced with a VERBATIM EXCERPT (labelled "real run · excerpt")
+    from a REAL run on **riir-refine itself** (public MIT — reviewer's condition: a
+    reviewer can reproduce it; command + one finding block + the Found/fixable summary
+    lines; the `0 corpus-covered` tail + one [heuristic] row OMITTED — never edited —
+    per the reviewer's next-to-"the corpus is the model" caution; the emoji glyphs
+    (🔍🛠️⏱) render-free because Inter/JBM lack them — words kept, glyphs dropped,
+    disclosed here). 321 chars at 44 cps completes at 7.8 s with ~1 s hold ✓.
+  - Layout collisions fixed in S02 (word x measured via frame.text_width — the
+    "learnedules" overprint; pill widened), S03 (badge clear of the 580 numeral), S04
+    (cards/counters separated), S05 (p50 beside < 1 ms; gate subtitle fits), S06 (score
+    cards restructured: name+unit small, value big; bottom chips separated), S10 (subline
+    shortened), S11 (#3025 chip fits).
+  - **End card disclosure corrected**: "script: owner-approved" → "script: owner-directed"
+    (the r12 script was finalized under the decree, not line-approved — the truthful form).
+  - Board chip: "live board" + dataset list DROPPED until the board is republished
+    (the served HTML carries none of them client-side-rendered); chip =
+    "rethink.riir.ai · per-suite gaps published".
+  - Final: `mozilla.mp4` 119.53 s, 1080p30 H.264+AAC, inspect clean, −14.6 LUFS /
+    −0.9 dBTP. Reviewer's still-open-before-ship list stands: riir-dapps flow-figure
+    commit (dapps-side), live-site subpage sweep, AI-voice disclosure in the application
+    text, whisper word-timed captions + music pick (upgrades), board republish,
+    recording-day pin re-verify.
+
+  **Status line correction (the reviewer caught it): the plan Status line still reads
+  "DRAFT — awaiting owner GO" — superseded by the owner's r12 no-gates decree; the plan is
+  EXECUTING under the decree and this r14 record.**
 
 ## 6. Captions (subtitle-ready)
 
