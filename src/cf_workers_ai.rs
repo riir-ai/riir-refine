@@ -2326,6 +2326,96 @@ impl ArmSummary {
     }
 }
 
+// ── Issue 234 T3 — the compile-gate SteerVerifier plug-in ──────────────────
+
+/// The steer-loop's verification decision from the oracle's raw verdict
+/// axes — extracted pure so the arm S tests need no cargo spawn (the
+/// adapter below is the thin `apply_edit` + `ClippyVerifier` shell around
+/// this one mapping).
+///
+/// Mapping law (the refusal feeds `guidance_from_failure`, so the category
+/// is the steering signal, never a paraphrase):
+/// - the response did not merge (`apply_edit` → `None`) → `Parse` — the
+///   student must be told its output was not a mergeable Rust edit;
+/// - cargo/clippy did not run → `Rejected` with the transport error (an
+///   infrastructure failure is still a verification refusal — the loop
+///   steers on it and the deadline/budget laws bound the retries);
+/// - ran but the merged module did not compile → `Rejected` (clause (a)'s
+///   trust rule: an empty lint list off a compile failure is not a
+///   resolution);
+/// - ran, compiled, and `clippy::<rule_id>` still present → `Rejected`;
+/// - otherwise → `Verified`.
+#[cfg(feature = "steer_retry")]
+#[must_use]
+pub fn steer_verdict_from_oracle(
+    ran: bool,
+    compiled: bool,
+    error: Option<String>,
+) -> crate::steer_retry::SteerVerdict {
+    use crate::steer_retry::{SteerFailure, SteerFailureCategory, SteerVerdict};
+    if !ran {
+        return SteerVerdict::Failed(SteerFailure {
+            category: SteerFailureCategory::Rejected,
+            detail: error.unwrap_or_else(|| "the oracle did not run".to_string()),
+        });
+    }
+    if !compiled {
+        return SteerVerdict::Failed(SteerFailure {
+            category: SteerFailureCategory::Rejected,
+            detail: "the merged module did not compile under the oracle".to_string(),
+        });
+    }
+    SteerVerdict::Verified
+}
+
+/// The compile-gate [`crate::steer_retry::SteerVerifier`] arm S runs the
+/// steer loop under: merge the candidate into the buggy module
+/// ([`apply_edit`] — the same merge ladder every scored arm trusts), then
+/// ask the real oracle whether the target lint still fires on the result.
+/// The µs ladder ([`crate::steer_retry::ParseVerifier`]) stays the loop's
+/// in-crate default; this is T3's priced plug-in on the same trait.
+///
+/// One oracle call per steered attempt is SECONDS, not µs — arm S reports
+/// the oracle wall beside the generation wall so the cost axes stay honest
+/// (T3's decline law prices the whole loop, verify legs included).
+#[cfg(feature = "steer_retry")]
+pub struct ClippySteerVerifier<'a> {
+    pub verifier: &'a ClippyVerifier,
+    /// [`apply_edit`]'s verbatim arm: reachable-fixture generations may be
+    /// whole-module replacements (`SampleSource::Reachable`); v2edit rows
+    /// never (`false`). The trait's signature carries no sample, so the
+    /// caller rebuilds this struct per case — two plain fields, not a
+    /// harness.
+    pub verbatim_ok: bool,
+}
+
+#[cfg(feature = "steer_retry")]
+impl crate::steer_retry::SteerVerifier for ClippySteerVerifier<'_> {
+    fn verify(&self, rule_id: &str, buggy: &str, fix: &str) -> crate::steer_retry::SteerVerdict {
+        use crate::steer_retry::{SteerFailure, SteerFailureCategory, SteerVerdict};
+        let Some((merged, _strategy)) = apply_edit(buggy, fix, self.verbatim_ok) else {
+            return SteerVerdict::Failed(SteerFailure {
+                category: SteerFailureCategory::Parse,
+                detail: "the response did not merge into the module (no parseable edit \
+                         strategy applied)"
+                    .to_string(),
+            });
+        };
+        let oracle = self.verifier.verify(&merged, rule_id);
+        let target_present = oracle
+            .present_lints
+            .iter()
+            .any(|l| l == &format!("clippy::{rule_id}"));
+        if oracle.ran && oracle.compiled && target_present {
+            return SteerVerdict::Failed(SteerFailure {
+                category: SteerFailureCategory::Rejected,
+                detail: format!("the target lint still fires (clippy::{rule_id})"),
+            });
+        }
+        steer_verdict_from_oracle(oracle.ran, oracle.compiled, oracle.error)
+    }
+}
+
 #[cfg(test)]
 #[path = "cf_workers_ai_tests.rs"]
 mod tests;

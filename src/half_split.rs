@@ -352,7 +352,7 @@ fn collect_rs_files(paths: &[PathBuf], out: &mut Vec<PathBuf>, skipped: &mut usi
                     children = rd
                         .filter_map(std::result::Result::ok)
                         .map(|e| e.path())
-                        .collect()
+                        .collect();
                 }
                 Err(_) => *skipped += 1,
             }

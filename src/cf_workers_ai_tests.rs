@@ -912,3 +912,95 @@ fn clip_payload_never_splits_a_utf8_char() {
     assert!(out.contains("clipped"));
     assert!(out.is_char_boundary(0));
 }
+
+// ── Issue 234 T3: the compile-gate SteerVerifier mapping (feature-gated) ──
+#[cfg(feature = "steer_retry")]
+mod steer_verdict_tests {
+    use super::*;
+    use crate::steer_retry::SteerFailureCategory;
+    use crate::steer_retry::SteerVerifier;
+
+    fn category_of(v: crate::steer_retry::SteerVerdict) -> Option<SteerFailureCategory> {
+        match v {
+            crate::steer_retry::SteerVerdict::Verified => None,
+            crate::steer_retry::SteerVerdict::Failed(f) => Some(f.category),
+        }
+    }
+
+    fn detail_of(v: crate::steer_retry::SteerVerdict) -> String {
+        match v {
+            crate::steer_retry::SteerVerdict::Verified => String::new(),
+            crate::steer_retry::SteerVerdict::Failed(f) => f.detail,
+        }
+    }
+
+    #[test]
+    fn oracle_not_run_is_rejected_with_the_transport_error() {
+        let v = crate::cf_workers_ai::steer_verdict_from_oracle(
+            false,
+            false,
+            Some("cargo missing".into()),
+        );
+        assert_eq!(category_of(v), Some(SteerFailureCategory::Rejected));
+    }
+
+    #[test]
+    fn oracle_not_run_without_error_names_the_loud_default() {
+        let v = crate::cf_workers_ai::steer_verdict_from_oracle(false, false, None);
+        match v {
+            crate::steer_retry::SteerVerdict::Failed(f) => {
+                assert_eq!(f.detail, "the oracle did not run");
+            }
+            crate::steer_retry::SteerVerdict::Verified => panic!("must refuse"),
+        }
+    }
+
+    #[test]
+    fn ran_but_not_compiled_is_rejected_by_the_trust_rule() {
+        let v = crate::cf_workers_ai::steer_verdict_from_oracle(true, false, None);
+        assert_eq!(category_of(v), Some(SteerFailureCategory::Rejected));
+    }
+
+    #[test]
+    fn ran_and_compiled_verifies() {
+        let v = crate::cf_workers_ai::steer_verdict_from_oracle(true, true, None);
+        assert!(matches!(v, crate::steer_retry::SteerVerdict::Verified));
+    }
+
+    #[test]
+    fn non_merging_response_maps_to_parse_category() {
+        // A response that merges to nothing (not Rust, not a snippet of
+        // the module) — the adapter's pre-oracle arm. apply_edit is pure
+        // (syn-based), so this needs no cargo spawn.
+        let verifier = ClippyVerifier::new();
+        let arm = crate::cf_workers_ai::ClippySteerVerifier {
+            verifier: &verifier,
+            verbatim_ok: false,
+        };
+        let buggy = "pub fn f() -> u32 { return 42; }";
+        let garbage = "this is not rust at all <<<>>>";
+        let v = arm.verify("needless_return", buggy, garbage);
+        let (cat, detail) = (category_of(v.clone()), detail_of(v));
+        assert_eq!(cat, Some(SteerFailureCategory::Parse));
+        assert!(detail.contains("did not merge"));
+    }
+
+    #[test]
+    fn whitespace_body_that_merges_to_the_same_lint_is_rejected_not_parsed() {
+        // The loop's NoEdit law catches the byte-equal echo BEFORE the
+        // adapter. A whitespace-only body here can still merge (the LCS
+        // path admits it) into a module that still fires the target lint
+        // — the honest mapping is Rejected (lint still fires), never
+        // Parse, and never a Verified.
+        let verifier = ClippyVerifier::new();
+        let arm = crate::cf_workers_ai::ClippySteerVerifier {
+            verifier: &verifier,
+            verbatim_ok: false,
+        };
+        let buggy = "pub fn f() -> u32 { return 42; }";
+        let v = arm.verify("needless_return", buggy, "   ");
+        let (cat, detail) = (category_of(v.clone()), detail_of(v));
+        assert_eq!(cat, Some(SteerFailureCategory::Rejected));
+        assert!(detail.contains("still fires"));
+    }
+}

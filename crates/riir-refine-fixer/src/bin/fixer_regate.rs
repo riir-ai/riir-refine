@@ -142,6 +142,15 @@ struct Args {
     /// The per-case escalation deadline in ms (the whole readiness-retry
     /// + wire budget; Bench 107: the lazy window ran ~100 ms under it).
     deadline_ms: u64,
+    /// Issue 234 T3 arm S: steered-round budget (the loop's max rounds;
+    /// default = the crate's STEER_RETRY_ROUNDS).
+    steer_rounds: usize,
+    /// Arm S: per-case deadline for the WHOLE steer loop in ms (checked
+    /// before each generation; 0 = none — arm C carries no deadline).
+    steer_deadline_ms: u64,
+    /// Arm S: join arm H's ledger rows by case id for the takeover axis
+    /// (report-only — this arm never spends a hosted call).
+    join_h: Option<PathBuf>,
     /// Plan 225 T1.1 (`--arm HARVEST`): cap on harvested cases (0 = the
     /// full deduped v2edit population). Separate from `--limit` (whose
     /// default 16 is the LLM arms' per-chunk semantics).
@@ -201,6 +210,12 @@ impl Args {
             esc_manifest: PathBuf::from(".refine/escalation_manifest.json"),
             esc_domain: "clippy".into(),
             deadline_ms: 2_000,
+            #[cfg(feature = "steer_retry")]
+            steer_rounds: riir_refine::steer_retry::STEER_RETRY_ROUNDS,
+            #[cfg(not(feature = "steer_retry"))]
+            steer_rounds: 3,
+            steer_deadline_ms: 0,
+            join_h: None,
             harvest_cap: 0,
             harvest_behavioural: 0,
             frozen_cases: None,
@@ -248,6 +263,15 @@ impl Args {
                 "--deadline-ms" => {
                     a.deadline_ms = val().parse().expect("--deadline-ms must be an integer")
                 }
+                "--steer-rounds" => {
+                    a.steer_rounds = val().parse().expect("--steer-rounds must be an integer")
+                }
+                "--steer-deadline-ms" => {
+                    a.steer_deadline_ms = val()
+                        .parse()
+                        .expect("--steer-deadline-ms must be an integer")
+                }
+                "--join-h" => a.join_h = Some(PathBuf::from(val())),
                 "--harvest-cap" => {
                     a.harvest_cap = val().parse().expect("--harvest-cap must be an integer")
                 }
@@ -722,9 +746,10 @@ fn main() {
         "A" | "B" | "G" | "G2" => run_cf(&args, &verifier, &prepared),
         "C" => run_daemon(&args, &verifier, &prepared),
         "H" => hosted_dispatch(&args, &verifier, &prepared, harness.store.as_ref()),
+        "S" => steer_dispatch(&args, &verifier, &prepared),
         other => {
             eprintln!(
-                "unknown --arm {other} (A|B|G|G2|C|H|DRY|HARVEST|POOLTEXTS|FROZEN|PLACEBO|BT8|BT8DRY)"
+                "unknown --arm {other} (A|B|G|G2|C|H|S|DRY|HARVEST|POOLTEXTS|FROZEN|PLACEBO|BT8|BT8DRY)"
             );
             std::process::exit(2);
         }
@@ -2426,8 +2451,18 @@ fn run_hosted(
         let (outcome_class, served_from, fix, receipt_note, wall_ms) = match kind.as_str() {
             "seat_rerank" => {
                 let t = std::time::Instant::now();
-                let answer =
-                    dispatch.escalate_rerank(p.score, &p.sample.module, &p.pool, deadline, policy);
+                let answer = dispatch.escalate_rerank(
+                    p.score,
+                    &p.sample.module,
+                    &p.pool,
+                    deadline,
+                    policy,
+                    // The bench runs from the repo root (the lib's own
+                    // contract); the consult reads the repo's recorded
+                    // answer — a bench never arms --yes itself.
+                    std::path::Path::new("."),
+                    false,
+                );
                 let wall = t.elapsed().as_millis();
                 // The R7 receipt tier (seat_rerank builds only): the
                 // seat-side decision time + the build/confidence audit
@@ -2469,6 +2504,9 @@ fn run_hosted(
                     &p.sample.module,
                     deadline,
                     args.max_new as u64,
+                    // Same bench posture as the rerank leg above.
+                    std::path::Path::new("."),
+                    false,
                 );
                 let wall = t.elapsed().as_millis();
                 match fix {
@@ -3175,6 +3213,9 @@ fn run_frozen(args: &Args, verifier: &ClippyVerifier) {
                 texts,
                 std::time::Instant::now() + std::time::Duration::from_millis(args.deadline_ms),
                 policy,
+                // Frozen-bench posture: CWD repo root, never --yes.
+                std::path::Path::new("."),
+                false,
             ),
             _ => {
                 eprintln!("FATAL: dispatch refused mid-read");
@@ -3581,4 +3622,332 @@ fn run_placebo(args: &Args) {
         eprintln!("⚠ READ INVALID: pool drift exceeded 5% of scored rows");
         std::process::exit(1);
     }
+}
+
+// ── Issue 234 T3 — arm S: the steered arm over the labeled fixtures ────────
+//
+// Per case, ONE compute pass yields THREE arms (T3's decline law prices the
+// whole loop, so the axes split honestly):
+//   • modelless   — the incumbent's served fix (free, µs; the baseline).
+//   • unguided    — the steer loop's round-0 fix (the prompt every takeover
+//                   arm sends — the guidance-free LLM baseline).
+//   • steered     — the loop's verified fix (the SteerDistill cell itself).
+// The takeover axis joins arm H's ledger by case id (report-only) — arm S
+// never spends a hosted call. Oracle cost (score_case) is reported beside
+// the generation wall: one oracle call per scored arm.
+//
+// Student: the local daemon (DaemonL4, the `SteerStudent` impl at the
+// steer_retry posture — its `all(steer_retry, l4_lora)` gate holds because
+// steer_retry implies l4_lora). Refuses loud without it; decline is a
+// correct answer at the measurement, never here.
+#[cfg(feature = "steer_retry")]
+fn steer_dispatch(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+    run_steer(args, verifier, prepared);
+}
+
+#[cfg(not(feature = "steer_retry"))]
+fn steer_dispatch(_args: &Args, _verifier: &ClippyVerifier, _prepared: &[Prepared]) {
+    eprintln!(
+        "--arm S requires --features steer_retry (the steer loop + its DaemonL4 \
+         SteerStudent impl compile only there; l4_lora rides transitively) — \
+         an armed arm must never look armed while doing nothing"
+    );
+    std::process::exit(2);
+}
+
+#[cfg(feature = "steer_retry")]
+fn run_steer(args: &Args, verifier: &ClippyVerifier, prepared: &[Prepared]) {
+    use riir_refine::cf_workers_ai::{ArmSummary, ClippySteerVerifier};
+    use riir_refine::steer_retry::{SteerStudent, steer_retry};
+
+    // The daemon student (same posture arm C refuses without: all three
+    // of --l4-bin/--l4-gguf/--l4-lora, the driver refuses without --lora).
+    let (bin, gguf, lora) =
+        if let (Some(b), Some(g), Some(l)) = (&args.l4_bin, &args.l4_gguf, &args.l4_lora) {
+            (b.clone(), g.clone(), l.clone())
+        } else {
+            eprintln!(
+                "SKIP arm S: --l4-bin, --l4-gguf and --l4-lora are all required \
+                 (the daemon is the steered-ternary student; decline is a \
+                 correct MEASUREMENT answer, but an ARMED arm refuses loud)"
+            );
+            std::process::exit(3);
+        };
+    let mut student = match DaemonL4::spawn(&bin, &gguf, &lora, args.max_new) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("FATAL: daemon spawn failed: {e}");
+            std::process::exit(1);
+        }
+    };
+    eprintln!(
+        "[regate] arm S: student={} rounds={} deadline={}ms cases={} — \
+         LOAD-DISCLOSURE: record sibling GPU/CPU load before quoting",
+        student.name(),
+        args.steer_rounds,
+        args.steer_deadline_ms,
+        prepared.len()
+    );
+
+    let mut out = args
+        .out
+        .as_ref()
+        .map(|p| std::io::BufWriter::new(std::fs::File::create(p).expect("ledger creates")));
+
+    let mut summary_m = ArmSummary::default();
+    let mut summary_u = ArmSummary::default();
+    let mut summary_s = ArmSummary::default();
+    let (mut sw, mut sl, mut st) = (0u128, 0u128, 0u128);
+    let (mut uw, mut ul, mut ut) = (0u128, 0u128, 0u128);
+    let mut gen_ms_total = 0u128;
+    let mut gen_calls = 0u128;
+    let mut oracle_ms_total = 0u128;
+    let mut verified_at = [0usize; 4]; // rounds 0..=3 verified
+    let mut never_verified = 0usize;
+    let mut declined = 0usize;
+    let mut deadline_hits = 0usize;
+
+    for p in prepared {
+        eprintln!("[S] {} …", p.sample.id);
+        let deadline = if args.steer_deadline_ms > 0 {
+            Some(
+                std::time::Instant::now()
+                    + std::time::Duration::from_millis(args.steer_deadline_ms),
+            )
+        } else {
+            None
+        };
+
+        // ── the modelless arm (score once, fold once) ──────────────────
+        let t_oracle = std::time::Instant::now();
+        let m_score = match &p.modelless {
+            Some(fix) => cf_workers_ai::score_case(verifier, &p.sample, fix, Some(&args.behav_dir)),
+            None => cf_workers_ai::score_case(verifier, &p.sample, "", Some(&args.behav_dir)),
+        };
+        oracle_ms_total += t_oracle.elapsed().as_millis();
+        summary_m.add(&m_score, p.reachable_miss, 0, 0, 0.0, 0.0);
+
+        // ── the steer loop (the priced cell) ───────────────────────────
+        let verbatim_ok = p.sample.source == cf_workers_ai::SampleSource::Reachable;
+        let arm_verifier = ClippySteerVerifier {
+            verifier,
+            verbatim_ok,
+        };
+        let base_prompt = cf_workers_ai::prompt_raw(&p.sample.module);
+        let t_gen = std::time::Instant::now();
+        let outcome = steer_retry(
+            &mut student,
+            &arm_verifier,
+            &p.sample.lints[0],
+            &p.sample.module,
+            &base_prompt,
+            deadline,
+            args.steer_rounds,
+        );
+        let gen_ms = t_gen.elapsed().as_millis();
+        gen_ms_total += gen_ms;
+        gen_calls += outcome.attempts.len() as u128;
+
+        let round0_fix = outcome.attempts.first().and_then(|a| a.fix.clone());
+        let final_fix = outcome
+            .verified
+            .as_ref()
+            .map(|v| v.fix.clone())
+            .or_else(|| round0_fix.clone());
+        match outcome.verified.as_ref().map(|v| v.round) {
+            Some(0) => verified_at[0] += 1,
+            Some(1) => verified_at[1] += 1,
+            Some(2) => verified_at[2] += 1,
+            Some(3) => verified_at[3] += 1,
+            Some(_) => {}
+            None => never_verified += 1,
+        }
+        if outcome.student_declined {
+            declined += 1;
+        }
+        if outcome.deadline_expired {
+            deadline_hits += 1;
+        }
+
+        // ── the unguided arm (round 0's fix — skip rescoring when the
+        //    loop verified at round 0: same text, same score) ──────────
+        let same_as_final = outcome
+            .verified
+            .as_ref()
+            .map(|v| v.round == 0)
+            .unwrap_or(false);
+        let u_score = if same_as_final {
+            m_score.clone()
+        } else {
+            let t_oracle = std::time::Instant::now();
+            let s = match &round0_fix {
+                Some(fix) => {
+                    cf_workers_ai::score_case(verifier, &p.sample, fix, Some(&args.behav_dir))
+                }
+                None => cf_workers_ai::score_case(verifier, &p.sample, "", Some(&args.behav_dir)),
+            };
+            oracle_ms_total += t_oracle.elapsed().as_millis();
+            s
+        };
+        summary_u.add(&u_score, p.reachable_miss, 0, 0, 0.0, 0.0);
+
+        // ── the steered arm (the loop's served fix) ────────────────────
+        let t_oracle = std::time::Instant::now();
+        let s_score = match &final_fix {
+            Some(fix) => cf_workers_ai::score_case(verifier, &p.sample, fix, Some(&args.behav_dir)),
+            None => cf_workers_ai::score_case(verifier, &p.sample, "", Some(&args.behav_dir)),
+        };
+        oracle_ms_total += t_oracle.elapsed().as_millis();
+        summary_s.add(&s_score, p.reachable_miss, 0, 0, 0.0, 0.0);
+
+        // ── paired keep_strict reads ───────────────────────────────────
+        match (s_score.keep_strict, m_score.keep_strict) {
+            (true, false) => sw += 1,
+            (false, true) => sl += 1,
+            _ => st += 1,
+        }
+        match (u_score.keep_strict, m_score.keep_strict) {
+            (true, false) => uw += 1,
+            (false, true) => ul += 1,
+            _ => ut += 1,
+        }
+
+        // ── the ledger row (steer-specific shape; record_case's JSON is
+        //    fixed and carries no rounds axis) ─────────────────────────
+        if let Some(f) = out.as_mut() {
+            let row = serde_json::json!({
+                "id": p.sample.id,
+                "arm": "S",
+                "lints": p.sample.lints,
+                "miss_class": format!("{:?}", p.miss),
+                "reachable_miss": p.reachable_miss,
+                "modelless": {"served": p.modelless.is_some(), "keep_s": m_score.keep_strict},
+                "unguided": {
+                    "served": round0_fix.is_some(),
+                    "keep_s": u_score.keep_strict,
+                },
+                "steered": {
+                    "served": final_fix.is_some(),
+                    "keep_s": s_score.keep_strict,
+                    "verified_round": outcome.verified.as_ref().map(|v| v.round),
+                },
+                "rounds_used": outcome.attempts.len(),
+                "student_declined": outcome.student_declined,
+                "deadline_expired": outcome.deadline_expired,
+                "gen_ms": gen_ms,
+            });
+            use std::io::Write as _;
+            let _ = writeln!(f, "{row}");
+        }
+        println!(
+            "  {:<28} miss={:<13} m[keep_s={}] u[keep_s={}] s[keep_s={} r={:?}] {}ms",
+            p.sample.id,
+            format!("{:?}", p.miss),
+            m_score.keep_strict,
+            u_score.keep_strict,
+            s_score.keep_strict,
+            outcome.verified.as_ref().map(|v| v.round),
+            gen_ms,
+        );
+    }
+
+    let n = prepared.len();
+    println!(
+        "\n═ arm S summary (steered-ternary; {n} paired cases; rounds budget {}) ═",
+        args.steer_rounds
+    );
+    println!(
+        "| arm | n | EM | parses | merge | keep_o/scoreable | keep_s | vetoed | divergent | regressions | $ |"
+    );
+    println!("{}", summary_m.markdown_row("S-modelless"));
+    println!("{}", summary_u.markdown_row("S-unguided"));
+    println!("{}", summary_s.markdown_row("S-steered"));
+    println!(
+        "  rounds: verified at r0 {} · r1 {} · r2 {} · r3 {} · never {} · declined {} · deadline {}",
+        verified_at[0],
+        verified_at[1],
+        verified_at[2],
+        verified_at[3],
+        never_verified,
+        declined,
+        deadline_hits
+    );
+    println!(
+        "  cost axes: generation total {gen_ms_total}ms over {gen_calls} call(s); \
+         oracle (score_case) total {oracle_ms_total}ms — T3 prices BOTH legs"
+    );
+    println!(
+        "  paired keep_s: steered-vs-modelless W/L/T {sw}/{sl}/{st} · \
+         unguided-vs-modelless W/L/T {uw}/{ul}/{ut}"
+    );
+
+    // ── the takeover axis: join arm H's ledger (report-only) ───────────
+    if let Some(path) = &args.join_h {
+        let raw = match std::fs::read_to_string(path) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!(
+                    "--join-h {}: {e} — the takeover axis prints nothing",
+                    path.display()
+                );
+                return;
+            }
+        };
+        // id → (modelless keep_s, escalated keep_s, served_from)
+        let mut h: std::collections::BTreeMap<String, (bool, bool, String)> = Default::default();
+        for line in raw.lines() {
+            let Ok(row) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            if row.get("arm").and_then(|a| a.as_str()) != Some("H") {
+                continue;
+            }
+            let Some(id) = row.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
+                continue;
+            };
+            let m_keep = row
+                .pointer("/modelless/keep_s")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let (e_keep, served) = match row.pointer("/escalated/served_from") {
+                Some(v) => (
+                    row.pointer("/escalated/keep_s")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false),
+                    v.as_str().unwrap_or("?").to_string(),
+                ),
+                None => (false, "none".to_string()),
+            };
+            h.insert(id, (m_keep, e_keep, served));
+        }
+        let (mut hw, mut hl, mut ht) = (0u128, 0u128, 0u128);
+        let mut joined = 0u128;
+        let mut served_live = 0u128;
+        for p in prepared {
+            let Some((m_keep, e_keep, served)) = h.get(&p.sample.id) else {
+                continue;
+            };
+            joined += 1;
+            if served != "modelless" {
+                served_live += 1;
+            }
+            if e_keep == m_keep {
+                ht += 1;
+            } else if *e_keep {
+                hw += 1;
+            } else {
+                hl += 1;
+            }
+        }
+        println!(
+            "  takeover join (arm H ledger, SAME-set law): intersection {joined} case(s) — \
+             H-escalated beats H-modelless W/L/T {hw}/{hl}/{ht} · H served {served_live}/{joined} escalated leg(s); \
+             the join is valid only over the arm-H fixture set arm S ran on)"
+        );
+    }
+    println!(
+        "  T3 law: takeover-wins or cost-dominated ⇒ record NEGATIVE and close — \
+              this bench prints, it never edits the issue"
+    );
+    append_quality_history("S", "steer-daemon-l4", &summary_s);
 }

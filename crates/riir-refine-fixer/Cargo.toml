@@ -41,6 +41,7 @@ score_bench = ["riir-refine/score_bench"]
 seat_rerank = ["riir-refine/seat_rerank"]
 escalation_manifest = ["riir-refine/escalation_manifest"]
 hosted_expert = ["riir-refine/hosted_expert"]
+steer_retry = ["riir-refine/steer_retry"]
 # Plan 335 P0 — arms A/B against a LOCAL OpenAI-compatible server
 # (`--backend local --base http://127.0.0.1:PORT/v1`): reuses the core's
 # `OaiClient` (the groq_first seam — `riir-llm/transport`, already in the
