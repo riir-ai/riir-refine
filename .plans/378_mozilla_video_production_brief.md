@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1 = bmo + mlx-community 4-bit) · r3 CFP-comparison verdict = **REVISE** — all edits applied (§0; session capped) · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; recent-git coverage: P12 = 1,673/8 domains) · r5 (fresh session `e3312b56`) = REVISE applied — 3 blockers + bounded fixes (§0) · r5 round 2: the S02 mapping-chip fixed (learned/symbolic split, NO neural net at heal time — the neural part lives offline in the distillation) + cosmetics (§4 preamble settle, scene-time re-flow, 3-s card)
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -127,6 +127,20 @@ conservative (16 in a loose grep — re-derive at the sync gate); S02 chips rewo
 LLM · plays well with yours" + the neural/symbolic mapping chip); staleness sweep (the bmo
 checkbox, the §7 "sixteen sixty-nine" example, the 295-word mention, the probe job short id
 `0906aefa`, the schedule's P15 row).
+
+**Verdict r5.1 → r5 FINAL** (same session, rounds 2–3): round 2 flagged ONE bounded edit —
+the new S02 chip `neural: retrieval` was unsupported and contradicted the brief's own
+"no neural net in the hot path" law (AGENTS.md: "modelless rulewright", "zero-parameter hot
+path") → fixed to `learned: retrieval + rule selection · symbolic: rules + compile gate ·
+no neural net at heal time` (the neural work lives OFFLINE in the distillation that built the
+corpus; P18 carries the same mapping), plus three cosmetics (§4 preamble settle 0.35, scene
+times re-flowed contiguously, "4-s end card" → 3-s) — commit `26d81333`. Round 3:
+**AGREE** — "nothing in the brief now blocks owner GO". Owner gates: the two sccache wording
+checkboxes, §9 inputs + board URL, line-by-line script approval, the S13 own-voice call, the
+hosting pick. Build-time gates (scheduled in §8): the measured duration gate, the P7
+eval-regime pin (11-17), the number-sync gate vs Proposal 025 (1,673/8 vs the proposal's
+1,602/7). Carried risk on record: "neuro-symbolic" appears only in the video, not the written
+application — the owner's choice.
 
 ## 1. What this is
 
