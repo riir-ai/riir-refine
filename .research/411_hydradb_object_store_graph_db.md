@@ -1,6 +1,6 @@
 # 411 — Distill verdict: hydra-db/hydradb (object-store graph DB)
 
-**Status:** DISTILLED — pending owner decision (YES B+ corpus; batch staged as nominal Batch 365 / Plan 379)
+**Status:** DISTILLED + FIRST TRANCHE LANDED (Batch 364 / Plan 379, 2026-11-16: candidates 1, 2, 7, 8, 4 of the table below — R1 `degree-gated-probe-with-doubling-retry` GOAT PASS ParetoDominant 3/0/0 two-run stable, R2 `bfs-depth-epoch-marker-dedup` FAILED the bar (Tie at every size) DEMOTED to NotBenchable-by-measurement per the ungoat law, 7/8 the honesty pair, 4 `derived-index-write-touches-only-changed-keys`; the SECOND storage tranche (candidates 9/10/11/3/5 + #6) DEFERRED to the follow-up batch; `count-before-fault-injection` (the face candidate, fault_store.rs:186) an honest T0 DROP — no fault_store.rs exists at the pin; candidate 14 adjudicated as the consume_budget rider on adaptive-yield-consecutive-ready; GOAT record: `.benchmarks/154_batch364_goat_cells.md`; the cite corrections: 'graph-slate/write.rs' = src/shard/write.rs, 'graph-slate/config.rs' = crates/graph-slate/src/core/config.rs, 'graph-slate/state.rs' = crates/graph-slate/src/core/state.rs — all content byte-exact). Was: DISTILLED — pending owner decision (YES B+ corpus; batch staged as nominal Batch 365 / Plan 379)
 
 ## Source
 

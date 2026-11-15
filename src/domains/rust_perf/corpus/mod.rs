@@ -9,7 +9,8 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
-//! 342 entries across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the `kernel_opt` warming family + the `#143684` rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`; PRIOR: 338 entries
+//! 347 entries across 15 categories as of Batch 364 (+5: io ×2 — `degree-gated-probe-with-doubling-retry` (the BENCHABLE GOAT lead: an anchored edge-property expansion reads the property's index once past the scan-vs-probe crossover at degree ≥ 64, and after a probe overflows at its entry budget W retries only at degree ≥ 2W — failed probes read ≤ ~2× the largest degree while a much larger hub still gets its probe, never a one-overflow-poisons-all watermark) + `derived-index-write-touches-only-changed-keys` (an unchanged re-put pays full LSM amplification — diff previous vs next, write only deltas; the unchanged merge is a read-only no-op preflight) — complexity ×1 `bfs-depth-epoch-marker-dedup` (the BENCHABLE co-lead: one u8 stamp array + the monotone depth marker deletes N per-level clears — one allocation, zero memsets) — measurement-honesty ×2 `spawn-blocking-queue-wait-split-from-compute` (the wrapper stamps queue-wait BEFORE the spawn, the closure stamps its own execution — a saturated pool presents contention as kernel slowness) + `latency-histogram-split-on-structural-populations` (split at the record site on the discriminator the code already holds, label-from-data-not-export, populations by structure, gap-not-guess, derived totals; carries the histogram family's folded faces) — the hydra-db/hydradb object-store-graph-db distill first tranche; the storage-transcription second tranche (candidates 9/10/11/3/5) DEFERRED to the follow-up batch, `count-before-fault-injection` an honest T0 drop (the cited `fault_store.rs` does not exist at the pin), candidate 14 adjudicated as the `consume_budget` rider on `adaptive-yield-consecutive-ready`, #6 adjudicated distinct both directions and deferred, the align-64 second instance riding `align-64-false-sharing`; `ELv2` transcription-only @ `9166374`; Plan 379 / Research 411, `entries_80`; PRIOR: 342 entries
+//! across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the `kernel_opt` warming family + the `#143684` rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`;
 //! across 15 categories as of Batch 362 (+1: io —
 //! `driver-pipeline-cache-sealed-adapter-keyed`, suggestion-NotBenchable,
 //! the `ThreeRT` sealed driver pipeline cache: a compile-artifact cache whose
@@ -829,6 +830,7 @@ mod entries_76;
 mod entries_77;
 mod entries_78;
 mod entries_79;
+mod entries_80;
 
 #[cfg(test)]
 mod tests;
@@ -1097,6 +1099,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_77::entries());
     entries.extend(entries_78::entries());
     entries.extend(entries_79::entries());
+    entries.extend(entries_80::entries());
     Corpus::new(entries)
 }
 
