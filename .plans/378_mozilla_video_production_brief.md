@@ -1,11 +1,14 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all revisions APPLIED (§0) · r2 addenda 2026-11-15: minimal-flow rule (S05/S09 re-anchored to the documented flows) + TTS engine = Fish Audio Drama 3 (owner pick; bmo cannot host it — run posture §7) · final verdict requested
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied (§0, commit below) — awaiting AGREE conversion, then owner GO
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
 - [x] Owner: TTS engine DECIDED 2026-11-15 — **fish-speech · Fish Audio Drama 3** — §7 (run posture amended there: bmo cannot host Drama 3 — Apple silicon vs NVIDIA-only ≥48 GB FP8; lane = 4090 + drama-3-int4 probe, or Fish Audio hosted fallback)
 - [x] Agent: flow re-anchor + minimal-flow rule (S05/S09 → the documented flows) — r2, this revision
+- [ ] Agent: pin `drama-3-int4` provenance (actual uploader + revision hash; safetensors ONLY at download — no pickle weights) before the probe — verdict r2
+- [ ] 🔴 Agent: grep the LIVE refine.riir.ai (+ the other three fronts) for the §2 banned words before the video link ships — a reviewer is one click from any mismatch (verdict r2)
+- [ ] Agent: the application's video-link text repeats the AI-voice disclosure line (verdict r2)
 - [ ] Owner: run the two commands once and save the output TEXT + supply the board URL — §9 (no video recording needed)
 - [ ] Agent: scaffold the fframes project + build S01–S13 + end card per §4/§8
 - [ ] Agent: captions track (word-timed JSON) + loudness gate + export per §6/§7/§8
@@ -44,6 +47,15 @@ revision below is applied in this revision of the brief:
   yet" twice; the only compliant revival is a named person + public repo + consent, which
   would also change the written answers.
 
+**Verdict r2** (2026-11-15, reviewer session `66064fa0`): **REVISE** — 13 bounded edits, no
+architectural change. All applied in this revision: S05/S09 doc-wins tie-breaks (status marks,
+gfflow-only source, vocabulary-law-wins label drops, billing-lane omission made explicit), the
+`0.4 ms` chip re-pinned to the P6 gate (`< 1 ms`), WSL2 time-box on the 4090 probe with
+automatic fallback to hosted, int4 provenance pin + safetensors-only, hosted tier ToS check,
+official-voice-only + reference/seed pinning, live-site banned-word grep gate,
+application-link disclosure repeat, §1 "2:10 is fine" retired (hard 2:00 stands), measured
+duration gate + three ranked cuts (§5).
+
 ## 1. What this is
 
 The two-minute video for the Mozilla Human-Scale AI Incubator application
@@ -56,7 +68,8 @@ by REAL captured data (§9) + a disclosed AI-generated voice (§7). Honest and c
 Produced with **fframes** — the skill is installed at
 `../riir-ai/.agents/skills/fframes-video/` (read `SKILL.md` first, then `references/design.md`,
 `references/audio.md`, `references/captions.md`). Format: 1920×1080 landscape, 30 fps,
-target ~118 s + ~3 s end card = ≤ 2:12 (the brief says "two-minute"; 2:10 is fine, never 3 min).
+hard ≤ 2:00 total INCLUDING the end card (the r1 "~118 s + ~3 s = ≤ 2:12, 2:10 is fine" line is
+RETIRED — §0, §5 and §8 all carry the same cap; verdict r2).
 
 Project home: `../mozilla-video/` (sibling scratch dir, `cargo fframes new mozilla-video
 --format landscape --fps 30 --yes`; no remote — the deliverable is the mp4 + this plan's record).
@@ -165,6 +178,14 @@ recording day (the corpus and board move weekly).
     model-classes / trust-flow figures, no swimlanes. Node labels are grepped from those two docs
     verbatim at build time — never invented, never from memory — and on-screen labels obey the
     §2 vocabulary law (contribute / contribution points; the banned words never render).
+    Tie-breaks (verdict r2), in order: (1) the DOC wins wording — §4's strings are illustrative
+    defaults; (2) the doc's step ORDER and STATUS win — a rung the doc marks `planned` renders
+    carrying a `planned` mark, never as current; (3) the §2 vocabulary law beats any verbatim
+    label — a banned-word node or edge is DROPPED whole, never reworded. Source blocks: the
+    gfflow render blocks ONLY (role_flows.md's mermaid twins carry internal billing vocabulary —
+    never a source). S09 deliberately omits the coder's billing step (login/metering): the
+    video's money story is S01's "free · offline" + S12's reputation-not-payment; the billing
+    plane stays the written application's subject.
 - **Motion:** springs/ease-out 300–600 ms in, 200–300 ms out, 60–120 ms staggers; counters
   tick in mono; one accent element per scene; cards get a subtle window frame and a slow
   1.02× scale-in. No beat-spam, no full-frame zooms, nothing fades up 40 px with
@@ -184,16 +205,16 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
 | S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Vector redraw of real GOAT-table rows scrolling (lane names + verdicts lifted verbatim from the katgpt-rs README — the agent greps 3–4 rows, never invents). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
-| S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram redrawn from `rethink_flow.md` (grep before drawing — §8): query card → the floor's fused gate → TWO endings only — green `answered · µs · receipt (hashes, not data)` and amber `abstain → up one rung`; the two upper rungs sit as small dim nodes on the up-arrow — the ladder is hinted, never fully drawn (minimal-flow rule). Labels lifted verbatim from the doc. |
+| S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `< 1 ms` stopwatch + `abstain` | Wire diagram redrawn from `rethink_flow.md` (grep before drawing — §8): query card → the floor's fused gate → TWO endings — green `answer + receipt` (µs; hashes, not data) and amber `not sure → abstains, up one rung`; the two upper rungs sit as small dim nodes on the up-arrow, EACH carrying its doc-status mark (the bag rung `live`; the encoder/hosted rung per the doc's honesty table — `planned` renders marked `planned`, never as current; the ladder hinted, never fully drawn). The stopwatch pins to the P6 GATE (`< 1 ms` p99); a small chip may add `p50 24–762 µs`. Tie-breaks per §3 — the doc wins wording. |
 | S06 | 0:41–0:53 | board beat | Vector board redraw + chip `live board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` | fframes redraws the board (radar + footprint bars + latency bars, log axis like the live page) from the P7 pins — real numbers, our own layout; the URL chip invites verification. Dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the real gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
 | S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
 | S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
-| S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` | Product loop redrawn from `role_flows.md` (the coder loop; the miner arc = ONE dashed branch — node labels verbatim from the doc, §8): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. NOT the four-role taxonomy (minimal-flow rule); on-screen labels obey the vocabulary law. |
+| S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
 | S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` (+ chip `#3025 CI 50 ✓ 0 ✗` only if P15 provenance gets pinned) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only, and only after the provenance pin. |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
-| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + `narration: AI-generated voice (Fish Audio Drama 3)` (REQUIRED — owner picked the TTS lane; doubles as the Community-License attribution) | Quiet end card, one fade, nothing else moves. |
+| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + `narration: AI-generated voice (Fish Audio Drama 3)` (REQUIRED — owner picked the TTS lane; doubles as the Community-License attribution) — and the APPLICATION's video-link text repeats this exact line (a 4-s end card is easy to miss — verdict r2) | Quiet end card, one fade, nothing else moves. |
 
 ## 5. Full VO script (the transcription — 295 words, hard 2:00)
 
@@ -238,8 +259,20 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 > to three contributors, a recruiting pilot, and the GPU behind the decision tier. Small by
 > design. Yours by default.
 
-If VO still runs past 2:00: cut S13 "and the GPU behind the decision tier" last — never
-restore the S07 VO.
+**Duration gate (MEASURED — verdict r2):** after the 12 takes are generated, sum the wav
+lengths + 12 × 0.6 s settles + S07's 4 s breather + the end card BEFORE building any scene;
+the total must be ≤ 120 s. If it exceeds 2:00, apply the ranked cuts IN ORDER (edit §5 here
+first — the plan stays the canonical record — then regenerate only the cut scenes; never
+time-stretch audio):
+
+1. S13: drop "and the GPU behind the decision tier" (−7 words → 288) — the on-screen GPU chip
+   stays.
+2. S12: "Fingerprinting? Refused by design." → "Fingerprinting: refused." (−2 → 286) — the
+   on-screen stamp keeps `refused by design`.
+3. S03: "ninety-plus survived the gates as Rust lanes" → "ninety-plus survived the gates"
+   (−3 → 283) — the on-screen lane names carry the detail.
+
+Never restore the S07 VO.
 
 ## 6. Captions (subtitle-ready)
 
@@ -319,19 +352,29 @@ not the video's narration voice).
 
 **Engine (owner pick 2026-11-15): fish-speech · Fish Audio Drama 3** (`fishaudio/drama-3` via
 github.com/fishaudio/fish-speech — SGLang-Omni / vLLM-Omni serve posture; 35B MoE, 3B active,
-expressive multi-speaker TTS with natural-language direction). ONE fixed voice for all 12 takes.
+expressive multi-speaker TTS with natural-language direction; primary sources read 2026-11-15:
+the HF model card, fish-speech `docs/en/install.md`, the LICENSE raw file). ONE fixed voice
+for all 12 takes — an OFFICIAL Fish-provided reference only (never a hosted-library voice of
+unknown provenance: a user-uploaded clone of a real person could breach §IV(b)(i) — verdict
+r2); pin the reference clip + generation seed at the first take and reuse both for all 12
+(no take-to-take drift).
 
 ⛔ **Run posture (measured 2026-11-15): bmo CANNOT host Drama 3** — the model is **NVIDIA-only,
 ≥ 48 GB VRAM at FP8** (fish-speech install docs: no CPU, no Apple MPS, no ROCm), and bmo is the
 Apple-silicon runner (96 GB unified RAM, no CUDA — `agent-mail rig status bmo` shows no GPU
 column; its Tailscale IP only routes via amo). The lane, in order:
-1. **4090 + `fishaudio/drama-3-int4`** (unofficial community int4 quant, ~20 GB-class) — queue
-   `agent-mail rig run 4090 --shared` with a ONE-TAKE probe (S06) AFTER the current exclusive
-   job clears (never stack a 20-GB model load on a BUSY CUDA rig); if the probe fits and sounds
-   right, batch the remaining 11 takes on the same posture.
-2. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU, zero
-   license friction (their hosted service), same model, same takes. The fallback that always
-   works.
+1. **4090 + `fishaudio/drama-3-int4`** (~20 GB-class; the README calls itself an UNOFFICIAL
+   quant despite the `fishaudio/` namespace — PIN the actual uploader + revision hash at
+   download, and load safetensors ONLY, never pickle weights, on a box holding repos and keys).
+   The 4090 is WINDOWS: SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough — TIME-BOX the
+   probe to ONE attempt (≤ half a day; queue `agent-mail rig run 4090 --shared` AFTER the
+   current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig). Probe fits +
+   sounds right → batch the remaining 11 takes; ANY wall (setup, VRAM, sound) → fall to lane 2
+   automatically. The deadline is 2026-11-20; the probe must not eat a day of it.
+2. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU,
+   same model, same takes. ⚠ The hosted API is governed by Fish Audio's TERMS OF SERVICE, not
+   the Community License — confirm the plan tier's commercial-use grant before the cut ships
+   (verdict r2). Still the fallback that always works.
 3. bmo stays OUT of the TTS lane — a documented hardware fact, not a preference. (bmo can still
    host the whisper caption pass — CPU is fine there.)
 
@@ -399,6 +442,11 @@ provenance signal from generated audio (§IV(b)(iv)).
    stream=codec_type,width,height,nb_frames,duration mozilla.mp4`.
 7. Deliverables: `mozilla.mp4` (≤ 2:00 hard, 1080p30, H.264 + AAC), `captions.srt` (§6,
    shifted to the real VO), and the strip contact sheets for the owner's review.
+8. Pre-ship gates (verdict r2): (i) grep the LIVE refine.riir.ai (+ riir.ai / reflex.riir.ai /
+   rethink.riir.ai) for the §2 banned words — the video's S12 line says "reputation — never
+   payment" and a reviewer is one click from any site page that still says otherwise; a hit =
+   file the site fix or re-scope the S12 line BEFORE the link goes out. (ii) the application's
+   video-link text carries the same AI-voice disclosure as the end card (§4 END).
 
 ### The terminal typing recipe (S04's gate line · S08 · S12's equation — all typed text)
 
