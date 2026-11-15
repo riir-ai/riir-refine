@@ -32,7 +32,7 @@
   },
   "meter": {
    "n": "4b",
-   "title": "The burn meter",
+   "title": "Hosted-lane meter",
    "lane": "bill",
    "color": "#5cc8e8"
   }
@@ -99,8 +99,8 @@
    "illustrative": false
   },
   {
-   "title": "What a logged-in run costs",
-   "text": "The meter counts code-word tokens and bills one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed burn report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code.",
+   "title": "What a logged-in run reports",
+   "text": "Hosted-lane metering counts code words at one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed run report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code.",
    "steps": [
     "meter"
    ],

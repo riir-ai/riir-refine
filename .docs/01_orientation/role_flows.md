@@ -82,7 +82,7 @@ title = "Fixed code"; body = "clippy · perf · docker · dist + compile errors"
 status = "live"
 [[step]]
 id = "meter"; n = "4b"; lane = "bill"; col = 3
-title = "Hosted-lane metering"; body = "1 KAT-equiv / 1M code words; TUNA first where funded"
+title = "Hosted-lane meter"; body = "1 KAT-equiv / 1M code words; TUNA first where funded"
 status = "live"
 
 [[edge]]
