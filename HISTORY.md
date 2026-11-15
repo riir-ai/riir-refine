@@ -1698,6 +1698,12 @@ The issue stays OPEN with nothing checked remaining — T1–T5 all
 landed; the correlation/utility cell (each signal vs later measured
 holdout deltas) is the standing gate before any promotion talk.
 
+## 2026-11-15 — Issue 237 CLOSED-NEGATIVE + removed (the noise-reduction rule); issue 238's blind-class claim line made canonical
+
+**237 — selection → composition descent** (bench 151 `4a35b11b`, zed-07a26ed5@amo, lease folded with the verdict): **NO-GO** — arm-a compose-all 0.9643 = arm-b order-only 0.9643 byte-identical (the ordering axis is a measured NO-OP); arm-c fitted-level subset 0.3929 (Δ−32 resolutions to save one created lint); falsification HOLDS; the damage concentrates in the 24 multi-target fixtures — composition breadth is the fixpoint's fuel, not over-composition; `K_ij` = 0 disclosed. Re-open ONLY on a pair-effect-pricing consumer. Instrumentation stays report-only (`--composition-ab`, bench-only behind `score_bench`; default heal path byte-identical). Full text: git history of `.issues/237_rating_energy_composition_descent.md`.
+
+**238 — claim-line format repair** (the 1176 blind class, found by this sweep): the live lease (zed-m3-ane-domain, the Plan 377 session) sat embedded in the Status line, invisible to `claim_lease_check --item 238` ("no claim line on any file numbered 238"); the lint passes such lines as clean because it only validates CANONICAL lines. Reformatted to canonical — holder/epoch/expiry verbatim (1794670478 → 2026-11-16T15:34:38Z).
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
