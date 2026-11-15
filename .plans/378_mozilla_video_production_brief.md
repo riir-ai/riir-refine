@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -94,8 +94,8 @@ at any step; no number is needed or wanted (zero spend IS the number).
 **r4.2 — recent-git coverage pass** (2026-11-15, owner warning "beware the ane domain, ensure
 all new in git recently is covered"): every pin re-derived from its source of truth TODAY.
 Moved: **P12 1,669 → 1,673** (rust_perf 338 → 342, Batch 363 `009394b7`; the manifest pins
-"health total 1673") + the 8th domain's label corrected to **ane** (`ane_rules: 6`, Plan 377,
-opt-in — NOT default, NOT in the shipped release set; the video never implies otherwise).
+"health total 1673") + the 8th domain's label corrected to **ane** (`ane_rules: 6`, Plan 377 —
+the kernel_pregate TWO-PASS shape, see the r6 correction below).
 Re-verified CURRENT (no change): P13 — exactly **254** recorded score-bench runs, first
 84.6% → last **96.4%** (2026-11-13, parse_safety 1.0); P15 — #3025 still clean **CI 50 ✓ 0 ✗**
 (outcome poll `ffaaeb9e`, 11-15); P14 — crates.io 0.5.1 stands. Also on the radar from the
@@ -142,6 +142,16 @@ eval-regime pin (11-17), the number-sync gate vs Proposal 025 (1,673/8 vs the pr
 1,602/7). Carried risk on record: "neuro-symbolic" appears only in the video, not the written
 application — the owner's choice.
 
+**r6 owner correction** (2026-11-15): the r4.2 characterization of the **ane** domain was
+somewhat wrong. ane is NOT a passive opt-in to be hidden — it is the **kernel_pregate
+TWO-PASS shape** (the owner's design, Plan 377): FIRST PASS scans for ane candidates
+(recall-biased needles + prose + path-word signals per file, like kernel_pregate's detector);
+SECOND PASS activates the ane domain's rules only on signal spans (± 24 lines). Its
+non-promotion today is a measured-gate matter (Plan 377 P2.1 cost leg pre-registered,
+unrun; `RIIR_ANE_PREGATE=0` is demote-only from birth — the promotion posture is ready),
+not an architecture with no default path. P12 + the r4.2 record corrected; the video's
+count claims (1,673 / 8 domains) are unaffected.
+
 ## 1. What this is
 
 The two-minute video for the Mozilla Human-Scale AI Incubator application
@@ -178,7 +188,7 @@ recording day (the corpus and board move weekly).
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
 | P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game); 🔴 r5: a loose grep now finds **16** repos carrying the convention — re-derive at the number-sync gate and move the chip + VO together (13 is conservative; never inflate without the grep) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
-| P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377, OPT-IN: never imply it is default or in the shipped release set); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15) | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
+| P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377: the kernel_pregate TWO-PASS shape — first pass scans for ANE candidates (needle/prose/path-word signals), the domain activates on signal files only; currently opt-in pending its pre-registered cost gate (Plan 377 P2.1, unrun; demote-only env ready), rules suggestion-only until proposers land); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15) | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
 | P13 | Heal rate: "85% then, 96 now, 254 runs" | 🔴 score-bench `heal_rate`: first recorded run **84.6%** (2026-08-19) → latest **96.4%**, parse-safety 1.0, **254 recorded runs**; say the trend, never "increases each day" | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
 | P14 | Distribution | **crates.io `cargo-refine` 0.5.1 (2026-11-11)**; GitHub releases + Homebrew tap + Scoop bucket (Sept 2026) | `riir-refine/AGENTS.md` §Open posture, issue 221 |
 | P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — owner verdict "hand-written goodwill"; ⚠ bench 127 records agent-verified rounds ("Claude verified … dictated the fix + reply wording") → the VO/screen use Proposal 025's NEUTRAL wording ("first upstream contribution · six review rounds"); the literal "written by hand" is retired unless the owner affirms it (checklist). **#3025 open, CI 50 pass / 0 fail** — owner account (2026-11-15): "found by cargo refine, fixed by AI (llm)"; ⚠ bench 128 records the lane as "issue-driven, not healer-emitted" (0 actionable sweep findings; upstream issue #2968 asked for the mechanism) → the ON-SCREEN chip uses the verifiable form (`upstream issue #2968 · AI-assisted fix`); owner evidence may supersede | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
