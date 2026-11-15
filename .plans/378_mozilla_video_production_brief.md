@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0)
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -127,6 +127,19 @@ conservative (16 in a loose grep — re-derive at the sync gate); S02 chips rewo
 LLM · plays well with yours" + the neural/symbolic mapping chip); staleness sweep (the bmo
 checkbox, the §7 "sixteen sixty-nine" example, the 295-word mention, the probe job short id
 `0906aefa`, the schedule's P15 row).
+
+**r7 owner direction + slip admission** (2026-11-15): (1) PROCESS — the ane
+mischaracterization survived r4.2's coverage pass AND two AGREE verdicts: those passes
+verified the NUMBERS but not the prose characterizations. Standing law for every future pass
+on this plan: fact-check PROSE claims against repo records (AGENTS.md, bench records, the
+domain docs), not just re-count the numbers. (2) POSITIONING — the technique's identity is
+**ADAPTIVE**, not just "small" (owner: "what small? our brain? lol"): the corpus learns with
+every fix — Elo/Beta re-ranking per repo, ~100 rules/week growth, the heal-rate climb,
+self-evolve — S02's VO now reads "adaptive learned rules", the chip is `adaptive
+neuro-symbolic — between rules & LLMs`, and S09/S10 carry the adaptation evidence. "Small"
+survives only as the close line's echo of Mozilla's principle (the 0.48 GB stack, the
+one-engineer team). Fresh verdict commissioned (new session) with an explicit prose-hunting
+mandate.
 
 **Verdict r5.1 → r5 FINAL** (same session, rounds 2–3): round 2 flagged ONE bounded edit —
 the new S02 chip `neural: retrieval` was unsupported and contradicted the brief's own
@@ -267,19 +280,24 @@ recording day (the corpus and board move weekly).
   captured output text (§9), every number comes from §2, charts re-plot real pinned values,
   and on-screen chips link the live pages (board URL, crates.io) so a reviewer can verify
   anything in one click. Nothing on screen is invented; some of it is beautifully re-typeset.
-  - **Positioning (owner direction 2026-11-15): cargo refine works ALONGSIDE existing tools and
-    LLMs — never as a replacement.** It helps humans AND AI agents analyze for perf and
-    security; the cost beat is DIRECT (P18): the default path makes 0 LLM calls and spends $0
-    on API calls — every fix there is one you don't pay an agent for (zero spend needs no
-    baseline; no invented N/%; on screen never the word "token" — the §2 ban). The category is
-    **neuro-symbolic** — between rules and LLMs, which is exactly WHY it is faster and smaller
-    (S02 carries the term AND a chip mapping the halves: LEARNED = retrieval + rule selection,
-    SYMBOLIC = rules + compile gate — NO neural net at heal time; the neural part lives
-    OFFLINE in the distillation that built the corpus — the DO-NOT-SAY "no neural net in the
-    hot path" stays true and is now EXPLAINED). S11's #3025 chip ILLUSTRATES the
-    alongside story (AI-assisted fix) — it is NOT claimed as healer-emitted (bench 128:
-    issue-driven). The term "neuro-symbolic" is video-only for now — Proposal 025's written
-    answers keep their current vocabulary unless the owner aligns them.
+  - **Positioning (owner direction 2026-11-15, r7: the technique is ADAPTIVE — not just
+    "small"): cargo refine works ALONGSIDE existing tools and LLMs — never as a replacement.**
+    It helps humans AND AI agents analyze for perf and security; the cost beat is DIRECT
+    (P18): the default path makes 0 LLM calls and spends $0 on API calls — every fix there is
+    one you don't pay an agent for (zero spend needs no baseline; no invented N/%; on screen
+    never the word "token" — the §2 ban). The category is **adaptive neuro-symbolic** —
+    between rules and LLMs (faster and smaller BY CONSTRUCTION), and ADAPTIVE in the visible,
+    measured sense: every verified fix feeds the corpus, selection re-ranks per repo
+    (Elo/Beta), the corpus grows ~100 rules/week, the heal rate climbed 84.6 → 96.4 — S02
+    names the term; S09/S10 ARE the adaptation evidence on screen. "Small" stays ONLY as the
+    close line's echo of Mozilla's principle (the stack: 0.48 GB, sub-ms; the team: one
+    engineer) — "adaptive" is the technique's own word. S02 carries a chip mapping the
+    halves: LEARNED = retrieval + rule selection, SYMBOLIC = rules + compile gate — NO neural
+    net at heal time; the neural work lives OFFLINE in the distillation that built the corpus
+    — the DO-NOT-SAY "no neural net in the hot path" stays true and is now EXPLAINED. S11's
+    #3025 chip ILLUSTRATES the alongside story (AI-assisted fix) — NOT claimed as
+    healer-emitted (bench 128: issue-driven). "Neuro-symbolic"/"adaptive" are video-only for
+    now — Proposal 025's written answers keep their vocabulary unless the owner aligns them.
   - **Minimal-flow rule (owner direction 2026-11-15): show the CURRENT documented flow — and only
     the minimal version of it.** Exactly two flow surfaces on screen: ONE decision wire (S05,
     redrawn from `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`) and ONE product loop
@@ -312,7 +330,7 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 | id | t (target) | VO (see §5) | On-screen | Graphics + motion prompt |
 |---|---|---|---|---|
 | S01 | 0:00–0:09 | hook | `BEFORE: subscription · datacenter · your code uploaded` / `AFTER: offline · free · code stays` | Diagonal split. Left card red-tinted: cloud, `$` and upload-arrow icons drop in staggered; right card dark: unplugged-plug icon springs in. Wipe resolves left→right on "We built the opposite." |
-| S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` + chips `neuro-symbolic — between rules & LLMs` · `needs no LLM · plays well with yours` · `learned: retrieval + rule selection · symbolic: rules + compile gate · no neural net at heal time` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
+| S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` + chips `adaptive neuro-symbolic — between rules & LLMs` · `needs no LLM · plays well with yours` · `learned: retrieval + rule selection · symbolic: rules + compile gate · no neural net at heal time` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
 | S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Vector redraw of real GOAT-table rows scrolling (lane names + verdicts lifted verbatim from the katgpt-rs README — the agent greps 3–4 rows, never invents). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
 | S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `< 1 ms` stopwatch + `abstain` + chip `research sibling · the method's proving ground` | Wire diagram redrawn from `rethink_flow.md` (grep before drawing — §8): query card → the floor's fused gate → TWO endings — green `answer + receipt` (µs; hashes, not data) and amber `not sure → abstains, up one rung`; the two upper rungs sit as small dim nodes on the up-arrow, EACH carrying its doc-status mark (the bag rung `live`; the encoder/hosted rung per the doc's honesty table — `planned` renders marked `planned`, never as current; the ladder hinted, never fully drawn). The stopwatch pins to the P6 GATE (`< 1 ms` p99); a small chip may add `p50 24–762 µs`. Tie-breaks per §3 — the doc wins wording. |
@@ -326,13 +344,13 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 | S13 | 1:37.5–1:49.5 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` · `built for: FOSS maintainers · students · devs without cloud budgets` · `sustainable: fiscal sponsor · MIT core` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
 | END | 1:49.5–2:00 (card 1:57–2:00; the close line holds to 1:57) | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + disclosure line (REQUIRED, r3-widened): `narration: AI voice · Fish Audio Drama 3 · visuals: AI-assisted · script: owner-approved` — and the APPLICATION's video-link text repeats this exact line (a 3-s end card is easy to miss — verdict r2; r5 timing; r3 extends the disclosure beyond the voice) | Quiet end card, one fade, nothing else moves. |
 
-## 5. Full VO script (the transcription — 289 words after r5, hard 2:00)
+## 5. Full VO script (the transcription — 290 words after r7, hard 2:00)
 
 > S01 — Cloud AI fixes your code — for a subscription, on a datacenter, with your source
 > leaving the machine. We built the opposite.
 >
-> S02 — cargo refine heals code with learned rules — neuro-symbolic: neither a rules engine
-> nor a giant model. The corpus is the model.
+> S02 — cargo refine heals code with adaptive learned rules — neuro-symbolic: neither a
+> rules engine nor a giant model. The corpus is the model.
 >
 > S03 — katgpt-rs — public, MIT — studied five hundred eighty papers; ninety-plus survived
 > the gates as Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw.
@@ -414,7 +432,7 @@ Cloud AI fixes your code — for a subscription, on a datacenter, with your sour
 
 2
 00:00:09,400 --> 00:00:14,800
-cargo refine heals code with learned rules — neuro-symbolic: neither a rules engine nor a giant model. The corpus is the model.
+cargo refine heals code with adaptive learned rules — neuro-symbolic: neither a rules engine nor a giant model. The corpus is the model.
 
 3
 00:00:15,400 --> 00:00:23,800
