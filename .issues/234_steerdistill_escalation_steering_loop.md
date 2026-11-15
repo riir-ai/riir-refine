@@ -1,6 +1,8 @@
 # Issue 234: SteerDistill steering loop for the escalation chain (steer, don't take over)
 
 **Status:** Open — T2 LANDED 2026-11-14 (amo-idle-i234-t2); T3 (the fixer_regate measurement arm) is the remaining gate — decline is a correct answer
+**Claimed:** zed-df880732@m3, 1794701723, expires 2026-11-16T00:15:00+00:00
+  (T3 only — the fixer_regate steered arm: arm S code + instrument gates land first on m3; the live ternary cell routes to a rig separately, its own posture check gating the queue)
 **Lease closed:** amo-idle-i234-t2, 1794613727 — T2 LANDED 2026-11-14 (was expires 2026-11-15T23:48:47+00:00, scope: T2 only)
 **Source:** arXiv:2611.13410 SteerDistill via [riir-rethink/.research/025](../riir-rethink/.research/025_SteerDistill_Closed_Loop_Teacher_Steering.md)
 **Related:** `src/hosted_expert.rs` (R2 payload: snippet + no-retention system message — GENERATE/takeover shape), `src/seat_rerank.rs`, opt-in `ternary_inference`, `fix_verify` compile gate, corpus-gap intake lane
