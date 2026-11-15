@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes · r8 FINAL = **AGREE** (`602d8d7d`, round 3, checked at `4ea202ad`) — nothing blocks owner GO
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -170,7 +170,14 @@ drop-whole rule does real work there); P12 ship-scope chip (the binary ships ≈
 path-word). Reviewer-confirmed sound: P12 arithmetic, the ane two-pass characterization,
 the S02 VO + no-neural-net chip, P15 vs benches 127/128, P18 vs role_flows. Not checked by
 that pass: §7 license/MLX facts (verified here from primary sources), whether Beta-posterior
-re-ranking is automatic in 0.5.1 (P19 scopes it conservatively).
+re-ranking is automatic in 0.5.1 (P19 scopes it conservatively). Round 2 caught three claimed
+edits missing from §4/the P7 pin (the S09/S10 rows + the rung fold) — landed `4ea202ad` with
+supersession pointers on the r7/r4.2 records and the r8 record relocated to §0 (a bad anchor
+had slotted it into §3). Round 3: **AGREE** — "nothing in the brief now blocks owner GO".
+Carried forward (not brief defects): the 11-17 P7 pin does two jobs (eval regime + producing
+rung — either unresolved fires the S06 degrade rule); the public-repo grep WILL hit
+role_flows.md as it stands (expect a doc fix or an S12 re-scope before the link ships);
+Proposal 025 L247 + its 1,602/7 row still need the named sync.
 
 **Verdict r5.1 → r5 FINAL** (same session, rounds 2–3): round 2 flagged ONE bounded edit —
 the new S02 chip `neural: retrieval` was unsupported and contradicted the brief's own
