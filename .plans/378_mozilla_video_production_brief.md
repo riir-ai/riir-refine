@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied (§0, commit below) — awaiting AGREE conversion, then owner GO
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · **r2 final = AGREE** (2026-11-15, session `66064fa0`, checked at commit `85331b5e`) — the brief is production-ready; owner GO is the remaining human gate
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -55,6 +55,13 @@ automatic fallback to hosted, int4 provenance pin + safetensors-only, hosted tie
 official-voice-only + reference/seed pinning, live-site banned-word grep gate,
 application-link disclosure repeat, §1 "2:10 is fine" retired (hard 2:00 stands), measured
 duration gate + three ranked cuts (§5).
+
+**Verdict r2 final** (2026-11-15, same session, at commit `85331b5e`): **AGREE** — all edits
+confirmed present; "nothing in the brief blocks owner GO". Remaining items are BUILD-TIME
+gates, not brief defects: the Drama-3 facts rest on the primary-source reading (HF card,
+fish-speech install docs, LICENSE), the hosted tier's commercial grant is confirmed only when
+lane 2 is used, and the live-site banned-word grep may force a site fix or an S12 re-scope
+before the link ships.
 
 ## 1. What this is
 
