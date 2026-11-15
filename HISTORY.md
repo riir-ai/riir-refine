@@ -1704,6 +1704,10 @@ holdout deltas) is the standing gate before any promotion talk.
 
 **238 — claim-line format repair** (the 1176 blind class, found by this sweep): the live lease (zed-m3-ane-domain, the Plan 377 session) sat embedded in the Status line, invisible to `claim_lease_check --item 238` ("no claim line on any file numbered 238"); the lint passes such lines as clean because it only validates CANONICAL lines. Reformatted to canonical — holder/epoch/expiry verbatim (1794670478 → 2026-11-16T15:34:38Z).
 
+## 2026-11-15 — Issue 234 CLOSED-NEGATIVE (T3 arm S live cell, Bench 153); removed under the noise-reduction rule
+
+**234 — SteerDistill escalation steering loop** (Bench 153, zed-53534b91@m3, lease folded with the verdict): **NO-GO per the pre-registered decline law, both legs** — EM 0/32 on all three arms, 0 parses on unguided+steered (128 calls, all ServedParsing), steered cost-dominated (16,502.7 s gen vs 14.2 s oracle; 4 gens/case for the modelless arm's output), no arm-H ledger for the takeover join. The mechanism confound is pinned IN the record: the daemon's 1024-position cache truncated every long-prompt generation (64/128 calls) — the cell separates neither "truncated" from "cannot do the task", so a widened-cache daemon run is a NEW pre-registered cell, never a re-tune. steer_retry stays opt-in, no manifest knob. Setup trail (the three rig lessons — cmd.exe runner, runner-temp worktrees break sibling path deps → self-managed mirror worktree, rustc AV at 24-way parallel cold build → CARGO_BUILD_JOBS=8) lives in the issue's git history. Evidence: `.benchmarks/153_issue234_t3_arm_s_live_cell_negative.md` + `.benchmarks/234_arm_s_4090_ledger.jsonl`.
+
 ## Lessons
 
 A fresh worktree + empty target dir is the only clippy reading that means "0" — a stale-cache close-out claimed 0 and 34 findings were live.
