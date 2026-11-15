@@ -1,9 +1,11 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all revisions APPLIED (§0)
+Status: DRAFT — awaiting owner GO · Claude verdict r1 = **REVISE** — all revisions APPLIED (§0) · r2 addenda 2026-11-15: minimal-flow rule (S05/S09 re-anchored to the documented flows) + TTS engine = Fish Audio Drama 3 (owner pick; bmo cannot host it — run posture §7) · final verdict requested
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
+- [x] Owner: TTS engine DECIDED 2026-11-15 — **fish-speech · Fish Audio Drama 3** — §7 (run posture amended there: bmo cannot host Drama 3 — Apple silicon vs NVIDIA-only ≥48 GB FP8; lane = 4090 + drama-3-int4 probe, or Fish Audio hosted fallback)
+- [x] Agent: flow re-anchor + minimal-flow rule (S05/S09 → the documented flows) — r2, this revision
 - [ ] Owner: run the two commands once and save the output TEXT + supply the board URL — §9 (no video recording needed)
 - [ ] Agent: scaffold the fframes project + build S01–S13 + end card per §4/§8
 - [ ] Agent: captions track (word-timed JSON) + loudness gate + export per §6/§7/§8
@@ -48,8 +50,8 @@ The two-minute video for the Mozilla Human-Scale AI Incubator application
 ([Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md), deadline 2026-11-20).
 Reviewer brief: *"a link to a two-minute video showing the project and the team's vision …
 Reviewers want to see the technology working and hear directly from the team about why it
-matters. The video does not need to be polished."* → real screen captures + the owner's real
-voice. Honest and concrete beats polished.
+matters. The video does not need to be polished."* → 100% fframes-drawn vector scenes driven
+by REAL captured data (§9) + a disclosed AI-generated voice (§7). Honest and concrete beats polished.
 
 Produced with **fframes** — the skill is installed at
 `../riir-ai/.agents/skills/fframes-video/` (read `SKILL.md` first, then `references/design.md`,
@@ -155,6 +157,14 @@ recording day (the corpus and board move weekly).
   captured output text (§9), every number comes from §2, charts re-plot real pinned values,
   and on-screen chips link the live pages (board URL, crates.io) so a reviewer can verify
   anything in one click. Nothing on screen is invented; some of it is beautifully re-typeset.
+  - **Minimal-flow rule (owner direction 2026-11-15): show the CURRENT documented flow — and only
+    the minimal version of it.** Exactly two flow surfaces on screen: ONE decision wire (S05,
+    redrawn from `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`) and ONE product loop
+    (S09, redrawn from `../riir-refine/.docs/01_orientation/role_flows.md` — the coder loop + its
+    opt-in leaseback arc). Nothing else: no fixer/trainer role lanes, no dev-flow / train-freeze /
+    model-classes / trust-flow figures, no swimlanes. Node labels are grepped from those two docs
+    verbatim at build time — never invented, never from memory — and on-screen labels obey the
+    §2 vocabulary law (contribute / contribution points; the banned words never render).
 - **Motion:** springs/ease-out 300–600 ms in, 200–300 ms out, 60–120 ms staggers; counters
   tick in mono; one accent element per scene; cards get a subtle window frame and a slow
   1.02× scale-in. No beat-spam, no full-frame zooms, nothing fades up 40 px with
@@ -174,16 +184,16 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
 | S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Vector redraw of real GOAT-table rows scrolling (lane names + verdicts lifted verbatim from the katgpt-rs README — the agent greps 3–4 rows, never invents). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
-| S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram: query card slides in → fast lane (stopwatch icon spins to `0.4 ms`) → amber `abstain` branch lights on "doesn't know". Labels `choice / score / noul` under the wire. |
+| S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `0.4 ms` stopwatch + `abstain` | Wire diagram redrawn from `rethink_flow.md` (grep before drawing — §8): query card → the floor's fused gate → TWO endings only — green `answered · µs · receipt (hashes, not data)` and amber `abstain → up one rung`; the two upper rungs sit as small dim nodes on the up-arrow — the ladder is hinted, never fully drawn (minimal-flow rule). Labels lifted verbatim from the doc. |
 | S06 | 0:41–0:53 | board beat | Vector board redraw + chip `live board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` | fframes redraws the board (radar + footprint bars + latency bars, log axis like the live page) from the P7 pins — real numbers, our own layout; the URL chip invites verification. Dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the real gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
 | S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
 | S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
-| S09 | 1:05–1:15 | flywheel | `scan → retrieve → draft → compile-gate → record → learn` + `opt-in share · secret-scanned` | Redraw of the site's flywheel as 6 nodes on a ring, rotating slowly; the compile-gate node flashes ✓ and once ✗→revert; the share branch (dashed, dimmer) unlocks only when an `opt-in` toggle flips. |
+| S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` | Product loop redrawn from `role_flows.md` (the coder loop; the miner arc = ONE dashed branch — node labels verbatim from the doc, §8): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. NOT the four-role taxonomy (minimal-flow rule); on-screen labels obey the vocabulary law. |
 | S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` (+ chip `#3025 CI 50 ✓ 0 ✗` only if P15 provenance gets pinned) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only, and only after the provenance pin. |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
-| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + `narration: AI-generated voice` (REQUIRED — owner picked the TTS lane) | Quiet end card, one fade, nothing else moves. |
+| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + `narration: AI-generated voice (Fish Audio Drama 3)` (REQUIRED — owner picked the TTS lane; doubles as the Community-License attribution) | Quiet end card, one fade, nothing else moves. |
 
 ## 5. Full VO script (the transcription — 295 words, hard 2:00)
 
@@ -298,7 +308,7 @@ Today it's one engineer — and no external users yet; we say so. The grant fund
 
 (12 cues — S07 carries no VO; shift all timings to the real VO after recording.)
 
-## 7. Voiceover — TTS SELECTED (owner decision 2026-11-14) + pipeline
+## 7. Voiceover — TTS engine: Fish Audio Drama 3 (owner decision 2026-11-15) + pipeline
 
 **The shipping voice is GENERATED.** The owner is a non-native English speaker and wants
 easier listening for reviewers — a fair call, and the disclosure (end card:
@@ -307,23 +317,43 @@ gotcha. The §5 script text stays the source of truth; the written application p
 owner-voiced per Proposal 025 §Compliance (Mozilla's AI policy governs the written answers,
 not the video's narration voice).
 
-**Engine pick (in order of naturalness):**
-1. **ElevenLabs** (recommended for the shipping cut) — most natural, easiest listening;
-   multilingual v2, ONE fixed voice for all 12 takes, moderate stability. A 295-word script
-   is trivial cost on the cheapest tier. Cloud — send only the script text, never code.
-2. **OpenAI TTS** (`gpt-4o-mini-tts`-class) — cheaper, decent, slightly less natural.
-3. **Kokoro-82M** (free, offline, Apache-2.0, CPU via onnx; HF: hexgrad/Kokoro-82M) — the
-   fully-offline posture; good quality, less natural than 1–2.
+**Engine (owner pick 2026-11-15): fish-speech · Fish Audio Drama 3** (`fishaudio/drama-3` via
+github.com/fishaudio/fish-speech — SGLang-Omni / vLLM-Omni serve posture; 35B MoE, 3B active,
+expressive multi-speaker TTS with natural-language direction). ONE fixed voice for all 12 takes.
+
+⛔ **Run posture (measured 2026-11-15): bmo CANNOT host Drama 3** — the model is **NVIDIA-only,
+≥ 48 GB VRAM at FP8** (fish-speech install docs: no CPU, no Apple MPS, no ROCm), and bmo is the
+Apple-silicon runner (96 GB unified RAM, no CUDA — `agent-mail rig status bmo` shows no GPU
+column; its Tailscale IP only routes via amo). The lane, in order:
+1. **4090 + `fishaudio/drama-3-int4`** (unofficial community int4 quant, ~20 GB-class) — queue
+   `agent-mail rig run 4090 --shared` with a ONE-TAKE probe (S06) AFTER the current exclusive
+   job clears (never stack a 20-GB model load on a BUSY CUDA rig); if the probe fits and sounds
+   right, batch the remaining 11 takes on the same posture.
+2. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU, zero
+   license friction (their hosted service), same model, same takes. The fallback that always
+   works.
+3. bmo stays OUT of the TTS lane — a documented hardware fact, not a preference. (bmo can still
+   host the whisper caption pass — CPU is fine there.)
+
+**License — Fish Audio Community License v1.0 (full text read 2026-11-15):** our use is licensed
+under §III(a) Community Commercial (Annual Revenue < USD 500K — true; even a full $300K grant
+stays under) and is NOT a Hosted Service (§III(c)(1): speech for content we create, delivered in
+our own product). We own the outputs (§IV(c)(iii)). ⛔ Never clone a real person's voice
+(§IV(b)(i)) — a Drama-3 stock/reference voice only; the owner's voice would need a deliberate
+consent act first. Attribution rides the end card (§4 END). Never strip a watermark or
+provenance signal from generated audio (§IV(b)(iv)).
 
 **Generation rules:**
 - Same engine + same voice + same settings for ALL takes — never mix engines across scenes.
 - Generate per scene (12 files, `vo_s01.wav` … `vo_s13.wav`, S07 none) — per-scene takes keep
   retakes cheap and give each scene its own timing.
 - The §5 script already spells every number as words ("five hundred eighty", "one
-  sixty-one", "sixteen sixty-nine") — that is deliberate: TTS reads number words far more
-  reliably than digits. Test-generate S06 first (the longest, densest line) and listen once
-  before batch-generating the rest; adjust spelling (e.g. "twenty-seven-billion-parameter")
-  only if the engine stumbles, and keep the §5 text as the canonical record of what changed.
+ sixty-one", "sixteen sixty-nine") — that is deliberate: TTS reads number words far more
+ reliably than digits. Test-generate S06 FIRST (the longest, densest line — it doubles as the
+ int4 VRAM probe, §7 run posture) and listen once before batch-generating the rest; adjust
+ spelling (e.g. "twenty-seven-billion-parameter") only if the engine stumbles, and keep the §5
+ text as the canonical record of what changed. One narration style; natural-language direction
+ tags stay minimal (at most one calm/neutral direction note per scene).
 - **Word timestamps for captions**: run the FINAL generated audio (not the script text)
   through whisper with word timestamps (`whisperx` or `openai-whisper
   --word_timestamps True`) → emit `media/captions.json` in the skill's cue format (§6).
@@ -358,7 +388,10 @@ not the video's narration voice).
    scripts — everything through the crate.
 5. Every number on screen comes from §2. If a LIVE pin moved on recording day (corpus count,
    heal rate, board numbers), update the pin table here first, then the code — never hardcode
-   from memory.
+   from memory. Every FLOW on screen comes from the docs (minimal-flow rule, §3): S05 greps
+   `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`; S09 greps
+   `../riir-refine/.docs/01_orientation/role_flows.md` — node names and step order lifted
+   verbatim at build time; if a doc figure moved, the video follows the docs.
 6. Checks, in order: `timeline` (pacing) → `inspect --fail-on warning` → `strip <scene> -n 12`
    per scene → `frame` crops for the dense cards (S06 bars, S12 equation, S10 counters) →
    `inspect --pops` → `audio analyze` → `preview` for the owner. Then `render -o mozilla.mp4`
@@ -400,14 +433,15 @@ The video is 100% fframes-drawn. What it needs from the owner is REAL DATA, not 
 1. **`cargo refine` dry run** in a real workspace repo → save the stdout TEXT to
    `mozilla-video/media/refine_dryrun.txt` (S08's terminal types it verbatim — real
    findings, real paths, nothing scripted by the agent).
-2. **`cargo refine fix`** once on a scratch branch → save the transcript, ideally including
-   one compile-gate revert moment if a broken fix shows up naturally (optional; feeds S09's
-   ✓/✗ beats with real labels).
+2. **`cargo refine fix`** once on a scratch branch → save the transcript (OPTIONAL — S09 builds
+   without it: the compile-gate node then uses the documented ✓/✗ labels from `role_flows.md`;
+   the transcript only makes the beat labels real). Ideally includes one compile-gate revert
+   moment if a broken fix shows up naturally.
 3. **Board URL** — the live page link for S06's `live board:` chip (owner supplies; numbers
    come from pin P7, re-measured on recording day).
 4. **Nothing else** — GOAT-table rows (S03) are lifted verbatim from the katgpt-rs README by
    the agent; PR cards (S11) draw from pin P15; the flywheel (S09) is the redraw of the
-   site's flow; the conservation equation (S12) is in pin P16.
+   documented role flow (`role_flows.md`, §8); the conservation equation (S12) is in pin P16.
 
 Optional authenticity lane (never blocking): if the owner wants the texture of a real
 terminal — cursor drift, theme, font — one OBS/`ffmpeg -f avfoundation` recording of the
