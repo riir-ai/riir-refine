@@ -1,7 +1,7 @@
 # Issue 239: Conditional-geometry diagnostic axes for the rulewright corpus (Research 675 consumer)
 
 **Date:** 2026-11-15
-**Status:** Open — unclaimed
+**Status:** Open — unclaimed. **2026-11-16 upstream verdict (Plan 638 T2.7, delegated 2 rounds AGREE): DEMOTE — axis (i)'s value premise is MEASURED-NEGATIVE.** The primitives landed (`katgpt-rs` `3eb1cb713`, estimators-gated, opt-in), but at the genuinely-curved decision arm both the cond_id two-ball form AND the spectral incumbents fail (incumbents mis-order PR 7.53→11.11; cond_id d̂_B 8.86 vs the 4-plant at n=128) — no complementary signal on any shape measured. Axis (i) as written ("a cheap corpus-health gate in the spirit of geometric-features-recover-class") has no working estimator behind it at the measured scales; the axis re-opens only under Plan 638's 4 recorded triggers (a labeled real shape / the G2 bar / a consumer need the incumbents miss / a larger-n ω=3 rerun). Axis (ii) was always gated on a richer embedding and is untouched by this verdict.
 **Source:** katgpt-rs Research 675 ([arXiv:2608.25166](https://arxiv.org/abs/2608.25166) distill) + Plan 638 (the `cond_id`/`cond_imbalance` primitives, katgpt-core `estimators`-gated). Verdict: GOAT, pending Plan 638 Phase 2 gates.
 
 Two consumer axes for the rulewright surface. Both consume the Plan 638 primitives; neither gates on them until the plan's G1–G5 gates pass.
