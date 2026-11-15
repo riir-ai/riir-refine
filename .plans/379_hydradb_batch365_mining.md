@@ -1,6 +1,8 @@
 # 379 — Batch 365: hydradb distill mining (rust_perf: io/caching/concurrency/measurement-honesty)
 
-**Status:** staged — verdict recorded (Research 411); mining not started. Source pinned `916637477f3f34766b4905b270bd4292109d77e6` (v0.4.0, ELv2 — transcription-only, original fixtures). Queue slot: behind nominal Batch 364 (InferenceForge / Plan 375).
+**Status:** CLAIMED 2026-11-15 (zed-m3-i379-hydradb@m3, epoch 1794697180, expires 2026-11-18T23:00Z) — mining started; Plan 375's InferenceForge slot stays its holder's (lease to 11-21, honored); this batch runs the NEXT queue slot so the lane advances while amo is offline.
+
+Staged — verdict recorded (Research 411); source pinned `916637477f3f34766b4905b270bd4292109d77e6` (v0.4.0, ELv2 — transcription-only, original fixtures). Queue slot: behind nominal Batch 364 (InferenceForge / Plan 375) — landing order re-derives the number from the score_history tail at landing.
 
 ## Pre-registered bars
 
