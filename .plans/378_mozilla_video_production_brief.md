@@ -487,11 +487,12 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 > S13 — Today it's one engineer — and no external users yet; we say so. The grant funds two
 > to three contributors and a recruiting pilot. Small by design. Yours by default.
 
-**Duration gate (MEASURED — r5 arithmetic):** after the 12 takes are generated, sum the wav
+**Duration gate (MEASURED — r5 arithmetic; real takes 2026-11-15 batch):** after the 12 takes are generated, sum the wav
 lengths + 12 × 0.35 s settles + S07's 2.5 s breather + the ~3 s end card BEFORE building any
-scene; the total must be ≤ 120 s. Context: 290 words at a number-dense ~150 wpm read ≈ 116 s
+scene; the total must be ≤ 120 s. **MEASURED (batch job `01a1dfc9`, 12/12 takes, amo):**
+VO total **152.36 s** (per-take: s01 9.1 · s02 12.07 · s03 15.0 · s04 14.58 · s05 10.26 · s06 18.72 · s08 9.2 · s09 11.28 · s10 12.54 · s11 11.75 · s12 14.02 · s13 13.84) → gate total ≈ **162 s, over by ~42 s**. The plan's 150 wpm assumption did not hold: this voice reads ≈ **114 wpm** (per-scene 0.40–0.67 s/word — number-dense scenes slowest). LEVERS MEASURED DEAD 2026-11-15: (1) direction tags — `[brisk]`/`[fast pace]`/`[narrator, speaking quickly…]` all within noise of baseline (s03 14.0–15.0 s vs 15.0); (2) punctuation/flow normalization — semicolon→comma run-on 14.68 s (noise); (3) silence-trim (ffmpeg −30 dB/0.4 s/keep 0.3 s) recovers only **~2.2 s** total — the pauses are breath tone, deeper cuts audibly chop. Context: 290 words at a number-dense ~150 wpm read ≈ 116 s
 of VO → the gate WILL likely fire; the timing changes below buy ~5.5 s and the word ladder
-frees ~25 more. Apply the ranked cuts IN ORDER (edit §5 here first — the plan stays the
+frees ~25 more. ⚠ **The ladder alone is now measured INSUFFICIENT**: post-ladder (−25 words) ≈ 131 s trimmed — to reach VO ≤ 110.3 s the script must land ≈ **220 words (−63, ~22%)**, ~38 words beyond the ladder, and the remaining cuts touch substance (S06 connective, S02 rules-engine contrast, S03 primitive list, S04 gate qualities, S09 memory beat — each beat's on-screen graphic carries the dropped words). **DECISION NOW OWNER-GATED**: the §5 script carries the owner's line-by-line approval; a deep cut beyond the ladder is a script change, not a production detail. Owner picks: (a) approve the drafted ~220-word §5 (agent drafts, owner line-approves, regenerate the cut scenes — mechanical, voice proven); (b) the hosted Fish Audio lane (real speed control — but §7 lane 3's ToS commercial-use confirmation is its own owner gate); (c) an explicit over-length concession — REJECTED by §0b ("the hard 2:00 stands"). Apply the ranked cuts IN ORDER (edit §5 here first — the plan stays the
 canonical record — then regenerate only the cut scenes; never time-stretch audio; the on-screen
 carries whatever the VO drops):
 
