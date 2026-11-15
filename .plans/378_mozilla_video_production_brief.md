@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0)
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -13,7 +13,7 @@ Branch: `develop`
 - [ ] Owner: #3025 chip wording — your account ("found by cargo refine, fixed by AI (llm)") vs bench 128 ("issue-driven, not healer-emitted", 0 actionable sweep findings); the ON-SCREEN default is the verifiable form `upstream issue #2968 · AI-assisted fix · CI 50 ✓ 0 ✗` — supersede with evidence or approve (verdict r5 blocker 1)
 - [ ] Owner: #2977 "written by hand" — affirm the literal claim or keep the neutral VO ("first upstream contribution"; bench 127 records agent-verified rounds) (verdict r5 blocker 2)
 - [ ] 🔴 Agent: P7 eval-regime pin by 2026-11-17, else the S06 degrade rule fires (drops "outscores"; keeps footprint + latency + gaps) — verdict r3
-- [ ] Agent: same-day number sync vs Proposal 025 (the video's "13 repos" = the refine-convention count, NOT the workspace's total repo count — never quote one as the other; verdict r3)
+- [ ] Agent: same-day number sync vs Proposal 025 (the video's "13 repos" = the refine-convention count, NOT the workspace's total repo count — never quote one as the other; verdict r3); ALSO sync Proposal 025's "each installation learns which rules work" wording to P19's shipped behavior, and its 1,602/7-domains corpus row to 1,673/8 (verdict r8)
 - [ ] Agent: host the mp4 login-free (unlisted YouTube/Vimeo or a riir.ai asset URL) + verify logged-out playback before submission (verdict r3)
 - [ ] Owner: run the two commands once and save the output TEXT + supply the board URL — §9 (no video recording needed)
 - [ ] Agent: scaffold the fframes project + build S01–S13 + end card per §4/§8
@@ -200,14 +200,15 @@ recording day (the corpus and board move weekly).
 | P8 | Per-suite gaps published | **Two suite sets — never mix them on screen:** the board = 8 benchmark spokes (ag_news, massive_intent_en, banking77, sst5, emotion, xnli_en, prompt_injections, typed_decisions); the wider record set trails on 11 suites (worst hellaswag −57.7, winogrande −23.4; closest ag_news −0.2, incl. thai_wisesight/thai_sib200 + the JDI suites). On-screen gap table = the board's own per-spoke display only | same board; `riir-rethink/.benchmarks/096`, `086`, `087` |
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
-| P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game); 🔴 r5: a loose grep now finds **16** repos carrying the convention — re-derive at the number-sync gate and move the chip + VO together (13 is conservative; never inflate without the grep) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
-| P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377: the kernel_pregate TWO-PASS shape — first pass scans for ANE candidates (needle/prose/path-word signals), the domain activates on signal files only; currently opt-in pending its pre-registered cost gate (Plan 377 P2.1, unrun; demote-only env ready), rules suggestion-only until proposers land); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15) | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
-| P13 | Heal rate: "85% then, 96 now, 254 runs" | 🔴 score-bench `heal_rate`: first recorded run **84.6%** (2026-08-19) → latest **96.4%**, parse-safety 1.0, **254 recorded runs**; say the trend, never "increases each day" | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
+| P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game); 🔴 r5/r8: loose greps now find **21** repos carrying the convention — re-derive at the number-sync gate and move the chip + VO together (13 is conservative; never inflate without the grep) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
+| P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377: the kernel_pregate TWO-PASS shape — first pass scans for ANE candidates (needle/prose/path-word signals), the domain activates on signal spans ±24 lines (whole file on a path-word signal); currently opt-in pending its pre-registered cost gate (Plan 377 P2.1, unrun; demote-only env ready), rules suggestion-only until proposers land); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15). ⚠ SHIP SCOPE (r8): the binary ships ≈ **1,598 rules / 6 domains** by feature lists (sec + ane are opt-in, outside the release set) — 1,673/8 is the FULL corpus; S10 carries a scope chip so `cargo refine --info` never contradicts the video | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
+| P13 | Heal rate: "96, held since August · 254 recorded runs" | 🔴 score-bench `heal_rate`: day-one calibration 84.6 → 90.4 → 98.1 within 77 min (2026-08-19), then **96.2–96.4 held since 2026-08-25** (latest 96.4, parse-safety 1.0); **254 rows total, only 213 are the n=35 frozen lane** (the other 41 are other lanes, n = 4–100, dips to 54.3%) — plot the frozen lane honestly FLAT; ⛔ never a climb line (the measured trend is flat; the day-one third run is HIGHER than today) | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
 | P14 | Distribution | **crates.io `cargo-refine` 0.5.1 (2026-11-11)**; GitHub releases + Homebrew tap + Scoop bucket (Sept 2026) | `riir-refine/AGENTS.md` §Open posture, issue 221 |
 | P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — owner verdict "hand-written goodwill"; ⚠ bench 127 records agent-verified rounds ("Claude verified … dictated the fix + reply wording") → the VO/screen use Proposal 025's NEUTRAL wording ("first upstream contribution · six review rounds"); the literal "written by hand" is retired unless the owner affirms it (checklist). **#3025 open, CI 50 pass / 0 fail** — owner account (2026-11-15): "found by cargo refine, fixed by AI (llm)"; ⚠ bench 128 records the lane as "issue-driven, not healer-emitted" (0 actionable sweep findings; upstream issue #2968 asked for the mechanism) → the ON-SCREEN chip uses the verifiable form (`upstream issue #2968 · AI-assisted fix`); owner evidence may supersede | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
 | P16 | Transparency sentence | contribution points non-transferable, expiring, no cash value; **not a blockchain**: per-op conservation invariant `Σ balances + healed + expired == reservoir + topups` (test-pinned + Lean-proven `Kat/Tuna.lean`), per-epoch Merkle anchor roots published hourly (`GET /points/anchor` 200-verified); resettable client UUID, hardware fingerprinting refused | Proposal 025 §points plane; `riir-dapps/AGENTS.md`, `.proofs/RiirDappsProof/Kat/Tuna.lean` |
 | P17 | The ask | $300K: ~60% people (2–3 contributors), ~15% pilot, ~15% infra+audit, ~10% contingency; GPU spend = training the decision tier (W7) + our corpus production lane; fleet tooling opens MIT; never imply paid "fixer nodes" (uptime earns 0 points by design) | Proposal 025 §Year-1 workplan |
 | P18 | Cost beat: "0 LLM calls · 0 API spend — the default path, free by design" | The default heal path never calls an online LLM: dry run, fix draft, compile gate are all local (modelless by construction: no network AT HEAL TIME, no account; G2 p50 ≤ 1 ms — an LLM call cannot fit that budget; G4 alloc-free). Every fix on that path is one you don't pay an agent for — zero spend needs no baseline, and no N/% is claimed. ⚠ Scope: "at heal time" (the `update_check` release feature phones home separately — never conflate); "token" is on the §2 DO-NOT-SAY list — the on-screen form is LLM calls / API spend, never "tokens"; the LEARNED parts (latent retrieval + Elo/Beta rule selection) run locally with NO neural net on the heal path — the neural work lives offline in the distillation that built the corpus | `riir-refine/AGENTS.md` (modelless mandate, zero-parameter hot path), Proposal 025 |
+| P19 | What 0.5.1 actually ships (the "adaptive" scope — r8) | Memory half LIVE: every fix is recorded per machine. The oracle-verified LEARNING half is INERT by design (the release set lacks `clippy_verify` — "memory half only", documented). The Elo damp rides `--recompute-elo` (an explicit batch replay — default alone arms nothing at runtime). Demote/readmit is public and MANUAL by design (nothing demotes automatically). `adoption_gate` is opt-in. ⚠ On-screen "adaptive" scopes to exactly this: live memory + per-context Elo-ordered retrieval + the audited-distillation growth curve — never "learns with every fix" | `riir-refine/AGENTS.md` + `role_flows.md` ("memory always records, learning runs when the oracle is present") |
 
 **DO-NOT-SAY list (hard):**
 - ~~"blockchain / distributed ledger / autonomous DAO"~~ for refine — the points ledger is
@@ -239,7 +240,8 @@ recording day (the corpus and board move weekly).
   have achieved it, but you do need early evidence of it", listing "community involvement in
   shaping the project" and "partners who want to pilot or fund the work" as valid evidence.
   Our beats qualify: six review rounds of maintainer engagement with the design ratified
-  on-thread (community shaping), the merged upstream fix (downstream acceptance), 13-repo
+  on-thread (community shaping), the merged upstream fix (TEAM CONTRIBUTION — bench 127
+  classes it goodwill, evidencing nothing about the healer), 13-repo
   daily production (returning use), the recruiting pilot. The S13 honesty chips are EVIDENCE
   framing — keep them.
 - **The "3 friends adopted it" testimonial has a compliant revival lane** (owner-gated): if
@@ -286,18 +288,53 @@ recording day (the corpus and board move weekly).
     (P18): the default path makes 0 LLM calls and spends $0 on API calls — every fix there is
     one you don't pay an agent for (zero spend needs no baseline; no invented N/%; on screen
     never the word "token" — the §2 ban). The category is **adaptive neuro-symbolic** —
-    between rules and LLMs (faster and smaller BY CONSTRUCTION), and ADAPTIVE in the visible,
-    measured sense: every verified fix feeds the corpus, selection re-ranks per repo
-    (Elo/Beta), the corpus grows ~100 rules/week, the heal rate climbed 84.6 → 96.4 — S02
-    names the term; S09/S10 ARE the adaptation evidence on screen. "Small" stays ONLY as the
-    close line's echo of Mozilla's principle (the stack: 0.48 GB, sub-ms; the team: one
-    engineer) — "adaptive" is the technique's own word. S02 carries a chip mapping the
+    between rules and LLMs (faster and smaller BY CONSTRUCTION), and ADAPTIVE in exactly what
+    SHIPS (r8, pin P19): per-machine memory records every fix (live in the release binary —
+    the oracle-verified learning half is inert by design, memory-only), Elo-ordered retrieval
+    selects per context, the corpus grows ~100 rules/week through AUDITED DISTILLATION
+    batches (authored, not scraped; the opt-in contribution loop has live plumbing and no
+    external contributors yet), and the demote/readmit record is public and deliberately
+    manual — S02 names the term; S09's memory beat and S10's corpus curve are the on-screen
+    evidence. "Small" stays ONLY as the
+    close line's echo of Mozilla's principle (the 0.48 GB stack; the team: one engineer —
+    ⚠ never join the latency surfaces: sub-ms is the REFLEX floor (P6), the 0.48 GB stack's
+    median is 1.6 ms (P7)) — "adaptive" is the technique's own word. S02 carries a chip mapping the
     halves: LEARNED = retrieval + rule selection, SYMBOLIC = rules + compile gate — NO neural
     net at heal time; the neural work lives OFFLINE in the distillation that built the corpus
     — the DO-NOT-SAY "no neural net in the hot path" stays true and is now EXPLAINED. S11's
-    #3025 chip ILLUSTRATES the alongside story (AI-assisted fix) — NOT claimed as
-    healer-emitted (bench 128: issue-driven). "Neuro-symbolic"/"adaptive" are video-only for
-    now — Proposal 025's written answers keep their vocabulary unless the owner aligns them.
+    #3025 chip ILLUSTRATES the alongside story (AI-assisted fix) — NOT claimed as healer-emitted (bench 128:
+    issue-driven). "Neuro-symbolic"/"adaptive" are video-only for
+    now — Proposal 025's written answers keep their vocabulary unless the owner aligns them
+    (the sync gate also covers Proposal 025 L247's "each installation learns which rules
+    work" — the shipped wording is P19's, per verdict r8 blocker 1).
+
+    **Verdict r8 — fresh prose-hunting session** (2026-11-15, session `602d8d7d`, round 1):
+    **REVISE** — the prose hunt WORKED: four blockers, all applied. (1) "learns with every fix"
+    overclaimed — the shipped 0.5.1 binary's learning half is inert by design (memory-only; the
+    Elo damp rides an explicit `--recompute-elo`; nothing demotes automatically) → S09 VO says
+    "remembers what worked" (same count), §3's adaptive sentence rewritten to what ships, and
+    **pin P19** records the shipped scope (live memory + per-context Elo-ordered retrieval +
+    the audited-distillation growth curve — never "learns with every fix"). (2) The heal-rate
+    climb line was false — day-one went 84.6 → 90.4 → 98.1 in 77 min and 96.2–96.4 has HELD
+    since 2026-08-25 (only 213 of 254 rows are the n=35 frozen lane) → S10 says "ninety-six,
+    held since August", plots the frozen lane honestly FLAT, and lets the corpus curve (562 →
+    1,673) be the climbing line; P13 rewritten. (3) Corpus growth is AUDITED DISTILLATION
+    (authored, not scraped) — §3 separates: live memory / audited growth / the opt-in
+    contribution loop (plumbing live, no external contributors yet); Proposal 025 L247's "each
+    installation learns" added to the sync gate. (4) S05/S06 rung tension (rethink_flow.md
+    marks the encoder rung `planned` while P7's 0.48 GB IS the Q8 encoder artifact) → folded
+    into the 11-17 P7 pin ("which rung produced the board numbers" must resolve before drawing
+    either). Bounded: S09 chip "redacted batch" → "secret-scanned batch" (the scan drops rows
+    with secrets; it does not redact); the pre-ship banned-word grep extended to the PUBLIC repo
+    docs (riir-refine is public MIT — role_flows.md still says burn meter / earn KAT / payment
+    page); the §3 false-reason fix (the gfflow blocks carry billing vocabulary too — the
+    drop-whole rule does real work there); P12 ship-scope chip (the binary ships ≈1,598 rules /
+    6 domains by feature lists — 1,673/8 is the full corpus); P11 greps now find 21 repos;
+    §0b's #2977 demoted to TEAM CONTRIBUTION; the P12 span nit (±24 lines / whole file on
+    path-word). Reviewer-confirmed sound: P12 arithmetic, the ane two-pass characterization,
+    the S02 VO + no-neural-net chip, P15 vs benches 127/128, P18 vs role_flows. Not checked by
+    that pass: §7 license/MLX facts (verified here from primary sources), whether Beta-posterior
+    re-ranking is automatic in 0.5.1 (P19 scopes it conservatively).
   - **Minimal-flow rule (owner direction 2026-11-15): show the CURRENT documented flow — and only
     the minimal version of it.** Exactly two flow surfaces on screen: ONE decision wire (S05,
     redrawn from `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`) and ONE product loop
@@ -310,8 +347,9 @@ recording day (the corpus and board move weekly).
     defaults; (2) the doc's step ORDER and STATUS win — a rung the doc marks `planned` renders
     carrying a `planned` mark, never as current; (3) the §2 vocabulary law beats any verbatim
     label — a banned-word node or edge is DROPPED whole, never reworded. Source blocks: the
-    gfflow render blocks ONLY (role_flows.md's mermaid twins carry internal billing vocabulary —
-    never a source). S09 deliberately omits the coder's billing step (login/metering): the
+    gfflow render blocks ONLY (the mermaid twins are not the render source) — and BOTH carry
+    billing vocabulary (the gfflow coder block says "The burn meter", "KAT-equiv", "tokens"),
+    so the drop-whole rule does real work on the gfflow blocks too. S09 deliberately omits the coder's billing step (login/metering): the
     video's money story is S01's "free · offline" + S12's reputation-not-payment; the billing
     plane stays the written application's subject.
 - **Motion:** springs/ease-out 300–600 ms in, 200–300 ms out, 60–120 ms staggers; counters
@@ -370,11 +408,11 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 > S08 — That discipline became cargo refine: the default lint fixer in daily production
 > since August — thirteen of our own repos name it.
 >
-> S09 — It writes a fix only if your crate still compiles, learns what worked — and only if
-> you opt in, shares secret-scanned fixes that improve every machine.
+> S09 — It writes a fix only if your crate still compiles, remembers what worked — and only
+> if you opt in, shares secret-scanned fixes that improve every machine.
 >
 > S10 — The corpus: sixteen seventy-three rules, eight domains — from five sixty-two in August,
-> a hundred new a week. Bench heal rate: eighty-five then, ninety-six now.
+> a hundred new a week. Bench heal rate: ninety-six, held since August.
 >
 > S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream contribution — to
 > Mozilla's own sccache — merged after six review rounds.
@@ -388,7 +426,7 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 
 **Duration gate (MEASURED — r5 arithmetic):** after the 12 takes are generated, sum the wav
 lengths + 12 × 0.35 s settles + S07's 2.5 s breather + the ~3 s end card BEFORE building any
-scene; the total must be ≤ 120 s. Context: 289 words at a number-dense ~150 wpm read ≈ 116 s
+scene; the total must be ≤ 120 s. Context: 290 words at a number-dense ~150 wpm read ≈ 116 s
 of VO → the gate WILL likely fire; the timing changes below buy ~5.5 s and the word ladder
 frees ~25 more. Apply the ranked cuts IN ORDER (edit §5 here first — the plan stays the
 canonical record — then regenerate only the cut scenes; never time-stretch audio; the on-screen
@@ -405,7 +443,7 @@ carries whatever the VO drops):
 5. S12: "Fingerprinting? Refused by design." → "Fingerprinting: refused." (−2) — the stamp
    keeps `refused by design`.
 6. S05: drop "reflex, instinct, Rethink:" (−3) — the wire labels carry them.
-7. S09: drop "learns what worked" (−3) — the loop graphic carries the learn beat.
+7. S09: drop "remembers what worked" (−3) — the loop graphic carries the memory beat.
 
 Never restore the S07 VO. Pace lever before word cuts: the generation rule asks the engine
 for a brisk narrator read (~155–165 wpm target) — the gate adjudicates.
@@ -456,11 +494,11 @@ That discipline became cargo refine: the default lint fixer in daily production 
 
 8
 00:01:05,400 --> 00:01:14,800
-It writes a fix only if your crate still compiles, learns what worked — and only if you opt in, shares secret-scanned fixes that improve every machine.
+It writes a fix only if your crate still compiles, remembers what worked — and only if you opt in, shares secret-scanned fixes that improve every machine.
 
 9
 00:01:15,400 --> 00:01:23,800
-The corpus: 1,673 rules, 8 domains — from 562 in August, a hundred new a week. Bench heal rate: 85 then, 96 now.
+The corpus: 1,673 rules, 8 domains — from 562 in August, a hundred new a week. Bench heal rate: 96, held since August.
 
 10
 00:01:24,400 --> 00:01:31,800
@@ -523,7 +561,7 @@ conversions, measured ~2× real time on an M3 Max. The lane, in order:
    actual uploader + revision hash at download, safetensors ONLY; the 4090 is WINDOWS —
    SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough; ONE attempt ≤ half a day, AFTER the
    current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig).
-3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 289 words) — zero GPU,
+3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 290 words) — zero GPU,
    same model, same takes. ⚠ Governed by Fish Audio's TERMS OF SERVICE, not the Community
    License — confirm the plan tier's commercial-use grant before the cut ships (verdict r2).
    The fallback that always works.
@@ -598,10 +636,12 @@ Audio" notice) — nothing in the r3 lane change moves the license analysis.
    stream=codec_type,width,height,nb_frames,duration mozilla.mp4`.
 7. Deliverables: `mozilla.mp4` (≤ 2:00 hard, 1080p30, H.264 + AAC), `captions.srt` (§6,
    shifted to the real VO), and the strip contact sheets for the owner's review.
-8. Pre-ship gates (verdict r2): (i) grep the LIVE refine.riir.ai (+ riir.ai / reflex.riir.ai /
-   rethink.riir.ai) for the §2 banned words — the video's S12 line says "reputation — never
-   payment" and a reviewer is one click from any site page that still says otherwise; a hit =
-   file the site fix or re-scope the S12 line BEFORE the link goes out. (ii) the application's
+8. Pre-ship gates (verdict r2, r8 extension): (i) grep the LIVE refine.riir.ai (+ riir.ai /
+   reflex.riir.ai / rethink.riir.ai) AND the PUBLIC repo docs (riir-refine is public MIT —
+   role_flows.md still says "burn meter" / "earn KAT" / "payment page") for the §2 banned
+   words — the video's S12 line says "reputation — never
+   payment" and a reviewer is one click from any page that still says otherwise; a hit =
+   file the site/doc fix or re-scope the S12 line BEFORE the link goes out. (ii) the application's
    video-link text carries the same AI-voice disclosure as the end card (§4 END).
 
    ### Schedule (r3 — dated 2026-11-15; submit target 11-19, one buffer day before the 11-20 23:59 PST deadline)
