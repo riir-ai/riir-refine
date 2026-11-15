@@ -1,6 +1,6 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes · r8 FINAL = **AGREE** (`602d8d7d`, round 3, checked at `4ea202ad`) · r9 owner direction + fact-check: the proposal subject is cargo REFINE (~32 MB binary + ~13.4 MB rule corpus — P20), not the 0.48 GB Rethink stack (mostly the LAYA Q8 checkpoint); S08/S06/§3 re-scoped, stale-size bans added · **r10 FINAL = AGREE** (`8c18bab0`, round 2, checked at `44ea7866`): dist binary re-pinned MEASURED (17.8 MB decimal / 6.48 MB archive, sha `ed181a66…`, reproduced independently by the reviewer) — nothing in the r9/r10 delta blocks owner GO · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed · **r10 RE-PINNED on m3: 17.8 MB binary / 6.48 MB archive (sha `ed181a66…`)** · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed — nothing blocks owner GO
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1) · r3 CFP-comparison REVISE applied · r4/r4.1/r4.2 owner directions applied (neuro-symbolic positioning; direct cost claim; P12 = 1,673/8 domains via the recent-git pass) · r5 (fresh session `e3312b56`) REVISE applied — 3 blockers + bounded fixes · r5.1 bounded edit + cosmetics applied · **r5 FINAL = AGREE** (`e3312b56`, round 3, checked at `26d81333`) — nothing in the brief blocks owner GO · r6 owner correction: ane = the kernel_pregate two-pass shape (scan-first, activate-on-signal), pending its measured cost gate — P12 wording fixed · r7 owner direction: the technique is ADAPTIVE (not just small) — S02 VO/chip updated, slip admission + prose-fact-check standing law recorded (§0) · r8 fresh prose-hunt verdict REVISE applied (session `602d8d7d`): 4 blockers (learns→remembers per P19, heal-rate honestly flat, growth = audited distillation, S05/S06 rung fold into the 11-17 P7 pin) + 8 bounded fixes · r8 FINAL = **AGREE** (`602d8d7d`, round 3, checked at `4ea202ad`) · r9 owner direction + fact-check: the proposal subject is cargo REFINE (~32 MB binary + ~13.4 MB rule corpus — P20), not the 0.48 GB Rethink stack (mostly the LAYA Q8 checkpoint); S08/S06/§3 re-scoped, stale-size bans added · **r10 FINAL = AGREE** (`8c18bab0`, round 2, checked at `44ea7866`): dist binary re-pinned MEASURED (17.8 MB decimal / 6.48 MB archive, sha `ed181a66…`, reproduced independently by the reviewer) · **r10 probe DONE: lane 1 (amo mlx-audio) VERIFIED — S06 take on disk (18.72 s, rev `2b0c8028…`), §7 lane table finalized; owner listen-gate before batch** — nothing in the r9/r10 delta blocks owner GO · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed · **r10 RE-PINNED on m3: 17.8 MB binary / 6.48 MB archive (sha `ed181a66…`)** · r10 verdict REVISE applied (fresh session `8c18bab0`): the 33.4 MB figure was the DEV --release binary — the SHIPPED artifact is the `--profile dist` build (16.9–19.0 MB measured at v0.4.8; the owner's ~15 MB was close — retraction recorded); P20 re-pinned (dist re-measure required before the S08 chip renders), S06's bar labeled on screen as the research stack, corpus-basis reconciliation added (P025 L295 freeze buckets vs manifest rules — never mixed), proposal path fixed — nothing blocks owner GO
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
@@ -13,6 +13,7 @@ Branch: `develop`
 - [ ] Owner: #3025 chip wording — your account ("found by cargo refine, fixed by AI (llm)") vs bench 128 ("issue-driven, not healer-emitted", 0 actionable sweep findings); the ON-SCREEN default is the verifiable form `upstream issue #2968 · AI-assisted fix · CI 50 ✓ 0 ✗` — supersede with evidence or approve (verdict r5 blocker 1)
 - [ ] Owner: #2977 "written by hand" — affirm the literal claim or keep the neutral VO ("first upstream contribution"; bench 127 records agent-verified rounds) (verdict r5 blocker 2)
 - [x] 🔴 Agent: build cargo-refine (current develop, release.yml's exact feature list) with `--profile dist`; re-pin P20(a) binary + archive sizes, decimal MB, and render the S08 chip from THAT value — DONE 2026-11-15 on m3 (warm dist cache): binary 17,750,720 B = 17.8 MB, archive 6.48 MB, sha `ed181a66…`; plain build (cargo-auditable not installed locally — negligible delta)
+- [x] 🔴 Agent: TTS probe — DONE 2026-11-15: lane 1 (amo, mlx-audio) VERIFIED — S06 take on disk (`mozilla-video/media/s06_probe.wav`, 18.72 s, rev `2b0c8028…`, working command pinned §7); lane 2 (4090 fish-speech) WALLED (server-based runtime) + cleaned; ⚠ Owner: LISTEN to the take before the batch (test-first rule)
 - [ ] 🔴 Agent: P7 eval-regime pin by 2026-11-17, else the S06 degrade rule fires (drops "outscores"; keeps footprint + latency + gaps) — verdict r3
 - [ ] Agent: same-day number sync vs Proposal 025 (the video's "13 repos" = the refine-convention count, NOT the workspace's total repo count — never quote one as the other; verdict r3); ALSO sync Proposal 025's "each installation learns which rules work" wording to P19's shipped behavior, its 1,602/7-domains corpus row to 1,673/8, and re-verify the 13.4 MB rule-text figure against the grown corpus (verdict r8/r9); PLUS the corpus-basis reconciliation — P025 L295's freeze-bucket basis (1,642 classes / 13.4 MB, 2026-11-10) vs the manifest's 1,673 rules / 8 domains are TWO BASES, never mixed on screen (verdict r10)
 - [ ] Agent: host the mp4 login-free (unlisted YouTube/Vimeo or a riir.ai asset URL) + verify logged-out playback before submission (verdict r3)
@@ -183,8 +184,19 @@ archive 6.48 MB gz. S08 renders `whole tool: 17.8 MB · offline`; §3/§0b carry
 figure. Verdict round 2: **AGREE** — the reviewer independently reproduced the binary on
 disk (bytes, sha, version 0.5.0 stamp, release.yml feature list, build stamp `8b37886d5926`)
 and re-compressed the archive (6.46 MB, consistent). Carry-forward (not a blocker): the pin
-is arm64-macOS — other targets ran to 19.0 MB at v0.4.8, so measure per-target if the chip
+is arm64 macOS — other targets ran to 19.0 MB at v0.4.8, so measure per-target if the chip
 is ever described as "every platform"; re-measure on any rebuild before recording day.
+
+**r10 probe DONE — lane 1 VERIFIED** (2026-11-15 evening, session wake #3 + amo rounds 1–3):
+the mlx-audio take EXISTS — `mozilla-video/media/s06_probe.wav`, 18.72 s, 44.1 kHz Int16,
+1.65 MB, conversion-card revision `2b0c8028…`, generated on amo via the working command now
+pinned in §7 lane 1 (the CLI's output flags differ from the docs: no `--audio_path`; plain
+default output = `audio_000.wav` in cwd; `--save` requires `--stream`). Lane 2 (4090
+fish-speech) WALLED after 6 rounds (server-based runtime, `pyrootutils` dep chain) —
+cleaned up (probe tree/scripts/weights cache/pip installs removed; the shared
+huggingface_hub upgrade disclosed-left). ⚠ THE TAKE IS UNLISTENED — the owner listens
+before the 12-take batch (test-first rule); if the voice fails, lane 3 (hosted) or a
+different reference voice is the fallback.
 
 **r9 owner direction** (2026-11-15): "0.48 GB is still too big — it's big because of the LAYA
 model mostly, which can be smaller; the Refine we released is only ~15 MB I think? Mention
@@ -596,26 +608,17 @@ TTS input normalizes §5's em-dashes to commas/periods; §5 stays the canonical 
 port.** The OFFICIAL fish-speech release remains NVIDIA-only (≥ 48 GB VRAM at FP8; no CPU, no
 Apple MPS, no ROCm) — but mlx-audio merged Drama 3 (PR #1018) and `mlx-community` carries
 conversions, measured ~2× real time on an M3 Max. The lane, in order:
-1. **bmo + `mlx-community/fish-audio-drama-3-4bit`** (4-bit experts / 8-bit dense+tower: 22 GB
-   on disk, ~26 GB peak — bmo holds 96 GB unified with 75 free: comfortable headroom; quality
-   close-not-bit-identical: teacher-forced backbone cosine 0.995; the card's NOTICE lists every
-   weight change; same Community License). Install from mlx-audio `main` (support post-0.5.9):
-   `pip install "mlx-audio @ git+https://github.com/Blaizzy/mlx-audio"`. Generate with the
-   card's sampling: `python -m mlx_audio.tts.generate --model
-   mlx-community/fish-audio-drama-3-4bit --text <line> --ref_audio <voice.wav> --ref_text
-   <transcript> --temperature 0.7 --top_p 0.7 --top_k 30`. Queue `agent-mail rig run bmo
-   --shared` (bmo QUIET; never on a busy rig) — ONE-TAKE S06 probe first, TIME-BOXED ≤ half a
-   day; ANY wall (install, memory, sound) → lane 2 automatically. Same-quality family
-   fallbacks: 3-bit (`fish-audio-drama-3-3bit`, ~22.5–24 GB peak), 8-bit (~49 GB peak). The
-   deadline is 2026-11-20 — the probe must not eat a day of it.
-2. **4090 + `fishaudio/drama-3-int4`** (r2 lane, demoted one step: ~20 GB-class; PIN the
-   actual uploader + revision hash at download, safetensors ONLY; the 4090 is WINDOWS —
-   SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough; ONE attempt ≤ half a day, AFTER the
-   current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig).
+1. **bmo/amo + `mlx-community/fish-audio-drama-3-4bit`** — **LANE 1 VERIFIED 2026-11-15 (r10 probe DONE, S06 take on disk)**: the working command (amo, `python -m mlx_audio.tts.generate --model mlx-community/fish-audio-drama-3-4bit --text <line> --ref_audio ref.wav --ref_text <transcript> --temperature 0.7 --top_p 0.7 --top_k 30 --audio_format wav`) writes `audio_000.wav` to the CWD (⚠ NO `--audio_path` flag exists; ⚠ `--save` requires `--stream` — the plain default output is the right posture); the take: **18.72 s, 44.1 kHz Int16 mono, 1.65 MB** (`mozilla-video/media/s06_probe.wav`), conversion-card revision `2b0c8028…`, weights 12/12 fetched (~92 min first pull); quality = UNLISTENED — the owner listens before the batch (the plan's test-first rule). bmo's identical job was dropped from its queue (referee) — amo is the lane-1 host.
+2. **4090 + fish-speech — WALLED (r10, 6 rounds, cleaned up)**: the runtime is server-based
+   (`tools/tts_sample.py` is an api_client → `tools/api_server.py` died on a missing
+   `pyrootutils` dep; the CLI's output flags differ from the docs) — dependency whack-a-mole
+   past the time-box. All leftovers cleaned (probe tree, run scripts, the 7.6 MB partial
+   weights cache, pip installs; the shared `huggingface_hub` upgrade disclosed-left).
 3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 290 words) — zero GPU,
    same model, same takes. ⚠ Governed by Fish Audio's TERMS OF SERVICE, not the Community
    License — confirm the plan tier's commercial-use grant before the cut ships (verdict r2).
-   The fallback that always works.
+   The fallback if the local lane's VOICE fails the owner's listen (the runtime itself is
+   verified).
 
 **License — Fish Audio Community License v1.0 (full text read 2026-11-15):** our use is licensed
 under §III(a) Community Commercial (Annual Revenue < USD 500K — true; even a full $300K grant
