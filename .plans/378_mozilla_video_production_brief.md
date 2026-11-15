@@ -1,16 +1,17 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1 = bmo + mlx-community 4-bit) · r3 CFP-comparison verdict = **REVISE** — all edits applied (§0; verdict session capped at 3 rounds) · r4 owner direction 2026-11-15: **neuro-symbolic positioning** (alongside tools/LLMs, never a replacement; humans + AI agents; zero-token cost beat) + #3025 provenance pinned (found by cargo refine, fixed by AI llm) — S02/S08/S09/S10/S11 updated, ranked cut 1 pre-applied · r4.1: cost claim made DIRECT (cost saving at every step — 0 tokens, 0 agent calls; zero spend needs no baseline) · r4.2: recent-git coverage pass — P12 1,669 → **1,673** (Batch 363 rust_perf +4), ane = the opt-in 8th domain, P13/P15/P14 re-verified current
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3: bmo CAN host Drama 3 via the community MLX port (lane 1 = bmo + mlx-community 4-bit) · r3 CFP-comparison verdict = **REVISE** — all edits applied (§0; verdict session capped at 3 rounds) · r4 owner direction 2026-11-15: **neuro-symbolic positioning** (alongside tools/LLMs, never a replacement; humans + AI agents; zero-token cost beat) + #3025 provenance pinned (found by cargo refine, fixed by AI llm) — S02/S08/S09/S10/S11 updated, ranked cut 1 pre-applied · r4.1: cost claim made DIRECT (cost saving at every step — 0 tokens, 0 agent calls; zero spend needs no baseline) · r4.2: recent-git coverage pass — P12 1,669 → **1,673** (Batch 363 rust_perf +4), ane = the opt-in 8th domain, P13/P15/P14 re-verified current · r5 verdict (fresh session `e3312b56`) = **REVISE** — 3 blockers + bounded fixes applied: #3025 chip → verifiable form (bench 128), #2977 "written by hand" retired from VO/screen (bench 127), duration pre-arithmetic (0.35 s settles / S07 2.5 s / end card 3 s) + deeper ranked ladder, "0 tokens" → `0 LLM calls · 0 API spend` (the brief's OWN vocabulary ban), sec-domain + n≈35 + date-stamp + 16-repo caveats, staleness sweep
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
-- [x] Owner: TTS engine DECIDED 2026-11-15 — **fish-speech · Fish Audio Drama 3** — §7 (run posture amended there: bmo cannot host Drama 3 — Apple silicon vs NVIDIA-only ≥48 GB FP8; lane = 4090 + drama-3-int4 probe, or Fish Audio hosted fallback)
+- [x] Owner: TTS engine DECIDED 2026-11-15 — **fish-speech · Fish Audio Drama 3** — §7 (run posture r3: bmo CAN host via the community MLX port — lane 1; 4090-int4 = lane 2; Fish Audio hosted = lane 3)
 - [x] Agent: flow re-anchor + minimal-flow rule (S05/S09 → the documented flows) — r2, this revision
 - [ ] Agent: pin the conversion provenance before any probe (mlx-community 4-bit revision hash / int4 uploader + hash; safetensors ONLY at download — no pickle weights) — verdict r2; lane order updated r3 (bmo MLX first)
 - [ ] 🔴 Agent: grep the LIVE refine.riir.ai (+ the other three fronts) for the §2 banned words before the video link ships — a reviewer is one click from any mismatch (verdict r2)
 - [ ] Agent: the application's video-link text repeats the AI-voice disclosure line (verdict r2)
 - [ ] Owner: approve the §5 script line-by-line — first-party substance; the AI lanes produce, the owner approves (verdict r3; r4's S02/S13 VO edits are owner-directed — pre-approved)
-- [x] Owner: #3025 provenance PINNED 2026-11-15 — **found by cargo refine, fixed by AI (llm)**; S11 chip unlocked with that wording (#2977 stays hand-written) (owner direction r4)
+- [ ] Owner: #3025 chip wording — your account ("found by cargo refine, fixed by AI (llm)") vs bench 128 ("issue-driven, not healer-emitted", 0 actionable sweep findings); the ON-SCREEN default is the verifiable form `upstream issue #2968 · AI-assisted fix · CI 50 ✓ 0 ✗` — supersede with evidence or approve (verdict r5 blocker 1)
+- [ ] Owner: #2977 "written by hand" — affirm the literal claim or keep the neutral VO ("first upstream contribution"; bench 127 records agent-verified rounds) (verdict r5 blocker 2)
 - [ ] 🔴 Agent: P7 eval-regime pin by 2026-11-17, else the S06 degrade rule fires (drops "outscores"; keeps footprint + latency + gaps) — verdict r3
 - [ ] Agent: same-day number sync vs Proposal 025 (the video's "13 repos" = the refine-convention count, NOT the workspace's total repo count — never quote one as the other; verdict r3)
 - [ ] Agent: host the mp4 login-free (unlisted YouTube/Vimeo or a riir.ai asset URL) + verify logged-out playback before submission (verdict r3)
@@ -103,6 +104,30 @@ day as this plan's P7 degrade-rule deadline (one combined fact-freshness pass th
 issues 234 (steer_retry) and 233 (calibrated_dispatch) are opt-in features outside every video
 claim; issue 237 closed negative (bench-only lane, no video surface).
 
+**Verdict r5 — fresh session, post-r4** (2026-11-15, session `e3312b56`, round 1): **REVISE** —
+three blockers + bounded fixes, ALL APPLIED:
+1. **#3025 chip contradicted bench 128** (the sweep found "0 actionable perf findings"; the
+   lane is "issue-driven, not healer-emitted" — upstream issue #2968 asked for the mechanism)
+   → the on-screen chip uses the verifiable form (`upstream issue #2968 · AI-assisted fix ·
+   CI 50 ✓ 0 ✗`), the "positioning PROOF" language demoted to illustration, and the owner
+   adjudicates (checklist) whether evidence supersedes bench 128.
+2. **"written by hand" for #2977 not supported literally** (bench 127: agent-verified rounds —
+   "Claude verified … dictated the fix + reply wording") → VO/screen use Proposal 025's
+   neutral wording ("first upstream contribution · six review rounds", −3 words → 289); the
+   owner may affirm the literal claim (checklist).
+3. **Duration math**: at 150 wpm the old posture landed ~2:07–2:12 → timing bought FIRST
+   (settles 0.6→0.35 s, S07 4→2.5 s, end card 4→3 s ≈ 5.5 s) + a DEEPER ranked ladder
+   (S04 gates −6, S03 lane names −8, S01 datacenter −3, S12 −2, S05 rung names −3, S09
+   "learns" −3 ≈ −25 words) — the measured gate adjudicates.
+Plus: "0 tokens" tripped the brief's OWN banned-word list → the on-screen form is
+`0 LLM calls · 0 API spend`, scoped to the default path ("free by design"; "at heal time" —
+update_check phones home separately and is never conflated); sec-domain opt-in caveat on S08
+(never fake a sec line); `n≈35 frozen bench` + date-stamp chips on S10; P11 "13 repos" flagged
+conservative (16 in a loose grep — re-derive at the sync gate); S02 chips reworded ("needs no
+LLM · plays well with yours" + the neural/symbolic mapping chip); staleness sweep (the bmo
+checkbox, the §7 "sixteen sixty-nine" example, the 295-word mention, the probe job short id
+`0906aefa`, the schedule's P15 row).
+
 ## 1. What this is
 
 The two-minute video for the Mozilla Human-Scale AI Incubator application
@@ -138,14 +163,14 @@ recording day (the corpus and board move weekly).
 | P8 | Per-suite gaps published | **Two suite sets — never mix them on screen:** the board = 8 benchmark spokes (ag_news, massive_intent_en, banking77, sst5, emotion, xnli_en, prompt_injections, typed_decisions); the wider record set trails on 11 suites (worst hellaswag −57.7, winogrande −23.4; closest ag_news −0.2, incl. thai_wisesight/thai_sib200 + the JDI suites). On-screen gap table = the board's own per-spoke display only | same board; `riir-rethink/.benchmarks/096`, `086`, `087` |
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
-| P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
+| P11 | "default lint fixer since August, 13 repos" | 13 workspace repos' AGENTS.md carry the "`cargo refine` before manual fixes" convention; in daily production since 2026-08; private game production = the seal runtime repo (never name the game); 🔴 r5: a loose grep now finds **16** repos carrying the convention — re-derive at the number-sync gate and move the chip + VO together (13 is conservative; never inflate without the grep) | grep `"Lint fixing" + "cargo refine"` across `/Users/kat/git/*/AGENTS.md` |
 | P12 | Corpus: "1,673 rules · 8 domains · from 562 · ~100/week" | 🔴 manifest today: **1,673 rules / 8 domains** (clippy 120 + rust_perf **342** [Batch 363, `009394b7`] + kernel_opt 1,089 + sec 69 + docker 31 + dist 8 + shader 8 + **ane 6** — ane is the 8th domain, Plan 377, OPT-IN: never imply it is default or in the shipped release set); history first row **2026-08-28: 562**; growth **≈ 98–102 rules/week** (re-derived 2026-11-15) | 🔴 `riir-refine/.benchmarks/pins_manifest.json` + `corpus_history.jsonl` (re-sum on recording day) |
 | P13 | Heal rate: "85% then, 96 now, 254 runs" | 🔴 score-bench `heal_rate`: first recorded run **84.6%** (2026-08-19) → latest **96.4%**, parse-safety 1.0, **254 recorded runs**; say the trend, never "increases each day" | 🔴 `riir-refine/.benchmarks/score_history.jsonl` |
 | P14 | Distribution | **crates.io `cargo-refine` 0.5.1 (2026-11-11)**; GitHub releases + Homebrew tap + Scoop bucket (Sept 2026) | `riir-refine/AGENTS.md` §Open posture, issue 221 |
-| P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — **written by hand** (owner verdict: goodwill class; say "our first upstream fix, written by hand", NEVER "the AI wrote it"); **#3025 open, CI 50 pass / 0 fail** — **provenance PINNED (owner, 2026-11-15): found by cargo refine, fixed by AI (llm)** — the S11 #3025 chip carries exactly that wording and doubles as the positioning proof (the tool finds; AI fixes; the alongside story in one Mozilla artifact). #2977 stays HAND-written — never "the AI wrote it" (owner verdict stands) | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
+| P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — owner verdict "hand-written goodwill"; ⚠ bench 127 records agent-verified rounds ("Claude verified … dictated the fix + reply wording") → the VO/screen use Proposal 025's NEUTRAL wording ("first upstream contribution · six review rounds"); the literal "written by hand" is retired unless the owner affirms it (checklist). **#3025 open, CI 50 pass / 0 fail** — owner account (2026-11-15): "found by cargo refine, fixed by AI (llm)"; ⚠ bench 128 records the lane as "issue-driven, not healer-emitted" (0 actionable sweep findings; upstream issue #2968 asked for the mechanism) → the ON-SCREEN chip uses the verifiable form (`upstream issue #2968 · AI-assisted fix`); owner evidence may supersede | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
 | P16 | Transparency sentence | contribution points non-transferable, expiring, no cash value; **not a blockchain**: per-op conservation invariant `Σ balances + healed + expired == reservoir + topups` (test-pinned + Lean-proven `Kat/Tuna.lean`), per-epoch Merkle anchor roots published hourly (`GET /points/anchor` 200-verified); resettable client UUID, hardware fingerprinting refused | Proposal 025 §points plane; `riir-dapps/AGENTS.md`, `.proofs/RiirDappsProof/Kat/Tuna.lean` |
 | P17 | The ask | $300K: ~60% people (2–3 contributors), ~15% pilot, ~15% infra+audit, ~10% contingency; GPU spend = training the decision tier (W7) + our corpus production lane; fleet tooling opens MIT; never imply paid "fixer nodes" (uptime earns 0 points by design) | Proposal 025 §Year-1 workplan |
-| P18 | Cost beat: "cost saving at every step — 0 tokens, 0 agent calls" | The default path BUYS NO TOKENS, ever: dry run, fix draft, compile gate are all local — the tool outputs what to fix AND fixes it without calling any online agent/LLM (modelless by construction: no network call, no account; G2 p50 ≤ 1 ms — an LLM call cannot fit that budget; G4 alloc-free). State the saving DIRECTLY: every fix is one you don't pay an agent for. Zero spend needs no baseline — no N/% is needed or permitted (unmeasured comparisons stay out) | `riir-refine/AGENTS.md` (modelless mandate, zero-parameter hot path), Proposal 025 |
+| P18 | Cost beat: "0 LLM calls · 0 API spend — the default path, free by design" | The default heal path never calls an online LLM: dry run, fix draft, compile gate are all local (modelless by construction: no network AT HEAL TIME, no account; G2 p50 ≤ 1 ms — an LLM call cannot fit that budget; G4 alloc-free). Every fix on that path is one you don't pay an agent for — zero spend needs no baseline, and no N/% is claimed. ⚠ Scope: "at heal time" (the `update_check` release feature phones home separately — never conflate); "token" is on the §2 DO-NOT-SAY list — the on-screen form is LLM calls / API spend, never "tokens" | `riir-refine/AGENTS.md` (modelless mandate, zero-parameter hot path), Proposal 025 |
 
 **DO-NOT-SAY list (hard):**
 - ~~"blockchain / distributed ledger / autonomous DAO"~~ for refine — the points ledger is
@@ -220,12 +245,16 @@ recording day (the corpus and board move weekly).
   anything in one click. Nothing on screen is invented; some of it is beautifully re-typeset.
   - **Positioning (owner direction 2026-11-15): cargo refine works ALONGSIDE existing tools and
     LLMs — never as a replacement.** It helps humans AND AI agents analyze for perf and
-    security; the cost beat is DIRECT (P18): it finds and fixes without calling any online agent —
-    cost saving at every step, 0 tokens bought, ever (zero spend needs no baseline; no invented
-    N/%); the category is **neuro-symbolic** — between rules and LLMs,
-    which is exactly WHY it is faster and smaller. S02 carries the term; S08's real output
-    carries perf + sec on screen; S11's #3025 chip is the proof (the tool found it, AI fixed
-    it).
+    security; the cost beat is DIRECT (P18): the default path makes 0 LLM calls and spends $0
+    on API calls — every fix there is one you don't pay an agent for (zero spend needs no
+    baseline; no invented N/%; on screen never the word "token" — the §2 ban). The category is
+    **neuro-symbolic** — between rules and LLMs, which is exactly WHY it is faster and smaller
+    (S02 carries the term AND a chip saying where each half lives: neural = retrieval +
+    offline distillation, symbolic = rules + compile gate — the DO-NOT-SAY "no neural net in
+    the hot path" stays true and is now EXPLAINED). S11's #3025 chip ILLUSTRATES the
+    alongside story (AI-assisted fix) — it is NOT claimed as healer-emitted (bench 128:
+    issue-driven). The term "neuro-symbolic" is video-only for now — Proposal 025's written
+    answers keep their current vocabulary unless the owner aligns them.
   - **Minimal-flow rule (owner direction 2026-11-15): show the CURRENT documented flow — and only
     the minimal version of it.** Exactly two flow surfaces on screen: ONE decision wire (S05,
     redrawn from `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`) and ONE product loop
@@ -258,21 +287,21 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | id | t (target) | VO (see §5) | On-screen | Graphics + motion prompt |
 |---|---|---|---|---|
 | S01 | 0:00–0:09 | hook | `BEFORE: subscription · datacenter · your code uploaded` / `AFTER: offline · free · code stays` | Diagonal split. Left card red-tinted: cloud, `$` and upload-arrow icons drop in staggered; right card dark: unplugged-plug icon springs in. Wipe resolves left→right on "We built the opposite." |
-| S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` + chips `neuro-symbolic — between rules & LLMs` · `with your tools & your LLM — not a replacement` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
+| S02 | 0:09–0:15 | corpus-is-model | `learned rules — not a giant model` + `THE CORPUS IS THE MODEL` + chips `neuro-symbolic — between rules & LLMs` · `needs no LLM · plays well with yours` · `neural: retrieval · symbolic: rules + compile gate` | Giant type (130 px) with per-word spring-in; small rule tiles (`collapsible_if`, `needless_range_loop`, `map_clone`…) fly in and stack into a book shape; a GPU icon sits dimmed with a strike-through. |
 | S03 | 0:15–0:24 | katgpt-rs papers | `katgpt-rs · MIT · ★141` + ticker `580 papers studied` + chip `90+ survived the gates` | Vector redraw of real GOAT-table rows scrolling (lane names + verdicts lifted verbatim from the katgpt-rs README — the agent greps 3–4 rows, never invents). Ticker counts 0→580 in mono; the survival chip stamps in on "survived". Three primitive chips pop on the beats: `sigmoid (never softmax) ✓`, `ternary SIMD matvec`, `freeze / thaw`. |
 | S04 | 0:24–0:33 | GOAT gates | `G1 CORRECT · G2 PERF · G3 NO-REG · G4 ZERO-ALLOC` + `161 features default-on` + `57 Lean theorems ✓` | Four stamps slam in sequence (thud SFX, 120 ms apart); counters tick up beside them; tiny terminal line `proof gate: 57 theorems · axioms ✓` types itself. |
 | S05 | 0:33–0:41 | decision stack | `reflex · instinct · rethink` + `< 1 ms` stopwatch + `abstain` + chip `research sibling · the method's proving ground` | Wire diagram redrawn from `rethink_flow.md` (grep before drawing — §8): query card → the floor's fused gate → TWO endings — green `answer + receipt` (µs; hashes, not data) and amber `not sure → abstains, up one rung`; the two upper rungs sit as small dim nodes on the up-arrow, EACH carrying its doc-status mark (the bag rung `live`; the encoder/hosted rung per the doc's honesty table — `planned` renders marked `planned`, never as current; the ladder hinted, never fully drawn). The stopwatch pins to the P6 GATE (`< 1 ms` p99); a small chip may add `p50 24–762 µs`. Tie-breaks per §3 — the doc wins wording. |
 | S06 | 0:41–0:53 | board beat | Vector board redraw + chip `live board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` + chip `teacher: offline only · never in the serving path` | fframes redraws the board (radar + footprint bars + latency bars, log axis like the live page) from the P7 pins — real numbers, our own layout; the URL chip invites verification. Dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the real gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
-| S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
-| S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` + chip `no LLM · no GPU · no account · no network at heal time` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. The real output's roll-up line ("findings by domain: clippy · perf · sec …") carries the perf + security analysis on screen (§3 positioning). Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
+| S07 | 0:53–0:55.5 | — (no VO; 2.5 s breather — r5 timing) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
+| S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` + chip `no LLM · no GPU · no account · no network at heal time` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. The real output's roll-up line, IF the run shows one, carries the perf + security analysis on screen (§3 positioning) — ⛔ the typed text is the REAL output VERBATIM: the `sec` domain is OPT-IN, so a release-binary run may show no sec line — never add or fake one. Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
 | S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` + chip `for humans and AI agents alike` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
-| S10 | 1:15–1:24 | numbers | `562 → 1,673 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` · big counter `0 tokens · 0 agent calls` + subline `cost saving at every step` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
-| S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` + chip `#3025: found by cargo refine · fixed by AI (llm) · CI 50 ✓ 0 ✗` (PINNED 2026-11-15) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only — and it is the positioning PROOF: the tool finds, AI fixes (§3). |
+| S10 | 1:15–1:24 | numbers | `562 → 1,673 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` + chip `n≈35 frozen bench` + date stamp `as of <recording day>` · big counter `0 LLM calls · 0 API spend` + subline `the default path — free by design` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
+| S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · 6 review rounds` + `crates.io · brew · scoop` + chip `#3025: upstream issue #2968 · AI-assisted fix · CI 50 ✓ 0 ✗` | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only — an ILLUSTRATION of the alongside story (our fix work with AI assistance), NOT claimed as healer-emitted (bench 128: issue-driven); the S10 zero-spend claim scopes the PRODUCT's default path — #3025 is our upstream contribution work, a different surface. |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` · `built for: FOSS maintainers · students · devs without cloud budgets` · `sustainable: fiscal sponsor · MIT core` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
-| END | 1:52–1:56 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + disclosure line (REQUIRED, r3-widened): `narration: AI voice · Fish Audio Drama 3 · visuals: AI-assisted · script: owner-approved` — and the APPLICATION's video-link text repeats this exact line (a 4-s end card is easy to miss — verdict r2; r3 extends the disclosure beyond the voice) | Quiet end card, one fade, nothing else moves. |
+| END | 1:57–2:00 | — | `cargo refine — the corpus is the model` + `refine.riir.ai · github.com/katopz/katgpt-rs · crates.io/cargo-refine` + `MIT` + disclosure line (REQUIRED, r3-widened): `narration: AI voice · Fish Audio Drama 3 · visuals: AI-assisted · script: owner-approved` — and the APPLICATION's video-link text repeats this exact line (a 4-s end card is easy to miss — verdict r2; r3 extends the disclosure beyond the voice) | Quiet end card, one fade, nothing else moves. |
 
-## 5. Full VO script (the transcription — 292 words after r4, hard 2:00)
+## 5. Full VO script (the transcription — 289 words after r5, hard 2:00)
 
 > S01 — Cloud AI fixes your code — for a subscription, on a datacenter, with your source
 > leaving the machine. We built the opposite.
@@ -304,8 +333,8 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 > S10 — The corpus: sixteen seventy-three rules, eight domains — from five sixty-two in August,
 > a hundred new a week. Bench heal rate: eighty-five then, ninety-six now.
 >
-> S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream fix — written by
-> hand, to Mozilla's own sccache — merged after six review rounds.
+> S11 — It's on crates dot i-o, Homebrew, and Scoop. Our first upstream contribution — to
+> Mozilla's own sccache — merged after six review rounds.
 >
 > S12 — Contribution points are reputation — never payment. No blockchain: every point
 > conserved per operation, anchored in public Merkle roots. Fingerprinting? Refused by
@@ -314,20 +343,29 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 > S13 — Today it's one engineer — and no external users yet; we say so. The grant funds two
 > to three contributors and a recruiting pilot. Small by design. Yours by default.
 
-**Duration gate (MEASURED — verdict r2):** after the 12 takes are generated, sum the wav
-lengths + 12 × 0.6 s settles + S07's 4 s breather + the end card BEFORE building any scene;
-the total must be ≤ 120 s. If it exceeds 2:00, apply the ranked cuts IN ORDER (edit §5 here
-first — the plan stays the canonical record — then regenerate only the cut scenes; never
-time-stretch audio):
+**Duration gate (MEASURED — r5 arithmetic):** after the 12 takes are generated, sum the wav
+lengths + 12 × 0.35 s settles + S07's 2.5 s breather + the ~3 s end card BEFORE building any
+scene; the total must be ≤ 120 s. Context: 289 words at a number-dense ~150 wpm read ≈ 116 s
+of VO → the gate WILL likely fire; the timing changes below buy ~5.5 s and the word ladder
+frees ~25 more. Apply the ranked cuts IN ORDER (edit §5 here first — the plan stays the
+canonical record — then regenerate only the cut scenes; never time-stretch audio; the on-screen
+carries whatever the VO drops):
 
+0. TIMING — PRE-APPLIED r5: settles 0.6 → 0.35 s, S07 4 → 2.5 s, end card 4 → 3 s (≈5.5 s).
 1. S13: drop "and the GPU behind the decision tier" — **PRE-APPLIED 2026-11-15** (r4 spent
    +4 words on S02's "neuro-symbolic"); the on-screen GPU chip stays.
-2. S12: "Fingerprinting? Refused by design." → "Fingerprinting: refused." (−2 → 290) — the
-   on-screen stamp keeps `refused by design`.
-3. S03: "ninety-plus survived the gates as Rust lanes" → "ninety-plus survived the gates"
-   (−3 → 287) — the on-screen lane names carry the detail.
+2. S04: drop "correctness, speed, no regressions, zero allocations" (−6) — the four stamps
+   carry them.
+3. S03: drop "as Rust lanes: sigmoid scoring, ternary SIMD, freeze-and-thaw" (−8) — the
+   primitive chips carry them.
+4. S01: drop "on a datacenter" (−3) — the S01 card carries it.
+5. S12: "Fingerprinting? Refused by design." → "Fingerprinting: refused." (−2) — the stamp
+   keeps `refused by design`.
+6. S05: drop "reflex, instinct, Rethink:" (−3) — the wire labels carry them.
+7. S09: drop "learns what worked" (−3) — the loop graphic carries the learn beat.
 
-Never restore the S07 VO.
+Never restore the S07 VO. Pace lever before word cuts: the generation rule asks the engine
+for a brisk narrator read (~155–165 wpm target) — the gate adjudicates.
 
 ## 6. Captions (subtitle-ready)
 
@@ -383,7 +421,7 @@ The corpus: 1,673 rules, 8 domains — from 562 in August, a hundred new a week.
 
 10
 00:01:24,400 --> 00:01:31,800
-It's on crates.io, Homebrew, and Scoop. Our first upstream fix — written by hand, to Mozilla's own sccache — merged after six review rounds.
+It's on crates.io, Homebrew, and Scoop. Our first upstream contribution — to Mozilla's own sccache — merged after six review rounds.
 
 11
 00:01:32,400 --> 00:01:39,800
@@ -400,7 +438,7 @@ Today it's one engineer — and no external users yet; we say so. The grant fund
 
 **The shipping voice is GENERATED.** The owner is a non-native English speaker and wants
 easier listening for reviewers — a fair call, and the disclosure (end card:
-`narration: AI-generated voice`) turns it into one more transparency beat instead of a
+the widened line — narration · visuals · script — §4 END) turns it into one more transparency beat instead of a
 gotcha. The §5 script text stays the source of truth; the written application prose stays
 owner-voiced per Proposal 025 §Compliance. OUR READING of Mozilla's AI-use policy ("all
 submitted content must ultimately reflect your own original work, ideas, and voice") is that
@@ -442,7 +480,7 @@ conversions, measured ~2× real time on an M3 Max. The lane, in order:
    actual uploader + revision hash at download, safetensors ONLY; the 4090 is WINDOWS —
    SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough; ONE attempt ≤ half a day, AFTER the
    current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig).
-3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU,
+3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 289 words) — zero GPU,
    same model, same takes. ⚠ Governed by Fish Audio's TERMS OF SERVICE, not the Community
    License — confirm the plan tier's commercial-use grant before the cut ships (verdict r2).
    The fallback that always works.
@@ -462,17 +500,18 @@ Audio" notice) — nothing in the r3 lane change moves the license analysis.
 - Generate per scene (12 files, `vo_s01.wav` … `vo_s13.wav`, S07 none) — per-scene takes keep
   retakes cheap and give each scene its own timing.
 - The §5 script already spells every number as words ("five hundred eighty", "one
- sixty-one", "sixteen sixty-nine") — that is deliberate: TTS reads number words far more
+ sixty-one", "sixteen seventy-three") — that is deliberate: TTS reads number words far more
  reliably than digits. Test-generate S06 FIRST (the longest, densest line — it doubles as the
  lane-1 MLX probe, §7 run posture) and listen once before batch-generating the rest; adjust
  spelling (e.g. "twenty-seven-billion-parameter") only if the engine stumbles, and keep the §5
  text as the canonical record of what changed. One narration style; natural-language direction
- tags stay minimal (at most one calm/neutral direction note per scene).
+ tags stay minimal (at most one calm/neutral direction note per scene); pace target ≈ 155–165
+ wpm (brisk narrator — the duration gate adjudicates, §5).
 - **Word timestamps for captions**: run the FINAL generated audio (not the script text)
   through whisper with word timestamps (`whisperx` or `openai-whisper
   --word_timestamps True`) → emit `media/captions.json` in the skill's cue format (§6).
   ⛔ Never synthesize timings from the text.
-- **Pipeline after generation:** scene `duration()` = VO length + 0.6 s settle; audio map
+- **Pipeline after generation:** scene `duration()` = VO length + 0.35 s settle (r5 timing); audio map
   places each wav at its scene start with `.voice()`; music bed
   `AudioTrack::new("music.mp3", Second(0.)..Eof).gain_db(-18.).fade_in(1.).fade_out(2.).duck_under_voice()`
   (owner picks; ~100–110 BPM so cuts land); minimal SFX — stamp thuds on S04/S11/S12, ticks
@@ -524,8 +563,8 @@ Audio" notice) — nothing in the r3 lane change moves the license analysis.
 
    ### Schedule (r3 — dated 2026-11-15; submit target 11-19, one buffer day before the 11-20 23:59 PST deadline)
 
-   - **11-15 (today):** brief final; bmo TTS probe queued (`01a1de06`); owner GO requested.
-   - **11-16:** owner §9 inputs; probe verdict → batch the 12 takes; whisper captions; P15 provenance pin.
+   - **11-15 (today):** brief final; bmo TTS probe queued (job `01a1de06-0947-…`, panel short id `0906aefa`); owner GO requested.
+   - **11-16:** owner §9 inputs; probe verdict → batch the 12 takes; whisper captions; sccache chip wording final (r5).
    - **11-17:** fframes build S01–S13 + end card; **P7 eval-regime pin deadline** (the degrade rule fires otherwise); number-sync vs Proposal 025.
    - **11-18:** owner review (preview + strips); live-site banned-word grep; loudness gate; hosting picked.
    - **11-19:** final render + `captions.srt` + link hosting + submit package ready.
