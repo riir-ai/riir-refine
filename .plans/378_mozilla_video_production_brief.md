@@ -1,12 +1,12 @@
 # Plan 378 — Mozilla video: "The corpus is the model" (2-min fframes production brief)
 
-Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · **r2 final = AGREE** (2026-11-15, session `66064fa0`, checked at commit `85331b5e`) — the brief is production-ready; owner GO is the remaining human gate
+Status: DRAFT — awaiting owner GO · verdicts: r1 REVISE applied · r2 REVISE applied · r2 final = **AGREE** (`66064fa0`, at `85331b5e`) · r3 addendum 2026-11-15 (owner fyi): **bmo CAN host Drama 3 via the community MLX port** — lane 1 = bmo + mlx-community 4-bit (owner's original "on bmo" restored); CFP-comparison verdict requested
 Branch: `develop`
 
 - [x] Owner: VO lane DECIDED 2026-11-14 — **generated voice** (easier listening; non-native EN) — §7
 - [x] Owner: TTS engine DECIDED 2026-11-15 — **fish-speech · Fish Audio Drama 3** — §7 (run posture amended there: bmo cannot host Drama 3 — Apple silicon vs NVIDIA-only ≥48 GB FP8; lane = 4090 + drama-3-int4 probe, or Fish Audio hosted fallback)
 - [x] Agent: flow re-anchor + minimal-flow rule (S05/S09 → the documented flows) — r2, this revision
-- [ ] Agent: pin `drama-3-int4` provenance (actual uploader + revision hash; safetensors ONLY at download — no pickle weights) before the probe — verdict r2
+- [ ] Agent: pin the conversion provenance before any probe (mlx-community 4-bit revision hash / int4 uploader + hash; safetensors ONLY at download — no pickle weights) — verdict r2; lane order updated r3 (bmo MLX first)
 - [ ] 🔴 Agent: grep the LIVE refine.riir.ai (+ the other three fronts) for the §2 banned words before the video link ships — a reviewer is one click from any mismatch (verdict r2)
 - [ ] Agent: the application's video-link text repeats the AI-voice disclosure line (verdict r2)
 - [ ] Owner: run the two commands once and save the output TEXT + supply the board URL — §9 (no video recording needed)
@@ -357,33 +357,43 @@ gotcha. The §5 script text stays the source of truth; the written application p
 owner-voiced per Proposal 025 §Compliance (Mozilla's AI policy governs the written answers,
 not the video's narration voice).
 
-**Engine (owner pick 2026-11-15): fish-speech · Fish Audio Drama 3** (`fishaudio/drama-3` via
-github.com/fishaudio/fish-speech — SGLang-Omni / vLLM-Omni serve posture; 35B MoE, 3B active,
-expressive multi-speaker TTS with natural-language direction; primary sources read 2026-11-15:
-the HF model card, fish-speech `docs/en/install.md`, the LICENSE raw file). ONE fixed voice
-for all 12 takes — an OFFICIAL Fish-provided reference only (never a hosted-library voice of
-unknown provenance: a user-uploaded clone of a real person could breach §IV(b)(i) — verdict
-r2); pin the reference clip + generation seed at the first take and reuse both for all 12
-(no take-to-take drift).
+**Engine (owner pick 2026-11-15): fish-speech · Fish Audio Drama 3** (`fishaudio/drama-3`;
+official runtimes: SGLang-Omni / vLLM-Omni on NVIDIA; Apple silicon via the community
+**mlx-audio** port — Drama 3 merged in PR #1018; 35B MoE, 3B active, expressive multi-speaker
+TTS with natural-language direction; primary sources read 2026-11-15: the HF model card,
+fish-speech `docs/en/install.md`, the LICENSE raw file, mlx-audio `fish-drama3.md`, the
+mlx-community 4-bit card). ONE fixed voice for all 12 takes — an OFFICIAL Fish-provided
+reference only (never a hosted-library voice of unknown provenance: a user-uploaded clone of a
+real person could breach §IV(b)(i) — verdict r2); pin the reference clip + generation seed at
+the first take and reuse both for all 12 (no take-to-take drift). The PROBE may ride the
+upstream docs' own demo reference (the seed-tts-eval-mini Common Voice clip the fish-drama3
+docs clone from, CC0-released) — the SHIPPING voice is chosen + pinned before batch generation.
+TTS input normalizes §5's em-dashes to commas/periods; §5 stays the canonical record.
 
-⛔ **Run posture (measured 2026-11-15): bmo CANNOT host Drama 3** — the model is **NVIDIA-only,
-≥ 48 GB VRAM at FP8** (fish-speech install docs: no CPU, no Apple MPS, no ROCm), and bmo is the
-Apple-silicon runner (96 GB unified RAM, no CUDA — `agent-mail rig status bmo` shows no GPU
-column; its Tailscale IP only routes via amo). The lane, in order:
-1. **4090 + `fishaudio/drama-3-int4`** (~20 GB-class; the README calls itself an UNOFFICIAL
-   quant despite the `fishaudio/` namespace — PIN the actual uploader + revision hash at
-   download, and load safetensors ONLY, never pickle weights, on a box holding repos and keys).
-   The 4090 is WINDOWS: SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough — TIME-BOX the
-   probe to ONE attempt (≤ half a day; queue `agent-mail rig run 4090 --shared` AFTER the
-   current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig). Probe fits +
-   sounds right → batch the remaining 11 takes; ANY wall (setup, VRAM, sound) → fall to lane 2
-   automatically. The deadline is 2026-11-20; the probe must not eat a day of it.
-2. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU,
-   same model, same takes. ⚠ The hosted API is governed by Fish Audio's TERMS OF SERVICE, not
-   the Community License — confirm the plan tier's commercial-use grant before the cut ships
-   (verdict r2). Still the fallback that always works.
-3. bmo stays OUT of the TTS lane — a documented hardware fact, not a preference. (bmo can still
-   host the whisper caption pass — CPU is fine there.)
+⛔ **Run posture (r3, owner fyi 2026-11-15): bmo CAN host Drama 3 — via the community MLX
+port.** The OFFICIAL fish-speech release remains NVIDIA-only (≥ 48 GB VRAM at FP8; no CPU, no
+Apple MPS, no ROCm) — but mlx-audio merged Drama 3 (PR #1018) and `mlx-community` carries
+conversions, measured ~2× real time on an M3 Max. The lane, in order:
+1. **bmo + `mlx-community/fish-audio-drama-3-4bit`** (4-bit experts / 8-bit dense+tower: 22 GB
+   on disk, ~26 GB peak — bmo holds 96 GB unified with 75 free: comfortable headroom; quality
+   close-not-bit-identical: teacher-forced backbone cosine 0.995; the card's NOTICE lists every
+   weight change; same Community License). Install from mlx-audio `main` (support post-0.5.9):
+   `pip install "mlx-audio @ git+https://github.com/Blaizzy/mlx-audio"`. Generate with the
+   card's sampling: `python -m mlx_audio.tts.generate --model
+   mlx-community/fish-audio-drama-3-4bit --text <line> --ref_audio <voice.wav> --ref_text
+   <transcript> --temperature 0.7 --top_p 0.7 --top_k 30`. Queue `agent-mail rig run bmo
+   --shared` (bmo QUIET; never on a busy rig) — ONE-TAKE S06 probe first, TIME-BOXED ≤ half a
+   day; ANY wall (install, memory, sound) → lane 2 automatically. Same-quality family
+   fallbacks: 3-bit (`fish-audio-drama-3-3bit`, ~22.5–24 GB peak), 8-bit (~49 GB peak). The
+   deadline is 2026-11-20 — the probe must not eat a day of it.
+2. **4090 + `fishaudio/drama-3-int4`** (r2 lane, demoted one step: ~20 GB-class; PIN the
+   actual uploader + revision hash at download, safetensors ONLY; the 4090 is WINDOWS —
+   SGLang-Omni / vLLM-Omni need WSL2 + CUDA passthrough; ONE attempt ≤ half a day, AFTER the
+   current exclusive job clears — never stack a 20-GB load on a BUSY CUDA rig).
+3. **Fish Audio hosted API** (fish.audio, pay-per-text — trivial at 295 words) — zero GPU,
+   same model, same takes. ⚠ Governed by Fish Audio's TERMS OF SERVICE, not the Community
+   License — confirm the plan tier's commercial-use grant before the cut ships (verdict r2).
+   The fallback that always works.
 
 **License — Fish Audio Community License v1.0 (full text read 2026-11-15):** our use is licensed
 under §III(a) Community Commercial (Annual Revenue < USD 500K — true; even a full $300K grant
@@ -391,7 +401,9 @@ stays under) and is NOT a Hosted Service (§III(c)(1): speech for content we cre
 our own product). We own the outputs (§IV(c)(iii)). ⛔ Never clone a real person's voice
 (§IV(b)(i)) — a Drama-3 stock/reference voice only; the owner's voice would need a deliberate
 consent act first. Attribution rides the end card (§4 END). Never strip a watermark or
-provenance signal from generated audio (§IV(b)(iv)).
+provenance signal from generated audio (§IV(b)(iv)). The community MLX conversions carry the
+SAME Community License (their model cards say so verbatim and carry the "Built with Fish
+Audio" notice) — nothing in the r3 lane change moves the license analysis.
 
 **Generation rules:**
 - Same engine + same voice + same settings for ALL takes — never mix engines across scenes.
@@ -400,7 +412,7 @@ provenance signal from generated audio (§IV(b)(iv)).
 - The §5 script already spells every number as words ("five hundred eighty", "one
  sixty-one", "sixteen sixty-nine") — that is deliberate: TTS reads number words far more
  reliably than digits. Test-generate S06 FIRST (the longest, densest line — it doubles as the
- int4 VRAM probe, §7 run posture) and listen once before batch-generating the rest; adjust
+ lane-1 MLX probe, §7 run posture) and listen once before batch-generating the rest; adjust
  spelling (e.g. "twenty-seven-billion-parameter") only if the engine stumbles, and keep the §5
  text as the canonical record of what changed. One narration style; natural-language direction
  tags stay minimal (at most one calm/neutral direction note per scene).
