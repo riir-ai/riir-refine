@@ -97,7 +97,9 @@ Moved: **P12 1,669 → 1,673** (rust_perf 338 → 342, Batch 363 `009394b7`; the
 "health total 1673") + the 8th domain's label corrected to **ane** (`ane_rules: 6`, Plan 377 —
 the kernel_pregate TWO-PASS shape, see the r6 correction below).
 Re-verified CURRENT (no change): P13 — exactly **254** recorded score-bench runs, first
-84.6% → last **96.4%** (2026-11-13, parse_safety 1.0); P15 — #3025 still clean **CI 50 ✓ 0 ✗**
+84.6% → last **96.4%** (2026-11-13, parse_safety 1.0) — that first→last reading was
+SUPERSEDED by r8's P13 rewrite (the honest trend: day-one calibration 84.6→90.4→98.1, then
+held ~96; plot the frozen lane FLAT); P15 — #3025 still clean **CI 50 ✓ 0 ✗**
 (outcome poll `ffaaeb9e`, 11-15); P14 — crates.io 0.5.1 stands. Also on the radar from the
 recent log: issue 190's T10 no-submit signal re-read is owed at the **11-17 gate** — the same
 day as this plan's P7 degrade-rule deadline (one combined fact-freshness pass that day);
@@ -139,7 +141,36 @@ self-evolve — S02's VO now reads "adaptive learned rules", the chip is `adapti
 neuro-symbolic — between rules & LLMs`, and S09/S10 carry the adaptation evidence. "Small"
 survives only as the close line's echo of Mozilla's principle (the 0.48 GB stack, the
 one-engineer team). Fresh verdict commissioned (new session) with an explicit prose-hunting
-mandate.
+mandate. (⚠ SUPERSEDED by r8: P19 scopes the adaptive claim — "remembers", not "learns";
+P13 replaces the heal-rate climb with "held since August".)
+
+**Verdict r8 — fresh prose-hunting session** (2026-11-15, session `602d8d7d`, round 1):
+**REVISE** — the prose hunt WORKED: four blockers, all applied. (1) "learns with every fix"
+overclaimed — the shipped 0.5.1 binary's learning half is inert by design (memory-only; the
+Elo damp rides an explicit `--recompute-elo`; nothing demotes automatically) → S09 VO says
+"remembers what worked" (same count), §3's adaptive sentence rewritten to what ships, and
+**pin P19** records the shipped scope (live memory + per-context Elo-ordered retrieval +
+the audited-distillation growth curve — never "learns with every fix"). (2) The heal-rate
+climb line was false — day-one went 84.6 → 90.4 → 98.1 in 77 min and 96.2–96.4 has HELD
+since 2026-08-25 (only 213 of 254 rows are the n=35 frozen lane) → S10 says "ninety-six,
+held since August", plots the frozen lane honestly FLAT, and lets the corpus curve (562 →
+1,673) be the climbing line; P13 rewritten. (3) Corpus growth is AUDITED DISTILLATION
+(authored, not scraped) — §3 separates: live memory / audited growth / the opt-in
+contribution loop (plumbing live, no external contributors yet); Proposal 025 L247's "each
+installation learns" added to the sync gate. (4) S05/S06 rung tension (rethink_flow.md
+marks the encoder rung `planned` while P7's 0.48 GB IS the Q8 encoder artifact) → folded
+into the 11-17 P7 pin ("which rung produced the board numbers" must resolve before drawing
+either). Bounded: S09 chip "redacted batch" → "secret-scanned batch" (the scan drops rows
+with secrets; it does not redact); the pre-ship banned-word grep extended to the PUBLIC repo
+docs (riir-refine is public MIT — role_flows.md still says burn meter / earn KAT / payment
+page); the §3 false-reason fix (the gfflow blocks carry billing vocabulary too — the
+drop-whole rule does real work there); P12 ship-scope chip (the binary ships ≈1,598 rules /
+6 domains by feature lists — 1,673/8 is the full corpus); P11 greps now find 21 repos;
+§0b's #2977 demoted to TEAM CONTRIBUTION; the P12 span nit (±24 lines / whole file on
+path-word). Reviewer-confirmed sound: P12 arithmetic, the ane two-pass characterization,
+the S02 VO + no-neural-net chip, P15 vs benches 127/128, P18 vs role_flows. Not checked by
+that pass: §7 license/MLX facts (verified here from primary sources), whether Beta-posterior
+re-ranking is automatic in 0.5.1 (P19 scopes it conservatively).
 
 **Verdict r5.1 → r5 FINAL** (same session, rounds 2–3): round 2 flagged ONE bounded edit —
 the new S02 chip `neural: retrieval` was unsupported and contradicted the brief's own
@@ -196,7 +227,7 @@ recording day (the corpus and board move weekly).
 | P4 | "57 theorems machine-checked in Lean" | `EXPECTED_THEOREMS=57`, 7 modules, axiom budget + sorry-refusal enforced | `katgpt-rs/.proofs/KatgptProof/`, `scripts/proof_gate.sh:72` |
 | P5 | MIT + crates.io (substrate) | katgpt-rs MIT, github.com/katopz/katgpt-rs; **katgpt-core 0.5.0 live on crates.io** | `katgpt-rs/LICENSE`, crates.io API 2026-11-11 |
 | P6 | "answers in under a millisecond" | G2 gate p99 ≤ 1 ms per decision set; measured p50 0.024–0.762 ms across 13 reflex harness suites (its own suite set); cheap-lane p50 84–391 µs | `riir-reflex/benches/decision_set_goat.rs`, `riir-reflex/.benchmarks/137_modelless_timing_quiet/RECORD.md` |
-| P7 | Board beat: "outscores a 27B teacher" | **Aggregate index: Rethink 73.1% (areas) / 76.4% (benchmarks) vs mammoth-1 27B 67.4% / 70.6% vs Clef-flash 9B 60.6% / 65.1%**; disk **0.48 GB vs 6.80 vs 55.62 GB** → vs the 27B = **~116× smaller**, vs the 9B = 14× (never swap the two ratios); latency p50 geomean **1.6 ms vs 681 ms vs 2506 ms** → ~1567× **at the median only** (escalated-path multiple is far lower — own-encoder 21×–36×; never quote >1000× without "at the median"); Rethink serves **6/8 board spokes, 2 fallback**. ⚠ **Evaluation regime UNPINNED** — confirm from rethink bench records how the teacher was run (zero-/few-shot) before recording; the VO scopes the claim to "the public classification suites" and names datasets on screen. DEGRADE RULE (r3): still unpinned by 2026-11-17 → S06 drops "outscores" — keeps footprint + latency + published-gaps only | 🔴 LIVE board page (owner's screenshot; republish before capture; capture the URL for the on-screen chip) + `riir-rethink/AGENTS.md` sizing FAQ (Q8 447.7 MB ≈ 0.48 GB) |
+| P7 | Board beat: "outscores a 27B teacher" | **Aggregate index: Rethink 73.1% (areas) / 76.4% (benchmarks) vs mammoth-1 27B 67.4% / 70.6% vs Clef-flash 9B 60.6% / 65.1%**; disk **0.48 GB vs 6.80 vs 55.62 GB** → vs the 27B = **~116× smaller**, vs the 9B = 14× (never swap the two ratios); latency p50 geomean **1.6 ms vs 681 ms vs 2506 ms** → ~1567× **at the median only** (escalated-path multiple is far lower — own-encoder 21×–36×; never quote >1000× without "at the median"); Rethink serves **6/8 board spokes, 2 fallback**. ⚠ **Evaluation regime UNPINNED** — confirm from rethink bench records how the teacher was run (zero-/few-shot) before recording; the VO scopes the claim to "the public classification suites" and names datasets on screen. DEGRADE RULE (r3): still unpinned by 2026-11-17 → S06 drops "outscores" — keeps footprint + latency + published-gaps only. ALSO PIN by 11-17 (r8): WHICH rung produced the board numbers — rethink_flow.md marks the encoder rung `planned`/HOSTED-ONLY while the 0.48 GB here IS the Q8 ENCODER artifact; S05's `planned` mark and S06's board must not contradict (resolve before drawing either) | 🔴 LIVE board page (owner's screenshot; republish before capture; capture the URL for the on-screen chip) + `riir-rethink/AGENTS.md` sizing FAQ (Q8 447.7 MB ≈ 0.48 GB) |
 | P8 | Per-suite gaps published | **Two suite sets — never mix them on screen:** the board = 8 benchmark spokes (ag_news, massive_intent_en, banking77, sst5, emotion, xnli_en, prompt_injections, typed_decisions); the wider record set trails on 11 suites (worst hellaswag −57.7, winogrande −23.4; closest ag_news −0.2, incl. thai_wisesight/thai_sib200 + the JDI suites). On-screen gap table = the board's own per-spoke display only | same board; `riir-rethink/.benchmarks/096`, `086`, `087` |
 | P9 | Escalation containment | ESC serves a pinned **[15%, 60%]** band with a production rate guard; measured armed rates 42.7–52.8% | `riir-instinct/tests/serve_gates.rs`, `riir-rethink/.benchmarks/089` |
 | P10 | Method sentence | paired A/B, one frozen read, pre-registered bars, Wilson 95% bounds, non-inferiority δ = max(1.0 pp, 2.5·SE) | `riir-instinct/src/stats.rs`, `riir-rethink/.benchmarks/089.../RESULTS.md` |
@@ -307,34 +338,6 @@ recording day (the corpus and board move weekly).
     now — Proposal 025's written answers keep their vocabulary unless the owner aligns them
     (the sync gate also covers Proposal 025 L247's "each installation learns which rules
     work" — the shipped wording is P19's, per verdict r8 blocker 1).
-
-    **Verdict r8 — fresh prose-hunting session** (2026-11-15, session `602d8d7d`, round 1):
-    **REVISE** — the prose hunt WORKED: four blockers, all applied. (1) "learns with every fix"
-    overclaimed — the shipped 0.5.1 binary's learning half is inert by design (memory-only; the
-    Elo damp rides an explicit `--recompute-elo`; nothing demotes automatically) → S09 VO says
-    "remembers what worked" (same count), §3's adaptive sentence rewritten to what ships, and
-    **pin P19** records the shipped scope (live memory + per-context Elo-ordered retrieval +
-    the audited-distillation growth curve — never "learns with every fix"). (2) The heal-rate
-    climb line was false — day-one went 84.6 → 90.4 → 98.1 in 77 min and 96.2–96.4 has HELD
-    since 2026-08-25 (only 213 of 254 rows are the n=35 frozen lane) → S10 says "ninety-six,
-    held since August", plots the frozen lane honestly FLAT, and lets the corpus curve (562 →
-    1,673) be the climbing line; P13 rewritten. (3) Corpus growth is AUDITED DISTILLATION
-    (authored, not scraped) — §3 separates: live memory / audited growth / the opt-in
-    contribution loop (plumbing live, no external contributors yet); Proposal 025 L247's "each
-    installation learns" added to the sync gate. (4) S05/S06 rung tension (rethink_flow.md
-    marks the encoder rung `planned` while P7's 0.48 GB IS the Q8 encoder artifact) → folded
-    into the 11-17 P7 pin ("which rung produced the board numbers" must resolve before drawing
-    either). Bounded: S09 chip "redacted batch" → "secret-scanned batch" (the scan drops rows
-    with secrets; it does not redact); the pre-ship banned-word grep extended to the PUBLIC repo
-    docs (riir-refine is public MIT — role_flows.md still says burn meter / earn KAT / payment
-    page); the §3 false-reason fix (the gfflow blocks carry billing vocabulary too — the
-    drop-whole rule does real work there); P12 ship-scope chip (the binary ships ≈1,598 rules /
-    6 domains by feature lists — 1,673/8 is the full corpus); P11 greps now find 21 repos;
-    §0b's #2977 demoted to TEAM CONTRIBUTION; the P12 span nit (±24 lines / whole file on
-    path-word). Reviewer-confirmed sound: P12 arithmetic, the ane two-pass characterization,
-    the S02 VO + no-neural-net chip, P15 vs benches 127/128, P18 vs role_flows. Not checked by
-    that pass: §7 license/MLX facts (verified here from primary sources), whether Beta-posterior
-    re-ranking is automatic in 0.5.1 (P19 scopes it conservatively).
   - **Minimal-flow rule (owner direction 2026-11-15): show the CURRENT documented flow — and only
     the minimal version of it.** Exactly two flow surfaces on screen: ONE decision wire (S05,
     redrawn from `../riir-rethink/.docs/03_decision_flow/rethink_flow.md`) and ONE product loop
@@ -375,8 +378,8 @@ scene owns its wav; scene duration = VO length + 0.35 s settle — r5 timing).
 | S06 | 0:41–0:53 | board beat | Vector board redraw + chip `live board: <url>` + `ag_news · banking77 · sst5 · xnli_en …` + bars `0.48 GB vs 55.6 GB` · `1.6 ms vs 2506 ms (median)` + chip `teacher: offline only · never in the serving path` | fframes redraws the board (radar + footprint bars + latency bars, log axis like the live page) from the P7 pins — real numbers, our own layout; the URL chip invites verification. Dataset names line up under the radar; footnote chip: `per-suite gaps: published ↓` ghosting the real gap rows for 2 s. ⛔ Ratios: "~116× smaller, ~1500× at the median" vs the 27B — never the 14× (that's vs the 9B). |
 | S07 | 0:53–0:55.5 | — (no VO; 2.5 s breather — r5 timing) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
 | S08 | 0:55.5–1:03.5 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` + chip `no LLM · no GPU · no account · no network at heal time` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. The real output's roll-up line, IF the run shows one, carries the perf + security analysis on screen (§3 positioning) — ⛔ the typed text is the REAL output VERBATIM: the `sec` domain is OPT-IN, so a release-binary run may show no sec line — never add or fake one. Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
-| S09 | 1:03.5–1:12.5 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` + chip `for humans and AI agents alike` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
-| S10 | 1:12.5–1:21.5 | numbers | `562 → 1,673 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` + chip `n≈35 frozen bench` + date stamp `as of <recording day>` · big counter `0 LLM calls · 0 API spend` + subline `the default path — free by design` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
+| S09 | 1:03.5–1:12.5 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: secret-scanned batch → proof queue → settle → corpus leases back` + chip `for humans and AI agents alike` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
+| S10 | 1:12.5–1:21.5 | numbers | `562 → 1,673 rules · 8 domains` · `+100/week` · `96.4% · held since August` + chips `n≈35 frozen bench` · `full corpus — the binary ships the domains you enable` · date stamp `as of <recording day>` · big counter `0 LLM calls · 0 API spend` + subline `the default path — free by design` (P18) | Counters tick in mono; the CORPUS curve climbs 562 → 1,673 (the real climb); the frozen-lane heal rate plots honestly FLAT at ~96 (the n=35 lane, 213 runs — ⛔ never a climb line: day-one went 84.6→98.1 in 77 min and it has held since; P13). |
 | S11 | 1:21.5–1:29.5 | upstream | `mozilla/sccache #2977 MERGED · 6 review rounds` + `crates.io · brew · scoop` + chip `#3025: upstream issue #2968 · AI-assisted fix · CI 50 ✓ 0 ✗` | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only — an ILLUSTRATION of the alongside story (our fix work with AI assistance), NOT claimed as healer-emitted (bench 128: issue-driven); the S10 zero-spend claim scopes the PRODUCT's default path — #3025 is our upstream contribution work, a different surface. |
 | S12 | 1:29.5–1:37.5 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:37.5–1:49.5 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` · `built for: FOSS maintainers · students · devs without cloud budgets` · `sustainable: fiscal sponsor · MIT core` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
