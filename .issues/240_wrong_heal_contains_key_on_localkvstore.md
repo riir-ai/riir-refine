@@ -1,6 +1,8 @@
 # Issue 240 — wrong heal: `unnecessary_get_then_check` emitted `contains_key` on receivers that never carried it (riir-dapps 8b06a45 landed ~13 non-compiling rewrites; dapps develop red since 2026-11-11)
 
-**Status:** OPEN — filed 2026-11-16 by the plan-378 lane after the figure-render verification lane hit the red parent lib
+**Status:** OPEN — CLAIMED 2026-11-16 (m3 repair lane) — filed 2026-11-16 by the plan-378 lane after the figure-render verification lane hit the red parent lib
+**Claimed:** m3 (zed-native), 1773875000, expires 2026-11-18T18:00:30Z — repair lane: upstream `contains_key` on LocalKvStore (keeps clippy green, avoids the value-copy at every probe) + the rulewright receiver-capability guard + divergence row + targeted residue screen; full consumer_residue_sweep owed at the next rig window (amo/bmo/4090 offline tonight).
+
 
 ## The finding
 
