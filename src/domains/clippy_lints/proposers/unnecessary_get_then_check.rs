@@ -639,6 +639,37 @@ mod tests {
     }
 
     #[test]
+    fn foreign_store_receiver_declines() {
+        // riir-neuron-db issue 240's class (the dapps 8b06a45 sweep,
+        // 2026-11-11): ~30 sites rewrote `LocalKvStore::get(&k).is_some()`
+        // guards into `contains_key` — the type carries NO such method, and
+        // the whole kat arm (dapps `src/kat/`, cfg-gated) failed E0599 for
+        // five days. Post-235 the receiver classification must see the
+        // foreign store struct as UNKNOWN and decline. Both spellings the
+        // sweep touched: `self.store` field access and the bare binding.
+        let field = concat!(
+            "struct LocalKvStore;\n",
+            "impl LocalKvStore { fn get(&self, k: &[u8]) -> Option<Vec<u8>> { None } }\n",
+            "struct KatLedger { store: LocalKvStore }\n",
+            "impl KatLedger {\n",
+            "    fn key_registered(&self, k: &[u8]) -> bool { self.store.get(k).is_some() }\n",
+            "}\n",
+        );
+        assert!(
+            propose_fix("unnecessary_get_then_check", field).is_none(),
+            "foreign-store field receiver must decline (issue 240)"
+        );
+        let bare = concat!(
+            "struct LocalKvStore;\n",
+            "fn f(s: &LocalKvStore, k: &[u8]) -> bool { s.get(k).is_none() }\n",
+        );
+        assert!(
+            propose_fix("unnecessary_get_then_check", bare).is_none(),
+            "foreign-store bare receiver must decline (issue 240)"
+        );
+    }
+
+    #[test]
     fn turbofish_get_refused() {
         let input = "fn f(m: &std::collections::HashMap<u8, u8>, k: u8) -> bool { m.get::<u8>(&k).is_none() }";
         let out = propose_fix("unnecessary_get_then_check", input);

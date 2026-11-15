@@ -321,6 +321,33 @@ mod tests {
         // SPECIFIC pattern (`Exhausted => {}`) that never covers the
         // target's `Truncated` — guard-failure is E0004 non-exhaustive.
         // MUST NOT fire.
+        //
+        // (riir-dapps issue-240's migrate_sweep.rs variant, pinned
+        // 2026-11-16: the same shape with a `return Err(..)` in BOTH arm
+        // bodies — `Dispose::Zero => { if v.iter().any(|b| *b != 0) {
+        // return Err(..); } }` beside `Dispose::Delete => { return Err(..); }
+        // — collapsed to `Zero if .. => { return Err(..) }`, leaving the
+        // all-zero fall-through uncovered: E0004 at --all-features. The
+        // sweep's compile posture had the file cfg-gated out, so the lane
+        // stayed green. Same decline.)
+        let dapps_variant = concat!(
+            "enum Dispose { Zero, Delete }\n",
+            "fn f(d: Dispose, value: &[u8]) -> Result<(), u8> {\n",
+            "    match d {\n",
+            "        Dispose::Zero => {\n",
+            "            if value.iter().any(|b| *b != 0) {\n",
+            "                return Err(1);\n",
+            "            }\n",
+            "        }\n",
+            "        Dispose::Delete => {\n",
+            "            return Err(2);\n",
+            "        }\n",
+            "    }\n",
+            "    Ok(())\n",
+            "}\n",
+        );
+        let out = propose_fix("collapsible_match", dapps_variant);
+        assert!(out.is_none(), "dapps variant must decline: {out:?}");
         let input = concat!(
             "enum PathOutcome { Truncated, Exhausted }\n",
             "fn f(x: PathOutcome, seen: &mut Vec<u32>, p: u32) {\n",
