@@ -86,7 +86,9 @@ AI agents analyze for perf + security; mechanical fixes burn ZERO tokens (the bo
 P18 — qualitative only; never a saved-token NUMBER). #3025 provenance PINNED by owner: found
 by cargo refine, fixed by AI (llm) — S11's chip unlocked; #2977 stays hand-written. S02 VO
 gains "neuro-symbolic" (+4 words); ranked cut 1 pre-applied to S13 (−7) → §5 now 292 words.
-These VO edits are owner-directed (pre-approved).
+These VO edits are owner-directed (pre-approved). Owner clarification (same day): the cost
+claim is DIRECT — every fix is cost saving by construction, because no online agent is called
+at any step; no number is needed or wanted (zero spend IS the number).
 
 ## 1. What this is
 
@@ -130,7 +132,7 @@ recording day (the corpus and board move weekly).
 | P15 | Mozilla upstream | **sccache #2977 MERGED** (six review rounds, merge `907230be`) — **written by hand** (owner verdict: goodwill class; say "our first upstream fix, written by hand", NEVER "the AI wrote it"); **#3025 open, CI 50 pass / 0 fail** — **provenance PINNED (owner, 2026-11-15): found by cargo refine, fixed by AI (llm)** — the S11 #3025 chip carries exactly that wording and doubles as the positioning proof (the tool finds; AI fixes; the alongside story in one Mozilla artifact). #2977 stays HAND-written — never "the AI wrote it" (owner verdict stands) | 🔴 `.benchmarks/127_mozilla_wetrun/README.md`, `.benchmarks/128_mozilla_rustperf_day2/README.md` |
 | P16 | Transparency sentence | contribution points non-transferable, expiring, no cash value; **not a blockchain**: per-op conservation invariant `Σ balances + healed + expired == reservoir + topups` (test-pinned + Lean-proven `Kat/Tuna.lean`), per-epoch Merkle anchor roots published hourly (`GET /points/anchor` 200-verified); resettable client UUID, hardware fingerprinting refused | Proposal 025 §points plane; `riir-dapps/AGENTS.md`, `.proofs/RiirDappsProof/Kat/Tuna.lean` |
 | P17 | The ask | $300K: ~60% people (2–3 contributors), ~15% pilot, ~15% infra+audit, ~10% contingency; GPU spend = training the decision tier (W7) + our corpus production lane; fleet tooling opens MIT; never imply paid "fixer nodes" (uptime earns 0 points by design) | Proposal 025 §Year-1 workplan |
-| P18 | Cost beat: "mechanical fixes burn 0 tokens" | The heal hot path is modelless by construction: no LLM inference, no network call, no account (G2 p50 ≤ 1 ms — an LLM call cannot fit that budget; G4 alloc-free); an agent calling cargo refine for mechanical classes skips LLM round-trips entirely. ⚠ The honest form is QUALITATIVE — never quote a saved-token NUMBER (unmeasured; a tokens-for-the-same-fixes benchmark would be its own task) | `riir-refine/AGENTS.md` (modelless mandate, zero-parameter hot path), Proposal 025 |
+| P18 | Cost beat: "cost saving at every step — 0 tokens, 0 agent calls" | The default path BUYS NO TOKENS, ever: dry run, fix draft, compile gate are all local — the tool outputs what to fix AND fixes it without calling any online agent/LLM (modelless by construction: no network call, no account; G2 p50 ≤ 1 ms — an LLM call cannot fit that budget; G4 alloc-free). State the saving DIRECTLY: every fix is one you don't pay an agent for. Zero spend needs no baseline — no N/% is needed or permitted (unmeasured comparisons stay out) | `riir-refine/AGENTS.md` (modelless mandate, zero-parameter hot path), Proposal 025 |
 
 **DO-NOT-SAY list (hard):**
 - ~~"blockchain / distributed ledger / autonomous DAO"~~ for refine — the points ledger is
@@ -205,8 +207,9 @@ recording day (the corpus and board move weekly).
   anything in one click. Nothing on screen is invented; some of it is beautifully re-typeset.
   - **Positioning (owner direction 2026-11-15): cargo refine works ALONGSIDE existing tools and
     LLMs — never as a replacement.** It helps humans AND AI agents analyze for perf and
-    security; mechanical fixes burn ZERO tokens (the bold cost beat, P18 — qualitative only,
-    never a saved-token number); the category is **neuro-symbolic** — between rules and LLMs,
+    security; the cost beat is DIRECT (P18): it finds and fixes without calling any online agent —
+    cost saving at every step, 0 tokens bought, ever (zero spend needs no baseline; no invented
+    N/%); the category is **neuro-symbolic** — between rules and LLMs,
     which is exactly WHY it is faster and smaller. S02 carries the term; S08's real output
     carries perf + sec on screen; S11's #3025 chip is the proof (the tool found it, AI fixed
     it).
@@ -250,7 +253,7 @@ scene owns its wav; scene duration = VO length + 0.6 s settle).
 | S07 | 0:53–0:57 | — (no VO; 4 s breather) | `pre-register → commit → one frozen read → Wilson bounds` | On-screen only: the pipeline builds left→right; a bracket labeled `LB95 > 0` snaps around the result; a losing lever gets stamped `DEMOTED · public` (red stamp, slight rotation). Music carries the beat. |
 | S08 | 0:57–1:05 | refine production | Vector terminal typing REAL `cargo refine` output + `13 of our own repos name it the default` + chip `no LLM · no GPU · no account · no network at heal time` | fframes draws the terminal; the text is the owner's REAL dry-run output (run once, save the text — §9), typed per the §8 typing recipe at human speed with a blinking cursor. A constellation of 13 repo chips lights up around it, one per beat. The real output's roll-up line ("findings by domain: clippy · perf · sec …") carries the perf + security analysis on screen (§3 positioning). Nothing invented — if the owner hasn't run it yet, this scene waits for the text. |
 | S09 | 1:05–1:15 | flywheel | `dry run (private) → fix · compile-gated → fixed code` + `opt-in: redacted batch → proof queue → settle → corpus leases back` + chip `for humans and AI agents alike` | Product loop redrawn from `role_flows.md`'s gfflow blocks ONLY (the coder loop; the contribution arc = ONE dashed branch; tie-breaks §3 — a banned-word node/edge drops whole, never rewords): the loop rotates slowly; the compile-gate node flashes ✓ and once ✗→revert (the owner's fix transcript makes these labels real if §9.2 supplied); the dashed opt-in branch unlocks only when an `opt-in` toggle flips. The billing step is deliberately OUT (§3); NOT the four-role taxonomy. |
-| S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` · big counter `0 tokens burned on mechanical fixes` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
+| S10 | 1:15–1:24 | numbers | `562 → 1,669 rules · 8 domains` · `+100/week` · `84.6% → 96.4%` · big counter `0 tokens · 0 agent calls` + subline `cost saving at every step` (P18) | Three counters tick in mono; underneath, a line chart climbs 84.6→96.4 with 254 tiny dots (the recorded runs) scattered along the axis. |
 | S11 | 1:24–1:32 | upstream | `mozilla/sccache #2977 MERGED · written by hand · 6 review rounds` + `crates.io · brew · scoop` + chip `#3025: found by cargo refine · fixed by AI (llm) · CI 50 ✓ 0 ✗` (PINNED 2026-11-15) | PR card slides in; a green `MERGED` stamp hits #2977; three installer badges underline at the end. The #3025 chip stays OFF the VO — chip only — and it is the positioning PROOF: the tool finds, AI fixes (§3). |
 | S12 | 1:32–1:40 | transparency | `Σ balances + healed + expired = reservoir + topups ✓` · `Merkle anchor roots · public` · `fingerprinting: refused` | The conservation equation types out and its `=` pulses green with a ✓; a small Merkle tree roots into a hash chip labeled `published hourly`; a shield icon stamps `refused` on a fingerprint icon. |
 | S13 | 1:40–1:52 | ask + close | donut `60% people · 15% pilot · 15% infra · 10% contingency` + chips `one engineer today` · `0 external users — pilot recruiting` · `GPU: decision tier + corpus` · `built for: FOSS maintainers · students · devs without cloud budgets` · `sustainable: fiscal sponsor · MIT core` | Donut segments sweep in; the honesty chips stamp in on "we say so"; a GPU chip orbits to the decision-tier segment. On "Small by design." the frame clears to the close line; on "Yours by default." it holds. |
