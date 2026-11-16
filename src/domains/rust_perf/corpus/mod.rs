@@ -9,6 +9,7 @@
 //! 038) or that are NotBenchable-with-a-metric-mismatch (Issue 014), `None` for
 //!      unconditional wins + honestly `NotBenchable` rules.
 //!
+//! 356 entries across 15 categories as of Batch 367 (+3: measurement-honesty ×3 — `eval-window-state-restore-roundtrip-detection` (the LEAD: a scored subject must not be moved away for a measurement and restored after it — the ring-sample detector algebra, THRESHOLD×typical + the load-bearing absolute floor, SEEN/BACK templates, isolation both sides, the informational-jump carve-out, the not-detected list carried) + `capacity-gated-exact-undo-loud-degrade` (undo admitted by a byte budget; the skip LOUD and typed; degrade to report-not-undo; in-place restore; the out-of-snapshot regime condition) + `self-caused-wait-excluded-from-rate-estimate` (consult pauses subtracted before a per-unit rate; median-of-window; the falsifiers carried)) — all suggestion-only `NotBenchable` `bench_spec: None` (the metric-mismatch class); xingjian-bai/opal @ `97762859` MIT, re-verified STILL the tip at the batch window (the `misc/` → `opal/misc/` path move disclosed, quotes byte-verified at the new path); Plan 381 / Research 413, `entries_82`;
 //! 347 entries across 15 categories as of Batch 364 (+5: io ×2 — `degree-gated-probe-with-doubling-retry` (the BENCHABLE GOAT lead: an anchored edge-property expansion reads the property's index once past the scan-vs-probe crossover at degree ≥ 64, and after a probe overflows at its entry budget W retries only at degree ≥ 2W — failed probes read ≤ ~2× the largest degree while a much larger hub still gets its probe, never a one-overflow-poisons-all watermark) + `derived-index-write-touches-only-changed-keys` (an unchanged re-put pays full LSM amplification — diff previous vs next, write only deltas; the unchanged merge is a read-only no-op preflight) — complexity ×1 `bfs-depth-epoch-marker-dedup` (the BENCHABLE co-lead: one u8 stamp array + the monotone depth marker deletes N per-level clears — one allocation, zero memsets) — measurement-honesty ×2 `spawn-blocking-queue-wait-split-from-compute` (the wrapper stamps queue-wait BEFORE the spawn, the closure stamps its own execution — a saturated pool presents contention as kernel slowness) + `latency-histogram-split-on-structural-populations` (split at the record site on the discriminator the code already holds, label-from-data-not-export, populations by structure, gap-not-guess, derived totals; carries the histogram family's folded faces) — the hydra-db/hydradb object-store-graph-db distill first tranche; the storage-transcription second tranche (candidates 9/10/11/3/5) DEFERRED to the follow-up batch, `count-before-fault-injection` an honest T0 drop (the cited `fault_store.rs` does not exist at the pin), candidate 14 adjudicated as the `consume_budget` rider on `adaptive-yield-consecutive-ready`, #6 adjudicated distinct both directions and deferred, the align-64 second instance riding `align-64-false-sharing`; `ELv2` transcription-only @ `9166374`; Plan 379 / Research 411, `entries_80`; PRIOR: 342 entries
 //! across 15 categories as of Batch 363 (+4: measurement-honesty ×3 — `instruction-count-cache-blindness` (the icount gate's locality-blindness law — equal instructions, divergent access; adjudicated both ways vs the `kernel_opt` warming family + the `#143684` rider), `wall-clock-ungated-shared-ci-noise-floor` (wall-clock is CONTEXT never judge in shared CI; the noise floor derives from an empty-change baseline; carries the folded `ci-gate-policy-shape` composite: budgets + thresholds + min-share), `alloc-proxy-inversion-work-ratio-caveat` (alloc churn is a proxy — an alloc-only verdict inverts on lookup-structure trades) — and layout ×1 `async-wrapper-future-size-exponential-nesting` (a measuring wrapper holding the inner ≥2x per layer composes exponentially; the one-store Linear Future keeps it linear — the benchable lead, measured by the standalone preflight per the pre-registered fallback); the hotpath.rs CI-benchmarking blog (the FOURTH hotpath-family pass), `cpu-model-per-run-metadata` DROPPED (measurement infrastructure, not a fix-space); Plan 374 / Research 407, `entries_79`;
 //! across 15 categories as of Batch 362 (+1: io —
@@ -832,14 +833,32 @@ mod entries_78;
 mod entries_79;
 mod entries_80;
 mod entries_81;
+mod entries_82;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 353 entries
-/// (Batch 365, 2026-11-16, Plan 379 T3 / Research 411: +6 -- the hydradb
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 356 entries
+/// (Batch 367, 2026-11-16, Plan 381 / Research 413: +3 -- the opal
+/// reactive-optimizer harness measurement-integrity tranche,
+/// `entries_82`: `eval-window-state-restore-roundtrip-detection`
+/// (measurement-honesty -- the LEAD: a scored subject must not be moved
+/// away for a measurement and restored after it; the ring-sample detector
+/// algebra with the load-bearing absolute floor, informational-jump
+/// carve-out, and the carried not-detected list) +
+/// `capacity-gated-exact-undo-loud-degrade` (measurement-honesty -- undo
+/// availability admitted by a byte budget, the skip LOUD and typed, the
+/// degrade to report-not-undo, the in-place restore, the out-of-snapshot
+/// regime condition) + `self-caused-wait-excluded-from-rate-estimate`
+/// (measurement-honesty -- consult pauses subtracted before a per-unit
+/// rate, median-of-window; the bimodal-tail + accepted-rewrite falsifiers
+/// carried); all three suggestion-only `NotBenchable`, `bench_spec: None`
+/// (the metric-mismatch class); xingjian-bai/opal @ `97762859` MIT,
+/// re-verified STILL the tip at the batch window (the `misc/` ->
+/// `opal/misc/` path move disclosed, quotes byte-verified at the new
+/// path); prior: Batch 365, 2026-11-16, Plan 379 T3 / Research 411: +6 -- the hydradb
 /// SECOND storage tranche, `entries_81`: `existential-witness-early-exit-
 /// scan` (io, BENCHABLE -- the predicate-arity GOAT lead, the cell in
 /// `.benchmarks/155_batch365_goat_cells.md`) + `wal-watermark-pinned-
@@ -1131,6 +1150,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_79::entries());
     entries.extend(entries_80::entries());
     entries.extend(entries_81::entries());
+    entries.extend(entries_82::entries());
     Corpus::new(entries)
 }
 

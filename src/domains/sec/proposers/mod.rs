@@ -271,6 +271,7 @@
 use syn::File;
 
 pub mod activation_expansion;
+pub mod agent_code_static_boundary;
 pub mod arc_raw_boundary;
 pub mod archive_extract;
 pub mod audit_hit_fingerprint;
@@ -322,6 +323,7 @@ pub mod slice_len_guard;
 pub mod softmax_collapse;
 pub mod sql_identifier_allowlist;
 pub mod sql_query_value_bind;
+pub mod stale_proposal_shown_base_merge;
 pub mod strike_cross_site;
 pub mod subnormal_rescale;
 pub mod unbounded_read;

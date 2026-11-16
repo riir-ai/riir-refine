@@ -2737,6 +2737,32 @@ is an original synthesis, standalone-compiled AND executed before entry)."
             fixed_code: "fn guarded_logit(x: f32, eps: f32) -> f32 {\n    // the output-domain clamp — the bound survives, no +inf\n    let raw = (x / (1.0 - x)).ln();\n    let bound = (((1.0 - f64::from(eps)) / f64::from(eps)).ln()) as f32;\n    raw.max(-bound).min(bound)\n}\n".to_string(),
             family: SecFamily::Numerics,
         },
+        // ══ Batch 367 (2026-11-16) — the opal reactive-optimizer      ══
+        // ══ harness transcription, sec half (the agent-harness       ══
+        // ══ family's +2 axes): the generated-code boundary scanner   ══
+        // ══ and the stale-proposal shown-base merge. Source:         ══
+        // ══ xingjian-bai/opal @ 97762859 (MIT, re-verified STILL the ══
+        // ══ tip; the misc/ -> opal/misc/ path move disclosed, quotes ══
+        // ══ byte-verified at the new path). BOTH suggest-only        ══
+        // ══ InputValidation entries; fixtures b367 F2/F3.            ══
+        // ── agent-code-static-boundary-diagnostics-never-gate (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "agent-code-static-boundary-diagnostics-never-gate".to_string(),
+            sec_concept: "static source diagnostics over agent-generated code, framed as OBSERVATIONS THAT NEVER DECIDE: a scan of a proposed program for boundary-crossing surface (io/process spawn, dynamic evaluation, introspection, protected-object mutation) with import-alias resolution records file/line/category diagnostics BEFORE acceptance, and the acceptance decision stays the caller's — a candidate that subsequently fails to build can still have flags; these are observations, not rejections, and the scan never panics (even a broken input must not turn a diagnostic into a failure). SOURCE LAW, verbatim (xingjian-bai/opal, opal/misc/boundary.py:1-3): \"Best-effort static diagnostics for program boundary crossings, never an execution policy or a sandbox.\" + (:5-7) \"Common import aliases are resolved, but runtime aliases, computed attributes and other indirect access can evade these heuristics; a flag can also be benign. Nothing here executes agent code, touches training objects or RNGs, or changes whether a program is accepted.\" + check() \"Never raises\" — \"even a broken stderr must not turn a diagnostic into a training failure\" + record(): \"A candidate that subsequently fails to build can still have flags; these are observations, not rejections.\" THE TAXONOMY IS THE CONTENT (the ideas from boundary.py's tables, our own Rust-shaped vocabulary): io (spawn/fs/net surface), dynamic-eval analogs (eval/exec/dynamic load), introspection (frames/globals/reflection), protected-object mutation (a mutation-shaped method on the guarded object). ⛔ ADJUDICATION vs the agent-harness family: `untrusted-content-interpolated-into-prompt` (B350) owns UNTRUSTED CONTENT flowing into prompts — THIS owns UNTRUSTED CODE against protected surfaces (the code-source axis was unowned); `removed-span-veto-outscopes-recovery-path` (B340) is an ADMISSION AUTHORITY whose veto outscopes downstream judges — THIS is deliberately NOT one (diagnostics-never-gate is the anti-authority posture, itself the portable lesson: generated-code review that cannot decide must still be RECORDED); `egress-control-bypass-flag` (B342) owns config-level egress defeat — a different layer. REGIME: any lane that admits machine-authored code or config (fixer candidates, advisory patches, plugin submissions, macro expansion review). Suggest-only: what gates is the consumer's policy, never the scanner — the rule lands suggest-only, never FIXABLE_SEC. HONEST BOUND (carried in-rule, fixture-demonstrated): the category VOCABULARY, not the walker, is the bound — indirectly-constructed names evade, and a flag can be benign (a deliberate-looking surface with a benign use is flagged and the observation recorded either way). Detector: `proposers::agent_code_static_boundary`. Fixture: `fixtures/b367_fixtures.rs` F2. Batch 367 / Plan 381 / Research 413 (xingjian-bai/opal @ 97762859, MIT; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn review_candidate(src: &str) -> bool {\n    // the scan's findings GATE: any flag silently rejects the proposal —\n    // the observations-decides defect (a benign-looking io name is a\n    // false rejection; a real boundary crosser is never recorded for review)\n    let flags = scan_surfaces(src);\n    flags.is_empty()\n}\n".to_string(),
+            fixed_code: "fn review_candidate(src: &str, caller_verdict: Verdict) -> (Vec<Diagnostic>, Verdict) {\n    // observations, never a gate: the scan RECORDS; the caller's\n    // verdict stands whatever the scan found — and a malformed input\n    // yields empty diagnostics, never a panic\n    let diagnostics = scan_surfaces(src);\n    for d in &diagnostics {\n        record_for_review(d);\n    }\n    (diagnostics, caller_verdict)\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
+        // ── stale-proposal-merges-against-shown-base (InputValidation; suggest-only) ──
+        SecRule {
+            rule_id: "stale-proposal-merges-against-shown-base".to_string(),
+            sec_concept: "a proposal is applied as its DELTA against the base it was shown, never wholesale onto current state: for each name in proposal union shown_base, where the proposal differs from the SHOWN BASE the proposal's version lands (inserted when a revert removed the file), where the proposal deleted a base file the removal lands, unchanged names carry current — so an answer computed before a revert does not bring the reverted state back. SOURCE LAW, verbatim (xingjian-bai/opal, opal/wrapper.py _apply, :859-860): \"three-way merge at file level: apply only what the agent changed relative to the files it was shown, so an answer computed before a revert does not bring the reverted program back.\" THE FAILURE MODE IS THE CONTENT: a late or queued answer computed against a since-reverted state would resurrect the reverted program under a wholesale apply. ⛔ ADJUDICATION vs the family: `externally-authored-edits-by-id-not-counted-index` (B339) owns ADDRESS validity of external edits (identity vs range membership) — THIS owns BASE validity (delta vs wholesale application); generic VCS three-way merge is the primitive (ambient, not corpus); the escalation chain's stale-answer hazard (a seat answer arriving after a demote latch) is the at-home instance. THE NAMED REGIME CONDITION (the adversarial panel's kill arm, carried): a full-file rewrite of a since-reverted file degenerates the merge to a wholesale write and carries the stale view — protection holds where edits are local; the fixture demonstrates the degeneration rather than hiding it. REGIME: any proposal-admission lane (fixer candidates, advisory patches, config rewrites) where state can change between the proposal's computation and its application. The rule lands suggest-only, never FIXABLE_SEC: whether stale bases can actually occur is runtime knowledge (are answers queued? do reverts interleave?) a parse-only pass cannot have. Honest recall limits: apply-loop vocabulary is fn-scope; a wholesale apply named in unfamiliar vocabulary fires as the QUESTION, review decides. Detector: `proposers::stale_proposal_shown_base_merge`. Fixture: `fixtures/b367_fixtures.rs` F3. Batch 367 / Plan 381 / Research 413 (xingjian-bai/opal @ 97762859, MIT; the fixture is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn apply_answer(current: &mut WorkingSet, answer: &Proposal) {\n    // wholesale: every proposal name is written onto CURRENT state — a\n    // late answer computed before a revert resurrects the reverted files\n    for file in &answer.files {\n        current.put(file.name.clone(), file.body.clone());\n    }\n}\n".to_string(),
+            fixed_code: "fn apply_answer(current: &mut WorkingSet, answer: &Proposal, shown_base: &Snapshot) {\n    // delta-vs-shown-base: only what the agent CHANGED relative to the\n    // files it was shown — a pre-revert answer cannot bring the reverted\n    // state back\n    for name in answer.names().chain(shown_base.names()) {\n        let (in_answer, in_base) = (answer.get(name), shown_base.get(name));\n        match (in_answer, in_base) {\n            (Some(new), Some(old)) if new != old => current.put(name, new),\n            (Some(new), None) => current.put(name, new),\n            (None, Some(_)) => current.remove(name),\n            _ => {} // unchanged relative to the shown base: carry current\n        }\n    }\n}\n".to_string(),
+            family: SecFamily::InputValidation,
+        },
         // ══ Batch 353 (2026-11-13) — the FORGE Lab std memory-safety ══
         // ══ transcription (sec). FOUR suggest-only soundness rules on ══
         // ══ the consumer-unsafe surface; the source is the Microsoft ══
@@ -4098,6 +4124,133 @@ mod tests {
             assert!(
                 detect_len(&rule.fixed_code, &fixed) == 0,
                 "batch-366 {id}: detector must stay silent on its own fixed fixture"
+            );
+        }
+    }
+
+    /// Batch 367 (the opal reactive-optimizer harness transcription, sec
+    /// half, Plan 381 / Research 413, xingjian-bai/opal @ 97762859, MIT) —
+    /// TWO suggest-only InputValidation rules on the agent-harness axes
+    /// (the generated-code boundary scanner + the stale-proposal
+    /// shown-base merge); never `FIXABLE_SEC`.
+    #[test]
+    fn batch367_rules_present_families_and_provenance() {
+        let all = entries();
+        for id in [
+            "agent-code-static-boundary-diagnostics-never-gate",
+            "stale-proposal-merges-against-shown-base",
+        ] {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-367 rule '{id}' missing from corpus"));
+            assert_eq!(
+                r.family,
+                SecFamily::InputValidation,
+                "batch-367 {id} family"
+            );
+            assert!(
+                r.sec_concept
+                    .contains("Batch 367 / Plan 381 / Research 413"),
+                "batch-367 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("97762859"),
+                "batch-367 {id} must cite the opal pin"
+            );
+            assert!(
+                r.sec_concept.contains("suggest-only"),
+                "batch-367 {id} must carry the suggest-only posture"
+            );
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-367 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+        // The law needles (keyed after reading the landed text).
+        let r1 = all
+            .iter()
+            .find(|r| r.rule_id == "agent-code-static-boundary-diagnostics-never-gate")
+            .unwrap();
+        assert!(
+            r1.sec_concept
+                .contains("never an execution policy or a sandbox")
+                && r1.sec_concept.contains("observations, not rejections"),
+            "batch-367 R2 must carry the never-gate law verbatim"
+        );
+        assert!(
+            r1.sec_concept
+                .contains("the category VOCABULARY, not the walker, is the bound"),
+            "batch-367 R2 must carry the honest evasion bound"
+        );
+        assert!(
+            r1.sec_concept.contains("Never raises"),
+            "batch-367 R2 must carry the never-raises contract"
+        );
+        let r3 = all
+            .iter()
+            .find(|r| r.rule_id == "stale-proposal-merges-against-shown-base")
+            .unwrap();
+        assert!(
+            r3.sec_concept.contains("three-way merge at file level")
+                && r3
+                    .sec_concept
+                    .contains("does not bring the reverted program back"),
+            "batch-367 R3 must carry the merge law verbatim"
+        );
+        assert!(
+            r3.sec_concept
+                .contains("degenerates the merge to a wholesale write"),
+            "batch-367 R3 must carry the kill-arm regime condition"
+        );
+        // The R2 adjudications both directions + the R3 kinship cite.
+        assert!(
+            r1.sec_concept
+                .contains("untrusted-content-interpolated-into-prompt")
+                && r1
+                    .sec_concept
+                    .contains("removed-span-veto-outscopes-recovery-path"),
+            "batch-367 R2 must carry both family adjudications"
+        );
+        assert!(
+            r3.sec_concept
+                .contains("externally-authored-edits-by-id-not-counted-index"),
+            "batch-367 R3 must carry the B339 kinship cite"
+        );
+    }
+
+    /// Batch 367 detectors: fire on their own buggy fixture, stay
+    /// silent on their own fixed fixture (the parse half is covered by
+    /// `every_fixture_parses`).
+    #[test]
+    fn batch367_detectors_fire_on_buggy_stay_silent_on_fixed() {
+        use crate::domains::sec::proposers::agent_code_static_boundary;
+        use crate::domains::sec::proposers::stale_proposal_shown_base_merge;
+        let all = entries();
+        let pairs: [(&str, fn(&str, &syn::File) -> usize); 2] = [
+            (
+                "agent-code-static-boundary-diagnostics-never-gate",
+                |s: &str, f: &syn::File| agent_code_static_boundary::detect(s, f).len(),
+            ),
+            (
+                "stale-proposal-merges-against-shown-base",
+                |s: &str, f: &syn::File| stale_proposal_shown_base_merge::detect(s, f).len(),
+            ),
+        ];
+        for (id, detect_len) in pairs {
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-367 rule '{id}' missing from corpus"));
+            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+            assert!(
+                detect_len(&rule.buggy_code, &buggy) > 0,
+                "batch-367 {id}: detector must fire on its own buggy fixture"
+            );
+            let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+            assert!(
+                detect_len(&rule.fixed_code, &fixed) == 0,
+                "batch-367 {id}: detector must stay silent on its own fixed fixture"
             );
         }
     }
