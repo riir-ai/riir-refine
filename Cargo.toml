@@ -1438,6 +1438,16 @@ required-features = ["clippy_verify"]
 name = "pav_data_curate"
 required-features = ["pav_data"]
 
+# Plan 356 / riir-train issue 695 step (2) — the extra-spans pool's STORE half:
+# dump the lived `.refine/trajectories.kv` shapes as JSONL rows for the
+# campaign seam (`--spans ...,<file>.jsonl`); `--validate <file>` re-checks any
+# pool file parses standalone with unique ids. Run:
+#   cargo run --release --features pav_data --example pav356_extra_spans -- \
+#     --store-root . --out /tmp/pav356_store_spans.jsonl
+[[example]]
+name = "pav356_extra_spans"
+required-features = ["pav_data"]
+
 # Plan 049 T0.1: oracle-label a fresh real-repo span set across the
 # workspace repos and freeze it as a BLAKE3-committed dataset
 # (.benchmarks/data/049_t01/). Needs cargo + clippy on PATH.

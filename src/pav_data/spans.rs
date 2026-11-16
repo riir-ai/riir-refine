@@ -69,7 +69,9 @@ pub fn fixture_spans() -> Vec<PavSpan> {
 /// Rows whose `shape` does not parse standalone are skipped (counted in the
 /// return); duplicate shapes (the same span met under several lint keys)
 /// collapse to one span. Tier-`Withdrawn` rows are skipped — a strategy the
-/// memory has retired is not a distribution worth amortizing.
+/// memory has retired is not a distribution worth amortizing. Empty shapes
+/// are skipped too (measured live: a planted-but-never-filled trajectory row
+/// passes the trivially-valid parse; the daemon's prompt contract needs code).
 ///
 /// # Errors
 /// `TrajStore::open` failures (WAL replay, unwritable dir).
@@ -84,7 +86,7 @@ pub fn store_spans(root: &Path) -> Result<(Vec<PavSpan>, usize), String> {
             skipped += 1;
             continue;
         }
-        if !pruner.validate(&row.shape, "").parses {
+        if row.shape.trim().is_empty() || !pruner.validate(&row.shape, "").parses {
             skipped += 1;
             continue;
         }
