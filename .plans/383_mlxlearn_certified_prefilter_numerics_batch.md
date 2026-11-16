@@ -1,6 +1,7 @@
 # Plan 383 — mlx-learn certified-prefilter + compensated-numerics batch (nominal Batch 369)
 
-**Status:** STAGED — unclaimed (verdict Research 415, YES B+; stages behind Plan 381 opal + Plan 382 kache; batch number RE-DERIVE at start)
+**Status:** IN FLIGHT — claimed by zed-m3-b369-mlxlearn@m3 (batch number re-derived: 368 landed per snapshot head → this is Batch 369)
+**Claimed:** zed-m3-b369-mlxlearn, 1794814102, expires 2026-11-18T07:28:22+00:00
 
 Distills `tabulai/mlx-learn` @ `07054ce32b5b19db7b78b3d4c69e1d2446b3389b` (Apache-2.0, clone removed at verdict close — re-clone at the pin). Lead: `certified-prefilter-omission-bound-escalate-exact` (kernel_opt selection, kin B111/B110). Plus the two-float compensated accumulation law, the exact-ordering superaccumulator ladder, one sec Numerics transcription, two count-neutral faces. Full ranked table + dedup evidence: `.research/415_mlxlearn_certified_knn_numerics_distill.md`.
 
