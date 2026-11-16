@@ -1,6 +1,6 @@
 # Research 414 — kache build-cache distill verdict (+ adoption pilot pre-registration)
 
-**Status:** DISTILLED — pending owner decision (corpus batch staged as Plan 382, unclaimed; the ADOPTION pilot is a SEPARATE owner-gated lane, not this note's batch)
+**Status:** PILOT EXECUTED — PASS (2026-11-16, owner "go"; bench 157, zed-m3-kache-pilot@m3): T0 pass with one disclosed delta class (`KACHE_DISABLED=1` strips `-C incremental` + sets child `CARGO_INCREMENTAL=0` by default — `KACHE_PRESERVE_INCREMENTAL=1` restores full argv parity; the remap injection measured live: 9 `--remap-path-prefix` rules mapping machine-local roots to `/kache/*` sentinels, the source path stays cargo-relative so `file!()` stays neutral); bars (a) 26/26 rlibs blake3-identical across worktrees, (b) 6/6 tests + all named probes pass both postures, (c) per-worktree disk 92 MB incumbent → ≈0 armed (CoW clones), (d) warm-store walls ~3.7-4.3x + warm clippy 0.02 s vs 3.4 s (PROVISIONAL walls — m3 shared box above MAX_LOAD during the cells, preflight refused, relative deltas load-robust), (e) dev-loop ~9% overhead → disposition holds (job lanes armed, dev loops incumbent), (f) clippy units cacheable measured (run 2 = 27 hits, 0.02 s), (g) no shared target dirs + thrash both directions clean (#238 pre-clean verified). ADOPT per the pre-registered posture; skill/AGENTS lines landed same session (pre-reg item 6); rollout amo/bmo job lanes next, 4090 last; remotes deferred. Corpus batch staged as Plan 382, claimed by zed-m3-b368-kache@m3 (separate lane).
 
 ## Source
 
