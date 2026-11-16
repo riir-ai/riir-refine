@@ -2486,7 +2486,23 @@ axis (24 layers fall 0.999995 -> 0.99958 with every rule applied). REGIME: \
 fp16/NE-class arithmetic with a finite internal accumulate. Suggest-only: the \
 threshold is model-family-measured and the parity gate decides whether the split \
 is wanted at all. Honest recall limits: compute-site vocabulary is fn-scope; an \
-f32-accumulator projection escapes the band and fires only for review. Detector: \
+f32-accumulator projection escapes the band and fires only for review. ⛔ THE \
+ACCUMULATION FACE (Batch 366 / Plan 380 / Research 412, George & Rush \
+\"When Rounding Breaks Machine Learning\", robertj1.com \
+live-fetch 2026-11-16 — count-neutral rider face, the B351 precedent): a LONG \
+low-precision BATCH SUM carries this host's precision axis AND a range axis \
+this host does not own — an incremental binary16 sum of 151,936 ones STALLS at \
+2048 (the accumulator's ulp exceeds the increment; each +1 rounds away) and \
+log-sum-exp reads 7.62 instead of 11.93, while the same accumulation measured \
+±∞ under the libraries' tree-ordered reductions (\"the batch sum overflows to \
++∞ before the division\"); keep long low-precision batch sums in a WIDER \
+accumulator (f32 — exact here: 151,936 is an f32 integer) and round once at \
+the division. ⛔ THE ISSUE-940 CARVE-OUT (carried as the face text): f32 \
+sync-crossing reductions stay order-pinned — the wider-accumulator law is \
+low-precision lanes only, never a determinism-law override. The face is \
+suggest-only with the host; no separate detector (the host's wide-reduction \
+vocabulary covers the surface). Fixture: `fixtures/b366_fixtures.rs` F6. \
+Detector: \
 `proposers::wide_reduction_split`. Fixture: `fixtures/b352_fixtures.rs` F2. Batch \
 352 / Plan 362 / Research 395 (AJ-Gonzalez/LoNE @ `4806171d`, Apache-2.0 — cited \
 as class provenance; the fixture is an original synthesis, standalone-compiled AND \
@@ -2551,6 +2567,174 @@ executed before entry)."
                 .to_string(),
             buggy_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for i in 0..CTX {\n        // validity keyed by BUFFER INDEX — wrong after the first rotation\n        if i < n_seen && i <= query_pos as usize && i >= floor as usize {\n            mask[i] = f16(0.0);\n        }\n    }\n    mask\n}\n".to_string(),
             fixed_code: "const CTX: usize = 4096;\n\n/// Preallocated fp16 KV cache + its additive attention mask.\nstruct KvCache {\n    slots: [Option<u32>; CTX],\n    write: usize,\n}\n\nfn attention_mask(cache: &KvCache, n_seen: usize, query_pos: u32) -> [f16; CTX] {\n    let _ = n_seen; // the count no longer bounds validity\n    let mut mask = [f16(-65504.0); CTX];\n    let floor = query_pos.saturating_sub(WINDOW - 1);\n    for (i, slot) in cache.slots.iter().enumerate() {\n        // validity keyed by the slot's ABSOLUTE position\n        if let Some(pos) = slot {\n            if *pos <= query_pos && *pos >= floor {\n                mask[i] = f16(0.0);\n            }\n        }\n    }\n    mask\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ══ Batch 366 (2026-11-16) — the rounding-bugs numerics      ══
+        // ══ transcription (George & Rush, "When Rounding Breaks     ══
+        // ══ Machine Learning", the TorchLean/FloatLib audit). FIVE  ══
+        // ══ suggest-only Numerics rules + the R6 accumulation FACE  ══
+        // ══ on wide-reduction-precision-split. Live-fetch           ══
+        // ══ provenance (the blog URL is the pin, NO sha: no clone). ══
+        // ── gelu-tanh-cancellation-sigmoid-form (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "gelu-tanh-cancellation-sigmoid-form".to_string(),
+            sec_concept: "the tanh-spelled GELU erases its deep-negative tail: \
+0.5*x*(1.0 + tanh z) rounds `1.0 + tanh z` to +0.0 once 2*e^(-2|z|) < \
+half-ulp-below-1 (2.98e-8 f32, |z| >~ 9), and at x = -6 every tested spelling \
+(PyTorch, the Transformers variants, JAX, TorchLean's usual tanh GELU) returned \
+negative zero instead of about -8.4e-11 (measured, George & Rush, live-fetch \
+2026-11-16, verbatim at the pin: \"Writing the same approximation with sigmoid \
+sigma keeps the small value. This is an algebraic rearrangement of the tanh \
+formula, not a switch to the erf definition: 0.5 x (1 + tanh z) = x sigma(2z)\
+\"). Rearrange to `x * sigmoid(2z)` — the identity is exact over the reals and \
+the sigmoid division keeps the tail representable. ⛔ ADJUDICATION vs \
+`fused-activation-approximation-expansion` (B352, BOTH directions): THAT \
+EXPANDS a fused activation to primitive ops for PARITY against a backend's \
+approximate substitute; THIS REWRITES WITHIN the composed form for CANCELLATION \
+— different axes, they COMPOSE (a parity-critical path can need both). Distinct \
+from `sigmoid-minus-one` (the family sibling): THAT owns `sigmoid(x) - 1` \
+spellings (1-p near p=1), THIS owns the tanh-GELU identity (no sigmoid-minus \
+subtraction anywhere). REGIME: the erasure band |z| >~ 9 (outside it the naive \
+form tracks the fix to ~1e-3 relative — fixture-pinned); in-band the rewrite \
+changes a WRONG ZERO into the true tail. Suggest-only: which spelling a fused \
+kernel already uses is invisible to parse-only, and the erf switch is a \
+DIFFERENT (checkpoint-changing) decision this rule never makes. Honest recall \
+limits: gelu vocabulary is fn-scope; a deliberate tanh spelling outside the \
+band fires and review decides. Detector: \
+`proposers::gelu_tanh_sigmoid_form`. Fixture: `fixtures/b366_fixtures.rs` F1. \
+Batch 366 / Plan 380 / Research 412 (George & Rush, \"When Rounding Breaks \
+Machine Learning\", robertj1.com/ai4science/rounding-bugs-in-ml-formulas/, \
+live-fetch 2026-11-16 — the blog URL is the pin, NO sha: no clone; the fixture \
+is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn gelu_activation(x: f32) -> f32 {\n    // the tanh spelling — the deep-negative tail erases to -0.0\n    let z = (2.0f32 / std::f32::consts::PI).sqrt() * (x + 0.044715 * x.powi(3));\n    0.5 * x * (1.0 + z.tanh())\n}\n".to_string(),
+            fixed_code: "fn gelu_activation(x: f32) -> f32 {\n    // the sigmoid rearrangement — the SAME tanh approximation, not erf\n    let z = (2.0f32 / std::f32::consts::PI).sqrt() * (x + 0.044715 * x.powi(3));\n    x * (1.0 / (1.0 + (-2.0 * z).exp()))\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── kl-penalty-exp-minus-d-cancellation (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "kl-penalty-exp-minus-d-cancellation".to_string(),
+            sec_concept: "the k3 KL penalty e^d - d - 1 collapses to exactly 0.0 \
+at small |d|: at d = 2^-12 f32 the d^2/2 term is exactly a quarter-ulp above \
+1+d, so correctly-rounded exp(d) rounds to 1+d and the form returns 0.0 where \
+the true penalty is ~3.0e-8 (measured, George & Rush, live-fetch 2026-11-16, \
+verbatim at the pin: \"At d=2-12 in float32, the direct expression returned zero \
+instead of roughly 3.0x10-8; expm1(d) - d kept the value\"). TRL's GRPO runs \
+this line whenever its beta > 0 — UPSTREAM-NAIVE, transcription only, NEVER a \
+PR; our own riir-train-engine carried the same form and was FIXED 2026-11-16 \
+(riir-train issue 691, commit 29ba94d0 — the in-stack counterpart, fixture-first). \
+Rearrange to `d.exp_m1() - d`. REGIME: the small-d band (the fixture also pins \
+the mid regime: at d = 2^-6 the naive form already survives). Suggest-only: the \
+penalty's own GRADIENT survives the collapse (the source says so), so whether \
+the zero matters is a per-lane call. Honest recall limits: kl/penalty vocabulary \
+is fn-scope; a deliberate direct form in a gradient-only lane fires and review \
+decides. Detector: `proposers::kl_penalty_expm1`. Fixture: \
+`fixtures/b366_fixtures.rs` F2. Batch 366 / Plan 380 / Research 412 (George & \
+Rush, \"When Rounding Breaks Machine Learning\", \
+robertj1.com/ai4science/rounding-bugs-in-ml-formulas/, live-fetch 2026-11-16 — \
+the blog URL is the pin, NO sha: no clone; the fixture is an original \
+synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn kl_penalty_k3(d: f32) -> f32 {\n    // the direct k3 estimator — collapses to exactly 0.0 at small |d|\n    d.exp() - d - 1.0\n}\n".to_string(),
+            fixed_code: "fn kl_penalty_k3(d: f32) -> f32 {\n    // expm1 keeps the small difference the direct subtraction loses\n    d.exp_m1() - d\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── variance-cancellation-two-pass (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "variance-cancellation-two-pass".to_string(),
+            sec_concept: "the one-pass variance E[x^2] - mean^2 cancels \
+catastrophically when the inputs share a large mean: at the blog's \
+[4095, 4097, 4097] f32 slice the scatter-mean tie at 2^25 loses the 2-ulp tail \
+and PyTorch Geometric's VarAggregation returns EXACTLY -2.0 where the true \
+variance is 8/9, the subsequent std returning zero (measured, George & Rush, \
+live-fetch 2026-11-16, verbatim at the pin: \"PyTorch Geometric's variance \
+aggregation showed a similar problem: [4095, 4097, 4097] gave -2 in float32 \
+where the true variance was 8/9, and the subsequent standard deviation returned \
+zero\"). JAX documents the same and SHIPS `algorithm=\"stable\"` — the stable \
+form is decision content. Rearrange to the two-pass mean((x - mean)^2), or a \
+Welford stream when a single pass is required. REGIME: a large shared mean vs \
+the spread (the fixture also pins a small-mean slice where both forms agree). \
+Suggest-only: the second pass costs bandwidth (streaming vs two-pass is a \
+per-lane memory call). Honest recall limits: variance/normalize vocabulary is \
+fn-scope; a deliberate one-pass in a small-mean lane fires and review decides. \
+Distinct from `fp16-subnormal-product-power-of-two-rescale` (products underflow \
+in fp16 — a different mechanism, no f16 required here; the -2 reproduces in \
+plain f32). Detector: `proposers::variance_two_pass`. Fixture: \
+`fixtures/b366_fixtures.rs` F3. Batch 366 / Plan 380 / Research 412 (George & \
+Rush, \"When Rounding Breaks Machine Learning\", \
+robertj1.com/ai4science/rounding-bugs-in-ml-formulas/, live-fetch 2026-11-16 — \
+the blog URL is the pin, NO sha: no clone; the fixture is an original \
+synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn layer_variance(x: &[f32]) -> f32 {\n    // the one-pass spelling — cancels at a large shared mean\n    let n = x.len() as f32;\n    let sum: f32 = x.iter().sum();\n    let mean = sum / n;\n    let x2_sum: f32 = x.iter().map(|v| v * v).sum();\n    x2_sum / n - mean * mean\n}\n".to_string(),
+            fixed_code: "fn layer_variance(x: &[f32]) -> f32 {\n    // the two-pass spelling — no cancellation at a large shared mean\n    let n = x.len() as f32;\n    let sum: f32 = x.iter().sum();\n    let mean = sum / n;\n    let acc: f32 = x.iter().map(|v| { let c = v - mean; c * c }).sum();\n    acc / n\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── decay-gate-precision-collapse-low-precision (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "decay-gate-precision-collapse-low-precision".to_string(),
+            sec_concept: "a decay-gated update decay*avg + (1-decay)*param STOPS \
+MOVING in a low-precision lane: decay 0.999 rounds to 1.0 in bf16 (8-bit \
+significand), the (1-decay)*param increment rounds to 0.0, and a moving average \
+at 1/64 stays there for 5,000 steps (measured, George & Rush, live-fetch \
+2026-11-16, verbatim at the pin: \"a bfloat16 moving average stayed at 1/64 for \
+5,000 steps because every update rounded away, and in pure bfloat16, an xLSTM \
+decay between nearby steps rounded to 1 instead of about 0.9526\"). Run the \
+update in a WIDER lane (f32) — the blog's one-step value 8389263/2^29. ⛔ THE \
+ISSUE-940 CARVE-OUT (carried in-rule): f32 sync-crossing reductions stay \
+ORDER-PINNED — the determinism law is not overturned; this rule is LOW-PRECISION \
+LOCAL LANES ONLY (bf16/f16 decay gates), regimes disjoint. ⛔ ADJUDICATION vs \
+`fp16-subnormal-product-power-of-two-rescale` (B352, BOTH directions): THAT \
+lifts PRODUCTS out of fp16's subnormal band with a power-of-two weight rescale \
+(exactness-preserving, per-term mantissa loss); THIS widens the UPDATE LANE \
+because the decay MULTIPLIER itself rounds to 1.0 — a value-rounding failure, \
+not a product-underflow one, and no rescale can recover an increment that \
+became 0.0. REGIME: decay values within half-ulp of 1.0 in the lane's \
+significand (bf16 0.996-1.0 all collapse to 1.0; f32 needs ~0.99999997). \
+Suggest-only: the wider lane costs memory/bandwidth per parameter, and some \
+frameworks keep a bf16 master-copy by design. Honest recall limits: \
+decay/ema/momentum vocabulary is fn-scope; the lane dtype is invisible to \
+parse-only, so a deliberate f32-lane site fires and review decides (suppressed \
+by the widening vocabulary `to_f32`/`as f32`). Detector: \
+`proposers::decay_gate_low_precision`. Fixture: `fixtures/b366_fixtures.rs` F4. \
+Batch 366 / Plan 380 / Research 412 (George & Rush, \"When Rounding Breaks \
+Machine Learning\", robertj1.com/ai4science/rounding-bugs-in-ml-formulas/, \
+live-fetch 2026-11-16 — the blog URL is the pin, NO sha: no clone; the fixture \
+is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn ema_step(avg: Bf16, param: Bf16, decay: Bf16) -> Bf16 {\n    // the bf16-lane update — decay 0.999 rounds to 1.0 in bf16, the\n    // increment rounds away, and the average never moves\n    avg * decay + (1.0 - decay) * param\n}\n".to_string(),
+            fixed_code: "fn ema_step_widened(avg: Bf16, param: Bf16, decay: Bf16) -> Bf16 {\n    // the update runs in the f32 lane — the increment survives\n    let moved = avg.to_f32() * decay.to_f32() + (1.0f32 - decay.to_f32()) * param.to_f32();\n    Bf16::from_f32(moved)\n}\n".to_string(),
+            family: SecFamily::Numerics,
+        },
+        // ── logit-clamp-epsilon-absorption (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "logit-clamp-epsilon-absorption".to_string(),
+            sec_concept: "an eps-guarded logit that clamps in the INPUT domain \
+absorbs its own guard: hi = 1.0 - eps rounds to 1.0 in f32 for eps = 1e-8 \
+(half-ulp below 1 is 2.98e-8), the clamp is a no-op at the top, and \
+logit(1.0) = +inf (measured, George & Rush, live-fetch 2026-11-16, verbatim at \
+the pin: \"In one float32 clamp, eps=1e-8 disappeared from the upper limit \
+1-eps, which rounded to 1 and produced infinity later\"). PyTorch's \
+`torch.special.logit(x, eps=1e-8)` is upstream-naive (#204898). Clamp in the \
+OUTPUT domain — bound the log RESULT to +-ln((1-eps)/eps) computed in a wider \
+lane (the blog's replacement 4828871/2^18 = 18.4207). ⛔ ADJUDICATION vs the \
+Guarded-ops family: a `safeDiv`-style denominator guard ADDS eps to escape a \
+divide-by-zero (the guard survives); THIS guard SUBTRACTS eps from a bound and \
+the subtraction itself is what vanishes — the guard-erases-itself class. \
+REGIME: eps <= half-ulp below the clamp point in the lane (f32: eps <= ~3e-8 \
+at hi=1; the same absorption bites any `1.0 - eps` bound). Suggest-only: the \
+guard's placement may be an input-domain API CONTRACT (then the fix changes \
+documented behavior and needs a versioned bump). Honest recall limits: \
+logit/ln vocabulary is fn-scope; the eps value is invisible to parse-only, so a \
+large-eps site fires and review decides. Detector: \
+`proposers::logit_clamp_absorption`. Fixture: `fixtures/b366_fixtures.rs` F5. \
+Batch 366 / Plan 380 / Research 412 (George & Rush, \"When Rounding Breaks \
+Machine Learning\", robertj1.com/ai4science/rounding-bugs-in-ml-formulas/, \
+live-fetch 2026-11-16 — the blog URL is the pin, NO sha: no clone; the fixture \
+is an original synthesis, standalone-compiled AND executed before entry)."
+                .to_string(),
+            buggy_code: "fn guarded_logit(x: f32, eps: f32) -> f32 {\n    // the input-domain clamp — hi absorbs eps and logit(1.0) = +inf\n    let hi = 1.0 - eps;\n    let p = x.max(eps).min(hi);\n    (p / (1.0 - p)).ln()\n}\n".to_string(),
+            fixed_code: "fn guarded_logit(x: f32, eps: f32) -> f32 {\n    // the output-domain clamp — the bound survives, no +inf\n    let raw = (x / (1.0 - x)).ln();\n    let bound = (((1.0 - f64::from(eps)) / f64::from(eps)).ln()) as f32;\n    raw.max(-bound).min(bound)\n}\n".to_string(),
             family: SecFamily::Numerics,
         },
         // ══ Batch 353 (2026-11-13) — the FORGE Lab std memory-safety ══
@@ -3796,6 +3980,124 @@ mod tests {
             assert!(
                 detect_len(&rule.fixed_code, &fixed) == 0,
                 "batch-352 {id}: detector must stay silent on its own fixed fixture"
+            );
+        }
+    }
+
+    /// Batch 366 (the rounding-bugs numerics transcription, Plan 380 /
+    /// Research 412, George & Rush, live-fetch provenance — the blog URL
+    /// is the pin, NO sha) — presence, family, provenance discipline.
+    /// FIVE suggest-only Numerics rules + the R6 accumulation FACE
+    /// riding `wide-reduction-precision-split` (count-neutral, the
+    /// fixture F6 pins it); never `FIXABLE_SEC`.
+    #[test]
+    fn batch366_rules_present_families_and_provenance() {
+        let all = entries();
+        let ids = [
+            "gelu-tanh-cancellation-sigmoid-form",
+            "kl-penalty-exp-minus-d-cancellation",
+            "variance-cancellation-two-pass",
+            "decay-gate-precision-collapse-low-precision",
+            "logit-clamp-epsilon-absorption",
+        ];
+        for id in ids {
+            let r = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-366 rule '{id}' missing from corpus"));
+            assert_eq!(r.family, SecFamily::Numerics, "batch-366 {id} family");
+            assert!(
+                r.sec_concept
+                    .contains("Batch 366 / Plan 380 / Research 412"),
+                "batch-366 {id} must cite its landing lineage"
+            );
+            assert!(
+                r.sec_concept.contains("robertj1.com"),
+                "batch-366 {id} must cite the live-fetch blog pin"
+            );
+            assert!(
+                !r.sec_concept.contains("@ `"),
+                "batch-366 {id} must carry NO sha pin (live-fetch provenance)"
+            );
+            assert!(
+                !crate::domains::sec::proposers::FIXABLE_SEC.contains(&id),
+                "batch-366 {id} must stay suggest-only (never FIXABLE_SEC)"
+            );
+        }
+        // The R6 face: count-neutral, rides the B352 host rule — the
+        // face text (the Issue-940 carve-out + the stall datum) must be
+        // present on the HOST, not as a ninth rule.
+        let host = all
+            .iter()
+            .find(|r| r.rule_id == "wide-reduction-precision-split")
+            .unwrap_or_else(|| panic!("batch-366 face host missing"));
+        assert!(
+            host.sec_concept.contains("THE ACCUMULATION FACE"),
+            "batch-366 face must ride wide-reduction-precision-split"
+        );
+        assert!(
+            host.sec_concept.contains("ISSUE-940 CARVE-OUT"),
+            "batch-366 face must carry the Issue-940 carve-out"
+        );
+        assert!(
+            host.sec_concept.contains("Batch 366"),
+            "batch-366 face must cite its landing lineage"
+        );
+        assert!(
+            all.iter()
+                .find(|r| r.rule_id == "sum-single-rounding-low-precision")
+                .is_none(),
+            "batch-366 R6 must stay a FACE — no separate rule"
+        );
+    }
+
+    /// Batch 366 detectors: fire on their own buggy fixture, stay
+    /// silent on their own fixed fixture (the parse half is covered by
+    /// `every_fixture_parses`).
+    #[test]
+    fn batch366_detectors_fire_on_buggy_stay_silent_on_fixed() {
+        use crate::domains::sec::proposers::decay_gate_low_precision;
+        use crate::domains::sec::proposers::gelu_tanh_sigmoid_form;
+        use crate::domains::sec::proposers::kl_penalty_expm1;
+        use crate::domains::sec::proposers::logit_clamp_absorption;
+        use crate::domains::sec::proposers::variance_two_pass;
+        let all = entries();
+        let pairs: [(&str, fn(&str, &syn::File) -> usize); 5] = [
+            (
+                "gelu-tanh-cancellation-sigmoid-form",
+                |s: &str, f: &syn::File| gelu_tanh_sigmoid_form::detect(s, f).len(),
+            ),
+            (
+                "kl-penalty-exp-minus-d-cancellation",
+                |s: &str, f: &syn::File| kl_penalty_expm1::detect(s, f).len(),
+            ),
+            (
+                "variance-cancellation-two-pass",
+                |s: &str, f: &syn::File| variance_two_pass::detect(s, f).len(),
+            ),
+            (
+                "decay-gate-precision-collapse-low-precision",
+                |s: &str, f: &syn::File| decay_gate_low_precision::detect(s, f).len(),
+            ),
+            (
+                "logit-clamp-epsilon-absorption",
+                |s: &str, f: &syn::File| logit_clamp_absorption::detect(s, f).len(),
+            ),
+        ];
+        for (id, detect_len) in pairs {
+            let rule = all
+                .iter()
+                .find(|r| r.rule_id == id)
+                .unwrap_or_else(|| panic!("batch-366 rule '{id}' missing from corpus"));
+            let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+            assert!(
+                detect_len(&rule.buggy_code, &buggy) > 0,
+                "batch-366 {id}: detector must fire on its own buggy fixture"
+            );
+            let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+            assert!(
+                detect_len(&rule.fixed_code, &fixed) == 0,
+                "batch-366 {id}: detector must stay silent on its own fixed fixture"
             );
         }
     }
