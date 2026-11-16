@@ -1,7 +1,8 @@
 # Issue 238 — the wide-posture lib suite takes 23 min: measure, then parallelize honestly
 
-**Status:** OPEN
-**Claimed:** zed-m3-ane-domain (Plan 377 landing session), 1794670478, expires 2026-11-16T15:34:38Z
+**Status:** OPEN — T1 measurement in flight (amo idle lane 2026-11-17)
+**Claimed:** zed-amo-i238-t1, 1794872400, expires 2026-11-19T10:00:00Z
+**Lease closed:** zed-m3-ane-domain (Plan 377 landing session), epoch 1794670478, was expires 2026-11-16T15:34:38Z (expired unexecuted — the filing session moved on; re-claimed for T1)
 
 ## The datum (measured, not guessed)
 
