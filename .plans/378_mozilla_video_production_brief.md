@@ -249,7 +249,7 @@ count claims (1,673 / 8 domains) are unaffected.
 ## 1. What this is
 
 The two-minute video for the Mozilla Human-Scale AI Incubator application
-([Proposal 025](.proposals/025_mozilla_human_scale_ai_incubator.md), deadline 2026-11-20).
+([Proposal 025](../.proposals/025_mozilla_human_scale_ai_incubator.md), deadline 2026-11-20).
 Reviewer brief: *"a link to a two-minute video showing the project and the team's vision …
 Reviewers want to see the technology working and hear directly from the team about why it
 matters. The video does not need to be polished."* → 100% fframes-drawn vector scenes driven

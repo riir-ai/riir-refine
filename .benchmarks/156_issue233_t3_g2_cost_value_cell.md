@@ -3,7 +3,7 @@
 **Status:** COMPLETE — verdict **NOT-PROMOTED** (`calibrated_dispatch` stays opt-in, out of the release set); the value leg of the pre-registered GOAT grammar fails on the real corpus. Session: zed-m3-i233-g2, 1794790207.
 
 - **Date:** 2026-11-16 (m3, quiet window, AC, powermode=2(high) disclosed)
-- **Issue:** [`.issues/233_sparseread_reading_control_wiring.md`](../.issues/233_sparseread_reading_control_wiring.md) T3 (the G2 cost leg — the gate's remaining half)
+- **Issue:** `.issues/233_sparseread_reading_control_wiring.md` (closed; git history) T3 (the G2 cost leg — the gate's remaining half)
 - **Instrument:** `examples/calibrated_dispatch_g2.rs` (new; one process = one arm; the runner invokes it at feature sets differing ONLY in `calibrated_dispatch`)
 - **Provenance:** preflight PASSED before the series (`power=AC Power load=2.20 swap=0.00M powermode=2(high)`), again after (`load=1.60`); one mid-series event (round b3, see §Noise). Walk: `riir-refine/src` + `katgpt-rs/crates/katgpt-core/src` = **1,371 files**, `top_k` 8, warmup + 3 timed passes per invocation, 6 interleaved invocations (A,B,A,B,A,B), release profile, `CARGO_TARGET_DIR=/tmp/i233g2`.
 
