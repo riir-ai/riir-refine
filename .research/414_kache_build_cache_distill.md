@@ -1,0 +1,84 @@
+# Research 414 — kache build-cache distill verdict (+ adoption pilot pre-registration)
+
+**Status:** DISTILLED — pending owner decision (corpus batch staged as Plan 382, unclaimed; the ADOPTION pilot is a SEPARATE owner-gated lane, not this note's batch)
+
+## Source
+
+- `github.com/kunobi-ninja/kache` — a compiler cache (sccache alternative) for Rust/C/C++/CUDA. Inspected 2026-11-16 (zed-m3-kache@m3). Full shallow clone at pin **`da717cb9b105df795a369d5b6511bf61597f4c58`** (tip 2026-11-15), **Apache-2.0** (LICENSE verified in-tree). `.raw/kache` REMOVED at verdict close — every in-source quote below was read at that pin this session and re-verifies at mine time (standing law).
+- Provenance chain: vendor blog *"Content-addressed Rust builds (or, what kache actually caches)"* (`ninja.kunobi.com/blog/what-kache-actually-caches`, 2026-05-27, read live — the key-composition and policy quotes), README (release-tested matrix, remotes, `kache targets`/`clean --orphans`), in-tree `src/` (mechanism verification). No upstream port — kache is original (sccache is the comparable incumbent, already mined ×2: entries_58 B324, entries_69 B343).
+
+## Mechanism (decision content for both verdicts)
+
+A `RUSTC_WRAPPER` keyed by a **blake3 content key**: rustc version + commit hash + host triple, target triple, crate name/types/edition, `-C` flags sorted, features + `--cfg` sorted, source files via a `--emit=dep-info` pre-pass (catches module trees, `include!()`, build-script outputs), `env!()`/`option_env!()` vars, extern rlib hashes, `RUSTFLAGS` with machine-local path prefixes replaced by stable placeholders. Deliberately EXCLUDED from the key: absolute paths, machine identity, the `incremental` codegen flag. Store = content-addressed blobs; restores use **reflink (APFS clonefile/btrfs/XFS) → hardlink fallback → zero-copy**; **per-key singleflight** (concurrent cargo processes needing the same unit: first compiles, waiters wake to the hit); optional daemon + S3/GCS/filesystem remotes; `kache targets` / `clean --orphans` (worktree-target accounting); `why-miss` explainer; `KACHE_DISABLED=1` per-build escape.
+
+Three load-bearing behaviors, each verified at the pin:
+
+1. **`CARGO_INCREMENTAL=0` while armed, BY DESIGN** (blog): the two strategies corrupt artifacts under APFS overlapping-write semantics. This is the #1 adoption falsifier (dev-loop regression axis).
+2. **`--remap-path-prefix` INJECTION** — core wrapper behavior, not a test fixture only: pervasive in `src/wrapper.rs`, `src/cache_key.rs`, `src/path_normalizer.rs`, `src/compile.rs`, `src/incremental_policy.rs`, `src/key_inputs.rs`; asserted by `tests/integration_test.rs:838` (*"converges on current rustc with kache's injected `--remap-path-prefix`"*) and `crates/kache-e2e/src/fixture.rs:246`, plus the `e2e-rust-remap-prefix` and `e2e-rust-cascade-file-macro` scenarios. It changes `file!()`, panic locations and debuginfo paths in armed builds. This is the **second adoption falsifier** (verdict-round catch — my round-1 summary omitted it; the reviewer found it and I verified the sites myself).
+3. **`KACHE_DISABLED=1` is a first-class direct-exec passthrough**: `src/main.rs:1373–1379` (regression #238 — passthrough over a warm target dir must unlink read-only hardlinked restores first, or the real compiler hits EACCES overwriting them in place), `src/compile.rs:973` (*"Also used by direct-exec passthrough (`KACHE_DISABLED`)"*). The injection rides the cached path; passthrough argv-neutrality is a one-line pilot T0 confirm (not fully read at verdict — disclosed).
+
+Plus one correction the verdict round produced **in the source's favor**: **clippy IS a known-keyed workspace-wrapper chain** — `src/compiler/mod.rs:891` (*"A workspace-wrapper chain Kache knows how to key: Clippy. `clippy-driver`…"*), `src/args.rs:369–373` (the double-wrapper `RUSTC_WRAPPER` + `RUSTC_WORKSPACE_WRAPPER` detection), `src/cache_key.rs:11642` (double-wrapper keying), and Issue #505's fix for *unrecognized* workspace-wrapper tools (dylint-driver) — the fail-closed posture for unknown chains. The round-1 premise "no clippy handling beyond the bench runner removing the variable" is REFUTED at the pin; the clippy hit-rate cell stays as a measurement (clippy reruns are a large fraction of our gate wall — if clippy units key and hit, the gate lane is the biggest winner).
+
+Default skip-list: binary crates, dylibs, proc-macros (linker/codesign risk classes — the hardlink-restore mutation-coupling mitigation). Foreign marquee datum: second Firefox worktree **+3.0 GB (reflink) vs +16.7 GB (sccache)** on APFS; monitor header `Store: 44.4 GiB / 50.0 GiB / 90.0% · Hit rate: 92% count | 83% weighted | 70% miss-time`. **Foreign-box provenance, never a bar** (serving-recipe law applied to build tooling).
+
+## Verdict
+
+**YES B− corpus** (rust_perf; io + caching + concurrency + measurement-honesty; nominal Batch 368 behind Plan 381/opal — the number re-derives at landing) **/ LANE INTEL HIGH** (the build-hygiene lane: this is simultaneously a tool-adoption candidate with a pre-registered pilot; not the perf_rematch league) **/ PRODUCT-COVERAGE YES** (extends the build-cache family — sccache entries_58 + entries_69 already landed — with its first content-addressed+CoW-restore member).
+
+Verdict history: round 1 REVISE (four corrections — the remap injection omission, the mis-specified bit-neutrality bar, gates-stay-disabled-first, two missing pilot cells; all folded), round 2 AGREE. The clippy premise was corrected at the pin in round 2.
+
+## Dedup evidence (live greps at the B366 head `bcf4cb8c`, both vocabularies)
+
+- `reflink|clonefile|FICLONE|hard_link|hardlink` over `riir-refine/src` → ONE hit: `sec/proposers/path_join_escape.rs` sink list (`fs::hard_link` as a path-join SINK — unrelated axis). **Zero owners of the CoW-restore axis.**
+- `singleflight|in_flight|one_flight|coalesc` → all hits are kernel_opt GPU **memory**-coalescing (a different axis; in-rule adjudication named at authoring) + `writeclass-share-partition-inflight-writes` (entries_74 — budget PARTITIONING per write class, not work dedup; both-directions adjudication carried).
+- Expected dedup kills named now: GC/eviction/limit family (`pack-store-gc-decides-by-recovered-index` entries_75, `cache-share-capped-at-measured-distinct-working-set`, `reserve-then-commit-capacity-accounting` entries_58, `vanished-entry-tolerant-eviction-panic-else` entries_69, `one-shared-disk-cache-not-even-split` entries_81, `raw-bytes-with-hit-backfill-once` entries_69, `derived-cache-throwaway-version-reset-recovery` entries_75, `single-entry-last-key-lookup-cache` entries_66). Daemon/background-upload = ambient plumbing.
+
+## Ranked candidates
+
+| # | rule (working name) | grade | notes |
+|---|---|---|---|
+| R1 | `restore-via-cow-clone-not-copy` (io) | **B+ GOAT lead, BENCHABLE** | Capability-gated restore ladder: reflink (clonefile/FICLONE) → hardlink → copy, never plain-copy-first for large artifacts. Bytes-written O(size)→O(1), wall massively better at [64MB, 256MB, 1GB]; exact bytes → G1 trivial (read-back compare); deterministic. Anti-regime carried in-rule: tiny files (clone syscall ≈ copy) + the hardlink inode-SHARING mutation-coupling clause (two paths, one inode — in-place mutation through either corrupts the other; kache's skip-list for binaries/dylibs/proc-macros is the mitigation, and #238's unlink-first restore discipline is the write-back law). UPSTREAM: **present at pin** — their own landed mechanism, decision content only, never a PR. |
+| R2 | `singleflight-identical-work-per-content-key` (concurrency) | B | Per-key flight: concurrent identical units (same content key) join one execution — first runner executes, waiters wake to the shared result. Regime: identical work concurrent AND execution ≫ wait. Anti-regime: cheap work (lock overhead > re-execution). NotBenchable-by-domain candidate (contention latency, the dial9 class) with the entries_77 standalone-preflight fallback pre-named. |
+| R3 | `cache-key-normalizes-machine-local-components` (caching) | B− face-or-rule | The EXCLUDE axis of cache keys: placeholder machine-local paths (home dir, registry, workspace root), drop machine identity + the `incremental` codegen flag, while every output-affecting input stays in — so the key is identical on two machines. **Carries the round-2 output-side clause:** key-side placeholders alone are insufficient — the OUTPUT must be normalized too (kache's injected `--remap-path-prefix`); otherwise two machines share a key for DIFFERENT bytes (absolute paths embedded in debuginfo/`file!()`). Adjacent-DISTINCT from kernel_opt `compiled-handle-direct-launch-key-completeness` (the INCLUDE axis) — compose, never merge. |
+| R4 | `hit-rate-metric-weights-by-unit-cost` (measurement-honesty) | B− face-or-rule | Raw count rate vs compile-time-weighted vs miss-time-saved — three denominators; the count-only aggregate misleads under bimodal per-unit costs (92% count vs 70% miss-time in their own header). Adjacent to `latency-histogram-split-on-structural-populations` (entries_80) — split-on-populations vs weight-by-cost — both-directions adjudication mandatory. |
+| R5 | `wrapper-chain-classify-or-refuse-loud` (caching/robustness) | B− face-or-rule | Issue #505 posture: a `RUSTC_WORKSPACE_WRAPPER` tool the executor does not recognize must be classified (known: clippy) or fail-closed to UNCACHED passthrough — never silently keyed as rustc (a mis-keyed hit is a silent wrong artifact). Adjacent to the sec trust/TOCTOU families; small bounded shape (chain detection + typed refusal). |
+| — | dep-info input-discovery pre-pass | DROP | Folds as a face on R3 / the key-completeness law (input-set discovery, not a standalone fix-space). |
+| — | incremental-vs-content cache mode split | DROP | Architecture note (path-keyed single-target-dir vs content-keyed cross-machine; mixing them corrupts on APFS) — real decision content for the ADOPTION lane, no bounded Rust fix-space. Carried in the pilot pre-registration, not the corpus. |
+| — | GC limits / eviction / daemon / remote sync | DROP | Dedup (family list above) + ambient plumbing. |
+
+**Yield: 1–3 rules + 1–2 faces** after ~50% falsification. GOAT check R1 passes all four criteria (benchable io class, bit-identical G1 trivial, O(size)→O(1) magnitude story, deterministic).
+
+## Lane intel — the adoption pilot pre-registration (the HIGH half; separate owner-gated lane)
+
+**Posture: YES, pilot-first, PER-LANE armed (env-switch law shape), NEVER blanket `kache init` on dev boxes.** The pain it targets: N concurrent agents × duplicated dep trees (per-plan `CARGO_TARGET_DIR=/tmp/<plan>`, git-workflow worktrees, `guard_parallel` 3-lane runs, the 640G-leftover incident class). It composes with our isolation law (wrapper is orthogonal to target-dir location — per-plan dirs stay; it does NOT reintroduce the shared-target-dir gate-validity hazard). Arm via `RUSTC_WRAPPER=kache` env in the JOB lane; interactive dev shells stay on the incumbent byte-identically.
+
+Arming discipline (round-2 corrections folded):
+
+1. **Verdict-bearing gates stay `KACHE_DISABLED=1` in the first pilot** — `full_gate.sh`/`test_gate.sh`, GOAT G2 cells, the x86_64 matrix. A wrong-key hit is a silent stale artifact, i.e. a verdict the box can invalidate. Arm build/test job lanes first. Once armed anywhere, each gate's provenance line prints the kache state (armed / disabled / hit-rate).
+2. **Bars (pre-registered, replacing the round-1 "rlib blake3 vs disabled" bar which was mis-specified — a remapped build cannot equal an unremapped one by construction):**
+   - (a) **cache identity**: armed-miss vs armed-hit rlib blake3 equality across two worktrees (tests the cache itself);
+   - (b) **behavioral neutrality**, armed vs disabled: identical test pass counts + named probes for `file!()`-relative fixtures, panic-message assertions and backtraces (the remap injection's blast radius);
+   - (c) disk: df delta per added worktree vs incumbent;
+   - (d) wall: warm worktree build time vs incumbent;
+   - (e) **dev-loop falsifier**: edit→linked-binary delta under `CARGO_INCREMENTAL=0` (the `just dev`/`pilot_dylib` regression axis — if this regresses materially, dev lanes stay incumbent forever and kache is job-lane-only);
+   - (f) **clippy-lane hit-rate cell** (clippy IS keyable per `compiler/mod.rs:891` — measure, don't assume);
+   - (g) **mixed arming**: armed and unarmed lanes NEVER share a target dir (pre-registered rule — remap flags + incremental differ), plus one thrash measurement (armed build over an unarmed-warm target and reverse, count forced rebuilds).
+3. Passthrough argv-neutrality of `KACHE_DISABLED=1`: one-line confirm at pilot T0 (in-source comments name the direct-exec passthrough; the exact argv path was not fully read at verdict — disclosed).
+4. Rollout: m3 pilot quiet window → amo/bmo job lanes → 4090 last (nvcc supported; Windows exe caching off by default — fine). Remote stores (S3/R2) DEFERRED: credential touch (owner gate under the 2026-11-11 decree) + our CF-cost caution; local-only solves the stated same-box pain.
+5. Housekeeping law amendments IF adopted: du lies across hardlink walks (account by df + `kache stats`/`kache targets`); per-plan target rm frees little df BY DESIGN (blobs persist in the GC-bounded store — the cleanup law's df-delta check gets a carve-out); the store is a new disk-clean class (regenerable, GC-bounded, never per-item rm without approval); `kache clean --orphans` becomes the mechanical detector for deleted-worktree targets (the 640G-incident class); `kache gc` limits tuned per box.
+6. Skill/AGENTS.md lines ONLY after the pilot passes — one line in build-hygiene, one line in the global AGENTS.md Rust section. Not before (doctrine-before-proof is the vocabulary-leak-back pattern).
+7. Alternatives rejected: shared global `CARGO_TARGET_DIR` (gate-validity law), sccache (no CoW restore — still N physical copies; doesn't solve the disk axis).
+
+## Product coverage
+
+Extends the build-cache family (sccache entries_58 + entries_69) with its first content-addressed + CoW-restore member on a young but vendor-maintained source (crates.io `kache`, brew/apt/nix/winget packaging, nightly benchmarks vs Firefox/LLVM/SurrealDB, GitHub CI). Follow-up pool (accumulation clause): the kache docs tree (`docs/` cache-key + architecture pages — unread at verdict), howardjohn's *"Sharing Rust Build Cache"* blog (2026-02-18), the Cargo Book build-cache/fingerprint chapters, ccache docs, the bazel remote-cache API, and the kache-vs-global-target-dir comparison (their docs tree — the search snippet surfaced it; repo issue #48 is an unrelated PR, verified this session).
+
+## Honest caveats
+
+- Young project (~6 months, v0.7.x, single vendor; stars unverified this session). Maturity signals are good (CI, benchmarks, fuzz/, e2e scenario corpus, packaging) but battle-testing depth vs sccache (7.9k★) is unproven — hence pilot-first and gates-disabled-first.
+- `CARGO_INCREMENTAL=0` while armed is their deliberate design (their own landed decision — decision content, and falsifier #1).
+- `--remap-path-prefix` injection changes `file!()`/panic locations/debuginfo (falsifier #2; the bar pair (a)/(b) above exists because of it).
+- Hardlink-restore mutation coupling is real; their skip-list (binaries/dylibs/proc-macros default-off) is the mitigation.
+- Unread at verdict (re-read at mine time): `crates/kache-store` (link.rs = the CoW ladder), `crates/kache-fs` (copy/volume), `kache-core` singleflight internals, `src/target_dedup.rs`, `src/path_normalizer.rs`, `fuzz/`, `scenarios/`, `docs/`.
+- Wrapper adds per-invocation overhead (dep-info pre-pass, hashing) — tail cost measured in the pilot (bar d/g), never assumed. First build after arming is slower (cold store).
+- Session: zed-m3-kache@m3. Queue slot: behind Plan 381 (opal); Plan 375 (InferenceForge) lease to 11-21 untouched. NOTHING INVENTED — every in-source quote read at the pin this session; blog quotes from the live fetch.
