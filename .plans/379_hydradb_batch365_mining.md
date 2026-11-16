@@ -1,6 +1,7 @@
 # 379 — Batch 365: hydradb distill mining (rust_perf: io/caching/concurrency/measurement-honesty)
 
 **Status:** FIRST TRANCHE LANDED 2026-11-16 as Batch 364 (the landing-order re-derivation; Batch 365's number stays free for the next landing) — T0-T7 + T9 complete this session; T3 (the second storage tranche) and the #6 rule DEFERRED to the follow-up batch with reason (the 4-6-rule size discipline); T8 done (AGENTS/README/.docs prose + pins_manifest --write). GOAT: R1 PASS (ParetoDominant 3/0/0, `.benchmarks/154_batch364_goat_cells.md`), R2 FAILED -> DEMOTED same-commit. Claim lease FOLDED at landing (the lease line's scope discharged).
+**Claimed:** zed-m3-i379-tranche2@m3, 1794787356, expires 2026-11-18T00:02:36Z — T3 second storage tranche + #6 (candidates 9/10/11/3/5 + #6; quotes carry 364's T0 verification, re-read at the pin before entry).
 
 Original claim: 2026-11-15 (zed-m3-i379-hydradb@m3, epoch 1794697180); Plan 375's InferenceForge slot honored (its lease to 11-21). Source pinned `916637477f3f34766b4905b270bd4292109d77e6` (v0.4.0, ELv2 — transcription-only, original fixtures).
 
