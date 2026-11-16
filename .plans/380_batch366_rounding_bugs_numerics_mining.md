@@ -1,6 +1,7 @@
 # Plan 380 — Batch 366: the rounding-bug numerics transcription batch (TorchLean/FloatLib atlas → sec/Numerics)
 
-**Status:** IN FLIGHT — staged at verdict time (Research 412), behind Batch 365 (hydradb, Plan 379). Landing lane: `riir-refine` `develop`.
+**Status:** IN FLIGHT — Batch 365 (hydradb) landed 2026-11-16, this batch is first in queue. Landing lane: `riir-refine` `develop`.
+**Claimed:** zed-m3-b366-rounding@m3, 1794796375, expires 2026-11-18T02:32:55Z
 
 Proof path (pre-registered before any corpus edit): each rule lands with (a) our own Rust fixture reproducing the collapse (buggy arm must produce the exact wrong value the blog's table records — e.g. R1 −0.0·up at x=−6 f32, R2 0.0 at d=2^−12), (b) the fixed arm surviving it, (c) a tampered-verdict arm proving the fixture gate reds; all suggest-only `NotBenchable-by-domain` (Issue-185/B352 posture) — no Pareto claim is made or needed.
 
