@@ -1,7 +1,7 @@
 # Issue 233 — SparseRead reading-control wiring for the rulewright read lane
 
 **Status:** open — T1 CLOSED MEASURED-NEGATIVE 2026-11-14 (the T1.0 cost-weighted census; record under T1); T2 open but its exposure premise carries the measured 0.3–1.1% ceiling (its own bars own its fate); T3 substrate + census instrument LANDED 2026-11-14 (record under T3) — the G2 cost leg (quiet-box) owns the gate's remaining half
-**Claimed:** zed-amo-i233-t3, 1794609327, expires 2026-11-15T22:35:27Z
+**Claimed:** zed-m3-i233-g2, 1794790207, expires 2026-11-17T01:50:07Z — scope: the T3 G2 cost leg (added p50/p95 per file, bench_preflight PROVENANCE, quiet m3 window) + the real-scan pool-cut value read + the verdict; the promotion grammar adjudicated on the measured numbers
 
 - **Date:** 2026-11-13 (m3)
 - **Research:** [`.research/404_SparseRead_Reading_Control_Layer.md`](../.research/404_SparseRead_Reading_Control_Layer.md) — arXiv:2608.22237 (SparseRead, MIT, `Liuzedooong/SparseReading @ d30f75f8`)
@@ -33,4 +33,5 @@ cargo refine's admission gates are single-axis and stateless: kernel_pregate adm
 - NOT re-opening QUERY_TEXT_CAP's lossy posture — T2 is a NEW cumulative axis beside it, complementary, with the faithful fallback the cap never had.
 
 **Lease closed:** amo-idle-i233-t10, 1794608618 — T1.0 EXECUTED + T1 CLOSED MEASURED-NEGATIVE 2026-11-14 (was expires 2026-11-15T22:23:38+00:00)
+**Lease closed:** zed-amo-i233-t3, 1794609327, was expires 2026-11-15T22:35:27+00:00 (expired — holder offline past the 11-14 substrate+recall landing; the G2 cost leg re-claimed by zed-m3-i233-g2)
 **Lease closed:** zed-4430bf70@4090, 1794579705, was expires 2026-11-13T16:21:45Z (expired unworked — the routing hand-off) — housekeeping routing (2026-11-13): routed to the amo lane (the active refine-batch rig; 4090 cannot host refine builds right now — 2/32 GB RAM free, the sibling t679 job holds the box, and T2 own bars demand a quiet-box preflight). Order of work per the issue own discipline: T1.0 FIRST (the repeated-span-query count on the oracle-fed battery — a near-zero count DEFERS T1 with the count recorded), then T1 (in-memory read-episode record, env-off byte-identity), T2 (the bytes-bound budget with the faithful uncapped fallback), T3 stretch behind its feature gate. Claim expected from the taking agent on pickup.
