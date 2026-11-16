@@ -148,8 +148,26 @@ impl DaemonEditGenerator {
         lora: &str,
         max_new: usize,
     ) -> Result<Self, std::io::Error> {
+        Self::spawn_with_args(binary, gguf, lora, max_new, &[])
+    }
+
+    /// [`Self::spawn`] plus extra daemon flags (issue 695 step 1: the
+    /// campaign passes `--temperature 0.7 --serve-seed S` through here;
+    /// whitespace-split by the caller's CLI flag).
+    ///
+    /// # Errors
+    /// Whatever [`DaemonL4::spawn_with_args`] reports.
+    pub fn spawn_with_args(
+        binary: &str,
+        gguf: &str,
+        lora: &str,
+        max_new: usize,
+        extra_args: &[String],
+    ) -> Result<Self, std::io::Error> {
         Ok(Self {
-            daemon: crate::l4_daemon::DaemonL4::spawn(binary, gguf, lora, max_new)?,
+            daemon: crate::l4_daemon::DaemonL4::spawn_with_args(
+                binary, gguf, lora, max_new, extra_args,
+            )?,
         })
     }
 }

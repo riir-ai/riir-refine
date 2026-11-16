@@ -25,6 +25,9 @@
 //!     --daemon-bin ../riir-train/target/release/examples/bonsai_clippy_l4_eval \
 //!     --gguf ../riir-train/data/Ternary-Bonsai-27B-Q2_0.gguf \
 //!     --lora <trained-ckpt.bin> --ground-truth
+//! # Issue 695 step 1 — the temperature campaign adds (per-chunk seeds, the
+//! # verdict's condition 3):
+//!     --daemon-args "--temperature 0.7 --serve-seed <chunk-unique>"
 //! ```
 
 #![cfg(feature = "pav_data")]
@@ -39,7 +42,7 @@ fn usage() -> ! {
     eprintln!(
         "usage: pav_data_curate --out <pairs.jsonl> [--spans fixtures,store,<extra.jsonl>] \
          [--store-root <dir>] [--limit N] [--seed S] [--n-cov N] [--n-mc N] [--max-steps N] \
-         [--eps-pit F] [--max-prefixes N] [--ground-truth] \
+         [--eps-pit F] [--max-prefixes N] [--ground-truth] [--daemon-args \"<extra daemon flags>\"] \
          [--daemon-bin <path> --gguf <path> --lora <path> [--max-new N]]"
     );
     std::process::exit(2);
@@ -150,9 +153,16 @@ fn main() {
         let gguf = flag(&args, "--gguf").unwrap_or_else(|| usage());
         let lora = flag(&args, "--lora").unwrap_or_else(|| usage());
         let max_new = num(&args, "--max-new", 96usize);
+        // Issue 695 step 1 — extra daemon flags (e.g. `--daemon-args
+        // "--temperature 0.7 --serve-seed 7"`), whitespace-split and
+        // appended after the fixed base flags at spawn.
+        let extra: Vec<String> = flag(&args, "--daemon-args")
+            .map(|a| a.split_whitespace().map(str::to_string).collect())
+            .unwrap_or_default();
         println!("[generator] spawning daemon: {bin} (max_new {max_new})…");
-        let mut generator = DaemonEditGenerator::spawn(&bin, &gguf, &lora, max_new)
-            .unwrap_or_else(|e| panic!("daemon spawn failed: {e}"));
+        let mut generator =
+            DaemonEditGenerator::spawn_with_args(&bin, &gguf, &lora, max_new, &extra)
+                .unwrap_or_else(|e| panic!("daemon spawn failed: {e}"));
         let ds = curate(&spans, &mut generator, &judge, &cfg);
         (ds, generator.name().to_string())
     } else {

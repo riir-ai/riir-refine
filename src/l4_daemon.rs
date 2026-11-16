@@ -84,9 +84,33 @@ impl DaemonL4 {
         lora: &str,
         max_new: usize,
     ) -> Result<Self, std::io::Error> {
+        Self::spawn_with_args(binary, gguf, lora, max_new, &[])
+    }
+
+    /// [`Self::spawn`] plus extra daemon flags (riir-train issue 695 step 1:
+    /// the campaign passes `--temperature T --serve-seed S` through here).
+    /// Order-preserving, appended AFTER the fixed base flags; the daemon
+    /// refuses unknown flags loud, so a typo'd extra arg dies at boot, not
+    /// silently at decode.
+    ///
+    /// # Errors
+    ///
+    /// - the binary cannot be spawned, its pipes cannot be captured, or it
+    ///   exits during load without signalling READY (the [`Self::spawn`]
+    ///   contract verbatim);
+    /// - a typo'd/unknown extra flag makes the DAEMON refuse at boot, which
+    ///   surfaces as exactly that exit-during-load error.
+    pub fn spawn_with_args(
+        binary: &str,
+        gguf: &str,
+        lora: &str,
+        max_new: usize,
+        extra_args: &[String],
+    ) -> Result<Self, std::io::Error> {
         let mut child = Command::new(binary)
             .args(["--gguf", gguf, "--lora", lora, "--serve", "--max-new"])
             .arg(max_new.to_string())
+            .args(extra_args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
