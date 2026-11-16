@@ -1,8 +1,7 @@
 # Plan 381 — opal transcription batch (nominal Batch 367): measurement-integrity + agent-harness classes
 
 **Status:** LANDED — Batch 367 (2026-11-16, zed-m3-opal-b367@m3): rust_perf 353 → 356 (entries_82) + sec 74 → 76, all five rules suggestion-only NotBenchable; fixtures 26/26 standalone pre-entry; gates green ×4 clippy postures + lib 4408/0 + pins_manifest --write + prose agree; the claim row discharged by the landing. Verdict: riir-refine Research 413 (YES B− corpus / lane-intel NONE / product-coverage: sec agent-harness family +2 axes). Source: `xingjian-bai/opal` @ `97762859ba5e2527e5c6f63d9890dfbab860d51f`, MIT — pin re-verified STILL the tip at the batch window (the `misc/` → `opal/misc/` path move disclosed, quotes byte-verified at the new path).
-**Claimed:** zed-m3-opal-b367@m3, epoch 1794804218, expires 2026-11-18T04:43:38+00:00
-**Lease closed:** zed-m3-opal-b367@m3, epoch 1794804218, expiry 2026-11-18T04:43:38+00:00 (discharged by the landing commit)
+**Lease closed:** zed-m3-opal-b367@m3, 1794804218, was expires 2026-11-18T04:43:38+00:00 — discharged by the landing commit f553965ef (Batch 367)
 **Nominal batch number:** 365 — RE-DERIVE at batch start (362/363 are claimed by staged ThreeRT/FORGE lanes; the score_history tail is the counter).
 
 ## Phase 0 — re-verification
