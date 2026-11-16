@@ -1,7 +1,9 @@
 # Issue 233 — SparseRead reading-control wiring for the rulewright read lane
 
 **Status:** open — T1 CLOSED MEASURED-NEGATIVE 2026-11-14 (the T1.0 cost-weighted census; record under T1); T2 open but its exposure premise carries the measured 0.3–1.1% ceiling (its own bars own its fate); T3 substrate + census instrument LANDED 2026-11-14 (record under T3) — the G2 cost leg (quiet-box) owns the gate's remaining half
-**Claimed:** zed-m3-i233-g2, 1794790207, expires 2026-11-17T01:50:07Z — scope: the T3 G2 cost leg (added p50/p95 per file, bench_preflight PROVENANCE, quiet m3 window) + the real-scan pool-cut value read + the verdict; the promotion grammar adjudicated on the measured numbers
+**Claimed:** zed-m3-i233-g2, 1794790207, expires 2026-11-17T01:50:07Z
+
+Lease scope: the T3 G2 cost leg (added p50/p95 per file, bench_preflight PROVENANCE, quiet m3 window) + the real-scan pool-cut value read + the verdict; the promotion grammar adjudicated on the measured numbers.
 
 - **Date:** 2026-11-13 (m3)
 - **Research:** [`.research/404_SparseRead_Reading_Control_Layer.md`](../.research/404_SparseRead_Reading_Control_Layer.md) — arXiv:2608.22237 (SparseRead, MIT, `Liuzedooong/SparseReading @ d30f75f8`)
