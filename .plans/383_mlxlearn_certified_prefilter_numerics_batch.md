@@ -1,0 +1,22 @@
+# Plan 383 — mlx-learn certified-prefilter + compensated-numerics batch (nominal Batch 369)
+
+**Status:** STAGED — unclaimed (verdict Research 415, YES B+; stages behind Plan 381 opal + Plan 382 kache; batch number RE-DERIVE at start)
+
+Distills `tabulai/mlx-learn` @ `07054ce32b5b19db7b78b3d4c69e1d2446b3389b` (Apache-2.0, clone removed at verdict close — re-clone at the pin). Lead: `certified-prefilter-omission-bound-escalate-exact` (kernel_opt selection, kin B111/B110). Plus the two-float compensated accumulation law, the exact-ordering superaccumulator ladder, one sec Numerics transcription, two count-neutral faces. Full ranked table + dedup evidence: `.research/415_mlxlearn_certified_knn_numerics_distill.md`.
+
+- [ ] Re-derive batch number at start (`score_history.jsonl` tail + queue snapshot head; 367 opal in flight, 368 kache staged).
+- [ ] Claim lease: append `**Claimed:**` line here + push BEFORE any corpus edit (48 h expiry).
+- [ ] Re-clone `tabulai/mlx-learn` into `.raw/mlx-learn` at pin `07054ce32b5b19db7b78b3d4c69e1d2446b3389b`; re-verify every quote in Research 415 + the unread-file reads (`_neighbors_compact.py`, `_neighbors_registers.py`, `_neighbors_paired.py`, `_neighbors_shortlist.py`, `neighbors/_base.py`, `docs/knn-compact-certificate.md`, `docs/knn-precision-ordering.md`, `docs/fp32_policy.md`) — new candidates go through the same dedup gate; record quote corrections.
+- [ ] Dedup re-verification at authoring HEAD (corpora move every day): re-grep the four lead families under both vocabularies; adjudicate any new sibling landed since 2026-11-16 in-rule.
+- [ ] Bench posture pre-registration (BEFORE first corpus edit): R2's CPU-testable fixture vs exact scan — decide benchable-rust_perf-sibling vs kernel_opt suggestion-tier + `NotBenchable-here` annotation (dial9 class); record the decision + bars in this plan.
+- [ ] Author R2 `certified-prefilter-omission-bound-escalate-exact` (kernel_opt, selection/numerics bucket beside B111): four-arm fixture discipline (buggy/fixed/all-safe/tamper), standalone-compiled AND executed pre-entry; carry the refuse-safe −inf bias + widening-vs-exact-criterion + carry≤lanes correctness constraint as decision content; kinship paragraphs to B111 + B110 + B365 both directions.
+- [ ] Author R1 `device-fp64-absent-two-float-compensated-accumulation` (kernel_opt numerics): fixture proves error reduction on a cancellation fixture + bit-level composition identities; in-rule adjudication vs `kahan-endpoint-peel-dead-flops-exact` (B276), `hi-lo-split-pow2-prescale-clears-subnormal-floor` (gpu_102), sec `wide-reduction-precision-split`; Issue-940 carve-out in-rule (pin the fold order).
+- [ ] Author R3 `exact-ordering-escalating-precision-ladder` (kernel_opt numerics): fixture = adversarial f32 pairs misordered by naive compare, resolved by the ladder, bit-identical vs f64/expansion reference; the bit-decode mantissa/shift + FTZ rationale in-rule; ties → index order face.
+- [ ] Author R4 `clamp-emits-tail-error-term` (sec Numerics transcription, suggest-only, NotBenchable-by-domain): detector vocabulary per the sec-class gate lesson (IDENT+BODY, never string literals); all-ANNOTATED; live-reproduce the clamp-accounting number in OUR Rust fixture first (the B366 T0 kill-gate shape).
+- [ ] Land F1 (face on B105 capability-probe: verify OUTPUT) + F2 (face on the crossover/dispatch family: decisive-axis + class exclusion) as count-neutral riders on their hosts.
+- [ ] Standing gates: `cargo clippy -D warnings` ×3 postures (default / no-default / touched-domain bench posture); lib tests at touched postures (0-failure floors); retrieval floors HELD (no re-pin unless genuinely moved); `scripts/pins_manifest.py --write` + prose agree (AGENTS + README + health_views counts).
+- [ ] Disclose owed/not-owed: score-bench (not owed if zero clippy_lints surface), freeze-table regen (not owed — generations.rs is clippy/rustc_errors-domain), release-set binary rebuild (not owed for a corpus-only delta), deny gate, fmt gate on touched files.
+- [ ] GOAT record if any benchable cell runs (`.benchmarks/<next>_batchN_goat_cells.md`, numbering discipline + dual-allocation gate at push).
+- [ ] Research note status flip + queue-snapshot landing block; AGENTS.md counts + HISTORY.md ledger line.
+- [ ] `rm -rf .raw/mlx-learn` at close (stale `.raw` on a landed batch = unfinished batch).
+- [ ] Commit+push on `develop` (conventional prefix; `Session:` line in the body; only this batch's named files — the tree is shared).
