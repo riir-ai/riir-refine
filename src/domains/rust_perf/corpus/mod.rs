@@ -831,14 +831,44 @@ mod entries_77;
 mod entries_78;
 mod entries_79;
 mod entries_80;
+mod entries_81;
 
 #[cfg(test)]
 mod tests;
 
 /// Build a seed corpus from common rust performance rules.
 ///
-/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 342 entries
-/// (Batch 363, 2026-11-14, Plan 374 / Research 407: +4 -- the hotpath.rs
+/// Returns a BLAKE3-committed [`Corpus<RustPerfDomain>`] with 353 entries
+/// (Batch 365, 2026-11-16, Plan 379 T3 / Research 411: +6 -- the hydradb
+/// SECOND storage tranche, `entries_81`: `existential-witness-early-exit-
+/// scan` (io, BENCHABLE -- the predicate-arity GOAT lead, the cell in
+/// `.benchmarks/155_batch365_goat_cells.md`) + `wal-watermark-pinned-
+/// before-snapshot` (io, NotBenchable-by-domain -- the read-ORDER
+/// invariant) + `tail-walk-cost-cap-declines-to-rebuild` (io,
+/// NotBenchable-by-domain -- the two-sided regime: the xlog delta path
+/// deliberately has no gate, "O(delta) by construction") + `frozen-
+/// artifact-plus-delta-tail-overlay` (caching, NotBenchable-by-domain --
+/// base epoch + bounded overlay, the pointer re-read every call) +
+/// `pending-claim-registry-take-consumes-drop-clears` (concurrency,
+/// NotBenchable-by-model -- the CITE-CORRECTION of the staged catalog-
+/// memo row: the verified site is the pending-sweep registry take/Drop,
+/// the bloom clause dropped) + `one-shared-disk-cache-not-even-split`
+/// (caching, NotBenchable-by-domain -- the cache-QUALITY axis, the
+/// 48 GiB/64-scope prod pathology); hydra-db/hydradb @ `9166374` `ELv2`
+/// transcription-only; STALE-DOC REPAIR en-route: this fn doc sat at the
+/// Batch-363-era 342 through the Batch 364 landing (the missed-pin class
+/// this doc itself names below) -- repaired to 353 here); prior: Batch
+/// 364, 2026-11-16, Plan 379 / Research 411: +5 -- the hydradb FIRST
+/// tranche, `entries_80`: `degree-gated-probe-with-doubling-retry` (io,
+/// BENCHABLE GOAT PASS `ParetoDominant` 3/0/0 two-run stable) +
+/// `bfs-depth-epoch-marker-dedup` (complexity, FAILED the bar at
+/// measurement -- Tie at every size -- DEMOTED to NotBenchable-by-
+/// measurement same-commit, the memset axis stays fixture-censused) +
+/// `spawn-blocking-queue-wait-split-from-compute` + `latency-histogram-
+/// split-on-structural-populations` (measurement-honesty, the queue/exec
+/// split + the record-site population split carrying the histogram
+/// family's folded faces) + `derived-index-write-touches-only-changed-
+/// keys` (io, NotBenchable-by-model); prior: Batch 363, 2026-11-14, Plan 374 / Research 407: +4 -- the hotpath.rs
 /// CI-benchmarking blog distill, `entries_79`: `instruction-count-cache-
 /// blindness` (measurement-honesty, suggestion-only -- an icount gate
 /// cannot adjudicate a locality-divergent pair) +
@@ -1100,6 +1130,7 @@ pub fn build_perf_seed_corpus() -> Corpus<RustPerfDomain> {
     entries.extend(entries_78::entries());
     entries.extend(entries_79::entries());
     entries.extend(entries_80::entries());
+    entries.extend(entries_81::entries());
     Corpus::new(entries)
 }
 
