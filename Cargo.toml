@@ -1213,6 +1213,20 @@ required-features = ["latent_retrieval"]
 name = "calibrated_dispatch_census"
 required-features = ["calibrated_dispatch", "latent_retrieval", "clippy_lints", "rust_perf"]
 
+# Issue 233 T3 — the G2 cost leg + the real-scan pool-cut value read. One
+# process = one arm; the runner invokes it twice at feature sets differing
+# ONLY in calibrated_dispatch and alternates the invocations (A,B,A,B,A,B,
+# quiet-box bench_preflight PROVENANCE). Runs at BOTH postures — the
+# incumbent arm names span_shape_dispatch explicitly (implied by
+# calibrated_dispatch on the armed arm), so the one delta axis holds:
+#   cargo run --release --features span_shape_dispatch,latent_retrieval,clippy_lints,rust_perf \
+#     --example calibrated_dispatch_g2 -- <root>...
+#   cargo run --release --features calibrated_dispatch,latent_retrieval,clippy_lints,rust_perf \
+#     --example calibrated_dispatch_g2 -- <root>...
+[[example]]
+name = "calibrated_dispatch_g2"
+required-features = ["span_shape_dispatch", "latent_retrieval", "clippy_lints", "rust_perf"]
+
 # Issue 185 T4 — the softmax-collapse family's read-only workspace sweep.
 [[example]]
 name = "softmax_collapse_sweep"
