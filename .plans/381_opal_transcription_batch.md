@@ -1,6 +1,7 @@
 # Plan 381 — opal transcription batch (nominal Batch 367): measurement-integrity + agent-harness classes
 
-**Status:** STAGED — plan-first per the distill law; the cargo half awaits a batch window (the claim row lands when it starts, the push is the arbiter). Verdict: riir-refine Research 413 (YES B− corpus / lane-intel NONE / product-coverage: sec agent-harness family +2 axes). Source: `xingjian-bai/opal` @ `97762859ba5e2527e5c6f63d9890dfbab860d51f`, MIT, v0.3.10 alpha — re-clone + re-pin at T0.
+**Status:** IN PROGRESS — claimed for mining (Batch 367); T0.4 done; the cargo half runs this window. Verdict: riir-refine Research 413 (YES B− corpus / lane-intel NONE / product-coverage: sec agent-harness family +2 axes). Source: `xingjian-bai/opal` @ `97762859ba5e2527e5c6f63d9890dfbab860d51f`, MIT, v0.3.10 alpha — re-clone + re-pin at T0.
+**Claimed:** zed-m3-opal-b367@m3, epoch 1794804218, expires 2026-11-18T04:43:38+00:00
 **Nominal batch number:** 365 — RE-DERIVE at batch start (362/363 are claimed by staged ThreeRT/FORGE lanes; the score_history tail is the counter).
 
 ## Phase 0 — re-verification
