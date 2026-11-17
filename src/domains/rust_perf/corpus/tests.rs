@@ -12337,7 +12337,7 @@ fn batch368_goat_cells() {
         for r in &results {
             assert!(
                 r.fixed_alloc_bytes < r.buggy_alloc_bytes,
-                "batch-368 '{rid}' bytes axis: the clone arm must write strictly less than the copy arm at n={}" ,
+                "batch-368 '{rid}' bytes axis: the clone arm must write strictly less than the copy arm at n={}",
                 r.size
             );
         }
