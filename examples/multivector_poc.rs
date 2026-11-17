@@ -42,6 +42,7 @@ fn domain_index(d: DomainId) -> usize {
         DomainId::Docker => 4,
         DomainId::Dist => 5,
         DomainId::ShaderPerf => 6,
+        DomainId::Ane => 7,
     }
 }
 
@@ -54,6 +55,7 @@ fn domain_label(d: DomainId) -> &'static str {
         DomainId::Docker => "docker",
         DomainId::Dist => "dist",
         DomainId::ShaderPerf => "shader",
+        DomainId::Ane => "ane",
     }
 }
 

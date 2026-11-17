@@ -475,7 +475,7 @@ mod tests {
             KneeRefusal::MalformedZero { units: 2 },
             KneeRefusal::OnePassSurface { units: 9, total: 9 },
         ] {
-            assert!(!r.line().is_empty());
+            assert_ne!(r.line(), "");
         }
     }
 

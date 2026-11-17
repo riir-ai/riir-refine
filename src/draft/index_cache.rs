@@ -1470,7 +1470,7 @@ mod tests {
 
         // (a) cold miss → build + store. `cache_dir()` appends `/index`
         // under the env-set base — the entry lands in `dir/index/`.
-        let idx_dir = dir.join("index");
+        let _idx_dir = dir.join("index");
         let mut m =
             LatentMatcher::from_enabled_domains_with_overlay(overlay).expect("build (miss)");
         let cold = digests(&mut m);

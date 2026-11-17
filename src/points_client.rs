@@ -692,8 +692,12 @@ mod tests {
     /// over the DEFAULT host — the race fired when the contribute tests
     /// joined the module (issue 204's landing exposed it); the lock is the
     /// minimal honest serialization).
+    /// Same cfg as its consumers: at the all-features posture both net pins
+    /// arm and every unpinned test compiles to nothing (issue 228 D-d).
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     static SERVICE_URL_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    #[cfg(not(any(feature = "net-mainnet", feature = "net-devnet")))]
     fn key() -> ed25519_dalek::SigningKey {
         ed25519_dalek::SigningKey::from_bytes(&[9u8; 32])
     }

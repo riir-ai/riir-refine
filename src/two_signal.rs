@@ -538,7 +538,7 @@ mod tests {
             let d = compose(&arming, &consumed_proposal(2));
             assert_eq!(d, Composition::WindowUndecidable { reuse: 2 });
             let mut serving = vec![5u64];
-            assert!(!commit(&mut serving, &d, |s| s.clear()));
+            assert!(!commit(&mut serving, &d, std::vec::Vec::clear));
             assert_eq!(serving, vec![5]);
         }
         let d = compose(&holding(), &consumed_proposal(9));

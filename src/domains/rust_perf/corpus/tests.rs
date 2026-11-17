@@ -12196,11 +12196,11 @@ fn batch362_rules_present_and_parse() {
 }
 
 /// Batch 365 (Plan 379 T3 / Research 411) — the GOAT cell for the tranche's
-/// benchable lead, at the plan's pre-registered bar: ParetoDominant, wins
+/// benchable lead, at the plan's pre-registered bar: `ParetoDominant`, wins
 /// >= 2/3 sizes, two-run stable (the alloc axis bit-identical across
-/// repeats; the timing medians are noise by design). SLOW (spawns a cargo
-/// build + run per rule in a temp crate, twice for the determinism leg):
-/// `cargo test -p riir-refine --lib --features rust_perf_bench batch365_goat
+/// > repeats; the timing medians are noise by design). SLOW (spawns a cargo
+/// > build + run per rule in a temp crate, twice for the determinism leg):
+/// > `cargo test -p riir-refine --lib --features rust_perf_bench batch365_goat
 /// -- --ignored --nocapture`. Record: `.benchmarks/155_batch365_goat_cells.md`.
 #[cfg(feature = "rust_perf_bench")]
 #[test]
@@ -12266,9 +12266,9 @@ fn batch365_goat_cells() {
 }
 
 /// Batch 368 (Plan 382 / Research 414) — the GOAT cell for the batch's
-/// benchable lead, at the plan's pre-registered bar: ParetoDominant (the
+/// benchable lead, at the plan's pre-registered bar: `ParetoDominant` (the
 /// bytes-written/alloc axis is the claimed axis — the clone arm models the
-/// CoW posture's zero-data-page writes; the copy arm allocates O(size)),
+/// `CoW` posture's zero-data-page writes; the copy arm allocates O(size)),
 /// wins >= 2/3 sizes, two-run stable. SLOW (spawns a cargo build + run
 /// per rule in a temp crate, twice for the determinism leg):
 /// `cargo test -p riir-refine --lib --features rust_perf_bench batch368_goat
@@ -12345,7 +12345,7 @@ fn batch368_goat_cells() {
 }
 
 /// Batch 364 (Plan 379 / Research 411) — the GOAT cells for the batch's
-/// benchable pair, at the plan's pre-registered bars: ParetoDominant,
+/// benchable pair, at the plan's pre-registered bars: `ParetoDominant`,
 /// wins >= 2/3 sizes, two-run stable (the alloc axis bit-identical across
 /// repeats; the timing medians are noise by design). SLOW (spawns a cargo
 /// build + run per rule in a temp crate, twice for the determinism leg):
