@@ -74,7 +74,12 @@ for name in ("base", "ungated", "pregate"):
     docs = [load(name, r) for r in (1, 2, 3)]
     files = docs[0]["per_file_us"].keys()
     assert all(set(d["per_file_us"].keys()) == set(files) for d in docs), "walk drifted between rounds"
-    med = {f: median([docs[r]["per_file_us"][f] for r in range(3)]) for f in files}
+    # per_file_us[f] is the list of TIMED-PASS samples within one round
+    # (one untimed warmup + 3 timed passes — the example header's law),
+    # so the per-file population is 3 rounds × 3 passes = 9 samples;
+    # flatten BEFORE the median (the old spelling fed median() a list of
+    # lists — TypeError on the first subtraction, the bmo run-2 crash).
+    med = {f: median([s for r in range(3) for s in docs[r]["per_file_us"][f]]) for f in files}
     arms[name] = {
         "docs": docs,
         "med": med,
