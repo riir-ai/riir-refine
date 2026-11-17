@@ -111,8 +111,9 @@ cargo check --all-features      # ternary_inference OK since riir-ai 4bfe3b30 (a
 # Wide-posture verification (issue 238 T5): the ALL-compiled-retrieval lib suite
 # (defaults + kernel_opt,sec,latent_retrieval,ane_pregate) rides
 # `agent-mail rig run --shared --est <rig> -- cargo test --lib --features …` off m3
-# (amo/bmo) — its wall is bound by one ~19-min headroom_probe test (T1 measured),
-# never quick on a 16-core laptop; landing receipts quote the rig.
+# (amo/bmo) — the issue-238 T4 pool-size derivation cut the wall 990 s → 217 s
+# (amo, 2026-11-17; the floor is now the parallel span_source_defaults /
+# retrieval_sweep_report pair at ~210 s each); landing receipts quote the rig.
 ./scripts/fmt_gate.py           # the rustfmt-clean gate (issue 223 T4, Layer 8): map-driven exclusions + tripwires (scripts/fmt_exclusions.txt), batched per-chunk rustfmt, drain list scripts/fmt_pending_expected.txt (starts EMPTY, only shrinks)
 ./scripts/pins_manifest.py      # the corpus count gate (plan 329 P1, issue 197): bare = manifest+prose vs compiled corpus (the Layer-7 check); `--write` is the count-pin landing pass — run it ONLY when the corpus genuinely moved and land the manifest diff WITH the corpus change (never run-to-pass); `--self-test` proves both red directions. `.benchmarks/pins_manifest.json` is the single count source of truth — the corpus count asserts read it via `crate::pins_manifest::count`, so a hand-typed count anywhere is a bug
 ./scripts/deny_gate.sh          # cargo-deny advisories gate (plan 298): vulnerable CRATES at lockfile level (the sec corpus owns vulnerable USAGE); --scan / --scan --deep = report-only workspace + nested-lockfile surveys; CI wiring owner-gated
