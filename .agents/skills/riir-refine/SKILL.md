@@ -98,8 +98,10 @@ after the safety checks named per step.
    before any `reset --hard` in a shared worktree.
 4. **Disk check → clean only when needed.** `df -h /` and `df -h
    /Volumes/SDXC1TB` — internal < 100Gi free OR SD < 100Gi free → invoke the
-   `disk-clean` skill (its contract: LIST first, delete only user-approved
-   items). Healthy disk → report the two numbers, delete nothing. The
+   `disk-clean` skill (lives in `../katgpt-rs/.agents/skills/`; its contract:
+   two-tier — SAFE-class regenerable caches delete autonomously, measured
+   + reported; LOAD-BEARING/IRREPLACEABLE list first, delete only
+   user-approved items). Healthy disk → report the two numbers, delete nothing. The
    incremental-dir slice (`*/target/debug/incremental`, ~30G when dirty) is
    the standing zero-risk pick. LOAD-BEARING, never delete:
    `riir-refine/target/release` (the `~/.cargo/bin/cargo-refine` symlink
