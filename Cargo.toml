@@ -1260,6 +1260,10 @@ required-features = ["elo_k_eff", "latent_retrieval"]
 name = "adoption_g3_cell"
 required-features = ["adoption_gate"]
 
+[[example]]
+name = "adoption_trinity_frame"
+required-features = ["adoption_gate"]
+
 # Phase 2: rust_perf domain demo. Validates the scaffold end-to-end.
 [[example]]
 name = "perf_heal_demo"

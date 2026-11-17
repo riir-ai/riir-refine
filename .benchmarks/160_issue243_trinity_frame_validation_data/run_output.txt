@@ -1,0 +1,177 @@
+[trinity posture] α₀=0.50 noises=[0.1, 0.2] seeds=32 bar=0.90 — PROXY T1 (committed windows carry no forward rows; disclosed)
+== window riir-dapps_adoption_outcomes.jsonl (48 rows: 41 accepted / 7 rejected; 6 tags; 12 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  REFUSE  |        6 |    1..38   |          2 |            0 |             0
+  [T2] readmit PROCEED |        4 |    1..3    |          2 |            0 |             0
+  [T2] readmit REFUSE  |        2 |    3..38   |          0 |            0 |             0
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=4 misses=8 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  collapsible_match            REFUSE min-stability 0.719 — no reliably-best winner
+  [T1 miss] demote  doc_overindented_list_items  REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] demote  redundant_closure            REFUSE min-stability 0.625 — no reliably-best winner
+  [T1 miss] readmit collapsible_match            REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit doc_overindented_list_items  PROCEED min-stability 0.625 — no reliably-best winner
+  [T1 miss] readmit redundant_closure            PROCEED min-stability 0.406 — no reliably-best winner
+  [T1 miss] readmit shrink-to-fit-after-build    PROCEED min-stability 0.625 — no reliably-best winner
+  [T1 miss] readmit vec-with-capacity            PROCEED min-stability 0.562 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 9
+  [T3] demote  collapsible_match            REFUSE noise=0.719 loo=[row9(collapsible_match,true), row32(collapsible_match,true)]
+  [T3] demote  doc_overindented_list_items  REFUSE noise=0.781 loo=[row20(doc_overindented_list_items,true)]
+  [T3] demote  redundant_closure            REFUSE noise=0.625 loo=[row21(redundant_closure,true)]
+  [T3] demote  vec-with-capacity            REFUSE noise=0.938 loo=[row33(vec-with-capacity,true), row39(vec-with-capacity,true)]
+  [T3] readmit collapsible_match            REFUSE noise=0.781 loo=[row5(collapsible_match,false)]
+  [T3] readmit doc_overindented_list_items  PROCEED noise=0.625 loo=[row20(doc_overindented_list_items,true)]
+  [T3] readmit redundant_closure            PROCEED noise=0.406 loo=[row21(redundant_closure,true)]
+  [T3] readmit shrink-to-fit-after-build    PROCEED noise=0.625 loo=[row16(shrink-to-fit-after-build,true), row19(shrink-to-fit-after-build,true), row43(shrink-to-fit-after-build,true)]
+  [T3] readmit vec-with-capacity            PROCEED noise=0.562 loo=[row33(vec-with-capacity,true), row34(unnecessary_get_then_check,true), row35(unnecessary_get_then_check,true), row36(unnecessary_get_then_check,true), row37(unnecessary_get_then_check,true), row38(unnecessary_get_then_check,true), row39(vec-with-capacity,true)]
+  [T3 join] collapsible_match: fragile in demote+readmit
+  [T3 join] doc_overindented_list_items: fragile in demote+readmit
+  [T3 join] redundant_closure: fragile in demote+readmit
+  [T3 join] shrink-to-fit-after-build: fragile in readmit
+  [T3 join] vec-with-capacity: fragile in demote+readmit
+
+== window riir-deployer_adoption_outcomes.jsonl (2 rows: 0 accepted / 2 rejected; 1 tags; 2 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  PROCEED |        1 |    2..2    |          0 |            1 |             1
+  [T2] readmit REFUSE  |        1 |    2..2    |          0 |            1 |             1
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=1 misses=1 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  explicit_auto_deref          PROCEED min-stability 0.562 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 1
+  [T3] demote  explicit_auto_deref          PROCEED noise=0.562 loo=[row0(explicit_auto_deref,false), row1(explicit_auto_deref,false)]
+  [T3 join] explicit_auto_deref: fragile in demote
+
+== window riir-instinct_adoption_outcomes.jsonl (1 rows: 0 accepted / 1 rejected; 1 tags; 2 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  PROCEED |        1 |    1..1    |          1 |            1 |             1
+  [T2] readmit REFUSE  |        1 |    1..1    |          1 |            1 |             1
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=0 misses=2 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  collapsible_match            PROCEED min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit collapsible_match            REFUSE min-stability 0.781 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 2
+  [T3] demote  collapsible_match            PROCEED noise=0.781 loo=[row0(collapsible_match,false)]
+  [T3] readmit collapsible_match            REFUSE noise=0.781 loo=[row0(collapsible_match,false)]
+  [T3 join] collapsible_match: fragile in demote+readmit
+
+== window riir-kat_adoption_outcomes.jsonl (1 rows: 0 accepted / 1 rejected; 1 tags; 2 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  PROCEED |        1 |    1..1    |          1 |            1 |             1
+  [T2] readmit REFUSE  |        1 |    1..1    |          1 |            1 |             1
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=0 misses=2 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  collapsible_match            PROCEED min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit collapsible_match            REFUSE min-stability 0.781 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 2
+  [T3] demote  collapsible_match            PROCEED noise=0.781 loo=[row0(collapsible_match,false)]
+  [T3] readmit collapsible_match            REFUSE noise=0.781 loo=[row0(collapsible_match,false)]
+  [T3 join] collapsible_match: fragile in demote+readmit
+
+== window riir-neuron-db_adoption_outcomes.jsonl (21 rows: 17 accepted / 4 rejected; 10 tags; 20 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  PROCEED |        1 |    7..7    |          0 |            0 |             0
+  [T2] demote  REFUSE  |        9 |    1..3    |          5 |            0 |             0
+  [T2] readmit PROCEED |        8 |    1..2    |          5 |            0 |             0
+  [T2] readmit REFUSE  |        2 |    3..7    |          0 |            0 |             0
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=3 misses=17 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  collapsible_match            PROCEED min-stability 0.125 — no reliably-best winner
+  [T1 miss] demote  doc_lazy_continuation        REFUSE min-stability 0.812 — no reliably-best winner
+  [T1 miss] demote  excessive_precision          REFUSE min-stability 0.875 — no reliably-best winner
+  [T1 miss] demote  manual_slice_fill            REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] demote  ptr_arg                      REFUSE min-stability 0.812 — no reliably-best winner
+  [T1 miss] demote  unnecessary_get_then_check   REFUSE min-stability 0.844 — no reliably-best winner
+  [T1 miss] demote  unnecessary_lazy_evaluations REFUSE min-stability 0.875 — no reliably-best winner
+  [T1 miss] demote  vec-with-capacity            REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit doc_lazy_continuation        PROCEED min-stability 0.688 — no reliably-best winner
+  [T1 miss] readmit excessive_precision          PROCEED min-stability 0.656 — no reliably-best winner
+  [T1 miss] readmit explicit_auto_deref          REFUSE min-stability 0.719 — no reliably-best winner
+  [T1 miss] readmit manual_slice_fill            PROCEED min-stability 0.500 — no reliably-best winner
+  [T1 miss] readmit ptr_arg                      PROCEED min-stability 0.812 — no reliably-best winner
+  [T1 miss] readmit shrink-to-fit-after-build    PROCEED min-stability 0.562 — no reliably-best winner
+  [T1 miss] readmit unnecessary_get_then_check   PROCEED min-stability 0.469 — no reliably-best winner
+  [T1 miss] readmit unnecessary_lazy_evaluations PROCEED min-stability 0.531 — no reliably-best winner
+  [T1 miss] readmit vec-with-capacity            PROCEED min-stability 0.656 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 18
+  [T3] demote  collapsible_match            PROCEED noise=0.125 loo=[row0(excessive_precision,true), row1(collapsible_match,false), row2(shrink-to-fit-after-build,true), row3(shrink-to-fit-after-build,true), row6(collapsible_match,false), row7(unnecessary_get_then_check,true), row8(explicit_auto_deref,true), row9(doc_lazy_continuation,true), row10(excessive_precision,true), row11(ptr_arg,true), row12(ptr_arg,true), row14(unnecessary_lazy_evaluations,true), row15(manual_slice_fill,true), row17(collapsible_match,false), row19(explicit_auto_deref,true), row20(vec-with-capacity,true)]
+  [T3] demote  doc_lazy_continuation        REFUSE noise=0.812 loo=[row9(doc_lazy_continuation,true)]
+  [T3] demote  excessive_precision          REFUSE noise=0.875 loo=[none]
+  [T3] demote  explicit_auto_deref          REFUSE noise=0.906 loo=[row19(explicit_auto_deref,true)]
+  [T3] demote  manual_slice_fill            REFUSE noise=0.781 loo=[row15(manual_slice_fill,true)]
+  [T3] demote  ptr_arg                      REFUSE noise=0.812 loo=[row11(ptr_arg,true), row12(ptr_arg,true)]
+  [T3] demote  unnecessary_get_then_check   REFUSE noise=0.844 loo=[row7(unnecessary_get_then_check,true)]
+  [T3] demote  unnecessary_lazy_evaluations REFUSE noise=0.875 loo=[row14(unnecessary_lazy_evaluations,true)]
+  [T3] demote  vec-with-capacity            REFUSE noise=0.781 loo=[row20(vec-with-capacity,true)]
+  [T3] readmit doc_lazy_continuation        PROCEED noise=0.688 loo=[row9(doc_lazy_continuation,true)]
+  [T3] readmit excessive_precision          PROCEED noise=0.656 loo=[row0(excessive_precision,true), row10(excessive_precision,true)]
+  [T3] readmit explicit_auto_deref          REFUSE noise=0.719 loo=[row18(explicit_auto_deref,false)]
+  [T3] readmit manual_slice_fill            PROCEED noise=0.500 loo=[row15(manual_slice_fill,true)]
+  [T3] readmit ptr_arg                      PROCEED noise=0.812 loo=[row11(ptr_arg,true), row12(ptr_arg,true)]
+  [T3] readmit shrink-to-fit-after-build    PROCEED noise=0.562 loo=[row2(shrink-to-fit-after-build,true), row3(shrink-to-fit-after-build,true)]
+  [T3] readmit unnecessary_get_then_check   PROCEED noise=0.469 loo=[row0(excessive_precision,true), row2(shrink-to-fit-after-build,true), row3(shrink-to-fit-after-build,true), row4(collapsible_match,true), row5(collapsible_match,true), row7(unnecessary_get_then_check,true)]
+  [T3] readmit unnecessary_lazy_evaluations PROCEED noise=0.531 loo=[row14(unnecessary_lazy_evaluations,true)]
+  [T3] readmit vec-with-capacity            PROCEED noise=0.656 loo=[row0(excessive_precision,true), row2(shrink-to-fit-after-build,true), row3(shrink-to-fit-after-build,true), row4(collapsible_match,true), row5(collapsible_match,true), row7(unnecessary_get_then_check,true), row8(explicit_auto_deref,true), row9(doc_lazy_continuation,true), row10(excessive_precision,true), row11(ptr_arg,true), row20(vec-with-capacity,true)]
+  [T3 join] collapsible_match: fragile in demote
+  [T3 join] doc_lazy_continuation: fragile in demote+readmit
+  [T3 join] excessive_precision: fragile in demote+readmit
+  [T3 join] explicit_auto_deref: fragile in demote+readmit
+  [T3 join] manual_slice_fill: fragile in demote+readmit
+  [T3 join] ptr_arg: fragile in demote+readmit
+  [T3 join] shrink-to-fit-after-build: fragile in readmit
+  [T3 join] unnecessary_get_then_check: fragile in demote+readmit
+  [T3 join] unnecessary_lazy_evaluations: fragile in demote+readmit
+  [T3 join] vec-with-capacity: fragile in demote+readmit
+
+== window riir-reflexer_adoption_outcomes.jsonl (1 rows: 1 accepted / 0 rejected; 1 tags; 2 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  REFUSE  |        1 |    1..1    |          1 |            0 |             0
+  [T2] readmit PROCEED |        1 |    1..1    |          1 |            0 |             0
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=0 misses=2 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  doc_lazy_continuation        REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit doc_lazy_continuation        PROCEED min-stability 0.781 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 2
+  [T3] demote  doc_lazy_continuation        REFUSE noise=0.781 loo=[row0(doc_lazy_continuation,true)]
+  [T3] readmit doc_lazy_continuation        PROCEED noise=0.781 loo=[row0(doc_lazy_continuation,true)]
+  [T3 join] doc_lazy_continuation: fragile in demote+readmit
+
+== window riir-rethink_adoption_outcomes.jsonl (1 rows: 1 accepted / 0 rejected; 1 tags; 2 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  REFUSE  |        1 |    1..1    |          1 |            0 |             0
+  [T2] readmit PROCEED |        1 |    1..1    |          1 |            0 |             0
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=0 misses=2 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  unnecessary_get_then_check   REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit unnecessary_get_then_check   PROCEED min-stability 0.781 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 2
+  [T3] demote  unnecessary_get_then_check   REFUSE noise=0.781 loo=[row0(unnecessary_get_then_check,true)]
+  [T3] readmit unnecessary_get_then_check   PROCEED noise=0.781 loo=[row0(unnecessary_get_then_check,true)]
+  [T3 join] unnecessary_get_then_check: fragile in demote+readmit
+
+== window riir-viewbridge_adoption_outcomes.jsonl (3 rows: 3 accepted / 0 rejected; 3 tags; 6 consults)
+  [T2] verdict class | consults | mass rows min..max | single-row | all-rejected | zero-accepted
+  [T2] demote  REFUSE  |        3 |    1..1    |          3 |            0 |             0
+  [T2] readmit PROCEED |        3 |    1..1    |          3 |            0 |             0
+  [T2] seat-swap class: 0 consults (no seat rows in committed windows — the seat leg is UNMEASURED, disclosed)
+  [T1 proxy] winner-carrying consults: hits=0 misses=6 (bar ≥ 0.90); abstain-excluded=0 (no winner to test)
+  [T1 miss] demote  empty_line_after_doc_comments REFUSE min-stability 0.688 — no reliably-best winner
+  [T1 miss] demote  missing_panics_doc           REFUSE min-stability 0.781 — no reliably-best winner
+  [T1 miss] demote  semicolon_if_nothing_returned REFUSE min-stability 0.844 — no reliably-best winner
+  [T1 miss] readmit empty_line_after_doc_comments PROCEED min-stability 0.688 — no reliably-best winner
+  [T1 miss] readmit missing_panics_doc           PROCEED min-stability 0.781 — no reliably-best winner
+  [T1 miss] readmit semicolon_if_nothing_returned PROCEED min-stability 0.844 — no reliably-best winner
+  [T3] fragile consults (noise below bar OR any LOO move): 6
+  [T3] demote  empty_line_after_doc_comments REFUSE noise=0.688 loo=[row1(empty_line_after_doc_comments,true)]
+  [T3] demote  missing_panics_doc           REFUSE noise=0.781 loo=[row0(missing_panics_doc,true)]
+  [T3] demote  semicolon_if_nothing_returned REFUSE noise=0.844 loo=[row2(semicolon_if_nothing_returned,true)]
+  [T3] readmit empty_line_after_doc_comments PROCEED noise=0.688 loo=[row1(empty_line_after_doc_comments,true)]
+  [T3] readmit missing_panics_doc           PROCEED noise=0.781 loo=[row0(missing_panics_doc,true)]
+  [T3] readmit semicolon_if_nothing_returned PROCEED noise=0.844 loo=[row2(semicolon_if_nothing_returned,true)]
+  [T3 join] empty_line_after_doc_comments: fragile in demote+readmit
+  [T3 join] missing_panics_doc: fragile in demote+readmit
+  [T3 join] semicolon_if_nothing_returned: fragile in demote+readmit
+
+== totals across 8 windows
+[T1 proxy] consults=48 hits=8 misses=40 abstain-excluded=0
+[T3] fragile consults total: 42
+[beyond-census] fragile consults OUTSIDE Bar C's accepted-carrier demote-refusal set: 25 — readmit collapsible_match REFUSE (0.781); readmit doc_overindented_list_items PROCEED (0.625); readmit redundant_closure PROCEED (0.406); readmit shrink-to-fit-after-build PROCEED (0.625); readmit vec-with-capacity PROCEED (0.562); demote explicit_auto_deref PROCEED (0.562); demote collapsible_match PROCEED (0.781); readmit collapsible_match REFUSE (0.781); demote collapsible_match PROCEED (0.781); readmit collapsible_match REFUSE (0.781); demote collapsible_match PROCEED (0.125); readmit doc_lazy_continuation PROCEED (0.688); readmit excessive_precision PROCEED (0.656); readmit explicit_auto_deref REFUSE (0.719); readmit manual_slice_fill PROCEED (0.500); readmit ptr_arg PROCEED (0.812); readmit shrink-to-fit-after-build PROCEED (0.562); readmit unnecessary_get_then_check PROCEED (0.469); readmit unnecessary_lazy_evaluations PROCEED (0.531); readmit vec-with-capacity PROCEED (0.656); readmit doc_lazy_continuation PROCEED (0.781); readmit unnecessary_get_then_check PROCEED (0.781); readmit empty_line_after_doc_comments PROCEED (0.688); readmit missing_panics_doc PROCEED (0.781); readmit semicolon_if_nothing_returned PROCEED (0.844)

@@ -198,6 +198,12 @@ pub mod escalation_manifest;
 // (the module compiles to nothing).
 #[cfg(feature = "adoption_gate")]
 pub mod adoption_gate;
+// Issue 243's evaluation-trinity frame (T1 retention-hit × T2 window-mass ×
+// T3 flip-identity) over an AdoptionWindow — the same gated surface as its
+// subject. Report-only census; the perturbation ensemble reproduces the
+// executed G3-cell procedure exactly (same seeding, same arms).
+#[cfg(feature = "adoption_gate")]
+pub mod trinity_frame;
 // Plan 202 R6: the escalation DISPATCH — armed manifest rows joined to their
 // shipped transports (the min-pool gate, the deadline-capped readiness
 // retry, the sticky cost-ceiling latch). Gated as the manifest AND any of

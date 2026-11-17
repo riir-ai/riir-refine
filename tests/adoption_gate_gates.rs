@@ -384,3 +384,83 @@ fn shape_of(v: &GateVerdict) -> &'static str {
         GateVerdict::Abstain => "ABSTAIN",
     }
 }
+
+/// Issue 243's arms' self-test — THAT the trinity arms compute at all
+/// (the fixture-planting survival clause; the falsifier is the
+/// frame-validation pass over the committed Bench-150 windows, never
+/// this synthetic fixture). A seeded multi-tag window (accepted +
+/// rejected carriers, a 1-row tag) must produce a frame where every
+/// consult carries a verdict, a mass row, and a stability number, the
+/// LOO attribution names only real row indices, and two computations
+/// are byte-identical (the arms are deterministic — the frame-validation
+/// pass's premise).
+#[test]
+fn trinity_arms_compute_and_are_deterministic() {
+    use riir_refine::trinity_frame::{TrinityConfig, compute_frame};
+
+    let root = scratch_root("trinity");
+    let path = root.join(".refine").join("adoption_outcomes.jsonl");
+    std::fs::create_dir_all(path.parent().expect("parent")).expect("mkdir");
+    // tag "carry": 3 accepted rows (a multi-row accepted carrier);
+    // tag "thin": 1 accepted row (a single-row carrier); tag "noise":
+    // 2 rejected rows (an all-rejected carrier). Distinct payloads →
+    // distinct digests.
+    std::fs::write(
+        &path,
+        concat!(
+            "{\"v\":1,\"tag\":\"carry\",\"accepted\":true,\"digest_hex\":\"",
+            "aa01000000000000000000000000000000000000000000000000000000000000\"}\n",
+            "{\"v\":1,\"tag\":\"carry\",\"accepted\":true,\"digest_hex\":\"",
+            "aa02000000000000000000000000000000000000000000000000000000000000\"}\n",
+            "{\"v\":1,\"tag\":\"carry\",\"accepted\":true,\"digest_hex\":\"",
+            "aa03000000000000000000000000000000000000000000000000000000000000\"}\n",
+            "{\"v\":1,\"tag\":\"thin\",\"accepted\":true,\"digest_hex\":\"",
+            "bb01000000000000000000000000000000000000000000000000000000000000\"}\n",
+            "{\"v\":1,\"tag\":\"noise\",\"accepted\":false,\"digest_hex\":\"",
+            "cc01000000000000000000000000000000000000000000000000000000000000\"}\n",
+            "{\"v\":1,\"tag\":\"noise\",\"accepted\":false,\"digest_hex\":\"",
+            "cc02000000000000000000000000000000000000000000000000000000000000\"}\n",
+        ),
+    )
+    .expect("write window");
+    let window = AdoptionWindow::load_file(path).expect("loads");
+    let cfg = TrinityConfig::default();
+    let frame = compute_frame(&window, &cfg).expect("frame computes");
+
+    // The population: 3 tags × 2 kinds, both arms populated.
+    assert_eq!(frame.tags, 3);
+    assert_eq!(frame.consults.len(), 6);
+    assert_eq!(frame.rows, 6);
+    assert_eq!(frame.accepted, 4);
+    assert_eq!(frame.rejected, 2);
+    for c in &frame.consults {
+        assert!(!c.verdict.is_empty(), "every consult carries a verdict");
+        assert!(c.mass_rows >= 1, "every consult carries backing mass");
+        assert!((0.0..=1.0).contains(&c.min_stability));
+        for m in &c.loo_moved_by {
+            assert!(m.row_index < frame.rows, "LOO attribution names real rows");
+        }
+    }
+    // Carrier classifications on the mass actually computed.
+    let thin = frame
+        .consults
+        .iter()
+        .find(|c| c.id.tag == "thin")
+        .expect("thin consult present");
+    assert!(thin.single_row_carrier && thin.accepted_carrier);
+    let noise = frame
+        .consults
+        .iter()
+        .find(|c| c.id.tag == "noise")
+        .expect("noise consult present");
+    assert!(noise.all_rejected_carrier && noise.mass_accepted == 0);
+    // Determinism: two computations are identical.
+    let again = compute_frame(&window, &cfg).expect("frame recomputes");
+    assert_eq!(frame.consults.len(), again.consults.len());
+    for (a, b) in frame.consults.iter().zip(&again.consults) {
+        assert_eq!(a.verdict, b.verdict);
+        assert_eq!(a.min_stability, b.min_stability);
+        assert_eq!(a.loo_moved_by, b.loo_moved_by);
+    }
+    std::fs::remove_dir_all(&root).ok();
+}
