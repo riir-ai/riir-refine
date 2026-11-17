@@ -65,7 +65,7 @@ Standing reading laws (from the report's own footer): name-keyed coverage is a L
 7. **Coverage intake loop** — `--coverage-report` (this charter), `--corpus-delta`, `--corpus-gap` (katgpt-core coverage_manifest substrate, content-addressed intake rows), `--misses` queues, `--oracle-census` + default gap-arming.
 8. **Corpus lease serving** — the corpus as an add-only replicated artifact (epoch + per-segment BLAKE3s, ETag == commitment) over the KAT/points planes; `update`/`sync`/`corpus-pr` verbs.
 
-**Naming verdict:** the act has a name now — **codegram** (coined in the riir-ai glossary, Text/grammar/traces section): the healer's grammar-is-the-model act over code; family `quest_grammar` (quests) · `topologammar` (maps) · `codegram` (code fixes); the shared machinery noun is **grammaturgy** (existing row). It is NOT a new mechanism — the healer already is codegram; what does NOT exist is the span-SHAPE (syntax-keyed) half of dispatch, filed as issue 216 with pre-registered perf bars.
+**Naming verdict:** the act has a name now — **codegram** (coined in the riir-ai glossary, Text/grammar/traces section): the healer's grammar-is-the-model act over code; family `quest_grammar` (quests) · `topologrammar` (maps) · `codegram` (code fixes); the shared machinery noun is **grammaturgy** (existing row). It is NOT a new mechanism — the healer already is codegram; what does NOT exist is the span-SHAPE (syntax-keyed) half of dispatch, filed as issue 216 with pre-registered perf bars.
 
 ## Improvement queue (the "so we can improve after" list)
 
