@@ -1,6 +1,7 @@
 # Issue 238 — the wide-posture lib suite takes 23 min: measure, then parallelize honestly
 
-**Status:** OPEN — T1 DONE 2026-11-17 (H1 confirmed, the wall is one 1140 s headroom_probe test; T3/nextest REFUTED; T4 reshaped onto the headroom_probe fixture economics; T2 refuted-prerequisite) — remaining: T4 (fixture-cost lever, GOAT-gated) + T5 (the rig-routed standing lane)
+**Status:** OPEN — T1 DONE 2026-11-17 (H1 confirmed, the wall is one 1140 s headroom_probe test; T3/nextest REFUTED; T4 reshaped onto the headroom_probe fixture economics; T2 refuted-prerequisite) — remaining: T4 (fixture-cost lever, GOAT-gated); T5 DONE 2026-11-17
+**Claimed:** zed-amo-i238-t4, epoch 1794877029, expires 2026-11-19T00:57:09Z
 **Lease closed:** zed-amo-i238-t1, epoch 1794872400, was expires 2026-11-19T10:00:00Z — T1 landed the same session (measurement + verdicts recorded in the task rows below)
 **Lease closed:** zed-m3-ane-domain (Plan 377 landing session), epoch 1794670478, was expires 2026-11-16T15:34:38Z (expired unexecuted — the filing session moved on; re-claimed for T1)
 
