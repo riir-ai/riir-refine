@@ -1,6 +1,7 @@
 # Issue 243: G3-cell evaluation trinity (preservation × mass × identity) for the next adoption-gate cell
 
 **Status:** Open — instrument-frame improvement; report-only (no gate change, no posture change)
+**Claimed:** amo-idle-i243, 1794927066, expires 2026-11-19T15:00:00Z — executing the pre-registered frame-validation pass (T1–T3 over the committed Bench-150 windows) + the falsifier adjudication
 **Source:** arXiv:2611.07624 "Beneath the Surface: What We Overlook When We Talk About Agent Evolution" (Wang et al., 2026-11-05) — D.4's frozen-pool admission replay, where a constrained gate's size-normalized retention score ROSE while it discarded 9/15 best candidates, because a shrinking retained set (`{Seed}` alone) can score 1.0 — the strong-fallback illusion. Distillation + verdict (Gain, small): `riir-refine/.research/416_Beneath_The_Surface_Agent_Evolution_Audit.md`.
 
 ## The gap
