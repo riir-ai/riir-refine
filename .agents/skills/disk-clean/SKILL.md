@@ -1,14 +1,11 @@
 ---
 name: disk-clean
-description: Audit and reclaim disk space across the multi-repo workspace, home caches, and SDXC1TB. Scans cargo target dirs, incremental caches, GGUF model dirs, Unity Library caches, rustup and cargo registries. Classifies findings into regenerable-safe, load-bearing, and irreplaceable before presenting a list for user approval, then deletes only approved items and verifies freed space. Use when disk is full or low, before large builds or GPU training runs, or when asked what can be deleted or cleaned.
+description: Audit and reclaim disk space across the multi-repo workspace, home caches, and SDXC1TB. Scans cargo target dirs, incremental caches, GGUF model dirs, Unity Library caches, rustup and cargo registries. Classifies findings into regenerable-safe, load-bearing, and irreplaceable — the regenerable-safe class is deleted autonomously (before/after measured and reported), the load-bearing and irreplaceable classes are presented as a list for user approval and deleted only per approved item. Use when disk is full or low, before large builds or GPU training runs, or when asked what can be deleted or cleaned.
 ---
 
 # Disk Clean
 
-Reclaim disk space on the workstation. The contract is **list first, delete only
-what the user approves**. Never delete anything classified IRREPLACEABLE without
-explicit per-item confirmation. The user's default posture is "list only, I
-will decide later".
+Reclaim disk space on the workstation. The contract is **two-tier**: SAFE-class regenerable caches are deleted AUTONOMOUSLY (measure before/after, verify, report — approval was removed by owner decree 2026-11-17 after amo's 11 GB ENOSPC trough proved waiting on approval for regenerable caches breaks the box); LOAD-BEARING and IRREPLACEABLE classes stay **list first, delete only what the user approves per item**. Never delete anything classified LOAD-BEARING or IRREPLACEABLE without explicit per-item confirmation.
 
 ## When to use
 
@@ -45,7 +42,7 @@ Notes:
 Every finding goes in exactly one bucket. Bucket decides presentation order
 and wording, never silently decides deletion.
 
-### SAFE — regenerable caches (the default suggestion)
+### SAFE — regenerable caches (the AUTONOMOUS-DELETE class — no approval gate)
 
 | Item | Typical size when dirty | Regenerates how |
 |---|---|---|
@@ -98,20 +95,21 @@ repo's debug dir**. Measured precedent (2026-09-13): that freed ~480G internal
 - `.Trashes` on SD is not shell-accessible — tell the user to empty via
   Finder if it matters.
 
-## Phase 3 — Present the list, get approval
+## Phase 3 — Present the list, execute the SAFE class
 
-Present a markdown table (path, size, bucket, one-line note) sorted by size,
-then name the "max space, zero risk" pick explicitly with its expected freed
-total. Use the `ask_user` tool with concrete options (e.g. "clean both",
-"X only", "nothing") when the decision is needed. List-only requests end
-here.
+Present a markdown table (path, size, bucket, one-line note) sorted by size, then name the "max space, zero risk" pick explicitly with its expected freed total.
 
-## Phase 4 — Execute (only after explicit approval)
+- **SAFE rows execute autonomously** — no approval wait, no `ask_user` for them. Record the before/after `df` pair and the per-path deletions in the run report (the autonomous act is trusted BECAUSE it is measured and reported). The running-process re-check (Phase 4 step 1) still gates every deletion.
+- **LOAD-BEARING and IRREPLACEABLE rows** go to the user with the `ask_user` tool and concrete options (e.g. "clean both", "X only", "nothing") — delete only per approved item.
+- List-only requests end here (present, do not execute even the SAFE class when the user explicitly asked for a list).
+
+## Phase 4 — Execute (SAFE rows autonomously; gated rows only after explicit approval)
 
 1. Re-check `ps aux | grep -E "cargo|rustc" | grep -v grep` immediately
    before deleting — sibling agents start builds concurrently.
 2. Delete with explicit FULL paths — no shell globbing across repos, no
-   `$VAR` interpolation. One `rm -rf` per approved item or group.
+   `$VAR` interpolation. One `rm -rf` per item or group; for gated rows the
+   item list must equal the approved list exactly (no additions).
 3. Timeouts: APFS metadata-heavy deletions take minutes
    (1200000 ms); exFAT/SD with many small files can take much longer
    (1800000 ms).
