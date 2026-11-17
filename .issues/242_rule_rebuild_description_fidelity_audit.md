@@ -1,6 +1,7 @@
-# Issue 241: Rule rebuild description-fidelity audit (the iWSP text-bottleneck metric on the rule corpus)
+# Issue 242: Rule rebuild description-fidelity audit (the iWSP text-bottleneck metric on the rule corpus)
 
 **Status:** Open — fusion idea, filed unclaimed; report-only until a defect justifies promotion
+**Claimed:** zed-m3-i242-t0, 1794900078, expires 2026-11-19T07:21:18Z — scope: T0 (the free redundancy pre-check) + the T0 verdict; T1 (hosted spend) stays outside this lease
 **Source:** arXiv:2611.18114 "Interpretable weight-space programming builds transparent transformers and brain encoding models" (Singh et al., MSR/JHU/Columbia/NYU, 2026-11-13) — the **text-bottleneck rebuild metric**: describe an interpretable model in ≤200 words → a fresh agent session rebuilds it from the description ALONE → the rebuild preserves behavior (their numbers: all 13 algorithmic rebuilds 100% hidden accuracy, NLP −1.4 pts, rebuild params 1.74× the original vs **2,043×** for a description-less control, NLP error-correlation 0.74 vs 0.51). Distillation + verdict (Gain): `katgpt-rs/.research/678_iWSP_Interpretable_Weight_Space_Programming.md`; verdict round-1 AGREE conditions are baked into this issue.
 
 ## The idea
