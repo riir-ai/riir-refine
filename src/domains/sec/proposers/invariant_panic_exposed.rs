@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn fires_on_uninit_window_with_clone_inside() {
-        let src = r#"
+        let src = r"
             pub struct Ring<T> { buf: [std::mem::MaybeUninit<T>; 4] }
             impl<T: Clone> Ring<T> {
                 fn fill(&mut self, xs: &[T]) -> [T; 4] {
@@ -330,7 +330,7 @@ mod tests {
                     unsafe { buf.transpose().assume_init() }
                 }
             }
-        "#;
+        ";
         let f = findings_of(src);
         assert_eq!(f.len(), 1, "the window must fire once");
         assert_eq!(f[0].kind, KIND);
@@ -339,7 +339,7 @@ mod tests {
 
     #[test]
     fn fires_on_set_len_window_before_user_call() {
-        let src = r#"
+        let src = r"
             pub fn render(rows: &[String]) -> Vec<u8> {
                 let mut out: Vec<u8> = Vec::with_capacity(rows.len() * 4);
                 out.set_len(rows.len() * 4);
@@ -347,7 +347,7 @@ mod tests {
                 out[..banner.len()].copy_from_slice(banner.as_bytes());
                 out
             }
-        "#;
+        ";
         // set_len arms the length-prefix invariant; the clone runs inside
         // the armed window.
         assert_eq!(findings_of(src).len(), 1);
@@ -355,7 +355,7 @@ mod tests {
 
     #[test]
     fn silent_when_manuallydrop_wraps_the_window() {
-        let src = r#"
+        let src = r"
             pub struct Ring<T> { buf: [std::mem::MaybeUninit<T>; 4] }
             impl<T: Clone> Ring<T> {
                 fn fill(&mut self, xs: &[T]) -> [T; 4] {
@@ -370,13 +370,13 @@ mod tests {
                     out
                 }
             }
-        "#;
+        ";
         assert!(findings_of(src).is_empty(), "ManuallyDrop suppresses");
     }
 
     #[test]
     fn silent_when_init_completes_before_any_user_call() {
-        let src = r#"
+        let src = r"
             pub fn finish(a: String, b: String) -> [String; 2] {
                 let mut buf: [std::mem::MaybeUninit<String>; 2] =
                     [const { std::mem::MaybeUninit::uninit() }; 2];
@@ -384,7 +384,7 @@ mod tests {
                 buf[1].write(b);
                 unsafe { buf.transpose().assume_init() }
             }
-        "#;
+        ";
         // No user call at all: nothing the author doesn't control runs
         // inside the window.
         assert!(findings_of(src).is_empty());
@@ -409,7 +409,7 @@ mod tests {
 
     #[test]
     fn silent_without_manual_init_vocabulary() {
-        let src = r#"
+        let src = r"
             pub fn plain(xs: &[String]) -> Vec<String> {
                 let mut out = Vec::with_capacity(xs.len());
                 for x in xs {
@@ -417,20 +417,20 @@ mod tests {
                 }
                 out
             }
-        "#;
+        ";
         assert!(findings_of(src).is_empty(), "no gate-a vocabulary = silent");
     }
 
     #[test]
     fn fires_when_the_window_is_open_ended() {
-        let src = r#"
+        let src = r"
             pub fn stage(templates: &[String]) -> staging::Buf<String> {
                 let mut buf = staging::Buf::uninit(2);
                 let first = templates[0].clone();
                 buf.set(0, first);
                 buf
             }
-        "#;
+        ";
         // `uninit(` in the body (the Buf::uninit constructor) opens a
         // window no completing site closes; the clone inside fires.
         let f = findings_of(src);

@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn fires_on_as_ref_called_twice_with_bounds_check() {
-        let src = r#"
+        let src = r"
             pub fn get<S: AsRef<[u8]>>(s: &S, idx: usize) -> Option<u8> {
                 if idx < s.as_ref().len() {
                     Some(unsafe { *s.as_ref().get_unchecked(idx) })
@@ -233,7 +233,7 @@ mod tests {
                     None
                 }
             }
-        "#;
+        ";
         let f = findings_of(src);
         assert_eq!(f.len(), 1, "the repeated call must fire once");
         assert_eq!(f[0].kind, KIND);
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn fires_on_borrow_called_twice_with_len_arithmetic() {
-        let src = r#"
+        let src = r"
             pub fn remaining_len<K: Borrow<str>>(items: &[K]) -> usize {
                 let mut total = 0;
                 for k in items {
@@ -251,13 +251,13 @@ mod tests {
                 }
                 total
             }
-        "#;
+        ";
         assert_eq!(findings_of(src).len(), 1);
     }
 
     #[test]
     fn silent_when_called_once_and_kept() {
-        let src = r#"
+        let src = r"
             pub fn get<S: AsRef<[u8]>>(s: &S, idx: usize) -> Option<u8> {
                 let bytes = s.as_ref();
                 if idx < bytes.len() {
@@ -266,7 +266,7 @@ mod tests {
                     None
                 }
             }
-        "#;
+        ";
         // The call-once fix: one call, the result kept — single textual
         // occurrence, nothing to disagree.
         assert!(findings_of(src).is_empty());
@@ -274,11 +274,11 @@ mod tests {
 
     #[test]
     fn silent_on_two_different_receivers() {
-        let src = r#"
+        let src = r"
             pub fn join_lengths<A: AsRef<str>, B: AsRef<str>>(a: &A, b: &B) -> usize {
                 a.as_ref().len() + b.as_ref().len()
             }
-        "#;
+        ";
         // Two receivers, two impls: each called once — per-receiver
         // counting keeps this silent.
         assert!(findings_of(src).is_empty());
@@ -286,7 +286,7 @@ mod tests {
 
     #[test]
     fn silent_without_the_provider_bound() {
-        let src = r#"
+        let src = r"
             pub fn get(s: &[u8], idx: usize) -> Option<u8> {
                 if idx < s.len() {
                     Some(unsafe { *s.get_unchecked(idx) })
@@ -294,7 +294,7 @@ mod tests {
                     None
                 }
             }
-        "#;
+        ";
         // The slice arrives already borrowed: the caller's impl ran once,
         // upstream of this fn.
         assert!(findings_of(src).is_empty());
@@ -302,13 +302,13 @@ mod tests {
 
     #[test]
     fn silent_without_invariant_context() {
-        let src = r#"
+        let src = r"
             pub fn show<S: AsRef<str>>(s: &S) -> String {
                 let a = s.as_ref().to_string();
                 let b = s.as_ref().to_uppercase();
                 a + &b
             }
-        "#;
+        ";
         // Two calls, but no unsafe / len vocabulary: the disagreement has
         // no reachable invariant to break here.
         assert!(findings_of(src).is_empty());
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn test_mods_are_skipped() {
-        let src = r#"
+        let src = r"
             #[cfg(test)]
             mod tests {
                 #[test]
@@ -327,7 +327,7 @@ mod tests {
                     assert_eq!(f(&[1u8, 2]), 4);
                 }
             }
-        "#;
+        ";
         assert!(findings_of(src).is_empty(), "cfg(test) habitat is skipped");
     }
 }

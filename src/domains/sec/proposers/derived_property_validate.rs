@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn fires_on_derived_chain_into_unchecked_ctor() {
-        let src = r#"
+        let src = r"
             pub fn swap_byte<P: EncodedPattern>(haystack: &str, from: &P, to: u8) -> String {
                 let b = from.byte_at();
                 unsafe {
@@ -269,7 +269,7 @@ mod tests {
                     )
                 }
             }
-        "#;
+        ";
         let f = findings_of(src);
         assert_eq!(f.len(), 1, "the derived chain must fire once");
         assert_eq!(f[0].kind, KIND);
@@ -278,13 +278,13 @@ mod tests {
 
     #[test]
     fn fires_on_provider_bound_with_plain_operand() {
-        let src = r#"
+        let src = r"
             pub fn render<P: Borrow<str>>(piece: &P) -> String {
                 let mut buf: Vec<u8> = Vec::new();
                 buf.extend_from_slice(piece.borrow().as_bytes());
                 unsafe { String::from_utf8_unchecked(buf) }
             }
-        "#;
+        ";
         // The bound arm: the caller chooses `Borrow`'s impl — the bytes
         // are trusted even where the argument itself is a plain local.
         assert_eq!(findings_of(src).len(), 1);
@@ -309,7 +309,7 @@ mod tests {
 
     #[test]
     fn silent_when_the_checked_path_is_used() {
-        let src = r#"
+        let src = r"
             pub fn swap_byte_checked<P: EncodedPattern>(
                 haystack: &str,
                 from: &P,
@@ -322,7 +322,7 @@ mod tests {
                     .collect();
                 String::from_utf8(bytes).ok()
             }
-        "#;
+        ";
         // No unchecked constructor in the fn at all.
         assert!(findings_of(src).is_empty());
     }

@@ -2976,6 +2976,10 @@ entry)."
 
 #[cfg(test)]
 mod tests {
+
+    // The per-rule census pair repeated by every battery in this module — factored
+    // so the array types stay under clippy's type_complexity ceiling.
+    type CensusPair = (&'static str, fn(&str, &syn::File) -> usize);
     use super::*;
 
     #[test]
@@ -3891,7 +3895,7 @@ mod tests {
         use crate::domains::sec::proposers::server_read_timeout;
         use crate::domains::sec::proposers::sql_query_value_bind;
         let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 5] = [
+        let pairs: [CensusPair; 5] = [
             ("sql-query-value-interpolation-unbound", |s, f| {
                 sql_query_value_bind::detect(s, f).len()
             }),
@@ -3926,9 +3930,9 @@ mod tests {
         }
     }
 
-    /// Batch 352 (the LoNE numerics family): FOUR suggest-only rules,
+    /// Batch 352 (the `LoNE` numerics family): FOUR suggest-only rules,
     /// all `Numerics` (the Issue-185 family, the backend-parity axis),
-    /// provenance-pinned to the LoNE sha, never `FIXABLE_SEC`.
+    /// provenance-pinned to the `LoNE` sha, never `FIXABLE_SEC`.
     #[test]
     fn batch352_rules_present_families_and_provenance() {
         let all = entries();
@@ -3966,7 +3970,7 @@ mod tests {
     #[test]
     fn batch352_detectors_fire_on_buggy_stay_silent_on_fixed() {
         let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 4] = [
+        let pairs: [CensusPair; 4] = [
             (
                 "fp16-subnormal-product-power-of-two-rescale",
                 |s: &str, f: &syn::File| {
@@ -4088,7 +4092,7 @@ mod tests {
         use crate::domains::sec::proposers::logit_clamp_absorption;
         use crate::domains::sec::proposers::variance_two_pass;
         let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 5] = [
+        let pairs: [CensusPair; 5] = [
             (
                 "gelu-tanh-cancellation-sigmoid-form",
                 |s: &str, f: &syn::File| gelu_tanh_sigmoid_form::detect(s, f).len(),
@@ -4130,7 +4134,7 @@ mod tests {
 
     /// Batch 367 (the opal reactive-optimizer harness transcription, sec
     /// half, Plan 381 / Research 413, xingjian-bai/opal @ 97762859, MIT) —
-    /// TWO suggest-only InputValidation rules on the agent-harness axes
+    /// TWO suggest-only `InputValidation` rules on the agent-harness axes
     /// (the generated-code boundary scanner + the stale-proposal
     /// shown-base merge); never `FIXABLE_SEC`.
     #[test]
@@ -4227,7 +4231,7 @@ mod tests {
         use crate::domains::sec::proposers::agent_code_static_boundary;
         use crate::domains::sec::proposers::stale_proposal_shown_base_merge;
         let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 2] = [
+        let pairs: [CensusPair; 2] = [
             (
                 "agent-code-static-boundary-diagnostics-never-gate",
                 |s: &str, f: &syn::File| agent_code_static_boundary::detect(s, f).len(),
@@ -4356,7 +4360,7 @@ mod tests {
         use crate::domains::sec::proposers::global_write_read_lock;
         use crate::domains::sec::proposers::invariant_panic_exposed;
         let all = entries();
-        let pairs: [(&str, fn(&str, &syn::File) -> usize); 4] = [
+        let pairs: [CensusPair; 4] = [
             ("unsafe-invariant-panic-exposed", |s, f| {
                 invariant_panic_exposed::detect(s, f).len()
             }),

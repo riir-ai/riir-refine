@@ -213,14 +213,14 @@ mod tests {
 
     #[test]
     fn fires_on_set_var_under_read_guard() {
-        let src = r#"
+        let src = r"
             static CFG: std::sync::RwLock<u32> = std::sync::RwLock::new(0);
 
             pub fn reload_program_env(key: &str, val: &str) {
                 let _lock = CFG.read().unwrap();
                 std::env::set_var(key, val);
             }
-        "#;
+        ";
         let f = findings_of(src);
         assert_eq!(f.len(), 1, "the shared-tier env write must fire once");
         assert_eq!(f[0].kind, KIND);
@@ -242,26 +242,26 @@ mod tests {
 
     #[test]
     fn silent_when_the_exclusive_tier_is_taken() {
-        let src = r#"
+        let src = r"
             static CFG: std::sync::RwLock<u32> = std::sync::RwLock::new(0);
 
             pub fn reload_program_env(key: &str, val: &str) {
                 let _lock = CFG.write().unwrap();
                 std::env::set_var(key, val);
             }
-        "#;
+        ";
         // The fix posture: the mutation rides the exclusive tier.
         assert!(findings_of(src).is_empty());
     }
 
     #[test]
     fn silent_without_a_read_guard_in_scope() {
-        let src = r#"
+        let src = r"
             pub fn bootstrap(key: &str, val: &str) {
                 // Single-threaded init before any reader exists.
                 std::env::set_var(key, val);
             }
-        "#;
+        ";
         assert!(findings_of(src).is_empty());
     }
 

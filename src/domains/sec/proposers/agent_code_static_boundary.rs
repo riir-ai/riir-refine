@@ -176,9 +176,9 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
-    fn findings_of(src: syn::File) -> Vec<BoundaryFinding> {
-        let text = quote::ToTokens::to_token_stream(&src).to_string();
-        detect(&text, &src)
+    fn findings_of(src: &syn::File) -> Vec<BoundaryFinding> {
+        let text = quote::ToTokens::to_token_stream(src).to_string();
+        detect(&text, src)
     }
 
     #[test]
@@ -188,7 +188,7 @@ mod tests {
                 process::spawn_child("ls");
             }
         };
-        let f = findings_of(src);
+        let f = findings_of(&src);
         assert_eq!(f.len(), 1, "the io/process surface is flagged: {f:?}");
     }
 
@@ -199,7 +199,7 @@ mod tests {
                 x.wrapping_add(1)
             }
         };
-        assert!(findings_of(src).is_empty(), "benign code scans clean");
+        assert!(findings_of(&src).is_empty(), "benign code scans clean");
     }
 
     #[test]
@@ -209,7 +209,7 @@ mod tests {
                 guarded.set_param(2.0);
             }
         };
-        let f = findings_of(src);
+        let f = findings_of(&src);
         assert_eq!(
             f.len(),
             1,
@@ -226,7 +226,7 @@ mod tests {
             }
         };
         assert!(
-            findings_of(src).is_empty(),
+            findings_of(&src).is_empty(),
             "an indirect surface evades the category vocabulary (the honest bound)"
         );
     }
@@ -242,7 +242,7 @@ mod tests {
         let text = quote::ToTokens::to_token_stream(&src).to_string();
         let f = detect(&text, &src);
         assert!(
-            f.len() > 0,
+            !f.is_empty(),
             "the gate posture (flags.is_empty as the verdict) must fire: {f:?}"
         );
     }

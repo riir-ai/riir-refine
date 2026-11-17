@@ -168,9 +168,9 @@ mod tests {
     use super::*;
     use syn::parse_quote;
 
-    fn findings_of(src: syn::File) -> Vec<WholesaleApplyFinding> {
-        let text = quote::ToTokens::to_token_stream(&src).to_string();
-        detect(&text, &src)
+    fn findings_of(src: &syn::File) -> Vec<WholesaleApplyFinding> {
+        let text = quote::ToTokens::to_token_stream(src).to_string();
+        detect(&text, src)
     }
 
     #[test]
@@ -182,7 +182,7 @@ mod tests {
                 }
             }
         };
-        let f = findings_of(src);
+        let f = findings_of(&src);
         assert_eq!(f.len(), 1, "the wholesale loop is flagged: {f:?}");
     }
 
@@ -198,7 +198,7 @@ mod tests {
             }
         };
         assert!(
-            findings_of(src).is_empty(),
+            findings_of(&src).is_empty(),
             "a delta-vs-shown-base apply is the fixed shape, suppressed"
         );
     }
@@ -210,6 +210,6 @@ mod tests {
                 state.advance();
             }
         };
-        assert!(findings_of(src).is_empty());
+        assert!(findings_of(&src).is_empty());
     }
 }
