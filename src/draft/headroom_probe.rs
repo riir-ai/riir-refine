@@ -29,10 +29,17 @@
 //!
 //! Pool depth is a real configuration knob, not a read-off: the matcher
 //! retrieves `max(top_k, RERANK_POOL)` candidates and re-ranks *the pool*, so
-//! a depth-24 probe can promote a rule that the depth-20 production path never
-//! saw. Each depth is therefore measured by its own query rather than by
-//! slicing one deep list — which is also why `recall@8` can exceed nothing and
-//! `recall@24` is not automatically ≥ `recall@20`.
+//! a rung beyond production can promote a rule the production pool never
+//! retrieved — the re-pin history's boundary-tie class (a casualty
+//! first-found at depth N+1). Depth is therefore never read off one deep
+//! canonically-ranked list. But depths at or below [`RERANK_POOL`] all
+//! retrieve that same pool — the depth only truncates the reranked list —
+//! so the probe issues ONE query per pool size (issue 238 T4): the
+//! production pool serves every depth ≤ [`RERANK_POOL`] by canonicalizing
+//! the truncated prefix (byte-identical to a per-depth query; the
+//! derivation guard test pins the law against substrate drift), and each
+//! deeper rung queries at its own size. The historical claim survives
+//! where it bites: `recall@37` is not automatically ≥ `recall@33`.
 //!
 //! The second surface (real-`cargo clippy` ground truth over the multi-lint
 //! composite spans) lives in `tests/uncontaminated_g1.rs`, next to the oracle
@@ -45,10 +52,10 @@
 
 use std::collections::BTreeSet;
 
-use super::domain_router::DomainId;
 use super::instantiation_rerank::RERANK_POOL;
 use super::latent_matcher::LatentMatcher;
 use super::retrieval_eval::{OwnedEvalSpan, canonical_rank, domain_index, labeled_eval_spans};
+use super::{DomainId, ScoredRule};
 
 /// Candidate-pool depths probed, ascending. `RERANK_POOL` (the production
 /// depth) must be one of them — it is the recall@1 reference point.
@@ -216,28 +223,131 @@ pub struct HeadroomVerdict {
     pub stop: bool,
 }
 
-/// Rank the enabled-domain list for `code` at pool depth `k`, returning the
-/// rule ids in production's canonical order.
+/// Extract one domain's ranked list from a `suggest_span` fan-out, owning the
+/// rules (the fan-out value is consumed — no clone on the probe path).
+fn domain_rules(by_domain: Vec<(DomainId, Vec<ScoredRule>)>, domain: DomainId) -> Vec<ScoredRule> {
+    by_domain
+        .into_iter()
+        .find(|(d, _)| *d == domain)
+        .map_or_else(Vec::new, |(_, rules)| rules)
+}
+
+/// The per-depth list the probe has always measured: `canonical_rank` over
+/// the suggest output truncated to that depth. Canonicalization happens
+/// AFTER truncation (per-depth shape), never over one deep canonically-ranked
+/// list — the module law.
+fn canonical_ids(rules: &[ScoredRule], k: usize) -> Vec<String> {
+    canonical_rank(&rules[..k.min(rules.len())])
+        .iter()
+        .take(k)
+        .map(|r| r.rule_id.clone())
+        .collect()
+}
+
+/// One query per pool size, not per depth (issue 238 T4).
 ///
-/// Owned ids: the matcher is borrowed mutably per query (shared G4 scratch),
-/// so a borrowed view cannot outlive the next depth's call.
-fn ranked_ids_at(
+/// `suggest_all_domains` retrieves `max(top_k, RERANK_POOL)` candidates, so
+/// every depth ≤ [`RERANK_POOL`] shares the production pool — identical
+/// retrieval, instantiation marking and re-rank — and the depth only
+/// truncates the reranked list before `canonical_rank`. Deriving those lists
+/// from ONE production-pool query is byte-identical to querying each depth
+/// (the same vector, sliced the same way, ranked by the same
+/// per-rule [`canonical_rank`] key); [`canonical_ids`] is the shared derivation and the
+/// `span_source_depth_derivation_matches_per_depth_queries` guard test pins
+/// the law against substrate drift. Depths ABOVE [`RERANK_POOL`] are their
+/// own pool size and query separately (the boundary-tie class the re-pin
+/// history documents).
+#[cfg_attr(feature = "demonstrability_gate", allow(dead_code))]
+#[must_use]
+fn derived_depth_lists(
     matcher: &mut LatentMatcher,
     code: &str,
     domain: DomainId,
-    k: usize,
-) -> Vec<String> {
-    let (_, by_domain) = matcher.suggest_span(code, k);
-    by_domain
-        .iter()
-        .find(|(d, _)| *d == domain)
-        .map_or_else(Vec::new, |(_, rules)| {
-            canonical_rank(rules)
+) -> [Vec<String>; HEADROOM_DEPTHS.len()] {
+    let prod_rules = domain_rules(matcher.suggest_span(code, RERANK_POOL).1, domain);
+    let mut deep_rules: Vec<(usize, Vec<ScoredRule>)> = Vec::new();
+    for &k in HEADROOM_DEPTHS.iter().filter(|&&k| k > RERANK_POOL) {
+        deep_rules.push((k, domain_rules(matcher.suggest_span(code, k).1, domain)));
+    }
+
+    let mut lists: [Vec<String>; HEADROOM_DEPTHS.len()] = Default::default();
+    for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
+        let rules: &[ScoredRule] = if k <= RERANK_POOL {
+            &prod_rules
+        } else {
+            deep_rules
                 .iter()
-                .take(k)
-                .map(|r| r.rule_id.clone())
-                .collect()
-        })
+                .find(|(kk, _)| *kk == k)
+                .map_or(&[][..], |(_, rules)| rules.as_slice())
+        };
+        lists[i] = canonical_ids(rules, k);
+    }
+    lists
+}
+
+/// The historical per-depth queries — one [`suggest_span`](LatentMatcher::suggest_span)
+/// call per [`HEADROOM_DEPTHS`] rung. Kept for the `demonstrability_gate`
+/// posture, whose per-domain depth scaling makes the truncation count a
+/// scaled quantity the pool-size derivation does not replicate — and for the
+/// derivation guard tests, which compare this shape against the derived one
+/// at every posture.
+#[cfg_attr(not(feature = "demonstrability_gate"), allow(dead_code))]
+#[must_use]
+fn per_depth_lists(
+    matcher: &mut LatentMatcher,
+    code: &str,
+    domain: DomainId,
+) -> [Vec<String>; HEADROOM_DEPTHS.len()] {
+    let mut lists: [Vec<String>; HEADROOM_DEPTHS.len()] = Default::default();
+    for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
+        let rules = domain_rules(matcher.suggest_span(code, k).1, domain);
+        lists[i] = canonical_ids(&rules, k);
+    }
+    lists
+}
+
+/// Fold one span's per-depth lists into the report — the counting block
+/// shared by every list-derivation shape (the derivation tests compare the
+/// LIST law; the fold is deliberately the same code on both sides).
+fn fold_depth_lists(
+    report: &mut HeadroomReport,
+    span: &OwnedEvalSpan,
+    lists: &[Vec<String>; HEADROOM_DEPTHS.len()],
+) {
+    let prod = &lists[PROD_DEPTH_IDX];
+    let chosen_id = prod.first().cloned();
+    let correct = chosen_id.as_deref() == Some(span.label.as_str());
+
+    let deepest = &lists[HEADROOM_DEPTHS.len() - 1];
+    let rank = deepest.iter().position(|id| *id == span.label);
+
+    for m in [
+        &mut report.per_domain[domain_index(span.domain)],
+        &mut report.blended,
+    ] {
+        m.labeled += 1;
+        if correct {
+            m.chosen += 1;
+        }
+        for (i, list) in lists.iter().enumerate() {
+            if list.contains(&span.label) {
+                m.in_pool[i] += 1;
+            }
+        }
+    }
+
+    if !correct {
+        report.misses.push(HeadroomMiss {
+            expected: span.label.clone(),
+            domain: span.domain,
+            rank,
+            chosen: chosen_id,
+            kind: match rank {
+                Some(_) => MissKind::Selection,
+                None => MissKind::Retrieval,
+            },
+        });
+    }
 }
 
 /// Run the headroom probe over the Issue 017 labeled fixture set with the
@@ -296,47 +406,15 @@ pub fn run_headroom_probe_with_spans(
             continue;
         }
 
-        // One query per depth: the pool IS the re-rank input, so depth is a
-        // configuration, not a slice of one deep list.
-        let mut lists: [Vec<String>; HEADROOM_DEPTHS.len()] = Default::default();
-        for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
-            lists[i] = ranked_ids_at(&mut matcher, &span.code, span.domain, k);
-        }
+        // One query per pool size (issue 238 T4); the per-depth queries
+        // remain only under the demonstrability_gate posture, whose per-domain
+        // depth scaling makes the truncation count a scaled quantity.
+        #[cfg(feature = "demonstrability_gate")]
+        let lists = per_depth_lists(&mut matcher, &span.code, span.domain);
+        #[cfg(not(feature = "demonstrability_gate"))]
+        let lists = derived_depth_lists(&mut matcher, &span.code, span.domain);
 
-        let prod = &lists[PROD_DEPTH_IDX];
-        let chosen_id = prod.first().cloned();
-        let correct = chosen_id.as_deref() == Some(span.label.as_str());
-
-        let deepest = &lists[HEADROOM_DEPTHS.len() - 1];
-        let rank = deepest.iter().position(|id| *id == span.label);
-
-        for m in [
-            &mut report.per_domain[domain_index(span.domain)],
-            &mut report.blended,
-        ] {
-            m.labeled += 1;
-            if correct {
-                m.chosen += 1;
-            }
-            for (i, list) in lists.iter().enumerate() {
-                if list.contains(&span.label) {
-                    m.in_pool[i] += 1;
-                }
-            }
-        }
-
-        if !correct {
-            report.misses.push(HeadroomMiss {
-                expected: span.label.clone(),
-                domain: span.domain,
-                rank,
-                chosen: chosen_id,
-                kind: match rank {
-                    Some(_) => MissKind::Selection,
-                    None => MissKind::Retrieval,
-                },
-            });
-        }
+        fold_depth_lists(&mut report, span, &lists);
     }
 
     report
@@ -863,7 +941,8 @@ fn census_span_depths(
 ) -> [bool; HEADROOM_DEPTHS.len()] {
     let mut hits = [false; HEADROOM_DEPTHS.len()];
     for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
-        let ids = ranked_ids_at(matcher, code, domain, k);
+        let rules = domain_rules(matcher.suggest_span(code, k).1, domain);
+        let ids = canonical_ids(&rules, k);
         hits[i] = ids
             .first()
             .is_some_and(|id| oracle_picks.contains(id.as_str()));
@@ -1374,6 +1453,87 @@ mod tests {
             decomp_default.selector_addressable, decomp_explicit.selector_addressable,
             "the default decomposition must match the explicit-fixture-set run"
         );
+    }
+
+    /// Issue 238 T4: the pool-size derivation law. Every depth ≤
+    /// [`RERANK_POOL`] must derive byte-identically from the ONE
+    /// production-pool query (the same reranked vector sliced to the depth,
+    /// canonicalized by the same per-rule key — never re-ranked), and each
+    /// depth above it must match its own per-depth query. Runs ONE injected
+    /// span, not the fixture set — this pins the LAW at seconds, while the
+    /// one-off full-set verification (below, `--ignored`) pins the corpus.
+    #[test]
+    fn span_source_depth_derivation_matches_per_depth_queries() {
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let span = OwnedEvalSpan {
+            label: "needless_return".to_string(),
+            domain: DomainId::Clippy,
+            code: "fn f(x: i32) -> i32 { return x; }".to_string(),
+            acceptable: Vec::new(),
+        };
+
+        // the derived shape: one production-pool query + one per deeper rung
+        let derived = derived_depth_lists(&mut matcher, &span.code, span.domain);
+        // the historical shape: one query PER DEPTH, on the same matcher
+        let direct = per_depth_lists(&mut matcher, &span.code, span.domain);
+
+        for (i, &k) in HEADROOM_DEPTHS.iter().enumerate() {
+            assert_eq!(
+                derived[i], direct[i],
+                "depth {k}: the derived list must equal the per-depth query"
+            );
+        }
+    }
+
+    /// Issue 238 T4 one-off verification — run ONCE per derivation-law or
+    /// substrate change (`cargo test ... -- --ignored`): the full fixture-set
+    /// probe through the derived path must equal an independent per-depth
+    /// re-run, field for field — blended, every domain row, every miss with
+    /// its rank and chosen rule, and the skipped census. Heavy by
+    /// construction (a full per-depth fixture eval on top of the derived
+    /// one); never un-ignored without re-deriving the law.
+    #[test]
+    #[ignore = "issue 238 T4 one-off — full fixture-set derived-vs-per-depth equality; heavy"]
+    fn t4_derived_probe_equals_per_depth_probe_full_fixture_set() {
+        let spans = labeled_eval_spans();
+        let derived = run_headroom_probe_with_spans(crate::draft::RerankMode::default(), &spans);
+
+        // the historical per-depth shape, inline
+        let mut matcher = LatentMatcher::from_enabled_domains().expect("build matcher");
+        let mut legacy = HeadroomReport::default();
+        for span in &spans {
+            if !matcher.has_domain(span.domain) {
+                legacy.skipped += 1;
+                continue;
+            }
+            let lists = per_depth_lists(&mut matcher, &span.code, span.domain);
+            fold_depth_lists(&mut legacy, span, &lists);
+        }
+
+        assert_eq!(derived.blended, legacy.blended, "blended metrics");
+        assert_eq!(derived.per_domain, legacy.per_domain, "per-domain rows");
+        assert_eq!(derived.skipped, legacy.skipped, "skipped census");
+        assert_eq!(derived.misses.len(), legacy.misses.len(), "miss count");
+        for (a, b) in derived.misses.iter().zip(&legacy.misses) {
+            assert_eq!(
+                (
+                    a.expected.as_str(),
+                    a.domain,
+                    a.rank,
+                    a.kind,
+                    a.chosen.as_deref()
+                ),
+                (
+                    b.expected.as_str(),
+                    b.domain,
+                    b.rank,
+                    b.kind,
+                    b.chosen.as_deref()
+                ),
+                "miss row drifted: expected={}",
+                a.expected
+            );
+        }
     }
 
     /// Plan 049 T0.0a: the reason the injection point exists — the probe
