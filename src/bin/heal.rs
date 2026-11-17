@@ -156,6 +156,14 @@ enum KatCommand {
     /// co-signature bundle; the filing's `--attest-cosig <bundle>` files
     /// ATTEST-ONLY (the GitHub link stays on B).
     Migrate,
+    /// riir-dapps Issue 150: `account claim-v1 [--key <path>] [--list]` —
+    /// claim the carried corpus's devnet-v1 authorship for THIS gen-2
+    /// account: the picked v1 SSH key proves it (SSHSIG), the account's
+    /// live key signs, the T2 factor rides the header (armed TOTP). The
+    /// v1 id is DERIVED from the picked key (never typed); the display
+    /// pseudonym prints BEFORE the submit. `--list` reads the public
+    /// claims feed. Needs `kat_transport`.
+    ClaimV1,
     /// riir-dapps plan 053 / riir-kat issue 007: `kat totp` — the
     /// TOTP second factor's CLI (the client half of the route host's
     /// `/auth/totp` state machine). Exactly one mode word per
@@ -4958,6 +4966,97 @@ fn rmpk_state(state: riir_kat::kat_protocol_migrate::MigrateRequestState) -> &'s
 /// otpauth URI carries the SECRET: rendered ONCE, never persisted (the
 /// URI-once law — a client that archives the secret has enrolled itself,
 /// not the user).
+/// riir-dapps Issue 150 (`account claim-v1`): the v1 attribution claim's
+/// CLI. Exactly one mode per invocation:
+/// - `account claim-v1 [--key <path>] [--totp <code>]` — compose +
+///   locally verify + submit. The v1 key comes ONLY from the explicit
+///   `--key <path>` when given; otherwise the ssh-picker's DEFAULT pick
+///   (riir-auth `ssh_picker` — the ~/.ssh Ed25519 keys, oldest first;
+///   the default-pick law names it). The v1 id is DERIVED from the
+///   picked key — never typed — and the display pseudonym prints before
+///   the submit (what will render, confirmed).
+/// - `account claim-v1 --list` — the public claims feed, verbatim.
+#[cfg(feature = "kat_transport")]
+fn run_kat_claim_v1(words: &[String]) {
+    use riir_kat::kat_recovery_client::ssh_picker;
+    use riir_refine::kat_account::KatAccount;
+    use riir_refine::kat_claim_v1_client as cv1;
+
+    let fail = |msg: String| -> ! {
+        eprintln!("claim-v1: {msg}");
+        std::process::exit(1);
+    };
+    let flag = |name: &str| -> Option<String> {
+        words
+            .iter()
+            .position(|w| w == name)
+            .and_then(|i| words.get(i + 1).cloned())
+    };
+    if words.contains(&"--list".to_string()) {
+        let url = command_service_url();
+        match cv1::http::claims(&url) {
+            Ok((200, body)) => println!("{body}"),
+            Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
+            Err(e) => fail(e),
+        }
+        return;
+    }
+    if words.iter().any(|w| w.starts_with('-'))
+        && flag("--key").is_none()
+        && flag("--totp").is_none()
+    {
+        fail("usage: account claim-v1 [--key <path>] [--totp <code>] | --list".into());
+    }
+    let url = command_service_url();
+    let mut account = KatAccount::load(&KatAccount::default_dir())
+        .unwrap_or_else(|e| fail(format!("no account — run `cargo refine login` first ({e})")));
+    learn_root(&mut account, &url);
+    let acct = account
+        .service_account_hex()
+        .map(str::to_string)
+        .unwrap_or_else(|| fail("the local account record is malformed".into()));
+    let signer = account
+        .signing_key()
+        .unwrap_or_else(|e| fail(format!("cannot read the account key: {e}")));
+    let ledger_id = riir_refine::kat_migrate_client::fetch_ledger_id(&url)
+        .unwrap_or_else(|e| fail(format!("cannot read the ledger id: {e}")))
+        .unwrap_or_else(|| {
+            fail("this service has no ledger id (a pre-v2 ledger) — claims need auth v2".into())
+        });
+    // The v1 key: explicit `--key`, else the picker's default pick.
+    let v1_key = match flag("--key") {
+        Some(path) => match cv1::load_key_file(std::path::Path::new(&path)) {
+            Ok(k) => k,
+            Err(e) => fail(e),
+        },
+        None => {
+            let picks = ssh_picker::list_ed25519_keys_from_env();
+            let Some((from, _)) = ssh_picker::default_pick(&picks) else {
+                fail("no Ed25519 key in ~/.ssh to pick — pass --key <path>".into());
+            };
+            match cv1::load_key_file(&picks[from].path) {
+                Ok(k) => k,
+                Err(e) => fail(e),
+            }
+        }
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let req = cv1::compose(&v1_key, &signer, &acct, &ledger_id, now).unwrap_or_else(|e| fail(e));
+    // The local wire-compat gate BEFORE any code is spent: the same
+    // checks the worker runs, minus the store.
+    cv1::verify_locally(&req, &ledger_id).unwrap_or_else(|e| fail(format!("self-verify: {e}")));
+    println!("claim-v1: v1 identity {} → account {}", req.pseudonym, acct);
+    println!("claim-v1: this binds that authorship to your account (display only, write-once)");
+    let totp = flag("--totp").unwrap_or_else(t2_code);
+    match cv1::http::claim(&url, &req.body, Some(&totp)) {
+        Ok((200, body)) => println!("{body}"),
+        Ok((code, body)) => fail(format!("HTTP {code}: {body}")),
+        Err(e) => fail(e),
+    }
+}
+
 #[cfg(feature = "kat_transport")]
 fn run_kat_totp(mode: Option<&str>, code: Option<&str>) {
     use riir_kat::kat_totp_client::{TotpEnrollOutcome, TotpFailure};
@@ -9327,8 +9426,14 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             "login" | "account" | "update" | "upgrade" | "sync" | "claim" | "stake" | "unstake"
             | "vote" | "pay" | "topup" | "buy" | "kat" | "tuna" | "faucet" | "wetrun"
             | "config" | "replay" | "corpus-pr" | "get" | "send" | "migrate" | "totp"
+            | "claim-v1"
                 if args.paths.is_empty() && args.command.is_none() =>
             {
+                // The modifier-taking verbs take every remaining word as
+                // their arguments (the genesis/admin shape).
+                if arg == "claim-v1" {
+                    args.keys_args.extend(it.by_ref());
+                }
                 args.command = Some(match arg.as_str() {
                     "login" => KatCommand::Login,
                     "account" => KatCommand::Account,
@@ -9346,6 +9451,7 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
                     "get" => KatCommand::TunaGet,
                     "send" => KatCommand::TunaSend,
                     "migrate" => KatCommand::Migrate,
+                    "claim-v1" => KatCommand::ClaimV1,
                     "totp" => KatCommand::Totp,
                     "faucet" => KatCommand::Faucet,
                     "wetrun" => KatCommand::Wetrun,
@@ -9575,6 +9681,12 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
                 if arg == "keys" {
                     args.keys_args.push("list".to_string());
                 }
+                args.keys_args.extend(it.by_ref());
+            }
+            // Issue 150: `account claim-v1 …` — re-aims at ClaimV1 and
+            // takes every remaining word (the keys/custody shape).
+            "claim-v1" if args.command == Some(KatCommand::Account) && args.paths.is_empty() => {
+                args.command = Some(KatCommand::ClaimV1);
                 args.keys_args.extend(it.by_ref());
             }
             // The `kat totp` / `account totp` two-word shapes — the
@@ -13665,6 +13777,10 @@ fn main() {
             KatCommand::Keys => {
                 riir_refine::build_stamp::refuse("account keys", &["kat_transport"])
             }
+            #[cfg(feature = "kat_transport")]
+            KatCommand::ClaimV1 => run_kat_claim_v1(&args.keys_args),
+            #[cfg(not(feature = "kat_transport"))]
+            KatCommand::ClaimV1 => riir_refine::build_stamp::refuse("claim-v1", &["kat_transport"]),
             #[cfg(feature = "kat_transport")]
             KatCommand::Custody => run_kat_custody(&args.keys_args),
             #[cfg(not(feature = "kat_transport"))]

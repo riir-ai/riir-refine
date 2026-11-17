@@ -447,12 +447,12 @@ pub mod kat_redact;
 #[cfg(feature = "kat_service")]
 pub use riir_kat::{
     kat_account, kat_account_client, kat_admin_client, kat_adoption, kat_burn_client,
-    kat_fixstat_client, kat_genesis_client, kat_identity, kat_keyset_client, kat_lease_client,
-    kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account, kat_protocol_admin,
-    kat_protocol_burn, kat_protocol_fixstat, kat_protocol_genesis, kat_protocol_lease,
-    kat_protocol_migrate, kat_protocol_migrate_tally, kat_protocol_pay, kat_protocol_payreq,
-    kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop, kat_protocol_v2,
-    kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_stake_client,
+    kat_claim_v1_client, kat_fixstat_client, kat_genesis_client, kat_identity, kat_keyset_client,
+    kat_lease_client, kat_meter, kat_pay_client, kat_payreq_client, kat_protocol_account,
+    kat_protocol_admin, kat_protocol_burn, kat_protocol_fixstat, kat_protocol_genesis,
+    kat_protocol_lease, kat_protocol_migrate, kat_protocol_migrate_tally, kat_protocol_pay,
+    kat_protocol_payreq, kat_protocol_replay, kat_protocol_stake, kat_protocol_tuna_airdrop,
+    kat_protocol_v2, kat_protocol_vote, kat_protocol_wetrun, kat_replay_client, kat_stake_client,
     kat_tuna_admin_client, kat_vote_client, kat_wetrun,
 };
 #[cfg(all(feature = "kat_service", feature = "kat_transport"))]
