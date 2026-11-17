@@ -271,7 +271,7 @@ ed25519-dalek = "2"
 # the quiet bmo runner (added p50 0.086–0.170 / p95 0.798–0.973 ms/file, all
 # 3 interleaved rounds) + G3 PASS (applying domains rank-1 byte-identical).
 # sec stays opt-in (no file signal; Bench 140 axis unchanged).
-default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search", "shader_perf", "elo_k_eff"]
+default = ["clippy_lints", "rust_perf", "self_evolve", "docker", "rustc_errors", "dist", "kernel_pregate", "ruliology_search", "shader_perf", "elo_k_eff", "ane_pregate"]
 
 # Issue 122 PoC: the PowerPlay frontier miner — modelless generator at the
 # capability frontier (unsolved-before / solved-after / regression-green /
@@ -349,9 +349,9 @@ kernel_pregate = ["kernel_opt"]
 # host-orchestration domain — suggestion-only seed corpus distilled from
 # liquidcodec-ane (Research 409 R1–R6; two-source convergence kept).
 # Zero new deps; the retrieval surface + demonstrability column the
-# kernel_opt ANE family was drowning in. NOT default, NOT the release set
-# until the pregate's measured cost leg lands (the kernel_pregate
-# promotion precedent).
+# kernel_opt ANE family was drowning in. PROMOTED via ane_pregate
+# (Bench 377 P2.1: the G2 two-run-stable PASS — the pregate gate keeps
+# the domain's cost off non-ANE files; the owner's standing law applies).
 ane = []
 
 # Plan 377: the ANE pregate — the owner's two-pass ask ("code scan for ane
@@ -361,7 +361,11 @@ ane = []
 # out, then scopes the fan-out to the signal lines ± window (the
 # kernel_pregate shape, Issue 208 / Bench 131). Inert without `ane`; the
 # scan path is byte-identical without this feature. `RIIR_ANE_PREGATE=0`
-# (exact literal) is the DEMOTE-only env from birth.
+# (exact literal) is the DEMOTE-only env from birth. PROMOTED to default
+# + the release set 2026-11-17 (Bench 377 P2.1 two-run-stable PASS on bmo:
+# added p50 0.015/0.045 ms, p95 0.423/0.657 ms across the pair — 1.5–22×
+# under the 1.0/5.0 ceilings, utility floor 8/8 both runs — the owner's
+# standing law "gain no perf hurt must enabled by default").
 ane_pregate = ["ane"]
 
 # Issue 216 (the codegram POC, 2026-11-07): span-shape-keyed rule dispatch —

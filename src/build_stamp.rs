@@ -148,6 +148,17 @@ pub const RELEASE_FEATURES: &[&str] = &[
     // matcher it caches lives under latent_retrieval, which bare cargo
     // default does not compile.
     "index_cache",
+    // Plan 377 P2.1 — ane_pregate PROMOTED (two-run-stable G2 PASS on bmo,
+    // 2026-11-17: added p50 0.015/0.045 ms, p95 0.423/0.657 ms across the
+    // pair against the 1.0/5.0 ceilings — 1.5–22× headroom, utility floor
+    // 8/8 both runs, 728-file walk). The owner's two-pass ask made real:
+    // the needle scan detects ANE-bearing files before the ane domain's
+    // matcher fans out, so the domain's cost lands only where an ANE span
+    // signals. Implies ane — suggestion-only seed corpus, zero new deps
+    // (license graph unchanged; the licenses job names it — one feature
+    // list, lockstep). Kill-switch `RIIR_ANE_PREGATE=0` (the exact
+    // literal, DEMOTE-ONLY from birth).
+    "ane_pregate",
 ];
 
 /// The copy-pasteable rebuild for the shipped set. Deliberately names
