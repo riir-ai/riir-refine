@@ -54,6 +54,7 @@ fn node_id(kind: &str, digest: &[u8; 16]) -> String {
     }
 }
 
+#[cfg(feature = "rust_perf_bench")]
 fn hex_encode_lut_bench_spec() -> crate::domains::rust_perf::bench::BenchSpec {
     crate::domains::rust_perf::bench::BenchSpec {
         sizes: vec![1_024, 16_384, 262_144],
