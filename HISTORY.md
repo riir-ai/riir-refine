@@ -2,6 +2,11 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-18 — Batch 372 LANDED (Plan 310 / Research 349): the infinity tokio-family rust_perf distill
+
+rust_perf 365 → 369 (`entries_86`, hydro-project/infinity @ `1abc6fcff` Apache-2.0, clone read at the pin): `closed-channel-select-arm-gate` + `inline-actor-futures-pool-not-spawn-per-actor` (with the no-yield-idle-recheck rider + the recv-drain face completing the wake-economics triangle) + `defer-deferrable-inputs-while-work-in-flight` (concurrency, suggestion-only) + `streamed-chunk-tail-coalesce-kind-gated` (allocation, the BENCHABLE GOAT lead — the kind-gated tail-extend coalesce, alloc-axis bars pre-registered) + 2 count-neutral faces (cancel-sender-registration on the entries_06 oneshot host; stopped-thread admission on the entries_44 host) + the honest DROP of the dedup-ID discrimination candidate. Fixtures b372 12/12 pre-entry (the gate caught the wake-per-wave model among three arm defects). Full record: the .distill/001 Batch-372 row + the plan.
+- The B371-R1 wip debts repaired en-route (disclosed, attributed): the default-posture compile break (entries_85's bench-spec fn ungated vs the cfg-gated bench mod — E0433 at HEAD) + its CRLF line endings (fmt-normalized, content-neutral) + the three stale count pins (annotated/benchable-message/kernel-witness/health-total, each repaired to measured truth with the chain).
+
 ## 2026-11-18 — Issue 244 CLOSED (file removed): install name `cargo-refine` → `riir-refine` on crates.io, Homebrew and Scoop
 
 `refine` is taken on crates.io (rsalmei's file renamer) and in homebrew-core (a grammar checker); `riir-refine` was free. The binary stays `cargo-refine`, so `cargo refine` is unchanged. The publish surgery now sets the package name (`NAME=riir-refine`) and the binary name (`BIN=cargo-refine`) separately (`adf946bb`).

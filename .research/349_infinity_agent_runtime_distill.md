@@ -1,6 +1,6 @@
 # Research 349 — infinity agent-runtime distill (hydro-project/infinity @ `1abc6fcff1f186124f924b56aa92c3a3684c90c5`)
 
-**Status:** DISTILLED — pending owner decision (verdict 2026-10-29 ~13:5xZ; plan 310 = nominal Batch 306 claims plan-first at the next mining slot)
+**Status:** RECORD — LANDED 2026-11-18 (Batch 372, Plan 310, `entries_86`: rust_perf 365 → 369 — the batch's 4 own rules + 2 count-neutral faces; the landing commit is the arbiter; `dedup-id-only-naturally-non-idempotent-inputs` the honest DROP recorded on the plan)
 
 ## The source
 

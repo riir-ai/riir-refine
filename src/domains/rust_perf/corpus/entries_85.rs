@@ -111,7 +111,8 @@ fn run_fixed(inp: &mut Input) -> u64 {
 }
 
 fn fold(inp: &Input) -> u64 { inp.sink }
-"#.to_string(),
+"#
+        .to_string(),
     }
 }
 
