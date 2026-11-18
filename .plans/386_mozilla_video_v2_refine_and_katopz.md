@@ -1,6 +1,6 @@
 # Plan 386 — Mozilla video v2: "refine → katopz" (project demo + team vision, 2-min re-do)
 
-Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO batch + assets + build in flight · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
+Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
 Branch: `develop`
 
 The CFP line this answers: *"a link to a two-minute video showing the project and the
@@ -13,11 +13,11 @@ working and hear directly from the team about why it matters."* Two halves, in t
 - [x] Agent: storyboard + VO script + fact pins (this doc)
 - [x] Agent: `cargo refine help` verb (alias of `--help`) — riir-refine CLI — landed `73e6cfc3` (stdout, exit 0, byte-identical to `--help`)
 - [x] Agent: `cargo refine train` verdict — **DECLINED** (see §Verdicts V1); the video shows the trainer as a node, and the terminal uses the real `cargo refine update`
-- [ ] Agent: VO batch v5 on amo (Drama 3, inline `[excited]`/`[confident]`/`[warm]` tags, temp 0.8) — energy fix
-- [ ] Agent: assets — talk photo, riir-ai avatar, contribution heatmap + growth data measured from git
-- [ ] Agent: fframes rebuild (`~/git/mozilla-video`, new scene set) → inspect → strip → render
-- [ ] Agent: fresh Claude verdict on the render (facts + motion + slop)
-- [ ] Agent: `video-family` skill (riir-ai `.agents/skills/video-family/`)
+- [x] Agent: VO batch v5 on amo (Drama 3, inline `[excited]`/`[confident]`/`[warm]` tags, temp 0.8) — 17 takes, tags whisper-verified NOT spoken; t03 re-made ("Refine's"→"The suggestions from refine"); pace ≈1.8 words/s (voice-bound); names: katopz→"cat-ops", riir-ai→"rear AI" (owner listen)
+- [x] Agent: assets — talk photo, riir-ai avatar, heatmap (34,446 owner-authored commits · 110/110 days · 40 repos, Aug 1→Nov 18) + corpus growth (412→1,572 `rule_id`s, weekly from git) — regeneration commands in the video README
+- [x] Agent: fframes rebuild (`~/git/mozilla-video`, 15 scenes, `kit.rs` motion kit, `Xf` cross-fades) → inspect (clean but the deliberate Reflex code-wall bleed) → strips → render 120.13 s, −13.1 LUFS / −0.9 dBTP — mozilla-video `cda3e6c`
+- [x] Agent: fresh Claude verdict on the render (facts + motion + slop) — r1 REVISE, applied (§Verdicts V5)
+- [x] Agent: `video-family` skill (riir-ai `.agents/skills/video-family/`) — riir-ai `931620cdb`
 - [ ] Owner: listen-check v5 takes + watch the render; swap in the two pasted Zed images if the measured charts differ from them (they did not reach the agent session — §Assets)
 
 ## Look (web-family → video)
@@ -93,6 +93,26 @@ End-card line (on screen, not spoken): *Voice generated with Fish Audio Drama 3 
   the cues + temperature 0.8.
 - **V4 — container wording.** "inside a container" is pinned to the trainer window (F8) and the
   operator's node lane; the fixer VO keeps it to one clause — no sandbox-security claim beyond F7.
+
+- **V5 — fresh render verdict r1 (2026-11-18): REVISE → applied (mozilla-video `c73c88e`).**
+  Blockers: (1) "Refine's suggestions became two PRs" is FALSE by our own record — #2977 is
+  goodwill (owner verdict 2026-11-02, Bench 127), #3025 is issue-driven, not healer-emitted
+  (Bench 128 provenance) → the beat is now "Upstream goodwill → mozilla/sccache", VO "I also
+  give back upstream"; (2) "seven times faster" overstated → VO "from thirty-three seconds to
+  four", chip "test workload · 32 stalled reads"; (3) "only if you opt in" misstated the
+  consent default (the prompt defaults to anonymous share) → "Nothing leaves until you're
+  asked", chip "asked first · secret-blind"; (4) fixer "container" unsourced → dropped (the
+  trainer window keeps it, F8); (5) the perf mock overrode the owner's "mock it" — the real
+  `refine 2.4s` timing line replaces it (Claude verdict: an invented number in a
+  "technology working" video costs more than it buys; owner may re-instate with the DEMO chip);
+  (6) "34,446 commits · katopz" counts agent-authored commits → count dropped, heatmap labelled
+  "human + AI-agent commits", linear intensity; (7) a synthetic voice says "Hi, I'm katopz" →
+  legible AI-voice chip at T1 (agent half); recording t01/t07 in the owner's own voice is the
+  owner's option. Bounded fixes taken: "6 of 6 fixed", jargon line cut, "With Mozilla —",
+  growth relabelled "repair rules in refine's source". Kept (owner-asserted): trainer on our
+  GPUs (p08).
+- **F6 re-framed:** 33.596 s → 4.394 s on the Bench 128 test workload (32 stalled reads); the
+  reporter's own reproduction measured ≈4.9× — never say "seven times faster" bare.
 
 ## Assets
 
