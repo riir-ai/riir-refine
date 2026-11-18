@@ -1,6 +1,6 @@
 # Plan 386 — Mozilla video v2: "refine → katopz" (project demo + team vision, 2-min re-do)
 
-Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · **r2 (owner watch 2026-11-18): 'too excited, sometimes not, AI slop' → calm register re-cut — VO v6 ONE `[calm]` cue on every line (level spread −22.6..−25.4 dB vs v5's 6 dB swing; mix LRA 6.5→3.9 LU), no-overshoot motion, hype copy cut, install line → `cargo install riir-refine` (issue 244); render 120.00 s sha `b2ecea96…` (mozilla-video `5082379`); skill updated (riir-ai `670ce5c93`)** · **r3 (owner 2026-11-18): proof = the corpus grown by real use since August (dog-food start), not commit counts → heatmap dropped, corpus chart is the hero (412 @ 08-17 → 1,572); names respelled (Kat opz · R I I R, A I); render 122.07 s sha `79717f59…` (mozilla-video `191cac1`)** · **r4 (owner 2026-11-18): `cargo install riir-refine` confirmed working by owner; [calm] 'near boring' → measured cue probe, ONE `[confident]` cue (v7); 'six of six kept' jargon → 'All six stay'; render 120.40 s sha `06e6528d…` (mozilla-video `534fe65`)** · **r5 (owner 2026-11-18): 'talks too slow, like 0.8 speed' → takes at 1.25× (pitch-preserving atempo; Drama 3 has no speed knob, pace cues/ref swap measured ≤5%); render 102.40 s sha `ebb4b453…`** · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
+Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · **r2 (owner watch 2026-11-18): 'too excited, sometimes not, AI slop' → calm register re-cut — VO v6 ONE `[calm]` cue on every line (level spread −22.6..−25.4 dB vs v5's 6 dB swing; mix LRA 6.5→3.9 LU), no-overshoot motion, hype copy cut, install line → `cargo install riir-refine` (issue 244); render 120.00 s sha `b2ecea96…` (mozilla-video `5082379`); skill updated (riir-ai `670ce5c93`)** · **r3 (owner 2026-11-18): proof = the corpus grown by real use since August (dog-food start), not commit counts → heatmap dropped, corpus chart is the hero (412 @ 08-17 → 1,572); names respelled (Kat opz · R I I R, A I); render 122.07 s sha `79717f59…` (mozilla-video `191cac1`)** · **r4 (owner 2026-11-18): `cargo install riir-refine` confirmed working by owner; [calm] 'near boring' → measured cue probe, ONE `[confident]` cue (v7); 'six of six kept' jargon → 'All six stay'; render 120.40 s sha `06e6528d…` (mozilla-video `534fe65`)** · **r5 (owner 2026-11-18): 'talks too slow, like 0.8 speed' → takes at 1.25× (pitch-preserving atempo; Drama 3 has no speed knob, pace cues/ref swap measured ≤5%); render 102.40 s sha `ebb4b453…`** · **r6 (owner 2026-11-18, r5 lgtm): 'For example' framing + example chip/caption; secret blinded to `[REDACTED:github-token]` (code-checked); sccache beat = 'running refine across Mozilla's repos led us to s c cache' (Bench 128 provenance kept — 'refine found it' not claimed); domain roadmap chips; highlight emoji drift fixed; render 108.47 s sha `21eb03bc…` (mozilla-video `9b3ed73`)** · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
 Branch: `develop`
 
 The CFP line this answers: *"a link to a two-minute video showing the project and the
@@ -153,6 +153,20 @@ End-card line (on screen, not spoken): *Voice generated with Fish Audio Drama 3 
   fframes skill's no-retime rule governs the cut, and this is the TTS speed step the engine
   lacks. All 17 sped takes whisper word-perfect. VO 107 → 86 s; the video is now 1:42 (no
   padding back to 2:00).
+
+- **V11 — r6 owner asks (2026-11-18).** (a) "For example" before the dry run — AGREE, plus
+  an example chip + "your numbers will differ" caption on both heroes. (b) Secrets: code
+  check (`src/kat_sync_payload.rs` + `src/katplane/kat_redact.rs`) — every sent text field
+  passes `RedactionGate::check`; default `allow_redacted: false` blocks the whole row,
+  `true` blinds in place to `[REDACTED:<kind>]`; local `cargo refine scan` warns with the
+  value never shown → the scene shows flag → blind → stays home. (c) sccache provenance:
+  the owner asked to say refine found the perf issue; Bench 128 records the opposite ("none
+  of them is the backoff mechanism — scan = campaign record; fix = issue-driven") →
+  Claude verdict: say "Running refine across Mozilla's Rust repos led us to s c cache" and
+  open the beat on the real sweep roll-up (186 findings); "refine found it" stays unclaimed
+  unless new evidence lands. (d) End-card domain chips: kernel_opt, rust_perf, clippy, sec,
+  docker, dist (live) then ○ python, ○ js, ○ go (planned). (e) Highlight drift = the emoji
+  fallback advance; fixed in `sell_line`.
 
 ## Assets
 
