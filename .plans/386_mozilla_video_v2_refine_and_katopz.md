@@ -1,6 +1,6 @@
 # Plan 386 — Mozilla video v2: "refine → katopz" (project demo + team vision, 2-min re-do)
 
-Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb + VO batch + assets + build in flight · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
+Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO batch + assets + build in flight · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
 Branch: `develop`
 
 The CFP line this answers: *"a link to a two-minute video showing the project and the
@@ -11,7 +11,7 @@ working and hear directly from the team about why it matters."* Two halves, in t
 ## Tasks
 
 - [x] Agent: storyboard + VO script + fact pins (this doc)
-- [ ] Agent: `cargo refine help` verb (alias of `--help`) — riir-refine CLI
+- [x] Agent: `cargo refine help` verb (alias of `--help`) — riir-refine CLI — landed `73e6cfc3` (stdout, exit 0, byte-identical to `--help`)
 - [x] Agent: `cargo refine train` verdict — **DECLINED** (see §Verdicts V1); the video shows the trainer as a node, and the terminal uses the real `cargo refine update`
 - [ ] Agent: VO batch v5 on amo (Drama 3, inline `[excited]`/`[confident]`/`[warm]` tags, temp 0.8) — energy fix
 - [ ] Agent: assets — talk photo, riir-ai avatar, contribution heatmap + growth data measured from git
