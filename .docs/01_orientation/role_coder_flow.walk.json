@@ -2,7 +2,7 @@
  "gfflow_walk": 1,
  "generated_by": "reflex-site scripts/render_flows.py",
  "file": "role_coder_flow.svg",
- "title": "The coder loop: dry-run first, then the compile-gated fix — the meter draws TUNA before KAT",
+ "title": "The coder loop: dry-run first, then the compile-gated fix — free, anonymous, entirely on your machine",
  "accent": "#3fd68a",
  "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
  "steps": {
@@ -25,16 +25,10 @@
    "color": "#3fd68a"
   },
   "get": {
-   "n": "4a",
+   "n": "4",
    "title": "Fixed code",
    "lane": "me",
    "color": "#3fd68a"
-  },
-  "meter": {
-   "n": "4b",
-   "title": "Hosted-lane meter",
-   "lane": "bill",
-   "color": "#5cc8e8"
   }
  },
  "edges": [
@@ -49,16 +43,12 @@
   {
    "id": "fix->get",
    "back": false
-  },
-  {
-   "id": "fix->meter",
-   "back": false
   }
  ],
  "walk": [
   {
    "title": "Install",
-   "text": "One prebuilt binary (brew, scoop, or the install script) lands in ~/.cargo/bin — no repo clone, no build. Logged out it stays anonymous and is never billed.",
+   "text": "One prebuilt binary (Homebrew, Scoop, the install script, or `cargo install cargo-refine`) lands in ~/.cargo/bin — no repo clone, no build. It stays anonymous: fixing needs no account.",
    "steps": [
     "inst"
    ],
@@ -67,7 +57,7 @@
   },
   {
    "title": "Dry run first",
-   "text": "The bare `cargo refine` is a review: it lists the fixes it would make across your crate and writes nothing. No listing is published as a fixture — your code never leaves the machine, so this walk shows real bytes only where a step crosses to the fleet.",
+   "text": "The bare `cargo refine` is a review: it lists the fixes it would make across your crate and writes nothing. No listing is published as a fixture — your code never leaves the machine, so this walk shows real bytes only where a step crosses to the network.",
    "steps": [
     "dry"
    ],
@@ -89,23 +79,12 @@
   },
   {
    "title": "What you get",
-   "text": "Healed code across the shipped domains — clippy lints, compile errors, Rust perf, Dockerfiles, release profiles — plus the local self-evolve loop: memory always records, learning runs when the oracle is present.",
+   "text": "Healed code across the shipped domains — clippy lints, compile errors, Rust perf, Dockerfiles, release profiles — plus the local self-evolve loop: memory always records, learning runs when the oracle is present. Hosted lanes, where a deployment funds them, are metered by contribution points as fair use — never local healing.",
    "steps": [
     "get"
    ],
    "edges": [
     "fix->get"
-   ],
-   "illustrative": false
-  },
-  {
-   "title": "What a logged-in run reports",
-   "text": "Hosted-lane metering counts code words at one KAT-equivalent per million; where the deployment funds trial credit, TUNA pays first. The signed run report is pushed after the run, is watermark-deduped (replays are no-ops), and never carries your code.",
-   "steps": [
-    "meter"
-   ],
-   "edges": [
-    "fix->meter"
    ],
    "illustrative": false
   }

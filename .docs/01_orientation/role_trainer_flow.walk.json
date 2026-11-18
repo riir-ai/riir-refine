@@ -2,19 +2,19 @@
  "gfflow_walk": 1,
  "generated_by": "reflex-site scripts/render_flows.py",
  "file": "role_trainer_flow.svg",
- "title": "The trainer loop: stake, host the daily window — ours only at launch; the reward class is designed",
+ "title": "The trainer loop: bond, host a training window — ours only today; the reward class is designed",
  "accent": "#3fd68a",
  "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
  "steps": {
-  "stake": {
+  "bond": {
    "n": "1",
-   "title": "Stake 1K KAT",
+   "title": "Node bond",
    "lane": "net",
    "color": "#5cc8e8"
   },
   "win": {
    "n": "2",
-   "title": "The daily window",
+   "title": "The training window",
    "lane": "win",
    "color": "#3fd68a"
   },
@@ -27,7 +27,7 @@
  },
  "edges": [
   {
-   "id": "stake->win",
+   "id": "bond->win",
    "back": false
   },
   {
@@ -37,28 +37,28 @@
  ],
  "walk": [
   {
-   "title": "Stake 1K KAT",
-   "text": "The operator bond for hosting a window — designed for third parties; the stake machinery matures first. Local models stay optional and unarmed (measured quality + latency fail; a reopen bar is on record).",
+   "title": "The node bond (designed)",
+   "text": "A lock of 50 accrued contribution points — never a transfer, never a fee; a proven fault burns it into the expiry sink. Designed for third parties; the bond + serving machinery matures first. Local models stay optional and unarmed (measured quality + latency fail; a reopen bar is on record).",
    "steps": [
-    "stake"
+    "bond"
    ],
    "edges": [],
    "illustrative": false
   },
   {
-   "title": "The daily window",
-   "text": "One container, cron-start, sleep-after — billing is the run window only. The LLM lane is API-first with free legs and a USD cap. It runs today on our replicas only, and the page says so.",
+   "title": "The training window",
+   "text": "One container, cron-start, sleep-after — the rig cost is the run window only. The LLM lane is API-first with free legs and a USD cap. It runs today on our replicas only, and the page says so.",
    "steps": [
     "win"
    ],
    "edges": [
-    "stake->win"
+    "bond->win"
    ],
    "illustrative": false
   },
   {
    "title": "Endorsements (a designed class)",
-   "text": "Trainer endorsements plus an epoch pool share — the reward class settles when third-party hosts open; until then nothing is promised. v1 windows are fleet-funded from the USD treasury.",
+   "text": "Trainer endorsements plus a pool share — the reward class settles when third-party hosts open; until then nothing is promised. v1 windows are operator-funded.",
    "steps": [
     "get"
    ],

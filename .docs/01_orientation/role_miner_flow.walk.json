@@ -2,7 +2,7 @@
  "gfflow_walk": 1,
  "generated_by": "reflex-site scripts/render_flows.py",
  "file": "role_miner_flow.svg",
- "title": "The contributor loop: redacted records up, proof at real clippy, points at the epoch settle — and the corpus leases back",
+ "title": "The contributor loop: redacted records up, proof at real clippy, points at the weekly settle — and the corpus leases back",
  "accent": "#3fd68a",
  "intro": "Press play to walk the flow one step at a time, or click a dot to jump.",
  "steps": {
@@ -21,19 +21,19 @@
   "proof": {
    "n": "3",
    "title": "Proof queue",
-   "lane": "fleet",
+   "lane": "net",
    "color": "#5cc8e8"
   },
-  "pay": {
+  "points": {
    "n": "4a",
    "title": "Points at the settle",
-   "lane": "fleet",
+   "lane": "net",
    "color": "#5cc8e8"
   },
   "grow": {
    "n": "4b",
    "title": "The corpus grows",
-   "lane": "fleet",
+   "lane": "net",
    "color": "#5cc8e8"
   }
  },
@@ -47,7 +47,7 @@
    "back": false
   },
   {
-   "id": "proof->pay",
+   "id": "proof->points",
    "back": false
   },
   {
@@ -62,7 +62,7 @@
  "walk": [
   {
    "title": "Join once",
-   "text": "`cargo refine join` opts in with the contribution policy + GitHub login, and binds your account — one command, reversible (`cargo refine leave` stops every send; fixing was always local). Local healing never needs consent or network.",
+   "text": "`cargo refine join` opts in with the contribution policy + a read-only GitHub check, and binds your random client ID — one command, reversible (`cargo refine leave` stops every send; fixing was always local). Local healing never needs consent or network.",
    "steps": [
     "join"
    ],
@@ -71,7 +71,7 @@
   },
   {
    "title": "The redacted batch",
-   "text": "Every fix run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your account key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in.",
+   "text": "Every fix run auto-syncs the redacted batch: rule verdicts plus the short snippets each fix touched — secret-scanned, never whole files, never your paths, signed with your key. This is the network's published sample batch, so you can inspect exactly what leaves the machine before opting in.",
    "steps": [
     "bat"
    ],
@@ -100,12 +100,12 @@
   },
   {
    "title": "Points at the settle",
-   "text": "The epoch settle pays the pool to contributors (contributing = processing, proven = paid), within seven days of an accepted push. Contributed accounts are never re-gated while depleted. Live on riir.ai.",
+   "text": "At the weekly settle (Monday 00:00 UTC) checked outcomes accrue contribution points: a fix record accepted into the corpus intake, a reported miss a landed rule later heals, a fix merged upstream into a public repo, a rule landed in the community corpus. Node uptime, compute served, and fix attempts accrue nothing, by design. Points are non-transferable, never purchasable, never payment.",
    "steps": [
-    "pay"
+    "points"
    ],
    "edges": [
-    "proof->pay"
+    "proof->points"
    ],
    "illustrative": false
   },

@@ -9,7 +9,7 @@
   "q": {
    "n": "1",
    "title": "Unproven queue",
-   "lane": "fleet",
+   "lane": "net",
    "color": "#5cc8e8"
   },
   "drain": {
@@ -30,10 +30,10 @@
    "lane": "ops",
    "color": "#3fd68a"
   },
-  "pay": {
+  "settle": {
    "n": "4",
-   "title": "Pays on the board",
-   "lane": "fleet",
+   "title": "On the board",
+   "lane": "net",
    "color": "#5cc8e8"
   }
  },
@@ -55,14 +55,14 @@
    "back": false
   },
   {
-   "id": "gates->pay",
+   "id": "gates->settle",
    "back": false
   }
  ],
  "walk": [
   {
    "title": "The unproven queue",
-   "text": "Pushed rows wait for proof — nothing credits until a verifier re-runs the gate and the oracle. Live on riir.ai.",
+   "text": "Pushed rows wait for proof — nothing accrues until a verifier re-runs the gate and the oracle. Live on riir.ai.",
    "steps": [
     "q"
    ],
@@ -82,7 +82,7 @@
   },
   {
    "title": "Replay on your rig (designed)",
-   "text": "The third-party lane would lease queued fixes to your own CPU box, re-run the gate and the oracle locally, and — on K=2 agreement with a second verifier — share a bounded cut of the row's reward. The cut is pinned at zero until ratified; nothing is promised until it settles.",
+   "text": "The third-party lane would lease queued fixes to your own CPU box, re-run the gate and the oracle locally, and — on K=2 agreement with a second verifier — share a bounded cut of the row's points. The cut is pinned at zero until ratified; nothing is promised until it settles.",
    "steps": [
     "rep"
    ],
@@ -104,13 +104,13 @@
    "illustrative": false
   },
   {
-   "title": "Pays on the board",
-   "text": "Accepted work settles through the contributor rows on the public board — the operator lane's earn path today, in public.",
+   "title": "On the board",
+   "text": "Accepted work settles through the contributor rows on the public board — the operator lane today, in public.",
    "steps": [
-    "pay"
+    "settle"
    ],
    "edges": [
-    "gates->pay"
+    "gates->settle"
    ],
    "illustrative": false
   }

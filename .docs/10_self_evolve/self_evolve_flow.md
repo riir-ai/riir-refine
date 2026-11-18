@@ -2,16 +2,17 @@
 
 > **Purpose:** the one diagram that shows the WHOLE `cargo refine`
 > self-evolve loop end to end — the local per-run loop (modelless
-> L0–L2 + memory + learning) and the consent-gated fleet loop (mining →
-> proof → KAT → corpus growth → lease-back) that closes the flywheel
-> network-wide. Issue 131.
+> L0–L2 + memory + learning) and the consent-gated network loop (contributing →
+> proof → contribution points → corpus growth → lease-back) that closes the
+> flywheel network-wide. Issue 131; re-scoped to the contribution-points
+> plane (Proposal 025 v4).
 
 Two renders exist:
 
 - **The hero SVG** — `self_evolve_flow.svg` (+ the 390 px card list
   `self_evolve_flow_m.svg`), rendered from the ` ```gfflow ` block below
   (short labels: it must read at front-page scale on `refine.riir.ai`).
-  This is the pinned mirror the KAT network pages embed — the family
+  This is the pinned mirror the refine front embeds — the family
   flow-figure shape (numbered steps in path order, grouped into
   swimlanes; design guide §8, riir-ai Plan 620).
 - **The annotated diagram** — the full mermaid in this doc, with the
@@ -21,9 +22,10 @@ Two renders exist:
 ## The hero source (renders `self_evolve_flow.svg`) — the gfflow block
 
 Four lanes group the flywheel: your machine (the local pipeline), the
-learning loop, the opt-in KAT fleet, and the lease-back lane that closes
+learning loop, the opt-in contribution service, and the lease-back lane
+closes
 the wheel. The local pipeline counts 1→5; the record step branches —
-6a learns locally, 6b.1/6b.2 are the opt-in fleet loop, and step 7
+6a learns locally, 6b.1/6b.2 are the opt-in network loop, and step 7
 leases the fleet corpus back. Two back edges never take numbers:
 learning returns to retrieval, and the lease returns to retrieval.
 
@@ -37,7 +39,7 @@ id = "local"; label = "Your machine"; note = "every cargo refine run · free · 
 [[lane]]
 id = "loop"; label = "The learning loop"; note = "your outcomes, your machine"; color = "refine"
 [[lane]]
-id = "fleet"; label = "The KAT fleet"; note = "opt-in · the network side"; color = "ai"
+id = "fleet"; label = "The contribution service"; note = "opt-in · the network side"; color = "ai"
 [[lane]]
 id = "lease"; label = "Back to your machine"; note = "the wheel closes"; color = "refine"
 
@@ -72,7 +74,7 @@ status = "live"
 tag = { text = "opt-in · off by default", color = "refine" }
 [[step]]
 id = "proof"; n = "6b.2"; lane = "fleet"; col = 5
-title = "Proof + payout"; body = "verified at real clippy; the epoch settle pays points"
+title = "Proof, then points"; body = "verified at real clippy; the weekly settle accrues points"
 status = "live"
 [[step]]
 id = "lse"; n = "7"; lane = "lease"; col = 1
@@ -131,8 +133,8 @@ text  = "Only with consent do redacted records queue to leave: rule verdicts plu
 steps = ["mine"]
 in    = { lang = "json", src = "data/flows/self_evolve/02_batch.json", label = "one contribution batch (published sample)" }
 [[walk]]
-title = "Proof + payout"
-text  = "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Live on riir.ai."
+title = "Proof, then points"
+text  = "On sync, rows enter the proof queue and are verified at a real clippy re-run; at the weekly settle checked outcomes accrue contribution points to contributors. Live on riir.ai."
 steps = ["proof"]
 [[walk]]
 title = "The lease-back"
@@ -158,16 +160,14 @@ flowchart TB
 
     REC -->|"opt-in consent (join)"| OUT["contribution batch<br/>.refine/outbox"]
 
-    subgraph NET["network — the KAT fleet (riir.ai)"]
+    subgraph NET["network — the contribution service (riir.ai)"]
         direction LR
         OUT -->|"auto-sync push"| PROOF["proof queue<br/>verified at real clippy"]
-        PROOF --> SETTLE["epoch settle<br/>pays points to contributors"]
+        PROOF --> SETTLE["weekly settle<br/>accrues contribution points"]
         PROOF --> GROW["fleet corpus grows<br/>pattern classes per domain"]
     end
 
     GROW -->|"corpus leased back"| RET
-    SCAN -.->|"KAT / TUNA meter"| SETTLE
-    SCAN -.-> BURN["every scanning run burns fuel<br/>(watermarked, replay-safe)"]
 ```
 
 ## What each edge means (honest reading)
@@ -176,24 +176,25 @@ flowchart TB
   fix becomes a trajectory (memory half — runs in every build); the EMA
   direction update consumes only oracle-verified outcomes (learning
   half — no-ops with one log line without `clippy_verify`).
-- **record → mining batch is OPT-IN** (owner mandate 2026-09-08): the
-  consent tiers are `Unset` / `OptedIn` / `OptedOut`; `Unset` never
+- **record → contribution batch is OPT-IN** (owner mandate 2026-09-08):
+  the consent tiers are `Unset` / `OptedIn` / `OptedOut`; `Unset` never
   pushes — running `sync` IS the consent. A persisted opt-out record stops the push
   half; healing was always local.
-- **proof queue → epoch settle:** rows enter the proof queue on push,
-  are credited at the proof pass (real `cargo clippy` re-run), and pay
-  at the epoch settle — mining = processing, minted = paid (owner
-  vocabulary).
+- **proof queue → weekly settle:** rows enter the proof queue on push,
+  are credited at the proof pass (real `cargo clippy` re-run), and accrue
+  at the weekly settle (Monday 00:00 UTC) — checked outcomes accrue
+  contribution points; node uptime and compute accrue nothing (the
+  contribution vocabulary, Proposal 025 law 3).
 - **fleet corpus grows → leased back:** the corpus view aggregates the
   network's pattern classes; clients refresh a leased corpus overlay
-  (`DomainOverlay`) so retrieval sees what the fleet observed. The two
+  (`DomainOverlay`) so retrieval sees what the network observed. The two
   corpus truths are different by design (the fix lane compiles in its
   rules; the suggest lane ranks on the lease).
-- **scanning burns fuel** (dotted, annotated diagram only): every
-  scanning run — the bare dry run included — settles charge against
-  KAT, or TUNA trial credit first where the deployment funds it. The
-  burn is metered locally, reported signed, and advanced via a
-  server-side monotone watermark (replays no-op).
+- **local runs never touch points:** the dry run, `fix`, `scan` and
+  `corpus` are free and never blocked — points meter only hosted/expert
+  lanes, as fair use (Proposal 025 binding law 1). The KAT burn meter
+  belongs to the frozen lane upstream (internal builds; compiled out of
+  the public binary).
 
 ## Degenerate states (all honest, all silent-when-empty)
 
@@ -202,8 +203,9 @@ flowchart TB
 - No oracle → learning disabled, memory still records.
 - No consent → nothing leaves the machine; `.refine/outbox/` is named,
   never deleted.
-- Unfunded deployment → claims answer `unconfigured`, healing bills KAT
-  directly (fail-closed).
+- Unfunded deployment → healing stays free and local; the points plane
+  has no unfunded posture (the frozen KAT lane's meter exists only in
+  internal builds — the public binary carries no meter at all).
 
 ## Re-rendering the hero SVG
 
@@ -231,5 +233,5 @@ both mirror pairs together.
 - [`latent_fix_memory.md`](latent_fix_memory.md) — the memory layer
 - [`latent_skill_evolution.md`](latent_skill_evolution.md) — the EMA layer
 - [`evolve_recorder.md`](evolve_recorder.md) — the oracle-split recorder
-- The KAT surface: riir-dapps `front_page.rs` + `heal_skill.rs` (the
+- The contribution surface: riir-dapps `front_page.rs` + `heal_skill.rs` (the
   pinned SVG mirror lives in the worker's `self_evolve_flow.svg`)

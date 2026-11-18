@@ -50,7 +50,7 @@
   },
   "proof": {
    "n": "6b.2",
-   "title": "Proof + payout",
+   "title": "Proof, then points",
    "lane": "fleet",
    "color": "#5cc8e8"
   },
@@ -195,8 +195,8 @@
    }
   },
   {
-   "title": "Proof + payout",
-   "text": "On sync, rows enter the proof queue and are verified at a real clippy re-run; the epoch settle pays contribution points to contributors (contributing = processing, proven = paid). Live on riir.ai.",
+   "title": "Proof, then points",
+   "text": "On sync, rows enter the proof queue and are verified at a real clippy re-run; at the weekly settle checked outcomes accrue contribution points to contributors. Live on riir.ai.",
    "steps": [
     "proof"
    ],
