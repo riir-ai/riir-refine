@@ -30,7 +30,7 @@ earnings promise.
 
 ```mermaid
 flowchart LR
-    INST["install cargo-refine"] --> DRY["cargo refine — dry run<br/>private · nothing sent"]
+    INST["install riir-refine"] --> DRY["cargo refine — dry run<br/>private · nothing sent"]
     DRY --> FIX["cargo refine fix<br/>compile-gated writes"]
     FIX --> GET["GET — fixed code<br/>clippy · perf · docker · dist<br/>+ compile errors"]
     INST -.-> FREE["free · no account<br/>local healing never bills"]
@@ -38,7 +38,7 @@ flowchart LR
 
 | | |
 |---|---|
-| **Does** | install (one binary: `cargo install cargo-refine`, Homebrew, or a checksum-verified download) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine fix` (compile-gated writes; divergence classes stay manual). |
+| **Does** | install (one binary: `cargo install riir-refine`, Homebrew, or a checksum-verified download) · `cargo refine` dry run (private review, writes and sends nothing) · `cargo refine fix` (compile-gated writes; divergence classes stay manual). |
 | **Gets** | healed code across the shipped domains: clippy lints + compile errors, perf, Dockerfiles, release profiles (security, GPU-kernel and shader rules are in preview, not in the release). Plus the local self-evolve loop (memory always; learning when the oracle is present). |
 | **Shares** | nothing — anonymous and free. Fixing runs entirely on your machine; no account, no network, nothing reported or billed at run time. The fix keeps a local memory under the crate's `.refine/`, and deleting it starts fresh. |
 
@@ -86,7 +86,7 @@ from = "fix"; to = "get"
 
 [[walk]]
 title = "Install"
-text  = "One prebuilt binary (Homebrew, Scoop, the install script, or `cargo install cargo-refine`) lands in ~/.cargo/bin — no repo clone, no build. It stays anonymous: fixing needs no account."
+text  = "One prebuilt binary (Homebrew, Scoop, the install script, or `cargo install riir-refine`) lands in ~/.cargo/bin — no repo clone, no build. It stays anonymous: fixing needs no account."
 steps = ["inst"]
 [[walk]]
 title = "Dry run first"

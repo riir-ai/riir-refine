@@ -48,7 +48,7 @@
  "walk": [
   {
    "title": "Install",
-   "text": "One prebuilt binary (Homebrew, Scoop, the install script, or `cargo install cargo-refine`) lands in ~/.cargo/bin — no repo clone, no build. It stays anonymous: fixing needs no account.",
+   "text": "One prebuilt binary (Homebrew, Scoop, the install script, or `cargo install riir-refine`) lands in ~/.cargo/bin — no repo clone, no build. It stays anonymous: fixing needs no account.",
    "steps": [
     "inst"
    ],
