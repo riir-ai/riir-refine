@@ -441,7 +441,7 @@ jobs:
             exit 1
           fi
           mkdir -p bucket
-          cat > "bucket/cargo-refine.json" <<EOF
+          cat > "bucket/riir-refine.json" <<EOF
           {
               "version": "${VERSION}",
               "description": "Refine - the code fixer that learns: clippy, rust perf, docker and rustc-error fixes for Rust crates",
@@ -462,12 +462,12 @@ jobs:
           EOF
           git clone -q --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${BUCKET_REPO}.git" bucket_repo
           mkdir -p bucket_repo/bucket
-          cp "bucket/cargo-refine.json" "bucket_repo/bucket/cargo-refine.json"
+          cp "bucket/riir-refine.json" "bucket_repo/bucket/riir-refine.json"
           cd bucket_repo
           git config user.name "cargo-refine-release-bot"
           git config user.email "bot@users.noreply.github.com"
           git checkout -q -b "release/${TAG}"
-          git add "bucket/cargo-refine.json"
+          git add "bucket/riir-refine.json"
           git commit -qm "cargo-refine ${TAG}"
           git push -q -f origin "HEAD:refs/heads/release/${TAG}"
           gh pr create -R "$BUCKET_REPO" --head "release/${TAG}" --base main \

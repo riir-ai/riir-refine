@@ -309,7 +309,7 @@ Windows (PowerShell):
 
 ```powershell
 scoop bucket add riir-ai https://github.com/riir-ai/scoop-bucket
-scoop install cargo-refine
+scoop install riir-refine
 # or the script:
 irm https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.ps1 | iex
 ```
