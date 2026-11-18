@@ -1,6 +1,6 @@
 # Plan 383 — mlx-learn certified-prefilter + compensated-numerics batch (nominal Batch 370)
 
-**Status:** IN FLIGHT — claimed by zed-f62ef364@4090 (takeover 2026-11-18: prior lease expired 07:28Z with zero corpus work landed — only the claim commit 710ab7296; batch number re-verified: 368 landed per snapshot head → this is Batch 369)
+**Status:** LANDED 2026-11-18 as Batch 370 (commit 29e26436; lease FOLDED — zed-f62ef364, epoch 1794987125, expiry 2026-11-20T07:32:05+00:00 released at landing)
 **RENUMBERED 2026-11-18 07:5xZ → nominal Batch 370:** the plan-384 sybil lane (shikuwa-4090-b369) allocated Batch 369 first-push at 07:28:54Z (commit 76811c50) — first-allocation wins, every citing site moved (plan header, fixture filenames b369→b370, batch test names, research note queue slot). No corpus content was landed under 369 by this lane (fixtures authored under the 369 name were renamed pre-landing, zero external citations).
 **Claimed:** zed-f62ef364, 1794987125, expires 2026-11-20T07:32:05+00:00
 
@@ -25,4 +25,4 @@ Distills `tabulai/mlx-learn` @ `07054ce32b5b19db7b78b3d4c69e1d2446b3389b` (Apach
 - [ ] [-] GOAT record if any benchable cell runs (`.benchmarks/<next>_batchN_goat_cells.md`, numbering discipline + dual-allocation gate at push).
 - [ ] - [x] Research note status flip + queue-snapshot landing block; AGENTS.md counts + HISTORY.md ledger line.
 - [ ] `rm -rf .raw/mlx-learn` at close (stale `.raw` on a landed batch = unfinished batch).
-- [ ] - [ ] Commit+push on `develop` (conventional prefix; `Session:` line in the body; only this batch's named files — the tree is shared).
+- [ ] - [x] Commit+push on `develop` — LANDED `29e26436` (batch 370; the merged MM files + the still-staged batch-369 rust_perf set folded in, disclosed in the commit body + the snapshot block; coordination mail 01a1ee17) (conventional prefix; `Session:` line in the body; only this batch's named files — the tree is shared).
