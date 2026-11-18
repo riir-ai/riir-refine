@@ -7292,6 +7292,7 @@ USAGE:
                                        Show the matching rules per code span, no edits
 {compile}{account}{points}    cargo refine --stats [on|off]      Share rule-and-count stats (opt-in, never your code or paths)
     cargo refine --version             Version and the features this build carries
+    cargo refine help                  This page (same as --help)
     cargo refine --help-all            Every flag, including maintainer reports
 
 Rule domains in this build: {list}",
@@ -7409,7 +7410,7 @@ USAGE:
                     verbs). Flags that take a VALUE (`--stats on`, the
                     `--active-set-*` family) keep their flag spellings; words
                     already claimed by other planes (`stats`/`info` = the points
-                    surface, `version` = --version) are theirs.
+                    surface, `version` = --version, `help` = --help) are theirs.
     --suggest       Suggest mode (alias of the `suggest` verb): print matching rules
                     per code span (no edits).
     --fix           Fix mode: apply the compiled-in proposers' span-preserving edits
@@ -9601,6 +9602,13 @@ fn parse_args_from(argv: impl IntoIterator<Item = String>) -> Args {
             // below dispatches on args.version.
             "version" if args.paths.is_empty() && args.command.is_none() => {
                 args.version = true;
+            }
+            // Plan 386 V2: `help` — the verb alias of --help (same page,
+            // stdout, exit 0). Only as the first word: `cargo refine fix help`
+            // still treats `help` as a path.
+            "help" if args.paths.is_empty() && args.command.is_none() => {
+                println!("{}", user_help());
+                std::process::exit(0);
             }
             // Plan 342: the machine-local posture verbs — local-only,
             // ungated (a charitable build owns its choices too), parsed
