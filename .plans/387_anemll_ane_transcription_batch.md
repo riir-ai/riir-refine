@@ -1,0 +1,25 @@
+# Plan 387 — anemll-forge ANE-hybrid transcription batch
+
+**Status:** staged — Claude verdict AGREE (2 rounds, session c676122d) recorded 2026-11-18; awaiting a batch window (Research 421)
+
+Distills `Anemll/anemll-forge` @ `v8-gpu-ane-prefill` (PIN `912925f7f0579c0918786267a7457f7abb36e597`,
+MIT, tip 2026-11-17) into a mixed transcription batch: ane-domain majority + rust_perf caching.
+**This is a BRANCH-DELTA RE-GRADE of the 2026-09-30 verdict** (@ `117ded62`, MARGINAL C+ / LANE
+INTEL HIGH, lane record `../riir-ai/.research/392_Anemll_Forge_ANE_GDN_Numerics_Distill.md`) — the
+v8 branch is new material; the historical-import atoms re-grade as re-reads. Verdict + candidate
+table + NEW/RE-READ tags + quotes: `.research/421_anemll_forge_ane_hybrid_prefill_distill.md`.
+
+- [ ] T0 re-clone + re-pin the branch (fast-moving; the 421 quotes are pinned at `912925f7` — byte-verify EVERY cited quote at the new sha before any entry lands; a moved quote = re-grade the row) **+ prove the NEW/RE-READ tags with the two-pin diff: `git fetch origin 117ded62a79806fa96554b5a34eb2d5c055b15eb` then `git diff --stat 117ded62..912925f` — a candidate whose source text exists at BOTH pins is RE-READ regardless of its tag here**
+- [ ] T0b read the UNREAD residue named in Research 421 (`QUANTIZATION_NOTES.md`, `RESULTS_M5_MAX_INT8.md`, `COREAI_PORT_NOTES.md`, `V8_SERVER.md` body, `coreai/` + `scripts/` code, `prototypes/*.py`) — upgrade/kill rows per findings; record any new candidates in the research note
+- [ ] T1 dedup re-verification: 3+ vocabularies per candidate over ane + rust_perf + kernel_opt + sec corpora at landing HEAD (the 421 greps were at the pre-batch HEAD; the ane family may have moved); read every hit's rule_id and adjudicate in-row; dedup-at-mining binds. **ALSO re-read the 09-30 record (`../riir-ai/.research/392`) before authoring** — it owns the absorption lead, the silu rider, the lazy-commit fold, the multifunction intel, the per-stage-tap method
+- [ ] T2 author entries (all suggestion-only, all `bench_spec: None`, NotBenchable-by-domain disclosed per rule — the criterion-1 domain-miss class, Batch-136 precedent):
+  - [ ] ane: `ane-int8-matmul-shape-silent-wrong-gate` (A4, the lead) · `ane-stage-parity-gate-cpu-vs-ane-same-model` (A1, B− — batch lane decides rule-form vs the 09-30 lane-intel classification) · `ane-hybrid-pipeline-block-granularity-not-layer-interleave` (A8) · `ane-prediction-gap-fewer-bigger-calls` (A9) · `ane-concurrent-same-function-silent-corruption` (A10) · `ane-host-output-pool-unbounded-call-bound` (A6) · `ane-package-size-build-gate-before-kernel-panic` (A7, face-or-rule decision at authoring)
+  - [ ] rust_perf: `snapshot-state-kv-prefix-consistency-drop-invalid` (R2) · A5 as FACE on entries_74 `one-program-many-functions-accelerator-service-memory` (the landed rule owns the axis; the regime split rides its context_notes)
+  - [ ] ~~kernel_opt: `gdn-speculative-lazy-commit-pending-rows`~~ — **DROPPED at verdict round 1** (the 09-30 verdict folded lazy-commit into `gdn-transition-replay-log-commit-many` B178/B182; the design's second-instance confirmation is recorded in Research 421, never a new entry)
+  - [ ] faces (count-neutral): F3 on rust_perf entries_74 `ane-split-calibration-fit-bandwidth-interference-term` (the M6 work-class decomposition + wake/spin interference — NEW) · F2's partial-sum-pole delta FOLDS into the 09-30 QUEUED LEAD `operand-rescale-exact-norm-absorption` at its GDN-kernel touchpoint (the absorption identity is the lead's, never re-claimed) · F1 is the 09-30 silu rider (record beside it, never a new face)
+- [ ] T3 fixtures: original minimal Rust reproductions per rule (the four-arm discipline where applicable); standalone-compiled AND executed BEFORE entry; F4's positive instances recorded in the batch note, never landed
+- [ ] T4 standing gates: clippy at default + all-features + no-default postures; `scripts/fmt_gate.py`; retrieval floor gate both lanes (HELD or re-pin with reason); corpus needles pass
+- [ ] T5 count pins one-landing: `scripts/pins_manifest.py --write` + AGENTS.md counts + README + `.docs/11_domains/` heads + health_views + the ane corpus header count — in the landing commit (kernel_opt delta now ZERO — adjust the witness walk accordingly)
+- [ ] T6 score-bench run (corpus-touching landing); freeze/score-bench NOT owed unless clippy_lints delta > 0 (none expected — assert in the landing note)
+- [ ] T7 lane-intel follow-through: (a) file the bench_preflight ANE-interference issue in riir-reflex (the F3/F4 pmset blind spot — verdict-round-1 disposition: an issue, not a mention; own numbering discipline, separate commit in that repo) · (b) the 1179 feed line + league-doc reference row remain NAMED recommendations only (1179 is PAUSED today; no sibling edits from this lane beyond the reflex issue in (a))
+- [ ] T8 commit + push (queue snapshot landing row + research note Status flip to RECORD + this plan's checkboxes); teardown: `rm -rf .raw/anemll-forge` in the same session
