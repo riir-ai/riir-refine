@@ -305,7 +305,7 @@ pub fn decide(cache: Option<&UpdateCache>, now: i64, installed: &str) -> Plan {
 ///
 /// Issue 221 P4 step 5: the crates.io route rides the same line. A
 /// crates.io-lane build (Issue 225's lane stamp) LEADS with `cargo install
-/// cargo-refine` — cargo owns that binary, and `upgrade` refuses it; a
+/// --force riir-refine` — cargo owns that binary, and `upgrade` refuses it; a
 /// source/binary-lane build keeps `cargo refine upgrade` and names the
 /// crates.io route as the parenthetical.
 #[must_use]
@@ -314,7 +314,12 @@ pub fn alert_line(latest: &CachedRelease, installed: &str) -> Option<String> {
 }
 
 /// The cargo command that upgrades a crates.io install.
-pub const CRATESIO_UPGRADE: &str = "cargo install cargo-refine";
+///
+/// Issue 244: the crates.io package is `riir-refine` (`refine` is taken);
+/// the binary stays `cargo-refine`. `--force` is load-bearing for the
+/// migration — a box that installed the legacy `cargo-refine` PACKAGE owns
+/// the same binary path, and cargo refuses the new package without it.
+pub const CRATESIO_UPGRADE: &str = "cargo install --force riir-refine";
 
 /// The pure half of [`alert_line`] — the lane is a parameter so both
 /// postures are testable from one build.
@@ -1069,7 +1074,7 @@ mod tests {
     }
 
     /// Issue 221 P4 step 5: a crates.io-lane build leads with (and only
-    /// names) `cargo install cargo-refine` — `upgrade` refuses that build.
+    /// names) `cargo install riir-refine` — `upgrade` refuses that build.
     #[test]
     fn cratesio_lane_alert_leads_with_cargo_install() {
         let line = alert_line_for(&release("0.3.0", None), INSTALLED, true).expect("newer alerts");

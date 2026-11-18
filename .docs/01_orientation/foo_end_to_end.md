@@ -28,7 +28,7 @@
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/riir-ai/cargo-refine/main/install.sh | sh
-# or: brew tap riir-ai/tap && brew trust riir-ai/tap && brew install cargo-refine
+# or: brew tap riir-ai/tap && brew trust riir-ai/tap && brew install riir-refine
 ```
 
 **This does not work yet, and the reason is not a copy problem.**

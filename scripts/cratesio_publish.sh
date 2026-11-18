@@ -10,7 +10,9 @@
 # rewriting — same ref + same args -> byte-identical manifest.
 #
 # The surgery, item by item (issue 221 Findings B + the P2a world):
-#   [package]     canonical rows: name -> --name, version -> --version,
+#   [package]     canonical rows: name -> --name (default riir-refine, issue 244;
+#                 the legacy `cargo-refine` crate name is still accepted for a
+#                 final migration release), version -> --version,
 #                 publish = true; license = "MIT" rides from the dev manifest
 #                 (P0(c)); + the include list (src/**, build.rs,
 #                 build_commit.rs, the kernel_opt wgsl fixture the default
@@ -39,12 +41,13 @@
 #                 REWRITTEN to ["compile_oracle", "scoped_recheck"] (it
 #                 implies latent_retrieval in the dev tree — the retrieval
 #                 leg is binaries-only); default GAINS fix_verify +
-#                 update_check so `cargo install cargo-refine` yields the
+#                 update_check so `cargo install riir-refine` yields the
 #                 full registry product.
 #   targets       all [[test]]/[[bench]]/[[example]] rows dropped (their
 #                 dirs stay out of the include list; their required-features
-#                 name removed features); [[bin]] keeps ONLY the --name bin
-#                 (cargo-refine) as a canonical block with required-features
+#                 name removed features); [[bin]] keeps ONLY the $BIN bin
+#                 (cargo-refine — FIXED, independent of the package name, so
+#                 `cargo refine` keeps working) as a canonical block with required-features
 #                 pruned of removed features; corpus_diagnose +
 #                 wasm-validator-build are binaries-only bins.
 #   [patch.*]     both dropped (sibling vendor forks — dead weight in a
@@ -64,16 +67,21 @@
 # Usage:
 #   scripts/cratesio_publish.sh                       # full gate, registry mode
 #   scripts/cratesio_publish.sh --kc-source sibling   # pre-P1 surgery gate
-#   scripts/cratesio_publish.sh --ref v0.4.8 --name cargo-refine \
+#   scripts/cratesio_publish.sh --ref v0.4.8 --name riir-refine \
 #       --version 0.4.8 --kc-version 0.4.2
 #
 # Exit codes: 0 green · 1 any gate red · 2 usage/refusal.
 
 set -eu
 
-NAME=cargo-refine
+# Issue 244: the PACKAGE name (what `cargo install` takes) and the BIN name
+# (what `cargo refine` dispatches to) are separate axes. `refine` is taken on
+# crates.io (and homebrew-core), so the package is riir-refine; the bin stays
+# cargo-refine forever — renaming it would break the `cargo refine` verb.
+NAME=riir-refine
+BIN=cargo-refine
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-KC_VERSION=0.4.2
+KC_VERSION=0.5.0   # the P1 cascade version cargo-refine 0.5.0/0.5.1 shipped against
 KC_SOURCE=registry
 REF=HEAD
 KEEP_STAGE=0
@@ -120,11 +128,12 @@ rm -rf "$STAGE/crates" "$STAGE/vendor" "$STAGE/validator_src" \
 echo "   staged $STAGE"
 
 # ── 2. the manifest surgery ─────────────────────────────────────────────────
-python3 - "$STAGE/Cargo.toml" "$NAME" "$VERSION" "$KC_VERSION" "$KC_SOURCE" "$KC_PATH" <<'PYEOF'
+python3 - "$STAGE/Cargo.toml" "$NAME" "$VERSION" "$KC_VERSION" "$KC_SOURCE" "$KC_PATH" "$BIN" <<'PYEOF'
 import re, sys
 
-path, name, version, kc_version, kc_source, kc_path = (
-    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6])
+path, name, version, kc_version, kc_source, kc_path, bin_name = (
+    sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6],
+    sys.argv[7])
 lines = open(path).read().splitlines(keepends=True)
 
 # The dropped PRIVATE dep crate names (issue 221 Findings B table, post-P2a).
@@ -417,7 +426,7 @@ for idx, line in enumerate(out):
 kept_bin = None
 for blk in bins:
     nm = re.search(r'name\s*=\s*"([^"]+)"', "".join(blk))
-    if nm and nm.group(1) == name:
+    if nm and nm.group(1) == bin_name:
         rf = re.search(r"required-features\s*=\s*\[(.*?)\]", "".join(blk))
         req = [e.strip().strip('"') for e in rf.group(1).split(",")] if rf else []
         kept_bin = [r for r in req if r not in removed_features]
@@ -425,7 +434,7 @@ if kept_bin is not None:
     out.append("# The publish bin — the unified CLI. required-features pruned at\n")
     out.append("# surgery (removed features are binaries-only; issue 221 P2).\n")
     out.append("[[bin]]\n")
-    out.append(f'name = "{name}"\n')
+    out.append(f'name = "{bin_name}"\n')
     out.append('path = "src/bin/heal.rs"\n')
     if kept_bin:
         out.append("required-features = [" + ", ".join('"%s"' % r for r in kept_bin) + "]\n")
@@ -533,11 +542,11 @@ if ! cargo build --release --quiet > "$STAGE/build.log" 2>&1; then
     tail -30 "$STAGE/build.log" >&2
     exit 1
 fi
-[ -x "$CARGO_TARGET_DIR/release/$NAME" ] || { echo "FAIL: bin not built" >&2; exit 1; }
+[ -x "$CARGO_TARGET_DIR/release/$BIN" ] || { echo "FAIL: bin not built" >&2; exit 1; }
 echo "   build ✓"
 # Verdict round-2 fix 1: a binary that builds but won't run fails the gate —
 # never a silent pass (the --version leg exercises the build-stamp path).
-if ! "$CARGO_TARGET_DIR/release/$NAME" --version > "$STAGE/bin_version.log" 2>&1; then
+if ! "$CARGO_TARGET_DIR/release/$BIN" --version > "$STAGE/bin_version.log" 2>&1; then
     echo "FAIL: the built bin refuses --version; tail:" >&2
     tail -5 "$STAGE/bin_version.log" >&2
     exit 1

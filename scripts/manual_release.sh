@@ -118,7 +118,7 @@ else
 fi
 
 echo "== tap/scoop manifest bumps (the CI pipeline opened PRs; manual mode edits main directly)"
-echo "   NOTE: bump riir-ai/homebrew-tap Formula/cargo-refine.rb (version + 4 sha256 from"
+echo "   NOTE: bump riir-ai/homebrew-tap Formula/riir-refine.rb (version + 4 sha256 from"
 echo "   $DIST/SHA256SUMS) and gist-rs/scoop-bucket bucket/cargo-refine.json (version +"
 echo "   windows-gnu url + hash), commit + push each — or merge the CI PRs when billing"
 echo "   is fixed and CI ran instead."

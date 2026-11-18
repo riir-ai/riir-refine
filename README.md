@@ -296,7 +296,7 @@ Homebrew 6+ refuses untrusted taps, so the trust step is part of the install):
 ```sh
 brew tap riir-ai/tap
 brew trust riir-ai/tap
-brew install riir-ai/tap/cargo-refine
+brew install riir-ai/tap/riir-refine   # formula renamed from cargo-refine (issue 244); binary unchanged
 ```
 
 or the checksum-verified script (macOS/Linux):

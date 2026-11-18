@@ -51,7 +51,7 @@ pub const COMPILED_FEATURES: &str = env!("RIIR_CLIPPY_COMPILED_FEATURES");
 pub const BUILD_COMMIT: &str = env!("RIIR_REFINE_BUILD_COMMIT");
 
 /// The build LANE (Issue 225): `crates.io` when the publish surgery's lane
-/// marker was in the package (`cargo install cargo-refine`), else `source`
+/// marker was in the package (`cargo install riir-refine`), else `source`
 /// (the dev tree and the prebuilt binaries). On the crates.io lane
 /// [`BUILD_COMMIT`] is the published ref's commit, resolved at surgery time.
 pub const BUILD_LANE: &str = env!("RIIR_REFINE_BUILD_LANE");
