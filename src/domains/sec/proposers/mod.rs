@@ -281,6 +281,7 @@ pub mod cache_mask_key;
 pub mod call_once_keep_result;
 pub mod callback_lock_invoke;
 pub mod capacity_silent_truncate;
+pub mod clamp_tail_error_term;
 pub mod client_ip_forwarded;
 pub mod cors_any_creds;
 pub mod decay_gate_low_precision;

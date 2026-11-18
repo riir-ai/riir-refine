@@ -60,8 +60,7 @@ fn main() {
     // adjudicator keys on this; never infer an arm from file names).
     let compiled_ane = cfg!(feature = "ane");
     let compiled_pregate = cfg!(feature = "ane_pregate");
-    let demoted =
-        std::env::var("RIIR_ANE_PREGATE").as_deref() == Ok("0");
+    let demoted = std::env::var("RIIR_ANE_PREGATE").as_deref() == Ok("0");
     let arm = if !compiled_ane {
         "baseline"
     } else if !compiled_pregate || demoted {
@@ -130,9 +129,11 @@ fn main() {
         let mut misses: Vec<String> = Vec::new();
         for (idx, (src, path)) in ANE_SPANS.iter().enumerate() {
             let spans = matcher.suggest_file(src, path, TOP_K);
-            let cited = spans
-                .iter()
-                .any(|s| s.by_domain.iter().any(|(d, _)| *d == riir_refine::draft::DomainId::Ane));
+            let cited = spans.iter().any(|s| {
+                s.by_domain
+                    .iter()
+                    .any(|(d, _)| *d == riir_refine::draft::DomainId::Ane)
+            });
             if !cited {
                 misses.push(format!("fixture#{idx} ({path})"));
             }

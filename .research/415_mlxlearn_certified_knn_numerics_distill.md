@@ -1,6 +1,6 @@
 # Distill: tabulai/mlx-learn — certified KNN prefilter + device compensated numerics
 
-**Status:** DISTILLED — pending owner decision
+**Status:** RECORD — LANDED as Batch 370 (Plan 383, 2026-11-18; the batch was staged as nominal 369, renumbered 370 pre-landing — the plan-384 sybil lane allocated 369 first-push, commit 76811c50 07:28:54Z, first-allocation wins). T0 at the landing: two reader subagents verified every quote at the pin `07054ce3`; SIX citation corrections carried — (1) the device files live under `src/mlxlearn_device/` (screen/integer/precision/compensated), config.py at `src/mlxlearn/_common/config.py`; (2) the carry-widening quotes live in `_neighbors_integer.py:350-355` + `docs/knn-integer-certificate.md:23-26`, NOT the compact certificate doc; (3) the participation probe lives in `_neighbors.py:54-119`, NOT `neighbors/_base.py`; (4) R4's second cite `:261-263` → `:260-262`; (5) the precision header spans `:9-259` with two proved exact sub-tier shortcuts (common-exponent int64 :144-166, rebased 4-limb :170-187); (6) F2's gate code is `svm/_classes.py:248-273`. Version prose: the pin is tag v0.1.3 (not 0.1.0a2).
 
 - **Source:** https://github.com/tabulai/mlx-learn @ `07054ce32b5b19db7b78b3d4c69e1d2446b3389b` (tip read 2026-11-16; Apache-2.0; full clone at `riir-refine/.raw/mlx-learn`, **removed at verdict close** — re-clone at the pin for authoring).
 - **Inspection date:** 2026-11-16 (M3, `zed-m3-mlxlearn@m3`).
@@ -69,4 +69,4 @@ Not fired. The patterns face numpy/scikit-learn/FAISS ecosystems; no famous-Rust
 
 ## Queue slot
 
-Nominal **Batch 369** (367 = opal in flight, 368 = kache staged — re-derive at landing per the standing rule). Plan **383** (created with this note). Research note **415** (this file).
+LANDED as **Batch 370** (renumbered from nominal 369 — the plan-384 sybil lane allocated 369 first-push; every citing site moved). Plan **383**. Research note **415** (this file). Entries: kernel_opt `entries_gpu_158` (R2/R1/R3/NC1), sec corpus (R4). Faces F1 (B105 output-verify arm) + F2 (B111 decisive-axis/both-counts/class-exclusion arm) landed count-neutral on their owners. Dropped at authoring: NC2 `sorted-insert-shift-chain-expanded-to-registers` (C+/B− — bounded private-array→register expansion is layout engineering whose fix-space is device-compiler-shaped; recorded in the subagent's readout) + NC3 `capability-refusal-before-lossy-conversion` (C+ — half (a) refusal-layer classification, half (b) the house refuse-loud posture with no new corpus shape).

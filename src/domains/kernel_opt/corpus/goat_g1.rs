@@ -89,7 +89,7 @@ use crate::domains::kernel_opt::KernelRule;
 #[must_use]
 pub fn expected_corpus_files() -> Vec<String> {
     let mut names = vec!["entries_popcorn".to_string()];
-    for n in 1..=157 {
+    for n in 1..=158 {
         if n < 10 {
             names.push(format!("entries_gpu_{n:02}"));
         } else {
@@ -376,6 +376,7 @@ fn per_file_entries() -> Vec<(String, Vec<KernelRule>)> {
         entries_gpu_155,
         entries_gpu_156,
         entries_gpu_157,
+        entries_gpu_158,
         entries_gpu_37,
         entries_gpu_36,
         entries_gpu_01,
@@ -1301,7 +1302,7 @@ mod tests {
     #[test]
     fn expected_corpus_files_cover_all_batches() {
         let names = expected_corpus_files();
-        assert_eq!(names.len(), 158); // popcorn + gpu_01..154 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues)
+        assert_eq!(names.len(), 159); // popcorn + gpu_01..158 (the B335 repair caught 148; B336 keeps the census current at landing; B338 continued; B339 continued; B337 continued; B341 continued; B345 continues; B370 continues)
         assert_eq!(names[0], "entries_popcorn");
         assert!(names.contains(&"entries_gpu_09".to_string()));
         assert!(names.contains(&"entries_gpu_10".to_string()));

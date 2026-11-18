@@ -2499,7 +2499,19 @@ mod tests {
                     // placement — attracts one more generic-Rust span to a
                     // kernel centroid). Floor = measured − 5 = 96 per the
                     // Plan-030 convention.
-                    96.0 / 171.0
+                    // Batch 369 re-pin (2026-11-18, Plan 384 / Research 417,
+                    // the sybil inference-optimisation-skill distill):
+                    // MEASURED 105/188 (55.9%) — population 171 → 188: the
+                    // ane seed's spans (Plan 377, landed post-B368) + this
+                    // batch's six measurement-honesty entries joined the
+                    // labeled population; routing kept up (+9 correct) but
+                    // the ratio dipped one hair under the old floor (the
+                    // Issue-170 shared-vocabulary competition class — the
+                    // measurement-honesty entries' generic benchmark
+                    // vocabulary shares tokens with clean spans). Floor =
+                    // measured − 5 = 100 per the Plan-030 convention.
+                    // Annotation only; gating stays killed (85% bar).
+                    100.0 / 188.0
                 }
                 // Batch 131 (2026-09-08, Plan 112): the two sec
                 // InputValidation adds (wire-frame alloc + secret-file

@@ -2971,6 +2971,62 @@ entry)."
                 .to_string(),
             family: SecFamily::ProcessState,
         },
+        // ── clamp-emits-tail-error-term (Numerics; suggest-only) ──
+        SecRule {
+            rule_id: "clamp-emits-tail-error-term".to_string(),
+            sec_concept: "an approximation that deliberately clamps its input domain EMITS A \
+MEASURABLE ERROR TERM for the clamped mass, and the caller folds the emitted \
+terms — under a conservative multiplier for the summation's own rounding — into \
+a REPORTED bound; a clamp with no emitted tail silently understates every \
+result the clamp touched. SOURCE LAW, verbatim (tabulai/mlx-learn @ 07054ce3, \
+src/mlxlearn_device/_compensated.py): the kernel emits per-row `tail_error[row]\
+=(abs(u.x)>80.0f)?(sw[row]/denom[0])*(feature_max*1.8048524e-35f):0.0f` with the \
+in-source comment 'exp2x deliberately clamps beyond -80. Bound only that tail \
+error; / other arithmetic and transcendental errors are not formally bounded.' \
+(:66-69), and the caller reports `tail_bound = 2.0 * mx.sum(tail_errors)` with \
+'Factor 2 accounts conservatively for float32 rounding in this particular / \
+tail sum. This is not a bound on all other numerical errors.' (:260-262 — the \
+record's cite was :261-263, corrected at T0). 1.8048524e-35 ≈ e^−80, the \
+clamp-point residual, so each emitted term OVER-covers its item's true tail and \
+the factor-2 fold covers the f32 summation rounding (the fixture demonstrates \
+the multiplier is load-bearing: in the f32 subnormal band the factor-1 bound \
+falls short while factor 2 covers, on the SAME input set). THE HONESTY POSTURE \
+IS THE CONTENT — the module docstring verbatim: 'The transcendental \
+approximation and arithmetic do not provide a formal error bound; callers must \
+treat the output as a numerical check, not a proof.' — and the bound is \
+LOAD-BEARING at consumers, not decorative: the logistic acceptance/convergence \
+gates fold it (`candidate_norm + candidate_tail < norm_value + tail_value`, \
+`norm_value + tail_value <= effective_tol * 0.95`, _logistic.py:175/:187), the \
+Newton gate the same (:184). ⛔ ADJUDICATION vs the sec Numerics family: \
+`gelu-tanh-cancellation-sigmoid-form` (B366) owns value-COLLAPSE (a wrong zero) \
+with an algebraic REWRITE fix — THIS owns the clamp's ACCOUNTING (the tail may \
+be genuinely negligible but it must be EMITTED and REPORTED, not hidden); \
+`decay-gate-precision-collapse-low-precision` (B366) owns a stalled EMA — value \
+rounding, no clamp; `logit-clamp-epsilon-absorption` (B366) owns a clamp that \
+ABSORBS ITS OWN GUARD (input-domain eps) — adjacent clamp vocabulary, different \
+law: THAT breaks on the clamp itself, THIS leaves the clamp intact and demands \
+the tail's emission; `wide-reduction-precision-split` (B352) owns accumulator \
+width. REGIME: any deliberately clamped approximation (exp/softmax tails, \
+saturating activations, truncated series) whose caller makes decisions from the \
+result — the emitted term is how the clamp's cost becomes visible. ANTI-REGIME: \
+saturation-by-design where the caller prices the tail elsewhere (the flag is a \
+QUESTION, review decides — suggest-only); unbounded approximations (no clamp, \
+no tail). Suggest-only: whether a given clamp NEEDS the emission is a numerics \
+design decision parse-only cannot make, and the emission is a wire/API change \
+the rule never performs. Honest recall limits: approx vocabulary is fn-scope; a \
+clamp spelled in unfamiliar vocabulary fires as the QUESTION. Detector: \
+`proposers::clamp_tail_error_term`. Fixture: `fixtures/b370_fixtures.rs` F1. \
+Batch 370 / Plan 383 / Research 415 (tabulai/mlx-learn @ 07054ce3, Apache-2.0; \
+the fixture is an original synthesis, standalone-compiled AND executed before \
+entry)."
+                .to_string(),
+            buggy_code: "/// The cheap clamped exponential: below -80 the tail is silently\n/// dropped — every denominator this feeds is understated by the\n/// clamped mass, and nothing reports it.\nfn cheap_exp_approx(z: f32, w: f32) -> f32 {\n    if z < -80.0 {\n        let _ = w; // the weight is dropped with the tail\n        return 0.0;\n    }\n    z.exp()\n}\n\nfn denom(logits: &[(f32, f32)]) -> f32 {\n    logits.iter().map(|&(z, w)| cheap_exp_approx(z, w)).sum()\n}\n"
+                .to_string(),
+            fixed_code: "/// The clamp-point residual (e^-80): every clamped item's true tail\n/// is at most this times its weight, so the emitted term OVER-covers.\nconst E_NEG_80: f32 = 1.804_852_4e-35;\n\n/// The cheap clamped exponential WITH the emitted tail term.\nfn cheap_exp_tail(z: f32, w: f32) -> (f32, f32) {\n    if z < -80.0 {\n        return (0.0, w * E_NEG_80); // the clamp's cost, made visible\n    }\n    (z.exp(), 0.0)\n}\n\nfn denom_with_bound(logits: &[(f32, f32)]) -> (f32, f32) {\n    let mut denom = 0.0f32;\n    let mut tail = 0.0f32;\n    for &(z, w) in logits {\n        let (v, t) = cheap_exp_tail(z, w);\n        denom += v;\n        tail += t;\n    }\n    // Factor 2 covers the summation's own f32 rounding — a check,\n    // never a proof of all arithmetic error.\n    (denom, 2.0 * tail)\n}\n"
+                .to_string(),
+            family: SecFamily::Numerics,
+        },
+
     ]
 }
 
@@ -4390,5 +4446,39 @@ mod tests {
                 "batch-353 {id}: detector must stay silent on its own fixed fixture"
             );
         }
+    }
+    /// Batch 370 (the mlx-learn numerics transcription sec half, Plan 383 /
+    /// Research 415, tabulai/mlx-learn @ 07054ce3, Apache-2.0) — ONE
+    /// suggest-only `Numerics` rule: the deliberately clamped approximation
+    /// must EMIT a measurable tail-error term for the clamped mass, and the
+    /// caller folds the emitted terms under a conservative multiplier into a
+    /// REPORTED bound — a check, never a claimed proof. Fixture gate ran 4/4
+    /// standalone (`fixtures/b370_fixtures.rs`); the subnormal-band
+    /// adversarial arm proved the factor-2 multiplier is load-bearing.
+    #[test]
+    fn batch370_clamp_tail_rule_and_detector() {
+        use crate::domains::sec::proposers::clamp_tail_error_term;
+        let all = entries();
+        let rule = all
+            .iter()
+            .find(|r| r.rule_id == "clamp-emits-tail-error-term")
+            .unwrap_or_else(|| panic!("batch-370 rule missing from corpus"));
+        assert!(
+            rule.sec_concept
+                .contains("Factor 2 accounts conservatively")
+        );
+        assert!(rule.sec_concept.contains("numerical check, not a proof"));
+        assert!(rule.sec_concept.contains("1.8048524e-35"));
+        // the detector: fires on the unbounded clamp, silent on the fixed
+        let buggy = syn::parse_file(&rule.buggy_code).expect("buggy parses");
+        assert!(
+            clamp_tail_error_term::detect(&rule.buggy_code, &buggy).len() > 0,
+            "batch-370: detector must fire on its own buggy fixture"
+        );
+        let fixed = syn::parse_file(&rule.fixed_code).expect("fixed parses");
+        assert!(
+            clamp_tail_error_term::detect(&rule.fixed_code, &fixed).is_empty(),
+            "batch-370: detector must stay silent on its own fixed fixture"
+        );
     }
 }

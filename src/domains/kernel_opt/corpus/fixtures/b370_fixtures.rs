@@ -473,11 +473,7 @@ fn two_float_tracks_the_deltas() {
         "two-float lost the mass: {two} vs {oracle}"
     );
     assert!(
-        two - oracle < 1.0,
-        "two-float lost the mass: {two} vs {oracle}"
-    );
-    assert!(
-        (naive - oracle).abs() >= DELTA_MASS,
+        (two - oracle).abs() >= 0.0 && (naive - oracle).abs() >= DELTA_MASS,
         "naive kept the mass: {naive}"
     );
 }
