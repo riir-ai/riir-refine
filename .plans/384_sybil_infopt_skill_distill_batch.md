@@ -1,8 +1,6 @@
 # Plan 384 — sybil inference-optimisation-skill distill batch (rust_perf measurement-honesty)
 
-**Status:** STAGED — unclaimed (verdict Research 417, YES B corpus / LANE INTEL HIGH; behind Plan 383/mlx-learn; batch number re-derived at start)
-
-Source: sybil-solutions/inference-optimisation-skill @ `fda968e7fc1996aa23c67139c755fe541c9d4be0` (MIT, tip 2026-11-16; full clone inspected 2026-11-16, quotes verified at the pin, `.raw/` removed at verdict close). All candidates suggestion-only `NotBenchable` + `bench_spec: None` (the metric-mismatch class — the B367 opal tranche posture). Fixtures are ORIGINAL Rust reproductions; never paste source content.
+**Status:** CLAIMED — shikuwa-4090-b369, epoch 1794988108, expires 2026-11-20T08:00:00Z (claimed 2026-11-18T07:28:28Z after the Plan 383 lease lapsed un-renewed at origin — verified same session; batch number re-derived at start: entries_83/B368 is last landed, this is Batch 369, entries_84). Source: sybil-solutions/inference-optimisation-skill @ `fda968e7fc1996aa23c67139c755fe541c9d4be0` (MIT, tip 2026-11-16; full clone inspected 2026-11-16, quotes verified at the pin, `.raw/` removed at verdict close). All candidates suggestion-only `NotBenchable` + `bench_spec: None` (the metric-mismatch class — the B367 opal tranche posture). Fixtures are ORIGINAL Rust reproductions; never paste source content.
 
 - [ ] Re-read the mining queue snapshot + re-derive the batch number + corpus count from `src/domains/rust_perf/corpus/` at start (snapshot counts are claims).
 - [ ] Claim lease: append `**Claimed:** <session>, <epoch>, expires <ISO>` + push BEFORE any corpus edit.
