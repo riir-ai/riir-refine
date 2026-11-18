@@ -1,6 +1,6 @@
 # Plan 386 — Mozilla video v2: "refine → katopz" (project demo + team vision, 2-min re-do)
 
-Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
+Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · **r2 (owner watch 2026-11-18): 'too excited, sometimes not, AI slop' → calm register re-cut — VO v6 ONE `[calm]` cue on every line (level spread −22.6..−25.4 dB vs v5's 6 dB swing; mix LRA 6.5→3.9 LU), no-overshoot motion, hype copy cut, install line → `cargo install riir-refine` (issue 244); render 120.00 s sha `b2ecea96…` (mozilla-video `5082379`); skill updated (riir-ai `670ce5c93`)** · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
 Branch: `develop`
 
 The CFP line this answers: *"a link to a two-minute video showing the project and the
@@ -39,8 +39,8 @@ working and hear directly from the team about why it matters."* Two halves, in t
 | # | Scene | Picture | VO (v5) |
 |---|---|---|---|
 | P1 | Title | `refine` center, green; `https://refine.riir.ai/` types in white beneath (per-char reveal, cursor) | "[excited] Meet refine." |
-| P2 | Install | URL wipes out; `cargo install cargo-` types in front of `refine` — the whole line re-centers, `refine` slides right with a spring | "One install, from crates.io." |
-| P3 | Command | `install cargo-` fades + collapses; `cargo ` and `refine` close the gap to a centered `cargo refine` | "One command." |
+| P2 | Install | URL wipes out; `cargo install riir-` types in front of `refine` (V7) — the whole line re-centers, `refine` slides right with a spring | "One install, from crates.io." |
+| P3 | Command | `install riir-` fades + collapses; `cargo ` and `refine` close the gap to a centered `cargo refine` | "One command." |
 | P4 | Dry run | `cargo refine` flies to top-left as the prompt of a terminal that grows around it; the real capture (riir-dapps `src/data/refine_capture.txt`, v0.5.0) scrolls fast with a top-down motion blur, then brakes on the two sell lines, which pop (scale 1.0→1.12→1.0) with a cyan/violet flash | "[excited] A dry run, fully offline. Nine findings, and about fifty-five percent fixable right here, on your machine. So let's fix them!" |
 | P5 | Fix | same terminal, `cargo refine fix` types; consent block blurs past; brakes on the verify lines + `6 edit(s) verified` + `100% fixed` (pop + flash) + a perf chip `perf  −18% allocs · demo` (labelled DEMO on screen — owner-authorised mock) | "[excited] cargo refine fix. Every edit has to compile, or it's rolled back. Six for six." |
 | P6 | Screen | terminal zooms out to a card; a line draws from it through a **secret scan** gate (key icons struck out, `sk-…` → `████`) toward a node | "[confident] What it can't fix yet gets scanned for secrets first. Keys are dropped, never sent, and only if you opt in." |
@@ -113,6 +113,19 @@ End-card line (on screen, not spoken): *Voice generated with Fish Audio Drama 3 
   GPUs (p08).
 - **F6 re-framed:** 33.596 s → 4.394 s on the Bench 128 test workload (32 stalled reads); the
   reporter's own reproduction measured ≈4.9× — never say "seven times faster" bare.
+
+- **V6 — r2 calm register (owner, 2026-11-18).** The owner's watch verdict on r1: "too
+  excited and sometimes no excite — looks like AI slop; should be consistent, calm energy,
+  cool, smart, proud". Root cause measured: the per-line cue mix (`[excited]`/`[warm]`/…)
+  swung take levels by 6 dB. Probe (p01/p04/t03 × 3 cues): `[calm]` held ±0.2 dB → the
+  whole v6 script uses `[calm]`, temp 0.65 (amo `batch_v6.sh` + `lines_v6.txt`). Motion
+  vocabulary de-hyped (no back-ease, no strobe, no shake/ring/white flash). Script v6 (calm,
+  no exclamations) supersedes the §Storyboard VO column — the canonical text is amo
+  `lines_v6.txt` and mozilla-video `media_src/v6/stt_v6.tsv`.
+- **V7 — install name.** `cargo install riir-refine` (riir-refine issue 244: `refine` is taken
+  on crates.io + homebrew-core; the binary stays `cargo-refine`). The crates.io publish is
+  in flight — the video shows the post-publish command; re-verify `cargo install riir-refine`
+  resolves before the video link is submitted.
 
 ## Assets
 
