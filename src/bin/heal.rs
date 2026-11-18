@@ -7331,6 +7331,147 @@ fn usage_text() -> String {
     #[cfg(not(feature = "kat_service"))]
     let credit_help = "";
     let credit_flags_help = "";
+    // Issue 246: every verb row below is gated to the feature set that can
+    // actually run it — the same discipline user_help() applies (a build's
+    // --help-all must not advertise commands its own binary refuses into the
+    // build stamp's exit-2 naming the rebuild). Row bytes are unchanged;
+    // only their visibility moves. offline/online/off/on stay unconditional
+    // (the Plan 342 posture verbs are the only truly ungated commands).
+    // Correction to the issue's original note: update/sync/config ARE
+    // runtime-gated (Update|Sync refuse kat_transport; config refuses
+    // kat_service at dispatch) — the gates here follow the runtime, not
+    // that note. The generator's source scan is cfg-independent, so every
+    // verb stays declared for the skill's two-sided adjudication.
+    #[cfg(feature = "kat_transport")]
+    let refill_help = "    cargo refine refill [--refill-wait <s>]             <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)\n";
+    #[cfg(not(feature = "kat_transport"))]
+    let refill_help = "";
+    #[cfg(feature = "kat_service")]
+    let info_help = "    cargo refine --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service; the `info` word is the points plane's — this surface stays a flag)\n";
+    #[cfg(not(feature = "kat_service"))]
+    let info_help = "";
+    #[cfg(all(feature = "kat_service", feature = "score_bench"))]
+    let candidates_help = "    cargo refine --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)\n";
+    #[cfg(not(all(feature = "kat_service", feature = "score_bench")))]
+    let candidates_help = "";
+    #[cfg(feature = "kat_service")]
+    let account_help = "    cargo refine login [--key <path>]                   (KAT account, needs --features kat_service)\n    cargo refine account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)";
+    #[cfg(not(feature = "kat_service"))]
+    let account_help = "";
+    #[cfg(any(feature = "points", feature = "kat_transport"))]
+    let update_help = "    cargo refine update                                 (corpus lease refresh, kat_transport or points)\n";
+    #[cfg(not(any(feature = "points", feature = "kat_transport")))]
+    let update_help = "";
+    #[cfg(feature = "kat_transport")]
+    let sync_help = "    cargo refine sync                                   (push redacted batches + pull lease, kat_transport)\n";
+    #[cfg(not(feature = "kat_transport"))]
+    let sync_help = "";
+    #[cfg(feature = "kat_service")]
+    let sync_export_help = "    cargo refine sync --export <file|->                 (WRITE the redacted batch, send nothing — no login, throwaway key)\n";
+    #[cfg(not(feature = "kat_service"))]
+    let sync_export_help = "";
+    #[cfg(feature = "kat_service")]
+    let claim_help = "    cargo refine claim --tx <sig>                       (queue/submit a payment claim, kat_service)\n";
+    #[cfg(not(feature = "kat_service"))]
+    let claim_help = "";
+    #[cfg(feature = "kat_transport")]
+    let transfer_help = "    cargo refine stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)\n    cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)\n    cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)\n    cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)\n    cargo refine topup [--pack N] [--qr|--no-qr] [--pick latest]  (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, --pick latest shows the newest without asking; kat_transport)\n    cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)\n    cargo refine kat                                  (the one-line KAT balance — the service ledger's authoritative number, host-labelled; kat_transport)\n    cargo refine kat totp enroll [--code <c>]          (riir-dapps plan 053: the TOTP second factor — no code mints a pending factor and shows the otpauth URI ONCE, --code confirms; on an ARMED account the CURRENT code first, then the replacement mints; kat_transport)\n    cargo refine kat totp disarm --code <c>            (remove the factor — a CURRENT-step code against the ARMED row; kat_transport)\n    cargo refine kat migrate … --totp <code>           (the second factor on the migration filing — required once the OLD account is TOTP-armed)\n    cargo refine kat migrate --attest-cosign <old_hex> <new_hex> --github <login>  (riir-dapps Issue 143: on the box of the account the login is BOUND to — co-sign an attest-only filing with THIS account's key; prints a public bundle, no private key leaves; kat_transport)\n    cargo refine kat migrate --github <login> --old-key <path> --attest-cosig <bundle>  (file ATTEST-ONLY with that bundle — the GitHub link stays on the co-signer; file within 10 minutes of the co-sign)\n    cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)\n";
+    #[cfg(not(feature = "kat_transport"))]
+    let transfer_help = "";
+    #[cfg(feature = "admin")]
+    let admin_help = "    cargo refine get|send <amt> tuna [account-id]  (riir-dapps Proposal 009 §9: the marketing TUNA airdrop ADMIN hand — get targets your own account id, send takes a 32-hex account id (a base58 pubkey refuses with the hint); --gov <id> pins the Executed mandate, else unique-hash resolution via the mandates listing; --dry-run composes hash+row+body+caps with no network; secrets read from TUNA_CAN_OPENER_KEY + KAT_CRANK_TOKEN, refused pre-network, never echoed; admin feature, never in the release set)\n";
+    #[cfg(not(feature = "admin"))]
+    let admin_help = "";
+    #[cfg(feature = "kat_transport")]
+    let faucet_help = "    cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)\n    cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)\n";
+    #[cfg(not(feature = "kat_transport"))]
+    let faucet_help = "";
+    #[cfg(all(
+        feature = "kat_transport",
+        feature = "clippy_verify",
+        feature = "latent_retrieval"
+    ))]
+    let replay_help = "    cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)\n";
+    #[cfg(not(all(
+        feature = "kat_transport",
+        feature = "clippy_verify",
+        feature = "latent_retrieval"
+    )))]
+    let replay_help = "";
+    #[cfg(feature = "kat_service")]
+    let config_help = "    cargo refine config get                            (the ACTIVE service url + its source + every state file's network stamp: env > config > default)\n    cargo refine config set --url <devnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)\n    cargo refine config adopt-state <devnet|mainnet> [--discard]  (migrate pre-split network-blind state: oracle-confirmed adopt, or quarantine; riir-kat Issue 003 T4)\n    --net <devnet|mainnet>                             (one-invocation env sugar, pin-checked; Issue 003 T11)\n";
+    #[cfg(not(feature = "kat_service"))]
+    let config_help = "";
+    #[cfg(feature = "kat_transport")]
+    let refill_flags_help = "
+    --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4; the flag alias of
+                    the `refill` verb): credit a TEST
+                    account on devnet — open a faucet request, force a crank
+                    settle pass when RIIR_REFINE_KAT_CRANK_TOKEN is set, then
+                    read the server balance and refresh the 075 gate's input
+                    from that server truth. Exit 0 iff the final synced
+                    balance is positive. It REFUSES on mainnet (and on any
+                    ledger this client cannot name as devnet): the free daily
+                    faucet/drip tier is retired, and the user refuel paths
+                    are exactly two — contribute (join + sync) or pay
+                    (KAT packs).
+    --refill-wait <s>  With refill ONLY: bound the settle poll (default 0 =
+                    one after-read, no poll — the credit normally lands at the
+                    hourly crank alarm, not synchronously).";
+    #[cfg(not(feature = "kat_transport"))]
+    let refill_flags_help = "";
+    #[cfg(feature = "kat_service")]
+    let account_detail_help = "
+    login           KAT account identity (Proposal 005 T0.1): generate an
+                    Ed25519 keypair in OpenSSH format under the account dir
+                    (RIIR_AUTH_ACCOUNT_DIR / ~/.config/riir-auth), or
+                    import one with --key <path>. Idempotent — an existing
+                    key is loaded, never regenerated. Records the free-tier
+                    grant as a LOCAL projection (accounting-only, G9d).
+    account         KAT local view: account id (BLAKE3(pubkey)), key path,
+                    the grant note (the signup claim is TUNA trial credit),
+                    and — when a path (or cwd) holds a repo-local charge
+                    ledger — this repo's metered burn. Verifies key↔record
+                    agreement (tamper
+                    evidence). No $ figures (caveats #12/#15).";
+    #[cfg(not(feature = "kat_service"))]
+    let account_detail_help = "";
+    #[cfg(any(feature = "points", feature = "kat_transport"))]
+    let update_detail_help = "
+    update          T1.6 corpus lease refresh (needs a kat_transport or
+                    points build — the release set carries points):
+                    GET /lease with If-None-Match → 304 (up to date, no
+                    charge) or 200 → manifest verify (tamper → reject, fall
+                    back local) → segment diff → fetch → staged verify →
+                    ATOMIC pointer swap → retrieval index rebuild next run.
+                    Prints the lease charge line (idempotent per epoch).";
+    #[cfg(not(any(feature = "points", feature = "kat_transport")))]
+    let update_detail_help = "";
+    #[cfg(feature = "kat_transport")]
+    let sync_detail_help = "
+    sync            T1.6 bidirectional (kat_transport): push redacted
+                    trajectory batches (the sanctioned egress path) + pull
+                    the lease. The payload is SIGNED with the account key
+                    (v2 — Issue 008; `login` first). With the service plane
+                    deferred, the push is validated + queued locally
+                    (.refine/outbox/) — nothing is faked.";
+    #[cfg(not(feature = "kat_transport"))]
+    let sync_detail_help = "";
+    #[cfg(feature = "kat_service")]
+    let claim_detail_help = "
+    claim           T1.6 payment claim (--tx <sig>, kat_service): validate +
+                    compose + submit (or queue locally when the service
+                    plane is not yet live). NEVER mints client-side (G9d).
+    --tx <sig>      With claim: the Solana transaction signature (base58,
+                    64-88 chars).";
+    #[cfg(not(feature = "kat_service"))]
+    let claim_detail_help = "";
+    #[cfg(feature = "kat_service")]
+    let key_help = "
+    --key <path>    With login: import this OpenSSH Ed25519 private key
+                    (unencrypted only) instead of generating one.";
+    #[cfg(not(feature = "kat_service"))]
+    let key_help = "";
     let domains = domain_choices();
     format!(
         "cargo-refine (Plan 005) — modelless code healing via latent corpus retrieval
@@ -7341,9 +7482,7 @@ USAGE:
     cargo refine suggest [--domain <{domains}>] [--top-k <N>] [--clippy-json <path>] <path>...
     cargo refine fix-compile [--write] [--max-iters <N>] [--verify-args <s>] <path>...
 {credit_help}    cargo refine --stats [on|off]                       <- work-stats sharing consent (bare = status; default OFF; the `stats` word is the points panel's)
-    cargo refine refill [--refill-wait <s>]             <- DEVNET-OPS ONLY faucet credit (Issue 094 D4: refuses on mainnet; kat_transport)
-    cargo refine --info                                 <- ONE COMMAND stats: wallet + account + mining + local work (kat_service; the `info` word is the points plane's — this surface stays a flag)
-    cargo refine --dump-trajectories > trajectories.jsonl
+{refill_help}{info_help}    cargo refine --dump-trajectories > trajectories.jsonl
     cargo refine --memory-stats                         (loop debug query, no paths)
     cargo refine --recompute-elo                        (batch rating backfill, 039 T2)
     cargo refine --collapse-report                      (self-collapse monitor, 042)
@@ -7361,39 +7500,12 @@ USAGE:
     cargo refine --active-set-clear                      (drop every demotion + cap; the corpus is never touched)
     cargo refine score-bench | --score-report        (needs --features score_bench)
     cargo refine necessity-bench [--necessity-top N --necessity-random K --necessity-smoke --necessity-rule RULE]  (Issue 108 + the 102-T4 per-decision paired lane, score_bench)
-    cargo refine --candidates <path>                   (T2.4 promotion gate, kat_service+score_bench)
-    cargo refine login [--key <path>]                   (KAT account, needs --features kat_service)
-    cargo refine account [<path>] [--history]            (KAT local view + repo burn + earned/spent, kat_service)
+{candidates_help}{account_help}
     cargo refine offline                                 (Plan 342 firewall: every network lane refuses until `online`; marker-based — env vars and settings.toml cannot override; ungated)
     cargo refine online                                  (clear the firewall + remind what your settings.toml chose; ungated)
     cargo refine off --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist OFF in settings.toml — the run-start auto-check family; --auto-update = app check + corpus refresh together; ungated)
     cargo refine on  --auto-update|--auto-upgrade|--auto-corpus|--app-check   (persist ON; bare off/on prints the current state)
-    cargo refine update                                 (corpus lease refresh, kat_transport or points)
-    cargo refine sync                                   (push redacted batches + pull lease, kat_transport)
-    cargo refine sync --export <file|->                 (WRITE the redacted batch, send nothing — no login, throwaway key)
-    cargo refine claim --tx <sig>                       (queue/submit a payment claim, kat_service)
-    cargo refine stake --usd <N> | --info              (Proposal 007 staking: transfer QR / position, kat_transport)
-    cargo refine vote --proposal <id> --yes|--no     (Proposal 008 T2.4 governance voting: weight + evidence render, kat_transport)
-    cargo refine unstake                                (drain unlocked tranches + escrow disclosure, kat_transport)
-    cargo refine pay --request [--amount N] [--label L] [--qr] [--wait S]  (Proposal 011 T1.3 pay request: signed create + link-first + poll-on-credit, kat_transport)
-    cargo refine topup [--pack N] [--qr|--no-qr] [--pick latest]  (riir-dapps Plan 045 B7 USDC→KAT checkout: catalog + signed intent + solana: URL; the QR renders automatically on a TTY — --no-qr suppresses; on the open cap it shows your open checkout instead — --show <seq> re-prints it, --void <seq> releases it, --pick latest shows the newest without asking; kat_transport)
-    cargo refine buy <amount> <kat|usdc>           (the friction-cut: resolves the catalog pack from the exact amount — `buy 10 kat` = pack 1; MAINNET is the default dial, --net devnet overrides; glued `10kat` works; same flags as topup; kat_service+kat_transport)
-    cargo refine kat                                  (the one-line KAT balance — the service ledger's authoritative number, host-labelled; kat_transport)
-    cargo refine kat totp enroll [--code <c>]          (riir-dapps plan 053: the TOTP second factor — no code mints a pending factor and shows the otpauth URI ONCE, --code confirms; on an ARMED account the CURRENT code first, then the replacement mints; kat_transport)
-    cargo refine kat totp disarm --code <c>            (remove the factor — a CURRENT-step code against the ARMED row; kat_transport)
-    cargo refine kat migrate … --totp <code>           (the second factor on the migration filing — required once the OLD account is TOTP-armed)
-    cargo refine kat migrate --attest-cosign <old_hex> <new_hex> --github <login>  (riir-dapps Issue 143: on the box of the account the login is BOUND to — co-sign an attest-only filing with THIS account's key; prints a public bundle, no private key leaves; kat_transport)
-    cargo refine kat migrate --github <login> --old-key <path> --attest-cosig <bundle>  (file ATTEST-ONLY with that bundle — the GitHub link stays on the co-signer; file within 10 minutes of the co-sign)
-    cargo refine tuna                                 (the one-line TUNA trial-credit balance + expiry window; kat_transport)
-    cargo refine get|send <amt> tuna [account-id]  (riir-dapps Proposal 009 §9: the marketing TUNA airdrop ADMIN hand — get targets your own account id, send takes a 32-hex account id (a base58 pubkey refuses with the hint); --gov <id> pins the Executed mandate, else unique-hash resolution via the mandates listing; --dry-run composes hash+row+body+caps with no network; secrets read from TUNA_CAN_OPENER_KEY + KAT_CRANK_TOKEN, refused pre-network, never echoed; admin feature, never in the release set)
-    cargo refine faucet --request [--qr]               (Proposal 011 T1.8 faucet preset: the amount is the deployment's cap, not yours, kat_transport)
-    cargo refine wetrun [--dry-run]                    (Proposal 011 T4.1 wet-run + G-WET; REFUSES mainnet with no override, --dry-run is read-only everywhere, kat_transport)
-    cargo refine replay                                 (Proposal 015 Phase 2: lease → local clippy-oracle replay → signed verdict; toolchain-pinned, kat_transport+clippy_verify)
-    cargo refine config get                            (the ACTIVE service url + its source + every state file's network stamp: env > config > default)
-    cargo refine config set --url <devnet|mainnet|https://…>  (persist the service url — https unless loopback; Plan 023)
-    cargo refine config adopt-state <devnet|mainnet> [--discard]  (migrate pre-split network-blind state: oracle-confirmed adopt, or quarantine; riir-kat Issue 003 T4)
-    --net <devnet|mainnet>                             (one-invocation env sugar, pin-checked; Issue 003 T11)
-
+{update_help}{sync_help}{sync_export_help}{claim_help}{transfer_help}{admin_help}{faucet_help}{replay_help}{config_help}
     (no mode)       DRY RUN (the just-works default): review what WOULD be
                     fixed — suggest output over the paths (default: `.`),
                     zero edits. Bare `cargo refine` IS the dry run — there is
@@ -7401,7 +7513,7 @@ USAGE:
                     `get`/`send`/`wetrun`).
 
     VERB-FIRST LAW (Issue 210): every standalone mode is also a BARE VERB —
-                    `cargo refine refill|misses|frontier-report|
+                    `cargo refine misses|frontier-report|
                     blueprint-report|horizon-report|gate-calibration|oracle-census|
                     corpus-gap|config-audit|orphan-report|platform-audit|
                     frame-time-report|coverage-report|score-bench|necessity-bench|
@@ -7725,36 +7837,10 @@ USAGE:
                     the batch-contribution record (Unset proceeds — running
                     sync IS consent), an Unset stats record pushes NOTHING,
                     because --fix is universal. The two consents are separate;
-                    one does not imply the other. Works in every build.
-    --refill        DEVNET-OPS ONLY (riir-dapps Issue 094 D4; the flag alias of
-                    the `refill` verb): credit a TEST
-                    account on devnet — open a faucet request, force a crank
-                    settle pass when RIIR_REFINE_KAT_CRANK_TOKEN is set, then
-                    read the server balance and refresh the 075 gate's input
-                    from that server truth. Exit 0 iff the final synced
-                    balance is positive. It REFUSES on mainnet (and on any
-                    ledger this client cannot name as devnet): the free daily
-                    faucet/drip tier is retired, and the user refuel paths
-                    are exactly two — contribute (join + sync) or pay
-                    (KAT packs).
-    --refill-wait <s>  With refill ONLY: bound the settle poll (default 0 =
-                    one after-read, no poll — the credit normally lands at the
-                    hourly crank alarm, not synchronously).
+                    one does not imply the other. Works in every build.{refill_flags_help}
     --quiet         With --fix: skip the --suggest pass (only show fixes).
     --no-fmt        Disable the automatic post-write rustfmt pass (it is
-                    default-on; see src/fmt.rs for the discipline it encodes).
-    login           KAT account identity (Proposal 005 T0.1): generate an
-                    Ed25519 keypair in OpenSSH format under the account dir
-                    (RIIR_AUTH_ACCOUNT_DIR / ~/.config/riir-auth), or
-                    import one with --key <path>. Idempotent — an existing
-                    key is loaded, never regenerated. Records the free-tier
-                    grant as a LOCAL projection (accounting-only, G9d).
-    account         KAT local view: account id (BLAKE3(pubkey)), key path,
-                    the grant note (the signup claim is TUNA trial credit),
-                    and — when a path (or cwd) holds a repo-local charge
-                    ledger — this repo's metered burn. Verifies key↔record
-                    agreement (tamper
-                    evidence). No $ figures (caveats #12/#15).
+                    default-on; see src/fmt.rs for the discipline it encodes).{account_detail_help}
     upgrade         Issue 153: the verified BINARY self-update (fetch the
                     release archive + SHA256SUMS, verify, backup-swap). The
                     binary carries the compiled corpus — upgrading it is how
@@ -7762,25 +7848,7 @@ USAGE:
                     (the release set carries it). RIIR_REFINE_AUTO_UPGRADE=1
                     applies pending upgrades at run start; the corpus lease
                     refresh (update) auto-runs at run start, at most once
-                    per 12h — RIIR_REFINE_AUTO_CORPUS=0 demotes (default-on).
-    update          T1.6 corpus lease refresh (needs a kat_transport or
-                    points build — the release set carries points):
-                    GET /lease with If-None-Match → 304 (up to date, no
-                    charge) or 200 → manifest verify (tamper → reject, fall
-                    back local) → segment diff → fetch → staged verify →
-                    ATOMIC pointer swap → retrieval index rebuild next run.
-                    Prints the lease charge line (idempotent per epoch).
-    sync            T1.6 bidirectional (kat_transport): push redacted
-                    trajectory batches (the sanctioned egress path) + pull
-                    the lease. The payload is SIGNED with the account key
-                    (v2 — Issue 008; `login` first). With the service plane
-                    deferred, the push is validated + queued locally
-                    (.refine/outbox/) — nothing is faked.
-    claim           T1.6 payment claim (--tx <sig>, kat_service): validate +
-                    compose + submit (or queue locally when the service
-                    plane is not yet live). NEVER mints client-side (G9d).
-    --tx <sig>      With claim: the Solana transaction signature (base58,
-                    64-88 chars).
+                    per 12h — RIIR_REFINE_AUTO_CORPUS=0 demotes (default-on).{update_detail_help}{sync_detail_help}{claim_detail_help}
     --update-timeout <s>  The run-start lease-phase budget (default 4s;
                     0 = skip). Timeout/offline → heal proceeds on the local
                     corpus (G3 — the network may delay freshness, never
@@ -7789,9 +7857,7 @@ USAGE:
     --no-reheat     Skip the run-end boundary reheat (the mid-run-epoch
                     straddle pass; CI/cost-sensitive runs).
     --corpus-epoch <E>    Pin the corpus epoch (an INSTALLED epoch — implies
-                    the lease check is skipped; the CI-reproducibility form).
-    --key <path>    With login: import this OpenSSH Ed25519 private key
-                    (unencrypted only) instead of generating one.
+                    the lease check is skipped; the CI-reproducibility form).{key_help}
 {}{}    --domain        Filter suggest output to one domain (default: auto — all enabled).
     --top-k <N>     Rules per span per domain (default 3).
     --clippy-json <path>  Feed real clippy findings into --suggest / the dry

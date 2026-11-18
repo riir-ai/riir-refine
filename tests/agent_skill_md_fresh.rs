@@ -163,63 +163,22 @@ fn binary_help_surface_is_covered() {
     // fragments OUT, so this is a SUBSET check — the full-coverage half is
     // `every_public_verb_is_rendered` (the source scan is cfg-independent).
     //
-    // EXEMPT: the ops/money verbs. `usage_text()` names them UNCONDITIONALLY
-    // (annotated "needs --features kat_service") in every build's --help-all,
-    // while the public skill deliberately omits the ops rows — the
-    // zero-token law (2026-11-18 owner decree) keeps token vocabulary off
-    // the refine product surfaces, and money verbs are operator lanes, not
-    // healing lanes. Their two-sided coverage is the GENERATOR's
-    // adjudication (CATEGORIES ops rows vs the CLI source), not this file.
-    // The wart itself — help-all naming verbs the build refuses — is filed
-    // as an issue; if it is fixed (the fragments cfg-gated), this list
-    // shrinks to nothing naturally.
-    const OPS_EXEMPT: [&str; 20] = [
-        "login",
-        "account",
-        "refill",
-        "claim",
-        "stake",
-        "unstake",
-        "vote",
-        "pay",
-        "topup",
-        "buy",
-        "kat",
-        "tuna",
-        "get",
-        "send",
-        "faucet",
-        "wetrun",
-        "replay",
-        "corpus-pr",
-        "totp",
-        "migrate",
-    ];
+    // Issue 246 gated usage_text()'s verb rows to the features that can run
+    // them, so this binary's --help-all prints NO ops/money verbs — the
+    // binary's help surface is a strict subset of the public skill with NO
+    // exemption list. (The former OPS_EXEMPT existed only because
+    // usage_text named the ops verbs unconditionally; it deleted naturally
+    // with the gate.) The ops verbs' public-render exclusion is structural
+    // (the generator's PUBLIC_OMITTED_CATEGORIES) and their two-sided CLI
+    // coverage is the generator's own adjudication, which --check runs in
+    // the other tests of this file.
     for verb in &verbs {
-        if OPS_EXEMPT.contains(&verb.as_str()) {
-            continue;
-        }
         let spelled = format!("cargo refine {verb}");
         assert!(
             SKILL.contains(&spelled),
             "the built binary's help prints `{spelled}` — the skill does not render it"
         );
     }
-    // The exemption itself is pinned two-sided: the ops verbs are the
-    // generator's OMITTED category (never in the public dump), and the
-    // adjudication through --check fails on any stale CATEGORIES row — so
-    // an ops verb the CLI REMOVES reds the generation, and an exempt name
-    // leaking into the public render reds here.
-    let (ok, out) = run_generator(&["--dump-verbs"]);
-    assert!(ok, "generator --dump-verbs failed\n{out}");
-    for exempt in OPS_EXEMPT {
-        assert!(
-            !out.lines().any(|l| l.trim() == exempt),
-            "ops verb `{exempt}` leaked into the public render set — move it out of the omitted category or teach it"
-        );
-    }
-    let (ok, out) = run_generator(&["--check"]);
-    assert!(ok, "generator --check (adjudication) failed\n{out}");
 }
 
 #[test]
