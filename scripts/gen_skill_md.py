@@ -43,7 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Bumped by hand at each content revision — never derived from the clock,
 # so --check is deterministic across days.
-SKILL_VERSION = 2
+SKILL_VERSION = 3
 SKILL_DATE = "2026-11-18"
 
 SKILL_PATH = REPO / "assets" / "agent_skill" / "SKILL.md"
@@ -53,7 +53,14 @@ CARGO_TOML = REPO / "Cargo.toml"
 BUILD_STAMP_RS = REPO / "src" / "build_stamp.rs"
 DOMAIN_ROUTER_RS = REPO / "src" / "draft" / "domain_router.rs"
 
-SERVED_URL = "https://riir.ai/skills/cargo-refine/SKILL.md"
+# The canonical serve path is the PACKAGE name (riir-refine — the name every
+# install lane teaches: crates.io, brew, scoop). The legacy path
+# /skills/cargo-refine/SKILL.md stays served by the worker as a PERMANENT
+# ALIAS with identical bytes — every agent copy installed before the
+# 2026-11-18 rename curls the old URL on its freshness note, and it must
+# never 404. The worker owns the alias; this file names only the canonical.
+SERVED_URL = "https://riir.ai/skills/riir-refine/SKILL.md"
+SKILL_DIR = "riir-refine"
 
 # ---------------------------------------------------------------------------
 # Verb classification. (verb -> (category_key, gloss))
@@ -330,7 +337,7 @@ def render(verbs: set[str], version: str, release_features: list[str],
     out: list[str] = []
     w = out.append
     w("---")
-    w("name: cargo-refine")
+    w("name: riir-refine")
     w("description: Drive the riir-refine `cargo refine` healer over its CLI — bare dry run "
       "first, then compile-gated fixes at the real feature set, the divergence classes that "
       "stay manual, bench-file safety, and the contribution loop (join, leave, sync). Use when "
@@ -360,14 +367,14 @@ def render(verbs: set[str], version: str, release_features: list[str],
     w("")
     w("```sh")
     w("# Claude Code")
-    w("mkdir -p .claude/skills/cargo-refine")
+    w("mkdir -p .claude/skills/{d}".format(d=SKILL_DIR))
     w("curl -fsSL {url} \\".format(url=SERVED_URL))
-    w("  -o .claude/skills/cargo-refine/SKILL.md")
+    w("  -o .claude/skills/{d}/SKILL.md".format(d=SKILL_DIR))
     w("")
     w("# Zed (and any agent that accepts a markdown instruction file)")
-    w("mkdir -p .agents/skills/cargo-refine")
+    w("mkdir -p .agents/skills/{d}".format(d=SKILL_DIR))
     w("curl -fsSL {url} \\".format(url=SERVED_URL))
-    w("  -o .agents/skills/cargo-refine/SKILL.md")
+    w("  -o .agents/skills/{d}/SKILL.md".format(d=SKILL_DIR))
     w("```")
     w("")
     w("## 1. Install the healer")

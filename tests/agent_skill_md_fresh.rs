@@ -216,10 +216,19 @@ fn forbidden_stale_facts_and_required_ones() {
         );
     }
     let installs = SKILL
-        .match_indices("https://riir.ai/skills/cargo-refine/SKILL.md")
+        .match_indices("https://riir.ai/skills/riir-refine/SKILL.md")
         .count();
     assert!(
         installs >= 3,
         "the served URL must appear in both install blocks + freshness: {installs}"
+    );
+    // The canonical file names ONLY the canonical path — the legacy
+    // /skills/cargo-refine/ path is the WORKER's alias, never spelled here
+    // (an agent copy installed at the old dir curls the old URL and the
+    // alias serves it; this file must not teach two URLs).
+    assert_eq!(
+        SKILL.match_indices("cargo-refine/SKILL.md").count(),
+        0,
+        "the legacy path must not appear in the canonical skill"
     );
 }
