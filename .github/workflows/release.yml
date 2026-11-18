@@ -69,6 +69,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # The agent skill (assets/agent_skill/SKILL.md — served at
+      # /skills/cargo-refine/SKILL.md) is GENERATED from the CLI source and
+      # gated by tests/agent_skill_md_fresh.rs. A release that would ship a
+      # CLI whose verbs the served skill does not render is refused here
+      # before anything is built (the issue-244 stale-skill class).
+      - name: Gate the generated agent skill (regenerate-check)
+        run: python3 scripts/gen_skill_md.py --check
+
       - name: Install the pinned toolchain (rust-toolchain.toml)
         run: rustup toolchain install
 

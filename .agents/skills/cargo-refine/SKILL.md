@@ -13,20 +13,23 @@ self-evolve trajectories on every apply.
 ## Setup (once per machine)
 
 - Global binary `cargo refine` = `~/.cargo/bin/cargo-refine` → symlink to
-  `/Users/katopz/git/riir-refine/target/release/cargo-refine`
-  (built with `--features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport`
-  — the bin's required-features + the verify features; Plan 107 T1 made
-  kat_service mandatory).
-- Rebuild after rulewright source changes:
-  `cd /Users/katopz/git/riir-refine && cargo build --release --features fix_verify,clippy_verify,latent_retrieval,rust_perf,clippy_lints,kat_service,kat_transport --bin cargo-refine`
-  (the symlink keeps pointing at the rebuilt binary).
+  the sibling repo's release build (m3: `/Users/kat/git/riir-refine/`, amo:
+  `/Users/katopz/git/riir-refine/`, Windows junction per the 10-11 record).
+  Build it with the RELEASE feature set + the verify features:
+  `cargo build --release --locked --features fix_verify,clippy_verify,latent_retrieval,points,net-mainnet,update_check`
+  (the bin's required-features are `latent_retrieval,rust_perf,clippy_lints`
+  — defaults since issue 190 T14a dropped kat_service; the prebuilt-style
+  set is `src/build_stamp.rs` RELEASE_FEATURES — points is the contribution
+  plane, kat_service/kat_transport stay OUT).
+- Rebuild after rulewright source changes (same feature line, `--bin
+  cargo-refine`) — the symlink keeps pointing at the rebuilt binary.
 - Fresh box without the sibling repo → fall back to manual fixes +
   `cargo clippy --fix`; do not block on the rulewright.
 - ⛔ **A bare `cargo build --release` of riir-refine silently re-stales the
   global binary** (Issue 117, the 00:21 class): it overwrites the symlink
-  target with a DEFAULT-FEATURES build, so `sync` / `update` / `--refill` /
-  the burn push / the consent heartbeat are compiled out while the usage
-  page still lists them. Always rebuild with the feature list above.
+  target with a DEFAULT-FEATURES build, so `sync` / `update` / `refill` /
+  the contribution tails are compiled out while the usage page still lists
+  them. Always rebuild with the feature list above.
   **Diagnose it in one command — `cargo refine --version` prints the compiled
   feature set and, when the shipped set is incomplete, says `release set:
   STALE` and names the rebuild.** Invoking a compiled-out command now
@@ -154,9 +157,9 @@ class, site, evidence type). The idle loop (riir-refine skill queue item 14)
 consumes it: probe each class against real clippy FIRST, then extend the
 proposer + fixtures + score-bench.
 
-The **aggregate** of the `miss` class — how much of clippy's surface the
+the aggregate of the `miss` class — how much of clippy's surface the
 corpus does not cover at all, rather than the misses one session happened to
-hit — is `cargo refine --coverage-report` (Issue 119). It derives the lint list
+hit — is `cargo refine coverage-report` (Issue 119). It derives the lint list
 from the INSTALLED driver, so the debt moves as clippy ships lints, and joins
 two cited frequency sources (the Bench 061 real-code fired histogram + the
 published kornel 100K-crate top-10) without ever estimating a count. Read the
