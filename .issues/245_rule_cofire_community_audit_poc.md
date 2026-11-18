@@ -1,6 +1,8 @@
 # Issue 245: Rule co-fire community audit — PoC (Research 420)
 
-**Status:** Open — GAIN-tier PoC per `.research/420_Goodfire_Neuron_Communities_Rule_Cofire_Communities.md`; verdict negotiation Claude-AGREE 2026-11-18 (2 rounds). Unclaimed.
+**Status:** Open — GAIN-tier PoC per `.research/420_Goodfire_Neuron_Communities_Rule_Cofire_Communities.md`; verdict negotiation Claude-AGREE 2026-11-18 (2 rounds).
+**Claimed:** shikuwa-4090-i245-poc0, 1796000000, expires 2026-11-19T12:00:00Z
+(claim scope: PoC-0 census ONLY — parse `094_t0{2,3,4}` waves, pin both conventions, census table + co-fire edge list on disk; PoC-1+ stay unowned — compute cells, GPU exclusive-held on this box by the i1223 deciding run)
 
 **Source:** Goodfire, "Large-scale Neuron Community Discovery Reveals Neuron-Sparse Behaviors in Language Models" (arXiv:2611.23112, 2026-11-17) — distilled shape: co-fire graph over discrete units → community discovery → causal necessity/sufficiency audits.
 
