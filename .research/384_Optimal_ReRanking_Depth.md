@@ -96,3 +96,12 @@ it is the cheap decisive census any future depth-side proposal runs FIRST (the p
 the reusable part, not the adaptive mechanism). The seat-pool submission cap (plan §Phase 3) dies
 with the calibration it depended on. The QPP-falsification arm (T1.2) is moot — Phase 0's kill
 precedes it. Commit: the CLOSE-NEGATIVE landing on develop (see `git log -- plan 351`).
+
+**Cross-domain corroboration (2026-11-18, [Research 419](419_Scaling_Reranked_Retrieval.md)):**
+Weaviate's *Scaling Reranked Retrieval* (BRIGHT, commercial cross-encoders, k=100..2,000) measures
+this pool-composition law published-side: reranked head-of-list saturates by k=1,000 (nDCG@10 flat
+0.423→0.424) while retention keeps converting toward the 0.871 pool ceiling (R@20 0.418→0.560),
+and removing the reach stage halves window recall (0.738→0.476), collapsing listwise ordering
+(0.482→0.375) — "deeper pools buy recall insurance, never top-1 recovery", now with a price curve
+(the last depth doubling: +0.001 nDCG@10). Same two-half shape as this addendum's membership-vs-
+ranking split; cited, never merged.
