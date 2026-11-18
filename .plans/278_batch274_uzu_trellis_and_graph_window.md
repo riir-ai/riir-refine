@@ -1,7 +1,6 @@
 # Plan 278 — Batch 274: uzu trellis trio + #996 GDN-tree-verify fusion + the llama.cpp graph-window + splash 122B residue
 
-**Status:** CLAIMED — shikuwa-4090-idle, 2026-10-24, expires 2026-10-26
-
+**Status:** LANDED — Batch 274 (`03c089fba73`, 2026-10-25: +3 own kernel_opt rules corpus 941→944 entries_gpu_120 + 1 own rust_perf rule 266→267 entries_47 + 5 count-neutral rider faces, Plan 278 / Research 311; the landing commit is the arbiter).
 **Claim:** Batch 274 / plan 278 claimed by shikuwa/4090 idle loop BEFORE authoring; push is the
 arbiter; other lanes re-fetch before staging and yield to this row. Sources already local
 (`vendor/uzu` fetched to origin/main `14b770894`; `vendor/splash` fetched; `vendor/prismml-llama.cpp`

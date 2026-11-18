@@ -1,6 +1,8 @@
 # Plan 385 — codegraph kernel transcription batch (nominal Batch 371)
 
-**Status:** CLAIMED — shikuwa-4090-b371, epoch 1795005397, expires 2026-11-20T12:36:44+00:00 (claimed 2026-11-18T12:36Z; batch number re-derived at claim: 369 = sybil/Plan-384 landed, 370 = mlxlearn/Plan-383 landed → **Batch 371**, title renumbered from the stale nominal 369). Box state: the 4090 holds the i1223 deciding-run exclusive window (Plan-337 zero-cargo posture) until ~2026-11-19T12Z — **T0/T1 (clone + quote verification + dedup greps, zero cargo) proceed now; T2–T8 authoring gates (cargo: bench validator + lib/clippy postures) wait for the post-run quiet window or another rig.** Plan-first; verdict recorded in `.research/418_codegraph_kernel_distill.md` (YES B corpus / lane LOW / product-coverage YES, 2026-11-17, pin `44098dec2c014f94f04c07df2d257b58bda2bb5a`); cargo half awaits a free window — covered by the claim above.
+**Status:** CLAIMED — shikuwa-4090-b371, epoch 1795005397, expires 2026-11-20T12:36:44+00:00 (claimed 2026-11-18T12:36Z; batch number re-derived at claim: 369 = sybil/Plan-384 landed, 370 = mlxlearn/Plan-383 landed → **Batch 371**, title renumbered from the stale nominal 369).
+**Claimed:** shikuwa-4090-b371, 1795005397, expires 2026-11-20T12:36:44+00:00
+(Box state at claim: the 4090 holds the i1223 deciding-run exclusive window (Plan-337 zero-cargo posture) — T0/T1 zero-cargo work proceeded inside it; T4's cargo gate postures wait for the post-run quiet window or another rig. Plan-first; verdict recorded in `.research/418_codegraph_kernel_distill.md` (YES B corpus / lane LOW / product-coverage YES, 2026-11-17, pin `44098dec…`); batch number re-derived at claim: 369 = sybil/Plan-384 landed, 370 = mlxlearn/Plan-383 landed → **Batch 371**, title renumbered from the stale nominal 369.)
 
 Tasks:
 

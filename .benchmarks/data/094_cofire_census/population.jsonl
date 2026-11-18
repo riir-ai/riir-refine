@@ -1,0 +1,148 @@
+{"name": "actix-governor-0.10.0", "lints": ["multiple_crate_versions"], "waves": [3]}
+{"name": "arbtest-0.3.2", "lints": ["test_attr_in_doctest"], "waves": [4]}
+{"name": "arc-interner-0.7.0", "lints": ["needless_maybe_sized", "needless_return"], "waves": [4]}
+{"name": "arraydeque-0.5.1", "lints": ["manual_abs_diff"], "waves": [2]}
+{"name": "async_executors-0.7.0", "lints": ["doc_overindented_list_items"], "waves": [2]}
+{"name": "audiopus-0.2.0", "lints": ["legacy_numeric_constants", "needless_borrow", "needless_question_mark", "redundant_guards", "useless_borrows_in_formatting"], "waves": [2]}
+{"name": "aws-sdk-resourcegroups-1.115.0", "lints": ["question_mark"], "waves": [2]}
+{"name": "binascii-0.1.4", "lints": ["byte_char_slices", "identity_op", "len_zero", "manual_is_multiple_of", "needless_range_loop"], "waves": [2]}
+{"name": "bitcode-0.6.9", "lints": ["missing_transmute_annotations"], "waves": [4]}
+{"name": "bitcode_derive-0.6.9", "lints": ["large_enum_variant", "obfuscated_if_else", "ptr_arg"], "waves": [4]}
+{"name": "bitmaps-3.2.1", "lints": ["if_same_then_else", "manual_filter", "missing_transmute_annotations", "non_canonical_clone_impl"], "waves": [2]}
+{"name": "btparse-0.2.0", "lints": ["needless_borrow", "unnecessary_lazy_evaluations"], "waves": [2]}
+{"name": "built-0.8.1", "lints": ["needless_late_init"], "waves": [2]}
+{"name": "burn-train-0.21.0", "lints": ["for_kv_map"], "waves": [2]}
+{"name": "chic-1.2.2", "lints": ["inherent_to_string", "useless_format"], "waves": [2]}
+{"name": "chromiumoxide-0.9.1", "lints": ["useless_borrows_in_formatting"], "waves": [2]}
+{"name": "chrono-english-0.2.1", "lints": ["clone_on_copy", "collapsible_match", "needless_borrow", "question_mark", "redundant_closure", "unnecessary_unwrap", "useless_conversion", "wrong_self_convention"], "waves": [2]}
+{"name": "cityhasher-0.1.0", "lints": ["manual_rotate"], "waves": [2]}
+{"name": "clap-markdown-0.1.5", "lints": ["mixed_attributes_style", "needless_borrow", "needless_return", "only_used_in_recursion", "single_char_add_str", "useless_format", "write_with_newline"], "waves": [3]}
+{"name": "com_macros_support-0.6.0", "lints": ["legacy_numeric_constants", "needless_borrow", "needless_return", "single_char_add_str"], "waves": [2]}
+{"name": "concat-idents-1.1.5", "lints": ["test_attr_in_doctest"], "waves": [2]}
+{"name": "debug_stub_derive-0.3.0", "lints": ["needless_lifetimes"], "waves": [4]}
+{"name": "deunicode-1.6.2", "lints": ["needless_as_bytes"], "waves": [2]}
+{"name": "dinghy-build-0.8.6", "lints": ["needless_borrows_for_generic_args", "needless_question_mark", "ptr_arg", "suspicious_doc_comments"], "waves": [4]}
+{"name": "docker-generate-0.1.3", "lints": ["derivable_impls", "inherent_to_string", "into_iter_on_ref", "needless_borrow", "redundant_field_names", "to_string_in_format_args"], "waves": [4]}
+{"name": "dotenv-0.15.0", "lints": ["drain_collect", "manual_non_exhaustive", "needless_borrow", "needless_return", "unwrap_or_default"], "waves": [2]}
+{"name": "ducc-0.1.5", "lints": ["doc_overindented_list_items", "into_iter_on_ref", "len_without_is_empty", "manual_ok_err", "map_clone", "match_like_matches_macro", "needless_borrow", "needless_lifetimes", "needless_question_mark", "needless_return", "new_without_default", "question_mark", "redundant_field_names", "unnecessary_cast", "useless_conversion"], "waves": [3]}
+{"name": "ducc-sys-0.1.2", "lints": ["redundant_static_lifetimes"], "waves": [3]}
+{"name": "edit-0.1.5", "lints": ["io_other_error"], "waves": [4]}
+{"name": "edit-distance-2.2.2", "lints": ["needless_range_loop"], "waves": [4]}
+{"name": "embassy-time-0.5.1", "lints": ["extra_unused_lifetimes", "implicit_saturating_sub", "manual_div_ceil", "redundant_pattern_matching", "should_implement_trait"], "waves": [2]}
+{"name": "embedded-dma-0.2.0", "lints": ["doc_lazy_continuation"], "waves": [2]}
+{"name": "expander-2.2.1", "lints": ["derivable_impls", "identity_op", "needless_borrow", "unnecessary_mut_passed"], "waves": [2]}
+{"name": "ext-sort-0.1.5", "lints": ["len_without_is_empty", "needless_return", "type_complexity"], "waves": [4]}
+{"name": "extfmt-0.2.0", "lints": ["tabs_in_doc_comments"], "waves": [2]}
+{"name": "fast-counter-1.0.0", "lints": ["useless_conversion"], "waves": [4]}
+{"name": "fatfs-0.3.6", "lints": ["extra_unused_lifetimes", "field_reassign_with_default", "identity_op", "io_other_error", "legacy_numeric_constants", "len_without_is_empty", "manual_div_ceil", "manual_is_multiple_of", "manual_range_contains", "match_ref_pats", "needless_borrow", "needless_borrowed_reference", "needless_lifetimes", "needless_question_mark", "needless_return", "new_without_default", "question_mark", "seek_from_current", "unnecessary_cast", "unnecessary_map_or", "unnecessary_unwrap", "useless_conversion"], "waves": [4]}
+{"name": "finality-grandpa-0.16.3", "lints": ["unnecessary_map_or"], "waves": [4]}
+{"name": "fjall-3.1.10", "lints": ["expect_used", "map_unwrap_or", "missing_errors_doc", "missing_panics_doc", "multiple_crate_versions", "return_self_not_must_use", "significant_drop_in_scrutinee", "unnecessary_wraps", "unused_self"], "waves": [2]}
+{"name": "flurry-0.5.2", "lints": ["doc_lazy_continuation", "manual_div_ceil", "unnecessary_map_or"], "waves": [2]}
+{"name": "frost-core-3.0.0", "lints": ["wrong_self_convention"], "waves": [3]}
+{"name": "futures_codec-0.5.0", "lints": ["needless_borrow"], "waves": [4]}
+{"name": "gltf-1.4.1", "lints": ["double_ended_iterator_last", "legacy_numeric_constants"], "waves": [4]}
+{"name": "gltf-json-1.4.1", "lints": ["to_string_trait_impl"], "waves": [3]}
+{"name": "go-flag-0.1.0", "lints": ["len_zero", "manual_strip", "needless_lifetimes", "new_without_default", "single_char_add_str", "unnecessary_lazy_evaluations"], "waves": [2]}
+{"name": "grep-cli-0.1.12", "lints": ["io_other_error", "needless_return"], "waves": [4]}
+{"name": "growthbook-rust-sdk-1.1.0", "lints": ["comparison_to_empty", "useless_conversion"], "waves": [4]}
+{"name": "gsgdt-0.1.2", "lints": ["derivable_impls", "iter_kv_map", "len_zero", "map_clone", "module_inception", "needless_borrow", "unwrap_or_default", "write_literal"], "waves": [4]}
+{"name": "hexasphere-19.0.0", "lints": ["excessive_precision", "too_many_arguments"], "waves": [4]}
+{"name": "hexdump-0.1.3", "lints": ["manual_range_contains", "redundant_field_names"], "waves": [4]}
+{"name": "ical-0.11.0", "lints": ["doc_lazy_continuation", "legacy_numeric_constants"], "waves": [4]}
+{"name": "img-parts-0.4.0", "lints": ["byte_char_slices"], "waves": [2]}
+{"name": "impl-trait-for-tuples-0.2.3", "lints": ["doc_lazy_continuation", "large_enum_variant", "match_like_matches_macro", "needless_borrow", "redundant_closure", "to_string_in_format_args"], "waves": [3]}
+{"name": "indexmap-nostd-0.4.0", "lints": ["doc_lazy_continuation", "multiple_bound_locations"], "waves": [3]}
+{"name": "inflate-0.4.5", "lints": ["empty_line_after_doc_comments", "enum_variant_names", "get_first", "io_other_error", "len_zero", "manual_is_multiple_of", "map_clone", "match_like_matches_macro", "needless_borrow", "needless_return", "new_without_default", "redundant_field_names"], "waves": [3]}
+{"name": "input_buffer-0.5.0", "lints": ["new_without_default", "unnecessary_cast"], "waves": [4]}
+{"name": "interval-heap-0.0.5", "lints": ["collapsible_if", "doc_lazy_continuation", "doc_overindented_list_items", "len_zero", "map_clone", "redundant_field_names"], "waves": [2]}
+{"name": "kiwi-schema-0.2.1", "lints": ["assign_op_pattern", "len_without_is_empty", "manual_rotate", "needless_return", "new_without_default", "result_unit_err"], "waves": [3]}
+{"name": "konst_proc_macros-0.4.1", "lints": ["needless_borrow", "needless_borrows_for_generic_args", "needless_return"], "waves": [3]}
+{"name": "kv-index-1.4.0", "lints": ["absolute_paths"], "waves": [4]}
+{"name": "lettre_email-0.9.4", "lints": ["from_over_into"], "waves": [2]}
+{"name": "libcrux-curve25519-0.0.8", "lints": ["needless_range_loop"], "waves": [2]}
+{"name": "libfuzzer-sys-0.4.13", "lints": ["doc_lazy_continuation"], "waves": [2]}
+{"name": "libz-rs-sys-0.6.8", "lints": ["unnecessary_cast"], "waves": [3]}
+{"name": "lifetimed-bytes-0.1.0", "lints": ["missing_transmute_annotations"], "waves": [3]}
+{"name": "linregress-0.5.4", "lints": ["legacy_numeric_constants", "manual_repeat_n"], "waves": [3]}
+{"name": "log-once-0.4.1", "lints": ["duplicated_attributes"], "waves": [4]}
+{"name": "loom-0.7.2", "lints": ["legacy_numeric_constants", "manual_next_back", "needless_maybe_sized", "needless_return", "non_canonical_clone_impl", "unnecessary_mut_passed"], "waves": [2]}
+{"name": "lsp-codec-0.3.0", "lints": ["io_other_error", "manual_strip", "mem_replace_with_default", "needless_borrow"], "waves": [4]}
+{"name": "lyon_geom-1.0.19", "lints": ["needless_lifetimes"], "waves": [2]}
+{"name": "m3u8-rs-6.0.1", "lints": ["derivable_impls", "legacy_numeric_constants"], "waves": [3]}
+{"name": "man-0.3.0", "lints": ["needless_borrow", "single_char_add_str"], "waves": [3]}
+{"name": "markdown-1.0.0", "lints": ["implicit_saturating_sub"], "waves": [3]}
+{"name": "maybe-async-0.2.11", "lints": ["cmp_owned", "doc_lazy_continuation", "doc_overindented_list_items", "test_attr_in_doctest", "unnecessary_filter_map"], "waves": [3]}
+{"name": "memory_units-0.4.0", "lints": ["manual_div_ceil"], "waves": [3]}
+{"name": "merkleized-metadata-0.5.1", "lints": ["unnecessary_map_or"], "waves": [4]}
+{"name": "meval-0.2.0", "lints": ["into_iter_on_ref", "legacy_numeric_constants", "match_like_matches_macro", "needless_borrow", "needless_lifetimes", "redundant_field_names", "useless_conversion"], "waves": [4]}
+{"name": "mp4ameta-0.13.0", "lints": ["chunks_exact_to_as_chunks", "collapsible_if", "derivable_impls", "field_reassign_with_default", "manual_is_multiple_of", "too_many_arguments", "useless_nonzero_new_unchecked"], "waves": [2]}
+{"name": "msdos_time-0.1.6", "lints": ["redundant_field_names"], "waves": [3]}
+{"name": "muldiv-1.0.1", "lints": ["cast_abs_to_unsigned", "legacy_numeric_constants"], "waves": [2]}
+{"name": "murmurhash3-0.0.5", "lints": ["identity_op", "needless_return"], "waves": [4]}
+{"name": "mutatis-0.5.4", "lints": ["empty_line_after_doc_comments", "needless_borrow", "needless_return", "too_many_arguments", "unit_arg"], "waves": [4]}
+{"name": "ndarray_einsum_beta-0.7.0", "lints": ["clone_on_copy", "iter_cloned_collect", "len_zero", "needless_borrow", "option_filter_map", "redundant_field_names", "redundant_pattern_matching", "search_is_some", "unnecessary_get_then_check", "unnecessary_unwrap", "wrong_self_convention"], "waves": [4]}
+{"name": "ndk-macro-0.3.0", "lints": ["derivable_impls"], "waves": [3]}
+{"name": "nom-derive-0.10.1", "lints": ["doc_overindented_list_items", "needless_lifetimes"], "waves": [3]}
+{"name": "nostr-sdk-0.45.3", "lints": ["too_many_arguments"], "waves": [4]}
+{"name": "ntest-0.9.5", "lints": ["manual_ok_err"], "waves": [3]}
+{"name": "num-cmp-0.1.0", "lints": ["manual_range_contains"], "waves": [2]}
+{"name": "odds-0.4.0", "lints": ["len_without_is_empty", "len_zero", "let_and_return", "manual_dangling_ptr", "missing_safety_doc", "missing_transmute_annotations", "needless_late_init", "needless_lifetimes", "needless_return", "ptr_offset_with_cast", "redundant_field_names", "transmute_ptr_to_ref"], "waves": [3]}
+{"name": "osmesa-sys-0.1.2", "lints": ["redundant_static_lifetimes"], "waves": [3]}
+{"name": "oxrdfxml-0.2.4", "lints": ["too_many_arguments"], "waves": [4]}
+{"name": "path-tree-0.8.3", "lints": ["sliced_string_as_bytes"], "waves": [2]}
+{"name": "pbjson-build-0.9.0", "lints": ["use_self"], "waves": [4]}
+{"name": "pinned-0.1.0", "lints": ["doc_lazy_continuation"], "waves": [4]}
+{"name": "pom-3.4.0", "lints": ["map_identity"], "waves": [2]}
+{"name": "precomputed-map-0.2.0", "lints": ["manual_is_multiple_of"], "waves": [3]}
+{"name": "qoi-0.4.1", "lints": ["elidable_lifetime_names", "ignored_unit_patterns", "non_minimal_cfg", "uninlined_format_args"], "waves": [2]}
+{"name": "rayon-scan-0.1.1", "lints": ["legacy_numeric_constants", "needless_borrow", "needless_lifetimes"], "waves": [2]}
+{"name": "repng-0.2.2", "lints": ["empty_line_after_doc_comments", "identity_op", "len_zero", "manual_div_ceil", "manual_is_multiple_of", "manual_range_contains", "needless_borrow", "needless_lifetimes", "redundant_field_names", "unnecessary_cast"], "waves": [2]}
+{"name": "reqwest_mock-0.7.0", "lints": ["clone_on_copy", "derivable_impls", "new_without_default", "redundant_closure", "redundant_field_names", "redundant_static_lifetimes", "unnecessary_lazy_evaluations", "useless_conversion", "wrong_self_convention"], "waves": [4]}
+{"name": "rexif-0.7.5", "lints": ["useless_conversion"], "waves": [3]}
+{"name": "rp2040-pac-0.6.0", "lints": ["empty_docs"], "waves": [4]}
+{"name": "runtime-struct-field-names-as-array-0.1.0", "lints": ["collapsible_match", "search_is_some"], "waves": [3]}
+{"name": "rusoto_batch-0.48.0", "lints": ["needless_borrow", "single_component_path_imports"], "waves": [3]}
+{"name": "rusqlite_migration-2.6.0", "lints": ["useless_borrows_in_formatting"], "waves": [2]}
+{"name": "rustpython-ast-0.4.0", "lints": ["unnecessary_map_or"], "waves": [3]}
+{"name": "rustpython-parser-0.4.0", "lints": ["unnecessary_map_or"], "waves": [3]}
+{"name": "rustpython-parser-vendored-0.4.0", "lints": ["legacy_numeric_constants"], "waves": [3]}
+{"name": "ryu_floating_decimal-0.1.0", "lints": ["deprecated_clippy_cfg_attr", "legacy_numeric_constants", "manual_is_multiple_of", "question_mark"], "waves": [3]}
+{"name": "safemem-0.3.3", "lints": ["doc_lazy_continuation", "len_zero", "ptr_offset_with_cast"], "waves": [3]}
+{"name": "sentry-core-0.49.2", "lints": ["allow_attributes"], "waves": [3]}
+{"name": "serde_millis-0.1.1", "lints": ["double_parens", "duration_subsec"], "waves": [4]}
+{"name": "serde_nanos-0.1.4", "lints": ["redundant_closure"], "waves": [4]}
+{"name": "shadow-rs-2.0.0", "lints": ["useless_borrows_in_formatting"], "waves": [2]}
+{"name": "smartstring-1.0.1", "lints": ["manual_next_back", "non_canonical_clone_impl", "non_canonical_partial_ord_impl", "useless_conversion"], "waves": [2]}
+{"name": "speexdsp-resampler-0.1.0", "lints": ["assign_op_pattern", "collapsible_else_if", "excessive_precision", "explicit_auto_deref", "mem_replace_with_default", "needless_return", "unnecessary_cast"], "waves": [3]}
+{"name": "starknet-core-0.16.0", "lints": ["use_self"], "waves": [4]}
+{"name": "stop-token-0.7.0", "lints": ["from_over_into", "redundant_closure"], "waves": [4]}
+{"name": "stream-cancel-0.8.2", "lints": ["redundant_pattern_matching"], "waves": [4]}
+{"name": "stringmetrics-2.2.2", "lints": ["missing_const_for_fn", "redundant_else"], "waves": [3]}
+{"name": "strip-ansi-escapes-0.2.1", "lints": ["empty_line_after_doc_comments"], "waves": [3]}
+{"name": "swc_visit_macros-0.5.13", "lints": ["mem_replace_option_with_some"], "waves": [4]}
+{"name": "tauri-bundler-2.9.4", "lints": ["useless_borrows_in_formatting"], "waves": [2]}
+{"name": "tiny-skia-0.12.0", "lints": ["assign_op_pattern", "io_other_error", "useless_nonzero_new_unchecked"], "waves": [4]}
+{"name": "tiny-skia-path-0.12.0", "lints": ["manual_is_multiple_of"], "waves": [4]}
+{"name": "tiny_http-0.12.0", "lints": ["doc_overindented_list_items", "io_other_error", "unbuffered_bytes", "unnecessary_map_or"], "waves": [2]}
+{"name": "tokio-named-pipes-0.1.0", "lints": ["needless_lifetimes", "needless_return"], "waves": [4]}
+{"name": "tree-sitter-lua-0.5.0", "lints": ["const_is_empty"], "waves": [3]}
+{"name": "trust-dns-proto-0.23.2", "lints": ["derivable_impls", "doc_overindented_list_items", "empty_line_after_doc_comments", "get_first", "large_enum_variant", "legacy_numeric_constants", "needless_lifetimes", "unwrap_or_default", "use_self", "useless_borrows_in_formatting", "useless_conversion"], "waves": [2]}
+{"name": "tstr_proc_macros-0.3.0", "lints": ["get_first", "useless_format"], "waves": [4]}
+{"name": "typed-headers-0.2.0", "lints": ["match_like_matches_macro", "needless_return", "redundant_closure", "redundant_static_lifetimes", "single_component_path_imports", "upper_case_acronyms", "while_let_loop"], "waves": [4]}
+{"name": "unicode-bom-2.0.3", "lints": ["int_plus_one", "len_without_is_empty"], "waves": [3]}
+{"name": "unicode-case-mapping-1.0.0", "lints": ["expect_fun_call", "large_const_arrays", "manual_memcpy", "needless_borrows_for_generic_args", "redundant_static_lifetimes"], "waves": [4]}
+{"name": "urdf-rs-0.9.0", "lints": ["empty_line_after_doc_comments"], "waves": [3]}
+{"name": "utf8-ranges-1.0.5", "lints": ["into_iter_on_ref", "len_without_is_empty", "redundant_field_names"], "waves": [3]}
+{"name": "w3f-pcs-0.0.7", "lints": ["int_plus_one", "len_zero", "needless_borrow", "op_ref", "result_unit_err", "type_complexity", "unnecessary_lazy_evaluations", "unnecessary_to_owned", "unused_unit", "useless_conversion"], "waves": [3]}
+{"name": "w3f-plonk-common-0.0.10", "lints": ["extra_unused_lifetimes", "int_plus_one", "needless_borrow", "type_complexity"], "waves": [3]}
+{"name": "w3f-ring-proof-0.0.10", "lints": ["manual_repeat_n", "needless_borrow", "type_complexity", "useless_vec"], "waves": [3]}
+{"name": "waitpid-any-0.3.0", "lints": ["cast_sign_loss"], "waves": [4]}
+{"name": "warp-0.4.3", "lints": ["empty_line_after_outer_attr", "enum_variant_names", "explicit_auto_deref", "mem_replace_with_default", "multiple_bound_locations", "needless_borrows_for_generic_args", "needless_lifetimes", "needless_return", "needless_splitn", "redundant_closure", "type_complexity", "wrong_self_convention"], "waves": [4]}
+{"name": "wasip1-1.0.0", "lints": ["missing_safety_doc"], "waves": [4]}
+{"name": "wasix-0.13.2", "lints": ["doc_lazy_continuation", "doc_overindented_list_items", "missing_safety_doc", "needless_lifetimes", "too_many_arguments"], "waves": [2]}
+{"name": "wasm-gen-0.1.4", "lints": ["clone_on_copy", "explicit_counter_loop", "len_zero", "needless_borrow", "new_without_default", "ptr_arg", "single_component_path_imports", "unnecessary_cast", "unnecessary_mut_passed"], "waves": [4]}
+{"name": "wildcard-0.3.0", "lints": ["elidable_lifetime_names"], "waves": [2]}
+{"name": "winutil-0.1.1", "lints": ["needless_return"], "waves": [2]}
+{"name": "wol-rs-1.1.0", "lints": ["needless_range_loop", "useless_borrows_in_formatting"], "waves": [2]}
+{"name": "wyhash-0.6.0", "lints": ["chunks_exact_to_as_chunks"], "waves": [2]}
+{"name": "x11rb-0.14.0", "lints": ["useless_conversion"], "waves": [2]}
