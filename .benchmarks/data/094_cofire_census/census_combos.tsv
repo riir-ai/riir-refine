@@ -1,0 +1,7 @@
+ok_only	dedupe	crates_ge2	lint_universe	edges	edges_ge3	edge_instances
+True	keyunion	78	140	1026	57	1289
+True	pairunion	78	140	1026	57	1289
+True	perwave	99	140	1026	111	1579
+False	keyunion	84	153	1318	68	1635
+False	pairunion	84	153	1318	68	1635
+False	perwave	105	153	1318	124	1925

@@ -2,7 +2,7 @@
 
 > **Source:** "Large-scale Neuron Community Discovery Reveals Neuron-Sparse Behaviors in Language Models" — Goodfire + Imperial College (Igor Shilov, Thomas Fel, Tal Haklay, Lucius Bushnaq, Owen Lewis). Blog: <https://www.goodfire.com/research/neuron-communities> (2026-11-17); arXiv: [2611.23112](https://arxiv.org/abs/2611.23112).
 > **Date:** 2026-11-18
-> **Status:** Active — **GAIN** verdict; PoC filed at [`245_rule_cofire_community_audit_poc.md`](../.issues/245_rule_cofire_community_audit_poc.md) with pre-registered gates. No plan, no claimed gains (Ungoat discipline).
+> **Status:** **NEGATIVE-sparse** (2026-11-18, PoC-0 kill condition — Bench 161). The GAIN verdict is demoted: the pinned co-fire population sits 3 edges under its own sparseness bar (57 weight-≥3 edges vs the pre-registered ≥ 60), so the PoC chain stopped at its census gate. Re-open condition (new data): a wave-1 per-crate re-run. §7 carries the record.
 > **Related Research:** [053 (CNA — gradient attribution, SAE rejected)](../../katgpt-rs/.research/053_CNA_Contrastive_Neuron_Attribution.md) · [365 (riir-ai `co_occur` SkillEdgeTable)](../riir-ai/.research/365_SkillGraph_prereq_enhance_co_occur_skill_edges.md) · [393 (BSF — the representation-side sibling)](../../katgpt-rs/.research/393_Block_Sparse_Featurizer_Subspace_Concept_Primitive.md) · [394 (GNN survey — modularity adjudication)](../../katgpt-rs/.research/394_GNN_Survey_Within_Class_Effective_Rank_Fusion.md)
 > **Related Issues/Benches (this repo):** Issue 094 / `examples/tca_covariability_poc.rs` (the controlling negative) · Issue 098 cross-OOO (`src/score_bench/cross_ooo.rs`) · Bench 092 (`swap ≈ disable`) · Bench 094 (the fired-histogram data source)
 > **Verdict provenance:** Claude verdict ping-pong, 2 rounds (REVISE → AGREE), session `9e2b1616-7416-4104-b50f-9d48ae7ef5bc`, closed with `final_round` 2026-11-18.
@@ -76,7 +76,21 @@ Goodfire's neurons interact **within one forward pass** — a community is a cau
 
 ## 6. PoC Pointer
 
-Pre-registered gates live in [`245_rule_cofire_community_audit_poc.md`](../.issues/245_rule_cofire_community_audit_poc.md): PoC-0 census (pin exact counts; verdict-filter + repeated-crate conventions; wave-1 re-run note) → PoC-1 communities above a degree-preserving permutation null (lint fire counts AND crate sizes fixed; min-support ≈3 crates per the Bench 094 rule) → PoC-2 non-additivity vs summed per-rule necessity → PoC-3 sufficiency vs top-k-by-mass + random control. Any gate failure = NEGATIVE recorded + this note's tier demoted in the same commit.
+**CLOSED NEGATIVE-sparse at PoC-0 (Bench 161, 2026-11-18)** — the gates lived in Issue 245 (closed + removed at the close; git history recovers the file; the record lives in §7 + [Bench 161](../.benchmarks/161_i245_poc0_cofire_census.md)). PoC-1–4 were never run.
+
+## 7. NEGATIVE-sparse record (PoC-0 kill, Bench 161, 2026-11-18)
+
+**What ran:** the PoC-0 census over the Bench-094 wave scans (702 rows: 589 `ok` / 110 `compile_error` / 3 `timeout`; 580 distinct crates, 122 repeated (wave, crate) rows; wave 1 totals-only, excluded per the filing). Instrument `scripts/i245_poc0_cofire_census.py`, outputs `.benchmarks/data/094_cofire_census/`.
+
+**The kill, under the pinned convention (ok-only + per-crate pair-union):** 78 crates ≥ 40 PASS, **57 edges weight-≥3 < 60 FAIL** — NEGATIVE-sparse by 3 edges. Community discovery at min-support 3 was pre-registered as too sparse on exactly this reading.
+
+**What the census resolved (the filing's motivation):** the two prior parses' disagreement is fully attributed — claude-verdict's 105/1318/124 = all+perwave distinct pairs; coordinator's 99/111 = ok+perwave and **1579 = per-wave edge instances with multiplicity, not distinct pairs**. Both prior parses were per-wave readings; the viability they suggested (111/124 ≥ 60) was the double-counting artifact of the 122 repeated rows. Deduplicated to one entry per crate, the ge3 core is 57 (ok-only) / 68 (all-rows). The instrument reproduces both prior parses exactly — two parsers, one census, zero unexplained deltas.
+
+**The disclosed sensitivity (why the pin is not bar-shopped):** the ok-only filter was pinned before any census ran (`compile_error` scans are truncated runs sampling a different lint regime — rationale in the claim commit `c0f8e83b44c`). The all-rows variant reads 68 ≥ 60 (pass by 8); flipping the pin after seeing 57-vs-68 is the post-hoc bar-shopping the pre-registration exists to prevent. Both margins are razor-thin on a bar designed as a sparseness floor.
+
+**Re-open condition (new data, never a re-parse or a re-pin):** a wave-1 per-crate re-run (`094_t01` is totals-only; the filing itself priced this path "filed separately, do not block PoC-0") adds a fourth wave to the population. A re-open files a NEW issue citing this section + Bench 161, keeps the Bench-161 PoC-1 pre-registration (Louvain-class, min-support 3, degree-preserving permutation null, 1000 draws, one-sided p ≤ 0.05 at size ≥ 3), and re-reads the SAME kill bar on the new pinned population.
+
+**Scope of the demotion:** the paper distillation (§1–§3) stands; the demoted tier is the rulewright CONSUMER fusion (§4's co-fire × community-detection × community-level audits) — unproven and now kill-gated on population sparseness. §5's secondary/game-side analogs inherit the lesson: before any community-detection consumer, census the co-fire population against its own sparseness bar FIRST (the PoC-0 pattern).
 
 ## References
 
