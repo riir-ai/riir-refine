@@ -1,6 +1,6 @@
 # Plan 386 — Mozilla video v2: "refine → katopz" (project demo + team vision, 2-min re-do)
 
-Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · **r2 (owner watch 2026-11-18): 'too excited, sometimes not, AI slop' → calm register re-cut — VO v6 ONE `[calm]` cue on every line (level spread −22.6..−25.4 dB vs v5's 6 dB swing; mix LRA 6.5→3.9 LU), no-overshoot motion, hype copy cut, install line → `cargo install riir-refine` (issue 244); render 120.00 s sha `b2ecea96…` (mozilla-video `5082379`); skill updated (riir-ai `670ce5c93`)** · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
+Status: EXECUTING 2026-11-18 — owner re-do of Plan 378 (v1 rejected: chart misplaced, flat voice, slide-show feel); storyboard + VO script + fact pins below; CLI `help` verb LANDED (`73e6cfc3`); VO v5 + assets + build DONE — `video-family` skill LANDED (riir-ai `931620cdb`) · **r1 fresh verdict = REVISE (7 blockers) → blockers 1–6 APPLIED, 7 half-applied (AI-voice chip at T1; owner's own voice = owner option)** — render `mozilla_v2.mp4` 120.47 s, sha `0f4f29d6…` (mozilla-video `c73c88e`) · **r2 (owner watch 2026-11-18): 'too excited, sometimes not, AI slop' → calm register re-cut — VO v6 ONE `[calm]` cue on every line (level spread −22.6..−25.4 dB vs v5's 6 dB swing; mix LRA 6.5→3.9 LU), no-overshoot motion, hype copy cut, install line → `cargo install riir-refine` (issue 244); render 120.00 s sha `b2ecea96…` (mozilla-video `5082379`); skill updated (riir-ai `670ce5c93`)** · **r3 (owner 2026-11-18): proof = the corpus grown by real use since August (dog-food start), not commit counts → heatmap dropped, corpus chart is the hero (412 @ 08-17 → 1,572); names respelled (Kat opz · R I I R, A I); render 122.07 s sha `79717f59…` (mozilla-video `191cac1`)** · awaiting owner watch + listen · supersedes Plan 378's §4/§5 (378's fact pins + TTS lane stay the record)
 Branch: `develop`
 
 The CFP line this answers: *"a link to a two-minute video showing the project and the
@@ -126,6 +126,16 @@ End-card line (on screen, not spoken): *Voice generated with Fish Audio Drama 3 
   on crates.io + homebrew-core; the binary stays `cargo-refine`). The crates.io publish is
   in flight — the video shows the post-publish command; re-verify `cargo install riir-refine`
   resolves before the video link is submitted.
+
+- **V8 — r3 proof of use (owner, 2026-11-18).** "August is when we started using refine in
+  real life; the corpus has stacked since that day — that proves real use, not code commits,
+  which can be manipulated." F9 re-scoped: the commit heatmap is RETIRED; the T6 hero is the
+  corpus rule count weekly from git history from the first dog-food week (2026-08-17: 412) to
+  today (1,572). Local `.refine/blueprint_history.jsonl` fix-campaign records only reach back to
+  2026-10-27 (96 campaigns, 418 edits workspace-wide) — too short for the August claim, so the
+  corpus series carries it. Runtime 122.07 s: the calm voice (~2.3 words/s) + the owner's two
+  must-say lines (dog-food since August + self-funded spend) cost ~2 s over 2:00 — accepted
+  (the CFP asks for "a two-minute video", not a hard cap).
 
 ## Assets
 
