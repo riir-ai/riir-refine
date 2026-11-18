@@ -76,7 +76,7 @@ External-landscape searches (2026-10-31): open local coding tools (Continue, loc
 |---|---|---|
 | Working, measured technology | GOAT benches, `.benchmarks/08_benchmarks/` book, score-bench history | ✅ shipped |
 | Production deployment (internal) | Default dev-loop tool across the workspace's 32 repos since 2026-08 | ✅ honest, but internal |
-| Public distribution surface | `riir-ai/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket, **crates.io** (`riir-refine` 0.5.2, live 2026-11-18 — `cargo install riir-refine`; published as `cargo-refine` 0.5.0–0.5.1 from 2026-11-11, issue 244) | ✅ public |
+| Public distribution surface | `riir-ai/cargo-refine` (releases + install.sh/ps1), Homebrew tap, Scoop bucket, **crates.io** (`riir-refine` 0.6.0, live 2026-11-18 — `cargo install riir-refine`; published as `cargo-refine` 0.5.0–0.5.1 from 2026-11-11, issue 244) | ✅ public |
 | Upstream acceptance | mozilla/sccache #2977 **MERGED** (2026-11-07, `907230be`, six review rounds); #3025 (backend read backoff) **open + full CI matrix green** (50 pass / 1 by-design skip), answering the issue author's ratified design with their own reproducer measured | ✅ public |
 | Open data commitment | Contributed fix-pairs publish under MIT (consent screen pins it) | ✅ shipped |
 | Installer downloads / repo stars / issues | GitHub releases API + repo pages | ⬜ collect (T3) |

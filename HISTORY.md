@@ -2,6 +2,14 @@
 
 Compacted 2026-10-30: every `##` heading kept verbatim, one compact entry per record (≤2 short lines); the full pre-compaction text is in git history (pre-compaction HEAD 403d72bbb703; the 2026-10-16 pass: cf0f52dbb180). Operational rules live in `AGENTS.md`; removed issue files: git history.
 
+## 2026-11-18 — Issue 244 CLOSED (file removed): install name `cargo-refine` → `riir-refine` on crates.io, Homebrew and Scoop
+
+`refine` is taken on crates.io (rsalmei's file renamer) and in homebrew-core (a grammar checker); `riir-refine` was free. The binary stays `cargo-refine`, so `cargo refine` is unchanged. The publish surgery now sets the package name (`NAME=riir-refine`) and the binary name (`BIN=cargo-refine`) separately (`adf946bb`).
+- crates.io: `riir-refine` 0.5.2 (0.5.1 tree + hint, tag `cratesio-riir-refine-0.5.2`/`5eb86299`), then **0.6.0 from develop** (`9913bcc5`, tag `cratesio-riir-refine-0.6.0`) after the katgpt cascade katgpt-core 0.6.0 + types 0.3.1 / sense 0.3.1 / micro-belief 0.2.3 / assign 0.1.1 (katgpt-rs `fd36af96c`, semver-checks-chosen: core had 5 majors). Pointer `cargo-refine` 0.5.3 tells legacy installs to run `cargo install --force riir-refine`. Install tests on amo are green for both releases.
+- Publish from amo, not m3: m3 uploads at 218 KB/s, so a 7 MB crate takes about 32 s, and crates.io's 30 s Heroku limit returns 408. The token stays sealed on m3; Touch ID `exec` pipes it over ssh stdin. `p1-cascade` was re-sealed with `riir-refine` in its crate scope after a 403.
+- Homebrew: tap `Formula/riir-refine.rb` + `formula_renames.json` (`4ae9879`); Scoop: `bucket/riir-refine.json` + `deprecated/cargo-refine.json` (`836e422`); dist repo `a6c8da1`/`5ed711b`; release lane writes the new names (`3c56e457`).
+- Site: refine.riir.ai deploys `35da7018` + `3e8d51dc` (riir-dapps bench 018); the copy contract exempts the exact word `riir-refine`.
+
 ## 2026-11-18 — Batch 370 LANDED (Plan 383 / Research 415): the mlx-learn certified-KNN + compensated-numerics kernel_opt distill + the sec clamp-accounting transcription
 
 kernel_opt 1089 -> 1093 (entries_gpu_158: certified-prefilter-omission-bound-escalate-exact + device-fp64-absent-two-float-compensated-accumulation + exact-ordering-escalating-precision-ladder + overflow-guard-authoritative-sum-repair-after-loop, tabulai/mlx-learn @ 07054ce3 Apache-2.0) + sec 76 -> 77 (clamp-emits-tail-error-term); +2 count-neutral faces (B105 output-verify arm + B111 decisive-axis/both-counts/class-exclusion arm); fixtures 17/17 + 4/4 standalone; retrieval floors 30/0 HELD; the batch staged nominal 369, RENUMBERED 370 pre-landing (the plan-384 sybil lane allocated 369 first-push, 76811c50 — first-allocation wins); NC2/NC3 dropped at authoring; six T0 citation corrections carried (full record: the snapshot landing block + Plan 383 + Research 415).
