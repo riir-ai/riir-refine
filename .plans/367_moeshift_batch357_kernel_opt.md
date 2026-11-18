@@ -3,6 +3,7 @@
 **Status:** LANDED 2026-11-12 — Batch 357 complete (T0–T10; claim discharged by the landing commit).
 
 **Claimed:** zed-m3-b357-moeshift, 1794490726, expires 2026-11-14T13:38:46Z
+**Lease closed:** zed-m3-b357-moeshift, 1794490726, was expires 2026-11-14T13:38:46Z — DISCHARGED by the Batch-357 landing `5a9383c7b62` (2026-11-12: kernel_opt 1076→1078 entries_gpu_155 +2 own rules + 2 faces, all gates green, Plan 367 T0-T10 complete; the landing commit is the arbiter; the 7b678e660a9 queue prune kept the claim row live past its landing — this fold repairs the lint residue).
 
 Source: `davide-troiani/moeshift` @ `2b1b3e87ea94059518179bd93252c7452d6c11f3` (MIT; llama.cpp-omni fork — provenance chain cites tc-mb upstream for LES + the fork for the Qwen/Metal/cache work). C/C++/ObjC/Metal source — fixtures are ALWAYS original Rust reproductions (the transcription law). Nominal entries file `entries_gpu_155.rs` (entries_gpu_154 taken by B345/Plan 357 LocalSR; RE-DERIVE by `ls` at authoring — the sgl-muse-mega lane, Batch 354/plan 364, is staged unclaimed and may take the next slot first).
 
