@@ -4,6 +4,8 @@
 **Date:** 2026-11-09
 **Lease closed:** zed-m3-i221p4, 1794387082, expires 2026-11-13T09:00:00+00:00 — the agent-executable scope landed same session (P6 residue + P7 records + P4 bookkeeping below; the main P6 sweep was `6cdaffed3`); owner rows keep the issue open
 
+**P4 step 1 VERDICT LANDED 2026-11-18 (delegated-owner, session d9c2bb28 — the seal-sprints GOLF.md trim; this ruling retires the last non-credential owner row on this issue): the binary lane is KEPT, secondary-but-functional. The single retire trigger is CAPABILITY PARITY, not a release count (the issue's "after 1–2 crates.io releases" trigger is met and stays met — a higher count would move the goalpost): retire the binary-lane guts ONLY once the crates.io build (via the P2b lean-retriever posture) carries the contribution tier (`points`/`net`/`seat_rerank`) AND self-update has a crates.io-build equivalent. Until then both lanes coexist, and the homebrew-shadow + install-probe hazard guards STAY TRACKED (removing the retire option does not retire the hazards). GOLF.md no longer carries this row; this block is the record.**
+
 ## Landed 2026-11-09 — the katplane vendoring (zero private touch)
 
 The owner's minimization directive executed the SAME DAY, before any publish machinery:
