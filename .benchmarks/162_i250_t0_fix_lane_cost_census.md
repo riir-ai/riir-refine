@@ -42,3 +42,21 @@ Reverts are concentrated in two rules. A **per-rule historical revert prior** (t
 - One run dominates the tail.
 - (d) is unmeasured.
 - The amo / 4090 / bmo populations are pooled.
+
+## Addendum — T1a: the per-rule revert prior as a decline floor (2026-11-20)
+
+Pre-registered in `.issues/250` (`6e9c2759`). `t1a_rule_prior.py` (+ `t1a_output.txt`) in the data dir.
+- **Split:** time-split at median ts. FIT = 82 runs; EVALUATE = 36 held-out verify runs, 82 checks. The 206-check outlier falls in FIT; the held-out max is 5.
+- **Fitted rules with p ≥ 0.25:** assert_is_empty 0.727, unnecessary_get_then_check 0.5, map_unwrap_or 0.5, redundant_closure 2.5. That last value is stratum over-counting: whole-file reverts get attributed to the file's rules too, the same artifact as T0's 1.07.
+- **Held-out perfect-guard ceiling:** 82 → 64 checks = **21.95%**, so the 10% bar is reachable on this window.
+
+| τ | check reduction (ex-outlier) | false-decline rate | reverts caught |
+|---:|---:|---:|---|
+| 0.25 | 3.9% | 2.74% | 17 / 22 |
+| **0.5 (primary)** | **3.9%** | **2.74%** | 17 / 22 |
+| 0.75 | 3.9% | 0.68% | 1 / 22 |
+
+**Verdict: T1a FAIL on both bars at the primary τ** (3.9% < 10%; 2.74% > 1%).
+- The prior catches most reverting edits (17 of 22) but saves almost no checks. A doomed rule rarely sits alone in a run's batch: other edits in the same batch still revert or still force the rounds. The 3.9% saving is identical at every τ, i.e. it comes from batches the decline empties or cleans regardless of which rules cross the threshold.
+- Declining whole rules also drops kept edits (2.7%).
+- **Consequence for T1b:** a useful floor needs **per-edit** (not per-rule) resolution and must clear the cleaning-the-batch problem. The rule prior's 3.9% is the number the similarity arm must beat. The stratum accounting artifact (reverted > written under whole-file reverts) should be fixed in the blueprint row before any learned arm trains on these strata.

@@ -1,7 +1,7 @@
 # Issue 250: Verifier-gate shadow-score → decline-guard POC for the fix lane (ITERLOGIC transplant)
 
 **Status:** Open — research-derived POC (riir-refine Research 424, EMNLP 2026 Findings "Iterative Natural Logic Verification for Multi-hop QA"); verdict round 1 corrections applied (compile-label scope, cost model first, G1 per-posture)
-**Claimed:** katgpt-rs-93@amo, 1795118000, expires 2026-11-22T00:00:00Z
+**Lease closed:** katgpt-rs-93@amo, 1795118000, was expires 2026-11-22T00:00:00Z — T1a complete (FAIL, Bench 162 addendum); T1b unclaimed
 **Lease closed:** katgpt-rs-93@amo, 1795116000, was expires 2026-11-22T00:00:00Z — T0 complete (Bench 162); T1 unclaimed
 **Priority:** after the next maintained-binary lane (the cost asymmetry is real but the lane is not red today)
 
@@ -20,7 +20,7 @@ Therefore the transplant's honest first posture is NOT "order compiles" — it i
 ## Phases (pre-registered; the stop bars bind)
 
 - [x] **T0 — Cost-model census** — DONE 2026-11-20, [Bench 162](../.benchmarks/162_i250_t0_fix_lane_cost_census.md): NOT DOA. Wasted verifies are 11.3% of verify runs, the perfect-guard ceiling is 26.2% without the one 206-check outlier (66.3% with it), and the derived **G3 bar is ≥ 10% realized compile reduction**. Reverts concentrate in two rules, so T1 should run a per-rule revert prior as the floor's floor. (d) pool sizes are not persisted (deferred to the ladder arm's instrumentation). Original text: **T0 — Cost-model census (CPU, no GPU; produces the G3 number, and can kill the POC).** From trajectory records + a shadow fix_verify instrumentation, measure on the real `.refine/misses` queue: (a) compile invocations per fix run (baseline + rounds, per package); (b) the WASTED-VERIFY rate — runs whose entire batch reverts (baseline + every round spent on a doomed set); (c) per-file revert-round counts; (d) pool sizes per finding (candidates drafted vs the one verified). **Bar-setting rule: the G3 target is DERIVED from (b)+(c), not assumed** — e.g. "a floor at held-out PR-AUC X would have skipped Y% of wasted verifies". **DOA stop condition: if wasted verifies are rare (< ~5% of runs) and revert rounds ≈ 1, the decline-guard's savings are structurally thin and the POC stops here as a recorded negative** — that is a valid outcome, not a failure.
-- [ ] **T1a — the floor's floor: per-rule historical revert prior** (pre-registered 2026-11-20, katgpt-rs-93, before any number).
+- [x] **T1a — FAIL (Bench 162 addendum): the rule prior catches 17/22 reverts but saves 3.9% of checks (bar 10%; held-out ceiling 22%) and false-declines 2.7% (bar 1%) — per-rule resolution is too coarse; T1b must be per-edit and beat 3.9%. Also: the blueprint strata over-count reverts under whole-file reverts (fix before training on them).** Original: **T1a — the floor's floor: per-rule historical revert prior** (pre-registered 2026-11-20, katgpt-rs-93, before any number).
   - Data: Bench 162's 164 rows. Unit: the per-run rule strata.
   - Split: FIT on runs with ts < median(ts), EVALUATE on the later half.
   - Policy: decline rule r iff fitted p(r) = Σreverted/Σwritten ≥ τ. τ = 0.5 primary; 0.25 / 0.75 reported. Rules unseen in FIT are never declined. The `(whole file)` stratum is non-declinable (it carries no rule).
