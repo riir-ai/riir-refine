@@ -73,6 +73,9 @@ pub struct LatentSkillEvolution {
     directions: HashMap<String, Direction>,
     /// Evolution hyperparameters.
     config: EvolveConfig,
+    /// Issue 248: `Some` once [`Self::arm_novelty`] armed the gated rate.
+    #[cfg(feature = "evolve_novelty")]
+    novelty: Option<NoveltyArm>,
 }
 
 impl Default for LatentSkillEvolution {
@@ -98,6 +101,14 @@ pub fn ema_step(
     config: &EvolveConfig,
 ) -> f32 {
     let rate = if success { config.alpha } else { -config.beta };
+    ema_apply(dir, fix_dir, rate)
+}
+
+/// The signed-rate EMA body shared by [`ema_step`] and the gated variant —
+/// one definition, so the incumbent and the armed path cannot drift.
+#[allow(clippy::inline_always)] // the Issue 248 G3-measured codegen
+#[inline(always)]
+fn ema_apply(dir: &mut Direction, fix_dir: &Direction, rate: f32) -> f32 {
     let mut sq = 0.0f32;
     for i in 0..EMBED_DIM {
         let applied = rate * (fix_dir[i] - dir[i]);
@@ -107,6 +118,64 @@ pub fn ema_step(
     sq.sqrt()
 }
 
+#[cfg(feature = "evolve_novelty")]
+pub use katgpt_core::sense::novelty_retention::{NoveltyChannel, NoveltyRetentionConfig};
+
+/// The outcome-signed agreement of the evidence with the current belief —
+/// the novelty channel's observation (Issue 248): `(+1 | −1) · cos(dir,
+/// fix_dir)`. Sequential `+=` folds in index order (the Determinism law,
+/// katgpt-rs Issue 940 — never a SIMD lane sum). A zero-norm side yields a
+/// non-finite value, which the channel maps to the incumbent rate.
+#[cfg(feature = "evolve_novelty")]
+#[allow(clippy::inline_always)] // the Issue 248 G3-measured codegen
+#[inline(always)]
+#[must_use]
+pub fn outcome_agreement(dir: &Direction, fix_dir: &Direction, success: bool) -> f32 {
+    let mut dot = 0.0f32;
+    let mut nd = 0.0f32;
+    let mut nf = 0.0f32;
+    for i in 0..EMBED_DIM {
+        dot += dir[i] * fix_dir[i];
+        nd += dir[i] * dir[i];
+        nf += fix_dir[i] * fix_dir[i];
+    }
+    let cos = dot / (nd * nf).sqrt();
+    if success { cos } else { -cos }
+}
+
+/// [`ema_step`] with a novelty-gated rate (Issue 248, katgpt-rs Plan 639
+/// T3.4). The incumbent rate (`α` on success, `β` on fail) is the channel's
+/// BASE; the channel works in RETENTION space, so the map is explicit:
+/// `g = channel.step(ncfg, x, 1 − base_rate)`, `rate = 1 − g`, signed by the
+/// outcome, with `x` = [`outcome_agreement`] read BEFORE the step. Sustained
+/// disagreement (a regime shift) lowers retention → a larger step; transient
+/// disagreement (noise) raises it → a smaller step. `ncfg` must come from
+/// [`NoveltyRetentionConfig::validated`]. Zero-alloc, elementwise f32.
+#[cfg(feature = "evolve_novelty")]
+#[inline]
+pub fn ema_step_gated(
+    dir: &mut Direction,
+    fix_dir: &Direction,
+    success: bool,
+    config: &EvolveConfig,
+    channel: &mut NoveltyChannel,
+    ncfg: &NoveltyRetentionConfig,
+) -> f32 {
+    let base = if success { config.alpha } else { config.beta };
+    let x = outcome_agreement(dir, fix_dir, success);
+    let rate = 1.0 - channel.step(ncfg, x, 1.0 - base);
+    ema_apply(dir, fix_dir, if success { rate } else { -rate })
+}
+
+/// The armed novelty state of a [`LatentSkillEvolution`] — the validated
+/// config + one channel per lint (session-local by design, Issue 248's
+/// durable-format review).
+#[cfg(feature = "evolve_novelty")]
+struct NoveltyArm {
+    config: NoveltyRetentionConfig,
+    channels: HashMap<String, NoveltyChannel>,
+}
+
 impl LatentSkillEvolution {
     /// Construct with the given config.
     #[must_use]
@@ -114,6 +183,8 @@ impl LatentSkillEvolution {
         Self {
             directions: HashMap::new(),
             config,
+            #[cfg(feature = "evolve_novelty")]
+            novelty: None,
         }
     }
 
@@ -123,7 +194,37 @@ impl LatentSkillEvolution {
         Self {
             directions: HashMap::with_capacity(n),
             config: EvolveConfig::default(),
+            #[cfg(feature = "evolve_novelty")]
+            novelty: None,
         }
+    }
+
+    /// Arm the novelty-gated rate (Issue 248) for every lint of this
+    /// instance. Returns `false` (and stays unarmed — the incumbent path)
+    /// on an invalid config or when `NOVELTY_RETENTION=0` demotes the gate
+    /// (read once, here). Each lint's channel is created with its direction
+    /// (first success), so the armed hot path never allocates after warm-up.
+    #[cfg(feature = "evolve_novelty")]
+    pub fn arm_novelty(&mut self, config: NoveltyRetentionConfig) -> bool {
+        if katgpt_core::sense::novelty_retention::novelty_retention_demoted() {
+            return false;
+        }
+        let Some(config) = config.validated() else {
+            return false;
+        };
+        let mut channels = HashMap::with_capacity(self.directions.capacity());
+        for k in self.directions.keys() {
+            channels.insert(k.clone(), NoveltyChannel::new());
+        }
+        self.novelty = Some(NoveltyArm { config, channels });
+        true
+    }
+
+    /// Whether [`Self::arm_novelty`] armed this instance.
+    #[cfg(feature = "evolve_novelty")]
+    #[must_use]
+    pub fn novelty_armed(&self) -> bool {
+        self.novelty.is_some()
     }
 
     /// Number of lints with evolved directions.
@@ -168,6 +269,14 @@ impl LatentSkillEvolution {
     pub fn record_outcome(&mut self, lint_name: &str, fix_direction: &Direction, success: bool) {
         match self.directions.get_mut(lint_name) {
             Some(dir) => {
+                // Issue 248: the armed instance shapes the rate by evidence.
+                #[cfg(feature = "evolve_novelty")]
+                if let Some(arm) = self.novelty.as_mut() {
+                    if let Some(ch) = arm.channels.get_mut(lint_name) {
+                        ema_step_gated(dir, fix_direction, success, &self.config, ch, &arm.config);
+                        return;
+                    }
+                }
                 // EMA update: component-wise arithmetic (the shared core —
                 // see [`ema_step`]).
                 ema_step(dir, fix_direction, success, &self.config);
@@ -177,6 +286,11 @@ impl LatentSkillEvolution {
                 // This fix works, so it's a valid baseline.
                 self.directions
                     .insert(lint_name.to_string(), *fix_direction);
+                #[cfg(feature = "evolve_novelty")]
+                if let Some(arm) = self.novelty.as_mut() {
+                    arm.channels
+                        .insert(lint_name.to_string(), NoveltyChannel::new());
+                }
             }
             None => {
                 // First outcome is a fail: no-op. A fail doesn't tell us what a

@@ -410,6 +410,13 @@ kernel_route_narrow = ["kernel_opt", "latent_retrieval"]
 # code. Opt-in until the R6 arm-H outcome-based selection measures a winner.
 escalation_manifest = ["katgpt-core/escalation_guard"]
 
+# Issue 248 (katgpt-rs Plan 639 T3.4): the novelty-gated rate for
+# `evolve::ema_step` — `ema_step_gated` + `LatentSkillEvolution::arm_novelty`
+# consume katgpt-core's scalar-tier `NoveltyChannel` (outcome-signed agreement
+# signal, rate = 1 − retention). OPT-IN, per-instance armed; unarmed/off is the
+# incumbent path byte-for-byte; the durable learn-row path is NOT armed.
+evolve_novelty = ["katgpt-core/novelty_retention"]
+
 # Plan 621 Phase 5 T5.2 (2026-10-11): the probe-gated half of the rescue
 # lane — katgpt-core `state_probe` (the FlyBy probe kernel + Phase-2
 # classifier) consumed over the rescue tallies' ACCUMULATED b0 leg. The raw
@@ -2334,6 +2341,17 @@ required-features = ["kat_transport"]
 [[test]]
 name = "points_drain_g4_alloc"
 required-features = ["points_drain"]
+
+# Issue 248: the evolve_novelty gates — G1 bit-exact unarmed, G2 refine
+# quality fixture (#[ignore], --release), G3 interleaved A/B cost cell
+# (#[ignore], --release, bmo), plus the G4 counting-allocator binary.
+[[test]]
+name = "evolve_novelty_gates"
+required-features = ["evolve_novelty"]
+
+[[test]]
+name = "evolve_novelty_g4_alloc"
+required-features = ["evolve_novelty"]
 
 # Plan 329 P2 (issue 197, the sccache mock_command doctrine port): the
 # failure-injection matrix for the compile oracle — fix_verify +

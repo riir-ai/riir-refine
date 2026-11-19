@@ -1,5 +1,5 @@
 # Issue 248: novelty-gated rate for `evolve::ema_step` (katgpt-rs Plan 639 T3.4)
-**Status:** Open — claimed; gates PRE-REGISTERED below before any measurement.
+**Status:** DONE-NEGATIVE — G1 PASS · **G2 FAIL (0/32 cells)** · **G3 FAIL (median Δ 28.89 ns > 10.0 ns at k = 1, bmo ×3)** · G4 PASS. `evolve_novelty` stays OPT-IN (instrument only, never promoted); the durable learn-row arm (T5) is moot. Pre-registration `b2e88a09`.
 **Claimed:** p639-t34@amo, 1795077845, expires 2026-11-20T08:44:05Z
 
 **Source:** katgpt-rs Plan 639 Phase 3 T3.4 ("outcome-signed α/β → evidence-shaped;
@@ -107,9 +107,88 @@ the evidence shape the magnitude:
   `LatentSkillEvolution::record_outcome` calls after the first-success warm-up.
 
 ## Tasks
-- [ ] T1 feature + `ema_step_gated` + `LatentSkillEvolution::arm_novelty` (G1, G4 tests)
-- [ ] T2 G2 fixture (ignored test, `--release`), both tables recorded here
-- [ ] T3 G3 bmo cell (3 runs), PROVENANCE quoted
-- [ ] T4 verdict + close (HISTORY row, issue removed, feature stays OPT-IN)
-- [-] T5 durable learn-row arm — blocked on a katgpt-rs `NoveltyChannel` state
-  accessor/serde follow-up (see the review above); only meaningful after G2 PASS.
+- [x] T1 feature + `ema_step_gated` + `LatentSkillEvolution::arm_novelty` (G1, G4 tests)
+- [x] T2 G2 fixture (ignored test, `--release`), both tables recorded here
+- [x] T3 G3 bmo cell (3 runs), PROVENANCE quoted
+- [x] T4 verdict + close (HISTORY row, issue removed, feature stays OPT-IN)
+- [-] T5 durable learn-row arm — MOOT (G2 + G3 failed); would have needed a
+  katgpt-rs `NoveltyChannel` state accessor/serde follow-up (see the review above).
+
+## Results (2026-11-19)
+
+Code: `src/evolve.rs` (`ema_apply` shared body — `ema_step` bit-identical;
+`outcome_agreement`, `ema_step_gated`, `LatentSkillEvolution::arm_novelty` /
+`novelty_armed`), `tests/evolve_novelty_gates.rs`, `tests/evolve_novelty_g4_alloc.rs`,
+feature `evolve_novelty`. Substrate resolved at katgpt-rs `f907edece`.
+
+- **G1 PASS.** Feature ON unarmed (and refused-arm on an invalid config) layer
+  bit-identical (`to_bits`) to the `ema_step` reference over a 2 000-outcome,
+  3-lint stream; armed path bit-reproducible across two runs and NOT vacuous
+  (differs from unarmed); zero-norm evidence falls back to the base rate. Evolve unit
+  tests + `traj_store` learn-row tests 42/42 in BOTH postures (`learn_step`
+  untouched ⇒ rows byte-identical by construction); `t71_evolved_directions` green.
+- **G4 PASS.** 0 allocations over 1 000 armed `ema_step_gated` calls and 1 000 armed
+  `record_outcome` calls after warm-up (counting allocator, own binary).
+- **G2 FAIL — 0/32 cells** (`--release`, amo; fixture `cos(A, B) = −0.2656`).
+  Fixed curve (β = α/2), seed means adaptation / noise:
+  α 0.01 125.5/0.2539 · 0.02 86.5/0.3872 · 0.03 61.6/0.4706 · 0.05 36.8/0.5973 ·
+  0.07 26.4/0.7024 · 0.10 17.8/0.8351 · 0.15 11.7/1.0178 · 0.20 8.4/1.1745 ·
+  0.30 5.5/1.4450 · 0.40 4.4/1.6923 · 0.50 3.7/1.9259.
+  Gated grid (base α κ μ β_sat g_min → mean adapt/noise, (iii) distance):
+
+  | cell | adapt/noise | (ii) | (iii) |
+  |---|---|---|---|
+  | 0.05 0.4 0.2 4 0.5 | 9.1/0.9860 | ok | +0.1528 |
+  | 0.05 0.4 0.2 4 0.7 | 9.1/0.9860 | ok | +0.1528 |
+  | 0.05 0.4 0.2 8 0.5 | 7.6/1.1893 | ok | +0.0615 |
+  | 0.05 0.4 0.2 8 0.7 | 7.9/1.1847 | ok | +0.0418 |
+  | 0.05 0.4 0.4 4 0.5 | 10.0/1.0707 | ok | +0.0290 |
+  | 0.05 0.4 0.4 4 0.7 | 10.0/1.0707 | ok | +0.0290 |
+  | 0.05 0.4 0.4 8 0.5 | 8.6/1.1962 | DOM | −0.0288 |
+  | 0.05 0.4 0.4 8 0.7 | 9.2/1.2006 | DOM | −0.0653 |
+  | 0.05 0.8 0.2 4 0.5 | 5.0/1.4693 | ok | +0.0954 |
+  | 0.05 0.8 0.2 4 0.7 | 7.2/1.3665 | ok | −0.0776 |
+  | 0.05 0.8 0.2 8 0.5 | 4.4/1.7366 | DOM | −0.0443 |
+  | 0.05 0.8 0.2 8 0.7 | 6.6/1.4713 | DOM | −0.1234 |
+  | 0.05 0.8 0.4 4 0.5 | 5.4/1.4297 | ok | +0.0472 |
+  | 0.05 0.8 0.4 4 0.7 | 7.7/1.2547 | ok | −0.0109 |
+  | 0.05 0.8 0.4 8 0.5 | 5.0/1.5203 | ok | +0.0444 |
+  | 0.05 0.8 0.4 8 0.7 | 7.3/1.2970 | ok | −0.0219 |
+  | 0.10 0.4 0.2 4 0.5 | 7.5/1.2118 | ok | +0.0459 |
+  | 0.10 0.4 0.2 4 0.7 | 7.7/1.2113 | ok | +0.0325 |
+  | 0.10 0.4 0.2 8 0.5 | 6.4/1.3249 | ok | +0.0369 |
+  | 0.10 0.4 0.2 8 0.7 | 7.3/1.2848 | ok | −0.0098 |
+  | 0.10 0.4 0.4 4 0.5 | 8.4/1.1965 | ok | −0.0220 |
+  | 0.10 0.4 0.4 4 0.7 | 8.6/1.1965 | DOM | −0.0291 |
+  | 0.10 0.4 0.4 8 0.5 | 7.3/1.2979 | ok | −0.0159 |
+  | 0.10 0.4 0.4 8 0.7 | 8.4/1.2481 | ok | −0.0701 |
+  | 0.10 0.8 0.2 4 0.5 | 4.8/1.5358 | ok | +0.0608 |
+  | 0.10 0.8 0.2 4 0.7 | 6.7/1.4220 | ok | −0.0845 |
+  | 0.10 0.8 0.2 8 0.5 | 4.1/1.7889 | ok | −0.0228 |
+  | 0.10 0.8 0.2 8 0.7 | 6.3/1.5190 | DOM | −0.1434 |
+  | 0.10 0.8 0.4 4 0.5 | 5.0/1.4801 | ok | +0.0686 |
+  | 0.10 0.8 0.4 4 0.7 | 7.5/1.2837 | ok | −0.0225 |
+  | 0.10 0.8 0.4 8 0.5 | 4.8/1.5451 | ok | +0.0594 |
+  | 0.10 0.8 0.4 8 0.7 | 7.2/1.3306 | ok | −0.0417 |
+
+  Condition (i) (the 0.7× / 1.1× matched-point margins vs ONE fixed point, 3/3
+  seeds) holds in NO cell. Reading: the gate mostly slides the operating point
+  ALONG the fixed curve toward the fast/noisy end (every cell adapts in 4–10 ticks,
+  i.e. the α 0.15–0.4 region). 14/32 cells sit below the line (best
+  `0.05 0.4 0.2 4 *` at +0.153 — ≈ 13 % less noise than the interpolated fixed
+  curve at matched lag), but that best cell is 0.78× the lag of α 0.15 and 1.18×
+  the noise of α 0.10 — between points, never inside both margins of one.
+  Per the pre-registration this is a FAIL; no post-hoc grid widening was run.
+- **G3 FAIL — median Δ 28.888 ns > 10.0 ns (k = 1).** bmo, release test binary
+  only (no source), interleaved 51 × 20 000, `black_box` both ends, under
+  `/tmp/bmo-bench.lock`, preflight `MAX_LOAD=11.2` PASS at launch AND end every run:
+  run 1 a 8.221 / b 37.075 → Δ 28.854 ns; run 2 a 8.162 / b 37.085 → Δ 28.923 ns;
+  run 3 a 8.221 / b 37.108 → Δ 28.888 ns (ratio 4.51–4.54×). PROVENANCE (all six):
+  `power=AC Power load=0.83–0.93 swap=18627.69M canary=skipped powermode=0(auto) ane=ok`.
+  Disclosure: one unfenced diagnostic run (the first fenced loop's grep missed the
+  output line) read Δ 22.4 ns at a 6.4 ns incumbent — not folded in. The armed path
+  is a serial latency chain (3 folds + sqrt + div for the agreement, then the
+  channel's division) on top of an ~8 ns 8-lane EMA; not decomposed further.
+- **Verdict: DONE-NEGATIVE.** `evolve_novelty` stays OPT-IN as a re-runnable
+  instrument; nothing promoted; the durable learn-row path and `LearnRowDoc` are
+  unchanged.
