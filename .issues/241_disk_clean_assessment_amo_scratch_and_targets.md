@@ -2,7 +2,7 @@
 
 **Status:** Open — housekeeping assessment (list-first, deletions per the disk-clean contract).
 **Lease closed:** zed-c0c35a68@amo, 1794946800, was expires 2026-11-19T02:20:00Z (expired 2026-11-19T02:20Z, no landing - folded 2026-11-19 by the re-claim below; scope passed through unchanged)
-**Claimed:** zed-6addfb44@amo, 1795060553, expires 2026-11-21T04:40:00+00:00
+**Lease closed:** zed-6addfb44@amo, 1795060553, was expires 2026-11-21T04:40:00+00:00 (scope discharged same session - the assessment landed 6e618b1c; the issue remains the standing deep-clean list for the next low-disk event)
 
 ## 2026-11-19 re-claim verdict (zed-6addfb44@amo, epoch 1795060553) — SAFE-class executed autonomously per the 2026-11-17 decree, 98 GB net recovered; the standing table re-measured with two stale rows dissolved
 
