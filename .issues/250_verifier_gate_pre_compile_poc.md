@@ -1,6 +1,7 @@
 # Issue 250: Verifier-gate shadow-score → decline-guard POC for the fix lane (ITERLOGIC transplant)
 
 **Status:** Open — research-derived POC (riir-refine Research 424, EMNLP 2026 Findings "Iterative Natural Logic Verification for Multi-hop QA"); verdict round 1 corrections applied (compile-label scope, cost model first, G1 per-posture)
+**Claimed:** katgpt-rs-93@amo, 1795116000, expires 2026-11-22T00:00:00Z
 **Priority:** after the next maintained-binary lane (the cost asymmetry is real but the lane is not red today)
 
 ## The idea, scoped to the lane's actual shape
