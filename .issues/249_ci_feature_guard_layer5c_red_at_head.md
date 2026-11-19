@@ -1,6 +1,7 @@
 # Issue 249 — ci_feature_guard Layer 5c is red at HEAD: a by-construction feature conflict + real content rot
 
 **Status:** OPEN — filed 2026-11-19 from a full Layer 5c run at `73379e6d` (amo job `01a1f346-cdd4`, `cargo test --all-features --tests --no-fail-fast`, 132 test binaries, **28 failing tests in 14 binaries**). Unclaimed. Layers 1–5b2 are GREEN at the same commit (single-feature combos, all-features compile, clippy at both extremes, lib tests 3933/0, retrieval gate 30/0).
+**Claimed:** katgpt-rs-96@amo, 1795087130, expires 2026-11-20T11:18:50Z
 
 ## A. Design defect — `--all-features` enables two mutually exclusive net pins
 
